@@ -39,7 +39,8 @@
 
 (defn- existing-asset-ref-block
   [existing-asset]
-  {:block/title (ref/->page-ref (:block/uuid existing-asset))})
+  {:block/uuid (ldb/new-block-id)
+   :block/title (ref/->page-ref (:block/uuid existing-asset))})
 
 (defn- new-asset-block
   [repo ^js file {:keys [external-url] :as opts}]
@@ -86,25 +87,34 @@
           :block/tags #{:logseq.class/Asset}})))))
 
 (defn db-based-save-assets!
-  "Save incoming(pasted) assets to assets directory.
+  "Save incoming assets and return asset entities in input order.
 
-   Returns: asset entities"
-  [repo files & {:keys [pdf-area? last-edit-block save-to-page target-block]}]
-  (let [state-edit-block (when-not target-block
+   Options:
+
+   | key | description |
+   |-----|-------------|
+   | `:save-only?` | Save new assets under Asset without changing the editor or inserting references. |
+   | `:last-edit-block` | Use this editor target when no block is currently being edited. |
+   | `:save-to-page` | Page for new assets when there is no editor target. |
+   | `:target-block` | Append uploads as children of this explicit target. |"
+  [repo files & {:keys [save-only? last-edit-block save-to-page target-block]}]
+  (let [insert-target (when-not save-only? target-block)
+        use-editor? (not (or save-only? insert-target))
+        state-edit-block (when use-editor?
                            (state/get-edit-block))
         edit-content (when state-edit-block
                        (state/get-edit-content))
-        edit-block (when-not target-block
+        edit-block (when use-editor?
                      (if state-edit-block
                        (assoc state-edit-block :block/title edit-content)
                        last-edit-block))
         has-unsaved-edit? (and state-edit-block
                                (not= (:block/title state-edit-block) edit-content))
         empty-target? (cond
-                        target-block false
                         state-edit-block (string/blank? edit-content)
-                        last-edit-block (string/blank? (:block/title last-edit-block))
-                        :else false)]
+                        edit-block (string/blank? (:block/title edit-block))
+                        :else false)
+        insert-to-current-block-page? (boolean (:block/uuid edit-block))]
     (p/let [[repo-dir asset-dir-rpath] (assets-handler/ensure-assets-dir! repo)
             asset-page (db-async/<invoke-db-worker :thread-api/pull repo
                                                   [:block/uuid] :logseq.class/Asset)
@@ -117,26 +127,24 @@
                                          :asset-dir-rpath asset-dir-rpath
                                          :block/uuid (when (and (zero? idx) empty-target?)
                                                        (:block/uuid edit-block))})))
-            existing-assets (keep ::existing-asset blocks*)
-            new-asset-blocks (remove ::existing-asset blocks*)
-            ;; Re-uploading an existing file should still insert a reference when
-            ;; the user is dropping/pasting into a block. Property pickers and
-            ;; other callers without an editor target only need the entity.
-            ;; Reuse the empty editor block's uuid so replace-empty-target? and
-            ;; the later edit-block! keep the editor in sync (otherwise exit-edit
-            ;; saves the stale empty title over the inserted ref).
-            ref-blocks (when (or edit-block target-block)
-                         (map-indexed
-                          (fn [idx asset]
-                            (cond-> (existing-asset-ref-block asset)
-                              (and (zero? idx) empty-target? (:block/uuid edit-block))
-                              (assoc :block/uuid (:block/uuid edit-block))))
-                          existing-assets))
-            blocks (concat new-asset-blocks ref-blocks)
-            insert-to-current-block-page? (boolean (and (not target-block) (:block/uuid edit-block) (not pdf-area?)))
+            ;; Preserve file order and let only the first upload reuse the empty target.
+            blocks (->> blocks*
+                        (map-indexed
+                         (fn [idx block]
+                           (if-let [asset (::existing-asset block)]
+                             (when (or edit-block insert-target)
+                               (cond-> (existing-asset-ref-block asset)
+                                 (and (zero? idx) empty-target?)
+                                 (assoc :block/uuid (:block/uuid edit-block))))
+                             block)))
+                        (remove nil?)
+                        vec)
             target (cond
-                     target-block
-                     target-block
+                     save-only?
+                     asset-page
+
+                     insert-target
+                     insert-target
 
                      insert-to-current-block-page?
                      edit-block
@@ -158,19 +166,14 @@
                                                      :bottom? true
                                                      :sibling? (boolean (and edit-block (= edit-block target)))
                                                      :replace-empty-target? insert-to-current-block-page?})))
-       (p/let [results (if (seq new-asset-blocks)
-                         (db-async/<get-blocks repo (map :block/uuid new-asset-blocks) {:children? false})
+       (p/let [results (if (seq blocks)
+                         (db-async/<get-blocks repo (map :block/uuid blocks) {:children? false})
                          [])
                fetched (editor/unwrap-block-results results)
-               edit-target (or (some (fn [block]
-                                       (when (= (:block/uuid block) (:block/uuid edit-block))
-                                         block))
-                                     fetched)
-                               (when (and empty-target? (seq ref-blocks) (:block/uuid edit-block))
-                                 (assoc edit-block :block/title (:block/title (first ref-blocks)))))]
-         (when edit-target
+               fetched-by-uuid (into {} (map (juxt :block/uuid identity)) fetched)]
+         (when-let [edit-target (get fetched-by-uuid (:block/uuid edit-block))]
            (editor/edit-block! edit-target :max))
-         (concat fetched existing-assets))))))
+         (mapv #(or (::existing-asset %) (get fetched-by-uuid (:block/uuid %))) blocks*))))))
 
 
 (defn db-upload-assets!
