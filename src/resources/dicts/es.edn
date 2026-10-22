@@ -495,7 +495,6 @@
  :editor.slash/node-embed-desc "Insertar un nodo aquí"
  :editor.slash/node-reference "Referencia de nodo"
  :editor.slash/node-reference-desc "Crear un enlace hacia atrás a un nodo (una página o un bloque)"
- :editor.slash/normal-text "Texto normal"
  :editor.slash/normal-text-desc "Limpiar encabezado y establecer como texto normal"
  :editor.slash/number-children "Hijos numerados"
  :editor.slash/number-list "Lista numerada"

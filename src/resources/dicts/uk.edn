@@ -552,7 +552,6 @@
  :editor.slash/node-embed-desc "Вставити вузол тут"
  :editor.slash/node-reference "Посилання на вузол"
  :editor.slash/node-reference-desc "Створити зворотнє посилання на вузол (сторінка або блок)"
- :editor.slash/normal-text "Звичайний текст"
  :editor.slash/normal-text-desc "Очистити заголовок і встановити як звичайний текст"
  :editor.slash/number-children "Нумерувати дочірні елементи"
  :editor.slash/number-list "Нумерований список"

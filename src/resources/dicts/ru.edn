@@ -495,7 +495,6 @@
  :editor.slash/node-embed-desc "Вставить узел здесь"
  :editor.slash/node-reference "Ссылка на узел"
  :editor.slash/node-reference-desc "Создать обратную ссылку на узел (страница или блок)"
- :editor.slash/normal-text "Обычный текст"
  :editor.slash/normal-text-desc "Очистить заголовок и установить обычный текст"
  :editor.slash/number-children "Нумеровать потомков"
  :editor.slash/number-list "Нумерованный список"

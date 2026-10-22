@@ -495,7 +495,6 @@
  :editor.slash/node-embed-desc "Intégrer un nœud ici"
  :editor.slash/node-reference "Référence de nœud"
  :editor.slash/node-reference-desc "Créer un rétrolien vers un nœud (une page ou un bloc)"
- :editor.slash/normal-text "Texte normal"
  :editor.slash/normal-text-desc "Supprimer le titre et définir en texte normal"
  :editor.slash/number-children "Enfants numérotés"
  :editor.slash/number-list "Liste numérotée"

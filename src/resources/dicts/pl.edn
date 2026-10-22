@@ -495,7 +495,6 @@
  :editor.slash/node-embed-desc "Osadź węzeł tutaj"
  :editor.slash/node-reference "Odniesienie węzła"
  :editor.slash/node-reference-desc "Utwórz wsteczne łącze do węzła (strona lub blok)"
- :editor.slash/normal-text "Zwykły tekst"
  :editor.slash/normal-text-desc "Wyczyść nagłówek i ustaw na zwykły tekst"
  :editor.slash/number-children "Numeruj dzieci"
  :editor.slash/number-list "Lista numerowana"

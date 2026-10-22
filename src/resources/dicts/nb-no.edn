@@ -495,7 +495,6 @@
  :editor.slash/node-embed-desc "Bygg inn en node her"
  :editor.slash/node-reference "Nodereferanse"
  :editor.slash/node-reference-desc "Lag en baklenke til en node (en side eller blokk)"
- :editor.slash/normal-text "Normal tekst"
  :editor.slash/normal-text-desc "Fjern overskrift og sett til normal tekst"
  :editor.slash/number-children "Nummerer barn"
  :editor.slash/number-list "Nummerert liste"

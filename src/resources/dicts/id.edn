@@ -495,7 +495,6 @@
  :editor.slash/node-embed-desc "Sematkan node di sini"
  :editor.slash/node-reference "Referensi Node"
  :editor.slash/node-reference-desc "Buat tautan balik ke node (halaman atau blok)"
- :editor.slash/normal-text "Teks Normal"
  :editor.slash/normal-text-desc "Hapus judul dan atur ke teks normal"
  :editor.slash/number-children "Anak Angka"
  :editor.slash/number-list "Daftar Bernomor"

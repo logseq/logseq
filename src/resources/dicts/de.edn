@@ -495,7 +495,6 @@
  :editor.slash/node-embed-desc "Bette einen Knoten hier ein"
  :editor.slash/node-reference "Knotenreferenz"
  :editor.slash/node-reference-desc "Erstelle einen Rücklink zu einem Knoten (eine Seite oder ein Block)"
- :editor.slash/normal-text "Normaler Text"
  :editor.slash/normal-text-desc "Überschrift löschen und auf Normaltext einstellen"
  :editor.slash/number-children "Nummeriere Kinder"
  :editor.slash/number-list "Nummerierte Liste"

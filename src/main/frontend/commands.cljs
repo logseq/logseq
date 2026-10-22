@@ -172,7 +172,7 @@
   ([] (get-priorities t))
   ([t-fn]
    (let [group-label (t-fn :editor.slash/group-priority)
-         with-no-priority #(cons [(t-fn :editor.slash/no-priority) (->priority nil) "" :icon/priorityLvlNone] %)
+         with-no-priority #(conj % [(t-fn :editor.slash/no-priority) (->priority nil) "" :icon/priorityLvlNone])
          result (->>
                  (db-based-priorities)
                  (mapv (fn [priority]
@@ -198,20 +198,15 @@
 (defn- headings
   ([] (headings t))
   ([t-fn]
-   (into [[(t-fn :editor.slash/normal-text)
-           (->heading nil)
-           (t-fn :editor.slash/normal-text-desc)
-           :icon/text
-           (t-fn :editor.slash/group-heading)]
-          [(t-fn :editor.slash/clear-heading)
-           (->heading nil)
-           (t-fn :editor.slash/normal-text-desc)
-           :icon/heading-off
-           (t-fn :editor.slash/group-heading)]]
-         (mapv (fn [level]
+   (conj (mapv (fn [level]
                  (let [heading (t-fn :editor.slash/heading-label level)]
                    [heading (->heading level) heading (str "h-" level) (t-fn :editor.slash/group-heading)]))
-               (range 1 7)))))
+               (range 1 7))
+         [(t-fn :editor.slash/clear-heading)
+          (->heading nil)
+          (t-fn :editor.slash/normal-text-desc)
+          :icon/heading-off
+          (t-fn :editor.slash/group-heading)])))
 
 (defonce *latest-matched-command (atom ""))
 (defonce *matched-commands (atom nil))
