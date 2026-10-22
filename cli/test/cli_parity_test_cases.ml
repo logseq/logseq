@@ -160,6 +160,7 @@ let spawn_capture_calls () : string =
 JSON.stringify((globalThis.__logseqSpawnCapture && globalThis.__logseqSpawnCapture.calls) || [])
 |}]
 
+
 let set_env key value : unit = Js.Dict.set Node.Process.process##env key value
 
 let unset_env_raw : string -> unit =
@@ -4388,12 +4389,19 @@ let () =
              (Sync.Parsed_ensure_keys
                 { e2ee_password = Some "pw"; upload_keys = true }))
       in
-      match ensure_keys with
+      (match ensure_keys with
       | Sync.Sync_ensure_keys action ->
           expect_equal "ensure keys password" "pw"
             (expect_some "ensure keys e2ee" action.e2ee_password);
           expect_bool "ensure keys upload" true action.upload_keys
       | _ -> fail_test "expected Sync_ensure_keys action");
+      let remote_graphs =
+        expect_ok "sync remote-graphs without graph"
+          (Sync.build (config ()) (Global_opts.create ())
+             Sync.Parsed_remote_graphs)
+      in
+      expect_bool "remote graphs action" true
+        (remote_graphs = Sync.Sync_remote_graphs));
 
   test "CLI parity sync build validates config and asset download actions"
     (fun () ->
@@ -4705,6 +4713,195 @@ let () =
           "external-asset"
       in
       Js.Promise.resolve pass);
+
+  test_promise
+    "CLI parity sync remote-graphs requires auth without requiring a graph"
+    (fun () ->
+      let root = temp_dir "logseq-cli-sync-remote-graphs-auth-" in
+      let cfg = config ~root_dir:root () in
+      let* result =
+        effect_to_promise
+          (execute_with_output Sync.execute Sync.Sync_remote_graphs cfg
+             Output.Mode.Json)
+      in
+      remove_tree root;
+      expect_bool "remote-graphs auth error" true (Cli_result.is_error result);
+      (match result.Cli_result.error with
+      | Some err ->
+          expect_equal "missing auth not missing graph" "missing-auth"
+            (Error.code_to_string err.Error.code)
+      | None -> fail_test "expected missing-auth");
+      Js.Promise.resolve pass);
+
+  let stub_worker_script =
+    {|
+const http = require('http');
+const fs = require('fs');
+const path = require('path');
+const args = {};
+const argv = process.argv.slice(2);
+for (let i = 0; i < argv.length; i++) {
+  if (!argv[i].startsWith('--')) continue;
+  const key = argv[i].slice(2);
+  if (i + 1 < argv.length && !argv[i + 1].startsWith('--')) args[key] = argv[++i];
+  else args[key] = true;
+}
+const repo = args['repo'].replace(/^logseq_db_/, '');
+const encoded = encodeURIComponent(repo)
+  .replace(/%20/g, ' ')
+  .replace(/~/g, '%7E')
+  .replace(/%/g, '~');
+const runtimeDir = path.join(args['lifecycle-dir'], encoded);
+const send = (res, status, value) => {
+  res.writeHead(status, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify(value));
+};
+const server = http.createServer((req, res) => {
+  let body = '';
+  req.on('data', (chunk) => (body += chunk));
+  req.on('end', () => {
+    if (req.method === 'GET' && req.url === '/healthz') {
+      send(res, 200, {
+        repo: args['repo'],
+        status: 'ready',
+        host: '127.0.0.1',
+        pid: process.pid,
+        port: server.address().port,
+        'root-dir': args['root-dir'],
+        storage: {
+          root: args['root-dir'],
+          graphsDir: args['graphs-dir'],
+          lifecycleDir: args['lifecycle-dir'],
+        },
+        revision: 'stub',
+        ticket: args['admission-ticket'],
+        generation: args['graph-generation'],
+        'owner-source': args['owner-source'],
+        'ownership-protocol': 'sqlite-v1',
+      });
+    } else if (req.method === 'POST' && req.url === '/v1/invoke') {
+      const method = JSON.parse(body || '{}').method;
+      send(res, 200, {
+        resultTransit:
+          method === 'thread-api/db-sync-list-remote-graphs'
+            ? '[["^ ","~:graph-name","alpha","~:graph-id","~u11111111-1111-4111-8111-111111111111","~:graph-e2ee?",false]]'
+            : 'null',
+      });
+    } else if (req.url === '/v1/shutdown') {
+      send(res, 200, {});
+      setTimeout(() => process.exit(0), 10).unref();
+    } else send(res, 404, { error: 'not found' });
+  });
+});
+server.listen(0, '127.0.0.1', () => {
+  fs.mkdirSync(runtimeDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(runtimeDir, 'runtime-' + args['admission-ticket'] + '.json'),
+    JSON.stringify({
+      ticket: args['admission-ticket'],
+      generation: args['graph-generation'],
+      pid: process.pid,
+      owner: args['owner-source'],
+      root: args['root-dir'],
+      graphsDir: args['graphs-dir'],
+      lifecycleDir: args['lifecycle-dir'],
+      repo: repo,
+      'ownership-protocol': 'sqlite-v1',
+      port: server.address().port,
+      phase: 'ready',
+    }));
+  fs.writeFileSync(
+    path.join(args['root-dir'], '.cli-stub-port'),
+    String(server.address().port));
+});
+setTimeout(() => process.exit(0), 120000).unref();
+|}
+  in
+
+  test_promise
+    "CLI parity sync remote-graphs lists remotes without a local graph"
+    (fun () ->
+      let root = temp_dir "logseq-cli-sync-remote-graphs-" in
+      let worker_script = Node.Path.join [| root; "db-worker-node.js" |] in
+      let graph_dir =
+        Node.Path.join [| root; "graphs"; ".cli-sync-runtime" |]
+      in
+      let stop_stub () =
+        let port_file = Node.Path.join [| root; ".cli-stub-port" |] in
+        if Cli_unix.file_exists port_file then
+          Fetch.fetch
+            ("http://127.0.0.1:" ^ read_file port_file ^ "/v1/shutdown")
+          |> Js.Promise.then_ (fun _ -> Js.Promise.resolve ())
+          |> Js.Promise.catch (fun _ -> Js.Promise.resolve ())
+        else Js.Promise.resolve ()
+      in
+      let cleanup () =
+        unset_env "LOGSEQ_DB_WORKER_NODE_SCRIPT";
+        remove_tree root
+      in
+      try
+        write_file worker_script stub_worker_script;
+        set_env "LOGSEQ_DB_WORKER_NODE_SCRIPT" worker_script;
+        let cfg = config ~root_dir:root ~id_token:"id-token-1" () in
+        let* () =
+          effect_to_promise
+            (execute_with_output Sync.execute Sync.Sync_remote_graphs cfg
+               Output.Mode.Json)
+          |> Js.Promise.then_ (fun result ->
+              (match result.Cli_result.error with
+              | Some err ->
+                  fail_test
+                    ("remote-graphs failed: "
+                    ^ Error.code_to_string err.Error.code ^ " "
+                    ^ err.Error.message)
+              | None -> ());
+              expect_bool "remote-graphs ok" false
+                (Cli_result.is_error result);
+              expect_bool "account runtime graph dir created" true
+                (Cli_unix.file_exists graph_dir);
+              expect_int "hidden runtime not listed" 0
+                (Vec.length (Server_runtime.list_graphs cfg));
+              let graph_list =
+                effect_result "graph list"
+                  (execute_with_output Graph.execute Graph.Graph_list cfg
+                     Output.Mode.Json)
+              in
+              let graph_list_data =
+                expect_some "graph list data"
+                  (Cli_result.data_value graph_list)
+              in
+              let user_graphs =
+                expect_some "user graphs"
+                  (Option.bind (Edn_util.get graph_list_data "graphs")
+                     Edn_util.as_seq)
+              in
+              expect_int "graph list empty" 0 (Vec.length user_graphs);
+              let data =
+                expect_some "remote graphs data"
+                  (Cli_result.data_value result)
+              in
+              let graphs =
+                expect_some "graphs"
+                  (Option.bind (Edn_util.get data "graphs") Edn_util.as_seq)
+              in
+              expect_int "graph count" 1 (Vec.length graphs);
+              Js.Promise.resolve ())
+          |> Js.Promise.catch (fun error ->
+              let message =
+                Option.value
+                  (promise_error_message error)
+                  ~default:"remote-graphs test failed"
+              in
+              stop_stub () |> Js.Promise.then_ (fun () ->
+                  cleanup ();
+                  Js.Promise.reject (Failure message)))
+          |> Js.Promise.then_ (fun () -> stop_stub ())
+        in
+        cleanup ();
+        Js.Promise.resolve pass
+      with exn ->
+        cleanup ();
+        fail_promise (Printexc.to_string exn));
 
   test
     "CLI parity query validation rejects db/id datom clauses and non-vector \
@@ -5242,6 +5439,8 @@ let () =
         (Command_id.is_write Command_id.Graph_list);
       expect_bool "show requires graph" true
         (Command_id.requires_graph Command_id.Show);
+      expect_bool "sync remote-graphs does not require graph" false
+        (Command_id.requires_graph Command_id.Sync_remote_graphs);
       expect_bool "login does not require auth" false
         (Command_id.requires_auth Command_id.Login));
 
@@ -8060,6 +8259,7 @@ let () =
           (fun dir -> mkdir_p (Node.Path.join [| graphs; dir |]))
           (Vec.of_array
              [|
+               ".cli-sync-runtime";
                "yy%20y";
                "old~2Fname";
                "colon~3Aname";
