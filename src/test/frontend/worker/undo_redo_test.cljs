@@ -1851,3 +1851,37 @@
       (is (some? (d/entity @conn [:block/uuid class-uuid])))
       (is (= #{y-uuid}
              (set (map :block/uuid (get (d/entity @conn [:block/uuid x-uuid]) related))))))))
+
+(deftest redo-ops-replay-keeps-comments-blocks-property-test
+  (testing "redo of a semantic-ops tx that tags a block Comments re-derives comments/blocks"
+    (worker-undo-redo/clear-history! test-repo)
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          prev-pipeline @ldb/*transact-pipeline-fn
+          parent-uuid (random-uuid)
+          child-uuid (random-uuid)
+          comments-blocks (fn [] (:logseq.property.comments/blocks
+                                  (d/entity @conn [:block/uuid child-uuid])))]
+      (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+      (try
+        (sqlite-build/create-blocks conn [{:page {:block/title "redo comments tag"}
+                                           :blocks []}])
+        (let [page-id (d/q '[:find ?e . :where [?e :block/title "redo comments tag"]]
+                          @conn)]
+          (worker-undo-redo/clear-history! test-repo)
+          (apply-ops! conn
+                      [[:insert-blocks [[{:block/uuid parent-uuid
+                                          :block/title "p"}
+                                         {:block/uuid child-uuid
+                                          :block/title "c"
+                                          :block/tags #{:logseq.class/Comments}
+                                          :block/parent [:block/uuid parent-uuid]}]
+                                        page-id
+                                        {:sibling? false
+                                         :keep-uuid? true}]]]
+                      (local-tx-meta {:client-id "test-client"}))
+          (is (seq (comments-blocks)))
+          (is (map? (worker-undo-redo/undo test-repo)))
+          (is (map? (worker-undo-redo/redo test-repo)))
+          (is (seq (comments-blocks))))
+        (finally
+          (reset! ldb/*transact-pipeline-fn prev-pipeline))))))
