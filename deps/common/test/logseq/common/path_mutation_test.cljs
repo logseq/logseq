@@ -28,7 +28,7 @@
   (is (= "file://server/a/b" (path/url-normalize "file://server/a/./b")))
   (is (= "file://server/a/b" (path/path-normalize "file://server/a/./b")))
   (is (= "file://[bad" (path/url-normalize "file://[bad"))
-      "an unparseable URL is returned as is"))
+      "a URL that does not parse is returned as is"))
 
 ;; Fails if, in `trim-dir-prefix`, `if` becomes `if-not`.
 (deftest trim-dir-prefix-does-not-decode-a-plain-path-test
