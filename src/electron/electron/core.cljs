@@ -37,6 +37,7 @@
 (defonce HOST_PLUGIN_URL (str STATIC_URL "plugins/"))
 (defonce HOST_EXTERNAL_PLUGIN_URL (str STATIC_URL "external/"))
 (defonce PLUGINS_ROOT (.join node-path (.homedir os) ".logseq/plugins"))
+(defonce capture-mode? (= "1" js/process.env.LOGSEQ_CAPTURE_MODE))
 
 (defonce *setup-fn (volatile! nil))
 (defonce *teardown-fn (volatile! nil))
@@ -399,7 +400,8 @@
            (js-utils/disableXFrameOptions win)
 
            (db/ensure-graphs-dir!)
-           (install-cli-launcher!)
+           (when-not capture-mode?
+             (install-cli-launcher!))
 
            ;; Windows/Linux: handle deeplink URL passed on first launch via argv
            (handle-initial-deeplink! win)
@@ -473,7 +475,8 @@
                             {:scheme     FILE_ASSETS_SCHEME
                              :privileges (assoc privileges :stream true)}]))
 
-      (register-default-protocol-client! app)
+      (when-not capture-mode?
+        (register-default-protocol-client! app))
       (set-app-menu!)
       (i18n/on-locale-change! set-app-menu!)
       (setup-deeplink!)
