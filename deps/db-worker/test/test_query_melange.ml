@@ -27,6 +27,15 @@ let () =
           Fest.expect |> Fest.deep_equal (Db_query_dsl.pre_transform input) expected)
         cases);
 
+  Fest.test "custom readers traverse nested tags" (fun () ->
+      let form =
+        Db_query_dsl.apply_custom_readers
+          (Parser.read_edn "(and #tag foo (or #tag bar #tag baz))")
+      in
+      Fest.expect
+      |> Fest.deep_equal (Ds_wire.edn_of_query_form form)
+           "(and \"[[foo]]\" (or \"[[bar]]\" \"[[baz]]\"))");
+
   Fest.test "simplify-query" (fun () ->
       let cases =
         [

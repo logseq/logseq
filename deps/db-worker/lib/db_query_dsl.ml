@@ -104,7 +104,6 @@ let rec flatten f =
   | QueryFormVector xs | QueryFormList xs | QueryFormSet xs ->
       List.concat_map flatten xs
   | QueryFormMap kvs -> List.concat_map (fun (k, v) -> flatten k @ flatten v) kvs
-  | QueryFormTagged (t, f') -> flatten (QueryFormTagged (t, f'))
   | leaf -> [ leaf ]
 
 let lvar_name = function
@@ -750,15 +749,17 @@ let simplify_query form =
 
 (* cljs reader custom-readers: #tag x -> ->page-ref x *)
 let apply_custom_readers form =
-  match form with
-  | QueryFormTagged ("tag", f) ->
-      let name =
-        match f with
-        | QueryFormSymbol s -> s
-        | other -> Ds_wire.edn_of_query_form other
-      in
-      str (Page_ref.to_page_ref name)
-  | f -> f
+  postwalk
+    (function
+      | QueryFormTagged ("tag", f) ->
+          let name =
+            match f with
+            | QueryFormSymbol s -> s
+            | other -> Ds_wire.edn_of_query_form other
+          in
+          str (Page_ref.to_page_ref name)
+      | f -> f)
+    form
 
 (* ============ time helpers (worker query_dsl) ============ *)
 
