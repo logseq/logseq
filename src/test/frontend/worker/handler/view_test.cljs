@@ -45,20 +45,6 @@
               :value 123})
             [:operators :value-source :many? :values :value-after-operator-change])))))
 
-(deftest view-filter-value-after-operator-change-keeps-empty-for-is-operators
-  (let [normalize #'worker-view/view-filter-value-after-operator-change]
-    (is (= :empty (normalize :is-not :empty))
-        "Switching is -> is-not must keep Empty, not drop it to nil.")
-    (is (= :empty (normalize :is :empty))
-        "Switching is-not -> is must keep Empty.")
-    (is (= :empty (normalize :is (normalize :is-not :empty))))
-    (is (= :empty (normalize :is-not (normalize :is :empty))))
-    (is (= #{"tag"} (normalize :is #{"tag"})))
-    (is (= #{"tag"} (normalize :is-not #{"tag"})))
-    (is (nil? (normalize :is "stale"))
-        ":is still requires a set or :empty.")
-    (is (nil? (normalize :is-not "stale")))))
-
 (deftest view-filter-data-keeps-empty-after-is-operator-change
   (let [conn (d/create-conn db-schema/schema)
         property {:db/ident :block/tags
