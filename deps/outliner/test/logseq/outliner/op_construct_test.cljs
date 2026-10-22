@@ -20,6 +20,76 @@
     {:tx-data (:tx-data tx-report)
      :db-after (:db-after tx-report)}))
 
+(deftest derive-history-outliner-ops-insert-vector-tag-refs-test
+  (testing "tag-page insertion canonicalizes vector tag IDs before recording sync history"
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks [{:page {:block/title "Trips"}
+                                    :blocks [{:block/title "existing trip"}]}]})
+          target (db-test/find-block-by-content @conn "existing trip")
+          page (:block/parent target)
+          page-id (:db/id page)
+          page-ref [:block/uuid (:block/uuid page)]
+          tag-ident :logseq.class/Root
+          tag-id (:db/id (d/entity @conn tag-ident))
+          tag-ref [:block/uuid (:block/uuid (d/entity @conn tag-ident))]]
+      (doseq [[tags expected] [[[page-id] #{page-ref}]
+                              [[page-id tag-id] #{page-ref tag-ref}]
+                              [[page-ref tag-ref] #{page-ref tag-ref}]
+                              [[tag-ident :logseq.class/Tag] #{tag-ident :logseq.class/Tag}]
+                              [page-ref page-ref]
+                              [[:db/ident :logseq.class/Tag] [:db/ident :logseq.class/Tag]]
+                              [[] #{}]]]
+        (let [tx-meta {:outliner-op :insert-blocks
+                       :outliner-ops [[:insert-blocks [[{:block/uuid (random-uuid)
+                                                         :block/title ""
+                                                         :block/tags tags}]
+                                                       (:db/id target)
+                                                       {:sibling? true}]]]}
+              {:keys [forward-outliner-ops]}
+              (op-construct/derive-history-outliner-ops @conn @conn [] tx-meta)]
+          (is (= expected (get-in forward-outliner-ops [0 1 0 0 :block/tags]))
+              (pr-str tags)))))))
+
+(deftest derive-history-outliner-ops-save-vector-ref-attrs-test
+  (testing "editing canonicalizes vector references and preserves individual lookup refs"
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks [{:page {:block/title "page"}
+                                    :blocks [{:block/title "child"}]}]})
+          child (db-test/find-block-by-content @conn "child")
+          page (:block/parent child)
+          page-ref [:block/uuid (:block/uuid page)]
+          tx-meta {:outliner-op :save-block
+                   :outliner-ops [[:save-block [{:block/uuid (:block/uuid child)
+                                                 :block/title "Renamed trip"
+                                                 :block/parent page-ref
+                                                 :block/tags [(:db/id page)]}
+                                                {}]]]}
+          {:keys [forward-outliner-ops]}
+          (op-construct/derive-history-outliner-ops @conn @conn [] tx-meta)
+          payload (get-in forward-outliner-ops [0 1 0])]
+      (is (= #{page-ref} (:block/tags payload)))
+      (is (= page-ref (:block/parent payload)))
+      (is (= "Renamed trip" (:block/title payload))))))
+
+(deftest derive-history-outliner-ops-template-vector-tag-refs-test
+  (testing "template block tag vectors use stable references in history"
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks [{:page {:block/title "page"}
+                                    :blocks [{:block/title "template"}
+                                             {:block/title "target"}]}]})
+          template (db-test/find-block-by-content @conn "template")
+          target (db-test/find-block-by-content @conn "target")
+          page (:block/parent target)
+          tx-meta {:outliner-op :apply-template
+                   :outliner-ops [[:apply-template [(:db/id template) (:db/id target)
+                                                   {:template-blocks [{:block/uuid (random-uuid)
+                                                                       :block/title "new trip"
+                                                                       :block/tags [(:db/id page)]}]}]]]}
+          {:keys [forward-outliner-ops]}
+          (op-construct/derive-history-outliner-ops @conn @conn [] tx-meta)]
+      (is (= #{[:block/uuid (:block/uuid page)]}
+             (get-in forward-outliner-ops [0 1 2 :template-blocks 0 :block/tags]))))))
+
 (deftest derive-history-outliner-ops-canonicalizes-create-page-and-builds-delete-inverse-test
   (testing "create-page forward op keeps created uuid and reverse op deletes that page"
     (let [conn (db-test/create-conn-with-blocks {:pages-and-blocks []})
