@@ -2165,6 +2165,22 @@ let test_sort_comparison_keeps_different_scalar_types_tied () =
      Datascript.Bool true, Datascript.String "";
      Datascript.Bool false, Datascript.Int64 1L]
 
+let test_query_ref_set_filter_matches_raw_ref_datoms () =
+  let conn = parity_conn () in
+  let db = db_of conn in
+  let apple = Option.get (Ldb.get_page db (String "apple")) in
+  let note = Option.get (Ldb.ref_ent apple "user.property/note") in
+  let note_uuid = match Ldb.value note "block/uuid" with Some (Uuid uuid) -> uuid | _ -> failwith "Missing value UUID" in
+  let view = create_view_id conn "query-result" in
+  List.iter (fun (operator, expected) ->
+    let db = db_of conn in
+    let result = Db_view.get_view_data db (Some view)
+      (opt_add (parity_options db "query-result")
+        ["filters", filters [clause "user.property/note" operator (Wire.Set [Wire.Uuid note_uuid])]]) in
+    str_list_eq' "query ref membership uses the entity id carried by a Ref datom"
+      (result_titles db result) expected)
+    ["is", ["Apple"]; "is-not", ["Missing"; "Orange"]]
+
 let test_boolean_filters_preserve_clojure_truthiness () =
   let conn = parity_conn () in
   List.iter (fun feature ->
@@ -2183,6 +2199,7 @@ let () =
   Alcotest.run "db_view"
     [ ( "view_test"
       , [ Alcotest.test_case "text-not-contains-uses-case-folded-content" `Quick test_text_not_contains_uses_case_folded_content
+        ; Alcotest.test_case "query-ref-set-filter-matches-raw-ref-datoms" `Quick test_query_ref_set_filter_matches_raw_ref_datoms
         ; Alcotest.test_case "text-filters-ignore-missing-ref-content" `Quick test_text_filters_ignore_missing_ref_content
         ; Alcotest.test_case "false-scalars-do-not-pass-number-or-text-filters" `Quick test_false_scalar_does_not_pass_number_or_text_filters
         ; Alcotest.test_case "sort-comparison-keeps-different-scalar-types-tied" `Quick test_sort_comparison_keeps_different_scalar_types_tied

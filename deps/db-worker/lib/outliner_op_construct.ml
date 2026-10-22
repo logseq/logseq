@@ -538,6 +538,26 @@ let rewrite_block_title_with_retracted_refs (db : db) (block : Wire.t)
 
 (* op-construct/sanitize-insert-block-payload *)
 let sanitize_insert_block_payload db tx_data (block : Wire.t) : Wire.t =
+  let block = match mget "block/uuid" block with
+    | Some uuid -> (match entity_of_ref_wire db (Wire.Array [Wire.keyword "block/uuid"; uuid]) with
+      | None -> block
+      | Some entity ->
+        let attrs = Hashtbl.create 16 in
+        Datascript.datoms db Datascript.Eavt ~e:entity.id ()
+        |> Seq.iter (fun (datom : datom) ->
+          if String.starts_with ~prefix:"logseq.property" datom.a
+            || String.starts_with ~prefix:"user.property/" datom.a
+            || String.starts_with ~prefix:"plugin.property." datom.a then
+            Hashtbl.replace attrs datom.a ());
+        Hashtbl.fold (fun attr () block ->
+          match Datascript.Entity.entity_attr_raw entity attr with
+          | Some (One_value value) -> Cljs_map.assoc block attr (Ds_wire.transit_of_value value)
+          | Some (Many_values values) -> Cljs_map.assoc block attr
+              (Wire.Set (List.map Ds_wire.transit_of_value values))
+          | Some (One_entity _ | Many_entities _) ->
+              invalid_arg "inserted property values must remain raw"
+          | None -> block) attrs block)
+    | None -> block in
   let block' = sanitize_block_payload db ~tx_data block in
   match block' with
   | Wire.Map _ ->

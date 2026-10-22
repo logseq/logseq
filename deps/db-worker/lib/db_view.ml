@@ -1517,6 +1517,7 @@ let match_journal_day db (m : value) : value option =
 (* view/->filter-match-id *)
 let filter_match_id db (v : value) : entity_id option =
   match v with
+  | Ref id -> Some id
   | Nil -> None
   | Int64 i -> Datascript.Util.int64_to_int i
   | Float f -> Some (int_of_float f)
