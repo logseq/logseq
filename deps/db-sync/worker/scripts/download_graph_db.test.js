@@ -12,6 +12,7 @@ const {
   parseFramedRows,
   parseCliArgs,
   sanitizeGraphIdForFilename,
+  snapshotRequestUrl,
   writeSnapshotSqlite,
 } = require("./download_graph_db");
 
@@ -38,6 +39,22 @@ test("parseCliArgs accepts required args and defaults output", () => {
 
 test("sanitizeGraphIdForFilename replaces unsafe chars", () => {
   assert.equal(sanitizeGraphIdForFilename("us-east-1:abc/def"), "us-east-1_abc_def");
+});
+
+test("snapshotRequestUrl keeps the caller base for the API stream route", () => {
+  assert.equal(
+    snapshotRequestUrl(
+      "https://sync.example.test/",
+      "graph-1",
+      "http://127.0.0.1:8787/sync/graph-1/snapshot/stream?graph-id=graph-1",
+    ),
+    "https://sync.example.test/sync/graph-1/snapshot/stream?graph-id=graph-1",
+  );
+});
+
+test("snapshotRequestUrl keeps an external object URL", () => {
+  const external = "https://assets.example.test/graph-1.snapshot?X-Amz-Signature=abc";
+  assert.equal(snapshotRequestUrl("https://sync.example.test", "graph-1", external), external);
 });
 
 test("CLI --help exits successfully", () => {

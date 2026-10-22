@@ -27,6 +27,31 @@
                                    (resolve timeout-sentinel)
                                    (reject error))))))))}))
 
+(defn- node-request
+  [headers url]
+  #js {:method "GET"
+       :url url
+       :headers headers})
+
+(deftest request-from-node-keeps-host-and-forwarded-https-test
+  (let [request (platform-node/request-from-node
+                 (node-request #js {"host" "sync.example.test"
+                                    "x-forwarded-proto" "HTTPS, http"}
+                               "/sync/graph-1/snapshot/download")
+                 {})]
+    (is (= "https://sync.example.test/sync/graph-1/snapshot/download"
+           (.-url request)))))
+
+(deftest request-from-node-prefers-configured-base-url-over-forwarded-proto-test
+  (let [request (platform-node/request-from-node
+                 (node-request #js {"host" "127.0.0.1:8787"
+                                    "x-forwarded-proto" "http"}
+                               "/sync/graph-1/snapshot/download")
+                 {:scheme "https"
+                  :host "sync.example.test:9443"})]
+    (is (= "https://sync.example.test:9443/sync/graph-1/snapshot/download"
+           (.-url request)))))
+
 (deftest node-server-env-passes-the-admin-token-test
   (let [penv (.-env js/process)
         before (aget penv "DB_SYNC_ADMIN_TOKEN")]
