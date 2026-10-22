@@ -2116,12 +2116,54 @@ let parity_options db feature =
 let test_text_not_contains_uses_case_folded_content () =
   let conn = parity_conn () in
   let db = db_of conn in
-  let view = create_view_id conn "query-result" in
+  List.iter (fun feature ->
+  let view = create_view_id conn feature in
   let result = Db_view.get_view_data (db_of conn) (Some view)
-    (opt_add (parity_options db "query-result")
+    (opt_add (parity_options db feature)
        ["filters", filters [clause "user.property/note" "text-not-contains" (Wire.String "apple")]]) in
   str_list_eq' "negative text filter uses the same case folding as contains"
-    (result_titles (db_of conn) result) ["Missing"; "Orange"]
+    (result_titles (db_of conn) result) ["Missing"; "Orange"])
+    ["query-result"; "class-objects"]
+
+let test_text_filters_ignore_missing_ref_content () =
+  let conn = parity_conn () in
+  let apple = Option.get (Ldb.get_page (db_of conn) (String "apple")) in
+  ignore (Datascript.transact_conn_string conn (Printf.sprintf
+    "[[:db/add %d :user.property/note :logseq.property/empty-placeholder]]" apple.id));
+  List.iter (fun feature ->
+    let view = create_view_id conn feature in
+    let db = db_of conn in
+    let result = Db_view.get_view_data db (Some view)
+      (opt_add (parity_options db feature)
+         ["filters", filters [clause "user.property/note" "text-not-contains" (Wire.String "")]]) in
+    str_list_eq' "an empty text match does not match nil content"
+      (result_titles db result) ["Apple"; "Missing"])
+    ["query-result"; "class-objects"]
+
+let test_false_scalar_does_not_pass_number_or_text_filters () =
+  let conn = parity_conn () in
+  let apple = Option.get (Ldb.get_page (db_of conn) (String "apple")) in
+  let orange = Option.get (Ldb.get_page (db_of conn) (String "orange")) in
+  ignore (Datascript.transact_conn_string conn (Printf.sprintf
+    "[[:db/add %d :user.property/raw false] [:db/add %d :user.property/raw true]]" apple.id orange.id));
+  let view = create_view_id conn "query-result" in
+  let db = db_of conn in
+  List.iter (fun (operator, matched) ->
+    let result = Db_view.get_view_data db (Some view)
+      (opt_add (parity_options db "query-result")
+         ["filters", filters [clause "user.property/raw" operator matched]]) in
+    str_list_eq' "false scalar is excluded by the source's when guard"
+      (result_titles db result) ["Orange"])
+    ["number-gte", Wire.Int 0; "text-contains", Wire.String ""]
+
+let test_sort_comparison_keeps_different_scalar_types_tied () =
+  List.iter (fun (left, right) ->
+    List.iter (fun asc ->
+      check "incomparable scalar types tie instead of numeric coercion"
+        (Db_view.compare_sort_values (Some left) (Some right) asc = 0)) [true; false])
+    [Datascript.String "2", Datascript.Int64 10L;
+     Datascript.Bool true, Datascript.String "";
+     Datascript.Bool false, Datascript.Int64 1L]
 
 let test_boolean_filters_preserve_clojure_truthiness () =
   let conn = parity_conn () in
@@ -2141,6 +2183,9 @@ let () =
   Alcotest.run "db_view"
     [ ( "view_test"
       , [ Alcotest.test_case "text-not-contains-uses-case-folded-content" `Quick test_text_not_contains_uses_case_folded_content
+        ; Alcotest.test_case "text-filters-ignore-missing-ref-content" `Quick test_text_filters_ignore_missing_ref_content
+        ; Alcotest.test_case "false-scalars-do-not-pass-number-or-text-filters" `Quick test_false_scalar_does_not_pass_number_or_text_filters
+        ; Alcotest.test_case "sort-comparison-keeps-different-scalar-types-tied" `Quick test_sort_comparison_keeps_different_scalar_types_tied
         ; Alcotest.test_case "boolean-filters-preserve-clojure-truthiness" `Quick test_boolean_filters_preserve_clojure_truthiness
         ; Alcotest.test_case "missing-and-placeholder-sort-values-stay-last" `Quick test_missing_and_placeholder_sort_values_stay_last
         ; Alcotest.test_case "unlinked-references-ignore-node-ids-and-match-aliases" `Quick test_unlinked_references_ignore_node_ids_and_match_aliases

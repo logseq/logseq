@@ -604,6 +604,7 @@ let get_unlinked_references db (id : entity_id) : entity list =
 (* db-view/get-property-value-content *)
 let get_property_value_content db (v : value) : value option =
   match v with
+  | Nil | Bool false -> None
   | Uuid u ->
       (match Ldb.ent_of_ref db (Lookup_ref ("block/uuid", Uuid u)) with
        | Some e -> Db_property.property_value_content e
@@ -1019,7 +1020,11 @@ let compare_sort_values (a : value option) (b : value option) (asc_ : bool) : in
   | None, _ -> 1
   | _, None -> -1
   | Some va, Some vb ->
-      let c = compare_scalars va vb in
+      let same_type = match va, vb with
+        | (Int64 _ | Float _ | Instant _), (Int64 _ | Float _ | Instant _)
+        | String _, String _ | Bool _, Bool _ -> true
+        | _ -> false in
+      let c = if same_type then compare_scalars va vb else 0 in
       if asc_ then c else -c
 
 let js_num_str (f : float) : string =
@@ -1653,16 +1658,13 @@ let row_matched db (row : entity) (filters : view_filters) (input : string) : bo
           not
             (List.exists
                (fun v ->
-                  let pv =
-                    match get_property_value_content db v with
-                    | Some pv -> pv
-                    | None -> Nil
-                  in
-                  contains_substring (lowercase (js_str pv)) needle)
+                  match get_property_value_content db v with
+                  | Some pv -> contains_substring (lowercase (js_str pv)) needle
+                  | None -> false)
                value')
       | "number-gt" | "number-gte" | "number-lt" | "number-lte" ->
           (match raw with
-           | None -> false
+           | None | Some Nil | Some (Bool false) -> false
            | Some _ ->
                (match c.f_match with
                 | Nil -> true
@@ -2367,10 +2369,12 @@ let match_text_or_number_clause (row : clause_row) (op : string) (m : value) : b
               | _ -> contains_substring (lowercase (js_str v)) needle)
            row.r_contents)
   | "text-not-contains" ->
-      let needle = js_str m in
+      let needle = lowercase (js_str m) in
       Some
         (not
-           (List.exists (fun v -> contains_substring (js_str v) needle) row.r_contents))
+           (List.exists (function
+              | Nil -> false
+              | v -> contains_substring (lowercase (js_str v)) needle) row.r_contents))
   | "number-gt" -> Some (number_compare_match row.r_contents m (fun a b -> a > b))
   | "number-gte" -> Some (number_compare_match row.r_contents m (fun a b -> a >= b))
   | "number-lt" -> Some (number_compare_match row.r_contents m (fun a b -> a < b))
