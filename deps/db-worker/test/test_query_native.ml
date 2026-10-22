@@ -35,6 +35,19 @@ let await task =
   | Some (Error e) -> raise e
   | None -> failwith "task still pending"
 
+exception Query_timeout
+
+let with_query_timeout f =
+  let previous =
+    Sys.signal Sys.sigalrm (Sys.Signal_handle (fun _ -> raise Query_timeout))
+  in
+  ignore (Unix.alarm 2);
+  Fun.protect
+    ~finally:(fun () ->
+      ignore (Unix.alarm 0);
+      ignore (Sys.signal Sys.sigalrm previous))
+    (fun () -> try Some (f ()) with Query_timeout -> None)
+
 (* ---- schema + fixture data (subset of the logseq db schema needed by
    the query paths under test) ---- *)
 
@@ -86,10 +99,11 @@ let fixture_edn today_day =
       {:db/ident :logseq.property/status.done :block/title \"Done\"}
       {:db/id -101 :block/name \"page1\" :block/title \"page1\"}
       {:db/id -102 :block/name \"page two\" :block/title \"Page Two\"}
+      {:db/id -104 :block/name \"project\" :block/title \"Project\"}
       {:db/id -1 :block/title \"b1 content\" :block/page -101
        :block/uuid #uuid \"%s\"}
       {:db/id -2 :block/title \"b2 content\" :block/page -101}
-      {:db/id -3 :block/title \"b3 links\" :block/page -101 :block/refs [-102]}
+      {:db/id -3 :block/title \"b3 links\" :block/page -101 :block/refs [-102 -104]}
       {:db/id -4 :block/title \"task one\" :block/page -101
        :block/tags [:logseq.class/Task]
        :logseq.property/status :logseq.property/status.todo}
@@ -312,6 +326,17 @@ let () =
   check "query-dsl-query page-ref"
     (string_contains res "b3 links" && not (string_contains res "b1 content"));
 
+  List.iter
+    (fun query ->
+      let res =
+        invoke "thread-api/query-dsl-query"
+          [ Wire.String repo; Wire.String query; Wire.nil ]
+      in
+      check ("query-dsl-query nested tag: " ^ query)
+        (string_contains res "b3 links" && not (string_contains res "b1 content")))
+    [ "(and #project (not \"absent\"))";
+      "(and (or #project #absent) (not \"absent\"))" ];
+
   (* query-dsl-query: task *)
   let res =
     invoke "thread-api/query-dsl-query"
@@ -366,6 +391,31 @@ let () =
   in
   check "query-custom plain"
     (string_contains res "b1 content" && string_contains res "task one");
+
+  List.iter
+    (fun (name, clause, expected) ->
+      let res =
+        with_query_timeout (fun () ->
+          invoke "thread-api/query-custom"
+            [ Wire.String repo;
+              Wire.Map
+                [ (kw "query",
+                    Wire.Array
+                      [ kw "find"; Wire.Symbol "?t"; kw "where";
+                        clause;
+                        Wire.Array
+                          [ Wire.Symbol "?b"; kw "block/title"; Wire.Symbol "?t" ] ]) ];
+              Wire.Map [] ])
+      in
+      check ("query-custom tagged constant: " ^ name)
+        (match res with Some res -> string_contains res expected | None -> false))
+    [ ("uuid",
+        Wire.Array [ Wire.Symbol "?b"; kw "block/uuid"; Wire.Uuid uuid_b1 ],
+        "b1 content");
+      ("inst",
+        Wire.Array
+          [ Wire.List [ Wire.Symbol "="; Wire.Date_ms 1000L; Wire.Date_ms 1000L ] ],
+        "b1 content") ];
 
   (* query-custom: invalid context -> fail!'s synchronous throw escapes
      remoteInvoke as a rejection (cljs remote-function re-throws handler
