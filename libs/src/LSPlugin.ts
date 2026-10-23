@@ -806,7 +806,7 @@ export interface IEditorProxy extends Record<string, any> {
 
   getBlock: (
     srcBlock: BlockIdentity | EntityID,
-    opts?: Partial<{ includeChildren: boolean }>
+    opts?: Partial<{ includeChildren: boolean; camelCase: boolean }>
   ) => Promise<BlockEntity | null>
 
   setBlockCollapsed: (
@@ -904,6 +904,7 @@ export interface IEditorProxy extends Record<string, any> {
 
   // property entity related APIs (DB only)
   getProperty: (key: string) => Promise<BlockEntity | null>
+  getPropertiesByTitle: (title: string) => Promise<Array<Partial<BlockEntity>>>
 
   // insert or update property entity
   upsertProperty: (
@@ -956,6 +957,66 @@ export interface IEditorProxy extends Record<string, any> {
  * Datascript related APIs
  */
 export interface IDBProxy {
+  getAppInfo: () => Promise<{ version: string; supportDb: boolean }>
+  getContentCapabilities: () => Promise<{
+    app: { version: string; pluginsEnabled: boolean }
+    formats: Array<{
+      id: string
+      source: 'built-in'
+      canRender: 'supported' | 'unknown'
+      syntax: string | null
+      example?: string
+      renderVerified: boolean
+      limitations?: string[]
+    }>
+    plugins: {
+      count: number
+      returned: number
+      truncated: boolean
+      entries: Array<{
+        id: string
+        name: string | null
+        title: string | null
+        version: string | null
+        description: string | null
+        repositoryUrl: string | null
+        enabled: boolean
+        loadError: boolean
+        status: 'disabled' | 'load-error' | 'enabled-unverified'
+        canRender: 'unknown'
+        syntax: null
+        evidence: string
+        commands: Array<{
+          kind: 'slash' | 'command'
+          key?: string | null
+          label: string | null
+          description?: string | null
+        }>
+        commandsTruncated: boolean
+        renderers: Array<{
+          kind: 'fenced-code' | 'block' | 'block-properties' | 'hosted'
+          key: string | null
+          title: string | null
+          registered: boolean
+          hasRenderer: boolean
+          canRender: 'unknown'
+          syntax: null
+          evidence: string
+        }>
+        renderersTruncated: boolean
+        textTruncated: boolean
+      }>
+    }
+    limits: {
+      maxPlugins: number
+      maxCommandsPerPlugin: number
+      maxTextCharacters: number
+      maxPluginBytes: number
+      maxRenderersPerPlugin: number
+    }
+    limitations: string[]
+  }>
+  checkCurrentIsDbGraph: () => Promise<boolean>
   /**
    * Run a DSL query. https://docs.logseq.com/#/page/queries
    */
@@ -971,6 +1032,67 @@ export interface IDBProxy {
    * Run a datascript query with parameters.
    */
   datascriptQuery: <T = any>(query: string, ...inputs: Array<any>) => Promise<T>
+  search: <T = any>(query: string, options?: Record<string, any>) => Promise<T>
+
+  getBlock: IEditorProxy['getBlock']
+  createEmbed: (parentUuid: BlockUUID, targetUuid: BlockUUID) => Promise<BlockEntity | null>
+  listEmbeds: (options?: { page_uuid?: BlockUUID; target_uuid?: BlockUUID; limit?: number }) => Promise<{
+    embeds: Array<Record<string, any>>
+    count: number
+    truncated: boolean
+  }>
+  getTag: IEditorProxy['getTag']
+  getTagUsers: (tagUuid: BlockUUID) => Promise<Array<BlockEntity | PageEntity>>
+  getBacklinks: (targetUuid: BlockUUID) => Promise<Record<string, any>>
+  getTitleHolders: (title: string) => Promise<Array<Record<string, any>>>
+  getTitleInventory: () => Promise<Array<{
+    id: EntityID
+    uuid: BlockUUID
+    title: string
+    kind: 'page' | 'tag'
+    recycled: boolean
+  }>>
+  getJournalCandidates: () => Promise<Array<Record<string, any>>>
+  listRecycled: () => Promise<Array<Record<string, any>>>
+  getStatusRows: () => Promise<Array<[Record<string, any>, Record<string, any>]>>
+  getClosedValues: () => Promise<Array<[Record<string, any>, Record<string, any>]>>
+  getOrphanTags: () => Promise<Array<Record<string, any>>>
+  getOrphanProperties: () => Promise<Array<{ ident: string; title: string; type: string | null }>>
+  getPropertyUsers: (propertyIdent: string) => Promise<Array<{
+    holder: Record<string, any>
+    value: any
+    value_entity: Record<string, any> | null
+  }>>
+  listAssets: () => Promise<Array<{
+    uuid: BlockUUID
+    title: string | null
+    type: string | null
+    size: number | null
+    checksum: string | null
+    external_url: string | null
+    external_file_name: string | null
+  }>>
+  getPageData: (pageName: string) => Promise<Record<string, any>>
+  inspectPage: (
+    pageUuid: BlockUUID,
+    detail?: 'page' | 'blocks' | 'tags' | 'properties' | 'declared' | 'all'
+  ) => Promise<Record<string, any>>
+  getPageStats: (pageUuid: BlockUUID) => Promise<Record<string, any>>
+  getPageBlockUUIDs: (pageUuid: BlockUUID) => Promise<Array<Partial<BlockEntity> & { page_uuid: BlockUUID }>>
+  getBlockTree: (
+    blockUuid: BlockUUID,
+    maxDepth?: number,
+    maxNodes?: number
+  ) => Promise<Record<string, any>>
+  addBlockTag: (blockId: BlockIdentity, tagId: BlockIdentity) => Promise<BlockEntity | null>
+  listTags: (options?: Partial<{ expand: boolean }>) => Promise<Array<Record<string, any>>>
+  listProperties: (options?: Partial<{ expand: boolean }>) => Promise<Array<Record<string, any>>>
+  listPages: (options?: Partial<{ expand: boolean }>) => Promise<Array<{
+    'block/title': string
+    'block/uuid': BlockUUID
+    'block/created-at'?: number
+    'block/updated-at'?: number
+  }>>
 
   /**
    * Hook all transaction data of DB.
