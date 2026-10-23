@@ -3147,11 +3147,49 @@
                                   blocks-tx))]
     (swap! placeholder-ref-uuids into ref-uuids)))
 
+(defn- imported-pre-block-content?
+  "True when a file-graph pre-block still has non-property body after page
+   properties have been stripped for a DB import."
+  [block]
+  (and (:block/pre-block? block)
+       (not (string/blank? (:block/title block)))))
+
+(defn- dropped-pre-block-uuids
+  "Pre-blocks that only held page properties are omitted from the DB graph.
+   Their children are re-parented to the page via fix-pre-block-references."
+  [blocks]
+  (into #{}
+        (keep (fn [block]
+                (when (and (:block/pre-block? block)
+                           (not (imported-pre-block-content? block)))
+                  (:block/uuid block))))
+        blocks))
+
+(defn- prepare-blocks-for-db-tx
+  "Keep non-property pre-block body as a regular block. Page properties stay on
+   the page and :block/pre-block? is never transacted."
+  [blocks]
+  (keep (fn [block]
+          (cond
+            (not (:block/pre-block? block))
+            (dissoc block :block/pre-block?)
+
+            (imported-pre-block-content? block)
+            (dissoc block
+                    :block/pre-block?
+                    :block/properties
+                    :block/properties-order
+                    :block/properties-text-values
+                    :block/invalid-properties
+                    :block/macros)
+
+            :else
+            nil))
+        blocks))
+
 (defn- <build-blocks-tx
   [conn blocks pre-blocks per-file-state tx-options walked-by-uuid]
-  (let [blocks' (->> blocks
-                     (remove :block/pre-block?)
-                     (map #(dissoc % :block/pre-block?)))]
+  (let [blocks' (prepare-blocks-for-db-tx blocks)]
     (p/loop [tx-data []
              blocks blocks']
       (if-let [block (first blocks)]
@@ -3236,7 +3274,7 @@
           {:keys [pages-tx page-properties-tx per-file-state existing-pages]}
           (<build-pages-and-property-assets conn pages blocks tx-options)
           _ (log-phase-ms! log-fn :pages-tx pages-start {:file file})
-          pre-blocks (->> blocks (keep #(when (:block/pre-block? %) (:block/uuid %))) set)
+          pre-blocks (dropped-pre-block-uuids blocks)
           _ (import-progress! options {:phase :blocks-tx :file file})
           blocks-start (when log-fn (import-profile/now-ms))
           blocks-tx (<build-blocks-tx conn blocks pre-blocks per-file-state tx-options walked-by-uuid)
