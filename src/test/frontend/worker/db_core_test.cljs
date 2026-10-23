@@ -3800,12 +3800,15 @@
            alias-uuid #uuid "22222222-2222-2222-2222-222222222222"
            hidden-uuid #uuid "33333333-3333-3333-3333-333333333333"
            heading-uuid #uuid "44444444-4444-4444-4444-444444444444"]
+       (d/transact! conn [{:db/ident :logseq.class/Page}])
        (d/transact! conn [{:block/uuid alias-uuid
                            :block/title "Alias"
-                           :block/name "alias"}
+                           :block/name "alias"
+                           :block/tags [[:db/ident :logseq.class/Page]]}
                           {:block/uuid hidden-uuid
                            :block/title "Hidden"
                            :block/name "hidden"
+                           :block/tags [[:db/ident :logseq.class/Page]]
                            :logseq.property/hide? true}])
        (d/transact! conn [{:block/uuid source-uuid
                            :block/title "Source"
@@ -3823,6 +3826,7 @@
          (is (= {:page-id (:db/id alias-page)
                  :page-uuid alias-uuid
                  :page-title "Alias"
+                 :eligible-for-recent? true
                  :hidden? false
                  :property? false
                  :built-in? false
@@ -3833,6 +3837,7 @@
          (is (= {:page-id (:db/id heading-block)
                  :page-uuid heading-uuid
                  :page-title "Heading Block"
+                 :eligible-for-recent? false
                  :hidden? false
                  :property? false
                  :built-in? false
@@ -3843,6 +3848,7 @@
          (is (= {:page-id (:db/id hidden-page)
                  :page-uuid hidden-uuid
                  :page-title "Hidden"
+                 :eligible-for-recent? false
                  :hidden? true
                  :property? false
                  :built-in? false
