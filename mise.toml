@@ -1,0 +1,4 @@
+[tools]
+node = '24'
+java = 'openjdk-21.0.2'
+clojure = '1.12'
