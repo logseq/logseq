@@ -87,6 +87,79 @@
   "create index if not exists idx_personal_access_tokens_user_created_at on personal_access_tokens (user_id, created_at desc)")
 (def ^:private personal-access-tokens-graph-index-sql
   "create index if not exists idx_personal_access_tokens_graph_id on personal_access_tokens (graph_id)")
+(def ^:private oauth-apps-create-table-sql
+  (str "create table if not exists oauth_apps ("
+       "id TEXT primary key,"
+       "owner_user_id TEXT not null,"
+       "name TEXT not null,"
+       "description TEXT,"
+       "redirect_uris TEXT not null,"
+       "status TEXT not null,"
+       "review_note TEXT,"
+       "created_at INTEGER not null,"
+       "updated_at INTEGER not null,"
+       "reviewed_at INTEGER,"
+       "check (status in ('pending', 'approved', 'rejected'))"
+       ")"))
+(def ^:private oauth-apps-owner-index-sql
+  "create index if not exists idx_oauth_apps_owner_created_at on oauth_apps (owner_user_id, created_at desc)")
+(def ^:private oauth-apps-status-index-sql
+  "create index if not exists idx_oauth_apps_status_created_at on oauth_apps (status, created_at asc)")
+(def ^:private oauth-login-sessions-create-table-sql
+  (str "create table if not exists oauth_login_sessions ("
+       "id TEXT primary key,"
+       "user_id TEXT not null,"
+       "email TEXT,"
+       "username TEXT,"
+       "csrf_token TEXT not null,"
+       "created_at INTEGER not null,"
+       "expires_at INTEGER not null"
+       ")"))
+(def ^:private oauth-authorization-codes-create-table-sql
+  (str "create table if not exists oauth_authorization_codes ("
+       "code_hash TEXT primary key,"
+       "app_id TEXT not null,"
+       "user_id TEXT not null,"
+       "graph_id TEXT not null,"
+       "redirect_uri TEXT not null,"
+       "scope TEXT not null,"
+       "code_challenge TEXT not null,"
+       "expires_at INTEGER not null,"
+       "created_at INTEGER not null"
+       ")"))
+(def ^:private oauth-authorization-codes-app-index-sql
+  "create index if not exists idx_oauth_authorization_codes_app on oauth_authorization_codes (app_id)")
+(def ^:private oauth-access-tokens-create-table-sql
+  (str "create table if not exists oauth_access_tokens ("
+       "id TEXT primary key,"
+       "token_hash TEXT not null unique,"
+       "token_prefix TEXT not null,"
+       "app_id TEXT not null,"
+       "user_id TEXT not null,"
+       "graph_id TEXT not null,"
+       "scope TEXT not null,"
+       "expires_at INTEGER not null,"
+       "created_at INTEGER not null"
+       ")"))
+(def ^:private oauth-access-tokens-app-index-sql
+  "create index if not exists idx_oauth_access_tokens_app on oauth_access_tokens (app_id)")
+(def ^:private oauth-access-tokens-graph-index-sql
+  "create index if not exists idx_oauth_access_tokens_graph on oauth_access_tokens (graph_id)")
+(def ^:private oauth-refresh-tokens-create-table-sql
+  (str "create table if not exists oauth_refresh_tokens ("
+       "token_hash TEXT primary key,"
+       "app_id TEXT not null,"
+       "user_id TEXT not null,"
+       "graph_id TEXT not null,"
+       "scope TEXT not null,"
+       "expires_at INTEGER not null,"
+       "created_at INTEGER not null,"
+       "revoked_at INTEGER"
+       ")"))
+(def ^:private oauth-refresh-tokens-app-index-sql
+  "create index if not exists idx_oauth_refresh_tokens_app on oauth_refresh_tokens (app_id)")
+(def ^:private oauth-refresh-tokens-graph-index-sql
+  "create index if not exists idx_oauth_refresh_tokens_graph on oauth_refresh_tokens (graph_id)")
 
 (defn- duplicate-column-error?
   [error column-name]
@@ -204,7 +277,19 @@
    (common/<d1-run db daily-active-entities-create-index-sql)
    (common/<d1-run db personal-access-tokens-create-table-sql)
    (common/<d1-run db personal-access-tokens-user-index-sql)
-   (common/<d1-run db personal-access-tokens-graph-index-sql)))
+   (common/<d1-run db personal-access-tokens-graph-index-sql)
+   (common/<d1-run db oauth-apps-create-table-sql)
+   (common/<d1-run db oauth-apps-owner-index-sql)
+   (common/<d1-run db oauth-apps-status-index-sql)
+   (common/<d1-run db oauth-login-sessions-create-table-sql)
+   (common/<d1-run db oauth-authorization-codes-create-table-sql)
+   (common/<d1-run db oauth-authorization-codes-app-index-sql)
+   (common/<d1-run db oauth-access-tokens-create-table-sql)
+   (common/<d1-run db oauth-access-tokens-app-index-sql)
+   (common/<d1-run db oauth-access-tokens-graph-index-sql)
+   (common/<d1-run db oauth-refresh-tokens-create-table-sql)
+   (common/<d1-run db oauth-refresh-tokens-app-index-sql)
+   (common/<d1-run db oauth-refresh-tokens-graph-index-sql)))
 
 (defn- utc-day-str
   [timestamp-ms]
@@ -419,6 +504,245 @@
        :created-at (aget row "created_at")
        :expires-at (aget row "expires_at")})))
 
+(defn- d1-changes
+  [^js result]
+  (cond
+    (nil? result) 0
+    (number? (.-changes result)) (.-changes result)
+    (some? (.-meta result)) (or (.-changes (.-meta result)) 0)
+    :else 0))
+
+(defn- parse-redirect-uris
+  [raw]
+  (try
+    (let [parsed (when (string? raw) (js/JSON.parse raw))]
+      (if (array? parsed)
+        (mapv str (array-seq parsed))
+        []))
+    (catch :default _
+      [])))
+
+(defn- oauth-app-from-row
+  [row]
+  (when row
+    {:id (aget row "id")
+     :owner-user-id (aget row "owner_user_id")
+     :name (aget row "name")
+     :description (aget row "description")
+     :redirect-uris (parse-redirect-uris (aget row "redirect_uris"))
+     :status (aget row "status")
+     :review-note (aget row "review_note")
+     :created-at (aget row "created_at")
+     :updated-at (aget row "updated_at")
+     :reviewed-at (aget row "reviewed_at")}))
+
+(defn <oauth-app-insert!
+  [db {:keys [id owner-user-id name description redirect-uris status review-note
+             created-at updated-at reviewed-at]}]
+  (common/<d1-run
+   db
+   (str "insert into oauth_apps "
+        "(id, owner_user_id, name, description, redirect_uris, status, review_note, "
+        "created_at, updated_at, reviewed_at) "
+        "values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+   id owner-user-id name description (js/JSON.stringify (clj->js redirect-uris))
+   status review-note created-at updated-at reviewed-at))
+
+(defn <oauth-app-count-by-owner
+  [db user-id]
+  (p/let [result (common/<d1-all db
+                                 "select count(1) as n from oauth_apps where owner_user_id = ?"
+                                 user-id)
+          row (first (common/get-sql-rows result))]
+    (if row
+      (js/Number (aget row "n"))
+      0)))
+
+(defn <oauth-app-by-id
+  [db id]
+  (p/let [result (common/<d1-all db
+                                 (str "select id, owner_user_id, name, description, redirect_uris, "
+                                      "status, review_note, created_at, updated_at, reviewed_at "
+                                      "from oauth_apps where id = ?")
+                                 id)
+          row (first (common/get-sql-rows result))]
+    (oauth-app-from-row row)))
+
+(defn <oauth-apps-by-owner
+  [db user-id]
+  (p/let [result (common/<d1-all
+                  db
+                  (str "select id, owner_user_id, name, description, redirect_uris, "
+                       "status, review_note, created_at, updated_at, reviewed_at "
+                       "from oauth_apps where owner_user_id = ? "
+                       "order by created_at desc")
+                  user-id)
+          rows (common/get-sql-rows result)]
+    (mapv oauth-app-from-row rows)))
+
+(defn <oauth-apps-by-status
+  [db status]
+  (p/let [result (common/<d1-all
+                  db
+                  (str "select id, owner_user_id, name, description, redirect_uris, "
+                       "status, review_note, created_at, updated_at, reviewed_at "
+                       "from oauth_apps where status = ? "
+                       "order by created_at asc limit 100")
+                  status)
+          rows (common/get-sql-rows result)]
+    (mapv oauth-app-from-row rows)))
+
+(defn <oauth-app-delete!
+  [db id user-id]
+  (p/let [result (common/<d1-run db
+                                 "delete from oauth_apps where id = ? and owner_user_id = ?"
+                                 id user-id)]
+    (d1-changes result)))
+
+(defn <oauth-app-review!
+  [db id {:keys [status note reviewed-at]}]
+  (p/let [result (common/<d1-run
+                  db
+                  (str "update oauth_apps set status = ?, review_note = ?, "
+                       "reviewed_at = ?, updated_at = ? where id = ?")
+                  status note reviewed-at reviewed-at id)]
+    (d1-changes result)))
+
+(defn <oauth-grants-delete-by-app!
+  [db app-id]
+  (p/do!
+   (common/<d1-run db "delete from oauth_authorization_codes where app_id = ?" app-id)
+   (common/<d1-run db "delete from oauth_access_tokens where app_id = ?" app-id)
+   (common/<d1-run db "delete from oauth_refresh_tokens where app_id = ?" app-id)))
+
+(defn <oauth-session-insert!
+  [db {:keys [id user-id email username csrf-token created-at expires-at]}]
+  (common/<d1-run
+   db
+   (str "insert into oauth_login_sessions "
+        "(id, user_id, email, username, csrf_token, created_at, expires_at) "
+        "values (?, ?, ?, ?, ?, ?, ?)")
+   id user-id email username csrf-token created-at expires-at))
+
+(defn <oauth-session-by-id
+  [db id]
+  (p/let [result (common/<d1-all
+                  db
+                  (str "select id, user_id, email, username, csrf_token, expires_at "
+                       "from oauth_login_sessions where id = ?")
+                  id)
+          row (first (common/get-sql-rows result))]
+    (when row
+      {:id (aget row "id")
+       :user-id (aget row "user_id")
+       :email (aget row "email")
+       :username (aget row "username")
+       :csrf-token (aget row "csrf_token")
+       :expires-at (aget row "expires_at")})))
+
+(defn <oauth-code-insert!
+  [db {:keys [code-hash app-id user-id graph-id redirect-uri scope code-challenge
+             expires-at created-at]}]
+  (common/<d1-run
+   db
+   (str "insert into oauth_authorization_codes "
+        "(code_hash, app_id, user_id, graph_id, redirect_uri, scope, code_challenge, "
+        "expires_at, created_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?)")
+   code-hash app-id user-id graph-id redirect-uri scope code-challenge expires-at created-at))
+
+(defn <oauth-code-by-hash
+  [db code-hash]
+  (p/let [result (common/<d1-all
+                  db
+                  (str "select code_hash, app_id, user_id, graph_id, redirect_uri, scope, "
+                       "code_challenge, expires_at from oauth_authorization_codes "
+                       "where code_hash = ?")
+                  code-hash)
+          row (first (common/get-sql-rows result))]
+    (when row
+      {:code-hash (aget row "code_hash")
+       :app-id (aget row "app_id")
+       :user-id (aget row "user_id")
+       :graph-id (aget row "graph_id")
+       :redirect-uri (aget row "redirect_uri")
+       :scope (aget row "scope")
+       :code-challenge (aget row "code_challenge")
+       :expires-at (aget row "expires_at")})))
+
+(defn <oauth-code-delete!
+  [db code-hash]
+  (p/let [result (common/<d1-run db
+                                 "delete from oauth_authorization_codes where code_hash = ?"
+                                 code-hash)]
+    (d1-changes result)))
+
+(defn <oauth-access-token-insert!
+  [db {:keys [id token-hash token-prefix app-id user-id graph-id scope expires-at created-at]}]
+  (common/<d1-run
+   db
+   (str "insert into oauth_access_tokens "
+        "(id, token_hash, token_prefix, app_id, user_id, graph_id, scope, expires_at, created_at) "
+        "values (?, ?, ?, ?, ?, ?, ?, ?, ?)")
+   id token-hash token-prefix app-id user-id graph-id scope expires-at created-at))
+
+(defn <oauth-access-token-by-hash
+  [db token-hash]
+  (p/let [result (common/<d1-all
+                  db
+                  (str "select t.id, t.user_id, t.graph_id, t.scope, t.expires_at, "
+                       "a.status as app_status "
+                       "from oauth_access_tokens t "
+                       "join oauth_apps a on a.id = t.app_id "
+                       "where t.token_hash = ?")
+                  token-hash)
+          row (first (common/get-sql-rows result))]
+    (when row
+      {:id (aget row "id")
+       :user-id (aget row "user_id")
+       :graph-id (aget row "graph_id")
+       :scope (aget row "scope")
+       :expires-at (aget row "expires_at")
+       :app-status (aget row "app_status")})))
+
+(defn <oauth-refresh-token-insert!
+  [db {:keys [token-hash app-id user-id graph-id scope expires-at created-at]}]
+  (common/<d1-run
+   db
+   (str "insert into oauth_refresh_tokens "
+        "(token_hash, app_id, user_id, graph_id, scope, expires_at, created_at) "
+        "values (?, ?, ?, ?, ?, ?, ?)")
+   token-hash app-id user-id graph-id scope expires-at created-at))
+
+(defn <oauth-refresh-token-by-hash
+  [db token-hash]
+  (p/let [result (common/<d1-all
+                  db
+                  (str "select r.token_hash, r.app_id, r.user_id, r.graph_id, r.scope, "
+                       "r.expires_at, r.revoked_at, a.status as app_status "
+                       "from oauth_refresh_tokens r "
+                       "join oauth_apps a on a.id = r.app_id "
+                       "where r.token_hash = ?")
+                  token-hash)
+          row (first (common/get-sql-rows result))]
+    (when row
+      {:token-hash (aget row "token_hash")
+       :app-id (aget row "app_id")
+       :user-id (aget row "user_id")
+       :graph-id (aget row "graph_id")
+       :scope (aget row "scope")
+       :expires-at (aget row "expires_at")
+       :revoked-at (aget row "revoked_at")
+       :app-status (aget row "app_status")})))
+
+(defn <oauth-refresh-token-revoke!
+  [db token-hash revoked-at]
+  (p/let [result (common/<d1-run
+                  db
+                  (str "update oauth_refresh_tokens set revoked_at = ? "
+                       "where token_hash = ? and revoked_at is null")
+                  revoked-at token-hash)]
+    (d1-changes result)))
+
 (defn <index-upsert!
   ([db graph-id graph-name user-id schema-version graph-e2ee?]
    (<index-upsert! db graph-id graph-name user-id schema-version graph-e2ee? true))
@@ -477,6 +801,9 @@
 (defn <graph-delete-metadata! [db graph-id]
   (p/do!
    (common/<d1-run db "delete from personal_access_tokens where graph_id = ?" graph-id)
+   (common/<d1-run db "delete from oauth_authorization_codes where graph_id = ?" graph-id)
+   (common/<d1-run db "delete from oauth_access_tokens where graph_id = ?" graph-id)
+   (common/<d1-run db "delete from oauth_refresh_tokens where graph_id = ?" graph-id)
    (common/<d1-run db "delete from graph_aes_keys where graph_id = ?" graph-id)
    (common/<d1-run db "delete from graph_members where graph_id = ?" graph-id)))
 

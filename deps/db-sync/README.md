@@ -129,13 +129,41 @@ cd deps/db-sync
 pnpm test:node-adapter
 ```
 
+## Sign in with Logseq
+
+Developers create an app from Settings → Developer. The app stays `pending`
+until an operator approves it. Only an approved app can use the authorization
+code + PKCE flow.
+
+```bash
+# List apps waiting for review
+curl -H "x-db-sync-admin-token: $DB_SYNC_ADMIN_TOKEN" \
+  "$DB_SYNC_BASE_URL/admin/oauth/apps?status=pending"
+
+# Approve or reject
+curl -X POST -H "content-type: application/json" \
+  -H "x-db-sync-admin-token: $DB_SYNC_ADMIN_TOKEN" \
+  -d '{"status":"approved","note":"ok"}' \
+  "$DB_SYNC_BASE_URL/admin/oauth/apps/<client-id>/review"
+```
+
+Approved apps send users to `GET /oauth/authorize` (`response_type=code`,
+`code_challenge_method=S256`). The user signs in with a Logseq account, chooses
+one graph, and the app exchanges the code at `POST /oauth/token`. The access
+token is limited to that graph and the requested `logseq/read` and
+`logseq/write` scopes. Discovery is `GET /.well-known/oauth-authorization-server`.
+
+Apply D1 migration `0008_add_oauth_apps.sql` before using these routes.
+Login uses the configured Cognito user pool (`COGNITO_ISSUER` and
+`COGNITO_CLIENT_ID`) with `USER_PASSWORD_AUTH`.
+
 ## Environment Variables
 
 | Variable | Purpose |
 | --- | --- |
 | DB_SYNC_PORT | HTTP server port |
 | DB_SYNC_BASE_URL | External base URL for asset links |
-| DB_SYNC_ADMIN_TOKEN | Admin-only token (header `x-db-sync-admin-token`): passes the graph access check on sync and asset routes, and the operator graph deletion endpoints |
+| DB_SYNC_ADMIN_TOKEN | Admin-only token (header `x-db-sync-admin-token`): passes the graph access check on sync and asset routes, the operator graph deletion endpoints, and OAuth app review |
 | DB_SYNC_DATA_DIR | Data directory for sqlite + assets |
 | DB_SYNC_STORAGE_DRIVER | Storage backend selection (sqlite) |
 | DB_SYNC_ASSETS_DRIVER | Assets backend selection (filesystem) |
