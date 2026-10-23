@@ -32,7 +32,7 @@
     (when (set? value) value)
 
     (:text-contains :text-not-contains)
-    (when (string? value) value)
+    (if (string? value) value "")
 
     (:number-gt :number-lt :number-gte :number-lte)
     (when (number? value) value)
