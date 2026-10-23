@@ -33,3 +33,18 @@
      (state/pub-event! [:graph/restored repo])
      (state/pub-event! [:ui/re-render-root]))
    (p/finally #(state/set-state! :graph/loading? false))))
+
+(defn abandon-unopened-graph!
+  "Leave the UI on no open graph after create-or-open-db fails.
+
+  Startup seeds :git/current-repo before the worker opens it, and a failed
+  open closes any database the worker already had. Snapshot hooks then throw
+  that worker error through the root error boundary and replace the app.
+  Clear the seeded repo before :db/restoring? flips off, while those hooks
+  are still unmounted."
+  []
+  (db-subs/reset-graph! nil)
+  (when (some? (state/get-current-repo))
+    (state/set-current-repo! nil))
+  (state/set-state! :graph/loading? false)
+  (state/set-db-restoring! false))
