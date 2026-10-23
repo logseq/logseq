@@ -44,3 +44,28 @@
               :operator :before
               :value 123})
             [:operators :value-source :many? :values :value-after-operator-change])))))
+
+(deftest view-filter-data-keeps-empty-after-is-operator-change
+  (let [conn (d/create-conn db-schema/schema)
+        property {:db/ident :block/tags
+                  :block/title "Tags"
+                  :logseq.property/type :default}]
+    (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+    (with-redefs [db-view/get-property-values (fn [_db _property-ident _option] [])]
+      (is (= :empty
+             (:value-after-operator-change
+              (worker-view/view-filter-data
+               @conn
+               {:property property
+                :property-ident :block/tags
+                :operator :is-not
+                :value :empty})))
+          "The thread-API payload used by the operator UI must keep :empty.")
+      (is (= :empty
+             (:value-after-operator-change
+              (worker-view/view-filter-data
+               @conn
+               {:property property
+                :property-ident :block/tags
+                :operator :is
+                :value :empty})))))))
