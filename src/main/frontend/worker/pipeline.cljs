@@ -278,14 +278,15 @@
            (when (or page-tag-update? move-to-library? move-under-page?)
              (let [block-before (d/entity db-before id)
                    block-after (d/entity db-after id)
-                   ;; When a block becomes a page its descendant blocks still point
-                   ;; :block/page at the old page; re-point them at the new page.
-                   children-page-tx (fn []
+                   ;; Re-point descendant :block/page at the surviving page.
+                   ;; block->page / move-to-library: descendants still point at the
+                   ;; old page. page->block: they still point at the demoted page.
+                   children-page-tx (fn [page-id]
                                       (keep (fn [child-id]
                                               (let [child (d/entity db-after child-id)]
                                                 (when (and child (not (ldb/page? child)))
                                                   {:db/id child-id
-                                                   :block/page id})))
+                                                   :block/page page-id})))
                                             (ldb/get-block-full-children-ids db-after id)))]
                (when block-after
                  (cond
@@ -296,7 +297,7 @@
                       :block/name (common-util/page-name-sanity-lc (:block/title block-after))
                       :block/tags :logseq.class/Page}
                      [:db/retract id :block/page]]
-                    (children-page-tx))
+                    (children-page-tx id))
 
                    ;; page moved under another page
                    (and move-under-page? (ldb/internal-page? block-after))
@@ -318,7 +319,7 @@
                                     (when (or (ldb/class? block-parent) (ldb/property? block-parent))
                                       [[:db/retract id :block/parent]
                                        [:db/retract id :block/order]]))]
-                     (concat ->page-tx (move-parent-to-library-tx block-parent) (children-page-tx)))
+                     (concat ->page-tx (move-parent-to-library-tx block-parent) (children-page-tx id)))
 
                    ;; page->block
                    (and block-before (not (:added datom)) (ldb/internal-page? block-before))
@@ -329,8 +330,10 @@
                                            parent
                                            (recur (:block/parent parent)))))]
                      (when parent-page
-                       [[:db/retract id :block/name]
-                        [:db/add id :block/page (:db/id parent-page)]]))))))))
+                       (concat
+                        [[:db/retract id :block/name]
+                         [:db/add id :block/page (:db/id parent-page)]]
+                        (children-page-tx (:db/id parent-page)))))))))))
        tx-data))))
 
 (defn- add-missing-properties-to-typed-display-blocks
