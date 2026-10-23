@@ -135,8 +135,8 @@
   (boolean (and (string? challenge) (re-matches code-challenge-pattern challenge))))
 
 (defn- bytes->base64url
-  [bytes]
-  (let [binary (apply str (map #(js/String.fromCharCode %) (array-seq bytes)))]
+  [octets]
+  (let [binary (apply str (map #(js/String.fromCharCode %) (array-seq octets)))]
     (-> (js/btoa binary)
         (string/replace "+" "-")
         (string/replace "/" "_")

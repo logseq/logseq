@@ -128,7 +128,9 @@
                                    :app app
                                    :request normalized
                                    :graphs graphs
-                                   :csrf (:csrf-token session)})))))))))
+                                   :csrf (:csrf-token session)})
+               200
+               [(page/form-action-source (:redirect-uri normalized))]))))))))
 
 (defn- <login
   [request env]

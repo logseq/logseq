@@ -31,9 +31,9 @@
 (defn- review-id-from-path
   [path]
   (when (string/starts-with? path (str admin-collection-path "/"))
-    (let [rest (subs path (count (str admin-collection-path "/")))]
-      (when (string/ends-with? rest "/review")
-        (let [id (subs rest 0 (- (count rest) (count "/review")))]
+    (let [suffix (subs path (count (str admin-collection-path "/")))]
+      (when (string/ends-with? suffix "/review")
+        (let [id (subs suffix 0 (- (count suffix) (count "/review")))]
           (when (oauth/valid-client-id? id)
             id))))))
 

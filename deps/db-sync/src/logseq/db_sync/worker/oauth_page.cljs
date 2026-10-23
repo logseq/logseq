@@ -239,21 +239,45 @@
                     (escape-html (t lang :deny)) "</button></div>"))
              "</form>")))
 
+(defn form-action-source
+  "Origin of a redirect URI. Chrome applies form-action to the redirect that
+  follows a form post, so the consent page has to name the app origin."
+  [redirect-uri]
+  (when (string? redirect-uri)
+    (try
+      (let [url (js/URL. redirect-uri)
+            protocol (.-protocol url)]
+        (when (and (contains? #{"http:" "https:"} protocol)
+                   (string/blank? (.-username url))
+                   (string/blank? (.-password url)))
+          (str protocol "//" (.-host url))))
+      (catch :default _
+        nil))))
+
 (defn- html-headers
-  []
-  #js {"content-type" "text/html; charset=utf-8"
-       "content-security-policy" "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'"
-       "x-frame-options" "DENY"
-       "referrer-policy" "no-referrer"
-       "cache-control" "no-store"
-       "x-content-type-options" "nosniff"})
+  [form-action-sources]
+  (let [sources (->> form-action-sources
+                     (filter string?)
+                     distinct)
+        form-action (str "form-action 'self'"
+                         (when (seq sources)
+                           (str " " (string/join " " sources))))]
+    #js {"content-type" "text/html; charset=utf-8"
+         "content-security-policy" (str "default-src 'none'; style-src 'unsafe-inline'; "
+                                        form-action
+                                        "; base-uri 'none'; frame-ancestors 'none'")
+         "x-frame-options" "DENY"
+         "referrer-policy" "no-referrer"
+         "cache-control" "no-store"
+         "x-content-type-options" "nosniff"}))
 
 (defn html-response
-  ([body] (html-response body 200))
-  ([body status]
+  ([body] (html-response body 200 nil))
+  ([body status] (html-response body status nil))
+  ([body status form-action-sources]
    (platform/response body
                       #js {:status status
-                           :headers (html-headers)})))
+                           :headers (html-headers form-action-sources)})))
 
 (defn redirect-response
   ([location] (redirect-response location nil))

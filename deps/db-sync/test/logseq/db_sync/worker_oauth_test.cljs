@@ -530,13 +530,13 @@
      :location location
      :code code}))
 
-(defn- <exchange [client-id code verifier]
+(defn- <exchange [client-id code code-verifier]
   (<call (form-request "/oauth/token"
                        {"grant_type" "authorization_code"
                         "code" code
                         "client_id" client-id
                         "redirect_uri" redirect-uri
-                        "code_verifier" verifier})))
+                        "code_verifier" code-verifier})))
 
 (deftest sign-in-selects-a-graph-and-limits-the-access-token-test
   (async done
@@ -565,6 +565,9 @@
               (fn []
                 (p/let [client-id (<approved-client)
                         signed-in (<sign-in client-id "logseq/write logseq/read")
+                        _ (is (string/includes?
+                               (.get (.-headers (:consent signed-in)) "content-security-policy")
+                               "https://app.example"))
                         token-response (<exchange client-id (:code signed-in) verifier)
                         token (json-body token-response)
                         reused (<exchange client-id (:code signed-in) verifier)

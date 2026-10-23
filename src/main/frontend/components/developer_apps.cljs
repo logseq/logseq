@@ -122,7 +122,7 @@
            [:span.text-xs.opacity-60 (status-label status)]]
           (when (seq description)
             [:p.text-sm.opacity-70 description])
-          [:code.break-all text-xs id]
+          [:code.break-all.text-xs id]
           [:ul.text-xs.opacity-70
            (for [uri redirect-uris]
              [:li {:key uri} uri])]
