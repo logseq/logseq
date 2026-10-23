@@ -116,7 +116,9 @@
         page-children-classes))
 
 (def internal-tags
-  "Built-in classes that are hidden on a node and all pages view"
+  "Built-in classes hidden from All pages and treated as internal.
+   Node visibility for :logseq.class/Asset follows
+   :logseq.property.class/hide-from-node; the other members stay hidden on nodes."
   #{:logseq.class/Page :logseq.class/Property :logseq.class/Tag :logseq.class/Root
     :logseq.class/Asset})
 

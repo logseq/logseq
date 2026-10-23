@@ -3125,7 +3125,9 @@
   "Tags without inline or hidden tags"
   [config block]
   (when (:block/raw-title block)
-    (let [hidden-internal-tags (cond-> ldb/internal-tags
+    ;; Asset is internal (All pages / private tagging) but node visibility
+    ;; is controlled by hide-from-node, unlike Page/Property/Tag/Root.
+    (let [hidden-internal-tags (cond-> (disj ldb/internal-tags :logseq.class/Asset)
                                  (:show-tag-and-property-classes? config)
                                  (set/difference #{:logseq.class/Tag :logseq.class/Property}))
           block-tags (->>
