@@ -924,6 +924,9 @@ abc
       (is (empty? (filter #(= :block/pre-block? (:a %))
                           (d/datoms @conn :eavt)))
           "Legacy pre-block markers are never transacted")
+      (is (= "Plain pre-block"
+             (:block/title (db-test/find-block-by-content @conn "Plain pre-block")))
+          "Non-property content before the first outline block is imported")
       (is (= "Missing ref" (:block/title missing-block))
           "Missing OG block refs are removed from imported content")
       (is (empty? (:block/refs missing-block))
@@ -961,6 +964,109 @@ abc
           "Existing block refs are preserved, including forward refs from later files")
       (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
           "Imported graph validates"))))
+
+(deftest-async import-preserves-non-outline-pre-block-content
+  (p/do
+    (testing "plain paragraphs and code with no bullets or headings"
+      (p/let [file (write-temp-graph-file
+                    "pages/winsock.md"
+                    (str "This is a paragraph about winsock.\n\n"
+                         "Another paragraph.\n\n"
+                         "```javascript\n"
+                         "console.log('hi')\n"
+                         "```\n"))
+              conn (db-test/create-conn)
+              _ (db-pipeline/add-listener conn)
+              _ (import-files-to-db [file] conn {})
+              page (db-test/find-page-by-title @conn "winsock")
+              children (ordered-children page)
+              titles (mapv :block/title children)
+              nested-titles (mapv :block/title (mapcat ordered-children children))]
+        (is (seq children)
+            "A file with no outline bullets or headings still imports content")
+        (is (some #(string/includes? % "This is a paragraph about winsock.") titles)
+            "Paragraph content is imported")
+        (is (or (some #(string/includes? % "console.log") titles)
+                (some #(string/includes? % "console.log") nested-titles))
+            "Fenced code content is imported")
+        (is (empty? (filter #(= :block/pre-block? (:a %))
+                            (d/datoms @conn :eavt)))
+            "Legacy pre-block markers are never transacted")
+        (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+            "Imported graph validates")))
+
+    (testing "page properties plus non-bullet body"
+      (p/let [file (write-temp-graph-file
+                    "pages/notes.md"
+                    (str "note-type:: draft\n"
+                         "topic:: networking\n\n"
+                         "Winsock is a Windows API.\n"))
+              conn (db-test/create-conn)
+              _ (db-pipeline/add-listener conn)
+              _ (import-files-to-db [file] conn {})
+              page (db-test/find-page-by-title @conn "notes")
+              children (ordered-children page)
+              titles (mapv :block/title children)]
+        (is (= {:user.property/note-type "draft"
+                :user.property/topic "networking"
+                :block/tags [:logseq.class/Page]}
+               (db-test/readable-properties page))
+            "Page-level properties are imported onto the page")
+        (is (some #(string/includes? % "Winsock is a Windows API.") titles)
+            "Non-property body is imported as block content")
+        (is (not-any? #(or (string/includes? % "note-type::")
+                           (string/includes? % "topic::"))
+                      titles)
+            "Page property text is not duplicated into the block title")
+        (is (empty? (filter #(= :block/pre-block? (:a %))
+                            (d/datoms @conn :eavt)))
+            "Legacy pre-block markers are never transacted")
+        (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+            "Imported graph validates")))
+
+    (testing "property-only page does not create an empty block"
+      (p/let [file (write-temp-graph-file
+                    "pages/only-props.md"
+                    "note-type:: draft\n")
+              conn (db-test/create-conn)
+              _ (db-pipeline/add-listener conn)
+              _ (import-files-to-db [file] conn {})
+              page (db-test/find-page-by-title @conn "only-props")]
+        (is (= {:user.property/note-type "draft"
+                :block/tags [:logseq.class/Page]}
+               (db-test/readable-properties page))
+            "Property-only files still import page properties")
+        (is (empty? (ordered-children page))
+            "Property-only pre-blocks are omitted as empty blocks")
+        (is (empty? (filter #(= :block/pre-block? (:a %))
+                            (d/datoms @conn :eavt)))
+            "Legacy pre-block markers are never transacted")
+        (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+            "Imported graph validates")))
+
+    (testing "non-property content before the first outline block"
+      (p/let [file (write-temp-graph-file
+                    "pages/intro.md"
+                    (str "note-type:: open\n\n"
+                         "Intro paragraph before any outline.\n\n"
+                         "- first bullet\n"
+                         "- second bullet\n"))
+              conn (db-test/create-conn)
+              _ (db-pipeline/add-listener conn)
+              _ (import-files-to-db [file] conn {})
+              page (db-test/find-page-by-title @conn "intro")
+              titles (mapv :block/title (ordered-children page))]
+        (is (= {:user.property/note-type "open"
+                :block/tags [:logseq.class/Page]}
+               (db-test/readable-properties page))
+            "Page-level properties are imported onto the page")
+        (is (= ["Intro paragraph before any outline." "first bullet" "second bullet"] titles)
+            "Intro content is imported as a sibling of later outline blocks")
+        (is (empty? (filter #(= :block/pre-block? (:a %))
+                            (d/datoms @conn :eavt)))
+            "Legacy pre-block markers are never transacted")
+        (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+            "Imported graph validates")))))
 
 (deftest-async import-converts-markdown-headings-to-db-heading-metadata
   (p/let [file (write-temp-graph-file
