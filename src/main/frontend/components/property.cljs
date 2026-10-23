@@ -1433,7 +1433,12 @@
         id (hooks/use-memo #(str (random-uuid)) [])
         block (resolve-linked-block-if-exists target-block)
         show-hidden-properties? (use-hidden-properties-visible (:block/uuid block))
-        show-properties? (or sidebar-properties? tag-dialog?)
+        ;; `tag-dialog?` travels down into every block the dialog renders, so
+        ;; taking it at face value put an "Add property" button under each of
+        ;; them — including the empty block a freshly created page starts with.
+        ;; The dialog configures the PAGE; its blocks are just content.
+        show-properties? (or sidebar-properties?
+                             (and tag-dialog? (entity-util/page? block)))
         class? (entity-util/class? block)
         show-empty-and-hidden-properties? (let [{:keys [mode show? ids]} (state/use-sub :ui/show-empty-and-hidden-properties?)]
                                             (and show?
