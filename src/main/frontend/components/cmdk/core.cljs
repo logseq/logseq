@@ -2062,13 +2062,16 @@
                                         (when (and (string/blank? (:block/title only-child))
                                                    (empty? (:block/_parent only-child)))
                                           only-child)))]
-              (if-let [last-child (last (ldb/sort-by-order (:block/_parent target)))]
-                (editor-handler/move-blocks! to-move last-child {:sibling? true})
-                (editor-handler/move-blocks! to-move target {:sibling? false}))
-              ;; Remove the placeholder only if the page had exactly one empty block
-              (when placeholder-block
-                (editor-handler/delete-block-aux! placeholder-block))
-              (state/set-captured-uuids! captured-uuids (:block/uuid target))))
+              ;; Awaited so the dialog closes, and any reveal chained on this
+              ;; promise navigates, only once the blocks are on the target
+              (p/do!
+               (if-let [last-child (last (ldb/sort-by-order (:block/_parent target)))]
+                 (editor-handler/move-blocks! to-move last-child {:sibling? true})
+                 (editor-handler/move-blocks! to-move target {:sibling? false}))
+               ;; Remove the placeholder only if the page had exactly one empty block
+               (when placeholder-block
+                 (editor-handler/delete-block-aux! placeholder-block))
+               (state/set-captured-uuids! captured-uuids (:block/uuid target)))))
           (shui/dialog-close! :ls-dialog-cmdk)
           (shui/popup-hide!)
           (when to-move
@@ -2080,6 +2083,40 @@
                   {:on-click #(route-handler/redirect-to-page! (:block/uuid target))}
                   page-title]])
                :success)))))))))
+
+(defn- capture-destination
+  "The page a capture will land on: whatever the picker holds, else today."
+  [target-page]
+  (or target-page (db/get-page (date/today))))
+
+(defn- capture-open-page!
+  [page]
+  (route-handler/redirect-to-page! (:block/uuid page)))
+
+(defn- capture-open-in-sidebar!
+  [page]
+  (state/sidebar-add-block! (state/get-current-repo) (:db/id page) :page))
+
+(defn- capture-commit-then!
+  "Finish the capture, then reveal where it went.
+
+   The dialog promises a destination one line above the buttons (\"Add to: X\"),
+   so arriving on that page without the text just typed contradicts it. Before
+   this, both reveal actions closed the dialog and navigated without committing,
+   leaving the draft on the staging page in a state that was neither saved nor
+   discarded and gave no sign of it.
+
+   Chained on the promise rather than fired beside it: the move is async, so
+   navigating in parallel can win the race and show the page before the blocks
+   land. `capture-commit-blocks!` closes the dialog and shows its own \"Blocks
+   added to X\" toast, so neither is repeated by callers; an untouched draft
+   moves nothing and simply reveals the page.
+
+   Lives here rather than in the action bar because the footer buttons and the
+   keyboard shortcuts are wired separately and would otherwise drift."
+  [target f]
+  (p/do! (capture-commit-blocks! target)
+         (when target (f target))))
 
 (hsx/defc capture-page-blocks
   "Renders the full block editor for the staging page."
@@ -2303,28 +2340,22 @@
 (hsx/defc capture-action-bar
   "Bottom action bar for capture mode."
   [target-page]
-  (action-bar
-   {:tip (contextual-tip)
-    :primary {:text (t :cmdk.action/done) :shortcut ["mod" "e"]
-              :on-click #(capture-commit-blocks!
-                          (or target-page (db/get-page (date/today))))}
-    :secondary [{:text (t :editor.quick-add/open-target)
-                 :icon "open-as-page" :icon-extension? true
-                 :shortcut ["cmd" "shift" "o"]
-                 :on-click (fn []
-                             (shui/dialog-close! :ls-dialog-cmdk)
-                             (when target-page
-                               (route-handler/redirect-to-page! (:block/uuid target-page))))}
-                {:text (t :cmdk.action/open-in-sidebar)
-                 :icon "move-to-sidebar-right" :icon-extension? true
-                 :shortcut ["cmd" "shift" "return"]
-                 :on-click (fn []
-                             (when target-page
-                               (state/sidebar-add-block! (state/get-current-repo) (:db/id target-page) :page))
-                             (shui/dialog-close! :ls-dialog-cmdk))}
-                {:text (t :editor.quick-add/discard-draft)
-                 :icon "trash"
-                 :on-click #(editor-handler/discard-capture-draft!)}]}))
+  (let [target (capture-destination target-page)]
+    (action-bar
+     {:tip (contextual-tip)
+      :primary {:text (t :cmdk.action/done) :shortcut ["mod" "e"]
+                :on-click #(capture-commit-blocks! target)}
+      :secondary [{:text (t :editor.quick-add/open-target)
+                   :icon "open-as-page" :icon-extension? true
+                   :shortcut ["cmd" "shift" "o"]
+                   :on-click #(capture-commit-then! target capture-open-page!)}
+                  {:text (t :cmdk.action/open-in-sidebar)
+                   :icon "move-to-sidebar-right" :icon-extension? true
+                   :shortcut ["cmd" "shift" "return"]
+                   :on-click #(capture-commit-then! target capture-open-in-sidebar!)}
+                  {:text (t :editor.quick-add/discard-draft)
+                   :icon "trash"
+                   :on-click #(editor-handler/discard-capture-draft!)}]})))
 
 (hsx/defc capture-mode-content
   "Main capture mode view rendered inside the CMD+K dialog shell.
@@ -2372,7 +2403,7 @@
                            (do (.preventDefault e)
                                (.stopPropagation e)
                                (capture-commit-blocks!
-                                (or (.-current *target-page) (db/get-page (date/today)))))
+                                (capture-destination (.-current *target-page))))
 
                            ;; Esc = close without committing (draft preserved)
                            (= key "Escape")
@@ -2380,21 +2411,21 @@
                                (.stopPropagation e)
                                (shui/dialog-close! :ls-dialog-cmdk))
 
-                           ;; Cmd+Shift+O = open target page
+                           ;; Cmd+Shift+O = commit, then open the target page
                            (and meta? shift? (= key "o"))
                            (do (.preventDefault e)
                                (.stopPropagation e)
-                               (shui/dialog-close! :ls-dialog-cmdk)
-                               (when-let [page (.-current *target-page)]
-                                 (route-handler/redirect-to-page! (:block/uuid page))))
+                               (capture-commit-then!
+                                (capture-destination (.-current *target-page))
+                                capture-open-page!))
 
-                           ;; Cmd+Shift+Enter = open target in sidebar
+                           ;; Cmd+Shift+Enter = commit, then open it in the sidebar
                            (and meta? shift? (= key "Enter"))
                            (do (.preventDefault e)
                                (.stopPropagation e)
-                               (when-let [page (.-current *target-page)]
-                                 (state/sidebar-add-block! (state/get-current-repo) (:db/id page) :page))
-                               (shui/dialog-close! :ls-dialog-cmdk)))))]
+                               (capture-commit-then!
+                                (capture-destination (.-current *target-page))
+                                capture-open-in-sidebar!)))))]
          (.addEventListener js/document "keydown" handler true)
          #(.removeEventListener js/document "keydown" handler true)))
      [])
