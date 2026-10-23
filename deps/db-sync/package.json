@@ -15,6 +15,7 @@
     "build:node-adapter": "clojure -M:cljs release db-sync-node",
     "dev:node-adapter": "clojure -M:cljs watch db-sync-node",
     "start:node-adapter": "node worker/dist/node-adapter.js",
+    "preview:tasks-app": "node examples/tasks-app/preview.mjs",
     "show-sqlite-checksum": "clojure -M:cljs compile db-sync-show-checksum && node worker/dist/show-sqlite-checksum.js",
     "recompute-log-checksum": "clojure -M:cljs compile db-sync-recompute-log-checksum && node worker/dist/recompute-log-checksum.js",
     "migrate:local": "cd ./worker && wrangler d1 migrations apply DB --local",

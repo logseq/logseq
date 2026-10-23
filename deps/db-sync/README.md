@@ -156,7 +156,11 @@ rotates on each use. Discovery is `GET /.well-known/oauth-authorization-server`.
 
 Apply D1 migration `0008_add_oauth_apps.sql` before using these routes.
 Login uses the configured Cognito user pool (`COGNITO_ISSUER` and
-`COGNITO_CLIENT_ID`) with `USER_PASSWORD_AUTH`.
+`COGNITO_CLIENT_ID`) with `USER_PASSWORD_AUTH`. The Node adapter serves the
+same `/oauth/*`, discovery, and `/admin/oauth/apps` routes.
+
+A local Tasks app that signs in and reads the same graph is in
+`examples/tasks-app/`. Run it with `pnpm preview:tasks-app`.
 
 ## Environment Variables
 
