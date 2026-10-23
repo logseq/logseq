@@ -27,13 +27,19 @@
     ")"
     "\\]\\]")))
 
+(defn- replace-literal
+  "Replaces all `match` strings in `s` with `replacement`. Unlike
+  `string/replace`, `$` patterns in `replacement` are kept as is."
+  [s match replacement]
+  (string/replace s (re-pattern (common-util/escape-regex-chars match)) (constantly replacement)))
+
 (defn content-id-ref->page
   "Convert id ref backs to page name using refs."
   [content refs]
   (reduce
    (fn [content ref]
      (if (:block/title ref)
-       (string/replace content (page-ref/->page-ref (:block/uuid ref)) (:block/title ref))
+       (replace-literal content (page-ref/->page-ref (:block/uuid ref)) (:block/title ref))
        content))
    content
    refs))
@@ -69,12 +75,12 @@
          (fn [content ref]
            (if (:block/title ref)
              (let [content' (if (not (string/includes? (:block/title ref) " "))
-                              (string/replace content
-                                              (str "#" (page-ref/->page-ref (:block/uuid ref)))
-                                              (str "#" (:block/title ref)))
+                              (replace-literal content
+                                               (str "#" (page-ref/->page-ref (:block/uuid ref)))
+                                               (str "#" (:block/title ref)))
                               content)]
-               (string/replace content' (page-ref/->page-ref (:block/uuid ref))
-                               (page-ref/->page-ref (:block/title ref))))
+               (replace-literal content' (page-ref/->page-ref (:block/uuid ref))
+                                (page-ref/->page-ref (:block/title ref))))
              content))
          content
          (sort-refs refs))
