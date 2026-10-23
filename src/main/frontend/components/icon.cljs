@@ -16,7 +16,6 @@
             [frontend.db.model :as model]
             [frontend.db.utils :as db-utils]
             [frontend.extensions.lightbox :as lightbox]
-            [frontend.fs :as fs]
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.icon-color :as icon-color]
@@ -1516,17 +1515,6 @@
              (sort-by :block/updated-at >)
              (medley/distinct-by :logseq.property.asset/checksum))))))
 
-(defn- write-asset-file!
-  "Write an asset file to disk"
-  [repo dir file file-rpath]
-  (p/let [buffer (.arrayBuffer file)]
-    (if (util/electron?)
-      (ipc/ipc "writeFile" repo (path/path-join dir file-rpath) buffer)
-      ;; web
-      (p/let [buffer (.arrayBuffer file)
-              content (js/Uint8Array. buffer)]
-        (fs/write-plain-text-file! repo dir file-rpath content nil)))))
-
 ;; ============================================================================
 ;; URL Asset Download Helpers
 ;; ============================================================================
@@ -1717,7 +1705,7 @@
 
 (defn- <download-url-asset-via-ipc
   "Electron path: uses main-process IPC (node-fetch, no CORS).
-   Consumes structured {:status :ok :headers :data} response; classifies
+   Consumes the :includeResponse {:status :ok :headers :body} response; classifies
    failures by HTTP status and content. Sniffs magic bytes to distinguish
    HTML challenge pages from real images when headers are unreliable."
   [url]
@@ -1725,12 +1713,12 @@
                #js {:url url
                     :method "GET"
                     :returnType "arraybuffer"
-                    :structured true})
+                    :includeResponse true})
       (p/then (fn [^js response]
                 (let [status (.-status response)
                       headers (.-headers response)
                       header-content-type (some-> headers (gobj/get "content-type"))
-                      data (.-data response)
+                      data (.-body response)
                       byte-length (if (and data (.-byteLength data))
                                     (.-byteLength data) 0)]
                   (cond
@@ -1822,17 +1810,14 @@
      (if existing-asset
        ;; Reuse existing asset — skip file write and block creation
        existing-asset
-       (p/let [[repo-dir asset-dir-rpath] (assets-handler/ensure-assets-dir! repo)
-               size (.-size file)
+       (p/let [size (.-size file)
                ext (db-asset/asset-path->type file-name)
                asset-class (db/entity :logseq.class/Asset)
                block-id (ldb/new-block-id)
                extra-props (source-meta->properties source-meta)]
          (when (and ext asset-class)
-           ;; Write file to disk
-           (p/let [_ (let [file-path (str block-id "." ext)
-                           file-rpath (str asset-dir-rpath "/" file-path)]
-                       (write-asset-file! repo repo-dir file file-rpath))
+           ;; Write file to disk via the shared asset writer (binary-safe on Electron)
+           (p/let [_ (editor-handler/db-based-write-asset! repo (str block-id "." ext) file)
                    ;; Create block using api-insert-new-block! (same approach as tag tables)
                    block (editor-handler/api-insert-new-block!
                           file-name-without-ext
