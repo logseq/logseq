@@ -150,8 +150,9 @@ curl -X POST -H "content-type: application/json" \
 Approved apps send users to `GET /oauth/authorize` (`response_type=code`,
 `code_challenge_method=S256`). The user signs in with a Logseq account, chooses
 one graph, and the app exchanges the code at `POST /oauth/token`. The access
-token is limited to that graph and the requested `logseq/read` and
-`logseq/write` scopes. Discovery is `GET /.well-known/oauth-authorization-server`.
+token lasts one hour and is limited to that graph and the requested
+`logseq/read` and `logseq/write` scopes. The refresh token lasts one year and
+rotates on each use. Discovery is `GET /.well-known/oauth-authorization-server`.
 
 Apply D1 migration `0008_add_oauth_apps.sql` before using these routes.
 Login uses the configured Cognito user pool (`COGNITO_ISSUER` and

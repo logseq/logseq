@@ -19,7 +19,7 @@
 (def max-form-chars 16384)
 (def too-large-form ::too-large)
 (def access-token-ttl-ms (* 60 60 1000))
-(def refresh-token-ttl-ms (* 30 24 60 60 1000))
+(def refresh-token-ttl-ms (* 365 24 60 60 1000))
 (def auth-code-ttl-ms (* 5 60 1000))
 (def login-session-ttl-ms (* 15 60 1000))
 (def allowed-scopes #{"logseq/read" "logseq/write"})

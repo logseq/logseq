@@ -609,6 +609,8 @@
                   (is (string/starts-with? (:refresh_token token) "logseq_ort_"))
                   (is (= "Bearer" (:token_type token)))
                   (is (= 3600 (:expires_in token)))
+                  (is (= (+ 1700000000000 oauth/refresh-token-ttl-ms)
+                         (:expires-at (first (vals (:refresh @store))))))
                   (is (= "graph-1" (:graph_id token)))
                   (is (= "logseq/read logseq/write" (:scope token)))
                   (is (not (some #(= (:access_token token) %)
