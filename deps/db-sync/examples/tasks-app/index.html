@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tasks</title>
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <main>
+    <header>
+      <p class="mark">Logseq app</p>
+      <h1>Tasks</h1>
+    </header>
+    <section id="signed-out">
+      <p>Sign in with a Logseq account, choose one graph, and keep that graph's tasks here.</p>
+      <button id="sign-in" type="button">Sign in with Logseq</button>
+      <p id="signed-out-status" class="status"></p>
+    </section>
+    <section id="signed-in" hidden>
+      <div class="toolbar">
+        <p id="graph-name"></p>
+        <button id="refresh" type="button">Refresh</button>
+      </div>
+      <form id="create-form">
+        <input id="title" name="title" placeholder="New task" autocomplete="off" required>
+        <button type="submit">Add</button>
+      </form>
+      <ul id="tasks"></ul>
+      <p id="signed-in-status" class="status"></p>
+    </section>
+  </main>
+  <script src="/app.js"></script>
+</body>
+</html>

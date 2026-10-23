@@ -1,11 +1,15 @@
 (ns logseq.db-sync.worker.auth
-  (:require [clojure.string :as string]
+  (:require [clojure.set :as set]
+            [clojure.string :as string]
             [logseq.common.authorization :as authorization]
             [logseq.db-sync.common :as common]
             [logseq.db-sync.index :as index]
             [promesa.core :as p]))
 
 (def personal-access-token-prefix "logseq_pat_")
+(def oauth-access-token-prefix "logseq_oat_")
+(def ^:private rtc-groups #{"team" "rtc_2025_07_10"})
+(def ^:private user-info-url "https://api.logseq.com/file-sync/user_info")
 
 (defn- bearer-token [auth-header]
   (when (and (string? auth-header) (string/starts-with? auth-header "Bearer "))
@@ -91,6 +95,39 @@
   (and (string? token)
        (string/starts-with? token personal-access-token-prefix)))
 
+(defn oauth-access-token?
+  [token]
+  (and (string? token)
+       (string/starts-with? token oauth-access-token-prefix)))
+
+(defn- claims-groups
+  [claims]
+  (let [groups (some-> claims (aget "cognito:groups"))]
+    (cond
+      (array? groups) (set (array-seq groups))
+      (string? groups) (->> (string/split groups #"[\[\]\s,\"]+")
+                            (remove string/blank?)
+                            set)
+      :else #{})))
+
+(defn <rtc-user?
+  "True when the login JWT belongs to a sync group that can manage API credentials."
+  [request claims]
+  (let [claim-groups (claims-groups claims)]
+    (if (seq claim-groups)
+      (p/resolved (boolean (seq (set/intersection rtc-groups claim-groups))))
+      (-> (p/let [token (token-from-request request)
+                  response (js/fetch user-info-url
+                                     #js {:method "POST"
+                                          :headers #js {"authorization" (str "Bearer " token)
+                                                        "content-type" "application/json"}
+                                          :body "{}"})
+                  user-info (when (.-ok response) (.json response))
+                  user-groups (claims-groups
+                               #js {"cognito:groups" (some-> user-info (aget "UserGroups"))})]
+            (boolean (seq (set/intersection rtc-groups user-groups))))
+          (p/catch (fn [_] false))))))
+
 (defn <sha-256-hex
   [value]
   (p/let [payload (.encode (js/TextEncoder.) value)
@@ -108,20 +145,38 @@
     "both" "logseq/read logseq/write"
     nil))
 
+(defn- bound-credential-claims
+  [{:keys [id user-id graph-id scope expires-at]}]
+  (when (and (string? user-id)
+             (string? graph-id)
+             (string? scope)
+             (number? expires-at)
+             (> expires-at (common/now-ms)))
+    #js {"sub" user-id
+         "scope" scope
+         "pat_id" id
+         "pat_graph_id" graph-id}))
+
 (defn semantic-auth-claims
   [request env]
-  (let [token (token-from-request request)]
-    (if (personal-access-token? token)
-      (if-let [db (aget env "DB")]
+  (let [token (token-from-request request)
+        db (aget env "DB")]
+    (cond
+      (personal-access-token? token)
+      (if db
         (p/let [token-hash (<sha-256-hex token)
                 pat (index/<personal-access-token-by-hash db token-hash)
                 scope (some-> pat :permission permission->scope)]
-          (when (and pat
-                     scope
-                     (> (:expires-at pat) (common/now-ms)))
-            #js {"sub" (:user-id pat)
-                 "scope" scope
-                 "pat_id" (:id pat)
-                 "pat_graph_id" (:graph-id pat)}))
+          (bound-credential-claims (assoc pat :scope scope)))
         (p/resolved nil))
+
+      (oauth-access-token? token)
+      (if db
+        (p/let [token-hash (<sha-256-hex token)
+                oauth-token (index/<oauth-access-token-by-hash db token-hash)]
+          (when (= "approved" (:app-status oauth-token))
+            (bound-credential-claims oauth-token)))
+        (p/resolved nil))
+
+      :else
       (auth-claims request env))))

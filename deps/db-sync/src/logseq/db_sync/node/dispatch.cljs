@@ -6,6 +6,8 @@
             [logseq.db-sync.platform.core :as platform]
             [logseq.db-sync.worker.handler.assets :as assets-handler]
             [logseq.db-sync.worker.handler.index :as index-handler]
+            [logseq.db-sync.worker.handler.oauth :as oauth-handler]
+            [logseq.db-sync.worker.handler.oauth-app :as oauth-app-handler]
             [logseq.db-sync.worker.dispatch :as worker-dispatch]
             [logseq.db-sync.worker.asset-link :as asset-link]
             [logseq.db-sync.worker.handler.sync :as sync-handler]
@@ -57,6 +59,11 @@
 
       (= method "OPTIONS")
       (common/options-response)
+
+      ;; Sign in with Logseq and operator review. App registration stays on /api/.
+      (or (oauth-handler/route? path)
+          (oauth-app-handler/route? path))
+      (worker-dispatch/handle-worker-fetch request env)
 
       (string/starts-with? path "/sync/")
       (if-let [{:keys [graph-id tail]} (node-routes/parse-sync-path path)]
