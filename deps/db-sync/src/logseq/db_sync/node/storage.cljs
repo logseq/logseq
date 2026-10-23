@@ -35,6 +35,11 @@
                    (.all (.prepare db sql))
                    (.exec db sql))))
        :prepare (fn [sql] (.prepare db sql))
+       :batch (fn [statements]
+                ((.transaction db
+                               (fn []
+                                 (to-array (mapv (fn [^js stmt] (.run stmt))
+                                                 (array-seq statements)))))))
        :close (fn [] (.close db))
        :transaction (fn [f] ((.transaction db f)))
        :_db db})

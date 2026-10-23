@@ -160,6 +160,8 @@
   "create index if not exists idx_oauth_refresh_tokens_app on oauth_refresh_tokens (app_id)")
 (def ^:private oauth-refresh-tokens-graph-index-sql
   "create index if not exists idx_oauth_refresh_tokens_graph on oauth_refresh_tokens (graph_id)")
+(def ^:private oauth-expiring-tables
+  ["oauth_login_sessions" "oauth_authorization_codes" "oauth_access_tokens" "oauth_refresh_tokens"])
 
 (defn- duplicate-column-error?
   [error column-name]
@@ -289,7 +291,10 @@
    (common/<d1-run db oauth-access-tokens-graph-index-sql)
    (common/<d1-run db oauth-refresh-tokens-create-table-sql)
    (common/<d1-run db oauth-refresh-tokens-app-index-sql)
-   (common/<d1-run db oauth-refresh-tokens-graph-index-sql)))
+   (common/<d1-run db oauth-refresh-tokens-graph-index-sql)
+   (common/<d1-run db "create index if not exists idx_oauth_authorization_codes_graph on oauth_authorization_codes (graph_id)")
+   (p/doseq [table oauth-expiring-tables]
+     (common/<d1-run db (str "create index if not exists idx_" table "_expires on " table " (expires_at)")))))
 
 (defn- utc-day-str
   [timestamp-ms]
@@ -514,13 +519,10 @@
 
 (defn- parse-redirect-uris
   [raw]
-  (try
-    (let [parsed (when (string? raw) (js/JSON.parse raw))]
-      (if (array? parsed)
-        (mapv str (array-seq parsed))
-        []))
-    (catch :default _
-      [])))
+  (let [parsed (js/JSON.parse raw)]
+    (when-not (and (array? parsed) (every? string? (array-seq parsed)))
+      (throw (ex-info "Invalid stored OAuth redirect URIs" {})))
+    (vec (array-seq parsed))))
 
 (defn- oauth-app-from-row
   [row]
@@ -615,40 +617,50 @@
    (common/<d1-run db "delete from oauth_access_tokens where app_id = ?" app-id)
    (common/<d1-run db "delete from oauth_refresh_tokens where app_id = ?" app-id)))
 
+(defn- <oauth-cleanup!
+  [db now]
+  (p/doseq [table oauth-expiring-tables]
+    (common/<d1-run
+     db
+     (str "delete from " table " where rowid in "
+          "(select rowid from " table " where expires_at <= ? order by expires_at limit 100)")
+     now)))
+
 (defn <oauth-session-insert!
-  [db {:keys [id user-id email username csrf-token created-at expires-at]}]
-  (common/<d1-run
-   db
-   (str "insert into oauth_login_sessions "
-        "(id, user_id, email, username, csrf_token, created_at, expires_at) "
-        "values (?, ?, ?, ?, ?, ?, ?)")
-   id user-id email username csrf-token created-at expires-at))
+  [db {:keys [id user-id csrf-token created-at expires-at]}]
+  (p/do!
+   (<oauth-cleanup! db created-at)
+   (common/<d1-run
+    db
+    (str "insert into oauth_login_sessions "
+         "(id, user_id, csrf_token, created_at, expires_at) values (?, ?, ?, ?, ?)")
+    id user-id csrf-token created-at expires-at)))
 
 (defn <oauth-session-by-id
   [db id]
   (p/let [result (common/<d1-all
                   db
-                  (str "select id, user_id, email, username, csrf_token, expires_at "
+                  (str "select id, user_id, csrf_token, expires_at "
                        "from oauth_login_sessions where id = ?")
                   id)
           row (first (common/get-sql-rows result))]
     (when row
       {:id (aget row "id")
        :user-id (aget row "user_id")
-       :email (aget row "email")
-       :username (aget row "username")
        :csrf-token (aget row "csrf_token")
        :expires-at (aget row "expires_at")})))
 
 (defn <oauth-code-insert!
   [db {:keys [code-hash app-id user-id graph-id redirect-uri scope code-challenge
              expires-at created-at]}]
-  (common/<d1-run
-   db
-   (str "insert into oauth_authorization_codes "
-        "(code_hash, app_id, user_id, graph_id, redirect_uri, scope, code_challenge, "
-        "expires_at, created_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?)")
-   code-hash app-id user-id graph-id redirect-uri scope code-challenge expires-at created-at))
+  (p/do!
+   (<oauth-cleanup! db created-at)
+   (common/<d1-run
+    db
+    (str "insert into oauth_authorization_codes "
+         "(code_hash, app_id, user_id, graph_id, redirect_uri, scope, code_challenge, "
+         "expires_at, created_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?)")
+    code-hash app-id user-id graph-id redirect-uri scope code-challenge expires-at created-at)))
 
 (defn <oauth-code-by-hash
   [db code-hash]
@@ -676,15 +688,6 @@
                                  code-hash)]
     (d1-changes result)))
 
-(defn <oauth-access-token-insert!
-  [db {:keys [id token-hash token-prefix app-id user-id graph-id scope expires-at created-at]}]
-  (common/<d1-run
-   db
-   (str "insert into oauth_access_tokens "
-        "(id, token_hash, token_prefix, app_id, user_id, graph_id, scope, expires_at, created_at) "
-        "values (?, ?, ?, ?, ?, ?, ?, ?, ?)")
-   id token-hash token-prefix app-id user-id graph-id scope expires-at created-at))
-
 (defn <oauth-access-token-by-hash
   [db token-hash]
   (p/let [result (common/<d1-all
@@ -703,15 +706,6 @@
        :scope (aget row "scope")
        :expires-at (aget row "expires_at")
        :app-status (aget row "app_status")})))
-
-(defn <oauth-refresh-token-insert!
-  [db {:keys [token-hash app-id user-id graph-id scope expires-at created-at]}]
-  (common/<d1-run
-   db
-   (str "insert into oauth_refresh_tokens "
-        "(token_hash, app_id, user_id, graph_id, scope, expires_at, created_at) "
-        "values (?, ?, ?, ?, ?, ?, ?)")
-   token-hash app-id user-id graph-id scope expires-at created-at))
 
 (defn <oauth-refresh-token-by-hash
   [db token-hash]
@@ -734,14 +728,34 @@
        :revoked-at (aget row "revoked_at")
        :app-status (aget row "app_status")})))
 
-(defn <oauth-refresh-token-revoke!
-  [db token-hash revoked-at]
-  (p/let [result (common/<d1-run
-                  db
-                  (str "update oauth_refresh_tokens set revoked_at = ? "
-                       "where token_hash = ? and revoked_at is null")
-                  revoked-at token-hash)]
-    (d1-changes result)))
+(defn <oauth-tokens-exchange!
+  [db {:keys [code-hash refresh-token-hash]} access refresh]
+  (let [[table column key] (if code-hash
+                            ["oauth_authorization_codes" "code_hash" code-hash]
+                            ["oauth_refresh_tokens" "token_hash" refresh-token-hash])
+        grant-exists (str "exists (select 1 from " table " g join oauth_apps a on a.id = g.app_id "
+                          "where g." column " = ? and g.app_id = ? and g.expires_at > ? "
+                          (when refresh-token-hash "and g.revoked_at is null ")
+                          "and a.status = 'approved')")
+        access-exists "exists (select 1 from oauth_access_tokens where token_hash = ?)"
+        statements [[(str "insert into oauth_access_tokens "
+                          "(id, token_hash, token_prefix, app_id, user_id, graph_id, scope, expires_at, created_at) "
+                          "select ?, ?, ?, ?, ?, ?, ?, ?, ? where " grant-exists)
+                     (:id access) (:token-hash access) (:token-prefix access) (:app-id access)
+                     (:user-id access) (:graph-id access) (:scope access) (:expires-at access)
+                     (:created-at access) key (:app-id access) (:created-at access)]
+                    [(str "insert into oauth_refresh_tokens "
+                          "(token_hash, app_id, user_id, graph_id, scope, expires_at, created_at) "
+                          "select ?, ?, ?, ?, ?, ?, ? where " access-exists)
+                     (:token-hash refresh) (:app-id refresh) (:user-id refresh) (:graph-id refresh)
+                     (:scope refresh) (:expires-at refresh) (:created-at refresh) (:token-hash access)]
+                    [(str "delete from " table " where " column " = ? and " access-exists)
+                     key (:token-hash access)]]]
+    ;; One atomic batch: a losing concurrent exchange inserts nothing. Any failed
+    ;; insert rolls back the replacement pair and leaves the grant available.
+    (p/let [_ (<oauth-cleanup! db (:created-at access))
+            results (common/<d1-batch db statements)]
+      (d1-changes (aget results 0)))))
 
 (defn <index-upsert!
   ([db graph-id graph-name user-id schema-version graph-e2ee?]

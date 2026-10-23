@@ -22,11 +22,18 @@
       (= path "/oauth/consent")
       (= path "/oauth/token")))
 
+(defn- token-response
+  [body status]
+  (let [response (common/json-response body status)]
+    (.set (.-headers response) "cache-control" "no-store")
+    (.set (.-headers response) "pragma" "no-cache")
+    response))
+
 (defn- token-error
   [code description]
-  (common/json-response {"error" code
-                         "error_description" description}
-                        400))
+  (token-response {"error" code
+                   "error_description" description}
+                  400))
 
 (defn- message
   [request error]
@@ -134,7 +141,9 @@
 
 (defn- <login
   [request env]
-  (if-not (oauth/form-content-type? request)
+  (if-not (and (oauth/form-content-type? request)
+               (= (.get (.-headers request) "origin")
+                  (.-origin (js/URL. (.-url request)))))
     (message request :invalid-request)
     (p/let [params (oauth/<form-params request)]
       (if (= params oauth/too-large-form)
@@ -167,8 +176,6 @@
                 (let [now (common/now-ms)
                       session {:id (oauth/random-hex 32)
                                :user-id (aget claims "sub")
-                               :email (aget claims "email")
-                               :username (or (aget claims "cognito:username") username)
                                :csrf-token (oauth/random-hex 32)
                                :created-at now
                                :expires-at (+ now oauth/login-session-ttl-ms)}
@@ -248,7 +255,7 @@
                     (page/redirect-response (oauth/success-redirect normalized code))))))))))))
 
 (defn- <issue-tokens
-  [env {:keys [app-id user-id graph-id scope]}]
+  [env {:keys [app-id user-id graph-id scope]} grant]
   (let [now (common/now-ms)
         access-token (oauth/generate-access-token)
         refresh-token (oauth/generate-refresh-token)
@@ -256,32 +263,33 @@
         refresh-expires (+ now oauth/refresh-token-ttl-ms)]
     (p/let [access-hash (auth/<sha-256-hex access-token)
             refresh-hash (auth/<sha-256-hex refresh-token)
-            _ (index/<oauth-access-token-insert!
-               (aget env "DB")
-               {:id (str (random-uuid))
-                :token-hash access-hash
-                :token-prefix (oauth/token-prefix access-token)
-                :app-id app-id
-                :user-id user-id
-                :graph-id graph-id
-                :scope scope
-                :expires-at access-expires
-                :created-at now})
-            _ (index/<oauth-refresh-token-insert!
-               (aget env "DB")
-               {:token-hash refresh-hash
-                :app-id app-id
-                :user-id user-id
-                :graph-id graph-id
-                :scope scope
-                :expires-at refresh-expires
-                :created-at now})]
-      (common/json-response
-       (oauth/token-success {:access-token access-token
-                             :refresh-token refresh-token
-                             :expires-in (js/Math.floor (/ (- access-expires now) 1000))
-                             :scope scope
-                             :graph-id graph-id})))))
+            issued (index/<oauth-tokens-exchange!
+                    (aget env "DB") grant
+                    {:id (str (random-uuid))
+                     :token-hash access-hash
+                     :token-prefix (oauth/token-prefix access-token)
+                     :app-id app-id
+                     :user-id user-id
+                     :graph-id graph-id
+                     :scope scope
+                     :expires-at access-expires
+                     :created-at now}
+                    {:token-hash refresh-hash
+                     :app-id app-id
+                     :user-id user-id
+                     :graph-id graph-id
+                     :scope scope
+                     :expires-at refresh-expires
+                     :created-at now})]
+      (if (= 1 issued)
+        (token-response
+         (oauth/token-success {:access-token access-token
+                               :refresh-token refresh-token
+                               :expires-in (js/Math.floor (/ (- access-expires now) 1000))
+                               :scope scope
+                               :graph-id graph-id})
+         200)
+        (token-error "invalid_grant" "The grant is invalid.")))))
 
 (defn- <exchange-code
   [env params]
@@ -296,16 +304,12 @@
       (token-error "invalid_request" "The token request is invalid.")
       (p/let [code-hash (auth/<sha-256-hex code)
               row (index/<oauth-code-by-hash (aget env "DB") code-hash)
-              deleted (if row
-                        (index/<oauth-code-delete! (aget env "DB") code-hash)
-                        (p/resolved 0))
-              app (when (and row (= 1 deleted))
+              app (when row
                     (index/<oauth-app-by-id (aget env "DB") (:app-id row)))
               challenge (when (oauth/valid-code-verifier? verifier)
                           (oauth/<code-challenge verifier))
               now (common/now-ms)]
         (if (and row
-                 (= 1 deleted)
                  app
                  (= "approved" (:status app))
                  (= client-id (:app-id row))
@@ -314,8 +318,9 @@
                  (some #(= redirect-uri %) (:redirect-uris app))
                  (> (:expires-at row) now)
                  (= challenge (:code-challenge row)))
-          (<issue-tokens env row)
-          (token-error "invalid_grant" "The authorization code is invalid."))))))
+          (<issue-tokens env row {:code-hash code-hash})
+          (p/let [_ (when row (index/<oauth-code-delete! (aget env "DB") code-hash))]
+            (token-error "invalid_grant" "The authorization code is invalid.")))))))
 
 (defn- <refresh
   [env params]
@@ -326,16 +331,13 @@
       (token-error "invalid_request" "The token request is invalid.")
       (p/let [token-hash (auth/<sha-256-hex refresh-token)
               row (index/<oauth-refresh-token-by-hash (aget env "DB") token-hash)
-              now (common/now-ms)
-              revoked (when (and row
-                                 (nil? (:revoked-at row))
-                                 (> (:expires-at row) now)
-                                 (= "approved" (:app-status row))
-                                 (= client-id (:app-id row)))
-                       (index/<oauth-refresh-token-revoke!
-                        (aget env "DB") token-hash now))]
-        (if (= 1 revoked)
-          (<issue-tokens env row)
+              now (common/now-ms)]
+        (if (and row
+                 (nil? (:revoked-at row))
+                 (> (:expires-at row) now)
+                 (= "approved" (:app-status row))
+                 (= client-id (:app-id row)))
+          (<issue-tokens env row {:refresh-token-hash token-hash})
           (token-error "invalid_grant" "The refresh token is invalid."))))))
 
 (defn- <token

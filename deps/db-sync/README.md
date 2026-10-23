@@ -154,7 +154,10 @@ token lasts one hour and is limited to that graph and the requested
 `logseq/read` and `logseq/write` scopes. The refresh token lasts one year and
 rotates on each use. Discovery is `GET /.well-known/oauth-authorization-server`.
 
-Apply D1 migration `0008_add_oauth_apps.sql` before using these routes.
+Apply D1 migrations `0008_add_oauth_apps.sql` and
+`0009_add_oauth_cleanup_indexes.sql` before using these routes. Expired OAuth
+records are removed in batches of up to 100 per table during login, consent,
+and token issuance; consumed refresh tokens are deleted during rotation.
 Login uses the configured Cognito user pool (`COGNITO_ISSUER` and
 `COGNITO_CLIENT_ID`) with `USER_PASSWORD_AUTH`. The Node adapter serves the
 same `/oauth/*`, discovery, and `/admin/oauth/apps` routes.

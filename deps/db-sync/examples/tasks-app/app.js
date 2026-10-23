@@ -136,10 +136,15 @@ async function start() {
   const config = await loadConfig();
   const params = new URLSearchParams(location.search);
   if (location.pathname === "/callback") {
+    const pending = readSession();
+    if (!pending?.state || !pending.verifier || params.get("state") !== pending.state) {
+      throw new Error("Invalid sign-in callback");
+    }
     const error = params.get("error");
     if (error) throw new Error(error);
-    const pending = readSession();
-    const token = await exchangeCode(config, params.get("code"), pending && pending.verifier);
+    const code = params.get("code");
+    if (!code) throw new Error("Invalid sign-in callback");
+    const token = await exchangeCode(config, code, pending.verifier);
     const session = {
       apiBase: config.apiBase,
       clientId: config.clientId,

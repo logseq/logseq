@@ -14,9 +14,9 @@
 (defn- status-label
   [status]
   (case status
-    "pending" (t :settings.developer/status-pending)
-    "approved" (t :settings.developer/status-approved)
-    "rejected" (t :settings.developer/status-rejected)
+    "pending" (t :sync.oauth-app/status-pending)
+    "approved" (t :sync.oauth-app/status-approved)
+    "rejected" (t :sync.oauth-app/status-rejected)
     status))
 
 (defn- redirect-uri-list
@@ -45,45 +45,45 @@
                         (p/then on-created!)
                         (p/catch (fn [error]
                                    (notification/show!
-                                    (t :settings.developer/request-error)
+                                    (t :sync.oauth-app/request-error)
                                     :error)
                                    (log/error :db-sync/oauth-app-create-failed {:error error})))
                         (p/finally #(set-pending! false)))))]
     [:section.flex.flex-col.gap-3
-     [:h2.text-base.font-semibold (t :settings.developer/create-title)]
+     [:h2.text-base.font-semibold (t :sync.oauth-app/create-title)]
      [:div.flex.flex-col.gap-1
-      [:label.text-sm.opacity-70 (t :settings.developer/name)]
+      [:label.text-sm.opacity-70 (t :sync.oauth-app/name)]
       (shui/input
        {:value name
-        :placeholder (t :settings.developer/name-placeholder)
+        :placeholder (t :sync.oauth-app/name-placeholder)
         :on-change #(set-name! (util/evalue %))})]
      [:div.flex.flex-col.gap-1
-      [:label.text-sm.opacity-70 (t :settings.developer/description-label)]
+      [:label.text-sm.opacity-70 (t :sync.oauth-app/description-label)]
       (shui/textarea
        {:value description
-        :placeholder (t :settings.developer/description-placeholder)
+        :placeholder (t :sync.oauth-app/description-placeholder)
         :on-change #(set-description! (util/evalue %))})]
      [:div.flex.flex-col.gap-1
-      [:label.text-sm.opacity-70 (t :settings.developer/redirect-uris)]
+      [:label.text-sm.opacity-70 (t :sync.oauth-app/redirect-uris)]
       (shui/textarea
        {:value redirect-text
-        :placeholder (t :settings.developer/redirect-uris-placeholder)
+        :placeholder (t :sync.oauth-app/redirect-uris-placeholder)
         :on-change #(set-redirect-text! (util/evalue %))})
-      [:p.text-xs.opacity-60 (t :settings.developer/redirect-uris-hint)]]
+      [:p.text-xs.opacity-60 (t :sync.oauth-app/redirect-uris-desc)]]
      (shui/button
       {:class "self-start"
        :disabled (or pending? (not form-valid?))
        :on-click create!}
       (ui/icon "code" {:size 16})
-      (t :settings.developer/create))]))
+      (t :sync.oauth-app/create))]))
 
 (hsx/defc created-app
   [app]
   (when-let [client-id (:id app)]
     [:section.flex.flex-col.gap-2.border.p-3.rounded
-     [:h2.text-base.font-semibold (t :settings.developer/created-title)]
+     [:h2.text-base.font-semibold (t :sync.oauth-app/created-title)]
      [:div.flex.items-center.gap-2
-      [:span.text-sm.opacity-70 (t :settings.developer/client-id)]
+      [:span.text-sm.opacity-70 (t :sync.oauth-app/client-id)]
       [:code.flex-1.break-all.select-all client-id]
       (shui/button
        {:variant "outline"
@@ -92,7 +92,7 @@
         :on-click (fn []
                     (util/copy-to-clipboard! client-id)
                     (notification/show!
-                     (t :settings.developer/copied)
+                     (t :sync.oauth-app/copy-success)
                      :success))}
        (ui/icon "copy" {:size 16}))]
      [:p.text-sm.opacity-70 (status-label (:status app))]]))
@@ -100,16 +100,16 @@
 (hsx/defc app-list
   [apps load-error? pending? delete!]
   [:section.flex.flex-col.gap-2
-   [:h2.text-base.font-semibold (t :settings.developer/existing-title)]
+   [:h2.text-base.font-semibold (t :sync.oauth-app/existing-title)]
    (cond
      load-error?
-     [:p.text-sm.text-red-500 (t :settings.developer/request-error)]
+     [:p.text-sm.text-red-500 (t :sync.oauth-app/request-error)]
 
      (nil? apps)
      (ui/loading (t :ui/loading))
 
      (empty? apps)
-     [:p.text-sm.opacity-70 (t :settings.developer/empty)]
+     [:p.text-sm.opacity-70 (t :sync.oauth-app/empty-desc)]
 
      :else
      [:div.divide-y
@@ -128,14 +128,14 @@
              [:li {:key uri} uri])]
           (when (seq review-note)
             [:p.text-xs.opacity-70
-             (t :settings.developer/review-note review-note)])]
+             (t :sync.oauth-app/review-note review-note)])]
          (shui/button
           {:variant "ghost"
            :size :sm
            :disabled pending?
            :on-click #(delete! id)}
           (ui/icon "trash" {:size 16})
-          (t :settings.developer/delete))])])])
+          (t :sync.oauth-app/delete))])])])
 
 (hsx/defc panel
   []
@@ -156,7 +156,7 @@
                       (set-created! result)
                       (load-apps!))
         delete! (fn [app-id]
-                  (when (js/confirm (t :settings.developer/delete-confirm))
+                  (when (js/confirm (t :sync.oauth-app/delete-confirm-desc))
                     (set-pending! true)
                     (-> (rtc-handler/<delete-oauth-app! app-id)
                         (p/then (fn []
@@ -165,7 +165,7 @@
                                     (set-created! nil))))
                         (p/catch (fn [error]
                                    (notification/show!
-                                    (t :settings.developer/request-error)
+                                    (t :sync.oauth-app/request-error)
                                     :error)
                                    (log/error :db-sync/oauth-app-delete-failed {:error error})))
                         (p/finally #(set-pending! false)))))]
@@ -175,11 +175,11 @@
        nil)
      [])
     [:div.panel-wrap.is-developer.mb-8.flex.flex-col.gap-6
-     [:p.text-sm.opacity-70 (t :settings.developer/description)]
+     [:p.text-sm.opacity-70 (t :sync.oauth-app/desc)]
      (when base
        [:p.text-sm.opacity-70
         (interpolate-sentence
-         (t :settings.developer/usage)
+         (t :sync.oauth-app/usage-desc)
          :placeholders [(str base "/oauth/authorize")
                         (str base "/oauth/token")])])
      (create-form pending? set-pending! on-created!)

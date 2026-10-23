@@ -1,5 +1,7 @@
 (ns logseq.db-sync.worker-oauth-test
   (:require ["node:fs" :as fs]
+            ["node:os" :as os]
+            [logseq.db-sync.node.storage :as node-storage]
             [cljs.test :refer [async deftest is testing]]
             [clojure.string :as string]
             [logseq.common.authorization :as authorization]
@@ -49,7 +51,8 @@
    (form-request path params nil))
   ([path params cookie]
    (let [search (js/URLSearchParams.)
-         headers #js {"content-type" "application/x-www-form-urlencoded"}]
+         headers #js {"content-type" "application/x-www-form-urlencoded"
+                      "origin" "http://localhost"}]
      (doseq [[k v] params]
        (when (some? v)
          (.set search k (str v))))
@@ -159,30 +162,29 @@
                       (do (swap! store update :codes dissoc code-hash)
                           (p/resolved 1))
                       (p/resolved 0)))
-                  index/<oauth-access-token-insert!
-                  (fn [_ row]
-                    (swap! store assoc-in [:access (:token-hash row)] row)
-                    (p/resolved nil))
                   index/<oauth-access-token-by-hash
                   (fn [_ token-hash]
                     (p/resolved
                      (when-let [row (get-in @store [:access token-hash])]
                        (assoc row :app-status (get-in @store [:apps (:app-id row) :status])))))
-                  index/<oauth-refresh-token-insert!
-                  (fn [_ row]
-                    (swap! store assoc-in [:refresh (:token-hash row)] row)
-                    (p/resolved nil))
                   index/<oauth-refresh-token-by-hash
                   (fn [_ token-hash]
                     (p/resolved
                      (when-let [row (get-in @store [:refresh token-hash])]
                        (assoc row :app-status (get-in @store [:apps (:app-id row) :status])))))
-                  index/<oauth-refresh-token-revoke!
-                  (fn [_ token-hash revoked-at]
-                    (let [row (get-in @store [:refresh token-hash])]
-                      (if (and row (nil? (:revoked-at row)))
-                        (do (swap! store assoc-in [:refresh token-hash :revoked-at] revoked-at)
-                            (p/resolved 1))
+                  index/<oauth-tokens-exchange!
+                  (fn [_ {:keys [code-hash refresh-token-hash]} access refresh]
+                    (let [bucket (if code-hash :codes :refresh)
+                          key (or code-hash refresh-token-hash)
+                          row (get-in @store [bucket key])]
+                      (if row
+                        (do
+                          (swap! store (fn [state]
+                                         (-> state
+                                             (update bucket dissoc key)
+                                             (assoc-in [:access (:token-hash access)] access)
+                                             (assoc-in [:refresh (:token-hash refresh)] refresh))))
+                          (p/resolved 1))
                         (p/resolved 0))))
                   index/<semantic-graphs-list
                   (fn [_ user-id _]
@@ -352,6 +354,7 @@
         app {:name "<script>alert(1)</script>"
              :description "<img src=x onerror=alert(1)>"}
         html (page/login-page {:lang :en :app app :request request})]
+    (is (= "same-origin" (.get (.-headers (page/html-response html)) "referrer-policy")))
     (is (string/includes? html "&lt;script&gt;alert(1)&lt;/script&gt;"))
     (is (string/includes? html "&lt;img src=x onerror=alert(1)&gt;"))
     (is (not (re-find #"<script" html)))
@@ -853,4 +856,169 @@
             (is (some #(string/includes? % "delete from oauth_authorization_codes") @delete-sql))
             (is (some #(string/includes? % "oauth_apps") @init-sql))
             (is (some #(string/includes? % "oauth_login_sessions") @init-sql)))
+          done)))
+
+(deftest login-rejects-cross-origin-and-missing-origin-test
+  (async done
+         (let [store (new-store)]
+           (finish
+            (with-store store
+              (fn []
+                (p/let [client-id (<approved-client)]
+                  (p/doseq [origin ["https://attacker.example" "null" nil]]
+                    (let [request (form-request "/oauth/login"
+                                                (assoc (authorize-fields client-id)
+                                                       "username" "attacker"
+                                                       "password" "attacker-password"))]
+                      (if origin
+                        (.set (.-headers request) "origin" origin)
+                        (.delete (.-headers request) "origin"))
+                      (p/let [response (<call request)]
+                        (is (= 400 (.-status response)))
+                        (is (nil? (.get (.-headers response) "set-cookie")))
+                        (is (empty? (:sessions @store)))
+                        (is (empty? (:cognito-calls @store)))))))))
+            done))))
+
+(deftest form-reader-cancels-oversized-stream-test
+  (async done
+         (let [reads (atom 0)
+               cancelled? (atom false)
+               stream (js/ReadableStream.
+                       #js {:pull (fn [controller]
+                                    (swap! reads inc)
+                                    (if (<= @reads 20)
+                                      (.enqueue controller (js/Uint8Array. 4096))
+                                      (.close controller)))
+                            :cancel (fn [] (reset! cancelled? true))}
+                       #js {:highWaterMark 0})]
+           (finish
+            (p/let [params (oauth/<form-params
+                            (js/Request. "http://localhost/oauth/token"
+                                         #js {:method "POST" :body stream :duplex "half"}))
+                    valid (oauth/<form-params (form-request "/oauth/token" {"name" "你好"}))]
+              (is (= oauth/too-large-form params))
+              (is @cancelled?)
+              (is (< @reads 10))
+              (is (= {"name" "你好"} valid)))
+            done))))
+
+(defn- with-real-oauth-db [f]
+  (let [dir (.mkdtempSync fs (str (.tmpdir os) "/logseq-oauth-test-"))
+        db (node-storage/open-index-db dir)]
+    (-> (p/with-redefs [db-env #js {"DB" db "DB_SYNC_ADMIN_TOKEN" "admin-token"}
+                        auth/auth-claims (fn [_ _] (p/resolved (rtc-claims)))
+                        oauth-handler/<cognito-login
+                        (fn [_ _ _] (p/resolved {:claims (rtc-claims)}))]
+          (p/let [_ (index/<index-init! db)
+                  _ (index/<index-upsert! db "graph-1" "Ledger" "user-1" "65" false)]
+            (f db)))
+        (p/finally (fn []
+                     (.close db)
+                     (.rmSync fs dir #js {:recursive true :force true}))))))
+
+(deftest sqlite-oauth-issuance-is-atomic-test
+  (async done
+         (finish
+          (with-real-oauth-db
+            (fn [db]
+              (p/let [client-id (<approved-client)]
+                (p/doseq [table ["oauth_access_tokens" "oauth_refresh_tokens"]]
+                  (p/let [signed-in (<sign-in client-id "logseq/read")
+                          _ (.exec db (str "create trigger fail_token before insert on " table
+                                           " begin select raise(abort, 'injected token failure'); end"))
+                          failed (-> (<exchange client-id (:code signed-in) verifier)
+                                     (p/catch (fn [_] :failed)))
+                          _ (.exec db "drop trigger fail_token")
+                          rows (.exec db "select count(*) as n from oauth_access_tokens")
+                          retried (<exchange client-id (:code signed-in) verifier)
+                          token (json-body retried)
+                          refresh-params {"grant_type" "refresh_token"
+                                          "client_id" client-id
+                                          "refresh_token" (:refresh_token token)}
+                          _ (.exec db (str "create trigger fail_token before insert on " table
+                                           " begin select raise(abort, 'injected token failure'); end"))
+                          failed-refresh (-> (<call (form-request "/oauth/token" refresh-params))
+                                             (p/catch (fn [_] :failed)))
+                          _ (.exec db "drop trigger fail_token")
+                          retried-refresh (<call (form-request "/oauth/token" refresh-params))]
+                    (is (= 500 (.-status failed)))
+                    (is (= 200 (.-status retried)))
+                    (is (= 500 (.-status failed-refresh)))
+                    (is (= 200 (.-status retried-refresh)))
+                    (is (= "no-store" (.get (.-headers retried) "cache-control")))
+                    (is (= "no-cache" (.get (.-headers retried) "pragma")))
+                    (is (= (if (= table "oauth_access_tokens") 0 2) (aget (first rows) "n"))))))))
+          done)))
+
+(deftest sqlite-oauth-single-winner-and-revocation-test
+  (async done
+         (finish
+          (with-real-oauth-db
+            (fn [_]
+              (p/let [client-id (<approved-client)
+                      signed-in (<sign-in client-id "logseq/read")
+                      exchanged (p/all [(<exchange client-id (:code signed-in) verifier)
+                                         (<exchange client-id (:code signed-in) verifier)])
+                      success (first (filter #(= 200 (.-status %)) exchanged))
+                      token (json-body success)
+                      request (js/Request. "http://localhost/api/v1/graphs"
+                                           #js {:headers #js {"authorization" (str "Bearer " (:access_token token))}})
+                      before (auth/semantic-auth-claims request db-env)
+                      _ (<review! client-id "rejected")
+                      after (auth/semantic-auth-claims request db-env)
+                      refresh (<call (form-request "/oauth/token"
+                                                    {"grant_type" "refresh_token"
+                                                     "client_id" client-id
+                                                     "refresh_token" (:refresh_token token)}))]
+                (is (= [200 400] (sort (map #(.-status %) exchanged))))
+                (is (some? before))
+                (is (nil? after))
+                (is (= 400 (.-status refresh)))
+                (is (= "no-store" (.get (.-headers refresh) "cache-control"))))))
+          done)))
+
+(deftest sqlite-oauth-removes-expired-records-test
+  (async done
+         (finish
+          (with-real-oauth-db
+            (fn [db]
+              (p/let [client-id (<approved-client)
+                      signed-in (<sign-in client-id "logseq/read")
+                      response (<exchange client-id (:code signed-in) verifier)
+                      _ (.exec db "update oauth_access_tokens set expires_at = 1")
+                      _ (.exec db "update oauth_refresh_tokens set expires_at = 1")
+                      _ (.exec db "update oauth_login_sessions set expires_at = 1")
+                      abandoned (<sign-in client-id "logseq/read")
+                      _ (.exec db "update oauth_authorization_codes set expires_at = 1")
+                      current (<sign-in client-id "logseq/read")
+                      exchanged (<exchange client-id (:code current) verifier)]
+                (is (= 200 (.-status response)))
+                (is (some? (:code abandoned)))
+                (is (= 200 (.-status exchanged)))
+                (doseq [table ["oauth_access_tokens" "oauth_refresh_tokens"
+                               "oauth_login_sessions" "oauth_authorization_codes"]]
+                  (let [rows (.exec db (str "select count(*) as n from " table " where expires_at = 1"))]
+                    (is (zero? (aget (first rows) "n")) table))))))
+          done)))
+
+(deftest sqlite-oauth-code-cleanup-is-bounded-test
+  (async done
+         (finish
+          (with-real-oauth-db
+            (fn [db]
+              (p/let [client-id (<approved-client)
+                      _ (.exec db
+                               (str "with recursive n(x) as (values(1) union all select x+1 from n where x<250) "
+                                    "insert into oauth_authorization_codes "
+                                    "select 'expired-' || x, 'app', 'user', 'graph', 'https://example.com', "
+                                    "'logseq/read', 'pkce', 1, 0 from n"))
+                      _ (index/<oauth-code-insert!
+                         db {:code-hash "live" :app-id client-id :user-id "user-1" :graph-id "graph-1"
+                             :redirect-uri redirect-uri :scope "logseq/read" :code-challenge challenge
+                             :created-at 2 :expires-at 99999})
+                      expired (.exec db "select count(*) as n from oauth_authorization_codes where expires_at = 1")
+                      live (index/<oauth-code-by-hash db "live")]
+                (is (= 150 (aget (first expired) "n")))
+                (is (= "live" (:code-hash live))))))
           done)))

@@ -267,7 +267,7 @@
                                         form-action
                                         "; base-uri 'none'; frame-ancestors 'none'")
          "x-frame-options" "DENY"
-         "referrer-policy" "no-referrer"
+         "referrer-policy" "same-origin"
          "cache-control" "no-store"
          "x-content-type-options" "nosniff"}))
 

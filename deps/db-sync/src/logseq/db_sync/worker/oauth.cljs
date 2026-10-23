@@ -16,7 +16,7 @@
 (def max-text-length 500)
 (def max-name-length 80)
 (def max-state-length 512)
-(def max-form-chars 16384)
+(def max-form-bytes 16384)
 (def too-large-form ::too-large)
 (def access-token-ttl-ms (* 60 60 1000))
 (def refresh-token-ttl-ms (* 365 24 60 60 1000))
@@ -276,10 +276,20 @@
 
 (defn <form-params
   [request]
-  (p/let [text (.text request)]
-    (if (and (string? text) (> (count text) max-form-chars))
-      too-large-form
-      (params->map (js/URLSearchParams. (or text ""))))))
+  (if-let [body (.-body request)]
+    (let [reader (.getReader body)
+          decoder (js/TextDecoder.)]
+      (-> (p/loop [size 0 text ""]
+            (p/let [chunk (.read reader)]
+              (if (.-done chunk)
+                (params->map (js/URLSearchParams. (str text (.decode decoder))))
+                (let [payload (.-value chunk)
+                      next-size (+ size (.-byteLength payload))]
+                  (if (> next-size max-form-bytes)
+                    (p/let [_ (.cancel reader)] too-large-form)
+                    (p/recur next-size (str text (.decode decoder payload #js {:stream true}))))))))
+          (p/finally #(.releaseLock reader))))
+    (p/resolved {})))
 
 (defn query-params
   [url]
