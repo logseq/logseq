@@ -197,7 +197,6 @@
  :class.validation/duplicate "標籤「{1}」已存在。"
  :class.validation/extends-cycle "繼承關係出現迴圈。"
  :class.validation/invalid-extends-type "無效的繼承型別。"
- :class.validation/parents-must-be-tags "標籤的父級必須是標籤。"
  :class.validation/tag-with-non-tag "無法使用不是標籤「{1}」的內建頁面設定標籤。"
 
  :cmdk.action/apply-theme "套用主題"
@@ -1102,7 +1101,6 @@
  :page.validation/name-blank "頁面名稱不能為空。"
  :page.validation/name-no-hash "頁面名稱不能包含 「#」。"
  :page.validation/name-no-slash "頁面名稱不能包含 /。"
- :page.validation/parents-must-be-pages "頁面的父級必須是頁面。"
 
  :pdf/annotations-page "註解頁面"
  :pdf/area-highlight-shortcut "區域醒目標示（{1}）"

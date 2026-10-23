@@ -233,7 +233,7 @@
                   {:block/uuid (random-uuid)}
                   "PlainPage"
                   {:logseq.property/type :default}
-                  {}))
+                  {:block-uuid 41}))
                (p/then (fn [result]
                          (is (= created result))
                          (is (= [[:upsert nil
@@ -264,7 +264,7 @@
                   {:block/uuid (random-uuid)}
                   "Bar"
                   {:logseq.property/type :default}
-                  {}))
+                  {:block-uuid 42}))
                (p/then (fn [_]
                          (is false "namespaced convert should reject before write")))
                (p/catch (fn [error]

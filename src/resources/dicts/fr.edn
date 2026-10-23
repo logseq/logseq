@@ -167,7 +167,6 @@
  :class.validation/duplicate "Le tag « {1} » existe déjà."
  :class.validation/extends-cycle "Cycle détecté dans la relation d'héritage."
  :class.validation/invalid-extends-type "Type d'héritage invalide."
- :class.validation/parents-must-be-tags "Les parents de tags doivent être des tags."
  :class.validation/tag-with-non-tag "Impossible de définir une balise avec une page intégrée qui n'est pas une balise « {1} »."
 
  :cmdk.action/apply-theme "Appliquer le thème"
@@ -1072,7 +1071,6 @@
  :page.validation/name-blank "Le nom de page ne peut pas être vide."
  :page.validation/name-no-hash "Le nom de page ne peut pas contenir #"
  :page.validation/name-no-slash "Le nom de page ne peut pas contenir /."
- :page.validation/parents-must-be-pages "Les parents de pages doivent être des pages."
 
  :pdf/annotations-page "Page d'annotations"
  :pdf/area-highlight-shortcut "Surbrillance de zone ({1})"

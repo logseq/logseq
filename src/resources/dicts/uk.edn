@@ -222,7 +222,6 @@
  :class.validation/duplicate "Вже існує інший тег із назвою \"{1}\"."
  :class.validation/extends-cycle "Виявлено цикл в наслідуванні."
  :class.validation/invalid-extends-type "Цю сторінку неможливо розширити, оскільки вона або не є тегом, або успадковується від сторінки, яка не є тегом."
- :class.validation/parents-must-be-tags "Цей тег неможливо створити, доки всі батьківські елементи не будуть тегами."
  :class.validation/tag-with-non-tag "Неможливо встановити тег із вбудованою сторінкою, яка не є тегом \"{1}\"."
 
  :cmdk.action/apply-theme "Застосувати тему"
@@ -1182,7 +1181,6 @@
  :page.validation/name-blank "Назва сторінки не може бути порожньою."
  :page.validation/name-no-hash "Назва сторінки не може містити \"#\"."
  :page.validation/name-no-slash "Назва сторінки не може містити \"/\"."
- :page.validation/parents-must-be-pages "Цю сторінку неможливо створити, якщо всі батьківські елементи не є сторінками."
 
  :pdf/annotations-page "Сторінка анотацій"
  :pdf/area-highlight-shortcut "Виділення області ({1})"

@@ -27,8 +27,8 @@
   (let [container-page (page/get-page-name)]
     (ls-api-call! :editor.createTag
                   tag-name
-                  {:tagProperties [{:name "Status"}
-                                   {:name "Priority"
+                  {:tagProperties [{:name "Stage"}
+                                   {:name "Rank"
                                     :schema {:type "number"}}]})
     (doseq [[title status priority]
             [["Alpha table object" "Open" 2]
@@ -36,8 +36,8 @@
       (ls-api-call! :editor.insertBlock
                     container-page
                     (str title " #" tag-name)
-                    {:properties {"Status" status
-                                  "Priority" priority}}))
+                    {:properties {"Stage" status
+                                  "Rank" priority}}))
     (page/goto-page tag-name)
     (assert/assert-is-visible ".ls-view-body .ls-table-header-cell")
     (w/click ".views button[title='Add new view']")
@@ -179,8 +179,8 @@
    (loc/filter ".ls-view-body .ls-table-row" :has-text "Beta table object"))
 
   (w/click (view-action-button "filter"))
-  (w/click (loc/filter ".cp__select-results a" :has-text "Status"))
-  (assert/assert-is-visible ".cp__select-input[placeholder='Status']")
+  (w/click (loc/filter ".cp__select-results a" :has-text "Stage"))
+  (assert/assert-is-visible ".cp__select-input[placeholder='Stage']")
   (w/click (util/get-by-text "Is Not Empty" true))
   (assert/assert-is-visible ".filters-row")
   (assert/assert-is-visible
@@ -204,29 +204,29 @@
   (seed-table-view! "table-column-actions")
   (open-view-more-actions!)
   (open-view-submenu! "Columns visibility")
-  (w/click (loc/filter "[role='menuitemcheckbox']" :has-text "Status"))
+  (w/click (loc/filter "[role='menuitemcheckbox']" :has-text "Stage"))
   (assert/assert-have-count
-   (loc/filter ".ls-table-header-cell" :has-text "Status")
+   (loc/filter ".ls-table-header-cell" :has-text "Stage")
    0)
   (util/double-esc)
 
   (open-view-more-actions!)
   (open-view-submenu! "Columns visibility")
-  (w/click (loc/filter "[role='menuitemcheckbox']" :has-text "Status"))
+  (w/click (loc/filter "[role='menuitemcheckbox']" :has-text "Stage"))
   (assert/assert-is-visible
-   (loc/filter ".ls-table-header-cell" :has-text "Status"))
+   (loc/filter ".ls-table-header-cell" :has-text "Stage"))
   (util/double-esc)
 
   (util/refresh-until-graph-loaded)
   (assert/assert-is-visible
-   (loc/filter ".ls-table-header-cell" :has-text "Status")))
+   (loc/filter ".ls-table-header-cell" :has-text "Stage")))
 
 (deftest table-view-group-and-export-actions-test
   (seed-table-view! "table-group-export-actions")
 
   (open-view-more-actions!)
   (open-view-submenu! "Group by")
-  (w/click (loc/filter "[role='menuitemcheckbox']" :has-text "Status"))
+  (w/click (loc/filter "[role='menuitemcheckbox']" :has-text "Stage"))
   (assert/assert-is-visible
    (loc/filter ".ls-view-body" :has-text "Open"))
   (assert/assert-is-visible
@@ -269,7 +269,7 @@
   (seed-table-view! "table-column-sort")
   (sort-table-column! "Name" "Sort ascending")
   (assert-body-text-order "Alpha table object" "Beta table object")
-  (sort-table-column! "Priority" "Sort ascending")
+  (sort-table-column! "Rank" "Sort ascending")
   (assert-body-text-order "Beta table object" "Alpha table object")
   (sort-table-column! "Created At" "Sort descending")
   (assert/assert-is-visible

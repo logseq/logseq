@@ -223,7 +223,6 @@
  :class.validation/duplicate "标签“{1}”已存在。"
  :class.validation/extends-cycle "继承关系出现循环。"
  :class.validation/invalid-extends-type "无效的继承类型。"
- :class.validation/parents-must-be-tags "标签的父级必须是标签。"
  :class.validation/tag-with-non-tag "无法使用不是标签“{1}”的内置页面设置标签。"
 
  :cmdk.action/apply-theme "应用主题"
@@ -1194,7 +1193,6 @@
  :page.validation/name-blank "页面名称不能为空。"
  :page.validation/name-no-hash "页面名不能包含 \"#\"。"
  :page.validation/name-no-slash "页面名称不能包含 /。"
- :page.validation/parents-must-be-pages "页面的父级必须是页面。"
 
  :pdf/annotations-page "批注页"
  :pdf/area-highlight-shortcut "区域高亮（{1}）"

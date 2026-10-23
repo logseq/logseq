@@ -327,7 +327,7 @@
   (let [db-based? (entity-plus/db-based-graph? db)
         original-page-name (common-util/remove-boundary-slashes original-page-name)
         [original-page-name' page-name journal-day]
-        (if skip-journal?
+        (if (or skip-journal? (and class? db-based?))
           [original-page-name (common-util/page-name-sanity-lc original-page-name) nil]
           (convert-page-if-journal original-page-name date-formatter {:export-to-db-graph? @*export-to-db-graph?}))
         namespace? (and (or (not db-based?) @*export-to-db-graph?)
@@ -336,13 +336,17 @@
                         (text/namespace-page? original-page-name'))
         page-entity (when (and db (not skip-existing-page-check?))
                       (cond
+                        (and db-based? (not class?) (common-util/uuid-string? original-page-name))
+                        (d/entity db [:block/uuid (uuid original-page-name)])
+
                         journal-day
                         (ldb/get-journal-page-by-day db journal-day)
 
                         (and class? db-based?)
-                        (some->> (ldb/page-exists? db original-page-name' #{:logseq.class/Tag})
-                                 first
-                                 (d/entity db))
+                        (ldb/get-page-by-name db original-page-name' #{:logseq.class/Tag})
+
+                        db-based?
+                        (ldb/get-page-by-name db original-page-name' #{:logseq.class/Page :logseq.class/Journal})
 
                         :else
                         (get-page db original-page-name')))
@@ -387,7 +391,10 @@
                   (assoc :block/tags [:logseq.class/Journal])
                   (not db-based?)
                   (assoc :block/type "journal"))
-                {}))]
+                {})
+              (when (and db-based? page-entity (common-util/uuid-string? original-page-name))
+                (assoc (select-keys page-entity [:db/id :db/ident :block/name])
+                       :block/tags (mapv :db/ident (:block/tags page-entity)))))]
     [page page-entity]))
 
 (defn sanitize-hashtag-name

@@ -167,7 +167,6 @@
  :class.validation/duplicate "Tag '{1}' sudah ada."
  :class.validation/extends-cycle "Siklus terdeteksi pada pewarisan."
  :class.validation/invalid-extends-type "Tipe pewarisan tidak valid."
- :class.validation/parents-must-be-tags "Induk harus berupa tag."
  :class.validation/tag-with-non-tag "Tidak dapat menyetel tag dengan halaman bawaan yang bukan tag \"{1}\"."
 
  :cmdk.action/apply-theme "Terapkan tema"
@@ -1072,7 +1071,6 @@
  :page.validation/name-blank "Nama halaman tidak boleh kosong."
  :page.validation/name-no-hash "Nama halaman tidak boleh mengandung #"
  :page.validation/name-no-slash "Nama halaman tidak boleh mengandung /."
- :page.validation/parents-must-be-pages "Induk harus berupa halaman."
 
  :pdf/annotations-page "Halaman anotasi"
  :pdf/area-highlight-shortcut "Sorotan area ({1})"

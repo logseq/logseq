@@ -1266,6 +1266,16 @@ let page_query selector =
            Cli_primitive.V
              (Edn_util.vector_t_vec
                 (Vec.of_array [| sym "?e"; kw "block/name"; sym "?name" |]));
+           Cli_primitive.L
+             (Edn_util.list_t_vec
+                (Vec.of_array
+                   [|
+                     sym "or";
+                     vector_vec
+                       (Vec.of_array [| sym "?e"; kw "block/tags"; kw "logseq.class/Page" |]);
+                     vector_vec
+                       (Vec.of_array [| sym "?e"; kw "block/tags"; kw "logseq.class/Journal" |]);
+                   |]));
          |])
     ()
 
@@ -2464,16 +2474,10 @@ let pull_created_page invoke_config repo name create_result =
           (vector_vec
              (Vec.of_array [| kw "block/uuid"; Edn_util.uuid uuid |]))
   | None ->
-      Transport.thread_api_pull invoke_config ~repo
-        ~selector:
-          (Edn_util.vector_t_vec
-             (Vec.of_array [| kw "db/id"; kw "block/uuid" |]))
-        ~lookup:
-          (vector_vec
-             (Vec.of_array
-                [|
-                  kw "block/name"; Edn_util.string (normalized_lookup_name name);
-                |]))
+      Cli_effect.bind
+        (pull_pages_by_name invoke_config repo name page_selector)
+        (fun values ->
+          Cli_effect.pure (Option.value (first_entity values) ~default:Edn_util.nil))
 
 let tag_schema_property_ops tag_uuid ~add_properties ~remove_properties =
   let add_ops =

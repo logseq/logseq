@@ -222,7 +222,6 @@
  :class.validation/duplicate "'{1}' etiketi zaten mevcut."
  :class.validation/extends-cycle "Kalıtımda döngü tespit edildi."
  :class.validation/invalid-extends-type "Geçersiz kalıtım türü."
- :class.validation/parents-must-be-tags "Etiket üst öğeleri etiket olmalıdır."
  :class.validation/tag-with-non-tag "\"{1}\" etiketi olmayan yerleşik sayfayla etiket ayarlanamıyor."
 
  :cmdk.action/apply-theme "Temayı uygula"
@@ -1181,7 +1180,6 @@
  :page.validation/name-blank "Sayfa adı boş olamaz."
  :page.validation/name-no-hash "Sayfa adı # içeremez"
  :page.validation/name-no-slash "Sayfa adı / içeremez."
- :page.validation/parents-must-be-pages "Sayfa üst öğeleri sayfa olmalıdır."
 
  :pdf/annotations-page "Açıklamalar sayfası"
  :pdf/area-highlight-shortcut "Alan vurgulama ({1})"

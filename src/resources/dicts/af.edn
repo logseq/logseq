@@ -167,7 +167,6 @@
  :class.validation/duplicate "Tag '{1}' bestaat al."
  :class.validation/extends-cycle "Cyclus in overerving gedetecteerd."
  :class.validation/invalid-extends-type "Ongeldig overervingstype."
- :class.validation/parents-must-be-tags "Bovenliggende tags moeten tags zijn."
  :class.validation/tag-with-non-tag "Kan nie merker stel met ingeboude bladsy wat nie 'n merker \"{1}\" is nie."
 
  :cmdk.action/apply-theme "Pas tema toe"
@@ -1072,7 +1071,6 @@
  :page.validation/name-blank "Bladsynaam mag nie leeg zijn."
  :page.validation/name-no-hash "Bladsynaam kan nie # insluit nie"
  :page.validation/name-no-slash "Bladsynaam mag geen / bevatten."
- :page.validation/parents-must-be-pages "Bovenliggende bladsye moeten bladsye zijn."
 
  :pdf/annotations-page "Aantekeninge-bladsy"
  :pdf/area-highlight-shortcut "Gebiedsuitligting ({1})"

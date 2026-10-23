@@ -167,7 +167,6 @@
  :class.validation/duplicate "Tagg '{1}' finnes allerede."
  :class.validation/extends-cycle "Syklus i arv oppdaget."
  :class.validation/invalid-extends-type "Ugyldig arvstype."
- :class.validation/parents-must-be-tags "Overordnede tagger må være tagger."
  :class.validation/tag-with-non-tag "Kan ikke angi tag med innebygd side som ikke er en tag \"{1}\"."
 
  :cmdk.action/apply-theme "Bruk tema"
@@ -1072,7 +1071,6 @@
  :page.validation/name-blank "Sidenavn kan ikke være tomt."
  :page.validation/name-no-hash "Sidenavn kan ikke inneholde #"
  :page.validation/name-no-slash "Sidenavn kan ikke inneholde /."
- :page.validation/parents-must-be-pages "Overordnede sider må være sider."
 
  :pdf/annotations-page "Merknadsside"
  :pdf/area-highlight-shortcut "Områdemarkering ({1})"

@@ -462,14 +462,7 @@
 (defn- get-property-value-eid
   [db property-id raw-value]
   (if (= property-id :block/tags)
-    (first
-     (d/q '[:find [?v ...]
-            :in $ ?title
-            :where
-            [?v :block/title ?title]
-            [?v :block/tags :logseq.class/Tag]]
-          db
-          raw-value))
+    (:db/id (ldb/get-page-by-name db raw-value #{:logseq.class/Tag}))
     (first
      (d/q '[:find [?v ...]
             :in $ ?property-id ?raw-value
@@ -532,8 +525,8 @@
                         :v v}]
         (if (or (string/blank? v) (not (string? v)))
           (throw (ex-info "Value should be non-empty string" error-data))
-          (let [page (ldb/get-page @conn v)]
-            (if (entity-util/page? page)
+          (let [page (ldb/get-page-by-name @conn v #{:logseq.class/Page :logseq.class/Journal})]
+            (if page
               (:db/id page)
               (let [[_ page-uuid] (outliner-page/create! conn v error-data)]
                 (if-not page-uuid
@@ -946,12 +939,45 @@
                (when-not value-matches?
                  (raw-set-block-property! conn block property v'))))))))))
 
+(defn- create-property!
+  [conn property-id db-ident schema {:keys [property-name properties] :as opts}]
+  (let [k-name (or (and property-name (name property-name))
+                   (name property-id))
+        db-ident' (db-ident/ensure-unique-db-ident @conn db-ident)]
+    (assert (some? k-name)
+            (prn "property-id: " property-id ", property-name: " property-name))
+    ;; e2ee titles are ciphertext packages, not validatable page titles
+    (when-not (:e2ee? opts)
+      (outliner-validate/validate-page-title k-name {:node {:db/ident db-ident'}})
+      (outliner-validate/validate-page-title-characters k-name {:node {:db/ident db-ident'}})
+      (outliner-validate/validate-property-title k-name {:node {:db/ident db-ident'}}))
+    (let [db-id (:db/id properties)
+          page (when (integer? db-id)
+                 (d/entity @conn db-id))
+          _ (outliner-validate/validate-page-to-property-conversion page)
+          opts' (cond-> {:title k-name
+                         :properties properties}
+                  (integer? db-id)
+                  (assoc :block-uuid (:block/uuid page)))
+          tx-data (concat
+                   [(cond-> (sqlite-util/build-new-property db-ident' schema opts')
+                      (:e2ee? opts) (assoc :block/name (:encrypted-name opts)))]
+                   ;; Convert page to property
+                   (when db-id
+                     [[:db/retract db-id :block/tags :logseq.class/Page]]))]
+      (ldb/transact! conn tx-data
+                     {:outliner-op :upsert-property}))
+    (d/entity @conn db-ident')))
+
 (defn upsert-property!
   "Updates property if property-id is given. Otherwise creates a property
     with the given property-id or :property-name option. When a property is created
     it is ensured to have a unique :db/ident"
-  [conn property-id schema {:keys [property-name properties] :as opts}]
+  [conn property-id schema {:keys [property-name] :as opts}]
   (let [db @conn
+        existing (when-not (:e2ee? opts)
+                   (when-let [title (or property-name (some-> property-id name))]
+                     (ldb/get-page-by-name db title #{:logseq.class/Property})))
         db-ident (or property-id
                      (try (db-property/create-user-property-ident-from-name property-name)
                           (catch :default e
@@ -966,35 +992,20 @@
       (throw (ex-info ":checkbox property doesn't allow multiple values"
                       {:property-id property-id
                        :schema schema})))
-    (if-let [property (and (qualified-keyword? property-id) (d/entity db db-ident))]
-      (update-property conn db-ident property schema opts)
-      (let [k-name (or (and property-name (name property-name))
-                       (name property-id))
-            db-ident' (db-ident/ensure-unique-db-ident @conn db-ident)]
-        (assert (some? k-name)
-                (prn "property-id: " property-id ", property-name: " property-name))
-        ;; e2ee titles are ciphertext packages, not validatable page titles
-        (when-not (:e2ee? opts)
-          (outliner-validate/validate-page-title k-name {:node {:db/ident db-ident'}})
-          (outliner-validate/validate-page-title-characters k-name {:node {:db/ident db-ident'}})
-          (outliner-validate/validate-property-title k-name {:node {:db/ident db-ident'}}))
-        (let [db-id (:db/id properties)
-              page (when (integer? db-id)
-                     (d/entity db db-id))
-              _ (outliner-validate/validate-page-to-property-conversion page)
-              opts' (cond-> {:title k-name
-                             :properties properties}
-                      (integer? db-id)
-                      (assoc :block-uuid (:block/uuid page)))
-              tx-data (concat
-                       [(cond-> (sqlite-util/build-new-property db-ident' schema opts')
-                          (:e2ee? opts) (assoc :block/name (:encrypted-name opts)))]
-                       ;; Convert page to property
-                       (when db-id
-                         [[:db/retract db-id :block/tags :logseq.class/Page]]))]
-          (ldb/transact! conn tx-data
-                         {:outliner-op :upsert-property}))
-        (d/entity @conn db-ident')))))
+    (cond
+      (and (qualified-keyword? property-id) (d/entity db db-ident))
+      (update-property conn db-ident (d/entity db db-ident) schema opts)
+
+      existing
+      (do
+        (when property-id
+          (outliner-validate/validate-unique-by-name-and-tags
+           db (:block/title existing)
+           {:db/id -1 :block/tags [(d/entity db :logseq.class/Property)]}))
+        existing)
+
+      :else
+      (create-property! conn property-id db-ident schema opts))))
 
 (defn- node-value-target-id
   "Resolves a :node property value to the id of the node it targets. Such

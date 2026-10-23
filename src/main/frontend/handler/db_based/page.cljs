@@ -98,12 +98,14 @@
           (let [tag-entity (or (when existing-result? chosen-result) result)
                 hash-idx (string/last-index-of (subs edit-content 0 current-pos) last-pattern)
                 add-tag-to-nearest-node? (= page-ref/right-brackets (common-util/safe-subs edit-content (- hash-idx 2) hash-idx))
-                nearest-node (some-> (editor-handler/get-nearest-page) string/trim)]
+                nearest-node (some-> (editor-handler/get-nearest-page) string/trim)
+                node-types (when-not (common-util/uuid-string? nearest-node)
+                             #{:logseq.class/Page :logseq.class/Journal})]
             (if (and add-tag-to-nearest-node? (not (string/blank? nearest-node)))
-              (p/let [node-ent (db-async/<get-case-page (state/get-current-repo) nearest-node)
+              (p/let [node-ent (db-async/<get-page-by-name (state/get-current-repo) nearest-node node-types)
                       ;; Save because nearest node doesn't exist yet
                       _ (when-not node-ent (editor-handler/save-current-block!))
-                      node-ent' (or node-ent (db-async/<get-case-page (state/get-current-repo) nearest-node))
+                      node-ent' (or node-ent (db-async/<get-page-by-name (state/get-current-repo) nearest-node node-types))
                       _ (add-tag (state/get-current-repo) (:block/uuid node-ent') tag-entity)]
                 ;; Notify as action has been applied to a node off screen
                 (notification/show! (t :page/added-tag-to-node (:block/title tag-entity) (:block/title node-ent'))))

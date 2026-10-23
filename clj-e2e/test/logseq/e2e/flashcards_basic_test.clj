@@ -31,8 +31,13 @@
   []
   (w/click "#ls-cards-add"))
 
+(defn- tag-query
+  [tag-name]
+  (let [tag (first (ls-api-call! :editor.getTagsByName tag-name))]
+    (str "[[" (get tag "uuid") "]]")))
+
 (defn- setup-flashcards-data!
-  [{:keys [page-name tag-a tag-b card-a card-b query-a query-b]}]
+  [{:keys [page-name tag-a tag-b card-a card-b]}]
   (ls-api-call! :editor.appendBlockInPage page-name (str card-a " #Card #" tag-a))
   (ls-api-call! :editor.appendBlockInPage page-name (str card-b " #Card #" tag-b))
   (let [cards (ls-api-call! :editor.getTag "logseq.class/Cards")
@@ -43,17 +48,15 @@
                               {:properties {:block/tags #{cards-id}}})
         query-a-id (get cards-a ":logseq.property/query")
         query-b-id (get cards-b ":logseq.property/query")]
-    (ls-api-call! :editor.updateBlock query-a-id query-a)
-    (ls-api-call! :editor.updateBlock query-b-id query-b)))
+    (ls-api-call! :editor.updateBlock query-a-id (tag-query tag-a))
+    (ls-api-call! :editor.updateBlock query-b-id (tag-query tag-b))))
 
 (deftest flashcards-plus-and-switching-test
   (testing "create #Cards blocks from flashcards dialog and switch card sets"
     (let [tag-a "fc-tag-a"
           tag-b "fc-tag-b"
           card-a "Card A"
-          card-b "Card B"
-          query-a (str "[[" tag-a "]]")
-          query-b (str "[[" tag-b "]]")]
+          card-b "Card B"]
       (util/goto-journals)
       (let [page (ls-api-call! :editor.getCurrentPage)
             page-name (get page "name")]
@@ -62,9 +65,7 @@
           :tag-a tag-a
           :tag-b tag-b
           :card-a card-a
-          :card-b card-b
-          :query-a query-a
-          :query-b query-b}))
+          :card-b card-b}))
 
       (open-flashcards)
       (click-flashcards-plus)
@@ -98,7 +99,7 @@
             untitled-cards (ls-api-call! :editor.appendBlockInPage page-name ""
                                          {:properties {:block/tags #{cards-id}}})
             query-id (get untitled-cards ":logseq.property/query")]
-        (ls-api-call! :editor.updateBlock query-id query-a))
+        (ls-api-call! :editor.updateBlock query-id (tag-query tag-a)))
 
       (open-flashcards)
       (w/click "#cards-modal [role='combobox']")
