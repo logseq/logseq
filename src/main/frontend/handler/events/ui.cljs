@@ -291,7 +291,12 @@
           opts' (cond-> opts
                   editing-block
                   (assoc :original-block editing-block
-                         :edit-original-block #(edit-original-block! editing-block pos %)))]
+                         :edit-original-block #(edit-original-block! editing-block pos %))
+                  ;; Pin the resolved click-time list so the dialog does not
+                  ;; keep a stale toolbar snapshot when the outliner selection
+                  ;; was omitted and loaded here instead.
+                  (seq selected-blocks)
+                  (assoc :selected-blocks selected-blocks))]
       (when (seq blocks)
         (let [target' (or target
                           editing-target
