@@ -3093,7 +3093,9 @@
                                (= (:db/ident property) :logseq.property/icon))))
         has-viewable-properties? (seq properties)
         opts (merge config
-                    {:icon? true
+                    ;; Pills below the block have room for a label, so closed
+                    ;; values render icon + text there; other positions stay icon-only
+                    {:icon? (not= position :block-below)
                      :page-cp page-cp
                      :block-cp blocks-container
                      :inline-text inline-text
