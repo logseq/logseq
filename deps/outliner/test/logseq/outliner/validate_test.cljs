@@ -1,9 +1,12 @@
 (ns logseq.outliner.validate-test
   (:require [cljs.test :refer [are deftest is testing]]
+            [clojure.string :as string]
             [datascript.core :as d]
+            [logseq.db :as ldb]
             [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.test.helper :as db-test]
+            [logseq.outliner.page :as outliner-page]
             [logseq.outliner.validate :as outliner-validate]))
 
 (deftest validate-block-title-unique-for-properties
@@ -39,7 +42,7 @@
           @conn
           "Class1"
           (d/entity @conn :user.class/Class2)))
-        "Disallow duplicate class names, regardless of extends")
+        "Disallow duplicate top-level class names; built-in extends are not a namespace parent")
     (is (thrown-with-msg?
          js/Error
          #"Duplicate class"
@@ -210,6 +213,85 @@
           "FOO"
           (db-test/find-page-by-title @conn "Bar")))
         "Disallow rename when any candidate collides, even if an exempt candidate is checked first")))
+
+(deftest validate-block-title-unique-for-top-level-and-namespaced-pages
+  (testing "Rename there and back is allowed when a namespaced page shares the title"
+    (let [conn (db-test/create-conn)
+          [_ baz-uuid] (outliner-page/create! conn "Baz" {})
+          _ (outliner-page/create! conn "Foo/Baz" {:split-namespace? true})
+          baz (d/entity @conn [:block/uuid baz-uuid])
+          foo-baz (->> (d/q '[:find [?e ...] :where [?e :block/title "Baz"]] @conn)
+                       (map #(d/entity @conn %))
+                       (remove #(= baz-uuid (:block/uuid %)))
+                       first)]
+      (is (some? foo-baz))
+      (is (nil? (:block/parent baz))
+          "Standalone Baz has no parent")
+      (is (some? (:block/parent foo-baz))
+          "Foo/Baz is nested")
+      (is (nil? (outliner-validate/validate-unique-by-name-and-tags @conn "Qux" baz)))
+      (is (nil? (outliner-validate/validate-unique-by-name-and-tags @conn "Baz" baz))
+          "Restoring top-level Baz must not collide with Foo/Baz")
+      (is (= 2 (count (d/q '[:find [?e ...] :where [?e :block/title "Baz"]] @conn))))))
+
+  (testing "Renaming a Library namespace root to a top-level title is refused"
+    (let [conn (db-test/create-conn)
+          _ (outliner-page/create! conn "Baz" {})
+          _ (outliner-page/create! conn "Foo/Bar" {:split-namespace? true})
+          foo (ldb/get-page @conn "Foo")
+          library (ldb/get-library-page @conn)]
+      (is (= (:db/id library) (:db/id (:block/parent foo)))
+          "Namespace root Foo lives under Library")
+      (is (thrown-with-msg?
+           js/Error
+           #"Duplicate page"
+           (outliner-validate/validate-unique-by-name-and-tags @conn "Baz" foo))
+          "Foo cannot take the top-level Baz title")
+      (is (= "Foo" (:block/title (d/entity @conn (:db/id foo)))))
+      (is (= 1 (count (filter ldb/internal-page?
+                              (map #(d/entity @conn %)
+                                   (d/q '[:find [?e ...] :where [?e :block/title "Baz"]] @conn)))))
+          "Still exactly one live page titled Baz"))))
+
+(defn- transact-tag
+  "Insert a tag page. `extends` is :logseq.class/Root or a lookup ref."
+  [conn {:keys [title uuid extends]}]
+  (d/transact! conn
+               [{:block/uuid uuid
+                 :block/title title
+                 :block/name (string/lower-case title)
+                 :block/tags :logseq.class/Tag
+                 :logseq.property.class/extends extends}]))
+
+(deftest validate-block-title-unique-for-namespaced-tags
+  (testing "A top-level tag may reuse a namespaced tag title"
+    (let [conn (db-test/create-conn)
+          bar-uuid (random-uuid)
+          nested-foo-uuid (random-uuid)
+          _ (transact-tag conn {:title "Bar" :uuid bar-uuid :extends :logseq.class/Root})
+          _ (transact-tag conn {:title "Foo" :uuid nested-foo-uuid :extends [:block/uuid bar-uuid]})
+          [_ qux-uuid] (outliner-page/create! conn "Qux" {:class? true})
+          qux (d/entity @conn [:block/uuid qux-uuid])
+          nested-foo (d/entity @conn [:block/uuid nested-foo-uuid])]
+      (is (ldb/class? nested-foo))
+      (is (= (:db/id (d/entity @conn [:block/uuid bar-uuid]))
+             (:db/id (first (:logseq.property.class/extends nested-foo))))
+          "#Bar/Foo extends the user tag Bar")
+      (is (nil? (outliner-validate/validate-unique-by-name-and-tags @conn "Foo" qux))
+          "Renaming #Qux to #Foo must not collide with #Bar/Foo")))
+
+  (testing "Namespaced tags under the same parent cannot share a title"
+    (let [conn (db-test/create-conn)
+          bar-uuid (random-uuid)
+          _ (transact-tag conn {:title "Bar" :uuid bar-uuid :extends :logseq.class/Root})
+          _ (transact-tag conn {:title "Baz" :uuid (random-uuid) :extends [:block/uuid bar-uuid]})
+          qux-uuid (random-uuid)
+          _ (transact-tag conn {:title "Qux" :uuid qux-uuid :extends [:block/uuid bar-uuid]})]
+      (is (thrown-with-msg?
+           js/Error
+           #"Duplicate class"
+           (outliner-validate/validate-unique-by-name-and-tags
+            @conn "Baz" (d/entity @conn [:block/uuid qux-uuid])))))))
 
 (deftest validate-extends-property
   (let [conn (db-test/create-conn-with-blocks
