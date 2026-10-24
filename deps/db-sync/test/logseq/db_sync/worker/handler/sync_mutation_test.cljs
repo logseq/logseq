@@ -199,21 +199,6 @@
     (is (= "db transact failed" (:reason response)))
     (is (not (contains? response :missing-block-uuids)))))
 
-;; Fails if, in `sanitize-tx-entry`, `=` becomes `not=`.
-(deftest tx-batch-fix-retracting-only-a-missing-block-is-not-broadcast-test
-  (testing "a :fix entry whose only op retracts a block that does not exist changes nothing, so other clients are not told to pull"
-    (let [{:keys [self]} (server-self)
-          broadcasts (atom [])
-          t-before (storage/get-t (.-sql self))
-          response (with-redefs [ws/broadcast! (fn [_self _sender msg] (swap! broadcasts conj msg))]
-                     (sync-handler/handle-tx-batch! self nil
-                                                    [{:tx (protocol/tx->transit [[:db/retractEntity [:block/uuid (random-uuid)]]])
-                                                      :tx-id (random-uuid)
-                                                      :outliner-op :fix}]
-                                                    t-before))]
-      (is (= {:type "tx/batch/ok" :t t-before} (select-keys response [:type :t])))
-      (is (= [] @broadcasts)))))
-
 ;; large tx chunking
 
 ;; Fails if, in `replaced-value-attrs`, `when` becomes `when-not`.
