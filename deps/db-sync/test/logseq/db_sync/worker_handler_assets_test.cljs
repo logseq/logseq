@@ -142,3 +142,99 @@
                (p/catch (fn [error]
                           (is false (str error))
                           (done)))))))
+
+(deftest assets-get-serves-non-image-types-as-attachment-with-nosniff-test
+  (async done
+         (let [payload (js/Uint8Array. #js [1 2 3 4])
+               request (js/Request. "http://localhost/assets/graph-1/page-id.html"
+                                    #js {:method "GET"})
+               env #js {:LOGSEQ_SYNC_ASSETS
+                        #js {:get (fn [_key]
+                                    (p/resolved
+                                     #js {:body payload
+                                          :size 4
+                                          :httpMetadata #js {:contentType "text/html"}}))}}]
+           (-> (p/let [resp (assets/handle request env)]
+                 (is (= 200 (.-status resp)))
+                 (is (= "text/html" (.get (.-headers resp) "content-type")))
+                 (is (= "attachment; filename=\"page-id.html\""
+                        (.get (.-headers resp) "content-disposition")))
+                 (is (= "nosniff" (.get (.-headers resp) "x-content-type-options")))
+                 (is (nil? (.get (.-headers resp) "content-security-policy"))))
+               (p/then (fn [] (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
+(deftest assets-get-sandboxes-svg-test
+  (async done
+         (let [payload (js/Uint8Array. #js [1 2 3 4])
+               request (js/Request. "http://localhost/assets/graph-1/icon-id.svg"
+                                    #js {:method "GET"})
+               env #js {:LOGSEQ_SYNC_ASSETS
+                        #js {:get (fn [_key]
+                                    (p/resolved
+                                     #js {:body payload
+                                          :size 4
+                                          :httpMetadata #js {}}))}}]
+           (-> (p/let [resp (assets/handle request env)]
+                 (is (= 200 (.-status resp)))
+                 (is (= "image/svg+xml" (.get (.-headers resp) "content-type")))
+                 (is (= "inline; filename=\"icon-id.svg\""
+                        (.get (.-headers resp) "content-disposition")))
+                 (is (= "nosniff" (.get (.-headers resp) "x-content-type-options")))
+                 (is (= "sandbox" (.get (.-headers resp) "content-security-policy"))))
+               (p/then (fn [] (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
+(def ^:private hello-sha-256 "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824")
+
+(defn- put-request-with-checksum
+  [checksum]
+  (js/Request. "http://localhost/assets/graph-1/asset-1.bin"
+               #js {:method "PUT"
+                    :headers #js {"x-amz-meta-checksum" checksum}
+                    :body "hello"}))
+
+(deftest assets-put-verifies-the-declared-checksum-on-plain-graphs-test
+  (async done
+         (let [put-calls (atom 0)
+               env #js {:DB #js {}
+                        "LOGSEQ_SYNC_ASSETS"
+                        #js {:put (fn [& _]
+                                    (swap! put-calls inc)
+                                    (p/resolved nil))}}]
+           (-> (p/with-redefs [index/<graph-e2ee? (fn [_ _] (p/resolved false))]
+                 (p/let [accepted (assets/handle (put-request-with-checksum hello-sha-256) env)
+                         rejected (assets/handle (put-request-with-checksum (apply str (repeat 64 "a"))) env)
+                         rejected-body (.json rejected)]
+                   (is (= 200 (.-status accepted)))
+                   (is (= 1 @put-calls))
+                   (is (= 400 (.-status rejected)))
+                   (is (= "asset checksum mismatch" (aget rejected-body "error")))
+                   (is (= 1 @put-calls))))
+               (p/then (fn [] (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
+(deftest assets-put-cannot-verify-the-plaintext-checksum-on-e2ee-graphs-test
+  (async done
+         (let [put-calls (atom 0)
+               env #js {:DB #js {}
+                        "LOGSEQ_SYNC_ASSETS"
+                        #js {:put (fn [& _]
+                                    (swap! put-calls inc)
+                                    (p/resolved nil))}}]
+           ;; On E2EE graphs the body is an encrypted package and the declared
+           ;; checksum describes the plaintext: it is stored as declared.
+           (-> (p/with-redefs [index/<graph-e2ee? (fn [_ _] (p/resolved true))]
+                 (p/let [accepted (assets/handle (put-request-with-checksum (apply str (repeat 64 "a"))) env)]
+                   (is (= 200 (.-status accepted)))
+                   (is (= 1 @put-calls))))
+               (p/then (fn [] (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))

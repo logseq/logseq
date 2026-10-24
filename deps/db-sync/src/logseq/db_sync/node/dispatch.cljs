@@ -20,6 +20,15 @@
          (seq expected)
          (= expected actual))))
 
+(defn- internal-sync-tail?
+  "Tails that exist only for internal routing and must never be reached
+  through the public `/sync/<graph-id>/...` surface."
+  [tail]
+  (or (= tail "/semantic")
+      (string/starts-with? tail "/semantic/")
+      (= tail "/internal")
+      (string/starts-with? tail "/internal/")))
+
 (defn handle-node-fetch
   [{:keys [request env registry deps]}]
   (let [url (platform/request-url request)
@@ -49,7 +58,7 @@
           (p/let [signed-download? (when (= method "GET") (asset-link/<valid-request? request env))]
             (if (or signed-download? (admin-token-valid? request env))
               (assets-handler/handle request env)
-              (p/let [access-resp (index-handler/graph-access-response request env graph-id)]
+              (p/let [access-resp (worker-dispatch/<non-semantic-access-response request env graph-id)]
                 (if (.-ok access-resp)
                   (assets-handler/handle request env)
                   access-resp))))
@@ -63,13 +72,23 @@
         (if (seq graph-id)
           (if (= method "OPTIONS")
             (common/options-response)
-            (if (admin-token-valid? request env)
+            (cond
+              (internal-sync-tail? tail)
+              (http/not-found)
+
+              ;; Graph storage reset is an internal operation; through the
+              ;; public path it exists only for the admin token.
+              (and (= tail "/admin/reset") (not (admin-token-valid? request env)))
+              (http/not-found)
+
+              (admin-token-valid? request env)
               (let [ctx (graph/get-or-create-graph registry deps graph-id)
                     new-url (js/URL. (str (.-origin url) tail (.-search url)))]
                 (.set (.-searchParams new-url) "graph-id" graph-id)
                 (let [rewritten (platform/request (.toString new-url) request)]
                   (sync-handler/handle-http ctx rewritten)))
-              (p/let [access-resp (index-handler/graph-access-response request env graph-id)]
+              :else
+              (p/let [access-resp (worker-dispatch/<non-semantic-access-response request env graph-id)]
                 (if (.-ok access-resp)
                   (let [ctx (graph/get-or-create-graph registry deps graph-id)
                         new-url (js/URL. (str (.-origin url) tail (.-search url)))]
