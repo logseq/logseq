@@ -229,6 +229,55 @@
     (is (= [3 5 4] (get-children 2)))
     (is (= [2 6 7 8] (get-children 22)))))
 
+(deftest test-move-last-child-and-next-block-keeps-page-order
+  (testing "a last child and the block after its parent move in page order,
+  whatever their :block/order values compare as (db-test #1297)"
+    ;; 22 [2 [3 4] 5 30]: 4 is the last child of 2, 5 comes right after 2
+    (transact-tree! [[22 [[2 [[3] [4]]]
+                          [5]
+                          [30]]]])
+    ;; give 4 an order greater than 5's, as an undo that re-orders 5 can
+    ;; leave them: unrelated, since their parents differ
+    (let [order-5 (:block/order (get-block 5))]
+      (d/transact! (conn/get-db test-db false)
+                   [{:db/id (:db/id (get-block 4))
+                     :block/order (str order-5 "V")}]))
+    (outliner-tx/transact!
+     (transact-opts)
+     (outliner-core/move-blocks! (conn/get-db test-db false)
+                                 [(get-block 4) (get-block 5)] (get-block 30)
+                                 {:sibling? false}))
+    (is (= [4 5] (get-children 30)))))
+
+(deftest test-move-property-value-and-next-block-keeps-both
+  (testing "a last child that is a property value, with the block after its
+  parent: both are moved, none left out by the page-order sort"
+    (transact-tree! [[22 [[2 [[3] [4]]]
+                          [5]
+                          [30]]]])
+    ;; 4 becomes a value of 2's property, as a property value block is
+    (let [conn (conn/get-db test-db false)
+          property-ident :user.property/steps]
+      (d/transact! conn [{:db/ident :logseq.property/created-from-property
+                          :db/valueType :db.type/ref
+                          :db/cardinality :db.cardinality/one
+                          :db/index true}
+                         {:db/ident property-ident
+                          :db/valueType :db.type/ref
+                          :db/cardinality :db.cardinality/many
+                          :logseq.property/type :default}])
+      (d/transact! conn [{:db/id (:db/id (get-block 4))
+                          :logseq.property/created-from-property
+                          (:db/id (d/entity @conn property-ident))}
+                         [:db/add (:db/id (get-block 2)) property-ident (:db/id (get-block 4))]]))
+    (outliner-tx/transact!
+     (transact-opts)
+     (outliner-core/move-blocks! (conn/get-db test-db false)
+                                 [(get-block 4) (get-block 5)] (get-block 30)
+                                 {:sibling? false}))
+    (is (= #{4 5} (set (get-children 30))) "both moved")
+    (is (= [3] (get-children 2)))))
+
 (deftest test-indent-blocks
   (testing "
   [1 [[2 [[3
@@ -302,6 +351,25 @@
      (transact-opts)
      (outliner-core/indent-outdent-blocks! (conn/get-db test-db false) [(get-block 4) (get-block 5)] false))
     (is (= [3 4 5 6 9] (get-children 2)))))
+
+(deftest test-outdent-selection-over-2-levels
+  (testing "outdenting a deep block with a block 1 level up moves only the deep one out (db-test #1319)"
+    ;; 100 [101 [102 [103]] 104 105 106]: a=101, a1=102... as in the issue:
+    ;; a (a1; a2 (a2x)), b, c, d
+    (doseq [logical? [false true]]
+      (transact-tree! [[200 [[201 [[202] [203 [[204]]]]]
+                             [205]
+                             [206]
+                             [207]]]])
+      (outliner-tx/transact!
+       (transact-opts)
+       (outliner-core/indent-outdent-blocks! (conn/get-db test-db false)
+                                             [(get-block 204) (get-block 205)] false
+                                             {:logical-outdenting? logical?}))
+      ;; a2x goes out 1 level, after a2 under a; b, c, d stay where they are
+      (is (= [202 203 204] (get-children 201)) (str "logical " logical?))
+      (is (= [201 205 206 207] (get-children 200)) (str "logical " logical?))
+      (is (= [] (get-children 205)) (str "logical " logical?)))))
 
 (deftest test-outdent-skips-comments-right-siblings
   (testing "
@@ -461,6 +529,139 @@
          (transact-opts)
          (outliner-core/move-blocks-up-down! conn (mapv get-block ids) up?))
         (is (= expected (get-children 1)) (str ids " " (if up? "up" "down")))))))
+
+(defn- move-up-down!
+  [ids up?]
+  (outliner-tx/transact!
+   (transact-opts)
+   (outliner-core/move-blocks-up-down! (conn/get-db test-db false) (mapv get-block ids) up?)))
+
+(defn- parent-id
+  [id]
+  (:block/uuid (:block/parent (get-block id))))
+
+(deftest test-move-blocks-up-down-twice
+  (testing "up twice: 2 blocks go up 1 place per move"
+    (transact-tree! [[1000 [[1001] [1002] [1003] [1004]]]])
+    (move-up-down! [1003 1004] true)
+    (is (= [1001 1003 1004 1002] (get-children 1000)))
+    (move-up-down! [1003 1004] true)
+    (is (= [1003 1004 1001 1002] (get-children 1000)))))
+
+(deftest test-move-blocks-up-down-twice-down
+  (testing "down twice: 2 blocks go down 1 place per move"
+    (transact-tree! [[2000 [[2001] [2002] [2003] [2004]]]])
+    (move-up-down! [2001 2002] false)
+    (is (= [2003 2001 2002 2004] (get-children 2000)))
+    (move-up-down! [2001 2002] false)
+    (is (= [2003 2004 2001 2002] (get-children 2000)))))
+
+(deftest test-move-blocks-up-down-cases
+  ;; tree:
+  ;; [22 [[2 [[3 [[4] [5]]]
+  ;;          [6 [[7 [[8]]]]]
+  ;;          [9 [[10] [11]]]]]
+  ;;      [12 [[13] [14] [15]]]
+  ;;      [16 [[17]]]]]
+  (testing "down: a block among siblings goes after its right sibling"
+    (transact-tree! tree)
+    (move-up-down! [6] false)
+    (is (= [3 9 6] (get-children 2))))
+  (testing "down: a last child whose parent is a last child stays (no right sibling anywhere)"
+    (transact-tree! tree)
+    (move-up-down! [17] false)
+    (is (= [17] (get-children 16)))
+    (is (= 16 (parent-id 17))))
+  (testing "down: a last child goes into its parent's right sibling, as its first child"
+    (transact-tree! tree)
+    (move-up-down! [5] false)
+    (is (= [4] (get-children 3)))
+    (is (= 6 (parent-id 5)))
+    (is (= [5 7] (get-children 6))))
+  (testing "down: a last child whose parent has no right sibling stays"
+    (transact-tree! tree)
+    (move-up-down! [8] false)
+    (is (= [8] (get-children 7))))
+  (testing "up: a first child goes into the block above its parent, as its last child"
+    (transact-tree! tree)
+    (move-up-down! [13] true)
+    (is (= [14 15] (get-children 12)))
+    (is (= 2 (parent-id 13)))
+    (is (= [3 6 9 13] (get-children 2))))
+  (testing "up: a first child whose parent has no left sibling stays"
+    (transact-tree! tree)
+    (move-up-down! [3] true)
+    (is (= [3 6 9] (get-children 2))))
+  (testing "down: 2 consecutive blocks move together, after the next sibling"
+    (transact-tree! tree)
+    (move-up-down! [3 6] false)
+    (is (= [9 3 6] (get-children 2))))
+  (testing "up: 2 consecutive blocks move together, before the previous sibling"
+    (transact-tree! tree)
+    (move-up-down! [6 9] true)
+    (is (= [6 9 3] (get-children 2))))
+  (testing "up: the page's first block does not move"
+    (transact-tree! tree)
+    (move-up-down! [22] true)
+    (is (= 1 (parent-id 22))))
+  (testing "up: the first child of the page's first block does not leave it"
+    (transact-tree! tree)
+    (move-up-down! [2] true)
+    (is (= 22 (parent-id 2)))
+    (is (= [2 12 16] (get-children 22)))
+    (is (= 1 (parent-id 22))))
+  (testing "down: the page's last block does not move"
+    (transact-tree! tree)
+    (move-up-down! [22] false)
+    (is (= 1 (parent-id 22)))
+    (is (= [2 12 16] (get-children 22))))
+  (testing "a block keeps its children when it moves"
+    (transact-tree! tree)
+    (move-up-down! [6] true)
+    (is (= [6 3 9] (get-children 2)))
+    (is (= [7] (get-children 6)))
+    (is (= [8] (get-children 7)))))
+
+(deftest test-move-blocks-up-down-across-pages
+  (testing "a selection over 2 pages does not move a block into the other page (db-test #1318)"
+    ;; page 1: a(41) b(42) c(43); page 50: e(51) f(52)
+    (transact-tree! [[41] [42] [43]])
+    (d/transact! (conn/get-db test-db false)
+                 (concat [{:db/id 50 :block/uuid 50 :block/name "other page"}]
+                         (gp-block/with-parent-and-order 50
+                           (map #(assoc % :block/page 50 :block/title "x")
+                                (build-node-tree [[51] [52]]))))
+                 {:outliner-op :insert-blocks})
+    (doseq [up? [true false]]
+      (outliner-tx/transact!
+       (transact-opts)
+       (outliner-core/move-blocks-up-down! (conn/get-db test-db false)
+                                           [(get-block 41) (get-block 51)] up?))
+      (is (= [41 42 43] (get-children 1)))
+      (is (= [51 52] (get-children 50)))))
+  (testing "the only block of a nested page stays on it, with a sibling page before and after"
+    ;; page 1 holds pages 60, 70, 80 as children (a namespace); each has 1 block
+    (transact-tree! [[41]])
+    (let [conn (conn/get-db test-db false)
+          page-tx (fn [id order]
+                    {:db/id id :block/uuid id :block/name (str "nested " id)
+                     :block/title (str "nested " id)
+                     :block/parent [:block/uuid 1] :block/order order})]
+      (d/transact! conn [(page-tx 60 "a1") (page-tx 70 "a2") (page-tx 80 "a3")]
+                   {:outliner-op :insert-blocks})
+      (doseq [[page block] [[60 61] [70 71] [80 81]]]
+        (d/transact! conn (gp-block/with-parent-and-order
+                            page
+                            (map #(assoc % :block/page page :block/title "x")
+                                 (build-node-tree [[block]])))
+                     {:outliner-op :insert-blocks}))
+      (doseq [up? [true false]]
+        (outliner-tx/transact!
+         (transact-opts)
+         (outliner-core/move-blocks-up-down! conn [(get-block 71)] up?))
+        (is (= [71] (get-children 70)) (str "moved " (if up? "up" "down") ": stays on its page"))
+        (is (= [61] (get-children 60)))
+        (is (= [81] (get-children 80)))))))
 
 (deftest test-insert-blocks
   (testing "
@@ -925,10 +1126,6 @@
                                    (outliner-core/move-blocks-up-down! (conn/get-db test-db false) blocks (gen/generate gen/boolean)))
             (let [total (get-blocks-count)]
               (is (= total (count @*random-blocks))))))))))
-
-(defn- parent-id
-  [id]
-  (:block/uuid (:block/parent (get-block id))))
 
 (defn- page-order
   "Every block under page 1 in page order (depth first)."

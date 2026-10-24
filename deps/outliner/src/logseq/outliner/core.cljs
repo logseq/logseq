@@ -1238,12 +1238,30 @@
 
 (defn- get-top-level-blocks
   [top-level-blocks non-consecutive?]
-  (let [reversed? (and (not non-consecutive?)
-                       (:block/order (first top-level-blocks))
-                       (:block/order (second top-level-blocks))
-                       (> (compare (:block/order (first top-level-blocks))
-                                   (:block/order (second top-level-blocks))) 0))]
-    (if reversed? (reverse top-level-blocks) top-level-blocks)))
+  (let [[a b] top-level-blocks
+        same-parent? (= (:db/id (:block/parent a)) (:db/id (:block/parent b)))
+        reversed? (and (not non-consecutive?)
+                       same-parent?
+                       (:block/order a)
+                       (:block/order b)
+                       (> (compare (:block/order a) (:block/order b)) 0))]
+    (cond
+      ;; 2 blocks' :block/order values say which comes first only when they
+      ;; have the same parent; a last child and its parent's next sibling
+      ;; count as consecutive, and theirs are unrelated: page order instead
+      ;; the sort leaves out blocks with no page-order path (property
+      ;; values): keep every block, or a property value selected with its
+      ;; parent's next sibling would drop out of the move or delete
+      (and (not non-consecutive?) b (not same-parent?) (de/entity? a)
+           (= (:db/id (:block/page a)) (:db/id (:block/page b)))
+           (not-any? #(or (:logseq.property/created-from-property %)
+                          (:block/closed-value-property %))
+                     top-level-blocks))
+      (ldb/sort-page-random-blocks (.-db a) top-level-blocks)
+
+      reversed? (reverse top-level-blocks)
+
+      :else top-level-blocks)))
 
 (def ^:private comments-tag-ident :logseq.class/Comments)
 (def ^:private comment-tag-ident :logseq.class/Comment)
@@ -1534,14 +1552,57 @@
       :else
       top-level-blocks)))
 
+(defn- move-pages
+  "The pages `nodes` are drawn on, and a `same-page?` that says whether a
+  move to `target` (as its sibling or child) stays on one of them."
+  [db nodes]
+  (let [;; the page a node is drawn on: a block's page, or for a nested page
+        ;; (no :block/page) the page it is nested in
+        node-page-id (fn [node]
+                       (let [node (d/entity db (:db/id node))]
+                         (or (:db/id (:block/page node))
+                             (:db/id (:block/parent node)))))
+        pages (set (map node-page-id nodes))
+        ;; where a node lands as a child or sibling of `target`
+        target-page-id (fn [target sibling?]
+                         (let [target (d/entity db (:db/id target))]
+                           (if (and (not sibling?)
+                                    (or (ldb/page? target) (:block/name target)))
+                             (:db/id target)
+                             (node-page-id target))))]
+    {:pages pages
+     :same-page? (fn [target sibling?]
+                   (contains? pages (target-page-id target sibling?)))}))
+
+(defn- move-blocks-up!
+  "Moves `blocks` up to `target` (as its sibling or child). A property value
+  moved up past the first value would go into its parent and become an
+  ordinary child, so the first value moves down after `blocks` instead, and
+  every value stays a value."
+  [conn blocks target sibling? opts]
+  (let [first-block (first blocks)]
+    (if (and (not sibling?)
+             (:logseq.property/created-from-property first-block))
+      (move-blocks conn [(ldb/get-left-sibling first-block)] (last blocks)
+                   (merge opts {:sibling? true :up? false}))
+      (move-blocks conn blocks target (merge opts {:sibling? sibling? :up? true})))))
+
 (defn- move-blocks-up-down
   "Move blocks up/down."
   [conn blocks up?]
   {:pre [(seq blocks) (boolean? up?)]}
   (let [db @conn
         top-level-blocks (page-order-top-level-blocks db blocks)
-        opts {:outliner-op :move-blocks-up-down}]
-    (if up?
+        opts {:outliner-op :move-blocks-up-down}
+        {:keys [pages same-page?]} (move-pages db top-level-blocks)]
+    (cond
+      ;; a move up or down stays in 1 page: its target comes from 1 end of
+      ;; the selection, so a selection over 2 pages would carry the blocks
+      ;; of 1 page into the other
+      (> (count pages) 1)
+      nil
+
+      up?
       (let [first-block (d/entity db (:db/id (first top-level-blocks)))
             first-block-parent (:block/parent first-block)
             first-block-left-sibling (ldb/get-left-sibling first-block)
@@ -1553,11 +1614,13 @@
         (when (and left-left
                    (not= (:db/id (:block/page first-block-parent))
                          (:db/id left-left))
+                   ;; never into another page, e.g. a nested page's sibling
+                   (same-page? left-left sibling?)
                    (not (and (:logseq.property/created-from-property first-block)
                              (nil? first-block-left-sibling))))
-          (move-blocks conn top-level-blocks left-left (merge opts {:sibling? sibling?
-                                                                    :up? up?}))))
+          (move-blocks-up! conn top-level-blocks left-left sibling? opts)))
 
+      :else
       (let [last-top-block (last top-level-blocks)
             last-top-block-right (ldb/get-right-sibling last-top-block)
             right (or
@@ -1567,6 +1630,7 @@
             sibling? (= (:db/id (:block/parent last-top-block))
                         (:db/id (:block/parent right)))]
         (when (and right
+                   (same-page? right sibling?)
                    (not (and (:logseq.property/created-from-property last-top-block)
                              (nil? last-top-block-right))))
           (move-blocks conn top-level-blocks right (merge opts {:sibling? sibling?
@@ -1613,17 +1677,20 @@
                                                               :indent? true}))))))
           (if parent-original
             (let [blocks' (take-while (fn [b]
-                                        (not= (:db/id (:block/parent b))
-                                              (:db/id (:block/parent parent))))
+                                        (= (:db/id (:block/parent b))
+                                           (:db/id parent)))
                                       top-level-blocks)]
               (move-blocks conn blocks' parent-original (merge opts {:outliner-op :indent-outdent-blocks
                                                                      :sibling? true
                                                                      :indent? false})))
 
             (when parent
+              ;; only the selected blocks under the first one's parent go out
+              ;; 1 level; a selected block already above that level (a
+              ;; selection over 2 levels) stays, never goes deeper
               (let [blocks' (take-while (fn [b]
-                                          (not= (:db/id (:block/parent b))
-                                                (:db/id (:block/parent parent))))
+                                          (= (:db/id (:block/parent b))
+                                             (:db/id parent)))
                                         top-level-blocks)
                     result (move-blocks conn blocks' parent (merge opts {:sibling? true}))]
                 (if logical-outdenting?
