@@ -184,19 +184,23 @@
 
 (defn- block-reactions
   [db resource-key _runtime]
-  (let [[_ target-uuid current-user-uuid] resource-key
-        target (common/entity-by-uuid! db :target-uuid target-uuid)]
+  (let [[_ target-uuid current-user-uuid] resource-key]
+    (common/require-uuid! :target-uuid target-uuid)
     (when-not (or (nil? current-user-uuid) (uuid? current-user-uuid))
       (common/fail! "Invalid reaction user UUID" {:current-user-uuid current-user-uuid}))
-    (let [reactions (block-handler/block-reactions db (:db/id target))
-          watch-keys (into #{[:reactions target-uuid]}
-                           (keep (fn [item]
-                                   (when-let [creator-uuid
-                                              (get-in item [:logseq.property/created-by-ref
-                                                            :block/uuid])]
-                                     [:entity creator-uuid])))
-                           reactions)]
-      [watch-keys (reaction/summarize reactions current-user-uuid)])))
+    (if-let [target (d/entity db [:block/uuid target-uuid])]
+      (let [reactions (block-handler/block-reactions db (:db/id target))
+            watch-keys (into #{[:reactions target-uuid]}
+                             (keep (fn [item]
+                                     (when-let [creator-uuid
+                                                (get-in item [:logseq.property/created-by-ref
+                                                              :block/uuid])]
+                                       [:entity creator-uuid])))
+                             reactions)]
+        [watch-keys (reaction/summarize reactions current-user-uuid)])
+      ;; A queued snapshot can outlive its target. Watch recreation as well
+      ;; as reactions so restoring the block refreshes this empty summary.
+      [#{[:entity target-uuid] [:reactions target-uuid]} []])))
 
 (defn- block-ref-count
   [db resource-key _runtime]

@@ -9,6 +9,7 @@
             [logseq.db-sync.storage :as storage]
             [logseq.db-sync.worker.asset-link :as asset-link]
             [logseq.db-sync.worker.handler.assets :as assets-handler]
+            [logseq.db-sync.worker.handler.e2ee :as e2ee-handler]
             [logseq.db-sync.worker.http :as http]
             [logseq.db-sync.worker.ws :as ws]
             [logseq.db.frontend.asset :as db-asset]
@@ -285,9 +286,15 @@
          (cond-> {:blocks (mapv #(page-block-tree db %) roots)}
            next-cursor (assoc :next-cursor next-cursor)))))))
 
+(defn- non-blank-string? [v]
+  (and (string? v) (seq v)))
+
 (defn- body-clj [request]
-  (p/let [body (common/read-json request)]
-    (when body (js->clj body :keywordize-keys true))))
+  (-> (p/let [body (common/read-json request)]
+        (when body (js->clj body :keywordize-keys true)))
+      ;; Malformed JSON reads as nil so existing missing-field checks 400
+      ;; instead of bubbling a SyntaxError up as a 500.
+      (p/catch (fn [_] nil))))
 
 (defn- broadcast-change! [^js self]
   (ws/broadcast! self nil {:type "changed" :t (storage/get-t (.-sql self))}))
@@ -326,33 +333,63 @@
       {:block/uuid (:block/uuid page)
        :block/title (:block/title page)})))
 
-(defn- prepare-block-title! [conn title]
-  (let [refs (->> (page-ref-values title)
+(defn- prepare-block-title! [conn e2ee? title]
+  ;; E2EE titles are opaque ciphertext packages — they contain no resolvable
+  ;; [[refs]] (and transit punctuation must never be parsed as refs).
+  (if e2ee?
+    {:block/title title}
+    (let [refs (->> (page-ref-values title)
                   (keep #(resolve-page-ref! conn %))
                   (reduce (fn [result ref]
                             (assoc result (:block/uuid ref) ref)) {})
                   vals
                   vec)]
-    {:block/title (db-content/title-ref->id-ref title refs :replace-tag? false)
-     :block/refs (mapv #(vector :block/uuid (:block/uuid %)) refs)}))
+      {:block/title (db-content/title-ref->id-ref title refs :replace-tag? false)
+       :block/refs (mapv #(vector :block/uuid (:block/uuid %)) refs)})))
 
-(defn- tree-block [conn node]
-  (assoc (prepare-block-title! conn (:title node)) :block/uuid (random-uuid)))
+(defn- valid-tree-identities? [db target nodes]
+  (let [seen (atom #{})
+        valid-id? (fn [id]
+                    (and (string? id)
+                         (re-matches #"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}" id)))]
+    (letfn [(valid-node? [parent-id node]
+              (let [id (:uuid node)
+                    parsed (when (and id (valid-id? id)) (uuid (string/lower-case id)))
+                    existing (when parsed (d/entity db [:block/uuid parsed]))]
+                (and (non-blank-string? (:title node))
+                     (or (not (contains? node :uuid))
+                         (and parsed (not (contains? @seen parsed))
+                              (do (swap! seen conj parsed) true)))
+                     (or (nil? existing)
+                         (and (= "block" (block-kind existing))
+                              (= parent-id (get-in existing [:block/parent :block/uuid]))))
+                     (or (not (contains? node :children))
+                         (and (sequential? (:children node))
+                              (every? #(valid-node? parsed %) (:children node)))))))]
+      (and (sequential? nodes) (seq nodes)
+           (every? #(valid-node? (:block/uuid target) %) nodes)))))
 
-(defn- insert-tree! [conn target nodes position]
+(defn- tree-block [conn e2ee? node]
+  (let [id (if-let [value (:uuid node)] (uuid (string/lower-case value)) (random-uuid))]
+    (if (d/entity @conn [:block/uuid id])
+      {:block/uuid id}
+      (assoc (prepare-block-title! conn e2ee? (:title node)) :block/uuid id))))
+
+(defn- insert-tree! [conn target nodes position e2ee?]
   (let [nodes (vec nodes)
-        blocks (mapv #(tree-block conn %) nodes)]
-    (when (seq blocks)
-      (outliner-core/insert-blocks! conn blocks target
-                                    {:sibling? false :top? (= position "prepend")
-                                     :bottom? (not= position "prepend") :keep-uuid? true})
-      (mapv (fn [node block]
-              (let [children (when (seq (:children node))
-                               (insert-tree! conn (d/entity @conn [:block/uuid (:block/uuid block)])
-                                             (:children node) "append"))]
-                (cond-> {:uuid (str (:block/uuid block)) :title (:title node)}
-                  (seq children) (assoc :children children))))
-            nodes blocks))))
+        blocks (mapv #(tree-block conn e2ee? %) nodes)
+        fresh (filterv #(nil? (d/entity @conn [:block/uuid (:block/uuid %)])) blocks)]
+    (when (seq fresh)
+      (outliner-core/insert-blocks! conn fresh target
+                                   {:sibling? false :top? (= position "prepend")
+                                     :bottom? (not= position "prepend") :keep-uuid? true}))
+    (mapv (fn [node block]
+            (let [existing (d/entity @conn [:block/uuid (:block/uuid block)])
+                  children (when (seq (:children node))
+                             (insert-tree! conn existing (:children node) "append" e2ee?))]
+              (cond-> {:uuid (str (:block/uuid existing)) :title (:block/title existing)}
+                (seq children) (assoc :children children))))
+          nodes blocks)))
 
 (defn- today-journal-day []
   (let [now (js/Date.)]
@@ -437,13 +474,22 @@
                (or (not= property-ident :block/tags) (entity-util/class? entity)))
       (:db/id entity))))
 
-(defn- prepare-property-value [db property-ident value]
+(defn- prepare-ref-property-value [db property-ident value e2ee?]
+  (let [property (d/entity db property-ident)]
+    (or (resolve-ref-entity db property-ident value)
+        (when (and (not e2ee?)
+                   (= :url (:logseq.property/type property))
+                   (empty? (:block/_closed-value-property property))
+                   (db-property-type/url? value))
+          value))))
+
+(defn- prepare-property-value [db property-ident value e2ee?]
   (let [property (d/entity db property-ident)]
     (if-not (= :db.type/ref (:db/valueType property))
       {:value value}
       (let [many-input? (or (sequential? value) (set? value))
             values (if many-input? value [value])
-            resolved (mapv #(resolve-ref-entity db property-ident %) values)]
+            resolved (mapv #(prepare-ref-property-value db property-ident % e2ee?) values)]
         (if (every? some? resolved)
           {:value (if many-input? resolved (first resolved))}
           {:error (if (= property-ident :block/tags)
@@ -507,16 +553,71 @@
                      (and (contains? enabled type)
                           (string/includes? (string/lower-case (or (:block/title entity) "")) needle))))))))
 
-(defn- handle-pages [{:keys [^js self request ^js url conn db handler path-params]}]
+(defn- request-creator [request e2ee?]
+  (when-let [encoded (.get (.-headers request) "x-logseq-sync-actor")]
+    (let [claims (js/JSON.parse (js/decodeURIComponent encoded))]
+      {:uuid (uuid (aget claims "sub"))
+       :username (if e2ee? "" (aget claims "cognito:username"))
+       :email (aget claims "email")})))
+
+(defn- created-by-tx [before after datoms creator]
+  (let [targets (into #{}
+                      (keep (fn [datom]
+                              (when (:added datom)
+                                (let [old (d/entity before (:e datom))
+                                      node (d/entity after (:e datom))]
+                                  (when (and (:block/uuid node)
+                                             (or (and (= :block/uuid (:a datom))
+                                                      (nil? (:block/uuid old))
+                                                      (nil? (:logseq.property/created-by-ref node)))
+                                                 (and (= :block/title (:a datom))
+                                                      (non-blank-string? (:v datom))
+                                                      (string/blank? (:block/title old)))))
+                                    (:e datom)))))) datoms)
+        existing (d/entity after [:block/uuid (:uuid creator)])
+        actor-id (or (:db/id existing) "semantic-created-by")
+        now (.now js/Date)]
+    (when (seq targets)
+      (cond-> (mapv (fn [id] [:db/add id :logseq.property/created-by-ref actor-id]) targets)
+        (nil? existing)
+        (conj {:db/id actor-id :block/uuid (:uuid creator)
+               :block/title (:username creator) :block/name (:username creator)
+               :block/tags #{:logseq.class/Page}
+               :block/created-at now :block/updated-at now
+               :logseq.property.user/name (:username creator)
+               :logseq.property.user/email (:email creator)})))))
+
+(defn- authored-write! [conn creator mutate & args]
+  (if-not creator
+    (apply mutate conn args)
+    (let [result (volatile! nil)
+          metadata (volatile! nil)
+          before @conn]
+      ;; Keep identity scoped to synchronous work on an isolated connection.
+      ;; The author and operation reach storage in the same transaction.
+      (ldb/batch-transact-with-temp-conn!
+       conn nil
+       (fn [tx-conn tx-data]
+         (vreset! result (apply mutate tx-conn args))
+         (when-let [authorship (seq (created-by-tx before @tx-conn @tx-data creator))]
+           (ldb/transact! tx-conn authorship)))
+       :listen-db (fn [report]
+                    (when (:outliner-op (:tx-meta report))
+                      (vreset! metadata (:tx-meta report))))
+       :transform-tx-meta (fn [_] @metadata))
+      @result)))
+
+(defn- handle-pages [{:keys [^js self request ^js url conn db handler path-params e2ee? creator]}]
   (case handler
     :semantic/pages-list
     (paginated-response url :blocks (list-pages db) block-response)
 
     :semantic/pages-create
     (p/let [body (body-clj request)]
-      (if-not (seq (:title body))
+      (if-not (non-blank-string? (:title body))
         (http/bad-request "missing title")
-        (let [[title page-id] (outliner-page/create! conn (:title body) {})]
+        (let [[title page-id] (authored-write! conn creator outliner-page/create! (:title body)
+                                                     {:encrypted-title? e2ee? :encrypted-name (:name body)})]
           (broadcast-change! self)
           (http/json-response nil {:uuid (str page-id) :kind "page" :title title} 201))))
 
@@ -542,10 +643,11 @@
     :semantic/pages-update
     (p/let [body (body-clj request)
             page (find-entity db (:page-id path-params))]
-      (if (or (not (page? page)) (not (seq (:title body))))
+      (if (or (not (page? page)) (not (non-blank-string? (:title body))))
         (http/bad-request "invalid page-id or title")
         (do
-          (outliner-core/save-block! conn {:block/uuid (:block/uuid page) :block/title (:title body)})
+          (authored-write! conn creator outliner-core/save-block! {:block/uuid (:block/uuid page) :block/title (:title body)}
+                                     :encrypted-title? e2ee? :encrypted-name (:name body))
           (broadcast-change! self)
           (http/json-response nil (assoc (block-response page) :title (:title body))))))
 
@@ -559,7 +661,7 @@
           (js/Response. nil #js {:status 204})))
       (http/not-found))))
 
-(defn- handle-blocks [{:keys [^js self request conn db handler path-params]}]
+(defn- handle-blocks [{:keys [^js self request conn db handler path-params e2ee? creator]}]
   (case handler
 
     :semantic/blocks-get
@@ -570,12 +672,13 @@
     :semantic/blocks-update
     (p/let [body (body-clj request)
             block (find-entity db (:block-id path-params))]
-      (if (or (nil? block) (not (seq (:title body))))
+      (if (or (nil? block) (not (non-blank-string? (:title body))))
         (http/bad-request "invalid block-id or title")
         (do
-          (outliner-core/save-block! conn
-                                     (assoc (prepare-block-title! conn (:title body))
-                                            :block/uuid (:block/uuid block)))
+          (authored-write! conn creator (fn [actor-conn] (outliner-core/save-block! actor-conn
+                                     (assoc (prepare-block-title! actor-conn e2ee? (:title body))
+                                            :block/uuid (:block/uuid block))
+                                     :encrypted-title? e2ee? :encrypted-name (:name body))))
           (broadcast-change! self)
           (http/json-response nil {:uuid (str (:block/uuid block)) :kind (block-kind block) :title (:title body)}))))
 
@@ -614,36 +717,36 @@
     (p/let [body (body-clj request)
             target (find-entity db (:block-id path-params))]
       (if (or (nil? target) (not (contains? #{"append" "prepend"} (:position body)))
-              (not (seq (:blocks body))))
+              (not (valid-tree-identities? db target (:blocks body))))
         (http/bad-request "invalid target, position, or blocks")
-        (let [inserted (insert-tree! conn target (:blocks body) (:position body))]
+        (let [inserted (authored-write! conn creator insert-tree! target (:blocks body) (:position body) e2ee?)]
           (broadcast-change! self)
           (http/json-response nil {:blocks inserted} 201))))
 
     :semantic/blocks-insert-tree
     (p/let [body (body-clj request)
             target (find-entity db (:target-id body))]
-      (if (or (nil? target) (not (seq (:blocks body))))
+      (if (or (nil? target) (not (valid-tree-identities? db target (:blocks body))))
         (http/bad-request "invalid target or blocks")
-        (let [inserted (insert-tree! conn target (:blocks body) (or (:position body) "append"))]
+        (let [inserted (authored-write! conn creator insert-tree! target (:blocks body) (or (:position body) "append") e2ee?)]
           (broadcast-change! self)
           (http/json-response nil {:blocks inserted} 201))))))
 
-(defn- handle-block-properties [{:keys [^js self request conn db handler path-params]}]
+(defn- handle-block-properties [{:keys [^js self request conn db handler path-params e2ee? creator]}]
   (case handler
 
     :semantic/blocks-set-property
     (p/let [body (body-clj request)
             block (find-entity db (:block-id path-params))
             property-ident (resolve-property-ident db (:property-id path-params))
-            prepared (when property-ident (prepare-property-value db property-ident (:value body)))]
+            prepared (when property-ident (prepare-property-value db property-ident (:value body) e2ee?))]
       (cond
         (nil? block) (http/bad-request "block not found")
         (nil? property-ident) (http/bad-request "property not found")
         (not (contains? body :value)) (http/bad-request "missing property value")
         (:error prepared) (http/bad-request (:error prepared))
         :else
-        (do (set-prepared-property! conn (:db/id block) property-ident (:value prepared) true)
+        (do (authored-write! conn creator set-prepared-property! (:db/id block) property-ident (:value prepared) true)
             (broadcast-change! self)
             (http/json-response nil {:updated true}))))
 
@@ -659,19 +762,18 @@
 
     :semantic/blocks-batch-set-property
     (p/let [body (body-clj request)
-            entries (:entries body)
+            entries (if (sequential? (:entries body)) (:entries body) [])
             resolved (mapv (fn [{:keys [block-id property-id value]}]
                              (let [property-ident (resolve-property-ident db property-id)]
                                {:block (find-entity db block-id)
                                 :property-ident property-ident
                                 :prepared (when property-ident
-                                            (prepare-property-value db property-ident value))})) entries)]
+                                            (prepare-property-value db property-ident value e2ee?))})) entries)]
       (if (or (not (seq entries))
               (some #(or (nil? (:block %)) (nil? (:property-ident %))
                          (:error (:prepared %))) resolved))
         (http/bad-request "invalid batch property entry")
-        (do (ldb/batch-transact-with-temp-conn!
-             conn {:outliner-op :batch-set-property}
+        (do (authored-write! conn creator ldb/batch-transact-with-temp-conn! {:outliner-op :batch-set-property}
              (fn [temp-conn]
                (doseq [{:keys [block property-ident prepared]} resolved]
                  (set-prepared-property! temp-conn (:db/id block) property-ident (:value prepared)
@@ -681,41 +783,44 @@
 
     :semantic/blocks-batch-delete-property
     (p/let [body (body-clj request)
-            entries (:entries body)
+            entries (if (sequential? (:entries body)) (:entries body) [])
             resolved (mapv (fn [{:keys [block-id property-id]}]
                              {:block (find-entity db block-id)
                               :property-ident (resolve-property-ident db property-id)}) entries)]
       (if (or (not (seq entries)) (some #(or (nil? (:block %)) (nil? (:property-ident %))) resolved))
         (http/bad-request "invalid batch property entry")
         (do
-          (ldb/batch-transact-with-temp-conn!
-           conn {:outliner-op :batch-remove-property}
+          (authored-write! conn creator ldb/batch-transact-with-temp-conn! {:outliner-op :batch-remove-property}
            (fn [temp-conn]
              (doseq [{:keys [block property-ident]} resolved]
                (outliner-property/remove-block-property! temp-conn (:db/id block) property-ident))))
           (broadcast-change! self)
           (http/json-response nil {:deleted (count resolved)}))))))
 
-(defn- handle-capture-and-tags [{:keys [^js self request ^js url conn db handler path-params]}]
+(defn- handle-capture-and-tags [{:keys [^js self request ^js url conn db handler path-params e2ee? creator]}]
   (case handler
 
     :semantic/capture
     (p/let [body (body-clj request)]
-      (if-not (seq (:blocks body))
+      (if (or (not (sequential? (:blocks body))) (empty? (:blocks body)))
         (http/bad-request "missing blocks")
-        (let [today (ensure-today-page! conn)
-              inserted (insert-tree! conn today (:blocks body) "append")]
-          (broadcast-change! self)
-          (http/json-response nil {:page-id (str (:block/uuid today)) :blocks inserted} 201))))
+        (let [today (authored-write! conn creator ensure-today-page!)]
+          (if-not (valid-tree-identities? @conn today (:blocks body))
+            (http/bad-request "invalid capture block identities")
+            (let [inserted (authored-write! conn creator insert-tree! today (:blocks body) "append" e2ee?)]
+              (broadcast-change! self)
+              (http/json-response nil {:page-id (str (:block/uuid today)) :blocks inserted} 201))))))
 
     :semantic/tags-list
     (paginated-response url :tags (entities-by-avet db :block/tags :logseq.class/Tag) tag-response)
 
     :semantic/tags-create
     (p/let [body (body-clj request)]
-      (if-not (seq (:title body))
+      (if-not (non-blank-string? (:title body))
         (http/bad-request "missing title")
-        (let [[title tag-id] (outliner-page/create! conn (:title body) {:class? true})]
+        (let [[title tag-id] (authored-write! conn creator outliner-page/create! (:title body)
+                                                     {:class? true
+                                                      :encrypted-title? e2ee? :encrypted-name (:name body)})]
           (broadcast-change! self)
           (http/json-response nil {:uuid (str tag-id) :title title} 201))))
 
@@ -734,10 +839,11 @@
     :semantic/tags-update
     (p/let [body (body-clj request)
             tag (find-entity db (:tag-id path-params))]
-      (if (or (not (tag? tag)) (not (seq (:title body))))
+      (if (or (not (tag? tag)) (not (non-blank-string? (:title body))))
         (http/bad-request "invalid tag-id or title")
         (do
-          (outliner-core/save-block! conn {:block/uuid (:block/uuid tag) :block/title (:title body)})
+          (authored-write! conn creator outliner-core/save-block! {:block/uuid (:block/uuid tag) :block/title (:title body)}
+                                     :encrypted-title? e2ee? :encrypted-name (:name body))
           (broadcast-change! self)
           (http/json-response nil (assoc (tag-response tag) :title (:title body))))))
 
@@ -751,7 +857,7 @@
           (js/Response. nil #js {:status 204})))
       (http/not-found))))
 
-(defn- handle-tasks [{:keys [^js self request ^js url conn db handler]}]
+(defn- handle-tasks [{:keys [^js self request ^js url conn db handler e2ee? creator]}]
   (case handler
     :semantic/tasks-list
     (let [status (.get (.-searchParams url) "status")
@@ -788,19 +894,18 @@
             target (when-let [page-id (:page-id body)]
                      (find-entity db page-id))]
         (cond
-          (not (seq (:title body))) (http/bad-request "missing task title")
+          (not (non-blank-string? (:title body))) (http/bad-request "missing task title")
           (nil? status-choice) (http/bad-request "invalid task status")
           (and priority (nil? priority-choice)) (http/bad-request "invalid task priority")
           (and (:page-id body) (not (page? target))) (http/bad-request "invalid task page-id")
           :else
           (let [task-id (atom nil)]
-            (ldb/batch-transact-with-temp-conn!
-             conn {:outliner-op :create-task}
+            (authored-write! conn creator ldb/batch-transact-with-temp-conn! {:outliner-op :create-task}
              (fn [temp-conn]
                (let [target (if target
                               (d/entity @temp-conn [:block/uuid (:block/uuid target)])
                               (ensure-today-page! temp-conn))
-                     inserted (first (insert-tree! temp-conn target [{:title (:title body)}] "append"))
+                     inserted (first (insert-tree! temp-conn target [{:title (:title body)}] "append" e2ee?))
                      task-uuid (uuid (:uuid inserted))
                      task (d/entity @temp-conn [:block/uuid task-uuid])]
                  (reset! task-id task-uuid)
@@ -819,7 +924,7 @@
             (http/json-response nil (task-response (d/entity @conn [:block/uuid @task-id])) 201)))))))
 
 (defn- handle-assets
-  [{:keys [^js self request ^js url conn db handler path-params]}]
+  [{:keys [^js self request ^js url conn db handler path-params e2ee? creator]}]
   (case handler
     :semantic/assets-list
     (paginated-response url :assets
@@ -859,10 +964,11 @@
                                         :content-type (.get (.-headers request) "content-type")
                                         :checksum checksum
                                         :asset-type asset-type
-                                        :encoding encoding})]
+                                        :encoding encoding
+                                        :e2ee? e2ee?})]
                 (if-not (.-ok upload-response)
                   upload-response
-                  (-> (p/let [target (or target (ensure-today-page! conn))
+                  (-> (p/let [target (or target (authored-write! conn creator ensure-today-page!))
                               block {:block/uuid asset-id
                                      :block/title title
                                      :block/tags #{:logseq.class/Asset}
@@ -871,7 +977,7 @@
                                      :logseq.property.asset/checksum checksum
                                      :logseq.property.asset/remote-metadata {:checksum checksum
                                                                             :type asset-type}}
-                              _ (outliner-core/insert-blocks! conn [block] target
+                              _ (authored-write! conn creator outliner-core/insert-blocks! [block] target
                                                               {:sibling? false :bottom? true
                                                                :keep-uuid? true})
                               asset (d/entity @conn [:block/uuid asset-id])]
@@ -895,7 +1001,7 @@
       (http/not-found))))
 
 (defn- handle-properties-and-search
-  [{:keys [^js self request ^js url conn db handler path-params]}]
+  [{:keys [^js self request ^js url conn db handler path-params e2ee? creator]}]
   (case handler
 
     :semantic/properties-list
@@ -905,13 +1011,12 @@
 
     :semantic/properties-create
     (p/let [body (body-clj request)]
-      (if (or (not (seq (:title body))) (not (valid-property-schema? body)))
+      (if (or (not (non-blank-string? (:title body))) (not (valid-property-schema? body)))
         (http/bad-request "invalid property schema")
-        (let [property (outliner-property/upsert-property!
-                        conn nil
+        (let [property (authored-write! conn creator outliner-property/upsert-property! nil
                         {:logseq.property/type (keyword (or (:type body) "default"))
                          :db/cardinality (keyword (or (:cardinality body) "db.cardinality/one"))}
-                        {:property-name (:title body)})]
+                        {:property-name (:title body) :e2ee? e2ee? :encrypted-name (:name body)})]
           (broadcast-change! self)
           (http/json-response nil (property-response property) 201))))
 
@@ -928,9 +1033,9 @@
         (let [schema (cond-> {}
                        (:type body) (assoc :logseq.property/type (keyword (:type body)))
                        (:cardinality body) (assoc :db/cardinality (keyword (:cardinality body))))
-              updated (outliner-property/upsert-property!
-                       conn (:db/ident property) schema
-                       (cond-> {} (:title body) (assoc :property-name (:title body))))]
+              updated (authored-write! conn creator outliner-property/upsert-property! (:db/ident property) schema
+                       (cond-> {:e2ee? e2ee? :encrypted-name (:name body)}
+                         (:title body) (assoc :property-name (:title body))))]
           (broadcast-change! self)
           (http/json-response nil (property-response updated)))))
 
@@ -981,16 +1086,78 @@
     :semantic/properties-update :semantic/properties-delete
     :semantic/search})
 
-(defn handle [{:keys [^js self route] :as context}]
+;; E2EE write validation: on encrypted graphs, every title field a caller
+;; supplies must already be an encrypted package — plaintext returns 400.
+(def ^:private e2ee-title-handlers
+  #{:semantic/pages-create :semantic/pages-update :semantic/blocks-update
+    :semantic/tags-create :semantic/tags-update :semantic/tasks-create
+    :semantic/properties-create :semantic/properties-update})
+
+(def ^:private e2ee-tree-handlers
+  #{:semantic/blocks-insert-children :semantic/blocks-insert-tree :semantic/capture})
+
+(def ^:private e2ee-gated-write-handlers
+  (into e2ee-title-handlers (conj e2ee-tree-handlers :semantic/assets-create)))
+
+(def ^:private e2ee-name-handlers
+  #{:semantic/pages-create :semantic/pages-update :semantic/tags-create :semantic/tags-update
+    :semantic/properties-create :semantic/properties-update})
+
+(defn- block-trees-titles [nodes]
+  (mapcat (fn [node] (cons (:title node) (block-trees-titles (:children node))))
+          nodes))
+
+(defn- <e2ee-write-titles
+  "Titles a write operation wants to store. Assets: the title query param
+  (required on e2ee — otherwise a plaintext name would be derived from
+  file-name). Others: body titles from a request clone."
+  [{:keys [request ^js url db path-params]} handler]
+  (if (= handler :semantic/assets-create)
+    (p/resolved [(.get (.-searchParams url) "title")])
+    (p/let [body (body-clj (.clone request))]
+      (vec (concat
+            (when (and (contains? e2ee-title-handlers handler) (contains? body :title))
+              [(:title body)])
+            (when (and (contains? body :title)
+                       (or (contains? e2ee-name-handlers handler)
+                           (and (= handler :semantic/blocks-update)
+                                (:block/name (find-entity db (:block-id path-params))))))
+              [(:name body)])
+            (when (contains? e2ee-tree-handlers handler)
+              (block-trees-titles (:blocks body))))))))
+
+(defn- <e2ee-write-response [context handler]
+  (p/let [titles (<e2ee-write-titles context handler)]
+    (if (every? e2ee-handler/encrypted-package? titles)
+      ::allowed
+      (http/bad-request "content must be an encrypted package on e2ee graphs"))))
+
+(defn- dispatch-handle [context handler]
+  (cond
+    (contains? page-handlers handler) (handle-pages context)
+    (contains? block-handlers handler) (handle-blocks context)
+    (contains? block-property-handlers handler) (handle-block-properties context)
+    (contains? capture-and-tag-handlers handler) (handle-capture-and-tags context)
+    (contains? task-handlers handler) (handle-tasks context)
+    (contains? asset-handlers handler) (handle-assets context)
+    (contains? property-and-search-handlers handler) (handle-properties-and-search context)
+    :else (http/not-found)))
+
+(defn handle [{:keys [^js self route ^js url] :as context}]
   (let [conn (ensure-conn! self)
         handler (:handler route)
-        context (assoc context :conn conn :db @conn :handler handler :path-params (:path-params route))]
-    (cond
-      (contains? page-handlers handler) (handle-pages context)
-      (contains? block-handlers handler) (handle-blocks context)
-      (contains? block-property-handlers handler) (handle-block-properties context)
-      (contains? capture-and-tag-handlers handler) (handle-capture-and-tags context)
-      (contains? task-handlers handler) (handle-tasks context)
-      (contains? asset-handlers handler) (handle-assets context)
-      (contains? property-and-search-handlers handler) (handle-properties-and-search context)
-      :else (http/not-found))))
+        db @conn
+        ;; The index's graph_e2ee flag is authoritative and reaches the DO via
+        ;; the graph-e2ee param; the in-graph kv is only set at RTC upload, so
+        ;; check both — encrypted either way.
+        e2ee? (or (ldb/get-graph-rtc-e2ee? db)
+                  (= "true" (.get (.-searchParams url) "graph-e2ee")))
+        context (assoc context :conn conn :db db :handler handler :e2ee? e2ee?
+                       :path-params (:path-params route)
+                       :creator (request-creator (:request context) e2ee?))]
+    (if (and e2ee? (contains? e2ee-gated-write-handlers handler))
+      (p/let [result (<e2ee-write-response context handler)]
+        (if (= ::allowed result)
+          (dispatch-handle context handler)
+          result))
+      (dispatch-handle context handler))))

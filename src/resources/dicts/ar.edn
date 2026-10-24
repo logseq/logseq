@@ -495,7 +495,6 @@
  :editor.slash/node-embed-desc "تضمين عقدة هنا"
  :editor.slash/node-reference "مرجع عقدة"
  :editor.slash/node-reference-desc "إنشاء رابط خلفي إلى عقدة (صفحة أو كتلة)"
- :editor.slash/normal-text "نص عادي"
  :editor.slash/normal-text-desc "مسح العنوان وتعيينه كنص عادي"
  :editor.slash/number-children "عدد الأطفال"
  :editor.slash/number-list "قائمة مرقمة"

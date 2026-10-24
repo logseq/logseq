@@ -495,7 +495,6 @@
  :editor.slash/node-embed-desc "ここにノードを埋め込む"
  :editor.slash/node-reference "ノード参照"
  :editor.slash/node-reference-desc "ノード(ページまたはブロック)へのバックリンクを作成"
- :editor.slash/normal-text "通常のテキスト"
  :editor.slash/normal-text-desc "見出しをクリアして通常のテキストに設定"
  :editor.slash/number-children "子にナンバリング"
  :editor.slash/number-list "番号リスト"

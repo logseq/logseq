@@ -495,7 +495,6 @@
  :editor.slash/node-embed-desc "Sluit 'n nodus hier in"
  :editor.slash/node-reference "Nodusverwysingы"
  :editor.slash/node-reference-desc "Skep 'n rugskakkel na 'n nodus ('n bladsy of blok)"
- :editor.slash/normal-text "Normale teks"
  :editor.slash/normal-text-desc "Verwyder opskrif en stel op normale teks"
  :editor.slash/number-children "Nummering van kinders"
  :editor.slash/number-list "Genommerde lys"

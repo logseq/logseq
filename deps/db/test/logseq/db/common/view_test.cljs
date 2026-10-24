@@ -523,6 +523,42 @@
     (is (<= (:entity-calls window) 3)
         "Custom property sort must stay on the id-only path.")))
 
+(deftest get-view-data-class-objects-checkbox-sort-treats-false-as-a-value-test
+  ;; Unchecked is stored as false. if-let treated that as missing, so asc and
+  ;; desc both put the unchecked row last instead of reversing.
+  (let [conn (topic-conn
+              [{:page {:block/title "checked" :build/tags [:Topic]
+                       :build/properties {:user.property/done true}}}
+               {:page {:block/title "unchecked" :build/tags [:Topic]
+                       :build/properties {:user.property/done false}}}
+               {:page {:block/title "missing" :build/tags [:Topic]}}]
+              :properties {:user.property/done {:logseq.property/type :checkbox}})
+        class-id (:db/id (d/entity @conn :user.class/Topic))
+        view-id (create-view-id conn :class-objects :view-for-id class-id)
+        option {:view-feature-type :class-objects
+                :view-for-id class-id}
+        unchecked-id (:db/id (db-test/find-page-by-title @conn "unchecked"))
+        missing-id (:db/id (db-test/find-page-by-title @conn "missing"))
+        checked-id (:db/id (db-test/find-page-by-title @conn "checked"))
+        asc (db-view/get-view-data @conn view-id (assoc option :sorting [{:id :user.property/done :asc? true}]))
+        desc (db-view/get-view-data @conn view-id (assoc option :sorting [{:id :user.property/done :asc? false}]))
+        query-asc (db-view/get-view-data @conn view-id {:view-feature-type :query-result
+                                                       :query-entity-ids [checked-id unchecked-id]
+                                                       :sorting [{:id :user.property/done :asc? true}]})
+        query-desc (db-view/get-view-data @conn view-id {:view-feature-type :query-result
+                                                        :query-entity-ids [checked-id unchecked-id]
+                                                        :sorting [{:id :user.property/done :asc? false}]})]
+    (is (false? (:user.property/done (d/entity @conn unchecked-id)))
+        "Unchecked is stored as false, not a missing property.")
+    (is (nil? (:user.property/done (d/entity @conn missing-id))))
+    (is (= ["unchecked" "checked" "missing"] (result-titles conn asc))
+        "Ascending: false, true, then missing last.")
+    (is (= ["checked" "unchecked" "missing"] (result-titles conn desc))
+        "Descending reverses false/true; missing stays last.")
+    (is (= ["unchecked" "checked"] (result-titles conn query-asc))
+        "Query table ascending matches the tag table on the same valued rows.")
+    (is (= ["checked" "unchecked"] (result-titles conn query-desc)))))
+
 (deftest get-view-data-class-objects-number-sort-first-window-is-instant-test
   (let [pages (mapv (fn [idx]
                       {:page {:block/title (str "Topic " idx)
@@ -602,6 +638,57 @@
     (is (= ["Alpha" "Alpine"] (result-titles conn (:result contains))))
     (is (<= (:entity-calls input) 3))
     (is (= ["Beta"] (result-titles conn (:result input))))))
+
+(defn- note-topic-conn
+  []
+  (topic-conn
+   [{:page {:block/title "Page"}
+     :blocks [{:block/title "Apple block"
+               :build/tags [:Topic]
+               :build/properties {:user.property/note "Apple"}}
+              {:block/title "Orange block"
+               :build/tags [:Topic]
+               :build/properties {:user.property/note "Orange"}}]}]
+   :properties {:user.property/note {:logseq.property/type :default}}))
+
+(defn- title-id
+  [conn title]
+  (d/q '[:find ?e .
+         :in $ ?title
+         :where [?e :block/title ?title]]
+       @conn
+       title))
+
+(defn- note-filter
+  [operator]
+  {:or? false
+   :filters [[:user.property/note operator "apple"]]})
+
+(deftest get-view-data-class-objects-text-not-contains-is-case-insensitive-test
+  (let [conn (note-topic-conn)
+        class-id (:db/id (d/entity @conn :user.class/Topic))
+        view-id (create-view-id conn :class-objects :view-for-id class-id)
+        option {:view-feature-type :class-objects
+                :view-for-id class-id
+                :sorting [{:id :block/title :asc? true}]}
+        contains (db-view/get-view-data @conn view-id (assoc option :filters (note-filter :text-contains)))
+        not-contains (db-view/get-view-data @conn view-id (assoc option :filters (note-filter :text-not-contains)))]
+    (is (= ["Apple block"] (result-titles conn contains)))
+    (is (= ["Orange block"] (result-titles conn not-contains))
+        "does not contain must ignore case the same way contains does")))
+
+(deftest get-view-data-query-result-text-not-contains-is-case-insensitive-test
+  (let [conn (note-topic-conn)
+        view-id (create-view-id conn :query-result)
+        option {:view-feature-type :query-result
+                :query-entity-ids [(title-id conn "Apple block")
+                                   (title-id conn "Orange block")]
+                :sorting [{:id :block/title :asc? true}]}
+        contains (db-view/get-view-data @conn view-id (assoc option :filters (note-filter :text-contains)))
+        not-contains (db-view/get-view-data @conn view-id (assoc option :filters (note-filter :text-not-contains)))]
+    (is (= ["Apple block"] (result-titles conn contains)))
+    (is (= ["Orange block"] (result-titles conn not-contains))
+        "Query tables must apply the same case-insensitive does-not-contain match")))
 
 (deftest get-view-data-class-objects-number-filter-and-sort-test
   (let [conn (topic-conn
@@ -724,6 +811,278 @@
                                                      :view-for-id class-id
                                                      :sorting [{:id :user.property/score :asc? false}]})]
     (is (= ["With score" "Without score"] (result-titles conn result)))))
+
+(defn- grouped-row-titles-by-key
+  [conn result]
+  (into {}
+        (map (fn [[group rows]]
+               [group (mapv (fn [id] (:block/title (d/entity @conn id))) rows)]))
+        (:data result)))
+
+(defn- placeholder-sort-conn
+  "Two valued rows, one cleared to empty-placeholder, one never set.
+  Matches clearing Scheduled/Deadline with the date picker trash button."
+  [property-ident property-type early late]
+  (let [pages [{:page {:block/title "early" :build/tags [:Topic]
+                       :build/properties {property-ident early}}}
+               {:page {:block/title "late" :build/tags [:Topic]
+                       :build/properties {property-ident late}}}
+               {:page {:block/title "cleared" :build/tags [:Topic]
+                       :build/properties {property-ident early}}}
+               {:page {:block/title "missing" :build/tags [:Topic]}}]
+        built-in-datetime? (contains? #{:logseq.property/scheduled :logseq.property/deadline}
+                                      property-ident)
+        conn (if built-in-datetime?
+               (topic-conn pages)
+               (topic-conn pages :properties {property-ident {:logseq.property/type property-type}}))
+        cleared-id (title-id conn "cleared")]
+    (d/transact! conn [[:db/add cleared-id property-ident :logseq.property/empty-placeholder]])
+    conn))
+
+(defn- placeholder-sort-cases
+  [conn property-ident]
+  (let [class-id (:db/id (d/entity @conn :user.class/Topic))
+        view-id (create-view-id conn :class-objects :view-for-id class-id)
+        query-ids (mapv #(title-id conn %) ["late" "missing" "cleared" "early"])
+        options [{:view-feature-type :class-objects
+                  :view-for-id class-id}
+                 {:view-feature-type :query-result
+                  :query-entity-ids query-ids}]]
+    {:conn conn
+     :view-id view-id
+     :class-id class-id
+     :property-ident property-ident
+     :options options}))
+
+(deftest get-view-data-empty-placeholder-sorts-with-missing-values-test
+  ;; Clearing a :datetime/:number value writes :logseq.property/empty-placeholder
+  ;; while keeping the property on the node. compare of that keyword vs a
+  ;; timestamp/number throws and crashed the Task tag page (db-test#1453).
+  (doseq [[property-ident property-type early late]
+          [[:logseq.property/scheduled :datetime 1000 3000]
+           [:logseq.property/deadline :datetime 1000 3000]
+           [:user.property/score :number 1 9]]]
+    (let [{:keys [conn view-id options]}
+          (placeholder-sort-cases
+           (placeholder-sort-conn property-ident property-type early late)
+           property-ident)]
+      (let [cleared (get (d/entity @conn (title-id conn "cleared")) property-ident)]
+        (is (or (= :logseq.property/empty-placeholder cleared)
+                (= :logseq.property/empty-placeholder (:db/ident cleared)))
+            (str property-ident " stays on the node as empty-placeholder")))
+      (doseq [option options]
+        (let [titles (fn [sorting]
+                       (result-titles
+                        conn
+                        (db-view/get-view-data
+                         @conn view-id
+                         (assoc option :sorting sorting))))
+              asc (titles [{:id property-ident :asc? true}])
+              desc (titles [{:id property-ident :asc? false}])
+              multi (titles [{:id property-ident :asc? true}
+                             {:id :block/title :asc? true}])]
+          (is (= ["early" "late"] (take 2 asc)))
+          (is (= #{"cleared" "missing"} (set (drop 2 asc)))
+              "Placeholder and missing rows sort together last, both directions.")
+          (is (= ["late" "early"] (take 2 desc)))
+          (is (= #{"cleared" "missing"} (set (drop 2 desc))))
+          (is (= ["early" "late"] (take 2 multi)))
+          (is (= ["cleared" "missing"] (drop 2 multi))
+              "After the placeholder/missing tie, the minor title key still orders those rows."))))))
+
+(deftest get-view-data-empty-placeholder-group-and-filter-test
+  (let [{:keys [conn view-id class-id property-ident]}
+        (placeholder-sort-cases
+         (placeholder-sort-conn :logseq.property/scheduled :datetime 1000 3000)
+         :logseq.property/scheduled)
+        _ (d/transact! conn [[:db/add view-id :logseq.property.view/group-by-property property-ident]])
+        grouped (db-view/get-view-data
+                 @conn view-id
+                 {:view-feature-type :class-objects
+                  :view-for-id class-id
+                  :sorting [{:id :block/title :asc? true}]})
+        group-keys (mapv first (:data grouped))
+        titles-by-group (grouped-row-titles-by-key conn grouped)
+        filter-view-id (create-view-id conn :class-objects :view-for-id class-id)
+        empty-filter (db-view/get-view-data
+                      @conn filter-view-id
+                      {:view-feature-type :class-objects
+                       :view-for-id class-id
+                       :sorting [{:id :block/title :asc? true}]
+                       :filters {:or? false
+                                 :filters [[property-ident :is :empty]]}})]
+    (is (= [3000 1000 nil] group-keys)
+        "A cleared datetime groups with the empty group, not as a keyword key.")
+    (is (= ["late"] (get titles-by-group 3000)))
+    (is (= ["early"] (get titles-by-group 1000)))
+    (is (= #{"cleared" "missing"} (set (get titles-by-group nil))))
+    (is (= ["cleared" "missing"] (result-titles conn empty-filter))
+        "Filter :is :empty matches both a missing value and empty-placeholder.")))
+
+(deftest get-view-data-incomparable-sort-values-do-not-throw-test
+  ;; If a sort value is some other unexpected type, the view must still
+  ;; return rows instead of throwing out of cljs compare.
+  (let [conn (placeholder-sort-conn :logseq.property/scheduled :datetime 1000 3000)
+        unexpected-id (title-id conn "cleared")
+        _ (d/transact! conn [[:db/add unexpected-id :logseq.property/scheduled :user/not-a-date]])
+        class-id (:db/id (d/entity @conn :user.class/Topic))
+        view-id (create-view-id conn :class-objects :view-for-id class-id)
+        option {:view-feature-type :class-objects
+                :view-for-id class-id
+                :sorting [{:id :logseq.property/scheduled :asc? true}]}
+        titles (result-titles conn (db-view/get-view-data @conn view-id option))]
+    (is (= ["early" "late"] (take 2 titles)))
+    (is (= #{"cleared" "missing"} (set (drop 2 titles))))))
+
+(deftest get-view-data-query-result-missing-custom-sort-value-stays-last-test
+  (let [conn (topic-conn
+              [{:page {:block/title "dated" :build/tags [:Topic]
+                       :build/properties {:user.property/score 3}}}
+               {:page {:block/title "undated" :build/tags [:Topic]}}]
+              :properties {:user.property/score {:logseq.property/type :number}})
+        view-id (create-view-id conn :query-result)
+        option {:view-feature-type :query-result
+                :query-entity-ids [(title-id conn "undated")
+                                   (title-id conn "dated")]}
+        asc (db-view/get-view-data @conn view-id (assoc option :sorting [{:id :user.property/score :asc? true}]))
+        desc (db-view/get-view-data @conn view-id (assoc option :sorting [{:id :user.property/score :asc? false}]))]
+    (is (= ["dated" "undated"] (result-titles conn asc)))
+    (is (= ["dated" "undated"] (result-titles conn desc)))))
+
+(deftest get-view-data-grouped-missing-custom-sort-value-stays-last-test
+  (let [conn (topic-conn
+              [{:page {:block/title "dated-red" :build/tags [:Topic]
+                       :build/properties {:user.property/score 3
+                                          :user.property/bucket 1}}}
+               {:page {:block/title "undated-red" :build/tags [:Topic]
+                       :build/properties {:user.property/bucket 1}}}
+               {:page {:block/title "dated-blue" :build/tags [:Topic]
+                       :build/properties {:user.property/score 1
+                                          :user.property/bucket 2}}}
+               {:page {:block/title "undated-blue" :build/tags [:Topic]
+                       :build/properties {:user.property/bucket 2}}}]
+              :properties {:user.property/score {:logseq.property/type :number}
+                           :user.property/bucket {:logseq.property/type :number}})
+        class-id (:db/id (d/entity @conn :user.class/Topic))
+        view-id (create-view-id conn :class-objects :view-for-id class-id)
+        _ (d/transact! conn [[:db/add view-id :logseq.property.view/group-by-property :user.property/bucket]])
+        option {:view-feature-type :class-objects
+                :view-for-id class-id}
+        titles-by-bucket (fn [asc?]
+                           (grouped-row-titles-by-key
+                            conn
+                            (db-view/get-view-data
+                             @conn view-id
+                             (assoc option :sorting [{:id :user.property/score :asc? asc?}]))))]
+    (doseq [asc? [true false]]
+      (let [titles (titles-by-bucket asc?)]
+        (is (= ["dated-red" "undated-red"] (get titles 1)))
+        (is (= ["dated-blue" "undated-blue"] (get titles 2)))))))
+
+(deftest get-view-data-missing-many-cardinality-sort-value-stays-last-test
+  ;; A missing cardinality-many property must read as missing (nil), not as
+  ;; the summed 0 or joined "" a populated value produces, or rows missing it
+  ;; sort first ascending — and the query table would disagree with the tag
+  ;; table, which treats an empty value set as nil.
+  (let [conn (topic-conn
+              [{:page {:block/title "num" :build/tags [:Topic]
+                       :build/properties {:user.property/scores #{1 2}}}}
+               {:page {:block/title "txt" :build/tags [:Topic]
+                       :build/properties {:user.property/labels #{"a" "b"}}}}
+               {:page {:block/title "none" :build/tags [:Topic]}}]
+              :properties {:user.property/scores {:logseq.property/type :number
+                                                :db/cardinality :db.cardinality/many}
+                           :user.property/labels {:logseq.property/type :default
+                                                  :db/cardinality :db.cardinality/many}})
+        class-id (:db/id (d/entity @conn :user.class/Topic))
+        view-id (create-view-id conn :class-objects :view-for-id class-id)
+        options [{:view-feature-type :class-objects
+                  :view-for-id class-id}
+                 {:view-feature-type :query-result
+                  :query-entity-ids [(title-id conn "num")
+                                     (title-id conn "txt")
+                                     (title-id conn "none")]}]]
+    (doseq [option options
+            [prop valued] [[:user.property/scores "num"]
+                           [:user.property/labels "txt"]]
+            asc? [true false]]
+      (let [titles (result-titles
+                    conn
+                    (db-view/get-view-data @conn view-id
+                                           (assoc option :sorting [{:id prop :asc? asc?}])))]
+        (is (= valued (first titles)))
+        (is (= #{"num" "txt" "none"} (set titles)))))))
+
+(deftest get-view-data-multi-key-sort-missing-values-stay-last-test
+  ;; Major key partitions by value first; inside each partition the minor key
+  ;; orders rows. Rows missing either key must stay last at their level, in
+  ;; both directions and regardless of which property leads.
+  (let [conn (topic-conn
+              [{:page {:block/title "both" :build/tags [:Topic]
+                       :build/properties {:user.property/p1 2 :user.property/p2 20}}}
+               {:page {:block/title "p1-low" :build/tags [:Topic]
+                       :build/properties {:user.property/p1 1}}}
+               {:page {:block/title "p1-high" :build/tags [:Topic]
+                       :build/properties {:user.property/p1 3}}}
+               {:page {:block/title "p2-low" :build/tags [:Topic]
+                       :build/properties {:user.property/p2 10}}}
+               {:page {:block/title "p2-high" :build/tags [:Topic]
+                       :build/properties {:user.property/p2 30}}}
+               {:page {:block/title "neither" :build/tags [:Topic]}}]
+              :properties {:user.property/p1 {:logseq.property/type :number}
+                           :user.property/p2 {:logseq.property/type :number}})
+        class-id (:db/id (d/entity @conn :user.class/Topic))
+        view-id (create-view-id conn :class-objects :view-for-id class-id)
+        query-ids (mapv #(title-id conn %)
+                        ["both" "p1-low" "p1-high" "p2-low" "p2-high" "neither"])
+        options [{:view-feature-type :class-objects
+                  :view-for-id class-id}
+                 {:view-feature-type :query-result
+                  :query-entity-ids query-ids}]
+        cases [[{:id :user.property/p1 :asc? true} {:id :user.property/p2 :asc? true}]
+               ["p1-low" "both" "p1-high" "p2-low" "p2-high" "neither"]
+               [{:id :user.property/p1 :asc? true} {:id :user.property/p2 :asc? false}]
+               ["p1-low" "both" "p1-high" "p2-high" "p2-low" "neither"]
+               [{:id :user.property/p1 :asc? false} {:id :user.property/p2 :asc? true}]
+               ["p1-high" "both" "p1-low" "p2-low" "p2-high" "neither"]
+               [{:id :user.property/p1 :asc? false} {:id :user.property/p2 :asc? false}]
+               ["p1-high" "both" "p1-low" "p2-high" "p2-low" "neither"]
+               [{:id :user.property/p2 :asc? true} {:id :user.property/p1 :asc? true}]
+               ["p2-low" "both" "p2-high" "p1-low" "p1-high" "neither"]
+               [{:id :user.property/p2 :asc? true} {:id :user.property/p1 :asc? false}]
+               ["p2-low" "both" "p2-high" "p1-high" "p1-low" "neither"]
+               [{:id :user.property/p2 :asc? false} {:id :user.property/p1 :asc? true}]
+               ["p2-high" "both" "p2-low" "p1-low" "p1-high" "neither"]
+               [{:id :user.property/p2 :asc? false} {:id :user.property/p1 :asc? false}]
+               ["p2-high" "both" "p2-low" "p1-high" "p1-low" "neither"]]]
+    (doseq [option options
+            [sorting expected] (partition 2 cases)]
+      (is (= expected
+             (result-titles
+              conn
+              (db-view/get-view-data @conn view-id (assoc option :sorting sorting))))))))
+
+(deftest get-view-data-grouped-empty-group-sorts-last-test
+  ;; The empty group follows the same missing-last rule as row sorts, in both
+  ;; group-sort directions.
+  (let [conn (topic-conn
+              [{:page {:block/title "in-bucket-2" :build/tags [:Topic]
+                       :build/properties {:user.property/bucket 2}}}
+               {:page {:block/title "in-bucket-1" :build/tags [:Topic]
+                       :build/properties {:user.property/bucket 1}}}
+               {:page {:block/title "no-bucket" :build/tags [:Topic]}}]
+              :properties {:user.property/bucket {:logseq.property/type :number}})
+        class-id (:db/id (d/entity @conn :user.class/Topic))
+        view-id (create-view-id conn :class-objects :view-for-id class-id)
+        _ (d/transact! conn [[:db/add view-id :logseq.property.view/group-by-property :user.property/bucket]])
+        option {:view-feature-type :class-objects
+                :view-for-id class-id}
+        group-keys (fn [] (mapv first (:data (db-view/get-view-data @conn view-id option))))
+        desc (group-keys)
+        _ (d/transact! conn [[:db/add view-id :logseq.property.view/sort-groups-desc? false]])
+        asc (group-keys)]
+    (is (= [2 1 nil] desc))
+    (is (= [1 2 nil] asc))))
 
 (deftest get-view-data-class-objects-status-closed-value-sort-test
   (let [conn (topic-conn

@@ -416,7 +416,7 @@
         closed-property (:block/closed-value-property block)]
     (sort-by-order (cond
                      closed-property
-                     (:block/_closed-value-property closed-property)
+                     (mapcat :block/_closed-value-property closed-property)
 
                      from-property
                      (filter (fn [e]

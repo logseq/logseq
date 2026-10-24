@@ -551,7 +551,6 @@
  :editor.slash/node-embed-desc "Düğümü buraya gömme"
  :editor.slash/node-reference "Düğüm Başvurusu"
  :editor.slash/node-reference-desc "Bir düğüme geri bağlantı oluştur (sayfa veya blok)"
- :editor.slash/normal-text "Normal metin"
  :editor.slash/normal-text-desc "Başlığı temizle ve normal metne ayarla"
  :editor.slash/number-children "Çocukları Numaralandır"
  :editor.slash/number-list "Numaralı liste"

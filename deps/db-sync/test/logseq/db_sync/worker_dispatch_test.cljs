@@ -1,6 +1,8 @@
 (ns logseq.db-sync.worker-dispatch-test
   (:require [cljs.test :refer [async deftest is]]
             [clojure.string :as string]
+            [logseq.common.authorization :as authorization]
+            [logseq.db :as ldb]
             [logseq.db-sync.common :as common]
             [logseq.db-sync.index :as index]
             [logseq.db-sync.worker.auth :as auth]
@@ -302,7 +304,7 @@
                           (is false (str error))
                           (done)))))))
 
-(deftest semantic-api-rejects-e2ee-graphs-before-durable-object-test
+(deftest semantic-api-forwards-e2ee-request-to-durable-object-test
   (async done
          (let [{:keys [request claims]} (semantic-request "/api/v1/graphs/graph-1/pages" "logseq/read")
                forwarded (atom [])
@@ -313,10 +315,101 @@
                                index-handler/graph-access-response (fn [_ _ _] (p/resolved (ok-json-response)))
                                common/<d1-all (fn [& _] (p/resolved #js {:results #js [(graph-row true)]}))]
                  (p/let [response (dispatch/handle-worker-fetch request env)
+                         forwarded-request (first @forwarded)]
+                   (is (= 200 (.-status response)))
+                   (is (= 1 (count @forwarded)))
+                   (is (some? forwarded-request))))
+               (p/then (fn [] (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
+(deftest semantic-api-e2ee-edge-ops-require-e2ee-graph-test
+  (async done
+         (let [{:keys [request claims]} (semantic-request "/api/v1/graphs/graph-1/e2ee/encrypt" "logseq/write" "POST")
+               forwarded (atom [])
+               env #js {"DB" #js {}
+                        "LOGSEQ_SYNC_DO" (capturing-do-namespace forwarded)
+                        "SEMANTIC_WRITE_RATE_LIMITER" (rate-limiter true (atom []))}]
+           (-> (p/with-redefs [auth/auth-claims (fn [_ _] (p/resolved claims))
+                               index-handler/graph-access-response (fn [_ _ _] (p/resolved (ok-json-response)))
+                               common/<d1-all (fn [& _] (p/resolved #js {:results #js [(graph-row false)]}))]
+                 (p/let [response (dispatch/handle-worker-fetch request env)
                          body (json-body response)]
-                   (is (= 409 (.-status response)))
-                   (is (= "semantic-api-unavailable-for-e2ee" (:error body)))
+                   (is (= 400 (.-status response)))
+                   (is (= "operation requires an E2EE graph" (:error body)))
                    (is (empty? @forwarded))))
+               (p/then (fn [] (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
+(deftest semantic-api-e2ee-encrypt-helper-produces-canonical-package-test
+  (async done
+         (let [aes-key (js/Uint8Array.from (range 32) (fn [i] (mod (inc i) 256)))
+               key-b64 (js/btoa (.join (js/Array.from aes-key (fn [b] (js/String.fromCharCode b))) ""))
+               request (js/Request. "http://localhost/api/v1/graphs/graph-1/e2ee/encrypt"
+                                    #js {:method "POST"
+                                         :headers #js {"authorization" "Bearer semantic-token"
+                                                       "content-type" "application/json"}
+                                         :body (js/JSON.stringify #js {:texts #js ["hello" "世界"]
+                                                                     :key key-b64})})
+               claims #js {"sub" "user-1" "scope" "logseq/write"}
+               env #js {"DB" #js {}
+                        "SEMANTIC_WRITE_RATE_LIMITER" (rate-limiter true (atom []))
+                        "SEMANTIC_READ_RATE_LIMITER" (rate-limiter true (atom []))}]
+           (-> (p/with-redefs [auth/auth-claims (fn [_ _] (p/resolved claims))
+                               index-handler/graph-access-response (fn [_ _ _] (p/resolved (ok-json-response)))
+                               common/<d1-all (fn [& _] (p/resolved #js {:results #js [(graph-row true)]}))]
+                 (p/let [response (dispatch/handle-worker-fetch request env)
+                         body (json-body response)
+                         [cipher-1 cipher-2] (:texts body)]
+                   (is (= 200 (.-status response)))
+                   (is (= 2 (count (:texts body))))
+                   (doseq [cipher [cipher-1 cipher-2]]
+                     (let [decoded (ldb/read-transit-str cipher)]
+                       (is (vector? decoded))
+                       (is (= 2 (count decoded)))
+                       (is (every? #(instance? js/Uint8Array %) decoded))))))
+               (p/then (fn [] (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
+(deftest semantic-api-e2ee-encrypt-decrypt-round-trip-test
+  (async done
+         (let [aes-key (js/crypto.getRandomValues (js/Uint8Array. 32))
+               key-b64 (js/btoa (.join (js/Array.from aes-key (fn [b] (js/String.fromCharCode b))) ""))
+               plaintext "hello encrypted world"
+               env #js {"DB" #js {}
+                        "SEMANTIC_WRITE_RATE_LIMITER" (rate-limiter true (atom []))
+                        "SEMANTIC_READ_RATE_LIMITER" (rate-limiter true (atom []))}
+               claims #js {"sub" "user-1" "scope" "logseq/read logseq/write"}]
+           (-> (p/with-redefs [auth/auth-claims (fn [_ _] (p/resolved claims))
+                               index-handler/graph-access-response (fn [_ _ _] (p/resolved (ok-json-response)))
+                               common/<d1-all (fn [& _] (p/resolved #js {:results #js [(graph-row true)]}))]
+                 (p/let [encrypt-request
+                         (js/Request. "http://localhost/api/v1/graphs/graph-1/e2ee/encrypt"
+                                      #js {:method "POST"
+                                           :headers #js {"authorization" "Bearer semantic-token"
+                                                         "content-type" "application/json"}
+                                           :body (js/JSON.stringify #js {:texts #js [plaintext]
+                                                                       :key key-b64})})
+                         encrypt-response (dispatch/handle-worker-fetch encrypt-request env)
+                         encrypt-body (json-body encrypt-response)
+                         cipher (first (:texts encrypt-body))
+                         decrypt-request
+                         (js/Request. "http://localhost/api/v1/graphs/graph-1/e2ee/decrypt"
+                                      #js {:method "POST"
+                                           :headers #js {"authorization" "Bearer semantic-token"
+                                                         "content-type" "application/json"}
+                                           :body (js/JSON.stringify #js {:texts #js [cipher]
+                                                                       :key key-b64})})
+                         decrypt-response (dispatch/handle-worker-fetch decrypt-request env)
+                         decrypt-body (json-body decrypt-response)]
+                   (is (= 200 (.-status encrypt-response)))
+                   (is (= 200 (.-status decrypt-response)))
+                   (is (= [plaintext] (:texts decrypt-body)))))
                (p/then (fn [] (done)))
                (p/catch (fn [error]
                           (is false (str error))
@@ -346,6 +439,9 @@
 (deftest semantic-api-forwards-authorized-non-e2ee-request-test
   (async done
          (let [{:keys [request claims]} (semantic-request "/api/v1/graphs/graph-1/pages?limit=10" "logseq/read")
+               _ (.set (.-headers request) "x-logseq-sync-actor" "%7B%22sub%22%3A%22spoofed%22%7D")
+               _ (aset claims "cognito:username" "用户")
+               _ (aset claims "email" "user@example.com")
                forwarded (atom [])
                limit-calls (atom [])
                env #js {"DB" #js {}
@@ -359,6 +455,9 @@
                          forwarded-url (some-> forwarded-request .-url js/URL.)]
                    (is (= 200 (.-status response)))
                    (is (= 1 (count @forwarded)))
+                   (is (= {"sub" "user-1" "cognito:username" "用户" "email" "user@example.com"}
+                          (some-> (.get (.-headers forwarded-request) "x-logseq-sync-actor")
+                                  js/decodeURIComponent js/JSON.parse js->clj)))
                    (when forwarded-url
                      (is (= "/semantic/pages" (.-pathname forwarded-url)))
                      (is (= "10" (.get (.-searchParams forwarded-url) "limit")))
@@ -386,6 +485,309 @@
                    (is (= 200 (.-status resp)))
                    (is (= true (:ok body)))
                    (is (= 0 @access-check-calls))))
+               (p/then (fn [] (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
+(def ^:private pat-year-ms (* 365 24 60 60 1000))
+
+(defn- pat-management-request
+  ([method path]
+   (pat-management-request method path nil))
+  ([method path body]
+   (js/Request. (str "http://localhost" path)
+                (clj->js (cond-> {:method method
+                                  :headers {"authorization" "Bearer login-token"
+                                            "content-type" "application/json"}}
+                           body (assoc :body (js/JSON.stringify (clj->js body))))))))
+
+(defn- rtc-claims []
+  #js {"sub" "user-1"
+       "cognito:groups" #js ["rtc_2025_07_10"]})
+
+(defn- d1-results [rows]
+  #js {:results (clj->js rows)})
+
+(deftest pat-management-requires-rtc-group-login-jwt-test
+  (async done
+         (let [request (pat-management-request "GET" "/api/v1/personal-access-tokens")]
+           (-> (p/with-redefs [auth/auth-claims
+                               (fn [_ _]
+                                 (p/resolved #js {"sub" "user-1"
+                                                  "cognito:groups" #js ["beta-tester"]}))]
+                 (p/let [response (dispatch/handle-worker-fetch request #js {"DB" #js {}})
+                         body (json-body response)]
+                   (is (= 403 (.-status response)))
+                   (is (= "forbidden" (:error body)))))
+               (p/then (fn [] (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
+(deftest pat-management-does-not-accept-a-pat-as-login-test
+  (async done
+         (let [request (js/Request. "http://localhost/api/v1/personal-access-tokens"
+                                    #js {:headers #js {"authorization" "Bearer logseq_pat_not-a-login-token"}})]
+           (-> (p/with-redefs [authorization/verify-jwt
+                               (fn [_ _]
+                                 (p/rejected (ex-info "invalid" {})))]
+                 (p/let [response (dispatch/handle-worker-fetch request #js {"DB" #js {}})]
+                   (is (= 401 (.-status response)))))
+               (p/then (fn [] (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
+(deftest pat-create-defaults-to-one-year-and-persists-only-a-hash-test
+  (async done
+         (let [now 1700000000000
+               insert-call (atom nil)
+               request (pat-management-request
+                        "POST"
+                        "/api/v1/personal-access-tokens"
+                        {:graph-id "graph-1" :permission "both"})]
+           (-> (p/with-redefs [auth/auth-claims (fn [_ _] (p/resolved (rtc-claims)))
+                               common/now-ms (fn [] now)
+                               index/<semantic-graph-get
+                               (fn [_ _ graph-id]
+                                 (p/resolved {:graph-id graph-id}))
+                               common/<d1-run
+                               (fn [_ sql & args]
+                                 (reset! insert-call {:sql sql :args args})
+                                 (p/resolved #js {:success true}))]
+                 (p/let [response (dispatch/handle-worker-fetch request #js {"DB" #js {}})
+                         body (json-body response)
+                         token (:token body)
+                         {:keys [sql args]} @insert-call]
+                   (is (= 201 (.-status response)))
+                   (is (and (string? token)
+                            (string/starts-with? token "logseq_pat_")))
+                   (is (= "graph-1" (:graph-id body)))
+                   (is (= "both" (:permission body)))
+                   (is (= (+ now pat-year-ms) (:expires-at body)))
+                   (is (and (string? sql)
+                            (string/includes? (string/lower-case sql) "personal_access_tokens")))
+                   (is (not-any? #(= token %) args))
+                   (is (some #(and (string? %)
+                                   (re-matches #"[0-9a-f]{64}" %))
+                             args))))
+               (p/then (fn [] (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
+(deftest pat-create-validates-permission-expiration-and-graph-access-test
+  (async done
+         (let [now 1700000000000
+               env #js {"DB" #js {}}
+               request (fn [body]
+                         (pat-management-request
+                          "POST" "/api/v1/personal-access-tokens" body))
+               malformed-request (js/Request.
+                                  "http://localhost/api/v1/personal-access-tokens"
+                                  #js {:method "POST"
+                                       :headers #js {"authorization" "Bearer login-token"
+                                                      "content-type" "application/json"}
+                                       :body "{"})]
+           (-> (p/with-redefs [auth/auth-claims (fn [_ _] (p/resolved (rtc-claims)))
+                               common/now-ms (fn [] now)
+                               index/<semantic-graph-get
+                               (fn [_ _ graph-id]
+                                 (p/resolved (when (= "graph-1" graph-id)
+                                               {:graph-id graph-id})))]
+                 (p/let [invalid-permission (dispatch/handle-worker-fetch
+                                             (request {:graph-id "graph-1" :permission "admin"}) env)
+                         expired (dispatch/handle-worker-fetch
+                                  (request {:graph-id "graph-1"
+                                            :permission "read"
+                                            :expires-at now}) env)
+                         beyond-cap (dispatch/handle-worker-fetch
+                                     (request {:graph-id "graph-1"
+                                               :permission "read"
+                                               :expires-at (+ now pat-year-ms (* 24 60 60 1000) 1)}) env)
+                         malformed-body (dispatch/handle-worker-fetch
+                                         malformed-request env)
+                         inaccessible (dispatch/handle-worker-fetch
+                                       (request {:graph-id "graph-2"
+                                                 :permission "read"}) env)]
+                   (is (= 400 (.-status invalid-permission)))
+                   (is (= 400 (.-status expired)))
+                   (is (= 400 (.-status beyond-cap)))
+                   (is (= 400 (.-status malformed-body)))
+                   (is (= 403 (.-status inaccessible)))))
+               (p/then (fn [] (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
+(deftest pat-create-rejects-a-graph-that-is-not-semantic-api-eligible-test
+  (async done
+         (let [request (pat-management-request
+                        "POST"
+                        "/api/v1/personal-access-tokens"
+                        {:graph-id "encrypted-graph" :permission "read"})]
+           (-> (p/with-redefs [auth/auth-claims (fn [_ _] (p/resolved (rtc-claims)))
+                               index/<user-has-access-to-graph? (fn [_ _ _] (p/resolved true))
+                               index/<semantic-graph-get (fn [_ _ _] (p/resolved nil))
+                               common/<d1-run (fn [& _] (p/resolved #js {:success true}))]
+                 (p/let [response (dispatch/handle-worker-fetch request #js {"DB" #js {}})]
+                   (is (= 403 (.-status response)))))
+               (p/then (fn [] (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
+(deftest pat-list-never-returns-token-hash-and-revoke-is-owner-scoped-test
+  (async done
+         (let [sql-calls (atom [])
+               env #js {"DB" #js {}}
+               list-request (pat-management-request "GET" "/api/v1/personal-access-tokens")
+               delete-request (pat-management-request "DELETE" "/api/v1/personal-access-tokens/pat-1")]
+           (-> (p/with-redefs [auth/auth-claims (fn [_ _] (p/resolved (rtc-claims)))
+                               common/<d1-all
+                               (fn [_ sql & args]
+                                 (swap! sql-calls conj {:op :all :sql sql :args args})
+                                 (p/resolved
+                                  (d1-results
+                                   [{"id" "pat-1"
+                                     "graph_id" "graph-1"
+                                     "graph_name" "Graph 1"
+                                     "token_prefix" "logseq_pat_abcd"
+                                     "permission" "read"
+                                     "created_at" 10
+                                     "expires_at" 20
+                                     "token_hash" "must-not-leak"}])))
+                               common/<d1-run
+                               (fn [_ sql & args]
+                                 (swap! sql-calls conj {:op :run :sql sql :args args})
+                                 (p/resolved #js {:meta #js {:changes 1}}))]
+                 (p/let [list-response (dispatch/handle-worker-fetch list-request env)
+                         list-body (json-body list-response)
+                         delete-response (dispatch/handle-worker-fetch delete-request env)]
+                   (is (= 200 (.-status list-response)))
+                   (is (= [{:id "pat-1"
+                            :graph-id "graph-1"
+                            :graph-name "Graph 1"
+                            :token-prefix "logseq_pat_abcd"
+                            :permission "read"
+                            :created-at 10
+                            :expires-at 20}]
+                          (:tokens list-body)))
+                   (is (not (string/includes? (js/JSON.stringify (clj->js list-body)) "must-not-leak")))
+                   (is (= 204 (.-status delete-response)))
+                   (let [{:keys [sql args]} (last @sql-calls)]
+                     (is (and (string? sql)
+                              (string/includes? (string/lower-case sql) "delete from personal_access_tokens")))
+                     (is (= ["pat-1" "user-1"] args)))))
+               (p/then (fn [] (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
+(defn- pat-row [permission expires-at]
+  {"id" "pat-1"
+   "user_id" "user-1"
+   "graph_id" "graph-1"
+   "token_prefix" "logseq_pat_scope"
+   "permission" permission
+   "created_at" 10
+   "expires_at" expires-at})
+
+(defn- with-pat-query-results [permission expires-at]
+  (fn [_ sql & _args]
+    (let [sql (string/lower-case sql)]
+      (cond
+        (string/includes? sql "from personal_access_tokens")
+        (p/resolved (d1-results [(pat-row permission expires-at)]))
+
+        (string/includes? sql "union select graph_id from graph_members")
+        (p/resolved (d1-results [{"graph_id" "graph-1"}]))
+
+        (string/includes? sql "graph_e2ee")
+        (p/resolved (d1-results [{"graph_e2ee" 0}]))
+
+        :else
+        (p/resolved (d1-results []))))))
+
+(defn- pat-semantic-request [method graph-id token]
+  (js/Request. (str "http://localhost/api/v1/graphs/" graph-id "/pages")
+               #js {:method method
+                    :headers #js {"authorization" (str "Bearer " token)
+                                  "content-type" "application/json"}
+                    :body (when (= method "POST") "{\"title\":\"Page\"}")}))
+
+(deftest pat-semantic-api-enforces-read-write-and-both-permissions-test
+  (async done
+         (let [now 1700000000000
+               forwarded (atom [])
+               env #js {"DB" #js {}
+                        "LOGSEQ_SYNC_DO" (capturing-do-namespace forwarded)
+                        "SEMANTIC_READ_RATE_LIMITER" (rate-limiter true (atom []))
+                        "SEMANTIC_WRITE_RATE_LIMITER" (rate-limiter true (atom []))}
+               request (fn [method token]
+                         (pat-semantic-request method "graph-1" token))
+               run (fn [permission method token]
+                     (p/with-redefs [common/now-ms (fn [] now)
+                                     common/<d1-all (with-pat-query-results
+                                                      permission (+ now 10000))
+                                     common/<d1-run (fn [& _] (p/resolved #js {:success true}))]
+                       (dispatch/handle-worker-fetch (request method token) env)))]
+           (-> (p/let [read-get (run "read" "GET" "logseq_pat_read")
+                       read-post (run "read" "POST" "logseq_pat_read_post")
+                       write-get (run "write" "GET" "logseq_pat_write_get")
+                       write-post (run "write" "POST" "logseq_pat_write")
+                       both-get (run "both" "GET" "logseq_pat_both_get")
+                       both-post (run "both" "POST" "logseq_pat_both_post")]
+                 (is (= 200 (.-status read-get)))
+                 (is (= 403 (.-status read-post)))
+                 (is (= 403 (.-status write-get)))
+                 (is (= 200 (.-status write-post)))
+                 (is (= 200 (.-status both-get)))
+                 (is (= 200 (.-status both-post))))
+               (p/then (fn [] (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
+(deftest pat-semantic-api-rejects-wrong-graph-and-expired-token-test
+  (async done
+         (let [now 1700000000000
+               forwarded (atom [])
+               env #js {"DB" #js {}
+                        "LOGSEQ_SYNC_DO" (capturing-do-namespace forwarded)
+                        "SEMANTIC_READ_RATE_LIMITER" (rate-limiter true (atom []))}]
+           (-> (p/with-redefs [common/now-ms (fn [] now)
+                               common/<d1-run (fn [& _] (p/resolved #js {:success true}))]
+                 (p/let [wrong-graph
+                         (p/with-redefs [common/<d1-all
+                                         (with-pat-query-results "read" (+ now 10000))]
+                           (dispatch/handle-worker-fetch
+                            (pat-semantic-request "GET" "graph-2" "logseq_pat_wrong_graph") env))
+                         expired
+                         (p/with-redefs [common/<d1-all
+                                         (with-pat-query-results "read" now)]
+                           (dispatch/handle-worker-fetch
+                            (pat-semantic-request "GET" "graph-1" "logseq_pat_expired") env))]
+                   (is (= 403 (.-status wrong-graph)))
+                   (is (= 401 (.-status expired)))
+                   (is (empty? @forwarded))))
+               (p/then (fn [] (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
+(deftest pat-is-not-accepted-by-raw-sync-route-test
+  (async done
+         (let [request (js/Request. "http://localhost/sync/graph-1/snapshot/download"
+                                    #js {:headers #js {"authorization" "Bearer logseq_pat_raw_sync"}})
+               env #js {"DB" #js {}
+                        "LOGSEQ_SYNC_DO" (make-do-namespace)}]
+           (-> (p/with-redefs [authorization/verify-jwt
+                               (fn [_ _]
+                                 (p/rejected (ex-info "invalid" {})))]
+                 (p/let [response (dispatch/handle-worker-fetch request env)]
+                   (is (= 401 (.-status response)))))
                (p/then (fn [] (done)))
                (p/catch (fn [error]
                           (is false (str error))

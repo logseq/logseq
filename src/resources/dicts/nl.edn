@@ -495,7 +495,6 @@
  :editor.slash/node-embed-desc "Sluit een knooppunt hier in"
  :editor.slash/node-reference "Knoopverwijzing"
  :editor.slash/node-reference-desc "Maak een teruglink naar een knooppunt (een pagina of blok)"
- :editor.slash/normal-text "Normale tekst"
  :editor.slash/normal-text-desc "Kop verwijderen en instellen op normale tekst"
  :editor.slash/number-children "Nummering van onderliggende items"
  :editor.slash/number-list "Genummerde lijst"

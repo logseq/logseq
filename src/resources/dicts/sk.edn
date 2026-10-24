@@ -495,7 +495,6 @@
  :editor.slash/node-embed-desc "Vložiť uzol sem"
  :editor.slash/node-reference "Odkaz na uzol"
  :editor.slash/node-reference-desc "Vytvoriť spätný odkaz na uzol (stránka alebo blok)"
- :editor.slash/normal-text "Normálny text"
  :editor.slash/normal-text-desc "Vymazať nadpis a nastaviť ako normálny text"
  :editor.slash/number-children "Číslovať potomkov"
  :editor.slash/number-list "Číslovaný zoznam"
