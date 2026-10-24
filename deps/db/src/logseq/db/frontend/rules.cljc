@@ -145,10 +145,7 @@
     '[(object-has-class-property? ?b ?prop)
       [?prop-e :db/ident ?prop]
       [?t :logseq.property.class/properties ?prop-e]
-      [?b :block/tags ?tc]
-      (or
-       [(= ?t ?tc)]
-       (class-extends ?t ?tc))]
+      (class-instance ?t ?b)]
 
     :has-property-or-object-property
     '[(has-property-or-object-property? ?b ?prop)
@@ -284,20 +281,26 @@
        [(identity ?tags) [?spec ...]]
        (tag-spec->tag ?tag ?spec)
 
-       ;; tag/class attached to block
-       [?b :block/tags ?tc]
-
-       ;; direct or descendant
-       (or
-        [(= ?tag ?tc)]
-        (class-extends ?tag ?tc))
+       ;; tag/class attached to block, directly or through a descendant class
+       (class-instance ?tag ?b)
 
        [(missing? $ ?b :block/link)]]]
 
+    :class-instance
+    '[(class-instance ?class ?b)
+      [?b :block/tags ?tc]
+      (or
+       [(= ?class ?tc)]
+       (class-extends ?class ?tc))]
+
     ;; Matches a stored title exactly (direct callers pass capitalized values)
-    ;; or by its lowercase form (the DSL lowercases filter args)
+    ;; or by its lowercase form (the DSL lowercases filter args).
+    ;; Only Task and Task subclasses match; a non-Task class that reuses
+    ;; Status (including its default Todo) must not.
     :task
     '[(task ?b ?statuses)
+      [?task-class :db/ident :logseq.class/Task]
+      (class-instance ?task-class ?b)
       (ref-property-with-default ?b :logseq.property/status ?val)
       [(str ?val) ?val-str]
       [(clojure.string/lower-case ?val-str) ?val-lower]
@@ -305,6 +308,8 @@
        [(contains? ?statuses ?val)]
        [(contains? ?statuses ?val-lower)])]
 
+    ;; Priority is not Task-gated: file import and property-set leave
+    ;; Priority-only blocks without #Task, unlike Status.
     :priority
     '[(priority ?b ?priorities)
       (ref-property-with-default ?b :logseq.property/priority ?priority)
@@ -322,12 +327,13 @@
    :page-ref #{:has-ref}
 
    ;; simple query helpers
-   :task #{:ref-property-with-default}
+   :class-instance #{:class-extends}
+   :task #{:ref-property-with-default :class-instance}
    :priority #{:ref-property-with-default}
-   :tags #{:class-extends}
+   :tags #{:class-instance}
 
    :has-property-or-object-property #{:object-has-class-property}
-   :object-has-class-property #{:class-extends}
+   :object-has-class-property #{:class-instance}
    :has-simple-query-property #{:has-property-or-object-property}
    :has-private-simple-query-property #{:has-property-or-object-property}
    :property-missing-value #{:object-has-class-property}
