@@ -10,7 +10,9 @@
 (defn- memory-sql
   []
   (let [db (new sqlite ":memory:" nil)]
-    #js {:exec (fn [sql-str & args]
+    ;; :transaction as in storage-test: storage wraps its writes in one
+    #js {:transaction (fn [f] ((.transaction db f)))
+         :exec (fn [sql-str & args]
                  (let [^js stmt (.prepare db sql-str)]
                    (if (string/starts-with? (string/lower-case (string/trim sql-str)) "select")
                      (.apply (.-all stmt) stmt (to-array args))
