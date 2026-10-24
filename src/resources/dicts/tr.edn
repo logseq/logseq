@@ -115,6 +115,7 @@
  :block/click-to-fix-query "Sorguyu düzeltmek için tıklayın: {1}"
  :block/copy-ref "Blok referansını kopyala"
  :block/copy-url "Block URL'sini kopyala"
+ :block/copy-url-unavailable-warning "Kopyalanabilecek bir blok URL'si yok."
  :block/created-label "Oluşturulma: {1}"
  :block/deprecated-latex-export "'#+BEGIN_EXPORT latex' kullanımdan kaldırıldı. Bunun yerine '/Math block' komutunu kullanın."
  :block/deprecated-query-syntax "#+BEGIN_QUERY kullanımdan kaldırıldı. Bunun yerine '/Advanced Query' komutunu kullanın."
@@ -519,6 +520,7 @@
  :editor.slash/advanced-query-desc "Gelişmiş sorgu bloğu oluştur"
  :editor.slash/calculator "Hesap Makinesi"
  :editor.slash/calculator-desc "Hesap makinesi ekle"
+ :editor.slash/clear-heading "Başlığı temizle"
  :editor.slash/cloze "Cloze"
  :editor.slash/code-block "Kod bloğu"
  :editor.slash/code-block-desc "Kod bloğu ekle"
@@ -598,6 +600,7 @@
  :electron/wrong-release-warning-title "Apple Silicon üzerinde Intel (x64) sürümünü kullanıyorsunuz."
 
  :encryption/cloud-password-rich (fn [] ["Parolanızı kaybederseniz, buluttaki verilerinizin hiçbiri çözülemez. " [:span "Yine de grafiğinizin yerel sürümüne erişmeye devam edebilirsiniz."]])
+ :encryption/copy-key "Kopyala"
  :encryption/current-password "Mevcut şifre"
  :encryption/enter-password "Şifre girin"
  :encryption/enter-password-again "Şifreyi tekrar girin"
@@ -613,12 +616,16 @@
  :encryption/forgot-password-warning "Şifrenizi unutursanız şifrelenmiş veriler kurtarılamaz."
  :encryption/init-key-pair "Anahtar çiftini başlat"
  :encryption/init-key-pair-error "Anahtar çiftini başlatma hatası: {1}"
+ :encryption/key-unavailable "Anahtar kullanılamıyor"
  :encryption/password-not-matched "Şifreler eşleşmiyor"
  :encryption/password-updated-successfully "Şifre güncellendi"
+ :encryption/private-key "Özel anahtar (base64)"
+ :encryption/public-key "Genel anahtar (base64)"
  :encryption/remember-password-rich (fn [] [[:span "Lütfen "] "belirlediğiniz parolayı mutlaka hatırlayın; unutursanız onu sıfırlayamaz veya geri getiremeyiz, " [:span "ve size "] "parolanın güvenli bir yedeğini saklamanızı öneririz."])
  :encryption/reset-password "Şifreyi sıfırla"
  :encryption/set-new-password "Yeni şifre belirle"
  :encryption/set-password-title "Şifre belirle"
+ :encryption/show-private-key "Özel anahtarı göster"
  :encryption/updating-password "Şifre güncelleniyor"
  :encryption/wrong-password "Yanlış şifre"
 
@@ -701,6 +708,8 @@
  :flashcard/shortcut-tooltip "Kısayol: {1}"
 
  :flashcard.empty/desc "Herhangi bir bloğa karta dönüştürmek için \"{1}\" ekleyebilir veya bazı cloze'lar eklemek için \"/cloze\" komutunu tetikleyebilirsiniz."
+ :flashcard.empty/no-due-desc "Bu sorgu için tüm kartları gözden geçirdiniz. Daha sonra tekrar gelin veya şimdi yeniden alıştırma yapın."
+ :flashcard.empty/no-due-title "Gözden geçirilecek kart yok"
  :flashcard.empty/title "Bilgi Kartlarına Hoş Geldiniz"
 
  :flashcard.rating/again "Tekrar"
@@ -714,6 +723,7 @@
 
  :flashcard.review/finished "Tamamlandı! 💯"
  :flashcard.review/hide-answers "Yanıtları gizle"
+ :flashcard.review/practice-again "Yeniden alıştırma yap"
  :flashcard.review/show-answers "Yanıtları göster"
  :flashcard.review/show-clozes "Boşlukları göster"
 
@@ -1112,6 +1122,7 @@
  :page/contents "İçindekiler"
  :page/convert-to-tag "Etikete dönüştür"
  :page/copy-url "Sayfa URL adresini kopyala"
+ :page/copy-url-unavailable-warning "Kopyalanabilecek bir sayfa URL'si yok."
  :page/create "Yeni sayfa oluştur"
  :page/created-at "Oluşturulma Zamanı"
  :page/current-graph-as-sqlite-db "mevcut grafiği SQLite veritabanı olarak"
@@ -1151,6 +1162,7 @@
  :page.convert/cant-be-block "\"{1}\" sayfası bir bloğa dönüştürülemez."
  :page.convert/cant-be-block-has-children "\"{1}\" sayfası, sayfa alt öğelerine sahip olduğundan bir bloğa dönüştürülemez."
  :page.convert/cant-be-block-move-first "\"{1}\" sayfası bir bloğa dönüştürülemez, lütfen önce onu başka bir sayfaya taşıyın."
+ :page.convert/page-to-property-namespaced "Ad alanlı sayfalar özellik olamaz"
  :page.convert/page-to-tag-action "\"{1}\" sayfasını etikete dönüştür"
  :page.convert/page-to-tag-built-in "Yerleşik sayfalar etiket olamaz"
  :page.convert/page-to-tag-duplicate "\"{1}\" adında bir etiket zaten mevcut."
@@ -1177,6 +1189,7 @@
  :page.validation/alias-source-is-alias "Başka bir sayfanın takma adı olan bir sayfanın kendi takma adları olamaz."
  :page.validation/cant-set-built-in-tags "Yeni sayfada yerleşik etiketler ayarlanamıyor: {1}"
  :page.validation/duplicate "Etiketler için \"{1}\" adlı başka bir sayfa zaten mevcut: {2}."
+ :page.validation/duplicate-name "\"{1}\" adında başka bir sayfa zaten mevcut."
  :page.validation/name-blank "Sayfa adı boş olamaz."
  :page.validation/name-no-hash "Sayfa adı # içeremez"
  :page.validation/name-no-slash "Sayfa adı / içeremez."
@@ -1340,6 +1353,8 @@
  :plugin.themes/group "{1} temalar"
  :plugin.themes/light-and-dark "açık & koyu temalar"
 
+ :profiler/fn-not-found-error "Fonksiyon bulunamadı: {1}"
+ :profiler/fn-unqualified-error "cljs.core/map gibi tam nitelikli bir fonksiyon adı kullanın."
  :profiler/input-fn-placeholder "fonksiyon adını buraya girin"
  :profiler/unregister "Kaydı Sil"
 
@@ -1692,6 +1707,7 @@
  :settings/features "Özellikler"
  :settings/general "Genel"
  :settings/keymap "Kısayollar"
+ :settings/personal-access-tokens "Kişisel erişim tokenları"
  :settings/plugins "Eklenti ayarları"
 
  :settings.account/storage-usage "{1}GB toplam {2}GB depolama alanı ({3})"
@@ -1853,6 +1869,29 @@
  :sync/uploading "Yükleniyor..."
  :sync/user-doesnt-exist-yet "Kullanıcı henüz mevcut değil"
 
+ :sync.personal-access-token/api-docs "API belgeleri"
+ :sync.personal-access-token/copied "Kişisel erişim tokenı kopyalandı."
+ :sync.personal-access-token/create "Token oluştur"
+ :sync.personal-access-token/create-title "Kişisel erişim tokenı oluştur"
+ :sync.personal-access-token/created-title "Yeni kişisel erişim tokenınız"
+ :sync.personal-access-token/created-warning "Bu tokenı şimdi kopyalayın. Tekrar gösterilemez."
+ :sync.personal-access-token/date-summary "Oluşturulma: {1}; sona erme: {2}"
+ :sync.personal-access-token/deleted-graph "Silinmiş grafik"
+ :sync.personal-access-token/description "Logseq REST API için grafiğe özel kimlik bilgileri oluşturun."
+ :sync.personal-access-token/empty "Kişisel erişim tokenı yok."
+ :sync.personal-access-token/existing-title "Mevcut tokenlar"
+ :sync.personal-access-token/expiration "Geçerlilik süresi"
+ :sync.personal-access-token/graph "Grafik"
+ :sync.personal-access-token/no-graphs "Kullanılabilir senkronize grafik yok."
+ :sync.personal-access-token/permission "İzin"
+ :sync.personal-access-token/request-error "Kişisel erişim tokenı isteği başarısız oldu. Lütfen tekrar deneyin."
+ :sync.personal-access-token/revoke "İptal et"
+ :sync.personal-access-token/revoke-confirm "Bu kişisel erişim tokenı iptal edilsin mi? Bu işlem geri alınamaz."
+
+ :sync.personal-access-token.permission/both "Okuma ve yazma"
+ :sync.personal-access-token.permission/read "Okuma"
+ :sync.personal-access-token.permission/write "Yazma"
+
  :theme/logseq-default "Varsayılan Logseq teması"
  :theme/switch-to "{1} temasına geç"
 
@@ -1917,6 +1956,7 @@
 
  :view/add-new-view "Görünüm ekle"
  :view/all "Tümü"
+ :view/error "Görünüm hatası:"
  :view/export-edn "EDN dışa aktar"
  :view/linked-references "Bağlantılı referanslar"
  :view/new "Yeni"
@@ -1992,6 +2032,10 @@
  :view.table/sort-groups-order "Grup sıralaması"
  :view.table/total-refs-count "Toplam referans sayısı"
  :view.table/unpin "Sabitlemeyi kaldır"
+
+ :web.test-site/help-test "Test etmeye yardımcı olmak istiyorum"
+ :web.test-site/open-app "app.logseq.com adresini aç"
+ :web.test-site/warning "test.logseq.com yeni özellikleri test etmek içindir ve kararsız olabilir. Logseq'i gerçek çalışmalarınız için kullanıyorsanız lütfen app.logseq.com adresine geçin."
 
  :window/close "Pencereyi kapat"
  :window/exit-fullscreen "Tam ekrandan çık"
