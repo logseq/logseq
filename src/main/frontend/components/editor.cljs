@@ -1,6 +1,5 @@
 (ns frontend.components.editor
   (:require [clojure.string :as string]
-            [dommy.core :as dom]
             [frontend.commands :as commands :refer [*matched-commands]]
             [frontend.components.datepicker :as datepicker]
             [frontend.components.icon :as icon-component]
@@ -672,39 +671,32 @@
     (shui-editor-popups id format action nil)))
 
 (defn- editor-on-hide
-  [state type e editing-another-block?]
-  (let [action (state/get-editor-action)
-        config (:config state)]
-    (cond
-      (and editing-another-block? action)
-      (state/clear-editor-action!)
+  [e]
+  (let [target (.-target e)
+        popup? (or (.closest target "[data-editor-popup-ref]")
+                   ;; Nested editor menus render in portals outside their parent popup.
+                   (and (state/get-editor-action)
+                        (.closest target ".ui__dropdown-menu-content, .ui__dropdown-menu-sub-content")))]
+    (when-not (or popup? (state/editor-in-composition?))
+      (editor-handler/escape-editing))))
 
-      (and (= type :esc) (editor-handler/editor-commands-popup-exists?))
-      nil
+(defn- editor-on-escape
+  [e]
+  (when-not (or (state/editor-in-composition?)
+               (editor-handler/editor-commands-popup-exists?))
+    (let [action (state/get-editor-action)]
+      (cond
+        (or (contains? #{:commands :page-search :page-search-hashtag :block-search
+                         :template-search :datepicker} action)
+            (and (keyword? action) (= (namespace action) "editor.action")))
+        (util/stop e)
 
-      (state/editor-in-composition?)
-      nil
+        ;; editor/input handles Escape directly.
+        (= :input action)
+        nil
 
-      (or (contains?
-           #{:commands :page-search :page-search-hashtag :block-search :template-search
-             :datepicker}
-           action)
-          (and (keyword? action)
-               (= (namespace action) "editor.action")))
-      (when e (util/stop e))
-
-      ;; editor/input component handles Escape directly, so just prevent handling it here
-      (= :input action)
-      nil
-
-      ;; exit editing mode
-      :else
-      (let [select? (= type :esc)]
-        (p/do!
-         (editor-handler/escape-editing {:select? select?
-                                         :editing-another-block? editing-another-block?})
-         (some-> config :on-escape-editing
-                 (apply [(str uuid) (= type :esc)])))))))
+        :else
+        (editor-handler/escape-editing {:select? true})))))
 
 (defn editor-readonly?
   [block]
@@ -749,16 +741,9 @@
            {:active? true
             :root-ref #(or @*ref (gdom/getElement id))
             :on-hide (fn [e]
-                       (let [esc? (= "keydown" (.-type e))
-                             target (.-target e)
-                             block-container (when-not esc? (.closest target ".ls-block"))
-                             editing-another-block? (and block-container
-                                                         (not (dom/has-class? block-container "block-add-button"))
-                                                         (gdom/contains block-container target))]
-                         (editor-on-hide component-state
-                                         (if esc? :esc :click)
-                                         e
-                                         editing-another-block?)))})
+                       (if (= "keydown" (.-type e))
+                         (editor-on-escape e)
+                         (editor-on-hide e)))})
         opts (cond->
               {:id                id
                :ref               #(reset! *ref %)
@@ -776,7 +761,7 @@
                                       (when (= (util/ekey e) "Escape")
                                         (when-not (editor-handler/editor-commands-popup-exists?)
                                           (.stopPropagation e))
-                                        (editor-on-hide component-state :esc e false))))
+                                        (editor-on-escape e))))
                :auto-focus true
                :auto-capitalize (if (util/mobile?) "sentences" "off")
                :auto-correct (if (util/mobile?) "true" "false")
