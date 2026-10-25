@@ -1,23 +1,24 @@
 package main
 
 import (
+	"errors"
 	"strings"
 	"unicode/utf8"
 
+	"github.com/egoist/mygo"
+	"github.com/egoist/mygo/transfer"
 	"github.com/egoist/mygo/ui"
 	luimygo "github.com/logseq/lui/platform/mygo"
 )
 
 // The existing OCaml sink sends runs/caret/composition, not its source or
-// selection anchor. A host may supply these READ-ONLY queries from the OCaml
-// model and its measured layout. Never reconstruct source from rendered pills,
+// selection anchor. The host supplies this READ-ONLY query from the OCaml
+// model. Never reconstruct source from rendered pills,
 // nor add a second Go document. Unwired services are explicitly unsupported.
 // Snapshot offsets and OffsetAt results are UTF-8 bytes; source includes the
 // current composition preview. Queries must run synchronously on the UI thread.
 var logseqEditorServices struct {
-	Snapshot  func(blockID string) (source string, anchor, caret int, ok bool)
-	CaretRect func(blockID string, offset int) (ui.Rect, bool)
-	OffsetAt  func(blockID string, x, y float32) (int, bool)
+	Snapshot func(blockID string) (source string, anchor, caret int, ok bool)
 }
 
 type logseqEditorInput struct {
@@ -29,6 +30,8 @@ type logseqEditorInput struct {
 	marked           ui.TextInputRange
 	markedSelection  ui.TextInputRange
 	dragging         bool
+	layout           *editorLayout
+	handle           ui.Handle
 }
 
 func (services *platformServices) renderLogseqEditor(c *ui.Context, n luimygo.Node, _ func(), emit func(luimygo.Event)) {
@@ -38,24 +41,26 @@ func (services *platformServices) renderLogseqEditor(c *ui.Context, n luimygo.No
 	services.bind(n, e)
 	s := ui.Local(e, "logseq-editor-input", func() logseqEditorInput { return logseqEditorInput{} })
 	s.n, s.emit = n, emit
+	e.Bind(&s.handle)
+	services.editorHost().sinks[n.ID] = s
 	if id := n.String("accessibility-identifier"); id != "" {
 		e.Label(id)
 	}
-	caretRect := ui.Rect{W: 1, H: 18}
-	if logseqEditorServices.CaretRect != nil {
-		if r, ok := logseqEditorServices.CaretRect(n.String("block-id"), int(n.Number("caret", 0))); ok {
-			caretRect = r
+	e.HandleInput(s.input)
+	// The candidate rectangle comes from BoundsForRange after commit. Do not
+	// install a made-up font box before the sibling text has been laid out.
+	c.AfterFrame(func() {
+		layout, err := services.measureEditor(c, s)
+		if err != nil {
+			extensionGap(n.Identifier, err.Error())
+			return
 		}
-	} else {
-		extensionGap(n.Identifier, "caret/IME geometry and pointer hit testing require the OCaml editor layout bridge")
-	}
-	e.TextCaret(caretRect).HandleInput(s.input)
+		s.layout = layout
+	})
 	if _, _, _, ok := s.snapshot(); ok {
 		e.HandleTextInput(s)
 	} else {
-		// TextCaret is itself MyGo's native IME/text-input API. Unlike a
-		// TextArea it creates no Go text buffer. Do not attach an incomplete
-		// TextInputClient that lies about the surrounding document.
+		// Never attach an incomplete TextInputClient that lies about its source.
 		extensionGap(n.Identifier, "source/selection snapshot absent: native surrounding-text queries, replacement ranges, clipboard copy/cut and assistive selection unavailable")
 	}
 	if !s.mounted {
@@ -122,14 +127,33 @@ func (s *logseqEditorInput) input(ev ui.InputEvent) bool {
 		if key == "" {
 			return false
 		}
+		if s.composing {
+			return false // Native input methods own keys during preedit.
+		}
 		// Model keys retain structural semantics (Backspace at zero merges,
 		// Enter splits, Tab indents). Never also emit delete/insert for them.
 		s.send("key", extensionKeyValues(ev, key))
-		payload := extensionDOMKey(ev, key)
-		payload["isComposing"] = s.composing
-		extensionDOMEvent(s.n, s.emit, "keydown", payload)
-		if s.composing {
-			return false // Native input methods own keys during preedit.
+		if ev.Mods&(ui.Ctrl|ui.Super) != 0 && ev.Mods&ui.Alt == 0 {
+			command := ""
+			switch strings.ToLower(key) {
+			case "c":
+				if ev.Mods&ui.Shift == 0 {
+					command = "copy"
+				}
+			case "x":
+				if ev.Mods&ui.Shift == 0 {
+					command = "cut"
+				}
+			case "v":
+				if ev.Mods&ui.Shift == 0 {
+					command = "paste"
+				}
+			case "z", "y":
+				return true // The model key above owns history.
+			}
+			if command != "" {
+				return s.editCommand(command)
+			}
 		}
 		return key == "Backspace" || key == "Delete" || key == "Tab" || key == "Escape" ||
 			strings.HasPrefix(key, "Arrow") || key == "Home" || key == "End" ||
@@ -137,7 +161,7 @@ func (s *logseqEditorInput) input(ev ui.InputEvent) bool {
 			(strings.EqualFold(key, "a") && ev.Mods&(ui.Ctrl|ui.Super) != 0)
 	case ui.InputText:
 		if s.composing {
-			s.composing = false
+			s.composing, s.preedit = false, ""
 			s.send("composition", map[string]any{"state": "end", "text": ev.Text})
 		} else {
 			s.send("insert", map[string]any{"text": ev.Text})
@@ -146,15 +170,12 @@ func (s *logseqEditorInput) input(ev ui.InputEvent) bool {
 	case ui.InputCompose:
 		if ev.Text == "" {
 			if s.composing {
-				s.composing = false
+				s.composing, s.preedit = false, ""
 				s.send("composition", map[string]any{"state": "cancel"})
 			}
 		} else {
-			if !s.composing {
-				s.composing = true
-				s.send("composition", map[string]any{"state": "start"})
-			}
-			s.send("composition", map[string]any{"state": "update", "text": ev.Text})
+			index := ui.UTF16Len(ev.Text[:extensionRuneByte(ev.Text, ev.Caret)])
+			s.SetMarkedText(nil, ev.Text, ui.TextInputRange{Start: index, End: index})
 		}
 		return true
 	case ui.InputSelect:
@@ -166,10 +187,10 @@ func (s *logseqEditorInput) input(ev ui.InputEvent) bool {
 		if ev.Kind == ui.InputPointerDown {
 			s.dragging = ev.Button == 0
 		}
-		if !s.dragging || logseqEditorServices.OffsetAt == nil {
+		if !s.dragging {
 			return false
 		}
-		offset, ok := logseqEditorServices.OffsetAt(s.n.String("block-id"), ev.X, ev.Y)
+		offset, ok := s.offsetAt(ui.Point{X: ev.X, Y: ev.Y})
 		if !ok || offset < 0 {
 			return false
 		}
@@ -195,7 +216,7 @@ func (s *logseqEditorInput) input(ev ui.InputEvent) bool {
 			s.send("key", map[string]any{"key": "a", "ctrl": true})
 			return true
 		case "copy", "cut", "paste", "pasteAndMatchStyle", "undo", "redo":
-			extensionGap(s.n.Identifier, "Edit-menu clipboard and undo commands need an OCaml-owned host service")
+			return s.editCommand(ev.Text)
 		}
 	}
 	return false
@@ -209,6 +230,9 @@ func (s *logseqEditorInput) TextForRange(r ui.TextInputRange) (string, ui.TextIn
 	text, _, _, ok := s.snapshot()
 	if !ok {
 		return "", ui.TextInputRange{}
+	}
+	if r.Start > r.End {
+		r.Start, r.End = r.End, r.Start
 	}
 	lo, hi := ui.UTF16ByteOffset(text, r.Start), ui.UTF16ByteOffset(text, r.End)
 	hi = max(lo, hi)
@@ -255,7 +279,7 @@ func (s *logseqEditorInput) ReplaceText(r *ui.TextInputRange, text string) {
 		return
 	}
 	if s.composing {
-		s.composing = false
+		s.composing, s.preedit = false, ""
 		s.send("composition", map[string]any{"state": "end", "text": text})
 	} else {
 		s.send("insert", map[string]any{"text": text})
@@ -263,6 +287,16 @@ func (s *logseqEditorInput) ReplaceText(r *ui.TextInputRange, text string) {
 }
 
 func (s *logseqEditorInput) SetMarkedText(r *ui.TextInputRange, text string, selected ui.TextInputRange) {
+	// A native IME may replace only part of its active preedit. This transient
+	// string is IME state, not an independently editable document.
+	if s.composing && r != nil && r.Start >= s.marked.Start && r.End <= s.marked.End && r.End >= r.Start && *r != s.marked {
+		lo := ui.UTF16ByteOffset(s.preedit, r.Start-s.marked.Start)
+		hi := ui.UTF16ByteOffset(s.preedit, r.End-s.marked.Start)
+		selected.Start += r.Start - s.marked.Start
+		selected.End += r.Start - s.marked.Start
+		text = s.preedit[:lo] + text + s.preedit[hi:]
+		r = nil
+	}
 	if !s.replaceRange(r) {
 		return
 	}
@@ -297,23 +331,107 @@ func (s *logseqEditorInput) UnmarkText() {
 
 func (s *logseqEditorInput) BoundsForRange(r ui.TextInputRange) (ui.Rect, ui.TextInputRange, bool) {
 	text, _, _, ok := s.snapshot()
-	if !ok || logseqEditorServices.CaretRect == nil {
+	if !ok {
 		return ui.Rect{}, ui.TextInputRange{}, false
 	}
 	offset := ui.UTF16ByteOffset(text, r.Start)
-	rect, ok := logseqEditorServices.CaretRect(s.n.String("block-id"), offset)
+	rect, ok := s.caretRect(offset)
 	index := ui.UTF16Len(text[:offset])
 	return rect, ui.TextInputRange{Start: index, End: index}, ok
 }
 
 func (s *logseqEditorInput) IndexForPoint(p ui.Point) (int, bool) {
 	text, _, _, ok := s.snapshot()
-	if !ok || logseqEditorServices.OffsetAt == nil {
+	if !ok {
 		return 0, false
 	}
-	offset, ok := logseqEditorServices.OffsetAt(s.n.String("block-id"), p.X, p.Y)
+	offset, ok := s.offsetAt(p)
 	if !ok || !extensionByteBoundary(text, offset) {
 		return 0, false
 	}
 	return ui.UTF16Len(text[:offset]), true
+}
+
+func (s *logseqEditorInput) caretRect(offset int) (ui.Rect, bool) {
+	if l, ok := s.currentLayout(); ok {
+		r, ok := l.caret(offset)
+		if !ok {
+			return ui.Rect{}, false
+		}
+		a, ok := l.space.WindowToLocal(ui.Point{X: r.X, Y: r.Y})
+		if !ok {
+			return ui.Rect{}, false
+		}
+		b, ok := l.space.WindowToLocal(ui.Point{X: r.X + r.W, Y: r.Y + r.H})
+		if !ok {
+			return ui.Rect{}, false
+		}
+		return ui.Rect{X: min(a.X, b.X), Y: min(a.Y, b.Y), W: absEditor(a.X - b.X), H: absEditor(a.Y - b.Y)}, true
+	}
+	return ui.Rect{}, false
+}
+
+func absEditor(value float32) float32 {
+	if value < 0 {
+		return -value
+	}
+	return value
+}
+
+func (s *logseqEditorInput) offsetAt(p ui.Point) (int, bool) {
+	if l, ok := s.currentLayout(); ok {
+		point, ok := l.space.LocalToWindow(p)
+		if !ok {
+			return 0, false
+		}
+		return l.offsetAt(point)
+	}
+	return 0, false
+}
+
+func (s *logseqEditorInput) editCommand(command string) bool {
+	if s.composing {
+		return false
+	}
+	switch command {
+	case "copy", "cut":
+		text, a, b, ok := s.snapshot()
+		if !ok {
+			return false
+		}
+		lo, hi := min(a, b), max(a, b)
+		if lo == hi {
+			return true
+		}
+		if err := mygo.Clipboard.Write(transfer.TextData(text[lo:hi])); err != nil {
+			extensionGap(s.n.Identifier, err.Error())
+			return true
+		}
+		if command == "cut" {
+			s.send("delete", map[string]any{"kind": "selection"})
+		}
+		return true
+	case "paste", "pasteAndMatchStyle":
+		data, err := mygo.Clipboard.Read(transfer.Text)
+		if errors.Is(err, transfer.ErrFormat) {
+			return true
+		}
+		if err != nil {
+			extensionGap(s.n.Identifier, err.Error())
+			return true
+		}
+		payload, err := data.Read(transfer.Text)
+		if err != nil {
+			extensionGap(s.n.Identifier, err.Error())
+			return true
+		}
+		if len(payload) != 0 {
+			s.ReplaceText(nil, string(payload))
+		}
+		return true
+	case "undo", "redo":
+		s.send("key", map[string]any{"key": "z", "ctrl": true, "shift": command == "redo"})
+		return true
+	}
+	return false
 }
