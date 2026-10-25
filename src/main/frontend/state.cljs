@@ -1834,7 +1834,7 @@ should be done through this fn in order to get global config and config defaults
    (set-selection-blocks! blocks direction)))
 
 (defn set-editing!
-  [edit-input-id content block cursor-range & {:keys [move-cursor? container-id property-block direction event pos]
+  [edit-input-id content block cursor-range & {:keys [move-cursor? container-id property-block direction event pos keep-whitespace?]
                                                :or {move-cursor? true}}]
   ;; Click-to-edit uses pointerdown -> set-editing!, not editor-on-hide.
   ;; Close slash/commands when the edit target changes; same-block re-edit keeps them.
@@ -1853,7 +1853,10 @@ should be done through this fn in order to get global config and config defaults
             block (assoc block :block.editing/direction direction
                          :block.editing/event event
                          :block.editing/pos pos)
-            content (string/trim (or content ""))
+            ;; keep-whitespace?: the content holds keys the user typed (a space
+            ;; typed last is still to be followed by the next word)
+            content (cond-> (or content "")
+                      (not keep-whitespace?) string/trim)
             block-id (:block/uuid block)
             editing-block-id (if property-block
                                [container-id (:block/uuid property-block) block-id]

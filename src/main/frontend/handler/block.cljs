@@ -54,13 +54,14 @@
     (state/set-editor-last-input-time! repo (util/time-ms))))
 
 (defn- edit-block-aux
-  [repo block content text-range {:keys [container-id direction event pos]}]
+  [repo block content text-range {:keys [container-id direction event pos keep-whitespace?]}]
   (when block
     (let [container-id (or container-id
                            (state/get-current-editor-container-id)
                            :unknown-container)]
       (state/set-editing! (str "edit-block-" (:block/uuid block)) content block text-range
-                          {:container-id container-id :direction direction :event event :pos pos}))
+                          (cond-> {:container-id container-id :direction direction :event event :pos pos}
+                            keep-whitespace? (assoc :keep-whitespace? true))))
     (mark-last-input-time! repo)))
 
 (defn block-unique-title
