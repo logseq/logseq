@@ -589,7 +589,7 @@
             (is (= {:embeds [] :count 0 :truncated false} response))
             (is (= [["logseq.DB.listEmbeds" [args]]] @calls))
             (is (= mcp-compat/list-embeds (get-in mcp-server/data-tools [:listEmbeds :fn])))
-            (is (= 53 (+ (count mcp-server/api-tools) (count mcp-server/data-tools))))
+            (is (= 54 (+ (count mcp-server/api-tools) (count mcp-server/data-tools))))
             (is (string/includes? (aget (get-in mcp-server/data-tools [:createEmbed :config]) "description") "before retrying"))
             (is (string? (aget (aget (aget (get-in mcp-server/data-tools [:createEmbed :config]) "inputSchema") "target_uuid") "description"))))
           (p/catch (fn [error] (is false (str error))))

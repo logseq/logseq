@@ -1760,43 +1760,48 @@
               availability (is-title-available api-fn #js {"title" new-title})
               clashes (remove #(= page-uuid (or (:uuid %) (:block/uuid %)))
                               (:held_by availability))]
-        (when-not page
-          (throw (js/Error. (str "No live page exists with exact UUID " page-uuid))))
-        (when (recycled-entity? page)
-          (throw (js/Error. (str "Page " page-uuid " is recycled and cannot be renamed"))))
-        (when (seq clashes)
-          (throw (js/Error. (str "An entity titled " (pr-str new-title)
-                                 " already exists; renaming onto it would make the two indistinguishable"))))
-        (p/let [response (api-fn "logseq.DB.renamePage" [page-uuid new-title])]
-          (when-let [error (and response (aget response "error"))]
-            (throw (js/Error. (str error))))
-          (p/let [current-result (api-fn "logseq.DB.datascriptQuery" [page-query (uuid-query-input page-uuid)])
-                  current (js->clj current-result :keywordize-keys true)]
-            (cond
-              (or (nil? current) (not= new-title (or (:title current) (:block/title current)))
-                  (not (or (:name current) (:block/name current)))
-                  (recycled-entity? current))
-              {:validation nil
-               :response (js->clj response :keywordize-keys true)
-               :verified_entities []
-               :recovered_after_timeout false
-               :verified false
-               :previous_entities [page]
-               :observed_entities (if current [current] [])
-               :diagnostic "Rename was not observed on the original page UUID."}
+        (cond
+          (nil? page)
+          (p/rejected (js/Error. (str "No live page exists with exact UUID " page-uuid)))
 
-              verbose?
-              {:validation nil
-               :response (js->clj response :keywordize-keys true)
-               :verified_entities [current]
-               :recovered_after_timeout false
-               :verified true
-               :previous_entities [page]
-               :diagnostic nil}
+          (recycled-entity? page)
+          (p/rejected (js/Error. (str "Page " page-uuid " is recycled and cannot be renamed")))
 
-              :else
-              (merge {:verified true :diagnostic nil :previous_count 1}
-                     (entity-write-digest current)))))))))
+          (seq clashes)
+          (p/rejected (js/Error. (str "An entity titled " (pr-str new-title)
+                                    " already exists; renaming onto it would make the two indistinguishable")))
+
+          :else
+          (p/let [response (api-fn "logseq.DB.renamePage" [page-uuid new-title])]
+            (if-let [error (and response (aget response "error"))]
+              (p/rejected (js/Error. (str error)))
+              (p/let [current-result (api-fn "logseq.DB.datascriptQuery" [page-query (uuid-query-input page-uuid)])
+                      current (js->clj current-result :keywordize-keys true)]
+                (cond
+                  (or (nil? current) (not= new-title (or (:title current) (:block/title current)))
+                      (not (or (:name current) (:block/name current)))
+                      (recycled-entity? current))
+                  {:validation nil
+                   :response (js->clj response :keywordize-keys true)
+                   :verified_entities []
+                   :recovered_after_timeout false
+                   :verified false
+                   :previous_entities [page]
+                   :observed_entities (if current [current] [])
+                   :diagnostic "Rename was not observed on the original page UUID."}
+
+                  verbose?
+                  {:validation nil
+                   :response (js->clj response :keywordize-keys true)
+                   :verified_entities [current]
+                   :recovered_after_timeout false
+                   :verified true
+                   :previous_entities [page]
+                   :diagnostic nil}
+
+                  :else
+                  (merge {:verified true :diagnostic nil :previous_count 1}
+                         (entity-write-digest current)))))))))))
 
 (defn retitle-over-duplicate
   [api-fn args]
