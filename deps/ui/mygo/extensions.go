@@ -48,12 +48,7 @@ max-width max-height gap row-gap column-gap background shadow display main cross
 	}
 	out["logseq-dom"] = luimygo.Extension{
 		Fingerprint: extensionFingerprint("logseq-dom", false, nil, nil, []extensionEventSchema{dom}),
-		Render: func(c *ui.Context, _ luimygo.Node, _ func(), _ func(luimygo.Event)) {
-			// This schema is intentionally an invisible, childless event carrier.
-			// MyGo has no extension-level window capture API; do not steal focus.
-			extensionGap("logseq-dom", "window/document event capture is not available to extension renderers")
-			ui.Box(c).Size(0, 0)
-		},
+		Render:      s.renderDocumentEvents,
 	}
 	editorProps := extensionFields("string", false, "composition runs accessibility-identifier data-testid style-class attrs")
 	editorProps = append(editorProps, extensionFields("string", true, "block-id")...)
