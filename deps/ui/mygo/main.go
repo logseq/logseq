@@ -70,6 +70,32 @@ func run() (result error) {
 			Dispatch:   host.dispatch,
 		})
 		host.services.backend = host.backend
+		host.services.resources = newResourceRenderer(host.backend)
+		host.services.resources.Style = host.services.elementStyle
+		host.services.NaturalSize = func(id int64) (float32, float32, bool) {
+			if width, height, ready := host.services.resources.NaturalSize(id); ready {
+				return width, height, true
+			}
+			return host.backend.NaturalImageSize(id)
+		}
+		host.services.EditorDOM = func(c *ui.Context, op string, body json.RawMessage) ([]platformReply, error) {
+			if _, err := host.services.EditorRequest(op, string(body)); err != nil {
+				return nil, err
+			}
+			return host.services.EditorAfterFrame(c)
+		}
+		host.document = NewDocumentEvents(host.backend, func(name, payload string) bool {
+			if host.closing {
+				return true
+			}
+			prevented, err := r.DocumentEvent(name, payload)
+			if err != nil {
+				host.fail(err)
+				return true
+			}
+			return prevented
+		})
+		host.document.Pointer = host.services.EditorPointer
 		if err := r.Start(); err != nil {
 			host.fail(err)
 			return
@@ -94,6 +120,23 @@ func run() (result error) {
 				host.err = errors.Join(host.err, err)
 			}
 		})
+		host.services.Invalidate = host.window.Invalidate
+		if err := host.services.StartDesktopServices(host.window, func(replies []platformReply, err error) {
+			for _, reply := range replies {
+				if dispatchErr := r.PlatformEvent(reply); dispatchErr != nil {
+					host.fail(dispatchErr)
+					return
+				}
+			}
+			if err != nil {
+				log.Printf("logseq: desktop service: %v", err)
+			}
+			host.fail(host.drain())
+			host.window.Invalidate()
+		}); err != nil {
+			host.fail(err)
+			return
+		}
 		go host.watchWakeups()
 	})
 	mygo.App.OnWindowAllClosed(func() { mygo.App.Quit() })
@@ -115,6 +158,7 @@ type windowHost struct {
 	runtime    *ocamlRuntime
 	backend    *luimygo.Backend
 	services   *platformServices
+	document   *DocumentEvents
 	window     *mygo.Window
 	done       chan struct{}
 	closed     bool
@@ -253,6 +297,12 @@ func (h *windowHost) applyPatches(payload string, snapshot bool) error {
 		if err := h.backend.ApplyJSON(batch, snapshot); err != nil {
 			return fmt.Errorf("logseq: apply native batch: %w", err)
 		}
+		var applied luimygo.Batch
+		if err := json.Unmarshal(batch, &applied); err != nil {
+			return err
+		}
+		h.services.AppliedBatch(applied, snapshot)
+		h.services.resources.Sync()
 	}
 	return nil
 }
@@ -327,6 +377,7 @@ func (h *windowHost) view(c *ui.Context) {
 		}
 	}
 	h.services.View(c)
+	h.document.Capture(c)
 	// Backend.View enqueues its lifecycle dispatch before this callback, so
 	// failures raised after layout are observed during the same frame.
 	c.AfterFrame(func() {
@@ -339,6 +390,12 @@ func (h *windowHost) view(c *ui.Context) {
 			h.fail(err)
 			return
 		}
+		editorReplies, err := h.services.EditorAfterFrame(c)
+		if err != nil {
+			h.fail(err)
+			return
+		}
+		replies = append(replies, editorReplies...)
 		for _, reply := range replies {
 			if err := h.runtime.PlatformEvent(reply); err != nil {
 				h.fail(err)
@@ -358,9 +415,16 @@ func (h *windowHost) close() error {
 	}
 	h.closed = true
 	close(h.done)
+	if h.services != nil {
+		h.services.CloseDesktopServices()
+		h.services.CloseEditor()
+		if h.services.resources != nil {
+			h.services.resources.Close()
+		}
+	}
 	err := h.runtime.Close()
 	// Disposal patches are deliberately not rendered after the window closes.
-	// Services/resources are released only after OCaml stops producing events.
+	// Runtime disposal may still enqueue patches; do not render them after close.
 	_, callbackErr := h.runtime.takeMessages()
 	if h.backend != nil {
 		h.backend.Close()

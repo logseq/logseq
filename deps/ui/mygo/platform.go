@@ -33,6 +33,7 @@ type platformServices struct {
 	EditorDOM   func(c *ui.Context, op string, body json.RawMessage) ([]platformReply, error)
 	DOMMutation func(op string, body json.RawMessage) error
 	Invalidate  func()
+	resources   *resourceRenderer
 }
 
 type platformUIState struct {
@@ -57,15 +58,11 @@ func newPlatformServices(backend *luimygo.Backend) *platformServices {
 // system-theme detector and lose the real desktop preference.
 func (s *platformServices) View(c *ui.Context) {
 	previous := c.Theme()
-	if s.state != nil {
-		switch s.state.Data["theme"] {
-		case "light":
-			c.SetTheme(ui.LightTheme())
-		case "dark":
-			c.SetTheme(ui.DarkTheme())
-		}
-	}
 	defer c.SetTheme(previous)
+	if err := s.ApplyTheme(c); err != nil {
+		panic(err)
+	}
+	s.resources.Sync()
 	s.backend.View(c)
 }
 
@@ -221,12 +218,7 @@ func (s *platformServices) handle(name, payload string) ([]platformReply, error)
 		if err := platformObject(payload, &snapshot); err != nil {
 			return nil, err
 		}
-		if (snapshot.Mode != "light" && snapshot.Mode != "dark") || snapshot.Vars == nil {
-			return nil, fmt.Errorf("light/dark mode and vars are required")
-		}
-		s.snapshots[snapshot.Mode] = snapshot
-		s.reportGap("theme-snapshot", "application CSS variables are retained but cannot be installed through the backend's public API; authored CSS variable resolution is not implemented")
-		return nil, nil
+		return nil, s.InstallThemeSnapshot(snapshot)
 	case "dom-op":
 		op, body, ok := strings.Cut(payload, "\n")
 		if !ok || op == "" || strings.ContainsAny(op, "\r\x00") {

@@ -35,10 +35,15 @@ their typed ABI rather than disguising them as extension events. Geometry is
 queried only after a committed frame. Focus and imperative scrolling use LUI's
 production host services, including its node-lifetime and scroll-token checks.
 
-This is an initial host integration, not desktop feature or visual parity.
-Known gaps are reported explicitly: document/window event capture, editor
-shaped-layout measurements and hit testing, application CSS-variable/theme
-cascade, and unsupported raw markup/media. The editor source and selection stay
-in OCaml; the input sink must not invent geometry or maintain a second document.
-File, image, clipboard and shell services use public platform APIs where wired;
-an unsupported request is not acknowledged as a successful operation.
+The host routes document input synchronously through OCaml before native default
+handling. Editor caret, selection and pointer queries use committed retained text
+layout; the input sink does not maintain a second document. Theme snapshots feed
+the backend's scoped color defaults. Native file dialogs, downloads, clipboard,
+image decoding and shutdown saving use their real platform services.
+
+This is not a claim of desktop feature or visual parity. Full-window acceptance
+is separate from builds and headless contract tests. Raw CSS classes are not a
+stylesheet engine; unsupported markup/media and imperative operations are
+reported explicitly. Relative assets require an explicit graph-owned resolver.
+Ambiguous multiline atomic decorations do not fabricate source line ranges.
+An unsupported request is never acknowledged as a successful operation.

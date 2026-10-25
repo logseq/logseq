@@ -56,6 +56,7 @@ type resourceRenderer struct {
 	// ResolveSource may resolve graph-relative src values through that same owner.
 	ResolveAsset  func(filename string) (string, error)
 	ResolveSource func(source string) (string, error)
+	Style         func(c *ui.Context, e ui.Element, n luimygo.Node, attrs map[string]string, tag string)
 }
 
 func newResourceRenderer(backend *luimygo.Backend) *resourceRenderer {
@@ -222,7 +223,9 @@ func (r *resourceRenderer) Render(c *ui.Context, n luimygo.Node, tag string, _ f
 		panic(err)
 	}
 	attrs := extensionAttrs(n)
-	extensionElementStyle(e, n, attrs, tag)
+	if r.Style != nil {
+		r.Style(c, e, n, attrs, tag)
+	}
 	if label := attrs["alt"]; label != "" {
 		e.Label(label)
 	} else if label := n.String("accessibility-identifier"); label != "" {

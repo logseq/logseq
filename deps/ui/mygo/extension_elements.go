@@ -127,6 +127,9 @@ func (services *platformServices) renderLogseqElement(tag string) luimygo.Render
 			ui.Box(c).Size(0, 0)
 			return
 		}
+		if services.resources.Render(c, n, tag, children, emit) {
+			return
+		}
 		switch tag {
 		case "img", "video", "audio", "iframe", "canvas", "pdf", "svg", "path", "circle", "rect", "line", "polyline", "polygon", "g", "defs", "use", "ellipse", "select", "option":
 			extensionUnavailable(c, n, "raw resource/SVG/select embedding requires a host adapter")
@@ -167,6 +170,7 @@ func (services *platformServices) renderLogseqElement(tag string) luimygo.Render
 				value = n.String("text")
 			}
 			textState.reconcile(value)
+			services.BindInputValue(n, &textState.value)
 			root.Children(func() {
 				if tag == "textarea" {
 					e = ui.TextArea(c, &textState.value)
@@ -176,12 +180,17 @@ func (services *platformServices) renderLogseqElement(tag string) luimygo.Render
 			})
 			_, readOnly := attrs["readonly"]
 			e.ReadOnly(readOnly).Placeholder(attrs["placeholder"])
+			services.BindInputControl(n, e, textState.value)
 			e.OnChange(func() {
 				extensionDOMEvent(n, emit, "input", map[string]any{"value": textState.value})
 				extensionDOMEvent(n, emit, "change", map[string]any{"value": textState.value})
 			})
 		} else {
-			if n.String("orientation") == "horizontal" || n.String("orientation") == "row" || strings.Contains(" span a b i em strong code small kbd u mark del ins sub sup tspan label img em-emoji tr ", " "+tag+" ") {
+			if attrs["data-scroll-container"] != "" {
+				e = ui.Scroll(c)
+				state := ui.Local(e, "raw-scroll", func() ui.ScrollState { return ui.ScrollState{} })
+				services.BindScrollControl(n, e, state)
+			} else if n.String("orientation") == "horizontal" || n.String("orientation") == "row" || strings.Contains(" span a b i em strong code small kbd u mark del ins sub sup tspan label img em-emoji tr ", " "+tag+" ") {
 				e = ui.Row(c)
 			} else {
 				e = ui.Column(c)
@@ -189,7 +198,7 @@ func (services *platformServices) renderLogseqElement(tag string) luimygo.Render
 			if n.String("flex-wrap") == "wrap" {
 				e.Wrap()
 			}
-			extensionElementStyle(e, n, attrs, tag)
+			services.elementStyle(c, e, n, attrs, tag)
 			e.Children(func() {
 				if text := n.String("text"); text != "" {
 					ui.Text(c, text).Wrap()
@@ -200,7 +209,7 @@ func (services *platformServices) renderLogseqElement(tag string) luimygo.Render
 			})
 		}
 		if tag == "input" || tag == "textarea" {
-			extensionElementStyle(e, n, attrs, tag)
+			services.elementStyle(c, e, n, attrs, tag)
 		}
 		services.bind(n, e)
 		_, disabled := attrs["disabled"]
@@ -216,52 +225,6 @@ func (services *platformServices) renderLogseqElement(tag string) luimygo.Render
 		if title := attrs["title"]; title != "" {
 			e.Tooltip(title)
 		}
-		// Capture the previous frame's affine transform as plain values. Do
-		// not retain Context or call build-only Element APIs from input callbacks.
-		ox, oy := e.LocalToWindow(0, 0)
-		ux, uy := e.LocalToWindow(1, 0)
-		vx, vy := e.LocalToWindow(0, 1)
-		lastPointer := ui.Local(e, "raw-pointer", func() map[string]any { return nil })
-		// Native OCaml dispatch enriches nodeId and bubbles through extension
-		// ancestors; capture basic document events even without local listeners.
-		e.HandleInput(func(ev ui.InputEvent) bool {
-			switch ev.Kind {
-			case ui.InputKeyDown, ui.InputKeyUp:
-				if key := extensionKey(ev.Key); key != "" {
-					name := "keydown"
-					if ev.Kind == ui.InputKeyUp {
-						name = "keyup"
-					}
-					extensionDOMEvent(n, emit, name, extensionDOMKey(ev, key))
-				}
-			case ui.InputPointerDown, ui.InputPointerUp, ui.InputPointerMove:
-				name := "mousemove"
-				if ev.Kind == ui.InputPointerDown {
-					name = "mousedown"
-				} else if ev.Kind == ui.InputPointerUp {
-					name = "mouseup"
-				}
-				x, y := ox+(ux-ox)*ev.X+(vx-ox)*ev.Y, oy+(uy-oy)*ev.X+(vy-oy)*ev.Y
-				button := ev.Button
-				if button == 1 {
-					button = 2 // MyGo secondary=1; DOM secondary=2.
-				} else if button == 2 {
-					button = 1
-				}
-				payload := map[string]any{"clientX": x, "clientY": y, "button": button, "shiftKey": ev.Mods&ui.Shift != 0,
-					"altKey": ev.Mods&ui.Alt != 0, "metaKey": ev.Mods&ui.Super != 0, "ctrlKey": ev.Mods&ui.Ctrl != 0}
-				*lastPointer = payload
-				extensionDOMEvent(n, emit, name, payload)
-				if ev.Kind == ui.InputPointerDown && ev.Button == 1 {
-					extensionDOMEvent(n, emit, "contextmenu", payload)
-				}
-				if ev.Kind == ui.InputPointerUp && ev.Clicks == 2 {
-					extensionDOMEvent(n, emit, "dblclick", payload)
-				}
-			}
-			return false // Preserve native text editing, click and Tab handling.
-		})
-		e.OnClick(func() { extensionDOMEvent(n, emit, "click", *lastPointer) })
 		if tag == "a" && attrs["href"] != "" {
 			extensionGap(n.Identifier, "external href navigation requires the OCaml host; click is forwarded")
 		}
@@ -288,7 +251,7 @@ func extensionLength(text string) (float32, bool) {
 	return float32(value), err == nil && !math.IsNaN(value) && !math.IsInf(value, 0) && value >= 0
 }
 
-func extensionElementStyle(e ui.Element, n luimygo.Node, attrs map[string]string, tag string) {
+func (services *platformServices) elementStyle(c *ui.Context, e ui.Element, n luimygo.Node, attrs map[string]string, tag string) {
 	for name, set := range map[string]func(float32){"font-size": func(v float32) { e.FontSize(v) }, "opacity": func(v float32) { e.Opacity(v) }, "corner-radius": func(v float32) { e.Radius(v) }} {
 		if _, ok := n.Props[name]; ok {
 			set(float32(n.Number(name, 0)))
@@ -383,11 +346,17 @@ func extensionElementStyle(e ui.Element, n luimygo.Node, attrs map[string]string
 		}
 	}
 	if background := n.String("background"); background != "" {
-		_, hexError := strconv.ParseUint(strings.TrimPrefix(background, "#"), 16, 32)
-		if strings.HasPrefix(background, "#") && hexError == nil && (len(background) == 4 || len(background) == 5 || len(background) == 7 || len(background) == 9) {
-			e.Background(ui.Hex(background))
-		} else {
-			extensionGap(n.Identifier, "non-hex background/CSS variables need theme resolution")
+		if _, err := services.ApplyElementColor(c, e, "background", background); err != nil {
+			panic(err)
+		}
+	}
+	for declaration := range strings.SplitSeq(attrs["style"], ";") {
+		property, value, ok := strings.Cut(declaration, ":")
+		if !ok {
+			continue
+		}
+		if _, err := services.ApplyElementColor(c, e, property, value); err != nil {
+			panic(err)
 		}
 	}
 	for _, name := range []string{"line-height", "letter-spacing", "shadow", "main", "cross"} {

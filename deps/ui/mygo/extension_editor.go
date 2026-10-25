@@ -39,6 +39,7 @@ func (services *platformServices) renderLogseqEditor(c *ui.Context, n luimygo.No
 	// sibling standard nodes. This extension is intentionally only the sink.
 	e := ui.Box(c).Size(1, 1).Focusable().Cursor(ui.CursorText).InputMethod(true)
 	services.bind(n, e)
+	services.BindEditorControl(n, e)
 	s := ui.Local(e, "logseq-editor-input", func() logseqEditorInput { return logseqEditorInput{} })
 	s.n, s.emit = n, emit
 	e.Bind(&s.handle)
