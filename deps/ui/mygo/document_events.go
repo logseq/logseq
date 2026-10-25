@@ -105,7 +105,7 @@ func (d *DocumentEvents) input(ev ui.InputEvent, host ui.InputTarget) bool {
 		case ui.InputClick:
 			// Never deliver a press to a replacement of the same retained ID.
 			if d.pressed.Node.ID != 0 && !d.pressed.Current() {
-				return false
+				return true
 			}
 			taken := d.send(target, "click", payload)
 			if ev.Clicks == 2 {
