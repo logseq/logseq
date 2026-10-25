@@ -401,6 +401,7 @@
            (edit-block! source-block' (+ (count source-title) (count typed-text))
                         {:container-id container-id
                          :custom-content (str source-title typed-text block-title)
+                         :keep-whitespace? true
                          :tail-len (count block-title)
                          :save-code-editor? false
                          :save-current-block? false
@@ -410,6 +411,7 @@
              (edit-block! source-block' (+ (count source-title) (count latest-text))
                           {:container-id container-id
                            :custom-content (str source-title latest-text block-title)
+                           :keep-whitespace? true
                            :tail-len (count block-title)
                            :save-code-editor? false
                            :save-current-block? false
@@ -426,7 +428,8 @@
                                :save-current-block? false
                                :skip-load? true}
                         (seq typed-text)
-                        (assoc :custom-content (str typed-text (:block/title block')))))
+                        (assoc :custom-content (str typed-text (:block/title block'))
+                               :keep-whitespace? true)))
          (clear-pending-new-block!))))))
 
 (defn insert-new-block-before-block-aux!
