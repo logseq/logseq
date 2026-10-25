@@ -18,14 +18,21 @@ import (
 	luimygo "github.com/logseq/lui/platform/mygo"
 )
 
-// All methods belong to the UI goroutine. File persistence, downloads and
-// timers remain owned by the existing OCaml native services.
+// All methods belong to the UI goroutine. Desktop jobs marshal completion back
+// onto that goroutine; document persistence and timers remain OCaml-owned.
 type platformServices struct {
 	backend   *luimygo.Backend
 	state     *platformUIState
 	snapshots map[string]platformThemeSnapshot
 	gaps      map[string]bool
-	measures  []map[string]json.RawMessage
+	controls  platformControls
+	desktop   platformDesktopServices
+	// Queries run on the UI thread after layout. A false natural-size result
+	// means decoding is still pending, not a successful zero-sized image.
+	NaturalSize func(id int64) (width, height float32, ready bool)
+	EditorDOM   func(c *ui.Context, op string, body json.RawMessage) ([]platformReply, error)
+	DOMMutation func(op string, body json.RawMessage) error
+	Invalidate  func()
 }
 
 type platformUIState struct {
@@ -64,29 +71,7 @@ func (s *platformServices) View(c *ui.Context) {
 
 // Measurements run after the frame commits, not while patches are being built.
 func (s *platformServices) AfterFrame(c *ui.Context) ([]platformReply, error) {
-	requests := s.measures
-	s.measures = nil
-	var replies []platformReply
-	for _, request := range requests {
-		id, err := s.resolveRef(request["ref"])
-		if err != nil {
-			return nil, err
-		}
-		result := map[string]any{"ref": request["ref"], "rect": nil}
-		if id != 0 {
-			if r, ok := s.backend.Bounds(c, id); ok {
-				result["nodeId"] = id
-				result["rect"] = map[string]float32{"left": r.X, "top": r.Y, "right": r.X + r.W,
-					"bottom": r.Y + r.H, "width": r.W, "height": r.H}
-			}
-		}
-		reply, err := platformJSONReply("node-rect", result)
-		if err != nil {
-			return nil, err
-		}
-		replies = append(replies, reply...)
-	}
-	return replies, nil
+	return s.afterDOMFrame(c)
 }
 
 func (s *platformServices) resolveRef(raw json.RawMessage) (int64, error) {
@@ -264,34 +249,111 @@ func (s *platformServices) domOp(op, body string) ([]platformReply, error) {
 	}
 	switch op {
 	case "measure-node":
-		s.measures = append(s.measures, request)
-		return nil, nil
-	case "focus", "set-scroll-top":
+		return nil, s.queueDOM(op, body, request, "ref")
+	case "focus", "set-scroll-top", "select", "set-selection-range", "set-value":
 		id, err := s.resolveRef(request["ref"])
 		if err != nil || id == 0 {
 			return nil, err
 		}
 		if op == "focus" {
-			return nil, s.backend.RequestFocus(id)
+			if err := s.backend.RequestFocus(id); err != nil {
+				return nil, err
+			}
+			s.invalidateDOM()
+			return nil, nil
+		}
+		if op == "set-value" {
+			if !s.isTextControl(id) {
+				return nil, fmt.Errorf("node %d is not a native text control", id)
+			}
+			var value string
+			if err := platformRequired(request, "value", &value); err != nil {
+				return nil, err
+			}
+			if s.controls.values == nil {
+				s.controls.values = make(map[int64]platformValueCommand)
+			}
+			s.controls.values[id] = platformValueCommand{target: s.controlTarget(id), value: value}
+			s.invalidateDOM()
+			return nil, nil
+		}
+		if op == "select" || op == "set-selection-range" {
+			command := platformInputCommand{target: s.controlTarget(id), selectAll: op == "select"}
+			if !command.selectAll {
+				if err := platformRequired(request, "start", &command.start); err != nil {
+					return nil, err
+				}
+				if err := platformRequired(request, "end", &command.end); err != nil {
+					return nil, err
+				}
+				if command.start < 0 || command.end < 0 {
+					return nil, fmt.Errorf("selection offsets must not be negative")
+				}
+			}
+			if !s.isTextControl(id) {
+				return nil, fmt.Errorf("node %d is not a native text control", id)
+			}
+			if s.controls.input == nil {
+				s.controls.input = make(map[int64]platformInputCommand)
+			}
+			s.controls.input[id] = command
+			s.invalidateDOM()
+			if command.selectAll {
+				return nil, s.backend.RequestFocus(id)
+			}
+			return nil, nil
 		}
 		var top float32
-		if err := json.Unmarshal(request["top"], &top); err != nil {
+		if err := platformRequired(request, "top", &top); err != nil {
 			return nil, err
 		}
-		x, _, err := s.backend.ScrollOffset(id)
-		if err != nil {
+		return nil, s.queueDOM(op, body, request, "ref")
+	case "set-input-focus":
+		var block string
+		var focused bool
+		if err := platformRequired(request, "block-id", &block); err != nil {
 			return nil, err
 		}
-		return nil, s.backend.ScrollTo(id, x, top)
-	case "select", "set-selection-range", "set-input-focus":
-		return nil, fmt.Errorf("model-owned editor focus/selection service is not connected")
+		if block == "" {
+			return nil, fmt.Errorf("block-id must not be empty")
+		}
+		if err := platformRequired(request, "focused", &focused); err != nil {
+			return nil, err
+		}
+		if s.controls.editorFocus == nil {
+			s.controls.editorFocus = make(map[string]platformFocusCommand)
+		}
+		// The model can request focus before its sink's mount patch arrives.
+		// BindEditorControl consumes the latest intent, never a fake focus ack.
+		s.controls.editorFocus[block] = platformFocusCommand{s.controlTarget(s.editorNode(block)), focused}
+		s.invalidateDOM()
+		return nil, nil
+	case "open-file-picker", "download-text", "download-binary":
+		return nil, s.desktopFileRequest(op, request)
 	case "natural-size":
-		return nil, fmt.Errorf("the backend exposes no decoded image natural-size query")
+		return nil, s.queueDOM(op, body, request, "ref")
+	case "scroll-into-view", "scroll-to-node":
+		return nil, s.queueDOM(op, body, request, "ref")
+	case "scroll-row-into-view":
+		return nil, s.queueDOM(op, body, request, "row")
 	case "caret-rect", "selection-rects", "offset-at", "line-ranges", "scroll-height":
-		return nil, fmt.Errorf("the OCaml editor shaped-layout bridge is not available; model offsets and geometry cannot be inferred from node properties")
+		return nil, s.queueDOM(op, body, request, "")
+	case "set-text-content", "set-attr", "remove-attr", "set-class", "class-add", "class-remove", "style-set-property", "set-checked", "remove", "click":
+		return nil, s.queueDOM(op, body, request, "ref")
 	default:
 		return nil, fmt.Errorf("required DOM operation is not implemented by the MyGo host")
 	}
+}
+
+func platformRequired(request map[string]json.RawMessage, name string, result any) error {
+	raw, ok := request[name]
+	if !ok || string(raw) == "null" {
+		return fmt.Errorf("%s is required", name)
+	}
+	if err := json.Unmarshal(raw, result); err != nil {
+		return fmt.Errorf("invalid %s: %w", name, err)
+	}
+	return nil
 }
 
 func platformObject(payload string, result any) error {
