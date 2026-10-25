@@ -118,7 +118,7 @@ func resourceValidateSVG(payload []byte) error {
 	}
 }
 
-func resourceRetainedSVG(backend *luimygo.Backend, root luimygo.Node) (string, error) {
+func resourceRetainedSVG(node func(int64) (luimygo.Node, bool), root luimygo.Node) (string, error) {
 	var out bytes.Buffer
 	encoder := xml.NewEncoder(&out)
 	count := 0
@@ -161,7 +161,7 @@ func resourceRetainedSVG(backend *luimygo.Backend, root luimygo.Node) (string, e
 			}
 		}
 		for _, id := range n.Children {
-			child, ok := backend.Node(id)
+			child, ok := node(id)
 			if !ok {
 				return errors.New("retained SVG child is missing")
 			}

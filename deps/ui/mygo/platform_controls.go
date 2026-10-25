@@ -233,8 +233,9 @@ func (s *platformServices) isTextControl(id int64) bool {
 }
 
 // BindInputControl is called during construction, on an actual TextInput or
-// TextArea, after reconciling its OCaml-owned text. It returns DOM UTF-16 offsets
-// for event payloads. Neither the text nor the frame's Element is retained.
+// TextArea, after reconciling its OCaml-owned text. Returned UTF-16 offsets are
+// build-time only; event handlers must query InputTextSnapshot instead. Neither
+// the text nor the frame's Element is retained.
 func (s *platformServices) BindInputControl(n luimygo.Node, e ui.Element, text string) (start, end int) {
 	e.FocusBind(&s.controls.focused, n.ID)
 	if command, ok := s.controls.input[n.ID]; ok {
@@ -306,6 +307,17 @@ func platformRuneUTF16(text string, offset int) int {
 		offset--
 	}
 	return units
+}
+
+func appendInputTextSnapshot(backend *luimygo.Backend, c *ui.Context, id int64, payload map[string]any) bool {
+	text, anchor, caret, ok := backend.InputTextSnapshot(c, id)
+	if !ok {
+		return false
+	}
+	payload["value"] = text
+	payload["selectionStart"] = platformRuneUTF16(text, min(anchor, caret))
+	payload["selectionEnd"] = platformRuneUTF16(text, max(anchor, caret))
+	return true
 }
 
 func (s *platformServices) queueDOM(op, body string, request map[string]json.RawMessage, refField string) error {

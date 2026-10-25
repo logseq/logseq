@@ -34,6 +34,7 @@ type platformServices struct {
 	DOMMutation func(op string, body json.RawMessage) error
 	Invalidate  func()
 	resources   *resourceRenderer
+	mutations   *domMutationRenderer
 }
 
 type platformUIState struct {

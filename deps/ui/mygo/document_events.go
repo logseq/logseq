@@ -22,6 +22,7 @@ type DocumentEvents struct {
 	Pointer         func(ev ui.InputEvent, target int64) bool
 	backend         *luimygo.Backend
 	dispatch        DocumentDispatch
+	context         *ui.Context
 	services        ui.Services
 	pressed         luimygo.InputNode
 	composing       bool
@@ -39,6 +40,7 @@ func NewDocumentEvents(backend *luimygo.Backend, dispatch DocumentDispatch) *Doc
 // Keep DocumentEvents for the window's lifetime. This overrides the carrier's
 // observational dispatch with the host's synchronous default-prevention ABI.
 func (d *DocumentEvents) Capture(c *ui.Context) {
+	d.context = c
 	d.services = c.Services()
 	c.CaptureInput(d.input)
 }
@@ -63,6 +65,7 @@ func (d *DocumentEvents) send(target luimygo.InputNode, name string, payload map
 	}
 	if target.Node.ID != 0 {
 		payload["nodeId"] = target.Node.ID
+		appendInputTextSnapshot(d.backend, d.context, target.Node.ID, payload)
 	}
 	encoded, err := json.Marshal(payload)
 	if err != nil {

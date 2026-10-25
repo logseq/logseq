@@ -121,9 +121,16 @@ func (s *extensionTextState) reconcile(value string) {
 
 func (services *platformServices) renderLogseqElement(tag string) luimygo.Renderer {
 	return func(c *ui.Context, n luimygo.Node, children func(), emit func(luimygo.Event)) {
+		if services.mutations != nil {
+			n = services.mutations.BindDOMMutations(n)
+			if len(n.Children) == 0 {
+				children = func() {}
+			}
+		}
 		attrs := extensionAttrs(n)
 		_, hidden := attrs["hidden"]
-		if n.String("display") == "none" || hidden {
+		visible, explicitVisible := n.Props["visible"].(bool)
+		if n.String("display") == "none" || hidden || explicitVisible && !visible {
 			ui.Box(c).Size(0, 0)
 			return
 		}
@@ -150,6 +157,9 @@ func (services *platformServices) renderLogseqElement(tag string) luimygo.Render
 			root := ui.Column(c)
 			checked := ui.Local(root, "raw-checkbox", func() bool { return false })
 			_, *checked = attrs["checked"]
+			if value, explicit := n.Props["checked"].(bool); explicit {
+				*checked = value
+			}
 			root.Children(func() { e = ui.Checkbox(c, checked, n.String("text")) })
 			e.OnChange(func() {
 				payload := map[string]any{"checked": *checked}
@@ -181,9 +191,14 @@ func (services *platformServices) renderLogseqElement(tag string) luimygo.Render
 			_, readOnly := attrs["readonly"]
 			e.ReadOnly(readOnly).Placeholder(attrs["placeholder"])
 			services.BindInputControl(n, e, textState.value)
+			services.bind(n, e)
 			e.OnChange(func() {
-				extensionDOMEvent(n, emit, "input", map[string]any{"value": textState.value})
-				extensionDOMEvent(n, emit, "change", map[string]any{"value": textState.value})
+				payload := map[string]any{}
+				if !appendInputTextSnapshot(services.backend, c, n.ID, payload) {
+					return
+				}
+				extensionDOMEvent(n, emit, "input", payload)
+				extensionDOMEvent(n, emit, "change", payload)
 			})
 		} else {
 			if attrs["data-scroll-container"] != "" {
@@ -211,7 +226,9 @@ func (services *platformServices) renderLogseqElement(tag string) luimygo.Render
 		if tag == "input" || tag == "textarea" {
 			services.elementStyle(c, e, n, attrs, tag)
 		}
-		services.bind(n, e)
+		if textState == nil {
+			services.bind(n, e)
+		}
 		_, disabled := attrs["disabled"]
 		e.Disabled(disabled)
 		if label := attrs["aria-label"]; label != "" {
@@ -224,9 +241,6 @@ func (services *platformServices) renderLogseqElement(tag string) luimygo.Render
 		}
 		if title := attrs["title"]; title != "" {
 			e.Tooltip(title)
-		}
-		if tag == "a" && attrs["href"] != "" {
-			extensionGap(n.Identifier, "external href navigation requires the OCaml host; click is forwarded")
 		}
 		if n.String("style-class") != "" || attrs["style"] != "" {
 			extensionGap("raw markup", "CSS classes/styles are not a MyGo stylesheet; only supported typed properties and tag emphasis are rendered")
@@ -363,5 +377,8 @@ func (services *platformServices) elementStyle(c *ui.Context, e ui.Element, n lu
 		if _, ok := n.Props[name]; ok {
 			extensionGap(n.Identifier, "typed "+name+" is not implemented by the raw adapter")
 		}
+	}
+	if services.mutations != nil {
+		services.mutations.ApplyDOMMutationStyle(n, e)
 	}
 }

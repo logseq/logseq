@@ -70,7 +70,10 @@ func run() (result error) {
 			Dispatch:   host.dispatch,
 		})
 		host.services.backend = host.backend
+		host.services.mutations = newDOMMutationRenderer(host.services)
+		host.services.DOMMutation = host.services.mutations.HandleDOMMutation
 		host.services.resources = newResourceRenderer(host.backend)
+		host.services.resources.Project = host.services.mutations.BindDOMMutations
 		host.services.resources.Style = host.services.elementStyle
 		host.services.NaturalSize = func(id int64) (float32, float32, bool) {
 			if width, height, ready := host.services.resources.NaturalSize(id); ready {
@@ -96,6 +99,17 @@ func run() (result error) {
 			return prevented
 		})
 		host.document.Pointer = host.services.EditorPointer
+		host.services.mutations.Activate = func(n luimygo.Node) error {
+			if n.Identifier == "logseq-input" || n.Identifier == "logseq-textarea" {
+				return fmt.Errorf("native input activation requires the control's default action")
+			}
+			payload, err := json.Marshal(map[string]any{"nodeId": n.ID, "button": 0, "detail": 1})
+			if err != nil {
+				return err
+			}
+			_, err = r.DocumentEvent("click", string(payload))
+			return err
+		}
 		if err := r.Start(); err != nil {
 			host.fail(err)
 			return
@@ -302,6 +316,7 @@ func (h *windowHost) applyPatches(payload string, snapshot bool) error {
 			return err
 		}
 		h.services.AppliedBatch(applied, snapshot)
+		h.services.mutations.Sync()
 		h.services.resources.Sync()
 	}
 	return nil

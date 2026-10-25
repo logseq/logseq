@@ -442,6 +442,8 @@ let initialize_unlocked platform_code host_code (_payload : string) =
       match !current_app with
       | Some app -> Some (ext_snapshot (Lui_app.runtime app) id)
       | None -> None);
+  Platform.pre_dispatch_hook := Dom_ext.note_input_event;
+  Platform.post_dispatch_hook := Dom_ext.default_event;
   (match Sys.getenv_opt "LOGSEQ_DUMP" with
    | Some _ ->
        Platform.add_document_listener "click" (fun payload ->

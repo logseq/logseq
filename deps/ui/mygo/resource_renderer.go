@@ -57,6 +57,7 @@ type resourceRenderer struct {
 	ResolveAsset  func(filename string) (string, error)
 	ResolveSource func(source string) (string, error)
 	Style         func(c *ui.Context, e ui.Element, n luimygo.Node, attrs map[string]string, tag string)
+	Project       func(luimygo.Node) luimygo.Node
 }
 
 func newResourceRenderer(backend *luimygo.Backend) *resourceRenderer {
@@ -70,7 +71,7 @@ func newResourceRenderer(backend *luimygo.Backend) *resourceRenderer {
 
 func (r *resourceRenderer) source(n luimygo.Node) (resourceSource, error) {
 	if n.Identifier == "logseq-svg" {
-		svg, err := resourceRetainedSVG(r.backend, n)
+		svg, err := resourceRetainedSVG(r.node, n)
 		return resourceSource{"svg", svg}, err
 	}
 	if n.Identifier != "logseq-img" {
@@ -106,6 +107,14 @@ func (r *resourceRenderer) source(n luimygo.Node) (resourceSource, error) {
 	return resolved, err
 }
 
+func (r *resourceRenderer) node(id int64) (luimygo.Node, bool) {
+	n, exists := r.backend.Node(id)
+	if exists && r.Project != nil {
+		n = r.Project(n)
+	}
+	return n, exists
+}
+
 func (r *resourceRenderer) release(id int64) {
 	owner, ok := r.owners[id]
 	if !ok {
@@ -123,7 +132,7 @@ func (r *resourceRenderer) release(id int64) {
 // Removed or changed sources cancel their work and release the last cached image.
 func (r *resourceRenderer) Sync() {
 	for id, owner := range r.owners {
-		n, ok := r.backend.Node(id)
+		n, ok := r.node(id)
 		if !ok {
 			r.release(id)
 			continue
@@ -191,7 +200,7 @@ func (r *resourceRenderer) NaturalSize(id int64) (width, height float32, ready b
 	if !ok || r.closed {
 		return 0, 0, false
 	}
-	n, exists := r.backend.Node(id)
+	n, exists := r.node(id)
 	if !exists {
 		return 0, 0, false
 	}

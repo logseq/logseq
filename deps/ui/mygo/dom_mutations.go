@@ -323,6 +323,9 @@ func domMutationValidateStyle(name, value string) error {
 	value = strings.TrimSpace(value)
 	valid := false
 	switch name {
+	case "background", "background-color", "color", "border-color":
+		// The scoped theme resolver validates paint when the element is built.
+		valid = value != ""
 	case "display":
 		valid = value == "none" || value == "block" || value == "flex"
 	case "visibility":

@@ -470,9 +470,9 @@ let doc_query_selector_all (sel : string) : element list =
 
 (* ---------- element state ---------- *)
 
-(* live (value, selectionStart, selectionEnd) per DOM id — element
+(* live (value, selectionStart, selectionEnd) per retained element — element
    snapshots carry event-time values, but a browser's el.value tracks
-   typing. Editor_dom's pre_dispatch_hook refreshes these from event
+   typing. Platform's pre_dispatch_hook refreshes these from event
    payloads; readers fall back to the snapshot prop when no live field
    is recorded (e.g. a snapshot stored across later keystrokes). *)
 let live_fields : (string, string * int * int) Hashtbl.t =
@@ -488,10 +488,34 @@ let dom_id_of (el : element) : string option =
   | Some id when id <> "" -> Some id
   | _ -> str_prop "ref-id" el
 
+let input_field_key el =
+  let key = el_key el in
+  if key = "" then None else Some key
+
 let live_field (el : element) : (string * int * int) option =
-  match dom_id_of el with
+  match input_field_key el with
   | Some id -> Hashtbl.find_opt live_fields id
   | None -> None
+
+let note_input_event payload =
+  match str_prop "value" payload, target payload with
+  | Some value, Some el ->
+      Option.iter
+        (fun key ->
+          note_reference_owner el key;
+          let _, first, last =
+            Option.value (Hashtbl.find_opt live_fields key)
+              ~default:(value, 0, 0)
+          in
+          let offset name previous =
+            match num_prop name payload with
+            | Some n -> int_of_float n
+            | None -> previous
+          in
+          Hashtbl.replace live_fields key
+            (value, offset "selectionStart" first, offset "selectionEnd" last))
+        (input_field_key el)
+  | _ -> ()
 
 let get_attribute_raw (el : element) (name : string) : string option =
   if name = "id" then
@@ -508,13 +532,29 @@ let get_attribute (el : element) (name : string) : string option =
   | Some verdict -> verdict
   | None -> get_attribute_raw el name
 
+let default_event name payload =
+  if name = "click" && Option.value (num_prop "button" payload) ~default:0. = 0.
+  then
+    Option.iter
+      (fun el ->
+        Option.iter
+          (fun anchor ->
+            match get_attribute anchor "href" with
+            | Some href when href <> "" ->
+                if String.starts_with ~prefix:"#" href then
+                  Platform.set_location_hash href
+                else Platform.open_url href
+            | _ -> ())
+          (closest el "a[href]"))
+      (target payload)
+
 let value (el : element) : string =
   match live_field el with
   | Some (v, _, _) -> v
   | None -> Option.value (str_prop "value" el) ~default:""
 
 let set_value (el : element) (v : string) : unit =
-  (match dom_id_of el with
+  (match input_field_key el with
    | Some id -> (
        note_reference_owner el id;
        match Hashtbl.find_opt live_fields id with
@@ -524,7 +564,7 @@ let set_value (el : element) (v : string) : unit =
   Host.dom_op "set-value" (Js.Json.stringify (Js.Json.JObject [("ref", el); ("value", Js.Json.JString v)]))
 
 let set_selection_range (el : element) (s : int) (e : int) : unit =
-  (match dom_id_of el with
+  (match input_field_key el with
    | Some id -> (
        note_reference_owner el id;
        match Hashtbl.find_opt live_fields id with

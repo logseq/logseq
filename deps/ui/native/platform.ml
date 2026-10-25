@@ -163,7 +163,6 @@ let emit_event name payload =
   else begin
   if name = "click" then last_click_ms := now;
   propagation_stopped := false;
-  !pre_dispatch_hook payload;
   (* every listener sees the enriched payload: "target" injected from
      the host's nodeId — capture listeners run before the element bubble
      walk, so they need it just as early *)
@@ -184,6 +183,7 @@ let emit_event name payload =
           | None -> payload)
     | _ -> payload
   in
+  !pre_dispatch_hook payload;
   let run_listeners tbl =
     match Hashtbl.find_opt tbl name with
     | Some fns ->
