@@ -44,3 +44,21 @@
               :operator :before
               :value 123})
             [:operators :value-source :many? :values :value-after-operator-change])))))
+
+(deftest view-filter-data-keeps-deadline-timestamp-after-operator-change
+  (let [conn (d/create-conn db-schema/schema)
+        property {:db/ident :logseq.property/deadline
+                  :block/title "Deadline"
+                  :logseq.property/type :datetime}
+        custom-date (js/Date. "2024-06-01T00:00:00.000Z")]
+    (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+    (doseq [operator [:before :after]
+            value ["1 day ago" custom-date]]
+      (is (= value
+             (:value-after-operator-change
+              (worker-view/view-filter-data
+               @conn
+               {:property property
+                :property-ident :logseq.property/deadline
+                :operator operator
+                :value value})))))))
