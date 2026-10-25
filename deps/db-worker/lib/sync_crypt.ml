@@ -267,17 +267,138 @@ let encrypt_uint8array_fn : (Wire.t -> string -> Wire.t t) ref =
 let decrypt_uint8array_fn : (Wire.t -> Wire.t -> string t) ref =
   ref decrypt_uint8array_impl
 
+(* UTF-8 packing for AES *text* payloads.
+   Matches cljs frontend.common.crypt/<encrypt-text>, which TextEncoder-encodes
+   the transit string before AES-GCM. Melange platform strings are UTF-16; the
+   Aes_gcm helpers feed data through latin1 U8a.of_string, which truncates
+   code units >255. That corrupts Chinese titles and can break the inner
+   Transit JSON so decrypt_text_value leaves ["~#'", ...] as :block/title. *)
+
+let utf8_add_codepoint (buf : Buffer.t) (cp : int) : unit =
+  if cp < 0x80 then Buffer.add_char buf (Char.chr cp)
+  else if cp < 0x800 then begin
+    Buffer.add_char buf (Char.chr (0xC0 lor (cp lsr 6)));
+    Buffer.add_char buf (Char.chr (0x80 lor (cp land 0x3F)))
+  end
+  else if cp < 0x10000 then begin
+    Buffer.add_char buf (Char.chr (0xE0 lor (cp lsr 12)));
+    Buffer.add_char buf (Char.chr (0x80 lor ((cp lsr 6) land 0x3F)));
+    Buffer.add_char buf (Char.chr (0x80 lor (cp land 0x3F)))
+  end
+  else begin
+    Buffer.add_char buf (Char.chr (0xF0 lor (cp lsr 18)));
+    Buffer.add_char buf (Char.chr (0x80 lor ((cp lsr 12) land 0x3F)));
+    Buffer.add_char buf (Char.chr (0x80 lor ((cp lsr 6) land 0x3F)));
+    Buffer.add_char buf (Char.chr (0x80 lor (cp land 0x3F)))
+  end
+
+let utf8_bytes_of_string (s : string) : string =
+  let units = Unicode.utf16_units s in
+  let n = Array.length units in
+  let buf = Buffer.create (n * 3) in
+  let rec loop i =
+    if i >= n then Buffer.contents buf
+    else
+      let u = units.(i) in
+      if u >= 0xD800 && u <= 0xDBFF && i + 1 < n then
+        let u2 = units.(i + 1) in
+        if u2 >= 0xDC00 && u2 <= 0xDFFF then begin
+          utf8_add_codepoint buf
+            (0x10000 + ((u - 0xD800) lsl 10) + (u2 - 0xDC00));
+          loop (i + 2)
+        end
+        else begin
+          utf8_add_codepoint buf 0xFFFD;
+          loop (i + 1)
+        end
+      else if u >= 0xD800 && u <= 0xDFFF then begin
+        utf8_add_codepoint buf 0xFFFD;
+        loop (i + 1)
+      end
+      else begin
+        utf8_add_codepoint buf u;
+        loop (i + 1)
+      end
+  in
+  loop 0
+
+let utf8_decode_strict (bytes : string) : int list option =
+  let len = String.length bytes in
+  let byte i = Char.code (String.get bytes i) in
+  let rec loop i acc =
+    if i >= len then Some (List.rev acc)
+    else
+      let b0 = byte i in
+      if b0 < 0x80 then loop (i + 1) (b0 :: acc)
+      else if b0 < 0xC2 then None
+      else if b0 < 0xE0 then
+        if i + 1 >= len then None
+        else
+          let b1 = byte (i + 1) in
+          if b1 land 0xC0 <> 0x80 then None
+          else loop (i + 2) ((((b0 land 0x1F) lsl 6) lor (b1 land 0x3F)) :: acc)
+      else if b0 < 0xF0 then
+        if i + 2 >= len then None
+        else
+          let b1 = byte (i + 1) and b2 = byte (i + 2) in
+          if b1 land 0xC0 <> 0x80 || b2 land 0xC0 <> 0x80 then None
+          else
+            let cp =
+              ((b0 land 0x0F) lsl 12) lor ((b1 land 0x3F) lsl 6) lor (b2 land 0x3F)
+            in
+            if cp < 0x800 then None
+            else loop (i + 3) (cp :: acc)
+      else if b0 < 0xF5 then
+        if i + 3 >= len then None
+        else
+          let b1 = byte (i + 1) and b2 = byte (i + 2) and b3 = byte (i + 3) in
+          if
+            b1 land 0xC0 <> 0x80 || b2 land 0xC0 <> 0x80 || b3 land 0xC0 <> 0x80
+          then None
+          else
+            let cp =
+              ((b0 land 0x07) lsl 18)
+              lor ((b1 land 0x3F) lsl 12)
+              lor ((b2 land 0x3F) lsl 6)
+              lor (b3 land 0x3F)
+            in
+            if cp < 0x10000 || cp > 0x10FFFF then None
+            else loop (i + 4) (cp :: acc)
+      else None
+  in
+  loop 0 []
+
+let string_of_utf8_bytes (bytes : string) : string =
+  match utf8_decode_strict bytes with
+  | None ->
+      (* Legacy Melange ciphertexts truncated BMP chars into single latin1
+         bytes (e.g. café). Keep those as-is so ASCII-compatible legacy
+         packages still decrypt. *)
+      bytes
+  | Some cps ->
+      let units =
+        cps
+        |> List.concat_map (fun cp ->
+               if cp <= 0xFFFF then [ cp ]
+               else
+                 let cp = cp - 0x10000 in
+                 [ 0xD800 lor (cp lsr 10); 0xDC00 lor (cp land 0x3FF) ])
+        |> Array.of_list
+      in
+      Unicode.of_utf16_units units
+
 let encrypt_text_impl (aes_key : Wire.t) (text : string) : Wire.t t =
   run (fun () ->
       ignore (transit_read text);
       let iv = Crypto.random_bytes 12 in
+      let payload = utf8_bytes_of_string text in
       map
         (fun enc -> Wire.Array [ Wire.Binary iv; Wire.Binary enc ])
-        (Crypto.Aes_gcm.encrypt ~key:(raw_binary aes_key) ~iv text))
+        (Crypto.Aes_gcm.encrypt ~key:(raw_binary aes_key) ~iv payload))
 
 let decrypt_text_impl (aes_key : Wire.t) (v : Wire.t) : string t =
   catch
-    (decrypt_uint8array_impl aes_key v)
+    (map string_of_utf8_bytes (decrypt_uint8array_impl aes_key v))
     (fun e ->
       Worker_log.error "decrypt-text" [ ("error", exn_message e) ];
       error (ex_info "decrypt-text" []))
@@ -297,12 +418,13 @@ let decrypt_text_if_encrypted_fn : (Wire.t -> Wire.t -> string option t) ref =
 let encrypt_text_by_text_password_impl (text_password : string) (text : string) : Wire.t t =
   let salt = Crypto.random_bytes 16 in
   let iv = Crypto.random_bytes 12 in
+  let payload = utf8_bytes_of_string text in
   bind
     (Crypto.Pbkdf2.derive_aes_gcm_256 ~password:text_password ~salt ~iterations:600000)
     (fun derived ->
       map
         (fun enc -> Wire.Array [ Wire.Binary salt; Wire.Binary iv; Wire.Binary enc ])
-        (Crypto.Aes_gcm.encrypt ~key:derived ~iv text))
+        (Crypto.Aes_gcm.encrypt ~key:derived ~iv payload))
 
 let decrypt_text_by_text_password_impl (text_password : string) (v : Wire.t) : string t =
   catch
@@ -310,7 +432,8 @@ let decrypt_text_by_text_password_impl (text_password : string) (v : Wire.t) : s
      | [ Wire.Binary salt; Wire.Binary iv; Wire.Binary enc ] ->
          bind
            (Crypto.Pbkdf2.derive_aes_gcm_256 ~password:text_password ~salt ~iterations:600000)
-           (fun derived -> Crypto.Aes_gcm.decrypt ~key:derived ~iv enc)
+           (fun derived ->
+             map string_of_utf8_bytes (Crypto.Aes_gcm.decrypt ~key:derived ~iv enc))
      | _ -> invalid_arg "decrypt-text-by-text-password: expected [salt iv data]")
     (fun e ->
       Worker_log.error "decrypt-text-by-text-password" [ ("error", exn_message e) ];

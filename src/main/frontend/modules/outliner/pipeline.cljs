@@ -8,12 +8,16 @@
 
 (defn- update-editing-block-title-if-changed!
   [blocks]
-  (when-let [editing-block-uuid (:block/uuid (state/get-edit-block))]
-    (when-let [title (:block/title (get blocks editing-block-uuid))]
-      (let [editing-title (state/get-edit-content)]
-        (when (not= (string/trim (or editing-title ""))
-                    (string/trim title))
-          (state/set-edit-content! title))))))
+  ;; Skip while IME composition is active (e.g. Chinese input). Remote title
+  ;; updates must not replace the textarea mid-composition — that surfaces as
+  ;; the caret jumping and, when decrypt was wrong, as Transit JSON in the editor.
+  (when-not (state/editor-in-composition?)
+    (when-let [editing-block-uuid (:block/uuid (state/get-edit-block))]
+      (when-let [title (:block/title (get blocks editing-block-uuid))]
+        (let [editing-title (state/get-edit-content)]
+          (when (not= (string/trim (or editing-title ""))
+                      (string/trim title))
+            (state/set-edit-content! title)))))))
 
 (defn- current-page-deleted?
   [current-page deleted]

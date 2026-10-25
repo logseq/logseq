@@ -274,3 +274,75 @@
           "Graph load must not treat recycled pages as a user delete navigation.")
       (finally
         (state/replace-state! original-state)))))
+
+(deftest remote-title-update-skipped-during-ime-composition-test
+  (let [original-state (state/get-state)
+        repo "ime-composition-title-test"
+        block-uuid (random-uuid)
+        set-content-calls (atom [])
+        delta {:graph-id repo
+               :rev 15
+               :blocks {block-uuid {:block/uuid block-uuid
+                                    :block/title "[\"~#'\",\"你好\"]"}}
+               :deleted {}
+               :children {}
+               :affected-keys #{[:entity block-uuid]}}
+        tx-meta {:client-id "remote-client"}]
+    (try
+      (state/replace-state! {:client-id "local-client"
+                             :editor/in-composition? true
+                             :editor/block {:block/uuid block-uuid}
+                             :editor/content {block-uuid "ni"}})
+      (with-redefs [db-subs/apply-delta! (constantly true)
+                    state/get-current-repo (constantly repo)
+                    state/get-current-page (constantly nil)
+                    state/set-edit-content! (fn
+                                              ([title]
+                                               (swap! set-content-calls conj title))
+                                              ([_input-id title]
+                                               (swap! set-content-calls conj title))
+                                              ([_input-id title &_]
+                                               (swap! set-content-calls conj title)))]
+        (pipeline/invoke-hooks {:repo repo
+                                :tx-meta tx-meta
+                                :delta delta})
+        (is (= [] @set-content-calls)
+            "Remote title updates must not overwrite the textarea while IME composition is active."))
+      (finally
+        (state/replace-state! original-state)))))
+
+(deftest remote-title-update-applies-when-not-composing-test
+  (let [original-state (state/get-state)
+        repo "ime-idle-title-test"
+        block-uuid (random-uuid)
+        set-content-calls (atom [])
+        delta {:graph-id repo
+               :rev 16
+               :blocks {block-uuid {:block/uuid block-uuid
+                                    :block/title "你好"}}
+               :deleted {}
+               :children {}
+               :affected-keys #{[:entity block-uuid]}}
+        tx-meta {:client-id "remote-client"}]
+    (try
+      (state/replace-state! {:client-id "local-client"
+                             :editor/in-composition? false
+                             :editor/block {:block/uuid block-uuid}
+                             :editor/content {block-uuid "old"}})
+      (with-redefs [db-subs/apply-delta! (constantly true)
+                    state/get-current-repo (constantly repo)
+                    state/get-current-page (constantly nil)
+                    state/set-edit-content! (fn
+                                              ([title]
+                                               (swap! set-content-calls conj title))
+                                              ([_input-id title]
+                                               (swap! set-content-calls conj title))
+                                              ([_input-id title &_]
+                                               (swap! set-content-calls conj title)))]
+        (pipeline/invoke-hooks {:repo repo
+                                :tx-meta tx-meta
+                                :delta delta})
+        (is (= ["你好"] @set-content-calls)
+            "Remote title updates still apply when IME composition is idle."))
+      (finally
+        (state/replace-state! original-state)))))
