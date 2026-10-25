@@ -353,8 +353,7 @@ let main_scroll (ms : Model.t Signal.signal) : t =
 let detail_column (ms : Model.t Signal.signal) : t =
   Ui_parts.class_signal ms
     (fun (m : Model.t) ->
-      "flex-1 flex"
-      ^ if m.left_sidebar_open then " is-left-sidebar-open" else "")
+      if m.left_sidebar_open then "is-left-sidebar-open" else "")
     (column ~key:"left-container"
        ~accessibility_identifier:"left-container" ~grow:1.
        ~min_height:0
@@ -426,11 +425,11 @@ let help_menu_popup ~open_handbook () : t =
 
 let help_area (ms : Model.t Signal.signal) : t =
   Handbook.host ~controls:(fun open_handbook close_handbook -> Logseq_el.fragment
-    [ overlay ~key:"help-anchor" ~alignment:`bottom_trailing
-        [ Ui_components.with_props
-            [Ui_components.Prop.margin_right 32;Ui_components.Prop.margin_bottom (16+performance_bar_height)]
+    [ Ui_components.with_props
+            [Ui_components.Prop.position `absolute;Ui_components.Prop.inset_right 32.;
+             Ui_components.Prop.inset_bottom (float_of_int (16+performance_bar_height))]
             (Right_sidebar_view.help_trigger ~on_press:(fun () ->
-               close_handbook ();Runtime.send Action.Help_toggle;Runtime.flush ()) ()) ]
+               close_handbook ();Runtime.send Action.Help_toggle;Runtime.flush ()) ())
     ; reactive ~equal:(fun (a : Model.t) (b : Model.t) -> a.help_open = b.help_open) (fun (m : Model.t) ->
           if m.help_open then
             (* the dismiss catcher box is gone: the popover's own
@@ -471,7 +470,7 @@ let shell_contents (ms : Model.t Signal.signal) : t =
          (titlebar + page scroll), so the sidebar column spans the
          full window height like NavigationSplitView *)
       column ~key:"app" ~accessibility_identifier:"app-container" ~grow:1. ~min_height:0 ~gap:0
-        [row ~key:"panes" ~grow:1. ~min_height:0
+        [row ~key:"panes" ~grow:1. ~min_height:0 ~cross:`stretch
            [right_split ms st (left_split ms st (detail_column ms)) (right_sidebar ms);
             Pdf.container_el ~key:"asc" ~id:"app-single-container"];
          performance_bar ()]

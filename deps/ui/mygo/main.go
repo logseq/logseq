@@ -69,6 +69,10 @@ func run() (result error) {
 			Extensions: host.services.extensions(),
 			Dispatch:   host.dispatch,
 		})
+		if err := installApplicationIcons(host.backend, os.Getenv("LOGSEQ_NATIVE_ASSET_DIR")); err != nil {
+			host.fail(err)
+			return
+		}
 		host.services.backend = host.backend
 		host.services.mutations = newDOMMutationRenderer(host.services)
 		host.services.DOMMutation = host.services.mutations.HandleDOMMutation
