@@ -1,6 +1,7 @@
 (ns frontend.util.clock
   "Provides clock related functionality used by tasks"
-  (:require [frontend.util :as util]))
+  (:require [clojure.string :as string]
+            [frontend.util :as util]))
 
 (defn s->dhms-util
   "A function that returns the values for easier testing.
@@ -31,6 +32,17 @@
       (if (> seconds 0)
         (str seconds "s")
         ""))))
+
+(defn seconds->exact-duration
+  [seconds]
+  (if (zero? seconds)
+    "0s"
+    (let [[days hours minutes seconds] (s->dhms-util seconds)]
+      (->> [[days "d"] [hours "h"] [minutes "m"] [seconds "s"]]
+           (keep (fn [[value suffix]]
+                   (when (pos? value)
+                     (str value suffix))))
+           (string/join " ")))))
 
 (comment
   (defn minutes->hours:minutes

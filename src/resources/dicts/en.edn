@@ -2049,7 +2049,9 @@
  :view.table/sort-descending "Sort descending"
  :view.table/sort-groups-by "Sort groups by"
  :view.table/sort-groups-order "Sort groups order"
+ :view.table/time-spent "Time Spent"
  :view.table/total-refs-count "Total refs count"
+ :view.table/total-time "Total time: {1}"
  :view.table/unpin "Unpin"
 
  :web.test-site/help-test "I want to help test"

@@ -6,6 +6,7 @@
             [datascript.core :as d]
             [datascript.impl.entity :as de]
             [frontend.components.all-pages :as all-pages]
+            [frontend.components.block.status-history]
             [frontend.components.property.value :as property-value]
             [frontend.components.views :as views]
             [frontend.db.async :as db-async]
@@ -240,6 +241,114 @@
     (is (true? (#'views/filterable-column? title-column)))
     (is (false? (#'views/filterable-column? synthetic-backlinks-column))
         "Synthetic columns are not property entities or supported DB attributes and must not appear in the filter picker.")))
+
+(deftest query-time-spent-column-is-display-only-and-empty-for-zero-test
+  (let [timed-row (random-uuid)
+        long-timed-row (random-uuid)
+        zero-row (random-uuid)
+        column (views/query-time-spent-column {timed-row 11
+                                               long-timed-row 93784
+                                               zero-row 0})]
+    (is (= :block.temp/task-spent-time (:id column)))
+    (is (= "Time Spent" (:name column)))
+    (is (false? (:sortable? column)))
+    (is (nil? ((:cell column) nil {:block/uuid zero-row} column)))
+    (with-redefs [frontend.components.block.status-history/task-spent-time-value-cp
+                  (fn [seconds] [:time seconds])]
+      (is (= [:time 11]
+             ((:cell column) nil {:block/uuid timed-row} column)))
+      (is (= [:time 93784]
+             ((:cell column) nil {:block/uuid long-timed-row} column))
+          "Large durations use the same shared time display as task blocks."))))
+
+(deftest query-time-spent-column-is-visible-by-default-with-saved-order-test
+  (is (= #{:user.property/new}
+         (views/implicit-hidden-column-ids
+          [:select :block/title :block/created-at :block/updated-at
+           :block.temp/task-spent-time :user.property/new]
+          [:block/title]))))
+
+(deftest query-time-spent-column-default-order-test
+  (let [time-spent-column {:id :block.temp/task-spent-time}
+        columns [{:id :select}
+                 {:id :block/title}
+                 {:id :block/tags}
+                 {:id :logseq.property/status}
+                 {:id :block/created-at}
+                 {:id :block/updated-at}]]
+    (is (= [:select :block/title :block/tags :logseq.property/status
+            :block.temp/task-spent-time :block/created-at :block/updated-at]
+           (mapv :id (views/insert-query-time-spent-column columns time-spent-column))))
+    (is (= [:select :block/title :block.temp/task-spent-time
+            :block/created-at :block/updated-at]
+           (mapv :id
+                 (views/insert-query-time-spent-column
+                  (remove #(contains? #{:block/tags :logseq.property/status} (:id %)) columns)
+                  time-spent-column))))))
+
+(deftest query-heading-summary-includes-visible-and-exact-duration-test
+  (let [title "Live query"]
+    (is (= {:title title
+            :total "Total time: 2m"
+            :exact-duration "2m 54s"}
+           (views/query-heading-summary title 174))
+        "Aggregate seconds are preserved in the tooltip but truncated in the compact label.")
+    (is (= {:title title
+            :total "Total time: 3m"
+            :exact-duration "3m"}
+           (views/query-heading-summary title 180))
+        "The compact aggregate advances only at the full-minute boundary.")
+    (is (= {:title title
+            :total "Total time: 1d2h"
+            :exact-duration "1d 2h 3m 4s"}
+           (views/query-heading-summary title 93784)))
+    (is (= {:title title
+            :total "Total time: 2d10h"
+            :exact-duration "2d 10h 36m"}
+           (views/query-heading-summary title (+ (* 2 86400) (* 10 3600) (* 36 60))))
+        "Multi-day totals show days and hours; the tooltip keeps the minutes.")
+    (is (= {:title title
+            :total "Total time: 2d"
+            :exact-duration "2d"}
+           (views/query-heading-summary title (* 2 86400))))
+    (is (= {:title title
+            :total nil
+            :exact-duration nil}
+           (views/query-heading-summary title 0))
+        "A query with no tracked time shows no total.")
+    (is (= {:title title
+            :total nil
+            :exact-duration nil}
+           (views/query-heading-summary title nil))
+        "A missing summary (still loading) omits the total instead of showing 0.")))
+
+(deftest query-task-time-summary-uses-full-resource-total-when-windowed-test
+  (let [a (random-uuid)
+        b (random-uuid)
+        c (random-uuid)
+        window {:total-seconds 4 :seconds-by-block {a 4}}
+        offset {:total-seconds 7 :seconds-by-block {b 7}}
+        full {:total-seconds 11 :seconds-by-block {a 4 b 7 c 0}}]
+    (testing "a windowed query ignores the partial totals"
+      (is (= {:seconds-by-block {a 4}
+              :total-seconds nil}
+             (views/query-task-time-summary {:windowed? true :window window}))
+          "Before the full resource loads there is no total, not the window's total.")
+      (is (= {:seconds-by-block {a 4 b 7}
+              :total-seconds nil}
+             (views/query-task-time-summary {:windowed? true :window window :offset offset}))
+          "Rows from an offset window get their durations, still without a total.")
+      (is (= {:seconds-by-block {a 4 b 7 c 0}
+              :total-seconds 11}
+             (views/query-task-time-summary {:windowed? true
+                                             :window window
+                                             :offset offset
+                                             :full full}))
+          "Once the full resource loads its total covers every row."))
+    (testing "an unwindowed query uses its only resource"
+      (is (= {:seconds-by-block {a 4 b 7 c 0}
+              :total-seconds 11}
+             (views/query-task-time-summary {:windowed? false :window full}))))))
 
 (deftest all-pages-first-window-preview-uses-worker-display-title-test
   (let [page-uuid (random-uuid)

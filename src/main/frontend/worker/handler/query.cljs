@@ -46,52 +46,85 @@
                (d/pull @conn selector)
                (common-initial-data/with-parent @conn)))))
 
-(defn- block-status-history
-  [db block-id]
-  (->> (d/q '[:find ?history ?created-at ?status
-              :in $ ?block-id
+(defn- status-history-item
+  [db history-id created-at status-id]
+  (let [status (d/entity db status-id)]
+    {:db/id history-id
+     :block/created-at created-at
+     :logseq.property.history/property-ident :logseq.property/status
+     :logseq.property.history/ref-value-ident (:db/ident status)
+     :logseq.property.history/ref-value-uuid (:block/uuid status)
+     :logseq.property.history/ref-value-title (:block/title status)}))
+
+(defn- status-histories
+  "Returns {block-id sorted-status-history} for the blocks that have history."
+  [db block-ids]
+  (->> (d/q '[:find ?block ?history ?created-at ?status
+              :in $ [?block ...]
               :where
-              [?history :logseq.property.history/block ?block-id]
+              [?history :logseq.property.history/block ?block]
               [?history :logseq.property.history/property :logseq.property/status]
               [?history :logseq.property.history/ref-value ?status]
               [?history :block/created-at ?created-at]]
             db
-            block-id)
-       (map (fn [[history-id created-at status-id]]
-              (let [status (d/entity db status-id)]
-                {:db/id history-id
-                 :block/created-at created-at
-                 :logseq.property.history/property-ident :logseq.property/status
-                 :logseq.property.history/ref-value-ident (:db/ident status)
-                 :logseq.property.history/ref-value-uuid (:block/uuid status)
-                 :logseq.property.history/ref-value-title (:block/title status)})))
-       (sort-by :block/created-at)))
+            block-ids)
+       (group-by first)
+       (into {}
+             (map (fn [[block-id rows]]
+                    [block-id
+                     (->> rows
+                          (map (fn [[_block-id history-id created-at status-id]]
+                                 (status-history-item db history-id created-at status-id)))
+                          (sort-by :block/created-at))])))))
+
+(defn- block-status-history
+  [db block-id]
+  (get (status-histories db [block-id]) block-id))
+
+(defn- status-history-spent-seconds
+  [status-history now-ms]
+  (loop [[last-item item & others] status-history
+         time 0]
+    (if item
+      (let [last-status (:logseq.property.history/ref-value-ident last-item)
+            this-status (:logseq.property.history/ref-value-ident item)]
+        (if (and (= this-status :logseq.property/status.doing)
+                 (empty? others))
+          (-> (+ time (- now-ms (:block/created-at item)))
+              (quot 1000))
+          (let [time' (if (or
+                           (= last-status :logseq.property/status.doing)
+                           (and
+                            (not (contains? #{:logseq.property/status.canceled
+                                              :logseq.property/status.backlog
+                                              :logseq.property/status.done} last-status))
+                            (= this-status :logseq.property/status.done)))
+                        (+ time (- (:block/created-at item) (:block/created-at last-item)))
+                        time)]
+            (recur (cons item others) time'))))
+      (quot time 1000))))
 
 (defn task-spent-time
   [db block-id now-ms]
   (let [status-history (block-status-history db block-id)]
     (when (seq status-history)
-      (let [time (loop [[last-item item & others] status-history
-                        time 0]
-                   (if item
-                     (let [last-status (:logseq.property.history/ref-value-ident last-item)
-                           this-status (:logseq.property.history/ref-value-ident item)]
-                       (if (and (= this-status :logseq.property/status.doing)
-                                (empty? others))
-                         (-> (+ time (- now-ms (:block/created-at item)))
-                             (quot 1000))
-                         (let [time' (if (or
-                                          (= last-status :logseq.property/status.doing)
-                                          (and
-                                           (not (contains? #{:logseq.property/status.canceled
-                                                             :logseq.property/status.backlog
-                                                             :logseq.property/status.done} last-status))
-                                           (= this-status :logseq.property/status.done)))
-                                       (+ time (- (:block/created-at item) (:block/created-at last-item)))
-                                       time)]
-                           (recur (cons item others) time'))))
-                     (quot time 1000)))]
-        [(vec status-history) time]))))
+      [(vec status-history)
+       (status-history-spent-seconds status-history now-ms)])))
+
+(defn task-spent-times
+  "Returns elapsed seconds for every task id. Missing histories and non-task
+  blocks have an authoritative zero value."
+  [db block-ids now-ms]
+  (let [block-ids (vec (distinct block-ids))
+        histories (when (seq block-ids)
+                    (status-histories db block-ids))]
+    (into {}
+          (map (fn [block-id]
+                 [block-id
+                  (if-let [status-history (get histories block-id)]
+                    (status-history-spent-seconds status-history now-ms)
+                    0)]))
+          block-ids)))
 
 (def-thread-api :thread-api/task-spent-time
   [repo block-id]
