@@ -96,6 +96,12 @@ jobs:
         working-directory: deps/db-worker
         run: opam exec -- dune build
 
+      - name: Configure Linux OCaml shared-object linking
+        run: |
+          system_archive=$(cc -print-file-name=librt.a)
+          test -f "$system_archive"
+          echo "OCAMLPARAM=_,cclib=-L$(dirname "$system_archive")" >> "$GITHUB_ENV"
+
       - name: Build deps/ui
         working-directory: deps/ui
         run: opam exec -- dune build
