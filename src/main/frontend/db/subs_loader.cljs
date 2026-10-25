@@ -62,11 +62,15 @@
   leave before other resources so an open page's own blocks do not queue
   behind its title decorations and linked references."
   [entries]
-  (let [entries-by-kind (group-by entry-flush-kind entries)]
-    (mapcat (fn [kind]
-              (map vec (partition-all (get limits kind)
-                                      (get entries-by-kind kind))))
-            flush-kind-order)))
+  (let [{solo true batched false} (group-by #(boolean (:solo? %)) entries)
+        entries-by-kind (group-by entry-flush-kind batched)]
+    (concat
+     ;; entries of a failed batch, each in its own request (see flush!)
+     (map vector solo)
+     (mapcat (fn [kind]
+               (map vec (partition-all (get limits kind)
+                                       (get entries-by-kind kind))))
+             flush-kind-order))))
 
 (defn- worker-request
   [entries]
@@ -119,7 +123,16 @@
                             (p/resolve! (:result entry) value)))
                         (catch :default error
                           (reject! entries error)))))
-            (p/catch #(reject! entries %))
+            (p/catch (fn [error]
+                       ;; The worker fails a whole batch when one of its
+                       ;; resources fails (a block deleted after its request
+                       ;; was queued: "Missing renderer resource entity").
+                       ;; Send each entry again alone, so only the failing
+                       ;; one is rejected and the others still load.
+                       (if (and (next entries)
+                                (not (::cancelled (ex-data error))))
+                         (put-back! (map #(assoc % :solo? true) entries))
+                         (reject! entries error))))
             (p/finally (fn []
                          (reset! *flushing? false)
                          (flush!))))))))
