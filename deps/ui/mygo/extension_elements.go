@@ -128,9 +128,7 @@ func (services *platformServices) renderLogseqElement(tag string) luimygo.Render
 			}
 		}
 		attrs := extensionAttrs(n)
-		_, hidden := attrs["hidden"]
-		visible, explicitVisible := n.Props["visible"].(bool)
-		if n.String("display") == "none" || hidden || explicitVisible && !visible {
+		if !rawMarkupVisible(n) {
 			ui.Box(c).Size(0, 0)
 			return
 		}

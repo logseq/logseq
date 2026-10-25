@@ -63,7 +63,7 @@ func (s *platformServices) View(c *ui.Context) {
 	if err := s.ApplyTheme(c); err != nil {
 		panic(err)
 	}
-	s.resources.Sync()
+	s.resources.BeginView(c)
 	s.backend.View(c)
 }
 
