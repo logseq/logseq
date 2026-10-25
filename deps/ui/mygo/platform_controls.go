@@ -263,7 +263,7 @@ func (s *platformServices) BindEditorControl(n luimygo.Node, e ui.Element) {
 	block := n.String("block-id")
 	if command, ok := s.controls.editorFocus[block]; ok {
 		delete(s.controls.editorFocus, block)
-		if command.target.id != 0 && !s.liveTarget(command.target) {
+		if command.target.id != 0 && (command.target.id != n.ID || !s.liveTarget(command.target)) {
 			return
 		}
 		if command.focused {
@@ -490,7 +490,18 @@ func (s *platformServices) completeDOM(c *ui.Context, request *platformDOMReques
 			s.reportGap("dom-mutation", "model/renderer mutation bridge is not connected; requests remain pending")
 			return nil, true, nil
 		}
-		return nil, false, s.DOMMutation(request.op, request.body)
+		normalized := make(map[string]json.RawMessage, len(request.request))
+		for key, value := range request.request {
+			normalized[key] = value
+		}
+		// Resolve identifier refs once. A later rename must not redirect
+		// this command to a different node with the same identifier.
+		normalized["ref"] = json.RawMessage(fmt.Sprintf(`{"node-id":%d}`, request.target.id))
+		body, err := json.Marshal(normalized)
+		if err != nil {
+			return nil, false, err
+		}
+		return nil, false, s.DOMMutation(request.op, body)
 	default:
 		// Editor queries can precede the sink's mount. A dropped incarnation
 		// must not answer a later incarnation's model-offset request.
@@ -499,6 +510,14 @@ func (s *platformServices) completeDOM(c *ui.Context, request *platformDOMReques
 		}
 		if request.target.id == 0 {
 			return nil, true, nil
+		}
+		var block string
+		if err := platformRequired(request.request, "block-id", &block); err != nil {
+			return nil, false, err
+		}
+		node, _ := s.backend.Node(request.target.id)
+		if node.String("block-id") != block {
+			return nil, false, nil
 		}
 		if s.EditorDOM == nil {
 			s.reportGap("editor-layout", "post-frame editor query is not connected; requests remain pending")
@@ -525,7 +544,7 @@ func (s *platformServices) scrollIntoView(c *ui.Context, request *platformDOMReq
 			ancestor = parent.Parent
 		}
 		if ancestor != stop {
-			return false, fmt.Errorf("row is not a descendant of the requested scroller")
+			return false, nil // Reparented since this request was queued.
 		}
 		parent, _ := s.backend.Node(stop)
 		if !s.isScroller(parent) {
