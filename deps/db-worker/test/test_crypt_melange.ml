@@ -1356,4 +1356,35 @@ let () =
              Js.Promise.resolve ())
       |> Js.Promise.catch (fun _e ->
              Fest.expect |> Fest.ok false;
+             Js.Promise.resolve ()));
+
+  (* Chinese / non-latin1 titles must round-trip through encrypt_text_value.
+     Without UTF-8 packing, Melange latin1 U8a truncates code units >255 and
+     the inner Transit JSON can fail to parse, leaking ["~#'", ...] into
+     :block/title (repro'd with IME Chinese on encrypted sync graphs). *)
+  Fest.Promise.test "encrypt-decrypt-text-value-chinese-roundtrip-test" (fun () ->
+      promise_of_task
+        (bind (!generate_aes_key_fn ()) (fun aes_key ->
+             let titles =
+               [ {js|中文|js}
+               ; {js|你好世界|js}
+               ; {js|丢东西|js}
+               ; {js|测试 café 😀|js}
+               ; {js|-  É|js} ]
+             in
+             map
+               (fun _ -> ())
+               (all
+                  (List.map
+                     (fun title ->
+                       bind (!encrypt_text_value_fn aes_key title) (fun encrypted ->
+                           map
+                             (fun decrypted -> eq decrypted (Wire.String title))
+                             (!decrypt_text_value_fn aes_key encrypted)))
+                     titles))))
+      |> Js.Promise.then_ (fun _ ->
+             reset_hooks ();
+             Js.Promise.resolve ())
+      |> Js.Promise.catch (fun _e ->
+             Fest.expect |> Fest.ok false;
              Js.Promise.resolve ()))

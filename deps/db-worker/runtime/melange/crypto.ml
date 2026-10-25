@@ -215,10 +215,20 @@ module Rsa = struct
 end
 
 module Pbkdf2 = struct
+  (* Password is Unicode text (cljs TextEncoder); salt is raw bytes. *)
+  type text_encoder
+
+  external new_text_encoder : unit -> text_encoder = "TextEncoder" [@@mel.new]
+
+  external encode_utf8 : text_encoder -> string -> T.Uint8Array.t = "encode"
+  [@@mel.send]
+
+  let utf8_encoder = new_text_encoder ()
+
   let derive_aes_gcm_256 ~password ~salt ~iterations =
     let open Db_worker_effect.Infix in
     task_of_promise
-      (js_import_key subtle "raw" (u8a_of_string password)
+      (js_import_key subtle "raw" (encode_utf8 utf8_encoder password)
          [%mel.obj { name = "PBKDF2" }]
          false [| "deriveKey" |])
     >>= fun base ->
