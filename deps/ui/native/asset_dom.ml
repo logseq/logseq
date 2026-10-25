@@ -195,9 +195,9 @@ let pick_files () =
 let on_asset_write_finish ~repo':_ ~asset_id:_ = ()
 let retry_pending () = ()
 
-(* cljs objects.cljs build-class-object-columns :file — native version:
-   the Swift renderer resolves the file path from data-asset-file (same
-   contract as the imperative file_cell) *)
+let asset_source file =
+  Filename.concat (Asset_store.asset_dir (Runtime.repo ())) file
+
 let file_cell_el (w : Wire.t) : Lui_elements.t =
   let uuid = Option.value (Wire.map_get_uuid w "block/uuid") ~default:"" in
   let ext =
@@ -206,12 +206,7 @@ let file_cell_el (w : Wire.t) : Lui_elements.t =
   in
   let file = uuid ^ "." ^ ext in
   Lui_elements.box ~style_class:"block-content" ~max_height:30
-    [ (* TODO(component): needs the logseq-img extension element
-         itself — the native host resolves the asset path off
-         data-asset-file; the image kind has no such resolver hook *)
-      Logseq_el.el ~tag:"img"
-        ~attrs:[ ("title", file); ("data-asset-file", file) ]
-        [] ]
+    [ Lui_elements.image ~url:(asset_source file) ~alt:file ~max_height:30 [] ]
 
 (* web opens PhotoSwipe on pdf preview thumbs; native shows previews
    inline via the asset extension tag — nothing to lightbox *)
@@ -238,7 +233,15 @@ let block_view uuid (b : Model.block) : Lui_elements.t =
     [ (if is_pdf then
          Lui_elements.text ~key:("asset-link-" ^ uuid)
            ~value:(uuid ^ "." ^ ext) []
-       else Lui_elements.spacer ~key:("asset-empty-" ^ uuid) []) ]
+       else
+         let file = uuid ^ "." ^ ext in
+         let source =
+           match b.Model.block_asset_url with
+           | Some url when url <> "" -> url
+           | _ -> asset_source file
+         in
+         Lui_elements.image ~key:("asset-image-" ^ uuid) ~url:source ~alt:file
+           ~max_height:800 []) ]
 
 let install () =
   (* "upload" is dispatched by the shared editor command dispatcher —
@@ -268,5 +271,4 @@ let delete_asset uuid =
   ignore
     (Outliner_ops.apply_and_refresh
        [ Outliner_ops.delete_blocks [ uuid ] ])
-
 

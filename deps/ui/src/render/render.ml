@@ -240,7 +240,8 @@ let code_block ?(self = "") ?(extra = []) lang code =
                       mounts CM on it (editor/code_mirror.ml owns the
                       instance) *)
                    Logseq_codemirror.cm ~key:"ta" ~uuid:self ~lang
-                     ~value:code ~read_only:(Ui_services.env_publishing ()) ~source_role:"block" ()
+                     ~value:code ~read_only:(self = "" || Ui_services.env_publishing ())
+                     ~source_role:"block" ~on_event:(Code_mirror.on_native_event self) ()
                  ; (if not calc then Logseq_el.fragment []
                     else
                       match calc_results_el code with

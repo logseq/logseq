@@ -118,6 +118,8 @@ let unregister_dom_handlers id = Hashtbl.remove dom_handlers id
    dispatch; the bubble walk and the document-level fan-out check it *)
 let propagation_stopped = ref false
 let request_stop () = propagation_stopped := true
+let default_prevented = ref false
+let request_prevent () = default_prevented := true
 
 let dom_parent_of : (int -> int option) ref = ref (fun _ -> None)
 
@@ -154,6 +156,7 @@ let css_transform_icons () = false
 
 (* host -> OCaml event entry; called by the bridge. *)
 let emit_event name payload =
+  default_prevented := false;
   let now = date_now_ms () in
   if name = "click" && now -. !last_click_ms < 60. then
     ()
@@ -235,7 +238,7 @@ let emit_event name payload =
   if not !propagation_stopped then run_listeners window_listeners;
   (* DOM default action — runs after listeners had their chance to
      prevent; skipped entirely for coalesced duplicate clicks *)
-  (try !post_dispatch_hook name payload
+  (try if not !default_prevented then !post_dispatch_hook name payload
    with e ->
      Printf.eprintf "[emit_event] post hook threw ev=%s: %s\n%!" name
        (Printexc.to_string e));

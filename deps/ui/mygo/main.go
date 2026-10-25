@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
@@ -81,6 +82,13 @@ func run() (result error) {
 			Title: *title, Width: *width, Height: *height,
 			UseContentSize: true, Content: ui.View(host.view),
 		})
+		host.window.OnClose(func(e *mygo.CloseEvent) {
+			if host.closeReady || host.err != nil {
+				return
+			}
+			e.PreventDefault()
+			host.requestClose(false)
+		})
 		host.window.OnClosed(func() {
 			if err := host.close(); err != nil {
 				host.err = errors.Join(host.err, err)
@@ -89,6 +97,12 @@ func run() (result error) {
 		go host.watchWakeups()
 	})
 	mygo.App.OnWindowAllClosed(func() { mygo.App.Quit() })
+	mygo.App.OnBeforeQuit(func(e *mygo.QuitEvent) {
+		if host.window != nil && !host.closed && !host.closeReady && host.err == nil {
+			e.PreventDefault()
+			host.requestClose(true)
+		}
+	})
 	mygo.App.OnWillQuit(func(*mygo.QuitEvent) {
 		if err := host.close(); err != nil {
 			host.err = errors.Join(host.err, err)
@@ -98,13 +112,16 @@ func run() (result error) {
 }
 
 type windowHost struct {
-	runtime  *ocamlRuntime
-	backend  *luimygo.Backend
-	services *platformServices
-	window   *mygo.Window
-	done     chan struct{}
-	closed   bool
-	err      error
+	runtime    *ocamlRuntime
+	backend    *luimygo.Backend
+	services   *platformServices
+	window     *mygo.Window
+	done       chan struct{}
+	closed     bool
+	closing    bool
+	closeReady bool
+	quitting   bool
+	err        error
 
 	sizeKnown       bool
 	width, height   float32
@@ -123,6 +140,9 @@ func (h *windowHost) fail(err error) {
 func (h *windowHost) dispatch(event luimygo.Event) error {
 	if h.closed {
 		return fmt.Errorf("logseq: event arrived after window closure")
+	}
+	if h.closing {
+		return nil
 	}
 	if err := h.runtime.Dispatch(event); err != nil {
 		return err
@@ -148,6 +168,12 @@ func (h *windowHost) drain() error {
 					return err
 				}
 			case message.request != "":
+				if body, ok := strings.CutPrefix(message.request, "window-close-result\n"); ok {
+					if err := h.completeClose(body); err != nil {
+						return err
+					}
+					continue
+				}
 				replies, err := h.services.Handle(message.request)
 				if err != nil {
 					return fmt.Errorf("logseq: platform request: %w", err)
@@ -162,6 +188,50 @@ func (h *windowHost) drain() error {
 			}
 		}
 	}
+}
+
+func (h *windowHost) requestClose(quit bool) {
+	h.quitting = h.quitting || quit
+	if h.closing {
+		return
+	}
+	h.closing = true
+	if err := h.runtime.PlatformEvent(platformReply{Name: "window-close-request", Payload: "{}"}); err != nil {
+		h.closing = false
+		h.fail(err)
+	}
+	h.window.Invalidate()
+}
+
+func (h *windowHost) completeClose(body string) error {
+	var result struct {
+		OK    bool   `json:"ok"`
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal([]byte(body), &result); err != nil {
+		return fmt.Errorf("logseq: close acknowledgement: %w", err)
+	}
+	if !h.closing {
+		return fmt.Errorf("logseq: unsolicited close acknowledgement")
+	}
+	if !result.OK {
+		h.closing, h.quitting = false, false
+		log.Printf("logseq: keeping window open after save failure: %s", result.Error)
+		h.window.Invalidate()
+		return nil
+	}
+	h.closeReady = true
+	go mygo.RunOnMain(func() {
+		if h.closed {
+			return
+		}
+		if h.quitting {
+			mygo.App.Quit()
+		} else {
+			h.window.Close()
+		}
+	})
+	return nil
 }
 
 func (h *windowHost) applyPatches(payload string, snapshot bool) error {

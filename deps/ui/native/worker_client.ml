@@ -86,7 +86,29 @@ let run_invoke t name args =
         p
   end
 
-let invoke t name args = run_invoke t name args
+let pending_calls : (int, Wire.t Js.Promise.t) Hashtbl.t = Hashtbl.create 16
+let next_call = ref 0
+
+let invoke t name args =
+  let id = !next_call in
+  incr next_call;
+  let p = run_invoke t name args in
+  Hashtbl.add pending_calls id p;
+  ignore
+    (Js.Promise.then_
+       (fun _ -> Hashtbl.remove pending_calls id; Js.Promise.resolve ()) p
+     |> Js.Promise.catch (fun _ ->
+          Hashtbl.remove pending_calls id;
+          Js.Promise.resolve ()));
+  p
+
+let rec await_idle () =
+  let pending = Hashtbl.fold (fun _ p ps -> p :: ps) pending_calls [] in
+  match pending with
+  | [] -> Js.Promise.resolve ()
+  | _ ->
+      let* _ = Js.Promise.all (Array.of_list pending) in
+      await_idle ()
 
 let invoke1 t name a = invoke t name [ a ]
 let invoke2 t name a b = invoke t name [ a; b ]

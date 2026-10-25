@@ -17,6 +17,9 @@ module S = Editor_state
 module A = Editor_actions
 module Ops = Outliner_ops
 
+(* Web CodeMirror owns its input callbacks directly. *)
+let on_native_event _ ~name:_ ~value:_ ~key:_ = ()
+
 type cm_module
 type t
 

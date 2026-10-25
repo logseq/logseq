@@ -510,6 +510,28 @@ LUI_EXPORT int32_t lui_ocaml_platform_event(const char *data,
   return result;
 }
 
+/* 0 is failure, 1 permits the native default, 2 prevents it. */
+LUI_EXPORT int32_t lui_ocaml_document_event_utf8(const char *data,
+                                               int32_t length) {
+  if (!runtime_started || data == NULL || length < 0) return 0;
+  int accepted = 0;
+  caml_leave_blocking_section();
+  const value *handler = caml_named_value("lui_ocaml_document_event");
+  if (handler != NULL) {
+    CAMLparam0();
+    CAMLlocal2(payload, result);
+    payload = copy_bytes(data, length);
+    result = caml_callback_exn(*handler, payload);
+    if (Is_exception_result(result))
+      report_ocaml_exception("lui_ocaml_document_event", result);
+    else
+      accepted = Bool_val(result) ? 2 : 1;
+    CAMLdrop;
+  }
+  caml_enter_blocking_section();
+  return accepted;
+}
+
 LUI_EXPORT int32_t lui_ocaml_stop(void) {
   int result = 0;
   caml_leave_blocking_section();

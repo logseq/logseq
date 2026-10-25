@@ -639,6 +639,26 @@ let pump () =
       perf_mark "pump.total" t0;
       out)
 
+let rec prepare_window_close () =
+  let open Promise_ext in
+  let* () = Worker_client.await_idle () in
+  if !Editor_state.structure_pending then begin
+    let waiting = Js.Promise.make (fun ~resolve ~reject:_ ->
+      ignore (Host.set_timeout (fun () -> resolve ()) 16)) in
+    let* () = waiting in
+    prepare_window_close ()
+  end else begin
+    !(Editor_state.close_property_editor) ();
+    let* () = Worker_client.await_idle () in
+    let* () =
+      match Editor_state.editing () with
+      | Some e -> Editor_actions.commit_result e.uuid (Editor_actions.live_buffer e.uuid)
+      | None -> Js.Promise.resolve ()
+    in
+    let* () = Outliner_ops.flush_pending_save () in
+    Worker_client.await_idle ()
+  end
+
 let platform_event payload =
   (* Swift -> OCaml event channel (window resize, appearance change,
      dom-op results, menu commands). Payload is "name\njson". *)
@@ -651,7 +671,18 @@ let platform_event payload =
       let json =
         try Js.Json.parseExn body with _ -> Js.Json.JObject []
       in
-      if name = "window-size" then (
+      if name = "window-close-request" then
+        Host.enqueue (fun () ->
+          let result ok error =
+            platform_request ("window-close-result\n" ^ Yojson.Safe.to_string
+              (`Assoc [ "ok", `Bool ok; "error", `String error ])) in
+          ignore
+            (Js.Promise.then_ (fun () -> result true ""; Js.Promise.resolve ())
+               (prepare_window_close ())
+             |> Js.Promise.catch (fun error ->
+                  result false (Printexc.to_string error);
+                  Js.Promise.resolve ())))
+      else if name = "window-size" then (
         let f k =
           match json with
           | Js.Json.JObject kvs -> (
@@ -790,6 +821,18 @@ module Ffi = struct
   let dispose () = encode_batches (dispose ())
   let resync target = encode_batches (resync target)
   let platform_event = platform_event
+  let document_event payload =
+    with_entry_lock (fun () ->
+      let separator = String.index payload '\n' in
+      let name = String.sub payload 0 separator in
+      let json = String.sub payload (separator + 1)
+          (String.length payload - separator - 1) in
+      Platform.emit_event name (Js.Json.parseExn json);
+      let prevented = !Platform.default_prevented in
+      (match !current_app with
+       | Some app -> app_flush_checked app
+       | None -> invalid_arg "Document event before application initialization");
+      prevented)
   let root_node = root_node
   let editor_snapshot block_id =
     with_entry_lock (fun () ->
@@ -805,6 +848,7 @@ end
 
 let () =
   Callback.register "lui_ocaml_init" Ffi.initialize;
+  Callback.register "lui_ocaml_document_event" Ffi.document_event;
   Callback.register "lui_ocaml_appear" Ffi.appear;
   Callback.register "lui_ocaml_load" Ffi.load;
   Callback.register "lui_ocaml_press" Ffi.press;

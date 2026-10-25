@@ -220,6 +220,18 @@ let root_classes : (string, unit) Hashtbl.t = Hashtbl.create 8
 let body_classes : (string, unit) Hashtbl.t = Hashtbl.create 8
 let doc_data : (string, string) Hashtbl.t = Hashtbl.create 8
 let lang = ref "en"
+let theme_snapshots : (string, Ui_services.theme_snapshot) Hashtbl.t = Hashtbl.create 2
+
+let push_theme_snapshot (snap : Ui_services.theme_snapshot) =
+  let accent = Option.value (Hashtbl.find_opt doc_data "color") ~default:"logseq" in
+  let palette = Ui_theme.css_palette (Ui_theme.mode_of_string snap.mode) ~accent in
+  let vars = Ui_theme_vars.resolve_layers ~root:palette.root ~body:palette.body
+    ~application:palette.application ~overrides:snap.vars in
+  let vars = Hashtbl.fold (fun name value vars -> (name, `String value) :: vars)
+    vars [] |> List.sort (fun (a, _) (b, _) -> String.compare a b) in
+  request_host "theme-snapshot"
+    (Yojson.Safe.to_string (`Assoc
+      [ "mode", `String snap.mode; "vars", `Assoc vars ]))
 
 let push_ui_state () =
   let classes h =
@@ -241,12 +253,14 @@ let document_set_lang s =
 
 let document_set_data name value =
   Hashtbl.replace doc_data name value;
+  if name = "color" then Hashtbl.iter (fun _ -> push_theme_snapshot) theme_snapshots;
   push_ui_state ()
 
 let body_set_data name value = document_set_data name value
 
 let body_rm_data name =
   Hashtbl.remove doc_data name;
+  if name = "color" then Hashtbl.iter (fun _ -> push_theme_snapshot) theme_snapshots;
   push_ui_state ()
 
 let root_add_class c =
@@ -397,13 +411,8 @@ let theme_apply_dataset effective = document_set_data "theme" effective
    the application tokens before the ui-state mode flip that follows
    apply_dataset/apply_classes. *)
 let theme_apply_snapshot (snap : Ui_services.theme_snapshot) =
-  let assoc kvs = `Assoc (List.map (fun (k, v) -> k, `String v) kvs) in
-  request_host "theme-snapshot"
-    (Yojson.Safe.to_string
-       (`Assoc
-         [ "mode", `String snap.mode
-         ; "vars", assoc snap.vars
-         ]))
+  Hashtbl.replace theme_snapshots snap.mode snap;
+  push_theme_snapshot snap
 
 let theme_apply_classes effective =
   if effective = "dark" then begin

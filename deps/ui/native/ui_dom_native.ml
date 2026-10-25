@@ -216,7 +216,7 @@ let ev_of (e : Js.Json.t) : Ui_services.ev =
   ; repeat = jbool "repeat" e
   ; movement_x = jnum "movementX" e
   ; movement_y = jnum "movementY" e
-  ; default_prevented = jbool "defaultPrevented" e
+  ; default_prevented = jbool "defaultPrevented" e || !Platform.default_prevented
   ; target =
       (match jfield "target" e with
        | Some t -> Some (el_of t)
@@ -269,7 +269,7 @@ let ev_of (e : Js.Json.t) : Ui_services.ev =
   ; files
   ; has_files = files <> [] || has_file_type (jfield "dataTransfer" e)
       || has_file_type (clipboard_data e)
-  ; prevent_default = (fun () -> ())
+  ; prevent_default = Platform.request_prevent
   ; stop_propagation = Platform.request_stop
   ; stop_immediate = Platform.request_stop
   }

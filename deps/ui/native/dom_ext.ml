@@ -38,7 +38,7 @@ let target (ev : event) : element option =
   | Js.Json.JObject _ as el -> Some el
   | _ -> None
 
-let prevent_default (_ : event) : unit = ()
+let prevent_default (_ : event) : unit = Platform.request_prevent ()
 let stop_propagation (_ : event) : unit = Platform.request_stop ()
 let ancestors_of (el : element) : element list =
   match el with

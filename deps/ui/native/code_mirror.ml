@@ -1,11 +1,24 @@
-(* Native impl of editor/code_mirror.ml — code blocks render as plain
-   text until a native code editor exists. The actions bar still works:
-   copy goes to the pasteboard via Platform, and the language picker is
-   an anchored popover that writes the block's
-   logseq.property.code/lang property. *)
+(* The native code conduit proposes source changes to the same OCaml
+   buffer and debounced persistence path as the web CodeMirror adapter. *)
 
 open Lui_elements
 module W = Wire
+
+let on_native_event uuid ~name ~value ~key:_ =
+  if not (Ui_services.env_publishing ()) && uuid <> "" then
+    match name, value with
+    | "input", Some source ->
+        Editor_actions.sync_buffer uuid source;
+        Outliner_ops.schedule_save uuid source
+    | "focus", _ ->
+        (match Editor_state.editing () with
+         | Some editing when editing.uuid = uuid -> ()
+         | _ -> Editor_actions.enter_edit uuid (String.length (Editor_actions.model_title uuid)))
+    | "blur", _ ->
+        (match Editor_state.editing () with
+        | Some editing when editing.uuid = uuid -> Editor_actions.blur_commit ()
+        | _ -> ())
+    | _ -> ()
 
 let update_calc (_ : 'a) = ()
 let install () = ()

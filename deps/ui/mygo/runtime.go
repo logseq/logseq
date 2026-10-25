@@ -32,6 +32,7 @@ type nativeFunctions struct {
 	pump           func() int32
 	resync         func() int32
 	platformEvent  func(string, int32) int32
+	documentEvent  func(string, int32) int32
 	editorSnapshot func(string, int32, uintptr) int32
 	rootNode       func() int64
 	register       func() int32
@@ -139,7 +140,8 @@ func (r *ocamlRuntime) load(path string) error {
 	bindings := map[string]any{
 		"start": &f.start, "stop": &f.stop, "pump": &f.pump,
 		"resync": &f.resync, "platform_event": &f.platformEvent,
-		"root_node": &f.rootNode, "register_current_thread": &f.register,
+		"document_event_utf8": &f.documentEvent,
+		"root_node":           &f.rootNode, "register_current_thread": &f.register,
 		"press_ex": &f.pressEx, "text_changed_utf8": &f.text,
 		"picked_utf8": &f.picked, "toggle_changed": &f.toggle,
 		"editor_snapshot_utf8": &f.editorSnapshot,
@@ -318,6 +320,27 @@ func (r *ocamlRuntime) invoke(name string, call func(nativeFunctions) int32) err
 
 func (r *ocamlRuntime) Pump() error {
 	return r.invoke("pump", func(f nativeFunctions) int32 { return f.pump() })
+}
+
+func (r *ocamlRuntime) DocumentEvent(name, value string) (bool, error) {
+	if name == "" || strings.ContainsAny(name, "\n\x00") || !json.Valid([]byte(value)) {
+		return false, fmt.Errorf("logseq: invalid document event %q", name)
+	}
+	payload := name + "\n" + value
+	if err := validateABIText(payload); err != nil {
+		return false, err
+	}
+	var prevented bool
+	err := r.invoke("document event "+name, func(f nativeFunctions) int32 {
+		status := f.documentEvent(payload, int32(len(payload)))
+		prevented = status == 2
+		if status == 2 {
+			return 1
+		}
+		return status
+	})
+	r.signal()
+	return prevented, err
 }
 
 func (r *ocamlRuntime) PlatformEvent(reply platformReply) error {
