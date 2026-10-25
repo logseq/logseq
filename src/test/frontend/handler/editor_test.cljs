@@ -12,7 +12,9 @@
             [frontend.db.utils :as db-utils]
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.block :as block-handler]
+            [frontend.handler.common :as common-handler]
             [frontend.handler.editor :as editor]
+            [frontend.handler.export.html :as export-html]
             [frontend.handler.editor.assets :as editor-assets]
             [frontend.handler.editor.autopair :as editor-autopair]
             [frontend.handler.editor.format :as editor-format]
@@ -2340,6 +2342,58 @@
              (p/catch (fn [error]
                         (is false (str error))))
              (p/finally done))))
+
+(deftest prettify-xml-failure-does-not-abort-copy-or-cut-test
+  (async done
+    (let [block-uuid #uuid "11111111-1111-1111-1111-111111111111"
+          block {:db/id 1
+                 :block/uuid block-uuid
+                 :block/title "keep-delete"}
+          inner (mock-ls-block {:blockid (str block-uuid)})
+          copied (atom [])
+          deleted-uuids (atom nil)
+          html-export-error (js/Error. "NS_ERROR_FAILURE")]
+      (-> (p/with-redefs [state/get-current-repo (constantly "test")
+                          state/get-selection-block-ids (constantly [block-uuid])
+                          state/set-block-op-type! (fn [_])
+                          editor/get-selected-blocks (constantly [inner])
+                          editor/copy-cached-selection-text! (fn [_])
+                          editor/compose-copied-blocks-contents
+                          (fn [_repo _ids _opts]
+                            (p/resolved [[block-uuid] "keep-delete" [block]]))
+                          editor/<get-all-blocks-by-ids
+                          (fn [_repo _ids]
+                            (p/resolved [block]))
+                          util/copy-to-clipboard!
+                          (fn [text & _]
+                            (swap! copied conj [:plain text]))
+                          export-html/export-blocks-as-html
+                          (fn [& _]
+                            (p/rejected html-export-error))
+                          common-handler/copy-to-clipboard-without-id-property!
+                          (fn [_repo text html _blocks & {:keys [op]}]
+                            (swap! copied conj [:structured text html op]))
+                          db-async/<get-blocks
+                          (fn [_repo _ids _opts]
+                            (p/resolved [{:block block}]))
+                          editor/delete-blocks!
+                          (fn [_repo uuids _blocks _dom-blocks _mobile?]
+                            (reset! deleted-uuids uuids))]
+            (p/do!
+             (editor/copy-selection-blocks true)
+             (editor/cut-selection-blocks true)))
+          (p/then (fn [_]
+                    (is (= [[:plain "keep-delete"]
+                            [:structured "keep-delete" nil :copy]
+                            [:plain "keep-delete"]
+                            [:structured "keep-delete" nil :cut]]
+                           @copied)
+                        "Plain text and structured clipboard writes continue after HTML export fails.")
+                    (is (= [block-uuid] @deleted-uuids)
+                        "Cut must delete selected blocks when optional HTML export fails.")))
+          (p/catch (fn [error]
+                     (is false (str error))))
+          (p/finally done)))))
 
 (deftest copy-selection-blocks-loads-summaries-for-view-uuids-test
   (async done

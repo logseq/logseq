@@ -1636,6 +1636,47 @@
             (wait-for-copied-blocks! ["copy parent" "copy child"])]
         (is (empty? missing-blocks) (pr-str copy-result))))))
 
+(deftest cut-removes-blocks-when-html-prettify-fails-test
+  (testing "Cut deletes selected blocks even when HTML XSLT prettify throws"
+    (let [page-name (p/get-page-name)]
+      (b/new-blocks ["prettify-cut-a" "prettify-cut-b" "prettify-cut-c"])
+      (w/eval-js
+       "(() => {
+          window.XSLTProcessor = class {
+            importStylesheet() {
+              const err = new Error('NS_ERROR_FAILURE');
+              err.result = 0x80600001;
+              throw err;
+            }
+            transformToDocument() { throw new Error('unused'); }
+          };
+          return true;
+        })()")
+      (b/select-blocks 3)
+      (k/press "ControlOrMeta+x" {:delay 100})
+      (loop [remaining 50]
+        (let [contents (set (map string/trim (util/get-page-blocks-contents)))]
+          (when (some contents ["prettify-cut-a" "prettify-cut-b" "prettify-cut-c"])
+            (when (zero? remaining)
+              (throw (ex-info "Cut did not remove selected blocks after HTML prettify failure"
+                              {:contents contents})))
+            (util/wait-timeout 100)
+            (recur (dec remaining)))))
+      (let [{:keys [missing-blocks] :as copy-result}
+            (wait-for-copied-blocks! ["prettify-cut-a" "prettify-cut-b" "prettify-cut-c"])]
+        (is (empty? missing-blocks) (pr-str copy-result)))
+      (p/new-page "prettify-cut-target")
+      (b/paste)
+      (util/exit-edit)
+      (let [tree (ls-api-call! :editor.getPageBlocksTree "prettify-cut-target")
+            titles (mapv #(get % "content") tree)]
+        (is (some #{"prettify-cut-a"} titles) (pr-str titles))
+        (is (some #{"prettify-cut-c"} titles) (pr-str titles)))
+      (let [source (ls-api-call! :editor.getPageBlocksTree page-name)
+            source-titles (mapv #(get % "content") source)]
+        (is (not-any? #{"prettify-cut-a" "prettify-cut-b" "prettify-cut-c"} source-titles)
+            (pr-str source-titles))))))
+
 (deftest plain-multiline-and-html-paste-test
   (testing "paste mode preserves cursor text, multiline structure and safe rich content"
     (b/new-block "before-after")
