@@ -14,12 +14,12 @@ concurrency:
 env:
   NODE_VERSION: '22'
   OCAML_VERSION: '5.5.1'
-  LUI_REF: 'a884a9e1a2cc750fef7ffa0a03c6740922d44326'
+  LUI_REF: '7d00a2c60568d92eeebc20d8e5cbe0e672785eed'
 
 jobs:
   ubuntu:
     name: Build & test (ubuntu)
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
