@@ -5,6 +5,7 @@
             [datascript.impl.entity :as de]
             [frontend.worker.handler.block :as block-handler]
             [frontend.worker.handler.property :as property-handler]
+            [frontend.worker.handler.query :as query-handler]
             [frontend.worker.handler.render-resource.common :as common]
             [lambdaisland.glogi :as log]
             [logseq.common.util :as common-util]
@@ -390,6 +391,37 @@
       (contains? result :properties)
       (assoc :properties (query-property-maps db (:properties result))))))
 
+(defn- view-row-uuids
+  [{view-partition :partition :keys [rows groups]}]
+  (case view-partition
+    :flat rows
+    :grouped (mapcat :rows groups)
+    :grouped-list (mapcat (fn [{:keys [partitions]}]
+                            (mapcat :rows partitions))
+                          groups)
+    (common/fail! "Invalid view data partition" {:partition view-partition})))
+
+(defn- query-task-time-summary
+  "Sums tracked time for every row in the view. A task that is currently Doing
+  is measured up to `now-ms` and is not re-evaluated as time passes; the total
+  only refreshes when a task's status history changes."
+  [db value now-ms]
+  (let [block-uuids (vec (distinct (view-row-uuids value)))
+        block-id->uuid (into {}
+                            (map (fn [block-uuid]
+                                   [(:db/id (common/entity-by-uuid! db
+                                                                   :query-row-uuid
+                                                                   block-uuid))
+                                    block-uuid]))
+                            block-uuids)
+        seconds-by-id (query-handler/task-spent-times db (keys block-id->uuid) now-ms)
+        seconds-by-block (into {}
+                               (map (fn [[block-id block-uuid]]
+                                      [block-uuid (get seconds-by-id block-id 0)]))
+                               block-id->uuid)]
+    {:total-seconds (reduce + 0 (vals seconds-by-block))
+     :seconds-by-block seconds-by-block}))
+
 (defn- missing-view-data
   "Delete still has an in-flight :view-data snapshot. Fail-fast here
   rejects the whole get-render-snapshots batch and crashes the page."
@@ -457,6 +489,11 @@
               result (db-view/get-view-data db (:db/id view) option)
               value (normalize-view-data db result
                                          (some? (:group-by-property-ident config)))
+              task-time-summary (when (= :query-result feature-type)
+                                  (query-task-time-summary db value (common-util/time-ms)))
+              value (cond-> value
+                      task-time-summary
+                      (assoc :task-time-summary task-time-summary))
               include-row-previews? (and (:initial-row-count context)
                                          (= :flat (:partition value)))
               value (cond-> value
@@ -465,6 +502,10 @@
               value-partition (:partition value)]
           [(cond-> (view-watch-keys db view-uuid owner feature-type config value-partition)
              query-block (conj [:entity (:block/uuid query-block)])
+             task-time-summary
+             (into (map (fn [block-uuid]
+                          [:task-time block-uuid]))
+                   (keys (:seconds-by-block task-time-summary)))
              include-row-previews? (conj [:attr :block/title]))
            value]))
       (missing-view-data view-uuid))))
