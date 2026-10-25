@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"runtime"
 
 	"github.com/egoist/mygo/transfer"
 	"github.com/egoist/mygo/ui"
@@ -18,6 +17,9 @@ type DocumentDispatch func(name, payload string) bool
 // DocumentEvents owns only input routing state. The OCaml document remains the
 // authority for shortcuts, selection, navigation and command execution.
 type DocumentEvents struct {
+	// Pointer routes editor gestures after unprevented document capture and
+	// before MyGo target delivery. A zero target still allows active drags.
+	Pointer         func(ev ui.InputEvent, target int64) bool
 	backend         *luimygo.Backend
 	dispatch        DocumentDispatch
 	services        ui.Services
@@ -71,6 +73,18 @@ func (d *DocumentEvents) send(target luimygo.InputNode, name string, payload map
 
 func (d *DocumentEvents) input(ev ui.InputEvent, host ui.InputTarget) bool {
 	target, _ := d.backend.InputNode(host)
+	prevented := d.event(ev, target)
+	if !prevented && d.Pointer != nil && (ev.Kind == ui.InputPointerDown || ev.Kind == ui.InputPointerUp || ev.Kind == ui.InputPointerMove) {
+		id := target.Node.ID
+		if id != 0 && !target.Current() {
+			id = 0
+		}
+		return d.Pointer(ev, id)
+	}
+	return prevented
+}
+
+func (d *DocumentEvents) event(ev ui.InputEvent, target luimygo.InputNode) bool {
 	if d.compositionNode != target.Node.ID {
 		d.composing = false
 		d.compositionNode = target.Node.ID
@@ -169,31 +183,7 @@ func (d *DocumentEvents) command(target luimygo.InputNode, ev ui.InputEvent) boo
 		payload["clipboardData"] = clipboard
 		return d.send(target, "paste", payload)
 	}
-	// Menus carry commands rather than physical keys. Normalize only the
-	// existing accelerator vocabulary; native controls still get the original
-	// command when OCaml does not prevent it. No Go command model is introduced.
-	var key string
-	mods := ui.Ctrl
-	if runtime.GOOS == "darwin" {
-		mods = ui.Super
-	}
-	switch ev.Text {
-	case "undo":
-		key = "z"
-	case "redo":
-		key, mods = "z", mods|ui.Shift
-	case "selectAll":
-		key = "a"
-	case "delete":
-		key, mods = "Delete", 0
-	case "bold":
-		key = "b"
-	case "italic":
-		key = "i"
-	default:
-		return false
-	}
-	payload = extensionDOMKey(ui.InputEvent{Mods: mods}, key)
-	payload["nativeCommand"] = ev.Text
-	return d.send(target, "keydown", payload)
+	// Native text controls and the editor sink own the original command.
+	// Synthesizing keydown here would execute undo/selectAll/delete twice.
+	return false
 }
