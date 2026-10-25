@@ -247,7 +247,7 @@ let block_ast_resolver db ~(ctx : Export_file.context) (block_uuid : string)
 
 (* cljs block-children-content — follows :block/link, renders the whole
    subtree (open-blocks-only drops collapsed descendants). *)
-let block_children_ast_resolver db ~(ctx : Export_file.context)
+let block_children_ast_resolver db ~(ctx : Export_file.context) ~open_blocks_only
     (block_uuid : string) : Export_common_impl.block_ast list =
   match List.nth_opt (Ldb.get_block_and_children db block_uuid) 0 with
   | None -> []
@@ -261,7 +261,8 @@ let block_children_ast_resolver db ~(ctx : Export_file.context)
                ~opts:
                  { Export_file.default_tree_opts with
                    init_level = Some 1
-                 ; link = link <> None }
+                 ; link = link <> None
+                 ; open_blocks_only }
                ~ctx
            in
            content_to_ast ~content
@@ -311,7 +312,7 @@ let export_blocks_as_format (db : db) (root_block_uuids_or_page_uuid : value)
   let ctx = context_of_value content_config_v in
   let resolvers : Export_common_impl.resolvers =
     { block_ast = block_ast_resolver db ~ctx
-    ; block_children_ast = block_children_ast_resolver db ~ctx
+    ; block_children_ast = block_children_ast_resolver db ~ctx ~open_blocks_only
     ; page_ast = page_ast_resolver db ~ctx }
   in
   (match format_type with

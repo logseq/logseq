@@ -78,6 +78,8 @@
     "cli:e2e:skip-build": "bb dev:cli-e2e --skip-build",
     "app:serve": "node scripts/serve-static.mjs",
     "ui:build": "cd deps/db-worker && opam exec -- dune build js_api && cd ../ui && opam exec -- dune build js_app && ../../node_modules/.bin/vite build",
+    "ui:mygo:build": "bash deps/ui/mygo/build.sh",
+    "ui:mygo": "bash deps/ui/mygo/run.sh",
     "ui:dune-watch": "cd deps/ui && opam exec -- dune build js_app --watch",
     "ui:vite-watch": "cd deps/ui && ../../node_modules/.bin/vite build --watch",
     "test:db-worker": "cd deps/db-worker && opam exec -- dune runtest",

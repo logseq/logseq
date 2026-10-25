@@ -295,6 +295,20 @@
   (p/let [text (.text response)]
     (js->clj (js/JSON.parse text) :keywordize-keys true)))
 
+(deftest handle-http-answers-500-when-an-async-route-fails-test
+  (async done
+         (let [request (js/Request. "http://localhost/sync/graph-1/tx/batch"
+                                    #js {:method "POST" :body "not json"})]
+           (-> (p/let [response (sync-handler/handle-http #js {} request)
+                       body (json-body response)]
+                 (is (= 500 (.-status response)))
+                 (is (= "server error" (:error body)))
+                 (is (string? (:debug-message body))))
+               (p/then (fn [] (done)))
+               (p/catch (fn [error]
+                          (is false (str "handle-http rejected: " error))
+                          (done)))))))
+
 (deftest semantic-create-page-delegates-to-outliner-and-broadcasts-test
   (async done
          (with-memory-sql-async
@@ -1122,6 +1136,56 @@
                               (is false (str error))
                               (done)))))))))
 
+(deftest semantic-writes-retain-the-authenticated-creator-test
+  (async done
+    (with-memory-sql-async
+      (fn [sql]
+        (storage/init-schema! sql)
+        (let [conn (sqlite-export/create-conn)
+              self #js {:sql sql :conn conn :schema-ready true}
+              alice (random-uuid)
+              bob (random-uuid)
+              reports (atom [])
+              call (fn [actor path method body]
+                     (let [request (semantic-json-request path method body)]
+                       (.set (.-headers request) "x-logseq-sync-actor"
+                             (js/encodeURIComponent (js/JSON.stringify #js {"sub" (str actor)
+                                                                           "cognito:username" "Creator"
+                                                                           "email" "creator@example.com"})))
+                       (p/let [response (sync-handler/handle-http self request)]
+                         (is (.-ok response))
+                         (json-body response))))
+              author (fn [id]
+                       (some-> (d/entity @conn [:block/uuid (uuid id)])
+                               :logseq.property/created-by-ref :block/uuid))]
+          (d/listen! conn ::creator-reports #(swap! reports conj %))
+          (-> (p/let [page (call alice "/semantic/pages?graph-id=graph-1" "POST" {:title "Authored page"})
+                      inserted (call alice (str "/semantic/blocks/" (:uuid page) "/children?graph-id=graph-1") "POST"
+                                     {:position "append" :blocks [{:title "First [[New reference]]"} {:title "Second"}]})
+                      block-id (get-in inserted [:blocks 0 :uuid])
+                      blank-id (get-in inserted [:blocks 1 :uuid])
+                      _cleared (d/transact! conn [[:db/add [:block/uuid (uuid blank-id)] :block/title ""]])
+                      before-task (count @reports)
+                      task (call bob "/semantic/tasks?graph-id=graph-1" "POST" {:title "Authored task"})
+                      task-transactions (- (count @reports) before-task)
+                      edited (call bob (str "/semantic/blocks/" block-id "?graph-id=graph-1") "PATCH" {:title "Edited"})
+                      filled (call bob (str "/semantic/blocks/" blank-id "?graph-id=graph-1") "PATCH" {:title "First text"})]
+                (is (= "Edited" (:title edited)))
+                (is (= "First text" (:title filled)))
+                (is (= alice (author (:uuid page))))
+                (is (= alice (author block-id)))
+                (is (= bob (author blank-id)))
+                (is (= bob (author (:uuid task))))
+                (is (= alice (:block/uuid (:logseq.property/created-by-ref
+                                          (d/entity @conn (:e (first (d/datoms @conn :avet :block/name "new reference"))))))))
+                (is (= 1 task-transactions))
+                (is (= 2 (count (d/datoms @conn :avet :logseq.property.user/email "creator@example.com")))))
+              (p/then (fn [] (d/unlisten! conn ::creator-reports) (done)))
+              (p/catch (fn [error]
+                         (d/unlisten! conn ::creator-reports)
+                         (is false (str error))
+                         (done)))))))))
+
 (deftest semantic-create-task-uses-one-transaction-test
   (async done
          (with-memory-sql-async
@@ -1684,6 +1748,38 @@
 (defn- passthrough-compression-stream-constructor []
   (js* "function(_format){ return new TransformStream(); }"))
 
+(deftest snapshot-download-returns-the-current-journal-position-test
+  (async done
+    (with-memory-sql-async
+      (fn [sql]
+        (let [conn (storage/open-conn sql)
+              self #js {:sql sql :conn conn :schema-ready true
+                        :env #js {"DB_SYNC_SNAPSHOT_STREAM_GZIP" "false"}}
+              block-id (random-uuid)
+              entry {:tx-id (random-uuid) :outliner-op :save-block
+                     :tx (protocol/tx->transit [{:block/uuid block-id :block/title "Snapshot content"}])}
+              accepted (with-redefs [ws/broadcast! (fn [& _] nil)]
+                         (sync-handler/handle-tx-batch! self nil [entry] 0))
+              {:keys [request]} (request-url)]
+          (-> (p/let [legacy-pull (sync-handler/handle-http self (js/Request. "http://localhost/sync/graph-1/pull?since=0"))
+                      legacy-body (json-body legacy-pull)
+                      response (sync-handler/handle-http self request)
+                      body (json-body response)
+                      snapshot-response (sync-handler/handle-http self (js/Request. (:url body)))
+                      payload (.arrayBuffer snapshot-response)
+                      rows (snapshot/finalize-framed-buffer (js/Uint8Array. payload))]
+                (is (= 200 (.-status response)))
+                (is (= 1 (:t accepted) (:t body)))
+                (is (= 1 (:t legacy-body)))
+                (is (= "stream/graph-1.snapshot" (:key body)))
+                (is (= 200 (.-status snapshot-response)))
+                (is (empty? (:txs (sync-handler/pull-response self (:t body))))
+                    "A new download starts after the snapshot's journal position")
+                (is (= (#'sync-handler/fetch-snapshot-kvs-rows sql -1 10000) rows))
+                (is (= "Snapshot content" (:block/title (d/entity @conn [:block/uuid block-id])))))
+              (p/catch (fn [error] (is false (str error))))
+              (p/finally done)))))))
+
 (deftest snapshot-download-uses-gzip-encoding-when-compression-supported-test
   (async done
          (let [sql (empty-sql)
@@ -1707,6 +1803,7 @@
                        body (js->clj (js/JSON.parse text) :keywordize-keys true)]
                  (is (= 200 (.-status resp)))
                  (is (= true (:ok body)))
+                 (is (= 0 (:t body)))
                  (is (= "stream/graph-1.snapshot" (:key body)))
                  (is (= expected-url (:url body)))
                  (is (= "gzip" (:content-encoding body))))
@@ -1735,6 +1832,7 @@
                        body (js->clj (js/JSON.parse text) :keywordize-keys true)]
                  (is (= 200 (.-status resp)))
                  (is (= true (:ok body)))
+                 (is (= 0 (:t body)))
                  (is (not (contains? body :content-encoding)))
                  (done))
                (p/then (fn []

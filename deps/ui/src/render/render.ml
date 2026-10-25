@@ -546,13 +546,10 @@ let content ?(heading : int option) ?(self = "") ?(wrap_attrs = [])
           ~cls:"block-title-wrap as-heading" ~self ~wrap_attrs ~prefix
           rest
     | None ->
-        (* empty title: a <br> gives the inline wrap a line box, so
-           .block-content keeps its clickable area (cljs does the same
-           via the mldoc linebreak node it emits for empty content) *)
         if rest = "" then
           D.el ~key:"btw-empty" ~tag:"span"
             ~style_class:"block-title-wrap"
-            [ br ~key:"btw-br" [] ]
+            [ text ~key:"btw-empty-line" ~value:"\n" [] ]
         else wrap ~self ~wrap_attrs ~prefix rest
 
 
@@ -584,7 +581,7 @@ let quote_el ~self body : t =
   D.el ~key:("qbody-" ^ self) ~tag:"div" ~style_class:"block-body"
     [ D.el ~tag:"blockquote" ~style_class:"ls-blockquote"
         [ D.el ~tag:"div" ~style_class:"is-paragraph"
-            (Render_inline.parse ~self body @ [ br ~key:"qbr" [] ]) ] ]
+            (Render_inline.parse ~self body @ [ text ~key:"q-newline" ~value:"\n" [] ]) ] ]
 
 (* markdown pipe table — cljs markup renders
    .table-wrapper.classic-table.force-visible-scrollbar.markdown-table >
@@ -766,4 +763,3 @@ let title_block ?(self = "") ?resolved ?(annot = false)
             ~is_cards:(is_cards_block b)
             ~card_eid:b.Model.block_db_id ~self ~wrap_attrs ~prefix
             (Option.value resolved ~default:s))
-

@@ -5286,9 +5286,30 @@ let test_page_alias_sanitise_for_import_cross_file () =
    cases — registered in test_db_native.ml as the "gp-exporter" suite
    ===================================================================== *)
 
+let test_import_preserves_master_content_fixes () =
+  let file = write_temp_graph_file "pages/master-parity.md"
+    "- DONE $$\n  x + y\n  $$\n- TODO ```clojure\n  (+ 1 2)\n  ```\n  note:: after fence\n- tagged #[[alpha/beta]] #other-tag\n- before {{embed [[target]]}} after\n- target block\n  id:: 11111111-1111-4111-8111-111111111111\n- left {{embed ((11111111-1111-4111-8111-111111111111))}} right\n- many {{embed [[target]]}} {{embed [[second]]}}\n" in
+  let target = write_temp_graph_file "pages/target.md" "- target page\n" in
+  let second = write_temp_graph_file "pages/second.md" "- second page\n" in
+  let conn = create_conn () in
+  Outliner_db_pipeline.add_listener conn;
+  ignore (import_files_to_db [file; target; second] conn { (default_import_opts ()) with convert_all_tags = true });
+  let db = Datascript.db conn in
+  let math = find_block_exn db "x + y" in
+  check "task math retains Task class" (List.exists (fun (tag : entity) -> Ldb.ident_of tag = Some "logseq.class/Task") (Ldb.ref_ents math "block/tags")) "";
+  check "mixed embed retains surrounding title" (find_block db "before after" <> None) "";
+  let parent = find_block_exn db "before after" in
+  check "mixed embed becomes a child" (List.length (ordered_children parent) = 1) "";
+  check "block embed retains surrounding text" (find_block db "left right" <> None) "";
+  let many = find_block_exn db "many" in
+  check "multiple embeds become ordered children" (List.length (ordered_children many) = 2) "";
+  let tagged = find_block_re_exn db "tagged" in
+  check "namespaced tag keeps other tags" (List.length (Ldb.ref_ents tagged "block/tags") >= 2) ""
+
 let cases : unit Alcotest.test_case list =
   let tc name f = Alcotest.test_case name `Quick f in
-  [ tc "import-block-with-journal-ref-and-time-property-value"
+  [ tc "import-preserves-master-content-fixes" test_import_preserves_master_content_fixes;
+    tc "import-block-with-journal-ref-and-time-property-value"
       test_import_block_with_journal_ref_and_time_property_value;
     tc "import-quote-with-email-address"
       test_import_quote_with_email_address;

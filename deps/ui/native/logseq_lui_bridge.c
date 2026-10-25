@@ -3,6 +3,12 @@
 #include <stdlib.h>
 #include <string.h>
 
+#if !defined(_WIN32)
+#include <errno.h>
+#include <pthread.h>
+#include <signal.h>
+#endif
+
 #include <caml/alloc.h>
 #include <caml/fail.h>
 #include <caml/callback.h>
@@ -25,9 +31,75 @@ typedef void (*logseq_platform_request_callback)(const char *data,
                                                  int32_t length);
 
 static int runtime_started = 0;
+
+/* Read-only editor state; the caller copies the borrowed UTF-8 buffer. */
+LUI_EXPORT int32_t lui_ocaml_editor_snapshot_utf8(
+    const char *block_id, int32_t length,
+    logseq_platform_request_callback receive) {
+  if (!runtime_started || block_id == NULL || length < 0 || receive == NULL)
+    return 0;
+  int result = 0;
+  caml_leave_blocking_section();
+  const value *handler = caml_named_value("lui_ocaml_editor_snapshot");
+  if (handler != NULL) {
+    CAMLparam0();
+    CAMLlocal2(id, snapshot);
+    id = caml_alloc_initialized_string(length, block_id);
+    snapshot = caml_callback_exn(*handler, id);
+    if (!Is_exception_result(snapshot)) {
+      receive(String_val(snapshot), (int32_t)caml_string_length(snapshot));
+      result = 1;
+    }
+    CAMLdrop;
+  }
+  caml_enter_blocking_section();
+  return result;
+}
 static lui_patch_callback patch_callback = NULL;
 static logseq_wakeup_callback wakeup_callback = NULL;
 static logseq_platform_request_callback platform_request_callback = NULL;
+
+#if !defined(_WIN32)
+static void signal_ownership_failure(const char *operation, int error) {
+  fprintf(stderr, "logseq bridge: %s: %s\n", operation, strerror(error));
+  abort();
+}
+
+static void startup_preserving_host_signals(char **arguments) {
+  stack_t host_stack;
+  sigset_t startup_mask, host_mask;
+  int error;
+  if (sigaltstack(NULL, &host_stack) != 0)
+    signal_ownership_failure("query host alternate signal stack", errno);
+  if ((host_stack.ss_flags & SS_ONSTACK) != 0)
+    signal_ownership_failure("initialize OCaml from an active signal stack", EINVAL);
+  /* OCaml startup releases its signal stack on return. Defer asynchronous
+     signals until the embedding runtime's stack is restored. */
+  if (sigfillset(&startup_mask) != 0 ||
+      sigdelset(&startup_mask, SIGSEGV) != 0 ||
+      sigdelset(&startup_mask, SIGBUS) != 0 ||
+      sigdelset(&startup_mask, SIGILL) != 0 ||
+      sigdelset(&startup_mask, SIGFPE) != 0 ||
+      sigdelset(&startup_mask, SIGTRAP) != 0)
+    signal_ownership_failure("prepare OCaml startup signal mask", errno);
+#if defined(SIGSYS)
+  if (sigdelset(&startup_mask, SIGSYS) != 0)
+    signal_ownership_failure("preserve system-call signal", errno);
+#endif
+#if defined(SIGEMT)
+  if (sigdelset(&startup_mask, SIGEMT) != 0)
+    signal_ownership_failure("preserve emulator signal", errno);
+#endif
+  error = pthread_sigmask(SIG_BLOCK, &startup_mask, &host_mask);
+  if (error != 0) signal_ownership_failure("defer startup signals", error);
+  caml_startup(arguments);
+  if ((host_stack.ss_flags & SS_DISABLE) == 0 &&
+      sigaltstack(&host_stack, NULL) != 0)
+    signal_ownership_failure("restore host alternate signal stack", errno);
+  error = pthread_sigmask(SIG_SETMASK, &host_mask, NULL);
+  if (error != 0) signal_ownership_failure("restore host signal mask", error);
+}
+#endif
 
 static void report_ocaml_exception(const char *where, value result) {
   char *message = caml_format_exception(Extract_exception(result));
@@ -80,7 +152,7 @@ LUI_EXPORT int32_t lui_ocaml_start(lui_patch_callback callback,
 #else
     setenv("OCAMLRUNPARAM", "s=16M", 0);
     char *arguments[] = {"logseq_lui_ocaml", NULL};
-    caml_startup(arguments);
+    startup_preserving_host_signals(arguments);
 #endif
     runtime_started = 1;
   } else {
@@ -270,6 +342,46 @@ LUI_EXPORT int32_t lui_ocaml_load(int64_t node) {
   return dispatch_long("lui_ocaml_load", node);
 }
 
+LUI_EXPORT int32_t lui_ocaml_navigate_previous(int64_t node) {
+  return dispatch_long("lui_ocaml_navigate_previous", node);
+}
+
+LUI_EXPORT int32_t lui_ocaml_navigate_next(int64_t node) {
+  return dispatch_long("lui_ocaml_navigate_next", node);
+}
+
+LUI_EXPORT int32_t lui_ocaml_navigation_key_utf8(int64_t node,
+    const char *key, int32_t length, int32_t shift) {
+  if (key == NULL || length < 0) return 0;
+  int result = 0;
+  caml_leave_blocking_section();
+  const value *dispatch = caml_named_value("lui_ocaml_navigation_key");
+  if (dispatch != NULL) {
+    CAMLparam0();
+    CAMLlocal2(text, callback_result);
+    text = copy_bytes(key, length);
+    callback_result = caml_callback3_exn(*dispatch, Val_long(node), text,
+                                         Val_bool(shift));
+    result = emit_patch("lui_ocaml_navigation_key", callback_result);
+    CAMLdrop;
+  }
+  caml_enter_blocking_section();
+  return result;
+}
+
+LUI_EXPORT int32_t lui_ocaml_scroll_edges(int64_t node,
+    int32_t at_start, int32_t at_end) {
+  int result = 0;
+  caml_leave_blocking_section();
+  const value *dispatch = caml_named_value("lui_ocaml_scroll_edges");
+  if (dispatch != NULL)
+    result = emit_patch("lui_ocaml_scroll_edges",
+      caml_callback3_exn(*dispatch, Val_long(node),
+                          Val_bool(at_start), Val_bool(at_end)));
+  caml_enter_blocking_section();
+  return result;
+}
+
 LUI_EXPORT int32_t lui_ocaml_slider_changed(int64_t node,
                                             double fraction) {
   int result = 0;
@@ -379,6 +491,7 @@ LUI_EXPORT int32_t lui_ocaml_pump(void) {
 
 LUI_EXPORT int32_t lui_ocaml_platform_event(const char *data,
                                             int32_t length) {
+  if (data == NULL || length < 0) return 0;
   int result = 0;
   caml_leave_blocking_section();
   const value *handler = caml_named_value("lui_ocaml_platform_event");
@@ -387,7 +500,10 @@ LUI_EXPORT int32_t lui_ocaml_platform_event(const char *data,
     CAMLlocal2(payload_value, callback_result);
     payload_value = copy_bytes(data, length);
     callback_result = caml_callback_exn(*handler, payload_value);
-    result = 1;
+    if (Is_exception_result(callback_result))
+      report_ocaml_exception("lui_ocaml_platform_event", callback_result);
+    else
+      result = 1;
     CAMLdrop;
   }
   caml_enter_blocking_section();

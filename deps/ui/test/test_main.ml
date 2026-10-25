@@ -1502,7 +1502,12 @@ let test_cmdk_view () =
   check "dom key stable"
     (Cmdk_state.item_dom_key i1 = Cmdk_state.item_dom_key i1);
   (* node_exists suppresses the Create row *)
-  check "node_exists" (Cmdk_state.node_exists "Two" [ i2 ]);
+  let source_rows =
+    [ wmap [ "block/uuid", Wire.Uuid "u"
+           ; "block.temp/original-title", Wire.String "two"
+           ; "page?", Wire.Bool true ] ]
+  in
+  check "node_exists" (Cmdk_state.node_exists ~source_rows "Two" [ i2 ]);
   check "node_exists miss" (not (Cmdk_state.node_exists "nope" [ i2 ]));
   check "node_exists only pages"
     (not
@@ -1513,16 +1518,19 @@ let test_cmdk_view () =
     Cmdk_state.upsert_create
       { Cmdk_state.initial_view with input = "x"; groups = [ g1 ] }
   in
-  check "upsert create first unfiltered"
-    ((List.hd v2.groups).gid = Cmdk_state.G_create
-    && List.length v2.groups = 2);
+  check "upsert create after first page unfiltered"
+    (List.length v2.groups = 1
+    && List.map (fun (it : Cmdk_state.item) -> it.gid) (List.hd v2.groups).gitems
+       = [ Cmdk_state.G_nodes; Cmdk_state.G_create; Cmdk_state.G_nodes ]);
   let v3 =
     Cmdk_state.upsert_create
       { Cmdk_state.initial_view with input = "x"; groups = [ g1 ]
                                    ; filter = Some Cmdk_state.G_nodes }
   in
-  check "upsert create last when filtered"
-    ((List.nth v3.groups 1).gid = Cmdk_state.G_create)
+  check "upsert create after first page when filtered"
+    (List.length v3.groups = 1
+    && List.map (fun (it : Cmdk_state.item) -> it.gid) (List.hd v3.groups).gitems
+       = [ Cmdk_state.G_nodes; Cmdk_state.G_create; Cmdk_state.G_nodes ])
 
 let test_cmdk_groups () =
   let gids v q rows total =
@@ -1541,22 +1549,28 @@ let test_cmdk_groups () =
      = [ Cmdk_state.G_recently_updated; Cmdk_state.G_filters ]);
   check "query order"
     (gids v "abc" [] 0
-     = [ Cmdk_state.G_create; Cmdk_state.G_nodes
+     = [ Cmdk_state.G_nodes
        ; Cmdk_state.G_recently_updated; Cmdk_state.G_commands
-       ; Cmdk_state.G_files; Cmdk_state.G_filters ]);
+       ; Cmdk_state.G_files; Cmdk_state.G_create; Cmdk_state.G_filters ]);
   check "leading slash order"
     (gids v "/x" [] 0 = [ Cmdk_state.G_filters; Cmdk_state.G_nodes ]);
   check "mid slash order"
     (gids v "a/b" [] 0
-     = [ Cmdk_state.G_create; Cmdk_state.G_nodes; Cmdk_state.G_files
+     = [ Cmdk_state.G_nodes; Cmdk_state.G_files; Cmdk_state.G_create
        ; Cmdk_state.G_filters ]);
   let vf = { v with filter = Some Cmdk_state.G_commands } in
   check "filtered order"
     (gids vf "abc" [] 0
      = [ Cmdk_state.G_commands; Cmdk_state.G_create ]);
   let rows = [ cmdk_item ~act:(Cmdk_state.Open_page "u") "abc" ] in
+  let source_rows =
+    [ wmap [ "block/uuid", Wire.Uuid "u"
+           ; "block.temp/original-title", Wire.String "abc"
+           ; "page?", Wire.Bool true ] ]
+  in
   check "existing node drops create"
-    (gids v "abc" rows 1
+    (List.map (fun (g : Cmdk_state.group) -> g.gid)
+       (Cmdk_state.group_order ~source_rows v "abc" rows 1)
      = [ Cmdk_state.G_nodes; Cmdk_state.G_recently_updated
        ; Cmdk_state.G_commands; Cmdk_state.G_files
        ; Cmdk_state.G_filters ]);
@@ -1566,7 +1580,9 @@ let test_cmdk_groups () =
        (Cmdk_state.group_order v "zzz" rows 7)
    with
    | Some g ->
-       check "nodes group totals" (g.gitems = rows && g.gtotal = 7)
+       check "nodes group totals"
+         (List.filter (fun (it : Cmdk_state.item) -> it.gid <> Cmdk_state.G_create) g.gitems = rows
+         && g.gtotal = 7)
    | None -> check "nodes group totals" false);
   (* command table: no dev entries w/o developer-mode, sorted desc by id *)
   let tbl = Cmdk_state.command_table () in

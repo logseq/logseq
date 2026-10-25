@@ -72,10 +72,10 @@ let get_block_children db (block : entity) ~(all : bool)
             include_collapsed_children
             || not
                  (Ldb.truthy
-                    (Endpoint_property.entity_direct_value db parent.id
+                    (Property_maps.entity_direct_value db parent.id
                        "block/collapsed?"))
             || Option.is_some
-                 (Endpoint_property.entity_direct_value db parent.id
+                 (Property_maps.entity_direct_value db parent.id
                     "block/name")
           in
           let children =
@@ -129,7 +129,7 @@ let block_positioned_properties_map db (block : entity) : Wire.t =
                 (fun ident ->
                   match entity db (Ident ident) with
                   | Some p ->
-                      Some (Endpoint_property.display_property_map db p)
+                      Some (Property_maps.display_property_map db p)
                   | None -> None)
                 idents) ))
        (Render_snapshot.block_positioned_property_idents_by_position
@@ -316,7 +316,7 @@ let get_block_and_children db (id_or_page_name : value) (opts : gb_opts) :
       in
       let block_map_base =
         let direct =
-          Endpoint_property.entity_direct_map db block
+          Property_maps.entity_direct_map db block
             [ "db/id"; "db/ident"; "block/uuid"; "block/name"; "block/tags" ]
         in
         let forward =
@@ -1085,6 +1085,36 @@ let standalone_display_block (bm : Block_map.t) : Block_map.t =
         | _ -> bm
       else bm)
 
+(* format.block/math-block-formula reuses the standalone display parser. *)
+let math_block_formula (title : string) : string option =
+  let block = standalone_display_block [ "block/title", String title ] in
+  match Block_map.attr_value block "logseq.property.node/display-type" with
+  | Some (Keyword "math") -> Block_map.string_attr block "block/title"
+  | _ -> None
+
+let file_graph_block_attrs =
+  [ "block/format"; "block/properties"; "block/macros"
+  ; "block/properties-order"; "block/scheduled"; "block/deadline"
+  ; "block/marker"; "block/priority"; "block/properties-text-values"
+  ; "block/invalid-properties" ]
+
+(* DB extraction keeps only supported headings from the file property bag.
+   Other parsed properties stay in the title rather than becoming DB attrs. *)
+let normalize_extracted_block (block : Block_map.t) : Block_map.t =
+  let block = standalone_display_block block in
+  let heading =
+    match Block_map.attr_value block "block/properties" with
+    | Some props -> Clj_value.map_get_opt props "heading"
+    | None -> None
+  in
+  let block = Block_map.dissoc block file_graph_block_attrs in
+  match heading with
+  | Some (Bool true as heading) ->
+      Block_map.put block "logseq.property/heading" heading
+  | Some (Int64 level as heading) when level >= 1L && level <= 6L ->
+      Block_map.put block "logseq.property/heading" heading
+  | _ -> block
+
 (* cljs use-cached-refs + remove-empty-refs on the merged ref list;
    cached-refs are the input block's own :block/refs (the cljs version
    also reads :editor/block-refs UI state, unavailable here). *)
@@ -1194,28 +1224,12 @@ let parse_block_extract (db : db) (bm : Block_map.t) (title : string) :
     in
     match Gp_block.extract_blocks ast content' "markdown" opts with
     | [] -> bm
-    | nb :: _ ->
-        let nb = standalone_display_block nb in
-        let props =
-          match Block_map.attr_value nb "block/properties" with
-          | Some (Map pkvs) -> pkvs
-          | _ -> []
-        in
-        let nb =
-          Block_map.dissoc nb
-            [ "block/format"; "block/properties"; "block/macros"
-            ; "block/properties-order" ]
-        in
-        List.fold_left
-          (fun acc (k, v) ->
-            match k with
-            | Keyword "heading" | String "heading" ->
-                Block_map.put acc "logseq.property/heading" v
-            | _ -> acc)
-          nb props
+    | nb :: _ -> normalize_extracted_block nb
 
 (* cljs wrap-parse-block on the decoded block map *)
-let wrap_parse_block (db : db) (bm : Block_map.t) : Block_map.t =
+let wrap_parse_block ?(preserve_relations = false) (db : db) (bm : Block_map.t) :
+    Block_map.t =
+  let bm = Block_map.dissoc bm file_graph_block_attrs in
   match Block_map.string_attr bm "block/title" with
   | None -> bm
   | Some title0 -> (
@@ -1223,6 +1237,12 @@ let wrap_parse_block (db : db) (bm : Block_map.t) : Block_map.t =
         Option.value
           (Block_map.attr_value bm "logseq.property.node/display-type")
           ~default:Nil
+      in
+      let title0 =
+        match display_type_v with
+        | Keyword "math" | String "math" ->
+            Option.value (math_block_formula title0) ~default:title0
+        | _ -> title0
       in
       let code_or_math =
         match display_type_v with
@@ -1247,6 +1267,11 @@ let wrap_parse_block (db : db) (bm : Block_map.t) : Block_map.t =
       let merged =
         Block_map.dissoc (Block_map.merge bm parsed)
           [ "block/format"; "block.temp/ast-body"; "block/level" ]
+      in
+      let merged =
+        match Block_map.attr_value bm "block/tags" with
+        | Some tags when preserve_relations -> Block_map.put merged "block/tags" tags
+        | _ -> merged
       in
       let merged =
         match Block_map.attr_value bm "block/uuid" with
@@ -1291,7 +1316,10 @@ let wrap_parse_block (db : db) (bm : Block_map.t) : Block_map.t =
       let block_uuid =
         Option.value (Block_map.attr_value bm "block/uuid") ~default:Nil
       in
-      let refs = dedupe_refs (use_cached_refs block_uuid cached refs) in
+      let refs =
+        if preserve_relations && Block_map.mem bm "block/refs" then cached
+        else dedupe_refs (use_cached_refs block_uuid cached refs)
+      in
       let merged = Block_map.put merged "block/refs" (List refs) in
       match Block_map.string_attr merged "block/title" with
       | Some t ->
@@ -1329,28 +1357,7 @@ let parse_block args : Wire.t Db_worker_effect.t =
    a heading block's title loses its #s, and [[name]] refs rewrite to
    [[uuid]] against the extracted refs *)
 let paste_block_of (bm : Block_map.t) : Block_map.t =
-  (* the extracted :block/properties map is a property bag, not the
-     sequential attr the schema validates — hoist heading into
-     logseq.property/heading and drop the bag like parse-block does *)
-  let props =
-    match Block_map.attr_value bm "block/properties" with
-    | Some (Map pkvs) -> pkvs
-    | _ -> []
-  in
-  let bm =
-    Block_map.dissoc bm
-      [ "block/tags"; "block/properties"; "block/macros"
-      ; "block/properties-order" ]
-  in
-  let bm =
-    List.fold_left
-      (fun acc (k, v) ->
-        match k with
-        | Keyword "heading" | String "heading" ->
-            Block_map.put acc "logseq.property/heading" v
-        | _ -> acc)
-      bm props
-  in
+  let bm = Block_map.remove_attr (normalize_extracted_block bm) "block/tags" in
   let refs =
     match Block_map.attr_value bm "block/refs" with
     | Some v -> Clj_value.coll_items v

@@ -3904,3 +3904,10 @@ let () =
                  (Graph_backup.list_backups ~graphs_dir ~repo)))
            [ "auto-middle"; "auto-new"; "cli-old"; "manual-old"
            ; "unknown-old" ])
+
+let () =
+  Fest.test "marketplace proxy rejects exhausted rate limits" (fun () ->
+    List.iter (fun (status, remaining, expected) ->
+      let body = js_obj ["resources", js_obj ["core", js_obj ["remaining", Js.Json.number remaining]]] in
+      Fest.expect |> Fest.deep_equal (Electron_plugin.proxy_usable status body) expected)
+      [200, 4999., true; 200, 0., false; 200, -1., false; 503, 10., false])

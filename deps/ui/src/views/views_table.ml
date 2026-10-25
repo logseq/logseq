@@ -1648,6 +1648,12 @@ let render_table inst s : t =
       box ~grow:1. ~accessibility_identifier:(Ui_services.env_random_uuid ())
         [ table_el ~paginate:more inst s ]
 
+let error_el ~title ~content : t =
+  column ~padding:4 ~margin_top:4 ~gap:4 ~border_width:1
+    ~border_color:"hsl(var(--border))" ~style_class:"block-content-fallback-ui"
+    [ text ~value:title ~foreground:"hsl(var(--destructive))" []
+    ; text ~value:content [] ]
+
 let result_el inst (s : V.vstate) : t =
   let refs =
     match inst.V.kind with
@@ -1657,7 +1663,9 @@ let result_el inst (s : V.vstate) : t =
   (* A refetch keeps existing rows on screen. References never show the
      placeholder: their head and count already identify the pending section. *)
   let has_data = s.V.data <> Wr.VEmpty in
-  if s.V.loading && refs && not has_data then box ~key:"ls-view-pending" []
+  if s.V.view_error <> None then
+    error_el ~title:(I.t "view/error") ~content:(Option.get s.V.view_error)
+  else if s.V.loading && refs && not has_data then box ~key:"ls-view-pending" []
   else if s.V.loading && not has_data then
     text ~value:(I.t "ui/loading") ~padding:8 ~foreground:"muted-foreground" []
   else

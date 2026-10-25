@@ -1,6 +1,6 @@
 (* Command palette (cmdk) state + actions — mirrors
    src/main/frontend/components/cmdk/core.cljs:
-   groups create -> nodes -> commands, flat data-item-index,
+   create after the first page/block match, flat data-item-index,
    keyboard/mouse highlight, debounced search-blocks.
 
    Portable owner for both runtimes: platform and app-module access goes
@@ -127,6 +127,7 @@ type t =
   { vs : view Signal.state
   ; req : Ui_effect.request (* stale-response guard *)
   ; svs : Svs.t
+  ; source_rows : Wire.t list ref (* retain the last search's entity metadata *)
   }
 
 let initial_view =
@@ -163,7 +164,7 @@ let make ?(register = true) scheduler svs : t =
    | None -> services_ref := Some svs
    | Some _ -> ());
   let vs = Signal.state scheduler initial_view in
-  let st = { vs; req = Ui_effect.request (); svs } in
+  let st = { vs; req = Ui_effect.request (); svs; source_rows = ref [] } in
   (* the modal palette is the singleton shortcuts dispatch through;
      sidebar cmdk blocks are independent and must not steal the refs *)
   if register then begin
@@ -211,7 +212,7 @@ let decorate (v : view) : view =
                   { it with
                     ihl = v.hl = it.idx
                   ; imouse = v.mouse
-                  ; iq = (if g.gid = G_create then "" else v.input) })
+                  ; iq = (if it.gid = G_create then "" else v.input) })
                 g.gitems })
         v.groups }
 
@@ -487,7 +488,7 @@ let current_page_limit expanded =
 
 (* include-matched-count? returns {items, matched-count}; fall back to
    a bare array if the shape differs *)
-let run_search (svs : Svs.t) repo q move_mode nodes_limit =
+let search_rows (svs : Svs.t) repo q move_mode nodes_limit =
   let* w =
     svs.Svs.invoke "thread-api/search-blocks"
       [ Wire.String repo; Wire.String q
@@ -507,7 +508,11 @@ let run_search (svs : Svs.t) repo q move_mode nodes_limit =
             ~default:(List.length items) )
     | _ -> ([], 0)
   in
-  Ui_task.resolve (List.mapi (fun i w -> item_of_row w i) rows, total)
+  Ui_task.resolve (rows, total)
+
+let run_search svs repo q move_mode limit =
+  let* rows, total = search_rows svs repo q move_mode limit in
+  Ui_task.resolve (List.mapi (fun i row -> item_of_row row i) rows, total)
 
 (* number the flat item indices left-to-right, top-to-bottom *)
 let renumber groups =
@@ -525,23 +530,116 @@ let renumber groups =
       { g with gitems = items })
     groups
 
-(* cljs `node-exists?`: a page result whose original-title matches the
-   input suppresses the Create group *)
-let node_exists q rows =
-  let q' = String.lowercase_ascii (String.trim q) in
-  q' <> ""
-  && List.exists
-       (fun (it : item) ->
-         match it.act with
-         | Open_page _ ->
-             String.lowercase_ascii (String.trim (strip_pfts it.ititle)) = q'
-         | _ -> false)
-       rows
+let row_has_tag w ident =
+  match Wire.get w "block/tags" with
+  | Some (Wire.List tags) | Some (Wire.Array tags) | Some (Wire.Set tags) ->
+      List.exists
+        (fun tag ->
+          tag = Wire.Keyword ident
+          || Wire.get tag "db/ident" = Some (Wire.Keyword ident))
+        tags
+  | _ -> false
 
-let group_order v q rows total =
+let row_parentless w =
+  match Wire.get w "block/parent" with
+  | None | Some Wire.Nil -> true
+  | Some _ -> false
+
+let row_is_library w =
+  Wire.get w "logseq.property/built-in?" = Some (Wire.Bool true)
+  && str_field w "block/title" = Some "Library"
+
+let exact_page_candidate w =
+  Wire.get w "page?" = Some (Wire.Bool true)
+  && not (row_has_tag w "logseq.class/Tag")
+  && not (row_has_tag w "logseq.class/Property")
+  && (row_parentless w
+      || row_has_tag w "logseq.class/Journal"
+      || match Wire.get w "block.temp/breadcrumb" with
+         | Some (Wire.List crumbs) | Some (Wire.Array crumbs) ->
+             (match List.rev crumbs with
+              | parent :: _ -> row_is_library parent
+              | [] -> false)
+         | _ -> false)
+
+let page_name_sanity_lc s =
+  let s = (services ()).Svs.normalize (Fuzzy.lowercase s) in
+  let s =
+    if String.length s > 0 && s.[0] = '/' then
+      String.sub s 1 (String.length s - 1)
+    else s
+  in
+  let n = String.length s in
+  if n > 0 && s.[n - 1] = '/' then String.sub s 0 (n - 1) else s
+
+(* Exact matching uses the original title, never snippets or namespace
+   decorations. Classes, properties and namespaced children do not hide Create. *)
+let node_exists ?(source_rows = []) q rows =
+  let pages = Hashtbl.create (List.length rows) in
+  List.iter
+    (fun (it : item) ->
+      match it.act with
+      | Open_page uuid -> Hashtbl.replace pages uuid ()
+      | _ -> ())
+    rows;
+  String.trim q <> ""
+  && let q = page_name_sanity_lc q in
+     List.exists
+       (fun w ->
+         match Wire.map_get_uuid w "block/uuid", str_field w "block.temp/original-title" with
+         | Some uuid, Some title ->
+             Hashtbl.mem pages uuid && exact_page_candidate w
+             && page_name_sanity_lc title = q
+         | _ -> false)
+       source_rows
+
+(* Insert only after visibility has been computed. The containing group
+   keeps its identity/count/limit; the inserted item still belongs to Create. *)
+let insert_create_after_first_match groups =
+  match List.find_opt (fun (g : group) -> g.gid = G_create) groups with
+  | None -> groups
+  | Some creation when creation.gitems = [] -> groups
+  | Some creation ->
+      let first_match matches =
+        List.find_map
+          (fun g ->
+            Option.map (fun it -> (g.gid, it.ikey))
+              (List.find_opt (fun it -> matches it.act) g.gitems))
+          groups
+      in
+      let matched =
+        match first_match (function Open_page _ -> true | _ -> false) with
+        | Some _ as matched -> matched
+        | None -> first_match (function Open_block _ -> true | _ -> false)
+      in
+      (match matched with
+       | None -> groups
+       | Some (gid, key) ->
+           List.filter_map
+             (fun g ->
+               if g.gid = G_create then None
+               else if g.gid <> gid then Some g
+               else
+                 let rec insert before = function
+                   | [] -> List.rev before
+                   | it :: rest when it.ikey = key ->
+                       List.rev_append before (it :: creation.gitems @ rest)
+                   | it :: rest -> insert (it :: before) rest
+                 in
+                 Some { g with gitems = insert [] g.gitems })
+             groups)
+
+let visible_groups v groups =
+  List.map
+    (fun g ->
+      if v.sidebar || v.filter = Some g.gid || g.gexpanded then g
+      else { g with gitems = List.filteri (fun i _ -> i < g.glimit) g.gitems })
+    groups
+
+let group_order ?(source_rows = []) v q rows total =
   let svs = services () in
   let create_g () =
-    if node_exists q rows then None
+    if node_exists ~source_rows q rows then None
     else
       Some
         { gid = G_create; gtitle = svs.Svs.i18n "cmdk.group/create"
@@ -623,7 +721,7 @@ let group_order v q rows total =
     starts_slash
     || (try ignore (String.index q '/'); true with Not_found -> false)
   in
-  match v.filter with
+  let groups = match v.filter with
   | Some gid ->
       let only =
         match gid with
@@ -636,13 +734,12 @@ let group_order v q rows total =
       (* cljs filtered order puts the Create row after the group *)
       only @ Option.to_list (create_g ())
   | None ->
-      (* cljs group order: create?, current-page, nodes,
-         recently-updated, commands, files, filters — slash-prefixed
-         queries reorder to filters, current-page, nodes *)
+      (* Create follows commands/files unless a visible page/block matches;
+         slash-prefixed queries reorder to filters, current-page, nodes. *)
       if starts_slash then filters_g () :: cp () @ [ nodes_g () ]
       else if has_slash then
-        Option.to_list (create_g ())
-        @ cp () @ [ nodes_g (); files_g (); filters_g () ]
+        cp () @ [ nodes_g (); files_g () ]
+        @ Option.to_list (create_g ()) @ [ filters_g () ]
       else if String.trim q = "" then
         (* cljs :default on blank input runs :initial + :filters — but a
            fresh-open palette never triggers :default (refresh-key
@@ -651,28 +748,20 @@ let group_order v q rows total =
         if v.edited then cp () @ [ recents_g (); filters_g () ]
         else cp () @ [ recents_g () ]
       else
-        Option.to_list (create_g ())
-        @ cp ()
-        @ [ nodes_g (); recents_g (); commands_g (); files_g ()
-          ; filters_g () ]
+        cp () @ [ nodes_g (); recents_g (); commands_g (); files_g () ]
+        @ Option.to_list (create_g ()) @ [ filters_g () ]
+  in
+  visible_groups v groups |> insert_create_after_first_match
 
-let apply_results st q move_mode expanded rows total =
+let apply_results ?(source_rows = []) st q move_mode expanded rows total =
   ignore move_mode;
   ignore expanded;
   set_in st (fun v ->
       if v.input <> q then v (* stale — input moved on *)
       else
+        let () = st.source_rows := source_rows in
         let groups =
-          group_order v q rows total
-          |> List.map (fun g ->
-                 (* cljs visible-items: the filtered group is never
-                    truncated *)
-                 if v.filter = Some g.gid || g.gexpanded
-                    || List.length g.gitems <= g.glimit then g
-                 else
-                   { g with
-                     gitems =
-                       List.filteri (fun i _ -> i < g.glimit) g.gitems })
+          group_order ~source_rows v q rows total
           |> List.filter (fun g -> g.gitems <> [])
           |> renumber
         in
@@ -698,35 +787,47 @@ let refresh ?(clear = true) st =
   | None -> ()
   | Some repo ->
       ignore
-        ((let* (rows, total) =
-           run_search st.svs repo v.input v.move_mode
+        ((let* (source_rows, total) =
+           search_rows st.svs repo v.input v.move_mode
              (match v.filter with
               | Some G_current_page -> current_page_limit v.expanded
               | _ -> nodes_limit v.move_mode v.expanded)
          in
+         let rows = List.mapi (fun i row -> item_of_row row i) source_rows in
          if Ui_effect.is_current st.req gen then
-           apply_results st v.input v.move_mode v.expanded rows total;
+           apply_results ~source_rows st v.input v.move_mode v.expanded rows total;
          Ui_task.resolve ())  |> fun t -> Ui_task.catch t (fun e ->
                 st.svs.Svs.console_error "cmdk search failed" e;
                 Ui_task.resolve ()))
 
 (* the create row must not depend on the worker search resolving *)
-let upsert_create v =
-  let others = List.filter (fun g -> g.gid <> G_create) v.groups in
+let upsert_create ?(source_rows = []) v =
+  let others =
+    v.groups
+    |> List.filter (fun (g : group) -> g.gid <> G_create)
+    |> List.map (fun g ->
+           { g with gitems = List.filter (fun (it : item) -> it.gid <> G_create) g.gitems })
+  in
+  let rows = List.mapi (fun i w -> item_of_row w i) source_rows in
+  let items = if node_exists ~source_rows v.input rows then [] else create_items v.input in
   let g =
-    { gid = G_create; gtitle = ""; gitems = create_items v.input
+    { gid = G_create; gtitle = ""; gitems = items
     ; gtotal = 0; glimit = 1; gexpanded = false; gfilter_active = false }
   in
-  (* cljs filtered order puts create after the filtered group.
-     renumber here too: until the search lands there is no apply_results
-     pass, and hl addresses items by idx — an unnumbered create row
-     could never be highlighted *)
+  let rec before_filters before = function
+    | [] -> List.rev_append before [ g ]
+    | ({ gid = G_filters; _ } :: _ as rest) -> List.rev_append before (g :: rest)
+    | other :: rest -> before_filters (other :: before) rest
+  in
+  let groups =
+    if String.length v.input > 0 && v.input.[0] = '/' then others
+    else match v.filter with
+      | Some _ -> others @ [ g ]
+      | None -> before_filters [] others
+  in
   { v with
-    groups =
-      renumber
-        (match v.filter with
-         | Some _ -> others @ [ g ]
-         | None -> g :: others)
+    groups = groups |> insert_create_after_first_match
+             |> List.filter (fun g -> g.gitems <> []) |> renumber
   }
 
 (* cljs load-results :initial — recently-updated pages from storage ids *)
@@ -782,7 +883,8 @@ let load_recents st repo =
      Ui_task.resolve ())  |> fun t -> Ui_task.catch t (fun _ -> Ui_task.resolve ()))
 
 let on_input st q =
-  set_in st (fun v -> upsert_create { v with input = q; edited = true });
+  set_in st (fun v ->
+      upsert_create ~source_rows:!(st.source_rows) { v with input = q; edited = true });
   (* search fires on the keystroke itself — a debounce delays the last
      keystroke's results past the worker roundtrip it should overlap.
      request-stamped responses keep stale answers from overwriting

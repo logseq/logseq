@@ -182,6 +182,7 @@ type t =
   { vs : view Signal.state
   ; gen : int ref (* stale-response guard *)
   ; titles : string list ref
+  ; page_exact_titles : string list ref (* parentless internal pages/journals *)
   ; tag_titles : (string * string option) list ref
     (* class/tag entities for the # popup: (title, tabler icon) *)
   ; tag_exact_titles : string list ref
@@ -200,6 +201,7 @@ let make scheduler : t =
     { vs = Signal.state scheduler { ac = None; cm = None; pv = None }
   ; gen = ref 0
   ; titles = ref []
+  ; page_exact_titles = ref []
     ; tag_titles = ref []
     ; tag_exact_titles = ref []
     ; templates = ref []  }
@@ -627,7 +629,7 @@ let page_items_for t kind q =
            the query exactly names an existing class (internal ones like
            Page count) or a class alias *)
         List.exists (fun ti -> S.equal ti q) !(t.tag_exact_titles)
-    | _ -> List.exists (fun ti -> S.equal ti q) !(t.titles)
+    | _ -> List.exists (fun ti -> S.equal ti q) !(t.page_exact_titles)
   in
   (* cljs matched-pages-with-new-page: the "New tag/page" row goes after a
      leading starts-with match, else first *)
@@ -909,6 +911,24 @@ let load_titles t =
            | Wire.String s -> Some s
            | _ -> Cmdk_state.str_field row "block/title")
          rows;
+     (* get-all-page-titles intentionally returns strings, so resolve the
+        suppression set separately: ordinary names need an internal page
+        or journal with no parent. Tags retain their class/alias check. *)
+     let* exact =
+       Runtime.invoke2 "thread-api/q" (Wire.String (repo ()))
+         (Wire.Array
+            [ Wire.String
+                "[:find ?title :where (or [?page :block/tags :logseq.class/Page] [?page :block/tags :logseq.class/Journal]) [?page :block/title ?title] (not [?page :block/parent])]" ])
+     in
+     t.page_exact_titles :=
+       (match exact with
+        | Wire.Array xs | Wire.List xs ->
+            List.filter_map
+              (function
+                | Wire.Array [ Wire.String title ] | Wire.List [ Wire.String title ] -> Some title
+                | _ -> None)
+              xs
+        | _ -> []);
      (match (get t).ac with
       | Some ({ kind = Page_ref | Page_embed | Tag_search | Embed_ref; _ } as ac) ->
           set_ac t (Some (refresh_items t ac))

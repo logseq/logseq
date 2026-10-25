@@ -5813,8 +5813,37 @@ let test_insert_asset_canonicalizes_vector_tags () =
   check "a lookup reference remains a lookup reference"
     (wire_equal (Outliner_op_construct.sanitize_ref_value db lookup) lookup)
 
+let test_insert_batch_properties_survive_canonical_replay () =
+  let conn = create_conn_with_blocks ~pages_and_blocks:
+    [{page = {default_page with pg_title = Some "Views"};
+      blocks = [{default_block with b_title = Some "Owner"}]}] () in
+  let page = Option.get (find_page conn "Views") in
+  let owner = find_block conn "Owner" in
+  let view_uuid = gen_uuid () in
+  let report = Option.get (Db_tx.last_report_during conn (fun () ->
+    apply_ops conn [
+      wop "insert-blocks" [warr [wmap [wkw "block/uuid", Wire.Uuid view_uuid;
+        wkw "block/title", Wire.String "Table"]]; Wire.Uuid (uuid_of page);
+        wmap [wkw "keep-uuid?", Wire.Bool true; wkw "sibling?", Wire.Bool false]];
+      wop "batch-set-property" [warr [Wire.Uuid view_uuid]; wkw "logseq.property/view-for";
+        Wire.Int owner.id; wmap []];
+      wop "batch-set-property" [warr [Wire.Uuid view_uuid]; wkw "logseq.property.view/feature-type";
+        wkw "query-result"; wmap []]])) in
+  let forward, _ = derive_ops report.db_before report.db_after
+    (Db_normalize.wire_of_datoms report.tx_data)
+    (List.map (fun (key, value) -> wkw key, Ds_wire.transit_of_value value) report.tx_meta) in
+  let replay = Datascript.conn_from_db report.db_before in
+  List.iter (fun entry -> ignore (Sync_replay.replay_canonical_outliner_op replay entry None)) forward;
+  let view = entity_by_uuid_exn replay view_uuid in
+  check "inserted view retains its owner after canonical replay"
+    (match Ldb.ref_ent view "logseq.property/view-for" with
+      | Some target -> uuid_of target = uuid_of owner | None -> false);
+  check "inserted view retains its feature after canonical replay"
+    (Ldb.value view "logseq.property.view/feature-type" = Some (Keyword "query-result"))
+
 let op_construct_cases : unit Alcotest.test_case list =
-  [ Alcotest.test_case "insert-asset-canonicalizes-vector-tags" `Quick test_insert_asset_canonicalizes_vector_tags;
+  [ Alcotest.test_case "insert-batch-properties-survive-canonical-replay" `Quick test_insert_batch_properties_survive_canonical_replay;
+    Alcotest.test_case "insert-asset-canonicalizes-vector-tags" `Quick test_insert_asset_canonicalizes_vector_tags;
     Alcotest.test_case "derive-history-outliner-ops-canonicalizes-create-page-and-builds-delete-inverse" `Quick test_derive_create_page_canonicalizes_and_builds_delete_inverse;
     Alcotest.test_case "derive-history-outliner-ops-handles-replace-empty-target-insert-inverse" `Quick test_derive_replace_empty_target_insert_inverse;
     Alcotest.test_case "derive-history-outliner-ops-builds-upsert-property-inverse-delete-page" `Quick test_derive_upsert_property_inverse_delete_page;

@@ -439,6 +439,9 @@
 (deftest semantic-api-forwards-authorized-non-e2ee-request-test
   (async done
          (let [{:keys [request claims]} (semantic-request "/api/v1/graphs/graph-1/pages?limit=10" "logseq/read")
+               _ (.set (.-headers request) "x-logseq-sync-actor" "%7B%22sub%22%3A%22spoofed%22%7D")
+               _ (aset claims "cognito:username" "用户")
+               _ (aset claims "email" "user@example.com")
                forwarded (atom [])
                limit-calls (atom [])
                env #js {"DB" #js {}
@@ -452,6 +455,9 @@
                          forwarded-url (some-> forwarded-request .-url js/URL.)]
                    (is (= 200 (.-status response)))
                    (is (= 1 (count @forwarded)))
+                   (is (= {"sub" "user-1" "cognito:username" "用户" "email" "user@example.com"}
+                          (some-> (.get (.-headers forwarded-request) "x-logseq-sync-actor")
+                                  js/decodeURIComponent js/JSON.parse js->clj)))
                    (when forwarded-url
                      (is (= "/semantic/pages" (.-pathname forwarded-url)))
                      (is (= "10" (.get (.-searchParams forwarded-url) "limit")))

@@ -993,6 +993,15 @@ let built_in_pages_names = [ library_page_name; quick_add_page_name; "Contents" 
 let is_library (e : entity) : bool =
   built_in e && string_value e "block/title" = Some library_page_name
 
+(* A normal create can reuse journals or ordinary pages at the top level,
+   including direct Library children, but never namespace/class/property pages. *)
+let reusable_for_create (page : entity) : bool =
+  is_journal page
+  || (internal_page page && not (is_class page) && not (is_property page)
+      && (Option.is_none (value page "block/parent")
+          || Option.fold ~none:false ~some:is_library
+               (ref_ent page "block/parent")))
+
 (* db-db/inline-tag? — "#[[uuid]]" occurs in the raw title *)
 let inline_tag (raw_title : string) (tag_uuid : string) : bool =
   Ns_util.str_contains raw_title ("#" ^ Page_ref.to_page_ref tag_uuid)

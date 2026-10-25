@@ -1262,6 +1262,31 @@ let starts s prefix =
 let set_props ~caret uuid ident v =
   prop_batch ~caret uuid [ Ops.set_block_property uuid ident v ]
 
+(* A typed slash command inserts beside nonempty/already typed blocks;
+   preserve their complete buffer and convert only after the insert settles. *)
+let upsert_type_block ?lang ?(exit = false) ~caret uuid display_type =
+  let ops target =
+    Ops.set_block_property target "logseq.property.node/display-type"
+      (W.Keyword display_type)
+    :: (match lang with
+        | Some lang ->
+            [ Ops.set_block_property target "logseq.property.code/lang"
+                (W.String lang) ]
+        | None -> [])
+  in
+  let typed =
+    match S.find uuid with
+    | Some b -> b.Model.block_display_type <> None
+    | None -> false
+  in
+  if typed || String.trim (A.live_buffer uuid) <> "" then
+    A.insert_sibling_after
+      ~after_insert:(fun target ->
+        Ops.apply_and_refresh ~opts:(Ops.op_opts "set-block-property")
+          (ops target)) uuid
+  else if exit then exit_to_props uuid (ops uuid)
+  else prop_batch ~caret uuid (ops uuid)
+
 (* cljs batch-set-property-closed-value!: resolve the closed-value entity
    by db-property/closed-value-content (block/title else
    logseq.property/value), then batch-set-property {:entity-id? true} *)
@@ -1458,22 +1483,10 @@ let run_editor_cmd uuid command from to_ =
       open_cal (Cal_prop "logseq.property/scheduled") uuid caret
   | "deadline" ->
       open_cal (Cal_prop "logseq.property/deadline") uuid caret
-  | "quote" ->
-      set_props ~caret uuid "logseq.property.node/display-type"
-        (W.Keyword "quote")
-  | "math-block" ->
-      set_props ~caret uuid "logseq.property.node/display-type"
-        (W.Keyword "math")
-  | "code-block" ->
-      exit_to_props uuid
-        [ Ops.set_block_property uuid "logseq.property.node/display-type"
-            (W.Keyword "code") ]
-  | "calculator" ->
-      prop_batch ~caret uuid
-        [ Ops.set_block_property uuid "logseq.property.node/display-type"
-            (W.Keyword "code")
-        ; Ops.set_block_property uuid "logseq.property.code/lang"
-            (W.String "calc") ]
+  | "quote" -> upsert_type_block ~caret uuid "quote"
+  | "math-block" -> upsert_type_block ~caret uuid "math"
+  | "code-block" -> upsert_type_block ~exit:true ~caret uuid "code"
+  | "calculator" -> upsert_type_block ~lang:"calc" ~caret uuid "code"
   | "normal-text" | "clear-heading" ->
       prop_batch ~caret uuid
         [ Ops.remove_block_property uuid "logseq.property/heading" ]

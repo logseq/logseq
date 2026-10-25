@@ -523,8 +523,8 @@ let test_download_graph_by_id_cleans_on_failure () =
             | Some "sync/snapshot-download" ->
                 Db_worker_effect.pure
                   (Wire.Map
-                     [ kw "url"
-                     , Wire.String "https://snapshot.example.test" ])
+                     [ kw "t", Wire.Int 77
+                     ; kw "url", Wire.String "https://snapshot.example.test" ])
             | _ ->
                 Db_worker_effect.error
                   (Dispatcher.Exn_info
@@ -998,7 +998,8 @@ let test_db_sync_delegate_import_ops () =
             | Some "sync/snapshot-download" ->
                 Db_worker_effect.pure
                   (Wire.Map
-                     [ kw "url", Wire.String "https://snapshot.example.test" ])
+                     [ kw "t", Wire.Int 77
+                     ; kw "url", Wire.String "https://snapshot.example.test" ])
             | _ -> Db_worker_effect.pure Wire.Nil);
       Sync_deps.http_send_stream :=
         Some

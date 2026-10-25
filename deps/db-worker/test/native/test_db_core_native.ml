@@ -3215,6 +3215,25 @@ let test_worker_export_replaces_block_refs () =
 
 (* epoch-ms arrives over transit as Int64 (a 31-bit int can't hold it
    under melange): it must stay numeric — never Instant-by-magnitude *)
+let test_worker_export_preserves_missing_refs_and_open_embed_options () =
+  let conn = Sqlite_export.create_conn () in
+  ignore (Datascript.transact_conn_string conn
+    "[{:db/id -1 :block/title \"Page\" :block/name \"page\" :block/uuid #uuid \"11111111-2222-3333-4444-555555555555\"}
+      {:db/id -2 :block/title \"Embed root\" :block/uuid #uuid \"aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee\" :block/page -1 :block/parent -1 :block/order \"a\"}
+      {:db/id -3 :block/title \"Collapsed child\" :block/uuid #uuid \"bbbbbbbb-bbbb-4ccc-8ddd-eeeeeeeeeeee\" :block/page -1 :block/parent -2 :block/order \"a\" :block/collapsed? true}
+      {:block/title \"Hidden grandchild\" :block/uuid #uuid \"cccccccc-bbbb-4ccc-8ddd-eeeeeeeeeeee\" :block/page -1 :block/parent -3 :block/order \"a\"}
+      {:block/title \"{{embed ((aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee))}}\" :block/uuid #uuid \"99999999-8888-4777-8666-555555555555\" :block/page -1 :block/parent -1 :block/order \"b\"}
+      {:block/title \"see ((dddddddd-bbbb-4ccc-8ddd-eeeeeeeeeeee)) here\" :block/uuid #uuid \"88888888-8888-4777-8666-555555555555\" :block/page -1 :block/parent -1 :block/order \"c\"}]");
+  let export uuid open_only = Worker_export.export_blocks_as_format (db_of conn) (Uuid uuid) (Keyword "markdown")
+    (Map [Keyword "remove-options", List [Keyword "property"]; Keyword "other-options", Map [Keyword "open-blocks-only", Bool open_only]]) (Map []) in
+  let contains text fragment = try ignore (Str.search_forward (Str.regexp_string fragment) text 0); true with Not_found -> false in
+  check "unresolved reference remains literal"
+    (contains (export "88888888-8888-4777-8666-555555555555" false) "see ((dddddddd-bbbb-4ccc-8ddd-eeeeeeeeeeee)) here");
+  List.iter (fun open_only ->
+    let text = export "99999999-8888-4777-8666-555555555555" open_only in
+    check "embedded child stays visible" (contains text "Collapsed child");
+    check "embedded collapsed descendants respect export option" (contains text "Hidden grandchild" <> open_only)) [false; true]
+
 let test_epoch_ms_value_of_transit_stays_numeric () =
   let ms = 1783612800123L in
   let v = Ds_wire.value_of_transit (Wire.Int64 ms) in
@@ -3378,7 +3397,8 @@ let test_build_upsert_nodes_edn_resolves_uuid_page_ids () =
 (* ---------- cases ---------- *)
 
 let cases =
-  [ Alcotest.test_case "db-core-registers-db-sync-thread-apis" `Quick
+  [ Alcotest.test_case "worker-export-preserves-missing-refs-and-open-embed-options" `Quick test_worker_export_preserves_missing_refs_and_open_embed_options
+  ; Alcotest.test_case "db-core-registers-db-sync-thread-apis" `Quick
       test_db_core_registers_db_sync_thread_apis
   ; Alcotest.test_case "db-core-registers-all-db-core-thread-apis" `Quick
       test_db_core_registers_all_db_core_thread_apis

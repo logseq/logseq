@@ -41,13 +41,18 @@ let default_notification (msg : notification) : unit =
 
 (* copy-file! *)
 let copy_file_bang (from : string) (to_ : string) : unit Eff.t =
-  Fs.mkdir_p (Path.dirname to_) >>= fun () -> Fs.copy_file from to_
+  Eff.catch
+    (Fs.mkdir_p (Path.dirname to_) >>= fun () ->
+     Fs.read_binary from >>= fun payload -> Fs.write_binary to_ payload)
+    (fun error -> Eff.error (Failure ("Failed to copy " ^ from ^ " -> " ^ to_ ^ ": " ^ Printexc.to_string error)))
 
 (* copy-path! *)
 let rec copy_path (from : string) (to_ : string) : unit Eff.t =
   Fs.exists from >>= fun exists ->
   if not exists then Eff.pure () else
-  Fs.is_directory from >>= fun is_dir ->
+  Eff.catch (Fs.is_directory from)
+    (fun error -> Eff.error (Failure ("Failed to copy " ^ from ^ " -> " ^ to_ ^ ": " ^ Printexc.to_string error)))
+  >>= fun is_dir ->
   if is_dir then
     Fs.mkdir_p to_ >>= fun () ->
     Fs.readdir from >>= fun entries ->

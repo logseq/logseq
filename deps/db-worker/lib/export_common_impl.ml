@@ -260,6 +260,11 @@ let hashtag_value_to_string (inline_coll : value) : string =
          match ast_type inline with
          | "Nested_link" -> mstr (ast_content inline) "content" |> Option.value ~default:""
          | "Link" -> mstr (ast_content inline) "full_text" |> Option.value ~default:""
+         | "Macro" ->
+             let content = ast_content inline in
+             let name = Option.value ~default:"" (mstr content "name") in
+             let args = mcoll content "arguments" |> List.filter_map (function String value -> Some value | _ -> None) in
+             "{{" ^ name ^ (if args = [] then "" else "(" ^ String.concat "," args ^ ")") ^ "}}"
          | "Plain" ->
              (match ast_content inline with String s -> s | _ -> "")
          | _ -> "")
@@ -275,11 +280,12 @@ let replace_link_block_ref ~(resolvers : resolvers) ~(st : state)
   | Vector [ String "Link"; link ] | List [ String "Link"; link ] ->
       (match CV.coll_items (mget link "url") with
        | [ String "Block_ref"; String block_uuid ] ->
-           (match resolvers.block_ast (uuid_of block_uuid) with
-            | first :: _ ->
-                st.rre_block_ref_replaced <- true;
-                mcoll (ast_content first.node) "title"
-            | [] -> [])
+           let title = match resolvers.block_ast (uuid_of block_uuid) with
+             | first :: _ -> mcoll (ast_content first.node) "title"
+             | [] -> [] in
+           if title = [] then [Vector [String "Plain"; String ("((" ^ block_uuid ^ "))")]]
+           else (st.rre_block_ref_replaced <- true; title)
+
        | _ -> [ inline ])
   | _ -> [ inline ]
 

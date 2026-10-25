@@ -9,6 +9,8 @@ let encrypted_attrs = [ "block/title"; "block/name" ]
 
 let migration_deleted_attrs =
   [ "block/path-refs"; "block/pre-block?"
+  ; "block/scheduled"; "block/deadline"; "block/marker"; "block/priority"
+  ; "block/properties-text-values"; "block/invalid-properties"
   ; "logseq.property.embedding/hnsw-label"
   ; "logseq.property.embedding/hnsw-label-updated-at" ]
 

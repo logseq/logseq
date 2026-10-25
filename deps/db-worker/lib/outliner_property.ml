@@ -1112,11 +1112,11 @@ let create_property_text_block conn ~(block_id : Wire.t option)
   in
   let value' =
     convert_property_input_string
-      (match block with Some b -> Ldb.string_value b "logseq.property/type" | None -> None)
+      (match block with Some b -> ent_property_type b | None -> None)
       property value
   in
   if ent_property_type property <> Some "number" then
-    (match value' with
+    (match value with
      | Wire.String _ -> ()
      | _ ->
          failwith "value should be a string");
@@ -1146,7 +1146,7 @@ let create_property_text_block conn ~(block_id : Wire.t option)
            &&
            (match block with
             | Some b ->
-                (match Ldb.string_value b "logseq.property/type" with
+                (match ent_property_type b with
                  | Some t ->
                      List.mem t Db_schema.original_value_ref_property_types
                  | None -> false)

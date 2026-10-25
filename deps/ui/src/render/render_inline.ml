@@ -1394,9 +1394,7 @@ and try_match ~find ~refs ~self s i : (t * int * run_spec) option =
   | '<' -> try_lt ~refs ~self s i
   | ':' -> try_emoji s i
   | 'h' -> try_url s i
-  (* a raw newline inside a text run collapses in inline flow — the
-     br kind keeps the line break *)
-  | '\n' -> Some (br [], 1, Rs_plain)
+  | '\n' -> Some (text ~value:"\n" [], 1, Rs_plain)
   | _ -> None
 
 (* [[page]] / [label](url) *)
@@ -1830,9 +1828,9 @@ and try_lt ~refs ~self s i =
       | Some hit -> Some hit
       | None ->
           if Str_util.starts_at s i "<br>" then
-            Some (br [], 4, Rs_atomic ("br", "ed-br"))
+            Some (text ~value:"\n" [], 4, Rs_atomic ("br", "ed-br"))
           else if Str_util.starts_at s i "<br/>" then
-            Some (br [], 5, Rs_atomic ("br", "ed-br"))
+            Some (text ~value:"\n" [], 5, Rs_atomic ("br", "ed-br"))
           else None)
 
 (* <2026-09-27 Sun ...> — date starting with a digit *)

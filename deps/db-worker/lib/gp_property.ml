@@ -151,7 +151,7 @@ let drop_while f xs =
   go xs
 
 (* property/remove-properties *)
-let remove_properties (format : string) (content : string) : string =
+let remove_properties ?marker (format : string) (content : string) : string =
   if contains_properties content then
     let lines = split_lines content in
     let rec split_with acc = function
@@ -187,13 +187,28 @@ let remove_properties (format : string) (content : string) : string =
     String.concat "\n" (title_lines @ body)
   else if format <> "org" then
     let lines = split_lines content in
-    let lines =
-      match lines with
-      | first :: _rest when simplified_property first ->
-        drop_while simplified_property lines
-      | first :: rest ->
-        first :: drop_while simplified_property rest
-      | [] -> []
+    let first = match lines with first :: _ -> Unicode.trim first | [] -> "" in
+    let first = match marker with
+      | Some marker when Common_util.str_starts_with first marker
+          && String.length first > String.length marker
+          && List.mem first.[String.length marker] [' '; '\t'] ->
+          Unicode.trim (String.sub first (String.length marker) (String.length first - String.length marker))
+      | _ -> first in
+    let fence = if Common_util.str_starts_with first "```" then Some "```"
+      else if Common_util.str_starts_with first "$$" then Some "$$" else None in
+    let rec after_fence rev = function
+      | [] -> None
+      | line :: rest ->
+          let rev = line :: rev in
+          if Some (Unicode.trim line) = fence then
+            Some (List.rev_append rev (drop_while simplified_property rest))
+          else after_fence rev rest in
+    let lines = match lines, fence with
+      | first :: rest, Some _ ->
+          (match after_fence [first] rest with Some lines -> lines | None -> lines)
+      | first :: _, None when simplified_property first -> drop_while simplified_property lines
+      | first :: rest, None -> first :: drop_while simplified_property rest
+      | [], _ -> []
     in
     String.concat "\n" lines
   else content

@@ -1094,6 +1094,7 @@ let () =
         | Appear _ -> "Appear"
         | ScrollCompleted _ -> "ScrollCompleted"
         | VisibleRange _ -> "VisibleRange"
+        | ScrollEdges _ -> "ScrollEdges"
         | Picked _ -> "Picked"
         | PressModifiers _ -> "PressModifiers"
         | PressDetail _ -> "PressDetail"

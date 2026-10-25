@@ -41,6 +41,10 @@ let highlighted_indexes (h : ('m, 'a) Shared_scenarios.host) =
     (H.nodes h)
 
 let group_kinds (h : ('m, 'a) Shared_scenarios.host) =
+  let rec walk acc n =
+    List.fold_left walk (n :: acc) (M.children (H.tree h) n.M.id)
+  in
+  let modal = List.find (fun n -> H.has_class n "cp__cmdk__modal") (H.nodes h) in
   List.filter_map
     (fun n ->
       match M.string_prop n "data-attrs" with
@@ -48,7 +52,7 @@ let group_kinds (h : ('m, 'a) Shared_scenarios.host) =
           List.assoc_opt "data-cmdk-group-kind"
             (Lui_protocol.data_attrs_decode data)
       | None -> None)
-    (H.nodes h)
+    (List.rev (walk [] modal))
 
 let input_node (h : ('m, 'a) Shared_scenarios.host) =
   List.find (fun n -> H.has_class n "cp__cmdk-search-input") (H.nodes h)
@@ -118,8 +122,8 @@ let cmdk_kbd h =
     (H.nodes h)
 
 (* Query entry produces ordered results: contiguous flat indexes, first
-   item highlighted, groups in the cljs order (create/current-page ->
-   nodes -> recents -> commands -> files -> filters). *)
+   item highlighted, and stable result groups. Create follows the first
+   page/block match, or precedes filters when there is no match. *)
 let results_order (h : ('m, 'a) Shared_scenarios.host) =
   open_palette h;
   let input = input_node h in
@@ -136,25 +140,24 @@ let results_order (h : ('m, 'a) Shared_scenarios.host) =
   h.flush ();
   h.H.check "ArrowDown highlights the first result"
     (highlighted_indexes h = [ 0 ]);
-  (* meta+ArrowDown expands the highlighted group, and the refresh that
-     lands the expansion also publishes the local groups for the query:
-     canonical cljs order create -> current-page -> nodes ->
-     recently-updated -> commands -> files -> filters *)
+  (* Expanding the highlighted group also publishes the local groups. *)
   h.H.keydown ~meta:true "ArrowDown";
   h.flush ();
   let rank = function
-    | "create" -> 0
-    | "current-page" -> 1
-    | "nodes" -> 2
-    | "recently-updated" -> 3
-    | "commands" -> 4
-    | "files" -> 5
+    | "current-page" -> 0
+    | "nodes" -> 1
+    | "recently-updated" -> 2
+    | "commands" -> 3
+    | "files" -> 4
+    | "create" -> 5
     | "filters" -> 6
     | _ -> 99
   in
   let kinds = group_kinds h in
-  h.H.check "create group precedes other groups"
-    (kinds <> [] && List.hd kinds = "create");
+  h.H.check "create appears exactly once"
+    (List.length
+       (List.filter (fun n -> H.has_attr n "data-item-key" "create-e")
+          (cmdk_items h)) = 1);
   h.H.check "commands group is present" (List.mem "commands" kinds);
   let rec increasing = function
     | a :: (b :: _ as rest) -> rank a < rank b && increasing rest

@@ -295,6 +295,7 @@
  (name native_embed)
  (modules native_embed)
  (libraries logseq_ui_native)
+ (link_flags (:standard -runtime-variant _pic))
  (foreign_stubs
   (language c)
   (names logseq_lui_bridge))

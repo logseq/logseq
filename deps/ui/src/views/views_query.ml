@@ -32,6 +32,10 @@ let parse_src (s : string) : qsrc =
     | _ -> QDsl t)
   else QDsl t
 
+(* Incomplete source is a query-local error while the user is editing. *)
+let parse_src_result src =
+  try Ok (parse_src src) with Edn.Parse_error message -> Error message
+
 (* -- [:query spec] construction — only the worker-allowed keys -- *)
 
 let common_pairs block_uuid =
@@ -125,19 +129,14 @@ let spec_of cfg block_uuid = function
 
 (* -- run the query resource, decode rows into inst -- *)
 
+let set_query_error inst message =
+  V.update inst (fun s ->
+      { s with V.query_error = Some message; query_rows = [];
+        query_scalar_rows = []; query_view = W.Nil })
+
 let decode_result inst (v : W.t) =
   match W.get v "error" with
-  | Some e ->
-      V.update inst (fun s ->
-          { s with
-            V.query_error =
-              Some
-                (Option.value (W.map_get_string e "message")
-                   ~default:"query error")
-          ; query_rows = []
-          ; query_scalar_rows = []
-          ; query_view = W.Nil
-          })
+  | Some e -> set_query_error inst (Option.get (W.map_get_string e "message"))
   | None -> (
       let items =
         match W.get v "rows" with
@@ -176,32 +175,35 @@ let run inst (f : unit -> unit) =
   match inst.V.kind with
   | V.KQuery { block_uuid } -> (
       let src = (V.get inst).V.qsrc in
-      match parse_src src with
-      | QBlank ->
+      let gen = V.new_fetch inst in
+      match parse_src_result src with
+      | Error message ->
+          set_query_error inst message;
+          f ()
+      | Ok QBlank ->
           V.update inst (fun s ->
               { s with
-                V.query_rows = []
+                V.query_error = None
+              ; query_rows = []
               ; query_scalar_rows = []
               ; query_view = W.Nil
               });
           f ()
-      | src_kind ->
+      | Ok src_kind ->
           let run_with_cfg cfg =
-            match spec_of cfg block_uuid src_kind with
+            if not (V.fetch_fresh inst gen) then ()
+            else match spec_of cfg block_uuid src_kind with
             | Error msg ->
-                V.update inst (fun s -> { s with V.query_error = Some msg });
+                set_query_error inst msg;
                 f ()
             | Ok spec ->
                 let key = Db.key_query spec in
-                let gen = V.new_fetch inst in
                 Db.snapshots
                   ~f:(fun snap ->
                     if V.fetch_fresh inst gen then begin
                       (match Wr.snapshot_slot_value snap key with
                        | Some v -> decode_result inst v
-                       | None ->
-                           V.update inst (fun s ->
-                               { s with V.query_error = Some "query failed" }));
+                       | None -> set_query_error inst (I.t "query/error"));
                       (match (V.get inst).V.query_view with
                        | W.Nil -> f ()
                        | view ->
@@ -371,10 +373,10 @@ let cm_host inst : Lui_elements.t =
   Lui_elements.if_ ~test:open_sig
     (fun ctx parent ->
       let cur =
-        match parse_src (V.get inst).V.qsrc with
-        | QDsl s -> s
-        | QDatalog _ -> (V.get inst).V.qsrc
-        | QBlank -> ""
+        match parse_src_result (V.get inst).V.qsrc with
+        | Ok (QDsl s) -> s
+        | Ok (QDatalog _) | Error _ -> (V.get inst).V.qsrc
+        | Ok QBlank -> ""
       in
       (* cljs's CodeMirror editor evaluates as you type — fire the query
          eval immediately on input (the spec carries the source; it does

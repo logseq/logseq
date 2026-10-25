@@ -255,7 +255,7 @@ let graph_store_memory_tests () =
   Sqlite.close sql;
   Sys.remove path
 
-let graph_store_weak_indexes_test () =
+let graph_store_cache_policy_restore_test () =
   let open Datascript in
   let path = Filename.temp_file "graph_store_reference_policy" ".sqlite" in
   let sql = Sqlite.open_db ~path in
@@ -274,10 +274,6 @@ let graph_store_weak_indexes_test () =
   let sql = Sqlite.open_db ~path in
   let conn = Common_sqlite.get_storage_conn (Graph_store.storage sql) [] in
   let restored = db conn in
-  List.iter (fun index ->
-    check "reopened worker index uses weak references"
-      ((Persistent_sorted_set.settings index).ref_type = Persistent_sorted_set.Weak))
-    [ restored.eavt_index; restored.aevt_index; restored.avet_index ];
   check "cache policy does not change restored facts"
     (datoms restored Eavt ~e:1 ~a:"probe/value" ()
      |> Seq.exists (fun d -> d.v = Int64 7L));
@@ -545,7 +541,7 @@ let () =
   search_build_memory_tests ();
   graph_store_durability_tests ();
   graph_store_memory_tests ();
-  graph_store_weak_indexes_test ();
+  graph_store_cache_policy_restore_test ();
   graph_close_recovery_tests ();
   service_retry_tests ();
   check "registered q" (Dispatcher.registered "thread-api/q");

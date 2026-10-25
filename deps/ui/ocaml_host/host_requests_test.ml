@@ -248,7 +248,9 @@ let () =
             (name ^ "Unicode caret differs from the painted text")
             (List.exists
                (fun (r : Lui_scene.rect) ->
-                 abs_float (r.x -. x -. (expected.rx *. scale)) < 0.01
+                 abs_float
+                   (r.x -. x -. (expected.rx *. scale)
+                    +. Text_engine.input_offset engine 2) < 0.01
                  && abs_float (r.y -. y -. (expected.ry *. scale)) < 0.01)
                unicode);
           if kind <> SecureField then begin
@@ -4654,11 +4656,13 @@ let () =
                 (row_ids () = grouped_row_ids);
               expect "Native keystroke filter does not own keyboard recording"
                 (Keyboard_capture.active () && count_class "shortcut-filter-popover" = 1);
-              let key name meta =
+              let key name primary =
                 Platform.emit_event "keydown"
                   (Js.Json.JObject
                      [
-                       ("key", Js.Json.JString name); ("metaKey", Js.Json.JBoolean meta);
+                       ("key", Js.Json.JString name);
+                       ("metaKey", Js.Json.JBoolean (primary && Ui_services.env_is_mac ()));
+                       ("ctrlKey", Js.Json.JBoolean (primary && not (Ui_services.env_is_mac ())));
                      ])
               in
               let before_empty_dismissal = Gc.allocated_bytes () in
@@ -9414,6 +9418,8 @@ let () = Native_embed.with_entry_lock (fun () ->
     let search=List.find (fun id -> Lui_store.string_prop store id "placeholder"=Some (I18n.t "keymap/search-placeholder")) ids in
     let scrolls=List.filter (fun id -> Lui_store.kind store id="scroll") ids in
     check "The sidebar must own scrolling for its embedded keymap" (List.length scrolls=1);
+    let sidebar_state = Option.get (Sidebar_state.current ()) in
+    Runtime.signal_set sidebar_state.right_fraction 1.;
     let layout=Lui_layout.create () in
     List.iter (fun scale ->
       let scene=Lui_scene.create ~mask_atlas:(Lui_scene.Atlas.create ~bpp:1 ~w:1 ~h:1)
@@ -9423,12 +9429,16 @@ let () = Native_embed.with_entry_lock (fun () ->
         ~measure:(fun id value width _ -> Some (Text_engine.measure_text
           ~width:(Host_interaction.measure_width width) engine id value)) layout store;
       List.iter (fun width ->
+        Runtime.signal_set sidebar_state.viewport_w width;
+        ignore (Lui_app.flush app);
         Lui_layout.sync ~scale ~width:(width*.scale) ~height:(720.*.scale)
           ~measure:(fun id value offered _ -> Some (Text_engine.measure_text
             ~width:(Host_interaction.measure_width offered) engine id value)) layout store;
         List.iter (fun table ->
           let table_rect=Option.get (Lui_layout.rect layout table) in
-          check "Native reference tables must follow the resized sidebar content width"
+          check (Printf.sprintf
+            "Native reference tables must follow the resized sidebar content width (width=%.1f, scale=%.0f, actual=%.1f, expected=%.1f)"
+            width scale table_rect.w ((width-.48.)*.scale))
             (abs_float (table_rect.w-.(width-.48.)*.scale)<0.1);
           let rows=Lui_store.child_ids store table in
           let header=List.hd rows in

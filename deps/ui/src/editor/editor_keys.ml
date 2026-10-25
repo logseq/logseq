@@ -345,9 +345,7 @@ let edit_arrows ~route ~conduit uuid (kev : Edit_model.key_event)
     (m : Edit_model.t) =
   let up = kev.Edit_model.key = "ArrowUp" in
   if (kev.alt || kev.meta) && kev.shift then (
-    ignore
-      (Outliner_ops.apply_and_refresh
-         [ Outliner_ops.move_up_down [ uuid ] up ]);
+    A.move_blocks_up_down ~uuid up;
     m)
   else if kev.meta || kev.ctrl then (
     (* cljs mod+up / mod+down collapse/expand the block's children *)

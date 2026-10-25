@@ -275,6 +275,7 @@ let shallow_ref_identity ?cache ?attr db (r : Ev.node)
 
 let breadcrumb_entity ?cache db (n : Ev.node) : (attr * value) list =
   shallow_ref_identity ?cache db n
+  @ (if Ev.built_in n then [ "logseq.property/built-in?", Bool true ] else [])
   @ (match Ev.value n "block/raw-title" with
      | Some (String _ as s) -> [ ("block/raw-title", s) ]
      | _ -> [])

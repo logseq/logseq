@@ -14,7 +14,7 @@ concurrency:
 env:
   NODE_VERSION: '22'
   OCAML_VERSION: '5.5.1'
-  LUI_REF: 'feat/ml-backend'
+  LUI_REF: 'a884a9e1a2cc750fef7ffa0a03c6740922d44326'
 
 jobs:
   ubuntu:
@@ -49,7 +49,8 @@ jobs:
       - name: Checkout lui at LUI_REF
         id: lui
         run: |
-          git clone --branch "$LUI_REF" https://github.com/logseq/lui.git "$RUNNER_TEMP/lui"
+          git clone --no-checkout https://github.com/logseq/lui.git "$RUNNER_TEMP/lui"
+          git -C "$RUNNER_TEMP/lui" checkout "$LUI_REF"
           echo "commit=$(git -C "$RUNNER_TEMP/lui" rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           echo "LUI_SOURCE=$RUNNER_TEMP/lui" >> "$GITHUB_ENV"
 
@@ -116,8 +117,8 @@ jobs:
       - name: CSS build
         run: pnpm gulp:build
 
-  native-host:
-    name: Native host (${{ matrix.os }})
+  mygo-host:
+    name: MyGo host (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
@@ -129,7 +130,7 @@ jobs:
 
       - name: Linux system deps
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev libpango1.0-dev libcairo2-dev libharfbuzz-dev libfreetype-dev libfontconfig-dev libsdl2-dev libsdl2-ttf-dev libgl1-mesa-dev libegl1-mesa-dev libgles2-mesa-dev libffi-dev libgmp-dev
+        run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev libgtk-3-dev libpango1.0-dev libcairo2-dev libharfbuzz-dev libfreetype-dev libfontconfig-dev libsdl2-dev libsdl2-ttf-dev libgl1-mesa-dev libegl1-mesa-dev libgles2-mesa-dev libffi-dev libgmp-dev fonts-noto-cjk
 
       - name: macOS system deps
         if: runner.os == 'macOS'
@@ -165,9 +166,15 @@ jobs:
           ocaml-compiler: ${{ env.OCAML_VERSION }}
           dune-cache: true
 
-      - name: Checkout LUI native backend
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27.3'
+          cache-dependency-path: deps/ui/mygo/go.sum
+
+      - name: Checkout LUI at LUI_REF
         run: |
-          git clone --branch "$LUI_REF" https://github.com/logseq/lui.git "$RUNNER_TEMP/lui"
+          git clone --no-checkout https://github.com/logseq/lui.git "$RUNNER_TEMP/lui"
+          git -C "$RUNNER_TEMP/lui" checkout "$LUI_REF"
           git -C "$RUNNER_TEMP/lui" rev-parse HEAD
           echo "LUI_SOURCE=$RUNNER_TEMP/lui" >> "$GITHUB_ENV"
 
@@ -181,8 +188,11 @@ jobs:
         working-directory: deps/db-worker
         run: opam exec -- dune build bin/main.exe
 
-      - name: Build native host and check text backend
-        working-directory: deps/ui
+      - name: Build MyGo host and OCaml core library
+        run: bash deps/ui/mygo/build.sh
+
+      - name: Check MyGo host
+        working-directory: deps/ui/mygo
         run: |
-          opam exec -- dune build ocaml_host/logseq_native.exe
-          opam exec -- dune runtest ocaml_host
+          go test ./...
+          go vet ./...

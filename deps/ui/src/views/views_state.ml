@@ -58,6 +58,7 @@ type vstate =
   ; pinned : Sset.t
   ; columns : column list
   ; data : Views_wire.view_data
+  ; view_error : string option
   ; blocks : (string, W.t) Hashtbl.t (* uuid -> block map *)
   ; loading : bool
   ; collapsed_groups : Sset.t
@@ -127,6 +128,7 @@ let empty_vstate () : vstate =
   ; pinned = Sset.empty
   ; columns = []
   ; data = Views_wire.VEmpty
+  ; view_error = None
   ; blocks = Hashtbl.create 64
   ; loading = true
   ; collapsed_groups = Sset.empty

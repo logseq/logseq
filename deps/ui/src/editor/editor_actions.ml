@@ -864,7 +864,7 @@ let split_at_cursor uuid =
 
 (* shift+Enter on a code surface (or any non-splitting editor) appends a
    fresh sibling after the block — cljs insert-new-block! *)
-let insert_sibling_after uuid =
+let insert_sibling_after ?(after_insert = fun _ -> Js.Promise.resolve ()) uuid =
   match (S.editing (), S.find uuid) with
   | Some e, Some b when e.uuid = uuid ->
       let buf = Ops.trim_title uuid (live_buffer uuid) in
@@ -875,12 +875,15 @@ let insert_sibling_after uuid =
         || b.Model.block_children = []
       in
       let p =
-        (let* m = Ops.block_map_parsed uuid buf in
-        Ops.apply_and_refresh ~opts:(Ops.op_opts "insert-blocks")
-          [ Ops.op "save-block" [ m; Wire.Map [] ]
-          ; Ops.insert_blocks
-              [ Ops.block_map ~title:"" ~page:library new_uuid ]
-              uuid ~sibling ])
+        let* m = Ops.block_map_parsed uuid buf in
+        let* () =
+          Ops.apply_and_refresh ~opts:(Ops.op_opts "insert-blocks")
+            [ Ops.op "save-block" [ m; Wire.Map [] ]
+            ; Ops.insert_blocks
+                [ Ops.block_map ~title:"" ~page:library new_uuid ]
+                uuid ~sibling ]
+        in
+        after_insert new_uuid
       in
       optimistic_edit (fun p ->
           Model.split_insert p ~uuid ~before:buf
@@ -1375,14 +1378,46 @@ let indent_or_outdent ~indent =
       with_focus_after ~restore:(S.editing ()) focus caret
         (apply_indent_outdent ?parent_original uuids indent)
 
-let move_blocks_up_down up =
-  match selected_uuids () with
-  | [] -> ()
-  | uuids ->
-      optimistic_edit (fun p ->
-          let p' = Model.move_selected_top_blocks p uuids up in
-          if p' == p then None else Some p');
-      ignore (Ops.apply_and_refresh [ Ops.move_up_down uuids up ])
+let move_up_down_tail = ref (Js.Promise.resolve ())
+
+let move_blocks_up_down ?uuid up =
+  let context = Runtime.repo (), Runtime.route () in
+  let scope = S.interaction_scope () in
+  let move () =
+    if context <> (Runtime.repo (), Runtime.route ())
+       || scope <> S.interaction_scope () then Js.Promise.resolve ()
+    else
+      let uuids =
+        match uuid, S.editing () with
+        | Some uuid, Some e when e.S.uuid = uuid -> [ uuid ]
+        | Some _, _ -> []
+        | None, _ -> selected_uuids ()
+      in
+      match uuids with
+      | [] -> Js.Promise.resolve ()
+      | uuids ->
+          optimistic_edit (fun p ->
+              let p' = Model.move_selected_top_blocks p uuids up in
+              if p' == p then None else Some p');
+          let* saves =
+            match uuid with
+            | Some uuid ->
+                let* save = Ops.save_block_parsed uuid (live_buffer uuid) in
+                Js.Promise.resolve [ save ]
+            | None -> Js.Promise.resolve []
+          in
+          (* Selection is UUIDs plus container scope, not DOM rows: keep
+             it intact across refresh, never reselect over a click/Escape. *)
+          Ops.apply_and_refresh ~opts:(Ops.op_opts "move-blocks-up-down")
+            (saves @ [ Ops.move_up_down uuids up ])
+  in
+  let pending =
+    Js.Promise.then_ move !move_up_down_tail
+    |> Js.Promise.catch (fun e ->
+           Ui_services.log_error ("move blocks failed", e);
+           Js.Promise.resolve ())
+  in
+  move_up_down_tail := pending
 
 let delete_selection () =
   let before = S.history_cursor () in

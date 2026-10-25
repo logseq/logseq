@@ -324,28 +324,73 @@ let get_graph_uuid args =
 
 let () = Dispatcher.register "thread-api/get-graph-uuid" get_graph_uuid
 
-(* :thread-api/get-all-page-titles [repo]
-   cljs caches on [repo max-tx]; recomputing is semantics-identical. *)
+let page_title_identity (page : entity) : Wire.t =
+  let fields =
+    List.filter_map
+      (fun attr ->
+        Option.map (fun v -> Wire.keyword attr, Ds_wire.transit_of_value v)
+          (Ldb.value page attr))
+      [ "db/ident"; "block/uuid"; "block/title"; "block/name"
+      ; "logseq.property/built-in?"; "logseq.property/deleted-at"
+      ; "logseq.property/hide?" ]
+  in
+  Wire.Map ((Wire.keyword "db/id", Wire.Int page.id) :: fields)
+
+let page_title_metadata (page : entity) : Wire.t =
+  let with_tags page =
+    Cljs_map.assoc (page_title_identity page) "block/tags"
+      (Wire.Array (List.map page_title_identity (Ldb.ref_ents page "block/tags")))
+  in
+  let metadata =
+    Cljs_map.assoc (with_tags page) "page?" (Wire.Bool (Ldb.is_page page))
+  in
+  let metadata =
+    match Ldb.ref_ent page "block/parent" with
+    | Some parent -> Cljs_map.assoc metadata "block/parent" (with_tags parent)
+    | None -> metadata
+  in
+  List.fold_left
+    (fun metadata attr ->
+      match Ldb.ref_ents page attr with
+      | [] -> metadata
+      | aliases ->
+          Cljs_map.assoc metadata attr (Wire.Array (List.map with_tags aliases)))
+    metadata [ "block/alias"; "block/_alias" ]
+
+(* :thread-api/get-all-page-titles [repo ?{:include-metadata? true}]
+   The default remains the sorted title array (including nil titles).
+   Opt-in rows add page identity, tags, a direct parent and alias metadata;
+   parent/tag/alias fields are maps, not bare ids. Both modes sort by title. *)
 let get_all_page_titles args =
   with_conn args (fun db ->
-      let titles =
+      let include_metadata =
+        match Option.bind (arg args 1) (fun opts -> Cljs_map.get opts "include-metadata?") with
+        | Some (Wire.Bool true) -> true
+        | _ -> false
+      in
+      let pages =
         Ldb.get_all_pages db
         |> List.map (fun e ->
-               match Ldb.value e "block/title" with
-               | Some v -> Ds_wire.transit_of_value v
-               | None -> Wire.Nil)
+               let title =
+                 match Ldb.value e "block/title" with
+                 | Some v -> Ds_wire.transit_of_value v
+                 | None -> Wire.Nil
+               in
+               title, e)
+        |> List.stable_sort (fun (a, _) (b, _) ->
+               match a, b with
+               | Wire.String x, Wire.String y -> String.compare x y
+               | Wire.Nil, Wire.Nil -> 0
+               | Wire.Nil, _ -> -1
+               | _, Wire.Nil -> 1
+               | _, _ -> 0)
       in
       Db_worker_effect.pure
         (Wire.Array
-           (List.stable_sort
-              (fun a b ->
-                 match a, b with
-                 | Wire.String x, Wire.String y -> String.compare x y
-                 | Wire.Nil, Wire.Nil -> 0
-                 | Wire.Nil, _ -> -1
-                 | _, Wire.Nil -> 1
-                 | _, _ -> 0)
-              titles)))
+           (List.map
+              (fun (title, page) ->
+                if include_metadata then page_title_metadata page else title)
+              pages)))
 
 let () = Dispatcher.register "thread-api/get-all-page-titles" get_all_page_titles
 

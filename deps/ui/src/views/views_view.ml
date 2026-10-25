@@ -132,6 +132,7 @@ let rec hiccup_els inst (w : W.t) : t list =
    mounted body instead of rebuilding it *)
 let body_eq (a : V.vstate) (b : V.vstate) =
   a.V.data = b.V.data
+  && a.V.view_error = b.V.view_error
   && a.V.blocks == b.V.blocks
   && a.V.display_type = b.V.display_type
   && a.V.columns = b.V.columns
@@ -214,18 +215,15 @@ let view_el inst : t =
    empty states — and the raw-source .CodeMirror editor is a sibling of
    the inner inside .custom-query-results *)
 let query_content_key (s : V.vstate) =
-  let is_dsl_blank =
-    match Views_query.parse_src s.V.qsrc with
-    | Views_query.QBlank -> true
-    | Views_query.QDsl d -> String.trim d = ""
-    | _ -> false
-  in
-  if is_dsl_blank then `Blank
-  else if s.V.query_view <> W.Nil then `Custom s.V.query_view
-  else if s.V.query_error <> None then `Error (Option.get s.V.query_error)
-  else if s.V.query_scalar_rows <> [] then `Scalar s.V.query_scalar_rows
-  else if s.V.query_rows <> [] || s.V.data <> Wr.VEmpty || not s.V.loading then `Table
-  else `Loading
+  match Views_query.parse_src_result s.V.qsrc with
+  | Error message -> `Error message
+  | Ok Views_query.QBlank -> `Blank
+  | Ok _ ->
+      if s.V.query_error <> None then `Error (Option.get s.V.query_error)
+      else if s.V.query_view <> W.Nil then `Custom s.V.query_view
+      else if s.V.query_scalar_rows <> [] then `Scalar s.V.query_scalar_rows
+      else if s.V.query_rows <> [] || s.V.data <> Wr.VEmpty || not s.V.loading then `Table
+      else `Loading
 
 let query_content inst (s : V.vstate) : t =
   match query_content_key s with
@@ -234,8 +232,7 @@ let query_content inst (s : V.vstate) : t =
     (* :view fn output replaces the default table (cljs custom-query) *)
     column (hiccup_els inst view)
   | `Error error ->
-    text ~value:error
-      ~padding:8 ~foreground:"muted-foreground" []
+    Views_table.error_el ~title:(I.t "query/error") ~content:error
   | `Scalar rows ->
     list
       (List.map
@@ -270,9 +267,9 @@ let query_view_el inst : t =
             [ reactive ~equal:body_eq
                 (fun s ->
                   (* DSL queries, including blank ones, get the builder panel. *)
-                  match Views_query.parse_src s.V.qsrc with
-                  | Views_query.QDatalog _ -> spacer ~key:"builder-off" []
-                  | _ ->
+                  match Views_query.parse_src_result s.V.qsrc with
+                  | Error _ | Ok (Views_query.QDatalog _) -> spacer ~key:"builder-off" []
+                  | Ok _ ->
                       if s.V.is_advanced then spacer ~key:"builder-off" []
                       else Views_builder.builder_el inst ~tree:(Views_builder.tree_for inst))
                 (sig_of inst)
@@ -456,7 +453,13 @@ let load_view_data ?(fetch_limit = 0) inst =
              refresh) already superseded this request *)
           ()
       | None ->
-          V.update inst (fun s -> { s with V.data = Wr.VEmpty; loading = false })
+          V.update inst (fun s ->
+              { s with V.data = Wr.VEmpty; view_error = None; loading = false })
+      | Some v when W.get v "error" <> None ->
+          let error = Option.get (W.get v "error") in
+          let message = Option.get (W.map_get_string error "message") in
+          V.update inst (fun s ->
+              { s with V.data = Wr.VEmpty; view_error = Some message; loading = false })
       | Some v ->
           let d =
             try Wr.decode_view_data v
@@ -498,6 +501,7 @@ let load_view_data ?(fetch_limit = 0) inst =
             V.update inst (fun s ->
                 { s with
                   V.data = d
+                ; view_error = None
                 ; loading = false
                 ; items_count
                 ; fetch_limit =
@@ -529,6 +533,7 @@ let load_view_data ?(fetch_limit = 0) inst =
             V.update inst (fun s ->
                 { s with
                   V.data = d
+                ; view_error = None
                 ; loading = false
                 ; ref_pages_count = Wr.decode_ref_counts v
                 ; query_idents =

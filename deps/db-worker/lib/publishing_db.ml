@@ -173,11 +173,13 @@ let eid_of_v = function Ref n -> n | _ -> -1
 
 (* cljs clean-export! — all pages public unless publishing-public? false *)
 let clean_export (db : db) : db * string list =
-  let non_public = get_db_public_false_pages db in
+  let private_pages = get_db_public_false_pages db in
   let non_public =
-    Seq.fold_left (fun ids (d : datom) ->
-      if IntSet.mem (eid_of_v d.v) non_public then IntSet.add d.e ids else ids)
-      non_public (datoms db Avet ~a:"block/page" ())
+    IntSet.fold
+      (fun page ids ->
+        Seq.fold_left (fun ids (d : datom) -> IntSet.add d.e ids) ids
+          (datoms db Avet ~a:"block/page" ~v:(Ref page) ()))
+      private_pages private_pages
   in
   let filtered =
     Datascript.filter db (fun _db (d : datom) ->

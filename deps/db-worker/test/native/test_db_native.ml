@@ -1869,6 +1869,17 @@ let test_create_property_text_block_2 () =
 
 (* (deftest create-property-text-block! "Create new :many :number property
    values" ...) *)
+let test_number_default_value_accepts_text_input () =
+  let conn = Db_test_util.create_conn_with_blocks
+    ~properties:["num", { Db_test_util.default_property with p_type = "number" }] () in
+  let property = Option.get (Datascript.entity (db_of conn) (Ident "user.property/num")) in
+  ignore (Outliner_property.create_property_text_block conn
+    ~block_id:(Some (Wire.Int property.id)) "logseq.property/default-value" (Wire.String "5") ());
+  let property = Option.get (Datascript.entity (db_of conn) (Ident "user.property/num")) in
+  let value = Option.get (Ldb.ref_ent property "logseq.property/default-value") in
+  check "numeric default content is retained"
+    (match Db_property.property_value_content value with Some (Int64 5L) -> true | Some (Float 5.) -> true | _ -> false)
+
 let test_create_property_text_block_3 () =
   let conn =
     Db_test_util.create_conn_with_blocks
@@ -3835,6 +3846,7 @@ let endpoint_cases : unit Alcotest.test_case list =
     Alcotest.test_case "convert-property-input-string" `Quick test_convert_property_input_string;
     Alcotest.test_case "create-property-text-block" `Quick test_create_property_text_block;
     Alcotest.test_case "create-property-text-block-2" `Quick test_create_property_text_block_2;
+    Alcotest.test_case "number-default-value-accepts-text-input" `Quick test_number_default_value_accepts_text_input;
     Alcotest.test_case "create-property-text-block-3" `Quick test_create_property_text_block_3;
     Alcotest.test_case "set-block-property-basic-cases" `Quick test_set_block_property_basic_cases;
     Alcotest.test_case "set-block-property-basic-cases-2" `Quick test_set_block_property_basic_cases_2;
@@ -3919,6 +3931,33 @@ let db_test_cases : unit Alcotest.test_case list =
     Alcotest.test_case "get-block-alias-bidirectional-rule" `Quick test_get_block_alias_bidirectional;
     Alcotest.test_case "property-object-eids-rules" `Quick test_property_object_eids_rules ]
 
+let test_migrate_65_35_removes_file_graph_attributes () =
+  let conn = Sqlite_export.create_conn () in
+  ignore (Datascript.transact_conn_string conn
+    "[{:db/ident :logseq.kv/schema-version :kv/value {:major 65 :minor 34}}
+      {:block/uuid #uuid \"33333333-3333-4333-8333-333333333333\"
+       :block/title \"Task text\" :logseq.property/heading 2
+       :block/scheduled 20240102 :block/deadline 20240103 :block/marker \"NOW\"
+       :block/priority \"B\" :block/properties-text-values {:key \"value\"}
+       :block/invalid-properties #{\"@key\"}}]");
+  ignore (Db_migrate.migrate conn);
+  let db = Datascript.db conn in
+  List.iter (fun attr ->
+    check ("legacy attribute removed: " ^ attr)
+      (Seq.is_empty (Datascript.datoms db Datascript.Aevt ~a:attr ())))
+    ["block/scheduled"; "block/deadline"; "block/marker"; "block/priority";
+     "block/properties-text-values"; "block/invalid-properties"];
+  check "migration advances to 65.35"
+    (match Datascript.entity db (Ident "logseq.kv/schema-version") with
+     | Some entity -> Option.map Db_schema.parse_schema_version (Ldb.value entity "kv/value") = Some Db_schema.version
+         && Db_schema.version.sv_minor = Some 35
+     | None -> false);
+  let block = Option.get (Datascript.entity db (Lookup_ref ("block/uuid", Uuid "33333333-3333-4333-8333-333333333333"))) in
+  check "migration retains task text and heading"
+    (Ldb.value block "block/title" = Some (String "Task text")
+     && Ldb.value block "logseq.property/heading" = Some (Int64 2L));
+  check "migration is idempotent" (Db_migrate.migrate conn = None)
+
 let () =
   Alcotest.run "db-worker"
     [ "connection-lifetime", connection_lifetime_cases
@@ -3954,6 +3993,7 @@ let () =
     ; "misc-worker-util", Test_misc_native.worker_util_cases
     ; "render-resource", Test_render_resource_native.cases
     ; "render-affected-keys", Test_render_affected_keys_native.cases
+    ; "master-migrations", [Alcotest.test_case "migrate-65-35-removes-file-graph-attributes" `Quick test_migrate_65_35_removes_file_graph_attributes]
     ; "db-worker", Test_db_worker_native.cases
     ; "platform", Test_platform_native.cases
     ; "search-benchmark", Test_search_benchmark_native.cases

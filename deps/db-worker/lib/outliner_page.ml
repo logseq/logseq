@@ -1006,8 +1006,11 @@ let create db (title_star : string)
   in
   match existing_page with
   | Some epage
-    when Option.is_some (Ldb.value epage "block/journal-day")
-         || Option.is_none (Ldb.value epage "block/parent")
+    when (if class_ || resolved_tags <> [] then
+            (* Explicit class/tag creation retains its existing lookup rules. *)
+            Option.is_some (Ldb.value epage "block/journal-day")
+            || Option.is_none (Ldb.value epage "block/parent")
+          else Ldb.reusable_for_create epage)
          || Ldb.recycled epage ->
       if
         class_ && (not (Ldb.is_class epage))

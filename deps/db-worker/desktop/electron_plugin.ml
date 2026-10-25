@@ -195,6 +195,14 @@ let api_url repo suffix =
     (Option.value repo ~default:"")
     suffix
 
+let proxy_usable status body =
+  status = 200 &&
+  match Option.bind (json_get body "resources") (fun resources ->
+    Option.bind (json_get resources "core") (fun core ->
+      Option.bind (json_get core "remaining") Js.Json.decodeNumber)) with
+  | Some remaining -> remaining > 0.
+  | None -> true
+
 let valid_github_api () : unit Js.Promise.t =
   let stale =
     match !last_valid_github_api with
@@ -206,9 +214,13 @@ let valid_github_api () : unit Js.Promise.t =
     Electron_utils.fetch (target ^ "/rate_limit")
       (Some (fetch_opts ~timeout:2000))
     |> Js.Promise.then_ (fun res ->
-           if res_status res <> 200 then
-             Js.Exn.raiseError (res_status_text res);
-           Js.Promise.resolve ())
+           let body = if res_status res = 200 then
+               res_json res |> Js.Promise.catch (fun _ -> Js.Promise.resolve Js.Json.null)
+             else Js.Promise.resolve Js.Json.null in
+           body |> Js.Promise.then_ (fun body ->
+             if not (proxy_usable (res_status res) body) then
+               Js.Exn.raiseError ("GitHub API proxy unusable: " ^ string_of_int (res_status res));
+             Js.Promise.resolve ()))
     |> Js.Promise.then_ (fun () ->
            github_api := target;
            debug

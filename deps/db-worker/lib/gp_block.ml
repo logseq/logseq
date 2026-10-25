@@ -1263,6 +1263,7 @@ let construct_block (ast_block : value) (properties : extract_properties_result)
     let t =
       if opts.remove_properties then
         Gp_property.remove_properties
+          ?marker:(match List.assoc_opt "marker" block with Some (String marker) -> Some marker | _ -> None)
           (match List.assoc_opt "format" block with
            | Some (String f) -> f
            | _ -> "markdown")

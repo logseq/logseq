@@ -2086,12 +2086,158 @@ let test_class_objects_groups_by_number_sorts_numerically () =
   int_list_eq "desc numeric" desc_groups [ 10; 2; 1 ];
   int_list_eq "asc numeric" asc_groups [ 1; 2; 10 ]
 
+let test_missing_and_placeholder_sort_values_stay_last () =
+  let conn = topic_conn ~properties:number_prop
+    (List.map (fun (title, properties) ->
+      {page = {default_page with pg_title = Some title; pg_tags = ["Topic"]; pg_properties = properties}; blocks = []})
+      ["Early", ["user.property/score", Int64 1];
+       "Late", ["user.property/score", Int64 3]; "Cleared", []; "Missing", []]) in
+  let cleared = Option.get (Ldb.get_page (db_of conn) (String "cleared")) in
+  ignore (Datascript.transact_conn_string conn (Printf.sprintf
+    "[[:db/add %d :user.property/score :logseq.property/empty-placeholder]]" cleared.id));
+  let db = db_of conn in
+  let class_id = ident_eid db "user.class/Topic" in
+  let view_id = create_view_id conn ~view_for_id:class_id "class-objects" in
+  List.iter (fun asc ->
+    let entities = List.map (fun title -> Option.get (Ldb.get_page db (String title))) ["Early"; "Late"; "Cleared"; "Missing"] in
+    let sorted = Db_view.sort_entities db [Db_view.{s_id = "user.property/score"; s_asc = asc}; Db_view.{s_id = "block/title"; s_asc = true}] entities in
+    str_list_eq' "query rows keep cleared and missing last"
+      (List.filter_map (fun entity -> Ldb.string_value entity "block/title") sorted)
+      ((if asc then ["Early"; "Late"] else ["Late"; "Early"]) @ ["Cleared"; "Missing"]);
+    let result = Db_view.get_view_data db (Some view_id)
+      (opts ["view-feature-type", kw "class-objects"; "view-for-id", Wire.Int class_id;
+             "sorting", sorting ["user.property/score", asc; "block/title", true]]) in
+    str_list_eq' "cleared and missing remain last" (result_titles db result)
+      ((if asc then ["Early"; "Late"] else ["Late"; "Early"]) @ ["Cleared"; "Missing"])) [true; false]
+
+let test_unlinked_references_ignore_node_ids_and_match_aliases () =
+  let conn = create_conn () in
+  ignore (Datascript.transact_conn_string conn
+    "[{:db/id -1 :block/title \"aa\" :block/name \"aa\"}
+      {:block/title \"[[aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa]]\"}
+      {:block/title \"a[[aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa]]a\"}
+      {:block/title \"plain aa\"}
+      {:db/id -2 :block/title \"λόγος\" :block/name \"λόγος\" :block/alias -3}
+      {:db/id -3 :block/title \"Logos\" :block/name \"logos\"}
+      {:block/title \"Logos is a rational form of discourse\"}]");
+  let db = db_of conn in
+  List.iter (fun (page, expected) ->
+    let page = Option.get (Ldb.get_page db (String page)) in
+    let titles = Db_view.get_unlinked_references db page.id |> List.filter_map (fun e -> Ldb.string_value e "block/title") in
+    str_list_eq' "unlinked titles" titles [expected])
+    ["aa", "plain aa"; "λόγος", "Logos is a rational form of discourse"; "logos", "Logos is a rational form of discourse"]
+
+let parity_conn () =
+  topic_conn
+    ~properties:["user.property/note", {default_property with p_type = "default"};
+                 "user.property/score", {default_property with p_type = "number"}]
+    (List.map (fun (title, properties) ->
+      {page = {default_page with pg_title = Some title; pg_tags = ["Topic"]; pg_properties = properties}; blocks = []})
+      ["Apple", ["user.property/note", Str "APPLE"; "user.property/score", Int64 0];
+       "Orange", ["user.property/note", Str "Orange"; "user.property/score", Int64 10];
+       "Missing", []])
+
+let parity_options db feature =
+  let scope = if feature = "query-result" then
+      ["query-entity-ids", Wire.Array (List.map (fun title ->
+        Wire.Int (Option.get (Ldb.get_page db (String title))).id) ["apple"; "orange"; "missing"])]
+    else ["view-for-id", Wire.Int (ident_eid db "user.class/Topic")] in
+  opts (["view-feature-type", kw feature; "sorting", sorting ["block/title", true]] @ scope)
+
+let test_text_not_contains_uses_case_folded_content () =
+  let conn = parity_conn () in
+  let db = db_of conn in
+  List.iter (fun feature ->
+  let view = create_view_id conn feature in
+  let result = Db_view.get_view_data (db_of conn) (Some view)
+    (opt_add (parity_options db feature)
+       ["filters", filters [clause "user.property/note" "text-not-contains" (Wire.String "apple")]]) in
+  str_list_eq' "negative text filter uses the same case folding as contains"
+    (result_titles (db_of conn) result) ["Missing"; "Orange"])
+    ["query-result"; "class-objects"]
+
+let test_text_filters_ignore_missing_ref_content () =
+  let conn = parity_conn () in
+  let apple = Option.get (Ldb.get_page (db_of conn) (String "apple")) in
+  ignore (Datascript.transact_conn_string conn (Printf.sprintf
+    "[[:db/add %d :user.property/note :logseq.property/empty-placeholder]]" apple.id));
+  List.iter (fun feature ->
+    let view = create_view_id conn feature in
+    let db = db_of conn in
+    let result = Db_view.get_view_data db (Some view)
+      (opt_add (parity_options db feature)
+         ["filters", filters [clause "user.property/note" "text-not-contains" (Wire.String "")]]) in
+    str_list_eq' "an empty text match does not match nil content"
+      (result_titles db result) ["Apple"; "Missing"])
+    ["query-result"; "class-objects"]
+
+let test_false_scalar_does_not_pass_number_or_text_filters () =
+  let conn = parity_conn () in
+  let apple = Option.get (Ldb.get_page (db_of conn) (String "apple")) in
+  let orange = Option.get (Ldb.get_page (db_of conn) (String "orange")) in
+  ignore (Datascript.transact_conn_string conn (Printf.sprintf
+    "[[:db/add %d :user.property/raw false] [:db/add %d :user.property/raw true]]" apple.id orange.id));
+  let view = create_view_id conn "query-result" in
+  let db = db_of conn in
+  List.iter (fun (operator, matched) ->
+    let result = Db_view.get_view_data db (Some view)
+      (opt_add (parity_options db "query-result")
+         ["filters", filters [clause "user.property/raw" operator matched]]) in
+    str_list_eq' "false scalar is excluded by the source's when guard"
+      (result_titles db result) ["Orange"])
+    ["number-gte", Wire.Int 0; "text-contains", Wire.String ""]
+
+let test_sort_comparison_keeps_different_scalar_types_tied () =
+  List.iter (fun (left, right) ->
+    List.iter (fun asc ->
+      check "incomparable scalar types tie instead of numeric coercion"
+        (Db_view.compare_sort_values (Some left) (Some right) asc = 0)) [true; false])
+    [Datascript.String "2", Datascript.Int64 10L;
+     Datascript.Bool true, Datascript.String "";
+     Datascript.Bool false, Datascript.Int64 1L]
+
+let test_query_ref_set_filter_matches_raw_ref_datoms () =
+  let conn = parity_conn () in
+  let db = db_of conn in
+  let apple = Option.get (Ldb.get_page db (String "apple")) in
+  let note = Option.get (Ldb.ref_ent apple "user.property/note") in
+  let note_uuid = match Ldb.value note "block/uuid" with Some (Uuid uuid) -> uuid | _ -> failwith "Missing value UUID" in
+  let view = create_view_id conn "query-result" in
+  List.iter (fun (operator, expected) ->
+    let db = db_of conn in
+    let result = Db_view.get_view_data db (Some view)
+      (opt_add (parity_options db "query-result")
+        ["filters", filters [clause "user.property/note" operator (Wire.Set [Wire.Uuid note_uuid])]]) in
+    str_list_eq' "query ref membership uses the entity id carried by a Ref datom"
+      (result_titles db result) expected)
+    ["is", ["Apple"]; "is-not", ["Missing"; "Orange"]]
+
+let test_boolean_filters_preserve_clojure_truthiness () =
+  let conn = parity_conn () in
+  List.iter (fun feature ->
+    let view = create_view_id conn feature in
+    let db = db_of conn in
+    let result = Db_view.get_view_data db (Some view)
+      (opt_add (parity_options db feature)
+         ["filters", filters [clause "user.property/score" "is" (Wire.Bool true)]]) in
+    str_list_eq' (feature ^ " keeps zero as a present truthy value")
+      (result_titles db result) ["Apple"; "Orange"])
+    ["query-result"; "class-objects"]
+
 (* ---------- suite ---------- *)
 
 let () =
   Alcotest.run "db_view"
     [ ( "view_test"
-      , [ Alcotest.test_case
+      , [ Alcotest.test_case "text-not-contains-uses-case-folded-content" `Quick test_text_not_contains_uses_case_folded_content
+        ; Alcotest.test_case "query-ref-set-filter-matches-raw-ref-datoms" `Quick test_query_ref_set_filter_matches_raw_ref_datoms
+        ; Alcotest.test_case "text-filters-ignore-missing-ref-content" `Quick test_text_filters_ignore_missing_ref_content
+        ; Alcotest.test_case "false-scalars-do-not-pass-number-or-text-filters" `Quick test_false_scalar_does_not_pass_number_or_text_filters
+        ; Alcotest.test_case "sort-comparison-keeps-different-scalar-types-tied" `Quick test_sort_comparison_keeps_different_scalar_types_tied
+        ; Alcotest.test_case "boolean-filters-preserve-clojure-truthiness" `Quick test_boolean_filters_preserve_clojure_truthiness
+        ; Alcotest.test_case "missing-and-placeholder-sort-values-stay-last" `Quick test_missing_and_placeholder_sort_values_stay_last
+        ; Alcotest.test_case "unlinked-references-ignore-node-ids-and-match-aliases" `Quick test_unlinked_references_ignore_node_ids_and_match_aliases
+        ; Alcotest.test_case
             "get-view-data-journals-returns-ordered-compact-index-test" `Quick
             test_journals_ordered_compact_index
         ; Alcotest.test_case

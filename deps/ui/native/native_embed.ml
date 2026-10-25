@@ -579,29 +579,20 @@ let slider_changed node value =
   dispatch_lui (Lui_protocol.ValueChanged (node, value))
 
 let scroll_completed node token outcome =
-  let m =
-    Lui_protocol.String_map.empty
-    |> Lui_protocol.String_map.add "token" (Lui_protocol.IntValue token)
-    |> Lui_protocol.String_map.add "outcome"
-         (Lui_protocol.StringValue outcome)
-  in
-  dispatch_lui (Lui_protocol.ExtensionEvent (node, "scroll-completed", "", m))
+  dispatch_lui (Lui_protocol.ScrollCompleted (node, token, outcome))
 
 let visible_range node first last =
-  let m =
-    Lui_protocol.String_map.empty
-    |> Lui_protocol.String_map.add "first" (Lui_protocol.IntValue first)
-    |> Lui_protocol.String_map.add "last" (Lui_protocol.IntValue last)
-  in
-  dispatch_lui (Lui_protocol.ExtensionEvent (node, "visible-range", "", m))
+  dispatch_lui (Lui_protocol.VisibleRange (node, first, last))
 
 let picked node payload =
-  let m =
-    Lui_protocol.String_map.empty
-    |> Lui_protocol.String_map.add "payload"
-         (Lui_protocol.StringValue payload)
-  in
-  dispatch_lui (Lui_protocol.ExtensionEvent (node, "picked", "", m))
+  dispatch_lui (Lui_protocol.Picked (node, payload))
+
+let navigate_previous node = dispatch_lui (Lui_protocol.NavigatePrevious node)
+let navigate_next node = dispatch_lui (Lui_protocol.NavigateNext node)
+let navigation_key node key shift =
+  dispatch_lui (Lui_protocol.NavigationKey (node, key, shift))
+let scroll_edges node at_start at_end =
+  dispatch_lui (Lui_protocol.ScrollEdges (node, at_start, at_end))
 
 let extension_event node identifier name values =
   with_entry_lock (fun () ->
@@ -790,12 +781,26 @@ module Ffi = struct
   let scroll_completed node token outcome = encode_batches (scroll_completed node token outcome)
   let visible_range node first last = encode_batches (visible_range node first last)
   let picked node payload = encode_batches (picked node payload)
+  let navigate_previous node = encode_batches (navigate_previous node)
+  let navigate_next node = encode_batches (navigate_next node)
+  let navigation_key node key shift = encode_batches (navigation_key node key shift)
+  let scroll_edges node at_start at_end = encode_batches (scroll_edges node at_start at_end)
   let extension_event node identifier name values = encode_batches (extension_event node identifier name values)
   let pump () = encode_batches (pump ())
   let dispose () = encode_batches (dispose ())
   let resync target = encode_batches (resync target)
   let platform_event = platform_event
   let root_node = root_node
+  let editor_snapshot block_id =
+    with_entry_lock (fun () ->
+      match Editor_state.editing () with
+      | Some editing when editing.uuid = block_id ->
+        let model = Edit_model.display_model editing.model in
+        Yojson.Basic.to_string (`Assoc
+          [ "source", `String model.source
+          ; "anchor", `Int (Option.value model.anchor ~default:model.caret)
+          ; "caret", `Int model.caret ])
+      | _ -> "null")
 end
 
 let () =
@@ -821,9 +826,14 @@ let () =
   Callback.register "lui_ocaml_scroll_completed" Ffi.scroll_completed;
   Callback.register "lui_ocaml_visible_range" Ffi.visible_range;
   Callback.register "lui_ocaml_picked" Ffi.picked;
+  Callback.register "lui_ocaml_navigate_previous" Ffi.navigate_previous;
+  Callback.register "lui_ocaml_navigate_next" Ffi.navigate_next;
+  Callback.register "lui_ocaml_navigation_key" Ffi.navigation_key;
+  Callback.register "lui_ocaml_scroll_edges" Ffi.scroll_edges;
   Callback.register "lui_ocaml_extension_event" Ffi.extension_event;
   Callback.register "lui_ocaml_pump" Ffi.pump;
   Callback.register "lui_ocaml_platform_event" Ffi.platform_event;
   Callback.register "lui_ocaml_dispose" Ffi.dispose;
   Callback.register "lui_ocaml_root_node" Ffi.root_node;
+  Callback.register "lui_ocaml_editor_snapshot" Ffi.editor_snapshot;
   Callback.register "lui_ocaml_resync" Ffi.resync

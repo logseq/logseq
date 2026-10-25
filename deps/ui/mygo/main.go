@@ -1,0 +1,375 @@
+//go:build darwin || linux
+
+// logseq-mygo hosts the Logseq OCaml application in a native MyGo window.
+package main
+
+import (
+	"bytes"
+	"encoding/json"
+	"errors"
+	"flag"
+	"fmt"
+	"log"
+	"os"
+	"path/filepath"
+	"runtime"
+
+	"github.com/egoist/mygo"
+	"github.com/egoist/mygo/ui"
+	luimygo "github.com/logseq/lui/platform/mygo"
+)
+
+func main() {
+	if err := run(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func run() (result error) {
+	library := flag.String("library", "", "path to the Logseq native_embed shared library")
+	width := flag.Int("width", 1440, "content width in DIPs")
+	height := flag.Int("height", 900, "content height in DIPs")
+	title := flag.String("title", "Logseq", "window title")
+	flag.Parse()
+	if *library == "" {
+		return fmt.Errorf("-library is required")
+	}
+	if *width <= 0 || *height <= 0 {
+		return fmt.Errorf("width and height must be positive")
+	}
+	if flag.NArg() != 0 {
+		return fmt.Errorf("unexpected positional arguments: %v", flag.Args())
+	}
+	if err := prepareNativeEnvironment(); err != nil {
+		return err
+	}
+	r, err := openOCamlRuntime(*library)
+	if err != nil {
+		return err
+	}
+	host := &windowHost{runtime: r, done: make(chan struct{})}
+	logseqEditorServices.Snapshot = func(blockID string) (string, int, int, bool) {
+		snapshot, err := r.EditorSnapshot(blockID)
+		if err != nil {
+			host.fail(err)
+			return "", 0, 0, false
+		}
+		if snapshot == nil {
+			return "", 0, 0, false
+		}
+		return snapshot.Source, snapshot.Anchor, snapshot.Caret, true
+	}
+	// App.Run returns on its main/UI thread, including initialization failures.
+	defer func() { result = errors.Join(result, host.close(), host.err) }()
+	mygo.App.SetName("Logseq")
+	mygo.App.WhenReady(func() {
+		host.services = newPlatformServices(nil)
+		host.backend = luimygo.New(luimygo.Config{
+			Extensions: host.services.extensions(),
+			Dispatch:   host.dispatch,
+		})
+		host.services.backend = host.backend
+		if err := r.Start(); err != nil {
+			host.fail(err)
+			return
+		}
+		if err := host.drain(); err != nil {
+			host.fail(err)
+			return
+		}
+		host.window = mygo.NewWindow(mygo.WindowOptions{
+			Title: *title, Width: *width, Height: *height,
+			UseContentSize: true, Content: ui.View(host.view),
+		})
+		host.window.OnClosed(func() {
+			if err := host.close(); err != nil {
+				host.err = errors.Join(host.err, err)
+			}
+		})
+		go host.watchWakeups()
+	})
+	mygo.App.OnWindowAllClosed(func() { mygo.App.Quit() })
+	mygo.App.OnWillQuit(func(*mygo.QuitEvent) {
+		if err := host.close(); err != nil {
+			host.err = errors.Join(host.err, err)
+		}
+	})
+	return mygo.App.Run()
+}
+
+type windowHost struct {
+	runtime  *ocamlRuntime
+	backend  *luimygo.Backend
+	services *platformServices
+	window   *mygo.Window
+	done     chan struct{}
+	closed   bool
+	err      error
+
+	sizeKnown       bool
+	width, height   float32
+	appearanceKnown bool
+	dark            bool
+}
+
+func (h *windowHost) fail(err error) {
+	if err == nil || h.err != nil {
+		return
+	}
+	h.err = err
+	mygo.App.Quit()
+}
+
+func (h *windowHost) dispatch(event luimygo.Event) error {
+	if h.closed {
+		return fmt.Errorf("logseq: event arrived after window closure")
+	}
+	if err := h.runtime.Dispatch(event); err != nil {
+		return err
+	}
+	// MyGo's controlled inputs require normalized model props to be applied
+	// synchronously before Dispatch returns. Only this UI goroutine applies.
+	return h.drain()
+}
+
+func (h *windowHost) drain() error {
+	for {
+		messages, err := h.runtime.takeMessages()
+		if err != nil {
+			return err
+		}
+		if len(messages) == 0 {
+			return nil
+		}
+		for _, message := range messages {
+			switch {
+			case message.patch != "":
+				if err := h.applyPatches(message.patch, message.snapshot); err != nil {
+					return err
+				}
+			case message.request != "":
+				replies, err := h.services.Handle(message.request)
+				if err != nil {
+					return fmt.Errorf("logseq: platform request: %w", err)
+				}
+				for _, reply := range replies {
+					if err := h.runtime.PlatformEvent(reply); err != nil {
+						return err
+					}
+				}
+			default:
+				return fmt.Errorf("logseq: empty native callback message")
+			}
+		}
+	}
+}
+
+func (h *windowHost) applyPatches(payload string, snapshot bool) error {
+	// Logseq Ffi.encode_batches emits an ARRAY, unlike upstream's one-batch
+	// callbacks. Do not discard intermediate generations or guess snapshots
+	// from generation numbers: only an explicit resync is authoritative.
+	data := bytes.TrimSpace([]byte(payload))
+	if len(data) == 0 || data[0] != '[' {
+		return fmt.Errorf("logseq: native patch callback must contain a batch array")
+	}
+	var batches []json.RawMessage
+	if err := json.Unmarshal(data, &batches); err != nil {
+		return fmt.Errorf("logseq: decode native batch array: %w", err)
+	}
+	if len(batches) == 0 || (snapshot && len(batches) != 1) {
+		return fmt.Errorf("logseq: invalid batch count %d (snapshot=%t)", len(batches), snapshot)
+	}
+	for _, batch := range batches {
+		if err := h.backend.ApplyJSON(batch, snapshot); err != nil {
+			return fmt.Errorf("logseq: apply native batch: %w", err)
+		}
+	}
+	return nil
+}
+
+func (h *windowHost) pump() error {
+	if err := h.runtime.Pump(); err != nil {
+		return err
+	}
+	if err := h.drain(); err != nil {
+		return err
+	}
+	return h.backend.Err()
+}
+
+func (h *windowHost) watchWakeups() {
+	for {
+		select {
+		case <-h.done:
+			return
+		case <-h.runtime.wakeup:
+			select {
+			case <-h.done:
+				return
+			default:
+			}
+			// RunOnMain also pumps when the window is occluded/minimized; tying
+			// Host.drain solely to rendered frames would stall async app boot.
+			mygo.RunOnMain(func() {
+				if h.closed || h.err != nil {
+					return
+				}
+				if err := h.pump(); err != nil {
+					h.fail(err)
+					return
+				}
+				h.window.Invalidate()
+			})
+		}
+	}
+}
+
+func (h *windowHost) view(c *ui.Context) {
+	if h.closed || h.err != nil {
+		return
+	}
+	width, height := c.Size()
+	if !h.sizeKnown || width != h.width || height != h.height {
+		h.sizeKnown, h.width, h.height = true, width, height
+		payload, err := json.Marshal(struct {
+			Width  float32 `json:"width"`
+			Height float32 `json:"height"`
+		}{width, height})
+		if err != nil {
+			h.fail(err)
+			return
+		}
+		if err := h.runtime.PlatformEvent(platformReply{Name: "window-size", Payload: string(payload)}); err != nil {
+			h.fail(err)
+			return
+		}
+	}
+	dark := c.Theme().Dark
+	if !h.appearanceKnown || dark != h.dark {
+		h.appearanceKnown, h.dark = true, dark
+		payload := `{"dark":false}`
+		if dark {
+			payload = `{"dark":true}`
+		}
+		if err := h.runtime.PlatformEvent(platformReply{Name: "appearance", Payload: payload}); err != nil {
+			h.fail(err)
+			return
+		}
+	}
+	h.services.View(c)
+	// Backend.View enqueues its lifecycle dispatch before this callback, so
+	// failures raised after layout are observed during the same frame.
+	c.AfterFrame(func() {
+		if err := h.backend.Err(); err != nil {
+			h.fail(err)
+			return
+		}
+		replies, err := h.services.AfterFrame(c)
+		if err != nil {
+			h.fail(err)
+			return
+		}
+		for _, reply := range replies {
+			if err := h.runtime.PlatformEvent(reply); err != nil {
+				h.fail(err)
+				return
+			}
+		}
+		h.fail(h.drain())
+		if len(replies) > 0 && h.window != nil {
+			h.window.Invalidate()
+		}
+	})
+}
+
+func (h *windowHost) close() error {
+	if h.closed {
+		return nil
+	}
+	h.closed = true
+	close(h.done)
+	err := h.runtime.Close()
+	// Disposal patches are deliberately not rendered after the window closes.
+	// Services/resources are released only after OCaml stops producing events.
+	_, callbackErr := h.runtime.takeMessages()
+	if h.backend != nil {
+		h.backend.Close()
+	}
+	return errors.Join(err, callbackErr)
+}
+
+func prepareNativeEnvironment() error {
+	// These names/defaults come from native/services/platform_native.ml and
+	// native/daemon_client.ml. caml_startup's synthetic argv[0] cannot locate
+	// resources relative to the real Go executable, so resolve assets here.
+	assets, set := os.LookupEnv("LOGSEQ_NATIVE_ASSET_DIR")
+	if !set {
+		executable, err := os.Executable()
+		if err != nil {
+			return err
+		}
+		assets = filepath.Join(filepath.Dir(executable), "..", "Resources")
+	}
+	if assets == "" {
+		return fmt.Errorf("LOGSEQ_NATIVE_ASSET_DIR must not be empty")
+	}
+	assets, err := filepath.Abs(assets)
+	if err != nil {
+		return err
+	}
+	info, err := os.Stat(assets)
+	if err != nil {
+		return fmt.Errorf("logseq: native assets (set LOGSEQ_NATIVE_ASSET_DIR): %w", err)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("logseq: native asset path is not a directory: %s", assets)
+	}
+	if err := os.Setenv("LOGSEQ_NATIVE_ASSET_DIR", assets); err != nil {
+		return err
+	}
+	home := os.Getenv("HOME")
+	if home == "" {
+		return fmt.Errorf("HOME must be set for native persistence and daemon configuration")
+	}
+	stateDefault := filepath.Join(home, "Library", "Application Support", "logseq")
+	if runtime.GOOS == "linux" {
+		stateHome := os.Getenv("XDG_STATE_HOME")
+		if stateHome == "" || !filepath.IsAbs(stateHome) {
+			// The XDG specification ignores empty/relative state directories.
+			stateHome = filepath.Join(home, ".local", "state")
+		}
+		stateDefault = filepath.Join(stateHome, "logseq")
+	}
+	for name, defaultPath := range map[string]string{
+		"LOGSEQ_UI_STATE_DIR": stateDefault,
+		"LOGSEQ_ROOT_DIR":     filepath.Join(home, "logseq"),
+	} {
+		value, set := os.LookupEnv(name)
+		if !set {
+			value = defaultPath
+		}
+		if value == "" {
+			return fmt.Errorf("%s must not be empty", name)
+		}
+		absolute, err := filepath.Abs(value)
+		if err != nil {
+			return err
+		}
+		if err := os.Setenv(name, absolute); err != nil {
+			return err
+		}
+	}
+	if value, set := os.LookupEnv("LOGSEQ_DB_WORKER_BIN"); set {
+		if value == "" {
+			return fmt.Errorf("LOGSEQ_DB_WORKER_BIN must not be empty")
+		}
+		absolute, err := filepath.Abs(value)
+		if err != nil {
+			return err
+		}
+		if err := os.Setenv("LOGSEQ_DB_WORKER_BIN", absolute); err != nil {
+			return err
+		}
+	}
+	return nil
+}

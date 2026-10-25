@@ -78,6 +78,11 @@ let test_clean_export () =
       ; pab (page "page3") [ block "b31" ] ]
   in
   let filtered_db, _assets = Publishing_db.clean_export (db_of conn) in
+  let private_titles = ["b11"; "b12"; "![awesome.png](../assets/awesome_1648822509908_0.png"] in
+  check "private block titles are absent from all exported entities"
+    (not (Seq.exists (fun (d : datom) ->
+      match d.v with String title -> List.mem title private_titles | _ -> false)
+      (datoms filtered_db Aevt ~a:"block/title" ())));
   let exported_pages = page_names filtered_db in
   let exported_blocks = block_page_names filtered_db in
   check "Contains all pages that haven't been marked private"
