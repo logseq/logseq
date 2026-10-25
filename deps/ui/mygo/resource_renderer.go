@@ -35,6 +35,7 @@ func (e *resourceEntry) snapshot() resourceResult {
 type resourceOwner struct {
 	source resourceSource
 	entry  *resourceEntry
+	seen   uint64
 }
 
 type resourceEventState struct {
@@ -51,6 +52,8 @@ type resourceRenderer struct {
 	cache   map[resourceSource]*resourceEntry
 	workers chan struct{}
 	closed  bool
+	epoch   uint64
+	view    *ui.Context
 
 	// ResolveAsset must use the current OCaml-owned graph mapping, not cwd.
 	// ResolveSource may resolve graph-relative src values through that same owner.
@@ -144,8 +147,32 @@ func (r *resourceRenderer) Sync() {
 	}
 }
 
+// BeginView precedes Backend.View on the real frame context. Final layout can
+// render fitting/virtual children after View returns; probes borrow results only.
+func (r *resourceRenderer) BeginView(c *ui.Context) {
+	if r.closed {
+		return
+	}
+	r.Sync()
+	r.epoch++
+	epoch := r.epoch
+	r.view = c
+	c.AfterFrame(func() {
+		if r.epoch != epoch || r.view != c {
+			return
+		}
+		for id, owner := range r.owners {
+			if owner.seen != epoch {
+				r.release(id)
+			}
+		}
+		r.view = nil
+	})
+}
+
 func (r *resourceRenderer) Close() {
 	r.closed = true
+	r.view = nil
 	for id := range r.owners {
 		r.release(id)
 	}
@@ -153,6 +180,8 @@ func (r *resourceRenderer) Close() {
 
 func (r *resourceRenderer) acquire(id int64, source resourceSource, services ui.Services) *resourceEntry {
 	if owner, ok := r.owners[id]; ok && owner.source == source {
+		owner.seen = r.epoch
+		r.owners[id] = owner
 		return owner.entry
 	}
 	r.release(id)
@@ -189,7 +218,7 @@ func (r *resourceRenderer) acquire(id int64, source resourceSource, services ui.
 		}()
 	}
 	entry.refs++
-	r.owners[id] = resourceOwner{source, entry}
+	r.owners[id] = resourceOwner{source: source, entry: entry, seen: r.epoch}
 	return entry
 }
 
@@ -216,20 +245,30 @@ func (r *resourceRenderer) Render(c *ui.Context, n luimygo.Node, tag string, _ f
 	if tag != "img" && tag != "svg" {
 		return false
 	}
-	source, err := r.source(n)
-	result := resourceResult{done: true, err: err}
-	if r.closed {
-		result.err = errors.New("image renderer is closed")
-	} else if err == nil {
-		result = r.acquire(n.ID, source, c.Services()).snapshot()
-	} else {
-		r.release(n.ID)
+	committed := c == r.view
+	var source resourceSource
+	var result resourceResult
+	if committed {
+		var err error
+		source, err = r.source(n)
+		result = resourceResult{done: true, err: err}
+		if r.closed {
+			result.err = errors.New("image renderer is closed")
+		} else if err == nil {
+			result = r.acquire(n.ID, source, c.Services()).snapshot()
+		} else {
+			r.release(n.ID)
+		}
+	} else if owner, ok := r.owners[n.ID]; ok && !r.closed {
+		source, result = owner.source, owner.entry.snapshot()
 	}
 	// Image preserves SVG colors and uses inherited text color for currentColor;
 	// Icon would incorrectly flatten multicolor user SVGs to a monochrome mask.
 	e := ui.Image(c, result.image)
-	if err := r.backend.BindHostElement(n.ID, e); err != nil {
-		panic(err)
+	if committed {
+		if err := r.backend.BindHostElement(n.ID, e); err != nil {
+			panic(err)
+		}
 	}
 	attrs := extensionAttrs(n)
 	if r.Style != nil {
@@ -239,6 +278,9 @@ func (r *resourceRenderer) Render(c *ui.Context, n luimygo.Node, tag string, _ f
 		e.Label(label)
 	} else if label := n.String("accessibility-identifier"); label != "" {
 		e.Label(label)
+	}
+	if !committed {
+		return true
 	}
 	state := ui.Local(e, "resource-event", func() resourceEventState { return resourceEventState{} })
 	errText := ""

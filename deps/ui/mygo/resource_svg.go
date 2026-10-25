@@ -118,12 +118,24 @@ func resourceValidateSVG(payload []byte) error {
 	}
 }
 
+// rawMarkupVisible applies equally to projected raw elements and SVG subtrees.
+func rawMarkupVisible(n luimygo.Node) bool {
+	if visible, explicit := n.Props["visible"].(bool); explicit && !visible {
+		return false
+	}
+	_, hidden := extensionAttrs(n)["hidden"]
+	return n.String("display") != "none" && !hidden
+}
+
 func resourceRetainedSVG(node func(int64) (luimygo.Node, bool), root luimygo.Node) (string, error) {
 	var out bytes.Buffer
 	encoder := xml.NewEncoder(&out)
 	count := 0
 	var write func(luimygo.Node, int) error
 	write = func(n luimygo.Node, depth int) error {
+		if !rawMarkupVisible(n) {
+			return nil
+		}
 		count++
 		if count > resourceMaxSVGNodes || depth > 128 || out.Len() > 1<<20 {
 			return errors.New("inline SVG exceeds retained tree limits")
