@@ -261,6 +261,75 @@
              (set! editor/edit-block! original-edit-block!)
              (done)))))))
 
+(deftest enter-during-a-pending-insert-is-queued-where-it-fell-test
+  (with-redefs [editor/auto-complete? (constantly false)
+                editor/get-state (constantly {:node nil})
+                editor/inside-of-single-block (constantly false)
+                state/doc-mode-enter-for-new-line? (constantly false)]
+    (#'editor/start-pending-new-block!)
+    (#'editor/append-pending-new-block-text! "abc")
+    (editor/keydown-new-block-handler nil)
+    (#'editor/append-pending-new-block-text! "de")
+    (is (= {:typed-text "abcde" :enter-at 3}
+           (select-keys (state/get-state :editor/pending-new-block) [:typed-text :enter-at]))
+        "the Enter is kept at its place in the typed text, not dropped")
+    (editor/keydown-new-block-handler nil)
+    (is (= 3 (:enter-at (state/get-state :editor/pending-new-block)))
+        "a second queued Enter does not move the first")
+    (#'editor/backspace-pending-new-block! false)
+    (#'editor/backspace-pending-new-block! false)
+    (is (= 3 (:enter-at (state/get-state :editor/pending-new-block))))
+    (#'editor/backspace-pending-new-block! false)
+    (is (= {:typed-text "abc"}
+           (select-keys (state/get-state :editor/pending-new-block) [:typed-text :enter-at]))
+        "Backspace right after the queued Enter takes the Enter back, not a letter")
+    (#'editor/clear-pending-new-block!)))
+
+(deftest pending-insert-landing-replays-the-queued-enter-test
+  (async done
+    (let [block-id #uuid "22222222-2222-2222-2222-222222222222"
+          pending-block {:block/uuid block-id :block/title ""}
+          edits (atom [])
+          replays (atom [])
+          original-edit-block! editor/edit-block!
+          original-replay! editor/replay-queued-enter!]
+      (set! editor/edit-block! (fn [block pos opts]
+                                 (swap! edits conj [block pos (:custom-content opts) (:keep-whitespace? opts)])))
+      (set! editor/replay-queued-enter! (fn [& args] (swap! replays conj (vec args))))
+      (#'editor/start-pending-new-block!)
+      (#'editor/append-pending-new-block-text! "rapid enter alpha")
+      (#'editor/queue-pending-new-block-enter!)
+      (#'editor/queue-pending-new-block-tab! true)
+      (#'editor/append-pending-new-block-text! "rap")
+      (-> ((#'editor/inserted-block-edit-fn pending-block pending-block 7) [pending-block])
+          (p/then
+           (fn []
+             (is (= [[pending-block 17 "rapid enter alpha" true]] @edits)
+                 "the new block gets the keys typed before the queued Enter")
+             (is (= [[pending-block "rap" true]] @replays)
+                 "the queued Enter is pressed with the keys and the Tab that came after it")
+             (is (nil? (state/get-state :editor/pending-new-block)))))
+          (p/catch
+           (fn [error]
+             (is false (str error))))
+          (p/finally
+           (fn []
+             (set! editor/edit-block! original-edit-block!)
+             (set! editor/replay-queued-enter! original-replay!)
+             (#'editor/clear-pending-new-block!)
+             (done)))))))
+
+(deftest a-replayed-enter-starts-its-insert-with-what-it-carries-test
+  (reset! @#'editor/*pending-new-block-carry {:typed-text "rap" :tab-indent? true})
+  (#'editor/start-pending-new-block!)
+  (is (= {:typed-text "rap" :tab-indent? true}
+         (state/get-state :editor/pending-new-block)))
+  (is (nil? @@#'editor/*pending-new-block-carry) "the carry is used once")
+  (#'editor/clear-pending-new-block!)
+  (#'editor/start-pending-new-block!)
+  (is (= {:typed-text ""} (state/get-state :editor/pending-new-block)))
+  (#'editor/clear-pending-new-block!))
+
 (deftest save-block-if-changed-uses-passed-block-content-test
   (let [block-uuid #uuid "11111111-1111-1111-1111-111111111111"
         block {:db/id 1

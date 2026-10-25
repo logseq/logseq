@@ -320,14 +320,21 @@
   ;; to the new block, or failed
   (atom nil))
 
+(defonce ^:private *pending-new-block-carry
+  ;; What a queued Enter brings to the block it makes: the keys typed after it
+  ;; (and a Tab queued after it) while the previous insert was running
+  (atom nil))
+
 (defn- start-pending-new-block!
   "Marks an Enter as running; returns its token for settle-pending-new-block!."
   []
   (let [resolve! (atom nil)
         done (p/create (fn [resolve _reject] (reset! resolve! resolve)))
-        token {:promise done :resolve! @resolve! :callback-started? (atom false)}]
+        token {:promise done :resolve! @resolve! :callback-started? (atom false)}
+        carry @*pending-new-block-carry]
+    (reset! *pending-new-block-carry nil)
     (reset! *pending-new-block-done token)
-    (state/set-state! :editor/pending-new-block {:typed-text ""})
+    (state/set-state! :editor/pending-new-block (merge {:typed-text ""} carry))
     token))
 
 (defn <pending-new-block
@@ -354,16 +361,37 @@
   [indent?]
   (when (pending-new-block?)
     (state/update-state! :editor/pending-new-block
-                         #(assoc % :tab-indent? indent?))))
+                         #(if (:enter-at %)
+                            (assoc % :next-tab-indent? indent?)
+                            (assoc % :tab-indent? indent?)))))
+
+(defn- queue-pending-new-block-enter!
+  "An Enter pressed while the previous Enter's insert is running: remembers
+  where it fell in the typed text, so the text after it goes to the block this
+  Enter makes once the previous insert lands. A second queued Enter is dropped."
+  []
+  (when (pending-new-block?)
+    (state/update-state! :editor/pending-new-block
+                         (fn [{:keys [typed-text enter-at delete?] :as pending}]
+                           (if (or enter-at delete?)
+                             pending
+                             (assoc pending :enter-at (count typed-text)))))))
 
 (defn- backspace-pending-new-block!
   [delete-block?]
   (when (pending-new-block?)
     (state/update-state!
      :editor/pending-new-block
-     (fn [{:keys [typed-text] :as pending}]
-       (if (and (seq typed-text) (not delete-block?))
+     (fn [{:keys [typed-text enter-at] :as pending}]
+       (cond
+         ;; Backspace right after a queued Enter takes the Enter back
+         (and enter-at (= enter-at (count typed-text)) (not delete-block?))
+         (dissoc pending :enter-at :next-tab-indent?)
+
+         (and (seq typed-text) (not delete-block?))
          (assoc pending :typed-text (subs typed-text 0 (dec (count typed-text))))
+
+         :else
          (assoc pending :delete? true))))))
 
 (defn- clear-pending-new-block!
@@ -384,6 +412,7 @@
 (declare get-new-container-id)
 (declare delete-block-aux!)
 (declare expand-collapsed-indent-target!)
+(declare replay-queued-enter!)
 
 (defn- inserted-block-edit-fn
   [source-block block container-id]
@@ -393,7 +422,8 @@
                      block)
           source-block' (or (some #(when (= (:block/uuid source-block) (:block/uuid %)) %) rows)
                             source-block)
-          {:keys [typed-text tab-indent? delete?]} (pending-new-block)]
+          {:keys [typed-text tab-indent? delete? enter-at]} (pending-new-block)
+          typed-text (cond-> typed-text enter-at (subs 0 enter-at))]
       (if delete?
         (let [source-title (:block/title source-block')
               block-title (:block/title block')]
@@ -430,7 +460,11 @@
                         (seq typed-text)
                         (assoc :custom-content (str typed-text (:block/title block'))
                                :keep-whitespace? true)))
-         (clear-pending-new-block!))))))
+         (let [{:keys [enter-at next-tab-indent?] :as latest} (pending-new-block)
+               after-enter (when enter-at (subs (:typed-text latest) enter-at))]
+           (clear-pending-new-block!)
+           (when enter-at
+             (replay-queued-enter! block' after-enter next-tab-indent?))))))))
 
 (defn insert-new-block-before-block-aux!
   [config block value]
@@ -2530,6 +2564,49 @@
                   (insert-new-block! state content right-sibling)
                   (indent-outdent false))))))))))
 
+(defn- <editor-on-block
+  "Settles with true once the mounted editor is the one of `block-uuid` (its box
+  sets the editor args in a layout effect), with false after `frames` frames."
+  [block-uuid frames]
+  (p/create
+   (fn [resolve _reject]
+     (letfn [(check [n]
+               (let [[{:keys [block]} id] (state/get-editor-args)]
+                 (cond
+                   (and (= block-uuid (:block/uuid block)) (gdom/getElement id))
+                   (resolve true)
+
+                   (zero? n)
+                   (resolve false)
+
+                   :else
+                   (js/requestAnimationFrame #(check (dec n))))))]
+       (check frames)))))
+
+(defn replay-queued-enter!
+  "Presses the Enter queued while the previous Enter's insert ran, once the
+  editor is on the block that insert made. The keys typed after the queued
+  Enter (and a Tab queued after it) go to the block it makes."
+  [block after-enter next-tab-indent?]
+  (p/let [ready? (<editor-on-block (:block/uuid block) 60)]
+    (if-not ready?
+      (when-let [input (state/get-input)]
+        (when (seq after-enter)
+          (state/set-edit-content! (.-id input) (str (.-value input) after-enter))))
+      (do
+        (reset! *pending-new-block-carry
+                (cond-> {:typed-text (or after-enter "")}
+                  (some? next-tab-indent?) (assoc :tab-indent? next-tab-indent?)))
+        (p/do!
+         (keydown-new-block (get-state))
+         ;; the Enter made no block (an empty block outdents instead): the
+         ;; keys typed after it stay in this block
+         (when-let [{:keys [typed-text]} @*pending-new-block-carry]
+           (reset! *pending-new-block-carry nil)
+           (when-let [input (state/get-input)]
+             (when (seq typed-text)
+               (state/set-edit-content! (.-id input) (str (.-value input) typed-text))))))))))
+
 (defn- inside-of-single-block
   "When we are in a single block wrapper, we should always insert a new line instead of new block"
   [el]
@@ -2550,7 +2627,12 @@
                (or (nil? target)
                    (inside-of-editor-block target)))
       (if (pending-new-block?)
-        (when e (.preventDefault e))
+        (do
+          (when e (.preventDefault e))
+          (if (or (state/doc-mode-enter-for-new-line?)
+                  (inside-of-single-block (:node state)))
+            (append-pending-new-block-text! "\n")
+            (queue-pending-new-block-enter!)))
         (let [new-line? (or (state/doc-mode-enter-for-new-line?)
                             (inside-of-single-block (:node state)))]
           (cond
