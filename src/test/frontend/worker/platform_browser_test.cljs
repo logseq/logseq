@@ -73,11 +73,26 @@
                original-location (gobj/get js/globalThis "location")]
            (gobj/set js/globalThis "location" #js {:href "http://localhost/" :search ""})
            (-> (p/let [pool (<install (fake-sqlite [(busy-error) (busy-error)] calls))]
-                 (is (true? (.-pool pool)) "the pool installs once the old worker lets go of the files")
+                 (is (true? (.-pool ^js pool)) "the pool installs once the old worker lets go of the files")
                  (is (= [false true true] (mapv :forceReinitIfPreviouslyFailed @calls))
                      "retries ask sqlite to try again instead of returning the cached failure"))
                (p/catch (fn [error]
                           (is false (str "unexpected error: " error))))
+               (p/finally
+                 (fn []
+                   (gobj/set js/globalThis "location" original-location)
+                   (done)))))))
+
+(deftest install-opfs-pool-gives-up-after-20-busy-attempts-test
+  (async done
+         (let [calls (atom [])
+               original-location (gobj/get js/globalThis "location")]
+           (gobj/set js/globalThis "location" #js {:href "http://localhost/" :search ""})
+           (-> (<install (fake-sqlite (repeatedly 100 busy-error) calls))
+               (p/then (fn [_] (is false "expected the install to fail")))
+               (p/catch (fn [error]
+                          (is (= "NoModificationAllowedError" (.-name ^js error)))
+                          (is (= 20 (count @calls)) "each busy attempt is retried once, 20 attempts in all")))
                (p/finally
                  (fn []
                    (gobj/set js/globalThis "location" original-location)
@@ -91,7 +106,23 @@
            (-> (<install (fake-sqlite [(js/Error. "Missing required OPFS APIs.")] calls))
                (p/then (fn [_] (is false "expected the install to fail")))
                (p/catch (fn [error]
-                          (is (= "Missing required OPFS APIs." (.-message error)))
+                          (is (= "Missing required OPFS APIs." (.-message ^js error)))
+                          (is (= 1 (count @calls)) "an error that waiting can't fix fails at once")))
+               (p/finally
+                 (fn []
+                   (gobj/set js/globalThis "location" original-location)
+                   (done)))))))
+
+(deftest install-opfs-pool-does-not-retry-a-no-modification-error-of-another-kind-test
+  (async done
+         (let [calls (atom [])
+               original-location (gobj/get js/globalThis "location")
+               other (doto (js/Error. "The file is read-only") (gobj/set "name" "NoModificationAllowedError"))]
+           (gobj/set js/globalThis "location" #js {:href "http://localhost/" :search ""})
+           (-> (<install (fake-sqlite [other] calls))
+               (p/then (fn [_] (is false "expected the install to fail")))
+               (p/catch (fn [error]
+                          (is (= "The file is read-only" (.-message ^js error)))
                           (is (= 1 (count @calls)) "an error that waiting can't fix fails at once")))
                (p/finally
                  (fn []
