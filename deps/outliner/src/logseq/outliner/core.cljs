@@ -285,9 +285,17 @@
               ;; nil when create can't make the page a class, e.g. an existing journal
               class-ident (when class?
                             (or (some :db/ident tx-data)
-                                (:db/ident (d/entity db [:block/uuid page-uuid]))))]
-          [(cond-> (assoc (select-keys ref [:block/title :block/name :block.temp/original-page-name])
-                          :block/uuid page-uuid)
+                                (:db/ident (d/entity db [:block/uuid page-uuid]))))
+              ;; create can resolve a name no page has to an existing journal, e.g. the bracketed
+              ;; "[[Nov 2nd, 2026]]" of "[[ [[Nov 2nd, 2026]]]]": keep the journal's own title and name,
+              ;; which are protected, or the ref's would be written over them
+              existing (when-let [e (d/entity db [:block/uuid page-uuid])]
+                         (when (ldb/journal? e) e))]
+          [(cond-> (if existing
+                     (merge (select-keys existing [:db/id :block/uuid :block/title :block/name])
+                            (select-keys ref [:block.temp/original-page-name]))
+                     (assoc (select-keys ref [:block/title :block/name :block.temp/original-page-name])
+                            :block/uuid page-uuid))
              class-ident (assoc :db/ident class-ident))
            tx-data])))
     [ref nil]))
