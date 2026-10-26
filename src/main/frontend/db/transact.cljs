@@ -201,6 +201,9 @@
                       ensure-local-op-tx-id
                       (assoc
                        :client-id (:client-id (state/get-state))
+                       ;; a property write can reach the worker after an undo, delete or cut
+                       ;; removed its block; the worker drops it instead of failing the batch
+                       :skip-missing-targets? true
                        :ui/perf-id perf-id
                        :local-tx? true))
             edit-on-send? (boolean (and (:editor/edit-block-on-send? opts')

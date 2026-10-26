@@ -313,6 +313,30 @@
       (assoc opts :parent-original parent-original))
     opts))
 
+(defn- live-block?
+  [db id]
+  (some? (d/entity db (if (uuid? id) [:block/uuid id] id))))
+
+(defn- live-property-target-args
+  "With :skip-missing-targets? (set by the app's editor, never by the CLI or API, which keep their
+  'block or property doesn't exist' errors), a property write whose block or property was removed
+  after the editor sent it (an undo, a delete or a cut landing first) is dropped instead of
+  failing the whole batch. Returns the args to apply, or nil to skip the op."
+  [db opts' op args]
+  (if-not (:skip-missing-targets? opts')
+    args
+    (case op
+      :set-block-property
+      (let [[block-id property-id] args]
+        (when (and (live-block? db block-id) (d/entity db property-id))
+          args))
+      :batch-set-property
+      (let [[block-ids property-id & more] args
+            block-ids' (filterv #(live-block? db %) block-ids)]
+        (when (and (seq block-ids') (d/entity db property-id))
+          (into [block-ids' property-id] more)))
+      args)))
+
 (defn- ^:large-vars/cleanup-todo apply-op!
   [conn opts' *result [op args]]
   (case op
@@ -365,7 +389,8 @@
     (reset! *result (apply outliner-property/upsert-property! conn args))
 
     :set-block-property
-    (apply outliner-property/set-block-property! conn args)
+    (when-let [args (live-property-target-args @conn opts' op args)]
+      (apply outliner-property/set-block-property! conn args))
 
     :remove-block-property
     (apply outliner-property/remove-block-property! conn args)
@@ -379,7 +404,8 @@
       (outliner-property/create-property-text-block! conn block-id' property-id v opts))
 
     :batch-set-property
-    (apply outliner-property/batch-set-property! conn args)
+    (when-let [args (live-property-target-args @conn opts' op args)]
+      (apply outliner-property/batch-set-property! conn args))
 
     :batch-remove-property
     (apply outliner-property/batch-remove-property! conn args)
