@@ -209,6 +209,55 @@
       (is (= [:prevent-default :escape-editing] @calls)
           "Enter on a page title must save and exit without splitting the page entity."))))
 
+(defn- fake-dom-node
+  [attrs]
+  #js {:classList #js {:contains (constantly false)}
+       :closest (constantly nil)
+       :querySelector (constantly nil)
+       :getAttribute (fn [k] (get attrs k))})
+
+(deftest arrow-down-out-of-a-refused-title-saves-it-once-test
+  (async done
+    (let [page-uuid #uuid "11111111-1111-1111-1111-111111111111"
+          page {:db/id 1
+                :block/uuid page-uuid
+                :block/title "page 2"}
+          input #js {:value "page"}
+          current-block (fake-dom-node {})
+          next-block (fake-dom-node {"blockid" "22222222-2222-2222-2222-222222222222"})
+          previous-document (aget js/globalThis "document")
+          saves (atom [])]
+      (aset js/globalThis "document" #js {:activeElement input})
+      (-> (p/with-redefs [state/get-edit-block (constantly page)
+                          state/get-edit-content (constantly "page")
+                          state/block-component-editing? (constantly false)
+                          state/input-idle? (constantly true)
+                          editor/handle-last-input (fn [])
+                          util/rec-get-node (fn [_node class]
+                                              (when (= "ls-block" class)
+                                                current-block))
+                          util/get-next-block-non-collapsed (constantly next-block)
+                          editor/save-block! (fn [_repo block-uuid value]
+                                               (swap! saves conj [:arrow-down block-uuid value])
+                                               (p/rejected (ex-info "Duplicate page" {:type :notification})))
+                          editor/save-current-block! (fn [_opts]
+                                                       (swap! saves conj [:auto-save]))]
+            ;; the last Backspace, "page 2" -> "page", schedules the 450 ms auto-save
+            (editor/edit-box-on-change! #js {:target input} page "edit-block-page-title")
+            (-> (editor/move-cross-boundary-up-down :down {:input input})
+                (p/catch (fn [_error] nil)))
+            (p/delay 600))
+          (p/then (fn []
+                    (is (= [[:arrow-down page-uuid "page"]] @saves)
+                        "ArrowDown's save replaces the pending auto-save: a refused title is sent once, not twice.")))
+          (p/catch (fn [error]
+                     (is false (str error))))
+          (p/finally (fn []
+                       (if (some? previous-document)
+                         (aset js/globalThis "document" previous-document)
+                         (js-delete js/globalThis "document"))
+                       (done)))))))
+
 (deftest keydown-new-block-keeps-the-keydown-editor-state-test
   (let [block {:db/id 1
                :block/uuid #uuid "11111111-1111-1111-1111-111111111111"

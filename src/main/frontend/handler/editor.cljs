@@ -2940,6 +2940,10 @@
                     uuid
                     (not (state/block-component-editing?))
                     (not= title (string/trim value)))
+               ;; This save replaces the auto-save the last keystroke scheduled.
+               ;; Left pending, that timer saves the same text again when this
+               ;; save is refused (e.g. a duplicate page title) and the editor stays.
+               (clear-block-auto-save-timeout!)
                (save-block! repo uuid value))
 
              (cond
