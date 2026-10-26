@@ -171,6 +171,30 @@
                      (unsubscribe!))
                    (reset! state/*db-worker previous-db-worker)))))))))
 
+(deftest children-of-a-parent-that-is-gone-are-missing-not-an-error-test
+  ;; Key fuzzer: Enter, then Ctrl+Z (or Down, Ctrl+Z) with no wait undid the inserted block while its children
+  ;; slot was loading; the worker's "Missing direct-children parent" became an :error snapshot, which the
+  ;; hooks throw in render, and the app showed "Something went wrong".
+  (async done
+         (let [parent-uuid (random-uuid)
+               other-uuid (random-uuid)]
+           (finish-async!
+            done
+            (p/with-redefs [subs/<load-children
+                            (fn [_graph-id requested-uuid]
+                              (p/rejected (js/Error. (if (= requested-uuid parent-uuid)
+                                                       "Missing direct-children parent"
+                                                       "temporary worker failure"))))]
+              (let [unsubscribe (subs/subscribe-children! parent-uuid (fn []))
+                    unsubscribe-other (subs/subscribe-children! other-uuid (fn []))]
+                (p/let [_ (p/delay 0)]
+                  (is (= :missing (:status (subs/children-snapshot parent-uuid)))
+                      "children of a parent that is gone render as missing")
+                  (is (= :error (:status (subs/children-snapshot other-uuid)))
+                      "any other failed read stays an error")
+                  (unsubscribe)
+                  (unsubscribe-other))))))))
+
 (deftest mounted-error-snapshot-retries-when-worker-recovers-test
   (async done
          (let [resource-key [:journals]
