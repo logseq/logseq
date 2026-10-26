@@ -310,6 +310,35 @@
                                  @calls))))
                (p/finally done)))))
 
+(deftest choosing-a-type-for-an-invalid-property-name-creates-nothing-test
+  ;; Key fuzzer: a new property named "#" (or "#[[p") got the invalid-name
+  ;; warning, and choosing its type still sent upsert-property! with no id and no
+  ;; name, which failed in the worker on the nil name ("Property failed to create").
+  (async done
+         (let [calls (atom [])
+               *show-new-property-config? (atom false)]
+           (-> (p/with-redefs [state/get-current-repo (constantly "test")
+                               db-async/<get-block (fn [& _] (p/resolved nil))
+                               db-async/<get-all-properties (fn [& _] (p/resolved []))
+                               notification/show!
+                               (fn [& args]
+                                 (swap! calls conj (into [:notification] args)))
+                               db-property-handler/upsert-property!
+                               (fn [& args]
+                                 (swap! calls conj (into [:upsert] args))
+                                 (p/resolved nil))]
+                 (#'property-component/<on-property-type-change
+                  "Default" nil "#" {}
+                  {:block {:block/uuid (random-uuid)}
+                   :*show-new-property-config? *show-new-property-config?}))
+               (p/then (fn [_]
+                         (is (= [[:notification (t :property.validation/invalid-name) :error]] @calls)
+                             "the invalid name is reported once and no property is written")
+                         (is (false? @*show-new-property-config?))))
+               (p/catch (fn [error]
+                          (is false (str error))))
+               (p/finally done)))))
+
 (deftest property-input-on-chosen-refuses-namespaced-page-before-type-picker-test
   (let [page {:db/id 42
               :block/title "Bar"
