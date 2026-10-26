@@ -35,6 +35,7 @@ type platformServices struct {
 	Invalidate  func()
 	resources   *resourceRenderer
 	mutations   *domMutationRenderer
+	viewport    viewportRenderer
 }
 
 type platformUIState struct {
@@ -64,6 +65,7 @@ func (s *platformServices) View(c *ui.Context) {
 		panic(err)
 	}
 	s.resources.BeginView(c)
+	s.viewport.BeginView(s, c)
 	s.backend.View(c)
 }
 

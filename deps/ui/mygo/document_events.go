@@ -17,6 +17,8 @@ type DocumentDispatch func(name, payload string) bool
 // DocumentEvents owns only input routing state. The OCaml document remains the
 // authority for shortcuts, selection, navigation and command execution.
 type DocumentEvents struct {
+	// Observe sees the actual retained target before document default handling.
+	Observe func(ui.InputEvent, luimygo.InputNode)
 	// Pointer routes editor gestures after unprevented document capture and
 	// before MyGo target delivery. A zero target still allows active drags.
 	Pointer         func(ev ui.InputEvent, target int64) bool
@@ -49,6 +51,7 @@ func (s *platformServices) renderDocumentEvents(c *ui.Context, n luimygo.Node, _
 	e := ui.Box(c).Size(0, 0)
 	d := ui.Local(e, "document-events", func() DocumentEvents { return DocumentEvents{} })
 	d.backend = s.backend
+	d.Observe = s.ViewportInput
 	d.dispatch = func(name, payload string) bool {
 		extensionEmit(n, emit, "dom-event", map[string]any{"name": name, "payload": payload})
 		return false // Carrier dispatch has no default-prevention return channel.
@@ -76,6 +79,9 @@ func (d *DocumentEvents) send(target luimygo.InputNode, name string, payload map
 
 func (d *DocumentEvents) input(ev ui.InputEvent, host ui.InputTarget) bool {
 	target, _ := d.backend.InputNode(host)
+	if d.Observe != nil {
+		d.Observe(ev, target)
+	}
 	prevented := d.event(ev, target)
 	if !prevented && d.Pointer != nil && (ev.Kind == ui.InputPointerDown || ev.Kind == ui.InputPointerUp || ev.Kind == ui.InputPointerMove) {
 		id := target.Node.ID

@@ -227,6 +227,7 @@ func (services *platformServices) renderLogseqElement(tag string) luimygo.Render
 		if textState == nil {
 			services.bind(n, e)
 		}
+		services.viewport.Bind(services, c, n, e, emit)
 		_, disabled := attrs["disabled"]
 		e.Disabled(disabled)
 		if label := attrs["aria-label"]; label != "" {

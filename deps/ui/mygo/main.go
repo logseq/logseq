@@ -103,6 +103,7 @@ func run() (result error) {
 			return prevented
 		})
 		host.document.Pointer = host.services.EditorPointer
+		host.document.Observe = host.services.ViewportInput
 		host.services.mutations.Activate = func(n luimygo.Node) error {
 			if n.Identifier == "logseq-input" || n.Identifier == "logseq-textarea" {
 				return fmt.Errorf("native input activation requires the control's default action")
@@ -139,6 +140,10 @@ func run() (result error) {
 			}
 		})
 		host.services.Invalidate = host.window.Invalidate
+		host.window.OnBlur(func() {
+			host.services.CancelViewportPress()
+			host.services.CancelEditorPointer()
+		})
 		if err := host.services.StartDesktopServices(host.window, func(replies []platformReply, err error) {
 			for _, reply := range replies {
 				if dispatchErr := r.PlatformEvent(reply); dispatchErr != nil {
