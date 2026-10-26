@@ -406,6 +406,21 @@
                                :i18n-key :page.convert/page-to-property-namespaced
                                :type :error}}))))
 
+(def ^:private task-properties
+  "Setting one of these on a node without a class that provides it also tags the node #Task."
+  #{:logseq.property/status :logseq.property/scheduled :logseq.property/deadline})
+
+(defn disallow-task-properties-on-built-in-nodes
+  "A built-in node keeps its one built-in tag, so it can't take #Task: setting a task property on
+   it (e.g. DONE typed on the built-in Page class's page) would fail validation and lose the write."
+  [entities property-id]
+  (when (contains? task-properties property-id)
+    (when (some built-in-entity? entities)
+      (throw (ex-info "Built-in nodes can't be tasks"
+                      {:type :notification
+                       :payload {:message "Built-in nodes can't be tasks."
+                                 :type :error}})))))
+
 (defn disallow-editing-private-built-in-nodes
   "Disallow editing private :built-in nodes. This explicit validation is needed for contexts
    like CLI and API which allow users to edit any built-in entity whereas the app guards this
