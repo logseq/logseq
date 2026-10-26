@@ -140,7 +140,7 @@ let () = Native_embed.with_entry_lock (fun () ->
   let dom = { Ui_dom_native.ops with by_id = (fun identifier ->
     incr queries;
     if identifier="block-context-menu" then !menu_node else None) } in
-  Platform.install_ui_services ~assert_owner:Native_embed.assert_entry_owner
+  Platform.install_ui_services ~paints_caret:true ~assert_owner:Native_embed.assert_entry_owner
     ~request_flush:(fun () -> ()) ~dom ~timers:Ui_dom_native.timers ~files:Ui_dom_native.files;
   let event key =
     {(Ui_dom_native.ev_of (Js.Json.JObject

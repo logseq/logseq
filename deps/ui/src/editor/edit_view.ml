@@ -596,9 +596,8 @@ let overlay (frame : frame Signal.signal) : t =
          (fun f -> List.mapi (fun i r -> (i, r)) f.Edit_input.selection)
          frame)
   in
-  (* The native host paints the caret from the current glyph layout
-     alongside the input sink. Other hosts use the measured overlay
-     rectangle. *)
+  (* Hosts with their own caret painter suppress the shared overlay.
+     All other hosts use the measured rectangle. *)
   let caret =
     if Ui_services.env_paints_caret () then []
     else

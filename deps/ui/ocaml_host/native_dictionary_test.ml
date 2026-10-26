@@ -72,7 +72,18 @@ let () =
     reset ();select "zh-CN";
     write "zh-cn.edn"
       "{:header/more \"更多\" :nav/journals \"日志\" :sidebar.left/navigations \"导航\"}";
-    ignore (Native_embed.initialize 1 0 "");
+    List.iter (fun payload ->
+      let rejected =
+        try ignore (Native_embed.initialize 1 0 payload); false
+        with Invalid_argument _ | Yojson.Json_error _ -> true
+      in
+      expect "Invalid caret ownership must fail before native initialization" rejected)
+      [""; "{}"; "null"; {|{"paintsCaret":"false"}|};
+       {|{"paintsCaret":false,"paintsCaret":true}|};
+       {|{"paintsCaret":false,"unknown":true}|}];
+    ignore (Native_embed.initialize 1 0 {|{"paintsCaret":false}|});
+    expect "A native host without a caret painter must enable the shared overlay"
+      (Native_embed.with_entry_lock (fun () -> not (Ui_services.env_paints_caret ())));
     let elements=Native_embed.collect_elements () in
     let displays property value=List.exists (fun element ->
       let encoded=Js.Json.stringify element in

@@ -10,6 +10,12 @@ On Linux, `LUI_GPU=cpu` selects LUI's software rasterizer and SDL presentation
 without requesting an OpenGL window or context. Linux graphics failures
 are reported rather than silently switching to an invisible renderer.
 
+The native entry requires an explicit JSON caret capability before mounting
+views. This host passes `{"paintsCaret":true}` because its glyph-layout painter
+owns the caret; MyGo passes `false` to use the shared measured overlay instead.
+Neither the platform nor `GenericHost` implies caret ownership. Empty startup
+payloads are invalid; rebuild the launcher and OCaml entry together.
+
 ## Build
 
 Use OCaml 5.5.1 and LUI's `feat/ml-backend` branch, as in
