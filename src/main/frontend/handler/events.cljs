@@ -327,9 +327,15 @@
       (if (and batch? (> (count blocks) 1))
         (editor-handler/toggle-blocks-as-own-order-list! blocks)
         (when-let [block (cond-> blocks batch? (first))]
-          (if (editor-handler/own-order-number-list? block)
-            (editor-handler/remove-block-own-order-list-type! block)
-            (editor-handler/make-block-as-own-order-list! block)))))))
+          ;; Typing "1. " sends the edit block, which can be gone by now (deleted, or
+          ;; not in the db yet); setting the list type on it fails in the worker.
+          (p/let [block' (if (:block/uuid block)
+                           (db-async/<get-block repo (:block/uuid block) {:children? false})
+                           block)]
+            (when block'
+              (if (editor-handler/own-order-number-list? block')
+                (editor-handler/remove-block-own-order-list-type! block')
+                (editor-handler/make-block-as-own-order-list! block')))))))))
 
 (defevent! :editor/remove-own-number-list [[_ block]]
   (when (some-> block (editor-handler/own-order-number-list?))

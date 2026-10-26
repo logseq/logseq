@@ -5,6 +5,7 @@
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.events :as events]
+            [frontend.handler.property :as property-handler]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [logseq.shui.ui :as shui]
@@ -64,6 +65,35 @@
                 "a block deleted before the conversion runs gets no property write (it would fail in the worker)")
             (is (= [[(:block/uuid block) :logseq.property.node/display-type :quote]] present-writes)
                 "a block that is still there is converted"))
+          (p/catch (fn [e] (is false (str e))))
+          (p/finally done)))))
+
+(defn- <run-toggle-own-number-list!
+  "Runs :editor/toggle-own-number-list for `block` (as typing \"1. \" sends it) while the db
+  returns `db-block` for it; returns the property writes it made."
+  [block db-block]
+  (let [handler (get @@#'events/event-definitions :editor/toggle-own-number-list)
+        writes (atom [])]
+    (p/let [_ (p/with-redefs [state/get-current-repo (constantly "test-repo")
+                              db-async/<get-block (fn [_repo _id & _opts] (p/resolved db-block))
+                              property-handler/set-block-property! (fn [& args]
+                                                                     (swap! writes conj (vec args))
+                                                                     (p/resolved nil))
+                              property-handler/remove-block-property! (fn [& args]
+                                                                        (swap! writes conj (into [:remove] args))
+                                                                        (p/resolved nil))]
+                (handler [:editor/toggle-own-number-list block]))]
+      @writes)))
+
+(deftest toggle-own-number-list-skips-a-block-that-is-gone-test
+  (async done
+    (let [block {:db/id 8 :block/uuid #uuid "88888888-8888-8888-8888-888888888888" :block/title "1. "}]
+      (-> (p/let [gone-writes (<run-toggle-own-number-list! block nil)
+                  present-writes (<run-toggle-own-number-list! block block)]
+            (is (= [] gone-writes)
+                "a block gone before \"1. \" converts it gets no property write (it would fail in the worker)")
+            (is (= [[(:block/uuid block) :logseq.property/order-list-type "number"]] present-writes)
+                "a block that is still there becomes a numbered list"))
           (p/catch (fn [e] (is false (str e))))
           (p/finally done)))))
 
