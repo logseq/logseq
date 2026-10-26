@@ -59,6 +59,16 @@ func (s *platformServices) editorHost() *editorGeometryHost {
 // on disposal; no retained Element or OS edit history is owned here.
 func (s *platformServices) CloseEditor() { delete(editorGeometryHosts, s) }
 
+// CancelEditorPointer releases this window's drag capture without emitting input.
+// Call on the UI thread from the window's real blur callback.
+func (s *platformServices) CancelEditorPointer() {
+	if h := editorGeometryHosts[s]; h != nil {
+		for _, input := range h.sinks {
+			input.dragging = false
+		}
+	}
+}
+
 // EditorPointer routes a pre-dispatch window-space pointer to the input sink
 // of its actual block-editor ancestor. The sink is intentionally only 1 DIP;
 // the standard rich text, not an invisible replacement editor, receives hits.
