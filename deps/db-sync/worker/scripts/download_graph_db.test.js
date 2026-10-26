@@ -41,20 +41,20 @@ test("sanitizeGraphIdForFilename replaces unsafe chars", () => {
   assert.equal(sanitizeGraphIdForFilename("us-east-1:abc/def"), "us-east-1_abc_def");
 });
 
-test("snapshotRequestUrl keeps the caller base for the API stream route", () => {
-  assert.equal(
-    snapshotRequestUrl(
-      "https://sync.example.test/",
-      "graph-1",
-      "http://127.0.0.1:8787/sync/graph-1/snapshot/stream?graph-id=graph-1",
-    ),
-    "https://sync.example.test/sync/graph-1/snapshot/stream?graph-id=graph-1",
-  );
-});
-
-test("snapshotRequestUrl keeps an external object URL", () => {
+test("snapshotRequestUrl uses the caller base for API streams and preserves external URLs", () => {
   const external = "https://assets.example.test/graph-1.snapshot?X-Amz-Signature=abc";
-  assert.equal(snapshotRequestUrl("https://sync.example.test", "graph-1", external), external);
+  const cases = [
+    [
+      "https://sync.example.test/",
+      "http://127.0.0.1:8787/sync/graph-1/snapshot/stream?graph-id=graph-1",
+      "https://sync.example.test/sync/graph-1/snapshot/stream?graph-id=graph-1",
+    ],
+    ["https://sync.example.test", external, external],
+  ];
+
+  for (const [baseUrl, serverUrl, expected] of cases) {
+    assert.equal(snapshotRequestUrl(baseUrl, "graph-1", serverUrl), expected);
+  }
 });
 
 test("CLI --help exits successfully", () => {

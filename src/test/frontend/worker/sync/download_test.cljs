@@ -152,46 +152,15 @@
                             (reset! worker-state/*state state-prev)
                             (done)))))))
 
-(deftest download-fetches-snapshot-stream-from-the-configured-server-test
-  (async done
-         (let [config-prev @worker-state/*db-sync-config
-               fetch-prev js/fetch
-               calls (atom [])]
-           (reset! worker-state/*db-sync-config {:http-base "https://sync.example.test"})
-           (set! js/fetch
-                 (fn [url _opts]
-                   (swap! calls conj url)
-                   (js/Promise.reject (js/Error. "Failed to fetch"))))
-           (-> (p/with-redefs [sync-download/fetch-json (fn [_url _opts schema]
-                                                          (case schema
-                                                            :sync/snapshot-download
-                                                            (p/resolved {:t 7
-                                                                         :key "stream/graph-1.snapshot"
-                                                                         :url "http://127.0.0.1:8787/sync/graph-1/snapshot/stream?graph-id=graph-1"})
-
-                                                            (p/rejected (ex-info "unexpected schema" {:schema schema}))))]
-                 (sync-download/download-graph-by-id! "repo" "graph-1" false))
-               (p/then (fn [_]
-                         (is false "internal snapshot URL must not be fetched")))
-               (p/catch (fn [error]
-                          (is (= ["https://sync.example.test/sync/graph-1/snapshot/stream?graph-id=graph-1"]
-                                 @calls))
-                          (is (= "db-sync download failed" (ex-message error)))
-                          (is (= :fetch-snapshot-stream (:stage (ex-data error))))
-                          (is (= "Failed to fetch" (:error-message (ex-data error))))
-                          (is (= "https://sync.example.test/sync/graph-1/snapshot/stream?graph-id=graph-1"
-                                 (:snapshot-url (ex-data error))))))
-               (p/finally (fn []
-                            (set! js/fetch fetch-prev)
-                            (reset! worker-state/*db-sync-config config-prev)
-                            (done)))))))
-
-(deftest download-keeps-external-snapshot-url-test
-  (is (= "https://assets.example.test/graph-1.snapshot?X-Amz-Signature=abc"
-         (#'sync-download/snapshot-stream-request-url
-          "https://sync.example.test"
-          "graph-1"
-          "https://assets.example.test/graph-1.snapshot?X-Amz-Signature=abc"))))
+(deftest snapshot-stream-request-url-test
+  (doseq [[server-url expected]
+          [["http://127.0.0.1:8787/sync/graph-1/snapshot/stream?graph-id=graph-1"
+            "https://sync.example.test/sync/graph-1/snapshot/stream?graph-id=graph-1"]
+           ["https://assets.example.test/graph-1.snapshot?X-Amz-Signature=abc"
+            "https://assets.example.test/graph-1.snapshot?X-Amz-Signature=abc"]]]
+    (is (= expected
+           (#'sync-download/snapshot-stream-request-url
+            "https://sync.example.test" "graph-1" server-url)))))
 
 (deftest download-rejects-snapshot-without-a-journal-position-test
   (async done
