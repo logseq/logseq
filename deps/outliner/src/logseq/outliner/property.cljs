@@ -680,6 +680,8 @@
 (defn- validate-batch-set-property
   [conn block-eids property-id v]
   (outliner-validate/disallow-editing-private-built-in-nodes (mapv #(d/entity @conn %) block-eids))
+  (when (some? v)
+    (outliner-validate/disallow-task-properties-on-built-in-nodes (mapv #(d/entity @conn %) block-eids) property-id))
   (when (= property-id :block/tags)
     (outliner-validate/validate-tags-property @conn block-eids v))
   (when (= property-id :logseq.property.class/extends)
@@ -903,6 +905,8 @@
                           :property-id property-id
                           :block block
                           :property property})))
+       (when (some? v')
+         (outliner-validate/disallow-task-properties-on-built-in-nodes [block] property-id))
        (if (nil? v')
          (remove-block-property! conn block-eid property-id)
          (do
