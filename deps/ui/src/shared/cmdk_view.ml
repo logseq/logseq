@@ -443,7 +443,7 @@ let item_row svs (st : S.t) (item_sig : S.item Signal.signal) : t =
                         item_sig
                     ]
                 ; Ui_components.cmdk_item_body ~key:"txt"
-                    [ Ui_components.cmdk_main_text ~key:"main-text"
+                    [ row ~key:"title" ~gap:0 ~cross:`start ~min_width:0
                         [ if_
                             ~test:(reactive (fun (it : S.item) -> it.inline_icon <> None) item_sig)
                             (reactive
@@ -453,26 +453,29 @@ let item_row svs (st : S.t) (item_sig : S.item Signal.signal) : t =
                                 | Some value -> Ui_components.with_props [Ui_components.Prop.margin_right 4]
                                     (svs.Cmdk_services.render_icon ~size:14 value))
                                item_sig)
-                        ; hl_span "label" item_sig (fun it -> it.S.ititle)
-                        ; if_
-                            ~test:
-                              (reactive
-                                 (fun (it : S.item) ->
-                                   it.S.ibadge = S.Text_badge)
-                                 item_sig)
-                            (Ui_components.with_props [Ui_components.Prop.margin_left 4]
-                               (badge_el svs "tb"))
-                        ; if_
-                            ~test:
-                              (reactive
-                                 (fun (it : S.item) -> it.S.info <> None)
-                                 item_sig)
-                            (Ui_components.cmdk_info_text ~key:"info"
-                               [ text ~key:"dash" ~as_:`Span
-                                   ~value:{js| — |js} []
-                               ; hl_span "info-hl" item_sig
-                                   (fun it ->
-                                     Option.value ~default:"" it.S.info)
+                        ; Ui_components.with_props [Ui_components.Prop.grow 1.]
+                            (Ui_components.cmdk_main_text ~key:"main-text"
+                               [ hl_span "label" item_sig (fun it -> it.S.ititle)
+                               ; if_
+                                   ~test:
+                                     (reactive
+                                        (fun (it : S.item) ->
+                                          it.S.ibadge = S.Text_badge)
+                                        item_sig)
+                                   (Ui_components.with_props [Ui_components.Prop.margin_left 4]
+                                      (badge_el svs "tb"))
+                               ; if_
+                                   ~test:
+                                     (reactive
+                                        (fun (it : S.item) -> it.S.info <> None)
+                                        item_sig)
+                                   (Ui_components.cmdk_info_text ~key:"info"
+                                      [ text ~key:"dash" ~as_:`Span
+                                          ~value:{js| — |js} []
+                                      ; hl_span "info-hl" item_sig
+                                          (fun it ->
+                                            Option.value ~default:"" it.S.info)
+                                      ])
                                ])
                         ]
                     ]
