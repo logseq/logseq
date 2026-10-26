@@ -178,7 +178,7 @@ let ac_label_el (v : S.view) (it : S.ac_item) : t =
       (* no-icon commands render the label as a bare text node *)
       | None -> [ text ~key:"t" ~value:txt [] ])
     @ if it.S.ai_help then
-        [ text ~key:"help" [ help_circle_svg ] ]
+        [ box ~key:"help" [ help_circle_svg ] ]
       else [])
 ;;
 
