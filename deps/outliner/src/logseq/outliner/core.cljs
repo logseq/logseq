@@ -281,11 +281,14 @@
                                                                   :class? class?
                                                                   :journal? (or (= "journal" (:block/type ref))
                                                                                 (contains? (ref-tag-idents ref)
-                                                                                           :logseq.class/Journal))})]
+                                                                                           :logseq.class/Journal))})
+              ;; nil when create can't make the page a class, e.g. an existing journal
+              class-ident (when class?
+                            (or (some :db/ident tx-data)
+                                (:db/ident (d/entity db [:block/uuid page-uuid]))))]
           [(cond-> (assoc (select-keys ref [:block/title :block/name :block.temp/original-page-name])
                           :block/uuid page-uuid)
-             class? (assoc :db/ident (or (some :db/ident tx-data)
-                                         (:db/ident (d/entity db [:block/uuid page-uuid])))))
+             class-ident (assoc :db/ident class-ident))
            tx-data])))
     [ref nil]))
 
@@ -335,6 +338,35 @@
        (not (d/entity db [:block/uuid (second ref')]))
        (not (contains? created-uuids (second ref')))))
 
+(defn- resolve-tags
+  "Point each tag at its resolved class ref. A new tag (no :db/id) whose ref
+  create couldn't make a class is dropped and its ref stays: :block/tags only
+  takes classes. E.g. an existing journal written as #[[Oct 25th, 2026]], or a
+  uuid-named tag like #[[<block uuid>]] whose ref becomes a broken ref."
+  [tags pairs tag-names]
+  (let [tag-refs (reduce (fn [m [_ref ref' _tx-data]]
+                           (if (:db/ident ref')
+                             (update m (:block/name ref') (fnil conj []) ref')
+                             m))
+                         {}
+                         pairs)
+        no-class-names (into #{}
+                             (keep (fn [[ref ref' _tx-data]]
+                                     (when (and (new-page-ref? ref)
+                                                (contains? tag-names (:block/name ref))
+                                                (nil? (:db/ident ref')))
+                                       (:block/name ref))))
+                             pairs)]
+    (into []
+          (comp (remove #(and (nil? (:db/id %))
+                              (contains? no-class-names (:block/name %))))
+                (map (fn [tag]
+                       (if-let [ref (matching-ref-for-tag tag (get tag-refs (:block/name tag)))]
+                         (merge (dissoc tag :block/type)
+                                (select-keys ref [:block/uuid :db/ident]))
+                         tag))))
+          tags)))
+
 (defn- resolve-page-refs
   ([db block]
    (resolve-page-refs db block nil))
@@ -353,18 +385,7 @@
            broken-pairs (filterv (comp broken-page-map? second) pairs)
            refs' (mapv second resolved-pairs)
            page-txs (mapcat #(nth % 2) resolved-pairs)
-           tag-refs (reduce (fn [m ref]
-                              (if (:db/ident ref)
-                                (update m (:block/name ref) (fnil conj []) ref)
-                                m))
-                            {}
-                            refs')
-           tags' (mapv (fn [tag]
-                         (if-let [ref (matching-ref-for-tag tag (get tag-refs (:block/name tag)))]
-                           (merge (dissoc tag :block/type)
-                                  (select-keys ref [:block/uuid :db/ident]))
-                           tag))
-                       (:block/tags block))
+           tags' (resolve-tags (:block/tags block) pairs tag-names)
            replacements (into (keep (fn [[ref ref' _tx-data]]
                                       (when (not= (:block/uuid ref) (:block/uuid ref'))
                                         [(:block/uuid ref) (:block/uuid ref')]))
