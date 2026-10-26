@@ -1099,6 +1099,10 @@
                   (remove ldb/asset?))
          [target-block sibling?] (get-target-block db blocks target-block opts)
          _ (assert (some? target-block) (str "Invalid target: " target-block))
+         ;; A target without a parent (a top-level page, e.g. the page whose
+         ;; title is being edited during a paste) has no siblings: insert
+         ;; under it instead of with a nil :block/parent.
+         sibling? (and sibling? (some? (:block/parent target-block)))
          replace-empty-target? (if (and (some? replace-empty-target?)
                                         (:block/title target-block)
                                         (string/blank? (:block/title target-block)))
