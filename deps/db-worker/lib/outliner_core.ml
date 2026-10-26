@@ -700,15 +700,30 @@ let resolve_page_ref (db : db) ?(base_db : db option) (v : value)
         in
         (match res.page_uuid with
          | Some page_uuid ->
+             let page =
+               match
+                 List.find_opt
+                   (fun w ->
+                     Cljs_map.get w "block/uuid" = Some (Wire.Uuid page_uuid)
+                     && Cljs_map.get w "block/title" <> None)
+                   res.tx_data
+               with
+               | Some w -> Ds_wire.value_of_transit w
+               | None ->
+                   (match entity db (Lookup_ref ("block/uuid", Uuid page_uuid)) with
+                    | Some e -> entity_select_map e
+                    | None -> invalid_arg "resolve-page-ref: resolved page is missing")
+             in
+             let page_fields =
+               List.filter_map
+                 (fun k -> Option.map (fun v -> Keyword k, v) (map_key_of page k))
+                 [ "block/title"; "block/name" ]
+             in
              let m =
                match map_key_of v "block.temp/original-page-name" with
                | Some x ->
-                   [ (Keyword "block/title", String title)
-                   ; (Keyword "block/name", String name)
-                   ; (Keyword "block.temp/original-page-name", x) ]
-               | None ->
-                   [ (Keyword "block/title", String title)
-                   ; (Keyword "block/name", String name) ]
+                   page_fields @ [ (Keyword "block.temp/original-page-name", x) ]
+               | None -> page_fields
              in
              let m = m @ [ (Keyword "block/uuid", Uuid page_uuid) ] in
              let m =

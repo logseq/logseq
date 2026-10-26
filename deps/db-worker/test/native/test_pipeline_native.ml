@@ -1221,6 +1221,53 @@ let test_legacy_journal_reference_does_not_update_protected_attributes_test () =
           raise e);
        Db_tx.transact_pipeline_fn := Some (fun r -> r))
 
+let test_save_date_alias_preserves_existing_journal () =
+  let conn =
+    Db_test_util.create_pipeline_conn_with_blocks
+      ~pages_and_blocks:
+        [ Db_test_util.
+            { page = { default_page with pg_journal = Some 20261025 }
+            ; blocks = [] }
+        ; Db_test_util.
+            { page = { default_page with pg_title = Some "page1" }
+            ; blocks = [ { default_block with b_title = Some "target" } ] } ]
+      ()
+  in
+  let journal =
+    Option.get (Ldb.get_journal_page_by_day (db_of conn) 20261025)
+  in
+  let target =
+    Option.get (Db_test_util.find_block_by_content (db_of conn) "target")
+  in
+  let parsed_uuid = Common_uuid.new_block_id () in
+  with_transact_pipeline (fun () ->
+      save_block_bang conn
+        [ "block/uuid", Uuid (uuid_of target)
+        ; "block/title", String (Page_ref.to_page_ref parsed_uuid)
+        ; "block/refs",
+          List
+            [ bm_as_value
+                [ "block/uuid", Uuid parsed_uuid
+                ; "block/title", String "2026-10-25"
+                ; "block/name", String "2026-10-25"
+                ; "block/tags", List [ Keyword "logseq.class/Page" ] ] ] ]
+        ());
+  let saved = Option.get (entity (db_of conn) (Entity_id target.id)) in
+  let journal_after =
+    Option.get (Ldb.get_journal_page_by_day (db_of conn) 20261025)
+  in
+  check "date alias references the existing journal"
+    (Ldb.ref_ids saved "block/refs" = [ journal.id ]);
+  Alcotest.(check (option string)) "date alias stores the canonical journal uuid"
+    (Some (Page_ref.to_page_ref (uuid_of journal)))
+    (Ldb.string_value saved "block/title");
+  check "date alias preserves journal title"
+    (Ldb.string_value journal_after "block/title"
+     = Ldb.string_value journal "block/title");
+  check "date alias preserves journal name"
+    (Ldb.string_value journal_after "block/name"
+     = Ldb.string_value journal "block/name")
+
 (* ---------- create-journal-page-name-uses-default-formatter-test ---- *)
 let test_create_journal_page_name_uses_default_formatter_test () =
   let conn = Db_test_util.create_pipeline_conn () in
@@ -2941,6 +2988,7 @@ let cases : unit Alcotest.test_case list =
     Alcotest.test_case "code-block-tag-addition-preserves-explicit-code-lang-test" `Quick test_code_block_tag_addition_preserves_explicit_code_lang_test;
     Alcotest.test_case "journal-name-title-updates-throw-in-transact-pipeline-test" `Quick test_journal_name_title_updates_throw_in_transact_pipeline_test;
     Alcotest.test_case "legacy-journal-reference-does-not-update-protected-attributes-test" `Quick test_legacy_journal_reference_does_not_update_protected_attributes_test;
+    Alcotest.test_case "save-date-alias-preserves-existing-journal" `Quick test_save_date_alias_preserves_existing_journal;
     Alcotest.test_case "create-journal-page-name-uses-default-formatter-test" `Quick test_create_journal_page_name_uses_default_formatter_test;
     Alcotest.test_case "apply-template-today-dynamic-variable-persists-journal-ref-test" `Quick test_apply_template_today_dynamic_variable_persists_journal_ref_test;
     Alcotest.test_case "apply-template-tomorrow-dynamic-variable-creates-missing-journal-ref-test" `Quick test_apply_template_tomorrow_dynamic_variable_creates_missing_journal_ref_test;
