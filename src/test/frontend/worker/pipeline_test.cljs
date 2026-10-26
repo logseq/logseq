@@ -245,6 +245,40 @@
     (is (= (revision db-before ancestor) (revision @conn ancestor)))
     (is (= (revision db-before page) (revision @conn page)))))
 
+(deftest move-into-block-then-delete-it-does-not-resurrect-moved-blocks-test
+  ;; A key fuzzer's Backspace merge sent this batch in one apply-outliner-ops
+  ;; call, with the editor's {:outliner-op :delete-blocks}: blocks a, b, c
+  ;; moved into x as its children, x deleted, then x saved. a, b, c are x's
+  ;; children (the merge's previous block was x itself) or its siblings.
+  (doseq [[layout blocks] {:children [{:block/title "x"
+                                       :build/children [{:block/title "a"}
+                                                        {:block/title "b"}
+                                                        {:block/title "c"}]}
+                                      {:block/title "kept"}]
+                           :siblings [{:block/title "x"}
+                                      {:block/title "a"}
+                                      {:block/title "b"}
+                                      {:block/title "c"}
+                                      {:block/title "kept"}]}]
+    (testing (name layout)
+      (let [conn (db-test/create-conn-with-blocks
+                  [{:page {:block/title "page1"} :blocks blocks}])
+            [x a b c kept] (map #(db-test/find-block-by-content @conn %) ["x" "a" "b" "c" "kept"])
+            x-uuid (:block/uuid x)]
+        (with-transact-pipeline
+          #(outliner-op/apply-ops!
+            conn
+            [[:move-blocks [(mapv :block/uuid [a b c]) x-uuid {:sibling? false}]]
+             [:delete-blocks [[x-uuid] {}]]
+             [:save-block [{:block/uuid x-uuid :block/title "-`c`-`c`s" :block/tags () :block/refs ()} nil]]]
+            {:outliner-op :delete-blocks}))
+        (is (nil? (d/entity @conn [:block/uuid x-uuid])))
+        (doseq [block [a b c]]
+          (is (empty? (d/datoms @conn :eavt (:db/id block)))
+              (str (:block/title block) ", deleted with x, leaves no datoms behind")))
+        (is (= "kept" (:block/title (d/entity @conn (:db/id kept)))))
+        (is (empty? (:errors (worker-db-validate/validate-db conn :fix false))))))))
+
 (deftest direct-child-visibility-keeps-its-membership-owner-revision-test
   (doseq [[label attr value-for]
           [["recycled child"
