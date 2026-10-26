@@ -5,8 +5,11 @@
    [frontend.components.cmdk.core :as cmdk]
    [frontend.components.icon :as icon-component]
    [frontend.db.async :as db-async]
+   [frontend.handler.command-palette :as command-palette]
    [frontend.handler.db-based.recent :as db-recent-handler]
    [frontend.handler.editor.format :as editor-format]
+   [frontend.handler.route :as route-handler]
+   [frontend.modules.shortcut.config :as shortcut-config]
    [frontend.search :as search]
    [frontend.state :as state]
    [frontend.util :as util]
@@ -265,6 +268,72 @@
               [:action :default]
               [:stop-propagation]]
              (enter-action-calls event))))))
+
+(defn- with-document-body
+  "Run `f` with a stub `js/document` whose body is `body`; node has no DOM."
+  [body f]
+  (let [original-document (aget js/global "document")]
+    (set! (.-document js/global) #js {:body body})
+    (try
+      (f)
+      (finally
+        (if (nil? original-document)
+          (js-delete js/global "document")
+          (set! (.-document js/global) original-document))))))
+
+(defn- trigger-palette-command!
+  "Run `command` the way the palette runs a highlighted command."
+  [command]
+  (let [state {::cmdk/highlighted-item (atom {:source-command command})
+               ::cmdk/input-ref (atom #js {:value "" :focus (fn [])})}]
+    (with-redefs [shui/dialog-close! (fn [_])]
+      (cmdk/handle-action :trigger state nil))))
+
+(defn- palette-shortcut-command
+  [id]
+  (some #(when (= id (:id %)) %) (command-palette/global-shortcut-commands)))
+
+(deftest trigger-passes-shortcut-event-to-every-palette-shortcut-command-test
+  (testing "the shortcut handler calls every shortcut :fn with its event, so the palette must too"
+    (let [original-config @shortcut-config/*config
+          received-args (atom {})
+          body #js {:nodeName "BODY"}]
+      (try
+        (swap! shortcut-config/*config update-vals
+               (fn [shortcuts]
+                 (into {}
+                       (map (fn [[id shortcut]]
+                              [id (cond-> shortcut
+                                    (:fn shortcut)
+                                    (assoc :fn (fn [& args] (swap! received-args assoc id args))))]))
+                       shortcuts)))
+        (let [commands (filter :action (command-palette/global-shortcut-commands))]
+          (is (contains? (set (map :id commands)) :editor/toggle-block-children))
+          (with-document-body body #(doseq [command commands] (trigger-palette-command! command)))
+          (doseq [{:keys [id]} commands
+                  :let [args (get @received-args id)]]
+            (is (= 1 (count args)) (str id " :fn gets exactly one event argument"))
+            (is (identical? body (some-> (first args) .-target)) (str id " event targets the document body"))
+            (is (= (subs (str id) 1) (some-> (first args) .-identifier)) (str id " event carries the shortcut identifier"))))
+        (finally
+          (reset! shortcut-config/*config original-config))))))
+
+(deftest trigger-toggle-block-children-command-test
+  (testing "toggle-collapse! has no 0-arity; running it from the palette must not throw Invalid arity"
+    (let [checked-editing? (atom false)
+          command (palette-shortcut-command :editor/toggle-block-children)]
+      (with-redefs [state/editing? (fn [] (reset! checked-editing? true) false)
+                    state/selection? (constantly false)]
+        (with-document-body #js {:nodeName "BODY"} #(trigger-palette-command! command)))
+      (is (true? @checked-editing?) "toggle-collapse! ran past its arity dispatch"))))
+
+(deftest trigger-zero-arity-shortcut-command-test
+  (testing "a 0-arity shortcut :fn still runs from the palette"
+    (let [redirected? (atom false)]
+      (with-redefs [route-handler/redirect-to-home! (fn [& _] (reset! redirected? true))]
+        (with-document-body #js {:nodeName "BODY"}
+          #(trigger-palette-command! (palette-shortcut-command :go/home))))
+      (is (true? @redirected?)))))
 
 (deftest load-results-codes-unwraps-matched-count-map-test
   (async done
