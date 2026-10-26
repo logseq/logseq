@@ -83,18 +83,21 @@
                    (gobj/set js/globalThis "location" original-location)
                    (done)))))))
 
-(deftest install-opfs-pool-gives-up-after-20-busy-attempts-test
+(deftest install-opfs-pool-gives-up-after-the-busy-attempts-test
   (async done
          (let [calls (atom [])
-               original-location (gobj/get js/globalThis "location")]
+               original-location (gobj/get js/globalThis "location")
+               original-retry @platform-browser/*opfs-pool-install-retry]
            (gobj/set js/globalThis "location" #js {:href "http://localhost/" :search ""})
+           (reset! platform-browser/*opfs-pool-install-retry {:attempts 20 :delay-ms 1})
            (-> (<install (fake-sqlite (repeatedly 100 busy-error) calls))
                (p/then (fn [_] (is false "expected the install to fail")))
                (p/catch (fn [error]
                           (is (= "NoModificationAllowedError" (.-name ^js error)))
-                          (is (= 20 (count @calls)) "each busy attempt is retried once, 20 attempts in all")))
+                          (is (= 20 (count @calls)) "each busy attempt is retried once, the configured 20 attempts in all")))
                (p/finally
                  (fn []
+                   (reset! platform-browser/*opfs-pool-install-retry original-retry)
                    (gobj/set js/globalThis "location" original-location)
                    (done)))))))
 
