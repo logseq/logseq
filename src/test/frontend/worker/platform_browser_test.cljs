@@ -48,3 +48,52 @@
                      (gobj/set js/globalThis "location" original-location)
                      (gobj/remove js/globalThis "location"))
                    (done)))))))
+
+(defn- fake-sqlite
+  "installOpfsSAHPoolVfs that rejects with `errors` in order, then resolves; records the options of each call."
+  [errors calls]
+  (let [*errors (atom errors)]
+    #js {:installOpfsSAHPoolVfs (fn [opts]
+                                  (swap! calls conj (js->clj opts :keywordize-keys true))
+                                  (if-let [e (first @*errors)]
+                                    (do (swap! *errors rest) (p/rejected e))
+                                    (p/resolved #js {:pool true})))}))
+
+(defn- busy-error []
+  (doto (js/Error. "Access Handles cannot be created if there is another open Access Handle")
+    (gobj/set "name" "NoModificationAllowedError")))
+
+(defn- <install [sqlite]
+  (p/let [platform (platform-browser/browser-platform)]
+    ((get-in platform [:storage :install-opfs-pool]) sqlite "logseq-pool-test")))
+
+(deftest install-opfs-pool-retries-while-another-worker-holds-the-files-test
+  (async done
+         (let [calls (atom [])
+               original-location (gobj/get js/globalThis "location")]
+           (gobj/set js/globalThis "location" #js {:href "http://localhost/" :search ""})
+           (-> (p/let [pool (<install (fake-sqlite [(busy-error) (busy-error)] calls))]
+                 (is (true? (.-pool pool)) "the pool installs once the old worker lets go of the files")
+                 (is (= [false true true] (mapv :forceReinitIfPreviouslyFailed @calls))
+                     "retries ask sqlite to try again instead of returning the cached failure"))
+               (p/catch (fn [error]
+                          (is false (str "unexpected error: " error))))
+               (p/finally
+                 (fn []
+                   (gobj/set js/globalThis "location" original-location)
+                   (done)))))))
+
+(deftest install-opfs-pool-does-not-retry-other-errors-test
+  (async done
+         (let [calls (atom [])
+               original-location (gobj/get js/globalThis "location")]
+           (gobj/set js/globalThis "location" #js {:href "http://localhost/" :search ""})
+           (-> (<install (fake-sqlite [(js/Error. "Missing required OPFS APIs.")] calls))
+               (p/then (fn [_] (is false "expected the install to fail")))
+               (p/catch (fn [error]
+                          (is (= "Missing required OPFS APIs." (.-message error)))
+                          (is (= 1 (count @calls)) "an error that waiting can't fix fails at once")))
+               (p/finally
+                 (fn []
+                   (gobj/set js/globalThis "location" original-location)
+                   (done)))))))
