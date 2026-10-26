@@ -7,6 +7,7 @@
             [frontend.handler.editor :as editor]
             [frontend.state :as state]
             [frontend.util :as util]
+            [goog.dom :as gdom]
             [promesa.core :as p]))
 
 ;; editor/select-block-up-down is the exit Shift+Up/Down takes at a
@@ -85,3 +86,37 @@
           (p/then (fn [_] (is (= :cleared @did))))
           (p/catch (fn [e] (is false (str e))))
           (p/finally done)))))
+
+(deftest rejected-save-keeps-newer-editor-input-test
+  (async done
+    (let [editing (atom "edit-block-a")
+          save-started (p/deferred)
+          save-result (p/deferred)
+          prev-pending (state/get-state :editor/pending-new-block)
+          prev-action (state/get-editor-action)
+          pending {:id (random-uuid) :typed-text "draft"}]
+      (-> (p/with-redefs [state/get-edit-input-id #(deref editing)
+                          state/get-edit-block (constantly {:block/uuid (random-uuid)})
+                          state/get-current-repo (constantly "test-repo")
+                          state/editor-in-composition? (constantly false)
+                          gdom/getElement (constantly #js {:value "Title/draft"})
+                          editor/save-block-aux! (fn [& _]
+                                                  (p/resolve! save-started nil)
+                                                  save-result)
+                          state/clear-edit! (fn [& _] (reset! editing nil))]
+            (state/clear-editor-action!)
+            (let [exit (editor/escape-editing)]
+              (p/let [_ save-started]
+                (reset! editing "edit-block-b")
+                (state/set-state! :editor/pending-new-block pending)
+                (state/set-editor-action! :commands)
+                (p/reject! save-result (ex-info "Invalid title" {:type :notification}))
+                (p/let [_ (p/catch exit (constantly nil))]
+                  (is (= "edit-block-b" @editing))
+                  (is (= pending (state/get-state :editor/pending-new-block)))
+                  (is (= :commands (state/get-editor-action)))))))
+          (p/catch (fn [error] (is false (str error))))
+          (p/finally (fn []
+                       (state/set-state! :editor/pending-new-block prev-pending)
+                       (state/set-editor-action! prev-action)
+                       (done)))))))
