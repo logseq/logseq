@@ -210,6 +210,9 @@
   [input text e html]
   (util/stop e)
   (let [repo (state/get-current-repo)
+        ;; The clipboard resolves asynchronously; by then the user may have left
+        ;; this editor (Escape) or it may have been replaced (e.g. by a code block).
+        paste-input-id (state/get-edit-input-id)
         copied-blocks-from-memory (get-copied-blocks-from-memory text)]
     (->
      (p/let [{:keys [graph blocks embed-block? op]} (or copied-blocks-from-memory
@@ -240,7 +243,9 @@
              (editor-handler/paste-blocks blocks {:revert-cut-txs revert-cut-txs
                                                   :cut? keep-uuid?
                                                   :keep-uuid? keep-uuid?})))
-         (paste-copied-text input text html)))
+         (when (and paste-input-id
+                    (= paste-input-id (state/get-edit-input-id)))
+           (paste-copied-text input text html))))
      (p/catch (fn [error]
                 (log/error :msg "Paste failed" :exception error)
                 (state/pub-event! [:capture-error {:error error
