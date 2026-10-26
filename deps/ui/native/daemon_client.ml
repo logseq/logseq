@@ -543,8 +543,11 @@ let prewarm () : unit =
 (* prewarm on a real domain, not a systhread: the OCaml thread
    scheduler cannot preempt long foreign calls (SDL window creation
    blocks ~100ms), so a systhread spawn stalls until the first yield
-   and loses the whole point of overlapping the cold spawn. *)
-let () = ignore (Domain.spawn (fun () -> prewarm ()))
+   and loses the whole point of overlapping the cold spawn. Start after
+   embedded runtime startup restores the host signal mask, so neither
+   the domain nor its worker process inherits the temporary mask. *)
+let start_prewarm =
+  State_cell.Once.memo (fun () -> ignore (Domain.spawn prewarm))
 
 (* ---------- ipc (was window.apis.doAction) ---------- *)
 

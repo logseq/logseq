@@ -393,6 +393,7 @@ let initialize_unlocked platform_code host_code (payload : string) =
     | _ -> invalid_arg "Native startup requires exactly one boolean paintsCaret capability"
   in
   Printexc.record_backtrace true;
+  Daemon_client.start_prewarm ();
   Platform.install_ui_services ~paints_caret ~assert_owner:assert_entry_owner ~request_flush:Runtime.flush ~dom:Ui_dom_native.ops ~timers:Ui_dom_native.timers ~files:Ui_dom_native.files;
   (match (I18n.init ()).Js.Promise.state with
    | Js.Promise.Resolved () -> ()
