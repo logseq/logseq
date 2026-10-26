@@ -153,13 +153,19 @@
 
 (defevent! :graph/switch [[_ graph opts]]
   (let [t1 (t/now)]
-    (p/do!
-     (export/cancel-db-backup!)
-     (state/clear-async-queries!)
-     (graph-switch-on-persisted graph opts)
-     (export/backup-db-graph (state/get-current-repo))
-     (let [t2 (t/now)]
-       (log/info ::graph-switch-spent (- t2 t1))))))
+    (-> (p/do!
+         (export/cancel-db-backup!)
+         (state/clear-async-queries!)
+         (graph-switch-on-persisted graph opts)
+         (export/backup-db-graph (state/get-current-repo))
+         (let [t2 (t/now)]
+           (log/info ::graph-switch-spent (- t2 t1))))
+        (p/catch (fn [error]
+                   ;; The open failure is already reported. A rejected event
+                   ;; promise is not adopted by pub-event!, so it surfaces as
+                   ;; an unhandled rejection on top of the dead graph.
+                   (log/error :graph-switch-failed {:graph graph}
+                              :exception error))))))
 
 (defevent! :graph/open-new-window [[_ev target]]
   (ui-handler/open-new-window-or-tab! target))

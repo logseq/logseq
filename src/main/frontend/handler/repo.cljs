@@ -86,20 +86,29 @@
   "Restore the db of a graph from the persisted data, and setup. Create a new
   conn, or replace the conn in state with a new one."
   [repo & {:as opts}]
-  (p/do!
-   (when-not (true? (:file-graph-import? opts))
-     (state/set-db-restoring! true))
-   (db-restore/restore-graph! repo opts)
-   (<restore-date-formatter! repo)
-   (repo-config-handler/restore-repo-config! repo)
-   (when (config/global-config-enabled?)
-     (global-config-handler/restore-global-config!))
-    ;; Don't have to unlisten the old listener, as it will be destroyed with the conn
-   (when-not (true? (:ignore-style? opts))
-     (ui-handler/add-style-if-exists!))
-   (when-not (or config/publishing?
-                 (true? (:file-graph-import? opts)))
-     (state/set-db-restoring! false))))
+  (->
+   (p/do!
+    (when-not (true? (:file-graph-import? opts))
+      (state/set-db-restoring! true))
+    (-> (db-restore/restore-graph! repo opts)
+        (p/catch (fn [error]
+                   (db-restore/abandon-unopened-graph!)
+                   (throw error))))
+    (<restore-date-formatter! repo)
+    (repo-config-handler/restore-repo-config! repo)
+    (when (config/global-config-enabled?)
+      (global-config-handler/restore-global-config!))
+     ;; Don't have to unlisten the old listener, as it will be destroyed with the conn
+    (when-not (true? (:ignore-style? opts))
+      (ui-handler/add-style-if-exists!))
+    (when-not (or config/publishing?
+                  (true? (:file-graph-import? opts)))
+      (state/set-db-restoring! false)))
+   (p/finally
+    (fn []
+      (when-not (or config/publishing?
+                    (true? (:file-graph-import? opts)))
+        (state/set-db-restoring! false))))))
 
 (defn get-repos
   []

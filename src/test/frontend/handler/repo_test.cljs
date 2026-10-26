@@ -2,6 +2,7 @@
   (:require [cljs.test :refer [async deftest is]]
             [frontend.db.async :as db-async]
             [frontend.db.persist :as db-persist]
+            [frontend.db.restore :as db-restore]
             [frontend.db.subs :as db-subs]
             [frontend.handler.graph :as graph-handler]
             [frontend.handler.notification :as notification]
@@ -121,6 +122,33 @@
                      (is (seq @shown)
                          "Graph creation failure is shown to the user.")))
           (p/finally done)))))
+
+(deftest restore-and-setup-repo-drops-renderer-graph-when-open-fails-test
+  (async done
+    (let [previous "logseq_db_previous"
+          target "logseq_db_switch_target"
+          previous-state (state/get-state)]
+      (state/set-current-repo! previous)
+      (state/set-db-restoring! false)
+      (db-subs/reset-graph! previous)
+      (-> (p/with-redefs [db-restore/restore-graph!
+                          (fn [_repo _opts]
+                            (p/rejected (ex-info "DB worker failed"
+                                                 {:type :sqlite-error})))]
+            (repo-handler/restore-and-setup-repo! target))
+          (p/then (fn [_]
+                    (is false "A failed graph open must reject so the switch does not continue.")))
+          (p/catch
+           (fn [_error]
+             (is (nil? (state/get-current-repo))
+                 "create-or-open-db closes other graphs before it fails, so the previous repo is no longer open.")
+             (is (false? (state/get-state :db/restoring?))
+                 "A failed switch must not leave the app on the restoring skeleton.")))
+          (p/finally
+           (fn []
+             (state/replace-state! previous-state)
+             (db-subs/reset-graph! nil)
+             (done)))))))
 
 (deftest removing-current-repo-pauses-renderer-subscriptions-test
   (async done

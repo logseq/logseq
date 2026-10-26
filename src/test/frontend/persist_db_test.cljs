@@ -955,6 +955,36 @@
                        (set! state/<invoke-db-worker original-invoke)
                        (done)))))))
 
+(deftest browser-open-and-fetch-schema-propagates-worker-failure-test
+  (async done
+    (let [worker-error (ex-info "DB worker failed" {:type :sqlite-error})
+          reported (atom [])
+          original-state (state/get-state)
+          original-electron? util/electron?
+          original-invoke state/<invoke-db-worker]
+      (set! util/electron? (constantly false))
+      (set! state/<invoke-db-worker
+            (fn [qkw & _]
+              (if (= qkw :thread-api/create-or-open-db)
+                (p/rejected worker-error)
+                (p/rejected (ex-info "unexpected worker call" {:qkw qkw})))))
+      (-> (p/with-redefs [notification/show!
+                          (fn [content status & _]
+                            (swap! reported conj [content status]))
+                          state/pub-event! (fn [& _] nil)]
+            (protocol/<open-and-fetch-schema (browser/->InBrowser) "logseq_db_broken" {}))
+          (p/then (fn [result]
+                    (is false (str "open must reject a worker failure, got " (pr-str result)))))
+          (p/catch (fn [error]
+                     (is (identical? worker-error error))
+                     (is (seq @reported)
+                         "The sqlite error notification still reports the worker failure.")))
+          (p/finally (fn []
+                       (state/replace-state! original-state)
+                       (set! util/electron? original-electron?)
+                       (set! state/<invoke-db-worker original-invoke)
+                       (done)))))))
+
 (deftest graph-config-change-syncs-markdown-mirror-worker-setting-test
   (async done
     (let [worker-calls (atom [])

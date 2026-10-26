@@ -3,6 +3,7 @@
             [frontend.date :as date]
             [frontend.db.async :as db-async]
             [frontend.db.restore :as db-restore]
+            [frontend.db.subs :as db-subs]
             [frontend.handler :as handler]
             [frontend.handler.graph :as graph-handler]
             [frontend.handler.page :as page-handler]
@@ -98,3 +99,37 @@
            (fn [error]
              (is false (str error))))
           (p/finally done)))))
+
+(deftest restore-and-setup-drops-unopened-graph-when-worker-open-fails-test
+  (async done
+    (let [repo "logseq_db_worker_open_failed"
+          previous-state (state/get-state)
+          resets (atom [])
+          original-reset db-subs/reset-graph!]
+      (state/set-current-repo! repo)
+      (state/set-db-restoring! true)
+      (original-reset repo)
+      (-> (p/with-redefs [db-restore/restore-graph!
+                          (fn [graph]
+                            (is (= repo graph))
+                            (p/rejected (ex-info "DB worker failed"
+                                                 {:type :sqlite-error})))
+                          db-subs/reset-graph!
+                          (fn [graph-id]
+                            (swap! resets conj graph-id)
+                            (original-reset graph-id))]
+            (p/let [_ (handler/restore-and-setup! repo)]
+              (is (nil? (state/get-current-repo))
+                  "A failed open must not leave the pre-seeded repo current, or snapshot hooks throw through the root error boundary.")
+              (is (false? (state/get-state :db/restoring?))
+                  "Startup must leave the restoring skeleton.")
+              (is (some nil? @resets)
+                  "Renderer subscriptions must drop the graph the worker never opened.")))
+          (p/catch
+           (fn [error]
+             (is false (str "startup must survive a db worker open failure: " error))))
+          (p/finally
+           (fn []
+             (state/replace-state! previous-state)
+             (original-reset nil)
+             (done)))))))

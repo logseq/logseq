@@ -1,11 +1,14 @@
 (ns frontend.handler.events-test
-  (:require [cljs.test :refer [deftest is testing]]
+  (:require [cljs.test :refer [async deftest is testing]]
             [frontend.components.rtc.download-progress :as download-progress]
+            [frontend.db.restore :as db-restore]
+            [frontend.db.subs :as db-subs]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.events :as events]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
-            [logseq.shui.ui :as shui]))
+            [logseq.shui.ui :as shui]
+            [promesa.core :as p]))
 
 (deftest download-graph-progress-surface-test
   (let [calls (atom [])]
@@ -28,6 +31,36 @@
         (download-progress/show! "My notes")
         (download-progress/hide!)
         (is (= [:popup :popup-hide] (mapv first @calls)))))))
+
+(deftest graph-switch-survives-worker-open-failure-test
+  (async done
+    (let [previous "logseq_db_previous"
+          target "logseq_db_switch_target"
+          previous-state (state/get-state)
+          original-restore db-restore/restore-graph!]
+      (state/set-current-repo! previous)
+      (db-subs/reset-graph! previous)
+      (set! db-restore/restore-graph!
+            (fn [_repo _opts]
+              (p/rejected (ex-info "DB worker failed"
+                                   {:type :sqlite-error}))))
+      (-> (state/pub-event! [:graph/switch target])
+          (p/then (fn [result]
+                    ;; pub-event! stores the handler promise without adopting it.
+                    (if (p/promise? result) result (p/resolved result))))
+          (p/then (fn [value]
+                    (is (nil? value))
+                    (is (nil? (state/get-current-repo))
+                        "A failed switch must not leave the previous graph current after the worker closed it.")
+                    (is (false? (state/get-state :db/restoring?))
+                        "A failed switch must leave the restoring skeleton.")))
+          (p/catch (fn [error]
+                     (is false (str "graph switch must not reject into the app: " error))))
+          (p/finally (fn []
+                       (set! db-restore/restore-graph! original-restore)
+                       (state/replace-state! previous-state)
+                       (db-subs/reset-graph! nil)
+                       (done)))))))
 
 (deftest refocus-upsert-type-block-test
   (let [source-id #uuid "11111111-1111-1111-1111-111111111111"
