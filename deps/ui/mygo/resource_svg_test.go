@@ -38,8 +38,9 @@ func TestRetainedSVGStopsPaintingRemovedLeaves(t *testing.T) {
 		t.Helper()
 		deadline := time.Now().Add(3 * time.Second)
 		for {
+			_, _, decoded := s.resources.NaturalSize(1)
 			tester.Frame()
-			if _, _, ready := s.resources.NaturalSize(1); ready {
+			if decoded {
 				return
 			}
 			if time.Now().After(deadline) {
