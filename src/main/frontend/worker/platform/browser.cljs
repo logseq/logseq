@@ -71,10 +71,33 @@
   [key]
   (kv-set! key nil))
 
+(defn- access-handle-busy?
+  "True for the error OPFS gives when another context (the worker of the page before a reload) still holds a
+  file's sync access handle."
+  [e]
+  (let [e' (or (some-> e .-cause) e)]
+    (or (= "NoModificationAllowedError" (some-> e' .-name))
+        (= "NoModificationAllowedError" (some-> e .-name))
+        (string/includes? (str (some-> e' .-message)) "Access Handle"))))
+
+(def ^:private opfs-pool-install-attempts 20)
+(def ^:private opfs-pool-install-retry-ms 250)
+
 (defn- install-opfs-pool
-  [sqlite pool-name]
-  (.installOpfsSAHPoolVfs ^js sqlite #js {:name pool-name
-                                          :initialCapacity 20}))
+  "A reload starts the new page's worker while the old page's worker may still hold the pool's sync access
+  handles; installOpfsSAHPoolVfs then fails, and caches that failure unless forceReinitIfPreviouslyFailed is
+  set. Retry for up to 5 s while the handles are busy."
+  ([sqlite pool-name]
+   (install-opfs-pool sqlite pool-name 0))
+  ([sqlite pool-name attempt]
+   (-> (.installOpfsSAHPoolVfs ^js sqlite #js {:name pool-name
+                                               :initialCapacity 20
+                                               :forceReinitIfPreviouslyFailed (pos? attempt)})
+       (p/catch (fn [e]
+                  (if (and (< (inc attempt) opfs-pool-install-attempts) (access-handle-busy? e))
+                    (p/let [_ (p/delay opfs-pool-install-retry-ms)]
+                      (install-opfs-pool sqlite pool-name (inc attempt)))
+                    (p/rejected e)))))))
 
 (defn- export-file
   [pool path]
