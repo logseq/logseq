@@ -4380,6 +4380,127 @@ let test_indent_outdent_direct_outdent_undo_restores_right_sibling_parent
           check "child3 restored"
             (parent_uuid_of child3_uuid = Some parent_uuid)))
 
+(* Logical outdent (issue 13804) keeps the following sibling under the
+   original parent. The editor records
+   [:indent-outdent-blocks [ids false {:logical-outdenting? true}]].
+   Direct outdent (the flag nil or false) pulls that sibling under the
+   outdented block. *)
+let test_logical_outdent_leaves_following_sibling () =
+  let tree () =
+    let conn =
+      Db_test_util.create_conn_with_blocks
+        ~pages_and_blocks:
+          [ { Db_test_util.page =
+                { Db_test_util.default_page with pg_title = Some "page" }
+            ; blocks =
+                [ { Db_test_util.default_block with
+                    b_title = Some "a"
+                  ; b_children =
+                      [ { Db_test_util.default_block with
+                          b_title = Some "b"
+                        ; b_children =
+                            [ { Db_test_util.default_block with
+                                b_title = Some "c" } ] }
+                      ; { Db_test_util.default_block with b_title = Some "d" }
+                      ] } ] } ]
+        ()
+    in
+    let find title =
+      Option.get
+        (Db_test_util.find_block_by_content (Datascript.db conn) title)
+    in
+    (conn, find "a", find "b", find "c", find "d")
+  in
+  let parent_uuid db u =
+    match ent_by_block_uuid db u with
+    | None -> None
+    | Some e -> Option.map ent_block_uuid (Ldb.ref_ent e "block/parent")
+  in
+  let check_parents label logical expected_d_under_b =
+    preserve_state (fun () ->
+        let conn, a, b, c, d = tree () in
+        let ops = new_client_ops_db () in
+        let a_uuid = ent_block_uuid a in
+        let b_uuid = ent_block_uuid b in
+        let c_uuid = ent_block_uuid c in
+        let d_uuid = ent_block_uuid d in
+        let page_uuid = parent_uuid (Datascript.db conn) a_uuid in
+        with_datascript_conns conn (Some ops) (fun () ->
+            ignore
+              (apply_ops conn
+                 [ Wire.Array
+                     [ kw "indent-outdent-blocks"
+                     ; Wire.Array
+                         [ Wire.Array [ Wire.Int b.id ]
+                         ; Wire.Bool false
+                         ; Wire.Map
+                             [ kw "parent-original", Wire.Nil
+                             ; kw "logical-outdenting?", Wire.Bool logical ]
+                         ] ] ]
+                 local_tx_meta);
+            let db = Datascript.db conn in
+            check (label ^ " lifts b")
+              (parent_uuid db b_uuid = page_uuid);
+            check (label ^ " keeps c under b")
+              (parent_uuid db c_uuid = Some b_uuid);
+            check
+              (label
+               ^
+               if expected_d_under_b then " pulls d under b"
+               else " leaves d under a")
+              (parent_uuid db d_uuid
+               = Some (if expected_d_under_b then b_uuid else a_uuid))))
+  in
+  check_parents "direct" false true;
+  check_parents "logical" true false;
+  preserve_state (fun () ->
+      let conn, a, b, c, d = tree () in
+      let a_uuid = ent_block_uuid a in
+      let b_uuid = ent_block_uuid b in
+      let c_uuid = ent_block_uuid c in
+      let d_uuid = ent_block_uuid d in
+      let page_uuid = parent_uuid (Datascript.db conn) a_uuid in
+      let hook =
+        match !(Sync_deps.outliner_indent_outdent_blocks) with
+        | Some f -> f
+        | None -> Alcotest.fail "indent-outdent hook is unset"
+      in
+      ignore
+        (hook conn
+           (Wire.Array [ Wire.Uuid b_uuid ])
+           false
+           [ ("logical-outdenting?", Bool true) ]);
+      let db = Datascript.db conn in
+      check "hook logical lifts b" (parent_uuid db b_uuid = page_uuid);
+      check "hook logical keeps c under b"
+        (parent_uuid db c_uuid = Some b_uuid);
+      check "hook logical leaves d under a"
+        (parent_uuid db d_uuid = Some a_uuid));
+  preserve_state (fun () ->
+      let conn, a, b, c, d = tree () in
+      let a_uuid = ent_block_uuid a in
+      let b_uuid = ent_block_uuid b in
+      let c_uuid = ent_block_uuid c in
+      let d_uuid = ent_block_uuid d in
+      let page_uuid = parent_uuid (Datascript.db conn) a_uuid in
+      ignore
+        (Sync_replay.replay_canonical_outliner_op conn
+           (Wire.Array
+              [ kw "indent-outdent-blocks"
+              ; Wire.Array
+                  [ Wire.Array [ Wire.Uuid b_uuid ]
+                  ; Wire.Bool false
+                  ; Wire.Map
+                      [ kw "parent-original", Wire.Nil
+                      ; kw "logical-outdenting?", Wire.Bool true ] ] ])
+           None);
+      let db = Datascript.db conn in
+      check "replay logical lifts b" (parent_uuid db b_uuid = page_uuid);
+      check "replay logical keeps c under b"
+        (parent_uuid db c_uuid = Some b_uuid);
+      check "replay logical leaves d under a"
+        (parent_uuid db d_uuid = Some a_uuid))
+
 (* cljs indent-outdent-undo-enqueues-concrete-move-blocks-history-test *)
 let test_indent_outdent_undo_enqueues_concrete_move_blocks_history () =
   preserve_state (fun () ->
@@ -16051,6 +16172,9 @@ let () =
             "indent-outdent-direct-outdent-undo-restores-right-sibling-parent"
             `Quick
             test_indent_outdent_direct_outdent_undo_restores_right_sibling_parent
+        ; Alcotest.test_case
+            "logical-outdent-leaves-following-sibling"
+            `Quick test_logical_outdent_leaves_following_sibling
         ; Alcotest.test_case
             "indent-outdent-undo-enqueues-concrete-move-blocks-history"
             `Quick

@@ -724,7 +724,11 @@ let rec replay_canonical_outliner_op (conn : conn) (op_entry : Wire.t)
            invalid_rebase_op (Wire.keyword op)
              (Wire.Map [ Wire.keyword "args", Wire.Array args ])
        | _ ->
+           let logical_outdenting =
+             Outliner_op.opt_bool (opts_wire_map opts) "logical-outdenting?"
+           in
            Outliner_core.indent_outdent_blocks_conn conn blocks indent
+             ~logical_outdenting
              (block_map_wire (opts_wire_map opts)));
       None
   | "delete-blocks", [ ids; _opts ] ->
