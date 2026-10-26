@@ -16,7 +16,6 @@ From the repository root:
 ```sh
 opam exec -- dune build --root deps/db-worker bin/main.exe
 pnpm ui:mygo:build
-LOGSEQ_NATIVE_ASSET_DIR="$PWD/deps/ui/assets" \
 LOGSEQ_DB_WORKER_BIN="$PWD/deps/db-worker/_build/default/bin/main.exe" \
 LOGSEQ_ROOT_DIR="/path/to/isolated/graphs" \
 LOGSEQ_UI_STATE_DIR="/path/to/isolated/ui-state" \
@@ -24,8 +23,12 @@ pnpm ui:mygo
 ```
 
 `build.sh` creates the OCaml shared library and Go executable under
-`deps/ui/_build/mygo`. `run.sh` builds before launching and accepts the host's
-`-width`, `-height` and `-title` flags.
+`deps/ui/_build/mygo`, with fonts, icon data, theme images and dictionaries in
+the sibling `deps/ui/_build/Resources` directory. The host resolves this resource
+directory relative to its executable by default. `LOGSEQ_NATIVE_ASSET_DIR` may
+override it with another complete resource directory; `deps/ui/assets` alone
+does not contain theme images or dictionaries. `run.sh` builds before launching
+and accepts the host's `-width`, `-height` and `-title` flags.
 
 ## Integration boundary
 
