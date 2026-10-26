@@ -79,6 +79,34 @@
      {})
     (is (false? (:block/collapsed? (d/entity @conn [:block/uuid block-id]))))))
 
+(deftest insert-blocks-op-skips-a-view-for-a-node-that-is-gone
+  (testing "a references view created for a node an undo already removed is not inserted"
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "Test"} :blocks [{:block/title "Target"}]}
+                 {:page {:block/title "Gone"} :blocks []}])
+          target (db-test/find-block-by-content @conn "Target")
+          gone-id (:db/id (ldb/get-page @conn "gone"))
+          page-id (:db/id (ldb/get-page @conn "test"))
+          view (fn [view-for] {:block/uuid (random-uuid)
+                               :block/title "Unlinked references"
+                               :logseq.property/view-for view-for
+                               :logseq.property.view/feature-type :unlinked-references})
+          gone-view (view gone-id)
+          kept-view (view page-id)]
+      (d/transact! conn [[:db/retractEntity gone-id]])
+      (outliner-op/apply-ops!
+       conn
+       [[:insert-blocks [[gone-view] (:block/uuid target) {:sibling? true :keep-uuid? true}]]]
+       {:outliner-op :create-view})
+      (is (nil? (d/entity @conn [:block/uuid (:block/uuid gone-view)]))
+          "no view for a node that is gone")
+      (outliner-op/apply-ops!
+       conn
+       [[:insert-blocks [[kept-view] (:block/uuid target) {:sibling? true :keep-uuid? true}]]]
+       {:outliner-op :create-view})
+      (is (some? (d/entity @conn [:block/uuid (:block/uuid kept-view)]))
+          "a view for a node that exists is inserted"))))
+
 (deftest collapse-expand-blocks-op-skips-missing-blocks
   (testing "a block that isn't in the db (deleted, or its insert hasn't landed) is not created"
     (let [conn (db-test/create-conn-with-blocks

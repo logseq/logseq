@@ -233,11 +233,24 @@
           (js/console.error "Unexpected Import EDN error:" e)
           (reset! *result {:error (str "Unexpected Import EDN error: " (pr-str (ex-message e)))}))))))
 
+(defn- view-for-gone?
+  "A view block whose :logseq.property/view-for node no longer exists, e.g. a references view created by a
+  page's section after an undo removed the page; the write would fail validation."
+  [db block]
+  (when-let [view-for (:logseq.property/view-for block)]
+    (let [eid (cond
+                (map? view-for) (:db/id view-for)
+                (integer? view-for) view-for
+                :else (:db/id (d/entity db view-for)))]
+      (not (and eid (seq (d/datoms db :eavt eid)))))))
+
 (defn- apply-insert-blocks-op!
   [conn *result [blocks target-block-id opts]]
   (when-let [target-block (d/entity @conn [:block/uuid target-block-id])]
-    (let [result (outliner-core/insert-blocks! conn blocks target-block opts)]
-      (reset! *result result))))
+    (let [blocks (remove #(view-for-gone? @conn %) blocks)]
+      (when (seq blocks)
+        (let [result (outliner-core/insert-blocks! conn blocks target-block opts)]
+          (reset! *result result))))))
 
 (defn- template-children-blocks
   [db template-id]
