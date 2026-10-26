@@ -2980,13 +2980,22 @@
                (when-let [sibling-block-id (node-attr sibling-block "blockid")]
                  (let [container-id (some-> (node-attr sibling-block "containerid") js/parseInt)
                        new-uuid (cljs.core/uuid sibling-block-id)
-                       block {:block/uuid new-uuid}]
-                   (edit-block! block
-                                (or (:pos move-opts)
-                                    (when input [direction (util/get-line-pos (.-value input) (util/get-selection-start input))])
-                                    0)
-                                {:container-id container-id
-                                 :direction direction}))))))
+                       block {:block/uuid new-uuid}
+                       edit! #(edit-block! block
+                                           (or (:pos move-opts)
+                                               (when input [direction (util/get-line-pos (.-value input) (util/get-selection-start input))])
+                                               0)
+                                           {:container-id container-id
+                                            :direction direction})]
+                   (if (util/rec-get-node sibling-block "ls-page-title")
+                     ;; Journal titles are read-only (date-derived), as on click and on
+                     ;; Backspace into them: select the title instead of editing it, or
+                     ;; the edit is refused by the worker.
+                     (p/let [page (db-async/<get-block repo new-uuid {:children? false})]
+                       (if (entity/journal? page)
+                         (state/exit-editing-and-set-selected-blocks! [sibling-block])
+                         (edit!)))
+                     (edit!)))))))
           (case direction
             :up (if input
                   (cursor/move-cursor-to input 0)
