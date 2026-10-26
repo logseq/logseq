@@ -15,6 +15,7 @@
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.build :as db-property-build]
             [logseq.db.frontend.property.type :as db-property-type]
+            [logseq.db.frontend.query-dsl :as query-dsl]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.outliner.core :as outliner-core]
@@ -440,6 +441,11 @@
         _ (assert (some? property) (str "Property " property-id " doesn't exist yet"))
         value' (convert-property-input-string (:logseq.property/type block)
                                               property value)
+        value' (if (and (= property-id :logseq.property/query)
+                        (string? value')
+                        (string/includes? value' "[["))
+                 (query-dsl/resolve-page-refs value' #(:block/uuid (ldb/get-page @conn %)))
+                 value')
         _ (when (and (not= (:logseq.property/type property) :number)
                      (not (string? value)))
             (throw (ex-info "value should be a string" {:block-id block-id

@@ -6,7 +6,7 @@
             [frontend.db.async :as db-async]
             [frontend.db.hooks :as db-hooks]
             [frontend.db.query-dsl :as query-dsl]
-            [frontend.context.i18n :refer [t]]
+            [frontend.context.i18n :refer [interpolate-rich-text-node t]]
             [frontend.handler.db-based.property.util :as db-pu]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.query.builder :as query-builder]
@@ -431,10 +431,6 @@
         (loaded-page-title block-uuid (str s)))
     (str s)))
 
-(defn- page-title-string
-  [s]
-  (or (built-in-title s) (str s)))
-
 (defn- dsl-human-output
   [clause]
   (let [f (first clause)]
@@ -491,9 +487,9 @@
                  (t :query.builder/updated-label)
                  :else
                  (property-title k))
-               " " start
+               " " (page-title start)
                (when end
-                 (str " ~ " end))])
+                 [:span " ~ " (page-title end)])])
 
       ;; between journal start end
       (= (keyword f) :between)
@@ -505,7 +501,9 @@
                         (symbol? (last clause)))
                   (name (last  clause))
                   (second (last clause)))]
-        (t :query.builder/between-journal-label (page-title-string start) (page-title-string end)))
+        (interpolate-rich-text-node
+         (t :query.builder/between-journal-label)
+         [(page-title start) (page-title end)]))
 
       (contains? #{:task :priority} (keyword f))
       (str (name f) ": "
@@ -631,6 +629,7 @@
 (defn- get-q
   [block]
   (sanitize-q (or (:file-version/query-macro-title block)
+                  (:block/raw-title block)
                   (:block/title block)
                   "")))
 
