@@ -309,6 +309,8 @@ let hl_span ?(single_line = false) key (item_sig : S.item Signal.signal)
               let value = if single_line then display_spaces value else value in
               text ~key:"run" ~as_:(if hl then `Mark else `Span)
                 ~padding:0 ~corner_radius:0
+                ?background:(if hl then Some "var(--ls-page-mark-bg-color, #fef3ac)" else None)
+                ?foreground:(if hl then Some "var(--ls-page-mark-color, #262626)" else None)
                 ?white_space:(if single_line then Some "nowrap" else None)
                 ~value [])
             seg)
