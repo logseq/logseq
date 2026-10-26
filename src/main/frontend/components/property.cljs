@@ -110,12 +110,63 @@
                             (string/lower-case input)))]
       (sort-by (fn [item] (if (exact-title? item) 0 1)) results))))
 
+(defn- <on-property-type-change
+  "Handles choosing a type in property-type-select: adds the new property to `block` (or uses
+  `property`), sets the type and continues with its first value."
+  [v property property-name property-schema
+   {:keys [*property *property-schema block *show-new-property-config? *show-class-select? class-schema?]
+    :as opts}]
+  (let [type (keyword (string/lower-case v))
+        update-schema-fn #(assoc % :logseq.property/type type)]
+    (when *property-schema
+      (swap! *property-schema update-schema-fn))
+    (let [schema (or (and *property-schema @*property-schema)
+                     (update-schema-fn property-schema))]
+      (when *show-new-property-config?
+        (reset! *show-new-property-config? :adding-property))
+      (p/let [property' (when block (<add-property-from-dropdown block property-name schema opts))
+              property (or property' property)
+              add-class-property? (and (entity/class? block) class-schema?)]
+        (when *property (reset! *property property))
+        (if-not (:db/ident property)
+          ;; Nothing was created (e.g. an invalid name, already reported by
+          ;; <add-property-from-dropdown): setting a type on no property would
+          ;; make the worker fail on a nil name.
+          (when *show-new-property-config?
+            (reset! *show-new-property-config? false))
+          (p/do!
+           (when *show-new-property-config?
+             (reset! *show-new-property-config? false))
+           (when (= (:logseq.property/type schema) :node) (reset! *show-class-select? true))
+           (db-property-handler/upsert-property!
+            (:db/ident property)
+            schema
+            {})
+
+           (cond
+             (and *show-class-select? @*show-class-select?)
+             nil
+             add-class-property?
+             (shui/popup-hide!)
+             (pv/batch-operation?)
+             nil
+             (and block (= type :checkbox))
+             (p/do!
+              (ui/hide-popups-until-preview-popup!)
+              (let [value (if-some [value (:logseq.property/scalar-default-value property)]
+                            value
+                            false)]
+                (pv/<add-property! block (:db/ident property) value {:exit-edit? true})))
+             (and block
+                  (contains? #{:default :url} type)
+                  (not (seq (:property/closed-values property))))
+             (pv/<create-new-block! block property "" {:batch-op? true}))))))))
+
 ;; TODO: This component should be cleaned up as it's only used for new properties and used to be used for existing properties
 (hsx/defc property-type-select
-  [property {:keys [*property *property-name *property-schema built-in? disabled?
-                    show-type-change-hints? block *show-new-property-config?
-                    *show-class-select?
-                    default-open? class-schema?]
+  [property {:keys [*property-name *property-schema built-in? disabled?
+                    show-type-change-hints?
+                    default-open?]
              :as opts}]
   (shortcut/use-disable-all-shortcuts!)
   (let [property-name (or (and *property-name @*property-name) (db-property/built-in-display-title property t))
@@ -134,45 +185,7 @@
           :disabled disabled?
           :on-value-change
           (fn [v]
-            (let [type (keyword (string/lower-case v))
-                  update-schema-fn #(assoc % :logseq.property/type type)]
-              (when *property-schema
-                (swap! *property-schema update-schema-fn))
-              (let [schema (or (and *property-schema @*property-schema)
-                               (update-schema-fn property-schema))]
-                (when *show-new-property-config?
-                  (reset! *show-new-property-config? :adding-property))
-                (p/let [property' (when block (<add-property-from-dropdown block property-name schema opts))
-                        property (or property' property)
-                        add-class-property? (and (entity/class? block) class-schema?)]
-                  (when *property (reset! *property property))
-                  (p/do!
-                   (when *show-new-property-config?
-                     (reset! *show-new-property-config? false))
-                   (when (= (:logseq.property/type schema) :node) (reset! *show-class-select? true))
-                   (db-property-handler/upsert-property!
-                    (:db/ident property)
-                    schema
-                    {})
-
-                   (cond
-                     (and *show-class-select? @*show-class-select?)
-                     nil
-                     add-class-property?
-                     (shui/popup-hide!)
-                     (pv/batch-operation?)
-                     nil
-                     (and block (= type :checkbox))
-                     (p/do!
-                      (ui/hide-popups-until-preview-popup!)
-                      (let [value (if-some [value (:logseq.property/scalar-default-value property)]
-                                    value
-                                    false)]
-                        (pv/<add-property! block (:db/ident property) value {:exit-edit? true})))
-                     (and block
-                          (contains? #{:default :url} type)
-                          (not (seq (:property/closed-values property))))
-                     (pv/<create-new-block! block property "" {:batch-op? true})))))))}
+            (<on-property-type-change v property property-name property-schema opts))}
 
          ;; only set when in property configure modal
          (and *property-name (:logseq.property/type property-schema))
