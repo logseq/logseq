@@ -392,6 +392,25 @@
     (is (some? updated-block))
     (is (nil? (:user.property/default updated-block)) "Block property is deleted")))
 
+(deftest task-properties-on-built-in-nodes
+  ;; Key fuzzer: DONE typed on the built-in Page class's page set its status, which also tags #Task; a
+  ;; built-in keeps its one tag, so the write failed validation ("DB write failed with invalid data")
+  (let [conn (db-test/create-conn-with-blocks [{:page {:block/title "plain"} :blocks []}])
+        page-class (d/entity @conn :logseq.class/Page)
+        plain (ldb/get-page @conn "plain")
+        todo (:db/id (d/entity @conn :logseq.property/status.todo))]
+    (testing "a built-in node refuses a task property, with a notification"
+      (is (thrown-with-msg? js/Error #"Built-in nodes can't be tasks"
+                            (outliner-property/set-block-property! conn (:db/id page-class) :logseq.property/status todo)))
+      (is (thrown-with-msg? js/Error #"Built-in nodes can't be tasks"
+                            (outliner-property/batch-set-property! conn [(:db/id page-class)] :logseq.property/status todo)))
+      (is (nil? (:logseq.property/status (d/entity @conn :logseq.class/Page))))
+      (is (= [:logseq.class/Tag] (map :db/ident (:block/tags (d/entity @conn :logseq.class/Page))))))
+    (testing "an ordinary page still becomes a task"
+      (outliner-property/set-block-property! conn (:db/id plain) :logseq.property/status todo)
+      (is (= :logseq.property/status.todo (:db/ident (:logseq.property/status (d/entity @conn (:db/id plain))))))
+      (is (contains? (set (map :db/ident (:block/tags (d/entity @conn (:db/id plain))))) :logseq.class/Task)))))
+
 (deftest batch-set-property!
   (testing "Set built-in property values for multiple blocks"
     (let [conn (db-test/create-conn-with-blocks
