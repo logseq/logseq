@@ -275,16 +275,19 @@
               (auto-complete-keep-visible-scroll-top geometry))))))
 
 (defn auto-complete-prev
+  "Moves the highlight up, wrapping from the first item to the last.
+
+  With no items the index stays put: wrapping to `(dec 0)` would leave -1,
+  which `auto-complete-complete` would later pass to `nth`. An index left
+  beyond a list that shrank while typing moves to the last item."
   [state e]
   (let [current-idx (get state :frontend.ui/current-idx)
-        matched (reorder-matched state)]
+        total (count (reorder-matched state))]
     (util/stop e)
-    (cond
-      (>= @current-idx 1)
-      (swap! current-idx dec)
-      (= @current-idx 0)
-      (reset! current-idx (dec (count matched)))
-      :else nil)
+    (when (pos? total)
+      (reset! current-idx (if (< 0 @current-idx total)
+                            (dec @current-idx)
+                            (dec total))))
     (auto-complete-scroll-into-view! @current-idx)))
 
 (defn auto-complete-next
@@ -298,28 +301,29 @@
         (swap! current-idx inc)))
     (auto-complete-scroll-into-view! @current-idx)))
 
+(defn- auto-complete-highlighted-index
+  "Returns the highlighted index when it points at an item of `matched`, else nil."
+  [state matched]
+  (let [idx @(get state :frontend.ui/current-idx)]
+    (when (< -1 idx (count matched))
+      idx)))
+
 (defn auto-complete-complete
   [state e]
   (let [{:keys [on-chosen on-enter]} (:opts state)
-        matched (reorder-matched state)
-        current-idx (get state :frontend.ui/current-idx)]
+        matched (reorder-matched state)]
     (util/stop e)
-    (if (and (seq matched)
-             (> (count matched)
-                @current-idx))
-      (on-chosen (nth matched @current-idx) e)
+    (if-let [idx (auto-complete-highlighted-index state matched)]
+      (on-chosen (nth matched idx) e)
       (and on-enter (on-enter state)))))
 
 (defn auto-complete-shift-complete
   [state e]
   (let [{:keys [on-chosen on-shift-chosen on-enter]} (:opts state)
-        matched (reorder-matched state)
-        current-idx (get state :frontend.ui/current-idx)]
+        matched (reorder-matched state)]
     (util/stop e)
-    (if (and (seq matched)
-             (> (count matched)
-                @current-idx))
-      ((or on-shift-chosen on-chosen) (nth matched @current-idx) false)
+    (if-let [idx (auto-complete-highlighted-index state matched)]
+      ((or on-shift-chosen on-chosen) (nth matched idx) false)
       (and on-enter (on-enter state)))))
 
 (defn toggle-cards!
