@@ -44,18 +44,6 @@
   [block]
   (pu/lookup block :logseq.property/heading))
 
-(defn slash-command-has-heading?
-  "Whether the block being edited currently has a heading.
-
-  `:editor/block` is the snapshot from when editing started. `/h1` writes
-  `:logseq.property/heading` onto the live block and leaves that snapshot
-  unchanged, so the slash menu must follow the live heading."
-  [edit-block live-heading-snapshot]
-  (boolean
-   (if (= :ready (:status live-heading-snapshot))
-     (:value live-heading-snapshot)
-     (block-heading-value edit-block))))
-
 (defn filter-commands
   [page? has-heading? commands]
   (seq
@@ -120,11 +108,16 @@
   [id format]
   (let [[matched'] (hooks/use-atom *matched-commands)
         edit-block (state/get-edit-block)
-        live-heading (db-hooks/use-block-projection-snapshot
-                      (:block/uuid edit-block)
-                      block-heading-value)
+        {:keys [status value error]} (db-hooks/use-block-projection-snapshot
+                                      (:block/uuid edit-block)
+                                      block-heading-value)
         page? (entity/page? edit-block)
-        has-heading? (slash-command-has-heading? edit-block live-heading)
+        has-heading? (boolean
+                      (case status
+                        :ready value
+                        :loading (block-heading-value edit-block)
+                        :missing nil
+                        :error (throw error)))
         matched (or (filter-commands page? has-heading? matched') no-matched-commands)
         filtered? (slash-commands-search-filtered? matched' @commands/*initial-commands)]
     (ui/auto-complete
