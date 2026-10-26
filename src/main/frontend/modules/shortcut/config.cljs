@@ -36,6 +36,15 @@
     (js/setTimeout #(route-handler/go-to-search! mode) 128)
     (route-handler/go-to-search! mode)))
 
+(defn- when-editing-input
+  "Wraps an editing shortcut fn that reads the editor's textarea so it does
+  nothing when there is none. `state/editing?` can still be true for a moment
+  after the textarea left the DOM, and then `state/get-input` returns nil."
+  [f]
+  (fn [& args]
+    (when (state/get-input)
+      (apply f args))))
+
 ;; TODO: Namespace all-default-keyboard-shortcuts keys with `:command` e.g.
 ;; `:command.date-picker/complete`. They are namespaced in translation but
 ;; almost everywhere else they are not which could cause needless conflicts
@@ -134,10 +143,10 @@
                                              :fn      editor-handler/clear-block-content!}
 
    :editor/kill-line-before                 {:binding (if mac? "ctrl+u" "alt+u")
-                                             :fn      editor-handler/kill-line-before!}
+                                             :fn      (when-editing-input editor-handler/kill-line-before!)}
 
    :editor/kill-line-after                  {:binding (if mac? false "alt+k")
-                                             :fn      editor-handler/kill-line-after!}
+                                             :fn      (when-editing-input editor-handler/kill-line-after!)}
 
    :editor/beginning-of-block               {:binding (if mac? false "alt+a")
                                              :fn      editor-handler/beginning-of-block}
@@ -146,16 +155,16 @@
                                              :fn      editor-handler/end-of-block}
 
    :editor/forward-word                     {:binding (if mac? "ctrl+shift+f" "alt+f")
-                                             :fn      editor-handler/cursor-forward-word}
+                                             :fn      (when-editing-input editor-handler/cursor-forward-word)}
 
    :editor/backward-word                    {:binding (if mac? "ctrl+shift+b" "alt+b")
-                                             :fn      editor-handler/cursor-backward-word}
+                                             :fn      (when-editing-input editor-handler/cursor-backward-word)}
 
    :editor/forward-kill-word                {:binding (if mac? "ctrl+w" "alt+d")
-                                             :fn      editor-handler/forward-kill-word}
+                                             :fn      (when-editing-input editor-handler/forward-kill-word)}
 
    :editor/backward-kill-word               {:binding (if mac? false "alt+w")
-                                             :fn      editor-handler/backward-kill-word}
+                                             :fn      (when-editing-input editor-handler/backward-kill-word)}
 
    :editor/copy-embed                       {:binding "mod+shift+e"
                                              :fn      editor-handler/copy-current-block-embed}
