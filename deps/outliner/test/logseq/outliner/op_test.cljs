@@ -79,6 +79,27 @@
      {})
     (is (false? (:block/collapsed? (d/entity @conn [:block/uuid block-id]))))))
 
+(deftest collapse-expand-blocks-op-skips-missing-blocks
+  (testing "a block that isn't in the db (deleted, or its insert hasn't landed) is not created"
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "Test"}
+                  :blocks [{:block/title "Parent"}]}])
+          block-id (:block/uuid (db-test/find-block-by-content @conn "Parent"))
+          missing-id (random-uuid)]
+      (outliner-op/apply-ops!
+       conn
+       [[:collapse-expand-blocks [[{:block/uuid missing-id :block/collapsed? true}
+                                   {:block/uuid block-id :block/collapsed? true}]
+                                  {}]]]
+       {})
+      (is (nil? (d/entity @conn [:block/uuid missing-id])))
+      (is (true? (:block/collapsed? (d/entity @conn [:block/uuid block-id]))))
+      (outliner-op/apply-ops!
+       conn
+       [[:collapse-expand-blocks [[{:block/uuid missing-id :block/collapsed? false}] {}]]]
+       {})
+      (is (nil? (d/entity @conn [:block/uuid missing-id]))))))
+
 (deftest resolve-indent-outdent-parent-original-test
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "Test"}
