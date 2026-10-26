@@ -30,6 +30,9 @@ override it with another complete resource directory; `deps/ui/assets` alone
 does not contain theme images or dictionaries. `run.sh` builds before launching
 and accepts the host's `-width`, `-height` and `-title` flags.
 
+The host registers every bundled Inter face before creating the window. Missing
+or invalid fonts fail startup instead of depending on a system installation.
+
 ## Integration boundary
 
 The adapter copies borrowed callbacks, preserves patch order, applies controlled

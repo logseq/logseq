@@ -64,6 +64,10 @@ func run() (result error) {
 	defer func() { result = errors.Join(result, host.close(), host.err) }()
 	mygo.App.SetName("Logseq")
 	mygo.App.WhenReady(func() {
+		if err := installApplicationFonts(os.Getenv("LOGSEQ_NATIVE_ASSET_DIR")); err != nil {
+			host.fail(err)
+			return
+		}
 		host.services = newPlatformServices(nil)
 		host.backend = luimygo.New(luimygo.Config{
 			Extensions: host.services.extensions(),
@@ -454,6 +458,23 @@ func (h *windowHost) close() error {
 		h.backend.Close()
 	}
 	return errors.Join(err, callbackErr)
+}
+
+func installApplicationFonts(assetDir string) error {
+	for _, face := range []string{
+		"Regular", "Italic", "Light", "Medium", "MediumItalic",
+		"SemiBold", "SemiBoldItalic", "Bold", "BoldItalic",
+	} {
+		filename := filepath.Join(assetDir, "fonts", "Inter-"+face+".ttf")
+		data, err := os.ReadFile(filename)
+		if err != nil {
+			return fmt.Errorf("read application font %s: %w", filename, err)
+		}
+		if err := ui.RegisterFont(data, "Inter"); err != nil {
+			return fmt.Errorf("register application font %s: %w", filename, err)
+		}
+	}
+	return nil
 }
 
 func prepareNativeEnvironment() error {
