@@ -109,6 +109,15 @@ type ac =
      swaps editing_uuid before the position check can run *)
   }
 
+let ac_height_limit kind ~flipped available =
+  let inset, cap =
+    match kind, flipped with
+    | Slash, true -> 60., 460.
+    | _ -> 20., 480.
+  in
+  Float.max 0. (Float.min (available -. inset) cap)
+;;
+
 type cm_picker = Picker_emoji | Picker_icon
 
 type cm_item =
@@ -1087,11 +1096,8 @@ let open_ac ?tpos ?(autopair = true) t kind =
      above — measure once mounted and record (top, avail). Items can
      resolve well after the mount (first query after a cold load), so
      retry while the popup is up (~2s) to match base-ui's continuous
-     collision re-check.
-     The popover's --lui-popup-available-height clamp already bounds the rendered
-     rect, so lift it briefly to learn the real height (CSS caps such
-     as the commands list's own max-height still apply — matching what
-     the popup can actually render on either side) *)
+     collision re-check. Measure the scroll content independently of
+     its clipped viewport; layout constraints stay in typed view props. *)
   let rec measure tries =
     match (get t).ac with
     | Some a when a.kind = kind -> (
@@ -1115,72 +1121,46 @@ let open_ac ?tpos ?(autopair = true) t kind =
         in
         match Ui_services.dom_query "#ui__ac-inner" with
         | Some inner -> (
-            match inner.Ui_services.closest ".ui__popover-content" with
-            | Some pop ->
-                (* --lui-popup-available-height propagates to #ui__ac-inner's own
-                   max-height; lift it to read the real rendered height
-                   (the list's own CSS max still applies). The lift must
-                   stay the last override while measuring — the rect
-                   reads back asynchronously, so clamping right after
-                   would mask the lifted frame; restore the clamp only
-                   when the loop ends without a flip. The lifted frame
-                   renders clipped at the window edge either way, so it
-                   is not visible to the user. *)
-                pop.Ui_services.set_style "--lui-popup-available-height"
-                  "2000px";
-                let _rx, _ry, w, h_measured = pop.Ui_services.rect () in
-                (* Hosts whose element-rect reads report the popover's
-                   in-flow placeholder (the content box stretches to the
-                   overlay container on native) cannot measure the
-                   rendered popup — estimate the height from the item
-                   list instead: menu-link rows paint ~24px plus card
-                   chrome. The flip only needs an overflow check, not
-                   pixels; w still reads the (conservative) box width
-                   for the right-edge flip. *)
-                let h =
-                  if h_measured > 0. && h_measured < 460. then h_measured
-                  else
-                    Float.max 40.
-                      (12. +. (24. *. float (List.length a.items)))
-                in
-                (* base-ui flips align start->end when the popup would
-                   overflow the right viewport edge — the right edge
-                   lands at the caret; clamp to the margin when even
-                   that doesn't fit *)
-                let fx =
-                  if a.x +. w > Ui_services.dom_viewport_width () -. 5.
-                  then Some (Float.max 8. (a.x -. w))
-                  else None
-                in
-                if fx <> a.flipx then
-                  set_ac t (Some { a with flipx = fx });
-                let below =
-                  Ui_services.dom_viewport_height () -. a.y -. 5.
-                in
-                let above = a.cy -. 5. in
-                (* base-ui avoidCollisions re-checks continuously: a
-                   flip recorded while the list was still long must
-                   release again once filtered items shrink the popup
-                   enough to fit below, so re-evaluate every tick for
-                   the whole retry window rather than setting once.
-                   avail is the constraint, h the measured render — the
-                   inner's own max-height subtracts chrome from avail,
-                   so pass the whole space and place the top so the
-                   bottom edge lands just above the caret *)
-                let flip' =
-                  if h > below && above > below then
-                    let avail = above in
-                    let h_eff = Float.min h avail in
-                    Some (Float.max 5.0 (a.cy -. 5. -. h_eff), avail)
-                  else None
-                in
-                if flip' <> a.flip then
-                  set_ac t (Some { a with flip = flip' });
-                if tries <= 0 then
-                  pop.Ui_services.set_style "--lui-popup-available-height"
-                    (Printf.sprintf "calc(100vh - %.0fpx)" (a.y +. 5.))
-                else retry tries
-            | None -> retry tries)
+            match inner.Ui_services.closest ".ui__popover-content",
+                  inner.Ui_services.query "#ui__ac-items" with
+            | Some pop, Some items ->
+                let _, _, w, popup_height = pop.Ui_services.rect () in
+                let _, _, _, viewport_height = inner.Ui_services.rect () in
+                let _, _, _, content_height = items.Ui_services.rect () in
+                if w <= 0. || popup_height <= 0. || content_height <= 0.
+                then retry tries
+                else (
+                  let chrome =
+                    Float.max 0. (popup_height -. viewport_height)
+                  in
+                  let height ~flipped available =
+                    chrome +. Float.min content_height
+                      (ac_height_limit a.kind ~flipped available)
+                  in
+                  let fx =
+                    if a.x +. w > Ui_services.dom_viewport_width () -. 5.
+                    then Some (Float.max 8. (a.x -. w))
+                    else None
+                  in
+                  let below =
+                    Ui_services.dom_viewport_height () -. a.y -. 5.
+                  in
+                  let above = a.cy -. 5. in
+                  (* Compare the natural bottom-side height, not the
+                     current clipped height, so flipping cannot feed
+                     back into its own overflow decision. *)
+                  let flip' =
+                    if height ~flipped:false Float.infinity > below
+                       && above > below then
+                      let avail = above in
+                      let h_eff = height ~flipped:true avail in
+                      Some (Float.max 5.0 (a.cy -. 5. -. h_eff), avail)
+                    else None
+                  in
+                  if flip' <> a.flip || fx <> a.flipx then
+                    set_ac t (Some { a with flip = flip'; flipx = fx });
+                  retry tries)
+            | _ -> retry tries)
         | None -> retry tries)
     | None -> retry tries
     | _ -> ()

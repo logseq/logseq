@@ -336,9 +336,6 @@ let ac_inner (st : S.t) : t =
     if it.S.ai_key = S.empty_key then ac_empty_placeholder (S.get st)
     else ac_item_static st it
   in
-  (* web clamps ac-inner through the inline style's
-     --lui-popup-available-height expression; the native host ignores attrs-carried
-     style, so the same bound goes out as the wire max-height prop *)
   let max_height_sig =
     Logseq_el.own context
       (Signal.map
@@ -352,39 +349,17 @@ let ac_inner (st : S.t) : t =
                      Ui_services.dom_viewport_height () -. a.S.y -. 5.
                in
                int_of_float
-                 (Float.min
-                    (avail -.
-                       (match a.S.kind, a.S.flip with
-                        | S.Slash, Some _ -> 60.
-                        | _ -> 20.))
-                    (match a.S.kind, a.S.flip with
-                     | S.Slash, Some _ -> 460.
-                     | _ -> 480.))
+                 (S.ac_height_limit a.S.kind
+                    ~flipped:(Option.is_some a.S.flip) avail)
            | None -> 0)
-         (Signal.value (st.S.vs)))
+         (Signal.value st.S.vs))
   in
   let node =
     scroll ~key:"ac-inner" ~accessibility_identifier:"ui__ac-inner"
       ~style_class:"hide-scrollbar"
       ~data_attrs:
         [ ("style", "position:relative;-webkit-overflow-scrolling:touch") ]
-      ~data_attrs_signal:
-        (Logseq_el.own context
-           (Signal.map
-              (fun (v : S.view) ->
-                match v.S.ac with
-                | Some a ->
-                    (* the popup-ref scoped max-heights — slash popup
-                       flipped to top-side clamps tighter *)
-                    [ ( "style"
-                      , "max-height:min(calc(var(--lui-popup-available-height, "
-                        ^ (match a.S.kind, a.S.flip with
-                           | S.Slash, Some _ -> "460px) - 60px), 460px"
-                           | _ -> "480px) - 20px), 480px")
-                        ^ ")" ) ]
-                | None -> [])
-              (Signal.value (st.S.vs))))
-      [ column ~key:"ac-col"
+      [ column ~key:"ac-col" ~accessibility_identifier:"ui__ac-items"
           [ keyed ~source:units_sig ~key:unit_key ~cmp:Stdlib.compare
               ~mount:(fun u_sig ->
             (* the key fingerprints the unit fully, so sampling once is
