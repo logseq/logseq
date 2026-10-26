@@ -339,8 +339,13 @@
         (outliner-core/indent-outdent-blocks! conn blocks indent? opts)))
 
     :collapse-expand-blocks
-    (let [[blocks opts] args]
-      (ldb/transact! conn blocks opts))
+    ;; A block that is gone (deleted, or a new block whose insert hasn't landed when
+    ;; Ctrl+Up/Down follows Enter) would be created as a bare {:block/uuid :block/collapsed?}
+    ;; entity, which fails validation and the whole transaction.
+    (let [[blocks opts] args
+          blocks (filterv #(d/entity @conn [:block/uuid (:block/uuid %)]) blocks)]
+      (when (seq blocks)
+        (ldb/transact! conn blocks opts)))
 
     ;; properties
     :upsert-property
