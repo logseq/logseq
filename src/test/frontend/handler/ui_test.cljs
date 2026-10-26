@@ -6,7 +6,91 @@
             [frontend.storage :as storage]
             [frontend.state :as state]
             [frontend.util :as util]
+            [goog.dom :as gdom]
             [promesa.core :as p]))
+
+(defn- auto-complete-state
+  "Builds the shortcut state the `ui/auto-complete` component hands to its key handlers."
+  [matched current-idx opts]
+  {:matched matched
+   :opts opts
+   :frontend.ui/current-idx (atom current-idx)})
+
+(deftest auto-complete-enter-after-arrow-up-on-empty-list-test
+  (testing "Up on an empty popup, then Enter once results arrive, chooses the highlighted item"
+    (with-redefs [gdom/getElement (constantly nil)]
+      (let [chosen (atom [])
+            entered (atom 0)
+            opts {:on-chosen (fn [item _e] (swap! chosen conj item))
+                  :on-enter (fn [_state] (swap! entered inc))}
+            empty-state (auto-complete-state '() 0 opts)
+            *current-idx (:frontend.ui/current-idx empty-state)]
+        (ui-handler/auto-complete-prev empty-state nil)
+        (is (= 0 @*current-idx) "Up with no items keeps the index on the first slot")
+        (let [results-state (assoc empty-state :matched (list "alpha" "beta"))]
+          (ui-handler/auto-complete-complete results-state nil)
+          (is (= ["alpha"] @chosen))
+          (is (zero? @entered)))))))
+
+(deftest auto-complete-complete-test
+  (let [run (fn [complete-fn matched current-idx opts]
+              (let [chosen (atom [])
+                    entered (atom 0)
+                    opts (merge {:on-chosen (fn [item _e] (swap! chosen conj [:chosen item]))
+                                 :on-enter (fn [_state] (swap! entered inc))}
+                                opts)]
+                (complete-fn (auto-complete-state matched current-idx opts) nil)
+                {:chosen @chosen :entered @entered}))]
+    (testing "Enter chooses the highlighted item"
+      (let [{:keys [chosen entered]} (run ui-handler/auto-complete-complete (list "a" "b" "c") 1 {})]
+        (is (= [[:chosen "b"]] chosen))
+        (is (zero? entered))))
+    (testing "Enter indexes grouped items in display order"
+      (let [matched [{:group "x" :id 1} {:group "y" :id 2} {:group "x" :id 3}]
+            {:keys [chosen]} (run ui-handler/auto-complete-complete matched 1 {:grouped? true})]
+        (is (= [3] (map (comp :id second) chosen)))))
+    (testing "Enter falls back to on-enter when the index is negative"
+      (let [{:keys [chosen entered]} (run ui-handler/auto-complete-complete (list "a" "b") -1 {})]
+        (is (empty? chosen))
+        (is (= 1 entered))))
+    (testing "Enter falls back to on-enter when the list shrank below the index"
+      (let [{:keys [chosen entered]} (run ui-handler/auto-complete-complete (list "a") 3 {})]
+        (is (empty? chosen))
+        (is (= 1 entered))))
+    (testing "Enter falls back to on-enter when nothing matched"
+      (let [{:keys [chosen entered]} (run ui-handler/auto-complete-complete '() 0 {})]
+        (is (empty? chosen))
+        (is (= 1 entered))))
+    (testing "Shift+Enter chooses the highlighted item with on-shift-chosen"
+      (let [shifted (atom [])
+            {:keys [chosen entered]} (run ui-handler/auto-complete-shift-complete (list "a" "b") 1
+                                          {:on-shift-chosen (fn [item _] (swap! shifted conj item))})]
+        (is (= ["b"] @shifted))
+        (is (empty? chosen))
+        (is (zero? entered))))
+    (testing "Shift+Enter falls back to on-enter when the index is negative"
+      (let [{:keys [chosen entered]} (run ui-handler/auto-complete-shift-complete (list "a" "b") -1 {})]
+        (is (empty? chosen))
+        (is (= 1 entered))))))
+
+(deftest auto-complete-prev-next-test
+  (with-redefs [gdom/getElement (constantly nil)]
+    (let [move (fn [move-fn matched current-idx]
+                 (let [state (auto-complete-state matched current-idx {})]
+                   (move-fn state nil)
+                   @(:frontend.ui/current-idx state)))]
+      (testing "Up moves to the previous item and wraps from the first to the last"
+        (is (= 1 (move ui-handler/auto-complete-prev (list "a" "b" "c") 2)))
+        (is (= 2 (move ui-handler/auto-complete-prev (list "a" "b" "c") 0))))
+      (testing "Up from an index beyond a shrunk list goes to the last item"
+        (is (= 1 (move ui-handler/auto-complete-prev (list "a" "b") 5))))
+      (testing "Up with no items never makes the index negative"
+        (is (= 0 (move ui-handler/auto-complete-prev '() 0))))
+      (testing "Down moves to the next item and wraps from the last to the first"
+        (is (= 1 (move ui-handler/auto-complete-next (list "a" "b" "c") 0)))
+        (is (= 0 (move ui-handler/auto-complete-next (list "a" "b" "c") 2))))
+      (testing "Down with no items keeps the index on the first slot"
+        (is (= 0 (move ui-handler/auto-complete-next '() 0)))))))
 
 (deftest auto-complete-scroll-geometry-test
   (testing "normalizes focused-item geometry from container and target DOM data"
