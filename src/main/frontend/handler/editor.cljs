@@ -1206,14 +1206,6 @@
       (seq selected-ids)
       (seq (state/get-selection-block-ids))))
 
-(defn- <optional-html-export
-  "Clipboard HTML is optional; Firefox XSLT prettify must not abort copy/cut."
-  [repo block-uuids]
-  (-> (export-html/export-blocks-as-html repo block-uuids nil)
-      (p/catch (fn [error]
-                 (log/error :editor/html-export-failed error)
-                 nil))))
-
 (defn copy-selection-blocks
   [html? & {:keys [selected-blocks selected-ids op] :as opts}]
   (let [repo (state/get-current-repo)
@@ -1228,7 +1220,7 @@
       (when (seq blocks)
         (util/copy-to-clipboard! content)
         (p/let [copied-source-blocks (<get-all-blocks-by-ids repo top-level-block-uuids)
-                html (<optional-html-export repo top-level-block-uuids)]
+                html (export-html/export-blocks-as-html repo top-level-block-uuids nil)]
           (common-handler/copy-to-clipboard-without-id-property!
            repo content (when html? html) (blocks-for-clipboard copied-source-blocks) :op block-op)
           (state/set-block-op-type! block-op))
@@ -1454,7 +1446,7 @@
       (when block
         ;; TODO: support org mode
         (p/let [[_top-level-block-uuids md-content] (compose-copied-blocks-contents repo [block-id])
-                html (<optional-html-export repo [block-id])
+                html (export-html/export-blocks-as-html repo [block-id] nil)
                 copied-source-blocks (<get-all-blocks-by-ids repo [block-id])]
           (common-handler/copy-to-clipboard-without-id-property!
            repo md-content html (blocks-for-clipboard copied-source-blocks) :op :cut)
