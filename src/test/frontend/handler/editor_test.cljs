@@ -258,6 +258,58 @@
                          (js-delete js/globalThis "document"))
                        (done)))))))
 
+(defn- arrow-up-into-page-title!
+  "Runs ArrowUp from a page's first block into the page's title block, whose page is `page`;
+  returns what happened: [:edit uuid] or [:select node]."
+  [page]
+  (let [block {:db/id 2
+               :block/uuid #uuid "33333333-3333-3333-3333-333333333333"
+               :block/title "first"}
+        input #js {:value "first"}
+        current-block (fake-dom-node {})
+        title-block (fake-dom-node {"blockid" (str (:block/uuid page))})
+        previous-document (aget js/globalThis "document")
+        calls (atom [])]
+    (aset js/globalThis "document" #js {:activeElement input})
+    (-> (p/with-redefs [state/get-edit-block (constantly block)
+                        state/get-edit-content (constantly "first")
+                        state/block-component-editing? (constantly false)
+                        util/rec-get-node (fn [node class]
+                                            (cond
+                                              (= "ls-block" class) current-block
+                                              (and (= "ls-page-title" class) (identical? node title-block)) title-block))
+                        util/get-prev-block-non-collapsed (constantly title-block)
+                        db-async/<get-block (fn [_repo id & _opts]
+                                              (p/resolved (when (= id (:block/uuid page)) page)))
+                        editor/edit-block! (fn [b & _args] (swap! calls conj [:edit (:block/uuid b)]))
+                        state/exit-editing-and-set-selected-blocks! (fn [nodes & _args]
+                                                                       (swap! calls conj [:select (first nodes)]))]
+          (p/let [_ (editor/move-cross-boundary-up-down :up {:input input})]
+            (mapv (fn [[k v]] [k (if (identical? v title-block) :title-node v)]) @calls)))
+        (p/finally (fn []
+                     (if (some? previous-document)
+                       (aset js/globalThis "document" previous-document)
+                       (js-delete js/globalThis "document")))))))
+
+(deftest arrow-up-into-a-journal-title-selects-it-test
+  (async done
+    (let [journal {:db/id 1
+                   :block/uuid #uuid "00000001-2026-1025-0000-000000000000"
+                   :block/title "Oct 25th, 2026"
+                   :block/tags [{:db/ident :logseq.class/Journal}]}
+          page {:db/id 4
+                :block/uuid #uuid "44444444-4444-4444-4444-444444444444"
+                :block/title "page 1"
+                :block/tags [{:db/ident :logseq.class/Page}]}]
+      (-> (p/let [journal-calls (arrow-up-into-page-title! journal)
+                  page-calls (arrow-up-into-page-title! page)]
+            (is (= [[:select :title-node]] journal-calls)
+                "a journal's title is read-only: ArrowUp selects it instead of editing it")
+            (is (= [[:edit (:block/uuid page)]] page-calls)
+                "an ordinary page's title is still edited"))
+          (p/catch (fn [e] (is false (str e))))
+          (p/finally done)))))
+
 (deftest keydown-new-block-keeps-the-keydown-editor-state-test
   (let [block {:db/id 1
                :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
