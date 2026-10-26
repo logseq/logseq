@@ -82,7 +82,9 @@
     (let [clipboard "https://www.youtube.com/watch?v=xu9p5ynlhZk"
           expected-paste "{{video https://www.youtube.com/watch?v=xu9p5ynlhZk}}"]
       (p/with-redefs
-       [;; paste-copied-blocks-or-text mocks below
+       [state/get-edit-input-id (constantly "edit-block-test")
+        state/get-input (constantly nil)
+        ;; paste-copied-blocks-or-text mocks below
         commands/delete-selection! (constantly nil)
         commands/simple-insert! (fn [_input text] (p/resolved text))
         util/stop (constantly nil)
@@ -97,7 +99,9 @@
     (let [clipboard "https://x.com/chiefnoah13/status/1792677792506843462"
           expected-paste "{{twitter https://x.com/chiefnoah13/status/1792677792506843462}}"]
       (p/with-redefs
-       [commands/delete-selection! (constantly nil)
+       [state/get-edit-input-id (constantly "edit-block-test")
+        state/get-input (constantly nil)
+        commands/delete-selection! (constantly nil)
         commands/simple-insert! (fn [_input text] (p/resolved text))
         util/stop (constantly nil)
         util/get-selected-text (constantly "")
@@ -114,7 +118,9 @@
           block-content (str selected-text " is awesome")
           expected-paste "[logseq](https://logseq.com) is awesome"]
       (p/with-redefs
-       [;; paste-copied-blocks-or-text mocks below
+       [state/get-edit-input-id (constantly "edit-block-test")
+        state/get-input (constantly nil)
+        ;; paste-copied-blocks-or-text mocks below
         util/stop (constantly nil)
         util/get-selected-text (constantly selected-text)
         editor-format/get-selection-and-format
@@ -134,7 +140,9 @@
           block-content (str selected-text " - Obaluaê!")
           expected-paste "[great song](https://www.youtube.com/watch?v=xu9p5ynlhZk) - Obaluaê!"]
       (p/with-redefs
-       [;; paste-copied-blocks-or-text mocks below
+       [state/get-edit-input-id (constantly "edit-block-test")
+        state/get-input (constantly nil)
+        ;; paste-copied-blocks-or-text mocks below
         util/stop (constantly nil)
         util/get-selected-text (constantly selected-text)
         editor-format/get-selection-and-format
@@ -150,7 +158,8 @@
   (let [clipboard "((647f90f4-d733-4ee2-bbf5-907e820a23d3))"
         expected-paste "647f90f4-d733-4ee2-bbf5-907e820a23d3"]
     (p/with-redefs
-     [;; paste-copied-blocks-or-text mocks below
+     [state/get-edit-input-id (constantly "edit-block-test")
+      ;; paste-copied-blocks-or-text mocks below
       util/stop (constantly nil)
       state/get-input (constantly #js {:value "(())"})
       cursor/pos (constantly 2)
@@ -424,7 +433,8 @@
         expected-paste "after"
         block-content "test:: before"]
     (p/with-redefs
-     [state/get-input (constantly #js {:value block-content})
+     [state/get-edit-input-id (constantly "edit-block-test")
+      state/get-input (constantly #js {:value block-content})
        ;; paste-copied-blocks-or-text mocks below
       commands/delete-selection! (constantly nil)
       commands/simple-insert! (fn [_input text] (p/resolved text))
@@ -433,6 +443,49 @@
       (p/let [result ((paste-handler/editor-on-paste! nil)
                       #js {:clipboardData #js {:getData (constantly clipboard)}})]
         (is (= expected-paste result))))))
+
+(defn- <paste-text-while-edit-input-changes
+  "Pastes plain text into `edit-block-pasted`; before the clipboard read resolves,
+  the edit input id becomes `edit-input-id-after-read`. Resolves to the
+  simple-insert! calls and capture-error events."
+  [edit-input-id-after-read]
+  (let [*edit-input-id (atom "edit-block-pasted")
+        clipboard-read (p/deferred)
+        inserted (atom [])
+        errors (atom [])]
+    (p/with-redefs
+     [util/stop (constantly nil)
+      util/get-selected-text (constantly "")
+      html-parser/convert (constantly nil)
+      utils/getCopiedBlocksFromMemory (constantly nil)
+      paste-handler/get-copied-blocks (constantly clipboard-read)
+      state/get-edit-input-id (fn [] @*edit-input-id)
+      state/get-input (constantly nil)
+      state/pub-event! (fn [event] (swap! errors conj event))
+      commands/delete-selection! (constantly nil)
+      commands/simple-insert! (fn [id text _] (swap! inserted conj [id text]))]
+      (let [paste ((paste-handler/editor-on-paste! "edit-block-pasted")
+                   #js {:clipboardData #js {:getData (constantly "pasted text")}})]
+        (reset! *edit-input-id edit-input-id-after-read)
+        (p/resolve! clipboard-read nil)
+        (p/let [_ paste]
+          {:inserted @inserted
+           :errors @errors})))))
+
+(deftest-async editor-on-paste-drops-text-when-editor-exits-before-clipboard-resolves
+  (p/let [{:keys [inserted errors]} (<paste-text-while-edit-input-changes nil)]
+    (is (= [] inserted))
+    (is (= [] errors))))
+
+(deftest-async editor-on-paste-drops-text-when-another-editor-opens-before-clipboard-resolves
+  (p/let [{:keys [inserted errors]} (<paste-text-while-edit-input-changes "edit-block-other")]
+    (is (= [] inserted))
+    (is (= [] errors))))
+
+(deftest-async editor-on-paste-inserts-text-when-editor-stays-open-until-clipboard-resolves
+  (p/let [{:keys [inserted errors]} (<paste-text-while-edit-input-changes "edit-block-pasted")]
+    (is (= [["edit-block-pasted" "pasted text"]] inserted))
+    (is (= [] errors))))
 
 (deftest-async editor-on-paste-with-file-pasting
   (let [clipboard "<meta charset='utf-8'><img src=\"https://user-images.githubusercontent.com/38045018/228234385-cbbcc6b2-1168-40da-ab3e-1e506edd5fce.png\"/>"
@@ -455,7 +508,9 @@
     (let [clipboard-html "<meta charset='utf-8'><p>Delegated access\n management means you can select a subset of roles for a given project \nand allow the granted organization to self-manage those roles for their \nusers.</p>"
           expected-paste "Delegated access management means you can select a subset of roles for a given project and allow the granted organization to self-manage those roles for their users."]
       (p/with-redefs
-       [commands/delete-selection! (constantly nil)
+       [state/get-edit-input-id (constantly "edit-block-test")
+        state/get-input (constantly nil)
+        commands/delete-selection! (constantly nil)
         commands/simple-insert! (fn [_input text] (p/resolved text))
         util/stop (constantly nil)
         util/get-selected-text (constantly "")]
