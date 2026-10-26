@@ -233,6 +233,7 @@ let install ~request_flush ~dom ~timers ~files =
         ; open_url = Platform.open_url
         ; resource_url = (fun path -> "../" ^ path)
         ; paints_caret = (fun () -> false)
+        ; css_animations = (fun () -> true)
         ; menu_popup = (fun _ -> false)
         }
     ; dom

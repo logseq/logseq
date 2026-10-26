@@ -182,6 +182,9 @@ type env = {
   paints_caret : unit -> bool;
   (* The host paints the editor caret itself from its own glyph layout
      (native); the shared overlay caret must not double-draw. *)
+  css_animations : unit -> bool;
+  (* The host runs stylesheet animations. Without them, a shared editor
+     caret owns its scoped blink timer unless the host paints the caret. *)
   menu_popup : Json.t -> bool;
   (* Hand an in-app menu spec to the host for a native popup (the JSON
      shape lives in popups_state's serializer). The host replies with a
@@ -511,6 +514,7 @@ let env_random_uuid () = (get ()).env.random_uuid ()
 let env_open_url u = (get ()).env.open_url u
 let env_resource_url path = (get ()).env.resource_url path
 let env_paints_caret () = (get ()).env.paints_caret ()
+let env_css_animations () = (get ()).env.css_animations ()
 let env_menu_popup spec = (get ()).env.menu_popup spec
 
 let dom_on_document_event ?capture name f = (get ()).dom.on_document_event ?capture name f

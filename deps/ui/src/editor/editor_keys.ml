@@ -959,6 +959,10 @@ and apply_input ?frame uuid ev =
               | Edit_input.Delete _ | Edit_input.Key _) when e.S.uuid <> uuid ->
         e.S.uuid, !S.active_frame
     | _ -> uuid, frame in
+  let caret_frame = match frame with Some _ -> frame | None -> !S.active_frame in
+  Option.iter
+    (fun frame -> Edit_view.notify_caret_input uuid (Signal.value frame) ev)
+    caret_frame;
   let local = !S.structure_pending && !S.optimistic_split_ready
               && !S.pending_edit_real = 0
               && local_input_during_split uuid ev in

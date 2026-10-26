@@ -563,7 +563,107 @@ let sel_rect_view (r_s : (int * rect) Signal.signal) : t =
     (Signal.map (fun r -> clamp_nonneg r.Edit_input.h) rect_s);
   wrap
 
-let caret_view (frame : frame Signal.signal) : t =
+type caret_observer =
+  { token : unit ref
+  ; block_id : string
+  ; frame : frame Signal.signal
+  ; scope : Signal.scope
+  ; input : Edit_input.event -> unit
+  ; retire : unit -> unit
+  }
+
+let active_caret_observer : caret_observer option ref = ref None
+
+let notify_caret_input block_id frame event =
+  match !active_caret_observer with
+  | Some observer
+    when observer.block_id = block_id && observer.frame == frame
+         && not (Signal.scope_is_disposed observer.scope) ->
+      observer.input event
+  | _ -> ()
+
+let caret_visibility context ~model ~frame ~block_id =
+  let scope = context.Lui_ui.ui_scope in
+  let token = ref () in
+  let visible = Signal.state context.Lui_ui.ui_scheduler true in
+  let visible_signal = Signal.own_signal scope (Signal.value visible) in
+  let focused = ref true in
+  let composing = ref (Edit_model.composing (Signal.get model)) in
+  let current_model = ref (Signal.get model) in
+  let current_frame = ref (Signal.get frame) in
+  let timer = ref None in
+  let epoch = ref 0 in
+  let retired = ref false in
+  let subscriptions = ref [] in
+  let current () =
+    not !retired && not (Signal.scope_is_disposed scope)
+    && match !active_caret_observer with
+       | Some observer -> observer.token == token
+       | None -> false
+  in
+  let eligible () =
+    !focused && Option.is_some !current_frame.Edit_input.caret
+    && !current_frame.Edit_input.selection = []
+    && Edit_model.selection_range !current_model = None
+  in
+  let cancel () =
+    incr epoch;
+    Option.iter Ui_services.timers_clear_timeout !timer;
+    timer := None
+  in
+  let rec arm generation =
+    timer :=
+      Some
+        (Ui_services.timers_timeout
+           (fun () ->
+             if current () && generation = !epoch then (
+               timer := None;
+               if eligible () && not !composing then (
+                 Signal.set visible (not (Signal.get_state visible));
+                 Ui_services.request_flush ();
+                 if current () && generation = !epoch then arm generation)))
+           500)
+  in
+  let reset () =
+    if current () then (
+      cancel ();
+      Signal.set visible (eligible ());
+      if eligible () && not !composing then arm !epoch)
+  in
+  let retire () =
+    if not !retired then (
+      retired := true;
+      cancel ();
+      List.iter Signal.dispose_subscription !subscriptions;
+      subscriptions := [];
+      if not (Signal.scope_is_disposed scope) then Signal.set visible false;
+      match !active_caret_observer with
+      | Some observer when observer.token == token -> active_caret_observer := None
+      | _ -> ())
+  in
+  let input event =
+    (match event with
+     | Edit_input.Focus -> focused := true
+     | Edit_input.Blur -> focused := false; composing := false
+     | Edit_input.Composition ((Comp_start | Comp_update), _) -> composing := true
+     | Edit_input.Composition ((Comp_end | Comp_cancel), _) -> composing := false
+     | _ -> ());
+    reset ()
+  in
+  Option.iter (fun observer -> observer.retire ()) !active_caret_observer;
+  active_caret_observer := Some { token; block_id; frame; scope; input; retire };
+  subscriptions :=
+    [ Signal.subscribe model (fun value ->
+          current_model := value;
+          composing := Edit_model.composing value;
+          reset ())
+    ; Signal.subscribe frame (fun value -> current_frame := value; reset ())
+    ];
+  Signal.on_dispose scope retire;
+  reset ();
+  visible_signal
+
+let caret_view ?visible (frame : frame Signal.signal) : t =
  fun context parent ->
   (* test mounts under if_ — caret is Some whenever this renders *)
   let r_s =
@@ -581,14 +681,18 @@ let caret_view (frame : frame Signal.signal) : t =
              "var(--ls-caret-color, var(--ls-primary-text-color))" )
        ; Ui_components.Prop.position `relative
        ; Ui_components.Prop.z_index 2 ]
-       (row ~style_class:"ed-caret" ~width:2 []))
+       (match visible with
+        | None -> row ~style_class:"ed-caret" ~width:2 []
+        | Some visible ->
+            row ~style_class:"ed-caret" ~width:2
+              ~opacity:(reactive (fun shown -> if shown then 1. else 0.) visible) []))
       context (Some wrap)
   in
   bind_int context bar HeightValue
     (Signal.map (fun r -> clamp_nonneg r.Edit_input.h) r_s);
   wrap
 
-let overlay (frame : frame Signal.signal) : t =
+let overlay ?visible (frame : frame Signal.signal) : t =
  fun context parent ->
   let sel_s =
     own context
@@ -606,7 +710,7 @@ let overlay (frame : frame Signal.signal) : t =
            (own context
               (Signal.map
                  (fun f -> Option.is_some f.Edit_input.caret) frame))
-         (caret_view frame)
+         (caret_view ?visible frame)
      ]
   in
   (Ui_components.with_props
@@ -681,6 +785,10 @@ let sink ~block_id ~runs_s ~caret_s ~comp_s ~on_input : t =
 
 let view ~model ~frame ~block_id ~on_input ~cls : t =
  fun context parent ->
+  let visible =
+    if Ui_services.env_paints_caret () || Ui_services.env_css_animations () then None
+    else Some (caret_visibility context ~model ~frame ~block_id)
+  in
   let model = own context (Signal.map Edit_model.display_model model) in
   let cache = line_cache () in
   (* [lines_step] returns the previous list untouched when nothing a
@@ -714,7 +822,7 @@ let view ~model ~frame ~block_id ~on_input ~cls : t =
   (column ~style_class:("block-editor" ^ cls) ~grow:1.
      [ keyed ~source:lines_s ~key:(fun l -> l.lidx) ~cmp:Int.compare
          ~mount:(line_view ~on_input)
-     ; overlay frame
+     ; overlay ?visible frame
      ; sink ~block_id ~runs_s ~caret_s ~comp_s ~on_input
      ])
     context parent

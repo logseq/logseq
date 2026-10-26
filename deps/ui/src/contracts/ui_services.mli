@@ -125,6 +125,10 @@ type env = {
   paints_caret : unit -> bool;
   (* The host paints the editor caret itself from its own glyph layout
      (native); the shared overlay caret must not double-draw. *)
+  css_animations : unit -> bool;
+  (* True on web hosts that run stylesheet animations, false on native
+     hosts. Shared caret timers run only when both capabilities are false;
+     native caret painters retain ownership when paints_caret is true. *)
   menu_popup : Json.t -> bool;
   (* Hand an in-app menu spec to the host for a native popup; true
      means the host took it (it answers with a "native-menu-select"
@@ -398,6 +402,7 @@ val env_random_uuid : unit -> string
 val env_open_url : string -> unit
 val env_resource_url : string -> string
 val env_paints_caret : unit -> bool
+val env_css_animations : unit -> bool
 val env_menu_popup : Json.t -> bool
 
 val dom_on_document_event : ?capture:bool -> string -> (ev -> unit) -> unit

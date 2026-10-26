@@ -629,6 +629,7 @@ let install_ui_services ~paints_caret ~assert_owner ~request_flush ~dom ~timers 
         ; open_url = Host.open_url
         ; resource_url
         ; paints_caret = (fun () -> paints_caret)
+        ; css_animations = (fun () -> false)
         ; menu_popup = native_menu_popup
         }
     ; dom
