@@ -1841,6 +1841,7 @@
  :storage.recycle/retention-desc "Deleted pages and blocks stay here until restored or automatically garbage collected after 30 days."
  :storage.recycle/title "Recycle"
 
+ :sync/asset-too-large-error "Could not sync \"{1}\" because the file is too large to upload."
  :sync/assets-downloading "downloading assets"
  :sync/assets-downloading-count "Downloading assets ({1})"
  :sync/assets-uploading "uploading assets"
