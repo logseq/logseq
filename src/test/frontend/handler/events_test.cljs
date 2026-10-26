@@ -1,11 +1,14 @@
 (ns frontend.handler.events-test
-  (:require [cljs.test :refer [deftest is testing]]
+  (:require [cljs.test :refer [async deftest is testing]]
             [frontend.components.rtc.download-progress :as download-progress]
+            [frontend.db.async :as db-async]
+            [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.events :as events]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
-            [logseq.shui.ui :as shui]))
+            [logseq.shui.ui :as shui]
+            [promesa.core :as p]))
 
 (deftest download-graph-progress-surface-test
   (let [calls (atom [])]
@@ -28,6 +31,41 @@
         (download-progress/show! "My notes")
         (download-progress/hide!)
         (is (= [:popup :popup-hide] (mapv first @calls)))))))
+
+(defn- <run-upsert-type-block!
+  "Runs the :editor/upsert-type-block handler for `block` (as typing \"> \" sends it) while the
+  db returns `db-block` for it; returns the property writes it made."
+  [block db-block]
+  (let [handler (get @@#'events/event-definitions :editor/upsert-type-block)
+        writes (atom [])]
+    (p/let [_ (p/with-redefs [state/get-current-repo (constantly "test-repo")
+                              db-async/<get-block (fn [_repo _id & _opts] (p/resolved db-block))
+                              state/<invoke-db-worker (fn [& _args] (p/resolved nil))
+                              db-property-handler/set-block-property! (fn [& args]
+                                                                        (swap! writes conj args)
+                                                                        (p/resolved nil))
+                              db-property-handler/set-block-properties! (fn [& args]
+                                                                          (swap! writes conj args)
+                                                                          (p/resolved nil))
+                              editor-handler/save-block! (fn [& args]
+                                                           (swap! writes conj (cons :save-block args))
+                                                           (p/resolved nil))]
+                (handler [:editor/upsert-type-block {:block (assoc block :block/title "")
+                                                     :type :quote
+                                                     :update-current-block? true}]))]
+      @writes)))
+
+(deftest upsert-type-block-skips-a-block-that-is-gone-test
+  (async done
+    (let [block {:db/id 7 :block/uuid #uuid "77777777-7777-7777-7777-777777777777" :block/title ">"}]
+      (-> (p/let [gone-writes (<run-upsert-type-block! block nil)
+                  present-writes (<run-upsert-type-block! block (assoc block :block/title ""))]
+            (is (= [] gone-writes)
+                "a block deleted before the conversion runs gets no property write (it would fail in the worker)")
+            (is (= [[(:block/uuid block) :logseq.property.node/display-type :quote]] present-writes)
+                "a block that is still there is converted"))
+          (p/catch (fn [e] (is false (str e))))
+          (p/finally done)))))
 
 (deftest refocus-upsert-type-block-test
   (let [source-id #uuid "11111111-1111-1111-1111-111111111111"

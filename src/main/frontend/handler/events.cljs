@@ -392,34 +392,38 @@
           repo (state/get-current-repo)
           db-block (<get-upsert-type-block repo (:db/id block))
           latest-code-lang (<latest-code-lang repo lang)]
-    (let [block-type (:logseq.property.node/display-type db-block)
-          block-title (:block/title db-block)
-          requested-title? (contains? block :block/title)
-          requested-title (:block/title block)
-          turn-type! #(if (and (= (keyword type) :code) latest-code-lang)
-                        (db-property-handler/set-block-properties!
-                         (:block/uuid %)
-                         {:logseq.property.node/display-type (keyword type)
-                          :logseq.property.code/lang latest-code-lang})
-                        (db-property-handler/set-block-property!
-                         (:block/uuid %) :logseq.property.node/display-type (keyword type)))
-          apply-requested-title! #(when (and update-current-block?
-                                             requested-title?
-                                             (not= requested-title (:block/title %)))
-                                    (editor-handler/save-block! (state/get-current-repo) % requested-title))]
-      (p/let [converted-block (if (or (not (nil? block-type))
-                                      (and (not update-current-block?) (not (string/blank? block-title))))
-                                ;; Await the insert itself before converting the new block.
-                                (p/let [[insert-promise _ block'] (editor-handler/insert-new-block-aux!
-                                                                   {:preserve-current-block? true} db-block "")
-                                        _ insert-promise]
-                                  (when-let [id (:block/uuid block')]
-                                    (p/let [_ (turn-type! block')]
-                                      (<get-upsert-type-block repo id))))
-                                (p/let [_ (apply-requested-title! db-block)
-                                        _ (turn-type! db-block)]
-                                  (<get-upsert-type-block repo (:block/uuid db-block))))]
-        (js/setTimeout #(refocus-upsert-type-block! db-block converted-block update-current-block?) 100)))))
+    ;; The conversion is asynchronous: typing "> " or "```" and deleting the block right
+    ;; after (Backspace, cut) leaves no block to convert, and setting the display type on a
+    ;; nil uuid fails in the worker ("Set block property failed: block or property doesn't exist").
+    (when db-block
+      (let [block-type (:logseq.property.node/display-type db-block)
+            block-title (:block/title db-block)
+            requested-title? (contains? block :block/title)
+            requested-title (:block/title block)
+            turn-type! #(if (and (= (keyword type) :code) latest-code-lang)
+                          (db-property-handler/set-block-properties!
+                           (:block/uuid %)
+                           {:logseq.property.node/display-type (keyword type)
+                            :logseq.property.code/lang latest-code-lang})
+                          (db-property-handler/set-block-property!
+                           (:block/uuid %) :logseq.property.node/display-type (keyword type)))
+            apply-requested-title! #(when (and update-current-block?
+                                               requested-title?
+                                               (not= requested-title (:block/title %)))
+                                      (editor-handler/save-block! (state/get-current-repo) % requested-title))]
+        (p/let [converted-block (if (or (not (nil? block-type))
+                                        (and (not update-current-block?) (not (string/blank? block-title))))
+                                  ;; Await the insert itself before converting the new block.
+                                  (p/let [[insert-promise _ block'] (editor-handler/insert-new-block-aux!
+                                                                     {:preserve-current-block? true} db-block "")
+                                          _ insert-promise]
+                                    (when-let [id (:block/uuid block')]
+                                      (p/let [_ (turn-type! block')]
+                                        (<get-upsert-type-block repo id))))
+                                  (p/let [_ (apply-requested-title! db-block)
+                                          _ (turn-type! db-block)]
+                                    (<get-upsert-type-block repo (:block/uuid db-block))))]
+          (js/setTimeout #(refocus-upsert-type-block! db-block converted-block update-current-block?) 100))))))
 
 (defn- editing-users-by-block
   [online-users current-user-uuid]
