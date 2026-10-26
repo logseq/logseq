@@ -107,6 +107,30 @@
       (is (some? (d/entity @conn [:block/uuid (:block/uuid kept-view)]))
           "a view for a node that exists is inserted"))))
 
+(deftest property-ops-skip-a-gone-block-only-when-asked
+  (testing "the editor's writes (:skip-missing-targets?) to a block that is gone are dropped; other callers keep the error"
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "Test"} :blocks [{:block/title "kept"} {:block/title "gone"}]}])
+          kept (db-test/find-block-by-content @conn "kept")
+          gone (db-test/find-block-by-content @conn "gone")
+          gone-uuid (:block/uuid gone)
+          todo (:db/id (d/entity @conn :logseq.property/status.todo))]
+      (d/transact! conn [[:db/retractEntity (:db/id gone)]])
+      (is (thrown-with-msg? js/Error #"doesn't exist"
+                            (outliner-op/apply-ops!
+                             conn [[:set-block-property [gone-uuid :logseq.property/status todo]]] {}))
+          "without the option the write fails as before")
+      (outliner-op/apply-ops!
+       conn [[:set-block-property [gone-uuid :logseq.property/status todo]]]
+       {:skip-missing-targets? true})
+      (is (nil? (d/entity @conn [:block/uuid gone-uuid])) "the gone block is not recreated")
+      (outliner-op/apply-ops!
+       conn [[:batch-set-property [[(:block/uuid kept) gone-uuid] :logseq.property/status todo {}]]]
+       {:skip-missing-targets? true})
+      (is (= :logseq.property/status.todo
+             (:db/ident (:logseq.property/status (d/entity @conn (:db/id kept)))))
+          "the live block in the batch still gets the value"))))
+
 (deftest collapse-expand-blocks-op-skips-missing-blocks
   (testing "a block that isn't in the db (deleted, or its insert hasn't landed) is not created"
     (let [conn (db-test/create-conn-with-blocks
