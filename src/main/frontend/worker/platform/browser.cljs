@@ -75,10 +75,13 @@
   "True for the error OPFS gives when another context (the worker of the page before a reload) still holds a
   file's sync access handle."
   [e]
-  (let [e' (or (some-> e .-cause) e)]
-    (or (= "NoModificationAllowedError" (some-> e' .-name))
-        (= "NoModificationAllowedError" (some-> e .-name))
-        (string/includes? (str (some-> e' .-message)) "Access Handle"))))
+  (boolean
+   (some (fn [^js x]
+           (and (= "NoModificationAllowedError" (some-> x .-name))
+                ;; Chrome: "Access Handles cannot be created if there is another open Access Handle or Writable
+                ;; stream associated with the same file."
+                (string/includes? (str (some-> x .-message)) "Access Handle")))
+         [e (some-> e .-cause)])))
 
 (def ^:private opfs-pool-install-attempts 20)
 (def ^:private opfs-pool-install-retry-ms 250)
