@@ -3398,8 +3398,13 @@
 (defn- create-view!
   [view-parent view-feature-type {:keys [auto-triggered?]}]
   (p/let [repo (state/get-current-repo)
-          page (db-async/<get-block repo common-config/views-page-name {:children? false})]
-    (when page
+          page (db-async/<get-block repo common-config/views-page-name {:children? false})
+          ;; A references view mounted for a node that is gone (an undo removed the page it
+          ;; shows) would create a view for nothing; the worker refuses it (view-for must be a
+          ;; node with a title).
+          parent-exists? (or (nil? (:block/uuid view-parent))
+                             (db-async/<get-block repo (:block/uuid view-parent) {:children? false}))]
+    (when (and page parent-exists?)
       (p/let [list-view-type (when (contains? #{:linked-references :unlinked-references} view-feature-type)
                                (state/<invoke-db-worker :thread-api/pull repo [:db/id] :logseq.property.view/type.list))
               block-page-property (when (contains? #{:linked-references :unlinked-references} view-feature-type)

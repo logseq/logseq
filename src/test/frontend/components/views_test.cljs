@@ -11,6 +11,7 @@
             [frontend.db.async :as db-async]
             [frontend.db.hooks :as db-hooks]
             [frontend.db.subs :as subs]
+            [frontend.handler.editor :as editor-handler]
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -99,6 +100,34 @@
       (p/catch (fn [error]
                  (is false (str error))))
       (p/finally done)))
+
+(defn- <create-view-calls
+  "Runs create-view! for `view-parent` while the db returns `parent-in-db` for it; returns the inserts it sent."
+  [view-parent parent-in-db]
+  (let [inserts (atom [])]
+    (p/let [_ (p/with-redefs [state/get-current-repo (constantly "test-repo")
+                              db-async/<get-block (fn [_repo id & _opts]
+                                                    (p/resolved (if (= id (:block/uuid view-parent))
+                                                                  parent-in-db
+                                                                  {:db/id 1 :block/uuid (random-uuid) :block/title "$$$views"})))
+                              state/<invoke-db-worker (fn [& _args] (p/resolved {:db/id 2}))
+                              editor-handler/api-insert-new-block! (fn [& args]
+                                                                     (swap! inserts conj (vec args))
+                                                                     {:block/uuid (random-uuid)})]
+                (#'views/create-view! view-parent :unlinked-references {:auto-triggered? true}))]
+      @inserts)))
+
+(deftest create-view-skips-a-parent-that-is-gone-test
+  ;; Key fuzzer: an undo chain removed a page while its unlinked-references section was mounted; the
+  ;; section then created its view for the gone page and the worker refused the write.
+  (async done
+         (let [parent {:db/id 333 :block/uuid (random-uuid) :block/title "p"}]
+           (finish-async!
+            done
+            (p/let [gone (<create-view-calls parent nil)
+                    present (<create-view-calls parent parent)]
+              (is (= [] gone) "no view is created for a node that is gone")
+              (is (= 1 (count present)) "a view is created for a node that exists"))))))
 
 (defn- delta
   [rev affected-keys]
