@@ -328,15 +328,37 @@
        (nil? (:db/ident ref'))
        (common-util/uuid-string? (or (:block/name ref') ""))))
 
-(defn- missing-uuid-ref?
+(defn- missing-block-lookup?
   "A [:block/uuid id] lookup whose entity doesn't exist and isn't created by
-  this transaction would fail the transaction, so it's dropped."
+  this transaction would fail the transaction."
+  [db created-uuids v]
+  (and (vector? v)
+       (= :block/uuid (first v))
+       (uuid? (second v))
+       (not (d/entity db [:block/uuid (second v)]))
+       (not (contains? created-uuids (second v)))))
+
+(defn- missing-uuid-ref?
+  "A ref that is a missing-block-lookup? is dropped."
   [db created-uuids [_ref ref' _tx-data]]
-  (and (vector? ref')
-       (= :block/uuid (first ref'))
-       (uuid? (second ref'))
-       (not (d/entity db [:block/uuid (second ref')]))
-       (not (contains? created-uuids (second ref')))))
+  (missing-block-lookup? db created-uuids ref'))
+
+(defn- drop-missing-block-lookups
+  "An inserted block can point at a block that no longer exists, e.g. a
+  clipboard copied before an undo removed a block it links to or references.
+  Its :block/link and :block/refs lookups of that block are dropped instead of
+  failing the insert. A missing property value still fails it, as
+  cut-paste-property-test pins, since dropping it would lose the value."
+  [db created-uuids block]
+  (let [missing? #(missing-block-lookup? db created-uuids %)]
+    (cond-> block
+      (missing? (:block/link block))
+      (dissoc :block/link)
+
+      (some missing? (:block/refs block))
+      (update :block/refs (fn [refs]
+                            (let [refs' (remove missing? refs)]
+                              (if (set? refs) (set refs') (vec refs'))))))))
 
 (defn- resolve-tags
   "Point each tag at its resolved class ref. A new tag (no :db/id) whose ref
@@ -911,9 +933,11 @@
                        :else
                        (throw (js/Error. (str "[insert-blocks] illegal lookup: " lookup ", block: " block)))))
         entries (build-insert-blocks-tx db target-block blocks uuids get-new-id opts)
-        blocks-tx (mapv first entries)]
+        page-txs (mapcat second entries)
+        created-uuids (into (set (vals uuids)) (keep #(when (map? %) (:block/uuid %))) page-txs)
+        blocks-tx (mapv #(some->> (first %) (drop-missing-block-lookups db created-uuids)) entries)]
     {:blocks-tx blocks-tx
-     :page-txs (mapcat second entries)
+     :page-txs page-txs
      :id->new-uuid id->new-uuid
      :uuid->new-uuid uuids}))
 
