@@ -1259,6 +1259,29 @@
         (is (= expected-titles (mapv :block/title blocks)))
         (is (= (:block/uuid parent) (:block/uuid (first blocks))))))))
 
+(deftest-async copied-selection-skips-blocks-deleted-before-their-tree-loads
+  (testing "A block deleted between the selection read and its tree read is not copied as an untitled, uuid-less block"
+    (load-test-files
+     [{:page {:block/title "Source"}
+       :blocks [{:block/title "One"} {:block/title "Two"} {:block/title "Three"}]}])
+    (let [repo test-helper/test-db
+          block-uuids (mapv #(:block/uuid (test-helper/find-block-by-content %)) ["One" "Two" "Three"])
+          *deleted? (atom false)
+          ;; The Backspace (or cut) that follows Control+c lands between
+          ;; <get-blocks and the per-block tree fetch.
+          delete-then-answer (fn [api repo' requests]
+                               (when (and (not @*deleted?)
+                                          (some #(get-in % [:opts :all?]) requests))
+                                 (reset! *deleted? true)
+                                 (d/transact! (conn/get-db repo' false)
+                                              (mapv (fn [id] [:db/retractEntity [:block/uuid id]]) block-uuids)))
+                               (<complete-tree-worker api repo' requests))]
+      (p/with-redefs [state/<invoke-db-worker delete-then-answer]
+        (p/let [blocks (#'editor/<get-all-blocks-by-ids repo block-uuids)
+                clipboard (#'editor/blocks-for-clipboard blocks)]
+          (is @*deleted?)
+          (is (= [] clipboard)))))))
+
 (deftest-async copied-expanded-parent-includes-nested-children
   (testing "Non-collapsed control still copies the full subtree"
     (let [{:keys [parent expected-titles]} (load-collapsed-clipboard-fixture!

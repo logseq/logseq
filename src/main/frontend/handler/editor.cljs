@@ -1224,8 +1224,17 @@
     (p/let [result (db-async/<get-block-with-children repo block-uuid opts)]
       (let [root (:block result)
             children (:children result)]
-        (if (entity/page? root)
+        (cond
+          ;; Deleted after the selection was read (Backspace or a cut right
+          ;; after Control+c): a nil root would reach the clipboard as an
+          ;; untitled block without a uuid.
+          (nil? root)
+          nil
+
+          (entity/page? root)
           children
+
+          :else
           (cons root children))))))
 
 (defn- <get-all-blocks-by-ids
