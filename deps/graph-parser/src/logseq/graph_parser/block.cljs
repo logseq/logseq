@@ -322,8 +322,8 @@
               (first (sort (map :e (entity-util/get-pages-by-name db page-name)))))))
 
 (defn- stored-block-attr
-  "Read a scalar from datoms. Journal :block/title on Entity is computed from
-  title-format and must not be used as a write-back value."
+  "Read a scalar from datoms. Journal `:block/title` on Entity is computed from
+  `title-format` and must not be used as a write-back value."
   [db eid attr]
   (when (and db eid)
     (:v (first (d/datoms db :eavt eid attr)))))
