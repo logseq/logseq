@@ -13,6 +13,21 @@
             [logseq.outliner.page :as outliner-page]
             [promesa.core :as p]))
 
+(deftest search-blocks-before-the-graph-is-open
+  (testing "a search sent while the graph is still opening (right after a reload) finds nothing, without an error"
+    (let [conn (db-test/create-conn-with-blocks [{:page {:block/title "Test"} :blocks [{:block/title "hello"}]}])
+          logged (atom [])
+          console-error (.-error js/console)]
+      ;; the sqlite search catches its own failure and logs it: count the logged errors
+      (set! (.-error js/console) (fn [& args] (swap! logged conj (apply str args))))
+      (try
+        (is (empty? (search/search-blocks conn nil "hello" {})) "no search db yet")
+        (is (empty? (search/search-blocks conn nil "hello" {:limit 10 :page-only? true})) "no search db yet, pages only")
+        (is (empty? (search/search-blocks nil nil "hello" {})) "no graph conn yet")
+        (finally
+          (set! (.-error js/console) console-error)))
+      (is (empty? @logged) (str "no error logged: " (pr-str (take 2 @logged)))))))
+
 (defn- sql-placeholder-count
   [sql]
   (count (re-seq #"\?" sql)))

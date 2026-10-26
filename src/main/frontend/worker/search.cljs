@@ -1004,7 +1004,8 @@ ALTER TABLE blocks_fts_next RENAME TO blocks_fts;"))
                                    :or {enable-snippet? true}}]
    (let [tag-title? (boolean (tag-title-query q))
          q (or (tag-title-query q) q)]
-     (when-not (string/blank? q)
+     ;; no graph conn or search db yet (the graph is still opening, e.g. right after a reload): nothing to search
+     (when (and conn search-db (not (string/blank? q)))
        (let [option (assoc option :enable-snippet? enable-snippet?)
              match-input (get-match-input q)
              non-match-input (when (<= (count q) 2)
