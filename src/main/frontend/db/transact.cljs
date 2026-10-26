@@ -182,6 +182,8 @@
             request-repo (state/get-current-repo)
             request-route (state/get-route-match)
             request-editor-info (state/get-editor-info)
+            request-pending-id (when (:editor/edit-block-fn opts)
+                                 (:id (state/get-state :editor/pending-new-block)))
             opts' (-> opts
                       ensure-local-op-tx-id
                       (assoc
@@ -205,6 +207,14 @@
                 worker-returned-at (now-ms)
                 current-context? (and (= request-repo (state/get-current-repo))
                                       (= request-route (state/get-route-match)))
+                ;; A route/repo change skips inserted-block-edit-fn. Clear only
+                ;; the buffer that still belongs to this request so a later
+                ;; insert's typed-ahead text is not dropped.
+                _ (when (and (:editor/edit-block-fn opts')
+                             (not current-context?)
+                             (= request-pending-id
+                                (:id (state/get-state :editor/pending-new-block))))
+                    (state/set-state! :editor/pending-new-block nil))
                 publish? (or delta
                              (and current-context?
                                   (:editor/edit-block-fn opts')))
