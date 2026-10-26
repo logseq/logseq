@@ -176,7 +176,11 @@
                           (filter block-entity?)
                           (mapcat block-subtree-entities)
                           (map (fn [entity] [:db/retractEntity (:db/id entity)])))]
-      (distinct (concat txs subtree-tx)))
+      ;; `txs` stays as it is: a batch replays its datoms, and datoms are
+      ;; equal when e, a and v are, whatever `added` is, so `distinct` would
+      ;; drop the retract of a value added earlier in the batch (e.g. the
+      ;; :block/order a move gave a block deleted next) and keep the add.
+      (concat txs (distinct subtree-tx)))
     txs))
 
 (defn- direct-cleanup-tx
