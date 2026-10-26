@@ -1024,7 +1024,7 @@ let () =
   print_endline "native deferred focus reveal: OK"
 
 let () = Native_embed.with_entry_lock (fun () ->
-  Platform.install_ui_services ~assert_owner:Native_embed.assert_entry_owner
+  Platform.install_ui_services ~paints_caret:true ~assert_owner:Native_embed.assert_entry_owner
     ~request_flush:Runtime.flush ~dom:Ui_dom_native.ops
     ~timers:Ui_dom_native.timers ~files:Ui_dom_native.files;
   let store=Lui_store.create () and ui=Lui_window.Ui.create () in

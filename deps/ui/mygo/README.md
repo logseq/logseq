@@ -35,6 +35,17 @@ their typed ABI rather than disguising them as extension events. Geometry is
 queried only after a committed frame. Focus and imperative scrolling use LUI's
 production host services, including its node-lifetime and scroll-token checks.
 
+Native initialization requires exactly `{"paintsCaret":boolean}` as its JSON
+payload, independent of the platform and host profile codes. MyGo sends
+`{"paintsCaret":false}` before view construction: the shared OCaml editor owns
+the caret overlay and uses measurements from committed retained glyph layout.
+The 1-DIP input sink does not paint a caret. The SDL host sends
+`{"paintsCaret":true}` because it already owns a glyph-layout caret painter.
+Empty, missing, non-boolean, duplicate or additional capability fields fail
+initialization rather than selecting an implicit painter. Native hosts and the
+OCaml library must be rebuilt together; assets and persistence configuration
+remain environment-owned and are not part of this payload.
+
 The host routes document input synchronously through OCaml before native default
 handling. Editor caret, selection and pointer queries use committed retained text
 layout; the input sink does not maintain a second document. Theme snapshots feed

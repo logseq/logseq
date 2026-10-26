@@ -291,10 +291,9 @@ func (r *ocamlRuntime) Start() error {
 		if runtime.GOOS == "darwin" {
 			platform = 1
 		}
-		// native_embed.initialize currently ignores its payload. Assets and
-		// persistence/configuration are read from the native environment, not
-		// from an invented startup JSON schema. GenericHost is host code zero.
-		const payload = "{}"
+		// MyGo leaves caret painting to the shared measured overlay.
+		// GenericHost is host code zero; it does not imply a caret painter.
+		const payload = `{"paintsCaret":false}`
 		r.started = true
 		if r.functions.start(r.callbacks[0], r.callbacks[1], r.callbacks[2], platform, 0, payload, int32(len(payload))) != 1 {
 			return fmt.Errorf("logseq: OCaml initialization failed (see bridge diagnostics)")

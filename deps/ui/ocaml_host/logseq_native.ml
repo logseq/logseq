@@ -218,7 +218,7 @@ let () =
      the init patches are applied. *)
   let init_d =
     Domain.spawn
-      (fun () -> Native_embed.initialize Host_platform.platform_code 0 "")
+      (fun () -> Native_embed.initialize Host_platform.platform_code 0 {|{"paintsCaret":true}|})
   in
   sdl_ok (Sdl.init Sdl.Init.(video + events));
   Daemon_client.boot_mark "sdl init";

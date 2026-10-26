@@ -386,9 +386,14 @@ let perf_mark name t0 =
   if Lazy.force perf_log
   then Printf.eprintf "[perf] %s %.1fms\n%!" name (perf_ms () -. t0)
 
-let initialize_unlocked platform_code host_code (_payload : string) =
+let initialize_unlocked platform_code host_code (payload : string) =
+  let paints_caret =
+    match Yojson.Safe.from_string payload with
+    | `Assoc [ ("paintsCaret", `Bool value) ] -> value
+    | _ -> invalid_arg "Native startup requires exactly one boolean paintsCaret capability"
+  in
   Printexc.record_backtrace true;
-  Platform.install_ui_services ~assert_owner:assert_entry_owner ~request_flush:Runtime.flush ~dom:Ui_dom_native.ops ~timers:Ui_dom_native.timers ~files:Ui_dom_native.files;
+  Platform.install_ui_services ~paints_caret ~assert_owner:assert_entry_owner ~request_flush:Runtime.flush ~dom:Ui_dom_native.ops ~timers:Ui_dom_native.timers ~files:Ui_dom_native.files;
   (match (I18n.init ()).Js.Promise.state with
    | Js.Promise.Resolved () -> ()
    | Js.Promise.Rejected error -> raise error

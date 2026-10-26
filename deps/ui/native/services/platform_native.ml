@@ -535,7 +535,7 @@ let fmt_date ms =
     (List.nth month_of_abbr (f.month - 1))
     f.day f.year
 
-let install_ui_services ~assert_owner ~request_flush ~dom ~timers ~files =
+let install_ui_services ~paints_caret ~assert_owner ~request_flush ~dom ~timers ~files =
   Ui_services.install
     { storage =
         { get = local_storage_get
@@ -628,7 +628,7 @@ let install_ui_services ~assert_owner ~request_flush ~dom ~timers ~files =
         ; random_uuid = Host.random_uuid
         ; open_url = Host.open_url
         ; resource_url
-        ; paints_caret = (fun () -> true)
+        ; paints_caret = (fun () -> paints_caret)
         ; menu_popup = native_menu_popup
         }
     ; dom

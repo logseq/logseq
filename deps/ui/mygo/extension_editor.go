@@ -35,8 +35,8 @@ type logseqEditorInput struct {
 }
 
 func (services *platformServices) renderLogseqEditor(c *ui.Context, n luimygo.Node, _ func(), emit func(luimygo.Event)) {
-	// Edit_view already renders all text, pills, selections and the caret in
-	// sibling standard nodes. This extension is intentionally only the sink.
+	// Startup declares paintsCaret=false, so Edit_view renders the measured
+	// caret alongside text, pills and selections. This extension is only the sink.
 	e := ui.Box(c).Size(1, 1).Focusable().Cursor(ui.CursorText).InputMethod(true)
 	services.bind(n, e)
 	services.BindEditorControl(n, e)
