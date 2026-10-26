@@ -419,7 +419,10 @@
    :ui/toggle-document-mode                 {:binding "t d"
                                              :fn      state/toggle-document-mode!}
 
-   :ui/highlight-recent-blocks              {:binding "mod+c mod+r"
+   ;; Avoid chords that end in mod+r: Electron's View menu reload/restart
+   ;; accelerator (CommandOrControl+R) steals that stroke before the chord
+   ;; can finish, especially on Windows.
+   :ui/highlight-recent-blocks              {:binding "t h"
                                              :fn      state/toggle-highlight-recent-blocks!}
 
    :ui/toggle-settings                      {:binding (if mac? ["t s" "mod+,"] "t s")
