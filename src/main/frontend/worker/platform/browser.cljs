@@ -83,13 +83,14 @@
                 (string/includes? (str (some-> x .-message)) "Access Handle")))
          [e (some-> e .-cause)])))
 
-(def ^:private opfs-pool-install-attempts 20)
-(def ^:private opfs-pool-install-retry-ms 250)
+;; up to 80 attempts 250 ms apart (20 s): on a loaded machine the old page's worker can hold the handles for
+;; several seconds after a reload
+(defonce *opfs-pool-install-retry (atom {:attempts 80 :delay-ms 250}))
 
 (defn- install-opfs-pool
   "A reload starts the new page's worker while the old page's worker may still hold the pool's sync access
   handles; installOpfsSAHPoolVfs then fails, and caches that failure unless forceReinitIfPreviouslyFailed is
-  set. Retry for up to 5 s while the handles are busy."
+  set. Retry while the handles are busy, see *opfs-pool-install-retry."
   ([sqlite pool-name]
    (install-opfs-pool sqlite pool-name 0))
   ([sqlite pool-name attempt]
@@ -97,8 +98,8 @@
                                                :initialCapacity 20
                                                :forceReinitIfPreviouslyFailed (pos? attempt)})
        (p/catch (fn [e]
-                  (if (and (< (inc attempt) opfs-pool-install-attempts) (access-handle-busy? e))
-                    (p/let [_ (p/delay opfs-pool-install-retry-ms)]
+                  (if (and (< (inc attempt) (:attempts @*opfs-pool-install-retry)) (access-handle-busy? e))
+                    (p/let [_ (p/delay (:delay-ms @*opfs-pool-install-retry))]
                       (install-opfs-pool sqlite pool-name (inc attempt)))
                     (p/rejected e)))))))
 
