@@ -24,10 +24,10 @@ github.com/go-text/typesetting v0.3.5 h1:XZPUooClHY0Vf/rFyUyuPRNEkawARaFzLMQcXLS
 github.com/go-text/typesetting v0.3.5/go.mod h1:XZO1hD+nQVyvVa5IicQk7FsCa4PFQaJ2soWAP1f//68=
 github.com/go-text/typesetting-utils v0.0.0-20260419141703-4ffe8874dabc h1:8FGo2It5K75XkavhTiCKExUfVaVDS1feBnLCru5qeoY=
 github.com/go-text/typesetting-utils v0.0.0-20260419141703-4ffe8874dabc/go.mod h1:3/62I4La/HBRX9TcTpBj4eipLiwzf+vhI+7whTc9V7o=
-github.com/logseq/lui/platform/mygo v0.0.0-20261025225152-7d682e4ece22 h1:R3eOGkR4psa/USCndO6Id/2Bnn2TKv3KTNuNzrgcxng=
-github.com/logseq/lui/platform/mygo v0.0.0-20261025225152-7d682e4ece22/go.mod h1:zIy+VkDR5TR7WG+03CcX72Vhki5t3IIZkP7M3y431OY=
-github.com/logseq/mygo v0.0.0-20261025230757-c79e8817dd54 h1:qjdBI7PC/uFRKAOrvSnWgNDvAeO2g+SlXTCeb5GEHJo=
-github.com/logseq/mygo v0.0.0-20261025230757-c79e8817dd54/go.mod h1:dVav53PwF2xEotjf4oA5lTY2Jp2exgzyjLhbSXhbMwE=
+github.com/logseq/lui/platform/mygo v0.0.0-20261026000737-cabb5d8db8a8 h1:Y+bIx7owgC38tJdHzhSKhVFpqN9Lv9jS2xcUQzK8eKI=
+github.com/logseq/lui/platform/mygo v0.0.0-20261026000737-cabb5d8db8a8/go.mod h1:ZKw+Qrg6UDK8eKOq7mig2zGioh4eIOoLJ+C30CHOP8s=
+github.com/logseq/mygo v0.0.0-20261026000344-f98b35991753 h1:eG1dfvyV445TVVYiyvialxhTUhymsMYqUrBK6OMc9mU=
+github.com/logseq/mygo v0.0.0-20261026000344-f98b35991753/go.mod h1:dVav53PwF2xEotjf4oA5lTY2Jp2exgzyjLhbSXhbMwE=
 github.com/sergeymakinen/go-bmp v1.0.0 h1:SdGTzp9WvCV0A1V0mBeaS7kQAwNLdVJbmHlqNWq0R+M=
 github.com/sergeymakinen/go-bmp v1.0.0/go.mod h1:/mxlAQZRLxSvJFNIEGGLBE/m40f3ZnUifpgVDlcUIEY=
 github.com/sergeymakinen/go-ico v1.0.0 h1:uL3khgvKkY6WfAetA+RqsguClBuu7HpvBB/nq/Jvr80=

@@ -469,39 +469,20 @@ func (s *platformServices) EditorRequest(name, payload string) (bool, error) {
 	if !ok || block == "" {
 		return true, fmt.Errorf("editor measurement requires block-id")
 	}
-	h := s.editorHost()
-	var locate func(int64) (luimygo.Node, bool)
-	locate = func(id int64) (luimygo.Node, bool) {
-		n, ok := s.backend.Node(id)
-		if !ok {
-			return n, false
-		}
-		if n.Kind == "logseq-editor" && n.String("block-id") == block {
-			return n, true
-		}
-		for _, child := range n.Children {
-			if node, ok := locate(child); ok {
-				return node, true
-			}
-		}
-		return luimygo.Node{}, false
+	id := s.editorNode(block)
+	if id == 0 {
+		return true, fmt.Errorf("editor %s is not mounted", block)
 	}
-	for _, id := range s.backend.Roots() {
-		n, ok := locate(id)
-		if !ok {
-			continue
-		}
-		if logseqEditorServices.Snapshot == nil {
-			return true, fmt.Errorf("editor snapshot service absent")
-		}
-		source, _, _, ok := logseqEditorServices.Snapshot(block)
-		if !ok {
-			return true, fmt.Errorf("editor snapshot absent for %s", block)
-		}
-		h.pending[name+"|"+payload] = editorGeometryRequest{name, n.ID, block, source, n.String("runs"), values}
-		return true, nil
+	if logseqEditorServices.Snapshot == nil {
+		return true, fmt.Errorf("editor snapshot service absent")
 	}
-	return true, fmt.Errorf("editor %s is not mounted", block)
+	source, _, _, ok := logseqEditorServices.Snapshot(block)
+	if !ok {
+		return true, fmt.Errorf("editor snapshot absent for %s", block)
+	}
+	n, _ := s.backend.Node(id)
+	s.editorHost().pending[name+"|"+payload] = editorGeometryRequest{name, id, block, source, n.String("runs"), values}
+	return true, nil
 }
 
 // EditorAfterFrame resolves only requests that still name the same displayed
