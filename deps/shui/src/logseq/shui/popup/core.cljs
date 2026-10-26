@@ -425,8 +425,10 @@
                                             ;; controlled open prop is still true they hand focus back and
                                             ;; forth (popup guard -> trigger guard -> popup) until the stack
                                             ;; overflows, e.g. Tab out of a table column menu
+                                            ;; focus already went where Tab sent it: don't pull it back to the
+                                            ;; popup's target
                                             (react-dom/flushSync
-                                             #(hide! id 0 {:event native-event}))
+                                             #(hide! id 0 {:event native-event :skip-focus? true}))
                                             (hide! id 1 {:event native-event
                                                          :skip-focus? (= reason "outside-press")
                                                          :suppress-next-show? (= reason "outside-press")}))))))))]
