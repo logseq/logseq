@@ -1155,6 +1155,10 @@
                   (remove ldb/asset?))
          [target-block sibling?] (get-target-block db blocks target-block opts)
          _ (assert (some? target-block) (str "Invalid target: " target-block))
+         ;; A target without a parent (a top-level page, e.g. the page whose
+         ;; title is being edited during a paste) has no siblings: insert
+         ;; under it instead of with a nil :block/parent.
+         sibling? (and sibling? (some? (:block/parent target-block)))
          blocks (if (and (= outliner-op :paste) (some ldb/asset? blocks))
                   (prepare-pasted-assets db blocks target-block sibling? keep-uuid?)
                   blocks)
