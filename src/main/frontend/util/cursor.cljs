@@ -99,7 +99,9 @@
 (defn move-cursor-to
   ([input n] (move-cursor-to input n false))
   ([input n delay?']
-   (when (number? n)
+   ;; input is nil when the editor left the DOM before the caller ran (a shortcut such as alt+e right after
+   ;; the block was deleted or the editor closed): nothing to move
+   (when (and input (number? n))
      (.setSelectionRange input n n)
      (when-not (= js/document.activeElement input)
        (let [focus #(.focus input)]
