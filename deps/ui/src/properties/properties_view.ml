@@ -35,10 +35,7 @@ let on_keydown (ev : Ui_services.ev) =
     match ev.Ui_services.key with
     | Some "p"
       when (ev.Ui_services.meta || ev.Ui_services.ctrl)
-           && ev.Ui_services.alt ->
-        ev.Ui_services.prevent_default ();
-        Dialog.open_for_current ()
-    | Some "p" when ev.Ui_services.meta || ev.Ui_services.ctrl ->
+           && not (Shortcut_key.shift_held ev) ->
         ev.Ui_services.prevent_default ();
         Dialog.open_for_current ()
     | Some ";" when editable_target ev ->
