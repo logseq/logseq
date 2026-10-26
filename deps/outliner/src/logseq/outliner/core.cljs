@@ -269,7 +269,7 @@
                                   #{:logseq.class/Page :logseq.class/Journal})))))
 
 (defn- journal-identity-ref
-  "Journals keep a stable stored :block/name. Never copy inbound or
+  "Journals keep a stable stored `:block/name`. Never copy inbound or
   entity-computed title/name onto that page."
   [page ref]
   (merge (select-keys page [:db/id :block/uuid :db/ident])
@@ -283,30 +283,23 @@
        (not (ldb/recycled? e))))
 
 (defn- existing-journal-page
-  [db ref]
+  [db ref existing-page]
   (when (map? ref)
-    (or (when-let [day (:block/journal-day ref)]
-          (when-let [e (ldb/get-journal-page-by-day db day)]
-            (when (live-journal? e) e)))
-        (when-let [e (or (some->> (:db/id ref) (d/entity db))
-                         (when-let [id (:block/uuid ref)]
-                           (d/entity db [:block/uuid id])))]
-          (when (live-journal? e) e))
-        (when-let [page-name (:block/name ref)]
-          (when-let [e (ldb/get-page db page-name)]
-            (when (live-journal? e) e))))))
+    (if existing-page
+      ;; A resolved non-journal identity must not fall back to a same-name journal.
+      (when (live-journal? existing-page) existing-page)
+      (or (when-let [day (:block/journal-day ref)]
+            (when-let [page (ldb/get-journal-page-by-day db day)]
+              (when (live-journal? page) page)))
+          (when-let [page-name (:block/name ref)]
+            (when-let [page (ldb/get-page db page-name)]
+              (when (live-journal? page) page)))))))
 
 (defn- journal-page-tx?
   [page-uuid tx]
   (and (map? tx)
        (= page-uuid (:block/uuid tx))
-       (or (:block/journal-day tx)
-           (= "journal" (:block/type tx))
-           (let [tags (:block/tags tx)
-                 tag-set (set (if (or (sequential? tags) (set? tags))
-                                tags
-                                [tags]))]
-             (contains? tag-set :logseq.class/Journal)))))
+       (:block/journal-day tx)))
 
 (defn- resolve-created-page-ref
   [db ref class? page-uuid tx-data]
@@ -323,10 +316,17 @@
 
 (defn- resolve-page-ref
   [db ref tag-names]
-  (if-let [journal (existing-journal-page db ref)]
-    [(journal-identity-ref journal ref) nil]
-    (if (new-page-ref? ref)
-      (let [class? (contains? tag-names (:block/name ref))]
+  (let [existing-page (when (map? ref)
+                        (or (some->> (:db/id ref) (d/entity db))
+                            (when-let [id (:block/uuid ref)]
+                              (d/entity db [:block/uuid id]))
+                            (some->> (:db/ident ref) (d/entity db))))
+        class? (and (not (ldb/journal? existing-page))
+                    (or (ldb/class? existing-page)
+                        (contains? tag-names (:block/name ref))))]
+    (if-let [journal (when-not class? (existing-journal-page db ref existing-page))]
+      [(journal-identity-ref journal ref) nil]
+      (if (new-page-ref? ref)
         (if-let [page (and (not class?)
                            (when-let [e (ldb/get-page db (:block/name ref))]
                              ;; Live journals already matched via existing-journal-page;
@@ -341,8 +341,8 @@
                                                                     :journal? (or (= "journal" (:block/type ref))
                                                                                   (contains? (ref-tag-idents ref)
                                                                                              :logseq.class/Journal))})]
-            (resolve-created-page-ref db ref class? page-uuid tx-data))))
-      [ref nil])))
+            (resolve-created-page-ref db ref class? page-uuid tx-data)))
+        [ref nil]))))
 
 (defn- resolve-refs-dedup
   "Resolve new-page refs, deduping pages created during the pass: db doesn't
