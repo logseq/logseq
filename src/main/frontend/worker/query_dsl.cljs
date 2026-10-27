@@ -473,7 +473,7 @@
 
 (def ^:private name-like [:or :string :symbol :keyword])
 
-(def ^:private page-name [:or [:string {:min 1}] :symbol :keyword :int])
+(def ^:private page-name [:or [:string {:min 1}] :symbol :keyword :int :double])
 
 (def ^:private property-value [:or :string :symbol :keyword :int :double :boolean :uuid])
 
