@@ -208,6 +208,51 @@
     (is (= ["alpha" "beta" "gamma"] imported-titles)
         "A selected block that another selected block refers to is imported once, in its original position")))
 
+(deftest merge-export-maps-keeps-fuller-child-of-block-exported-twice
+  (let [parent-uuid (random-uuid)
+        child-uuid (random-uuid)
+        merged (#'sqlite-export/merge-export-maps
+                {:pages-and-blocks
+                 [{:page {:block/title "page1"}
+                   :blocks [{:block/title "parent" :block/uuid parent-uuid :build/keep-uuid? true
+                             :build/children [{:block/title "child" :block/uuid child-uuid :build/keep-uuid? true
+                                               :build/properties {:user.property/p1 "on child"}}]}]}]}
+                {:pages-and-blocks
+                 [{:page {:block/title "page1"}
+                   :blocks [{:block/title "parent" :block/uuid parent-uuid :build/keep-uuid? true
+                             :build/children [{:block/title "child" :block/uuid child-uuid :build/keep-uuid? true}]}]}]})
+        blocks (->> (:pages-and-blocks merged) (mapcat :blocks))
+        children (mapcat :build/children blocks)]
+    (is (= 1 (count blocks)))
+    (is (= 1 (count children)))
+    (is (= {:user.property/p1 "on child"} (:build/properties (first children)))
+        "The child's properties survive the merge with a shallow copy of its parent")))
+
+(deftest import-selected-nodes-keeps-child-properties-when-parent-and-child-are-referenced
+  (let [parent-uuid (random-uuid)
+        child-uuid (random-uuid)
+        referrer-title (str "refers to " (page-ref/->page-ref parent-uuid)
+                            " and " (page-ref/->page-ref child-uuid))
+        conn (db-test/create-conn-with-blocks
+              {:properties {:user.property/p1 {:logseq.property/type :default}}
+               :classes {:user.class/C1 {}}
+               :pages-and-blocks
+               [{:page {:block/title "page1"}
+                 :blocks [{:block/title "parent" :block/uuid parent-uuid :build/keep-uuid? true
+                           :build/children [{:block/title "child" :block/uuid child-uuid :build/keep-uuid? true
+                                             :build/tags #{:user.class/C1}
+                                             :build/properties {:user.property/p1 "on child"}}]}
+                          {:block/title referrer-title}]}]})
+        node-ids (->> ["parent" referrer-title]
+                      (mapv #(vector :block/uuid (:block/uuid (db-test/find-block-by-content @conn %)))))
+        conn2 (db-test/create-conn-with-import-map
+               (sqlite-export/build-export @conn {:export-type :selected-nodes :node-ids node-ids}))
+        imported-child (db-test/find-block-by-content @conn2 "child")]
+    (is (= "on child" (:block/title (:user.property/p1 imported-child)))
+        "A child keeps its property when its parent and it are both referenced by a selected block")
+    (is (contains? (set (map :block/title (:block/tags imported-child))) "C1")
+        "A child keeps its tag when its parent and it are both referenced by a selected block")))
+
 (deftest import-block-in-same-graph
   (let [original-data
         {:properties {:user.property/default-many {:logseq.property/type :default :db/cardinality :db.cardinality/many}}
