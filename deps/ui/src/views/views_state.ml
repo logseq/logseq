@@ -7,6 +7,7 @@
 open Promise_ext
 module W = Wire
 module Sset = Set.Make (String)
+module Smap = Map.Make (String)
 
 type feature = string (* "all-pages" | "class-objects" | "query-result" ... *)
 
@@ -56,6 +57,7 @@ type vstate =
   ; hidden : Sset.t
   ; ordered : string list
   ; pinned : Sset.t
+  ; sized : int Smap.t
   ; columns : column list
   ; data : Views_wire.view_data
   ; view_error : string option
@@ -126,6 +128,7 @@ let empty_vstate () : vstate =
   ; hidden = Sset.empty
   ; ordered = []
   ; pinned = Sset.empty
+  ; sized = Smap.empty
   ; columns = []
   ; data = Views_wire.VEmpty
   ; view_error = None
@@ -336,6 +339,9 @@ let apply_view_entity s (v : Views_wire.view_ent) : vstate =
   ; hidden =
       List.fold_left (fun s x -> Sset.add x s) Sset.empty v.vhidden
   ; ordered = v.vordered
+  ; sized =
+      List.fold_left (fun sizes (id, width) -> Smap.add id width sizes)
+        Smap.empty v.vsized
   ; pinned =
       List.fold_left (fun s x -> Sset.add x s) Sset.empty v.vpinned
   ; group_sort_by = v.vgroup_sort_by

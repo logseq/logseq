@@ -82,6 +82,7 @@ type view_ent =
   ; vhidden : string list
   ; vordered : string list
   ; vpinned : string list (* property idents *)
+  ; vsized : (string * int) list
   ; vgroup_by : string option (* property ident *)
   ; vgroup_sort_by : string option
   ; vgroup_desc : bool option
@@ -103,6 +104,20 @@ let str_list v =
          | W.Keyword s -> Some s
          | W.String s -> Some s
          | _ -> None)
+
+let column_sizes = function
+  | W.Nil -> []
+  | W.Map entries ->
+      List.map
+        (fun (key, value) ->
+          match key, as_float value with
+          | W.Keyword id, Some size
+            when Float.is_finite size && size >= 0.
+                 && size < float_of_int max_int ->
+              id, int_of_float (Float.round size)
+          | _ -> invalid_arg "Invalid view column width")
+        entries
+  | _ -> invalid_arg "Expected a view column widths map"
 
 let decode_view_ent (m : W.t) : view_ent option =
   match W.map_get_uuid m "block/uuid" with
@@ -126,6 +141,10 @@ let decode_view_ent (m : W.t) : view_ent option =
               ~default:""
         ; vsorting = W.get m "logseq.property.table/sorting"
         ; vfilters = W.get m "logseq.property.table/filters"
+        ; vsized =
+            column_sizes
+              (Option.value (W.get m "logseq.property.table/sized-columns")
+                 ~default:W.Nil)
         ; vhidden =
             str_list
               (Option.value (W.get m "logseq.property.table/hidden-columns")

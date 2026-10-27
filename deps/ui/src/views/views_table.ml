@@ -105,10 +105,22 @@ let tags_column () : V.column =
 let column_size (c : V.column) =
   match c.V.c_id with
   | "select" -> 32
+  | "id" -> 48
   | "logseq.property/query" -> 400
   | "block/title" | "block/name" -> 360
   | "block/created-at" | "block/updated-at" -> 160
+  | "add-property" -> 160
   | _ -> 180
+
+let column_width (s : V.vstate) (c : V.column) =
+  if c.V.c_id = "id" then 48
+  else Option.value (V.Smap.find_opt c.V.c_id s.V.sized) ~default:(column_size c)
+
+let with_column_width inst c elem =
+  Ui_parts.int_prop L.WidthValue
+    ~value:(reactive (fun s -> column_width s c) (sig_of inst))
+    (Ui_parts.int_prop L.MinWidth
+       ~value:(reactive (fun s -> column_width s c) (sig_of inst)) elem)
 
 let inner_cell children =
   Ui_components.with_props [ Ui_components.Prop.overflow `hidden ]
@@ -373,7 +385,7 @@ let title_cell inst ~row_uuid ~blk (c : V.column) : t =
                  ~style_class:"table-block-title"
                  [ (* Keep the caption and overlay actions as sibling hit regions. *)
                    Ui_parts.pressable ~on_press:(fun _ ->
-                     Table_title_editor.show ~anchor ~column_width:(column_size c)
+                     Table_title_editor.show ~anchor ~column_width:(column_width (V.get inst) c)
                        {(Decode.block_of_wire blk) with Model.block_uuid=Some row_uuid})
                      (row ~grow:1. ~min_width:0 ~height:32 ~cross:`center
                        [ text ~white_space:"nowrap" (Render_inline.parse ~self:row_uuid title) ])
@@ -479,9 +491,9 @@ let prop_cell ~blk (c : V.column) : t =
   | v -> inner_cell [ text ~value:(fmt_cell_value c v) [] ]
 
 let cell_el inst ~row_uuid ~blk (c : V.column) : t =
+  with_column_width inst c
   (Ui_components.with_props [ Ui_components.Prop.overflow `hidden ]
-  (box ~style_class:"ls-table-cell" ~width:(column_size c)
-    ~min_width:(column_size c) ~height:32
+  (box ~style_class:"ls-table-cell" ~height:32
     [ (match c.V.c_id with
        | "select" -> select_cell inst ~row_uuid ~blk
        | "block/title" -> title_cell inst ~row_uuid ~blk c
@@ -666,7 +678,10 @@ let header_cell_id inst (c : V.column) =
   "vhc-" ^ string_of_int inst.V.id ^ "-" ^ c.V.c_id
 
 let header_cell inst (c : V.column) : t =
-  (if Ui_services.env_publishing () then box ~width:(column_size c) [ text ~value:c.V.c_name [] ] else
+  with_column_width inst c
+  (if Ui_services.env_publishing () then
+    box [ text ~value:c.V.c_name [] ]
+   else
   let fg = "hsl(var(--muted-foreground))" in
   match c.V.c_id with
   | "select" ->
@@ -674,8 +689,8 @@ let header_cell inst (c : V.column) : t =
         [ Ui_components.Prop.font_size "0.875rem"
         ; Ui_components.Prop.line_height "1.25rem"
         ; Ui_components.Prop.font_weight 500 ]
-        (box ~style_class:"ls-table-header-cell" ~width:(column_size c)
-           ~min_width:(column_size c) ~foreground:fg
+        (box ~style_class:"ls-table-header-cell"
+           ~foreground:fg
            [ header_select_cell inst ])
   | _ ->
       let menu () =
@@ -705,7 +720,6 @@ let header_cell inst (c : V.column) : t =
            ; Ui_components.Prop.shadow "inset -1px 0 0 hsl(var(--border))" ]
            (box ~style_class:"ls-table-header-cell"
               ~accessibility_identifier:(header_cell_id inst c)
-              ~width:(column_size c) ~min_width:(column_size c)
               ~foreground:fg
               [ Ui_components.with_props
                   [ Ui_components.Prop.overflow `hidden ]
