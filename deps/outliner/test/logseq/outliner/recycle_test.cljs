@@ -4,6 +4,7 @@
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
+            [logseq.db.frontend.validate :as db-validate]
             [logseq.db.test.helper :as db-test]
             [logseq.outliner.op :as outliner-op]
             [logseq.outliner.page :as outliner-page]
@@ -179,6 +180,39 @@
                    {:outliner-op :delete-page})
     (is (nil? (recycle/gc! conn {:now-ms (* 29 24 3600 1000)})))
     (is (some? (d/entity @conn page-id)))))
+
+(deftest gc-recycled-page-converted-from-parent-tag-keeps-graph-valid
+  (let [conn (db-test/create-conn-with-blocks
+              {:classes {:Parent {}
+                         :Child {:build/class-extends [:Parent]}}})
+        parent-id (:db/id (db-test/find-page-by-title @conn "Parent"))
+        child-id (:db/id (db-test/find-page-by-title @conn "Child"))]
+    (is (= [parent-id] (map :db/id (:logseq.property.class/extends (d/entity @conn child-id))))
+        "Child extends only Parent before conversion")
+    (is (nil? (:errors (db-validate/validate-db @conn)))
+        "Graph is valid before conversion")
+    ;; The conversion as it was before Child was detached from it: graphs made then
+    ;; still have Child extending the page
+    (ldb/transact! conn
+                   [[:db/retract parent-id :db/ident]
+                    [:db/retract parent-id :block/tags :logseq.class/Tag]
+                    [:db/retract parent-id :logseq.property.class/extends]
+                    [:db/retract parent-id :logseq.property.class/properties]
+                    [:db/add parent-id :block/tags :logseq.class/Page]]
+                   {:outliner-op :save-block})
+    (is (nil? (:errors (db-validate/validate-db @conn)))
+        "Graph is valid after converting Parent to a page")
+    (ldb/transact! conn
+                   (recycle/recycle-page-tx-data @conn (d/entity @conn parent-id) {:now-ms 0})
+                   {:outliner-op :delete-page})
+    (is (true? (ldb/recycled? (d/entity @conn parent-id))))
+    (recycle/gc! conn {:now-ms (* 31 24 3600 1000)})
+    (is (nil? (d/entity @conn parent-id)) "Expired Parent page is removed by GC")
+    (is (some? (d/entity @conn child-id)) "Child tag survives GC")
+    (is (= [:logseq.class/Root] (map :db/ident (:logseq.property.class/extends (d/entity @conn child-id))))
+        "Child, left without a parent, extends Root")
+    (is (nil? (:errors (db-validate/validate-db @conn)))
+        "Graph is still valid after GC removes the Parent page")))
 
 (deftest apply-ops-permanently-delete-recycled-page-removes-page-and-descendants
   (let [conn (db-test/create-conn-with-blocks
