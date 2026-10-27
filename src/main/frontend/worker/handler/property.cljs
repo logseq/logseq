@@ -245,10 +245,12 @@
 
 (def-thread-api :thread-api/get-class-objects
   [repo class-id]
-  (let [db @(worker-state/get-datascript-conn repo)]
-    (->> (db-class/get-class-objects db class-id)
-         (map #(worker-plain/worker-plain-value db %))
-         worker-plain/with-explicit-ref-fields-recursive)))
+  ;; nil until the worker has opened the graph (the renderer can ask right after a reload)
+  (when-let [conn (worker-state/get-datascript-conn repo)]
+    (let [db @conn]
+      (->> (db-class/get-class-objects db class-id)
+           (map #(worker-plain/worker-plain-value db %))
+           worker-plain/with-explicit-ref-fields-recursive))))
 
 (def-thread-api :thread-api/validate-block-tag
   [repo block-id tag-id]
@@ -314,12 +316,12 @@
 
 (def-thread-api :thread-api/get-property-values
   [repo {:keys [property-ident] :as option}]
-  (let [conn (worker-state/get-datascript-conn repo)]
+  (when-let [conn (worker-state/get-datascript-conn repo)]
     (db-view/get-property-values @conn property-ident option)))
 
 (def-thread-api :thread-api/get-bidirectional-properties
   [repo {:keys [target-id]}]
-  (let [conn (worker-state/get-datascript-conn repo)]
+  (when-let [conn (worker-state/get-datascript-conn repo)]
     (worker-util/profile "get-bidirectional-properties"
                          (ldb/get-bidirectional-properties @conn target-id))))
 
