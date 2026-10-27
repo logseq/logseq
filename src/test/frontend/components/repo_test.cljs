@@ -1,7 +1,10 @@
 (ns frontend.components.repo-test
   (:require [cljs.test :refer [deftest is async]]
+            [electron.ipc :as ipc]
             [frontend.components.repo :as repo]
             [frontend.components.rtc.indicator :as rtc-indicator]
+            [frontend.config :as config]
+            [frontend.handler.db-based.import :as db-import-handler]
             [frontend.handler.db-based.sync :as rtc-handler]
             [frontend.handler.graph :as graph-handler]
             [frontend.handler.repo :as repo-handler]
@@ -545,6 +548,76 @@
                (p/catch (fn [error]
                           (is false (str error))
                           (finish-async-test! done)))))))
+
+(deftest existing-local-graph-action-is-electron-only-test
+  (with-redefs [util/electron? (constantly true)]
+    (with-redefs [config/publishing? false]
+      (is (true? (repo/existing-local-graph-action?)))))
+  (with-redefs [util/electron? (constantly false)]
+    (is (false? (repo/existing-local-graph-action?))))
+  (with-redefs [util/electron? (constantly true)]
+    (with-redefs [config/publishing? true]
+      (is (false? (repo/existing-local-graph-action?))))))
+
+(deftest add-existing-local-graph-opens-electron-folder-picker-test
+  (async done
+         (let [ipc-calls (atom [])
+               dialogs (atom [])]
+           (-> (p/with-redefs [repo/existing-local-graph-action? (constantly true)
+                               ipc/ipc (fn [op opts]
+                                         (swap! ipc-calls conj [op opts])
+                                         (p/resolved #js {:filePaths #js ["/tmp/logseq_db_Notes"]}))
+                               shui/dialog-open! (fn [_render opts]
+                                                   (swap! dialogs conj opts))
+                               db-import-handler/suggested-graph-name (fn [path]
+                                                                        (is (= "/tmp/logseq_db_Notes" path))
+                                                                        "Notes")]
+                 (repo/add-existing-local-graph! :folder))
+               (p/then (fn []
+                         (is (= 1 (count @ipc-calls)))
+                         (is (= :showOpenDialog (ffirst @ipc-calls)))
+                         (is (= ["openDirectory"] (:properties (second (first @ipc-calls)))))
+                         (is (= :add-existing-graph-name (:id (first @dialogs))))
+                         (finish-async-test! done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (finish-async-test! done)))))))
+
+(deftest add-existing-local-graph-opens-electron-file-picker-test
+  (async done
+         (let [ipc-calls (atom [])]
+           (-> (p/with-redefs [repo/existing-local-graph-action? (constantly true)
+                               ipc/ipc (fn [op opts]
+                                         (swap! ipc-calls conj [op opts])
+                                         (p/resolved #js {:filePaths #js []}))
+                               shui/dialog-open! (fn [& _]
+                                                   (is false "canceled picker must not prompt for a name"))]
+                 (repo/add-existing-local-graph! :file))
+               (p/then (fn []
+                         (is (= ["openFile"] (:properties (second (first @ipc-calls)))))
+                         (is (= ["sqlite" "zip"]
+                                (-> (first @ipc-calls) second :filters first :extensions)))
+                         (finish-async-test! done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (finish-async-test! done)))))))
+
+(deftest add-existing-local-graph-skips-non-electron-test
+  (let [ipc-calls (atom [])]
+    (with-redefs [repo/existing-local-graph-action? (constantly false)
+                  ipc/ipc (fn [& args]
+                            (swap! ipc-calls conj args))]
+      (repo/add-existing-local-graph! :folder)
+      (is (empty? @ipc-calls)))))
+
+(deftest choose-existing-local-graph-source-opens-dialog-test
+  (let [dialogs (atom [])]
+    (with-redefs [repo/existing-local-graph-action? (constantly true)
+                  shui/dialog-open! (fn [content opts]
+                                      (swap! dialogs conj {:content content :opts opts}))]
+      (repo/choose-existing-local-graph-source!)
+      (is (= 1 (count @dialogs)))
+      (is (= :add-existing-graph-source (:id (:opts (first @dialogs))))))))
 
 (deftest electron-shift-click-opens-local-graph-in-new-window-by-repo-test
   (let [events (atom [])
