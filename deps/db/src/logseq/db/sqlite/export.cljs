@@ -333,6 +333,28 @@
                        (if (set? val-or-vals) val-or-vals [val-or-vals]))))
        set))
 
+(defn- merge-blocks-with-same-uuid
+  "Keeps one block per :block/uuid, at the position of its first occurrence, so
+  that a block exported twice (e.g. as a selected block and as a referenced
+  one) is not imported at two positions. The occurrences are merged. Blocks
+  without a :block/uuid are kept as is."
+  [blocks]
+  (let [merged-by-uuid (->> blocks
+                            (filter :block/uuid)
+                            (group-by :block/uuid)
+                            (into {} (map (fn [[block-uuid same-uuid-blocks]]
+                                            [block-uuid (apply merge same-uuid-blocks)]))))]
+    (first
+     (reduce (fn [[result seen-uuids] block]
+               (let [block-uuid (:block/uuid block)]
+                 (cond
+                   (nil? block-uuid) [(conj result block) seen-uuids]
+                   (contains? seen-uuids block-uuid) [result seen-uuids]
+                   :else [(conj result (get merged-by-uuid block-uuid))
+                          (conj seen-uuids block-uuid)])))
+             [[] #{}]
+             blocks))))
+
 (defn- merge-export-maps
   "Merge export maps for partial graph exports. *Do not* use for a full graph
   export because it makes assumptions about page identity"
@@ -341,12 +363,16 @@
         (->> (mapcat :pages-and-blocks export-maps)
              ;; TODO: Group by more correct identity for title, same as check-for-existing-entities
              (group-by #(select-keys (:page %) [:block/title :build/journal]))
-             (mapv #(apply merge-with (fn [e1 e2]
-                                        ;; merge :page and add :blocks
-                                        (if (and (map? e1) (map e2))
-                                          (merge e1 e2)
-                                          (into e1 e2)))
-                           (second %))))
+             (mapv (fn [[_ same-page-entries]]
+                     (let [page-entry (apply merge-with (fn [e1 e2]
+                                                          ;; merge :page and add :blocks
+                                                          (if (and (map? e1) (map e2))
+                                                            (merge e1 e2)
+                                                            (into e1 e2)))
+                                             same-page-entries)]
+                       (cond-> page-entry
+                         (:blocks page-entry)
+                         (update :blocks merge-blocks-with-same-uuid))))))
         ;; Use merge-with to preserve new-property? and to allow full copies to overwrite shallow ones
         properties (apply merge-with merge (keep :properties export-maps))
         classes (apply merge-with merge (keep :classes export-maps))]
