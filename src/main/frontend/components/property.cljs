@@ -962,6 +962,19 @@
   [{:keys [page-title? sidebar-properties? tag-dialog?]}]
   (boolean (or page-title? sidebar-properties? tag-dialog?)))
 
+(defn- hidden-properties-only-without-reveal?
+  "True when a block has hidden properties but no shown ones and this surface
+  gives the user no way to reveal them, so the properties area renders nothing."
+  [{:keys [full-properties hidden-properties root-block? sidebar-properties? class?
+           show-hidden-properties? show-hidden-properties-toggle-button?]}]
+  (boolean (and (empty? full-properties)
+                (seq hidden-properties)
+                (not root-block?)
+                (not sidebar-properties?)
+                (not class?)
+                (not show-hidden-properties?)
+                (not show-hidden-properties-toggle-button?))))
+
 (defn- class-property-rows
   "Rows for the properties configured on a class, in their :block/order."
   [class-block]
@@ -995,10 +1008,15 @@
                                                    (not (block-below-pill-owns-hidden-toggle? target-block opts)))]
     [:<>
      (cond
-       (and (empty? full-properties) (seq hidden-properties) (not root-block?) (not sidebar-properties?)
-            (not class?)
-            (not show-hidden-properties?))
-         nil
+       (hidden-properties-only-without-reveal?
+        {:full-properties full-properties
+         :hidden-properties hidden-properties
+         :root-block? root-block?
+         :sidebar-properties? sidebar-properties?
+         :class? class?
+         :show-hidden-properties? show-hidden-properties?
+         :show-hidden-properties-toggle-button? show-hidden-properties-toggle-button?})
+       nil
 
        (and (empty? full-properties) (empty? hidden-properties) (not class?))
        (when show-properties?
