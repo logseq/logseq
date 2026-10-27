@@ -6636,6 +6636,57 @@ let () =
           remove_tree root;
           Js.Promise.resolve pass));
 
+  test_promise "CLI parity graph import reports an import the worker rejected"
+    (fun () ->
+      let root = temp_dir "logseq-cli-graph-import-rejected-" in
+      let import_edn = Node.Path.join [| root; "import.edn" |] in
+      write_file import_edn "{:page \"Import Page\"}";
+      let calls = ref Vec.empty in
+      let rejection = "Imported EDN has 1 validation error(s)" in
+      let server =
+        invoke_server (fun body ->
+            calls := Vec.push_front !calls body;
+            if Js.String.includes ~search:"thread-api/import-edn" body then
+              "[\"^ \",\"~:error\",\"" ^ rejection ^ "\"]"
+            else "null")
+      in
+      with_server server (fun base_url ->
+          let cfg =
+            {
+              (config ~repo:"demo" ~root_dir:root ()) with
+              Cli_config.base_url = Some base_url;
+            }
+          in
+          let* result =
+            effect_to_promise
+              (execute_with_output Graph.execute
+                 (Graph.Graph_import
+                    {
+                      graph = Cli_primitive.create_graph "demo";
+                      repo = Cli_primitive.create_repo "demo";
+                      opts =
+                        {
+                          Graph.import_type = Graph.Import_edn;
+                          input = import_edn;
+                        };
+                      require_missing_graph = false;
+                    })
+                 cfg Output.Mode.Human)
+          in
+          expect_bool "rejected import is an error" true
+            (Cli_result.is_error result);
+          let output = Format_types.format_result result cfg in
+          expect_named_contains "rejected import message" output rejection;
+          expect_named_not_contains "rejected import is not reported imported"
+            output "Imported edn";
+          expect_bool "worker received the import" true
+            (Vec.exists
+               (fun body ->
+                 Js.String.includes ~search:"thread-api/import-edn" body)
+               !calls);
+          remove_tree root;
+          Js.Promise.resolve pass));
+
   test "CLI parity top-level graph constraints reject existing sqlite imports"
     (fun () ->
       let root = temp_dir "logseq-cli-graph-constraints-" in
