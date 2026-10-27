@@ -240,6 +240,24 @@
         tx-data)
        (apply concat)))))
 
+(defn- descendants-page-tx
+  "When a block becomes a page, or a page becomes a block, its descendant blocks still point
+  :block/page at the old page; re-point them at `page-id`. The walk stops at a nested page:
+  its blocks belong to it, not to the converted node."
+  [db-after root-id page-id]
+  (loop [parent-ids [root-id]
+         tx []]
+    (if-let [parent-id (first parent-ids)]
+      (let [child-ids (->> (d/datoms db-after :avet :block/parent parent-id)
+                           (map :e)
+                           (remove #(ldb/page? (d/entity db-after %))))]
+        (recur (into (rest parent-ids) child-ids)
+               (into tx (map (fn [child-id]
+                               {:db/id child-id
+                                :block/page page-id})
+                             child-ids))))
+      tx)))
+
 (defn- toggle-page-and-block
   [db {:keys [db-before db-after tx-data tx-meta]}]
   (when-not (rtc-tx-or-download-graph? tx-meta)
@@ -278,23 +296,7 @@
            (when (or page-tag-update? move-to-library? move-under-page?)
              (let [block-before (d/entity db-before id)
                    block-after (d/entity db-after id)
-                   ;; When a block becomes a page, or a page becomes a block, its
-                   ;; descendant blocks still point :block/page at the old page;
-                   ;; re-point them at `page-id`. The walk stops at a nested page:
-                   ;; its blocks belong to it, not to the converted node.
-                   children-page-tx (fn [page-id]
-                                      (loop [parent-ids [id]
-                                             tx []]
-                                        (if-let [parent-id (first parent-ids)]
-                                          (let [child-ids (->> (d/datoms db-after :avet :block/parent parent-id)
-                                                               (map :e)
-                                                               (remove #(ldb/page? (d/entity db-after %))))]
-                                            (recur (into (rest parent-ids) child-ids)
-                                                   (into tx (map (fn [child-id]
-                                                                   {:db/id child-id
-                                                                    :block/page page-id})
-                                                                 child-ids))))
-                                          tx)))]
+                   children-page-tx #(descendants-page-tx db-after id %)]
                (when block-after
                  (cond
                    ;; move non-page block to Library
