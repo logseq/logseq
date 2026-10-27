@@ -799,8 +799,10 @@ let open_for_block uuid =
    straight to the value-editing phase for the named property — a
    dedicated picker (date input, closed-value select, node select) —
    across the whole block selection *)
-let open_for_block_with_property ?scope ?view_parent ?on_close ~uuids uuid ~ident =
+let open_for_block_with_property ?context_revision ?scope ?view_parent ?on_close ~uuids uuid ~ident =
   retire_open ();
+  let revision = Option.map (fun read -> (read () : int option)) context_revision in
+  if revision = Some None then () else
   let ticket = Ui_effect.issue open_requests in
   let parent_scope = match scope with Some _ -> scope | None -> !open_scope in
   let scope = match parent_scope with
@@ -869,6 +871,7 @@ let open_for_block_with_property ?scope ?view_parent ?on_close ~uuids uuid ~iden
     && page_target () = page
     && selection_valid (Editor_state.selection_state ())
     && List.for_all (fun check -> check ()) !checks
+    && Option.map (fun read -> read ()) context_revision = revision
   in
   let finish () =
     if Ui_effect.is_current open_requests ticket then retire_open ()
