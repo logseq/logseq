@@ -12,10 +12,12 @@
             [frontend.db.utils :as db-utils]
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.block :as block-handler]
+            [frontend.handler.common :as common-handler]
             [frontend.handler.editor :as editor]
             [frontend.handler.editor.assets :as editor-assets]
             [frontend.handler.editor.autopair :as editor-autopair]
             [frontend.handler.editor.format :as editor-format]
+            [frontend.handler.export.html :as export-html]
             [frontend.handler.paste :as paste-handler]
             [frontend.handler.property :as property-handler]
             [frontend.handler.route :as route-handler]
@@ -2294,6 +2296,112 @@
                         "Cut must load the inner text property-value block, not drop the wrapper.")
                     (is (= [value-uuid] @deleted-uuids)
                         "Cut must delete the inner text property-value block.")))
+          (p/catch (fn [error]
+                     (is false (str error))))
+          (p/finally done)))))
+
+(defn- <rejected
+  [message]
+  (p/rejected (js/Error. message)))
+
+(defn- <with-clipboard-writes
+  "Calls (f), which returns a promise, so that `copy-selection-blocks` runs on
+  one block without a database while the clipboard writes behave as given:
+  the plain text write by `util/copy-to-clipboard!`, the structured write by
+  `common-handler/copy-to-clipboard-without-id-property!`."
+  [block-uuid text-write structured-write f]
+  (p/with-redefs [state/get-current-repo (constantly "test")
+                  db-subs/block-snapshot (constantly {:status :missing})
+                  editor/compose-copied-blocks-contents
+                  (fn [_repo _ids & _]
+                    (p/resolved [[block-uuid] "copied text" [{:block/uuid block-uuid}]]))
+                  editor/<get-all-blocks-by-ids (fn [_repo _ids] (p/resolved []))
+                  export-html/export-blocks-as-html (fn [& _] (p/resolved ""))
+                  util/copy-to-clipboard! (fn [& _] (text-write))
+                  common-handler/copy-to-clipboard-without-id-property! (fn [& _] (structured-write))]
+    (f)))
+
+(deftest copy-selection-blocks-rejects-when-the-clipboard-refuses-every-write-test
+  (async done
+    (let [block-uuid (random-uuid)
+          op-types (atom [])]
+      (-> (p/with-redefs [state/get-selection-block-ids (constantly [block-uuid])
+                          state/set-block-op-type! (fn [op] (swap! op-types conj op))]
+            (<with-clipboard-writes block-uuid
+                                    #(<rejected "NotAllowedError")
+                                    #(<rejected "NotAllowedError")
+                                    #(editor/copy-selection-blocks true :selected-ids [block-uuid] :op :cut)))
+          (p/then (fn [_]
+                    (is false "copying must report that the clipboard refused it")))
+          (p/catch (fn [error]
+                     (is (= "The clipboard refused the copied blocks" (ex-message error)))
+                     (is (empty? @op-types)
+                         "A copy that reached the clipboard nowhere must not record a cut.")))
+          (p/finally done)))))
+
+(deftest copy-selection-blocks-succeeds-when-only-the-structured-write-is-refused-test
+  (async done
+    (let [block-uuid (random-uuid)
+          op-types (atom [])]
+      (-> (p/with-redefs [state/get-selection-block-ids (constantly [block-uuid])
+                          state/set-block-op-type! (fn [op] (swap! op-types conj op))]
+            (<with-clipboard-writes block-uuid
+                                    #(p/resolved nil)
+                                    #(<rejected "NotAllowedError")
+                                    #(editor/copy-selection-blocks true :selected-ids [block-uuid] :op :cut)))
+          (p/then (fn [_]
+                    (is (= [:cut] @op-types)
+                        "The text is on the clipboard, so the copy counts as done.")))
+          (p/catch (fn [error]
+                     (is false (str error))))
+          (p/finally done)))))
+
+(deftest cut-selection-blocks-keeps-the-blocks-when-the-clipboard-refuses-the-copy-test
+  (async done
+    (let [value-uuid #uuid "11111111-1111-1111-1111-111111111111"
+          inner (mock-ls-block {:blockid (str value-uuid)})
+          deleted-uuids (atom nil)]
+      (-> (p/with-redefs [editor/get-selected-blocks (constantly [inner])
+                          state/get-selection-block-ids (constantly [value-uuid])
+                          state/set-block-op-type! (fn [_])
+                          db-async/<get-blocks
+                          (fn [_repo _ids _opts]
+                            (p/resolved [{:block {:db/id 1 :block/uuid value-uuid :block/title "value"}}]))
+                          editor/delete-blocks!
+                          (fn [_repo uuids _blocks _dom-blocks _mobile?]
+                            (reset! deleted-uuids uuids))]
+            (<with-clipboard-writes value-uuid
+                                    #(<rejected "NotAllowedError")
+                                    #(<rejected "NotAllowedError")
+                                    #(editor/cut-selection-blocks true)))
+          (p/then (fn [_]
+                    (is false "cut must fail when nothing reached the clipboard")))
+          (p/catch (fn [_]
+                     (is (nil? @deleted-uuids)
+                         "Cut must not delete blocks the clipboard did not receive.")))
+          (p/finally done)))))
+
+(deftest cut-selection-blocks-deletes-when-the-text-reached-the-clipboard-test
+  (async done
+    (let [value-uuid #uuid "11111111-1111-1111-1111-111111111111"
+          inner (mock-ls-block {:blockid (str value-uuid)})
+          deleted-uuids (atom nil)]
+      (-> (p/with-redefs [editor/get-selected-blocks (constantly [inner])
+                          state/get-selection-block-ids (constantly [value-uuid])
+                          state/set-block-op-type! (fn [_])
+                          db-async/<get-blocks
+                          (fn [_repo _ids _opts]
+                            (p/resolved [{:block {:db/id 1 :block/uuid value-uuid :block/title "value"}}]))
+                          editor/delete-blocks!
+                          (fn [_repo uuids _blocks _dom-blocks _mobile?]
+                            (reset! deleted-uuids uuids))]
+            (<with-clipboard-writes value-uuid
+                                    #(p/resolved nil)
+                                    #(<rejected "NotAllowedError")
+                                    #(editor/cut-selection-blocks true)))
+          (p/then (fn [_]
+                    (is (= [value-uuid] @deleted-uuids)
+                        "The text is on the clipboard (Firefox refuses only the structured format), so the cut goes on.")))
           (p/catch (fn [error]
                      (is false (str error))))
           (p/finally done)))))
