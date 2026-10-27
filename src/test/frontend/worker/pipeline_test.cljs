@@ -1556,3 +1556,30 @@
           (is (not (ldb/internal-page? converted)))
           (is (= (:db/id page) (:db/id converted)))
           (is (some? (:block/name converted))))))))
+
+(deftest convert-nested-page-to-block-repoints-descendants-to-parent-page-test
+  ;; Reproduces https://github.com/logseq/db-test/issues/1424
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "Demote Parent"}}
+               {:page {:block/title "Nested Page"}
+                :blocks [{:block/title "child block"
+                          :build/children [{:block/title "grandchild block"}]}]}])]
+    (with-transact-pipeline
+      (fn []
+        (let [parent (db-test/find-page-by-title @conn "Demote Parent")
+              nested (db-test/find-page-by-title @conn "Nested Page")]
+          (outliner-core/move-blocks! conn [nested] parent {:sibling? false})
+          (assert (ldb/internal-page? (d/entity @conn (:db/id nested))))
+          (assert (= (:db/id nested)
+                     (:db/id (:block/page (db-test/find-block-by-content @conn "child block")))))
+          (ldb/transact! conn [[:db/retract (:db/id nested) :block/tags :logseq.class/Page]])
+          (let [parent-page (d/entity @conn (:db/id parent))]
+            (is (not (ldb/page? (d/entity @conn (:db/id nested)))))
+            (is (= (:db/id parent-page)
+                   (:db/id (:block/page (d/entity @conn (:db/id nested)))))
+                "The demoted block belongs to the parent page")
+            (is (= (:db/id parent-page)
+                   (:db/id (:block/page (db-test/find-block-by-content @conn "child block")))))
+            (is (= (:db/id parent-page)
+                   (:db/id (:block/page (db-test/find-block-by-content @conn "grandchild block"))))
+                "Descendants belong to the parent page, not the demoted block")))))))
