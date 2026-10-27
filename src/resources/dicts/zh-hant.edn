@@ -64,6 +64,7 @@
  :account/upcoming-cloud-features "即將推出的雲端功能，包括 Logseq Publish"
  :account/upgrade-plan "升級方案"
  :account/username "使用者名稱"
+
  :asset/acceptable-file-extensions "允許的副檔名"
  :asset/add-assets "新增素材"
  :asset/add-directory "新增目錄"
@@ -110,21 +111,7 @@
  :asset/title-label "素材標題："
  :asset/transfer-placeholder "{1} 個素材..."
  :asset/uploading "正在上傳"
- :block.comments/add-comment "新增留言"
- :block.comments/add-comment-command-desc "為此區塊新增留言。"
- :block.comments/collapsed-summary "{1} 則留言 · 最新來自 {2}"
- :block.comments/date-at-time "{1} {2}"
- :block.comments/label "留言"
- :block.comments/on-those-blocks "在這些區塊上"
- :block.comments/placeholder "回覆..."
- :block.comments/save-error "儲存留言失敗。"
- :block.comments/yesterday-at "昨天 {1}"
- :block.macro/embed-deprecated "{{embed}} 已棄用。請改用 '/Node embed' 命令。"
- :block.macro/namespace-deprecated "{{namespace}} 已棄用。請改用 {1} 功能。"
- :block.macro/query-deprecated "{{query}} 已棄用。請改用 '/Query' 命令。"
- :block.macro/unsupported-name "不支持的巨集名稱：{1}"
- :block.reaction/emoji-required-warning "請先選擇一個表情回應。"
- :block.reaction/unsupported-emoji-warning "不支援該表情回應。"
+
  :block/click-to-fix-query "點擊修復查詢：{1}"
  :block/copy-ref "複製區塊引用連結"
  :block/copy-url "複製區塊 URL"
@@ -157,11 +144,35 @@
  :block/switch-to-outline-view "切換到大綱檢視"
  :block/switch-to-plugin-renderer "切換到外掛渲染器"
  :block/untitled-query "未命名查詢"
+
+ :block.comments/add-comment "新增留言"
+ :block.comments/add-comment-command-desc "為此區塊新增留言。"
+ :block.comments/collapsed-summary "{1} 則留言 · 最新來自 {2}"
+ :block.comments/date-at-time "{1} {2}"
+ :block.comments/label "留言"
+ :block.comments/on-those-blocks "在這些區塊上"
+ :block.comments/placeholder "回覆..."
+ :block.comments/save-error "儲存留言失敗。"
+ :block.comments/yesterday-at "昨天 {1}"
+
+ :block.macro/embed-deprecated "{{embed}} 已棄用。請改用 '/Node embed' 命令。"
+ :block.macro/namespace-deprecated "{{namespace}} 已棄用。請改用 {1} 功能。"
+ :block.macro/query-deprecated "{{query}} 已棄用。請改用 '/Query' 命令。"
+ :block.macro/unsupported-name "不支持的巨集名稱：{1}"
+
+ :block.reaction/emoji-required-warning "請先選擇一個表情回應。"
+ :block.reaction/unsupported-emoji-warning "不支援該表情回應。"
+
  :breadcrumb/more-ancestors "顯示更多上層路徑"
+
+ :bug-report/desc "你可以幫助我們提交一個錯誤報告嗎？我們會盡快解決。"
+ :bug-report/title "BUG 上報"
+
  :bug-report.clipboard/action-desc "檢查和收集剪貼簿資料"
  :bug-report.clipboard/action-title "剪貼簿助手"
  :bug-report.clipboard/desc "你可以使用這些便利的工具來提供給我們額外的資訊。"
  :bug-report.clipboard/title "你遇到的錯誤是否與這些功能有關？"
+
  :bug-report.inspector/back "返回"
  :bug-report.inspector/clipboard-desc "這是從剪貼簿讀取的資料。"
  :bug-report.inspector/copied "已複製到剪貼簿！"
@@ -173,13 +184,17 @@
  :bug-report.inspector/placeholder "如果你在手機上，請長按此處進行貼上"
  :bug-report.inspector/tip "出了點問題？沒關係，點選返回到上一步。"
  :bug-report.inspector/title "剪貼簿資料檢視器"
+
  :bug-report.issue/action-desc "幫助改進 Logseq!"
  :bug-report.issue/action-title "提交錯誤報告"
  :bug-report.issue/desc "如果沒有可用的工具供你收集額外的資訊，請直接報告錯誤。"
  :bug-report.issue/report-link "回報問題"
  :bug-report.issue/title "或..."
- :bug-report/desc "你可以幫助我們提交一個錯誤報告嗎？我們會盡快解決。"
- :bug-report/title "BUG 上報"
+
+ :class/add-property "新增標籤屬性"
+ :class/tag-properties-desc "標籤屬性會被所有使用該標籤的節點繼承。例如，每個 #Task 節點都會繼承「Status」與「Priority」。"
+ :class/tagged-nodes "已加標籤的節點"
+
  :class.built-in/asset "素材"
  :class.built-in/card "卡片"
  :class.built-in/cards "卡片集"
@@ -197,6 +212,7 @@
  :class.built-in/task "任務"
  :class.built-in/template "範本"
  :class.built-in/whiteboard "白板"
+
  :class.validation/built-in-extends-change "無法修改內建項的繼承關係。"
  :class.validation/cant-add-tag-on-built-in "无法在内置“{1}”上添加标签。"
  :class.validation/cant-remove-private-tags "無法刪除私有標籤：{1}。"
@@ -208,9 +224,7 @@
  :class.validation/invalid-extends-type "無效的繼承型別。"
  :class.validation/parents-must-be-tags "標籤的父級必須是標籤。"
  :class.validation/tag-with-non-tag "無法使用不是標籤「{1}」的內建頁面設定標籤。"
- :class/add-property "新增標籤屬性"
- :class/tag-properties-desc "標籤屬性會被所有使用該標籤的節點繼承。例如，每個 #Task 節點都會繼承「Status」與「Priority」。"
- :class/tagged-nodes "已加標籤的節點"
+
  :cmdk.action/apply-theme "套用主題"
  :cmdk.action/copy-ref "複製引用"
  :cmdk.action/create "建立"
@@ -219,11 +233,14 @@
  :cmdk.action/open-in-sidebar "在側邊欄開啟"
  :cmdk.action/search "搜尋"
  :cmdk.action/trigger "觸發"
+
  :cmdk.create/page "建立頁面"
  :cmdk.create/tag "建立標籤"
+
  :cmdk.error/no-block-link "此塊內容中未找到連結。"
  :cmdk.error/no-page-link "此頁面屬性中未找到連結。"
  :cmdk.error/no-search-item-link "此搜尋項沒有連結。"
+
  :cmdk.filter/add "新增"
  :cmdk.filter/codes "僅搜尋程式碼"
  :cmdk.filter/commands "僅搜尋命令"
@@ -232,6 +249,7 @@
  :cmdk.filter/nodes "節點"
  :cmdk.filter/only-label "僅搜尋："
  :cmdk.filter/themes "僅搜尋主題"
+
  :cmdk.group/codes "程式碼"
  :cmdk.group/commands "命令"
  :cmdk.group/create "建立"
@@ -241,20 +259,25 @@
  :cmdk.group/nodes "節點"
  :cmdk.group/recently-updated "最近更新"
  :cmdk.group/themes "主題"
+
  :cmdk.info/create-page "建立名為「{1}」的頁面"
  :cmdk.info/create-tag "建立名為「{1}」的標籤"
+
  :cmdk.input/default-placeholder "你在找什麼？"
  :cmdk.input/move-blocks-placeholder "移動塊到"
  :cmdk.input/type-page-name-placeholder "輸入要建立的頁面名稱"
+
  :cmdk.tip/clear-filter "按 {1} 以清除搜尋篩選"
  :cmdk.tip/filter-results "按 {1} 以篩選搜尋結果"
  :cmdk.tip/label "提示："
  :cmdk.tip/open-sidebar "按 {1} 以在側邊欄中開啟搜尋"
+
  :collaboration/email-address "電子郵件地址"
  :collaboration/invite "邀請"
  :collaboration/members "成員："
  :collaboration/remove-access "移除存取權限"
  :collaboration/remove-access-error "移除成員失敗。"
+
  :color/blue "藍色"
  :color/crimson "深紅色"
  :color/cyan "青色"
@@ -271,12 +294,15 @@
  :color/tomato "番茄色"
  :color/violet "紫羅蘭色"
  :color/yellow "黃色"
+
  :command.auto-complete/complete "自動完成：選擇當前項"
  :command.auto-complete/meta-complete "中繼資料補全"
  :command.auto-complete/next "自動完成：選擇下一項"
  :command.auto-complete/prev "自動完成：選擇上一項"
  :command.auto-complete/shift-complete "自動完成：在側邊欄開啟"
+
  :command.command-palette/toggle "切換指令面板"
+
  :command.editor/add-comment "新增留言"
  :command.editor/add-property "添加屬性"
  :command.editor/add-property-deadline "新增截止日期屬性"
@@ -344,6 +370,7 @@
  :command.editor/up "向上移動游標 / 向上選擇"
  :command.editor/zoom-in "聚焦"
  :command.editor/zoom-out "推出聚焦"
+
  :command.go/all-graphs "前往所有圖譜"
  :command.go/all-pages "前往全部頁面"
  :command.go/backward "後退"
@@ -362,28 +389,37 @@
  :command.go/search-in-page "在頁面內搜尋"
  :command.go/search-themes "搜尋佈景主題"
  :command.go/tomorrow "明天"
+
  :command.graph/add "新增圖譜"
  :command.graph/db-add "資料庫：新增圖譜"
  :command.graph/db-save "資料庫：儲存圖譜"
  :command.graph/export-as-html "將公共圖譜匯出為 HTML"
  :command.graph/open "開啟圖譜"
  :command.graph/remove "移除圖譜"
+
  :command.misc/copy "複製"
  :command.misc/export-block-data "匯出區塊資料"
  :command.misc/export-graph-ontology-data "匯出圖譜本體資料"
  :command.misc/export-page-data "匯出頁面資料"
  :command.misc/import-edn-data "匯入 EDN 資料"
+
  :command.page/toggle-favorite "切換收藏"
+
  :command.pdf/close "關閉 PDF"
  :command.pdf/find "PDF: 查詢當前 pdf 檔案的文字"
  :command.pdf/next-page "PDF：下一頁"
  :command.pdf/previous-page "PDF：上一頁"
+
  :command.publish/open-dialog "開啟發佈對話方塊"
+
  :command.search/re-index "重新增立搜尋索引"
+
  :command.shell/run "執行 git 命令"
+
  :command.sidebar/clear "清空側邊欄"
  :command.sidebar/close-top "關閉頂部側邊欄面板"
  :command.sidebar/open-today-page "在側邊欄開啟今日"
+
  :command.ui/clear-all-notifications "清除所有通知"
  :command.ui/customize-appearance "自訂外觀"
  :command.ui/goto-plugins "外掛"
@@ -400,11 +436,16 @@
  :command.ui/toggle-settings "切換設定"
  :command.ui/toggle-theme "“在暗色/亮色主題之間切換”"
  :command.ui/toggle-wide-mode "切換寬螢幕模式"
+
  :command.window/close "關閉視窗"
+
  :context-menu/developer-tools "開發者工具"
  :context-menu/make-a-flashcard "製作閃卡"
  :context-menu/set-icon "設定圖示"
  :context-menu/toggle-number-list "切換編號列表"
+
+ :date/invalid-date-warning "{1} 不是有效日期。請再試一次"
+
  :date.nlp/last-friday "上週五"
  :date.nlp/last-monday "上週一"
  :date.nlp/last-month "上個月"
@@ -438,15 +479,42 @@
  :date.nlp/today "今天"
  :date.nlp/tomorrow "明天"
  :date.nlp/yesterday "昨天"
- :date/invalid-date-warning "{1} 不是有效日期。請再試一次"
+
  :deeplink/open-block-error "開啟連結失敗。區塊 ID `{1}` 不存在於目前圖譜中。"
  :deeplink/open-graph-error "開啟圖譜失敗。圖譜 `{1}` 不存在。"
  :deeplink/open-page-error "開啟連結失敗。頁面 `{1}` 不存在於目前圖譜中。"
+
+ :editor/add-content-first-warning "請先新增一些內容。"
+ :editor/auto-heading "自動標題"
+ :editor/block-search "正在搜尋區塊"
+ :editor/click-to-edit "點擊以編輯"
+ :editor/code-language-placeholder "選擇語言"
+ :editor/collapse-block-children "摺疊所有子塊"
+ :editor/cut "剪下"
+ :editor/cycle-todo "切換當前事項的待辦狀態"
+ :editor/delete-selection "刪除選定塊"
+ :editor/display-tag-inline-hint "以內嵌方式顯示此標籤，而不是放在此節點末尾。"
+ :editor/expand-block-children "展開所有子塊"
+ :editor/heading "標題 {1}"
+ :editor/moving-blocks-count "正在移動 {1} 個區塊"
+ :editor/new-page "新頁面"
+ :editor/new-tag "新標籤"
+ :editor/no-block-selected-warning "目前沒有選取任何區塊，請先選取區塊。"
+ :editor/paste "貼上"
+ :editor/reference-node-use-page-ref "要引用節點，請使用 `[[]]`。"
+ :editor/remove-heading "移除標題"
+ :editor/search-for-node "搜尋節點"
+ :editor/search-for-tag "搜尋標籤"
+ :editor/search-template-placeholder "搜尋範本"
+ :editor/template-insert-error "範本插入錯誤: {1}"
+
  :editor.document-mode/new-block-hint "{1} 建立新區塊"
  :editor.document-mode/title "文件模式"
  :editor.document-mode/toggle-desc "點擊 `D` 或輸入 {1} 切換文件模式"
+
  :editor.quick-add/add-to-today "加入今天"
  :editor.quick-add/title "快速新增"
+
  :editor.slash/advanced-query "進階查詢"
  :editor.slash/advanced-query-desc "建立進階查詢區塊"
  :editor.slash/calculator "計算機"
@@ -500,29 +568,7 @@
  :editor.slash/upload-asset "上傳素材"
  :editor.slash/upload-asset-desc "上傳圖片、PDF、DOCX 等檔案類型"
  :editor.slash/yesterday-desc "插入昨天的日期"
- :editor/add-content-first-warning "請先新增一些內容。"
- :editor/auto-heading "自動標題"
- :editor/block-search "正在搜尋區塊"
- :editor/click-to-edit "點擊以編輯"
- :editor/code-language-placeholder "選擇語言"
- :editor/collapse-block-children "摺疊所有子塊"
- :editor/cut "剪下"
- :editor/cycle-todo "切換當前事項的待辦狀態"
- :editor/delete-selection "刪除選定塊"
- :editor/display-tag-inline-hint "以內嵌方式顯示此標籤，而不是放在此節點末尾。"
- :editor/expand-block-children "展開所有子塊"
- :editor/heading "標題 {1}"
- :editor/moving-blocks-count "正在移動 {1} 個區塊"
- :editor/new-page "新頁面"
- :editor/new-tag "新標籤"
- :editor/no-block-selected-warning "目前沒有選取任何區塊，請先選取區塊。"
- :editor/paste "貼上"
- :editor/reference-node-use-page-ref "要引用節點，請使用 `[[]]`。"
- :editor/remove-heading "移除標題"
- :editor/search-for-node "搜尋節點"
- :editor/search-for-tag "搜尋標籤"
- :editor/search-template-placeholder "搜尋範本"
- :editor/template-insert-error "範本插入錯誤: {1}"
+
  :electron/about "關於 Logseq"
  :electron/add-to-dictionary "新增到字典"
  :electron/block-not-exist "開啟連結失敗。區塊 ID `{1}` 在目前圖譜中不存在。"
@@ -550,6 +596,7 @@
  :electron/wrong-release-open-stable "下載正式版"
  :electron/wrong-release-warning-detail "此版本透過 Rosetta 執行，速度可能非常緩慢。請優先下載 Apple Silicon (arm64) 版本；若該版本尚不適用於您的系統，可改用 Nightly 版本。"
  :electron/wrong-release-warning-title "您正在 Apple Silicon 上使用 Intel (x64) 版本。"
+
  :encryption/cloud-password-rich (fn [] ["如果你遺失了密碼，雲端中的所有資料都將無法解密。" [:span "你仍然可以存取圖譜的本機版本。"]])
  :encryption/current-password "目前密碼"
  :encryption/enter-password "輸入密碼"
@@ -574,17 +621,7 @@
  :encryption/set-password-title "為遠端圖譜設定密碼"
  :encryption/updating-password "正在更新密碼..."
  :encryption/wrong-password "密碼錯誤"
- :export.backup/backup-now "立即備份"
- :export.backup/cancel "取消備份"
- :export.backup/enabled-desc "此圖譜已啟用每小時備份，{1}。"
- :export.backup/folder "備份資料夾："
- :export.backup/hourly-note "每小時將建立一次備份。"
- :export.backup/open-folder "開啟此圖譜的備份資料夾"
- :export.backup/schedule "排程備份"
- :export.backup/set-folder-first "請先設定備份資料夾"
- :export.backup/sqlite-desc "將圖譜內容備份為單一 .sqlite 檔案的主要方式。"
- :export.backup/unsupported-desc "您的瀏覽器不支援 {{The File System Access API}}，請切換至基於 Chromium 的瀏覽器。"
- :export.backup/zip-desc "將圖譜內容和素材備份為 .zip 檔案的主要方式。"
+
  :export/backup-successful "備份成功！"
  :export/block-data-copied "已複製區塊資料！"
  :export/collecting-assets "正在收集素材"
@@ -629,12 +666,19 @@
  :export/zip "匯出 SQLite 資料庫和資源"
  :export/zip-error "匯出 ZIP 失敗。"
  :export/zip-exported "ZIP 已匯出至 {1}。"
- :file.config/deprecation-title "檔案 {1} 有以下棄用項："
- :file.config/error-title "檔案 {1} 有以下錯誤："
- :file.config/invalid-desc "請確保設定被 {} 包裹。"
- :file.config/invalid-title "檔案 {1} 無效。"
- :file.config/read-failed-desc "請確保你的設定被 {} 包裹。同時請確保字元 '( { [' 都有對應的閉合字元 ') } ]'。"
- :file.config/read-failed-title "讀取檔案 {1} 失敗"
+
+ :export.backup/backup-now "立即備份"
+ :export.backup/cancel "取消備份"
+ :export.backup/enabled-desc "此圖譜已啟用每小時備份，{1}。"
+ :export.backup/folder "備份資料夾："
+ :export.backup/hourly-note "每小時將建立一次備份。"
+ :export.backup/open-folder "開啟此圖譜的備份資料夾"
+ :export.backup/schedule "排程備份"
+ :export.backup/set-folder-first "請先設定備份資料夾"
+ :export.backup/sqlite-desc "將圖譜內容備份為單一 .sqlite 檔案的主要方式。"
+ :export.backup/unsupported-desc "您的瀏覽器不支援 {{The File System Access API}}，請切換至基於 Chromium 的瀏覽器。"
+ :export.backup/zip-desc "將圖譜內容和素材備份為 .zip 檔案的主要方式。"
+
  :file/config-duplicate-keys "檔案 '{1}' 有重複鍵。鍵 '{2}' 被指定了多次。"
  :file/config-invalid "檔案 'logseq/config.edn' 無效。請重新載入應用程式以查看錯誤並修正。"
  :file/format-not-supported "目前不支援 .{1} 檔案格式"
@@ -643,8 +687,22 @@
  :file/name "檔案名稱"
  :file/no-data "沒有資料"
  :file/title "檔案 {1}"
+
+ :file.config/deprecation-title "檔案 {1} 有以下棄用項："
+ :file.config/error-title "檔案 {1} 有以下錯誤："
+ :file.config/invalid-desc "請確保設定被 {} 包裹。"
+ :file.config/invalid-title "檔案 {1} 無效。"
+ :file.config/read-failed-desc "請確保你的設定被 {} 包裹。同時請確保字元 '( { [' 都有對應的閉合字元 ') } ]'。"
+ :file.config/read-failed-title "讀取檔案 {1} 失敗"
+
+ :flashcard/add-query "新增查詢"
+ :flashcard/all-cards "全部卡片"
+ :flashcard/select-cards "選擇卡片"
+ :flashcard/shortcut-tooltip "快捷鍵：{1}"
+
  :flashcard.empty/desc "你可以為任意區塊加入「{1}」將其變成閃卡，或使用「/cloze」加入填空。"
  :flashcard.empty/title "開始複習"
+
  :flashcard.rating/again "重來"
  :flashcard.rating/again-desc "我們答錯了。這通常表示我們已經忘記了這張卡片，是一次記憶失誤。"
  :flashcard.rating/easy "簡單"
@@ -653,54 +711,18 @@
  :flashcard.rating/good-desc "答案是對的，但我們花了一些心力才想起來。"
  :flashcard.rating/hard "困難"
  :flashcard.rating/hard-desc "答案是對的，但我們沒有把握，花了太久才想起來。"
+
  :flashcard.review/finished "恭喜！今天的複習已完成。 💯"
  :flashcard.review/hide-answers "隱藏答案"
  :flashcard.review/show-answers "顯示答案"
  :flashcard.review/show-clozes "顯示填空"
- :flashcard/add-query "新增查詢"
- :flashcard/all-cards "全部卡片"
- :flashcard/select-cards "選擇卡片"
- :flashcard/shortcut-tooltip "快捷鍵：{1}"
+
  :format/bold "粗體"
  :format/code "程式碼"
  :format/highlight "螢光標記"
  :format/italics "斜體"
  :format/strikethrough "刪除線"
- :graph.diagnostics/checksum-failed-error "計算圖譜 checksum 診斷失敗。"
- :graph.diagnostics/checksum-recomputed-success "已重新計算 checksum。重新計算結果：{1}，本機：{2}，遠端：{3}。已下載 {4}.edn，包含 {5} 個 block 與 checksum 屬性 {6}。"
- :graph.diagnostics/checksum-unavailable-warning "無法為目前圖譜計算 checksum 診斷。"
- :graph.diagnostics/client-ops-export-failed-error "匯出 Client ops SQLite 失敗。"
- :graph.diagnostics/client-ops-export-invalid-payload-warning "匯出 Client ops SQLite 失敗：無效的 payload 類型 {1}。"
- :graph.diagnostics/client-ops-export-success "已匯出 Client ops SQLite：{1}.sqlite"
- :graph.diagnostics/no-graph-warning "找不到圖譜。"
- :graph.page/title "頁面圖譜"
- :graph.switch/add-graph-action "是，新增圖譜"
- :graph.switch/empty-desc "沒有符合的圖譜，你要新增另一個嗎？"
- :graph.switch/prompt "切換到："
- :graph.switch/select-prompt "請選擇圖譜"
- :graph.validation/config-arweave-gateway-warning "已不再支援。"
- :graph.validation/config-block-hidden-properties-warning "在 DB 圖譜中不會使用，因為隱藏屬性需要在其設定中完成。"
- :graph.validation/config-default-templates-warning "已被 #Template 和 `Apply template to tags` 屬性取代。"
- :graph.validation/config-editor-command-trigger-warning "已不再支援。請改用 '/'，並回報相關 bug。"
- :graph.validation/config-favorites-warning "不會儲存在 DB 圖譜的設定中。"
- :graph.validation/config-feature-enable-block-timestamps-warning "在 DB 圖譜中不會使用，因為它始終啟用。"
- :graph.validation/config-preferred-format-warning "在 DB 圖譜中不會使用，因為 DB 圖譜只有 Markdown 模式。"
- :graph.validation/config-property-pages-enabled-warning "在 DB 圖譜中不會使用，因為所有屬性都有頁面。"
- :graph.validation/config-unused-in-db-graphs-warning "在 DB 圖譜中不會使用。"
- :graph.validation/invalid-blocks-detected "驗證偵測到 {1} 個無效區塊。這些區塊可能有問題。正在嘗試修復無效區塊，請再次執行驗證確認是否已修復。"
- :graph.validation/name-reserved-characters-warning "圖譜名稱不能包含以下保留字元："
- :graph.validation/reserved-character-asterisk "星號"
- :graph.validation/reserved-character-backslash "反斜線"
- :graph.validation/reserved-character-colon "冒號"
- :graph.validation/reserved-character-double-quote "雙引號"
- :graph.validation/reserved-character-forward-slash "正斜線"
- :graph.validation/reserved-character-greater-than "大於號"
- :graph.validation/reserved-character-hash "井號"
- :graph.validation/reserved-character-less-than "小於號"
- :graph.validation/reserved-character-pipe "垂直線或管線符號"
- :graph.validation/reserved-character-plus "加號"
- :graph.validation/reserved-character-question-mark "問號"
- :graph.validation/valid "您的知識庫是有效的！{1}"
+
  :graph/all-graphs "所有圖譜"
  :graph/already-exists-error "圖譜「{1}」已存在。請使用其他名稱重試。"
  :graph/build-error "圖譜載入失敗。"
@@ -765,6 +787,46 @@
  :graph/view-mode "檢視模式"
  :graph/view-mode-all-pages "所有頁面"
  :graph/view-mode-tags "標籤"
+
+ :graph.diagnostics/checksum-failed-error "計算圖譜 checksum 診斷失敗。"
+ :graph.diagnostics/checksum-recomputed-success "已重新計算 checksum。重新計算結果：{1}，本機：{2}，遠端：{3}。已下載 {4}.edn，包含 {5} 個 block 與 checksum 屬性 {6}。"
+ :graph.diagnostics/checksum-unavailable-warning "無法為目前圖譜計算 checksum 診斷。"
+ :graph.diagnostics/client-ops-export-failed-error "匯出 Client ops SQLite 失敗。"
+ :graph.diagnostics/client-ops-export-invalid-payload-warning "匯出 Client ops SQLite 失敗：無效的 payload 類型 {1}。"
+ :graph.diagnostics/client-ops-export-success "已匯出 Client ops SQLite：{1}.sqlite"
+ :graph.diagnostics/no-graph-warning "找不到圖譜。"
+
+ :graph.page/title "頁面圖譜"
+
+ :graph.switch/add-graph-action "是，新增圖譜"
+ :graph.switch/empty-desc "沒有符合的圖譜，你要新增另一個嗎？"
+ :graph.switch/prompt "切換到："
+ :graph.switch/select-prompt "請選擇圖譜"
+
+ :graph.validation/config-arweave-gateway-warning "已不再支援。"
+ :graph.validation/config-block-hidden-properties-warning "在 DB 圖譜中不會使用，因為隱藏屬性需要在其設定中完成。"
+ :graph.validation/config-default-templates-warning "已被 #Template 和 `Apply template to tags` 屬性取代。"
+ :graph.validation/config-editor-command-trigger-warning "已不再支援。請改用 '/'，並回報相關 bug。"
+ :graph.validation/config-favorites-warning "不會儲存在 DB 圖譜的設定中。"
+ :graph.validation/config-feature-enable-block-timestamps-warning "在 DB 圖譜中不會使用，因為它始終啟用。"
+ :graph.validation/config-preferred-format-warning "在 DB 圖譜中不會使用，因為 DB 圖譜只有 Markdown 模式。"
+ :graph.validation/config-property-pages-enabled-warning "在 DB 圖譜中不會使用，因為所有屬性都有頁面。"
+ :graph.validation/config-unused-in-db-graphs-warning "在 DB 圖譜中不會使用。"
+ :graph.validation/invalid-blocks-detected "驗證偵測到 {1} 個無效區塊。這些區塊可能有問題。正在嘗試修復無效區塊，請再次執行驗證確認是否已修復。"
+ :graph.validation/name-reserved-characters-warning "圖譜名稱不能包含以下保留字元："
+ :graph.validation/reserved-character-asterisk "星號"
+ :graph.validation/reserved-character-backslash "反斜線"
+ :graph.validation/reserved-character-colon "冒號"
+ :graph.validation/reserved-character-double-quote "雙引號"
+ :graph.validation/reserved-character-forward-slash "正斜線"
+ :graph.validation/reserved-character-greater-than "大於號"
+ :graph.validation/reserved-character-hash "井號"
+ :graph.validation/reserved-character-less-than "小於號"
+ :graph.validation/reserved-character-pipe "垂直線或管線符號"
+ :graph.validation/reserved-character-plus "加號"
+ :graph.validation/reserved-character-question-mark "問號"
+ :graph.validation/valid "您的知識庫是有效的！{1}"
+
  :header/go-back "返回"
  :header/go-forward "前進"
  :header/highlight-recent-blocks "醒目顯示最近的區塊"
@@ -772,32 +834,7 @@
  :header/more "更多"
  :header/quit-highlight-recent-blocks "退出醒目標示近期區塊"
  :header/toggle-left-sidebar "切換左側邊欄"
- :help.handbook/chat-on-discord "在 Discord 上聊天"
- :help.handbook/chat-on-discord-desc "提出問題、結識其他使用者，學習新的工作流程。"
- :help.handbook/copy-topic-link "複製主題連結"
- :help.handbook/current-chapter "目前章節"
- :help.handbook/help-categories "說明分類"
- :help.handbook/home "首頁"
- :help.handbook/link-copied "已複製手冊連結！"
- :help.handbook/monthly-posts "每月貼文"
- :help.handbook/next-chapter "下一章節"
- :help.handbook/popular-topics "熱門主題"
- :help.handbook/prev-chapter "上一章節"
- :help.handbook/resources-from "來自 {1} 的資源"
- :help.handbook/search-placeholder "搜尋"
- :help.handbook/shortcuts-count "{1} 個快捷鍵"
- :help.handbook/sync "同步"
- :help.handbook/title "說明"
- :help.handbook/topics "主題"
- :help.handbook/users-online "在線使用者"
- :help.handbook/visit-the-forum "造訪論壇"
- :help.handbook/visit-the-forum-desc "提供意見回饋、提出功能需求，進行深入討論。"
- :help.handbook/writing-mode "寫作模式（即時預覽）"
- :help.shortcuts/desc "查看快捷鍵與提示"
- :help.shortcuts/label "快速鍵"
- :help.shortcuts/shortcut-column "快速鍵"
- :help.shortcuts/title "鍵盤快速鍵"
- :help.shortcuts/triggers "觸發"
+
  :help/about "關於 Logseq"
  :help/about-title "關於"
  :help/ask-community "向社群提問"
@@ -832,6 +869,35 @@
  :help/terms "服務條款"
  :help/terms-title "條款"
  :help/usage-title "使用說明"
+
+ :help.handbook/chat-on-discord "在 Discord 上聊天"
+ :help.handbook/chat-on-discord-desc "提出問題、結識其他使用者，學習新的工作流程。"
+ :help.handbook/copy-topic-link "複製主題連結"
+ :help.handbook/current-chapter "目前章節"
+ :help.handbook/help-categories "說明分類"
+ :help.handbook/home "首頁"
+ :help.handbook/link-copied "已複製手冊連結！"
+ :help.handbook/monthly-posts "每月貼文"
+ :help.handbook/next-chapter "下一章節"
+ :help.handbook/popular-topics "熱門主題"
+ :help.handbook/prev-chapter "上一章節"
+ :help.handbook/resources-from "來自 {1} 的資源"
+ :help.handbook/search-placeholder "搜尋"
+ :help.handbook/shortcuts-count "{1} 個快捷鍵"
+ :help.handbook/sync "同步"
+ :help.handbook/title "說明"
+ :help.handbook/topics "主題"
+ :help.handbook/users-online "在線使用者"
+ :help.handbook/visit-the-forum "造訪論壇"
+ :help.handbook/visit-the-forum-desc "提供意見回饋、提出功能需求，進行深入討論。"
+ :help.handbook/writing-mode "寫作模式（即時預覽）"
+
+ :help.shortcuts/desc "查看快捷鍵與提示"
+ :help.shortcuts/label "快速鍵"
+ :help.shortcuts/shortcut-column "快速鍵"
+ :help.shortcuts/title "鍵盤快速鍵"
+ :help.shortcuts/triggers "觸發"
+
  :icon/emojis-count "表情符號 ({1})"
  :icon/icons-count "圖示 ({1})"
  :icon/matched-count "符合 ({1})"
@@ -841,6 +907,7 @@
  :icon/tab-all "全部"
  :icon/tab-emojis "表情符號"
  :icon/tab-icons "圖示"
+
  :import/all-tags "匯入所有標籤"
  :import/asset-too-large-warning "已略過複製資源 {1}，因為它超過了 100 MB 限制。"
  :import/assets-import-partial "已匯入 {1} / {2} 個資源。詳情請查看主控台。"
@@ -888,11 +955,14 @@
  :import/unexpected-error "發生未預期錯誤：{1}"
  :import/zip-import-error "壓縮檔匯入失敗：{1}"
  :import/zip-missing-db-sqlite "壓縮檔缺少 db.sqlite。請檢查封存結構。"
- :journal.default-query/doing "進行中"
- :journal.default-query/todo "待辦"
+
  :journal/add-blocks-to-today-success "區塊已加入今天！"
  :journal/page-cant-convert-warning "此頁面不是日記頁面。"
  :journal/parse-date-to-name-error "無法將日期解析為日誌頁名稱。"
+
+ :journal.default-query/doing "進行中"
+ :journal.default-query/todo "待辦"
+
  :keymap/all "全部"
  :keymap/already-bound "快速鍵已被佔用"
  :keymap/also-used-for-action "同時用於{1}"
@@ -929,17 +999,24 @@
  :keymap/undo "復原"
  :keymap/unset "未設定"
  :keymap/used-by-action "被以下命令佔用：{1}"
+
  :library/add-existing-pages "將現有頁面加入頁面庫"
  :library/add-pages "新增頁面"
  :library/title "頁面庫"
+
+ :mobile/camera-access-denied "已拒絕相機存取。請在「設定」>「Logseq」中啟用。"
+ :mobile/microphone-access-denied "已拒絕麥克風存取。請在「設定」>「Logseq」中啟用。"
+
  :mobile.header/actions "操作"
  :mobile.header/create-graph "建立新圖譜"
  :mobile.header/delete-block-confirm-desc "確定要刪除這個區塊嗎？"
  :mobile.header/delete-page-confirm-desc "確定要刪除這個頁面嗎？"
+
  :mobile.intent/file-options "檔案選項"
  :mobile.intent/open-with-app "使用您喜愛的應用程式開啟檔案"
  :mobile.intent/select-option-prompt "選擇要執行的操作"
  :mobile.intent/share "分享"
+
  :mobile.log/all "全部"
  :mobile.log/errors-only "僅錯誤"
  :mobile.log/full "完整日誌"
@@ -947,6 +1024,7 @@
  :mobile.log/old-first "最舊記錄在前"
  :mobile.log/ui "UI 日誌"
  :mobile.log/worker "worker 日誌"
+
  :mobile.settings/account "帳戶"
  :mobile.settings/check-log "查看日誌"
  :mobile.settings/discord-community "Discord 社群"
@@ -957,14 +1035,17 @@
  :mobile.settings/tabs "分頁"
  :mobile.settings/theme "主題"
  :mobile.settings/version "版本"
+
  :mobile.share/file-import-error "匯入分享檔案失敗。請再試一次。"
  :mobile.share/media-import-error "匯入分享媒體失敗。請再試一次。"
  :mobile.share/unsupported-content-warning "目前不支援解析此分享內容。請在 {1} 上回報以下代碼，我們會盡快處理。"
  :mobile.share/unsupported-import-type "不支援匯入 {1} 檔案。您可以在 {2} 上回報，我們會盡快處理。"
+
  :mobile.tab/capture "速記"
  :mobile.tab/flashcards "閃卡"
  :mobile.tab/go-to "前往"
  :mobile.tab/graphs "圖譜"
+
  :mobile.toolbar/audio "音訊"
  :mobile.toolbar/comment "留言"
  :mobile.toolbar/copy-ref "複製引用"
@@ -981,10 +1062,7 @@
  :mobile.toolbar/todo "待辦"
  :mobile.toolbar/undo "復原"
  :mobile.toolbar/unselect "取消選取"
- :mobile/camera-access-denied "已拒絕相機存取。請在「設定」>「Logseq」中啟用。"
- :mobile/microphone-access-denied "已拒絕麥克風存取。請在「設定」>「Logseq」中啟用。"
- :nav.all-pages/label "頁面"
- :nav.all-pages/title "頁面"
+
  :nav/all-files "所有檔案"
  :nav/all-journals "所有日誌"
  :nav/appearance "外觀"
@@ -1003,48 +1081,25 @@
  :nav/skip-to-main-content "跳轉到主頁面"
  :nav/tasks "任務"
  :nav/themes "佈景主題"
+
+ :nav.all-pages/label "頁面"
+ :nav.all-pages/title "頁面"
+
  :node/built-in-cant-delete-error "無法刪除內建項。"
  :node/new "新增節點"
+
  :notification/copied "已複製！"
- :onboarding.import-option/desc "你也可以稍後在應用程式中進行此操作。"
- :onboarding.import-option/title "匯入已有筆記"
+
  :onboarding.import/desc "如果它們是 EDN 或 Markdown 格式，Logseq 可以使用它們。"
  :onboarding.import/sqlite-desc "將你的 Logseq 圖譜的 SQLite 資料庫匯出檔案匯入到新的資料庫圖譜中"
  :onboarding.import/title "你有想要匯入的筆記嗎？"
+
+ :onboarding.import-option/desc "你也可以稍後在應用程式中進行此操作。"
+ :onboarding.import-option/title "匯入已有筆記"
+
  :onboarding.setup/desc "首先，你需要選擇一個資料夾，Logseq 將在其中儲存你的想法、創意和筆記。"
  :onboarding.setup/title (fn [] ["歡迎使用 " [:strong "Logseq！"]])
- :page.convert/block-parent-not-page "無法轉換塊，其父級不是頁面。"
- :page.convert/cant-be-block "頁「{1}」無法轉換為區塊。"
- :page.convert/cant-be-block-has-children "頁「{1}」無法轉換為區塊，因為它有子頁。"
- :page.convert/cant-be-block-move-first "頁面「{1}」無法轉換為區塊，請先將其移至其他頁面。"
- :page.convert/page-to-tag-action "將 \"{1}\" 轉換為標籤"
- :page.convert/page-to-tag-built-in "內建頁面不能用作標籤"
- :page.convert/page-to-tag-duplicate "標籤「{1}」已存在。"
- :page.convert/page-to-tag-namespaced "命名空間頁面不能作為標籤"
- :page.convert/property-value-to-page "無法將屬性值轉換為頁面。"
- :page.convert/tag-to-page-action "將標籤轉換為頁面"
- :page.convert/tag-to-page-built-in "內建標籤不能轉換為頁面"
- :page.convert/tag-to-page-confirm-desc "將標籤轉換為頁面也會移除它的標籤屬性，並把所有已使用該標籤的節點中的該標籤一併移除。你確定要繼續嗎？"
- :page.convert/tag-to-page-duplicate "頁面「{1}」已存在。"
- :page.convert/tag-to-page-has-children "此標籤無法轉換，因為它仍有子標籤。必須先移除或轉換所有子標籤，才能轉換此標籤。"
- :page.delete/batch-confirm-title "確定要刪除這些頁面嗎？屬性與標籤將被永久刪除，頁面將被移入資源回收筒。"
- :page.delete/confirm-title "確認要刪除此頁面嗎？"
- :page.delete/permanent-confirm-title "確定要永久刪除此頁面嗎？"
- :page.delete/success "頁面「{1}」已成功刪除！"
- :page.delete/today-journal-truncate-success "今天的日誌頁面內容已刪除。"
- :page.delete/total "總計: {1}"
- :page.delete/warning "這些頁面的內容已刪除，但無法刪除：{1}。有關更多詳細信息，請參閱 JavaScript 控制台。"
- :page.validation/alias-batch-multiple-owners "無法批次為多個頁面設定別名。"
- :page.validation/alias-duplicate-owner "此頁面已是另一個頁面的別名。"
- :page.validation/alias-owns-aliases "已有別名的頁面不能再作為別名使用。"
- :page.validation/alias-self "別名不能是頁面本身。"
- :page.validation/alias-source-is-alias "已作為別名的頁面不能再擁有自己的別名。"
- :page.validation/cant-set-built-in-tags "新頁面不能設定內建標籤：{1}"
- :page.validation/duplicate "另一个名为“{1}”的页面已存在，其标签为：{2}。"
- :page.validation/name-blank "頁面名稱不能為空。"
- :page.validation/name-no-hash "頁面名稱不能包含 「#」。"
- :page.validation/name-no-slash "頁面名稱不能包含 /。"
- :page.validation/parents-must-be-pages "頁面的父級必須是頁面。"
+
  :page/add-to-favorites "加入我的最愛"
  :page/added-tag-to-node "已將標籤「{1}」加入到「{2}」"
  :page/backlinks "反向連結"
@@ -1088,6 +1143,42 @@
  :page/unfavorite "從我的最愛移除"
  :page/unknown "未知頁面"
  :page/updated-at "更新於"
+
+ :page.convert/block-parent-not-page "無法轉換塊，其父級不是頁面。"
+ :page.convert/cant-be-block "頁「{1}」無法轉換為區塊。"
+ :page.convert/cant-be-block-has-children "頁「{1}」無法轉換為區塊，因為它有子頁。"
+ :page.convert/cant-be-block-move-first "頁面「{1}」無法轉換為區塊，請先將其移至其他頁面。"
+ :page.convert/page-to-tag-action "將 \"{1}\" 轉換為標籤"
+ :page.convert/page-to-tag-built-in "內建頁面不能用作標籤"
+ :page.convert/page-to-tag-duplicate "標籤「{1}」已存在。"
+ :page.convert/page-to-tag-namespaced "命名空間頁面不能作為標籤"
+ :page.convert/property-value-to-page "無法將屬性值轉換為頁面。"
+ :page.convert/tag-to-page-action "將標籤轉換為頁面"
+ :page.convert/tag-to-page-built-in "內建標籤不能轉換為頁面"
+ :page.convert/tag-to-page-confirm-desc "將標籤轉換為頁面也會移除它的標籤屬性，並把所有已使用該標籤的節點中的該標籤一併移除。你確定要繼續嗎？"
+ :page.convert/tag-to-page-duplicate "頁面「{1}」已存在。"
+ :page.convert/tag-to-page-has-children "此標籤無法轉換，因為它仍有子標籤。必須先移除或轉換所有子標籤，才能轉換此標籤。"
+
+ :page.delete/batch-confirm-title "確定要刪除這些頁面嗎？屬性與標籤將被永久刪除，頁面將被移入資源回收筒。"
+ :page.delete/confirm-title "確認要刪除此頁面嗎？"
+ :page.delete/permanent-confirm-title "確定要永久刪除此頁面嗎？"
+ :page.delete/success "頁面「{1}」已成功刪除！"
+ :page.delete/today-journal-truncate-success "今天的日誌頁面內容已刪除。"
+ :page.delete/total "總計: {1}"
+ :page.delete/warning "這些頁面的內容已刪除，但無法刪除：{1}。有關更多詳細信息，請參閱 JavaScript 控制台。"
+
+ :page.validation/alias-batch-multiple-owners "無法批次為多個頁面設定別名。"
+ :page.validation/alias-duplicate-owner "此頁面已是另一個頁面的別名。"
+ :page.validation/alias-owns-aliases "已有別名的頁面不能再作為別名使用。"
+ :page.validation/alias-self "別名不能是頁面本身。"
+ :page.validation/alias-source-is-alias "已作為別名的頁面不能再擁有自己的別名。"
+ :page.validation/cant-set-built-in-tags "新頁面不能設定內建標籤：{1}"
+ :page.validation/duplicate "另一个名为“{1}”的页面已存在，其标签为：{2}。"
+ :page.validation/name-blank "頁面名稱不能為空。"
+ :page.validation/name-no-hash "頁面名稱不能包含 「#」。"
+ :page.validation/name-no-slash "頁面名稱不能包含 /。"
+ :page.validation/parents-must-be-pages "頁面的父級必須是頁面。"
+
  :pdf/annotations-page "註解頁面"
  :pdf/area-highlight-shortcut "區域醒目標示（{1}）"
  :pdf/auto-fit "自動調整"
@@ -1120,31 +1211,7 @@
  :pdf/viewer "PDF 檢視器"
  :pdf/zoom-in "放大"
  :pdf/zoom-out "縮小"
- :plugin.install-from-file/menu-title "從 plugins.edn 安裝"
- :plugin.install-from-file/notice "以下的外掛將會取代你的其他外掛："
- :plugin.install-from-file/success "所有外掛均已安裝完成。"
- :plugin.install-from-file/title "從 plugins.edn 安裝外掛"
- :plugin.install-from-web-url/effect-label "功能"
- :plugin.install-from-web-url/repo-url-placeholder "GitHub 儲存庫網址"
- :plugin.install-from-web-url/supports-note "URL 支援 GitHub 儲存庫和本機開發伺服器。（例如：{1}、{2}）"
- :plugin.install-from-web-url/theme-label "佈景主題"
- :plugin.package-config/detach-desc "移除它只會將外掛從 Logseq 中解除連結，並保留來源資料夾不變。"
- :plugin.package-config/parse-error "解析外掛套件設定失敗。"
- :plugin.package-config/remove-error "移除損壞的外掛失敗。"
- :plugin.package-config/remove-external-success "已從外掛清單中移除損壞的外掛。"
- :plugin.package-config/remove-installed-success "已移除損壞的外掛「{1}」。"
- :plugin.proxy/direct "直接連線"
- :plugin.proxy/host-port-required "主機和連接埠不能為空"
- :plugin.proxy/system "系統"
- :plugin.proxy/test-url "測試 URL"
- :plugin.proxy/testing "測試中"
- :plugin.settings/edit-settings-json "編輯 settings.json"
- :plugin.settings/exit-code-mode "退出程式碼模式"
- :plugin.settings/title "外掛程式"
- :plugin.themes/default-desc "Logseq 預設 {1} 主題."
- :plugin.themes/default-name "Default {1} theme"
- :plugin.themes/group "{1} 主題"
- :plugin.themes/light-and-dark "亮色與深色主題"
+
  :plugin/all "所有"
  :plugin/auto-update-check "是否自動檢查更新"
  :plugin/auto-update-check-feedback "自動檢查更新: {1}!"
@@ -1238,8 +1305,124 @@
  :plugin/update-plugin "更新外掛程式：{1} - {2}"
  :plugin/updates-downloading "正在下載更新"
  :plugin/updating "正在更新"
+
+ :plugin.install-from-file/menu-title "從 plugins.edn 安裝"
+ :plugin.install-from-file/notice "以下的外掛將會取代你的其他外掛："
+ :plugin.install-from-file/success "所有外掛均已安裝完成。"
+ :plugin.install-from-file/title "從 plugins.edn 安裝外掛"
+
+ :plugin.install-from-web-url/effect-label "功能"
+ :plugin.install-from-web-url/repo-url-placeholder "GitHub 儲存庫網址"
+ :plugin.install-from-web-url/supports-note "URL 支援 GitHub 儲存庫和本機開發伺服器。（例如：{1}、{2}）"
+ :plugin.install-from-web-url/theme-label "佈景主題"
+
+ :plugin.package-config/detach-desc "移除它只會將外掛從 Logseq 中解除連結，並保留來源資料夾不變。"
+ :plugin.package-config/parse-error "解析外掛套件設定失敗。"
+ :plugin.package-config/remove-error "移除損壞的外掛失敗。"
+ :plugin.package-config/remove-external-success "已從外掛清單中移除損壞的外掛。"
+ :plugin.package-config/remove-installed-success "已移除損壞的外掛「{1}」。"
+
+ :plugin.proxy/direct "直接連線"
+ :plugin.proxy/host-port-required "主機和連接埠不能為空"
+ :plugin.proxy/system "系統"
+ :plugin.proxy/test-url "測試 URL"
+ :plugin.proxy/testing "測試中"
+
+ :plugin.settings/edit-settings-json "編輯 settings.json"
+ :plugin.settings/exit-code-mode "退出程式碼模式"
+ :plugin.settings/title "外掛程式"
+
+ :plugin.themes/default-desc "Logseq 預設 {1} 主題."
+ :plugin.themes/default-name "Default {1} theme"
+ :plugin.themes/group "{1} 主題"
+ :plugin.themes/light-and-dark "亮色與深色主題"
+
  :profiler/input-fn-placeholder "在此輸入函式名稱"
  :profiler/unregister "取消註冊"
+
+ :property/add-choice "新增選項"
+ :property/add-choices "新增選項"
+ :property/add-description "新增描述"
+ :property/add-new "新增屬性"
+ :property/add-or-change "新增或變更屬性"
+ :property/available-choices "可用選項"
+ :property/change-tooltip "變更 {1}"
+ :property/checkbox-state-mapping "核取方塊狀態對應"
+ :property/children-count "子項 ({1})"
+ :property/choices-count "{1} 個選項"
+ :property/choose-tag "選擇標籤"
+ :property/choose-tags "選擇標籤"
+ :property/clear-value "清空"
+ :property/collapse-bottom-pills "收合"
+ :property/collapse-hidden-properties "收合隱藏屬性"
+ :property/configure "設定屬性"
+ :property/convert-page-to-property "將 \"{1}\" 轉換為屬性"
+ :property/create-error "建立屬性失敗。"
+ :property/default-value "預設值"
+ :property/delete-from-node "從節點刪除屬性"
+ :property/delete-from-node-confirm "確認要從此節點刪除屬性 \"{1}\" 嗎？"
+ :property/delete-from-tag "從標籤刪除屬性"
+ :property/delete-from-tag-confirm "確認要從此標籤刪除屬性 \"{1}\" 嗎？"
+ :property/description-placeholder "描述"
+ :property/drag-to-reorder "拖曳以重新排序"
+ :property/existing-values "現有值："
+ :property/expand-bottom-pills "展開"
+ :property/go-to-this-property "跳至此屬性"
+ :property/hide-by-default "預設隱藏"
+ :property/hide-choice-for-tag "對此標籤隱藏選項"
+ :property/hide-empty-value "隱藏空值"
+ :property/hide-for-tag "對 #{1} 隱藏"
+ :property/hide-hidden-choices "隱藏已隱藏的選項"
+ :property/map-checked-to "將已勾選對應到"
+ :property/map-unchecked-to "將未勾選對應到"
+ :property/more-settings "更多設定"
+ :property/multiple-values "多值"
+ :property/multiple-values-confirm "此操作無法復原，確認要將此屬性改為多值嗎？"
+ :property/name "屬性名稱"
+ :property/name-placeholder "名稱"
+ :property/nodes-with-property "具有屬性的節點"
+ :property/overdue "已逾期"
+ :property/private-built-in-not-usable "這是私有內建屬性，不能使用。"
+ :property/remove-scope-for-tag "移除對 #{1} 的範圍限制"
+ :property/scope-choice-to-tag "僅用於 #{1}"
+ :property/select-choice "選擇一個選項"
+ :property/select-property-placeholder "選擇屬性"
+ :property/select-type-placeholder "選擇屬性類型"
+ :property/self-reference "自我引用"
+ :property/set-default-choice "設為預設選項"
+ :property/set-default-value "設定預設值"
+ :property/set-icon "設定圖示"
+ :property/set-placeholder "設定 {1}"
+ :property/set-property "設定屬性"
+ :property/set-tags "設定標籤"
+ :property/set-value "設定值"
+ :property/show-as-checkbox-on-node "在節點上顯示為核取方塊"
+ :property/show-as-checkbox-on-tagged-nodes "在已標記節點上顯示為核取方塊"
+ :property/show-hidden-choices "顯示已隱藏的選項"
+ :property/show-hidden-properties "顯示隱藏屬性"
+ :property/skip-choosing-tag "跳過選擇標籤"
+ :property/specify-node-tags "指定節點標籤"
+ :property/title-placeholder "標題"
+ :property/type "屬性類型"
+ :property/type-asset "附件"
+ :property/type-change-warning "變更屬性類型會清除部分屬性配置。"
+ :property/type-checkbox "核取方塊"
+ :property/type-date "日期"
+ :property/type-datetime "日期時間"
+ :property/type-locked-help "屬性類型一旦開始使用便會鎖定"
+ :property/type-node "節點"
+ :property/type-number "數字"
+ :property/type-text "文字"
+ :property/type-url "網址"
+ :property/ui-position "介面位置"
+ :property/ui-position-block-below "區塊的下方"
+ :property/ui-position-block-left "區塊的開頭"
+ :property/ui-position-block-right "區塊的結尾"
+ :property/ui-position-properties "區塊屬性"
+ :property/unset-property "移除屬性"
+ :property/update-success "屬性已更新！"
+ :property/use-choice-in-tag "用於 #{1}"
+
  :property.built-in/agent-session-id "Agent 工作階段 ID"
  :property.built-in/alias "別名"
  :property.built-in/asset "素材"
@@ -1347,27 +1530,22 @@
  :property.built-in/view-sort-groups-by-property "檢視群組排序依據"
  :property.built-in/view-sort-groups-desc "檢視群組降序排列"
  :property.built-in/view-type "檢視類型"
+
  :property.choice/already-exists "選項已存在。"
  :property.choice/cant-delete-built-in "無法刪除內建選項。"
  :property.choice/invalid "此屬性的選擇「{1}」無效：{2}"
+
  :property.color/blue "藍色"
  :property.color/green "綠色"
  :property.color/purple "紫色"
  :property.color/red "紅色"
  :property.color/yellow "黃色"
+
  :property.priority/high "高"
  :property.priority/low "低"
  :property.priority/medium "中"
  :property.priority/urgent "緊急"
- :property.repeat-recur-unit/day "天"
- :property.repeat-recur-unit/hour "小時"
- :property.repeat-recur-unit/minute "分鐘"
- :property.repeat-recur-unit/month "月"
- :property.repeat-recur-unit/week "週"
- :property.repeat-recur-unit/year "年"
- :property.repeat-repeat-type/dotted-plus "自完成時間起算推進"
- :property.repeat-repeat-type/double-plus "自排程時間起算推進，並跳至未來"
- :property.repeat-repeat-type/plus "自排程時間起算推進"
+
  :property.repeat/date "重複日期"
  :property.repeat/datetime "重複日期時間"
  :property.repeat/every "每"
@@ -1375,12 +1553,25 @@
  :property.repeat/next-date "下次日期"
  :property.repeat/task "重複任務"
  :property.repeat/when "當"
+
+ :property.repeat-recur-unit/day "天"
+ :property.repeat-recur-unit/hour "小時"
+ :property.repeat-recur-unit/minute "分鐘"
+ :property.repeat-recur-unit/month "月"
+ :property.repeat-recur-unit/week "週"
+ :property.repeat-recur-unit/year "年"
+
+ :property.repeat-repeat-type/dotted-plus "自完成時間起算推進"
+ :property.repeat-repeat-type/double-plus "自排程時間起算推進，並跳至未來"
+ :property.repeat-repeat-type/plus "自排程時間起算推進"
+
  :property.status/backlog "待處理"
  :property.status/canceled "已取消"
  :property.status/doing "進行中"
  :property.status/done "已完成"
  :property.status/in-review "審核中"
  :property.status/todo "待辦"
+
  :property.validation/cant-convert-to-number "無法將「{1}」轉換為數字。"
  :property.validation/cant-remove-required "無法移除必需的屬性。"
  :property.validation/cant-set-self-value "無法將自身設為屬性值。"
@@ -1389,91 +1580,11 @@
  :property.validation/invalid-value "屬性「{1}」具有無效值：{2}"
  :property.validation/many-to-one "無法將多值屬性改為單值屬性。"
  :property.validation/protected "此屬性受保護，無法修改。"
+
  :property.view-type/gallery "圖庫檢視"
  :property.view-type/list "清單檢視"
  :property.view-type/table "表格檢視"
- :property/add-choice "新增選項"
- :property/add-choices "新增選項"
- :property/add-description "新增描述"
- :property/add-new "新增屬性"
- :property/add-or-change "新增或變更屬性"
- :property/available-choices "可用選項"
- :property/change-tooltip "變更 {1}"
- :property/checkbox-state-mapping "核取方塊狀態對應"
- :property/children-count "子項 ({1})"
- :property/choices-count "{1} 個選項"
- :property/choose-tag "選擇標籤"
- :property/choose-tags "選擇標籤"
- :property/clear-value "清空"
- :property/collapse-bottom-pills "收合"
- :property/collapse-hidden-properties "收合隱藏屬性"
- :property/configure "設定屬性"
- :property/convert-page-to-property "將 \"{1}\" 轉換為屬性"
- :property/create-error "建立屬性失敗。"
- :property/default-value "預設值"
- :property/delete-from-node "從節點刪除屬性"
- :property/delete-from-node-confirm "確認要從此節點刪除屬性 \"{1}\" 嗎？"
- :property/delete-from-tag "從標籤刪除屬性"
- :property/delete-from-tag-confirm "確認要從此標籤刪除屬性 \"{1}\" 嗎？"
- :property/description-placeholder "描述"
- :property/drag-to-reorder "拖曳以重新排序"
- :property/existing-values "現有值："
- :property/expand-bottom-pills "展開"
- :property/go-to-this-property "跳至此屬性"
- :property/hide-by-default "預設隱藏"
- :property/hide-choice-for-tag "對此標籤隱藏選項"
- :property/hide-empty-value "隱藏空值"
- :property/hide-for-tag "對 #{1} 隱藏"
- :property/hide-hidden-choices "隱藏已隱藏的選項"
- :property/map-checked-to "將已勾選對應到"
- :property/map-unchecked-to "將未勾選對應到"
- :property/more-settings "更多設定"
- :property/multiple-values "多值"
- :property/multiple-values-confirm "此操作無法復原，確認要將此屬性改為多值嗎？"
- :property/name "屬性名稱"
- :property/name-placeholder "名稱"
- :property/nodes-with-property "具有屬性的節點"
- :property/overdue "已逾期"
- :property/private-built-in-not-usable "這是私有內建屬性，不能使用。"
- :property/remove-scope-for-tag "移除對 #{1} 的範圍限制"
- :property/scope-choice-to-tag "僅用於 #{1}"
- :property/select-choice "選擇一個選項"
- :property/select-property-placeholder "選擇屬性"
- :property/select-type-placeholder "選擇屬性類型"
- :property/self-reference "自我引用"
- :property/set-default-choice "設為預設選項"
- :property/set-default-value "設定預設值"
- :property/set-icon "設定圖示"
- :property/set-placeholder "設定 {1}"
- :property/set-property "設定屬性"
- :property/set-tags "設定標籤"
- :property/set-value "設定值"
- :property/show-as-checkbox-on-node "在節點上顯示為核取方塊"
- :property/show-as-checkbox-on-tagged-nodes "在已標記節點上顯示為核取方塊"
- :property/show-hidden-choices "顯示已隱藏的選項"
- :property/show-hidden-properties "顯示隱藏屬性"
- :property/skip-choosing-tag "跳過選擇標籤"
- :property/specify-node-tags "指定節點標籤"
- :property/title-placeholder "標題"
- :property/type "屬性類型"
- :property/type-asset "附件"
- :property/type-change-warning "變更屬性類型會清除部分屬性配置。"
- :property/type-checkbox "核取方塊"
- :property/type-date "日期"
- :property/type-datetime "日期時間"
- :property/type-locked-help "屬性類型一旦開始使用便會鎖定"
- :property/type-node "節點"
- :property/type-number "數字"
- :property/type-text "文字"
- :property/type-url "網址"
- :property/ui-position "介面位置"
- :property/ui-position-block-below "區塊的下方"
- :property/ui-position-block-left "區塊的開頭"
- :property/ui-position-block-right "區塊的結尾"
- :property/ui-position-properties "區塊屬性"
- :property/unset-property "移除屬性"
- :property/update-success "屬性已更新！"
- :property/use-choice-in-tag "用於 #{1}"
+
  :publish/action "發布"
  :publish/dialog-desc "可選擇為此頁面加上密碼保護。留空則為公開存取。"
  :publish/dialog-title "發布頁面"
@@ -1486,6 +1597,14 @@
  :publish/unpublish-error "取消發布失敗。"
  :publish/unpublish-missing-page-id "取消發布失敗：缺少頁面 ID。"
  :publish/unpublished "已取消發布。"
+
+ :query/advanced-results "進階查詢結果"
+ :query/custom-view-error "自訂檢視錯誤：{1}"
+ :query/error "查詢錯誤："
+ :query/examples-desc "查看更多範例：{{Queries documentation}}。"
+ :query/examples-title "查詢範例："
+ :query/results-for "{1} 的結果"
+
  :query.builder/add-filter-or-operator-placeholder "新增篩選器/運算子"
  :query.builder/between-end-label "結束日期"
  :query.builder/between-journal-label "介於：{1} ~ {2}"
@@ -1504,66 +1623,76 @@
  :query.builder/unwrap-operator "解除包裝"
  :query.builder/updated-label "更新時間"
  :query.builder/wrap-filter-with-label "以下方式包裝此篩選："
- :query/advanced-results "進階查詢結果"
- :query/custom-view-error "自訂檢視錯誤：{1}"
- :query/error "查詢錯誤："
- :query/examples-desc "查看更多範例：{{Queries documentation}}。"
- :query/examples-title "查詢範例："
- :query/results-for "{1} 的結果"
- :reference.filter/directions "點擊以包含，Shift+點擊以排除，再次點擊以移除。"
- :reference.filter/excludes "排除："
- :reference.filter/includes "包含："
- :reference.filter/search-placeholder "在已連結頁面搜尋"
- :reference.filter/title "篩選條件"
+
  :reference/blocks "區塊引用"
  :reference/copy "複製此引用"
  :reference/delete "刪除此引用"
  :reference/page-filter "頁面篩選"
  :reference/replace-with-embed "取代為嵌入"
  :reference/replace-with-text "取代為文字"
- :search.find-in-page/input-placeholder "在頁面中尋找"
- :search.find-in-page/match-case "區分大小寫"
- :search.find-in-page/next-result "下一個結果"
- :search.find-in-page/previous-result "上一個結果"
+
+ :reference.filter/directions "點擊以包含，Shift+點擊以排除，再次點擊以移除。"
+ :reference.filter/excludes "排除："
+ :reference.filter/includes "包含："
+ :reference.filter/search-placeholder "在已連結頁面搜尋"
+ :reference.filter/title "篩選條件"
+
  :search/blank-input "空白輸入"
  :search/full-text-placeholder "全文搜尋"
  :search/index-progress "正在建立索引 {1}%"
  :search/indices-rebuilt-success "搜尋索引已成功重建！"
  :search/no-result "未找到匹配項"
  :search/result-count "{1} 個結果"
+
+ :search.find-in-page/input-placeholder "在頁面中尋找"
+ :search.find-in-page/match-case "區分大小寫"
+ :search.find-in-page/next-result "下一個結果"
+ :search.find-in-page/previous-result "上一個結果"
+
  :select/default-prompt "請選擇提示"
  :select/default-select-multiple "選擇一個或多個"
  :select/new-option "+ 新選項: {1}"
+
+ :server/error-notification "[伺服器] {1}"
+ :server/mcp-url-copied "MCP URL 已複製到剪貼簿！"
+ :server/start "啟動伺服器"
+ :server/stop "停止伺服器"
+ :server/title "HTTP API 伺服器"
+
  :server.config/auto-start-label "隨應用程式啟動自動啟動伺服器"
  :server.config/port-label "連接埠（1 ~ 65535）"
  :server.config/reset "重設"
  :server.config/save-and-apply "儲存並套用"
  :server.config/title "伺服器設定"
+
  :server.status/closed "已關閉"
  :server.status/closing "關閉中"
  :server.status/error "錯誤"
  :server.status/running "執行中"
  :server.status/starting "啟動中"
  :server.status/stopped "已停止"
+
  :server.token/add-new "+ 新增權杖"
  :server.token/name-placeholder "名稱"
  :server.token/regenerate-value "重新產生權杖值"
  :server.token/title "授權權杖"
  :server.token/update-success "權杖更新成功！"
  :server.token/value-placeholder "值"
- :server/error-notification "[伺服器] {1}"
- :server/mcp-url-copied "MCP URL 已複製到剪貼簿！"
- :server/start "啟動伺服器"
- :server/stop "停止伺服器"
- :server/title "HTTP API 伺服器"
- :settings-page/publish-server-url "發佈伺服器 URL"
- :settings-page/publish-server-url-cleared "發佈伺服器 URL 已清除。將使用官方 Logseq Publish。"
- :settings-page/publish-server-url-default "Logseq Publish"
- :settings-page/publish-server-url-desc "為自架的單頁發佈設定自訂 HTTPS 發佈伺服器 URL。您的 Logseq 驗證權杖會傳送到此伺服器，請僅使用可信的網址。留空則使用官方 Logseq Publish 服務。"
- :settings-page/publish-server-url-reset "重設為預設值"
- :settings-page/publish-server-url-saved "發佈伺服器 URL 已儲存。"
+
+ :settings/account "帳戶"
+ :settings/advanced "進階功能"
+ :settings/ai "AI"
+ :settings/collaboration "協作"
+ :settings/editor "編輯器"
+ :settings/encryption "加密"
+ :settings/features "附加功能"
+ :settings/general "常規"
+ :settings/keymap "快速鍵"
+ :settings/plugins "外掛程式"
+
  :settings.account/storage-usage "{1}GB / {2}GB 總儲存（{3}）"
  :settings.account/synced-graphs "{1}/{2} 個同步圖譜（{3}）"
+
  :settings.advanced/auto-chmod "自動更改檔案許可權"
  :settings.advanced/auto-chmod-desc "禁用此功能可以允許多個使用者在擁有使用者組許可權的情況下編輯檔案。"
  :settings.advanced/auto-updater "自動更新"
@@ -1572,8 +1701,10 @@
  :settings.advanced/disable-sentry "寄送資料和診斷書給 Logseq"
  :settings.advanced/disable-sentry-desc "Logseq 永遠不會收集你的圖譜資料或出售你的數據。"
  :settings.advanced/network-proxy "網路代理"
+
  :settings.ai/enable-mcp-server "MCP 伺服器"
  :settings.ai/enable-mcp-server-desc "啟用 MCP 伺服器，允許與本地 AI 應用程式通訊"
+
  :settings.editor/auto-expand-block-refs "自動展開聚焦 block 的引用"
  :settings.editor/auto-expand-block-refs-tip "此選項控制是否在頁面載入時展開區塊引用"
  :settings.editor/custom-date-format "偏好日期格式"
@@ -1589,6 +1720,7 @@
  :settings.editor/show-full-blocks "顯示所有區塊引用列"
  :settings.editor/spell-checker "自動拼音核對"
  :settings.editor/wide-mode "寬屏模式"
+
  :settings.features/enable-flashcards "啟用卡片"
  :settings.features/home-default-page "設定預設首頁"
  :settings.features/home-default-page-update-success "首頁預設頁面已更新成功！"
@@ -1603,6 +1735,7 @@
  :settings.features/semantic-search "語意搜尋"
  :settings.features/semantic-search-desc "在搜尋結果中包含語意相符項目。適用於 macOS Apple silicon。"
  :settings.features/semantic-search-python3-missing "請安裝 Python 3 以啟用語意搜尋。"
+
  :settings.general/accent-color "強調色"
  :settings.general/accent-color-alert "選擇強調色可能會影響你選擇的自訂主題。"
  :settings.general/accent-color-logseq "Logseq 經典配色"
@@ -1630,23 +1763,23 @@
  :settings.general/theme-dark "深色模式"
  :settings.general/theme-light "淺色模式"
  :settings.general/theme-system "跟隨系統"
+
  :settings.sync-server/clear-success "已清除同步伺服器 URL。將使用官方 Logseq Sync。"
  :settings.sync-server/reset "還原預設值"
  :settings.sync-server/save-success "已儲存同步伺服器 URL。"
  :settings.sync-server/url "同步伺服器 URL"
  :settings.sync-server/url-desc "為自架同步設定自訂 HTTPS 同步伺服器 URL。你的 Logseq 驗證權杖會傳送到此伺服器，因此只應使用可信任的 URL。留空則使用官方 Logseq Sync。"
  :settings.sync-server/url-invalid-error "URL 必須以 https:// 或 http:// 開頭"
- :settings/account "帳戶"
- :settings/advanced "進階功能"
- :settings/ai "AI"
- :settings/collaboration "協作"
- :settings/editor "編輯器"
- :settings/encryption "加密"
- :settings/features "附加功能"
- :settings/general "常規"
- :settings/keymap "快速鍵"
- :settings/plugins "外掛程式"
+
+ :settings-page/publish-server-url "發佈伺服器 URL"
+ :settings-page/publish-server-url-cleared "發佈伺服器 URL 已清除。將使用官方 Logseq Publish。"
+ :settings-page/publish-server-url-default "Logseq Publish"
+ :settings-page/publish-server-url-desc "為自架的單頁發佈設定自訂 HTTPS 發佈伺服器 URL。您的 Logseq 驗證權杖會傳送到此伺服器，請僅使用可信的網址。留空則使用官方 Logseq Publish 服務。"
+ :settings-page/publish-server-url-reset "重設為預設值"
+ :settings-page/publish-server-url-saved "發佈伺服器 URL 已儲存。"
+
  :shell/input-command-title "輸入指令"
+
  :shortcut.category/basics "基礎操作"
  :shortcut.category/block-command-editing "塊編輯文字操作"
  :shortcut.category/block-editing "塊編輯基本"
@@ -1656,9 +1789,11 @@
  :shortcut.category/others "其他"
  :shortcut.category/plugins "外掛"
  :shortcut.category/toggle "切換"
+
  :sidebar.left/favorites "我的最愛"
  :sidebar.left/navigations "導覽"
  :sidebar.left/recent-pages "最近"
+
  :sidebar.right/close "關閉"
  :sidebar.right/close-all "全部關閉"
  :sidebar.right/close-others "關閉其他"
@@ -1672,6 +1807,12 @@
  :sidebar.right/open-as-page "以頁面形式開啟"
  :sidebar.right/resize-handle "右側邊欄調整大小"
  :sidebar.right/toggle "切換右側邊欄"
+
+ :storage/invalid-data-writing "無效資料寫入。"
+ :storage/sqlitedb-error "SQLiteDB 錯誤：{1}"
+ :storage/sqlitedb-import-error "SQLiteDB 匯入錯誤：{1}"
+ :storage/sqlitedb-save-error "SQLiteDB 儲存錯誤：{1}"
+
  :storage.recycle/block-deleted-at "塊已刪除 {1}"
  :storage.recycle/empty "資源回收筒是空的。"
  :storage.recycle/page-deleted-at "頁面已刪除 {1}"
@@ -1679,10 +1820,7 @@
  :storage.recycle/restore "還原"
  :storage.recycle/retention-desc "已刪除的頁面與區塊會保留在這裡，直到被還原或在 30 天後自動垃圾回收。"
  :storage.recycle/title "資源回收筒"
- :storage/invalid-data-writing "無效資料寫入。"
- :storage/sqlitedb-error "SQLiteDB 錯誤：{1}"
- :storage/sqlitedb-import-error "SQLiteDB 匯入錯誤：{1}"
- :storage/sqlitedb-save-error "SQLiteDB 儲存錯誤：{1}"
+
  :sync/assets-downloading "正在下載附件"
  :sync/assets-downloading-count "正在下載資產（{1}）"
  :sync/assets-uploading "正在上傳附件"
@@ -1710,8 +1848,10 @@
  :sync/storage-exceed-limit "同步儲存超出限制"
  :sync/uploading "上傳中..."
  :sync/user-doesnt-exist-yet "該使用者尚不存在。"
+
  :theme/logseq-default "Logseq 預設主題"
  :theme/switch-to "切換到 {1} 主題"
+
  :ui/all-done "全部完成！"
  :ui/apply "套用"
  :ui/cancel "取消"
@@ -1762,6 +1902,7 @@
  :ui/untitled "無標題"
  :ui/use-current-time "使用目前時間"
  :ui/yes "是"
+
  :updater/checking-for-updates "正在檢查更新"
  :updater/downloading-progress "正在下載更新（{1}%）"
  :updater/quit-and-install "重新啟動並安裝"
@@ -1769,6 +1910,18 @@
  :updater/update-available "發現新版本"
  :updater/update-error "⚠️ 哎呀，出了點問題！\n請查看{1}。"
  :updater/update-ready-to-install "更新已準備就緒"
+
+ :view/add-new-view "新增新檢視"
+ :view/all "全部"
+ :view/export-edn "匯出 EDN"
+ :view/linked-references "已連結的引用"
+ :view/new "新增"
+ :view/new-property "新增屬性"
+ :view/new-view "新增檢視"
+ :view/rename "重新命名"
+ :view/results "結果："
+ :view/unlinked-references "未連結的引用"
+
  :view.filter/custom-date "自訂日期"
  :view.filter/empty "空"
  :view.filter/filter "篩選"
@@ -1796,6 +1949,7 @@
  :view.filter/relative-3-months-ago "3 個月前"
  :view.filter/to "到"
  :view.filter/type-to-search "輸入以搜尋"
+
  :view.gallery/card-size "卡片尺寸"
  :view.gallery/compact-size "精簡"
  :view.gallery/custom-size "自訂"
@@ -1803,6 +1957,7 @@
  :view.gallery/display-properties "顯示屬性"
  :view.gallery/height "高度"
  :view.gallery/width "寬度"
+
  :view.table/ascending "升序"
  :view.table/columns-visibility "列可見性"
  :view.table/default-title "{1} 個節點"
@@ -1832,169 +1987,19 @@
  :view.table/sort-groups-order "分組排序方向"
  :view.table/total-refs-count "總引用數"
  :view.table/unpin "取消釘選"
- :view/add-new-view "新增新檢視"
- :view/all "全部"
- :view/export-edn "匯出 EDN"
- :view/linked-references "已連結的引用"
- :view/new "新增"
- :view/new-property "新增屬性"
- :view/new-view "新增檢視"
- :view/rename "重新命名"
- :view/results "結果："
- :view/unlinked-references "未連結的引用"
+
  :window/close "關閉"
  :window/exit-fullscreen "離開全螢幕"
  :window/maximize "最大化"
  :window/minimize "最小化"
  :window/restore "還原"
+
  :youtube/embed-first-reminder-mobile "請先嵌入 YouTube 影片，然後使用此圖示。\n提醒：您可以在行動裝置上貼上原始 YouTube 網址作為嵌入影片。"
  :youtube/player-not-ready "YouTube 播放器尚未準備好。"
  :youtube/timestamps-not-available-mobile "YouTube 時間戳記在行動裝置上暫不可用。"
+
  :zotero/attachments "附件"
  :zotero/imported-file-warning "這是一個從 Zotero 匯入的檔案，設定 Zotero 資料目錄 後即可在 Logseq 中開啟該檔案。"
  :zotero/linked-file-warning "這是一個 Zotero 連結檔案，設定 Zotero 連結附件基底目錄 後即可在 Logseq 中開啟該檔案。"
  :zotero/notes "筆記"
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 }
