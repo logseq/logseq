@@ -3967,7 +3967,7 @@
      ;; Identifies the view whose previous paint may stay on screen while the
      ;; next result loads. The search input is left out: typing must keep the
      ;; old table mounted so the search box is not unmounted mid-keystroke.
-     :previous-paint-key (pr-str (dissoc window-context :input))
+     :previous-paint-key (pr-str (dissoc (or window-context full-context) :input))
      :full-context full-context
      :resource-key [:view-data view-uuid (or window-context full-context)]
      :full-key (when window-context
