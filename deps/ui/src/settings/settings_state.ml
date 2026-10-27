@@ -140,13 +140,19 @@ let map_dissoc key kvs =
       match k with Wire.Keyword s -> s <> key | _ -> true)
     kvs
 
-let set_config key v =
+let set_config ?(on_saved = fun () -> ()) key v =
   let cfg' =
     match (Runtime.model ()).Model.graph_config with
     | Wire.Map kvs -> Wire.Map (map_assoc key v kvs)
     | _ -> invalid_arg "Graph configuration must be an EDN map"
   in
-  ignore (Sdk_config.write_config (repo ()) cfg')
+  ignore
+    ((let* () = Sdk_config.write_config (repo ()) cfg' in
+      on_saved ();
+      Js.Promise.resolve ())
+     |> Js.Promise.catch (fun _ ->
+          Toast.error (I18n.t "ui/save-changes-error");
+          Js.Promise.resolve ()))
 
 let config_set_bool key b = set_config key (Wire.Bool b)
 
@@ -171,8 +177,7 @@ let set_home_page name k =
       | Some n -> map_assoc "page" (Wire.String n) home
       | None -> map_dissoc "page" home
     in
-    set_config "default-home" (Wire.Map home');
-    k Home_ok
+    set_config ~on_saved:(fun () -> k Home_ok) "default-home" (Wire.Map home')
   in
   if String.trim name = "" then write None
   else

@@ -18,9 +18,18 @@ let get_url key =
   | _ -> None
 
 let valid_url s =
-  String.length s >= 7
-  && (String.sub s 0 7 = "http://" || String.length s >= 8
-      && String.sub s 0 8 = "https://")
+  let offset =
+    if Str_util.starts_with s "https://" then Some 8
+    else if Str_util.starts_with s "http://" then Some 7
+    else None
+  in
+  match offset with
+  | None -> false
+  | Some offset ->
+      let rest = String.sub s offset (String.length s - offset) in
+      let host = List.hd (String.split_on_char '/' rest) in
+      host <> "" && not (String.contains host '@')
+      && not (String.exists (function ' ' | '\t' | '\n' | '\r' | '?' | '#' -> true | _ -> false) s)
 
 let url_to_ws s =
   let scheme =
@@ -36,41 +45,67 @@ let url_to_ws s =
   scheme ^ "://" ^ base ^ "/sync/%s"
 
 (* settings.cljs push-sync-config-to-worker! *)
-let push_sync_config () =
+let push_sync_config url =
   let ws, http =
-    match get_url "sync-server-url" with
+    match url with
     | Some u -> (url_to_ws u, Str_util.strip_trailing_slashes u)
     | None -> (default_sync_ws, default_sync_http)
   in
-  Runtime.invoke1 "thread-api/set-db-sync-config"
+  let* result = Runtime.invoke1 "thread-api/set-db-sync-config"
     (Wire.Map
        [ (Wire.kw "enabled?", Wire.Bool true)
        ; (Wire.kw "ws-url", Wire.String ws)
        ; (Wire.kw "http-base", Wire.String http)
-       ])
+       ]) in
+  if Rtc_error.is_error result then failwith "Failed to update sync configuration";
+  Js.Promise.resolve ()
 
 let url_editor_body ~key ~storage_key ~title ~desc ~placeholder
-    ~saved_msg ~cleared_msg ~on_saved
+    ~saved_msg ~cleared_msg ?prepare ~on_saved
     (_ms : Model.t Signal.signal) : t =
  fun ctx parent ->
   let url = Signal.state ctx.ui_scheduler (Option.value (get_url storage_key) ~default:"") in
+  let saving = Signal.state ctx.ui_scheduler false in
   let read_input () = Runtime.signal_get url in
-  let reset () =
-    Ui_services.storage_remove storage_key;
+  let finish value =
+    (match value with
+     | Some value -> Ui_services.storage_set storage_key value
+     | None -> Ui_services.storage_remove storage_key);
     on_saved ();
-    Runtime.signal_set url "";
-    Toast.success cleared_msg;
-    Dialogs_state.close_named key
+    Settings_state.poke ();
+    if Ui_effect.alive ctx.ui_scope then begin
+      Runtime.signal_set url (Option.value value ~default:"");
+      Runtime.signal_set saving false;
+      Toast.success (if value = None then cleared_msg else saved_msg);
+      Dialogs_state.close_named key
+    end
   in
+  let failed () =
+    if Ui_effect.alive ctx.ui_scope then begin
+      Runtime.signal_set saving false;
+      Toast.error (T.t "ui/save-changes-error")
+    end
+  in
+  let commit value =
+    if not (Runtime.signal_get saving) then begin
+      match prepare with
+      | None -> (try finish value with _ -> failed ())
+      | Some prepare ->
+          Runtime.signal_set saving true;
+          ignore
+            ((let* () = Js.Promise.resolve () in
+              let* () = prepare value in
+              finish value;
+              Js.Promise.resolve ())
+             |> Js.Promise.catch (fun _ -> failed (); Js.Promise.resolve ()))
+    end
+  in
+  let reset () = commit None in
   let save () =
     let trimmed = String.trim (read_input ()) in
     if trimmed = "" then reset ()
     else if not (valid_url trimmed) then Toast.error (T.t "settings.sync-server/url-invalid-error")
-    else (
-      Ui_services.storage_set storage_key trimmed;
-      on_saved ();
-      Toast.success saved_msg;
-      Dialogs_state.close_named key)
+    else commit (Some trimmed)
   in
   let node =
     column ~key ~style_class:("cp__settings-" ^ key ^ "-cnt")
@@ -86,6 +121,7 @@ let url_editor_body ~key ~storage_key ~title ~desc ~placeholder
                   ~accessibility_identifier:(key ^ "-input")
                   ~style_class:"form-input is-small"
                   ~text_signal:(Signal.value url) ~placeholder
+                  ~disabled:(reactive (fun value -> value) (Signal.value saving))
                   ~on_input:(fun ev ->
                     match ev with
                     | Lui_protocol.TextChanged (_, q) ->
@@ -102,6 +138,7 @@ let url_editor_body ~key ~storage_key ~title ~desc ~placeholder
                      (Settings_controls.btn_cls ~variant:`Solid
                         ~size:`Sm ())
                    ~text:(T.t "ui/save")
+                   ~disabled:(reactive (fun value -> value) (Signal.value saving))
                    ~on_press:(fun _ -> save ())
                    [] ]
               @ [ if_ ~test:(reactive (fun value -> String.trim value <> "") (Signal.value url))
@@ -112,8 +149,13 @@ let url_editor_body ~key ~storage_key ~title ~desc ~placeholder
                       (Settings_controls.btn_cls ~variant:`Outline
                          ~size:`Sm ())
                     ~text:(T.t "settings.sync-server/reset")
+                    ~disabled:(reactive (fun value -> value) (Signal.value saving))
                     ~on_press:(fun _ -> reset ())
-                    []) ])
+                    [])
+                ; Ui_components.button ~key:(key ^ "-cancel") ~variant:`outline ~size:`sm
+                    ~text:(T.t "ui/cancel")
+                    ~disabled:(reactive (fun value -> value) (Signal.value saving))
+                    ~on_press:(fun _ -> Dialogs_state.close_named key) [] ])
           ]
       ]
   in
@@ -124,16 +166,11 @@ let sync_body model =
     ~title:(T.t "settings.sync-server/url") ~desc:(T.t "settings.sync-server/url-desc")
     ~placeholder:default_sync_http ~saved_msg:(T.t "settings.sync-server/save-success")
     ~cleared_msg:(T.t "settings.sync-server/clear-success")
-    ~on_saved:(fun () ->
-      ignore
-        ((let* _ = push_sync_config () in
-         Js.Promise.resolve ())
-         |> Js.Promise.catch (fun _ ->
-                Toast.error (I18n.t "settings/update-worker-error");
-                Js.Promise.resolve ())))) model
+    ~prepare:push_sync_config ~on_saved:(fun () -> ())) model
 
 let publish_body model =
   (url_editor_body ~key:"publish-server" ~storage_key:"publish-server-url"
     ~title:(T.t "settings-page/publish-server-url") ~desc:(T.t "settings-page/publish-server-url-desc")
     ~placeholder:default_publish_base ~saved_msg:(T.t "settings-page/publish-server-url-saved")
-    ~cleared_msg:(T.t "settings-page/publish-server-url-cleared") ~on_saved:(fun () -> ())) model
+    ~cleared_msg:(T.t "settings-page/publish-server-url-cleared")
+    ~on_saved:(fun () -> ())) model

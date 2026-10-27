@@ -126,7 +126,7 @@ let theme_item ~st mode label =
 (* ul.cp__theme-modes-options — needs a signal state holding the active mode *)
 let theme_modes_ul ~st =
   row ~key:"tm" ~style_class:"cp__theme-modes-options" ~gap:12
-    ~cross:`center ~min_height:85
+    ~cross:`center ~min_height:85 ~min_width:0 ~flex_wrap:`wrap
     [ theme_item ~st "light" (T.t "settings.general/theme-light")
     ; theme_item ~st "dark" (T.t "settings.general/theme-dark")
     ; theme_item ~st "system" (T.t "settings.general/theme-system")
