@@ -2952,6 +2952,37 @@
               (str "Expected non-serializable resource key to fail-fast: "
                    (pr-str resource-key))))))))
 
+(deftest view-data-resource-accepts-filter-clauses-without-a-value-test
+  (when-let [api (render-resource-api)]
+    (let [{:keys [conn view-a]} (render-resource-fixture)
+          incomplete-filters {:or? false
+                              :filters [[:user.property/note :text-contains]
+                                        [:block/tags :is]]}
+          option (atom nil)]
+      (testing "a clause whose value is not entered yet is a valid filter"
+        (with-redefs [db-view/get-view-data
+                      (fn [_db _view-id view-option]
+                        (reset! option view-option)
+                        {:count 0 :data []})]
+          (let [response (call-resource-raw api conn
+                                            [:view-data view-a
+                                             {:feature-type :class-objects
+                                              :filters incomplete-filters}])]
+            (is (nil? (get-in response [:value :error])))
+            (is (= (:filters incomplete-filters)
+                   (get-in @option [:filters :filters]))))))
+      (testing "clauses of any other length are reported as an isolated view error"
+        (doseq [clause [[:user.property/note]
+                        [:user.property/note :is #{} :extra]]]
+          (let [response (call-resource-raw api conn
+                                            [:view-data view-a
+                                             {:feature-type :class-objects
+                                              :filters {:or? false
+                                                        :filters [clause]}}])]
+            (is (= "Invalid view resource context"
+                   (get-in response [:value :error :message]))
+                (str "Expected an isolated view error for " (pr-str clause)))))))))
+
 (deftest block-sync-conflicts-resource-is-owned-by-the-sync-state-provider-test
   (when-let [api (render-resource-api)]
     (let [{:keys [conn resource-block]} (render-resource-fixture)
