@@ -1291,6 +1291,35 @@
            (count (d/datoms (:db valid-result) :avet :logseq.property.history/block)))
         "Original property history datoms are imported")))
 
+(deftest graph-datom-import-through-ldb-transact-keeps-property-history
+  (let [original-data
+        {:properties {:user.property/num {:logseq.property/type :number}}
+         :pages-and-blocks [{:page {:block/title "page1"}
+                             :blocks [{:block/title "num block"
+                                       :build/properties {:user.property/num 44}}]}]}
+        conn (db-test/create-conn-with-import-map original-data)
+        num-block (db-test/find-block-by-content @conn "num block")
+        _ (d/transact! conn [{:block/uuid (random-uuid)
+                              :block/created-at (common-util/time-ms)
+                              :logseq.property.history/block [:block/uuid (:block/uuid num-block)]
+                              :logseq.property.history/property :user.property/num
+                              :logseq.property.history/scalar-value 44}])
+        export-map (sqlite-export/build-export @conn {:export-type :graph})
+        ;; The worker's :thread-api/import-edn builds the import against a different
+        ;; graph, validates it and transacts it with ldb/transact!. The target graph
+        ;; already has content, as a graph that was used or just created by the app does,
+        ;; so its entity ids overlap the ids in the export
+        conn2 (db-test/create-conn-with-import-map
+               {:pages-and-blocks [{:page {:block/title "target page"}
+                                    :blocks (mapv #(hash-map :block/title (str "target block " %)) (range 20))}]})
+        txs (sqlite-export/build-import export-map @conn2 {})
+        validation (sqlite-export/validate-import-txs txs @conn2)
+        _ (assert (not (:error validation)) "Import txs are valid")
+        _ (ldb/transact! conn2 (:tx-data validation) {::sqlite-export/imported-data? true})]
+    (is (= 1 (count (d/datoms @conn :avet :logseq.property.history/block))))
+    (is (= 1 (count (d/datoms @conn2 :avet :logseq.property.history/block)))
+        "Property history is imported when transacting with ldb/transact!")))
+
 ;; When a built-in property appears in :build/class-properties alongside
 ;; user-defined properties, the per-class order must survive a round-trip
 (deftest import-graph-preserves-class-properties-order-with-built-in
