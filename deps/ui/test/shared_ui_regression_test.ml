@@ -249,7 +249,97 @@ let flashcards_config ~registry ~profile =
       (List.exists (fun node -> class_has node "all-pages-nav") (nodes session));
     ignore (Lui_app.dispose session.S.app))
 
+let grouped_table_selection ~registry ~profile =
+  let module V = Views_state in
+  let instance = ref None in
+  let session = S.mount ~registry ~profile ~initial:Model.initial
+      ~reducer:(fun model () -> model)
+      ~view:(fun context _ _ ->
+        let inst = V.make ~sched:context.Lui_ui.ui_scheduler
+            ~kind:V.KAllPages ~feature:"all-pages" ~owner:Wire.Nil in
+        instance := Some inst;
+        V.set inst { (V.empty_vstate ()) with
+          V.loading = false;
+          columns = [Views_table.builtin_column "select" "" "select" ()];
+          selected = V.Sset.of_list ["a"; "c"; "stale"];
+          data = Views_wire.VGrouped
+            [ { gv = Wire.Nil; grows = ["b"; "a"] }
+            ; { gv = Wire.Nil; grows = ["c"; "b"] } ] };
+        Lui_elements.column
+          [ Views_table.grouped_table inst ~rows:["b"; "a"]
+          ; Views_table.grouped_table inst ~rows:["c"; "b"] ]) () in
+  Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose session.S.app))
+    (fun () ->
+      let inst = Option.get !instance in
+      let headers = List.filter
+          (fun node -> M.string_prop node "accessibility-identifier" =
+            Some "header-checkbox") (nodes session) in
+      let header = List.hd headers in
+      check "A partially selected group is not checked as a fully selected group"
+        (Hashtbl.find_opt header.M.props "checked" <> Some (P.BoolValue true));
+      S.toggle session header.M.id true;
+      check "Selecting a group preserves the other group's selected rows"
+        (V.Sset.equal (V.get inst).V.selected
+           (V.Sset.of_list ["a"; "b"; "c"; "stale"]));
+      S.toggle session header.M.id false;
+      check "Clearing a group preserves selection outside that group"
+        (V.Sset.equal (V.get inst).V.selected
+           (V.Sset.of_list ["c"; "stale"]));
+      V.update inst (fun state -> { state with
+        V.selected = V.Sset.of_list ["a"; "b"; "c"; "stale"] });
+      check "Bulk actions use current row order once, without stale selections"
+        (Views_table.selected_uuids inst = ["b"; "a"; "c"]))
+
+let table_range_selection () =
+  let module V = Views_state in
+  let initial = { (V.empty_vstate ()) with
+    V.selected = V.Sset.of_list ["a"; "outside"]; table_anchor = Some "a" } in
+  let select state rows uuid checked shift =
+    V.table_select_row state ~rows ~uuid ~checked ~shift in
+  let ranged = select initial ["c"; "b"; "a"] "c" true true in
+  check "A range follows the current order and preserves outside selection"
+    (V.Sset.equal ranged.V.selected (V.Sset.of_list ["a"; "b"; "c"; "outside"]));
+  let missing = select initial ["b"; "c"] "c" true true in
+  check "A filtered-out anchor does not select unrelated rows"
+    (V.Sset.equal missing.V.selected (V.Sset.of_list ["a"; "c"; "outside"]));
+  let cleared = select initial ["a"; "b"; "c"] "a" false false in
+  let next = select cleared ["a"; "b"; "c"] "c" true true in
+  check "Deselecting the anchor ends the previous range"
+    (cleared.V.table_anchor = None &&
+      V.Sset.equal next.V.selected (V.Sset.of_list ["c"; "outside"]))
+
+let table_resize_transaction () =
+  let module V = Views_state in
+  let initial = { (V.empty_vstate ()) with
+    V.view_uuid = "table-a"; sized = V.Smap.singleton "title" 180 } in
+  let start = V.start_table_resize initial ~owner:7 ~column:"title" ~x:50. ~width:180 in
+  let move = V.move_table_resize start ~owner:7 ~x:82.6 in
+  check "Resize preview leaves the persisted-width map unchanged"
+    (move.V.sized = initial.V.sized &&
+      Option.map (fun r -> r.V.resize_preview) move.V.table_resize = Some 213);
+  let cancel = V.finish_table_resize move ~owner:7 ~commit:false in
+  check "Cancelling a drag rolls back without changing committed widths"
+    (cancel.V.table_resize = None && cancel.V.sized = initial.V.sized);
+  let release = V.finish_table_resize move ~owner:7 ~commit:true in
+  check "Release commits the rounded preview once"
+    (release.V.table_resize = None && V.Smap.find "title" release.V.sized = 213 &&
+      V.finish_table_resize release ~owner:7 ~commit:true = release);
+  let low = V.move_table_resize start ~owner:7 ~x:(-1000.) in
+  let high = V.move_table_resize start ~owner:7 ~x:1000. in
+  check "Resize previews clamp to the table's supported width range"
+    (Option.map (fun r -> r.V.resize_preview) low.V.table_resize = Some 40 &&
+      Option.map (fun r -> r.V.resize_preview) high.V.table_resize = Some 500);
+  check "A disposed older header cannot finish another header's drag"
+    (V.finish_table_resize move ~owner:8 ~commit:false = move);
+  let switched = { move with V.view_uuid = "table-b" } in
+  let stale = V.finish_table_resize switched ~owner:7 ~commit:true in
+  check "A previous view's drag never commits into the current view"
+    (stale.V.table_resize = None && stale.V.sized = initial.V.sized)
+
 let run_views ~registry ~profile ~finish =
+  table_resize_transaction ();
+  table_range_selection ();
+  grouped_table_selection ~registry ~profile;
   settings_config ~registry ~profile;
   flashcards_config ~registry ~profile;
   let previous_flush = !Runtime.app_flush in
@@ -281,7 +371,9 @@ let run_views ~registry ~profile ~finish =
     let created = Views_state.make ~sched ~kind:Views_state.KAllPages
       ~feature:"neutral-button-parity" ~owner:Wire.Nil in
     let selected = { (Views_state.empty_vstate ()) with
-      Views_state.selected=Views_state.Sset.singleton "neutral-row" } in
+      Views_state.selected=Views_state.Sset.singleton "neutral-row";
+      data=Views_wire.VFlat { rows=["neutral-row"]; count=1;
+        previews=Hashtbl.create 0; qprops=[] } } in
     let table = {created with Views_state.st=Signal.state sched selected} in
     Lui_elements.column
       [Right_sidebar_view.topbar_btn "contents" (I18n.t "page/contents") (fun () -> ());
@@ -2217,7 +2309,8 @@ let run_views ~registry ~profile ~finish =
         {o_refresh=(fun _ -> incr refreshes); o_refresh_src=(fun _ _ -> ());
          o_create_view=(fun _ -> ()); o_rename_box=(fun _ _ -> Lui_elements.spacer []);
          o_export=(fun _ -> ()); o_add_object=(fun _ -> ());
-         o_title_of_uuid=(fun _ uuid -> uuid); o_load_more=(fun _ -> ())};
+         o_title_of_uuid=(fun _ uuid -> uuid); o_load_more=(fun _ -> ());
+         o_full_action_rows=(fun _ reply -> reply (Error "Full action rows are not installed"))};
       Views_head.sorting_popup inst (popup_anchor ());
       Lui_elements.column
         [Views_table.foldable inst ~key:"tab-fixture"

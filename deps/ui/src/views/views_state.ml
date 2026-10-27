@@ -19,6 +19,15 @@ type filter_clause =
   ; c_val : W.t option
   }
 
+type table_resize =
+  { resize_owner : int
+  ; resize_view : string
+  ; resize_column : string
+  ; resize_x : float
+  ; resize_width : int
+  ; resize_preview : int
+  }
+
 (* column descriptor — mirrors views.cljs build-columns entries *)
 type column =
   { c_id : string (* kw string: "block/title", property ident, "id", "select" *)
@@ -54,6 +63,8 @@ type vstate =
   ; group_desc : bool option
   ; display_type : string (* ident tail: "table" | "list" | "gallery" *)
   ; selected : Sset.t
+  ; table_anchor : string option
+  ; table_resize : table_resize option
   ; hidden : Sset.t
   ; ordered : string list
   ; pinned : Sset.t
@@ -125,6 +136,8 @@ let empty_vstate () : vstate =
   ; group_desc = None
   ; display_type = "table"
   ; selected = Sset.empty
+  ; table_anchor = None
+  ; table_resize = None
   ; hidden = Sset.empty
   ; ordered = []
   ; pinned = Sset.empty
@@ -182,6 +195,61 @@ let get inst : vstate = Runtime.signal_get inst.st
 let set inst (s : vstate) = Runtime.signal_set inst.st s
 
 let update inst f = set inst (f (get inst))
+
+let table_select_row (s : vstate) ~rows ~uuid ~checked ~shift =
+  if not (List.mem uuid rows) then s
+  else
+    let selected =
+      match shift, s.table_anchor with
+      | true, Some anchor when Sset.mem anchor s.selected ->
+          (match List.find_index (( = ) anchor) rows,
+                 List.find_index (( = ) uuid) rows with
+           | Some first, Some last ->
+               let _, selected = List.fold_left
+                   (fun (index, selected) row ->
+                     (index + 1,
+                      if index >= min first last && index <= max first last
+                      then Sset.add row selected else selected))
+                   (0, s.selected) rows in
+               selected
+           | _ -> s.selected)
+      | _ -> s.selected
+    in
+    { s with
+      selected = (if checked then Sset.add uuid selected else Sset.remove uuid selected)
+    ; table_anchor =
+        if checked then Some uuid
+        else if s.table_anchor = Some uuid then None else s.table_anchor
+    }
+
+let start_table_resize (s : vstate) ~owner ~column ~x ~width =
+  if s.view_uuid = "" || not (Float.is_finite x) then s
+  else
+    { s with table_resize = Some
+        { resize_owner = owner; resize_view = s.view_uuid; resize_column = column
+        ; resize_x = x; resize_width = width; resize_preview = width } }
+
+let move_table_resize (s : vstate) ~owner ~x =
+  match s.table_resize with
+  | Some resize when resize.resize_owner = owner ->
+      if resize.resize_view <> s.view_uuid then { s with table_resize = None }
+      else if not (Float.is_finite x) then s
+      else
+        let width = float_of_int resize.resize_width +. x -. resize.resize_x in
+        let preview = int_of_float (Float.round (Float.max 40. (Float.min 500. width))) in
+        { s with table_resize = Some { resize with resize_preview = preview } }
+  | _ -> s
+
+let finish_table_resize (s : vstate) ~owner ~commit =
+  match s.table_resize with
+  | Some resize when resize.resize_owner = owner ->
+      { s with table_resize = None
+      ; sized =
+          if commit && resize.resize_view = s.view_uuid then
+            Smap.add resize.resize_column resize.resize_preview s.sized
+          else s.sized
+      }
+  | _ -> s
 
 (* -- wire encode/decode of persisted table state -- *)
 
@@ -413,6 +481,14 @@ let persist_hidden inst =
     (W.Array (List.map (fun k -> W.Keyword k) (Sset.elements s.hidden)))
     (fun () -> ())
 
+let persist_sized inst =
+  let s = get inst in
+  Views_db.set_view_property s.view_uuid
+    "logseq.property.table/sized-columns"
+    (W.Map (List.map (fun (column, width) -> W.Keyword column, W.Int width)
+      (Smap.bindings s.sized)))
+    (fun () -> ())
+
 let persist_display_type inst =
   let s = get inst in
   Views_db.set_view_property s.view_uuid "logseq.property.view/type"
@@ -453,6 +529,7 @@ type ops =
   ; o_add_object : inst -> unit
   ; o_title_of_uuid : inst -> string -> string
   ; o_load_more : inst -> unit
+  ; o_full_action_rows : inst -> ((Views_wire.view_data, string) result -> unit) -> unit
   }
 
 let ops_ref : ops option ref = ref None
