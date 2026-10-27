@@ -3945,7 +3945,7 @@
     ;; The atom must outlive a re-render: a child rendered with an earlier render's config
     ;; would otherwise wait on an atom the query no longer fills.
     (nil? (:query-result config))
-    (assoc :query-result (or *query-result (atom nil)))
+    (assoc :query-result *query-result)
 
     true
     (block-handler/attach-order-list-state block)
