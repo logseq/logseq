@@ -71,15 +71,20 @@ function resolveStorage(root, graphsDir) {
   fs.mkdirSync(lifecycleDir, { recursive: true });
   return { root, graphsDir, lifecycleDir };
 }
-function context(storage, repo) {
+// `unsignalableIsGone` chooses how every liveness probe made for this context treats a PID this user cannot
+// signal (see pidExists); the default is the strict one.
+function context(storage, repo, unsignalableIsGone = false) {
   const { root, graphsDir, lifecycleDir } = storage;
   if (!root || !graphsDir || !lifecycleDir) fail('Canonical storage context is required');
   repo = graphName(repo);
   const dir = path.join(lifecycleDir, encodeGraph(repo));
   fs.mkdirSync(dir, { recursive: true });
   return { root, graphsDir, lifecycleDir, repo, dir, graphDir: path.join(graphsDir, encodeGraph(repo)),
-    stateFile: path.join(dir, 'state.json') };
+    stateFile: path.join(dir, 'state.json'),
+    pidExists: unsignalableIsGone ? pid => pidExists(pid, { unsignalableIsGone: true }) : pidExists };
 }
+// The liveness probe of a context; runtime objects built by other callers have none and are strict.
+const existsFor = ctx => ctx.pidExists || pidExists;
 function snapshot(storage, repo) {
   return readState(path.join(storage.lifecycleDir, encodeGraph(repo), 'state.json'));
 }
@@ -90,10 +95,11 @@ function sameStorage(ctx, value) {
 }
 
 // PID existence deliberately does not establish OS process-instance identity.
-// EPERM means the PID belongs to a process this user cannot signal. Delete, stop and start treat that as an
-// error, because they must not go on while a process they cannot stop may hold the graph. Startup cleanup of
-// leftover records passes `unsignalableIsGone`: a worker is always signalable by the user who started it, so
-// such a PID has been reused by someone else's process and the record is stale.
+// EPERM means the PID belongs to a process this user cannot signal. Delete and stop treat that as an error,
+// because they must not go on while a process they cannot stop may hold the graph. Startup cleanup, start,
+// create and admit pass `unsignalableIsGone`: a worker is always signalable by the user who started it, so
+// such a PID has been reused by someone else's process and the record is stale; whether a worker really
+// holds the graph is decided by the ownership lock, which they all take or test next.
 function pidExists(pid, { unsignalableIsGone = false } = {}) {
   if (!Number.isSafeInteger(pid) || pid <= 0) fail('Invalid PID');
   try { process.kill(pid, 0); return true; }
@@ -178,7 +184,7 @@ function ownershipAvailable(ctx) {
   return true;
 }
 async function createGraph(storage, repo) {
-  const ctx = context(storage, repo);
+  const ctx = context(storage, repo, true);
   return withLease(ctx, 'create', async () => {
     const current = state(ctx);
     if (current.phase === 'available' && fs.existsSync(ctx.graphDir)) return current.generation;
@@ -199,7 +205,7 @@ function runtimeFile(ctx, ticket) {
   return path.join(ctx.dir, `runtime-${ticket}.json`);
 }
 async function admit({ storage, repo, ticket, generation, owner }) {
-  const ctx = context(storage, repo);
+  const ctx = context(storage, repo, true);
   if (!owner) fail('Worker owner is required');
   return withLease(ctx, 'admit', async () => {
     const current = state(ctx);
@@ -213,7 +219,7 @@ async function admit({ storage, repo, ticket, generation, owner }) {
       validateRegistration(ctx, current, record);
     }
     const previous = ticket ? [] : (await discover(ctx, current)).targets;
-    if (previous.some(pending)) fail('Graph ownership admission is pending', 'repo-locked');
+    if (previous.some(target => pending(target, existsFor(ctx)))) fail('Graph ownership admission is pending', 'repo-locked');
     const handle = acquireOwnership(ctx);
     try {
       if (!record) {
@@ -404,7 +410,7 @@ function publicationScan() {
   };
 }
 async function discover(ctx, current, scan, registeredOnly = false) {
-  const exists = scan ? scan.pidExists : pidExists;
+  const exists = scan ? scan.pidExists : existsFor(ctx);
   const targets = new Map();
   const goneDuplicates = [];
   for (const record of current.workers) {
@@ -532,7 +538,8 @@ async function waitExit(pid, milliseconds) {
   } while (Date.now() < deadline);
   return !pidExists(pid);
 }
-async function terminate(ctx, target, deleting, verified = false, exists = pidExists) {
+async function terminate(ctx, target, deleting, verified = false) {
+  const exists = existsFor(ctx);
   if (!exists(target.pid)) return;
   if (ownershipAvailable(ctx)) {
     // Free ownership fences abandoned tickets, but a verified endpoint still has
@@ -577,7 +584,7 @@ async function terminate(ctx, target, deleting, verified = false, exists = pidEx
 }
 async function shutdownAndWait(ctx, target, deleting, responsive) {
   if (target.pid === process.pid) fail('Cannot stop the calling process');
-  if (!pidExists(target.pid)) return;
+  if (!existsFor(ctx)(target.pid)) return;
   if (responsive) {
     try {
       const response = await request(target.port, '/v1/shutdown', 'POST',
@@ -600,7 +607,8 @@ async function shutdownAndWait(ctx, target, deleting, responsive) {
 const legacy = require('./legacy-retirement.cjs')({ fail, readJSON, writeJSON, graphName, canonicalRoot,
   sameStorage, pidExists, entries, request, shutdownAndWait, removeEntries, runtimeFile, state });
 
-async function probeUpgradeTarget(ctx, target, operationDeadline, exists) {
+async function probeUpgradeTarget(ctx, target, operationDeadline) {
+  const exists = existsFor(ctx);
   const deadline = Math.min(operationDeadline, Date.now() + HEALTH_PROBE_BUDGET);
   for (;;) {
     if (!exists(target.pid)) return { target };
@@ -634,8 +642,8 @@ async function upgradeGraph(ctx, revision, initialScan, registeredOnly) {
   let publicationDeadline;
   let generation;
   let scan = initialScan;
-  // Startup cleanup takes an unsignalable PID for a reused one (see pidExists); every scan probes alike.
-  const exists = initialScan.pidExists;
+  // stopOutdatedWorkers makes the context lenient: startup cleanup takes an unsignalable PID for a reused one.
+  const exists = existsFor(ctx);
   for (;;) {
     checkDeadline();
     const observed = await withLease(ctx, 'upgrade', async () => {
@@ -653,7 +661,7 @@ async function upgradeGraph(ctx, revision, initialScan, registeredOnly) {
         // existing unverified termination rules; never signal a recycled PID
         // merely because an earlier endpoint probe succeeded.
         if (available && !pending(target, exists)) {
-          await terminate(ctx, target, false, false, exists);
+          await terminate(ctx, target, false);
           await cleanup(ctx, current, [target]);
           // A gone worker's publication has no port on the target, so cleanup left it in server-list, where
           // the strict probes of later start and stop calls would meet its unsignalable PID again. Discovery
@@ -686,7 +694,7 @@ async function upgradeGraph(ctx, revision, initialScan, registeredOnly) {
       scan = publicationScan();
       continue;
     }
-    const probes = await Promise.all(observed.map(target => probeUpgradeTarget(ctx, target, deadline, exists)));
+    const probes = await Promise.all(observed.map(target => probeUpgradeTarget(ctx, target, deadline)));
     const applied = await withLease(ctx, 'upgrade', async () => {
       checkDeadline();
       const current = state(ctx);
@@ -703,14 +711,14 @@ async function upgradeGraph(ctx, revision, initialScan, registeredOnly) {
         const { value, error } = probes[index];
         if (exists(target.pid)) {
           if (available && !pending(target, exists)) {
-            await terminate(ctx, target, false, false, exists);
+            await terminate(ctx, target, false);
           } else {
             if (error) throw error;
             // An exited worker can have been replaced between the PID and HTTP
             // observations; let the next scan verify the new state instead.
             if (!value) return false;
             if (value.revision === revision) continue;
-            await terminate(ctx, target, false, true, exists);
+            await terminate(ctx, target, false, true);
           }
         }
         await cleanup(ctx, current, [target]);
@@ -733,7 +741,7 @@ async function stopOutdatedWorkers(storage, revision, repo) {
     : [repo];
   const scan = publicationScan();
   const results = await Promise.allSettled(names.map(name =>
-    upgradeGraph(context(storage, name), revision, scan, repo !== undefined)));
+    upgradeGraph(context(storage, name, true), revision, scan, repo !== undefined)));
   const errors = results.filter(result => result.status === 'rejected').map(result => result.reason);
   if (errors.length) throw new AggregateError(errors, `Outdated worker cleanup failed: ${errors.map(error => error.message).join('; ')}`);
   return results.flatMap(result => result.value);
@@ -759,7 +767,7 @@ async function stopUnderLease(ctx, current, deleting, owner) {
   const available = ownershipAvailable(ctx);
   if (!deleting) {
     for (const target of targets) {
-      if (!pidExists(target.pid) || (available && !pending(target))) continue;
+      if (!existsFor(ctx)(target.pid) || (available && !pending(target, existsFor(ctx)))) continue;
       const source = target.owner;
       if (source !== owner && !(owner === 'cli' && source === 'unknown'))
         fail('Server is owned by another process', 'server-owned-by-other');
@@ -871,7 +879,7 @@ async function cancelStartup(ctx, record) {
   });
 }
 async function startGraph({ storage, repo, script, owner = 'cli', createEmpty = false, generation, extraArgs = [] }) {
-  const ctx = context(storage, repo);
+  const ctx = context(storage, repo, true);
   // Capture the instance before queuing for exclusion, not after a delete/recreate.
   const observed = snapshot(storage, repo)?.generation;
   let created;
@@ -882,7 +890,7 @@ async function startGraph({ storage, repo, script, owner = 'cli', createEmpty = 
       await legacy.retireGraph(ctx, current);
       const { targets } = await discover(ctx, current);
       const available = ownershipAvailable(ctx);
-      const live = targets.filter(target => pidExists(target.pid) && (!available || pending(target)));
+      const live = targets.filter(target => existsFor(ctx)(target.pid) && (!available || pending(target, existsFor(ctx))));
       if (!available && !live.length) fail('Graph ownership is locked without a registered worker', 'repo-locked');
       if (live.length > 1) fail('Multiple live graph workers', 'server-start-failed');
       if (live.length) return live[0];

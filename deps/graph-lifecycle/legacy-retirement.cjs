@@ -21,7 +21,7 @@ module.exports = function ({ fail, readJSON, writeJSON, graphName, canonicalRoot
   }
   async function retireGraph(ctx, current, scan) {
     const file = path.join(ctx.graphDir, 'db-worker.lock');
-    const exists = scan ? scan.pidExists : pidExists;
+    const exists = scan ? scan.pidExists : ctx.pidExists || pidExists;
     const original = artifact(file);
     const disk = parse(original);
     // A record without a root cannot be correlated with a legacy lock; discover refuses it as an invalid registration.
