@@ -3,6 +3,7 @@
             [datascript.core :as d]
             [dommy.core :as dom]
             [frontend.components.block.comments-model :as comments-model]
+            [frontend.date :as date]
             [frontend.db.async :as db-async]
             [frontend.db.conn :as conn]
             [frontend.db.transact :as db-transact]
@@ -16,6 +17,7 @@
             [frontend.handler.editor.assets :as editor-assets]
             [frontend.handler.editor.quick-add :as editor-quick-add]
             [frontend.handler.export.html :as export-html]
+            [frontend.handler.notification :as notification]
             [frontend.handler.user :as user-handler]
             [frontend.modules.outliner.op :as frontend-outliner-op]
             [frontend.state :as state]
@@ -24,7 +26,9 @@
             [frontend.worker.handler.block :as worker-block-handler]
             [frontend.worker.handler.comments :as worker-comments]
             [goog.dom :as gdom]
+            [logseq.common.config :as common-config]
             [logseq.db :as ldb]
+            [logseq.shui.ui :as shui]
             [logseq.outliner.op :as outliner-op]
             [promesa.core :as p]))
 
@@ -839,6 +843,7 @@
         inserts (atom [])]
     (p/with-redefs [state/get-current-repo (constantly "test-repo")
                     user-handler/user-uuid (constantly (str user-id))
+                    db-async/<get-journal-page-by-day (fn [& _] (p/resolved nil))
                     db-async/<get-block
                     (fn [_repo block-id & _opts]
                       (p/resolved (when (= user-id block-id)
@@ -859,6 +864,45 @@
                       :replace-empty-target? false}]]
                @inserts)
             "Another user's Quick Add block must not suppress the current user's block.")))))
+
+(deftest-async quick-add-moves-blocks-to-today-journal-found-by-journal-day
+  (let [today-uuid (random-uuid)
+        quick-add-page-id (random-uuid)
+        quick-add-block {:block/uuid (random-uuid)
+                         :block/order "a0"}
+        moves (atom [])]
+    (p/with-redefs [state/get-current-repo (constantly "test-repo")
+                    state/get-date-formatter (constantly "yyyy-MM-dd")
+                    state/close-dialog! (fn [])
+                    shui/popup-hide! (fn [])
+                    notification/show! (fn [& _])
+                    date/today-journal-day (constantly 20261027)
+                    editor/save-current-block! (fn [] (p/resolved nil))
+                    ;; The journal's :block/name is in the default format, so a
+                    ;; lookup by the configured-format title finds nothing
+                    db-async/<get-journal-page-by-day
+                    (fn [_repo journal-day]
+                      (p/resolved (when (= 20261027 journal-day)
+                                    {:block/uuid today-uuid
+                                     :block/name "oct 27th, 2026"
+                                     :block/title "2026-10-27"})))
+                    db-async/<get-block-with-children
+                    (fn [_repo block-id & _opts]
+                      (p/resolved (cond
+                                    (= today-uuid block-id)
+                                    {:block {:block/uuid today-uuid}
+                                     :children []}
+
+                                    (= common-config/quick-add-page-name block-id)
+                                    {:block {:block/uuid quick-add-page-id}
+                                     :children [quick-add-block]})))
+                    editor/move-blocks! (fn [blocks target opts]
+                                          (swap! moves conj [blocks (:block/uuid target) opts])
+                                          (p/resolved nil))]
+      (p/let [_ (editor-quick-add/quick-add-blocks!)]
+        (is (= [[[quick-add-block] today-uuid {:sibling? false}]]
+               @moves)
+            "Quick Add blocks move to today's journal, found by its journal day")))))
 
 (deftest-async ensure-comments-area-for-single-selected-block
   (let [block-uuid (random-uuid)

@@ -193,12 +193,16 @@
     :else
     chosen-result))
 
-(defn- <page-by-title
-  [repo page]
-  (state/<invoke-db-worker :thread-api/pull
-                           repo
-                           [:db/id :block/title :block/name :block/uuid :block/tags]
-                           [:block/name (util/page-name-sanity-lc page)]))
+(defn- <journal-page-by-day
+  "Pulls the journal page of `journal-day`. A journal's `:block/name` doesn't
+  follow the configured journal title format, so it's found by its day."
+  [repo journal-day]
+  (p/let [page (db-async/<get-journal-page-by-day repo journal-day)]
+    (when-let [page-uuid (:block/uuid page)]
+      (state/<invoke-db-worker :thread-api/pull
+                               repo
+                               [:db/id :block/title :block/name :block/uuid :block/tags]
+                               [:block/uuid page-uuid]))))
 
 (defn- tag-on-chosen-handler
   [input id pos format current-pos edit-content q]
@@ -275,7 +279,7 @@
                                             (let [d (doto (goog.date.DateTime.) (.setTime (.getTime result)))
                                                   gd (goog.date.Date. (.getFullYear d) (.getMonth d) (.getDate d))
                                                   page (date/js-date->journal-title gd)]
-                                              [page (<page-by-title repo page)])))
+                                              [page (<journal-page-by-day repo (date/date->journal-day gd))])))
                                         [chosen' chosen-result])
             datoms (state/<invoke-db-worker :thread-api/datoms repo :avet :block/name (util/page-name-sanity-lc chosen'))
             multiple-pages-same-name? (> (count datoms) 1)
