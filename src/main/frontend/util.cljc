@@ -827,9 +827,12 @@
       looks up blocks in that container e.g. for embed"
      ([block] (get-prev-block-non-collapsed block {}))
      ([block {:keys [container up-down? exclude-property?]}]
-      (when-let [blocks (if container
-                          (get-blocks-noncollapse container)
-                          (get-blocks-noncollapse))]
+      ;; no block (its element left the DOM, e.g. Up from a code block whose block is gone): no neighbour,
+      ;; as get-next-block-non-collapsed already does
+      (when-let [blocks (and block
+                             (if container
+                               (get-blocks-noncollapse container)
+                               (get-blocks-noncollapse)))]
         (let [blocks (cond->>
                       (if up-down?
                         (skip-same-top-blocks blocks block)
