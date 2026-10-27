@@ -1468,10 +1468,15 @@
         (p/let [[_top-level-block-uuids md-content] (compose-copied-blocks-contents repo [block-id])
                 html (export-html/export-blocks-as-html repo [block-id] nil)
                 copied-source-blocks (<get-all-blocks-by-ids repo [block-id])]
-          (common-handler/copy-to-clipboard-without-id-property!
-           repo md-content html (blocks-for-clipboard copied-source-blocks) :op :cut)
-          (state/set-block-op-type! :cut)
-          (delete-block-aux! block))))))
+          (p/let [copied? (<clipboard-written?
+                           (common-handler/copy-to-clipboard-without-id-property!
+                            repo md-content html (blocks-for-clipboard copied-source-blocks) :op :cut))]
+            (if copied?
+              (do
+                (state/set-block-op-type! :cut)
+                (delete-block-aux! block))
+              (log/error :msg "Cut cancelled, the clipboard refused the block"
+                         :block-id block-id))))))))
 
 (defn- selection-node-block-id
   [node]
