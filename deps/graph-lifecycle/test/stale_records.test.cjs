@@ -247,6 +247,33 @@ test('startup cleanup refuses, with a coded error, a live worker whose runtime f
   });
 });
 
+for (const [description, damage] of [['without permissions', lock => { fs.writeFileSync(lock, '{}'); fs.chmodSync(lock, 0); }],
+  ['a directory', lock => fs.mkdirSync(lock)]]) {
+  test(`startup cleanup reclaims a server-list lock that is ${description}`, async () => {
+    await withGraph(async (storage, repo) => {
+      registerLeftoverWorker(storage, repo, exitedPid());
+      const lock = path.join(storage.root, 'server-list.lock');
+      damage(lock);
+      fs.utimesSync(lock, LONG_AGO, LONG_AGO);
+      await lifecycle.stopOutdatedWorkers(storage, REVISION, repo);
+      assert.equal(fs.existsSync(lock), false);
+      assert.deepEqual(lifecycle.snapshot(storage, repo).workers, []);
+    });
+  });
+}
+
+test('startup cleanup refuses, with a coded error, a server-list that cannot be read', async () => {
+  await withGraph(async (storage, repo) => {
+    registerLeftoverWorker(storage, repo, exitedPid());
+    const list = path.join(storage.root, 'server-list');
+    fs.writeFileSync(list, '');
+    fs.chmodSync(list, 0);
+    await assert.rejects(lifecycle.stopOutdatedWorkers(storage, REVISION, repo),
+      error => error.errors.every(cause => cause.code === 'server-stop-failed' && /Unreadable server publication list/.test(cause.message)));
+    fs.chmodSync(list, 0o600);
+  });
+});
+
 // Registers the leftover worker a second time, under another ticket or under the same one.
 function registerTwice(storage, repo, pid, sameTicket) {
   registerLeftoverWorker(storage, repo, pid);
