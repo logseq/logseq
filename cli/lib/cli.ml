@@ -200,9 +200,17 @@ let group_help_path registry path =
         && Vec.length command.Command_registry.path > Vec.length path)
       registry.Command_registry.commands
 
+(* A command can be followed by arguments, as in `example upsert --help`. *)
+let starts_with_command registry path =
+  Vec.exists
+    (fun command -> is_prefix command.Command_registry.path path)
+    registry.Command_registry.commands
+
 let help_group registry options positional =
-  if option_present "help" options then Some positional
-  else if group_help_path registry positional then Some positional
+  if group_help_path registry positional then Some positional
+  else if
+    option_present "help" options && starts_with_command registry positional
+  then Some positional
   else None
 
 let profile_status exit_code =
