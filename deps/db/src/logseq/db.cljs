@@ -211,10 +211,15 @@
                       (remove (fn [m] (or ;; db/id
                                        (integer? m)
                                        (empty? m)))))
-         tx-data (if-not (string? repo-or-conn)
+         ;; An EDN import retracts all current entities before adding the imported ones, which
+         ;; reuse entity ids. Cleaning up what refers to the retracted entities would delete
+         ;; imported data such as property history
+         cleanup-deleted-blocks? (and (not (string? repo-or-conn))
+                                      (not (:logseq.db.sqlite.export/imported-data? tx-meta)))
+         tx-data (if cleanup-deleted-blocks?
                    (delete-blocks/expand-delete-blocks-tx @repo-or-conn tx-data tx-meta)
                    tx-data)
-         delete-blocks-tx (when-not (string? repo-or-conn)
+         delete-blocks-tx (when cleanup-deleted-blocks?
                             (delete-blocks/update-refs-history @repo-or-conn tx-data tx-meta))
          tx-data (concat tx-data delete-blocks-tx)]
 
