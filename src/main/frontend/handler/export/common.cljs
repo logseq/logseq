@@ -5,14 +5,15 @@
             [promesa.core :as p]))
 
 (defn get-content-config []
-  {:export-bullet-indentation (state/get-export-bullet-indentation)
+  ;; mldoc counts each indentation character as a level. Use one tab per
+  ;; level for the intermediate Markdown consumed by formatted exporters.
+  {:export-bullet-indentation "\t"
    :date-formatter (state/get-date-formatter)
    ;; Encode block background-color highlights as ^^text^^ so they survive
    ;; Text/OPML/HTML export instead of being silently dropped (the property
    ;; is otherwise hidden from export like other :hide? true properties).
    :encode-highlight-as-mark? true
-   ;; Expand children of Text/:default property values so selected-block
-   ;; Text/OPML/HTML export matches file export (db-test#1390).
+   ;; Include Text property values and their descendants in formatted exports.
    :export-default-property-values-as-blocks? true})
 
 (defn <export-blocks-as-format
