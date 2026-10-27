@@ -320,6 +320,24 @@
                      (map :block/title)))
         "The value does not become a child block")))
 
+(deftest delete-number-property-page-with-a-value
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties {:num {:logseq.property/type :number}}
+               :pages-and-blocks
+               [{:page {:block/title "page1"}
+                 :blocks [{:block/title "b1" :build/properties {:num 3}}]}]})
+        block (db-test/find-block-by-content @conn "b1")
+        value-block-id (:db/id (:user.property/num block))
+        _ (assert (some? value-block-id))
+        property-page (d/entity @conn :user.property/num)]
+    (is (true? (outliner-page/delete! conn (:block/uuid property-page))))
+    (is (nil? (d/entity @conn :user.property/num))
+        "The property is deleted")
+    (is (nil? (:logseq.property/value (d/entity @conn value-block-id)))
+        "The value block is deleted with the property")
+    (is (some? (d/entity @conn (:db/id block)))
+        "The block that had the value stays")))
+
 (deftest delete-property-page-retracts-children-of-text-value-blocks
   (let [conn (db-test/create-conn-with-blocks
               {:properties {:note {:logseq.property/type :default}}
