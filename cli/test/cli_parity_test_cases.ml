@@ -6712,6 +6712,33 @@ let () =
       expect_named_contains "edn help status" edn_stdout ":status :ok";
       expect_named_contains "edn help message" edn_stdout "Usage: logseq");
 
+  test "CLI parity help for an unknown command is an unknown-command error"
+    (fun () ->
+      let unknown_top = run_cli_lifecycle [| "destroy-the-world2"; "--help" |] in
+      expect_int "unknown command help exit" 1 unknown_top.exit_code;
+      let unknown_top_stdout = stdout_text "unknown command stdout" unknown_top in
+      expect_named_contains "unknown command help code" unknown_top_stdout
+        "unknown-command";
+      expect_named_contains "unknown command help message" unknown_top_stdout
+        "destroy-the-world2";
+      expect_named_not_contains "unknown command help prints no usage"
+        unknown_top_stdout "Usage: logseq";
+      let unknown_sub = run_cli_lifecycle [| "graph"; "nonexistent"; "--help" |] in
+      expect_int "unknown subcommand help exit" 1 unknown_sub.exit_code;
+      expect_named_contains "unknown subcommand help code"
+        (stdout_text "unknown subcommand stdout" unknown_sub)
+        "unknown-command";
+      let known_group = run_cli_lifecycle [| "graph"; "--help" |] in
+      expect_int "group help exit" 0 known_group.exit_code;
+      expect_named_contains "group help usage"
+        (stdout_text "group help stdout" known_group)
+        "Usage: logseq graph";
+      let known_command = run_cli_lifecycle [| "graph"; "list"; "--help" |] in
+      expect_int "command help exit" 0 known_command.exit_code;
+      expect_named_contains "command help usage"
+        (stdout_text "command help stdout" known_command)
+        "Usage: logseq graph list");
+
   test "CLI parity main structured parse errors respect output modes" (fun () ->
       let json_output = run_cli_lifecycle [| "--output"; "json"; "wat" |] in
       expect_int "json parse exit" 1 json_output.exit_code;
