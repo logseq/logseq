@@ -1223,9 +1223,11 @@
   [html? & {:keys [selected-blocks selected-ids op] :as opts}]
   (let [repo (state/get-current-repo)
         ids (selection-copy-ids selected-blocks selected-ids)
-        block-op (or op :copy)]
-    (when (seq ids)
-      (copy-cached-selection-text! ids))
+        block-op (or op :copy)
+        ;; Written within the user gesture, before the later writes that a
+        ;; browser needing a gesture may refuse, so it counts as a copy too.
+        <early-text-written? (when (seq ids)
+                               (some-> (copy-cached-selection-text! ids) <clipboard-written?))]
     (p/let [[top-level-block-uuids content blocks]
             (compose-copied-blocks-contents
              repo ids (assoc (dissoc opts :selected-blocks :selected-ids :op)
@@ -1237,8 +1239,9 @@
                   blocks-written? (<clipboard-written?
                                    (common-handler/copy-to-clipboard-without-id-property!
                                     repo content (when html? html) (blocks-for-clipboard copied-source-blocks) :op block-op))
-                  text-written? <text-written?]
-            (when-not (or blocks-written? text-written?)
+                  text-written? <text-written?
+                  early-text-written? <early-text-written?]
+            (when-not (or blocks-written? text-written? early-text-written?)
               (throw (ex-info "The clipboard refused the copied blocks" {:block-uuids top-level-block-uuids})))
             (state/set-block-op-type! block-op)))
         ;; (notification/show! "Copied!" :success)

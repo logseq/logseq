@@ -2356,6 +2356,34 @@
                      (is false (str error))))
           (p/finally done)))))
 
+(deftest copy-selection-blocks-counts-the-write-made-during-the-user-gesture-test
+  (async done
+    (let [block-uuid (random-uuid)
+          text-writes (atom [])
+          op-types (atom [])]
+      (-> (p/with-redefs [state/get-selection-block-ids (constantly [block-uuid])
+                          state/set-block-op-type! (fn [op] (swap! op-types conj op))]
+            (<with-clipboard-writes block-uuid
+                                    ;; Only the first write, made during the gesture before
+                                    ;; the blocks are loaded, is accepted by the browser.
+                                    #(if (= 1 (count (swap! text-writes conj :write)))
+                                       (p/resolved nil)
+                                       (<rejected "NotAllowedError"))
+                                    #(<rejected "NotAllowedError")
+                                    #(p/with-redefs [db-subs/block-snapshot
+                                                     (constantly {:status :ready
+                                                                  :value {:block/uuid block-uuid
+                                                                          :block/title "cached title"}})]
+                                       (editor/copy-selection-blocks true :selected-ids [block-uuid] :op :cut))))
+          (p/then (fn [_]
+                    (is (= 2 (count @text-writes))
+                        "The cached text is written first, then the exported text.")
+                    (is (= [:cut] @op-types)
+                        "The cached text reached the clipboard, so the copy counts as done.")))
+          (p/catch (fn [error]
+                     (is false (str error))))
+          (p/finally done)))))
+
 (deftest cut-selection-blocks-keeps-the-blocks-when-the-clipboard-refuses-the-copy-test
   (async done
     (let [value-uuid #uuid "11111111-1111-1111-1111-111111111111"
