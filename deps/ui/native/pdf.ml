@@ -13,12 +13,16 @@ open Promise_ext
 module W = Wire
 module J = Js.Json
 
+let load_generation = ref 0
+
 let current_sig : Model.pdf_asset option Signal.state option ref =
   ref None
 
 (* mounted viewer state — None until load_hls_data resolves *)
 type view =
   { asset : Model.pdf_asset
+  ; repo : string
+  ; instance : int
   ; hls : Model.hl list
   ; image_paths : (string * string) list (* hl id -> area png path *)
   ; page : int
@@ -101,6 +105,11 @@ let bool_str b = if b then "true" else "false"
 
 let attrs_of_view (v : view) : (string * string) list =
   [ "path", v.asset.Model.pdf_url
+  ; "identity", v.asset.Model.pdf_identity
+  ; "asset_key", v.asset.Model.pdf_key
+  ; "repo", v.repo
+  ; "instance", string_of_int v.instance
+  ; "block_uuid", Option.value v.asset.Model.pdf_block_uuid ~default:""
   ; "filename", v.asset.Model.pdf_filename
   ; "hls",
     J.stringify (J.array (Array.of_list (List.map (hl_json v.image_paths) v.hls)))
@@ -113,7 +122,6 @@ let attrs_of_view (v : view) : (string * string) list =
   ; "automenu", bool_str (Pdf_state.auto_open_ctx ())
   ; "hl_mode", bool_str !Pdf_state.highlight_mode
   ; "area_mode", bool_str !Pdf_state.area_mode
-  ; "style", "width:100%;height:100%"
   ]
 
 (* ---------- event payload parsing ---------- *)
@@ -245,6 +253,8 @@ let set_mode name on =
   update_view (fun v -> { v with rev = v.rev + 1 })
 
 let persist_page n =
+  if n < 1 then invalid_arg "PDF page must be positive";
+  update_view (fun v -> { v with page = n });
   match get_view () with
   | Some { asset = { Model.pdf_block_uuid = Some uuid; _ }; _ } ->
       ignore
@@ -254,6 +264,8 @@ let persist_page n =
   | _ -> ()
 
 let persist_scale s =
+  if String.trim s = "" then invalid_arg "PDF scale must not be empty";
+  update_view (fun v -> { v with scale = s });
   match get_view () with
   | Some { asset = { Model.pdf_block_db_id = Some id; _ }; _ } ->
       Pdf_state.set_stored_scale id s
@@ -270,7 +282,16 @@ let on_dom_event name payload =
     | Some p -> ( try J.parseExn p with _ -> J.null)
     | None -> J.null
   in
-  match name with
+  let current =
+    match get_view () with
+    | Some v ->
+        Runtime.repo () = v.repo
+        && jstr j "repo" = Some v.repo
+        && jstr j "identity" = Some v.asset.Model.pdf_identity
+        && jstr j "instance" = Some (string_of_int v.instance)
+    | None -> false
+  in
+  if current then match name with
   | "pdf-close" -> Pdf_state.set_current None
   | "pdf-hl-add" -> add_hl (hl_of_json j)
   | "pdf-hl-area" -> add_area_hl j
@@ -336,9 +357,20 @@ let image_paths_of (hls : Model.hl list) :
   Js.Promise.resolve (List.filter_map Fun.id (Array.to_list pairs))
 
 let load_view (a : Model.pdf_asset) =
+  incr load_generation;
+  let generation = !load_generation in
+  let repo = Runtime.repo () in
+  let current () =
+    generation = !load_generation && Runtime.repo () = repo
+    && !Pdf_state.current = Some a
+  in
+  set_view None;
   ignore
     (let* hls, page_opt, scale = Pdf_assets.load_hls_data a in
-     let* image_paths = image_paths_of hls in
+     let* image_paths =
+       if current () then image_paths_of hls else Js.Promise.resolve []
+     in
+     if current () then (
      Pdf_state.set_hls hls;
      let ref_hl =
        match !Pdf_state.ref_hl with
@@ -353,37 +385,36 @@ let load_view (a : Model.pdf_asset) =
      set_view
        (Some
           { asset = a
+          ; repo
+          ; instance = generation
           ; hls
           ; image_paths
           ; page
           ; scale
           ; ref_hl
           ; rev = 0
-          });
+          }));
      Js.Promise.resolve ())
 
 let viewer_el : Lui_elements.t =
  fun context parent ->
   let view_s = view_signal context in
-  (reactive ~equal:(fun (a : Model.pdf_asset option) b ->
-      match a, b with
-      | Some x, Some y -> x.pdf_identity = y.pdf_identity
-      | None, None -> true
-      | _ -> false) (fun ao ->
+  (reactive (fun ao ->
       match ao with
       | None ->
           set_view None;
           Lui_elements.spacer ~key:"pdf-none" []
       | Some a ->
           (match get_view () with
-           | Some v when v.asset.pdf_identity = a.pdf_identity -> ()
+           | Some v when v.asset = a -> ()
            | _ -> load_view a);
           (* the whole viewer — canvas, toolbar, sidebar, popovers — is
              the native logseq-pdf component; OCaml supplies only data
              (hls/page/scale/modes/flags) and receives annotation events *)
           (* TODO(component): logseq-pdf native extension widget —
              events + on_dom_event have no component equivalent *)
-          Logseq_el.el ~tag:"pdf"
+          Ui_components.with_props [ Ui_components.Prop.grow 1. ]
+          (Logseq_el.el ~tag:"pdf"
             ~events
             ~on_dom_event
             ~attrs_signal_v:
@@ -391,24 +422,27 @@ let viewer_el : Lui_elements.t =
                    match vo with
                    | Some v -> attrs_of_view v
                    | None -> [ "path", a.Model.pdf_url ]))
-            []) (asset_signal context))
+            [])) (asset_signal context))
     context parent
 
-(* the sibling of #left-container in #app-container: grows to take the
-   right half only while a pdf is open. No ~grow_signal prop exists, so
-   the reactive grow rides the style_class channel. *)
 let container_el ~key ~id : Lui_elements.t =
  fun context ->
-  Ui_parts.class_signal (asset_signal context)
-    (fun ao -> if Option.is_some ao then "grow" else "")
-    (Lui_elements.box ~key ~accessibility_identifier:id [ viewer_el ])
+  (Lui_elements.column ~key ~accessibility_identifier:id
+     ~grow:(reactive (fun ao -> if Option.is_some ao then 1. else 0.)
+              (asset_signal context))
+     [ viewer_el ])
     context
 
 let install () =
   Pdf_state.open_request :=
     (fun a ->
+      incr load_generation;
+      set_view None;
       match !current_sig with
-      | Some s -> Runtime.signal_set s a
+      | Some s ->
+          let unchanged = Runtime.signal_get s = a in
+          Runtime.signal_set s a;
+          if unchanged then Option.iter load_view a
       | None -> ());
   Pdf_state.create_today_journal :=
     (fun () ->

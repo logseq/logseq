@@ -10,8 +10,6 @@ module W = Wire
 let dom = Logseq_el.el
 let t = Lui_elements.spacer ~key:"asset-dom" []
 
-let upload_files (_files : Js.Json.t array) : unit = ()
-
 (* ---------- file drop upload ---------- *)
 
 (* Native source is real file paths (window drag & drop); bytes and the
@@ -44,10 +42,10 @@ let asset_block_map ~block_id ~title ~ext ~size ~checksum =
     ; W.String "logseq.property.asset/checksum", W.String checksum
     ; W.String "block/tags", W.Array [ W.Keyword "logseq.class/Asset" ] ]
 
-let find_by_checksum checksum k =
+let find_by_checksum ~repo checksum k =
   (let* w =
      Runtime.invoke2 "thread-api/q"
-       (W.String (Runtime.repo ()))
+       (W.String repo)
        (W.Array
           [ W.String
               "[:find (pull ?b [:block/uuid :block/title]) . :in $ ?c \
@@ -64,7 +62,6 @@ let find_by_checksum checksum k =
         | _ -> None)
    in
    k v)
-  |> Js.Promise.catch (fun _ -> k None)
 
 let read_file_bytes path =
   let ic = open_in_bin path in
@@ -73,7 +70,7 @@ let read_file_bytes path =
   close_in ic;
   Bytes.of_string b
 
-let asset_of_path ~idx ~edit_uuid ~empty_target path =
+let asset_of_path ~repo ~idx ~edit_uuid ~empty_target path =
   let name = Filename.basename path in
   let ext = ext_of_name name in
   let title = title_of_name name ext in
@@ -84,18 +81,20 @@ let asset_of_path ~idx ~edit_uuid ~empty_target path =
   else
     let u8 = read_file_bytes path in
     let* checksum = Asset_store.sha256_hex u8 in
-    find_by_checksum checksum (function
+    find_by_checksum ~repo checksum (function
       | Some (uuid, t) ->
           Toast.warning (I18n.asset_already_exists t uuid);
           Js.Promise.resolve None
       | None ->
+          if Runtime.repo () <> repo then
+            failwith "Graph changed during asset upload";
           let block_id =
             match idx = 0, empty_target, edit_uuid with
             | true, true, Some u -> u
             | _ -> Platform.random_uuid ()
           in
           let* () =
-            Asset_store.write_asset ~repo:(Runtime.repo ())
+            Asset_store.write_asset ~repo
               ~name:(block_id ^ "." ^ ext) ~u8
           in
           Js.Promise.resolve
@@ -106,7 +105,8 @@ let asset_of_path ~idx ~edit_uuid ~empty_target path =
 (* cljs db-based-save-assets! — target = edit block when it exists, else
    current page, else today's journal *)
 let upload_paths (paths : string list) =
-  if paths <> [] then
+  let repo = Runtime.repo () in
+  if paths <> [] && repo <> "" then
     let edit = S.editing () in
     let edit_uuid = Option.map (fun e -> e.S.uuid) edit in
     let empty_target =
@@ -118,8 +118,10 @@ let upload_paths (paths : string list) =
       match paths with
       | [] -> Js.Promise.resolve (List.rev acc)
       | path :: tl ->
+          if Runtime.repo () <> repo then
+            failwith "Graph changed during asset upload";
           let* v =
-            asset_of_path ~idx:i ~edit_uuid ~empty_target path
+            asset_of_path ~repo ~idx:i ~edit_uuid ~empty_target path
           in
           (match v with
            | Some b -> go (i + 1) tl (b :: acc)
@@ -139,8 +141,7 @@ let upload_paths (paths : string list) =
     match target with
     | None -> ()
     | Some t ->
-        ignore
-          (let* save_ops =
+        (let* save_ops =
              match S.editing () with
              | Some e -> (
                  match S.find e.S.uuid with
@@ -153,6 +154,8 @@ let upload_paths (paths : string list) =
              | None -> Js.Promise.resolve []
            in
            let* blocks = go 0 paths [] in
+           if Runtime.repo () <> repo then
+             failwith "Graph changed during asset upload";
            if blocks = [] then Js.Promise.resolve ()
            else
              let sibling = edit_uuid = Some t in
@@ -175,11 +178,16 @@ let upload_paths (paths : string list) =
              if empty_target then
                ignore (Outliner_ops.resync_open_editor ());
              Js.Promise.resolve ())
+        |> Js.Promise.catch (fun error ->
+             Ui_services.log_error ("Asset upload failed", error);
+             Toast.error (I18n.t1 "ui/error-boundary-error" "asset-upload:failed");
+             Js.Promise.resolve ())
+        |> ignore
 
 (* The file picker is imperative — the "upload" editor command calls
    Browser_ui.open_file_picker (host NSOpenPanel) and feeds the picked
    file snapshots through upload_paths. No hidden input node. *)
-let pick_files () =
+let upload_files files =
   let file_path (f : Js.Json.t) : string option =
     match f with
     | Js.Json.JObject kvs -> (
@@ -188,9 +196,17 @@ let pick_files () =
         | None -> None)
     | _ -> None
   in
+  let paths = List.filter_map file_path (Array.to_list files) in
+  if List.length paths <> Array.length files then
+    Toast.error (I18n.t1 "ui/error-boundary-error" "asset-upload:path-required")
+  else upload_paths paths
+
+let pick_files () =
+  let repo = Runtime.repo () in
   Browser_ui.open_file_picker (fun files ->
-      upload_paths
-        (List.filter_map file_path (Array.to_list files)))
+      if repo <> Runtime.repo () then
+        Toast.error (I18n.t1 "ui/error-boundary-error" "asset-upload:graph-changed")
+      else upload_files files)
 
 let on_asset_write_finish ~repo':_ ~asset_id:_ = ()
 let retry_pending () = ()
@@ -271,4 +287,3 @@ let delete_asset uuid =
   ignore
     (Outliner_ops.apply_and_refresh
        [ Outliner_ops.delete_blocks [ uuid ] ])
-

@@ -82,19 +82,17 @@ func (r *resourceRenderer) source(n luimygo.Node) (resourceSource, error) {
 	}
 	attrs := extensionAttrs(n)
 	source := attrs["src"]
-	if source == "" {
-		if filename := attrs["data-asset-file"]; filename != "" {
-			if filename != filepath.Base(filename) || strings.ContainsAny(filename, `/\`) || filename == "." || filename == ".." {
-				return resourceSource{}, errors.New("invalid graph asset filename")
-			}
-			if r.ResolveAsset == nil {
-				return resourceSource{}, errors.New("graph asset requires an OCaml-owned resolver")
-			}
-			var err error
-			source, err = r.ResolveAsset(filename)
-			if err != nil {
-				return resourceSource{}, errors.New("graph asset resolution failed")
-			}
+	if filename := attrs["data-asset-file"]; filename != "" {
+		if filename != filepath.Base(filename) || strings.ContainsAny(filename, `/\`) || filename == "." || filename == ".." {
+			return resourceSource{}, errors.New("invalid graph asset filename")
+		}
+		if r.ResolveAsset == nil {
+			return resourceSource{}, errors.New("graph asset requires an OCaml-owned resolver")
+		}
+		var err error
+		source, err = r.ResolveAsset(filename)
+		if err != nil {
+			return resourceSource{}, errors.New("graph asset resolution failed")
 		}
 	}
 	resolved, err := resourceSourceForURL(source)

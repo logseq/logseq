@@ -23,8 +23,10 @@ module U = I18n
 let comments_area_ident = "logseq.class/Comments"
 let comment_ident = "logseq.class/Comment"
 
-let is_comments_area (b : Model.block) =
-  List.mem comments_area_ident b.Model.block_tag_idents
+let is_comments_area = Comments_ops.is_comments_area
+let comment_target_block_p = Comments_ops.comment_target_block_p
+let eligible_targets = Comments_ops.eligible_targets
+let can_comment = Comments_ops.can_comment
 
 let el_scroll_into_view (el : Ui_services.el) : unit =
   el.Ui_services.scroll_into_view ()
@@ -47,21 +49,7 @@ let reveal uuid =
 
 (* cljs add-comment-to-blocks! → ensure-comments-area-for-blocks then
    reveal; the endpoint inserts the area child when it does not exist yet *)
-let ensure_for uuids =
-  match (Runtime.model ()).Model.repo with
-  | None -> ()
-  | Some repo ->
-      ignore
-        (let* area =
-          Runtime.invoke2 "thread-api/ensure-comments-area-for-blocks"
-            (W.String repo)
-            (W.List (List.map (fun u -> W.String u) uuids))
-        in
-        let* () = Outliner_ops.refresh_page () in
-        (match W.map_get_uuid area "block/uuid" with
-         | Some u -> reveal u
-         | None -> ());
-        Js.Promise.resolve ())
+let ensure_for uuids = Comments_ops.ensure_for ~on_ready:reveal uuids
 
 (* cljs add-comment-to-current-context!: an editing blank block becomes
    the comments area itself; otherwise ensure an area for the editing
@@ -107,17 +95,7 @@ let add_box_of area_uuid =
   Ui_services.dom_query
     ("#ls-block-" ^ area_uuid ^ " .ls-comment-add textarea")
 
-let submit area_uuid =
-  match add_box_of area_uuid with
-  | Some ta ->
-      let text = String.trim (ta.Ui_services.value ()) in
-      if text <> "" then (
-        ta.Ui_services.set_value "";
-        ta.Ui_services.set_text "";
-        ignore
-          (Outliner_ops.apply_and_refresh
-             [ insert_comment_op area_uuid text ]))
-  | None -> ()
+let submit = Comments_ops.submit
 
 let delete uuid =
   match (Runtime.model ()).Model.repo with
