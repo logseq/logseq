@@ -94,5 +94,6 @@
 
 (def-thread-api :thread-api/get-view-data
   [repo view-id option]
-  (let [db @(worker-state/get-datascript-conn repo)]
-    (worker-plain/worker-plain-value db (db-view/get-view-data db view-id option))))
+  (when-let [conn (worker-state/get-datascript-conn repo)]
+    (let [db @conn]
+      (worker-plain/worker-plain-value db (db-view/get-view-data db view-id option)))))
