@@ -544,6 +544,27 @@
     (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
         "Imported graph validates")))
 
+(deftest-async import-block-ref-in-property-value
+  (let [target-uuid #uuid "30000000-0000-4000-8000-000000000001"]
+    (p/let [dir (write-temp-file-graph
+                 {"logseq/config.edn" "{:meta/version 1 :file/name-format :triple-lowbar}\n"
+                  "pages/y.md" (str "- target block\n  id:: " target-uuid "\n")
+                  "pages/z.md" (str "- source block\n  rating:: ((" target-uuid "))\n"
+                                   "- missing target block\n  note:: ((30000000-0000-4000-8000-0000000000ff))\n")})
+            conn (db-test/create-conn)
+            _ (import-file-graph-to-db dir conn {})
+            source-block (db-test/find-block-by-content @conn "source block")
+            value (some->> source-block :user.property/rating :db/id (d/entity @conn))]
+      (is (some? value) "The property value is imported")
+      (is (= (page-ref/->page-ref target-uuid) (:block/title value))
+          "A block ref in a property value is a ref like in a title")
+      (is (contains? (set (map :block/uuid (:block/refs value))) target-uuid)
+          "The property value refs the block")
+      (is (some? (db-test/find-block-by-content @conn "missing target block"))
+          "A block ref to a block that doesn't exist doesn't fail the import")
+      (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+          "Imported graph validates"))))
+
 (deftest-async import-page-template-property
   (p/let [file (write-temp-graph-file "pages/t.md" "template:: tt\n\n- first block\n")
           conn (db-test/create-conn)
