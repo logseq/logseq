@@ -55,6 +55,13 @@
                                          :format formatter})
          (throw e))))))
 
+(defn journal-block-name
+  "The `:block/name` of the journal page for `date`. Unlike `journal-name`, this
+  ignores the configured journal title format: a journal's `:block/name` is
+  always the default-format title."
+  [date]
+  (date-time-util/format date date-time-util/default-journal-title-formatter))
+
 (defn start-of-day [date]
   (t/date-time (t/year date) (t/month date) (t/day date)))
 
