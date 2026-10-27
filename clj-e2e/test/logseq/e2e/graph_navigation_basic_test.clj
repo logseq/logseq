@@ -16,6 +16,33 @@
 (use-fixtures :once fixtures/open-page)
 (use-fixtures :each fixtures/new-logseq-page fixtures/validate-graph)
 
+(deftest graph-open-empty-state-navigates-in-app-test
+  (testing "graph-open empty-state add-graph stays in Logseq instead of opening an OS URL"
+    (util/search-and-click "Select graph to open")
+    (w/wait-for ".ls-dialog-select")
+    (w/fill ".cp__select-input" "zzz-no-such-graph")
+    (util/wait-timeout 200)
+    (assert/assert-is-visible
+     (loc/filter "button" :has-text "Yes, add another graph"))
+    (w/click (loc/filter "button" :has-text "Yes, add another graph"))
+    (assert/assert-is-visible
+     (loc/filter "#graphs, #main-content-container" :has-text "All graphs"))
+    (assert/assert-is-visible
+     (loc/filter "#main-content-container" :has-text "Create a new graph"))
+    (is (string/includes? (.url (w/get-page)) "graphs"))))
+
+(deftest graph-switcher-keeps-create-and-import-actions-test
+  (testing "graph switcher footer still exposes create and import notes"
+    (when-not (w/visible? "#left-sidebar.is-open")
+      (w/click "#left-menu")
+      (w/wait-for "#left-sidebar.is-open"))
+    (w/click ".cp__graphs-selector a.item")
+    (assert/assert-is-visible
+     (loc/filter ".cp__repos-quick-actions" :has-text "Create a new graph"))
+    (assert/assert-is-visible
+     (loc/filter ".cp__repos-quick-actions" :has-text "Import existing notes"))
+    (k/esc)))
+
 (deftest graph-empty-state-and-name-validation-test
   (testing "graph creation exposes an actionable empty state and rejects invalid/duplicate names"
     (let [graph-name (str "sample-valid-graph-" (random-uuid))]
