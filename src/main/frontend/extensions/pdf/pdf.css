@@ -75,9 +75,12 @@ input::-webkit-inner-spin-button {
       justify-content: flex-end;
 
       > .r {
+        /* In a narrow pane the buttons go to a second row instead of squeezing their labels */
+        @apply flex-wrap justify-end;
+
         a.button {
           @apply select-none flex items-center mx-2 py-1 px-0.5 bg-transparent
-          transition-none break-normal hover:opacity-80;
+          transition-none break-normal whitespace-nowrap shrink-0 hover:opacity-80;
 
           &.is-active {
             @apply opacity-100 rounded-none;
