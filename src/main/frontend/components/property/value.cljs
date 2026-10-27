@@ -838,6 +838,17 @@
       (.focus selected-day)
       (js/setTimeout #(focus-selected-day! id (dec remaining)) 16))))
 
+(defn- confirm-initial-day-on-enter!
+  "Enter anywhere in the picker outside a form control confirms the day the
+  picker opened on. On a calendar day the day's own key handler selects the day
+  the user moved to, so confirming the opening day as well would overwrite it."
+  [^js e initial-day select-handler!]
+  (when (and (= "Enter" (util/ekey e))
+             (not (ui/date-picker-form-target? e)))
+    (when-not (some-> (.-target e) (.closest "[role='gridcell']"))
+      (select-handler! initial-day))
+    (util/stop e)))
+
 (hsx/defc calendar-inner
   [id {:keys [block property datetime? on-change del-btn? on-delete]}]
   (let [value (get block (:db/ident property))
@@ -871,10 +882,7 @@
                          [id datetime? on-change])]
     (hooks/use-window-keydown
      (fn [^js e]
-       (when (and (= "Enter" (util/ekey e))
-                  (not (ui/date-picker-form-target? e)))
-         (select-handler! initial-day)
-         (util/stop e)))
+       (confirm-initial-day-on-enter! e initial-day select-handler!))
      [initial-day select-handler!])
     (hooks/use-effect!
      (fn []
