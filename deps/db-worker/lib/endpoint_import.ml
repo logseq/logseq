@@ -418,22 +418,32 @@ let terminal_import_result (run_id : string) (compact : Wire.t) : Wire.t =
     | Some (_, Wire.Int n) -> n
     | _ -> 0
   in
-  Wire.kw_map
-    (kvs
-     @ [ ("run-id", Wire.String run_id)
-       ; ( "status"
-         , kw
-             (if issue_count > 0 then "completed-with-errors"
-              else "completed") )
-       ; ("persisted?", Wire.Bool true)
-       ; ( "validation"
-         , Wire.kw_map
-             [ ( "status"
-               , kw
-                   (if validation_error_count > 0 then "failed"
-                    else "passed") )
-             ; ("error-count", Wire.Int validation_error_count) ] )
-       ; ("issue-count", Wire.Int issue_count) ])
+  let status =
+    if issue_count > 0 then "completed-with-errors" else "completed"
+  in
+  let validation_status =
+    if validation_error_count > 0 then "failed" else "passed"
+  in
+  let persisted = true in
+  let terminal =
+    Wire.kw_map
+      (kvs
+       @ [ ("run-id", Wire.String run_id)
+         ; ("status", kw status)
+         ; ("persisted?", Wire.Bool persisted)
+         ; ( "validation"
+           , Wire.kw_map
+               [ ("status", kw validation_status)
+               ; ("error-count", Wire.Int validation_error_count) ] )
+         ; ("issue-count", Wire.Int issue_count) ])
+  in
+  Worker_log.info "import-file-graph-terminal"
+    [ ("status", status)
+    ; ("persisted?", string_of_bool persisted)
+    ; ("issue-count", string_of_int issue_count)
+    ; ("validation-status", validation_status)
+    ; ("validation-error-count", string_of_int validation_error_count) ];
+  terminal
 
 (* ---- <import-file-graph! ---- *)
 
