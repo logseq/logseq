@@ -323,6 +323,11 @@ function validateRegistration(ctx, current, record) {
       || record.graphsDir !== ctx.graphsDir || record.lifecycleDir !== ctx.lifecycleDir)
     fail('Invalid worker registration');
 }
+// A registration is stale when its PID is gone, or when nothing holds the graph and no start is pending: the PID
+// was then reused by an unrelated process, which is how a leftover record is handled everywhere else.
+function staleRegistration(ctx, record, exists) {
+  return !exists(record.pid) || (ownershipAvailable(ctx) && !pending(record, exists));
+}
 function readRuntime(ctx, record, exists = pidExists) {
   const file = runtimeFile(ctx, record.ticket);
   // A worker can create or remove its file mid-check (admission, publish,
@@ -333,8 +338,9 @@ function readRuntime(ctx, record, exists = pidExists) {
     try { runtime = readJSON(file); }
     catch { unusable = true; }
     if (unusable || (runtime === null && fs.existsSync(file)) || (runtime !== null && (typeof runtime !== 'object' || Array.isArray(runtime)))) {
-      // A worker that is gone cannot be writing its file, so what it left unreadable is only stale.
-      if (!exists(record.pid)) return null;
+      // A worker that is gone, or whose registration is stale, cannot be writing its file, so what it left
+      // unreadable is only stale.
+      if (staleRegistration(ctx, record, exists)) return null;
       if (attempt < 3) continue;
       fail('Invalid worker runtime metadata');
     }
@@ -417,10 +423,8 @@ async function discover(ctx, current, scan, registeredOnly = false) {
     validateRegistration(ctx, current, record);
     const target = { ...record, ...readRuntime(ctx, record, exists) };
     if (targets.has(record.pid)) {
-      // Two registrations of one PID cannot be told apart while a worker runs under it. Once it is gone, or when
-      // nothing holds the graph and no start is pending (the PID was reused), they are only stale.
-      const first = targets.get(record.pid);
-      if (exists(record.pid) && !(ownershipAvailable(ctx) && !pending(first, exists) && !pending(target, exists)))
+      // Two registrations of one PID cannot be told apart while a worker runs under it; stale ones are only stale.
+      if (!staleRegistration(ctx, record, exists) || !staleRegistration(ctx, targets.get(record.pid), exists))
         fail('Duplicate worker registration');
       goneDuplicates.push(target);
     } else targets.set(record.pid, target);
