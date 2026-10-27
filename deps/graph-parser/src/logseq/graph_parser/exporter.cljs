@@ -2982,7 +2982,9 @@
               (keep (fn [kw-name]
                       (when (or (contains? new-class-page-names (name kw-name))
                                 (when-let [existing-uuid (get existing-pages (name kw-name))]
-                                  (existing-named-page-is-class? import-state existing-uuid)))
+                                  (or (existing-named-page-is-class? import-state existing-uuid)
+                                      ;; an existing page that becomes a class in this file
+                                      (contains? new-class-uuids existing-uuid))))
                         kw-name)))
               new-properties)
         page-tx-for-new-property?
