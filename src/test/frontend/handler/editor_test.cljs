@@ -3450,6 +3450,24 @@
           {:full-properties [{:property-id :user.property/p1}]
            :hidden-properties [{:property-id :user.property/p2}]}})))
 
+  (testing "shown hidden properties stay reopenable after the block is collapsed"
+    (let [block-uuid (random-uuid)
+          block {:block/uuid block-uuid
+                 :block/title "hidden only"
+                 :block.temp/display-properties
+                 {:full-properties []
+                  :hidden-properties [{:property-id :user.property/p1}]}}]
+      (try
+        (swap! state/*show-hidden-properties-block-ids conj block-uuid)
+        (is (editor/db-collapsable? block))
+        (is (not (editor/db-collapsable? (assoc block :block/uuid (random-uuid))))
+            "Another block with hidden rows that are not shown has no arrow")
+        (swap! state/*show-hidden-properties-block-ids disj block-uuid)
+        (is (not (editor/db-collapsable? block))
+            "Hiding them again removes the arrow")
+        (finally
+          (swap! state/*show-hidden-properties-block-ids disj block-uuid)))))
+
   (testing "query blocks stay collapsable when every property row is hidden"
     (is (editor/db-collapsable?
          {:block/title "query"

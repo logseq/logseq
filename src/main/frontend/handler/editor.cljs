@@ -3722,10 +3722,15 @@
 (defn db-collapsable?
   [block & _opts]
   (let [display-properties (:block.temp/display-properties block)
-        ;; The properties area renders only the visible rows; hidden and
-        ;; empty-hidden properties leave nothing to expand.
+        ;; The properties area renders only the visible rows. Hidden and
+        ;; empty-hidden properties leave nothing to expand, unless the block's
+        ;; hidden properties are shown: then they must stay reopenable.
         property-keys (if display-properties
-                        (map :property-id (:full-properties display-properties))
+                        (map :property-id
+                             (concat (:full-properties display-properties)
+                                     (when (contains? @state/*show-hidden-properties-block-ids
+                                                      (:block/uuid block))
+                                       (:hidden-properties display-properties))))
                         (or (seq (:block.temp/property-keys block))
                             (filter db-property/property? (keys block))))
         properties (->> property-keys
