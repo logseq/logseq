@@ -6921,6 +6921,28 @@ let () =
       let asked = run_cli_lifecycle [| "graph"; "--bogus"; "--help" |] in
       expect_int "explicit help exit" 0 asked.exit_code);
 
+  test "CLI parity a negative number is an option value, not a command word"
+    (fun () ->
+      let expect_invalid_value name argv option_name =
+        let output = run_cli_lifecycle argv in
+        expect_int (name ^ " exit") 1 output.exit_code;
+        let stdout = stdout_text (name ^ " stdout") output in
+        expect_named_contains (name ^ " code") stdout "invalid-options";
+        expect_named_contains (name ^ " names the option") stdout
+          ("Invalid value for option :" ^ option_name);
+        expect_named_not_contains (name ^ " is not an unknown command") stdout
+          "unknown command"
+      in
+      expect_invalid_value "negative timeout"
+        [| "graph"; "list"; "--timeout-ms"; "-5" |]
+        "timeout-ms";
+      expect_invalid_value "negative limit"
+        [| "-g"; "demo"; "list"; "page"; "--limit"; "-5" |]
+        "limit";
+      expect_invalid_value "negative offset"
+        [| "-g"; "demo"; "list"; "page"; "--offset"; "-1" |]
+        "offset");
+
   test "CLI parity --help=false does not ask for help" (fun () ->
       let root = temp_dir "logseq-cli-help-false-" in
       let ran =
