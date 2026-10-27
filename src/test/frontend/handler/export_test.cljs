@@ -105,7 +105,18 @@
         :block/uuid #uuid "00000000-0000-4000-8000-000000000601"}
        {:block/title "see ((00000000-0000-4000-8000-0000000009ff)) here"
         :build/keep-uuid? true
-        :block/uuid #uuid "00000000-0000-4000-8000-000000000602"}]}]))
+        :block/uuid #uuid "00000000-0000-4000-8000-000000000602"}]}
+     {:page {:block/title "page7"}
+      :blocks
+      [{:block/title "has text property children"
+        :build/keep-uuid? true
+        :block/uuid #uuid "00000000-0000-4000-8000-000000000701"
+        :build/properties
+        {:user.property/notes
+         {:build/property-value :block
+          :block/title "note value"
+          :build/children [{:block/title "note child"
+                            :build/children [{:block/title "note grandchild"}]}]}}}]}]))
 
 (def ^:private block-embed-test-page
   "Block embeds: a block whose :block/link is the embedded block (links set in
@@ -156,7 +167,8 @@
 (defn- load-export-test-files!
   []
   (let [{:keys [init-tx block-props-tx]}
-        (sqlite-build/build-blocks-tx {:pages-and-blocks (conj test-files block-embed-test-page)
+        (sqlite-build/build-blocks-tx {:properties {:user.property/notes {:logseq.property/type :default}}
+                                       :pages-and-blocks (conj test-files block-embed-test-page)
                                        :auto-create-ontology? true})
         init-index (map #(select-keys % [:block/uuid]) init-tx)]
     (d/transact! (conn/get-db test-helper/test-db false)
@@ -536,6 +548,18 @@
              (string/trim with-properties)))
       (is (= "- issue"
              (string/trim without-properties)))
+      (done))))
+
+(deftest export-blocks-as-markdown-keeps-text-property-value-children
+  (async done
+    (p/let [content (<export-blocks-as-markdown
+                     [#uuid "00000000-0000-4000-8000-000000000701"]
+                     {:remove-options #{}})]
+      (is (string/includes? content "note value"))
+      (is (string/includes? content "note child")
+          "children of a Text property value are exported")
+      (is (string/includes? content "note grandchild")
+          "descendants of a Text property value are exported")
       (done))))
 
 (deftest export-blocks-as-markdown-keeps-ref-to-missing-block
