@@ -327,3 +327,16 @@
     (is (= [:user.property/first :user.property/second :user.property/third]
            (map :property-ident rows))
         "A tag page lists its properties in their configured order")))
+
+(deftest hidden-properties-only-area-keeps-reveal-toggle-test
+  (let [hidden-only {:full-properties []
+                     :hidden-properties [{:property-ident :user.property/hidden}]}]
+    (is (true? (#'property-component/hidden-properties-only-without-reveal?
+                (assoc hidden-only :show-hidden-properties-toggle-button? false)))
+        "A block with no way to reveal its hidden properties renders no area")
+    (is (false? (#'property-component/hidden-properties-only-without-reveal?
+                 (assoc hidden-only :show-hidden-properties-toggle-button? true)))
+        "A tagged page with only hidden properties still renders the Show hidden properties toggle")
+    (is (false? (#'property-component/hidden-properties-only-without-reveal?
+                 (assoc hidden-only :sidebar-properties? true)))
+        "Sidebar properties are still rendered")))
