@@ -1160,6 +1160,7 @@ let () = Native_embed.with_entry_lock (fun () ->
   Logseq_codemirror.register registry;
   Logseq_editor.register registry;
   let initial = {Model.initial with left_sidebar_open=true; right_sidebar_open=false} in
+  Host.set_titlebar_left 80.;
   let app = Lui_app.create_with_extensions backend registry initial
       (fun _ next -> next) (fun _ model _ -> Chrome.shell model) in
   ignore (Lui_app.start app);
@@ -1186,6 +1187,7 @@ let () = Native_embed.with_entry_lock (fun () ->
   let sidebar_rect = Option.get (Lui_layout.rect layout sidebar) in
   check (Printf.sprintf "Native titlebar toggle x=%.0f w=%.0f exceeds sidebar x=%.0f w=%.0f" menu_rect.x menu_rect.w sidebar_rect.x sidebar_rect.w)
     (menu_rect.x >= 160. && menu_rect.x +. menu_rect.w <= sidebar_rect.x +. sidebar_rect.w);
+  Host.set_titlebar_left 0.;
   ignore (Lui_app.send app {initial with left_sidebar_open=false});
   ignore (Lui_app.flush app);
   Lui_layout.sync ~scale:2. ~width:2880. ~height:1800. layout store;
@@ -1193,11 +1195,12 @@ let () = Native_embed.with_entry_lock (fun () ->
     Lui_store.string_prop store id "accessibility-identifier" = Some "left-menu")
       (Lui_store.preorder store) in
   let closed_menu_rect = Option.get (Lui_layout.rect layout closed_menu) in
-  check "Closed native docks must not shift the toolbar beyond its traffic-light safe area"
-    (abs_float (closed_menu_rect.x -. 176.) <= 0.01);
+  check "Closed native docks must follow a zero host titlebar inset"
+    (abs_float (closed_menu_rect.x -. 16.) <= 0.01);
   let closed_scroll = Option.get (Lui_layout.rect layout scroll) in
   check "Closed native docks must release their divider widths"
     (abs_float (closed_scroll.w -. 2880.) <= 0.01);
+  Host.set_titlebar_left 80.;
   ignore (Lui_app.send app initial);
   ignore (Lui_app.flush app);
   List.iter (fun (width,height) ->
@@ -1458,6 +1461,7 @@ let () = Native_embed.with_entry_lock (fun () ->
       (scroll_rect.h > 0. && scroll_rect.h <= height -. 96.))
     [2880.,1800.; 1280.,900.; 2000.,1200.; 800.,600.; 2880.,1800.];
   ignore (Lui_app.dispose app);
+  Host.set_titlebar_left 0.;
   print_endline "native shell resize bounds: OK")
 
 let () = Native_embed.with_entry_lock (fun () ->
