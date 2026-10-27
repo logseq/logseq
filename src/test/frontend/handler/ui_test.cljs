@@ -185,3 +185,16 @@
       (is (some? (ui-handler/<get-file-content "repo" "logseq/custom.css")))
       (finally
         (reset! state/*db-worker previous)))))
+
+(deftest toggle-cards-respects-flashcards-setting-test
+  (let [published-events (atom [])]
+    (with-redefs [state/get-current-repo (constantly "test-repo")
+                  state/pub-event! (fn [event] (swap! published-events conj event))]
+      (testing "does not open the flashcards dialog when flashcards are disabled"
+        (with-redefs [state/get-config (constantly {:feature/enable-flashcards? false})]
+          (ui-handler/toggle-cards!))
+        (is (empty? @published-events)))
+      (testing "opens the flashcards dialog when flashcards are enabled"
+        (with-redefs [state/get-config (constantly {:feature/enable-flashcards? true})]
+          (ui-handler/toggle-cards!))
+        (is (= [[:modal/show-cards]] @published-events))))))
