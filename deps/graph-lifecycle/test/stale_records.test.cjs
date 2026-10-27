@@ -246,3 +246,38 @@ test('startup cleanup refuses, with a coded error, a live worker whose runtime f
     }
   });
 });
+
+// Registers the leftover worker a second time, under another ticket or under the same one.
+function registerTwice(storage, repo, pid, sameTicket) {
+  registerLeftoverWorker(storage, repo, pid);
+  const { stateFile } = lifecycle.context(storage, repo);
+  const current = lifecycle.snapshot(storage, repo);
+  current.workers.push({ ...current.workers[0], ticket: sameTicket ? current.workers[0].ticket : 'second-ticket' });
+  fs.writeFileSync(stateFile, JSON.stringify(current));
+}
+
+for (const [description, sameTicket] of [['under two tickets', false], ['twice under one ticket', true]]) {
+  test(`startup cleanup and stop retire an exited worker registered ${description}`, async () => {
+    await withGraph(async (storage, repo) => {
+      registerTwice(storage, repo, exitedPid(), sameTicket);
+      await lifecycle.stopOutdatedWorkers(storage, REVISION, repo);
+      assert.deepEqual(lifecycle.snapshot(storage, repo).workers, []);
+      registerTwice(storage, repo, exitedPid(), sameTicket);
+      await lifecycle.stopGraph(storage, repo, 'cli');
+      assert.deepEqual(lifecycle.snapshot(storage, repo).workers, []);
+    });
+  });
+}
+
+test('a live worker registered twice is still refused', async () => {
+  await withGraph(async (storage, repo) => {
+    const worker = cp.spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });
+    try {
+      registerTwice(storage, repo, worker.pid, false);
+      await assert.rejects(lifecycle.stopGraph(storage, repo, 'cli'), /Duplicate worker registration/);
+      assert.equal(lifecycle.snapshot(storage, repo).workers.length, 2);
+    } finally {
+      worker.kill();
+    }
+  });
+});
