@@ -1302,6 +1302,17 @@
               ["$$" (second node) "$$"]
               (and (vector? node) (= (first node) "List"))
               (extract-block-list (second node))
+              (and (vector? node) (= (first node) "Table"))
+              (let [{:keys [header groups]} (second node)
+                    rows (mapcat identity groups)
+                    ->cells (fn [cells] (mapv #(string/trim (apply str (mapcat extract %))) cells))
+                    ->row (fn [cells] (str "| " (string/join " | " cells) " |"))
+                    header-cells (if (seq header)
+                                   (->cells header)
+                                   (vec (repeat (count (first rows)) "")))]
+                (concat ["\n" (->row header-cells)
+                         "\n" (->row (repeat (count header-cells) "---"))]
+                        (mapcat (fn [row] ["\n" (->row (->cells row))]) rows)))
               :else
               (do
                 (log-fn :ast->text "Ignored ast node" :node node)
