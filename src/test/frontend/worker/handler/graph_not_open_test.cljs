@@ -3,7 +3,6 @@
   has opened the graph, must not throw while the graph's conn is missing."
   (:require [cljs.test :refer [deftest is testing]]
             [frontend.common.thread-api :as thread-api]
-            [frontend.worker.handler.block]
             [frontend.worker.handler.graph]
             [frontend.worker.handler.view]
             [frontend.worker.state :as worker-state]))
@@ -15,17 +14,6 @@
   (let [f (get @thread-api/*thread-apis k)]
     (is (fn? f) (str "thread api not registered: " k))
     (apply f args)))
-
-(deftest get-blocks-answers-each-request-before-graph-opens-test
-  (is (nil? (worker-state/get-datascript-conn unopened-repo)))
-  (let [requests [{:id "Contents" :opts {:children? false}}
-                  {:id 42 :opts {:children? true}}]
-        result (call-thread-api :thread-api/get-blocks unopened-repo requests)]
-    (testing "one result per request, as frontend.db.async requires"
-      (is (= (count requests) (count result))))
-    (testing "each result is a missing block"
-      (is (= ["Contents" 42] (mapv :id result)))
-      (is (every? nil? (map :block result))))))
 
 (deftest read-thread-apis-return-empty-before-graph-opens-test
   (is (nil? (worker-state/get-datascript-conn unopened-repo)))

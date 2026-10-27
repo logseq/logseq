@@ -64,14 +64,20 @@
          (let [result (apply f args)
                settled (-> (p/promise result)
                            (p/then (constantly nil))
-                           (p/catch (constantly nil)))]
-           (swap! *opening-graphs assoc repo settled)
-           (p/finally settled
-                      (fn [] (swap! *opening-graphs (fn [m] (cond-> m (identical? (get m repo) settled) (dissoc repo))))))
+                           (p/catch (constantly nil)))
+               ;; what waiting calls wait for: the open settling, or graph-open-wait-ms, whichever comes first;
+               ;; one timer per open, cleared when the open settles
+               released (p/create
+                         (fn [resolve _reject]
+                           (let [timer (js/setTimeout #(resolve nil) graph-open-wait-ms)]
+                             (p/finally settled (fn [] (js/clearTimeout timer) (resolve nil))))))]
+           (swap! *opening-graphs assoc repo released)
+           (p/finally released
+                      (fn [] (swap! *opening-graphs (fn [m] (cond-> m (identical? (get m repo) released) (dissoc repo))))))
            result)
 
          (and (string? repo) (get @*opening-graphs repo))
-         (p/let [_ (p/race [(get @*opening-graphs repo) (p/delay graph-open-wait-ms)])]
+         (p/let [_ (get @*opening-graphs repo)]
            (apply f args))
 
          :else
