@@ -78,17 +78,22 @@
                       (boolean? (:asc? item))))
                sorting)))
 
+(defn- valid-filter-clause?
+  "A clause is [property operator value]. The value is absent while the user has
+  picked an operator but not yet entered a value; the matchers treat that
+  clause as matching every row."
+  [clause]
+  (and (vector? clause)
+       (contains? #{2 3} (count clause))
+       (keyword? (first clause))))
+
 (defn- valid-filters?
   [filters]
   (and (map? filters)
        (every? #{:or? :filters} (keys filters))
        (or (nil? (:or? filters)) (boolean? (:or? filters)))
        (vector? (:filters filters))
-       (every? (fn [clause]
-                 (and (vector? clause)
-                      (= 3 (count clause))
-                      (keyword? (first clause))))
-               (:filters filters))))
+       (every? valid-filter-clause? (:filters filters))))
 
 (defn- require-view-context!
   [context]
