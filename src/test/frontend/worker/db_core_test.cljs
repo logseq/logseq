@@ -3419,6 +3419,45 @@
              (is (= (str "hello [[" class-uuid "]]") (:block/title object)))
              (is (not-any? #(= class-id (:db/id %)) (:block/tags object))))))))))
 
+(deftest convert-tag-to-page-moves-its-child-tags-to-root
+  (restoring-worker-state
+   (fn []
+     (let [convert! (get @thread-api/*thread-apis :thread-api/convert-tag-to-page)
+           conn (d/create-conn db-schema/schema)]
+       (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+       (d/transact! conn [{:db/id -1
+                           :block/title "Parent"
+                           :block/name "parent"
+                           :block/uuid (random-uuid)
+                           :db/ident :user.class/Parent
+                           :block/tags :logseq.class/Tag
+                           :block/created-at 1
+                           :block/updated-at 1
+                           :logseq.property.class/extends :logseq.class/Root}
+                          {:block/title "Child"
+                           :block/name "child"
+                           :block/uuid (random-uuid)
+                           :db/ident :user.class/Child
+                           :block/tags :logseq.class/Tag
+                           :block/created-at 1
+                           :block/updated-at 1
+                           :logseq.property.class/extends -1}
+                          {:block/title "Both"
+                           :block/name "both"
+                           :block/uuid (random-uuid)
+                           :db/ident :user.class/Both
+                           :block/tags :logseq.class/Tag
+                           :block/created-at 1
+                           :block/updated-at 1
+                           :logseq.property.class/extends [-1 :logseq.class/Task]}])
+       (reset! worker-state/*datascript-conns {test-repo conn})
+       (convert! test-repo (:db/id (d/entity @conn :user.class/Parent)))
+       (let [extends #(set (map :db/ident (:logseq.property.class/extends (d/entity @conn %))))]
+         (is (= #{:logseq.class/Root} (extends :user.class/Child))
+             "a child tag whose only parent became a page extends Root")
+         (is (= #{:logseq.class/Task} (extends :user.class/Both))
+             "a child tag with another parent keeps just that one"))))))
+
 (deftest validate-block-tag-runs-unique-tag-validation-in-worker
   (restoring-worker-state
    (fn []

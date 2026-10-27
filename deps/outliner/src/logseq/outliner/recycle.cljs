@@ -7,7 +7,8 @@
             [logseq.db.common.delete-blocks :as delete-blocks]
             [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.common.initial-data :as common-initial-data]
-            [logseq.db.common.order :as db-order]))
+            [logseq.db.common.order :as db-order]
+            [logseq.db.frontend.class :as db-class]))
 
 (def ^:private recycle-page-title "Recycle")
 (def ^:private retention-ms (* 30 24 3600 1000))
@@ -120,9 +121,23 @@
           (#(d/entity db [:block/uuid %]))
           :db/id))
 
+(defn- detach-child-classes-tx
+  "A retracted page can still be the parent of classes, e.g. a tag converted to a
+  page. Those classes must not be left without a parent."
+  [db tx-data]
+  (let [retracted (keep (fn [[op id]]
+                          (when (= op :db/retractEntity) (d/entity db id)))
+                        tx-data)
+        retracted-ids (set (map :db/id retracted))]
+    (->> retracted
+         (mapcat db-class/detach-child-classes-tx)
+         (remove (fn [[_op e]] (contains? retracted-ids e))))))
+
 (defn- with-delete-cleanup-tx
   [db tx-data]
-  (distinct (concat tx-data (delete-blocks/update-refs-history db tx-data {}))))
+  (distinct (concat tx-data
+                    (detach-child-classes-tx db tx-data)
+                    (delete-blocks/update-refs-history db tx-data {}))))
 
 (defn recycle-blocks-tx-data
   [db blocks {:keys [deleted-by-uuid now-ms]}]
