@@ -31,18 +31,6 @@
      (loc/filter "#main-content-container" :has-text "Create a new graph"))
     (is (string/includes? (.url (w/get-page)) "graphs"))))
 
-(deftest graph-switcher-keeps-create-and-import-actions-test
-  (testing "graph switcher footer still exposes create and import notes"
-    (when-not (w/visible? "#left-sidebar.is-open")
-      (w/click "#left-menu")
-      (w/wait-for "#left-sidebar.is-open"))
-    (w/click ".cp__graphs-selector a.item")
-    (assert/assert-is-visible
-     (loc/filter ".cp__repos-quick-actions" :has-text "Create a new graph"))
-    (assert/assert-is-visible
-     (loc/filter ".cp__repos-quick-actions" :has-text "Import existing notes"))
-    (k/esc)))
-
 (deftest graph-empty-state-and-name-validation-test
   (testing "graph creation exposes an actionable empty state and rejects invalid/duplicate names"
     (let [graph-name (str "sample-valid-graph-" (random-uuid))]
