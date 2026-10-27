@@ -113,6 +113,81 @@ test('startup cleanup reclaims a server-list lock whose holder PID now belongs t
   });
 });
 
+// Observes every exclusive creation of `lock` and every unlink of it by a holder; returns the function that undoes it.
+function watchLock(lock, onCreate, onUnlink) {
+  const { writeFileSync, unlinkSync } = fs;
+  fs.writeFileSync = function (file, data, options) {
+    const result = writeFileSync.apply(this, arguments);
+    if (file === lock && options?.flag === 'wx') onCreate();
+    return result;
+  };
+  fs.unlinkSync = function (file) {
+    const result = unlinkSync.apply(this, arguments);
+    if (file === lock) onUnlink();
+    return result;
+  };
+  return () => { fs.writeFileSync = writeFileSync; fs.unlinkSync = unlinkSync; };
+}
+
+test('a reclaimer does not take the lock of a writer that replaced the stale lock after it was judged', async () => {
+  await withGraph(async (storage, repo) => {
+    registerLeftoverWorker(storage, repo, exitedPid());
+    const lock = path.join(storage.root, 'server-list.lock');
+    fs.writeFileSync(lock, '');
+    fs.utimesSync(lock, LONG_AGO, LONG_AGO);
+    let writerHolds = false;
+    let takenFromWriter = false;
+    let replaced = false;
+    const { statSync } = fs;
+    // Right after the reclaimer has judged the old empty lock stale, a writer replaces it the way the server-list
+    // writers do: create the lock empty, write the holder later, release when done.
+    fs.statSync = function (file) {
+      const result = statSync.apply(this, arguments);
+      if (file === lock && !replaced) {
+        replaced = true;
+        fs.unlinkSync(lock);
+        const fd = fs.openSync(lock, 'wx');
+        writerHolds = true;
+        setTimeout(() => fs.writeSync(fd, JSON.stringify({ pid: process.pid, 'lock-id': 'writer' })), 100);
+        setTimeout(() => { writerHolds = false; fs.closeSync(fd); fs.rmSync(lock, { force: true }); }, 300);
+      }
+      return result;
+    };
+    const unwatch = watchLock(lock, () => { if (writerHolds) takenFromWriter = true; }, () => {});
+    try {
+      await lifecycle.stopOutdatedWorkers(storage, REVISION, repo);
+    } finally {
+      unwatch();
+      fs.statSync = statSync;
+    }
+    assert.equal(replaced, true);
+    assert.equal(takenFromWriter, false, 'the reclaimer took the lock while the writer held it');
+    assert.deepEqual(lifecycle.snapshot(storage, repo).workers, []);
+  });
+});
+
+test('concurrent reclaimers of one stale server-list lock take it one at a time', async () => {
+  await withGraph(async (storage, repo) => {
+    const others = ['second graph', 'third graph', 'fourth graph'];
+    for (const other of others) await lifecycle.createGraph(storage, other);
+    for (const graph of [repo, ...others]) registerLeftoverWorker(storage, graph, exitedPid());
+    const lock = path.join(storage.root, 'server-list.lock');
+    fs.writeFileSync(lock, '');
+    fs.utimesSync(lock, LONG_AGO, LONG_AGO);
+    let holders = 0;
+    let mostHolders = 0;
+    const unwatch = watchLock(lock, () => { mostHolders = Math.max(mostHolders, ++holders); }, () => { holders--; });
+    try {
+      await Promise.all([repo, ...others].map(graph => lifecycle.stopOutdatedWorkers(storage, REVISION, graph)));
+    } finally {
+      unwatch();
+    }
+    assert.equal(mostHolders, 1);
+    assert.equal(fs.existsSync(lock), false);
+    for (const graph of [repo, ...others]) assert.deepEqual(lifecycle.snapshot(storage, graph).workers, []);
+  });
+});
+
 test('startup cleanup does not take a server-list lock held by a live process', async () => {
   await withGraph(async (storage, repo) => {
     registerLeftoverWorker(storage, repo, exitedPid());
