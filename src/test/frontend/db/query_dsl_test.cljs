@@ -711,6 +711,15 @@
               (dsl-query "(page nope)")))
       "Correctly returns no results"))
 
+(deftest page-query-with-a-number-title
+  (load-test-files [{:page {:block/title "3.14"}
+                     :blocks [{:block/title "pi"}]}
+                    {:page {:block/title "42"}
+                     :blocks [{:block/title "answer"}]}])
+  (is (= ["pi"] (map :block/title (dsl-query "(page 3.14)")))
+      "a decimal page title, read as a number, still names the page")
+  (is (= ["answer"] (map :block/title (dsl-query "(page 42)")))))
+
 (deftest empty-queries
   (testing "nil or blank strings should be ignored"
     (are [x] (nil? (dsl-query x))
