@@ -246,6 +246,39 @@
       (is (= "one" (:block/title (d/entity @conn shared-value-id)))
           "The shared value block is kept"))))
 
+(deftest remove-block-property-deletes-many-text-value-blocks
+  (testing "Removing a many-valued text property deletes its value blocks"
+    (let [conn (db-test/create-conn-with-blocks
+                {:properties {:many {:logseq.property/type :default :db/cardinality :db.cardinality/many}}
+                 :pages-and-blocks
+                 [{:page {:block/title "page1"}
+                   :blocks [{:block/title "b1" :build/properties {:many #{"x" "y"}}}]}]})
+          b1 (db-test/find-block-by-content @conn "b1")
+          value-ids (set (map :db/id (:user.property/many b1)))]
+      (is (= 2 (count value-ids)))
+      (outliner-property/remove-block-property! conn (:block/uuid b1) :user.property/many)
+      (is (nil? (:user.property/many (d/entity @conn (:db/id b1)))))
+      (is (every? #(nil? (:block/title (d/entity @conn %))) value-ids)
+          "No value block is left behind")))
+
+  (testing "A value block that another block still holds is kept"
+    (let [conn (db-test/create-conn-with-blocks
+                {:properties {:many {:logseq.property/type :default :db/cardinality :db.cardinality/many}}
+                 :pages-and-blocks
+                 [{:page {:block/title "page1"}
+                   :blocks [{:block/title "b1" :build/properties {:many #{"x" "y"}}}
+                            {:block/title "b2"}]}]})
+          b1 (db-test/find-block-by-content @conn "b1")
+          b2 (db-test/find-block-by-content @conn "b2")
+          x-id (:db/id (some #(when (= "x" (:block/title %)) %) (:user.property/many b1)))
+          y-id (:db/id (some #(when (= "y" (:block/title %)) %) (:user.property/many b1)))]
+      (outliner-property/set-block-property! conn (:block/uuid b2) :user.property/many x-id)
+      (outliner-property/remove-block-property! conn (:block/uuid b1) :user.property/many)
+      (is (= "x" (:block/title (d/entity @conn x-id)))
+          "The value block b2 still holds is kept")
+      (is (nil? (:block/title (d/entity @conn y-id)))
+          "The other value block is deleted"))))
+
 (deftest create-property-text-block!
   (testing "Create a new :default property value"
     (let [conn (db-test/create-conn-with-blocks
