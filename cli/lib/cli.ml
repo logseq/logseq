@@ -391,11 +391,28 @@ let ensure_action_graph_constraints config action =
       Error (graph_exists_error graph)
   | _ -> Ok ()
 
+(* An exception that escapes a stage (for example a failed worker request) is
+   reported like any other error, in the chosen output format, instead of
+   reaching `bin/main.ml` as a bare exception name on stderr. *)
+let recover_stage ~on_error stage =
+  try Cli_effect.catch (stage ()) on_error with exn -> on_error exn
+
+let pending_error_state ?command mode exn =
+  let err = Error.exception_error exn in
+  set_pending_error_output ?command mode err;
+  Cli_effect.pure (Error err)
+
 let resolve_config : type marker.
     app_context ->
     (parsed_argv, marker) state ->
     (resolved_config, not_final) state Error.build_result Cli_effect.t =
  fun app (Parsed_argv_state (input, request)) ->
+  recover_stage
+    ~on_error:
+      (pending_error_state
+         ~command:(Cli_request.command_id request)
+         (output_mode_of_globals request.Cli_request.globals))
+  @@ fun () ->
   Cli_effect.map
     (fun result ->
       match result with
@@ -449,6 +466,12 @@ let build_action : type marker.
     (resolved_config, marker) state ->
     (built_action, not_final) state Error.build_result Cli_effect.t =
  fun app (Resolved_config_state (config, request)) ->
+  recover_stage
+    ~on_error:
+      (pending_error_state
+         ~command:(Cli_request.command_id request)
+         (output_mode_of_config config))
+  @@ fun () ->
   Cli_effect.map
     (fun result ->
       match result with
@@ -474,6 +497,12 @@ let execute_action : type marker.
     (built_action, marker) state ->
     (executed_action, final) state Error.build_result Cli_effect.t =
  fun app (Built_action_state (config, action)) ->
+  let failed exn =
+    let (Output.Mode.Packed mode) = output_mode_of_config config in
+    let result = Cli_result.error mode (Error.exception_error exn) in
+    Cli_effect.pure (Ok (Executed_action_state (config, result)))
+  in
+  recover_stage ~on_error:failed @@ fun () ->
   Cli_effect.map
     (fun result ->
       Ok (Executed_action_state (config, with_registry_metadata app result)))
