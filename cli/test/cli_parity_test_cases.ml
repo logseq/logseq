@@ -6963,6 +6963,59 @@ let () =
         (expect_parse_ok "cardinality many parses"
            [| "upsert"; "property"; "--name"; "p"; "--cardinality"; "many" |]));
 
+  test "CLI parity file errors are plain messages without exception text"
+    (fun () ->
+      let root = temp_dir "logseq-cli-file-errors-" in
+      let directory = Node.Path.join [| root; "a-directory" |] in
+      let garbage = Node.Path.join [| root; "garbage.edn" |] in
+      mkdir_p directory;
+      write_file garbage "{:a (";
+      let expect_plain_error name argv expected =
+        let output = run_cli_lifecycle argv in
+        expect_int (name ^ " exit") 1 output.exit_code;
+        let stdout = stdout_text (name ^ " stdout") output in
+        expect_named_contains (name ^ " message") stdout expected;
+        List.iter
+          (fun leak ->
+            expect_named_not_contains (name ^ " leaks " ^ leak) stdout leak)
+          [ "Cli_unix"; "Melange_edn"; "Error (exception)" ]
+      in
+      let import input =
+        [|
+          "--root-dir"; root; "-g"; "g"; "graph"; "import"; "--type"; "edn";
+          "--input"; input;
+        |]
+      in
+      expect_plain_error "missing import file" (import "/nonexistent")
+        "ENOENT";
+      expect_plain_error "import of a directory" (import directory) "EISDIR";
+      expect_plain_error "import of invalid edn" (import garbage) "invalid EDN";
+      expect_plain_error "missing blocks file"
+        [|
+          "--root-dir"; root; "-g"; "g"; "upsert"; "block"; "--blocks-file";
+          "/nonexistent";
+        |]
+        "ENOENT";
+      expect_plain_error "config that is a directory"
+        [| "--root-dir"; root; "--config"; directory; "graph"; "list" |]
+        "cannot read config file";
+      expect_plain_error "config that is invalid edn"
+        [| "--root-dir"; root; "--config"; garbage; "graph"; "list" |]
+        "invalid EDN";
+      let json_output =
+        run_cli_lifecycle
+          [|
+            "--root-dir"; root; "--config"; directory; "-o"; "json"; "graph";
+            "list";
+          |]
+      in
+      expect_int "json config error exit" 1 json_output.exit_code;
+      let json_stdout = stdout_text "json config error stdout" json_output in
+      expect_valid_json "json config error output" json_stdout;
+      expect_named_contains "json config error code" json_stdout
+        "invalid-config";
+      remove_tree root);
+
   test "CLI parity --help=false does not ask for help" (fun () ->
       let root = temp_dir "logseq-cli-help-false-" in
       let ran =

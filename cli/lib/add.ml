@@ -246,13 +246,13 @@ let read_blocks (opts : opts) args =
       | exception exn ->
           Error
             (Error.make Error.Invalid_blocks
-               ("invalid blocks markdown: " ^ Printexc.to_string exn)))
+               ("invalid blocks markdown: " ^ Exn_message.to_string exn)))
   | None, Some path, _ -> (
       try Markdown_blocks.of_markdown (read_file path)
       with exn ->
         Error
           (Error.make Error.Invalid_blocks
-             (path ^ ": " ^ Printexc.to_string exn)))
+             (path ^ ": " ^ Exn_message.to_string exn)))
   | None, None, Some content when content <> "" ->
       Ok (Vec.singleton (Block.make ~title:content ()))
   | None, None, _ when not (Vec.is_empty args) ->
