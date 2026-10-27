@@ -2467,6 +2467,9 @@
         order-list-idx (:own-order-list-index config)
         page-title? (:page-title? config)
         collapsable-page-title? (or page-title? (:collapsable-page-title? config))
+        ;; `collapsable?` depends on whether the block's hidden properties are
+        ;; shown, so rerender when that changes
+        _hidden-properties-visible? (property-component/use-hidden-properties-visible uuid)
         collapsable? (and (not (entity/leaf-property-value? block))
                           (editor-handler/collapsable? uuid {:semantic? true
                                                             :block block
