@@ -77,9 +77,11 @@ external from_textarea : cm_module -> D.el -> Js.Json.t -> t
 
 external get_value : t -> string = "getValue" [@@mel.send]
 external set_value : t -> string -> unit = "setValue" [@@mel.send]
+external to_textarea : t -> unit = "toTextArea" [@@mel.send]
 
 external set_option : t -> string -> Js.Json.t -> unit = "setOption"
   [@@mel.send]
+external get_option : t -> string -> Js.Json.t = "getOption" [@@mel.send]
 
 (* CM event handlers are invoked as (cm, event) — a 1-arg OCaml fn
    ignores the extra argument *)
@@ -188,6 +190,7 @@ let theme_name () =
 (* -- instances keyed by block uuid -- *)
 
 let instances : (string, t) Hashtbl.t = Hashtbl.create 8
+let synchronizing : (string, unit) Hashtbl.t = Hashtbl.create 4
 
 let instance uuid =
   match Hashtbl.find_opt instances uuid with
@@ -264,10 +267,12 @@ let update_calc c =
 (* mirror cljs save-code-editor!: the doc value flows into the block
    buffer + the debounced worker save; calc results recompute live *)
 let on_change uuid c =
-  let v = get_value c in
-  A.sync_buffer uuid v;
-  Ops.schedule_save uuid v;
-  update_calc c
+  if not (Hashtbl.mem synchronizing uuid) then begin
+    let v = get_value c in
+    A.sync_buffer uuid v;
+    Ops.schedule_save uuid v;
+    update_calc c
+  end
 
 (* cljs blur: save + drop the edit state (skipped after Esc — the escape
    path already committed) *)
@@ -391,7 +396,7 @@ let mount ?(read_only = false) uuid textarea =
         (ensure_mode file
          |> Js.Promise.then_ (fun () ->
                 (match instance uuid with
-                 | Some c' when c' == c ->
+                 | Some c' when c' == c && Js.Json.decodeString (get_option c "mode") = Some mode ->
                      set_option c "mode" (Js.Json.string mode)
                  | _ -> ());
                 Js.Promise.resolve ()))
@@ -403,6 +408,36 @@ let set_read_only uuid flag =
   | Some c -> set_option c "readOnly" (Js.Json.boolean flag)
   | None -> ()
 
+let set_controlled_value uuid value =
+  match instance uuid with
+  | Some c when get_value c <> value ->
+      Hashtbl.replace synchronizing uuid ();
+      Fun.protect
+        ~finally:(fun () -> Hashtbl.remove synchronizing uuid)
+        (fun () -> set_value c value);
+      update_calc c
+  | _ -> ()
+
+let set_language uuid lang =
+  let lang = normalize_lang lang in
+  match instance uuid with
+  | None -> ()
+  | Some c ->
+      let mode = cm_mode lang in
+      set_option c "mode" (Js.Json.string mode);
+      set_option c "matchBrackets" (Js.Json.boolean (lisp_like mode));
+      (match mode_file lang with
+       | None -> ()
+       | Some file ->
+           ignore
+             (ensure_mode file
+              |> Js.Promise.then_ (fun () ->
+                     (match instance uuid with
+                      | Some current when current == c && Js.Json.decodeString (get_option c "mode") = Some mode ->
+                          set_option c "mode" (Js.Json.string mode)
+                      | _ -> ());
+                     Js.Promise.resolve ())))
+
 (* cljs sync-editor-code!: a title written by another path (undo, db
    refresh, /code conversion) is pushed into an unfocused editor *)
 let sync_titles (_st : S.t) =
@@ -412,7 +447,7 @@ let sync_titles (_st : S.t) =
       | Some c, Some b ->
           let code = b.Model.block_title in
           if (not (has_focus c)) && get_value c <> code then
-            set_value c code
+            set_controlled_value uuid code
       | _ -> ())
     instances
 
@@ -428,25 +463,32 @@ let ensure_watch () =
         watch := Some (Signal.map sync_titles (S.signal ()))
 
 (* Lazy mounts are deduplicated until the core chunk arrives. *)
-let pending_mounts : (string, unit) Hashtbl.t = Hashtbl.create 4
+let pending_mounts : (string, D.el) Hashtbl.t = Hashtbl.create 4
 
-let mount_async ?(read_only = false) uuid el =
+let mount_async uuid el =
   ensure_watch ();
   if instance uuid = None && not (Hashtbl.mem pending_mounts uuid) then begin
-    Hashtbl.replace pending_mounts uuid ();
+    Hashtbl.replace pending_mounts uuid el;
     ignore
       (ensure_core ()
        |> Js.Promise.then_ (fun () ->
-              Hashtbl.remove pending_mounts uuid;
-              if instance uuid = None && D.el_is_connected el then
-                mount ~read_only uuid el;
+              (match Hashtbl.find_opt pending_mounts uuid with
+               | Some pending when pending == el ->
+                   Hashtbl.remove pending_mounts uuid;
+                   if instance uuid = None && D.el_is_connected el then
+                     mount
+                       ~read_only:(D.el_get_attr el "readonly" <> None)
+                       uuid el
+               | _ -> ());
               Js.Promise.resolve ()))
   end
 
 (* The adapter releases its block-role instance on node removal. *)
 let unmount uuid =
   Hashtbl.remove pending_mounts uuid;
-  Hashtbl.remove instances uuid
+  let previous = Hashtbl.find_opt instances uuid in
+  Hashtbl.remove instances uuid;
+  Option.iter to_textarea previous
 
 (* -- language picker (.code-block-actions .select-language) -- *)
 (* cljs shows the picker as a menu anchored under the button —

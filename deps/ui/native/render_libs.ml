@@ -1,10 +1,9 @@
-(* Native stub — katex/hljs are JS libraries; math + code highlight
-   render as plain text on native until ported *)
+(* JavaScript renderers are not available in the retained native host.
+   Code editing uses MyGo's language highlighter; rendered formulae still
+   retain their source as plain text, not KaTeX parity. *)
 open Promise_ext
 
-(* KaTeX/hljs slots — pending registrations are pushed to the host so
-   the Swift logseq-code/logseq-math extensions render natively
-   (Highlightr / SwiftMath). *)
+(* These registrations are host hints, not readiness acknowledgements. *)
 
 let ensure () : unit = ()
 
