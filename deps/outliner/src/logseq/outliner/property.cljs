@@ -20,6 +20,7 @@
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.page :as outliner-page]
             [logseq.outliner.validate :as outliner-validate]
+            [logseq.outliner.value-blocks :as value-blocks]
             [malli.core :as m]
             [malli.error :as me]
             [malli.util :as mu]))
@@ -651,38 +652,10 @@
       (when-let [property (d/entity @conn property-id)]
         (let [txs (mapcat
                    (fn [block]
-                     (let [value (get block property-id)
-                           entities (cond
-                                      (de/entity? value) [value]
-                                      (and (sequential? value) (every? de/entity? value)) value
-                                      :else nil)
-                           deleting-entities (filter
-                                              (fn [value]
-                                                (let [value-referrers*
-                                                      (d/q '[:find [?e ...]
-                                                             :in $ ?property-id ?value-id
-                                                             :where
-                                                             [?e ?property-id ?value-id]]
-                                                           @conn
-                                                           (:db/ident property)
-                                                           (:db/id value))
-                                                      value-referrers
-                                                      (cond
-                                                        (nil? value-referrers*)
-                                                        #{}
-
-                                                        (coll? value-referrers*)
-                                                        (set value-referrers*)
-
-                                                        :else
-                                                        #{value-referrers*})]
-                                                  (and
-                                                   (:logseq.property/created-from-property value)
-                                                   (not (or (entity-util/page? value) (ldb/closed-value? value)))
-                                                   (empty? (set/difference value-referrers block-id-set)))))
-                                              entities)
-                           retract-blocks-tx (when (seq deleting-entities)
-                                               (:tx-data (outliner-core/delete-blocks @conn deleting-entities {})))]
+                     (let [retract-blocks-tx (value-blocks/orphaned-value-blocks-tx
+                                              @conn property
+                                              (value-blocks/value-entity-ids (get block property-id))
+                                              block-id-set)]
                        (concat
                         [[:db/retract (:db/id block) (:db/ident property)]]
                         retract-blocks-tx)))
@@ -883,34 +856,6 @@
       (ldb/transact! conn tx-data
                      {:outliner-op :save-block}))))
 
-(defn- delete-replaced-value-blocks!
-  "Deletes the value blocks of `property` (with their children) in `value-ids`
-  that no node holds any more, e.g. the old text of a property that was just set
-  to another text. A value block that another node still holds is kept."
-  [conn property value-ids]
-  (let [db @conn
-        orphans (->> value-ids
-                     (keep #(d/entity db %))
-                     (filter (fn [value]
-                               (and (= (:db/id property)
-                                       (:db/id (:logseq.property/created-from-property value)))
-                                    (not (entity-util/page? value))
-                                    (not (ldb/closed-value? value))
-                                    (not= (:db/id (:logseq.property/default-value property))
-                                          (:db/id value))
-                                    (empty? (d/q '[:find [?e ...]
-                                                   :in $ ?property-ident ?value-id
-                                                   :where [?e ?property-ident ?value-id]]
-                                                 db (:db/ident property) (:db/id value)))))))
-        tx-data (->> orphans
-                     (mapcat (fn [value]
-                               (cons (:db/id value)
-                                     (ldb/get-block-full-children-ids db (:db/id value)))))
-                     distinct
-                     (map (fn [block-id] [:db/retractEntity block-id])))]
-    (when (seq tx-data)
-      (ldb/transact! conn tx-data {:outliner-op :save-block}))))
-
 (defn ^:large-vars/cleanup-todo set-block-property!
   "Updates a block property's value for an existing property-id and block.  If
   property is a ref type, automatically handles a raw property value i.e. you
@@ -983,13 +928,14 @@
                (when-not value-matches?
                  (raw-set-block-property! conn block property v')
                  (when ref?
-                   (let [old-ids (many-ref-value-ids existing-value)
-                         new-ids (many-ref-value-ids v')]
-                     (delete-replaced-value-blocks!
-                      conn property
-                      (if (and many? (not (coll? v')))
-                        #{}
-                        (set/difference old-ids new-ids))))))))))))))
+                   (let [replaced-ids (if (and many? (not (coll? v')))
+                                        #{}
+                                        (set/difference (many-ref-value-ids existing-value)
+                                                        (many-ref-value-ids v')))
+                         tx-data (value-blocks/orphaned-value-blocks-tx
+                                  @conn property replaced-ids #{(:db/id block)})]
+                     (when (seq tx-data)
+                       (ldb/transact! conn tx-data {:outliner-op :save-block})))))))))))))
 
 (defn upsert-property!
   "Updates property if property-id is given. Otherwise creates a property
