@@ -120,7 +120,7 @@
 
 (def-thread-api :thread-api/build-graph
   [repo option]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
+  (let [conn (worker-state/get-datascript-conn repo)]
     (graph-view/build-graph @conn option)))
 
 (def ^:private *get-all-page-titles-cache (volatile! (cache/lru-cache-factory {})))
