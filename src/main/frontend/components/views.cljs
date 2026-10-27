@@ -205,6 +205,29 @@
   [table row selected?]
   (set-table-row-selected! table (table-row-id row) selected?))
 
+(defn- table-range-rows
+  "Rows in display order that a shift-click range can span. A flat table paints
+  only a window of `:data` and keeps the whole list in `:full-data`; the
+  `:data` of a group table is the group."
+  [table]
+  (if (get-in table [:state :group-by-property])
+    (:data table)
+    (or (:full-data table) (:data table))))
+
+(defn- table-row-index
+  "Index of `row` among the rows a shift-click range spans, nil when absent."
+  [table row]
+  (let [idx (.indexOf (or (table-range-rows table) []) (table-row-id row))]
+    (when-not (neg? idx)
+      idx)))
+
+(defn- select-table-row-range!
+  [table from-idx to-idx]
+  (let [rows (table-range-rows table)]
+    (doseq [row-id (keep (fn [idx] (some-> (util/nth-safe rows idx) table-row-id))
+                         (range (min from-idx to-idx) (inc (max from-idx to-idx))))]
+      (state/set-state! (table-selection-path table :row-selection :selected-ids row-id) true))))
+
 (defn- table-toggle-selected-all!
   [table selected?]
   (let [group-by-property (get-in table [:state :group-by-property])]
@@ -252,7 +275,7 @@
    "#"])
 
 (hsx/defc row-checkbox
-  [{:keys [data] :as table} row _column]
+  [table row _column]
   (let [id (str (:db/id row) "-" "checkbox")
         [show? set-show!] (hooks/use-state false)
         checked? (use-table-row-selected? table row)]
@@ -267,18 +290,14 @@
        :on-click (fn [e]
                    (when-let [last-selected-idx (and (.-shiftKey e)
                                                      (get-table-last-selected-idx table))]
-                     (util/stop e)
-                     (let [idx (.indexOf data (table-row-id row))]
+                     (when-let [idx (table-row-index table row)]
+                       (util/stop e)
                        (when (not= last-selected-idx idx)
-                         (let [new-ids (keep (fn [idx] (util/nth-safe data idx)) (range (min last-selected-idx idx) (inc (max last-selected-idx idx))))]
-                           (when (seq new-ids)
-                             (doseq [row-id (map table-row-id new-ids)]
-                               (state/set-state! (table-selection-path table :row-selection :selected-ids row-id) true))))))))
+                         (select-table-row-range! table last-selected-idx idx)))))
        :on-checked-change (fn [v]
-                            (if v
-                              (let [idx (.indexOf data (table-row-id row))]
-                                (set-table-last-selected-idx! table idx))
-                              (let [idx (.indexOf data (table-row-id row))]
+                            (let [idx (table-row-index table row)]
+                              (if v
+                                (set-table-last-selected-idx! table idx)
                                 (when (= idx (get-table-last-selected-idx table))
                                   (set-table-last-selected-idx! table nil))))
                             (table-toggle-row-selected! table row v))
@@ -287,7 +306,7 @@
                    (if (or show? checked?) "opacity-100" "opacity-0"))})]))
 
 (hsx/defc gallery-card-checkbox
-  [{:keys [data] :as table} row]
+  [table row]
   (let [id (str (:db/id row) "-gallery-checkbox")
         checked? (use-table-row-selected? table row)]
     [:label.ls-gallery-card-select.flex.items-center.justify-center.cursor-pointer
@@ -299,17 +318,12 @@
        :on-click (fn [e]
                    (when-let [last-selected-idx (and (.-shiftKey e)
                                                      (get-table-last-selected-idx table))]
-                     (util/stop e)
-                     (let [idx (.indexOf data (table-row-id row))]
+                     (when-let [idx (table-row-index table row)]
+                       (util/stop e)
                        (when (not= last-selected-idx idx)
-                         (let [new-ids (keep (fn [idx] (util/nth-safe data idx))
-                                             (range (min last-selected-idx idx)
-                                                    (inc (max last-selected-idx idx))))]
-                           (when (seq new-ids)
-                             (doseq [row-id (map table-row-id new-ids)]
-                               (state/set-state! (table-selection-path table :row-selection :selected-ids row-id) true))))))))
+                         (select-table-row-range! table last-selected-idx idx)))))
        :on-checked-change (fn [v]
-                            (let [idx (.indexOf data (table-row-id row))]
+                            (let [idx (table-row-index table row)]
                               (if v
                                 (set-table-last-selected-idx! table idx)
                                 (when (= idx (get-table-last-selected-idx table))
