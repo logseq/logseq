@@ -2813,7 +2813,10 @@
                         ;; for refs and may have content
                         retract-tx (if (#{:node :date} from-prop-type)
                                      [[:db/retract (:db/id m) property-ident]]
-                                     (mapv #(vector :db/retractEntity (:db/id %))
+                                     (mapv #(if (:db/id %)
+                                              (vector :db/retractEntity (:db/id %))
+                                              ;; A checkbox or number value is not an entity
+                                              (vector :db/retract (:db/id m) property-ident %))
                                            (if (sequential? prop-value) prop-value [prop-value])))
                         prop-value-content (get-pvalue-content (:block/uuid m) prop)
                         new-value (db-property-build/build-property-value-block

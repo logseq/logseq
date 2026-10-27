@@ -505,6 +505,45 @@
     (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
         "Imported graph validates")))
 
+(deftest-async import-property-changing-from-boolean-to-text
+  (p/let [dir (write-temp-file-graph
+               {"logseq/config.edn" "{:meta/version 1 :file/name-format :triple-lowbar}\n"
+                "pages/a.md" "- block a\n  rating:: true\n"
+                "pages/b.md" "- block b\n  rating:: text1\n"
+                "pages/ns___c.md" "rating:: false\n\n- block c\n"})
+          conn (db-test/create-conn)
+          _ (import-file-graph-to-db dir conn {})
+          value-of (fn [block-title]
+                     (some->> (db-test/find-block-by-content @conn block-title)
+                              :user.property/rating
+                              (d/entity @conn)
+                              db-property/property-value-content))]
+    (is (some? (db-test/find-block-by-content @conn #"block b"))
+        "The file that uses the property as text is imported")
+    (is (= "text1" (value-of "block b")))
+    (is (= "true" (value-of "block a"))
+        "The earlier boolean value becomes text")
+    (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+        "Imported graph validates")))
+
+(deftest-async import-page-property-changing-from-boolean-to-text
+  (p/let [dir (write-temp-file-graph
+               {"logseq/config.edn" "{:meta/version 1 :file/name-format :triple-lowbar}\n"
+                "pages/ns___c.md" "rating:: true\n\n- block c\n"
+                "pages/z.md" "- block z\n  rating:: text1\n"})
+          conn (db-test/create-conn)
+          _ (import-file-graph-to-db dir conn {})]
+    (is (some? (db-test/find-block-by-content @conn #"block z"))
+        "The file that uses the property as text is imported")
+    (is (= "true"
+           (some->> (db-test/find-page-by-title @conn "c")
+                    :user.property/rating
+                    (d/entity @conn)
+                    db-property/property-value-content))
+        "The earlier boolean page property becomes text")
+    (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+        "Imported graph validates")))
+
 (deftest-async import-page-template-property
   (p/let [file (write-temp-graph-file "pages/t.md" "template:: tt\n\n- first block\n")
           conn (db-test/create-conn)
