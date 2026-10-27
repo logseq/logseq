@@ -302,6 +302,24 @@
     (is (nil? (d/entity @conn :user.property/rating)))
     (is (nil? (d/entity @conn [:block/uuid child-uuid])))))
 
+(deftest delete-property-page-retracts-text-value-blocks
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties {:note {:logseq.property/type :default}}
+               :pages-and-blocks
+               [{:page {:block/title "page1"}
+                 :blocks [{:block/title "Buy milk" :build/properties {:note "2 liters"}}]}]})
+        block (db-test/find-block-by-content @conn "Buy milk")
+        value-block-id (:db/id (:user.property/note block))
+        _ (assert (:logseq.property/created-from-property (d/entity @conn value-block-id)))
+        property-page (d/entity @conn :user.property/note)]
+    (outliner-page/delete! conn (:block/uuid property-page))
+    (is (nil? (d/entity @conn :user.property/note)))
+    (is (nil? (:block/title (d/entity @conn value-block-id)))
+        "The value block is deleted with the property")
+    (is (empty? (->> (:block/_parent (d/entity @conn (:db/id block)))
+                     (map :block/title)))
+        "The value does not become a child block")))
+
 (deftest create-journal
   (let [conn (db-test/create-conn)
         [_ page-uuid] (outliner-page/create! conn "Dec 16th, 2024" {})]
