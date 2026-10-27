@@ -1785,7 +1785,11 @@
         linked-path (when (and (string? linked-relative)
                                (string? linked-base-dir)
                                (not (string/blank? linked-base-dir)))
-                      (node-path/join linked-base-dir linked-relative))
+                      ;; Zotero stores a linked file outside its base directory as an absolute path
+                      (if (or (node-path/isAbsolute linked-relative)
+                              (windows-drive-path? linked-relative))
+                        linked-relative
+                        (node-path/join linked-base-dir linked-relative)))
         {:keys [path link base]} (cond
                                    linked-path {:path linked-path
                                                 :link (:link zotero-path-data)
