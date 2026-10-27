@@ -22,7 +22,7 @@ let finish_import repo label =
 (* name prompt -> validate -> run import; `run` resolves true only when
    the import actually landed (it may toast a local error itself) *)
 let ask_name_and_run label run =
-  Dialogs_state.prompt ~title:(T.t "import/set-graph-name-label") ~on_submit:(fun name ->
+  Dialogs_state.prompt ~title:(T.t "import/new-graph-name") ~on_submit:(fun name ->
       let name = String.trim name in
       if name = "" then Toast.warning (T.t "import/empty-graph-name")
       else if Graphs_ops.invalid_chars name <> [] then
@@ -35,7 +35,8 @@ let ask_name_and_run label run =
         ignore
           (let* ok =
             (Js.Promise.catch
-               (fun _e ->
+               (fun e ->
+                  Ui_services.log_error ("Import failed", e);
                   Toast.error (T.t "import/import-error");
                   Js.Promise.resolve false)
                (run repo))

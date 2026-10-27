@@ -982,6 +982,7 @@
  :import/ignored-files "导入跳过了 {1} 个文件。详情请查看 JavaScript 控制台。"
  :import/ignored-properties "导入跳过了 {1} 个属性"
  :import/ignored-properties-fix "要修复属性类型，请将属性值改为正确的类型并重新导入图谱"
+ :import/import-error "导入失败。"
  :import/invalid-blocks-detected "导入检测到 {1} 个无效块。这些块在交互时可能有问题。详情请查看 JavaScript 控制台。"
  :import/invalid-edn-file "所提供的 EDN 文件无效。请修正后重试。"
  :import/loading "正在导入"

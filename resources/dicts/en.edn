@@ -985,6 +985,7 @@
  :import/ignored-files (fn [count] (str "Import ignored " count " " (if (= 1 count) "file" "files") ". See the javascript console for more details."))
  :import/ignored-properties (fn [count] (str "Import ignored " count " " (if (= 1 count) "property" "properties")))
  :import/ignored-properties-fix "To fix a property type, change the property value to the correct type and reimport the graph"
+ :import/import-error "Import failed."
  :import/invalid-blocks-detected "Import detected {1} invalid block(s). These blocks may be buggy when you interact with them. See the javascript console for more."
  :import/invalid-edn-file "The given EDN file is not valid EDN. Please fix and try again."
  :import/loading "Importing"
