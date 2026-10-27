@@ -129,7 +129,7 @@ let dissoc (s : string) (key : string) : string =
         else key_str
       in
       if kl = key then Some (prev_ws, key_start, val_end)
-      else loop val_end key_start
+      else loop val_end val_end
   in
   match loop (i0 + 1) (i0 + 1) with
   | None -> s

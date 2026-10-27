@@ -4883,7 +4883,9 @@ let test_export_config_file_sets_title_format () =
   let options =
     { (default_export_options ()) with
       Gp.read_file =
-        (fun _ -> Eff.pure "{:journal/page-title-format \"yyyy-MM-dd\"}") }
+        (fun _ ->
+          Eff.pure
+            "{:ui/show-brackets? false :journal/page-title-format \"yyyy-MM-dd\"}") }
   in
   ignore
     (await
@@ -4895,7 +4897,18 @@ let test_export_config_file_sets_title_format () =
 ((Some (String "yyyy-MM-dd")) : value option)
     (match Datascript.entity db (Ident "logseq.class/Journal") with
      | Some e -> Ldb.value e "logseq.property.journal/title-format"
-     | None -> None) ""
+     | None -> None) "";
+  let saved_config =
+    match
+      q_scalar_in db
+        "[:find ?content . :where [?b :file/path \"logseq/config.edn\"] [?b :file/content ?content]]"
+        []
+    with
+    | Some (String content) -> Edn_util.read_string content
+    | _ -> failwith "saved config.edn content not found"
+  in
+  eq "saved config preserves Boolean false and removes the deprecated key"
+    (Map [ (Keyword "ui/show-brackets?", Bool false) ] : value) saved_config ""
 
 let split_result_value (texts, segs) : value =
   Map
