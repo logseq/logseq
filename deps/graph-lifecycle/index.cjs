@@ -305,18 +305,21 @@ function validateRegistration(ctx, current, record) {
       || record.graphsDir !== ctx.graphsDir || record.lifecycleDir !== ctx.lifecycleDir)
     fail('Invalid worker registration');
 }
-function readRuntime(ctx, record) {
+function readRuntime(ctx, record, exists = pidExists) {
   const file = runtimeFile(ctx, record.ticket);
   // A worker can create or remove its file mid-check (admission, publish,
-  // close, cleanup); confirm an empty read is stable before judging it.
+  // close, cleanup); confirm an unusable read is stable before judging it.
   for (let attempt = 0; ; attempt++) {
-    const runtime = readJSON(file);
-    if (runtime === null && fs.existsSync(file)) {
+    let runtime = null;
+    let unusable = false;
+    try { runtime = readJSON(file); }
+    catch { unusable = true; }
+    if (unusable || (runtime === null && fs.existsSync(file)) || (runtime !== null && (typeof runtime !== 'object' || Array.isArray(runtime)))) {
+      // A worker that is gone cannot be writing its file, so what it left unreadable is only stale.
+      if (!exists(record.pid)) return null;
       if (attempt < 3) continue;
       fail('Invalid worker runtime metadata');
     }
-    if (runtime !== null && (typeof runtime !== 'object' || Array.isArray(runtime)))
-      fail('Invalid worker runtime metadata');
     if (runtime !== null && Object.entries(runtimeRecord(record)).some(([key, value]) => runtime[key] !== value))
       fail('Worker runtime identity differs from registration');
     return runtime;
@@ -394,7 +397,7 @@ async function discover(ctx, current, scan, registeredOnly = false) {
   for (const record of current.workers) {
     validateRegistration(ctx, current, record);
     if (targets.has(record.pid)) fail('Duplicate worker registration');
-    const target = { ...record, ...readRuntime(ctx, record) };
+    const target = { ...record, ...readRuntime(ctx, record, exists) };
     targets.set(record.pid, target);
   }
   const attach = (target, candidate) => {
@@ -719,7 +722,9 @@ async function cleanup(ctx, current, targets) {
   for (const root of new Set([ctx.root, ...targets.map(target => target.root)]))
     await removeEntries(root, targets);
   for (const target of targets) {
-    const record = readJSON(runtimeFile(ctx, target.ticket));
+    let record = null;
+    try { record = readJSON(runtimeFile(ctx, target.ticket)); }
+    catch { /* a runtime file the worker left unreadable has no close error to report */ }
     if (record?.error && !current.acknowledgedErrors?.includes(target.ticket)) {
       current.acknowledgedErrors = [...(current.acknowledgedErrors || []), target.ticket];
       writeJSON(ctx.stateFile, current);
