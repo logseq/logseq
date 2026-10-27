@@ -799,6 +799,7 @@ let load_more_rows inst =
 (* Fetch the unwindowed resource for destructive actions without replacing
    the visible prefix or hydrating the entire graph into the viewport. *)
 let ensure_full_action_rows inst on_done =
+  let context_revision = (Runtime.model ()).Model.context_revision in
   let repo = Db.repo () in
   let route = Runtime.route () in
   let gen = !(inst.V.data_gen) in
@@ -813,7 +814,8 @@ let ensure_full_action_rows inst on_done =
   in
   let ctx = full_ctx () in
   let fresh () =
-    Db.repo () = repo && Runtime.route () = route
+    (Runtime.model ()).Model.context_revision = context_revision
+    && Db.repo () = repo && Runtime.route () = route
     && V.fetch_fresh inst gen
     && (V.get inst).V.view_uuid = view_uuid
     && full_ctx () = ctx
