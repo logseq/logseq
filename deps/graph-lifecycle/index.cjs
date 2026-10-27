@@ -277,7 +277,10 @@ function abortAdmission(runtime, error) {
 function entries(root) {
   let raw;
   try { raw = fs.readFileSync(path.join(root, 'server-list'), 'utf8'); }
-  catch (error) { if (error.code === 'ENOENT') return []; throw error; }
+  catch (error) {
+    if (error.code === 'ENOENT') return [];
+    throw Object.assign(new Error(`Unreadable server publication list: ${error.message}`, { cause: error }), { code: 'server-stop-failed' });
+  }
   return raw.split('\n').filter(line => line.trim()).map(line => {
     const match = line.trim().match(/^(\d+)\s+(\d+)$/);
     if (!match) fail('Invalid server publication');
@@ -444,11 +447,15 @@ async function discover(ctx, current, scan, registeredOnly = false) {
 }
 // The lock is created with writeFileSync, so a crash or a full disk can leave it empty or truncated,
 // and a lock without a holder PID has no live owner to wait for.
-// Returns null when the lock is gone, otherwise its raw text and its holder (null when unusable).
+// Returns null when the lock is gone, otherwise its raw text and its holder (null when unusable, which
+// includes a lock that cannot be read at all, such as one without permissions or a directory).
 function readServerListLock(lockFile) {
   let raw;
   try { raw = fs.readFileSync(lockFile, 'utf8'); }
-  catch (error) { if (error.code === 'ENOENT') return null; throw error; }
+  catch (error) {
+    if (error.code === 'ENOENT') return null;
+    return { raw: '', holder: null };
+  }
   try {
     const holder = JSON.parse(raw);
     if (holder && Number.isSafeInteger(holder.pid) && holder.pid > 0) return { raw, holder };
@@ -479,7 +486,7 @@ function reclaimServerListLock(lockFile) {
       try { fs.linkSync(claim, lockFile); }
       catch { /* taken again meanwhile */ }
     }
-  } finally { fs.rmSync(claim, { force: true }); }
+  } finally { fs.rmSync(claim, { force: true, recursive: true }); }
 }
 async function removeEntries(root, removed) {
   const lockFile = path.join(root, 'server-list.lock');
