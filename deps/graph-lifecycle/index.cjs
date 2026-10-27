@@ -458,6 +458,22 @@ function serverListLockIsStale(lockFile, lock) {
   try { return Date.now() - fs.statSync(lockFile).mtimeMs >= UNUSABLE_LOCK_GRACE; }
   catch (error) { if (error.code === 'ENOENT') return false; throw error; }
 }
+// Staleness is a property of one lock file, not of its text: between judging a lock and removing it, another
+// reclaimer can delete it and a writer can create a new one (still empty until its holder is written), and
+// removing by path would take that live lock. So the lock is first renamed to a name only this call knows,
+// which fixes the instance, and judged again there. A live lock caught by mistake is put back.
+function reclaimServerListLock(lockFile) {
+  const claim = `${lockFile}.${id()}.reclaim`;
+  try { fs.renameSync(lockFile, claim); }
+  catch { return; } // another reclaimer took it, or it cannot be moved now; the caller retries
+  try {
+    const claimed = readServerListLock(claim);
+    if (claimed && !serverListLockIsStale(claim, claimed)) {
+      try { fs.linkSync(claim, lockFile); }
+      catch { /* taken again meanwhile */ }
+    }
+  } finally { fs.rmSync(claim, { force: true }); }
+}
 async function removeEntries(root, removed) {
   const lockFile = path.join(root, 'server-list.lock');
   const owner = { pid: process.pid, 'lock-id': id() };
@@ -467,10 +483,7 @@ async function removeEntries(root, removed) {
     catch (error) {
       if (error.code !== 'EEXIST') throw error;
       const previous = readServerListLock(lockFile);
-      if (previous && serverListLockIsStale(lockFile, previous)) {
-        // Another process may reclaim the same stale lock first; remove it only while it is still the one judged stale.
-        if (readServerListLock(lockFile)?.raw === previous.raw) fs.rmSync(lockFile, { force: true });
-      }
+      if (previous && serverListLockIsStale(lockFile, previous)) reclaimServerListLock(lockFile);
       if (Date.now() >= deadline) fail('Timed out acquiring server-list lock');
       await sleep(25);
     }
