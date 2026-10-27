@@ -1933,6 +1933,9 @@ let () =
     let scene = Lui_host.scene host in
     let app = Option.get !(Native_embed.current_app) in
     let runtime = Lui_app.runtime app in
+    let worker_reads =
+      Option.map (fun worker -> worker.Worker_client.inflight_reads) !Runtime.worker
+    in
     let roots =
       [ "host", Obj.repr host
       ; "store", Obj.repr store
@@ -1978,7 +1981,7 @@ let () =
       ; "search_state", Obj.repr
           (Cmdk_state.latest_t, Cmdk_state.latest_st, Cmdk_state.latest_vs,
            Cmdk_state.services_ref)
-      ; "worker_reads", Obj.repr Worker_client.inflight_reads
+      ; "worker_reads", Obj.repr worker_reads
       ; "timers", Mutex.protect Host.timers_lock (fun () ->
           Obj.repr (Hashtbl.fold (fun _ timer acc -> timer :: acc) Host.timers []))
       ] in
@@ -2008,7 +2011,7 @@ let () =
           ; "property_areas",`Int (Hashtbl.length Properties_state.areas)
           ; "pending_split_actions",`Int (Queue.length Editor_actions.split_commits)
           ; "pending_edit_actions",`Int (Queue.length Editor_state.pending_edit_actions)
-          ; "worker_reads",`Int (Hashtbl.length Worker_client.inflight_reads)
+          ; "worker_reads",`Int (Option.fold ~none:0 ~some:Hashtbl.length worker_reads)
           ]
       ; "native_resources", `Assoc
           [ "software_backing_bytes", `Int
