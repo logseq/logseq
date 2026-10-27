@@ -8,7 +8,9 @@
             [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.common.initial-data :as common-initial-data]
             [logseq.db.common.order :as db-order]
-            [logseq.db.frontend.content :as db-content]))
+            [logseq.db.frontend.content :as db-content]
+            [logseq.db.frontend.property :as db-property]
+            [logseq.outliner.value-blocks :as value-blocks]))
 
 (def ^:private recycle-page-title "Recycle")
 (def ^:private retention-ms (* 30 24 3600 1000))
@@ -143,10 +145,32 @@
                    (when (and title (not= title stored-title))
                      [:db/add (:db/id ref) :block/title title])))))))
 
+(defn- owned-value-blocks-tx
+  "Tx data deleting the property value blocks held by the nodes `tx-data` removes,
+  unless a node that stays holds them. A number value, for one, belongs to its
+  property and not to the node that has it, so it would be left behind owned by
+  nothing."
+  [db tx-data]
+  (let [retracted-ids (->> tx-data
+                           (keep (fn [[op id]]
+                                   (when (= :db/retractEntity op)
+                                     (:db/id (d/entity db id)))))
+                           set)]
+    (->> retracted-ids
+         (keep #(d/entity db %))
+         (mapcat (fn [node]
+                   (mapcat (fn [[property-ident v]]
+                             (when-let [property (d/entity db property-ident)]
+                               (value-blocks/orphaned-value-blocks-tx
+                                db property (value-blocks/value-entity-ids v) retracted-ids)))
+                           (db-property/properties node))))
+         distinct)))
+
 (defn- with-delete-cleanup-tx
   [db tx-data]
   (distinct (concat tx-data
                     (retracted-pages-refs-title-tx db tx-data)
+                    (owned-value-blocks-tx db tx-data)
                     (delete-blocks/update-refs-history db tx-data {}))))
 
 (defn recycle-blocks-tx-data

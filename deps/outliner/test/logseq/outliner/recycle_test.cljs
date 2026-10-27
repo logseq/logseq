@@ -8,6 +8,7 @@
             [logseq.db.test.helper :as db-test]
             [logseq.outliner.op :as outliner-op]
             [logseq.outliner.page :as outliner-page]
+            [logseq.outliner.property :as outliner-property]
             [logseq.outliner.recycle :as recycle]))
 
 (defn- recycle-page
@@ -205,6 +206,55 @@
     (is (nil? (d/entity @conn [:block/uuid p2-uuid])))
     (is (= "b3 p2" (:block/title (d/entity @conn b3-id)))
         "The block keeps the page's title as text, not a link to a page that no longer exists")))
+
+(defn- conn-with-number-value-in-page
+  "A graph where block b1 of page p1 has num = 3. The value block belongs to the
+  property num, not to b1."
+  []
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties {:num {:logseq.property/type :number}}
+               :pages-and-blocks
+               [{:page {:block/title "p1"}
+                 :blocks [{:block/title "b1"}]}
+                {:page {:block/title "p2"}
+                 :blocks [{:block/title "b2"}]}]})
+        b1 (db-test/find-block-by-content @conn "b1")
+        _ (outliner-property/set-block-property! conn (:block/uuid b1) :user.property/num 3)
+        b1 (d/entity @conn (:db/id b1))]
+    {:conn conn
+     :p1-uuid (:block/uuid (ldb/get-page @conn "p1"))
+     :b2-uuid (:block/uuid (db-test/find-block-by-content @conn "b2"))
+     :value-id (:db/id (:user.property/num b1))}))
+
+(deftest permanently-delete-recycled-page-deletes-the-number-values-it-held
+  (let [{:keys [conn p1-uuid value-id]} (conn-with-number-value-in-page)]
+    (is (some? value-id))
+    (ldb/transact! conn
+                   (recycle/recycle-page-tx-data @conn (d/entity @conn [:block/uuid p1-uuid]) {})
+                   {:outliner-op :delete-page})
+    (is (true? (recycle/permanently-delete! conn p1-uuid)))
+    (is (nil? (:logseq.property/value (d/entity @conn value-id)))
+        "The number value block is not left behind")))
+
+(deftest gc-recycled-page-deletes-the-number-values-it-held
+  (let [{:keys [conn p1-uuid value-id]} (conn-with-number-value-in-page)]
+    (ldb/transact! conn
+                   (recycle/recycle-page-tx-data @conn (d/entity @conn [:block/uuid p1-uuid]) {:now-ms 0})
+                   {:outliner-op :delete-page})
+    (is (true? (recycle/gc! conn {:now-ms (* 31 24 3600 1000)})))
+    (is (nil? (:logseq.property/value (d/entity @conn value-id)))
+        "The number value block is not left behind")))
+
+(deftest gc-keeps-a-number-value-another-block-holds
+  (let [{:keys [conn p1-uuid b2-uuid value-id]} (conn-with-number-value-in-page)]
+    (outliner-property/set-block-property! conn b2-uuid :user.property/num value-id)
+    (ldb/transact! conn
+                   (recycle/recycle-page-tx-data @conn (d/entity @conn [:block/uuid p1-uuid]) {:now-ms 0})
+                   {:outliner-op :delete-page})
+    (is (true? (recycle/gc! conn {:now-ms (* 31 24 3600 1000)})))
+    (is (= 3 (:logseq.property/value (d/entity @conn value-id)))
+        "The value block b2 still holds is kept")
+    (is (= value-id (:db/id (:user.property/num (d/entity @conn [:block/uuid b2-uuid])))))))
 
 (deftest gc-keeps-unexpired-recycled-page
   (let [conn (db-test/create-conn-with-blocks
