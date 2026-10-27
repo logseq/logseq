@@ -8,6 +8,20 @@
             [logseq.outliner.page :as outliner-page]
             [logseq.outliner.property :as outliner-property]))
 
+(deftest batch-set-property-refuses-a-value-it-cant-convert
+  (testing "text that is not a number for a number property is refused with a message, not 'Property value must be not nil'"
+    (let [conn (db-test/create-conn-with-blocks
+                {:properties {:num {:logseq.property/type :number}}
+                 :pages-and-blocks [{:page {:block/title "page1"} :blocks [{:block/title "b1"}]}]})
+          block (db-test/find-block-by-content @conn "b1")
+          error (try (outliner-property/batch-set-property! conn [(:db/id block)] :user.property/num "#status" {:entity-id? false})
+                     nil
+                     (catch :default e e))]
+      (is (some? error) "the write is refused")
+      (is (not= "Property value must be not nil" (ex-message error)) (str "raw error: " (ex-message error)))
+      (is (= :notification (:type (ex-data error))) "the refusal is shown to the user")
+      (is (nil? (:user.property/num (d/entity @conn (:db/id block)))) "nothing was written"))))
+
 (deftest upsert-property!
   (testing "Creates a property"
     (let [conn (db-test/create-conn-with-blocks [])
