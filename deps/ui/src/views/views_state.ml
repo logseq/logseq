@@ -63,6 +63,10 @@ type vstate =
   ; group_desc : bool option
   ; display_type : string (* ident tail: "table" | "list" | "gallery" *)
   ; selected : Sset.t
+  ; table_select_all : bool
+  ; table_excluded : Sset.t
+  ; table_selection_epoch : int
+  ; table_action_pending : int option
   ; table_anchor : string option
   ; table_resize : table_resize option
   ; hidden : Sset.t
@@ -136,6 +140,10 @@ let empty_vstate () : vstate =
   ; group_desc = None
   ; display_type = "table"
   ; selected = Sset.empty
+  ; table_select_all = false
+  ; table_excluded = Sset.empty
+  ; table_selection_epoch = 0
+  ; table_action_pending = None
   ; table_anchor = None
   ; table_resize = None
   ; hidden = Sset.empty
@@ -196,28 +204,51 @@ let set inst (s : vstate) = Runtime.signal_set inst.st s
 
 let update inst f = set inst (f (get inst))
 
+let table_row_selected (s : vstate) uuid =
+  if s.table_select_all then not (Sset.mem uuid s.table_excluded)
+  else Sset.mem uuid s.selected
+
+let table_selection_changed (s : vstate) =
+  { s with table_selection_epoch = s.table_selection_epoch + 1
+  ; table_action_pending = None }
+
+let table_clear_selection (s : vstate) =
+  table_selection_changed { s with selected = Sset.empty
+  ; table_select_all = false; table_excluded = Sset.empty; table_anchor = None }
+
+let table_select_all_rows (s : vstate) checked =
+  { (table_clear_selection s) with table_select_all = checked }
+
+let table_set_rows (s : vstate) ~rows ~checked =
+  let change set add = List.fold_left (fun set uuid ->
+    if add then Sset.add uuid set else Sset.remove uuid set) set rows in
+  table_selection_changed
+    (if s.table_select_all then
+       { s with table_excluded = change s.table_excluded (not checked) }
+     else { s with selected = change s.selected checked })
+
 let table_select_row (s : vstate) ~rows ~uuid ~checked ~shift =
   if not (List.mem uuid rows) then s
   else
-    let selected =
+    let range =
       match shift, s.table_anchor with
-      | true, Some anchor when Sset.mem anchor s.selected ->
+      | true, Some anchor when table_row_selected s anchor ->
           (match List.find_index (( = ) anchor) rows,
                  List.find_index (( = ) uuid) rows with
            | Some first, Some last ->
-               let _, selected = List.fold_left
-                   (fun (index, selected) row ->
+               let _, range = List.fold_left
+                   (fun (index, range) row ->
                      (index + 1,
                       if index >= min first last && index <= max first last
-                      then Sset.add row selected else selected))
-                   (0, s.selected) rows in
-               selected
-           | _ -> s.selected)
-      | _ -> s.selected
+                      then row :: range else range))
+                   (0, []) rows in
+               range
+           | _ -> [])
+      | _ -> []
     in
-    { s with
-      selected = (if checked then Sset.add uuid selected else Sset.remove uuid selected)
-    ; table_anchor =
+    let s = table_set_rows s ~rows:range ~checked:true in
+    { (table_set_rows s ~rows:[uuid] ~checked) with
+      table_anchor =
         if checked then Some uuid
         else if s.table_anchor = Some uuid then None else s.table_anchor
     }
@@ -375,6 +406,8 @@ let ctx_of inst : W.t =
 
 (* apply persisted view-entity state — pure vstate -> vstate *)
 let apply_view_entity s (v : Views_wire.view_ent) : vstate =
+  let s = if s.view_uuid = v.vu then s else
+    { (table_clear_selection s) with table_resize = None } in
   let display_type =
     match v.vtype with
     | "logseq.property.view/type.list" -> "list"

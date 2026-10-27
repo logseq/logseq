@@ -348,7 +348,7 @@ let select_cell inst ~row_uuid ~blk : t =
         ~data_attrs:[ ("data-table-row-select", "true") ]
         [ checkbox_el inst ~jtrigger:true ~id:(dbid ^ "-checkbox")
             ~aria_label:(I.t "view.table/select-row")
-            ~shown:(fun (s : V.vstate) -> V.Sset.mem row_uuid s.V.selected)
+            ~shown:(fun (s : V.vstate) -> V.table_row_selected s row_uuid)
             ~on_toggle:(fun checked shift ->
               select_row inst ~uuid:row_uuid ~checked ~shift) ])
     ]
@@ -544,7 +544,14 @@ let cell_el inst ~row_uuid ~blk (c : V.column) : t =
 (* ---------- header ---------- *)
 
 let selected_row_uuids (s : V.vstate) =
-  List.filter (fun uuid -> V.Sset.mem uuid s.V.selected) (all_row_uuids s)
+  List.filter (V.table_row_selected s) (all_row_uuids s)
+
+let selected_row_count (s : V.vstate) =
+  match s.V.table_select_all, s.V.data with
+  | true, Wr.VFlat { count; _ } ->
+      max 0 (count - List.length (List.filter
+        (fun uuid -> V.Sset.mem uuid s.V.table_excluded) (all_row_uuids s)))
+  | _ -> List.length (selected_row_uuids s)
 
 let selected_uuids inst = selected_row_uuids (V.get inst)
 
@@ -557,23 +564,22 @@ let header_select_cell ?rows inst : t =
   let row_uuids s = Option.value rows ~default:(all_row_uuids s) in
   let shown (s : V.vstate) =
     let uuids = row_uuids s in
-    uuids <> [] && List.for_all (fun uuid -> V.Sset.mem uuid s.V.selected) uuids
+    uuids <> [] && List.for_all (V.table_row_selected s) uuids &&
+      (match rows, s.V.data with
+       | None, Wr.VFlat { count; _ } when count > List.length uuids -> s.V.table_select_all
+       | _ -> true)
   in
   let mixed (s : V.vstate) =
-    not (shown s) && List.exists (fun uuid -> V.Sset.mem uuid s.V.selected) (row_uuids s)
+    not (shown s) && List.exists (V.table_row_selected s) (row_uuids s)
   in
   row ~cross:`center ~main:`center ~width:32 ~height:32
     [ checkbox_el ~mixed inst ~jtrigger:false ~id:"header-checkbox" ~shown
         ~aria_label:(I.t "view.table/select-all")
         ~on_toggle:(fun on _shift ->
           V.update inst (fun s ->
-              { s with
-                V.selected =
-                  List.fold_left
-                    (fun acc uuid ->
-                      if on then V.Sset.add uuid acc else V.Sset.remove uuid acc)
-                    s.V.selected (row_uuids s)
-              })) ]
+            match rows with
+            | None -> V.table_select_all_rows s on
+            | Some rows -> V.table_set_rows s ~rows ~checked:on)) ]
 
 (* cljs header-cp: text-variant button holding the title span and a sort
    arrow for the active sort column — the arrow's presence is
@@ -799,31 +805,97 @@ let header_cell ?rows inst (c : V.column) : t =
 
 (* ---------- action bar ---------- *)
 
-let page_row_uuids inst =
-  let s = V.get inst in
-  List.filter
-    (fun u ->
-      match Hashtbl.find_opt s.V.blocks u with
-      | Some blk -> is_page_row blk
-      | None -> inst.V.feature = "all-pages")
-    (selected_row_uuids s)
+let with_full_selection inst ~scope action =
+  let initial = V.get inst in
+  if initial.V.table_action_pending = None then begin
+    let epoch = initial.V.table_selection_epoch + 1 in
+    let gen = !(inst.V.data_gen) in
+    let repo = Runtime.repo () and route = Runtime.route () in
+    let view = initial.V.view_uuid and context = V.ctx_of inst in
+    let live = ref true in
+    let current () =
+      let s = V.get inst in
+      !live && Runtime.repo () = repo && Runtime.route () = route &&
+      V.fetch_fresh inst gen && s.V.view_uuid = view && V.ctx_of inst = context &&
+      s.V.table_selection_epoch = epoch in
+    let finish () =
+      if (V.get inst).V.table_action_pending = Some epoch then
+        V.update inst (fun s -> { s with V.table_action_pending = None }) in
+    let fail () =
+      let notify = current () in
+      finish ();
+      if notify then Toast.error (I.t "view/error") in
+    V.update inst (fun s -> { s with V.table_selection_epoch = epoch
+      ; table_action_pending = Some epoch });
+    Signal.on_dispose scope (fun () ->
+      live := false;
+      let s = V.get inst in
+      if s.V.table_action_pending = Some epoch then
+        Signal.set inst.V.st { s with V.table_action_pending = None });
+    (V.ops ()).V.o_full_action_rows inst (function
+      | Error _ -> fail ()
+      | Ok data when current () ->
+          let state = { initial with V.data } in
+          let uuids = selected_row_uuids state in
+          if uuids = [] then finish ()
+          else Views_db.get_blocks uuids ~metadata:true ~on_error:fail (fun entities ->
+            if current () then begin
+              let blocks = Hashtbl.create (List.length uuids) in
+              List.iter (fun entity ->
+                match Option.bind (W.get entity "block/uuid") W.as_uuid with
+                | Some uuid -> Hashtbl.replace blocks uuid entity
+                | None -> ()) entities;
+              if not (List.for_all (Hashtbl.mem blocks) uuids) then fail ()
+              else begin
+                finish ();
+                if current () then action { state with V.blocks } current
+              end
+            end else finish ())
+      | Ok _ -> finish ())
+  end
 
-let delete_selected inst () =
-  let s = V.get inst in
-  let sel = selected_row_uuids s in
-  if sel <> [] then begin
-    let pages = page_row_uuids inst in
+let page_row_uuids (s : V.vstate) =
+  List.filter (fun uuid -> is_page_row (Hashtbl.find s.V.blocks uuid)) (selected_row_uuids s)
+
+let delete_selected inst s current () =
+  let prepare owner =
+  if current () then begin
+    let built_in entity = W.get entity "logseq.property/built-in?" = Some (W.Bool true) in
+    let sel = List.filter (fun uuid -> not (built_in (Hashtbl.find s.V.blocks uuid)))
+        (selected_row_uuids s) in
+    let sel_set = V.Sset.of_list sel in
+    let pages = List.filter (fun uuid -> V.Sset.mem uuid sel_set) (page_row_uuids s) in
     let page_set = V.Sset.of_list pages in
     let blocks = List.filter (fun u -> not (V.Sset.mem u page_set)) sel in
-    let do_delete () =
-      Views_db.delete_blocks blocks (fun () ->
-          List.iter (fun p -> Views_db.delete_page p (fun () -> ())) pages;
-          V.update inst (fun s -> { s with V.selected = V.Sset.empty });
-          refresh inst)
-    in
+    let owner_ident = Option.bind owner (fun entity -> Option.bind (W.get entity "db/ident") Wr.ident_of_value) in
     let need_confirm =
-      pages <> [] && List.mem inst.V.feature [ "all-pages"; "query-result" ]
-    in
+      pages <> [] && (match inst.V.kind with
+        | V.KAllPages | V.KQuery _ -> true
+        | V.KTagPage _ -> owner_ident <> Some "logseq.class/Page"
+        | _ -> false) in
+    let keep_selection = match inst.V.kind, owner with
+      | V.KPropertyPage _, Some entity -> built_in entity
+      | _ -> false in
+    let do_delete () = if current () then begin
+      let page_operations =
+        if need_confirm then
+          List.map (fun page -> Outliner_ops.op "delete-page" [W.Uuid page; W.Map []]) pages
+        else match inst.V.kind, owner_ident with
+          | V.KPropertyPage _, Some ident when not keep_selection ->
+              List.map (fun page -> Outliner_ops.remove_block_property page ident) pages
+          | _ -> [] in
+      let operations = (if blocks = [] then [] else [Outliner_ops.delete_blocks blocks]) @ page_operations in
+      if operations <> [] then begin
+        let open Promise_ext in
+        ignore ((let* result = Outliner_ops.apply_result operations in
+          (match result with
+           | Some _ when current () && not keep_selection ->
+               V.update inst V.table_clear_selection;
+               refresh inst
+           | _ -> ());
+          Js.Promise.resolve ()) |> Js.Promise.catch (fun _ -> Js.Promise.resolve ()))
+      end
+    end in
     if need_confirm then
       let names =
         List.filter_map
@@ -852,12 +924,21 @@ let delete_selected inst () =
                  ~value:(I.total (List.length names)) [] ]
            ~confirm_label:(I.t "ui/yes") ~on_confirm:do_delete ())
     else do_delete ()
-  end
+  end in
+  match inst.V.kind with
+  | V.KTagPage uuid | V.KPropertyPage uuid ->
+      let open Promise_ext in
+      ignore ((let* owner = Properties_data.entity (W.Uuid uuid) in
+        (match Properties_data.untag owner with
+         | W.Map _ as owner -> prepare (Some owner)
+         | _ -> if current () then Toast.error (I.t "view/error"));
+        Js.Promise.resolve ()) |> Js.Promise.catch (fun _ ->
+          if current () then Toast.error (I.t "view/error"); Js.Promise.resolve ()))
+  | _ -> prepare None
 
 (* cljs selection/action-group on-copy: copy-selection-blocks writes the
    selected rows' titles to the system clipboard and clears selection *)
-let copy_selected inst () =
-  let s = V.get inst in
+let copy_selected inst s current () =
   let titles =
     List.filter_map
       (fun u ->
@@ -867,29 +948,43 @@ let copy_selected inst () =
             | "" -> None
             | t -> Some t)
         | None -> None)
-      (selected_uuids inst)
+      (selected_row_uuids s)
   in
   if titles <> [] then begin
-    Ui_services.clipboard_copy (String.concat "\n" titles);
-    V.update inst (fun s -> { s with V.selected = V.Sset.empty })
+    ignore (Ui_task.catch
+      (Ui_task.bind (Ui_services.clipboard_write_text (String.concat "\n" titles)) (fun () ->
+        if current () then V.update inst V.table_clear_selection;
+        Ui_task.resolve ()))
+      (fun _ -> if current () then Toast.error (I.t "view/error"); Ui_task.resolve ()))
   end
 
 (* Selected table rows share one property workflow target. *)
-let property_target inst () =
-  match selected_uuids inst with
+let property_target s =
+  match selected_row_uuids s with
   | [] -> None
   | u :: _ as us ->
       Some { Properties_dialog.uuid = u; uuids = us; db_id = None; is_tag = false; title = "" }
 
-let set_tags_dlg inst =
-  match selected_uuids inst with
+let set_tags_dlg s current =
+  match selected_row_uuids s with
   | [] -> ()
   | u :: _ as us ->
-      Properties_dialog.open_for_block_with_property ~uuids:us u
-        ~ident:"block/tags"
+      let open Promise_ext in
+      ignore ((let* property = Properties_data.entity
+          (W.List [W.Keyword "db/ident"; W.Keyword "block/tags"]) in
+        if current () then
+          (match Properties_data.untag property with
+           | W.Map _ as property ->
+               Properties_dialog.open_dialog ~phase:(Properties_dialog.Value_edit property)
+                 { Properties_dialog.uuid = u; uuids = us; db_id = None; is_tag = false; title = "" }
+           | _ -> Toast.error (I.t "view/error"));
+        Js.Promise.resolve ()) |> Js.Promise.catch (fun _ ->
+          if current () then Toast.error (I.t "view/error"); Js.Promise.resolve ()))
 
 (* Keep the selection column available while bulk actions cover the header. *)
 let action_bar inst : t =
+ fun ctx parent ->
+  let scope = ctx.Lui_ui.ui_scope in
   let isig = sig_of inst in
   let action ?icon ?text ?width ?(margin_left = -1) ?(corner_radius = 0) ~label
       on_press =
@@ -900,11 +995,25 @@ let action_bar inst : t =
       ]
       (Ui_components.button ~variant:`outline ?icon ?text ?width ~label ~height:32 ~padding_vertical:0
          ~padding_horizontal:8 ~margin_left ~corner_radius
-         ~on_press:(fun _ -> on_press ())
+         ~disabled:(reactive (fun (s : V.vstate) -> s.V.table_action_pending <> None) isig)
+         ~on_press:(fun _ -> if (V.get inst).V.table_action_pending = None then on_press ())
          [])
   in
+  let property_action ~remove key =
+    let label = I.t (if remove then "property/unset-property" else "property/set-property") in
+    Properties_dialog.trigger ~key ~margin_left:(-1) ~remove ~target:(fun () -> None)
+      (fun _ -> action ~margin_left:0 ~label ~text:label (fun () ->
+        match !(Properties_dialog.current) with
+        | Some dialog when dialog.Properties_dialog.d_placement = Properties_dialog.Trigger key ->
+            Properties_dialog.close ()
+        | _ -> with_full_selection inst ~scope (fun state current ->
+            match property_target state with
+            | Some target when current () ->
+                Properties_dialog.open_at ~remove ~phase:Properties_dialog.Prop_select
+                  (Properties_dialog.Trigger key) target
+            | _ -> ()))) in
   if_
-    ~test:(reactive (fun s -> selected_row_uuids s <> []) isig)
+    ~test:(reactive (fun s -> selected_row_count s > 0) isig)
     (box ~key:"tac" ~margin_left:32 ~margin_top:1
        [
          toolbar ~style_class:"table-action-bar" ~orientation:`horizontal
@@ -917,25 +1026,26 @@ let action_bar inst : t =
                ~value:
                  (reactive
                     (fun (s : V.vstate) ->
-                      I.selected_count (List.length (selected_row_uuids s)))
+                      if s.V.table_action_pending <> None then I.t "ui/loading"
+                      else I.selected_count (selected_row_count s))
                     isig)
                [];
              action ~label:(I.t "property/set-tags") ~icon:(`app "hash")
                ~width:31 ~margin_left:0 ~corner_radius:6 (fun () ->
-                 set_tags_dlg inst);
+                 with_full_selection inst ~scope set_tags_dlg);
              action ~label:(I.t "ui/copy") ~text:(I.t "ui/copy")
-               (copy_selected inst);
-             Properties_dialog.trigger ~key:(Printf.sprintf "table-%d-set-property" inst.V.id)
-               ~margin_left:(-1) ~remove:false ~target:(property_target inst)
-               (action ~margin_left:0 ~label:(I.t "property/set-property") ~text:(I.t "property/set-property"));
-             Properties_dialog.trigger ~key:(Printf.sprintf "table-%d-unset-property" inst.V.id)
-               ~margin_left:(-1) ~remove:true ~target:(property_target inst)
-               (action ~margin_left:0 ~label:(I.t "property/unset-property") ~text:(I.t "property/unset-property"));
+               (fun () -> with_full_selection inst ~scope (fun s current -> copy_selected inst s current ()));
+             property_action ~remove:false (Printf.sprintf "table-%d-set-property" inst.V.id);
+             property_action ~remove:true (Printf.sprintf "table-%d-unset-property" inst.V.id);
              action
                ~label:(I.t "ui/delete")
-               ~icon:(`app "trash") ~width:31 ~corner_radius:6 (delete_selected inst);
+               ~icon:(`app "trash") ~width:31 ~corner_radius:6
+               (fun () -> with_full_selection inst ~scope (fun s current -> delete_selected inst s current ()));
+             Ui_components.button ~variant:`outline ~height:32 ~width:31 ~corner_radius:6
+               ~label:(I.t "ui/cancel") ~icon:(`app "x")
+               ~on_press:(fun _ -> V.update inst V.table_clear_selection) [];
            ];
-       ])
+       ]) ctx parent
 
 (* ---------- table ---------- *)
 
@@ -996,11 +1106,11 @@ let keyed_row_key (u, blk) =
    Rides the dom-event channel since kinds expose no key events; the
    stop(e) half is adapter-side and not portable. *)
 let table_row_keydown inst ~row_uuid name payload =
-  if name = "keydown" && V.Sset.mem row_uuid (V.get inst).V.selected then
+  if name = "keydown" && V.table_row_selected (V.get inst) row_uuid then
     match Json_payload.str payload "key" with
     | "Enter" ->
         open_row_sidebar row_uuid;
-        V.update inst (fun s -> { s with V.selected = V.Sset.empty })
+        V.update inst V.table_clear_selection
     | "ArrowLeft" | "ArrowRight" as arrow ->
         (match Ui_services.dom_by_id ("ls-block-" ^ row_uuid) with
          | Some row_dom -> (
@@ -1016,8 +1126,7 @@ let table_row_keydown inst ~row_uuid name payload =
                  | c :: _ -> Some c
                  | [] -> None
              in
-             V.update inst
-               (fun s -> { s with V.selected = V.Sset.empty });
+             V.update inst V.table_clear_selection;
              if arrow = "ArrowRight" then
                row_dom.Ui_services.remove_class "selected";
              match pick with
@@ -1050,7 +1159,7 @@ let row_el inst (cols : V.column list) ~row_uuid ~blk : t =
   let sel_sig =
     Logseq_el.own ctx
       (Signal.map
-         (fun (s : V.vstate) -> V.Sset.mem row_uuid s.V.selected)
+         (fun (s : V.vstate) -> V.table_row_selected s row_uuid)
          (sig_of inst))
   in
   Logseq_el.el ~key:("ls-tr-" ^ row_uuid) ~tag:"div"
