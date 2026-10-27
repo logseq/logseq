@@ -1,7 +1,6 @@
 (ns logseq.db.common.delete-blocks
   "Provides fn to handle any deletion to occur per ldb/transact!"
-  (:require [clojure.string :as string]
-            [datascript.core :as d]
+  (:require [datascript.core :as d]
             [logseq.common.util :as common-util]
             [logseq.common.util.block-ref :as block-ref]
             [logseq.common.util.page-ref :as page-ref]
@@ -14,13 +13,13 @@
                         ""
                         (:block/title block))]
     (some-> ref-raw-title
-            (string/replace (re-pattern (common-util/format "(?i){{embed \\(\\(%s\\)\\)\\s?}}" (str (:block/uuid block))))
-                            block-content)
+            (common-util/replace-literal (re-pattern (common-util/format "(?i){{embed \\(\\(%s\\)\\)\\s?}}" (str (:block/uuid block))))
+                                         block-content)
 
-            (string/replace (block-ref/->block-ref (str (:block/uuid block)))
-                            block-content)
-            (string/replace (page-ref/->page-ref (str (:block/uuid block)))
-                            block-content))))
+            (common-util/replace-literal (block-ref/->block-ref (str (:block/uuid block)))
+                                         block-content)
+            (common-util/replace-literal (page-ref/->page-ref (str (:block/uuid block)))
+                                         block-content))))
 
 (defn- build-retracted-tx
   ([retracted-blocks]
