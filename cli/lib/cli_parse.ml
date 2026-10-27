@@ -559,6 +559,10 @@ let validate_option_values path options =
                 validate_time_option "deadline" options))
       else if path2 path "upsert" "block" || path2 path "upsert" "asset" then
         validate_pos_value options
+      else if path2 path "upsert" "property" then
+        validate_member_option "cardinality"
+          (Vec.of_array [| "one"; "many" |])
+          options
       else Ok ())
 
 let validate_options path options =
