@@ -273,6 +273,7 @@
 (defn- convert-tag-to-page-tx
   [db class-id]
   (let [objects (db-class/get-class-objects db class-id)
+        child-class-txs (db-class/detach-child-classes-tx (d/entity db class-id))
         page-txs [[:db/retract class-id :db/ident]
                   [:db/retract class-id :block/tags :logseq.class/Tag]
                   [:db/retract class-id :logseq.property.class/extends]
@@ -285,7 +286,7 @@
                                              (:block/tags obj))}
                               [:db/retract (:db/id obj) :block/tags class-id]])
                            objects)]
-    (vec (concat page-txs object-txs))))
+    (vec (concat page-txs child-class-txs object-txs))))
 
 (def-thread-api :thread-api/convert-tag-to-page
   [repo class-id]
