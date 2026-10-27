@@ -215,3 +215,34 @@ test('startup cleanup does not take a server-list lock held by a live process', 
     assert.equal(JSON.parse(fs.readFileSync(lock, 'utf8'))['lock-id'], 'live');
   });
 });
+
+const leftoverRuntimeFile = (storage, repo) => path.join(lifecycle.context(storage, repo).dir, 'runtime-leftover-ticket.json');
+
+for (const [description, content] of [['empty', ''], ['truncated', '{"ticket":"left'], ['not JSON', Buffer.from([0xff, 0xfe, 0x41])],
+  ['an array', '[]']]) {
+  test(`startup cleanup retires an exited worker whose runtime file is ${description}`, async () => {
+    await withGraph(async (storage, repo) => {
+      registerLeftoverWorker(storage, repo, exitedPid());
+      fs.writeFileSync(leftoverRuntimeFile(storage, repo), content);
+      await lifecycle.stopOutdatedWorkers(storage, REVISION, repo);
+      assert.deepEqual(lifecycle.snapshot(storage, repo).workers, []);
+      assert.equal(fs.existsSync(leftoverRuntimeFile(storage, repo)), false);
+    });
+  });
+}
+
+test('startup cleanup refuses, with a coded error, a live worker whose runtime file is unreadable', async () => {
+  await withGraph(async (storage, repo) => {
+    const worker = cp.spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });
+    try {
+      registerLeftoverWorker(storage, repo, worker.pid);
+      fs.writeFileSync(leftoverRuntimeFile(storage, repo), '{broken');
+      await assert.rejects(lifecycle.stopOutdatedWorkers(storage, REVISION, repo),
+        error => error.errors.every(cause => cause.code === 'server-stop-failed'));
+      assert.equal(lifecycle.snapshot(storage, repo).workers.length, 1);
+      assert.equal(fs.readFileSync(leftoverRuntimeFile(storage, repo), 'utf8'), '{broken');
+    } finally {
+      worker.kill();
+    }
+  });
+});
