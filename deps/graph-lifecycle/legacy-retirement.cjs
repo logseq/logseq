@@ -21,6 +21,7 @@ module.exports = function ({ fail, readJSON, writeJSON, graphName, canonicalRoot
   }
   async function retireGraph(ctx, current, scan) {
     const file = path.join(ctx.graphDir, 'db-worker.lock');
+    const exists = scan ? scan.pidExists : pidExists;
     const original = artifact(file);
     const disk = parse(original);
     const records = current.workers.filter(record => record['ownership-protocol'] === undefined);
@@ -29,7 +30,7 @@ module.exports = function ({ fail, readJSON, writeJSON, graphName, canonicalRoot
     const runtimeBefore = new Map(records.map(record => [record.ticket, artifact(runtimeFile(ctx, record.ticket))]));
     const roots = new Set([ctx.root, ...records.map(record => record.root)]);
     const publications = [...roots].flatMap(root => (scan ? scan.entries(root) : entries(root)).map(entry => ({ ...entry, root })));
-    const dead = publications.filter(entry => !pidExists(entry.pid));
+    const dead = publications.filter(entry => !exists(entry.pid));
     const candidates = new Map();
     for (const record of records) {
       const raw = runtimeBefore.get(record.ticket);
@@ -78,7 +79,7 @@ module.exports = function ({ fail, readJSON, writeJSON, graphName, canonicalRoot
     if (original !== null && disk && !candidates.size) unresolved(ctx, 'invalid lock');
     const retired = [];
     for (const target of candidates.values()) {
-      if (!pidExists(target.pid)) continue;
+      if (!exists(target.pid)) continue;
       if (!target.port) unresolved(ctx, `unidentified live PID ${target.pid}`);
       const probe = async () => {
         let response;
