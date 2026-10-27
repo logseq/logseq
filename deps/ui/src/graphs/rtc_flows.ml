@@ -200,6 +200,10 @@ let on_log (log : Wire.t) =
    on a logged-in user, like cljs. -- *)
 let emit_timeout : int option ref = ref None
 
+let cancel_pending_start () =
+  Option.iter Ui_services.timers_clear_timeout !emit_timeout;
+  emit_timeout := None
+
 (* the auto-start-rtc-if-possible background task: start sync for the
    emitted repo, else the current one — db-sync-start is idempotent and
    no-ops for graphs without a remote id *)
@@ -211,15 +215,16 @@ let start repo =
 
 let emit repo =
   if logged_in () then begin
-    (match !emit_timeout with
-     | Some id -> Ui_services.timers_clear_timeout id
-     | None -> ());
+    cancel_pending_start ();
     emit_timeout :=
-      Some (Ui_services.timers_timeout (fun () -> start repo) 50)
+      Some (Ui_services.timers_timeout (fun () ->
+          emit_timeout := None;
+          start repo) 50)
   end
 
 (* cljs current-login-user watch -> [:login] *)
-let notify_login () = emit None
+let notify_login () =
+  if not (!Runtime.worker_auth_changed Runtime.Auth_updated) then emit None
 
 (* cljs current-repo watch -> [:graph-switch repo], also fired by
    trigger-rtc-start callers like :graph/restored — both land on
@@ -250,14 +255,14 @@ let notify_logout () = Rtc_ops.stop ()
 let sign_out () =
   List.iter Ui_services.storage_remove
     [ "id-token"; "access-token"; "refresh-token" ];
-  ignore
-    (Runtime.invoke1 "thread-api/sync-app-state"
-       (Wire.Map
-          [ (Wire.kw "auth/id-token", Wire.String "")
-          ; (Wire.kw "auth/access-token", Wire.String "")
-          ; (Wire.kw "auth/refresh-token", Wire.String "")
-          ]));
-  notify_logout ()
+  cancel_pending_start ();
+  if not (!Runtime.worker_auth_changed Runtime.Logout) then (
+    ignore
+      (Rtc_ops.clear_auth_async ()
+       |> Js.Promise.catch (fun e ->
+              Ui_services.log_error ("db-sync auth clear failed", e);
+              Js.Promise.resolve ()));
+    notify_logout ())
 
 let () =
   Runtime.rtc_log_handler := on_log;

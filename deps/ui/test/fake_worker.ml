@@ -14,6 +14,7 @@ let install (handler : handler) : Worker_client.t =
     { Worker_client.invoke_fn
     ; on_message = (fun _ _ -> ())
     ; dead
+    ; daemon = None
     }
   in
   Runtime.worker := Some t;

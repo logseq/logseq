@@ -217,7 +217,7 @@ let install_rejecting_worker (h : host) =
   ops := [];
   Runtime.worker :=
     Some
-      { Worker_client.invoke_fn =
+      { Worker_client.daemon = None; invoke_fn =
           (fun name args ->
             calls := !calls @ [ name ];
             if owned_call name then h.reject_promise ("worker rejects: " ^ name)
@@ -721,7 +721,7 @@ let test_exit_waits_for_save (h : host) =
   set_editing ~uuid:"b1" ~buffer:"saved before exit" ~caret:17 ~base:"old";
   let complete = ref (fun () -> ()) in
   Runtime.worker := Some
-    { Worker_client.invoke_fn = (fun name args ->
+    { Worker_client.daemon = None; invoke_fn = (fun name args ->
         if name = "thread-api/apply-outliner-ops" then
           Js.Promise.make (fun ~resolve ~reject:_ ->
               complete := (fun () ->
@@ -761,7 +761,7 @@ let test_history_after_navigation (h : host) =
   let cursor = S.history_cursor () in
   let complete = ref (fun () -> ()) in
   Runtime.worker := Some
-    { Worker_client.invoke_fn = (fun name args ->
+    { Worker_client.daemon = None; invoke_fn = (fun name args ->
         if name = "thread-api/undo-redo-undo" then
           Js.Promise.make (fun ~resolve ~reject:_ ->
             complete := (fun () -> resolve
@@ -792,7 +792,7 @@ let test_delete_selection_history (h : host) =
     (W.map_get_uuid expected "selection-anchor" = Some "b2");
   let options = ref W.Nil in
   Runtime.worker := Some
-    { Worker_client.invoke_fn = (fun name args ->
+    { Worker_client.daemon = None; invoke_fn = (fun name args ->
         if name = "thread-api/apply-outliner-ops" then
           (match args with [_; _; opts] -> options := opts | _ -> ());
         Js.Promise.resolve (worker_handler h name args))
@@ -823,7 +823,7 @@ let test_property_command_refresh (h : host) =
         calls := [];
         ops := [];
         Runtime.worker := Some
-          { Worker_client.invoke_fn = (fun name args ->
+          { Worker_client.daemon = None; invoke_fn = (fun name args ->
               Js.Promise.resolve
                 (if name = "thread-api/get-property-closed-values" then
                    W.List [ W.Map [ W.Keyword "db/id", W.Int 17;

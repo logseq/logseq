@@ -36,12 +36,12 @@ let note_file_saved repo path content =
     | config -> Runtime.send (Action.Graph_config_loaded (repo,config))
     | exception (Edn.Parse_error _ | Invalid_argument _ as error) -> report_config_error error
 
-let read_config repo =
+let read_config ?(invoke = Runtime.invoke) repo =
   match !published_config with
   | Some config -> Js.Promise.resolve (validate_config config)
   | None ->
-      let* content = Runtime.invoke2 "thread-api/get-file-content" (Wire.String repo)
-        (Wire.String config_path) in
+      let* content = invoke "thread-api/get-file-content"
+        [ Wire.String repo; Wire.String config_path ] in
       let config = match content with
         | Wire.Nil -> Wire.Map []
         | Wire.String text when String.trim text="" -> Wire.Map []

@@ -6,12 +6,44 @@
 
 open Promise_ext
 type message_handler = string -> Wire.t -> unit
+type scope = Daemon_client.scope = { repo : string; epoch : int }
+type outcome = Daemon_client.outcome = Not_sent | Outcome_unknown
+type request_failure = Daemon_client.request_failure =
+  { scope : scope option
+  ; method_name : string
+  ; outcome : outcome
+  ; cause : exn
+  }
+exception Request_failed = Daemon_client.Request_failed
+type phase = Daemon_client.phase = Disconnected | Recovering | Ready | Failed of exn
+type lifecycle = Daemon_client.lifecycle = { scope : scope option; phase : phase }
+type invoke = Daemon_client.invoke
+type bootstrap = Daemon_client.bootstrap =
+  { scope : scope
+  ; invoke : invoke
+  ; is_current : unit -> bool
+  }
 
 type t =
   { invoke_fn : string -> Wire.t list -> Wire.t Js.Promise.t
   ; mutable on_message : message_handler
   ; dead : string Js.Promise.t
+  ; daemon : Daemon_client.transport option
   }
+
+let supports_recovery t = Option.is_some t.daemon
+let daemon_exn t =
+  match t.daemon with
+  | Some daemon -> daemon
+  | None -> invalid_arg "Daemon recovery is unavailable for this worker"
+
+let configure_recovery t ~on_state ~on_request_failure ~rehydrate =
+  Daemon_client.configure_recovery (daemon_exn t) ~on_state ~on_request_failure ~rehydrate
+
+let lifecycle t = Daemon_client.lifecycle (daemon_exn t)
+let connect t ~repo = Daemon_client.connect (daemon_exn t) ~repo
+let reconnect_existing t ~repo = Daemon_client.reconnect_existing (daemon_exn t) ~repo
+let disconnect t = Option.iter Daemon_client.disconnect t.daemon
 
 type global
 
@@ -155,6 +187,7 @@ let create () =
         Js.Promise.resolve (Transit.of_string result))
     ; on_message = (fun _ _ -> ())
     ; dead = Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())
+    ; daemon = None
     }
   else
   if Daemon_client.is_electron () then (
@@ -163,6 +196,7 @@ let create () =
       { invoke_fn = (fun name args -> Daemon_client.invoke tr name args)
       ; on_message = (fun _ _ -> ())
       ; dead = tr.Daemon_client.dead
+      ; daemon = Some tr
       }
     in
     tr.sink <- (fun kind payload -> t.on_message kind payload);
@@ -190,7 +224,7 @@ let create () =
       Js.Promise.resolve (Transit.of_string result)
     in
     let t =
-      { invoke_fn; on_message = (fun _ _ -> ()); dead }
+      { invoke_fn; on_message = (fun _ _ -> ()); dead; daemon = None }
     in
     (* the worker never answers after it dies — [dead] rejects every
        in-flight call instead of hanging callers *)

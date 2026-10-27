@@ -106,18 +106,18 @@ let jump_to_anchor anchor =
   Ui_services.timers_clear_timeout !anchor_timer;
   poll_anchor anchor 0
 
-let fetch_blocks (p : Model.page) =
-  let* blocks = Outliner_ops.fetch_page_blocks (repo ()) p in
+let fetch_blocks ?(invoke = Runtime.invoke) ?(current = fun () -> true) (p : Model.page) =
+  let* blocks = Outliner_ops.fetch_page_blocks ~invoke ~current (repo ()) p in
   Js.Promise.resolve
     { p with
       Model.page_blocks = Model.merge_blocks p.Model.page_blocks blocks
     }
-let fetch_refs_blocks (p : Model.page) : Model.block list Js.Promise.t =
+let fetch_refs_blocks ?(invoke = Runtime.invoke) (p : Model.page) : Model.block list Js.Promise.t =
   match p.Model.page_db_id with
   | Some id ->
       let* w =
-        Runtime.invoke2 "thread-api/get-block-refs"
-          (Wire.String (repo ())) (Wire.Int id)
+        invoke "thread-api/get-block-refs"
+          [ Wire.String (repo ()); Wire.Int id ]
       in
       (* cljs block-ref-count gates the references section with
                 hidden-ref-id-pred, which excludes same-page refs — drop
@@ -206,11 +206,11 @@ let journals_chunk = 2
 let journals_has_more = ref true
 let journals_loading_more = ref false
 
-let collect_journal p =
-  let* p' = fetch_blocks p in
-  let* refs = fetch_refs_blocks p' in
+let collect_journal ?(invoke = Runtime.invoke) ?(current = fun () -> true) p =
+  let* p' = fetch_blocks ~invoke ~current p in
+  let* refs = fetch_refs_blocks ~invoke p' in
   (* title-tag chips need tag uuids/id for their context menu *)
-  Outliner_ops.resolve_page_tags (repo ())
+  Outliner_ops.resolve_page_tags ~invoke (repo ())
     { p' with Model.page_linked_refs = refs }
 
 let journal_summaries w =
@@ -252,32 +252,34 @@ let maybe_fill_journals () =
          | _ -> ())
        150)
 
-let load_journals () =
+let load_journals ?(invoke = Runtime.invoke) ?(current = fun () -> true)
+    ?(strict = false) () =
   Ui_services.perf_mark "nav:journals";
   journals_has_more := true;
   journals_loading_more := false;
   (let* w =
-    Runtime.invoke2 "thread-api/get-latest-journals" (Wire.String (repo ()))
-      (Wire.Int journals_initial)
+    invoke "thread-api/get-latest-journals"
+      [ Wire.String (repo ()); Wire.Int journals_initial ]
   in
+  if not (current ()) then failwith "Journal load was superseded";
   let pages = journal_summaries w in
   if List.length pages < journals_initial then journals_has_more := false;
-  let* arr = Js.Promise.all (Array.of_list (List.map collect_journal pages)) in
+  let* arr = Js.Promise.all (Array.of_list (List.map (collect_journal ~invoke ~current) pages)) in
   let* js = Js.Promise.resolve (Array.to_list arr) in
   Js.Promise.resolve
     (match Runtime.route () with
-     | Model.Journals | Model.Home ->
+     | (Model.Journals | Model.Home) when current () ->
          Runtime.send (Action.Journals_loaded js);
-         scroll_main_top ();
-         maybe_fill_journals ()
+         if not strict then scroll_main_top ();
+         if not strict then maybe_fill_journals ()
      | _ -> ()))
   |> Js.Promise.catch (fun e ->
          Ui_services.log_error ("load_journals failed", e);
-         (match Runtime.route () with
-          | Model.Journals | Model.Home ->
+         (match Runtime.route (), current () with
+          | (Model.Journals | Model.Home), true when not strict ->
               Runtime.send Action.Page_load_failed
           | _ -> ());
-         Js.Promise.resolve ())
+         if strict then Js.Promise.reject (Js.Exn.anyToExnInternal e) else Js.Promise.resolve ())
 
 (* scroll-end pagination — the next [journals_chunk] days fetch + append;
    days already loaded (e.g. a fresh page created mid-session) are
@@ -299,7 +301,7 @@ let load_more_journals () : unit Js.Promise.t =
      if List.length pages < journals_chunk then
        journals_has_more := false;
      let* arr =
-       Js.Promise.all (Array.of_list (List.map collect_journal pages))
+       Js.Promise.all (Array.of_list (List.map (fun p -> collect_journal p) pages))
      in
      (* the model route — !Runtime.current_route is None until a
         Navigate_to action, so on the boot journals route every load
@@ -358,6 +360,12 @@ let go_to_journals_target () : (string * Model.route) Js.Promise.t =
    otherwise a slow stale load overwrites the page the user navigated to *)
 let stale (route : Model.route) = Runtime.route () <> route
 
+let recovering () =
+  match !Runtime.worker with
+  | Some worker when Worker_client.supports_recovery worker ->
+      (Worker_client.lifecycle worker).phase = Worker_client.Recovering
+  | _ -> false
+
 (* routes that already committed a route_page — a same-route reload can
    race a mid-apply sync tx and read the page as missing; that transient
    must not swap the live view for "Page not found" *)
@@ -375,13 +383,13 @@ let stale_page (p : Model.page) () =
   | None -> true
 
 (* get-page-route-info resolves name/uuid/lookup-ref -> summary *)
-let rec load_page_ref for_route ref_v =
+let rec load_page_ref ?(invoke = Runtime.invoke) ?(current = fun () -> true)
+    ?(strict = false) for_route ref_v =
   incr Runtime.load_gen;
   let gen = !Runtime.load_gen in
-  let is_stale () = stale for_route || gen <> !Runtime.load_gen in
+  let is_stale () = not (current ()) || stale for_route || gen <> !Runtime.load_gen in
   (let* info =
-    Runtime.invoke2 "thread-api/get-page-route-info"
-      (Wire.String (repo ())) ref_v
+    invoke "thread-api/get-page-route-info" [ Wire.String (repo ()); ref_v ]
   in
   Ui_services.perf_mark "nav:route-info";
   (* cljs redirect-to-page!: an alias page's route resolves to
@@ -392,16 +400,21 @@ let rec load_page_ref for_route ref_v =
     , Wire.as_uuid ref_v )
   with
   | Some src, cur when cur <> Some src ->
-      if not (is_stale ()) then
-        Ui_services.nav_set_hash
-          (Runtime.nav_hash ("#/page/" ^ src));
-      Js.Promise.resolve ()
+      if is_stale () then Js.Promise.resolve ()
+      else if strict then (
+        let target = Model.Page src in
+        Runtime.send (Action.Navigate_to target);
+        Ui_services.nav_set_hash (Runtime.nav_hash ("#/page/" ^ src));
+        load_page_ref ~invoke ~current ~strict target (Wire.Uuid src))
+      else (
+        Ui_services.nav_set_hash (Runtime.nav_hash ("#/page/" ^ src));
+        Js.Promise.resolve ())
   | _ -> (
   match Decode.page_of_summary info with
   | Some p ->
-      let* p' = fetch_blocks p in
+      let* p' = fetch_blocks ~invoke ~current p in
       Ui_services.perf_mark "nav:blocks";
-      let* p'' = Outliner_ops.resolve_page_tags (repo ()) p' in
+      let* p'' = Outliner_ops.resolve_page_tags ~invoke (repo ()) p' in
       (* cljs page-inner renders the :block/parent namespace chain as a
          breadcrumb above the title — same parents endpoint the
          block-zoom load uses, keyed by the page uuid *)
@@ -409,10 +422,9 @@ let rec load_page_ref for_route ref_v =
         match p''.Model.page_uuid with
         | Some u ->
             (let* parents_w =
-               Runtime.invoke2 "thread-api/get-block-parents"
-                 (Wire.String (repo ()))
-                 (Wire.List
-                    [ Wire.Keyword "block/uuid"; Wire.Uuid u ])
+               invoke "thread-api/get-block-parents"
+                 [ Wire.String (repo ())
+                 ; Wire.List [ Wire.Keyword "block/uuid"; Wire.Uuid u ] ]
              in
              let page_parents =
                Wire.elems parents_w
@@ -440,7 +452,7 @@ let rec load_page_ref for_route ref_v =
            count cannot run ahead of the first rows. *)
         (* zoom-out to a page parent keeps the zoomed
            block in edit mode (cljs pending-edit) *)
-        (match Editor_actions.consume_pending_zoom ()
+        (match (if strict then None else Editor_actions.consume_pending_zoom ())
          with
          | Some u when Editor_state.ready () -> (
              match Editor_state.find u with
@@ -456,24 +468,26 @@ let rec load_page_ref for_route ref_v =
          route creates the journal page on the fly; non-journal names
          keep the inline :page/not-found *)
       match ref_v with
-      | Wire.String n when Dates.is_journal_title n && not (Ui_services.env_publishing ()) ->
+      | Wire.String n when not strict && Dates.is_journal_title n && not (Ui_services.env_publishing ()) ->
           (let* _ = Outliner_ops.apply_create_page n in
-           load_page_ref for_route ref_v)
+           load_page_ref ~invoke ~current ~strict for_route ref_v)
       | _ ->
           if (not (is_stale ())) && !loaded_route <> Some for_route
           then Runtime.send Action.Page_load_failed;
-          Js.Promise.resolve ())))
-  |> Js.Promise.catch (fun _ ->
+          if strict then Js.Promise.reject (Failure "Recovery page is missing")
+          else Js.Promise.resolve ())))
+  |> Js.Promise.catch (fun error ->
          if (not (is_stale ())) && !loaded_route <> Some for_route then
            Runtime.send Action.Page_load_failed;
-         Js.Promise.resolve ())
+         if strict then Js.Promise.reject (Js.Exn.anyToExnInternal error) else Js.Promise.resolve ())
 
 (* Home: default-home config page when set & resolvable, else today's
    journal page (no config) or the journals list (config set but the
    page is missing). *)
-let load_home () =
+let load_home ?(invoke = Runtime.invoke) ?(current = fun () -> true)
+    ?(strict = false) () =
   let repo = repo () in
-  (let* cfg = Sdk_config.read_config repo in
+  (let* cfg = Sdk_config.read_config ~invoke repo in
   let page_name =
     match Wire.get cfg "default-home" with
     | Some dh -> Wire.map_get_string dh "page"
@@ -482,46 +496,47 @@ let load_home () =
   match page_name with
   | Some name ->
       (let* info =
-        Runtime.invoke2 "thread-api/get-page-route-info"
-          (Wire.String repo) (Wire.String name)
+        invoke "thread-api/get-page-route-info"
+          [ Wire.String repo; Wire.String name ]
       in
-      match Decode.page_of_summary info, stale Model.Home with
+      match Decode.page_of_summary info, not (current ()) || stale Model.Home with
       | Some p, false ->
           Runtime.send (Action.Navigate_to (Model.Page name));
-          let* p' = fetch_blocks p in
-          let* p'' = Outliner_ops.resolve_page_tags repo p' in
-          if not (stale (Model.Page name)) then (
+          let* p' = fetch_blocks ~invoke p in
+          let* p'' = Outliner_ops.resolve_page_tags ~invoke repo p' in
+          if current () && not (stale (Model.Page name)) then (
             Editor_state.clear_overrides ();
             loaded_route := Some (Model.Page name);
             (Ui_services.perf_mark "router:page-loaded"; Runtime.send (Action.Page_loaded p''));
-            fetch_ref_count
+            if not strict then fetch_ref_count
               ~stale:(fun () ->
                 stale (Model.Page name))
               p'');
           Js.Promise.resolve ()
       | None, false ->
           Runtime.send (Action.Navigate_to Model.Journals);
-          load_journals ()
+          load_journals ~invoke ~current ~strict ()
       | _ -> Js.Promise.resolve ())
   (* cljs home renders the journals list (all-journals >
      journal-item), not today's journal as a standalone page *)
   | None ->
-      Runtime.reload_current_view := load_journals;
+      Runtime.reload_current_view := (fun () -> load_journals ());
       Runtime.journals_load_more := load_more_journals;
-      load_journals ())
+      load_journals ~invoke ~current ~strict ())
   |> Js.Promise.catch (fun e ->
          Ui_services.log_error ("load_home failed", e);
          (match Runtime.route () with
-          | Model.Home -> Runtime.send Action.Page_load_failed
+          | Model.Home when current () && not strict -> Runtime.send Action.Page_load_failed
           | _ -> ());
-         Js.Promise.resolve ())
+         if strict then Js.Promise.reject (Js.Exn.anyToExnInternal e) else Js.Promise.resolve ())
 
-let load_block_zoom uuid =
+let load_block_zoom ?(invoke = Runtime.invoke) ?(current = fun () -> true)
+    ?(strict = false) uuid =
   incr Runtime.load_gen;
   let gen = !Runtime.load_gen in
   (let* w =
-    Runtime.invoke2 "thread-api/get-blocks" (Wire.String (repo ()))
-      (Wire.Array
+    invoke "thread-api/get-blocks" [ Wire.String (repo ());
+      Wire.Array
          [ Wire.Map
              [ (Wire.String "id", Wire.Uuid uuid)
              ; ( Wire.String "opts"
@@ -534,10 +549,9 @@ let load_block_zoom uuid =
                      , Wire.Bool true )
                    ] )
              ]
-         ])
+         ] ]
   in
-  Js.Promise.resolve
-    (match Wire.elems w with
+  (match Wire.elems w with
      | [ pair ] -> (
          let blk =
            (* the pair's flat `children` carry the full maps;
@@ -562,12 +576,10 @@ let load_block_zoom uuid =
                | None -> []
              in
              let collapsed = ref Editor_state.String_set.empty in
-             ignore
-               ((let* parents_w =
-                  Runtime.invoke2 "thread-api/get-block-parents"
-                    (Wire.String (repo ()))
-                    (Wire.List
-                       [ Wire.Keyword "block/uuid"; Wire.Uuid uuid ])
+               (let* parents_w =
+                  invoke "thread-api/get-block-parents"
+                    [ Wire.String (repo ())
+                    ; Wire.List [ Wire.Keyword "block/uuid"; Wire.Uuid uuid ] ]
                 in
                 let page_parents =
                   Wire.elems parents_w
@@ -577,12 +589,12 @@ let load_block_zoom uuid =
                              Some (Decode.block_of_wire w)
                          | _ -> None)
                 in
-                let* bs0 = Outliner_ops.fill_embed_children (repo ()) ancestors collapsed [ b ] in
-                let* bs = Outliner_ops.resolve_block_tags bs0 in
+                let* bs0 = Outliner_ops.fill_embed_children ~invoke ~current (repo ()) ancestors collapsed [ b ] in
+                let* bs = Outliner_ops.resolve_block_tags ~invoke bs0 in
                 (* drop the late result when the
                    zoom target is no longer routed *)
                 if
-                  gen = !Runtime.load_gen
+                  current () && gen = !Runtime.load_gen
                   && Runtime.route ()
                      = Model.Block_zoom uuid
                 then (
@@ -624,9 +636,9 @@ let load_block_zoom uuid =
                              .block_db_collapsable
                        })));
                 (match
-                   Editor_actions.consume_pending_zoom ()
+                   (if strict then None else Editor_actions.consume_pending_zoom ())
                  with
-                 | Some u when Editor_state.ready () ->
+                 | Some u when current () && Editor_state.ready () ->
                      Editor_actions.enter_edit
                        ~scope:("zoom-" ^ uuid)
                        u
@@ -637,7 +649,7 @@ let load_block_zoom uuid =
                              Ui_services.log_error
                                ("load_block_zoom parents failed", e);
                              if
-                               gen = !Runtime.load_gen
+                               current () && gen = !Runtime.load_gen
                                && Runtime.route ()
                                   = Model.Block_zoom uuid
                              then (
@@ -647,33 +659,36 @@ let load_block_zoom uuid =
                                then
                                  Runtime.send
                                    Action.Page_load_failed);
-                             Js.Promise.resolve ())))
+                             if strict then Js.Promise.reject (Js.Exn.anyToExnInternal e) else Js.Promise.resolve ()))
          | _ ->
              if
-               (not (stale (Model.Block_zoom uuid)))
+               current () && (not (stale (Model.Block_zoom uuid)))
                && !loaded_route <> Some (Model.Block_zoom uuid)
-             then Runtime.send Action.Page_load_failed)
+             then Runtime.send Action.Page_load_failed;
+             if strict then Js.Promise.reject (Failure "Recovery block is missing")
+             else Js.Promise.resolve ())
      | _ ->
          if
-           (not (stale (Model.Block_zoom uuid)))
+           current () && (not (stale (Model.Block_zoom uuid)))
            && !loaded_route <> Some (Model.Block_zoom uuid)
-         then Runtime.send Action.Page_load_failed))
+         then Runtime.send Action.Page_load_failed;
+         if strict then Js.Promise.reject (Failure "Recovery block is missing")
+         else Js.Promise.resolve ()))
   |> Js.Promise.catch (fun e ->
          Ui_services.log_error ("load_block_zoom failed", e);
          if
-           (not (stale (Model.Block_zoom uuid)))
+           current () && (not (stale (Model.Block_zoom uuid)))
            && !loaded_route <> Some (Model.Block_zoom uuid)
          then Runtime.send Action.Page_load_failed;
-         Js.Promise.resolve ())
+         if strict then Js.Promise.reject (Js.Exn.anyToExnInternal e) else Js.Promise.resolve ())
 
-let load_route (route : Model.route) =
-  loading_route := Some route;
+let set_reload_owner (route : Model.route) =
   (* the non-page refresh hook belongs to the route that assigned it —
      re-arm it per route so callers (page-icon writes, the refresh
      fallback) reload *this* view instead of whatever route last set it *)
   (match route with
    | Model.Journals | Model.Home ->
-       Runtime.reload_current_view := load_journals;
+       Runtime.reload_current_view := (fun () -> load_journals ());
        Runtime.journals_load_more := load_more_journals
    | Model.Page s ->
        Runtime.reload_current_view :=
@@ -690,8 +705,29 @@ let load_route (route : Model.route) =
    | Model.Bug_report | Model.Bug_report_clipboard
    | Model.File _ | Model.Not_found _ | Model.Settings ->
        Runtime.reload_current_view := (fun () -> Js.Promise.resolve ());
-       Runtime.journals_load_more := (fun () -> Js.Promise.resolve ()));
-  match route with
+       Runtime.journals_load_more := (fun () -> Js.Promise.resolve ()))
+
+let rehydrate ~invoke ~current () =
+  let* () =
+    match Runtime.route () with
+    | Model.Page name ->
+        load_page_ref ~invoke ~current ~strict:true (Runtime.route ()) (Wire.page_ref name)
+    | Model.Library ->
+        load_page_ref ~invoke ~current ~strict:true Model.Library (Wire.String "Library")
+    | Model.Block_zoom uuid -> load_block_zoom ~invoke ~current ~strict:true uuid
+    | Model.Journals -> load_journals ~invoke ~current ~strict:true ()
+    | Model.Home -> load_home ~invoke ~current ~strict:true ()
+    | Model.All_pages | Model.All_graphs | Model.Import | Model.Settings
+    | Model.Bug_report | Model.Bug_report_clipboard | Model.File _ | Model.Not_found _ ->
+        Js.Promise.resolve ()
+  in
+  if current () then set_reload_owner (Runtime.route ());
+  Js.Promise.resolve ()
+
+let load_route (route : Model.route) =
+  loading_route := Some route;
+  set_reload_owner route;
+  if not (recovering ()) then match route with
   | Model.Home -> ignore (load_home ())
   | Model.Page s -> (
       (* cljs: the page route accepts a block uuid in :name and renders
@@ -767,6 +803,8 @@ let resolve () =
    applied op), and each reload remounts the block tree — debounce so a
    burst collapses into one refetch *)
 let reload_timer = ref 0
+
+let cancel_reload () = Ui_services.timers_clear_timeout !reload_timer
 
 let reload () =
   Ui_services.perf_mark "router:reload";

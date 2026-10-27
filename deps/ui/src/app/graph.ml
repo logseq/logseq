@@ -17,31 +17,30 @@ let boot_mark name =
   if !boot_trace then
     Printf.eprintf "[app %.3f] %s\n%!" (Js.Date.now () /. 1000.) name
 
-let init_worker () =
-  let* _ = Runtime.invoke1 "thread-api/init" (Wire.Array []) in
+let init_worker ?(invoke = Runtime.invoke) ?(repo = (Runtime.model ()).Model.repo) () =
+  let* _ = invoke "thread-api/init" [ Wire.Array [] ] in
   boot_mark "init-worker queued";
   (* cljs events.cljs :graph/sync-context — :dev? flips the
             worker's OUTLINER-PERF-LOGGING mirror used by e2e *)
   let* _ =
-    Runtime.invoke1 "thread-api/set-context"
-      (Wire.Map
-         [ (Wire.kw "dev?", Wire.Bool (Ui_services.env_dev_build ())) ])
+    invoke "thread-api/set-context"
+      [ Wire.Map
+          [ (Wire.kw "dev?", Wire.Bool (Ui_services.env_dev_build ())) ] ]
   in
   (* single-arg map like cljs state/set-db-sync-config *)
   let* _ =
-    Runtime.invoke1 "thread-api/set-db-sync-config"
-      (Rtc_ops.db_sync_config ())
+    invoke "thread-api/set-db-sync-config" [ Rtc_ops.db_sync_config () ]
   in
   (* cljs pushes sync-app-state at boot so a stored login reaches
             the worker before any db-sync call *)
-  let* _ = Rtc_ops.sync_app_state (Runtime.model ()).Model.repo in
+  let* _ = Rtc_ops.sync_app_state ~invoke repo in
   (* cljs ships a transact context with :dev? = config/dev?
             (DEV-RELEASE); e2e builds compile that flag in, which turns
             on the worker's :db-worker/outliner-op-perf logging *)
   let* _ =
     if Ui_services.env_rtc_test_mode () then
-      Runtime.invoke1 "thread-api/set-context"
-        (Wire.Map [ (Wire.kw "dev?", Wire.Bool true) ])
+      invoke "thread-api/set-context"
+        [ Wire.Map [ (Wire.kw "dev?", Wire.Bool true) ] ]
     else Js.Promise.resolve Wire.Nil
   in
   boot_mark "init-worker done";
@@ -52,17 +51,22 @@ let list_graphs () =
   boot_mark "list-db replied";
   Js.Promise.resolve (Decode.repos_of_list_db w)
 
-let open_graph repo =
+let open_graph ?invoke repo =
   (* cljs theme.cljs effect [current-repo]: pdf viewer resets when the
      repo changes *)
-  Pdf_state.set_current None;
-  boot_mark "create-or-open issued";
-  let* _ =
-    Runtime.invoke2 "thread-api/create-or-open-db" (Wire.String repo)
-      (Wire.Map [])
-  in
-  boot_mark "create-or-open replied";
-  Sdk_config.read_config repo
+  if (Runtime.model ()).Model.repo <> Some repo then Pdf_state.set_current None;
+  match invoke with
+  | None when Worker_client.supports_recovery (Runtime.worker_or_fail ()) ->
+      let* _ = Worker_client.connect (Runtime.worker_or_fail ()) ~repo in
+      Sdk_config.read_config repo
+  | invoke ->
+      let invoke = Option.value invoke ~default:Runtime.invoke in
+      boot_mark "create-or-open issued";
+      let* _ =
+        invoke "thread-api/create-or-open-db" [ Wire.String repo; Wire.Map [] ]
+      in
+      boot_mark "create-or-open replied";
+      Sdk_config.read_config ~invoke repo
 
 (* cljs events.cljs <build-search-index!: on graph open the frontend asks
    the worker to build blocks_fts; seed entities (Library etc.) only reach
@@ -96,12 +100,12 @@ let create_graph ?(remote = false) name =
   Js.Promise.resolve repo
 
 (* cljs <create! title {:today-journal? true} via outliner-op create-page *)
-let create_today_journal repo =
+let create_today_journal ?(invoke = Runtime.invoke) repo =
   let title = Dates.today () in
   let* _ =
-    Runtime.invoke3 "thread-api/apply-outliner-ops"
-      (Wire.String repo)
-      (Wire.Array
+    invoke "thread-api/apply-outliner-ops"
+      [ Wire.String repo
+      ; Wire.Array
          [ Wire.Array
              [ Wire.Keyword "create-page"
              ; Wire.Array
@@ -112,7 +116,7 @@ let create_today_journal repo =
                      ]
                  ]
              ]
-         ])
-      (Wire.Map [])
+         ]
+      ; Wire.Map [] ]
   in
   Js.Promise.resolve title

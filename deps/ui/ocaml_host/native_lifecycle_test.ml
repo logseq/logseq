@@ -1,6 +1,24 @@
 let check message condition = if not condition then failwith message
 
 let () =
+  let arguments =
+    Wire.Array
+      [ Wire.Array [ Wire.kw "graph/importing-state"; Wire.kw "step" ]
+      ; Wire.kw "validating" ]
+  in
+  let report = Wire.Map [ Wire.kw "repo", Wire.String "test" ] in
+  List.iter (fun (kind, frame, payload) ->
+    let received = ref None in
+    let data = Yojson.Safe.to_string
+        (`Assoc [ "type", `String kind
+                ; "payload", `String (Transit.to_string frame) ]) in
+    Daemon_client.deliver (fun name value -> received := Some (name, value)) data;
+    check "Daemon events lost their kind or payload" (!received = Some (kind, payload)))
+    [ "thread-api/set-ui-state", arguments, arguments
+    ; "sync-db-changes", Wire.Array [ Wire.kw "sync-db-changes"; report ], report ];
+  print_endline "native daemon event envelopes: OK"
+
+let () =
   let disposed = ref 0 in
   let backend = Lui_protocol.{backend_profile=generic_profile (); apply_batch=(fun _ -> true)} in
   let app : (Model.t, Action.t) Lui_app.reducer_app =

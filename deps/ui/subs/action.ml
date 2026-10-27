@@ -1,6 +1,7 @@
 (* Reducer actions for the app loop. *)
 
 type t =
+  | Graph_prepared of string * Wire.t
   | Boot_graph_ready of string * Wire.t
   | Graph_closed (* the open repo was deleted — no graph remains *)
   | Repos_loaded of string list
@@ -58,6 +59,7 @@ type t =
 (* short constructor name for perf attribution — __uiPerf labels *)
 let tag (a : t) : string =
   match a with
+  | Graph_prepared _ -> "graph-prepared"
   | Boot_graph_ready _ -> "boot-graph-ready"
   | Graph_closed -> "graph-closed"
   | Repos_loaded _ -> "repos-loaded"

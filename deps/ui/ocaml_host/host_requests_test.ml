@@ -1351,7 +1351,7 @@ let () = Native_embed.with_entry_lock (fun () ->
   Signal.set sidebar_state.open_menu "";
   ignore (Lui_app.flush app);
   let saved_worker = !Runtime.worker in
-  Runtime.worker := Some {Worker_client.invoke_fn=(fun _ _ ->
+  Runtime.worker := Some {Worker_client.daemon = None; inflight_reads = Hashtbl.create 16; invoke_fn=(fun _ _ ->
       Js.Promise.make (fun ~resolve:_ ~reject:_ -> ()));
     on_message=(fun _ _ -> ());
     dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
@@ -3932,7 +3932,7 @@ let () =
       Runtime.worker :=
         Some
           {
-            Worker_client.invoke_fn =
+            Worker_client.daemon = None; inflight_reads = Hashtbl.create 16; invoke_fn =
               (fun name _ ->
                 match name with
                 | "thread-api/get-file-content" | "thread-api/pull" ->
@@ -5269,7 +5269,7 @@ let () = Native_embed.with_entry_lock (fun () ->
         (label ()=Some (I18n.t "page/unfavorite"));
       let favorites = Hashtbl.create 2 and writes = ref [] in
       Hashtbl.add favorites "menu-target" true;Hashtbl.add favorites "current-route" false;
-      Runtime.worker:=Some {Worker_client.invoke_fn=(fun name args ->
+      Runtime.worker:=Some {Worker_client.daemon = None; inflight_reads = Hashtbl.create 16; invoke_fn=(fun name args ->
           Js.Promise.resolve (match name,args with
             | "thread-api/favorited-page?",[_;Wire.Uuid uuid] ->
                 Wire.Bool (Hashtbl.find favorites uuid)
@@ -5428,7 +5428,7 @@ let () = Native_embed.with_entry_lock (fun () ->
     List.iter (fun (exit,draft,rejected) ->
       Editor_state.st:=None;Editor_state.field_sigs_opt:=None;
       let writes=ref [] and complete=ref (fun () -> ()) in
-      Runtime.worker:=Some {Worker_client.invoke_fn=(fun method_ args ->
+      Runtime.worker:=Some {Worker_client.daemon = None; inflight_reads = Hashtbl.create 16; invoke_fn=(fun method_ args ->
         if method_="thread-api/apply-outliner-ops" then begin
           writes:=args::!writes;
           let response=Js.Promise.make (fun ~resolve ~reject:_ ->
@@ -5524,7 +5524,7 @@ let () = Native_embed.with_entry_lock (fun () ->
   Fun.protect ~finally:(fun () -> Runtime.read_model:=previous_model;Runtime.worker:=previous_worker;
     Runtime.app_flush:=previous_flush;Editor_state.st:=previous_editor;
     Editor_state.field_sigs_opt:=previous_fields) (fun () ->
-    Runtime.worker:=Some {Worker_client.invoke_fn=(fun _ _ -> Js.Promise.make (fun ~resolve:_ ~reject:_ -> ()));
+    Runtime.worker:=Some {Worker_client.daemon = None; inflight_reads = Hashtbl.create 16; invoke_fn=(fun _ _ -> Js.Promise.make (fun ~resolve:_ ~reject:_ -> ()));
       on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
     List.iter (fun scale -> List.iter (fun width -> List.iter (fun (icon,editing) ->
       Editor_state.st:=None;Editor_state.field_sigs_opt:=None;
@@ -5687,7 +5687,7 @@ let () = Native_embed.with_entry_lock (fun () ->
       let property=map ["block/uuid",Wire.Uuid "new-property-owner";
         "db/ident",Wire.Keyword "fixture/value";
         "logseq.property/type",Wire.Keyword property_type] in
-      Runtime.worker:=Some {Worker_client.invoke_fn=(fun method_ args ->
+      Runtime.worker:=Some {Worker_client.daemon = None; inflight_reads = Hashtbl.create 16; invoke_fn=(fun method_ args ->
         match method_,args with
         | "thread-api/pull",[_;_;Wire.Keyword "logseq.property/empty-placeholder"] ->
             incr placeholder_reads;Js.Promise.resolve (map ["db/id",Wire.Int 99])
@@ -6049,7 +6049,7 @@ let () =
           Runtime.worker :=
             Some
               {
-                Worker_client.invoke_fn =
+                Worker_client.daemon = None; inflight_reads = Hashtbl.create 16; invoke_fn =
                   (fun name _ ->
                     if name <> "thread-api/get-view-filter-data" then
                       failwith ("Unexpected date-scroll request: " ^ name);
@@ -6363,7 +6363,7 @@ let () = Native_embed.with_entry_lock (fun () ->
     [Wire.Keyword "db/ident",Wire.Keyword ("test/property-"^string_of_int index);
      Wire.Keyword "block/title",Wire.String (Printf.sprintf "Property %02d" index);
      Wire.Keyword "logseq.property/type",Wire.Keyword "number"]) in
-  Runtime.worker:=Some {Worker_client.invoke_fn=(fun name _ ->
+  Runtime.worker:=Some {Worker_client.daemon = None; inflight_reads = Hashtbl.create 16; invoke_fn=(fun name _ ->
     Js.Promise.resolve (match name with
       | "thread-api/get-all-properties" -> Wire.List properties
       | "thread-api/get-property-values" -> Wire.List []
@@ -6886,7 +6886,7 @@ let () = Native_embed.with_entry_lock (fun () ->
         ~renderer:{Lui_host.name="settings-scroll-test";render=(fun _ -> Bytes.empty)}
         ~width:(int_of_float (1280.*.scale)) ~height:(int_of_float (720.*.scale)) () in
       let previous_worker= !Runtime.worker and previous_settings= !Settings_state.st in
-      Runtime.worker:=Some {Worker_client.invoke_fn=(fun name _ -> match name with
+      Runtime.worker:=Some {Worker_client.daemon = None; inflight_reads = Hashtbl.create 16; invoke_fn=(fun name _ -> match name with
         | "thread-api/get-file-content" | "thread-api/pull" -> Js.Promise.resolve Wire.Nil
         | _ -> failwith ("Unexpected settings fixture request: " ^ name));
         on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
@@ -8593,7 +8593,7 @@ let () = Native_embed.with_entry_lock (fun () ->
       let block=map ["block/uuid",W.Uuid "date-owner";
         ident,(if is_datetime then selected else W.Tagged("datascript/Entity",map ["db/id",W.Int 901]))] in
       let writes = ref [] and journal_days = ref [] in
-      Runtime.worker:=Some {Worker_client.invoke_fn=(fun name args ->
+      Runtime.worker:=Some {Worker_client.daemon = None; inflight_reads = Hashtbl.create 16; invoke_fn=(fun name args ->
         Js.Promise.resolve (match name,args with
           | "thread-api/entity",[_; W.Int 901] -> selected
           | "thread-api/entity",[_; W.List [W.Keyword "block/uuid";_]] -> block
@@ -8789,7 +8789,7 @@ let () = Native_embed.with_entry_lock (fun () ->
        (if !current_type=0 then tagged (map ["db/id",Wire.Int 11;
           "db/ident",Wire.Keyword "logseq.property/empty-placeholder"])
         else ref_id !current_type)]) | _ -> assert false in
-  Runtime.worker:=Some {Worker_client.invoke_fn=(fun method_ args ->
+  Runtime.worker:=Some {Worker_client.daemon = None; inflight_reads = Hashtbl.create 16; invoke_fn=(fun method_ args ->
     Js.Promise.resolve (match method_,args with
       | "thread-api/entity",[_;Wire.List [Wire.Keyword "block/uuid";_]] -> block ()
       | "thread-api/get-blocks",[_;Wire.Array [request]] ->
@@ -9183,7 +9183,7 @@ let () = Native_embed.with_entry_lock (fun () ->
   and previous_folder = !Exporter.folder_sig in
   let model={Model.initial with repo=Some "logseq_db_TransferFixture";phase=Model.Ready} in
   Runtime.read_model:=(fun () -> model);Exporter.folder_sig:=None;
-  Runtime.worker:=Some {Worker_client.invoke_fn=(fun name _ ->
+  Runtime.worker:=Some {Worker_client.daemon = None; inflight_reads = Hashtbl.create 16; invoke_fn=(fun name _ ->
     if name<>"thread-api/get-key-value" then failwith ("Unexpected transfer fixture request: "^name);
     Js.Promise.resolve Wire.Nil);on_message=(fun _ _ -> ());
     dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
@@ -10163,7 +10163,7 @@ let () = Native_embed.with_entry_lock (fun () ->
       let refreshed ()=Subs_state.task_of_promise (Js.Promise.resolve ()) in
       Runtime.hooks.refresh_after_ops<-refreshed;
       Runtime.hooks.refresh_property_areas<-refreshed;
-      Runtime.worker:=Some {Worker_client.invoke_fn=(fun method_ args ->
+      Runtime.worker:=Some {Worker_client.daemon = None; inflight_reads = Hashtbl.create 16; invoke_fn=(fun method_ args ->
         match method_ with
         | "thread-api/apply-outliner-ops" ->
             writes:=args::!writes;
@@ -10642,7 +10642,7 @@ let () = Native_embed.with_entry_lock (fun () ->
   let property = map ["db/ident",Wire.Keyword "logseq.property/priority";
     "block/title",Wire.String "Priority";"logseq.property/type",Wire.Keyword "default";
     "property/closed-values",Wire.List [choice]] in
-  Runtime.worker:=Some {Worker_client.invoke_fn=(fun name _ ->
+  Runtime.worker:=Some {Worker_client.daemon = None; inflight_reads = Hashtbl.create 16; invoke_fn=(fun name _ ->
     Js.Promise.resolve (match name with
       | "thread-api/pull" -> map ["block/tags",Wire.List []]
       | _ -> failwith ("Unexpected empty-property fixture request: "^name)));
@@ -10805,7 +10805,7 @@ let () = Native_embed.with_entry_lock (fun () ->
     | Js.Promise.Resolved value -> value
     | Js.Promise.Rejected error -> raise error
     | Js.Promise.Pending -> failwith "Class membership fixture did not settle" in
-  Runtime.worker:=Some {Worker_client.invoke_fn=(fun name _ ->
+  Runtime.worker:=Some {Worker_client.daemon = None; inflight_reads = Hashtbl.create 16; invoke_fn=(fun name _ ->
     Js.Promise.resolve (match name with
       | "thread-api/get-page-blocks-tree" -> raw
       | "thread-api/get-blocks" -> Wire.Array (List.map (fun entity -> map ["block",entity])
@@ -10941,7 +10941,7 @@ let () = Native_embed.with_entry_lock (fun () ->
     Sidebar_state.model_signal:=previous_sidebar_model)
     (fun () -> List.iter (fun scale -> List.iter (fun recent ->
       let payload = ref (Wire.Array []) in
-      Runtime.worker:=Some {Worker_client.invoke_fn=(fun name _ ->
+      Runtime.worker:=Some {Worker_client.daemon = None; inflight_reads = Hashtbl.create 16; invoke_fn=(fun name _ ->
         if name="thread-api/get-favorite-pages" || name="thread-api/get-recent-pages"
         then Js.Promise.resolve !payload else failwith ("Unexpected icon request: "^name));
         on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
@@ -11040,7 +11040,7 @@ let () = Native_embed.with_entry_lock (fun () ->
     "block/uuid",Wire.Uuid (string_of_int id);"db/ident",Wire.Keyword "user.class/Label";
     "logseq.property/icon",map ["type",Wire.Keyword "tabler-icon";"id",Wire.String icon]] in
   let current = ref [tag 20 "Star";tag 10 "24Hours"] and tag_ids = ref [20;10] in
-  Runtime.worker:=Some {Worker_client.invoke_fn=(fun name _ -> Js.Promise.resolve
+  Runtime.worker:=Some {Worker_client.daemon = None; inflight_reads = Hashtbl.create 16; invoke_fn=(fun name _ -> Js.Promise.resolve
     (match name with
     | "thread-api/get-case-page" -> map ["block/tags",Wire.Set (List.map (fun id -> Wire.Int id) !tag_ids)]
     | "thread-api/get-blocks" -> Wire.Array (List.map (fun value -> map ["block",value]) !current)
@@ -11073,7 +11073,7 @@ let () = Native_embed.with_entry_lock (fun () ->
   and previous_model = !Runtime.read_model and previous_parent = !Platform.dom_parent_of
   and previous_editor = !Editor_state.st and previous_fields = !Editor_state.field_sigs_opt
   and previous_worker = !Runtime.worker in
-  Runtime.worker:=Some {Worker_client.invoke_fn=(fun _ _ -> Js.Promise.make (fun ~resolve:_ ~reject:_ -> ()));
+  Runtime.worker:=Some {Worker_client.daemon = None; inflight_reads = Hashtbl.create 16; invoke_fn=(fun _ _ -> Js.Promise.make (fun ~resolve:_ ~reject:_ -> ()));
     on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
   let failures=ref [] in
   let expect label condition=if not condition then failures:=label::!failures in
@@ -11301,7 +11301,7 @@ let () = Native_embed.with_entry_lock (fun () ->
     @ match value with None -> [] | Some value -> ["logseq.property/icon",value]) in
   let metadata=ref [tag 20 (Some (own "tabler-icon" "Star"));tag 10 (Some (own "tabler-icon" "24Hours"))] in
   Runtime.read_model:=(fun () -> {Model.initial with repo=Some "block-icon-fixture"});
-  Runtime.worker:=Some {Worker_client.invoke_fn=(fun name _ ->
+  Runtime.worker:=Some {Worker_client.daemon = None; inflight_reads = Hashtbl.create 16; invoke_fn=(fun name _ ->
     if name<>"thread-api/get-blocks" then failwith ("Unexpected block icon request: "^name);
     Js.Promise.resolve (Wire.Array (List.map (fun entity -> map ["block",entity]) !metadata)));
     on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};

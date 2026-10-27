@@ -140,6 +140,12 @@ let edit_reload_min_ms = 8000.0
 let edit_input_idle_ms = 750.0
 
 let ui_busy ~now ~last_fire =
+  let recovering =
+    match !Runtime.worker with
+    | Some worker when Worker_client.supports_recovery worker ->
+        (Worker_client.lifecycle worker).phase <> Worker_client.Ready
+    | _ -> false
+  in
   let editing_active =
     Editor_state.ready () && Editor_state.editing () <> None
   in
@@ -153,7 +159,7 @@ let ui_busy ~now ~last_fire =
   let ui_active =
     editing_active && now -. !last_ui_input_ms < edit_input_idle_ms
   in
-  !Editor_state.structure_pending || typing_active || edit_throttled || ui_active
+  recovering || !Editor_state.structure_pending || typing_active || edit_throttled || ui_active
   (* Inspect overlays only when the state guards would otherwise allow reload. *)
   || Ui_services.dom_query
       "#ui__ac, .cp__cmdk__modal, .ui__popover-content, .ls-context-menu-content, #date-time-picker, .ls-editor-link-form, .ls-property-dialog"

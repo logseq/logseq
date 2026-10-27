@@ -438,6 +438,8 @@
   module Exn = struct
     exception Error of Json.t
 
+    let anyToExnInternal (error : exn) = error
+
     let raiseError s = raise (Error (Json.JString s))
 
     let message = function

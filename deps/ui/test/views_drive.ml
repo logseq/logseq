@@ -207,6 +207,7 @@ let install_worker () =
       { Worker_client.invoke_fn = (fun n a -> invoke n a)
       ; on_message = (fun _ _ -> ())
       ; dead
+      ; daemon = None
       }
 
 (* ---------- mount ---------- *)

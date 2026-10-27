@@ -1,7 +1,7 @@
 (* Native twin of core/daemon_client.ml.
 
    Same contract, different transport plumbing: instead of fetch +
-   EventSource + window.apis.doAction, we spawn the OCaml daemon
+   streaming SSE + window.apis.doAction, we spawn the OCaml daemon
    (deps/db-worker/bin/main.exe) ourselves, discover its port via
    <root>/server-list, POST /v1/invoke over a plain socket, and read
    /v1/events on a systhread. All cross-thread delivery goes through
@@ -106,7 +106,7 @@ let graph_name repo =
   let prefix = "logseq_db_" in
   let trimmed = String.trim repo in
   let name =
-    if String.length trimmed >= String.length prefix
+    if String.length trimmed > String.length prefix
        && String.sub trimmed 0 (String.length prefix) = prefix
     then
       String.sub trimmed (String.length prefix)
@@ -378,7 +378,7 @@ let find_live_daemon (repo : string) : string option =
   List.find_map
     (fun (pid, port) ->
        match probe_daemon ~port with
-       | Some (r, true) when r = repo ->
+       | Some (r, true) when graph_name r = graph_name repo ->
            boot_mark
              ("probe ok pid=" ^ string_of_int pid ^ " port="
               ^ string_of_int port);
@@ -430,8 +430,23 @@ let record_last_repo (repo : string) : unit =
 let ensure_attached (repo : string) : string =
   Mutex.lock attach_mu;
   Fun.protect ~finally:(fun () -> Mutex.unlock attach_mu) (fun () ->
-      match Hashtbl.find_opt attached repo with
-      | Some base -> base
+         let cached = Hashtbl.find_opt attached repo in
+         let cached =
+           match cached with
+           | Some base ->
+               (try
+                  let port =
+                    String.split_on_char ':' base |> List.rev |> List.hd
+                    |> int_of_string
+                  in
+                  match probe_daemon ~port with
+                  | Some (r, true) when graph_name r = graph_name repo -> Some base
+                  | _ -> None
+                with _ -> None)
+           | None -> None
+         in
+         match cached with
+         | Some base -> base
       | None ->
           let base =
             match find_live_daemon repo with
@@ -601,313 +616,697 @@ let ipc (args : Wire.t list) : Wire.t Js.Promise.t =
   ignore (Thread.create (fun () -> run ()) ());
   p
 
-(* ---------- http ---------- *)
+let json_field name = function
+  | Js.Json.JObject fields -> List.assoc_opt name fields
+  | _ -> None
+let canonical_repo repo = "logseq_db_" ^ graph_name repo
+let normalize_path = Unix.realpath
 
-(* minimal blocking HTTP over a socket; localhost only *)
-let http_post ~(host : string) ~(port : int) ~(path : string)
-    ~(body : string) : (int * string) =
-  let addr = Unix.ADDR_INET (Unix.inet_addr_of_string host, port) in
-  let ic, oc = Unix.open_connection addr in
-  let req =
-    Printf.sprintf
-      "POST %s HTTP/1.1\r\nHost: %s:%d\r\nContent-Type: \
-       application/json\r\nContent-Length: %d\r\nConnection: \
-       close\r\n\r\n%s"
-      path host port (String.length body) body
-  in
-  output_string oc req;
-  flush oc;
-  (* status line *)
-  let status_line = input_line ic in
-  let status =
-    match String.split_on_char ' ' status_line with
-    | _ :: code :: _ -> Option.value (int_of_string_opt code) ~default:0
-    | _ -> 0
-  in
-  (* headers *)
-  let rec headers acc =
-    let line = input_line ic in
-    if line = "" || line = "\r" then acc
-    else headers (line :: acc)
-  in
-  let headers = headers [] in
-  let chunked =
-    List.exists
-      (fun h ->
-         let l = String.lowercase_ascii h in
-         String.length l > 18
-         && String.sub l 0 18 = "transfer-encoding:"
-         &&
-           (match String.index_opt l ':' with
-            | Some i ->
-                String.trim (String.sub l (i + 1) (String.length l - i - 1))
-                = "chunked"
-            | None -> false))
-      headers
-  in
-  let buf = Buffer.create 4096 in
-  if chunked then begin
-    (* chunked transfer-encoding: "<hex>\r\n<data>\r\n" until "0\r\n" *)
-    let rec chunks () =
-      let size_line = String.trim (input_line ic) in
-      match int_of_string_opt ("0x" ^ size_line) with
-      | Some 0 -> ignore (try input_line ic with _ -> "")
-      | Some n -> (
-          Buffer.add_channel buf ic n;
-          ignore (input_line ic);
-          (* trailing CRLF *)
-          chunks ())
-      | None -> ()
-    in
-    (try chunks () with End_of_file -> ())
-  end
-  else begin
-    (* body to EOF *)
-    (try
-       while true do
-         Buffer.add_channel buf ic 8192
-       done
-     with End_of_file -> ())
-  end;
-  Unix.close (Unix.descr_of_in_channel ic);
-  (status, Buffer.contents buf)
+(* Epochs fence client continuations, not server-side execution. *)
+type scope = { repo : string; epoch : int }
+type outcome = Not_sent | Outcome_unknown
+type request_failure =
+  { scope : scope option
+  ; method_name : string
+  ; outcome : outcome
+  ; cause : exn
+  }
+exception Request_failed of request_failure
+exception Remote_error of string
+exception Identity_changed of string
 
-let http_get_stream ~(host : string) ~(port : int) ~(path : string)
-    ~(on_line : string -> unit) ~(alive : unit -> bool) : unit =
-  let addr = Unix.ADDR_INET (Unix.inet_addr_of_string host, port) in
+type phase = Disconnected | Recovering | Ready | Failed of exn
+type lifecycle = { scope : scope option; phase : phase }
+type invoke = string -> Wire.t list -> Wire.t Js.Promise.t
+type bootstrap =
+  { scope : scope
+  ; invoke : invoke
+  ; is_current : unit -> bool
+  }
+type identity =
+  { base_url : string
+  ; repo : string
+  ; root : string
+  ; graphs_dir : string
+  ; lifecycle_dir : string
+  ; generation : string
+  ; ticket : string
+  ; pid : int
+  ; port : int
+  ; owner_source : string
+  ; revision : string
+  }
+type control =
+  { mark_sent : unit -> unit
+  ; was_sent : unit -> bool
+  ; cancel : unit -> unit
+  ; install_cancel : (unit -> unit) -> unit
+  }
+
+let pending () =
+  let resolve_ref = ref (fun _ -> ()) in
+  let reject_ref = ref (fun (_ : exn) -> ()) in
+  let promise =
+    Js.Promise.make (fun ~resolve ~reject ->
+        resolve_ref := (fun v -> resolve v [@u]);
+        reject_ref := (fun e -> reject e [@u]))
+  in
+  promise, (fun v -> !resolve_ref v), (fun e -> !reject_ref e)
+
+let required_string name json =
+  match Option.bind (json_field name json) Js.Json.decodeString with
+  | Some s when String.trim s <> "" -> s
+  | _ -> failwith ("Missing daemon identity field: " ^ name)
+
+let required_int name json =
+  match Option.bind (json_field name json) Js.Json.decodeNumber with
+  | Some n when n > 0. && n = Float.floor n && n <= float_of_int max_int ->
+      int_of_float n
+  | _ -> failwith ("Invalid daemon identity field: " ^ name)
+
+let port_of_base base =
+  let prefix = "http://127.0.0.1:" in
+  let n = String.length prefix in
+  if String.length base <= n || String.sub base 0 n <> prefix then
+    failwith "Daemon endpoint must be IPv4 loopback";
+  match int_of_string_opt (String.sub base n (String.length base - n)) with
+  | Some port when port > 0 && port <= 65535 -> port
+  | _ -> failwith "Invalid daemon endpoint port"
+
+let decode_identity base json =
+  if required_string "status" json <> "ready" then
+    failwith "Daemon is not ready";
+  if required_string "host" json <> "127.0.0.1"
+     || required_string "ownership-protocol" json <> "sqlite-v1" then
+    failwith "Unsupported daemon ownership";
+  let storage =
+    match json_field "storage" json with
+    | Some s -> s
+    | None -> failwith "Daemon storage identity is missing"
+  in
+  let port = required_int "port" json in
+  if port <> port_of_base base then failwith "Daemon port identity changed";
+  let root = normalize_path (required_string "root" storage) in
+  if root <> normalize_path (required_string "root-dir" json) then
+    failwith "Daemon root identity disagrees";
+  { base_url = base
+  ; repo = canonical_repo (required_string "repo" json)
+  ; root
+  ; graphs_dir = normalize_path (required_string "graphsDir" storage)
+  ; lifecycle_dir = normalize_path (required_string "lifecycleDir" storage)
+  ; generation = required_string "generation" json
+  ; ticket = required_string "ticket" json
+  ; pid = required_int "pid" json
+  ; port
+  ; owner_source = required_string "owner-source" json
+  ; revision = required_string "revision" json
+  }
+
+let verify_binding (old : identity) (next : identity) =
+  if old.repo <> next.repo || old.root <> next.root
+     || old.graphs_dir <> next.graphs_dir
+     || old.lifecycle_dir <> next.lifecycle_dir
+     || old.generation <> next.generation then
+    raise (Identity_changed "Graph or storage incarnation changed")
+
+let verify_instance (old : identity) (next : identity) =
+  verify_binding old next;
+  if old.pid <> next.pid || old.ticket <> next.ticket
+     || old.base_url <> next.base_url || old.owner_source <> next.owner_source
+     || old.revision <> next.revision then
+    raise (Identity_changed "Worker changed while attaching")
+
+let decode_reply json =
+  match Option.bind (json_field "ok" json) Js.Json.decodeBoolean with
+  | Some false ->
+      let message =
+        match json_field "error" json with
+        | Some error ->
+            Option.value
+              (Option.bind (json_field "message" error) Js.Json.decodeString)
+              ~default:"Daemon rejected request"
+        | None -> "Daemon rejected request"
+      in
+      raise (Remote_error message)
+  | Some true ->
+      (match Option.bind (json_field "resultTransit" json) Js.Json.decodeString with
+       | Some result -> Transit.of_string result
+       | None -> failwith "Daemon response has no resultTransit")
+  | None -> failwith "Malformed daemon response"
+
+let deliver sink data =
+  let json = Js.Json.parseExn data in
+  let kind = required_string "type" json in
+  match Option.bind (json_field "payload" json) Js.Json.decodeString with
+  | Some payload ->
+      let payload =
+        match Transit.of_string payload with
+        | Wire.Array (Wire.Keyword framed_kind :: rest)
+        | Wire.List (Wire.Keyword framed_kind :: rest) when framed_kind = kind ->
+            (match rest with [p] -> p | _ -> Wire.Array rest)
+        | payload -> payload
+      in
+      sink kind payload
+  | None -> failwith "Daemon event has no payload"
+
+let after seconds callback =
+  let cancelled = Atomic.make false in
+  ignore (Thread.create (fun () ->
+      Unix.sleepf seconds;
+      Host.enqueue (fun () -> if not (Atomic.get cancelled) then callback ())) ());
+  fun () -> Atomic.set cancelled true
+
+let control () =
+  let mutex = Mutex.create () in
+  let sent = ref false and cancelled = ref false in
+  let close = ref (fun () -> ()) in
+  let locked f =
+    Mutex.lock mutex;
+    Fun.protect ~finally:(fun () -> Mutex.unlock mutex) f
+  in
+  { mark_sent = (fun () -> locked (fun () ->
+        if !cancelled then failwith "Request cancelled";
+        sent := true))
+  ; was_sent = (fun () -> locked (fun () -> !sent))
+  ; cancel = (fun () -> locked (fun () -> cancelled := true; !close ()))
+  ; install_cancel = (fun f -> locked (fun () ->
+        close := f;
+        if !cancelled then f ()))
+  }
+
+let async f =
+  let promise, resolve, reject = pending () in
+  ignore (Thread.create (fun () ->
+      match f () with
+      | value -> Host.enqueue (fun () -> resolve value)
+      | exception error -> Host.enqueue (fun () -> reject error)) ());
+  promise
+
+let with_socket ctl port f =
   let fd = Unix.socket Unix.PF_INET Unix.SOCK_STREAM 0 in
-  (try
-     Unix.connect fd addr;
-     let oc = Unix.out_channel_of_descr fd in
-     Printf.fprintf oc
-       "GET %s HTTP/1.1\r\nHost: %s:%d\r\nAccept: \
-        text/event-stream\r\n\r\n"
-       path host port;
-     flush oc;
-     let ic = Unix.in_channel_of_descr fd in
-     (* consume status + headers *)
-     let rec skip_headers () =
-       let line = input_line ic in
-       if line <> "" && line <> "\r" then skip_headers ()
-     in
-     ignore (input_line ic);
-     skip_headers ();
-     while alive () do
-       match input_line ic with
-       | line -> on_line line
-       | exception End_of_file -> raise Exit
-       | exception _ -> raise Exit
-     done
-   with Exit -> ()
-  | e ->
-      prerr_endline
-        ("[daemon] SSE stream ended: " ^ Printexc.to_string e));
-  (try Unix.close fd with _ -> ())
+  let mutex = Mutex.create () in
+  let open_ = ref true in
+  let locked f =
+    Mutex.lock mutex;
+    Fun.protect ~finally:(fun () -> Mutex.unlock mutex) f
+  in
+  ctl.install_cancel (fun () -> locked (fun () ->
+      if !open_ then (try Unix.shutdown fd Unix.SHUTDOWN_ALL with Unix.Unix_error _ -> ())));
+  Fun.protect
+    ~finally:(fun () -> locked (fun () -> open_ := false; Unix.close fd))
+    (fun () ->
+      Unix.connect fd (Unix.ADDR_INET (Unix.inet_addr_loopback, port));
+      let ic = Unix.in_channel_of_descr fd in
+      let send text =
+        let bytes = Bytes.of_string text in
+        ctl.mark_sent ();
+        let rec loop pos =
+          if pos < Bytes.length bytes then
+            let n = Unix.write fd bytes pos (Bytes.length bytes - pos) in
+            if n = 0 then raise End_of_file else loop (pos + n)
+        in loop 0
+      in
+      f ic send)
 
-(* ---------- transport ---------- *)
+let response_headers ?(require_ok = true) ic =
+  let status =
+    match String.split_on_char ' ' (input_line ic) with
+    | _ :: code :: _ -> int_of_string code
+    | _ -> failwith "Malformed HTTP status"
+  in
+  if require_ok && status <> 200 then
+    failwith ("Daemon HTTP status " ^ string_of_int status);
+  let rec loop headers =
+    match String.trim (input_line ic) with
+    | "" -> headers
+    | line ->
+        (match String.index_opt line ':' with
+         | Some i ->
+             let name = String.lowercase_ascii (String.sub line 0 i) in
+             let value = String.trim (String.sub line (i+1) (String.length line-i-1)) in
+             loop ((name, value) :: headers)
+         | None -> failwith "Malformed HTTP header")
+  in loop []
 
-type sse_state = { mutable stop : bool }
+let read_http_body ic headers consume =
+  match List.assoc_opt "transfer-encoding" headers with
+  | Some encoding when String.lowercase_ascii encoding = "chunked" ->
+      let rec chunks () =
+        let size = input_line ic |> String.trim |> String.split_on_char ';' |> List.hd in
+        let size = int_of_string ("0x" ^ size) in
+        if size < 0 then failwith "Invalid HTTP chunk";
+        if size > 0 then (
+          let rec bytes remaining =
+            if remaining > 0 then (
+              let n = min remaining 4096 in
+              consume (really_input_string ic n);
+              bytes (remaining - n))
+          in
+          bytes size;
+          if input_line ic <> "\r" then failwith "Invalid HTTP chunk delimiter";
+          chunks ())
+      in chunks ()
+  | Some _ -> failwith "Unsupported HTTP transfer encoding"
+  | None ->
+      (match List.assoc_opt "content-length" headers with
+       | Some length ->
+           let rec bytes remaining =
+             if remaining > 0 then (
+               let n = min remaining 4096 in
+               consume (really_input_string ic n);
+               bytes (remaining-n))
+           in bytes (int_of_string length)
+       | None ->
+           let bytes = Bytes.create 4096 in
+           let rec loop () =
+             match input ic bytes 0 4096 with
+             | 0 -> ()
+             | n -> consume (Bytes.sub_string bytes 0 n); loop ()
+           in loop ())
 
+let raw_post ctl base name args =
+  let body =
+    Yojson.Safe.to_string
+      (`Assoc [ "method", `String name
+              ; "argsTransit", `String (Transit.to_string (Wire.Array args)) ])
+  in
+  let port = port_of_base base in
+  async (fun () ->
+      with_socket ctl port (fun ic send ->
+          send (Printf.sprintf
+            "POST /v1/invoke HTTP/1.1\r\nHost: 127.0.0.1:%d\r\nContent-Type: application/json\r\nContent-Length: %d\r\nConnection: close\r\n\r\n%s"
+            port (String.length body) body);
+          let headers = response_headers ~require_ok:false ic in
+          let body = Buffer.create 4096 in
+          read_http_body ic headers (Buffer.add_string body);
+          decode_reply (Js.Json.parseExn (Buffer.contents body))))
+
+let probe_identity base =
+  let port = port_of_base base in
+  async (fun () ->
+      match http_get ~port ~path:"/healthz" with
+      | Some (200, body) ->
+          let id = decode_identity base (Js.Json.parseExn body) in
+          if id.root <> Unix.realpath (root_dir ())
+             || id.graphs_dir <> Unix.realpath (graphs_dir ())
+             || id.lifecycle_dir <> Unix.realpath (lifecycle_dir ()) then
+            raise (Identity_changed "Daemon belongs to another storage root");
+          id
+      | _ -> failwith "Daemon health probe failed")
+
+let existing_generation repo =
+  let path = Filename.concat (Filename.concat (lifecycle_dir ()) (encode_graph repo)) "state.json" in
+  match Yojson.Safe.from_file path with
+  | `Assoc fields when List.assoc_opt "phase" fields = Some (`String "available")
+                      && Sys.file_exists (Filename.concat (graphs_dir ()) (encode_graph repo)) ->
+      (match List.assoc_opt "generation" fields with
+       | Some (`String generation) when generation <> "" -> generation
+       | _ -> failwith "Graph generation is missing")
+  | _ -> failwith "Graph is not available"
+
+let prepare_explicit ~is_current repo creating =
+  let* generation =
+    async (fun () ->
+        if creating then ensure_graph_created repo;
+        existing_generation repo)
+  in
+  if not (is_current ()) then failwith "Daemon connection superseded";
+  let* rt = ipc [Wire.String "db-worker-runtime"; Wire.String repo; Wire.Map []] in
+  if not (is_current ()) then failwith "Daemon connection superseded";
+  match Wire.map_get_string rt "base-url" with
+  | Some base ->
+      let* id = probe_identity base in
+      if id.repo <> repo || id.generation <> generation then
+        Js.Promise.reject (Identity_changed "Runtime graph identity disagrees")
+      else Js.Promise.resolve id
+  | None -> Js.Promise.reject (Failure "Runtime has no daemon endpoint")
+
+let discover (old : identity) =
+  let* entries = async read_server_list in
+  let rec loop = function
+    | [] -> Js.Promise.resolve None
+    | (pid,port) :: rest ->
+        let base = "http://127.0.0.1:" ^ string_of_int port in
+        let probe =
+          let* id = probe_identity base in
+          if id.pid = pid && id.repo = old.repo then (
+            verify_binding old id;
+            Js.Promise.resolve (Some id))
+          else Js.Promise.resolve None
+        in
+        let* candidate =
+          probe |> Js.Promise.catch (function
+            | Identity_changed _ as e -> Js.Promise.reject e
+            | _ -> Js.Promise.resolve None)
+        in
+        match candidate with Some _ -> Js.Promise.resolve candidate | None -> loop rest
+  in loop entries
+
+let remember (id : identity) =
+  Mutex.lock attach_mu;
+  Hashtbl.replace attached id.repo id.base_url;
+  Mutex.unlock attach_mu
+
+let stream ctl (id : identity) on_keepalive on_data on_end =
+  ignore (Thread.create (fun () ->
+      let result =
+        try
+          with_socket ctl id.port (fun ic send ->
+              send (Printf.sprintf
+                "GET /v1/events HTTP/1.1\r\nHost: 127.0.0.1:%d\r\nAccept: text/event-stream\r\n\r\n" id.port);
+              let headers = response_headers ic in
+              if List.assoc_opt "content-type" headers <> Some "text/event-stream" then
+                failwith "Daemon events are not an SSE stream";
+              let line = Buffer.create 256 and data = Buffer.create 1024 in
+              let consume_line () =
+                let value = Buffer.contents line in
+                Buffer.clear line;
+                if value = ": keepalive" then Host.enqueue on_keepalive
+                else if value = "" then (
+                  if Buffer.length data > 0 then (
+                    let event = Buffer.contents data in
+                    Buffer.clear data;
+                    Host.enqueue (fun () -> on_data event)))
+                else if String.starts_with ~prefix:"data:" value then (
+                  let value = String.sub value 5 (String.length value-5) in
+                  let value = if String.starts_with ~prefix:" " value then
+                      String.sub value 1 (String.length value-1) else value in
+                  if Buffer.length data > 0 then Buffer.add_char data '\n';
+                  Buffer.add_string data value)
+              in
+              let previous_cr = ref false in
+              read_http_body ic headers (fun bytes ->
+                  String.iter (fun c ->
+                      if c = '\r' then (consume_line (); previous_cr := true)
+                      else if c = '\n' then (
+                        if not !previous_cr then consume_line ();
+                        previous_cr := false)
+                      else (previous_cr := false; Buffer.add_char line c)) bytes));
+          Failure "Daemon event stream ended"
+        with error -> error
+      in Host.enqueue (fun () -> on_end result)) ())
+
+type attempt =
+  { scope : scope
+  ; promise : scope Js.Promise.t
+  ; resolve : scope -> unit
+  ; reject : exn -> unit
+  ; mutable cancel_timer : unit -> unit
+  }
+type call =
+  { scope : scope
+  ; name : string
+  ; control : control
+  ; reject : exn -> unit
+  }
+type hooks =
+  { on_state : lifecycle -> unit
+  ; on_request_failure : request_failure -> unit
+  ; rehydrate : bootstrap -> unit Js.Promise.t
+  }
 type transport =
   { mutable base_url : string
   ; mutable repo : string
-  ; mutable sse : sse_state option
   ; mutable sink : string -> Wire.t -> unit
-  ; pending : (string * Wire.t list) Queue.t
   ; dead : string Js.Promise.t
+  ; mutable epoch : int
+  ; mutable status : lifecycle
+  ; mutable hooks : hooks option
+  ; mutable binding : identity option
+  ; mutable attempt : attempt option
+  ; mutable stop_stream : unit -> unit
+  ; calls : (int, call) Hashtbl.t
+  ; mutable next_call : int
+  ; mutable handle_loss : scope -> exn -> unit
   }
 
-let json_field (name : string) (j : Js.Json.t) : Js.Json.t option =
-  match j with
-  | Js.Json.JObject kvs -> (
-      match List.assoc_opt name kvs with
-      | Some v -> Some v
-      | None -> None)
-  | _ -> None
+let lifecycle t = t.status
+let is_current t (scope : scope) =
+  t.epoch = scope.epoch && t.status.scope = Some scope
 
-let post_invoke (base_url : string) (name : string) (args : Wire.t list)
-    : Wire.t Js.Promise.t =
-  let p, resolve, reject = Js.Promise.pending () in
-  (* host:port from base-url like http://127.0.0.1:PORT *)
-  let host, port =
-    match
-      String.split_on_char '/'
-        (String.sub base_url 7 (String.length base_url - 7))
-    with
-    | hp :: _ -> (
-        match String.split_on_char ':' hp with
-        | [ h; ps ] -> (h, Option.value (int_of_string_opt ps) ~default:0)
-        | _ -> ("127.0.0.1", 0))
-    | _ -> ("127.0.0.1", 0)
-  in
-  let body =
-    Yojson.Safe.to_string
-      (`Assoc
-        [ "method", `String name
-        ; "argsTransit", `String (Transit.to_string (Wire.Array args)) ])
-  in
-  boot_mark ("invoke " ^ name);
-  ignore
-    (Thread.create
-       (fun () ->
-         try
-           let _status, resp = http_post ~host ~port ~path:"/v1/invoke" ~body in
-           boot_mark ("invoke " ^ name ^ " done");
-           let j = Js.Json.parseExn resp in
-           let ok =
-             match json_field "ok" j with
-             | Some v -> Js.Json.decodeBoolean v = Some true
-             | None -> false
-           in
-           if not ok then
-             let message =
-               match json_field "error" j with
-               | Some e -> (
-                   match json_field "message" e with
-                   | Some m ->
-                       Option.value (Js.Json.decodeString m) ~default:""
-                   | None -> "")
-               | None -> ""
-             in
-             prerr_endline ("[daemon] invoke " ^ name ^ " failed: " ^ message);
-             Host.enqueue (fun () ->
-                 reject
-                   (Failure ("db-worker daemon " ^ name ^ ": " ^ message)))
-           else
-             let result =
-               match json_field "resultTransit" j with
-               | Some rt -> (
-                   match Js.Json.decodeString rt with
-                   | Some s -> Transit.of_string s
-                   | None -> Wire.Nil)
-               | None -> Wire.Nil
-             in
-             Host.enqueue (fun () -> resolve result)
-         with e ->
-           prerr_endline
-             ("[daemon] invoke " ^ name ^ " transport error: "
-             ^ Printexc.to_string e);
-           Host.enqueue (fun () -> reject e))
-       ());
-  p
+let publish t phase =
+  t.status <- { t.status with phase };
+  match t.hooks with Some hooks -> hooks.on_state t.status | None -> ()
 
-(* SSE: lines "data: {json}"; payload is a transit string carrying
-   [<kw> ...]. *)
-let sse_thread (t : transport) (host : string) (port : int)
-    (state : sse_state) : unit =
-  http_get_stream ~host ~port ~path:"/v1/events"
-    ~alive:(fun () -> not state.stop)
-    ~on_line:(fun line ->
-      let line = String.trim line in
-      if String.length line > 5 && String.sub line 0 5 = "data:" then
-        let data = String.sub line 5 (String.length line - 5) |> String.trim in
-        (match (try Some (Js.Json.parseExn data) with _ -> None) with
-         | Some j -> (
-             match
-               Option.bind (json_field "payload" j) Js.Json.decodeString
-             with
-             | Some s -> (
-                 match
-                   (try Some (Transit.of_string s) with _ -> None)
-                 with
-                 | Some (Wire.Array (Wire.Keyword kind :: rest))
-                 | Some (Wire.List (Wire.Keyword kind :: rest)) ->
-                     let payload =
-                       match rest with
-                       | [ p ] -> p
-                       | _ -> Wire.Array rest
-                     in
-                     let sink = t.sink in
-                     Host.enqueue (fun () -> sink kind payload)
-                 | _ -> ())
-             | None -> ())
-         | None -> ()))
+let report_failure t (scope : scope option) name outcome cause reject =
+  let failure = {scope; method_name = name; outcome; cause} in
+  reject (Request_failed failure);
+  match t.hooks with
+  | Some hooks ->
+      if outcome = Outcome_unknown
+         || (match scope with None -> true | Some scope -> t.epoch = scope.epoch)
+      then hooks.on_request_failure failure
+  | None -> ()
 
-let attach (t : transport) (repo : string) (base_url : string) : unit =
-  (match t.sse with
-   | Some s -> s.stop <- true
+let retire t cause =
+  t.epoch <- t.epoch + 1;
+  let epoch = t.epoch in
+  t.status <- {scope = None; phase = Disconnected};
+  t.base_url <- "";
+  t.repo <- "";
+  let stop_stream = t.stop_stream in
+  t.stop_stream <- (fun () -> ());
+  let attempt = t.attempt in
+  t.attempt <- None;
+  let calls = Hashtbl.fold (fun _ call acc -> call :: acc) t.calls [] in
+  Hashtbl.clear t.calls;
+  stop_stream ();
+  List.iter (fun (call : call) ->
+      call.control.cancel ();
+      report_failure t (Some call.scope) call.name
+        (if call.control.was_sent () then Outcome_unknown else Not_sent)
+        cause call.reject) calls;
+  (match attempt with
+   | Some attempt -> attempt.cancel_timer (); attempt.reject cause
    | None -> ());
-  let host, port =
-    match
-      String.split_on_char '/'
-        (String.sub base_url 7 (String.length base_url - 7))
-    with
-    | hp :: _ -> (
-        match String.split_on_char ':' hp with
-        | [ h; ps ] -> (h, Option.value (int_of_string_opt ps) ~default:0)
-        | _ -> ("127.0.0.1", 0))
-    | _ -> ("127.0.0.1", 0)
-  in
-  let state = { stop = false } in
-  t.sse <- Some state;
-  t.base_url <- base_url;
-  t.repo <- repo;
-  boot_mark ("sse attach " ^ repo);
-  ignore (Thread.create (fun () -> sse_thread t host port state) ())
+  epoch
 
-let list_graphs () : Wire.t Js.Promise.t =
-  let* graphs = ipc [ Wire.String "getGraphs" ] in
-  let names =
-    match graphs with
-    | Wire.Array xs | Wire.List xs -> xs
-    | _ -> []
-  in
-  Js.Promise.resolve
-    (Wire.Array
-       (List.map (fun w -> Wire.Map [ (Wire.kw "name", w) ]) names))
+let disconnect t =
+  let epoch = retire t (Failure "Daemon client disconnected") in
+  if t.epoch = epoch then publish t Disconnected
 
-let flush_pending (t : transport) : unit Js.Promise.t =
-  let rec loop () =
-    if Queue.is_empty t.pending then Js.Promise.resolve ()
-    else
-      let name, args = Queue.take t.pending in
-      let* _ = post_invoke t.base_url name args in
-      loop ()
-  in
-  loop ()
+let fail_attempt t (scope : scope) error =
+  if is_current t scope then (
+    let epoch = retire t error in
+    if t.epoch = epoch then (
+      t.status <- {scope = Some scope; phase = Failed error};
+      publish t (Failed error)))
 
-let invoke (t : transport) (name : string) (args : Wire.t list) :
-    Wire.t Js.Promise.t =
+let dispatch t (scope : scope) base name args =
+  if not (is_current t scope) then (
+    let promise, _, reject = pending () in
+    report_failure t (Some scope) name Not_sent (Failure "Stale daemon scope") reject;
+    promise)
+  else if name = "thread-api/init" then Js.Promise.resolve Wire.Nil
+  else
+    let promise, resolve, reject = pending () in
+    let id = t.next_call in
+    t.next_call <- id + 1;
+    let call = {scope; name; control = control (); reject} in
+    Hashtbl.add t.calls id call;
+    let finish f =
+      if Hashtbl.mem t.calls id then (
+        Hashtbl.remove t.calls id;
+        f ())
+    in
+    let request =
+      try raw_post call.control base name args
+      with error -> Js.Promise.reject error
+    in
+    ignore (request |> Js.Promise.then_ (fun result ->
+        if is_current t scope then finish (fun () -> resolve result);
+        Js.Promise.resolve ())
+      |> Js.Promise.catch (fun error ->
+        (match error with
+         | Remote_error _ -> finish (fun () -> reject error)
+         | _ ->
+             if is_current t scope then t.handle_loss scope error);
+        Js.Promise.resolve ()));
+    promise
+
+let rec start ?(cause = Failure "Daemon connection superseded") t repo explicit open_request =
+  match t.hooks with
+  | None -> Js.Promise.reject (Failure "Daemon recovery hooks are not configured")
+  | Some hooks ->
+      let old =
+        match t.binding with Some id when id.repo = repo -> Some id | _ -> None
+      in
+      let epoch = retire t cause in
+      if t.epoch <> epoch then Js.Promise.reject (Failure "Daemon connection superseded")
+      else
+        let scope = {repo; epoch} in
+        let promise, resolve, reject = pending () in
+        let attempt = {scope; promise; resolve; reject; cancel_timer = (fun () -> ())} in
+        t.attempt <- Some attempt;
+        t.status <- {scope = Some scope; phase = Recovering};
+        attempt.cancel_timer <- after 60. (fun () ->
+            if is_current t scope then fail_attempt t scope (Failure "Daemon connect timed out"));
+        publish t Recovering;
+        let current () =
+          is_current t scope
+          && (match t.attempt with Some active -> active == attempt | None -> false)
+        in
+        let check () = if not (current ()) then failwith "Daemon connection superseded" in
+        let rec find () =
+          check ();
+          match old with
+          | None -> Js.Promise.reject (Failure "No previously bound daemon to rediscover")
+          | Some old ->
+              let* candidate = discover old in
+              check ();
+              (match candidate with
+               | Some id -> Js.Promise.resolve id
+               | None ->
+                   let delayed, resolve, _ = pending () in
+                   let _cancel_delay = after 0.2 (fun () -> resolve ()) in
+                   let* () = delayed in find ())
+        in
+        let connecting =
+          try
+            check ();
+            let creating =
+              match open_request with
+              | Some ([_; (Wire.Map _ as opts)], _) -> Wire.get opts "config" <> None
+              | _ -> false
+            in
+            let* id =
+              if explicit then prepare_explicit ~is_current:current repo creating else find ()
+            in
+            check ();
+            (match old with Some old when not creating -> verify_binding old id | _ -> ());
+            if id.repo <> repo then raise (Identity_changed "Daemon repo identity changed");
+            remember id;
+            t.binding <- Some id;
+            t.repo <- repo;
+            t.base_url <- id.base_url;
+            let* () =
+              match open_request with
+              | None -> Js.Promise.resolve ()
+              | Some (args, result) ->
+                  let* value = dispatch t scope id.base_url "thread-api/create-or-open-db" args in
+                  result := value;
+                  Js.Promise.resolve ()
+            in
+            check ();
+            let subscribed, subscribed_resolve, subscribed_reject = pending () in
+            let ctl = control () in
+            t.stop_stream <- ctl.cancel;
+            let observed = ref false in
+            stream ctl id
+              (fun () -> if current () && not !observed then (
+                  observed := true; subscribed_resolve ()))
+              (fun data -> if is_current t scope then (
+                  try deliver t.sink data
+                  with error -> t.handle_loss scope error))
+              (fun error -> if is_current t scope then (
+                  subscribed_reject error;
+                  t.handle_loss scope error));
+            let* () = subscribed in
+            check ();
+            let* confirmed = probe_identity id.base_url in
+            check ();
+            verify_instance id confirmed;
+            let bootstrap =
+              {scope
+              ; invoke = (fun name args -> dispatch t scope id.base_url name args)
+              ; is_current = (fun () -> is_current t scope)
+              }
+            in
+            let* () = hooks.rehydrate bootstrap in
+            check ();
+            attempt.cancel_timer ();
+            publish t Ready;
+            if is_current t scope then (
+              t.attempt <- None;
+              resolve scope);
+            Js.Promise.resolve ()
+          with error -> Js.Promise.reject error
+        in
+        ignore (connecting |> Js.Promise.catch (fun error ->
+            if is_current t scope then fail_attempt t scope error;
+            Js.Promise.resolve ()));
+        promise
+
+and lost t scope error =
+  if is_current t scope then
+    match t.status.phase with
+    | Ready ->
+        ignore (
+          start ~cause:error t scope.repo false None
+          |> Js.Promise.then_ (fun _ -> Js.Promise.resolve ())
+          |> Js.Promise.catch (fun _ -> Js.Promise.resolve ()))
+    | Recovering -> fail_attempt t scope error
+    | Disconnected | Failed _ -> ()
+
+let configure_recovery t ~on_state ~on_request_failure ~rehydrate =
+  match t.status.phase with
+  | Recovering | Ready -> invalid_arg "Cannot replace active daemon recovery hooks"
+  | Disconnected | Failed _ ->
+      t.hooks <- Some {on_state; on_request_failure; rehydrate};
+      on_state t.status
+
+let connect t ~repo =
+  try
+    let repo = canonical_repo repo in
+    match t.status.phase, t.status.scope, t.attempt with
+    | Ready, Some scope, _ when scope.repo = repo -> Js.Promise.resolve scope
+    | Recovering, Some scope, Some attempt when scope.repo = repo -> attempt.promise
+    | _ -> start t repo true None
+  with error -> Js.Promise.reject error
+
+let reconnect_existing t ~repo =
+  try
+    let repo = canonical_repo repo in
+    match t.binding with
+    | Some binding when binding.repo = repo -> start t repo false None
+    | _ -> Js.Promise.reject (Failure "No matching bound daemon to rediscover")
+  with error -> Js.Promise.reject error
+
+let list_graphs () =
+  let* graphs = ipc [Wire.String "getGraphs"] in
+  match graphs with
+  | Wire.Array names | Wire.List names ->
+      Js.Promise.resolve
+        (Wire.Array (List.map (fun name -> Wire.Map [Wire.kw "name", name]) names))
+  | _ -> Js.Promise.reject (Failure "Malformed graph listing")
+
+let invoke t name args =
   match name with
   | "thread-api/init" -> Js.Promise.resolve Wire.Nil
   | "thread-api/list-db" -> list_graphs ()
-  | "thread-api/create-or-open-db" -> (
-      match args with
-      | Wire.String repo :: _ ->
-          let* rt =
-            ipc
-              [ Wire.String "db-worker-runtime"
-              ; Wire.String repo
-              ; Wire.Map [] ]
-          in
-          (match Wire.map_get_string rt "base-url" with
-           | Some base when base <> "" ->
-               if base <> t.base_url then (
-                 (if t.repo <> "" && t.repo <> repo then
-                    ignore
-                      (ipc
-                         [ Wire.String "releaseDbWorkerRuntime"
-                         ; Wire.String t.repo ]));
-                 attach t repo base)
-           | _ ->
-               failwith
-                 ("db-worker-runtime returned no base-url for " ^ repo));
-          let* _ = flush_pending t in
-          post_invoke t.base_url name args
-      | _ -> Js.Promise.reject (Failure "create-or-open-db: bad args"))
+  | "thread-api/create-or-open-db" ->
+      (match args with
+       | Wire.String repo :: _ ->
+           let result = ref Wire.Nil in
+           let* _ = start t (canonical_repo repo) true (Some (args, result)) in
+           Js.Promise.resolve !result
+       | _ -> Js.Promise.reject (Failure "create-or-open-db requires a repo"))
   | _ ->
-      if t.base_url = "" then (
-        Queue.add (name, args) t.pending;
-        Js.Promise.resolve Wire.Nil)
-      else post_invoke t.base_url name args
+      (match t.status.phase, t.status.scope with
+       | Ready, Some scope -> dispatch t scope t.base_url name args
+       | _ ->
+           let promise, _, reject = pending () in
+           let scope =
+             match t.status.scope with
+             | Some scope when is_current t scope -> Some scope
+             | _ -> None
+           in
+           report_failure t scope name Not_sent
+             (Failure "Daemon model is not ready") reject;
+           promise)
 
-let create_transport () : transport =
-  { base_url = ""
-  ; repo = ""
-  ; sse = None
-  ; sink = (fun _ _ -> ())
-  ; pending = Queue.create ()
-  ; dead = Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())
-  }
+let create_transport () =
+  let t =
+    { base_url = ""; repo = ""; sink = (fun _ _ -> ())
+    ; dead = Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())
+    ; epoch = 0; status = {scope = None; phase = Disconnected}
+    ; hooks = None; binding = None; attempt = None
+    ; stop_stream = (fun () -> ())
+    ; calls = Hashtbl.create 16; next_call = 0
+    ; handle_loss = (fun _ _ -> ())
+    }
+  in
+  t.handle_loss <- lost t;
+  t
 
 let is_electron () = true

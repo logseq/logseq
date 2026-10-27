@@ -8,6 +8,10 @@ open Model
    the pre-update action, before the state transition *)
 let effects (action : Action.t) : unit =
   match action with
+  | Action.Graph_prepared (repo, _) ->
+      if !Subs_state.current_repo <> Some repo then (
+        Subs_state.current_repo := Some repo;
+        Subs_state.current_graph_uuid := None)
   | Action.Boot_graph_ready (repo, _) ->
       Subs_state.current_repo := Some repo;
       Subs_state.current_graph_uuid := None;
@@ -90,6 +94,20 @@ let effects (action : Action.t) : unit =
 
 let update (model : t) (action : Action.t) : t =
   match action with
+  | Action.Graph_prepared (repo, config) ->
+      if model.repo = Some repo then { model with graph_config = config }
+      else
+        { model with
+          phase = Booting
+        ; repo = Some repo
+        ; graph_config = config
+        ; route_page = None
+        ; journals = []
+        ; page_missing = false
+        ; page_ref_count = 0
+        ; unlinked_exists = false
+        ; data_gen = model.data_gen + 1
+        }
   | Action.Boot_graph_ready (repo, config) ->
       (* rtc broadcast state belongs to the previous graph's conn; clear it
          so the header indicator only shows the new graph once its conn

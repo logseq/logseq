@@ -142,7 +142,7 @@ let settings_config ~registry ~profile =
       let current=ref {Model.initial with repo=Some "settings-config-fixture";
         graph_config=config false} and requests=ref [] in
       Runtime.read_model:=(fun () -> !current);
-      Runtime.worker:=Some {Worker_client.invoke_fn=(fun name args ->
+      Runtime.worker:=Some {Worker_client.daemon = None; invoke_fn=(fun name args ->
         requests:=(name,args)::!requests;
         Js.Promise.make (fun ~resolve:_ ~reject:_ -> ()));
         on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
@@ -203,7 +203,7 @@ let flashcards_config ~registry ~profile =
     let current=ref {Model.initial with repo=Some "flashcards-fixture";graph_config=config false}
     and popup=ref None in
     Runtime.read_model:=(fun () -> !current);
-    Runtime.worker:=Some {Worker_client.invoke_fn=(fun _ _ ->
+    Runtime.worker:=Some {Worker_client.daemon = None; invoke_fn=(fun _ _ ->
       Js.Promise.make (fun ~resolve:_ ~reject:_ -> ()));
       on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
     let session=S.mount ~registry ~profile ~initial:!current
@@ -491,7 +491,7 @@ let run_views ~registry ~profile ~finish =
   and previous_property_signal = !Properties_dialog.current_sig
   and previous_worker = !Runtime.worker in
   Properties_dialog.current := None;Properties_dialog.current_sig := None;
-  Runtime.worker := Some {Worker_client.invoke_fn=(fun _ _ ->
+  Runtime.worker := Some {Worker_client.daemon = None; invoke_fn=(fun _ _ ->
     Js.Promise.make (fun ~resolve:_ ~reject:_ -> ()));
     on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
   let property_ctx : Properties_value.ctx =
@@ -597,7 +597,7 @@ let run_views ~registry ~profile ~finish =
           Views_popup.stack_st:=previous_stack;done_ ()
       | (column,data,expected,scenario)::rest ->
           Views_popup.stack_st:=None;
-          Runtime.worker:=Some {Worker_client.invoke_fn=(fun name args ->
+          Runtime.worker:=Some {Worker_client.daemon = None; invoke_fn=(fun name args ->
               if name="thread-api/get-view-filter-data" then
                 check "filter value requests include their complete property type"
                   (match args with
@@ -723,7 +723,7 @@ let run_views ~registry ~profile ~finish =
     let previous_worker= !Runtime.worker and previous_model= !Runtime.read_model in
     Runtime.read_model:=(fun () -> {Model.initial with repo=Some "filter-reference-fixture"});
     let requested=ref [] in
-    Runtime.worker:=Some {Worker_client.invoke_fn=(fun method_ args ->
+    Runtime.worker:=Some {Worker_client.daemon = None; invoke_fn=(fun method_ args ->
       let results=if method_="thread-api/get-blocks" then
         match args with
         | [_;Wire.Array requests] ->
@@ -769,7 +769,7 @@ let run_views ~registry ~profile ~finish =
           Views_popup.stack_st:=previous_stack;done_ ()
       | (column,operator,initial,source,many,choices)::rest ->
           Views_popup.stack_st:=None;
-          Runtime.worker:=Some {Worker_client.invoke_fn=(fun method_ args ->
+          Runtime.worker:=Some {Worker_client.daemon = None; invoke_fn=(fun method_ args ->
             if method_="thread-api/get-view-filter-data" then
               check "reopening a filter requests values for its current operator"
                 (match args with [_;opts] -> Wire.get opts "operator"=Some (Wire.Keyword operator) | _ -> false);
@@ -880,7 +880,7 @@ let run_views ~registry ~profile ~finish =
       | (before,operand,after,normalized)::rest ->
           Views_popup.stack_st:=None;
           let requests=ref [] in
-          Runtime.worker:=Some {Worker_client.invoke_fn=(fun method_ args ->
+          Runtime.worker:=Some {Worker_client.daemon = None; invoke_fn=(fun method_ args ->
             let response=if method_="thread-api/get-view-filter-data" then begin
               let opts=List.nth args 1 in
               requests:=opts::!requests;
@@ -961,7 +961,7 @@ let run_views ~registry ~profile ~finish =
     and previous_stack= !Views_popup.stack_st in
     Views_popup.stack_st:=None;
     Runtime.read_model:=(fun () -> {Model.initial with repo=Some "page-name-filter-fixture"});
-    Runtime.worker:=Some {Worker_client.invoke_fn=(fun method_ _ -> Js.Promise.resolve
+    Runtime.worker:=Some {Worker_client.daemon = None; invoke_fn=(fun method_ _ -> Js.Promise.resolve
       (if method_="thread-api/get-view-filter-data" then Wire.Map
         [Wire.kw "value-source",Wire.Keyword "property-values";Wire.kw "values",Wire.Array []]
        else Wire.Nil));on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
@@ -989,7 +989,7 @@ let run_views ~registry ~profile ~finish =
   in
   let filter_input_check () =
     let previous_worker= !Runtime.worker and previous_model= !Runtime.read_model in
-    Runtime.worker:=Some {Worker_client.invoke_fn=(fun _ _ -> Js.Promise.resolve Wire.Nil);
+    Runtime.worker:=Some {Worker_client.daemon = None; invoke_fn=(fun _ _ -> Js.Promise.resolve Wire.Nil);
       on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
     Runtime.read_model:=(fun () -> Model.initial);
     List.iter (fun (operator,initial) ->
@@ -1058,7 +1058,7 @@ let run_views ~registry ~profile ~finish =
   in
   let filter_scope_check () =
     let previous_worker= !Runtime.worker and previous_model= !Runtime.read_model in
-    Runtime.worker:=Some {Worker_client.invoke_fn=(fun _ _ -> Js.Promise.resolve Wire.Nil);
+    Runtime.worker:=Some {Worker_client.daemon = None; invoke_fn=(fun _ _ -> Js.Promise.resolve Wire.Nil);
       on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
     Runtime.read_model:=(fun () -> Model.initial);
     List.iter (fun query -> List.iter (fun operator ->
@@ -1100,7 +1100,7 @@ let run_views ~registry ~profile ~finish =
     let previous_worker = !Runtime.worker and previous_published = !Sdk_config.published_config in
     let requests=ref [] in
     Sdk_config.published_config:=None;
-    Runtime.worker:=Some {Worker_client.invoke_fn=(fun method_ args ->
+    Runtime.worker:=Some {Worker_client.daemon = None; invoke_fn=(fun method_ args ->
       requests:=(method_,args)::!requests;
       Js.Promise.resolve (match method_ with
         | "thread-api/get-file-content" -> Wire.String "{:start-of-week 0}"
@@ -1129,7 +1129,7 @@ let run_views ~registry ~profile ~finish =
           and complete=ref (fun () -> ()) in
           Runtime.read_model:=(fun () -> !state);
           Runtime.app_send:=(fun action -> state:=Update.update !state action;true);
-          Runtime.worker:=Some {Worker_client.invoke_fn=(fun name _ ->
+          Runtime.worker:=Some {Worker_client.daemon = None; invoke_fn=(fun name _ ->
             if name<>"thread-api/transact" then failwith ("Unexpected config save: " ^ name);
             Js.Promise.make (fun ~resolve ~reject:_ -> complete:=(fun () -> resolve Wire.Nil [@u])));
             on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
@@ -1153,7 +1153,7 @@ let run_views ~registry ~profile ~finish =
     let previous_worker = !Runtime.worker and previous_model = !Runtime.read_model
     and previous_stack = !Views_popup.stack_st in
     Runtime.read_model := (fun () -> {Model.initial with repo=Some "custom-date-fixture"});
-    Runtime.worker := Some {Worker_client.invoke_fn=(fun name _ ->
+    Runtime.worker := Some {Worker_client.daemon = None; invoke_fn=(fun name _ ->
       Js.Promise.resolve (if name="thread-api/get-view-filter-data" then
         Wire.Map [Wire.kw "value-source",Wire.Keyword "timestamp"] else Wire.Nil));
       on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
@@ -1258,7 +1258,7 @@ let run_views ~registry ~profile ~finish =
             let callback = ref (fun () -> ()) in
             let promise = Js.Promise.make (fun ~resolve ~reject:_ -> callback := (fun () -> let value=() in resolve value [@u])) in
             promise,(fun () -> !callback ()) in
-          Runtime.worker := Some {Worker_client.invoke_fn=(fun method_ args ->
+          Runtime.worker := Some {Worker_client.daemon = None; invoke_fn=(fun method_ args ->
             requests := (method_,args)::!requests;notify ();
             Js.Promise.make (fun ~resolve:_ ~reject:_ -> ()));
             on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
@@ -1491,7 +1491,7 @@ let run_views ~registry ~profile ~finish =
   check "page menu restores the target's favorite label with the same row identity"
     (label ()=Some (I18n.t "page/unfavorite"));
   let queried = ref [] in
-  Runtime.worker:=Some {Worker_client.invoke_fn=(fun name args ->
+  Runtime.worker:=Some {Worker_client.daemon = None; invoke_fn=(fun name args ->
       queried:=(name,args)::!queried;
       Js.Promise.make (fun ~resolve:_ ~reject:_ -> ()));
     on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};

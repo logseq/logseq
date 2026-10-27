@@ -2,6 +2,8 @@
    frontend.state atoms: the worker client and the LUI app handle. *)
 
 let worker : Worker_client.t option ref = ref None
+type worker_auth_change = Auth_updated | Logout
+let worker_auth_changed : (worker_auth_change -> bool) ref = ref (fun _ -> false)
 let app_send : (Action.t -> bool) ref = ref (fun _ -> false)
 let app_flush : (unit -> unit) ref = ref (fun () -> ())
 

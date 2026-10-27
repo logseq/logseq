@@ -57,7 +57,7 @@ let set_sync_config () =
 
 (* cljs sync-app-state-payload: worker needs git/current-repo plus auth/*
    tokens to open the websocket on our behalf. *)
-let sync_app_state repo =
+let sync_app_state ?(invoke = Runtime.invoke) repo =
   (* cljs dissocs :git/current-repo when nil — keeps the worker's
      'sync-app-state: :git/current-repo is nil' error path clean *)
   let repo_pair =
@@ -65,8 +65,8 @@ let sync_app_state repo =
     | Some r -> [ (Wire.Keyword "git/current-repo", Wire.String r) ]
     | None -> []
   in
-  Runtime.invoke1 "thread-api/sync-app-state"
-    (Wire.Map
+  invoke "thread-api/sync-app-state"
+    [ Wire.Map
        (repo_pair
        @ [ ( Wire.Keyword "auth/id-token"
            , match Ui_services.storage_get "id-token" with
@@ -83,24 +83,44 @@ let sync_app_state repo =
          ; (Wire.Keyword "auth/oauth-client-id", Wire.String client_id)
          ; ( Wire.Keyword "auth/oauth-token-url"
            , Wire.String oauth_token_url )
-           ]))
+           ]) ]
 
 (* cljs <rtc-start! => :rtc/sync-auth-state + invoke :thread-api/db-sync-start *)
 let start repo =
+  let worker = !Runtime.worker in
+  let scope =
+    match worker with
+    | Some worker when Worker_client.supports_recovery worker ->
+        (Worker_client.lifecycle worker).scope
+    | _ -> None
+  in
+  let current () =
+    let model = Runtime.model () in
+    model.Model.phase = Model.Ready && model.Model.repo = Some repo
+    && Ui_services.storage_get "id-token" <> None
+    && (match worker, !Runtime.worker with
+        | Some expected, Some active when expected == active ->
+            if Worker_client.supports_recovery active then
+              let state = Worker_client.lifecycle active in
+              state.phase = Worker_client.Ready && state.scope = scope
+              && (match scope with Some scope -> scope.repo = repo | None -> false)
+            else true
+        | _ -> false)
+  in
   (* db-sync-start fails missing-field on list-remote-graphs without an
      auth token — emit! gates on login too, so do the same here for the
      direct callers that bypass it *)
-  if Ui_services.storage_get "id-token" <> None then
+  if current () then
     (* cljs p/let awaits sync-auth-state + config before db-sync-start:
        on the daemon transport each invoke is its own POST, so an
        un-awaited pair can be dispatched to the worker out of order and
        db-sync-start runs list-remote-graphs before the auth merge *)
     ignore
       ((let* _ = sync_app_state (Some repo) in
+        if not (current ()) then Js.Promise.resolve () else
         let* _ = set_sync_config () in
-        let* w =
-          Runtime.invoke1 "thread-api/db-sync-start" (Wire.String repo)
-        in
+        if not (current ()) then Js.Promise.resolve () else
+        let* w = Runtime.invoke1 "thread-api/db-sync-start" (Wire.String repo) in
         (* worker failures resolve as error transits — toast the known
            ones (wrong e2ee password, exceed limits) *)
         Rtc_error.report_outcome "db-sync-start" w;
@@ -110,12 +130,31 @@ let start repo =
               Js.Promise.resolve ()))
 
 (* cljs <rtc-stop! => invoke :thread-api/db-sync-stop (no args) *)
+let stop_async ?(invoke = Runtime.invoke) () =
+  let* result = invoke "thread-api/db-sync-stop" [] in
+  if Rtc_error.is_error result then
+    Js.Promise.reject (Failure "Database sync stop failed")
+  else Js.Promise.resolve ()
+
+let clear_auth_async ?(invoke = Runtime.invoke) () =
+  let* result =
+    invoke "thread-api/sync-app-state"
+      [ Wire.Map
+          [ (Wire.kw "auth/id-token", Wire.String "")
+          ; (Wire.kw "auth/access-token", Wire.String "")
+          ; (Wire.kw "auth/refresh-token", Wire.String "")
+          ] ]
+  in
+  if Rtc_error.is_error result then
+    Js.Promise.reject (Failure "Database sync auth clear failed")
+  else Js.Promise.resolve ()
+
 let stop () =
   ignore
-    (Runtime.invoke "thread-api/db-sync-stop" []
+    (stop_async ()
      |> Js.Promise.catch (fun e ->
             Ui_services.log_error ("db-sync-stop failed", e);
-            Js.Promise.resolve Wire.Nil))
+            Js.Promise.resolve ()))
 
 (* cljs ensure-e2ee-rsa-key-for-cloud! *)
 let ensure_rsa_keys () =

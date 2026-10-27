@@ -367,25 +367,26 @@ let merge_collapsed add rem =
    fetched trees; [ancestors] is the chain of linked db ids guarding
    self-embed loops, [collapsed] accumulates :block/collapsed? flags from
    the embed wires (Decode drops the flag). *)
-let rec fill_embed_children repo ancestors collapsed
+let rec fill_embed_children ?(invoke = Runtime.invoke) ?(current = fun () -> true) repo ancestors collapsed
     (blocks : Model.block list) : Model.block list Js.Promise.t =
   (* siblings fetch their children/embed trees in parallel —
      Promise.all preserves list order; the ancestors set still guards
      self-embed loops *)
   let item_p (b : Model.block) =
     let children_p =
-      fill_embed_children repo ancestors collapsed
+      fill_embed_children ~invoke ~current repo ancestors collapsed
         b.Model.block_children
     in
     let embed_p =
       match b.Model.block_link with
       | Some link_id when not (List.mem link_id ancestors) ->
           (let* w =
-            Runtime.invoke3 "thread-api/get-page-blocks-tree"
-              (Wire.String repo) (Wire.Int link_id) Wire.Nil
+            invoke "thread-api/get-page-blocks-tree"
+              [ Wire.String repo; Wire.Int link_id; Wire.Nil ]
           in
+          if not (current ()) then failwith "Embed load was superseded";
           collapsed := collect_collapsed !collapsed w;
-          fill_embed_children repo (link_id :: ancestors)
+          fill_embed_children ~invoke ~current repo (link_id :: ancestors)
             collapsed (Decode.blocks_of_wire w))
           |> Js.Promise.catch (fun _ -> Js.Promise.resolve [])
       | _ -> Js.Promise.resolve []
@@ -430,10 +431,10 @@ let tag_hidden blk =
   | _ -> false
 
 (* (db-id, (title, ident, hidden, uuid, icon)) per tag entity *)
-let tag_titles repo ids : (int * (string * string * bool * string * Node_icon.t option)) list Js.Promise.t =
+let tag_titles ?(invoke = Runtime.invoke) repo ids : (int * (string * string * bool * string * Node_icon.t option)) list Js.Promise.t =
   let* w =
-    Runtime.invoke2 "thread-api/get-blocks" (Wire.String repo)
-      (Wire.Array
+    invoke "thread-api/get-blocks" [ Wire.String repo;
+      Wire.Array
          (List.map
             (fun i ->
               Wire.Map
@@ -447,7 +448,7 @@ let tag_titles repo ids : (int * (string * string * bool * string * Node_icon.t 
                             ; Wire.Keyword
                                 "logseq.property.class/hide-from-node" ])
                       ]) ])
-            ids))
+            ids) ]
   in
   Js.Promise.resolve
     (List.filter_map
@@ -476,7 +477,7 @@ let tag_titles repo ids : (int * (string * string * bool * string * Node_icon.t 
          | _ -> None)
        (Wire.elems w))
 
-let resolve_block_tags (blocks : Model.block list) : Model.block list Js.Promise.t =
+let resolve_block_tags ?(invoke = Runtime.invoke) (blocks : Model.block list) : Model.block list Js.Promise.t =
   let ids =
     List.sort_uniq compare (List.fold_left collect_tag_ids [] blocks)
   in
@@ -486,7 +487,7 @@ let resolve_block_tags (blocks : Model.block list) : Model.block list Js.Promise
       match (Runtime.model ()).Model.repo with
       | None -> Js.Promise.resolve blocks
       | Some repo ->
-          let* titles = tag_titles repo ids in
+          let* titles = tag_titles ~invoke repo ids in
           let rec fill (b : Model.block) =
             let resolved =
               List.filter_map
@@ -529,10 +530,10 @@ let resolve_block_tags (blocks : Model.block list) : Model.block list Js.Promise
           Js.Promise.resolve (List.map fill blocks))
 
 (* the page entity's own block/tags -> resolved titles (page-title chips) *)
-let resolve_page_tags repo (page : Model.page) : Model.page Js.Promise.t =
+let resolve_page_tags ?(invoke = Runtime.invoke) repo (page : Model.page) : Model.page Js.Promise.t =
   let* w =
-    Runtime.invoke2 "thread-api/get-case-page" (Wire.String repo)
-      (Wire.String page.Model.page_title)
+    invoke "thread-api/get-case-page"
+      [ Wire.String repo; Wire.String page.Model.page_title ]
   in
   (* get-case-page encodes multi-ref values as a plain set of
             entity ids (unlike the {:db/id} stubs in entity maps) *)
@@ -550,7 +551,7 @@ let resolve_page_tags repo (page : Model.page) : Model.page Js.Promise.t =
   in
   let* titles = match ids with
     | [] -> Js.Promise.resolve []
-    | _ -> tag_titles repo ids in
+    | _ -> tag_titles ~invoke repo ids in
   (* the built-in Page class is implicit on every page —
             cljs never renders it as a chip *)
   let keep (i, (_, ident, _, _, _)) =
@@ -639,7 +640,7 @@ let title_ref_tokens (title : string) : string list =
 (* one get-blocks batch resolving every [[ref]] target on the page —
    primes the pull caches so anchors mount on hits instead of paying a
    thread-api/pull each (the N+1 pull storm the nav profile shows) *)
-let prefetch_anchor_refs repo (blocks : Model.block list) :
+let prefetch_anchor_refs ?(invoke = Runtime.invoke) ?(current = fun () -> true) repo (blocks : Model.block list) :
     unit Js.Promise.t =
   let rec collect acc (b : Model.block) =
     List.fold_left collect
@@ -683,9 +684,9 @@ let prefetch_anchor_refs repo (blocks : Model.block list) :
   | [] -> Js.Promise.resolve ()
   | _ ->
       (let* w =
-         Runtime.invoke2 "thread-api/get-blocks" (Wire.String repo)
-           (Wire.Array reqs)
+         invoke "thread-api/get-blocks" [ Wire.String repo; Wire.Array reqs ]
        in
+       if not (current ()) then failwith "Anchor load was superseded";
        Js.Promise.resolve (Render_inline.prime_pull_caches repo w))
       |> Js.Promise.catch (fun _ -> Js.Promise.resolve ())
 
@@ -693,28 +694,31 @@ let prefetch_anchor_refs repo (blocks : Model.block list) :
    fill → collapse application → library view filter → tag-title resolution.
    ~plain skips the collapse/embed/view shaping — sidebar items only need
    decoded + tag-resolved blocks and must not touch editor collapse state. *)
-let blocks_of_tree_wire ?(plain = false) repo (p : Model.page) blocks_w =
-  if plain then resolve_block_tags (Decode.blocks_of_wire blocks_w)
+let blocks_of_tree_wire ?(plain = false) ?(invoke = Runtime.invoke)
+    ?(current = fun () -> true) repo (p : Model.page) blocks_w =
+  if plain then resolve_block_tags ~invoke (Decode.blocks_of_wire blocks_w)
   else
     let collapsed = ref S.String_set.empty in
     collapsed := collect_collapsed !collapsed blocks_w;
     let decoded = Decode.blocks_of_wire blocks_w in
-    let* () = prefetch_anchor_refs repo decoded in
+    let* () = prefetch_anchor_refs ~invoke ~current repo decoded in
     let* blocks =
-      fill_embed_children repo (ancestors_of p) collapsed decoded
+      fill_embed_children ~invoke ~current repo (ancestors_of p) collapsed decoded
     in
+    if not (current ()) then failwith "Block tree load was superseded";
     set_collapsed !collapsed;
-    resolve_block_tags
+    resolve_block_tags ~invoke
       (Decode.view_blocks ~library:p.Model.page_is_library blocks)
 
-let fetch_page_blocks ?(plain = false) repo (p : Model.page) =
+let fetch_page_blocks ?(plain = false) ?(invoke = Runtime.invoke)
+    ?(current = fun () -> true) repo (p : Model.page) =
   let* v =
-    Runtime.invoke3 "thread-api/get-page-blocks-tree" (Wire.String repo)
-      (Wire.page_ref
-         (Option.value p.Model.page_uuid ~default:p.Model.page_title))
-      Wire.Nil
+    invoke "thread-api/get-page-blocks-tree"
+      [ Wire.String repo
+      ; Wire.page_ref (Option.value p.Model.page_uuid ~default:p.Model.page_title)
+      ; Wire.Nil ]
   in
-  let* blocks = blocks_of_tree_wire ~plain repo p v in
+  let* blocks = blocks_of_tree_wire ~plain ~invoke ~current repo p v in
   Js.Promise.resolve (Model.page_outliner_blocks p blocks)
 
 (* block-zoom breadcrumb chain: ancestor titles must be refetched on
@@ -1520,6 +1524,7 @@ let apply_and_refresh_result ?opts ops =
    Returns the promise so callers that move editing afterwards (paste)
    sequence after the model write *)
 let resync_open_editor ?(force = false) () : unit Js.Promise.t =
+  let generation = !Runtime.load_gen in
   match S.editing () with
   | None -> Js.Promise.resolve ()
   | Some e -> (
@@ -1539,11 +1544,13 @@ let resync_open_editor ?(force = false) () : unit Js.Promise.t =
                     opened with and the stored title moved since. undo/redo
                     force it — the user asked for the revert even when an
                     unsaved edit is in flight *)
-          if (force || (e.S.buffer = e.S.base)) && e.S.buffer <> title
+          if generation = !Runtime.load_gen
+             && (force || (e.S.buffer = e.S.base)) && e.S.buffer <> title
           then
             S.set (fun st ->
                 match st.S.editing with
-                | Some e' when e'.uuid = e.uuid ->
+                | Some e' when e'.uuid = e.uuid &&
+                    (force || (e'.S.buffer = e'.S.base && e'.S.buffer = e.S.buffer)) ->
                     { st with
                    S.editing =
                      Some
@@ -1552,6 +1559,8 @@ let resync_open_editor ?(force = false) () : unit Js.Promise.t =
                          with S.base = title }
                     }
                 | _ -> st);
+          Js.Promise.resolve ()
+      | None when not force && e.S.buffer <> e.S.base ->
           Js.Promise.resolve ()
       | None ->
           S.set (fun st -> { st with S.editing = None });
