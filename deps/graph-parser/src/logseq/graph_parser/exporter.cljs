@@ -911,7 +911,9 @@
   (let [m
         (->> props
              (mapcat (fn [[prop prop-value]]
-                       (if (#{:file :file-path :hl-stamp} prop)
+                       ;; Templates are blocks, so a template property that is left on a page has no DB equivalent
+                       (if (or (#{:file :file-path :hl-stamp} prop)
+                               (contains? template-file-property-names prop))
                          (do (swap! ignored-properties
                                     conj
                                     (ignored-built-in-property-value prop prop-value block))

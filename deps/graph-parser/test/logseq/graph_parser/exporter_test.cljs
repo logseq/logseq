@@ -483,6 +483,16 @@
     (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
         "Imported graph validates")))
 
+(deftest-async import-page-template-property
+  (p/let [file (write-temp-graph-file "pages/t.md" "template:: tt\n\n- first block\n")
+          conn (db-test/create-conn)
+          _ (db-pipeline/add-listener conn)
+          _ (import-files-to-db [file] conn {})]
+    (is (some? (db-test/find-block-by-content @conn #"first block"))
+        "A page with a template property is imported")
+    (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+        "Imported graph validates")))
+
 (deftest-async import-tag-and-property-of-same-name-when-the-page-has-a-file-convert-all-tags
   ;; "scheduled" is the name of a built-in property, "topic" isn't
   (p/all
