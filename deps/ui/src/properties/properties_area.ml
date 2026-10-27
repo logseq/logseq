@@ -54,13 +54,14 @@ let property_icon row =
   in
   match name with
   | Some n ->
-      box ~key:"pk-i" ~style_class:"property-icon" ~opacity:0.5
-        ~data_attrs:[ ("style", "display:flex;align-items:center;\
-          margin-right:4px") ]
+      Lui_elements.row ~key:"pk-i" ~cross:`center ~margin_right:4
+        ~style_class:"property-icon" ~opacity:0.5
         [ Icons.icon ~size:15. n ]
   | None ->
-      box ~key:"pk-b" ~style_class:"bullet-container"
-        [ box ~style_class:"bullet" [] ]
+      Lui_elements.row ~key:"pk-b" ~width:18 ~height:24 ~main:`center ~cross:`center
+        ~style_class:"bullet-container"
+        [ box ~style_class:"bullet" ~width:5 ~height:5 ~corner_radius:3
+            ~background:"var(--ls-secondary-text-color)" [] ]
 
 (* the key (name + bullet) opens the property menu — the dropdown_menu
    anchors to the enclosing stack. cljs property-key-cp skips the
@@ -73,21 +74,14 @@ let key_cell (ctx : V.ctx) ~owner_is_tag ~owner_title ?(icon = true)
   else
   let sched = context.Lui_ui.ui_scheduler in
   let menu_open = Signal.state sched false in
-  (Lui_elements.row ~gap:4 ~cross:`center ~min_height:28
+  (Lui_elements.row ~gap:4 ~cross:`center ~min_height:28 ~min_width:0 ~grow:1.
      ~style_class:"property-key-inner"
-     ~data_attrs:[ ("style", "position:relative;width:100%;min-width:0") ]
      [ (if icon then property_icon row else Logseq_el.nothing)
      ; Ui_components.button ~variant:`ghost ~size:`sm ~text_alignment:`start ~grow:1.0
          ~min_width:0
          ~style_class:"property-k jtrigger"
          ~foreground:"var(--ls-primary-text-color)"
-         ~data_attrs:
-           [ ( "style"
-             , "height:auto;min-height:0;padding:0;line-height:20px;\
-                user-select:none;width:100%;\
-                justify-content:flex-start;overflow:hidden;\
-                text-overflow:ellipsis;white-space:nowrap" )
-           ]
+         ~padding:0 ~min_height:0
          ~label:(D.row_title row)
          ~text:(D.row_title row)
          ~on_press:(fun _ -> Runtime.signal_set menu_open true)
@@ -122,16 +116,15 @@ let value_cell ~(hover : bool Signal.state option) ctx row : t =
     ~grow:1.0 ~main:`start ~min_width:0 ~min_height:28
     ~style_class:"ls-block property-value-container property-value-panel"
     ~transition:Ui_components.block_transition
-    ~data_attrs:[ ("style", "position:relative;flex-shrink:1;\
-      padding-top:0;padding-bottom:0;container-type:normal") ]
+    ~padding_vertical:0
     ((if show_panel_bullet row || entity_value then
-        [ box ~key:"vpb" ~style_class:"property-panel-bullet"
+        [ Lui_elements.row ~key:"vpb" ~cross:`center ~margin_left:7 ~margin_right:(-7)
+            ~style_class:"property-panel-bullet"
             ~min_height:24 ~opacity:0.6
-            ~data_attrs:[ ("style", "display:inline-flex;\
-              align-items:center;margin-left:7px;margin-right:-7px") ]
-            [ box ~style_class:"bullet-container"
-                ~data_attrs:[ ("style", "position:relative;left:0;top:0") ]
-                [ box ~style_class:"bullet" [] ]
+            [ Lui_elements.row ~width:18 ~height:24 ~main:`center ~cross:`center
+                ~style_class:"bullet-container"
+                [ box ~style_class:"bullet" ~width:5 ~height:5 ~corner_radius:3
+                    ~background:"var(--ls-secondary-text-color)" [] ]
             ]
         ]
       else [])
@@ -144,15 +137,14 @@ let panel_row (ctx : V.ctx) ~owner_is_tag ~owner_title row : t =
      the whole property-pair, so the hover signal lives at row level
      and value cells read it through [view ?hover] *)
   let hover = Signal.state sched false in
-  (Lui_elements.row ~gap:12 ~cross:`start ~grow:1.0
+  (Lui_elements.row ~gap:12 ~cross:`start ~grow:1.0 ~min_width:0
     ~style_class:
       ("property-pair property-panel-row"
       ^ (if D.value_empty_p (D.row_value row) then
            " property-panel-row-empty"
          else ""))
-    ~data_attrs:
-      [ ("data-property-type", D.row_type row)
-      ; ("style", "width:100%;padding-right:0.75rem;margin-left:0") ]
+    ~padding_horizontal:0
+    ~data_attrs:[ ("data-property-type", D.row_type row) ]
     ~on_pointer_enter:(fun _ ->
       Signal.set hover true;
       Runtime.flush ())
@@ -160,7 +152,7 @@ let panel_row (ctx : V.ctx) ~owner_is_tag ~owner_title row : t =
       if Runtime.signal_get hover then (
         Signal.set hover false;
         Runtime.flush ()))
-    [ column ~min_width:150 ~max_width:260 ~cross:`stretch ~gap:0
+    [ column ~width:150 ~min_width:0 ~max_width:260 ~cross:`stretch ~gap:0
         ~main:`center ~min_height:28
         ~foreground:"var(--ls-primary-text-color)"
         ~style_class:"property-key-panel"
@@ -177,8 +169,8 @@ let toggle_row () : t =
       (if !S.show_hidden then "property/collapse-hidden-properties"
        else "property/show-hidden-properties")
   in
-  row ~gap:0 ~style_class:"property-pair property-panel-row hidden-properties-toggle-row"
-    ~data_attrs:[ ("style", "padding-right:0.75rem") ]
+  row ~gap:0 ~padding_horizontal:0 ~min_width:0
+    ~style_class:"property-pair property-panel-row hidden-properties-toggle-row"
     [ column ~min_width:80 ~max_width:200 ~style_class:"property-key-panel"
         ~main:`center ~min_height:28
         [ Ui_components.button ~variant:`ghost ~size:`sm ~text_alignment:`start
@@ -186,12 +178,7 @@ let toggle_row () : t =
                          else "chevron-down"))
             ~style_class:"property-key-inner hidden-properties-toggle-key"
             ~min_height:28 ~foreground:"var(--ls-primary-text-color)"
-            ~data_attrs:
-              [ ( "style"
-                , "width:100%;min-width:0;padding:0;border:0;\
-                   background:transparent;text-align:left;\
-                   cursor:pointer" )
-              ]
+            ~grow:1. ~min_width:0 ~padding:0
             ~label ~text:label
             ~on_press:(fun _ ->
               S.toggle_hidden ();
@@ -259,8 +246,7 @@ let panel_children (ctx : V.ctx) ~owner_is_tag ~owner_title ~can_toggle
        @ (if can_toggle && has_hidden then [ toggle_row () ] else []))
 
 let panel_view ctx ~owner_is_tag ~owner_title ~can_toggle d : t =
-  column ~gap:0 ~corner_radius:6 ~style_class:"properties-panel"
-    ~data_attrs:[ ("style", "overflow:hidden") ]
+  column ~gap:0 ~min_width:0 ~corner_radius:6 ~style_class:"properties-panel"
     (panel_children ctx ~owner_is_tag ~owner_title ~can_toggle d)
 
 (* ---------- pills (block-below) ---------- *)
@@ -277,12 +263,8 @@ let pill_view (ctx : V.ctx) ~owner_is_tag ~owner_title prow : t =
         ]
     ; Ui_components.with_props
         [ Ui_components.Prop.font_size "0.875rem" ]
-        (Lui_elements.row ~gap:4 ~cross:`center ~min_height:20
+        (Lui_elements.row ~gap:4 ~cross:`center ~min_height:20 ~min_width:0
            ~style_class:"bottom-property-content property-value-container"
-           ~data_attrs:
-             [ ( "style"
-               , "position:relative;min-width:0;overflow:hidden;\
-                  flex-shrink:0;white-space:nowrap" ) ]
            [ V.view ~hover:None ctx prow ])
     ]
 
@@ -291,17 +273,11 @@ let pills_view ctx ~owner_is_tag ~owner_title below_rows : t =
     [ Ui_components.Prop.font_size "0.875rem" ]
     (column ~gap:4 ~grow:1.0
        ~min_width:0 ~style_class:"positioned-properties block-below"
-       ~data_attrs:[ ("style", "overflow-x:hidden;width:100%") ]
     [ row ~gap:6 ~cross:`center ~grow:1.0
         ~min_width:0 ~style_class:"bottom-properties-row"
-        ~data_attrs:[ ("style", "padding:0.25rem 0;max-height:2rem;\
-          overflow-y:hidden;width:100%") ]
-        [ row ~gap:8 ~cross:`center ~grow:1.0
+        ~padding_vertical:4
+        [ row ~gap:8 ~cross:`center ~grow:1.0 ~flex_wrap:`wrap
             ~min_width:0 ~style_class:"bottom-properties-pills-strip"
-            ~data_attrs:
-              [ ( "style"
-                , "flex:1 1 0;width:0;max-width:100%;flex-wrap:nowrap;\
-                   overflow-x:hidden;flex-basis:0" ) ]
             (List.map
                (pill_view ctx ~owner_is_tag ~owner_title)
                below_rows)

@@ -12,6 +12,7 @@ open Lui_elements
 
 type item =
   { it_title : string
+  ; it_key : string option
   ; it_tip : string (* ident / sublabel *)
   ; it_icon : string (* tabler icon before the title, "" = none *)
   ; it_new : bool (* renders via the "New option:" affordance *)
@@ -20,8 +21,8 @@ type item =
   ; on_choose : unit -> unit
   }
 
-let item ?(tip = "") ?(icon = "") ?(strong = false) ?(checked = false) title on_choose =
-  { it_title = title; it_tip = tip; it_icon = icon; it_new = false
+let item ?key ?(tip = "") ?(icon = "") ?(strong = false) ?(checked = false) title on_choose =
+  { it_title = title; it_key = key; it_tip = tip; it_icon = icon; it_new = false
   ; it_strong = strong; it_checked = checked; on_choose
   }
 
@@ -51,7 +52,7 @@ let visible_items ~items ~filter ~searched ~new_option ~new_case_sensitive =
   match new_option with
   | Some on_new when query <> "" && not exact ->
       let fresh =
-        { it_title = query; it_tip = ""; it_icon = ""; it_strong = false
+        { it_title = query; it_key = Some "__new__"; it_tip = ""; it_icon = ""; it_strong = false
         ; it_checked = false; it_new = true; on_choose = (fun () -> on_new query)
         }
       in
@@ -105,13 +106,21 @@ let view ~placeholder ?(compact = false) ?(show_empty_result = true) ?(new_case_
           scroll_token = s.scroll_token + 1 }
     end
   in
-  let item_key it = if it.it_new then "__new__" else it.it_title in
   let list_view =
     reactive ~equal:(fun a b -> a.q = b.q && a.searched == b.searched)
       (fun s ->
          let vis =
            visible_items ~items ~filter:s.q ~searched:s.searched
              ~new_option ~new_case_sensitive
+         in
+         let titles = Array.of_list (List.map (fun it -> Option.value it.it_key ~default:it.it_title) vis) in
+         let counts = Hashtbl.create (Array.length titles) in
+         Array.iter (fun title -> Hashtbl.replace counts title
+           (1 + Option.value (Hashtbl.find_opt counts title) ~default:0)) titles;
+         let item_key index =
+           let title = titles.(index) in
+           if Hashtbl.find counts title = 1 then title
+           else title ^ "-option-" ^ string_of_int index
          in
          (* Bound the results viewport while retaining every option in
             its scrollable content. Empty results collapse the list;
@@ -126,7 +135,7 @@ let view ~placeholder ?(compact = false) ?(show_empty_result = true) ?(new_case_
             @ [ list
                ~scroll_target:(reactive (fun state ->
                  match List.nth_opt vis state.active with
-                 | Some item -> item_key item
+                 | Some _ -> item_key state.active
                  | None -> "") (Signal.value st))
                ~scroll_token:(reactive (fun state -> state.scroll_token) (Signal.value st))
                ~scroll_anchor:`nearest
@@ -138,7 +147,7 @@ let view ~placeholder ?(compact = false) ?(show_empty_result = true) ?(new_case_
                  Ui_components.with_props
                    [Ui_components.Prop.hover_background highlight_background;
                     Ui_components.Prop.hover_foreground "var(--ls-secondary-text-color, hsl(var(--popover-foreground)))"]
-                   (list_item ~key:(item_key it)
+                   (list_item ~key:(item_key index)
                      ?height:(if compact then Some 32 else None)
                      ?min_height:(if compact then Some 32 else None)
                      ?padding_horizontal:(if compact then Some 8 else None)
@@ -156,7 +165,7 @@ let view ~placeholder ?(compact = false) ?(show_empty_result = true) ?(new_case_
                          ((if it.it_icon = "" then [] else
                              [ Ui_components.with_props [Ui_components.Prop.margin_right 4]
                                  (Icons.icon ~size:(if it.it_icon = "x" then 14. else 18.) it.it_icon) ])
-                          @ [ text ~value:title ~grow:1.0 [] ]
+                          @ [ text ~value:title ~grow:1.0 ~min_width:0 ~white_space:"normal" [] ]
                           @ if it.it_checked then [ icon ~name:(`app "check") ~point_size:14 [] ] else []) ] else [])))
               vis) ]
             @ if compact then [box ~height:4 []] else []))

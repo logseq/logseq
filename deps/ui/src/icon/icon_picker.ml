@@ -177,6 +177,8 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
   (* async emoji search token — a stale fill must not clobber a newer
      query's results *)
   let gen = ref 0 in
+  let alive = ref true in
+  Signal.on_dispose context.Lui_ui.ui_scope (fun () -> alive := false; incr gen);
   let get () = Runtime.signal_get st in
   let update f = Runtime.signal_set st (f (get ())) in
 
@@ -294,8 +296,7 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
      unwrapped row shrink-compresses every cell to a few px *)
   let pane_section label (items : t list) : t =
     Ui_components.with_props [ Ui_components.Prop.overflow `auto ]
-      (column ~grow:1.
-         ~data_attrs:[ ("style", "padding-left: 0.5rem") ]
+      (column ~grow:1. ~padding_horizontal:8 ~min_width:0
          (box ~style_class:"hd"
             [ text ~as_:`Strong ~style_class:"ls-ep-section-title" ~value:label
                 ~font_size:"0.75rem" ~font_weight:500
@@ -334,7 +335,7 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
       update (fun s -> { s with emoji_results = [] })
     else
       Emoji_mart.search v (fun entries ->
-          if g = !gen then
+          if !alive && g = !gen then
             update (fun s -> { s with emoji_results = entries }))
   in
 
@@ -368,7 +369,7 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
       | Tab_all ->
           let used = used_item_btns () in
           column ~gap:4 ~grow:1.
-            [ column ~data_attrs:[ ("style", "padding-bottom: 2.5rem") ]
+            [ Ui_components.with_props [Ui_components.Prop.padding_bottom 40] (column
                 ((if used = [] then []
                   else
                     [ pane_section
@@ -384,7 +385,7 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
                          [ string_of_int (List.length (icon_items ())) ])
                       (List.map
                          (fun (d, k) -> item_btn (Tabler_item (d, k)))
-                         (take 48 (icon_items ()))) ]) ]
+                         (take 48 (icon_items ()))) ])) ]
       | Tab_emoji ->
           (* cljs emojis-cp renders its own flex-1 flex-col gap-1 div
              inside the outer one *)
@@ -441,6 +442,8 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
 
   (Ui_components.with_props
      [ Ui_components.Prop.position `relative
+     ; Ui_components.Prop.max_width_viewport 1.
+     ; Ui_components.Prop.max_height_viewport 1.
      ; Ui_components.Prop.overflow `hidden ]
      (* fixed height: the picker is a shrink-to-fit popover and the
        scroll body contributes no intrinsic height — without an explicit
@@ -448,9 +451,7 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
        the always-tall icon grid to the same 408px cap anyway. *)
     (column ~style_class:"cp__emoji-icon-picker"
         ~width:380 ~height:408
-        ~data_attrs:
-          [ ("data-keep-selection", "true")
-          ; ("style", "max-width: calc(100vw - 16px)") ]
+        ~data_attrs:[ ("data-keep-selection", "true") ]
         [ row ~key:"ft" ~cross:`center ~padding:12 ~height:40
             ~background:
               "var(--lx-gray-02, var(--ls-secondary-background-color, \

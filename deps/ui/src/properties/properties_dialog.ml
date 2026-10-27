@@ -52,7 +52,17 @@ type dlg_state =
   }
 
 let current : dlg_state option ref = ref None
+let current_on_close : (unit -> unit) ref = ref (fun () -> ())
 let current_sig : dlg_state option Signal.state option ref = ref None
+let open_requests = Ui_effect.request ()
+let open_scope : Signal.scope option ref = ref None
+let pending_open : Signal.scope option ref = ref None
+
+let retire_open () =
+  ignore (Ui_effect.issue open_requests);
+  let pending = !pending_open in
+  pending_open := None;
+  Option.iter Signal.dispose_scope pending
 
 let state_signal sched =
   match !current_sig with
@@ -74,8 +84,13 @@ let set_phase d p =
   | None -> ()
 
 let close () =
+  retire_open ();
+  let previous = !current in
+  let on_close = !current_on_close in
+  current_on_close := (fun () -> ());
   current := None;
-  publish None
+  publish None;
+  if Option.is_some previous then on_close ()
 
 let is_open () = !current <> None
 
@@ -92,15 +107,32 @@ let type_of prop =
 
 let is_checkbox prop = type_of prop = "checkbox"
 
+let owners d =
+  match d.d_target.uuids with [] -> [d.d_target.uuid] | us -> us
+
 (* ---------- writes shared by phases ---------- *)
+
+let close_current d =
+  match !current with Some active when active == d -> close () | _ -> ()
+
+let finish_write d task =
+  ignore (let* _ = task in
+    S.refresh_all ();
+    close_current d;
+    Js.Promise.resolve ())
+
+let for_owners d write =
+  let rec run = function
+    | [] -> Js.Promise.resolve ()
+    | uuid :: rest -> let* _ = write uuid in run rest
+  in
+  run (owners d)
 
 let write_prop_value d prop w =
   match w with
   | Some v ->
-      D.set_block_property ~block_uuid:d.d_target.uuid
-        ~ident:(ident_of prop) ~value:v
-      |> ignore;
-      S.refresh_all ()
+      finish_write d (D.batch_set_property ~block_uuids:(owners d)
+        ~ident:(ident_of prop) ~value:v)
   | None -> ()
 
 (* cljs add-or-remove-property-value: for multiple-values properties
@@ -108,7 +140,7 @@ let write_prop_value d prop w =
    removes it *)
 let is_many prop =
   (match D.getk prop "db/cardinality" with
-   | Some "db.cardinality/many" -> true
+   | Some "db.cardinality/many" | Some "many" -> true
    | _ -> false)
   || ident_of prop = "block/tags"
 
@@ -120,37 +152,25 @@ let add_empty_text_block d prop =
   let ident = ident_of prop in
   !(Editor_state.close_block_editor) ();
   V.set_pending_edit ~block_uuid:d.d_target.uuid ~ident;
-  (let* _ =
-    D.create_property_text_block ~block_uuid:d.d_target.uuid ~ident
-      ~title:"" ~new_block_id:(Ui_services.env_random_uuid ()) ()
+  (let* _ = for_owners d (fun block_uuid ->
+    D.create_property_text_block ~block_uuid ~ident
+      ~title:"" ~new_block_id:(Ui_services.env_random_uuid ()) ())
   in
   S.refresh_now ();
+  close_current d;
   Js.Promise.resolve ())
-  |> ignore;
-  S.refresh_all ()
+  |> ignore
 
 (* chosen an existing property from the select *)
 let rec property_chosen d prop =
   if d.d_remove then (
-    let uuids =
-      match d.d_target.uuids with [] -> [ d.d_target.uuid ] | us -> us
-    in
-    List.iter
-      (fun u ->
-        ignore
-          (D.remove_block_property ~block_uuid:u ~ident:(ident_of prop)))
-      uuids;
-    S.refresh_all ();
-    close ())
+    finish_write d (for_owners d (fun block_uuid ->
+      D.remove_block_property ~block_uuid ~ident:(ident_of prop))))
   else if d.d_target.is_tag then (
-    ignore
-      (D.class_add_property ~class_uuid:d.d_target.uuid
-         ~ident:(ident_of prop));
-    S.refresh_all ();
-    close ())
+    finish_write d (D.class_add_property ~class_uuid:d.d_target.uuid
+         ~ident:(ident_of prop)))
   else if is_checkbox prop then (
-    write_prop_value d prop (Some (W.Bool false));
-    close ())
+    write_prop_value d prop (Some (W.Bool false)))
   else set_phase d (Value_edit prop)
 
 (* values may be bare eids, bare ident keywords or entity stubs whose
@@ -208,17 +228,10 @@ and pick_value d prop id =
        state from the refreshed entity *)
     Js.Promise.resolve ())
     |> ignore
-  else (
-    (match uuids with
-     | _ :: _ :: _ ->
-         D.batch_set_property ~block_uuids:uuids ~ident ~value:(W.Int id)
-         |> ignore
-     | _ -> write_prop_value d prop (Some (W.Int id)));
-    S.refresh_all ();
-    close ())
+  else write_prop_value d prop (Some (W.Int id))
 
 and valid_property_name s =
-  not (String.length s > 0
+  String.trim s <> "" && not (String.length s > 0
        && (s.[0] = '#'
           || (String.length s > 1 && s.[0] = '[' && s.[1] = '[')))
 
@@ -253,11 +266,9 @@ and on_type_chosen d name ty =
        else (
          match ty with
          | "checkbox" ->
-             write_prop_value d prop (Some (W.Bool false));
-             close ()
+             write_prop_value d prop (Some (W.Bool false))
          | "default" | "url" ->
-             add_empty_text_block d prop;
-             close ()
+             add_empty_text_block d prop
          | "node" -> set_phase d (Node_tags prop)
          | _ -> set_phase d (Value_edit prop))
    | _ -> S.toast_error (I18n.t "property/create-error"));
@@ -307,7 +318,7 @@ let prop_select_view d : t =
            | "" -> None
            | t ->
                Some
-                 (Sel.item ~tip:(ident_of p) ~icon:"letter-t"
+                 (Sel.item ~key:(ident_of p) ~tip:(ident_of p) ~icon:"letter-t"
                     ~strong:true t
                     (fun () -> property_chosen d p)))
          (W.elems w)
@@ -395,12 +406,13 @@ let node_tags_view d prop : t =
      in
      Js.Promise.resolve items)
 
-let value_items d prop wire_values =
+let value_items ?closed_values d prop wire_values =
   let ty = type_of prop in
   let closed =
-    match D.getf prop "property/closed-values" with
-    | Some w -> W.elems w
-    | None -> []
+    match closed_values, D.getf prop "property/closed-values" with
+    | Some values, _ -> values
+    | None, Some w -> W.elems w
+    | None, None -> []
   in
   if closed <> [] then
     List.filter_map
@@ -408,7 +420,7 @@ let value_items d prop wire_values =
         match D.entity_id_of c with
         | Some id ->
             Some
-              (Sel.item (D.ref_title c) (fun () -> pick_value d prop id))
+              (Sel.item ~key:("entity-" ^ string_of_int id) (D.ref_title c) (fun () -> pick_value d prop id))
         | None -> None)
       closed
   else
@@ -420,7 +432,7 @@ let value_items d prop wire_values =
             match D.entity_id_of v with
             | Some id ->
                 Some
-                  (Sel.item (D.ref_title v) (fun () ->
+                  (Sel.item ~key:("entity-" ^ string_of_int id) (D.ref_title v) (fun () ->
                        pick_value d prop id))
             | None -> None)
           wire_values
@@ -441,17 +453,18 @@ let icon_value_view d : t =
              ~on_chosen:(fun c ->
                (match c with
                 | Icon_picker.Remove ->
-                    D.remove_block_property ~block_uuid:d.d_target.uuid
-                      ~ident:"logseq.property/icon"
+                    for_owners d (fun block_uuid -> D.remove_block_property ~block_uuid
+                      ~ident:"logseq.property/icon")
                 | Icon_picker.Emoji id ->
-                    D.set_block_property ~block_uuid:d.d_target.uuid
+                    let* _ = D.batch_set_property ~block_uuids:(owners d)
                       ~ident:"logseq.property/icon"
                       ~value:
                         (W.Map
                            [ (W.Keyword "type", W.Keyword "emoji")
-                           ; (W.Keyword "id", W.String id) ])
+                           ; (W.Keyword "id", W.String id) ]) in
+                    Js.Promise.resolve ()
                 | Icon_picker.Tabler (id, color) ->
-                    D.set_block_property ~block_uuid:d.d_target.uuid
+                    let* _ = D.batch_set_property ~block_uuids:(owners d)
                       ~ident:"logseq.property/icon"
                       ~value:
                         (W.Map
@@ -460,10 +473,9 @@ let icon_value_view d : t =
                             @
                             match color with
                             | Some c -> [ (W.Keyword "color", W.String c) ]
-                            | None -> [])))
-               |> ignore;
-               S.refresh_all ();
-               close ())
+                            | None -> [])) in
+                    Js.Promise.resolve ())
+               |> finish_write d)
        | None -> ())
      [])
     context parent
@@ -477,42 +489,62 @@ let date_value_view d prop : t =
   let owners=match d.d_target.uuids with [] -> [d.d_target.uuid] | owners -> owners in
   ignore (let* block=D.entity_by_uuid d.d_target.uuid in
     let value=Option.value (D.getf (D.untag block) ident) ~default:W.Nil in
-    let* value=if not is_datetime && not (D.value_empty_p value) then
-      D.entity (W.Int (Option.get (D.entity_id_of value)))
-      else Js.Promise.resolve value in
+    let* value=match is_datetime,D.entity_id_of value with
+      | false,Some id -> D.entity (W.Int id)
+      | _ -> Js.Promise.resolve value in
     if !alive then Runtime.signal_set loaded (Some (D.untag value));
     Js.Promise.resolve ());
   let ctx : V.ctx =
     {owner_key="property-dialog";block_uuid=d.d_target.uuid;block_id=d.d_target.db_id;
      refresh=(fun () -> ());is_page=false;class_schema=false} in
+  let writes = ref 0 and dismiss_after_write = ref false in
+  let dismiss () =
+    if !writes = 0 then close_current d else dismiss_after_write := true
+  in
   let write value =
-    D.batch_set_property ~block_uuids:owners ~ident ~value |> ignore;
-    S.refresh_all ()
+    incr writes;
+    ignore (let* _ = D.batch_set_property ~block_uuids:owners ~ident ~value in
+      decr writes;
+      S.refresh_all ();
+      if !dismiss_after_write && !writes = 0 then close_current d;
+      Js.Promise.resolve ())
   in
   (reactive (function
     | None -> column ~width:556 []
     | Some value -> V.date_picker_content ctx ~ident ~is_datetime ~value
-        ~on_value:write ~on_dismiss:close
+        ~on_value:write ~on_dismiss:dismiss
         ~on_clear:(fun () ->
-          List.iter (fun block_uuid -> D.remove_block_property ~block_uuid ~ident |> ignore) owners;
-          close ();S.refresh_all ())) (Signal.value loaded)) context parent
+          finish_write d (for_owners d (fun block_uuid ->
+            D.remove_block_property ~block_uuid ~ident)))) (Signal.value loaded)) context parent
 
 let value_edit_view d prop : t =
  fun context parent ->
   let ty = type_of prop in
   if ty = "date" || ty = "datetime" then date_value_view d prop context parent
+  else if ty = "checkbox" then
+    (async_select ~placeholder:(title_of prop)
+      (let* block = D.entity_by_uuid d.d_target.uuid in
+       let value = match D.getf (D.untag block) (ident_of prop) with
+         | Some value -> value
+         | None -> Option.value (D.getf prop "logseq.property/scalar-default-value") ~default:(W.Bool false)
+       in
+       let checked = value = W.Bool true in
+       Js.Promise.resolve
+         [Sel.item ~checked (title_of prop)
+            (fun () -> write_prop_value d prop (Some (W.Bool (not checked))))])) context parent
   else if ident_of prop = "logseq.property/icon" then
     icon_value_view d context parent
   else
     let placeholder = I18n.t1 "property/set-placeholder" (title_of prop) in
+    let closed = Option.fold ~none:[] ~some:W.elems (D.getf prop "property/closed-values") in
     let on_new =
-      if ty = "number" then
+      if closed <> [] || List.mem ty ["page";"property";"asset"] then None
+      else if ty = "number" then
         Some
           (fun text ->
-            match Float.of_string_opt (String.trim text) with
+            match D.number_of_text text with
             | Some n ->
-                write_prop_value d prop (Some (W.Float n));
-                close ()
+                write_prop_value d prop (Some (W.Float n))
             | None -> ())
       else if ty = "node" || ty = "class" then
         Some
@@ -521,9 +553,7 @@ let value_edit_view d prop : t =
               (let* res =
                  (* cljs <create-page-if-not-exists!: class-type
                     and block/tags values are classes *)
-                 if ty = "class" || ident_of prop = "block/tags"
-                 then D.create_class text
-                 else D.create_page text
+                 V.create_node prop text
                in
                let* () =
                  match D.create_result_uuid res with
@@ -536,20 +566,26 @@ let value_edit_view d prop : t =
                      | None -> Js.Promise.resolve ())
                  | None -> Js.Promise.resolve ()
                in
-               close ();
                Js.Promise.resolve ()))
       else
         Some
           (fun text ->
             (* text value -> create value block *)
-            D.create_property_text_block ~block_uuid:d.d_target.uuid
-              ~ident:(ident_of prop) ~title:text
-              ~new_block_id:(Ui_services.env_random_uuid ()) ()
-            |> ignore;
-            S.refresh_all ();
-            close ())
+            finish_write d (for_owners d (fun block_uuid ->
+              D.create_property_text_block ~block_uuid
+                ~ident:(ident_of prop) ~title:text
+                ~new_block_id:(Ui_services.env_random_uuid ()) ())))
     in
-    if List.mem ty [ "node"; "page"; "class"; "property" ] then
+    if closed <> [] then
+      (async_select ~placeholder ~compact:(d.d_placement <> Centered)
+        (let rec eligible_for values = function
+          | [] -> Js.Promise.resolve values
+          | block_uuid :: rest ->
+              let* values = V.closed_values_for_owner ~block_uuid values in
+              eligible_for values rest in
+         let* eligible = eligible_for closed (owners d) in
+         Js.Promise.resolve (value_items ~closed_values:eligible d prop []))) context parent
+    else if List.mem ty [ "node"; "page"; "class"; "property"; "asset" ] then
       let initial, on_search =
         V.node_items_source ~block:(D.uuid_ref d.d_target.uuid) ~prop
           ~on_pick:(fun id -> pick_value d prop id)
@@ -595,6 +631,13 @@ let dialog_content ?compact_width ~phase d : t =
    card like cljs's unanchored command-palette fallback *)
 let view : t =
  fun context parent ->
+  open_scope := Some context.Lui_ui.ui_scope;
+  Signal.on_dispose context.Lui_ui.ui_scope (fun () ->
+      match !open_scope with
+      | Some scope when scope == context.Lui_ui.ui_scope ->
+          open_scope := None;
+          retire_open ()
+      | _ -> ());
   let s = state_signal context.Lui_ui.ui_scheduler in
   (reactive ~equal:(==)
      (fun dopt ->
@@ -635,18 +678,20 @@ let view : t =
 
 (* a second open replaces the dialog — cljs treats it as the single
    active modal *)
-let open_at ~remove ~phase placement target =
+let open_at ?(on_close = fun () -> ()) ~remove ~phase placement target =
   (* a second open replaces every popup — cljs treats it as the single
      active modal *)
   S.close_overlays ();
   S.close_all_view_overlays ();
+  close ();
   let d = { d_target = target; d_remove = remove; d_placement = placement
           ; d_phase = phase; d_phase_sig = None } in
   current := Some d;
+  current_on_close := on_close;
   publish (Some d)
 
-let open_dialog ?(remove = false) ?(phase = Prop_select) ?anchor target =
-  open_at ~remove ~phase (match anchor with Some (x,y) -> Point (x,y) | None -> Centered) target
+let open_dialog ?on_close ?(remove = false) ?(phase = Prop_select) ?anchor target =
+  open_at ?on_close ~remove ~phase (match anchor with Some (x,y) -> Point (x,y) | None -> Centered) target
 
 (* Retain the popup under its trigger so both renderers track layout,
    scrolling and resizing without asynchronous rectangle polling. *)
@@ -656,9 +701,13 @@ let trigger ~key ?margin_left ~remove ~target make_button : t =
   Signal.on_dispose context.Lui_ui.ui_scope (fun () ->
     match !current with
     | Some d when d.d_placement = Trigger key ->
+        retire_open ();
         current := None;
         (* Teardown owns the flush; do not remount siblings during disposal. *)
-        Signal.set state None
+        Signal.set state None;
+        let on_close = !current_on_close in
+        current_on_close := (fun () -> ());
+        on_close ()
     | _ -> ());
   (button_group ~key ~gap:0 ?margin_left ~background:"transparent"
      ~border_width:0 ~corner_radius:0
@@ -696,18 +745,22 @@ let trigger ~key ?margin_left ~remove ~target make_button : t =
    pending, so retry a few ticks rather than anchoring at 0,0 — and if
    the rect never lands fall back to the unanchored centered card
    instead of pinning the dialog to the corner. *)
-let open_for_anchor_el ?(remove = false) ?(phase = Prop_select)
+let open_for_anchor_el ?on_close ?(remove = false) ?(phase = Prop_select)
     (anchor : Ui_services.el) target =
+  retire_open ();
+  let ticket = Ui_effect.issue open_requests in
   let rec open_measured tries_left =
-    if tries_left > 0 && anchor.Ui_services.rect_pending () then
+    if not (Ui_effect.is_current open_requests ticket)
+       || not (anchor.Ui_services.connected ()) then ()
+    else if tries_left > 0 && anchor.Ui_services.rect_pending () then
       ignore
         (Ui_services.timers_timeout
            (fun () -> open_measured (tries_left - 1)) 32)
     else
       let x, y, w, h = anchor.Ui_services.rect () in
       if x <> 0. || y <> 0. || w <> 0. || h <> 0. then
-        open_dialog ~remove ~phase ~anchor:(x, y +. h) target
-      else open_dialog ~remove ~phase target
+        open_dialog ?on_close ~remove ~phase ~anchor:(x, y +. h) target
+      else open_dialog ?on_close ~remove ~phase target
   in
   open_measured 4
 
@@ -746,17 +799,98 @@ let open_for_block uuid =
    straight to the value-editing phase for the named property — a
    dedicated picker (date input, closed-value select, node select) —
    across the whole block selection *)
-let open_for_block_with_property ~uuids uuid ~ident =
-  (let* prop =
-    D.entity (W.List [ W.Keyword "db/ident"; W.Keyword ident ])
+let open_for_block_with_property ?scope ?view_parent ?on_close ~uuids uuid ~ident =
+  retire_open ();
+  let ticket = Ui_effect.issue open_requests in
+  let parent_scope = match scope with Some _ -> scope | None -> !open_scope in
+  let scope = match parent_scope with
+    | Some parent -> Signal.child_scope "property-open" parent
+    | None -> Signal.scope "property-open"
   in
-  (match D.untag prop with
-   | W.Map _ as p ->
-       open_dialog ~phase:(Value_edit p)
-         { uuid; uuids; db_id = None; is_tag = false; title = "" }
-   | _ -> ());
-  Js.Promise.resolve ())
-  |> ignore
+  pending_open := Some scope;
+  let repo = Runtime.repo () in
+  let route = Runtime.route () in
+  let load_gen = !Runtime.load_gen in
+  let overlay_gen = !S.overlay_generation in
+  let page_target () = Option.map (fun p -> p.Model.page_uuid, p.Model.page_db_id)
+      !Runtime.current_page in
+  let page = page_target () in
+  let selection = Editor_state.selection_state () in
+  let editing_target (st : Editor_state.t) =
+    Option.map (fun (e : Editor_state.editing) -> e.uuid, e.scope) st.editing
+  in
+  let selection_valid (st : Editor_state.t) =
+    Editor_state.String_set.equal selection.selected st.selected
+    && selection.selection_scope = st.selection_scope
+    && editing_target selection = editing_target st
+  in
+  let checks = ref [] in
+  let watch signal read valid =
+    checks := (fun () -> not (Signal.signal_is_disposed signal)
+      && valid (read ())) :: !checks;
+    ignore (Signal.own scope (Signal.subscribe ~emit_initial:false signal
+      (fun v -> if not (valid v) then retire_open ())))
+  in
+  if Editor_state.ready () then
+    watch (Editor_state.signal ()) Editor_state.selection_state selection_valid;
+  (match view_parent with
+   | None -> ()
+   | Some source ->
+       let parent : string option = Signal.get source in
+       watch source (fun () -> Signal.get source) (( = ) parent));
+  (match !Popups_state.active with
+   | None -> ()
+   | Some t ->
+       let before = Popups_state.get t in
+       let valid (v : Popups_state.view) =
+         (v.ac = None || v.ac == before.ac)
+         && (v.cm = None || v.cm == before.cm)
+         && (v.pv = None || v.pv == before.pv)
+       in
+       watch (Signal.value t.vs) (fun () -> Popups_state.get t) valid);
+  (match !Cmdk_state.latest_t with
+   | None -> ()
+   | Some t ->
+       let was_open = ref (Cmdk_state.get t).open_ in
+       let valid (v : Cmdk_state.view) = not v.open_ || !was_open in
+       checks := (fun () -> valid (Cmdk_state.get t)) :: !checks;
+       ignore (Signal.own scope
+         (Signal.subscribe ~emit_initial:false (Signal.value t.vs) (fun v ->
+            if not (valid v) then retire_open ();
+            was_open := v.open_))));
+  if Dialogs_state.ready () then (
+    let before = Dialogs_state.value () in
+    watch (Dialogs_state.signal ()) Dialogs_state.value
+      (fun v -> not (Dialogs_state.has_layer v) || v == before));
+  let valid () =
+    Ui_effect.is_current open_requests ticket && Ui_effect.alive scope
+    && Runtime.repo () = repo && Runtime.route () = route
+    && !Runtime.load_gen = load_gen && !S.overlay_generation = overlay_gen
+    && page_target () = page
+    && selection_valid (Editor_state.selection_state ())
+    && List.for_all (fun check -> check ()) !checks
+  in
+  let finish () =
+    if Ui_effect.is_current open_requests ticket then retire_open ()
+  in
+  let lookup = Js.Promise.catch (fun error -> Js.Promise.resolve (Error error))
+    (let* prop = D.entity (W.List [ W.Keyword "db/ident"; W.Keyword ident ]) in
+     Js.Promise.resolve (Ok prop))
+  in
+  ignore (let* result = lookup in
+    let active = valid () in
+    finish ();
+    (match result with
+     | Ok prop when active ->
+         (match D.untag prop with
+          | W.Map _ as p ->
+              open_dialog ?on_close ~phase:(Value_edit p)
+                { uuid; uuids; db_id = None; is_tag = false; title = "" }
+          | _ -> ())
+     | Error error when active ->
+         Ui_services.log_error ("property lookup failed", error)
+     | _ -> ());
+    Js.Promise.resolve ())
 
 let open_for_current () =
   match current_target () with
