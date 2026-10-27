@@ -113,14 +113,18 @@ let show_for (trig : Ui_services.el) =
                    tip_above = false;
                  });
             let rec place tries =
-              if not (trig.Ui_services.connected ()) then hide ()
+              if not (trig.Ui_services.connected ()) || label_for trig <> Some label
+              then hide ()
               else
                 match Ui_services.dom_query "#lui-tooltip" with
-                | None -> ()
+                | None -> hide ()
                 | Some bubble ->
                     if bubble.Ui_services.rect_pending () && tries > 0 then
                       schedule 16 (fun () -> place (tries - 1))
                     else
+                      let tx, ty, tw, th = trig.Ui_services.rect () in
+                      let trig_cx = tx +. (tw /. 2.) in
+                      let trig_bottom = ty +. th in
                       let _, _, w, h = bubble.Ui_services.rect () in
                       let x =
                         Float.max 5.
@@ -141,8 +145,12 @@ let show_for (trig : Ui_services.el) =
                              tip_label = label;
                              tip_keys = keys;
                              tip_x = x;
-                             tip_y = (if above then ty -. h else trig_bottom);
-                             tip_arrow_x = trig_cx -. x -. 4.;
+                             tip_y = Float.max 5.
+                               (Float.min
+                                  (if above then ty -. h else trig_bottom)
+                                  (Ui_services.dom_viewport_height () -. h -. 5.));
+                             tip_arrow_x = Float.max 4.
+                               (Float.min (trig_cx -. x -. 4.) (w -. 12.));
                              tip_above = above;
                            })
             in
@@ -221,5 +229,6 @@ let install ~scheduler =
     Ui_services.dom_on_document_event ~capture:true "keydown" on_dismiss;
     (* tooltips die with their anchor's scroll like the tippy instance *)
     Ui_services.dom_on_document_event ~capture:true "wheel" on_dismiss;
-    Ui_services.dom_on_document_event ~capture:true "scroll" on_dismiss
+    Ui_services.dom_on_document_event ~capture:true "scroll" on_dismiss;
+    Ui_services.dom_on_window_event "resize" on_dismiss
   end
