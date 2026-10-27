@@ -21,6 +21,8 @@ let dom = Logseq_el.el
 let nav_crumb hash _ : unit =
   Ui_services.nav_set_hash (Runtime.nav_hash hash)
 
+let page_hash name = "#/page/" ^ Ui_services.uri_encode_component name
+
 (* block zoom: .breadcrumb lists ancestor block titles (root first),
    each linking to its own zoom route — kit breadcrumb_trail (ghost
    caption buttons on .lui-breadcrumb) replacing the link row; the
@@ -39,8 +41,7 @@ let zoom_breadcrumbs (page : Model.page) : t list =
                    (fun (p : Model.block) ->
                      ( p.block_title
                      , nav_crumb
-                         ("#/page/"
-                         ^ Option.value p.block_uuid ~default:"") ))
+                         (page_hash (Option.value p.block_uuid ~default:"")) ))
                    parents)
               () ]
       ]
@@ -58,15 +59,13 @@ let breadcrumbs (page : Model.page) : t list =
                    (fun (p : Model.block) ->
                      ( p.block_title
                      , nav_crumb
-                         ("#/page/"
-                         ^ Option.value p.block_uuid
-                             ~default:p.block_title) ))
+                         (page_hash (Option.value p.block_uuid
+                             ~default:p.block_title)) ))
                    page.page_parents
                  @ [ ( page.page_title
                      , nav_crumb
-                         ("#/page/"
-                         ^ Option.value page.Model.page_uuid
-                             ~default:page.page_title) ) ])
+                         (page_hash (Option.value page.Model.page_uuid
+                             ~default:page.page_title)) ) ])
               () ] ]
   | [] ->
       (match String.split_on_char '/' page.page_title with
@@ -76,11 +75,11 @@ let breadcrumbs (page : Model.page) : t list =
         | [] -> List.rev acc
         | last :: [] ->
             (* leaf = the current page itself *)
-            (last, nav_crumb ("#/page/" ^ page.page_title))
+            (last, nav_crumb (page_hash page.page_title))
             :: acc |> List.rev
         | part :: rest ->
             let here = if prefix = "" then part else prefix ^ "/" ^ part in
-            crumbs ((part, nav_crumb ("#/page/" ^ here)) :: acc) here rest
+            crumbs ((part, nav_crumb (page_hash here)) :: acc) here rest
       in
       [ box ~key:"bc" ~style_class:"breadcrumb" ~min_width:0
           [ Lui_element_combine.breadcrumb_trail ~key:"bct"
@@ -864,20 +863,6 @@ let foldable_content key inner : t =
     ~transition:"grid-template-rows 0.2s ease-in-out"
     [ box ~key:"fci"  [ inner ] ]
 
-(* cljs views/view {:add-page-column? true} — each ref row carries the
-   source page name. *)
-let references_row (b : Model.block) : t =
-  match b.Model.block_page_name with
-  | Some pname ->
-      column
-        ~key:("ref-row-" ^ Option.value b.block_uuid ~default:"")
-        [ (* a.page-ref[data-ref] is read by sidebar_state *)
-          link ~key:"pn" ~url:"#" ~target:`self_ ~style_class:"page-ref"
-            ~data_attrs:[ ("data-ref", pname) ] ~text:pname []
-        ; Tree.block_row_static b
-        ]
-  | None -> Tree.block_row_static b
-
 (* cljs reference/references -> views/view :linked-references DOM —
    the section mounts the shared views machinery with the
    linked-references feature: view-head carries the view tabs + the
@@ -885,9 +870,7 @@ let references_row (b : Model.block) : t =
    renders the grouped-by-page list *)
 
 let references_view ~page_uuid ~has_refs () : t =
-  (* cljs references gates the whole section on [:block-ref-count
-     page-uuid] > 0 — the unfiltered total, so an include/exclude
-     filter can never hide the section itself *)
+  (* Views owns loading, settled-empty and live worker refreshes. *)
   if not has_refs then Logseq_el.nothing
   else
     column ~key:"refs" ~style_class:"references"
@@ -895,22 +878,12 @@ let references_view ~page_uuid ~has_refs () : t =
           [ Views_view.view ~kind:Views_state.KLinkedRefs
               ~owner:(Wire.Uuid page_uuid) ] ]
 
-(* journal linked refs render inside a foldable content wrapper, like
-   cljs views/view {:foldable-options ...} — journals default expanded. *)
+(* Journals share the page reference view, including filters, grouping,
+   loading and worker-driven refreshes, rather than a captured row list. *)
 let journal_references_view (p : Model.page) : t =
-  let key = Option.value p.Model.page_uuid ~default:p.Model.page_title in
-  match p.Model.page_linked_refs with
-  | [] -> Logseq_el.nothing
-  | refs ->
-      column ~key:("jrefs-" ^ key)
-        ~style_class:"references"
-        [ box ~key:"jrfc" ~style_class:"ls-foldable-content"
-            ~transition:"grid-template-rows 0.2s ease-in-out"
-            [ column ~key:"jrb" ~style_class:"ls-view-body" ~margin_top:4
-                ~min_width:0
-                (List.map references_row refs)
-            ]
-        ]
+  match p.Model.page_uuid with
+  | None -> Logseq_el.nothing
+  | Some uuid -> references_view ~page_uuid:uuid ~has_refs:true ()
 
 (* cljs lsp-pagebar-slot: a sibling of .ls-page-title inside the title's
    flex-row.space-between wrapper, NOT inside .block-content-wrapper —
@@ -1022,8 +995,12 @@ let journal_item_sig (ms : Model.t Signal.signal)
   let title_eq ((a : Model.page), ea) ((b : Model.page), eb) =
     ea = eb
     && a.Model.page_title = b.Model.page_title
+    && a.Model.page_icon = b.Model.page_icon
     && Model.page_node_icon a = Model.page_node_icon b
     && a.Model.page_tags = b.Model.page_tags
+    && a.Model.page_tag_idents = b.Model.page_tag_idents
+    && a.Model.page_tag_uuids = b.Model.page_tag_uuids
+    && a.Model.page_tag_db_ids = b.Model.page_tag_db_ids
     && a.Model.page_is_tag = b.Model.page_is_tag
     && a.Model.page_is_property = b.Model.page_is_property
     && a.Model.page_db_collapsable = b.Model.page_db_collapsable
@@ -1040,7 +1017,7 @@ let journal_item_sig (ms : Model.t Signal.signal)
     Logseq_el.own ctx (Signal.map (fun bs -> bs <> []) blocks_sig)
   in
   let jrefs_eq (a : Model.page) (b : Model.page) =
-    a.Model.page_linked_refs == b.Model.page_linked_refs
+    a.Model.page_uuid = b.Model.page_uuid
     && is_today_journal a = is_today_journal b
   in
   let is_first () =
@@ -1069,13 +1046,15 @@ let journal_item_sig (ms : Model.t Signal.signal)
                 var(--lx-gray-04, var(--ls-border-color))" )
          ]
     [ (* data-page-tags is the page-wrap plugin contract *)
-      box ~key:("jiw-" ^ key)
-        ~style_class:(page_wrap_cls (Signal.get ms) p0)
+      Ui_parts.class_signal ps (fun p -> page_wrap_cls (Signal.get ms) p)
+        (column ~key:("jiw-" ^ key)
         ~padding_horizontal:8
-        ~data_attrs:(page_wrap_attrs p0)
-        [ column ~key:("jip-" ^ key) ~gap:32
-            ~style_class:"page-inner"
-            ~data_attrs:[ ("style", "position:relative;padding-bottom:4rem") ]
+        ~data_attrs:(reactive page_wrap_attrs ps)
+        [ Ui_components.with_props
+                [ Ui_components.Prop.position `relative
+                ; Ui_components.Prop.padding_bottom 64 ]
+                (column ~key:("jip-" ^ key) ~gap:32
+                   ~style_class:"page-inner"
             [ title_ctx_row ~key:("jit-" ^ key) p0
                 [ reactive ~equal:title_eq
                     (fun (p, editing_title) ->
@@ -1090,9 +1069,10 @@ let journal_item_sig (ms : Model.t Signal.signal)
                           ps ms))
                 ; pagebar_slots_el p0
                 ]
-            ; column ~key:"page-blocks" ~style_class:"ls-page-blocks"
-                ~min_height:60 ~margin_top:16 ~margin_left:(-20)
-                ~data_attrs:[ ("style", "overflow:hidden") ]
+            ; Ui_components.with_props
+                    [ Ui_components.Prop.overflow `hidden ]
+                    (column ~key:"page-blocks" ~style_class:"ls-page-blocks"
+                       ~min_height:60 ~margin_top:16 ~margin_left:(-20)
                 [ Ui_components.with_props
                     [ Ui_components.Prop.position `relative ]
                     (box ~key:"page-blocks-inner"
@@ -1124,8 +1104,8 @@ let journal_item_sig (ms : Model.t Signal.signal)
                           Logseq_el.own ectx
                             (Signal.map (fun has -> (has, false)) nonempty))
                     ])
-                ]
-            ]
+                ])
+            ])
         ; column ~key:("jrefs-w-" ^ key) ~gap:32 ~margin_left:4
             (* cljs journal-page: #today-queries div on the today item,
                then one .fade-in.delay refs section (unlinked refs are
@@ -1142,7 +1122,7 @@ let journal_item_sig (ms : Model.t Signal.signal)
                       ]))
                 ps
             ]
-        ]
+        ])
     ])
     ctx parent
 
@@ -1249,7 +1229,7 @@ let scope_of_route (r : Model.route) =
   match r with Model.Block_zoom u -> "zoom-" ^ u | _ -> "main"
 
 let page_cls (m : Model.t) =
-  let base = "flex-1 page relative cp__page-inner-wrap" in
+  let base = "page cp__page-inner-wrap" in
   match m.route_page with
   | Some page -> page_wrap_cls m page
   | None -> base
@@ -1326,7 +1306,7 @@ let blocks_area ~scope ~library ?puuid (ms : Model.t Signal.signal) : t =
      spine is emitted; a spine republish (splice or route change)
      re-arms the loop via the spine_sig subscriber. Stops once the
      virtual list takes over — otherwise 1500/16 timeouts still run. *)
-  if not (virt_now ()) then begin
+  begin
     let grow_pending = ref false and alive = ref true in
     let rec grow () =
       grow_pending := false;
@@ -1349,10 +1329,11 @@ let blocks_area ~scope ~library ?puuid (ms : Model.t Signal.signal) : t =
       end
     in
     ignore
-      (Signal.subscribe ~emit_initial:false spine_sig (fun _ ->
-           if not (virt_now ()) then schedule_grow ()));
+      (Signal.own ctx.Lui_ui.ui_scope
+         (Signal.subscribe ~emit_initial:false spine_sig (fun _ ->
+              if not (virt_now ()) then schedule_grow ())));
     Signal.on_dispose ctx.Lui_ui.ui_scope (fun () -> alive := false);
-    schedule_grow ()
+    if not (virt_now ()) then schedule_grow ()
   end;
   let keyed_list =
     box ~key:"blw" ~style_class:"blocks-list-wrap"
@@ -1463,10 +1444,11 @@ let top_key (p : Model.page option) =
   match p with
   | Some p ->
       Some
-        ( p.page_uuid, p.page_title, Model.page_node_icon p, p.page_is_tag
+        ( p.page_uuid, p.page_title, p.page_icon, Model.page_node_icon p, p.page_is_tag
         , p.page_is_property
         , p.page_is_library, p.page_db_collapsable, p.page_parents
-        , p.page_journal_day )
+        , p.page_journal_day, p.page_internal, p.page_built_in, p.page_add_object
+        , p.page_tags, p.page_tag_idents, p.page_tag_uuids, p.page_tag_db_ids )
   | None -> None
 
 let top_eq (a : Model.t) (b : Model.t) =
@@ -1559,15 +1541,23 @@ let page_view_ms (ms : Model.t Signal.signal) : t =
      static ~style_class); the dynamic data-page-tags wrap attrs ride
      ~data_attrs_signal *)
   (Ui_parts.class_signal ms page_cls
-     (box ~key:"page" ~data_attrs:(reactive wrap_attrs_of ms)
+     (column ~key:"page" ~data_attrs:(reactive wrap_attrs_of ms)
         ~padding_horizontal:8
-        [ column ~key:"page-inner" ~gap:32
+        [ Ui_components.with_props
+            [ Ui_components.Prop.position `relative
+            ; Ui_components.Prop.padding_bottom 64 ]
+            (column ~key:"page-inner" ~gap:32
             ~style_class:"page-inner"
-            ~data_attrs:[ ("style", "position:relative;padding-bottom:4rem") ]
             [ reactive ~equal:top_eq top_view ms
-            ; page_tabs_el m0
+            ; reactive
+                ~equal:(fun a b ->
+                  let tabs_key (m : Model.t) = Option.map
+                    (fun p -> p.Model.page_uuid, p.Model.page_is_tag,
+                              p.Model.page_is_property) m.Model.route_page in
+                  tabs_key a = tabs_key b)
+                page_tabs_el ms
             ; blocks_area ~scope ~library ?puuid ms
-            ]
+            ])
         ; reactive ~equal:linked_refs_eq linked_refs_el ms
         ; reactive ~equal:unlinked_refs_eq unlinked_refs_el ms
         ; Selection_bar.view ()
