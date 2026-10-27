@@ -2,10 +2,13 @@
   (:require [cljs.test :refer [deftest is testing]]
             [datascript.core :as d]
             [logseq.db :as ldb]
+            [logseq.db.common.order :as db-order]
+            [logseq.db.frontend.property :as db-property]
             [logseq.db.test.helper :as db-test]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.op :as outliner-op]
-            [logseq.outliner.op.construct :as op-construct]))
+            [logseq.outliner.op.construct :as op-construct]
+            [logseq.outliner.page :as outliner-page]))
 
 (defn- child-titles
   [block]
@@ -151,6 +154,71 @@
         (outliner-core/move-blocks! conn [page] library {:sibling? false})
         (is (= (:db/id library)
                (:db/id (:block/parent (d/entity @conn (:db/id page))))))))))
+
+(defn- undo-delete-property!
+  "Deletes the property and applies the inverse ops, except the final :save-block
+  of the property page itself: outliner-core/save-block merges onto the page
+  entity, which nbb's datascript entity doesn't support. The value blocks are
+  restored by the ops before it."
+  [conn property-uuid]
+  (let [db-before @conn
+        tx-meta {:outliner-op :delete-page
+                 :outliner-ops [[:delete-page [property-uuid {}]]]}]
+    (outliner-page/delete! conn property-uuid)
+    (let [{:keys [inverse-outliner-ops]}
+          (op-construct/derive-history-outliner-ops db-before @conn [] tx-meta)]
+      (is (seq inverse-outliner-ops)
+          "Forward op has an inverse op")
+      (outliner-op/apply-ops!
+       conn
+       (remove (fn [[op [block]]]
+                 (and (= :save-block op)
+                      (= property-uuid (:block/uuid block))))
+               inverse-outliner-ops)
+       {}))))
+
+(deftest undo-delete-property-restores-text-values
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties {:note {:logseq.property/type :default}}
+               :pages-and-blocks
+               [{:page {:block/title "page"}
+                 :blocks [{:block/title "Buy milk"
+                           :build/properties {:note "2 liters"}
+                           :build/children [{:block/title "child"}]}]}]})
+        block (db-test/find-block-by-content @conn "Buy milk")
+        property-uuid (:block/uuid (d/entity @conn :user.property/note))]
+    (undo-delete-property! conn property-uuid)
+    (let [block' (d/entity @conn (:db/id block))]
+      (is (some? (d/entity @conn :user.property/note)))
+      (is (= "2 liters"
+             (db-property/property-value-content (:user.property/note block')))
+          "The block has its value again")
+      (is (= ["child"] (child-titles block'))
+          "The value is not a normal child block"))))
+
+(deftest undo-delete-property-restores-the-subtree-of-a-text-value
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties {:note {:logseq.property/type :default}}
+               :pages-and-blocks
+               [{:page {:block/title "page"}
+                 :blocks [{:block/title "Buy milk"
+                           :build/properties {:note "2 liters"}}]}]})
+        block (db-test/find-block-by-content @conn "Buy milk")
+        value (:user.property/note block)
+        _ (d/transact! conn [{:block/uuid (random-uuid)
+                              :block/title "check expiration"
+                              :block/page (:db/id (:block/page block))
+                              :block/parent (:db/id value)
+                              :block/order (db-order/gen-key)
+                              :block/created-at 1
+                              :block/updated-at 1}])
+        property-uuid (:block/uuid (d/entity @conn :user.property/note))]
+    (undo-delete-property! conn property-uuid)
+    (let [value' (:user.property/note (d/entity @conn (:db/id block)))]
+      (is (= "2 liters" (db-property/property-value-content value')))
+      (is (= ["check expiration"]
+             (mapv :block/title (:block/_parent value')))
+          "The value block has its child again"))))
 
 (deftest undo-delete-restores-many-text-property-values
   (doseq [value-title ["alpha" "beta"]]
