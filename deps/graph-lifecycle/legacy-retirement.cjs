@@ -7,7 +7,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 module.exports = function ({ fail, readJSON, writeJSON, graphName, canonicalRoot, sameStorage,
-  pidExists, entries, request, shutdownAndWait, removeEntries, runtimeFile }) {
+  pidExists, publishedPidMayRun, entries, request, shutdownAndWait, removeEntries, runtimeFile }) {
   function artifact(file) {
     try { return fs.readFileSync(file, 'utf8'); }
     catch (error) { if (error.code === 'ENOENT') return null; throw error; }
@@ -31,7 +31,7 @@ module.exports = function ({ fail, readJSON, writeJSON, graphName, canonicalRoot
     const runtimeBefore = new Map(records.map(record => [record.ticket, artifact(runtimeFile(ctx, record.ticket))]));
     const roots = new Set([ctx.root, ...records.map(record => record.root)]);
     const publications = [...roots].flatMap(root => (scan ? scan.entries(root) : entries(root)).map(entry => ({ ...entry, root })));
-    const dead = publications.filter(entry => !exists(entry.pid));
+    const dead = publications.filter(entry => !publishedPidMayRun(exists, entry.pid));
     const candidates = new Map();
     for (const record of records) {
       const raw = runtimeBefore.get(record.ticket);
