@@ -6865,10 +6865,28 @@ let () =
         "Usage: logseq upsert block";
       expect_named_contains "upsert block examples" upsert_help "Examples:";
       let example_help = run_cli [| "example"; "upsert"; "--help" |] in
-      expect_named_contains "example upsert usage" example_help
-        "Usage: logseq example upsert";
-      expect_named_not_contains "example upsert group has no examples"
-        example_help "Examples:");
+      expect_named_contains "example selector usage is the example command"
+        example_help "Usage: logseq example [options]";
+      expect_named_not_contains "example selector is not a command word"
+        example_help "Usage: logseq example upsert");
+
+  test "CLI parity help for a command with arguments is the command help"
+    (fun () ->
+      let show_help = run_cli [| "show"; "123"; "--help" |] in
+      expect_named_contains "show usage" show_help "Usage: logseq show [options]";
+      expect_named_contains "show options" show_help "--page";
+      expect_named_not_contains "show argument is not a subcommand" show_help
+        "<subcommand>";
+      let completion_help = run_cli [| "completion"; "zsh"; "-h" |] in
+      expect_named_contains "completion usage" completion_help
+        "Usage: logseq completion [options]";
+      expect_named_not_contains "completion argument is not a subcommand"
+        completion_help "<subcommand>";
+      let junk = run_cli_lifecycle [| "show"; "show"; "--help" |] in
+      expect_int "repeated command word help exit" 0 junk.exit_code;
+      expect_named_not_contains "repeated command word is not echoed"
+        (stdout_text "repeated command word stdout" junk)
+        "Usage: logseq show show");
 
   test
     "CLI parity structured example output keeps selector matched commands and \
