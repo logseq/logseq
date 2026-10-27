@@ -7,9 +7,7 @@ let dismiss id =
   Runtime.flush ()
 
 let show ?key ~kind msg =
-  (* the pushed toast takes the model's toast_next as its id — read it
-     before dispatch so the dismiss timer below names the right id *)
-  let id = (Runtime.model ()).Model.toast_next in
+  Option.iter (fun key -> Runtime.send (Action.Toast_dismiss_key key)) key;
   Runtime.send
     (Action.Toast_push
        { Model.toast_id = 0
@@ -17,15 +15,7 @@ let show ?key ~kind msg =
        ; toast_kind = kind
        ; toast_key = key
        });
-  Runtime.flush ();
-  (* the web toaster runs the duration countdown; the native retained
-     host does not — the model owns it here *)
-  let duration =
-    if kind = "error" then 0 else if key = None then 1500 else 2000
-  in
-  if duration > 0 then
-    ignore
-      (Ui_services.timers_timeout (fun () -> dismiss id) duration)
+  Runtime.flush ()
 
 let success msg = show ~kind:"success" msg
 let error msg = show ~kind:"error" msg
