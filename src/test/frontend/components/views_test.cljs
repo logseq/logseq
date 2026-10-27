@@ -12,11 +12,13 @@
             [frontend.db.hooks :as db-hooks]
             [frontend.db.subs :as subs]
             [frontend.modules.outliner.op :as outliner-op]
+            [frontend.rfx :as rfx]
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.worker.handler.block :as worker-block]
             [frontend.worker.handler.render-resource.view :as worker-view]
             [goog.object :as gobj]
+            [logseq.shui.ui :as shui]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]))
 
@@ -866,6 +868,44 @@
         "A new sort order drops the previous paint, so old rows are not left selectable.")
     (is (not= (key-for asc nil "") (key-for asc filters ""))
         "A new filter drops the previous paint, so old rows are not left selectable.")))
+
+(defn- row-ids-selected-by-shift-click
+  "Row ids that a shift-click on `row` selects when the last selected row is at
+  `last-selected-idx`."
+  [table row last-selected-idx]
+  (let [selected (atom #{})
+        checkbox-props (atom nil)]
+    (with-redefs [shui/checkbox (fn [props] (reset! checkbox-props props) nil)
+                  rfx/use-sub (constantly nil)
+                  rfx/snapshot-sub (fn [path]
+                                     (when (= :last-selected-idx (last path))
+                                       last-selected-idx))
+                  state/set-state! (fn [path value]
+                                     (when (true? value)
+                                       (swap! selected conj (last path))))
+                  util/stop (fn [_e] nil)]
+      (render-static (views/row-checkbox table row nil))
+      ((:on-click @checkbox-props) #js {:shiftKey true}))
+    @selected))
+
+(deftest shift-click-selects-the-range-past-the-painted-window-test
+  (let [row-ids (vec (repeatedly 40 random-uuid))
+        table {:data (subvec row-ids 0 10)
+               :full-data row-ids
+               :state {:selection-id "shift-range"}}
+        row (fn [idx] {:db/id (inc idx) :block/uuid (nth row-ids idx)})]
+    (testing "a flat table paints a window of its rows"
+      (is (= (set (subvec row-ids 0 26))
+             (row-ids-selected-by-shift-click table (row 25) 0))
+          "The range runs over every row between the two clicks, not only the painted window."))
+    (testing "a group table spans the rows of its group"
+      (let [group (subvec row-ids 10 20)
+            group-table (assoc table
+                               :data group
+                               :state {:selection-id "shift-range"
+                                       :group-by-property {:db/ident :block/tags}})]
+        (is (= (set (subvec row-ids 12 16))
+               (row-ids-selected-by-shift-click group-table (row 15) 2)))))))
 
 (deftest open-buttons-render-only-in-the-name-column-test
   (let [block {:db/id 1
