@@ -63,10 +63,8 @@ let download_binary ~(filename : string) ~(mime : string)
           ; ("mime", Js.Json.JString mime)
           ; ("data-b64", Js.Json.JString (b64_encode data)) ]))
 
-(* The file picker is imperative: "open-file-picker" makes the host run
-   NSOpenPanel; the reply lands as a "files-picked" platform event
-   carrying {request, files: [{name,size,path}]} (file snapshot shape,
-   same as drag-drop payloads). *)
+(* Directory picks carry root-relative names and captured bytes; ordinary
+   file picks and drag-drop payloads carry a host path. *)
 let pick_pending : (int, Js.Json.t array -> unit) Hashtbl.t =
   Hashtbl.create 4
 
@@ -83,12 +81,20 @@ let install_pick_listener () =
             match Hashtbl.find_opt pick_pending id with
             | Some cb ->
                 Hashtbl.remove pick_pending id;
-                let files =
-                  match Dom_ext.prop "files" j with
-                  | Js.Json.JArray a -> a
-                  | _ -> [||]
-                in
-                cb files
+                (match Dom_ext.str_prop "error" j with
+                 | Some error ->
+                     Ui_services.log_error_message ("file picker: " ^ error);
+                     Ui_services.dom_dispatch_json "ls:toast"
+                       (Json.Object
+                          [ "msg", Json.String (I18n.t "import/import-error")
+                          ; "cls", Json.String "error" ])
+                 | None ->
+                     let files =
+                       match Dom_ext.prop "files" j with
+                       | Js.Json.JArray a -> a
+                       | _ -> [||]
+                     in
+                     cb files)
             | None -> ())
         | None -> ())
   end
@@ -112,8 +118,8 @@ let open_file_picker ?accept ?(multiple : bool = false)
 
 let confirm (_ : string) : bool = false
 
-(* file inputs / drag-drop payloads — JSON File snapshots carry
-   {name,size,path} the host fills in *)
+(* Directory selections carry eager bytes and root-relative metadata;
+   ordinary file selections retain the selected host path. *)
 let file_name (f : Js.Json.t) : string =
   match Dom_ext.str_prop "name" f with
   | Some s -> s
@@ -123,13 +129,20 @@ let file_size (f : Js.Json.t) : float =
   Option.value (Dom_ext.num_prop "size" f) ~default:0.
 
 let file_buffer (f : Js.Json.t) : Js.Typed_array.Uint8Array.t Js.Promise.t =
-  match Dom_ext.str_prop "path" f with
-  | Some path -> (
-      try
-        let ic = open_in_bin path in
-        let n = in_channel_length ic in
-        let b = Bytes.of_string (really_input_string ic n) in
-        close_in ic;
-        Js.Promise.resolve b
-      with e -> Js.Promise.reject e)
-  | None -> Js.Promise.resolve (Bytes.create 0)
+  try
+    let data =
+      match Dom_ext.str_prop "data-b64" f with
+      | Some data -> Transit.base64_decode data
+      | None ->
+          (match Dom_ext.str_prop "path" f with
+           | Some path ->
+               let ic = open_in_bin path in
+               Fun.protect ~finally:(fun () -> close_in_noerr ic)
+                 (fun () -> In_channel.input_all ic)
+           | None -> failwith "File snapshot has neither bytes nor a host path")
+    in
+    Js.Promise.resolve (Bytes.of_string data)
+  with error ->
+    Ui_services.log_error_message
+      ("read file " ^ file_name f ^ ": " ^ Printexc.to_string error);
+    Js.Promise.reject error

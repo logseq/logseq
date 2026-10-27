@@ -21,7 +21,7 @@ let finish_import repo label =
 
 (* name prompt -> validate -> run import; `run` resolves true only when
    the import actually landed (it may toast a local error itself) *)
-let ask_name_and_run label run =
+let ask_name_and_run ?(restored=false) label run =
   Dialogs_state.prompt ~title:(T.t "import/new-graph-name") ~on_submit:(fun name ->
       let name = String.trim name in
       if name = "" then Toast.warning (T.t "import/empty-graph-name")
@@ -41,7 +41,9 @@ let ask_name_and_run label run =
                   Js.Promise.resolve false)
                (run repo))
           in
-          if ok then finish_import repo label;
+          if ok then
+            if restored then Toast.success (T.import_finished label (Graphs_ops.short_name repo))
+            else finish_import repo label;
           Js.Promise.resolve ())))
   ()
 
@@ -67,33 +69,148 @@ let import_edn repo (file : Ui_services.file) =
       in
       Js.Promise.resolve true
 
-let file_item (f : Ui_services.file) =
-  let* text = promise_of (f.Ui_services.file_text ()) in
-  Js.Promise.resolve
-    (Wire.Map
-       [ (Wire.kw "path", Wire.String f.Ui_services.file_name)
-       ; (Wire.kw "content", Wire.String text)
-       ])
+let import_error message =
+  Ui_services.log_error_message ("directory import: " ^ message);
+  failwith message
+
+let import_path (file : Ui_services.file) =
+  match file.file_relative_path with
+  | Some path
+    when not (String.contains path '\\')
+         && not (String.length path > 1 && path.[1] = ':')
+         && List.for_all (fun part -> part <> "" && part <> "." && part <> "..")
+              (String.split_on_char '/' path) -> path
+  | _ -> import_error "Directory import requires a selected-root-relative file path"
+
+let is_import_asset path = String.starts_with ~prefix:"assets/" path
+
+let ignored_import_path path =
+  if is_import_asset path then false
+  else
+    let rec ignored_parts = function
+      | [] -> false
+      | part :: rest ->
+          String.starts_with ~prefix:"." part || part = "node_modules"
+          || (part = "logseq"
+              && match rest with
+                 | ("bak" | "version-files" | "graphs-txid.edn") :: _ -> true
+                 | _ -> false)
+          || ignored_parts rest
+    in
+    ignored_parts (String.split_on_char '/' path)
+    || let extension = String.lowercase_ascii (Filename.extension path) in
+       extension <> ""
+       && not (List.mem extension [ ".md"; ".markdown"; ".org"; ".js"; ".edn"; ".css" ])
+
+let file_item (path, (file : Ui_services.file)) =
+  let asset = is_import_asset path in
+  let read = if asset then file.file_binary else file.file_text in
+  let* content =
+    promise_of
+      (Ui_task.catch (read ()) (fun error ->
+           Ui_services.log_error_message
+             ("directory import read " ^ path ^ ": " ^ Printexc.to_string error);
+           Ui_task.reject error))
+  in
+  let modified =
+    match file.file_last_modified with
+    | None -> []
+    | Some ms ->
+        let time = Wire.Date_ms (Int64.of_float ms) in
+        [ Wire.kw "last-modified-at", time; Wire.kw "file-updated-at", time ]
+  in
+  let payload =
+    if asset then
+      [ Wire.kw "asset/payload", Wire.Binary content
+      ; Wire.kw "asset/size", Wire.Int (String.length content) ]
+    else [ Wire.kw "file/content", Wire.String content ]
+  in
+  Js.Promise.resolve (Wire.Map ((Wire.kw "path", Wire.String path) :: modified @ payload))
+
+let import_completed result =
+  Wire.get result "status" = Some (Wire.Keyword "completed")
+  && Wire.get result "persisted?" = Some (Wire.Bool true)
+  && Wire.map_get_int result "issue-count" = Some 0
+  && match Wire.get result "validation" with
+     | Some validation ->
+         Wire.get validation "status" = Some (Wire.Keyword "passed")
+         && Wire.map_get_int validation "error-count" = Some 0
+     | None -> false
 
 let import_file_graph repo files =
-  match files with
-  | config :: rest ->
-      let* files_w = Js.Promise.all (Array.of_list (List.map file_item rest)) in
-      let* cfg = promise_of (config.Ui_services.file_text ()) in
-        let* _ =
-        Runtime.invoke "thread-api/import-file-graph"
-          [ Wire.String repo
-          ; Wire.Map
-              [ ( Wire.kw "path"
-                , Wire.String "logseq/config.edn" )
-              ; (Wire.kw "content", Wire.String cfg)
-              ]
-          ; Wire.Array (Array.to_list files_w)
-          ; Wire.Map []
-          ]
-      in
-      Js.Promise.resolve true
-  | [] -> Js.Promise.resolve false
+  let previous_repo = (Runtime.model ()).Model.repo in
+  let attaching = ref false in
+  let stage = ref "prepare files" in
+  let run =
+    let* () = Js.Promise.resolve () in
+    let seen = Hashtbl.create (List.length files) in
+    let files =
+      List.filter_map (fun file ->
+          let path = import_path file in
+          if ignored_import_path path then None
+          else if Hashtbl.mem seen path then import_error ("Duplicate import file: " ^ path)
+          else begin
+            Hashtbl.add seen path ();
+            Some (path, file)
+          end) files
+    in
+    match List.partition (fun (path, _) -> path = "logseq/config.edn") files with
+    | [ config ], rest ->
+        stage := "read config";
+        let* config = file_item config in
+        let rec read_files acc = function
+          | [] -> Js.Promise.resolve (List.rev acc)
+          | ((path, _) as file) :: rest ->
+              stage := "read " ^ path;
+              let* item = file_item file in
+              read_files (item :: acc) rest
+        in
+        let* files = read_files [] rest in
+        stage := "check graph name";
+        let* repos = Graph.list_graphs () in
+        if List.mem repo repos then import_error "Target graph already exists";
+        stage := "create graph";
+        attaching := true;
+        let* _ = Graph.create_graph (Graphs_ops.short_name repo) in
+        stage := "import worker files";
+        let* result =
+          Runtime.invoke "thread-api/import-file-graph"
+            [ Wire.String repo; config; Wire.Array files; Wire.Map [] ]
+        in
+        if not (import_completed result) then begin
+          let status map =
+            match Option.bind (Wire.get map "status") Wire.as_keyword with
+            | Some status -> status
+            | None -> "missing"
+          in
+          Ui_services.log_error_message
+            (Printf.sprintf "directory import terminal: status=%s persisted=%b issues=%s validation=%s"
+               (status result) (Wire.get result "persisted?" = Some (Wire.Bool true))
+               (match Wire.map_get_int result "issue-count" with
+                | Some n -> string_of_int n | None -> "missing")
+               (match Wire.get result "validation" with
+                | Some validation -> status validation | None -> "missing"));
+          import_error "Directory import did not complete without errors"
+        end;
+        stage := "restore imported graph";
+        let* _ = Graphs_ops.refresh () in
+        let* () = Graphs_ops.navigate_journal repo in
+        Js.Promise.resolve true
+    | _ ->
+        Toast.error (T.t "import/logseq-config-missing");
+        Js.Promise.resolve false
+  in
+  run |> Js.Promise.catch (fun _error ->
+      Ui_services.log_error_message ("directory import failed during " ^ !stage);
+      Toast.error (T.t "import/import-error");
+      if !attaching then
+        match previous_repo with
+        | Some previous ->
+            let* config = Graph.open_graph previous in
+            Runtime.send (Action.Boot_graph_ready (previous, config));
+            Js.Promise.resolve false
+        | None -> Js.Promise.resolve false
+      else Js.Promise.resolve false)
 
 (* cljs import.cljs zip helpers: entry names lowercase with "+" as "/";
    the db is the shortest path ending in "db.sqlite", assets are any
@@ -206,7 +323,7 @@ let run_files kind files =
   | "import-db-edn", f :: _ ->
       ask_name_and_run "EDN" (fun repo -> import_edn repo f)
   | "import-file-graph", _ :: _ ->
-      ask_name_and_run "file graph" (fun repo ->
+      ask_name_and_run ~restored:true "file graph" (fun repo ->
           import_file_graph repo files)
   | "import-sqlite-zip", f :: _ ->
       ask_name_and_run "SQLite DB + assets" (fun repo ->

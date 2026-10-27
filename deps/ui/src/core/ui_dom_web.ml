@@ -261,8 +261,23 @@ let rec json_of_js (v : Js.Json.t) : Json.t =
   | Js.Json.JSONArray a -> Json.Array (Array.map json_of_js a)
 
 let file_of_json (f : Js.Json.t) : Ui_services.file =
+  let relative_path =
+    match Option.bind (j_field f "webkitRelativePath") Js.Json.decodeString with
+    | None | Some "" -> None
+    | Some path ->
+        let segments = String.split_on_char '/' path in
+        if String.contains path '\\'
+           || not (List.for_all (fun s -> s <> "" && s <> "." && s <> "..") segments)
+        then failwith "Invalid directory-relative file path";
+        (match segments with
+         | _root :: (_ :: _ as relative) -> Some (String.concat "/" relative)
+         | _ -> failwith "Directory-relative file path is missing its root")
+  in
   { Ui_services.file_name = Web_dom.file_name f
   ; file_size = Web_dom.file_size f
+  ; file_relative_path = relative_path
+  ; file_last_modified =
+      Option.bind (j_field f "lastModified") Js.Json.decodeNumber
   ; file_text = (fun () -> task_of (Web_dom.file_text f))
   ; file_binary =
       (fun () ->
