@@ -10,6 +10,7 @@
             [logseq.common.util :as common-util]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.db :as ldb]
+            [logseq.db.frontend.property.build :as db-property-build]
             [logseq.db.sqlite.build :as sqlite-build]))
 
 ;; TODO: quickcheck
@@ -297,6 +298,46 @@
     (is (= ["b2"]
            (map :block/title (dsl-query "(property :user.property/default \"bar\")")))
         "Blocks with :default property value and not tagged with a tag that has that default-value property value"))
+
+  (deftest property-default-type-node-value-queries
+    (load-test-files
+     {:properties {:note {:logseq.property/type :default}}
+      :pages-and-blocks
+      [{:page {:block/title "x"}}
+       {:page {:block/title "page1"}
+        :blocks [{:block/title "plain"
+                  :build/properties {:note "x"}}
+                 {:block/title "node"}
+                 {:block/title "other"
+                  :build/properties {:note "y"}}]}]})
+    ;; Typing [[x]] in a text property stores a value block titled [[<uuid of x>]]
+    ;; that references x
+    (let [db (conn/get-db test-helper/test-db)
+          title->id (fn [title]
+                      (d/q '[:find ?e . :in $ ?title :where [?e :block/title ?title]] db title))
+          x (d/entity db (title->id "x"))
+          node-value (-> (db-property-build/build-property-value-block
+                          (d/entity db (title->id "node"))
+                          (d/entity db :user.property/note)
+                          (str "[[" (:block/uuid x) "]]")
+                          {:properties {:block/refs [(:db/id x)]}})
+                         (assoc :db/id "node-value"))]
+      (d/transact! (conn/get-db test-helper/test-db false)
+                   [node-value
+                    [:db/add (title->id "node") :user.property/note "node-value"]]))
+
+    (is (= #{"plain" "node"}
+           (set (map :block/title (dsl-query "(property note [[x]])"))))
+        "A page-ref query matches a node and the same text in a text property")
+    (is (= #{"plain" "node"}
+           (set (map :block/title (dsl-query "(property note x)"))))
+        "A text query matches a node and the same text in a text property")
+    (is (= ["other"]
+           (map :block/title (dsl-query "(property note [[y]])")))
+        "A value that is no node still matches only the same text")
+    (is (= #{"plain" "node" "other"}
+           (set (map :block/title (dsl-query "(property note)"))))
+        "Every block with the property matches"))
 
   (deftest property-checkbox-type-default-value-queries
     (load-test-files
