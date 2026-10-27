@@ -21,12 +21,13 @@ import (
 // All methods belong to the UI goroutine. Desktop jobs marshal completion back
 // onto that goroutine; document persistence and timers remain OCaml-owned.
 type platformServices struct {
-	backend   *luimygo.Backend
-	state     *platformUIState
-	snapshots map[string]platformThemeSnapshot
-	gaps      map[string]bool
-	controls  platformControls
-	desktop   platformDesktopServices
+	backend           *luimygo.Backend
+	state             *platformUIState
+	snapshots         map[string]platformThemeSnapshot
+	gaps              map[string]bool
+	controls          platformControls
+	codeMirrorSources map[int64]codeMirrorCompositionSource
+	desktop           platformDesktopServices
 	// Queries run on the UI thread after layout. A false natural-size result
 	// means decoding is still pending, not a successful zero-sized image.
 	NaturalSize func(id int64) (width, height float32, ready bool)

@@ -105,7 +105,7 @@ func run() (result error) {
 				return true
 			}
 			return prevented
-		})
+		}, host.services.codeMirrorComposing)
 		host.document.Pointer = host.services.EditorPointer
 		host.document.Observe = host.services.ViewportInput
 		host.services.mutations.Activate = func(n luimygo.Node) error {
@@ -331,6 +331,7 @@ func (h *windowHost) applyPatches(payload string, snapshot bool) error {
 			return err
 		}
 		h.services.AppliedBatch(applied, snapshot)
+		h.services.syncCodeMirrorSources(snapshot)
 		h.services.mutations.Sync()
 		h.services.resources.Sync()
 	}

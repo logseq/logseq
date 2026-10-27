@@ -18,6 +18,47 @@ type codeMirrorTextState struct {
 	focusRequested bool
 }
 
+type codeMirrorCompositionSource struct {
+	target     platformTarget
+	state      *codeMirrorTextState
+	buffer     *editor.Buffer
+	role, uuid string
+}
+
+func (s *platformServices) currentCodeMirrorSource(source codeMirrorCompositionSource) bool {
+	if !s.liveTarget(source.target) {
+		return false
+	}
+	n, ok := s.backend.Node(source.target.id)
+	return ok && n.Identifier == "logseq-codemirror" &&
+		n.String("source-role") == source.role && n.String("uuid") == source.uuid &&
+		source.state.role == source.role && source.state.uuid == source.uuid &&
+		source.state.editor.Buffer == source.buffer
+}
+
+func (s *platformServices) syncCodeMirrorSources(snapshot bool) {
+	if snapshot {
+		s.codeMirrorSources = nil
+		return
+	}
+	for id, source := range s.codeMirrorSources {
+		if !s.currentCodeMirrorSource(source) {
+			delete(s.codeMirrorSources, id)
+		}
+	}
+}
+
+// Key targets come from MyGo's actual focused ancestry, never an OCaml ID.
+func (s *platformServices) codeMirrorComposing(target luimygo.InputNode) bool {
+	if !target.Current() {
+		return false
+	}
+	source, ok := s.codeMirrorSources[target.Node.ID]
+	return ok && s.currentCodeMirrorSource(source) && source.state.focused &&
+		target.Node.String("source-role") == source.role && target.Node.String("uuid") == source.uuid &&
+		source.state.editor.Composing()
+}
+
 func (s *codeMirrorTextState) reconcile(role, uuid, value string) {
 	if s.editor.Buffer == nil || s.role != role || s.uuid != uuid {
 		*s = codeMirrorTextState{role: role, uuid: uuid, model: value,
@@ -116,6 +157,13 @@ func (services *platformServices) renderLogseqCodeMirror(c *ui.Context, n luimyg
 				s.focusRequested = true
 			}
 		}
-		s.focused = focused
+		s.focused = e.Focused()
+		if services.codeMirrorSources == nil {
+			services.codeMirrorSources = make(map[int64]codeMirrorCompositionSource)
+		}
+		services.codeMirrorSources[n.ID] = codeMirrorCompositionSource{
+			target: services.controlTarget(n.ID), state: s, buffer: s.editor.Buffer,
+			role: role, uuid: s.uuid,
+		}
 	})
 }

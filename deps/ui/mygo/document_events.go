@@ -21,21 +21,22 @@ type DocumentEvents struct {
 	Observe func(ui.InputEvent, luimygo.InputNode)
 	// Pointer routes editor gestures after unprevented document capture and
 	// before MyGo target delivery. A zero target still allows active drags.
-	Pointer         func(ev ui.InputEvent, target int64) bool
-	backend         *luimygo.Backend
-	dispatch        DocumentDispatch
-	context         *ui.Context
-	services        ui.Services
-	pressed         luimygo.InputNode
-	composing       bool
-	compositionNode int64
+	Pointer             func(ev ui.InputEvent, target int64) bool
+	codeMirrorComposing func(luimygo.InputNode) bool
+	backend             *luimygo.Backend
+	dispatch            DocumentDispatch
+	context             *ui.Context
+	services            ui.Services
+	pressed             luimygo.InputNode
+	composing           bool
+	compositionNode     int64
 }
 
-func NewDocumentEvents(backend *luimygo.Backend, dispatch DocumentDispatch) *DocumentEvents {
-	if backend == nil || dispatch == nil {
+func NewDocumentEvents(backend *luimygo.Backend, dispatch DocumentDispatch, codeMirrorComposing func(luimygo.InputNode) bool) *DocumentEvents {
+	if backend == nil || dispatch == nil || codeMirrorComposing == nil {
 		panic("document input requires a backend and synchronous OCaml dispatch")
 	}
-	return &DocumentEvents{backend: backend, dispatch: dispatch}
+	return &DocumentEvents{backend: backend, dispatch: dispatch, codeMirrorComposing: codeMirrorComposing}
 }
 
 // Capture installs the window callback AFTER backend.View on every frame.
@@ -51,6 +52,7 @@ func (s *platformServices) renderDocumentEvents(c *ui.Context, n luimygo.Node, _
 	e := ui.Box(c).Size(0, 0)
 	d := ui.Local(e, "document-events", func() DocumentEvents { return DocumentEvents{} })
 	d.backend = s.backend
+	d.codeMirrorComposing = s.codeMirrorComposing
 	d.Observe = s.ViewportInput
 	d.dispatch = func(name, payload string) bool {
 		extensionEmit(n, emit, "dom-event", map[string]any{"name": name, "payload": payload})
@@ -110,6 +112,9 @@ func (d *DocumentEvents) event(ev ui.InputEvent, target luimygo.InputNode) bool 
 		}
 		payload := extensionDOMKey(ev, key)
 		payload["isComposing"] = d.composing
+		if target.Node.Identifier == "logseq-codemirror" {
+			payload["isComposing"] = d.codeMirrorComposing(target)
+		}
 		return d.send(target, name, payload)
 	case ui.InputPointerDown, ui.InputPointerUp, ui.InputPointerMove, ui.InputClick:
 		payload := documentPointer(ev)
