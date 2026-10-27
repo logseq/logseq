@@ -3447,14 +3447,46 @@ let test_title_refs3 () =
   eqs "rewrite tag at eos" "see #[[u1]]"
     (Title_refs.rewrite_title "see #y" resolved)
 
-(* ---- editor_actions: selected_uuids fallback ---- *)
+(* ---- editor_actions: selection membership and document order ---- *)
 
 let test_selected_uuids () =
-  (* no mounted editor state -> empty selection -> empty list *)
+  let module S = Editor_state in
   let saved_model = !model_stub in
+  let saved_state = !(S.st) and saved_sources = !(S.extra_sources) in
   set_page (Some (page [ block "a" "A"; block "b" "B" ]));
   check "selected_uuids empty sel"
     (Editor_actions.selected_uuids () = []);
+  let sched = Signal.scheduler () in
+  let tree =
+    [ { (block ~children:[block "a" "Hidden"] "z" "Parent") with
+        Model.block_default_collapsed = true }
+    ; block "m" "Last" ]
+  in
+  let p = page tree in
+  S.extra_sources := ["selection-side", (fun () -> tree)];
+  List.iter (fun (label, model, scope, expected) ->
+      model_stub := model;
+      S.st := Some (Signal.state sched
+        { S.initial with selected = S.String_set.of_list (List.rev expected)
+        ; selection_scope = scope });
+      check ("selected_uuids document order: " ^ label)
+        (Editor_actions.selected_uuids () = expected))
+    [ "page title and collapsed descendants",
+      { Model.initial with route_page = Some p }, "main", ["p"; "z"; "a"; "m"]
+    ; "collapsed descendant without title",
+      { Model.initial with route_page = Some p }, "main", ["z"; "a"; "m"]
+    ; "co-mounted scope", Model.initial, "selection-side", ["z"; "a"; "m"]
+    ; "journal titles before their own blocks",
+      { Model.initial with journals = [p; { (page [block "b" "Second"]) with
+          page_uuid = Some "q" }] }, "main", ["p"; "z"; "a"; "m"; "q"; "b"] ];
+  S.st := Some (Signal.state sched
+    { S.initial with selected = S.String_set.of_list ["unloaded"; "z"] });
+  model_stub := { Model.initial with route_page = Some p };
+  check "selected_uuids retains unresolved membership during reload"
+    (S.String_set.equal (S.String_set.of_list (Editor_actions.selected_uuids ()))
+       (S.selected ()));
+  S.st := saved_state;
+  S.extra_sources := saved_sources;
   model_stub := saved_model
 
 (* ---- Update.update: remaining arm ---- *)

@@ -120,6 +120,16 @@ let run ~command ~block ~value : outcome =
   | "upload" ->
       h.pick_files ();
       Handled
+  | ("copy" | "cut" | "delete")
+    when Editor_state.selection_active ()
+         && (match block with
+             | None -> false
+             | Some uuid -> Editor_state.String_set.mem uuid (Editor_state.selected ())) ->
+      (match command with
+       | "copy" -> Editor_actions.copy_selection_text ()
+       | "cut" -> Editor_actions.cut_selection_text ()
+       | _ -> Editor_actions.delete_selection ());
+      Handled
   | _ -> (
       match current_block block with
       | None -> No_target
