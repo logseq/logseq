@@ -1206,7 +1206,20 @@
       (seq selected-ids)
       (seq (state/get-selection-block-ids))))
 
+(defn- <clipboard-written?
+  "Resolves to true when the clipboard write succeeded and to false when the
+  browser refused it."
+  [write-promise]
+  (-> (p/promise write-promise)
+      (p/then (constantly true))
+      (p/catch (fn [error]
+                 (log/warn :msg "Clipboard write failed" :exception error)
+                 false))))
+
 (defn copy-selection-blocks
+  "Copies the selected blocks. The returned promise rejects when the browser
+  refused every clipboard write, so a caller that goes on to delete the blocks
+  (cut) does not lose them."
   [html? & {:keys [selected-blocks selected-ids op] :as opts}]
   (let [repo (state/get-current-repo)
         ids (selection-copy-ids selected-blocks selected-ids)
@@ -1218,12 +1231,16 @@
              repo ids (assoc (dissoc opts :selected-blocks :selected-ids :op)
                              :quick-copy? true))]
       (when (seq blocks)
-        (util/copy-to-clipboard! content)
-        (p/let [copied-source-blocks (<get-all-blocks-by-ids repo top-level-block-uuids)
-                html (export-html/export-blocks-as-html repo top-level-block-uuids nil)]
-          (common-handler/copy-to-clipboard-without-id-property!
-           repo content (when html? html) (blocks-for-clipboard copied-source-blocks) :op block-op)
-          (state/set-block-op-type! block-op))
+        (let [<text-written? (<clipboard-written? (util/copy-to-clipboard! content))]
+          (p/let [copied-source-blocks (<get-all-blocks-by-ids repo top-level-block-uuids)
+                  html (export-html/export-blocks-as-html repo top-level-block-uuids nil)
+                  blocks-written? (<clipboard-written?
+                                   (common-handler/copy-to-clipboard-without-id-property!
+                                    repo content (when html? html) (blocks-for-clipboard copied-source-blocks) :op block-op))
+                  text-written? <text-written?]
+            (when-not (or blocks-written? text-written?)
+              (throw (ex-info "The clipboard refused the copied blocks" {:block-uuids top-level-block-uuids})))
+            (state/set-block-op-type! block-op)))
         ;; (notification/show! "Copied!" :success)
         ))))
 
