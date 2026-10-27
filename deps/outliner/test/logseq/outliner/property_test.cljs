@@ -62,6 +62,18 @@
       (outliner-property/upsert-property! conn :user.property/empty-prop {:logseq.property/type :number} {})
       (is (= :number (:logseq.property/type (d/entity @conn :user.property/empty-prop)))))))
 
+(deftest upsert-property-type-change-with-closed-values-notification-has-i18n-key
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties {:arm {:logseq.property/type :default
+                                  :build/closed-values [{:uuid (random-uuid) :value "raster"}]}}})
+        err (try
+              (outliner-property/upsert-property! conn :user.property/arm {:logseq.property/type :node} {})
+              nil
+              (catch :default e e))]
+    (is (= :notification (:type (ex-data err))))
+    (is (= :property.validation/type-change-with-closed-values
+           (get-in (ex-data err) [:payload :i18n-key])))))
+
 (deftest upsert-property-rejects-type-change-with-closed-values
   (let [conn (db-test/create-conn-with-blocks
               {:properties {:arm {:logseq.property/type :default
