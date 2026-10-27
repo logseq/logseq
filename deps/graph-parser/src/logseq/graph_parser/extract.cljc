@@ -106,7 +106,8 @@
                                           properties (zipmap (map (comp keyword string/lower-case first) properties-ast)
                                                              (map second properties-ast))]
                                       (:title properties))))
-                                ast)
+                                ;; Only page properties, which come before the first block, set the title
+                                (take-while (complement gp-block/heading-block?) ast))
             first-block-name (let [title (last (first (:title first-block)))]
                                (and first-block
                                     (string? title)
