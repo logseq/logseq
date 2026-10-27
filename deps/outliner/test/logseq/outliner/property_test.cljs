@@ -62,6 +62,28 @@
       (outliner-property/upsert-property! conn :user.property/empty-prop {:logseq.property/type :number} {})
       (is (= :number (:logseq.property/type (d/entity @conn :user.property/empty-prop)))))))
 
+(deftest upsert-property-rejects-type-change-with-closed-values
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties {:arm {:logseq.property/type :default
+                                  :build/closed-values [{:uuid (random-uuid) :value "raster"}
+                                                        {:uuid (random-uuid) :value "vector"}]}}})]
+    (is (empty? (d/datoms @conn :avet :user.property/arm))
+        "Closed values alone leave no datoms under the property ident")
+
+    (testing "Changing type is rejected while the property has closed values"
+      (is (thrown-with-msg?
+           js/Error #"Disallowed type change with closed values"
+           (outliner-property/upsert-property! conn :user.property/arm {:logseq.property/type :node} {})))
+      (is (= :default (:logseq.property/type (d/entity @conn :user.property/arm))))
+      (is (= 2 (count (:block/_closed-value-property (d/entity @conn :user.property/arm))))))
+
+    (testing "Changing type is allowed once the closed values are deleted"
+      (let [property-id (:db/id (d/entity @conn :user.property/arm))]
+        (doseq [closed-value (:block/_closed-value-property (d/entity @conn :user.property/arm))]
+          (outliner-property/delete-closed-value! conn property-id [:block/uuid (:block/uuid closed-value)])))
+      (outliner-property/upsert-property! conn :user.property/arm {:logseq.property/type :node} {})
+      (is (= :node (:logseq.property/type (d/entity @conn :user.property/arm)))))))
+
 (deftest upsert-property-converts-plain-page
   (let [conn (db-test/create-conn)
         [_ page-uuid] (outliner-page/create! conn "PlainPage" {})

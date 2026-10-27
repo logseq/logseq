@@ -348,12 +348,20 @@
                           (mapcat
                            (fn [[property-id v]]
                              (build-property-value-tx-data conn property property-id v)) properties)))]
-    (when (and (contains? changed-property-attrs :logseq.property/type)
-               (seq (d/datoms @conn :avet db-ident)))
-      (throw (ex-info "Disallowed type change with existing data"
-                      {:type :notification
-                       :payload {:message "This property's type can't be changed because it has existing data."
-                                 :type :error}})))
+    (when (contains? changed-property-attrs :logseq.property/type)
+      (when (seq (d/datoms @conn :avet db-ident))
+        (throw (ex-info "Disallowed type change with existing data"
+                        {:type :notification
+                         :payload {:message "This property's type can't be changed because it has existing data."
+                                   :type :error}})))
+      ;; Closed values aren't indexed under the property's ident, so the check
+      ;; above doesn't see them. Leaving them behind makes validate-db delete
+      ;; every value of the property.
+      (when (seq (:block/_closed-value-property property))
+        (throw (ex-info "Disallowed type change with closed values"
+                        {:type :notification
+                         :payload {:message "This property's type can't be changed because it has closed values. Delete the closed values first."
+                                   :type :error}}))))
     (when (seq tx-data)
       (ldb/transact! conn tx-data {:outliner-op :update-property
                                    :property-id (:db/id property)}))
