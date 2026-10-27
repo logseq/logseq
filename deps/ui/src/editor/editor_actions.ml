@@ -419,6 +419,7 @@ let commit_result uuid buf =
     S.override_title uuid (Ops.normalized_title uuid buf);
       let* sop = Ops.save_block_parsed uuid buf in
       let* _ = Ops.apply_and_refresh ~opts [ sop ] in
+      S.retire_title_override uuid (Ops.normalized_title uuid buf);
       (* the buffer is now persisted — advance base so the undo
                 resync gate treats it as clean and can restore reverted
                 titles instead of masking them with the pre-undo text *)

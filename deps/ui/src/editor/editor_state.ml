@@ -512,6 +512,10 @@ let display_overrides : (string, string) Hashtbl.t = Hashtbl.create 8
 let override_title uuid title =
   Hashtbl.replace display_overrides uuid title
 
+let retire_title_override uuid title =
+  if Hashtbl.find_opt display_overrides uuid = Some title then
+    Hashtbl.remove display_overrides uuid
+
 let title_for uuid fallback =
   Option.value (Hashtbl.find_opt display_overrides uuid) ~default:fallback
 

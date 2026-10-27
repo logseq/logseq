@@ -1409,7 +1409,6 @@ let schedule_save uuid title =
               Hashtbl.remove autosave_revisions uuid;
               if context = (Runtime.repo (), Runtime.route ()) then (
                 (* Advance the clean base only for the submitted revision. *)
-                S.override_title uuid (normalized_title uuid title);
                 S.set_silent (fun st ->
                     match st.S.editing with
                     | Some e when e.S.uuid = uuid && e.S.buffer = title ->

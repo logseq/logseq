@@ -295,10 +295,30 @@ let create ?(units = Bytes) source =
   ; dirty = None
   }
 
-(* external update (db broadcast / undo): re-split, keep caret clamped *)
+(* External replacement preserves offsets in the unchanged prefix/suffix. *)
 let set_source m source =
-  let caret = clamp_caret m.units source m.caret in
-  let anchor = Option.map (clamp_caret m.units source) m.anchor in
+  let old_len = String.length m.source and new_len = String.length source in
+  let limit = min old_len new_len in
+  let rec prefix i =
+    if i < limit && m.source.[i] = source.[i] then prefix (i + 1) else i
+  in
+  let prefix = prefix 0 in
+  let rec suffix i =
+    if i < limit - prefix
+       && m.source.[old_len - i - 1] = source.[new_len - i - 1]
+    then suffix (i + 1) else i
+  in
+  let suffix = suffix 0 in
+  let remap off =
+    let off =
+      if off < prefix then off
+      else if off >= old_len - suffix then off + new_len - old_len
+      else min off (new_len - suffix)
+    in
+    clamp_caret m.units source off
+  in
+  let caret = remap m.caret in
+  let anchor = Option.map remap m.anchor in
   rebuild m source ~caret ~anchor ~dirty:None
 
 let selection_range m =

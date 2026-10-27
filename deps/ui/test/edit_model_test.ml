@@ -332,6 +332,20 @@ let test_shape () =
   let m4 = M.set_source m "a [[x]] c" in
   check "shape changes on atomic" (M.shape m4 <> s0)
 
+let test_source_replacement () =
+  let before = "prefix short suffix" in
+  let after = "prefix canonical title suffix" in
+  let m =
+    M.select (M.create before) ~anchor:2
+      ~focus:(String.length before - 3)
+    |> fun m -> M.set_source m after
+  in
+  eqi "source replacement retains suffix-relative caret"
+    (String.length after - 3) m.M.caret;
+  eq "source replacement retains prefix-relative anchor"
+    (Some 2) m.M.anchor
+    (function Some x -> string_of_int x | None -> "none")
+
 let test_double_click () =
   List.iter
     (fun (source, offset, expected) ->
@@ -351,6 +365,7 @@ let test_double_click () =
     ]
 
 let run () =
+  test_source_replacement ();
   test_double_click ();
   test_byte_exact ();
   test_run_kinds ();

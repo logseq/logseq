@@ -343,8 +343,7 @@ let test_save_debounce (h : host) =
   stage_page h [ Test_check.block "b1" "hello" ];
   set_editing ~uuid:"b1" ~buffer:"hello" ~caret:5 ~base:"hello";
   install_worker ~repo:h.repo h;
-  (* two keystrokes inside the window collapse to a single save of the
-     latest buffer; the committed base and the display override advance *)
+  (* Two keystrokes collapse to one save of the latest buffer. *)
   Editor_keys.apply_input "b1" (EI.Insert "x");
   Editor_keys.apply_input "b1" (EI.Insert "y");
   check "typing publishes buffer" ((editing_now ()).S.buffer = "helloxy");
@@ -355,8 +354,47 @@ let test_save_debounce (h : host) =
        check "debounce saves latest once" false;
        Js.log ("save ops: " ^ string_of_int (List.length sos)));
   check "commit advances base" ((editing_now ()).S.base = "helloxy");
-  eqs "commit sets title override" "helloxy" (S.title_for "b1" "?");
+  check "commit displays saved title" (current_titles () = [ "helloxy" ]);
   check "ops carry the repo" !repo_ok;
+  reset_editor ();
+  let raw = "[[Reference alias]]" in
+  let canonical = "[[11111111-2222-4333-8444-555555555555]]" in
+  stage_page h [ Test_check.block "b1" canonical ];
+  set_editing ~uuid:"b1" ~buffer:"" ~caret:0 ~base:canonical;
+  let revision = ref 0 in
+  let canonical_host =
+    { h with base_handler = (fun name args ->
+        let result = h.base_handler name args in
+        if name <> "thread-api/apply-outliner-ops" then result
+        else begin
+          (* The worker already holds the canonical reference. Alias
+             normalization makes this save a no-op, with no touched row. *)
+          apply_ops h
+            [ Ops.op "save-block"
+                [ W.Map
+                    [ W.kw "block/uuid", W.Uuid "b1"
+                    ; W.kw "block/title", W.String canonical ]
+                ; W.Map [] ] ];
+          incr revision;
+          W.Map
+            [ W.kw "result", W.Nil
+            ; W.kw "delta", W.Map
+                [ W.kw "rev", W.Int !revision
+                ; W.kw "blocks", W.Map []
+                ; W.kw "deleted", W.Map []
+                ; W.kw "children", W.Map [] ] ]
+        end) }
+  in
+  install_worker ~repo:h.repo canonical_host;
+  Editor_keys.apply_input "b1" (EI.Insert raw);
+  let* () = h.wait_ms 500 in
+  check "canonical acknowledgement advances the editable base"
+    ((editing_now ()).S.base = raw);
+  check "autosave does not mask the canonical reference"
+    (current_titles () = [ canonical ]);
+  let* () = A.commit_result "b1" raw in
+  check "no-op commit does not restore the reference alias"
+    (current_titles () = [ canonical ]);
   reset_editor ();
   Js.Promise.resolve ()
 
