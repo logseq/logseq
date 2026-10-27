@@ -55,7 +55,23 @@ let lazy_feasible : bool =
 let margin = 1200.
 
 let forced : (string, unit) Hashtbl.t = Hashtbl.create 8
-let force uuid = Hashtbl.replace forced uuid ()
+let waiting : (string, (unit -> unit) list) Hashtbl.t = Hashtbl.create 8
+
+let force uuid =
+  Hashtbl.replace forced uuid ();
+  List.iter (fun mount -> mount ())
+    (Option.value (Hashtbl.find_opt waiting uuid) ~default:[]);
+  Runtime.flush ()
+
+let register_force ctx uuid near =
+  let mount () = Signal.set near true in
+  Hashtbl.replace waiting uuid
+    (mount :: Option.value (Hashtbl.find_opt waiting uuid) ~default:[]);
+  Signal.on_dispose ctx.Lui_ui.ui_scope (fun () ->
+    let rest = List.filter (fun f -> f != mount)
+        (Option.value (Hashtbl.find_opt waiting uuid) ~default:[]) in
+    if rest = [] then Hashtbl.remove waiting uuid
+    else Hashtbl.replace waiting uuid rest)
 
 let near_viewport el =
   let r = bounding_rect el in
@@ -63,9 +79,16 @@ let near_viewport el =
   rect_top r < vh +. margin && rect_bottom r > -. margin
 
 let attach ctx el_id near =
+  let alive = ref true and observer = ref None in
+  Signal.on_dispose ctx.Lui_ui.ui_scope (fun () ->
+    alive := false;
+    Option.iter io_disconnect !observer);
   let mount () =
-    Signal.set near true;
-    Runtime.flush ()
+    if !alive then begin
+      Signal.set near true;
+      Option.iter io_disconnect !observer;
+      Runtime.flush ()
+    end
   in
   match get_by_id el_id with
   (* cljs: (or forced? (nil? ref) (near?)) -> mount — a missing element
@@ -81,8 +104,8 @@ let attach ctx el_id near =
                 mount ())
             (io_opts ~rootMargin:(Printf.sprintf "%.0fpx 0px" margin))
         in
-        io_observe io el;
-        Signal.on_dispose ctx.Lui_ui.ui_scope (fun () -> io_disconnect io)
+        observer := Some io;
+        io_observe io el
       end
 
 let lazy_children ~key ~uuid ~min_height ~render : t =
@@ -92,9 +115,13 @@ let lazy_children ~key ~uuid ~min_height ~render : t =
       (Hashtbl.mem forced uuid || not lazy_feasible)
   in
   let near_sig = (Signal.value (near)) in
+  register_force ctx uuid near;
+  let alive = ref true in
+  Signal.on_dispose ctx.Lui_ui.ui_scope (fun () -> alive := false);
   let el_id = "lazy-" ^ key in
   if lazy_feasible && not (Hashtbl.mem forced uuid) then
-    set_timeout (fun () -> attach ctx el_id near) 0;
+    set_timeout (fun () ->
+      if !alive && not (Signal.get near_sig) then attach ctx el_id near) 0;
   (column ~key ~accessibility_identifier:el_id ~style_class:"block-children"
      ~grow:1.
      [ Lui_elements.if_

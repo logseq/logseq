@@ -668,6 +668,37 @@ let tags_el uuid (b : Model.block) : t =
 
 
 
+let content_wrap key (b : Model.block) children =
+  let quote = b.block_display_type = Some "quote" in
+  Ui_components.with_props
+    (if quote then
+       [ Ui_components.Prop.position `relative
+       ; Ui_components.Prop.padding_vertical 8
+       ; Ui_components.Prop.padding_left 20
+       ; Ui_components.Prop.padding_right 16
+       ; Ui_components.Prop.background
+           "var(--ls-page-blockquote-bg-color, var(--lx-gray-04))"
+       ; Ui_components.Prop.foreground "var(--ls-page-blockquote-color)" ]
+     else [])
+    (row ~key:("cew-" ^ key) ~grow:1. ~min_width:0 ~gap:4 ~flex_wrap:`wrap
+       ~margin_vertical:(if quote then 8 else 0)
+       ~style_class:"block-content-or-editor-wrap"
+       ~data_attrs:(match b.block_display_type with
+         | Some dt -> [ ("data-node-type", dt) ]
+         | None -> [])
+       ((if quote then
+           [ Ui_components.with_props
+               [ Ui_components.Prop.position `absolute
+               ; Ui_components.Prop.inset_left 0.
+               ; Ui_components.Prop.inset_top 0.
+               ; Ui_components.Prop.inset_bottom 0.
+               ; Ui_components.Prop.pointer_enabled false ]
+               (box ~key:"quote-border" ~width:4
+                  ~background:
+                    "var(--ls-page-blockquote-border-color, var(--lx-gray-05-alpha))"
+                  []) ]
+         else []) @ children))
+
 (* -- row -- *)
 
 (* the document listeners live in Editor_keys.install_once, which the
@@ -694,49 +725,23 @@ and row_main ~editable ~library scope (b : Model.block) : t =
   let key = block_key b in
   (* data-has-heading feeds block.css selectors — rides ~data_attrs *)
   row ~key:("main-" ^ key)
-      ~style_class:"block-main-container" ~gap:4
+      ~style_class:"block-main-container" ~gap:4 ~min_height:24
         ~data_attrs:
           ((match block_heading_lvl b with
             | Some lvl -> [ ("data-has-heading", string_of_int lvl) ]
-            | None -> [])
-          @ [ ("style", "min-height:24px") ])
+            | None -> []))
         [ control_wrap ~scope ~library uuid b
-        ; column ~key:("col-" ^ key) ~grow:1.
-            [ column ~key:("col2-" ^ key)
+        ; column ~key:("col-" ^ key) ~grow:1. ~min_width:0
+            [ column ~key:("col2-" ^ key) ~min_width:0
                 [ row ~key:("bmc-" ^ key)
                      ~gap:8
-                    [ column ~key:("col3-" ^ key) ~grow:1.
-                        [ box ~key:("cew-" ^ key)
-                            ~style_class:"block-content-or-editor-wrap"
-                            ~grow:1.
-                            ~data_attrs:
-                              ((match b.Model.block_display_type with
-                                | Some dt -> [ ("data-node-type", dt) ]
-                                | None -> [])
-                              @ [ ( "style"
-                                  , "display:flex;flex-direction:row;\
-                                     flex-wrap:wrap;gap:0.25rem"
-                                    ^
-                                    if b.Model.block_display_type
-                                       = Some "quote"
-                                    then
-                                      ";text-indent:0;padding:8px 16px;\
-                                       border-left:4px solid \
-                                       var(--ls-page-blockquote-border-color, var(--lx-gray-05-alpha));\
-                                       background-color:\
-                                       var(--ls-page-blockquote-bg-color, var(--lx-gray-04));\
-                                       color:var(--ls-page-blockquote-color);\
-                                       margin:0.5rem 0"
-                                    else "" )
-                                ])
-                            [ box ~key:("cei-" ^ key)
+                    [ column ~key:("col3-" ^ key) ~grow:1. ~min_width:0
+                        [ content_wrap key b
+                            [ Ui_components.with_props
+                                [ Ui_components.Prop.padding_right 4 ]
+                                (column ~key:("cei-" ^ key)
                                 ~style_class:"block-content-or-editor-inner"
-                                ~grow:1.
-                                ~data_attrs:
-                                  [ ( "style"
-                                    , "display:flex;flex-direction:column;\
-                                       width:100%;padding-right:0.25rem" )
-                                  ]
+                                ~grow:1. ~min_width:0
                                 [ row ~key:("row-" ^ key)
                                     ~style_class:"block-row"
                                     ~grow:1. ~gap:4 ~cross:`center
@@ -770,7 +775,7 @@ and row_main ~editable ~library scope (b : Model.block) : t =
                                           else tags_el uuid b
                                         ]
                                     ]
-                                ]
+                                ])
                             ]
                         ; (* cljs .flex.flex-col.w-full inner column:
                              .positioned-properties.block-below pills sit

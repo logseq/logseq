@@ -8,7 +8,23 @@ open Lui_elements
 module D = Logseq_el
 
 let forced : (string, unit) Hashtbl.t = Hashtbl.create 8
-let force uuid = Hashtbl.replace forced uuid ()
+let waiting : (string, (unit -> unit) list) Hashtbl.t = Hashtbl.create 8
+
+let force uuid =
+  Hashtbl.replace forced uuid ();
+  List.iter (fun mount -> mount ())
+    (Option.value (Hashtbl.find_opt waiting uuid) ~default:[]);
+  Runtime.flush ()
+
+let register_force ctx uuid near =
+  let mount () = Signal.set near true in
+  Hashtbl.replace waiting uuid
+    (mount :: Option.value (Hashtbl.find_opt waiting uuid) ~default:[]);
+  Signal.on_dispose ctx.Lui_ui.ui_scope (fun () ->
+    let rest = List.filter (fun f -> f != mount)
+        (Option.value (Hashtbl.find_opt waiting uuid) ~default:[]) in
+    if rest = [] then Hashtbl.remove waiting uuid
+    else Hashtbl.replace waiting uuid rest)
 
 (* TODO(component): the lazy-mount dom-event is a host-side contract
    (onAppear triggers the mount); the attr half could ride ~data_attrs
@@ -18,9 +34,11 @@ let force uuid = Hashtbl.replace forced uuid ()
 let lazy_children ~key ~uuid ~min_height ~render : t =
  fun ctx parent ->
   let near =
-    Signal.state ctx.Lui_ui.ui_scheduler (Hashtbl.mem forced uuid)
+    Signal.state ctx.Lui_ui.ui_scheduler
+      (Hashtbl.mem forced uuid || not (Virt_list.lazy_spine ctx))
   in
   let near_sig = (Signal.value (near)) in
+  register_force ctx uuid near;
   (Virt_list.lazy_row ~node_key:key ~style_class:"block-children" ~key:uuid
     ~estimate_size:(fun _ -> min_height) near near_sig (render ())) ctx parent
 
