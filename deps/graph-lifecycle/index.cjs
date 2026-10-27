@@ -418,17 +418,37 @@ async function discover(ctx, current, scan, registeredOnly = false) {
   for (const result of results) if (result.status === 'rejected') throw result.reason;
   return { targets: [...targets.values()] };
 }
+function readLock(lockFile) {
+  let raw;
+  try { raw = fs.readFileSync(lockFile, 'utf8'); }
+  catch (error) { if (error.code === 'ENOENT') return null; throw error; }
+  try { return { raw, owner: JSON.parse(raw) }; }
+  catch (error) { if (error instanceof SyntaxError) return { raw, owner: null }; throw error; }
+}
+// Locks are published whole, so an observed lock without a valid holder PID was left by an interrupted writer.
+function lockStale(lock) {
+  const pid = lock.owner?.pid;
+  return !Number.isSafeInteger(pid) || pid <= 0 || !pidExists(pid);
+}
+function publishLock(lockFile, owner) {
+  const temporary = `${lockFile}.${owner['lock-id']}.tmp`;
+  try {
+    fs.writeFileSync(temporary, JSON.stringify(owner), { flag: 'wx' });
+    fs.linkSync(temporary, lockFile);
+  } finally { fs.rmSync(temporary, { force: true }); }
+}
 async function removeEntries(root, removed) {
   const lockFile = path.join(root, 'server-list.lock');
   const owner = { pid: process.pid, 'lock-id': id() };
   const deadline = Date.now() + 2000;
   for (;;) {
-    try { fs.writeFileSync(lockFile, JSON.stringify(owner), { flag: 'wx' }); break; }
+    try { publishLock(lockFile, owner); break; }
     catch (error) {
       if (error.code !== 'EEXIST') throw error;
-      const previous = readJSON(lockFile);
-      if (previous && !pidExists(previous.pid)) {
-        if (readJSON(lockFile)?.['lock-id'] === previous['lock-id']) fs.unlinkSync(lockFile);
+      const previous = readLock(lockFile);
+      if (previous && lockStale(previous) && readLock(lockFile)?.raw === previous.raw) {
+        try { fs.unlinkSync(lockFile); }
+        catch (unlinkError) { if (unlinkError.code !== 'ENOENT') throw unlinkError; }
       }
       if (Date.now() >= deadline) fail('Timed out acquiring server-list lock');
       await sleep(25);
@@ -443,7 +463,7 @@ async function removeEntries(root, removed) {
       fs.renameSync(temporary, file);
     } finally { fs.rmSync(temporary, { force: true }); }
   } finally {
-    if (readJSON(lockFile)?.['lock-id'] !== owner['lock-id']) fail('Server-list lock ownership changed');
+    if (readLock(lockFile)?.owner?.['lock-id'] !== owner['lock-id']) fail('Server-list lock ownership changed');
     fs.unlinkSync(lockFile);
   }
 }
