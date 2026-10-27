@@ -296,15 +296,31 @@ for (const [description, sameTicket] of [['under two tickets', false], ['twice u
   });
 }
 
-test('a live worker registered twice is still refused', async () => {
+test('a running worker that holds the graph and is registered twice is still refused', async () => {
   await withGraph(async (storage, repo) => {
     const worker = cp.spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });
+    const holder = lifecycle.acquireOwnership(lifecycle.context(storage, repo));
     try {
       registerTwice(storage, repo, worker.pid, false);
       await assert.rejects(lifecycle.stopGraph(storage, repo, 'cli'), /Duplicate worker registration/);
       assert.equal(lifecycle.snapshot(storage, repo).workers.length, 2);
     } finally {
+      holder.release();
       worker.kill();
+    }
+  });
+});
+
+test('startup cleanup retires two registrations of a PID that was reused by an unrelated process', async () => {
+  await withGraph(async (storage, repo) => {
+    const unrelated = cp.spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });
+    try {
+      registerTwice(storage, repo, unrelated.pid, false);
+      await lifecycle.stopOutdatedWorkers(storage, REVISION, repo);
+      assert.deepEqual(lifecycle.snapshot(storage, repo).workers, []);
+      assert.equal(unrelated.exitCode, null, 'the unrelated process was left alone');
+    } finally {
+      unrelated.kill();
     }
   });
 });
