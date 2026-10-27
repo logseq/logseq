@@ -417,8 +417,11 @@ async function discover(ctx, current, scan, registeredOnly = false) {
     validateRegistration(ctx, current, record);
     const target = { ...record, ...readRuntime(ctx, record, exists) };
     if (targets.has(record.pid)) {
-      // Two registrations of one PID cannot be told apart while it runs; once it is gone both are only stale.
-      if (exists(record.pid)) fail('Duplicate worker registration');
+      // Two registrations of one PID cannot be told apart while a worker runs under it. Once it is gone, or when
+      // nothing holds the graph and no start is pending (the PID was reused), they are only stale.
+      const first = targets.get(record.pid);
+      if (exists(record.pid) && !(ownershipAvailable(ctx) && !pending(first, exists) && !pending(target, exists)))
+        fail('Duplicate worker registration');
       goneDuplicates.push(target);
     } else targets.set(record.pid, target);
   }
