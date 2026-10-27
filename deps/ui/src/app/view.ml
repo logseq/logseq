@@ -13,11 +13,8 @@ let view _context model_source _send : t =
         "var(--lx-gray-01, var(--ls-primary-background-color, \
          hsl(var(--background))))";
       Ui_components.Prop.font_size "var(--ls-page-text-size)";
-      Ui_components.Prop.font_family
-        "var(--ls-font-family), sans-serif, system-ui, -apple-system, \
-         BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, \
-         'Noto Sans', serif, Apple Color Emoji, Segoe UI Emoji, Segoe UI \
-         Symbol";
-      Ui_components.Prop.line_height "1.5";
+      Ui_components.Prop.font_family "var(--lx-font-stack)";
+      Ui_components.Prop.font_weight Ui_theme.typography.weight_regular;
+      Ui_components.Prop.line_height "var(--lx-line-height)";
     ]
     (Chrome.shell model_source)

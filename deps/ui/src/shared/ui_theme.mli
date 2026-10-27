@@ -84,6 +84,11 @@ type components = {
 (** Typography scale — the sizes/weights the cmdk and page chrome use. *)
 type typography = {
   font_family : string;
+  font_stack : string;
+  (* Authored family followed by platform and missing-glyph fallbacks. *)
+  root_text_size : string;
+  (* 16px document-root baseline, independent of body text size. *)
+  line_height : string;
   page_text_size : string;
   (* 1em — body text. *)
   page_title_size : string;
@@ -114,6 +119,8 @@ type snapshot = {
   vars : (string * string) list;
   (* Derived application custom properties (see module doc). *)
 }
+
+val typography : typography
 
 (** Whether a variable belongs to the shared stylesheet cascade.
     Native resolves it through [css_palette]; Web keeps its CSS declaration. *)
