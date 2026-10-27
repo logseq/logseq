@@ -200,15 +200,17 @@
          (if (set? value) value [value]))))
 
 (defn- default-property-values-as-blocks?
-  "Text property values are exported as blocks when the caller asks for it or,
-  so that their children are not dropped, when a value has children."
+  "Text property values are exported as blocks when a value has children (so
+  they are not dropped) or, if the caller asks for it, when the property allows
+  multiple values. A single value without children stays on the property line."
   [db property value context]
   (and (= :default (:logseq.property/type property))
        (not (if (set? value)
               (some :block/closed-value-property value)
               (:block/closed-value-property value)))
-       (or (:export-default-property-values-as-blocks? context)
-           (property-value-has-children? db value))))
+       (or (property-value-has-children? db value)
+           (and (:export-default-property-values-as-blocks? context)
+                (db-property/many? property)))))
 
 (defn- block-properties-content
   [db block spaces-tabs context]
