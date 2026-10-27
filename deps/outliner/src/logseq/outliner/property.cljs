@@ -361,6 +361,7 @@
         (throw (ex-info "Disallowed type change with closed values"
                         {:type :notification
                          :payload {:message "This property's type can't be changed because it has closed values. Delete the closed values first."
+                                   :i18n-key :property.validation/type-change-with-closed-values
                                    :type :error}}))))
     (when (seq tx-data)
       (ldb/transact! conn tx-data {:outliner-op :update-property

@@ -1617,6 +1617,7 @@
  :property.validation/invalid-value "Property \"{1}\" has invalid value: {2}"
  :property.validation/many-to-one "This property can't change from multiple values to one value because it has existing data."
  :property.validation/protected "Property is protected and can't be deleted."
+ :property.validation/type-change-with-closed-values "This property's type can't be changed because it has closed values. Delete the closed values first."
 
  :property.view-type/gallery "Gallery View"
  :property.view-type/list "List View"
