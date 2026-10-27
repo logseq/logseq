@@ -191,13 +191,24 @@
        (when (some? value)
          (str " " value))))
 
+(defn- property-value-has-children?
+  [db value]
+  (boolean
+   (some (fn [v]
+           (when-let [id (:db/id v)]
+             (seq (:block/_parent (d/entity db id)))))
+         (if (set? value) value [value]))))
+
 (defn- default-property-values-as-blocks?
-  [property value context]
-  (and (:export-default-property-values-as-blocks? context)
-       (= :default (:logseq.property/type property))
+  "Text property values are exported as blocks when the caller asks for it or,
+  so that their children are not dropped, when a value has children."
+  [db property value context]
+  (and (= :default (:logseq.property/type property))
        (not (if (set? value)
               (some :block/closed-value-property value)
-              (:block/closed-value-property value)))))
+              (:block/closed-value-property value)))
+       (or (:export-default-property-values-as-blocks? context)
+           (property-value-has-children? db value))))
 
 (defn- block-properties-content
   [db block spaces-tabs context]
@@ -226,7 +237,7 @@
                                                   (:block/raw-title property)
                                                   (name property-ident))
                                value (get properties property-ident)]
-                           (if (default-property-values-as-blocks? property value context)
+                           (if (default-property-values-as-blocks? db property value context)
                              (str (property-line-content property-title nil spaces-tabs context)
                                   "\n"
                                   (property-value-blocks-content db property value (str spaces-tabs "  ") context))
