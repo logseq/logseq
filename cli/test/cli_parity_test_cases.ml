@@ -6943,6 +6943,26 @@ let () =
         [| "-g"; "demo"; "list"; "page"; "--offset"; "-1" |]
         "offset");
 
+  test "CLI parity upsert property rejects a cardinality outside one and many"
+    (fun () ->
+      let output =
+        run_cli_lifecycle
+          [|
+            "-g"; "demo"; "upsert"; "property"; "--name"; "p"; "--cardinality";
+            "bogus";
+          |]
+      in
+      expect_int "bad cardinality exit" 1 output.exit_code;
+      let stdout = stdout_text "bad cardinality stdout" output in
+      expect_named_contains "bad cardinality code" stdout "invalid-options";
+      expect_named_contains "bad cardinality message" stdout
+        "Invalid value for option :cardinality: bogus";
+      expect_named_contains "bad cardinality lists the choices" stdout
+        "one, many";
+      ignore
+        (expect_parse_ok "cardinality many parses"
+           [| "upsert"; "property"; "--name"; "p"; "--cardinality"; "many" |]));
+
   test "CLI parity --help=false does not ask for help" (fun () ->
       let root = temp_dir "logseq-cli-help-false-" in
       let ran =
