@@ -2909,6 +2909,31 @@
                                     {:rows [resource-block]}
                                     response))))))
 
+(deftest quoted-full-text-query-with-unreadable-escape-searches-raw-text-test
+  (when-let [api (render-resource-api)]
+    (let [{:keys [conn resource-block]} (render-resource-fixture)
+          calls (atom [])
+          ;; sanitize-q output for the plain-text query `foo\cbar`; the
+          ;; EDN reader rejects `\c` as an escape.
+          resource-key [:query {:kind :dsl :query "\"foo\\cbar\""}]]
+      (with-redefs [search-handler/search-blocks
+                    (fn [_repo query-text _options]
+                      (swap! calls conj query-text)
+                      [{:block/uuid resource-block
+                        :block/title "foo\\cbar"}])]
+        (let [response (call-resource-with-runtime api conn resource-key
+                                                   {:repo test-repo})]
+          (is (nil? (get-in response [:value :error]))
+              "A plain-text query with a backslash runs as a full-text search, not a query error.")
+          (is (= ["foo\\cbar"] @calls)
+              "The search uses the text between the quotes as typed.")
+          (is (= [resource-block] (get-in response [:value :rows]))))
+        (let [response (call-resource-with-runtime
+                        api conn [:query {:kind :dsl :query "((and)"}]
+                        {:repo test-repo})]
+          (is (string? (get-in response [:value :error :message]))
+              "A malformed DSL query still reports its query error."))))))
+
 (deftest view-and-query-resources-reject-non-data-contracts-test
   (when-let [api (render-resource-api)]
     (let [{:keys [conn view-a view-row]} (render-resource-fixture)
