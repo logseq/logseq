@@ -632,6 +632,25 @@
                      (map #(d/entity db %) (d/q '[:find [?e ...] :where [?e :block/name]] db)))
            (str "No entity is both a class and a property for " name'))))))
 
+(deftest-async import-tag-and-property-of-same-name-when-an-earlier-file-created-the-page-convert-all-tags
+  (p/all
+   (for [name' ["scheduled"]]
+     (p/let [dir (write-temp-file-graph
+                  {"logseq/config.edn" "{:meta/version 1 :file/name-format :triple-lowbar}\n"
+                   ;; The first file creates the page of the name by referencing it
+                   "pages/a_first.md" (str "- first block\n  rating:: [[" name' "]]\n")
+                   (str "pages/" name' ".md") (str "kind:: a\n\n- own page block\n  tags:: [[" name' "]]\n- property block\n  " name' ":: true\n")})
+             conn (db-test/create-conn)
+             _ (import-file-graph-to-db dir conn {:convert-all-tags? true})
+             db @conn]
+       (is (some? (db-test/find-block-by-content db #"property block"))
+           (str "Block with property " name' " is imported"))
+       (is (empty? (map :entity (:errors (db-validate/validate-local-db! db))))
+           (str "Imported graph validates with a tag and property named " name'))
+       (is (not-any? #(and (ldb/class? %) (ldb/property? %))
+                     (map #(d/entity db %) (d/q '[:find [?e ...] :where [?e :block/name]] db)))
+           (str "No entity is both a class and a property for " name'))))))
+
 (deftest-async import-page-with-property-and-tag-of-same-name-convert-all-tags
   (p/let [file (write-temp-graph-file
                  "pages/source.md"
