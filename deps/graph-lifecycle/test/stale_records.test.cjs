@@ -375,6 +375,64 @@ for (const [description, damage, phase] of [['not a database', file => fs.writeF
   });
 }
 
+test('a worker admitted after a leftover worker whose PID now belongs to another user replaces its registration', async () => {
+  await withGraph(async (storage, repo) => {
+    registerLeftoverWorker(storage, repo, STALE_PID);
+    fs.writeFileSync(path.join(storage.root, 'server-list'), `${STALE_PID} 4000\n`);
+    const restore = denySignalZero(STALE_PID);
+    try {
+      const runtime = await lifecycle.admit({ storage, repo, owner: 'cli' });
+      lifecycle.releaseOwnership(runtime);
+    } finally {
+      restore();
+    }
+    assert.deepEqual(lifecycle.snapshot(storage, repo).workers.map(worker => worker.pid), [process.pid]);
+  });
+});
+
+test('starting a graph past a leftover worker whose PID now belongs to another user gets as far as launching a worker', async () => {
+  await withGraph(async (storage, repo) => {
+    registerLeftoverWorker(storage, repo, STALE_PID);
+    const restore = denySignalZero(STALE_PID);
+    try {
+      // The launched script does not exist, so the worker exits at once; what matters is that nothing raised EPERM.
+      await assert.rejects(lifecycle.startGraph({ storage, repo, script: path.join(storage.root, 'missing-worker.cjs') }),
+        error => error.code === 'server-start-failed');
+    } finally {
+      restore();
+    }
+  });
+});
+
+test('admission while something holds the graph reports it as locked, not as EPERM', async () => {
+  await withGraph(async (storage, repo) => {
+    registerLeftoverWorker(storage, repo, STALE_PID);
+    const holder = lifecycle.acquireOwnership(lifecycle.context(storage, repo));
+    const restore = denySignalZero(STALE_PID);
+    try {
+      await assert.rejects(lifecycle.admit({ storage, repo, owner: 'cli' }), { code: 'repo-locked' });
+    } finally {
+      restore();
+      holder.release();
+    }
+    assert.equal(lifecycle.snapshot(storage, repo).workers.length, 1);
+  });
+});
+
+test('stop and delete still refuse to go on past a PID this user may not signal', async () => {
+  await withGraph(async (storage, repo) => {
+    registerLeftoverWorker(storage, repo, STALE_PID);
+    const restore = denySignalZero(STALE_PID);
+    try {
+      await assert.rejects(lifecycle.stopGraph(storage, repo, 'cli'), { code: 'EPERM' });
+      await assert.rejects(lifecycle.deleteGraph(storage, repo), { code: 'EPERM' });
+    } finally {
+      restore();
+    }
+    assert.equal(lifecycle.snapshot(storage, repo).workers.length, 1);
+  });
+});
+
 test('observing a graph whose state.json is damaged reports it instead of throwing', async () => {
   await withGraph(async (storage, repo) => {
     const { generation } = lifecycle.snapshot(storage, repo);
