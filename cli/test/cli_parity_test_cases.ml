@@ -6888,6 +6888,39 @@ let () =
         (stdout_text "repeated command word stdout" junk)
         "Usage: logseq show show");
 
+  test "CLI parity a bare group still validates its options" (fun () ->
+      let expect_invalid name argv =
+        let output = run_cli_lifecycle argv in
+        expect_int (name ^ " exit") 1 output.exit_code;
+        expect_named_contains (name ^ " code")
+          (stdout_text (name ^ " stdout") output)
+          "invalid-options";
+        expect_named_not_contains (name ^ " prints no usage")
+          (stdout_text (name ^ " stdout") output)
+          "Usage: logseq"
+      in
+      expect_invalid "unknown option on group" [| "graph"; "--bogus" |];
+      expect_invalid "unknown option with value on group"
+        [| "list"; "--bogus"; "x" |];
+      expect_invalid "invalid output with no command" [| "-o"; "xml" |];
+      expect_invalid "invalid timeout on group"
+        [| "upsert"; "--timeout-ms"; "abc" |];
+      let json_output =
+        run_cli_lifecycle [| "-o"; "json"; "graph"; "--bogus" |]
+      in
+      expect_int "json group error exit" 1 json_output.exit_code;
+      let json_stdout = stdout_text "json group error stdout" json_output in
+      expect_valid_json "json group error output" json_stdout;
+      expect_named_contains "json group error status" json_stdout
+        "\"status\":\"error\"";
+      let group = run_cli_lifecycle [| "graph" |] in
+      expect_int "bare group exit" 0 group.exit_code;
+      expect_named_contains "bare group usage"
+        (stdout_text "bare group stdout" group)
+        "Usage: logseq graph";
+      let asked = run_cli_lifecycle [| "graph"; "--bogus"; "--help" |] in
+      expect_int "explicit help exit" 0 asked.exit_code);
+
   test
     "CLI parity structured example output keeps selector matched commands and \
      message" (fun () ->

@@ -311,11 +311,28 @@ let parse_args : type marker.
     if option_present "version" options then None
     else help_group app.registry options positional
   in
+  (* A group without `--help` is not asked for help, so its options still
+     have to be valid. *)
+  let group_options_error group =
+    if option_present "help" options then None
+    else
+      match
+        Cli_parse.validate_options group
+          (fst (Cli_parse.parse_tokens input.argv))
+      with
+      | Ok () -> None
+      | Error err -> Some err
+  in
   match help with
-  | Some group ->
-      Command_registry.render_help ~group app.registry
-      |> set_pending_message_output mode;
-      Error (Error.unknown_command "")
+  | Some group -> (
+      match group_options_error group with
+      | Some err ->
+          set_pending_error_output mode err;
+          Error err
+      | None ->
+          Command_registry.render_help ~group app.registry
+          |> set_pending_message_output mode;
+          Error (Error.unknown_command ""))
   | None -> (
       match parse_request app input with
       | Ok request -> Ok (Parsed_argv_state (input, request))
