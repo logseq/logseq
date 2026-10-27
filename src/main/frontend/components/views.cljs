@@ -3987,14 +3987,12 @@
   (or view-data previous-view-data))
 
 (defn- view-paint-identity
-  "Search input is part of the resource key. Exclude it so a typed
-   query can keep the previous paint (and the search field) mounted."
+  "Exclude search input from a windowed resource context's paint identity."
   [window-context]
   (dissoc window-context :input))
 
 (defn- retained-view-paint
-  "Keep the last successful view payload while a search refetch is in
-   flight. Drop it immediately when filter/sort/layout identity changes."
+  "Keep the previous payload while its paint identity is unchanged."
   [view-data previous-view-data previous-identity next-identity]
   (view-paint-source view-data
                      (when (= previous-identity next-identity)
@@ -4113,9 +4111,9 @@
      [window-context-key])
     (hooks/use-effect!
      (fn []
-       ;; Keep previous paint for same-context refetches (delete) and
-       ;; search-input-only key changes so the toolbar stays mounted.
-       ;; A new filter/sort/layout key must not keep the old 431-row table.
+       ;; Search-only changes preserve the toolbar during a refetch.
+       ;; Windowed filter/sort changes invalidate retained paint;
+       ;; layout changes are handled by the separate effect below.
        (when (not= retained-paint-identity-key paint-identity-key)
          (set-retained-paint-identity-key! paint-identity-key)
          (set-previous-view-data! nil))
