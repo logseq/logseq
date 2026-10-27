@@ -1081,17 +1081,12 @@
 
 (defn- convert-block-refs-in-property-value
   "Converts ((uuid)) in the text of a property value block to [[uuid]] like the title of
-   a block and adds the refs"
+   a block. The refs of the block are built from its title when the import is finalized, which
+   also works for a block that is imported later"
   [pvalue]
-  (let [block-ref-ids (when (and (map? pvalue) (string? (:block/title pvalue)))
-                        (->> (re-seq block-ref/block-ref-re (:block/title pvalue))
-                             (map second)
-                             (filter common-util/uuid-string?)))]
-    (if (seq block-ref-ids)
-      (-> pvalue
-          (update :block/title convert-block-refs-to-page-refs)
-          (update :block/refs (fn [refs] (into (vec refs) (map #(vector :block/uuid (uuid %))) block-ref-ids))))
-      pvalue)))
+  (cond-> pvalue
+    (and (map? pvalue) (string? (:block/title pvalue)))
+    (update :block/title convert-block-refs-to-page-refs)))
 
 (defn- build-properties-and-values
   "For given block properties, builds property values tx and returns a map with
