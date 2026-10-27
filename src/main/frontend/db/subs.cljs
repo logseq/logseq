@@ -169,7 +169,8 @@
   [parent-uuid items]
   (->> items
        (map (fn [[child-uuid order :as item]]
-              (when-not (and (= 2 (count item)) (string? order))
+              (when-not (and (= 2 (count item))
+                             (or (nil? order) (string? order)))
                 (throw (ex-info "Invalid direct-child item"
                                 {:parent-uuid parent-uuid :item item})))
               [(require-uuid! :block/uuid child-uuid) order]))
