@@ -308,3 +308,65 @@ test('a live worker registered twice is still refused', async () => {
     }
   });
 });
+
+const isCoded = error => (error instanceof AggregateError ? error.errors : [error]).every(cause => typeof cause.code === 'string' && cause.code.startsWith('server-'));
+
+for (const [description, damage] of [['empty', file => fs.writeFileSync(file, '')], ['truncated', file => fs.writeFileSync(file, '{"generation":"abc","pha')],
+  ['not JSON', file => fs.writeFileSync(file, Buffer.from([0xff, 0xfe, 0x41]))], ['without permissions', file => fs.chmodSync(file, 0)],
+  ['a directory', file => { fs.rmSync(file); fs.mkdirSync(file); }]]) {
+  test(`a state.json that is ${description} is refused with a coded error and left as it is`, async () => {
+    await withGraph(async (storage, repo) => {
+      const { stateFile } = lifecycle.context(storage, repo);
+      damage(stateFile);
+      const before = ['a directory', 'without permissions'].includes(description) ? null : fs.readFileSync(stateFile);
+      for (const operation of [() => lifecycle.createGraph(storage, repo), () => lifecycle.stopGraph(storage, repo, 'cli'),
+        () => lifecycle.stopOutdatedWorkers(storage, REVISION, repo), () => lifecycle.deleteGraph(storage, repo)])
+        await assert.rejects(operation(), error => isCoded(error) && /Invalid lifecycle state/.test(error.message));
+      assert.throws(() => lifecycle.snapshot(storage, repo), error => isCoded(error));
+      if (description === 'a directory') assert.equal(fs.statSync(stateFile).isDirectory(), true);
+      else if (description === 'without permissions') assert.equal(fs.statSync(stateFile).mode & 0o777, 0);
+      else assert.equal(fs.readFileSync(stateFile).equals(before), true, 'state.json was rewritten');
+      fs.chmodSync(stateFile, 0o600);
+    });
+  });
+}
+
+for (const [description, workers, message] of [['null', [null], /Invalid lifecycle state/], ['a number', [1], /Invalid lifecycle state/],
+  ['an empty object', [{}], /Invalid worker registration/], ['an object without a root', [{ pid: 12, ticket: 't' }], /Invalid worker registration/]]) {
+  test(`a worker list holding ${description} is refused as invalid`, async () => {
+    await withGraph(async (storage, repo) => {
+      const { stateFile } = lifecycle.context(storage, repo);
+      fs.writeFileSync(stateFile, JSON.stringify({ ...lifecycle.snapshot(storage, repo), workers }));
+      await assert.rejects(lifecycle.stopGraph(storage, repo, 'cli'), error => isCoded(error) && message.test(error.message));
+      await assert.rejects(lifecycle.stopOutdatedWorkers(storage, REVISION, repo), error => isCoded(error) && message.test(error.message));
+    });
+  });
+}
+
+test('worker-side checks report a vanished state.json with a coded error instead of a TypeError', async () => {
+  await withGraph(async (storage, repo) => {
+    const runtime = await lifecycle.admit({ storage, repo, owner: 'cli' });
+    try {
+      fs.rmSync(runtime.stateFile);
+      assert.throws(() => lifecycle.checkAdmission(runtime), { code: 'server-start-failed' });
+      assert.throws(() => lifecycle.assertOwnership(runtime), { code: 'repo-locked' });
+      assert.doesNotThrow(() => lifecycle.abortAdmission(runtime, new Error('stopped')));
+    } finally {
+      lifecycle.releaseOwnership(runtime);
+    }
+  });
+});
+
+test('observing a graph whose state.json is damaged reports it instead of throwing', async () => {
+  await withGraph(async (storage, repo) => {
+    const { generation } = lifecycle.snapshot(storage, repo);
+    fs.writeFileSync(lifecycle.context(storage, repo).stateFile, '');
+    const changes = [];
+    const close = lifecycle.observe(storage, repo, generation, change => changes.push(change));
+    try {
+      assert.deepEqual(changes.map(change => change.phase), ['observation-failed']);
+    } finally {
+      close();
+    }
+  });
+});
