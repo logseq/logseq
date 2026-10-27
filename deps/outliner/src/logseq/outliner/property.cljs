@@ -537,8 +537,10 @@
 
       :else
       ;; only value-ref-property types should call this
+      ;; text that isn't a number is refused with the same message as convert-property-input-string, instead of
+      ;; turning into nil and failing as "Property value must be not nil"
       (when-let [v' (if (and number-property? (string? v))
-                      (parse-double v)
+                      (fail-parse-double v)
                       v)]
         (find-or-create-property-value conn property-id v' block-id)))))
 
