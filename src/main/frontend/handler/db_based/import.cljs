@@ -249,12 +249,20 @@
   (let [export-map (try (edn/read-string (:import-data @import-inputs)) (catch :default _err ::invalid-import))]
     (if (or (= ::invalid-import export-map) (not (map? export-map)))
       (notification/show! (t :import/submitted-edn-invalid) :warning)
-      (p/let [block (when (::sqlite-export/block export-map)
+      (p/let [block-import? (some? (::sqlite-export/block export-map))
+              block (when block-import?
                       (<current-import-block))]
-        (if (:error block)
+        (cond
+          (:error block)
           (do
             (notification/show! (:error block) :error)
             (shui/dialog-close-all!))
+
+          ;; <current-import-block already notified that there is no block to import into
+          (and block-import? (nil? block))
+          (shui/dialog-close-all!)
+
+          :else
           (p/let [{:keys [error]}
                   (ui-outliner-tx/transact!
                    {:outliner-op :batch-import-edn}
