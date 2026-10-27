@@ -747,7 +747,7 @@ let cm_sub_el (st : S.t) (x : float) (y : float) (items : S.cm_item list)
        ~available_height:(Ui_services.dom_viewport_height () -. y -. 5.)
        ~style_class:"ui__dropdown-menu-sub-content"
        ~data_attrs:[ ("tabindex", "-1"); ("data-keep-selection", "") ]
-       ~on_dismiss:(fun _ -> close_cm st)
+       ~on_dismiss:(fun _ -> S.close_cm_sub st)
        [ box ~key:"w" (List.map (cm_sub_item_el st) items) ])
 ;;
 
@@ -884,8 +884,10 @@ let cm_highlight (el : Ui_services.el) =
 let pv_show_id : int option ref = ref None
 let pv_hide_id : int option ref = ref None
 let pv_pending : Ui_services.el option ref = ref None
+let pv_generation = ref 0
 
 let pv_cancel_show () =
+  incr pv_generation;
   (match !pv_show_id with
    | Some id -> Ui_services.timers_clear_timeout id
    | None -> ());
@@ -899,7 +901,14 @@ let pv_cancel_hide () =
       pv_hide_id := None
   | None -> ()
 
+let close_pv st =
+  pv_cancel_show ();
+  pv_cancel_hide ();
+  S.close_pv st
+
 let pv_open st (wrap : Ui_services.el) =
+  incr pv_generation;
+  let generation = !pv_generation and graph = Router.repo () in
   pv_pending := Some wrap;
   match
     Option.bind
@@ -917,11 +926,12 @@ let pv_open st (wrap : Ui_services.el) =
       and y = ry +. rh in
       ignore
         (let* (title, page, blocks) =
-            S.fetch_preview (Router.repo ()) name
+            S.fetch_preview graph name
         in
         (match !pv_pending with
          | Some el
-           when Properties_state.same_el el wrap
+           when generation = !pv_generation && graph = Router.repo ()
+                && Properties_state.same_el el wrap
                 && wrap.Ui_services.connected () ->
              S.set_pv st
                (Some
@@ -958,7 +968,7 @@ let pv_track st (el : Ui_services.el) =
             pv_hide_id :=
               Some
                 (Ui_services.timers_timeout
-                   (fun () -> S.close_pv st) 400)
+                   (fun () -> close_pv st) 400)
         | _ -> ())
 
 (* cljs popup-show! content = PopoverContent card classes +
@@ -978,7 +988,7 @@ let pv_popover (st : S.t) (p : S.pv) : t =
           (Ui_services.dom_viewport_height () -. p.S.pv_y -. 5.)
         ~style_class:"ui__popover-content ls-preview-popup"
         ~data_attrs:[ ("style", "padding-left:1.5rem") ]
-        ~on_dismiss:(fun _ -> S.close_pv st)
+        ~on_dismiss:(fun _ -> close_pv st)
     [ box ~key:"pvw" ~style_class:"tippy-wrapper as-page" ~width:600
         ~min_width:200 ~padding:8
         ~data_attrs:
@@ -1109,14 +1119,17 @@ let menu_keydown st (ev : Ui_services.ev) =
           it.Ui_services.scroll_into_view_nearest ();
           true
       | Some "Enter", _ :: _ -> (
-          match !cm_hi_el with
+          match List.find_opt
+              (fun e -> e.Ui_services.attr "data-highlighted" <> None)
+              items with
           | Some e -> e.Ui_services.click (); true
           | None -> true)
       | _ -> false)
 ;;
 
 let handle_keydown st (ev : Ui_services.ev) =
-  if S.ac_keydown st ev then (
+  if ev.Ui_services.composing then ()
+  else if S.ac_keydown st ev then (
     ev.Ui_services.prevent_default ();
     (* stopImmediate: same-target listeners registered later (the editor's
        own keydown) must not also react to the key the popup consumed *)
@@ -1126,7 +1139,14 @@ let handle_keydown st (ev : Ui_services.ev) =
     ev.Ui_services.stop_immediate ())
   else
     match ev.Ui_services.key with
-    | Some "Escape" when (S.get st).S.cm <> None -> close_cm st
+    | Some "Escape" when (S.get st).S.cm <> None ->
+        (match (S.get st).S.cm with
+         | Some cm when cm.S.sub_open >= 0 ->
+             close_cm_picker ();
+             S.close_cm_sub st
+         | _ -> close_cm st);
+        ev.Ui_services.prevent_default ();
+        ev.Ui_services.stop_immediate ()
     | _ -> ()
 ;;
 
@@ -1283,7 +1303,7 @@ let handle_click st (ev : Ui_services.ev) =
   match ev.Ui_services.target with
   | None -> ()
   | Some el ->
-      if not (in_popups el) then (S.close_ac st; close_cm st; S.close_pv st)
+      if not (in_popups el) then (S.close_ac st; close_cm st; close_pv st)
 ;;
 
 (* `ls:block-picker` {block, kind:"icon"|"emoji"} — the `p i`/`p r`
@@ -1460,7 +1480,17 @@ let install_listeners context st =
   (* the preview survives its trigger element (popup lives in the overlay
      layer); navigation must drop it like cljs' tippy instance dying with
      the reference node *)
-  Ui_services.nav_subscribe_change ~scope (fun () -> S.close_pv st);
+  Ui_services.nav_subscribe_change ~scope (fun () ->
+      S.close_ac st;
+      close_cm st;
+      close_pv st);
+  Signal.on_dispose scope (fun () ->
+      S.invalidate_ac st;
+      pv_cancel_show ();
+      pv_cancel_hide ();
+      match !(S.active) with
+      | Some current when current == st -> S.active := None
+      | _ -> ());
   Tooltip.install ~scheduler:context.Lui_ui.ui_scheduler
 ;;
 
