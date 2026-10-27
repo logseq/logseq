@@ -1506,6 +1506,37 @@ abc
         (p/finally (fn [_]
                      (set! (.-write (.-stderr js/process)) original-stderr-write))))))
 
+(deftest-async import-zotero-linked-file-with-absolute-path
+  (let [dir (fs/mkdtempSync (node-path/join (os/tmpdir) "logseq-zotero-linked-"))
+        base-dir (node-path/join dir "base")
+        zotero-dir (node-path/join dir "zotero")
+        linked-pdf (node-path/join dir "elsewhere" "Foo.pdf")
+        graph-dir (node-path/join dir "graph")
+        config (pr-str {:meta/version 1
+                        :file/name-format :triple-lowbar
+                        :zotero/settings-v2 {"default" {:zotero-data-directory zotero-dir
+                                                        :zotero-linked-attachment-base-directory base-dir}}})]
+    (fs/mkdirSync base-dir #js {:recursive true})
+    (fs/mkdirSync (node-path/dirname linked-pdf) #js {:recursive true})
+    (fs/writeFileSync linked-pdf "%PDF-1.1\n%%EOF\n")
+    (fs/mkdirSync (node-path/join graph-dir "logseq") #js {:recursive true})
+    (fs/mkdirSync (node-path/join graph-dir "pages") #js {:recursive true})
+    (fs/writeFileSync (node-path/join graph-dir "logseq/config.edn") config)
+    (fs/writeFileSync (node-path/join graph-dir "pages/Foo.md")
+                      (str "- [Foo.pdf](zotero://select/library/items/ABCD1234) {{zotero-linked-file " (pr-str linked-pdf) "}}\n"))
+    (p/let [conn (db-test/create-conn)
+            _ (import-file-graph-to-db graph-dir conn {})
+            asset (db-test/find-block-by-content @conn "Foo")]
+      (is (some? asset)
+          "A linked file given as an absolute path is imported as an Asset")
+      (is (= {:logseq.property.asset/external-url "zotero://select/library/items/ABCD1234"
+              :logseq.property.asset/external-file-name (str "zotero-link://" linked-pdf)}
+             (select-keys (db-test/readable-properties asset)
+                          [:logseq.property.asset/external-url :logseq.property.asset/external-file-name]))
+          "The Asset points at the absolute path, not at the base directory joined with it")
+      (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+          "Imported graph validates"))))
+
 (deftest-async import-asset-links-in-page-and-block-property-values
   (let [pdf-bytes "%PDF-1.1\n%%EOF\n"
         graph-dir (write-temp-file-graph
