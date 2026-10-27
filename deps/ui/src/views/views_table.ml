@@ -311,19 +311,23 @@ let select_row inst ~uuid ~checked ~shift =
 
 (* The selection target is 32 points; its centered 16-point chrome
    appears while hovered or checked. *)
-let checkbox_el inst ~jtrigger ~id ~aria_label ~shown ~on_toggle : t =
+let checkbox_el ?(mixed = fun _ -> false) inst ~jtrigger ~id ~aria_label ~shown ~on_toggle : t =
   Ui_parts.float_prop L.Opacity
-    ~value:(reactive (fun s -> if shown s then 1. else 0.) (sig_of inst))
-    (Ui_components.with_props [Ui_components.Prop.hover_opacity 1.]
-      (Ui_components.checkbox ~accessibility_identifier:id ~label:aria_label
+    ~value:(reactive (fun s -> if shown s || mixed s then 1. else 0.) (sig_of inst))
+    (Ui_components.with_props
+       [Ui_components.Prop.hover_opacity 1.
+       ;Ui_components.Prop.indicator_border_color "var(--lx-checkbox-border)"
+       ;Ui_components.Prop.checked_indicator_border_color "hsl(var(--border))"]
+      (Lui_elements.checkbox ~accessibility_identifier:id ~label:aria_label
         ~width:32 ~height:32 ~main:`center ~cross:`center
         ~border_color:"hsl(var(--primary))"
         ~transition:"opacity 150ms"
         ~style_class:(if jtrigger then "jtrigger" else "")
         ~checked:(reactive shown (sig_of inst))
-        ~on_toggle:(fun ev ->
+        ~indeterminate:(reactive mixed (sig_of inst))
+        ~on_toggle_detail:(fun ev ->
           match ev with
-          | L.ToggleChanged (_, on) -> on_toggle on
+          | L.ToggleChangedDetail (_, on, modifiers) -> on_toggle on (modifiers land 2 <> 0)
           | _ -> ())
         []))
 
@@ -345,8 +349,8 @@ let select_cell inst ~row_uuid ~blk : t =
         [ checkbox_el inst ~jtrigger:true ~id:(dbid ^ "-checkbox")
             ~aria_label:(I.t "view.table/select-row")
             ~shown:(fun (s : V.vstate) -> V.Sset.mem row_uuid s.V.selected)
-            ~on_toggle:(fun checked ->
-              select_row inst ~uuid:row_uuid ~checked ~shift:false) ])
+            ~on_toggle:(fun checked shift ->
+              select_row inst ~uuid:row_uuid ~checked ~shift) ])
     ]
 
 let open_row_sidebar row_uuid =
@@ -555,10 +559,13 @@ let header_select_cell ?rows inst : t =
     let uuids = row_uuids s in
     uuids <> [] && List.for_all (fun uuid -> V.Sset.mem uuid s.V.selected) uuids
   in
+  let mixed (s : V.vstate) =
+    not (shown s) && List.exists (fun uuid -> V.Sset.mem uuid s.V.selected) (row_uuids s)
+  in
   row ~cross:`center ~main:`center ~width:32 ~height:32
-    [ checkbox_el inst ~jtrigger:false ~id:"header-checkbox" ~shown
+    [ checkbox_el ~mixed inst ~jtrigger:false ~id:"header-checkbox" ~shown
         ~aria_label:(I.t "view.table/select-all")
-        ~on_toggle:(fun on ->
+        ~on_toggle:(fun on _shift ->
           V.update inst (fun s ->
               { s with
                 V.selected =
@@ -693,6 +700,54 @@ let open_property_menu inst ~anchor (c : V.column) (p : W.t) =
 let header_cell_id inst (c : V.column) =
   "vhc-" ^ string_of_int inst.V.id ^ "-" ^ c.V.c_id
 
+let resize_handle inst (c : V.column) : t =
+ fun context parent ->
+  let finish owner commit =
+    match (V.get inst).V.table_resize with
+    | Some resize when resize.V.resize_owner = owner ->
+        let commit = commit && resize.V.resize_view = (V.get inst).V.view_uuid in
+        V.update inst (fun s -> V.finish_table_resize s ~owner ~commit);
+        if commit then V.persist_sized inst
+    | _ -> ()
+  in
+  let node =
+    Ui_components.with_props
+      [Ui_components.Prop.position `absolute
+      ;Ui_components.Prop.inset_right 0.; Ui_components.Prop.inset_top 0.
+      ;Ui_components.Prop.cursor `pointer
+      ;Ui_components.Prop.hover_opacity 1.]
+      (box ~style_class:"ls-table-resize-handle" ~width:6 ~height:32
+        ~min_width:6 ~opacity:0.5
+        ~background:"hsl(var(--border))"
+        ~data_attrs:["data-no-dnd", "true"]
+        ~pointer_capture:true
+        ~on_pointer_down:(function
+          | L.PointerDown (owner, detail) when detail.L.button = 0 ->
+              V.update inst (fun s -> V.start_table_resize s ~owner
+                ~column:c.V.c_id ~x:detail.L.x ~width:(column_width s c))
+          | _ -> ())
+        ~on_pointer_move:(function
+          | L.PointerMove (owner, detail) ->
+              V.update inst (fun s -> V.move_table_resize s ~owner ~x:detail.L.x)
+          | _ -> ())
+        ~on_pointer_up:(function
+          | L.PointerUp (owner, detail) ->
+              V.update inst (fun s -> V.move_table_resize s ~owner ~x:detail.L.x);
+              finish owner true
+          | _ -> ())
+        ~on_pointer_cancel:(function
+          | L.PointerCancel (owner, _) -> finish owner false
+          | _ -> ()) []) context parent
+  in
+  Signal.on_dispose context.Lui_ui.ui_scope (fun () ->
+    let s = V.get inst in
+    match s.V.table_resize with
+    | Some resize when resize.V.resize_owner = node ->
+        (* Disposal already runs inside the scheduler flush. *)
+        Signal.set inst.V.st (V.finish_table_resize s ~owner:node ~commit:false)
+    | _ -> ());
+  node
+
 let header_cell ?rows inst (c : V.column) : t =
   with_column_width inst c
   (if Ui_services.env_publishing () then
@@ -740,10 +795,7 @@ let header_cell ?rows inst (c : V.column) : t =
               [ Ui_components.with_props
                   [ Ui_components.Prop.overflow `hidden ]
                   (header_button inst c)
-              ; (* resize-handle stays a hook — the opacity 0/.7/1 state
-                   ladder can't ride props (inline opacity beats :where
-                   hover/pressed) *)
-                box ~style_class:"ls-table-resize-handle" ~transition:"opacity 300ms" [] ])))
+              ; resize_handle inst c ])))
 
 (* ---------- action bar ---------- *)
 

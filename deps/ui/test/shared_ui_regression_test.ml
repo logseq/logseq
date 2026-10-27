@@ -277,11 +277,11 @@ let grouped_table_selection ~registry ~profile =
       let header = List.hd headers in
       check "A partially selected group is not checked as a fully selected group"
         (Hashtbl.find_opt header.M.props "checked" <> Some (P.BoolValue true));
-      S.toggle session header.M.id true;
+      S.dispatch session (P.ToggleChangedDetail (header.M.id, true, 0));
       check "Selecting a group preserves the other group's selected rows"
         (V.Sset.equal (V.get inst).V.selected
            (V.Sset.of_list ["a"; "b"; "c"; "stale"]));
-      S.toggle session header.M.id false;
+      S.dispatch session (P.ToggleChangedDetail (header.M.id, false, 0));
       check "Clearing a group preserves selection outside that group"
         (V.Sset.equal (V.get inst).V.selected
            (V.Sset.of_list ["c"; "stale"]));
