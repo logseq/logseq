@@ -7,7 +7,8 @@
             [logseq.db.common.delete-blocks :as delete-blocks]
             [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.common.initial-data :as common-initial-data]
-            [logseq.db.common.order :as db-order]))
+            [logseq.db.common.order :as db-order]
+            [logseq.db.frontend.content :as db-content]))
 
 (def ^:private recycle-page-title "Recycle")
 (def ^:private retention-ms (* 30 24 3600 1000))
@@ -120,9 +121,33 @@
           (#(d/entity db [:block/uuid %]))
           :db/id))
 
+(defn- retracted-pages-refs-title-tx
+  "Turns the [[uuid]] refs to the pages `tx-data` removes for good into those
+  pages' titles, so the blocks that referred to them stay readable instead of
+  holding a link to an id that no longer exists."
+  [db tx-data]
+  (let [retracted (->> tx-data
+                       (keep (fn [[op id]]
+                               (when (= :db/retractEntity op)
+                                 (d/entity db id)))))
+        retracted-ids (set (map :db/id retracted))
+        pages (filter ldb/page? retracted)]
+    (->> pages
+         (mapcat :block/_refs)
+         (common-util/distinct-by :db/id)
+         (remove #(contains? retracted-ids (:db/id %)))
+         (keep (fn [ref]
+                 (let [stored-title (:v (first (d/datoms db :eavt (:db/id ref) :block/title)))
+                       title (when (string? stored-title)
+                               (db-content/content-id-ref->page stored-title pages))]
+                   (when (and title (not= title stored-title))
+                     [:db/add (:db/id ref) :block/title title])))))))
+
 (defn- with-delete-cleanup-tx
   [db tx-data]
-  (distinct (concat tx-data (delete-blocks/update-refs-history db tx-data {}))))
+  (distinct (concat tx-data
+                    (retracted-pages-refs-title-tx db tx-data)
+                    (delete-blocks/update-refs-history db tx-data {}))))
 
 (defn recycle-blocks-tx-data
   [db blocks {:keys [deleted-by-uuid now-ms]}]

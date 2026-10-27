@@ -3,6 +3,7 @@
             [datascript.core :as d]
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
+            [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
             [logseq.db.test.helper :as db-test]
             [logseq.outliner.op :as outliner-op]
@@ -168,6 +169,42 @@
     (is (nil? (d/entity @conn value-id)))
     (is (some? (d/entity @conn (:db/id outer))))
     (is (some? (d/entity @conn (:db/id unrelated))))))
+
+(defn- conn-with-block-referring-to-page
+  "A graph where block b3 refers to page p2 with [[uuid]] in its stored title."
+  []
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "b3"}]}
+               {:page {:block/title "p2"}}])
+        p2 (ldb/get-page @conn "p2")
+        b3 (db-test/find-block-by-content @conn "b3")]
+    (d/transact! conn [{:db/id (:db/id b3)
+                        :block/title (str "b3 " (page-ref/->page-ref (:block/uuid p2)))
+                        :block/refs [(:db/id p2)]}])
+    {:conn conn
+     :p2-uuid (:block/uuid p2)
+     :b3-id (:db/id b3)}))
+
+(deftest permanently-delete-recycled-page-keeps-referring-block-readable
+  (let [{:keys [conn p2-uuid b3-id]} (conn-with-block-referring-to-page)]
+    (ldb/transact! conn
+                   (recycle/recycle-page-tx-data @conn (d/entity @conn [:block/uuid p2-uuid]) {})
+                   {:outliner-op :delete-page})
+    (is (true? (recycle/permanently-delete! conn p2-uuid)))
+    (is (nil? (d/entity @conn [:block/uuid p2-uuid])))
+    (is (= "b3 p2" (:block/title (d/entity @conn b3-id)))
+        "The block keeps the page's title as text, not a link to a page that no longer exists")))
+
+(deftest gc-recycled-page-keeps-referring-block-readable
+  (let [{:keys [conn p2-uuid b3-id]} (conn-with-block-referring-to-page)]
+    (ldb/transact! conn
+                   (recycle/recycle-page-tx-data @conn (d/entity @conn [:block/uuid p2-uuid]) {:now-ms 0})
+                   {:outliner-op :delete-page})
+    (is (true? (recycle/gc! conn {:now-ms (* 31 24 3600 1000)})))
+    (is (nil? (d/entity @conn [:block/uuid p2-uuid])))
+    (is (= "b3 p2" (:block/title (d/entity @conn b3-id)))
+        "The block keeps the page's title as text, not a link to a page that no longer exists")))
 
 (deftest gc-keeps-unexpired-recycled-page
   (let [conn (db-test/create-conn-with-blocks
