@@ -675,7 +675,8 @@ input::-webkit-inner-spin-button {
 .hls-popup {
   &-overlay {
     position: absolute;
-    top: 40px;
+    /* Below the whole header, which is taller when the toolbar wraps onto a second row */
+    top: 100%;
     right: 0;
     left: 0;
     width: 100%;
