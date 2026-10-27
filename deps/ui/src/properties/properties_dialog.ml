@@ -54,6 +54,15 @@ type dlg_state =
 let current : dlg_state option ref = ref None
 let current_on_close : (unit -> unit) ref = ref (fun () -> ())
 let current_sig : dlg_state option Signal.state option ref = ref None
+let open_requests = Ui_effect.request ()
+let open_scope : Signal.scope option ref = ref None
+let pending_open : Signal.scope option ref = ref None
+
+let retire_open () =
+  ignore (Ui_effect.issue open_requests);
+  let pending = !pending_open in
+  pending_open := None;
+  Option.iter Signal.dispose_scope pending
 
 let state_signal sched =
   match !current_sig with
@@ -75,6 +84,7 @@ let set_phase d p =
   | None -> ()
 
 let close () =
+  retire_open ();
   let previous = !current in
   let on_close = !current_on_close in
   current_on_close := (fun () -> ());
@@ -621,6 +631,13 @@ let dialog_content ?compact_width ~phase d : t =
    card like cljs's unanchored command-palette fallback *)
 let view : t =
  fun context parent ->
+  open_scope := Some context.Lui_ui.ui_scope;
+  Signal.on_dispose context.Lui_ui.ui_scope (fun () ->
+      match !open_scope with
+      | Some scope when scope == context.Lui_ui.ui_scope ->
+          open_scope := None;
+          retire_open ()
+      | _ -> ());
   let s = state_signal context.Lui_ui.ui_scheduler in
   (reactive ~equal:(==)
      (fun dopt ->
@@ -684,6 +701,7 @@ let trigger ~key ?margin_left ~remove ~target make_button : t =
   Signal.on_dispose context.Lui_ui.ui_scope (fun () ->
     match !current with
     | Some d when d.d_placement = Trigger key ->
+        retire_open ();
         current := None;
         (* Teardown owns the flush; do not remount siblings during disposal. *)
         Signal.set state None;
@@ -729,8 +747,12 @@ let trigger ~key ?margin_left ~remove ~target make_button : t =
    instead of pinning the dialog to the corner. *)
 let open_for_anchor_el ?on_close ?(remove = false) ?(phase = Prop_select)
     (anchor : Ui_services.el) target =
+  retire_open ();
+  let ticket = Ui_effect.issue open_requests in
   let rec open_measured tries_left =
-    if tries_left > 0 && anchor.Ui_services.rect_pending () then
+    if not (Ui_effect.is_current open_requests ticket)
+       || not (anchor.Ui_services.connected ()) then ()
+    else if tries_left > 0 && anchor.Ui_services.rect_pending () then
       ignore
         (Ui_services.timers_timeout
            (fun () -> open_measured (tries_left - 1)) 32)
@@ -777,17 +799,98 @@ let open_for_block uuid =
    straight to the value-editing phase for the named property — a
    dedicated picker (date input, closed-value select, node select) —
    across the whole block selection *)
-let open_for_block_with_property ?on_close ~uuids uuid ~ident =
-  (let* prop =
-    D.entity (W.List [ W.Keyword "db/ident"; W.Keyword ident ])
+let open_for_block_with_property ?scope ?view_parent ?on_close ~uuids uuid ~ident =
+  retire_open ();
+  let ticket = Ui_effect.issue open_requests in
+  let parent_scope = match scope with Some _ -> scope | None -> !open_scope in
+  let scope = match parent_scope with
+    | Some parent -> Signal.child_scope "property-open" parent
+    | None -> Signal.scope "property-open"
   in
-  (match D.untag prop with
-   | W.Map _ as p ->
-       open_dialog ?on_close ~phase:(Value_edit p)
-         { uuid; uuids; db_id = None; is_tag = false; title = "" }
-   | _ -> ());
-  Js.Promise.resolve ())
-  |> ignore
+  pending_open := Some scope;
+  let repo = Runtime.repo () in
+  let route = Runtime.route () in
+  let load_gen = !Runtime.load_gen in
+  let overlay_gen = !S.overlay_generation in
+  let page_target () = Option.map (fun p -> p.Model.page_uuid, p.Model.page_db_id)
+      !Runtime.current_page in
+  let page = page_target () in
+  let selection = Editor_state.selection_state () in
+  let editing_target (st : Editor_state.t) =
+    Option.map (fun (e : Editor_state.editing) -> e.uuid, e.scope) st.editing
+  in
+  let selection_valid (st : Editor_state.t) =
+    Editor_state.String_set.equal selection.selected st.selected
+    && selection.selection_scope = st.selection_scope
+    && editing_target selection = editing_target st
+  in
+  let checks = ref [] in
+  let watch signal read valid =
+    checks := (fun () -> not (Signal.signal_is_disposed signal)
+      && valid (read ())) :: !checks;
+    ignore (Signal.own scope (Signal.subscribe ~emit_initial:false signal
+      (fun v -> if not (valid v) then retire_open ())))
+  in
+  if Editor_state.ready () then
+    watch (Editor_state.signal ()) Editor_state.selection_state selection_valid;
+  (match view_parent with
+   | None -> ()
+   | Some source ->
+       let parent : string option = Signal.get source in
+       watch source (fun () -> Signal.get source) (( = ) parent));
+  (match !Popups_state.active with
+   | None -> ()
+   | Some t ->
+       let before = Popups_state.get t in
+       let valid (v : Popups_state.view) =
+         (v.ac = None || v.ac == before.ac)
+         && (v.cm = None || v.cm == before.cm)
+         && (v.pv = None || v.pv == before.pv)
+       in
+       watch (Signal.value t.vs) (fun () -> Popups_state.get t) valid);
+  (match !Cmdk_state.latest_t with
+   | None -> ()
+   | Some t ->
+       let was_open = ref (Cmdk_state.get t).open_ in
+       let valid (v : Cmdk_state.view) = not v.open_ || !was_open in
+       checks := (fun () -> valid (Cmdk_state.get t)) :: !checks;
+       ignore (Signal.own scope
+         (Signal.subscribe ~emit_initial:false (Signal.value t.vs) (fun v ->
+            if not (valid v) then retire_open ();
+            was_open := v.open_))));
+  if Dialogs_state.ready () then (
+    let before = Dialogs_state.value () in
+    watch (Dialogs_state.signal ()) Dialogs_state.value
+      (fun v -> not (Dialogs_state.has_layer v) || v == before));
+  let valid () =
+    Ui_effect.is_current open_requests ticket && Ui_effect.alive scope
+    && Runtime.repo () = repo && Runtime.route () = route
+    && !Runtime.load_gen = load_gen && !S.overlay_generation = overlay_gen
+    && page_target () = page
+    && selection_valid (Editor_state.selection_state ())
+    && List.for_all (fun check -> check ()) !checks
+  in
+  let finish () =
+    if Ui_effect.is_current open_requests ticket then retire_open ()
+  in
+  let lookup = Js.Promise.catch (fun error -> Js.Promise.resolve (Error error))
+    (let* prop = D.entity (W.List [ W.Keyword "db/ident"; W.Keyword ident ]) in
+     Js.Promise.resolve (Ok prop))
+  in
+  ignore (let* result = lookup in
+    let active = valid () in
+    finish ();
+    (match result with
+     | Ok prop when active ->
+         (match D.untag prop with
+          | W.Map _ as p ->
+              open_dialog ?on_close ~phase:(Value_edit p)
+                { uuid; uuids; db_id = None; is_tag = false; title = "" }
+          | _ -> ())
+     | Error error when active ->
+         Ui_services.log_error ("property lookup failed", error)
+     | _ -> ());
+    Js.Promise.resolve ())
 
 let open_for_current () =
   match current_target () with
