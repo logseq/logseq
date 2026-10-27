@@ -783,12 +783,8 @@ let editor_of_inst inst ~active =
         V.update inst (fun s -> { s with V.ref_titles = refs }))
     ; save = (fun tree ->
         let qsrc = tree_to_dsl tree in
-        let s = V.get inst in
-        let uuid = if s.V.query_block_uuid <> "" then s.V.query_block_uuid
-          else match inst.V.kind with V.KQuery { block_uuid } -> block_uuid
-          | _ -> invalid_arg "Query builder requires a query value block" in
         V.update inst (fun s -> { s with V.qsrc });
-        Db.save_block_title uuid qsrc (fun () -> refresh inst))
+        Views_query.save_src ~after:(fun () -> refresh inst) inst qsrc)
     }
 
 let builder_el inst ~tree : t = fun context ->

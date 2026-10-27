@@ -156,7 +156,7 @@ let body_eq (a : V.vstate) (b : V.vstate) =
 
 (* Result refreshes must not retire the active filter editor's draft or focus. *)
 let body_el ?(equal=body_eq) inst : t =
-  column ~gap:0 ~min_width:0 ~margin_top:4 ~style_class:"ls-view-body" ~grow:1.
+  column ~gap:0 ~min_width:0 ~min_height:0 ~margin_top:4 ~style_class:"ls-view-body" ~grow:1.
     [ Views_head.filters_row ~margin_bottom:8 inst
     ; reactive ~equal (Views_table.result_el inst) (sig_of inst)
     ]
@@ -178,15 +178,10 @@ let view_el inst : t =
     | _ -> true
   in
   let inner =
-  box ~grow:1.
-    [ column ~gap:8 ~grow:1.
-        [ column ~gap:8 ~grow:1.
-            [ Views_table.foldable inst ~key:"view"
-                ~title:(Views_head.render_head inst)
-                ~body:(body_el ~equal inst)
-            ]
-        ]
-    ]
+    column ~gap:0 ~grow:1. ~min_width:0 ~min_height:0
+      [ Views_table.foldable inst ~key:"view"
+          ~title:(Views_head.render_head inst)
+          ~body:(body_el ~equal inst) ]
   in
   (* An empty linked-refs result (page with no mentions) unmounts the
      section once the snapshot has settled. While it is loading, or
@@ -204,6 +199,9 @@ let view_el inst : t =
                  && s.V.data <> Wr.VEmpty
                  && s.V.items_count = 0
                  && Wr.row_count s.V.data = 0
+                 && s.V.view_error = None
+                 && s.V.filters = [] && s.V.input = ""
+                 && s.V.ref_includes = [] && s.V.ref_excludes = []
                in
                not settled_empty)
              (Signal.value inst.V.st))
@@ -230,7 +228,7 @@ let query_content inst (s : V.vstate) : t =
   | `Blank -> spacer ~key:"blank" []
   | `Custom view ->
     (* :view fn output replaces the default table (cljs custom-query) *)
-    column (hiccup_els inst view)
+    column ~min_width:0 ~gap:0 (hiccup_els inst view)
   | `Error error ->
     Views_table.error_el ~title:(I.t "query/error") ~content:error
   | `Scalar rows ->
@@ -248,22 +246,17 @@ let query_content inst (s : V.vstate) : t =
     (* block results → the query-result view. cljs renders the foldable
        live-query shell ("Live query (n)" head + view-actions + table)
        even when the result is empty. Keep this shell during a refresh. *)
-    box ~style_class:"query-result"
-      [ column ~gap:8
-          [ column ~gap:8
-              [ Views_table.foldable inst ~key:"qr"
-                  ~title:(Views_head.render_head inst)
-                  ~body:(body_el inst)
-              ]
-          ]
-      ]
+    column ~style_class:"query-result" ~gap:0 ~grow:1. ~min_width:0 ~min_height:0
+      [ Views_table.foldable inst ~key:"qr"
+          ~title:(Views_head.render_head inst)
+          ~body:(body_el inst) ]
   | `Loading ->
     text ~value:(I.t "ui/loading") ~padding:8 ~foreground:"muted-foreground" []
 
 let query_view_el inst : t =
   Logseq_el.fragment
-    [ box 
-        [ column
+    [ column ~gap:0 ~min_width:0 ~min_height:0 ~grow:1.
+        [ column ~gap:0 ~min_width:0 ~min_height:0 ~grow:1.
             [ reactive ~equal:body_eq
                 (fun s ->
                   (* DSL queries, including blank ones, get the builder panel. *)
@@ -273,7 +266,8 @@ let query_view_el inst : t =
                       if s.V.is_advanced then spacer ~key:"builder-off" []
                       else Views_builder.builder_el inst ~tree:(Views_builder.tree_for inst))
                 (sig_of inst)
-            ; reactive ~equal:(fun a b -> query_content_key a=query_content_key b)
+            ; reactive ~equal:(fun a b -> query_content_key a=query_content_key b
+                && (a.V.query_view = W.Nil || a.V.blocks == b.V.blocks))
                 (query_content inst) (sig_of inst)
             ]
         ]
@@ -468,7 +462,9 @@ let load_view_data ?(fetch_limit = 0) inst =
               Wr.VEmpty
           in
           let continue () =
-            load_props inst (fun () -> build_columns inst)
+            if V.fetch_fresh inst gen then
+              load_props inst (fun () ->
+                if V.fetch_fresh inst gen then build_columns inst)
           in
           if ref_kind inst then begin
             (* The worker may return a prefix (linked refs send
@@ -559,7 +555,8 @@ let load_view_data ?(fetch_limit = 0) inst =
                  | W.Nil -> []
                  | v -> Views_query.collect_uuids v [])
             in
-            load_blocks inst uuids (fun () -> continue ())
+            load_blocks ~fresh:(fun () -> V.fetch_fresh inst gen)
+              inst uuids continue
           end
   in
   if Ui_services.env_publishing () && view_uuid = "" then
@@ -611,13 +608,16 @@ let select_view inst v =
   refresh inst
 
 let load_views inst ~on_done =
+  let gen = V.new_fetch inst in
   let key = Db.key_views inst.V.owner inst.V.feature in
   Db.snapshots
     ~f:(fun snap ->
+      if V.fetch_fresh inst gen then
       match Wr.snapshot_slot_value snap key with
       | Some (W.Array uuids) | Some (W.List uuids) -> (
           let us = List.filter_map W.as_uuid uuids in
           Db.get_blocks us ~metadata:true (fun ents ->
+            if V.fetch_fresh inst gen then begin
               (* get_blocks order is storage order — tabs follow the
                  resource's uuid order (cljs view-uuids), which also picks
                  the default view (first tab) *)
@@ -632,7 +632,7 @@ let load_views inst ~on_done =
                   { s with
                     V.views = List.filter_map (Hashtbl.find_opt by_uuid) us
                   });
-              on_done ()))
+              on_done () end))
       | _ -> on_done ())
     [ Db.resource_views inst.V.owner inst.V.feature ]
 
@@ -796,6 +796,73 @@ let load_more_rows inst =
         load_view_data ~fetch_limit:limit inst
     | _ -> ()
 
+(* Fetch the unwindowed resource for destructive actions without replacing
+   the visible prefix or hydrating the entire graph into the viewport. *)
+let ensure_full_action_rows inst on_done =
+  let repo = Db.repo () in
+  let route = Runtime.route () in
+  let gen = !(inst.V.data_gen) in
+  let view_uuid = (V.get inst).V.view_uuid in
+  let full_ctx () =
+    match V.ctx_of inst with
+    | W.Map fields ->
+        W.Map
+          (List.filter
+             (fun (key, _) -> key <> W.kw "initial-row-count") fields)
+    | _ -> invalid_arg "View context must be a map"
+  in
+  let ctx = full_ctx () in
+  let fresh () =
+    Db.repo () = repo && Runtime.route () = route
+    && V.fetch_fresh inst gen
+    && (V.get inst).V.view_uuid = view_uuid
+    && full_ctx () = ctx
+  in
+  let settled = ref false in
+  let finish result =
+    if not !settled then begin
+      settled := true;
+      on_done (if fresh () then result else Error "View context changed")
+    end
+  in
+  if view_uuid = "" then finish (Error "No selected view")
+  else
+    let key = Db.key_view_data view_uuid ctx in
+    Db.snapshots
+      ~f:(fun snap ->
+        if not (fresh ()) then finish (Error "View context changed")
+        else
+          match Wr.snapshot_slot_value snap key with
+          | None -> finish (Error "Full view data is unavailable")
+          | Some (W.Map _ as wire) ->
+              (match W.get wire "error" with
+               | Some error ->
+                   finish (Error (Option.value
+                     (W.map_get_string error "message")
+                     ~default:"Full view data is unavailable"))
+               | None ->
+                   (try
+                      let expected = match W.map_get_int wire "count" with
+                        | Some count when count >= 0 -> count
+                        | _ -> invalid_arg "Invalid full view-data count" in
+                      let rows_key = match W.get wire "partition" with
+                        | Some (W.Keyword ("grouped" | "grouped-list")) -> "groups"
+                        | Some (W.Keyword "flat") | None -> "rows"
+                        | _ -> invalid_arg "Invalid full view-data partition" in
+                      (match W.get wire rows_key with
+                       | Some (W.Array _ | W.List _) -> ()
+                       | _ -> invalid_arg "Invalid full view-data rows");
+                      let data = Wr.decode_view_data wire in
+                      let actual = List.length (row_uuids_of data) in
+                      if expected > actual then
+                        finish (Error "Full view data is incomplete")
+                      else finish (Ok data)
+                    with e ->
+                      Ui_services.log_error ("full view-data decode failed", e);
+                      finish (Error "Full view data is invalid")))
+          | Some _ -> finish (Error "Full view data is invalid"))
+      [ Db.resource_view_data view_uuid ctx ]
+
 let add_new_object inst =
   let repo = Db.repo () in
   let context = repo, Runtime.route () in
@@ -854,6 +921,7 @@ let install_ops () =
     ; o_add_object = add_new_object
     ; o_title_of_uuid = title_of_uuid
     ; o_load_more = load_more_rows
+    ; o_full_action_rows = ensure_full_action_rows
     }
 
 (* ---------- mount ---------- *)
@@ -930,11 +998,23 @@ let toggle_query_editor ~block_uuid =
    "sync-db-changes" broadcast (Runtime.on_sync, run by worker_events) so
    result membership updates live; debounced so a burst of tx broadcasts
    coalesces into one refetch *)
-let debounced_refresh f = Ui_services.timers_debounce 150 f
+let debounced_refresh = lazy (Ui_services.timers_debounce 150)
 
 let refresh_live_insts () =
-  debounced_refresh (fun () ->
-      Hashtbl.iter (fun _ inst -> refresh inst) live)
+  (Lazy.force debounced_refresh) (fun () ->
+      Hashtbl.iter (fun _ inst ->
+        match inst.V.kind with
+        | V.KQuery _ -> refresh inst
+        | _ ->
+            load_views inst ~on_done:(fun () ->
+              if Hashtbl.mem live inst.V.id then begin
+                let s = V.get inst in
+                match List.find_opt (fun v -> v.Wr.vu = s.V.view_uuid) s.V.views with
+                | Some v ->
+                    V.update inst (fun s -> V.apply_view_entity s v);
+                    refresh inst
+                | None -> ensure_default_view inst
+              end)) live)
 
 let () =
   install_ops ();
