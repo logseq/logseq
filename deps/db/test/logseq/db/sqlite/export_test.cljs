@@ -170,6 +170,44 @@
             {:page {:build/journal 20250221}}]}))
       "In :pages-and-blocks, identical journals and their :blocks are merged"))
 
+(deftest merge-export-maps-keeps-one-block-per-uuid
+  (let [block-uuid (random-uuid)
+        other-uuid (random-uuid)
+        merged (#'sqlite-export/merge-export-maps
+                {:pages-and-blocks
+                 [{:page {:block/title "page1"}
+                   :blocks [{:block/title "alpha" :block/uuid block-uuid :build/keep-uuid? true}
+                            {:block/title "beta" :block/uuid other-uuid :build/keep-uuid? true}
+                            {:block/title "no uuid"}]}]}
+                {:pages-and-blocks
+                 [{:page {:block/title "page1"}
+                   :blocks [{:block/title "alpha" :block/uuid block-uuid :build/keep-uuid? true}
+                            {:block/title "no uuid"}]}]})
+        blocks (->> (:pages-and-blocks merged) (mapcat :blocks))]
+    (is (= ["alpha" "beta" "no uuid" "no uuid"]
+           (mapv :block/title blocks))
+        "A block exported twice stays at its first position; blocks without a uuid are kept")))
+
+(deftest import-selected-nodes-keeps-order-of-referenced-sibling
+  (let [alpha-uuid (random-uuid)
+        beta-title (str "order beta " (page-ref/->page-ref alpha-uuid))
+        conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks
+               [{:page {:block/title "page1"}
+                 :blocks [{:block/title "order alpha" :block/uuid alpha-uuid :build/keep-uuid? true}
+                          {:block/title beta-title}
+                          {:block/title "order gamma"}]}]})
+        node-ids (->> ["order alpha" beta-title "order gamma"]
+                      (mapv #(vector :block/uuid (:block/uuid (db-test/find-block-by-content @conn %)))))
+        conn2 (db-test/create-conn-with-import-map
+               (sqlite-export/build-export @conn {:export-type :selected-nodes :node-ids node-ids}))
+        page (db-test/find-page-by-title @conn2 "page1")
+        imported-titles (->> (:block/_page page)
+                             (sort-by :block/order)
+                             (mapv #(second (re-find #"^order (\w+)" (:block/title %)))))]
+    (is (= ["alpha" "beta" "gamma"] imported-titles)
+        "A selected block that another selected block refers to is imported once, in its original position")))
+
 (deftest import-block-in-same-graph
   (let [original-data
         {:properties {:user.property/default-many {:logseq.property/type :default :db/cardinality :db.cardinality/many}}
