@@ -457,6 +457,32 @@
     (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
         "Imported graph validates")))
 
+(deftest-async import-table-in-block
+  (p/let [file (write-temp-graph-file
+                 "pages/table.md"
+                 (str "- #+BEGIN_QUOTE\n"
+                      "  Event handlers were renamed:\n"
+                      "  \n"
+                      "  |Old event handler|New event handler|Note|\n"
+                      "  |:-:|:-:|:-:|\n"
+                      "  |OnBoot|OnStart||\n"
+                      "  |PreWrite|-|**Deprecated**|\n"
+                      "  #+END_QUOTE\n"))
+          conn (db-test/create-conn)
+          _ (db-pipeline/add-listener conn)
+          _ (import-files-to-db [file] conn {})
+          title (:block/title (db-test/find-block-by-content @conn #"Event handlers were renamed"))]
+    (is (some? title) "Quote with a table is imported")
+    (is (= ["Event handlers were renamed:"
+            "| Old event handler | New event handler | Note |"
+            "| --- | --- | --- |"
+            "| OnBoot | OnStart |  |"
+            "| PreWrite | - | **Deprecated** |"]
+           (remove string/blank? (string/split-lines title)))
+        "Table is imported as a markdown table with one row per line")
+    (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+        "Imported graph validates")))
+
 (deftest-async import-page-with-property-and-tag-of-same-name-convert-all-tags
   (p/let [file (write-temp-graph-file
                  "pages/source.md"
