@@ -112,9 +112,9 @@ let open_prop_dlg ~remove uuids =
         { Properties_dialog.uuid; uuids; db_id; is_tag = false; title = "" }
   | [] -> ()
 
-let open_tags = function
+let open_tags ~scope = function
   | uuid :: _ as uuids ->
-      Properties_dialog.open_for_block_with_property
+      Properties_dialog.open_for_block_with_property ~scope
         ~on_close:(restore_bar uuids) ~uuids uuid ~ident:"block/tags"
   | [] -> ()
 
@@ -238,6 +238,7 @@ let rec view () : t =
 and node () : t =
  fun ctx parent ->
   (install_listeners ();
+   let owner_scope = ctx.Lui_ui.ui_scope in
    let popup =
      match Popups_state.non_cm_popup_signal () with
      | Some signal -> signal
@@ -296,7 +297,8 @@ and node () : t =
                                      sbtn ~key:"sb-tag"
                                        ~label:(I18n.t "property/set-tags")
                                        ~icon:(`app "hash")
-                                       ~on_press:(fun _ -> open_tags sel)
+                                       ~on_press:(fun _ ->
+                                         open_tags ~scope:owner_scope sel)
                                        ();
                                    ]
                                    @ (let targets = comment_targets sel in
