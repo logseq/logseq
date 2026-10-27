@@ -475,6 +475,26 @@ test('stop and delete probe an unregistered server-list entry with an unsignalab
   });
 });
 
+test('startup cleanup keeps the server-list line of a worker that holds the graph although its PID cannot be signalled', async () => {
+  await withGraph(async (storage, repo) => {
+    const port = await closedPort();
+    registerLeftoverWorker(storage, repo, STALE_PID);
+    const list = path.join(storage.root, 'server-list');
+    fs.writeFileSync(list, `${STALE_PID} ${port}\n`);
+    const { graphDir } = lifecycle.context(storage, repo);
+    fs.writeFileSync(path.join(graphDir, 'db-worker.lock'), JSON.stringify({ pid: STALE_PID, repo, 'lock-id': 'old', 'owner-source': 'cli' }));
+    const holder = lifecycle.acquireOwnership(lifecycle.context(storage, repo));
+    const restore = denySignalZero(STALE_PID);
+    try {
+      await lifecycle.stopOutdatedWorkers(storage, REVISION).catch(() => {}); // refusing is fine; losing the line is not
+    } finally {
+      restore();
+      holder.release();
+    }
+    assert.equal(fs.readFileSync(list, 'utf8'), `${STALE_PID} ${port}\n`);
+  });
+});
+
 test('stop and delete still refuse to go on past a PID this user may not signal', async () => {
   await withGraph(async (storage, repo) => {
     registerLeftoverWorker(storage, repo, STALE_PID);
