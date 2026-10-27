@@ -6921,6 +6921,34 @@ let () =
       let asked = run_cli_lifecycle [| "graph"; "--bogus"; "--help" |] in
       expect_int "explicit help exit" 0 asked.exit_code);
 
+  test "CLI parity --help=false does not ask for help" (fun () ->
+      let root = temp_dir "logseq-cli-help-false-" in
+      let ran =
+        run_cli_lifecycle
+          [| "--root-dir"; root; "graph"; "list"; "--help=false" |]
+      in
+      expect_int "graph list with --help=false exit" 0 ran.exit_code;
+      expect_named_not_contains "graph list with --help=false prints no usage"
+        (stdout_text "graph list with --help=false stdout" ran)
+        "Usage: logseq";
+      let spaced =
+        run_cli_lifecycle
+          [| "--root-dir"; root; "graph"; "list"; "--help"; "false" |]
+      in
+      expect_named_not_contains "graph list with --help false prints no usage"
+        (stdout_text "graph list with --help false stdout" spaced)
+        "Usage: logseq";
+      let asked = run_cli_lifecycle [| "graph"; "list"; "--help=true" |] in
+      expect_named_contains "--help=true prints usage"
+        (stdout_text "--help=true stdout" asked)
+        "Usage: logseq graph list";
+      let invalid = run_cli_lifecycle [| "graph"; "list"; "--help=maybe" |] in
+      expect_int "--help=maybe exit" 1 invalid.exit_code;
+      expect_named_contains "--help=maybe code"
+        (stdout_text "--help=maybe stdout" invalid)
+        "invalid-options";
+      remove_tree root);
+
   test
     "CLI parity structured example output keeps selector matched commands and \
      message" (fun () ->

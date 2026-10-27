@@ -211,10 +211,20 @@ let command_path_prefix registry path =
       | _ -> if is_prefix candidate path then Some candidate else longest)
     None registry.Command_registry.commands
 
+(* `--help` and `-h` ask for help; `--help=false` does not. *)
+let help_requested options =
+  Vec.exists
+    (fun (key, value) ->
+      key = "help"
+      &&
+      match value with
+      | None -> true
+      | Some value -> String.lowercase_ascii (String.trim value) = "true")
+    options
+
 let help_group registry options positional =
   if group_help_path registry positional then Some positional
-  else if option_present "help" options then
-    command_path_prefix registry positional
+  else if help_requested options then command_path_prefix registry positional
   else None
 
 let profile_status exit_code =
@@ -314,7 +324,7 @@ let parse_args : type marker.
   (* A group without `--help` is not asked for help, so its options still
      have to be valid. *)
   let group_options_error group =
-    if option_present "help" options then None
+    if help_requested options then None
     else
       match
         Cli_parse.validate_options group
