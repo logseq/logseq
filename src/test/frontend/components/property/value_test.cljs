@@ -354,6 +354,37 @@
       (is (= [1 :user.property/due {:preserve-task-tag? true}]
              @removed-args*)))))
 
+(defn- picker-key-event
+  "A keydown whose target sits inside a date picker and matches `ancestor-selectors`."
+  [key ancestor-selectors]
+  (let [hits (set ancestor-selectors)]
+    #js {:key key
+         :preventDefault (fn [])
+         :stopPropagation (fn [])
+         :target #js {:closest (fn [selector]
+                                 (when (some hits (map string/trim (string/split selector #",")))
+                                   #js {:getAttribute (fn [_] nil)}))}}))
+
+(deftest enter-on-a-calendar-day-does-not-confirm-the-opening-day-test
+  (let [selected* (atom [])
+        select! (fn [d] (swap! selected* conj d))
+        opening-day (js/Date. 2026 9 27)]
+    (#'property-value/confirm-initial-day-on-enter!
+     (picker-key-event "Enter" [".ls-property-date-picker" "button" "[role='gridcell']"])
+     opening-day select!)
+    (is (empty? @selected*)
+        "The focused day selects itself; confirming the opening day too would overwrite the day picked with the arrow keys")
+    (#'property-value/confirm-initial-day-on-enter!
+     (picker-key-event "Enter" [".ls-property-date-picker"])
+     opening-day select!)
+    (is (= [opening-day] @selected*)
+        "Enter with focus elsewhere in the picker still confirms the opening day")
+    (#'property-value/confirm-initial-day-on-enter!
+     (picker-key-event "Enter" [".ls-property-date-picker" "input"])
+     opening-day select!)
+    (is (= [opening-day] @selected*)
+        "Enter in a form control stays with the control")))
+
 (deftest deleting-status-from-task-view-preserves-task-tag-test
   (let [calls* (atom [])
         block {:db/id 1}
