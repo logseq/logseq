@@ -223,6 +223,60 @@
         (is (true? (get-in @pasted [:opts :keep-uuid?]))
             "Clipboard cut payload must keep uuids even if this window last copied.")))))
 
+(defn- <with-rejected-clipboard-read
+  "Calls (f), which returns a promise, with `navigator.clipboard.read` rejecting
+  with NotAllowedError as it does in Firefox. Resolves to {:result f's result
+  :read-calls n} and restores the globals."
+  [f]
+  (let [read-calls (atom 0)
+        had-window? (exists? js/window)
+        navigator js/navigator
+        original-clipboard (js/Object.getOwnPropertyDescriptor navigator "clipboard")
+        _ (when-not had-window?
+            (set! (.-window js/globalThis) #js {}))
+        window js/window
+        window-had-navigator? (some? (.-navigator window))]
+    (when-not window-had-navigator?
+      (js/Object.defineProperty window "navigator" #js {:configurable true :value navigator}))
+    (js/Object.defineProperty navigator "clipboard"
+                              #js {:configurable true
+                                   :value #js {:read (fn []
+                                                       (swap! read-calls inc)
+                                                       (js/Promise.reject
+                                                        (js/Error. "NotAllowedError: Clipboard read operation is not allowed.")))}})
+    (-> (p/let [result (f)]
+          {:result result :read-calls @read-calls})
+        (p/finally (fn [_ _]
+                     (if original-clipboard
+                       (js/Object.defineProperty navigator "clipboard" original-clipboard)
+                       (js-delete navigator "clipboard"))
+                     (when-not window-had-navigator?
+                       (js-delete window "navigator"))
+                     (when-not had-window?
+                       (js-delete js/globalThis "window")))))))
+
+(deftest-async get-copied-blocks-resolves-nil-when-clipboard-read-is-rejected
+  (p/let [{:keys [result read-calls]} (<with-rejected-clipboard-read paste-handler/get-copied-blocks)]
+    (is (= 1 read-calls) "The clipboard read was attempted and refused.")
+    (is (nil? result) "A refused read means no copied blocks, not a failed paste.")))
+
+(deftest-async editor-on-paste-pastes-text-when-clipboard-read-is-rejected
+  (testing "Firefox rejects navigator.clipboard.read(); the text from the paste event is still pasted"
+    (let [text "text copied outside Logseq"]
+      (p/with-redefs
+       [commands/delete-selection! (constantly nil)
+        commands/simple-insert! (fn [_input text] (p/resolved text))
+        util/stop (constantly nil)
+        util/get-selected-text (constantly "")
+        utils/getCopiedBlocksFromMemory (constantly nil)
+        html-parser/convert (constantly nil)]
+        (p/let [{:keys [result read-calls]}
+                (<with-rejected-clipboard-read
+                 #((paste-handler/editor-on-paste! nil)
+                   #js {:clipboardData #js {:getData (constantly text)}}))]
+          (is (= 1 read-calls) "The clipboard read was attempted and refused.")
+          (is (= text result)))))))
+
 (deftest-async editor-on-paste-embed-block-uses-worker-loaded-link
   (let [linked-block-id #uuid "11111111-1111-1111-1111-111111111111"
         current-block-id #uuid "22222222-2222-2222-2222-222222222222"
