@@ -3961,6 +3961,10 @@
                                             nil)]
     {:initial-row-count initial-row-count
      :window-context window-context
+     ;; Identifies the view whose previous paint may stay on screen while the
+     ;; next result loads. The search input is left out: typing must keep the
+     ;; old table mounted so the search box is not unmounted mid-keystroke.
+     :previous-paint-key (pr-str (dissoc window-context :input))
      :full-context full-context
      :resource-key [:view-data view-uuid (or window-context full-context)]
      :full-key (when window-context
@@ -4083,11 +4087,16 @@
      (fn []
        (set-row-offset-state! nil)
        (set-stale-offset-window! nil)
-       ;; Keep previous paint only for same-context refetches (delete).
-       ;; A new filter/sort/input key must not keep the old 431-row table.
-       (set-previous-view-data! nil)
        js/undefined)
      [window-context-key])
+    (hooks/use-effect!
+     (fn []
+       ;; Keep previous paint for same-context refetches (delete) and for
+       ;; search input changes, so the search box stays mounted while typing.
+       ;; A new filter/sort key must not keep the old 431-row table.
+       (set-previous-view-data! nil)
+       js/undefined)
+     [(:previous-paint-key plan)])
     (hooks/use-effect!
      (fn []
        (let [next-layout [display-type group-by-property-ident]]
