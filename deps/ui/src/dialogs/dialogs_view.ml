@@ -170,6 +170,7 @@ let prompt_body (p : Dialogs_state.prompt) : t =
                ~accessibility_identifier:"ls-prompt-title" []
            ])
       @ [ Ui_components.input ~key:"prmt-in"
+            ~text:(reactive (Signal.value value))
             ~style_class:"form-input ls-prompt-input"
             ~data_attrs:[ ("style", "display:block;width:100%;margin:0.5rem 0 1rem") ]
             ~autofocus:true
