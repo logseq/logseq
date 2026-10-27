@@ -88,6 +88,11 @@ let effects (action : Action.t) : unit =
        | Model.Page _ | Model.Block_zoom _ -> ())
   | _ -> ()
 
+let next_context_revision (model : t) =
+  if model.context_revision = max_int then
+    invalid_arg "Model.context_revision exhausted";
+  model.context_revision + 1
+
 let update (model : t) (action : Action.t) : t =
   match action with
   | Action.Boot_graph_ready (repo, config) ->
@@ -95,16 +100,25 @@ let update (model : t) (action : Action.t) : t =
          so the header indicator only shows the new graph once its conn
          reports — a stale "on.idle" would let e2e switch-graph proceed
          while the navigation is still in flight *)
-      { model with phase = Ready; repo = Some repo; graph_config=config; rtc = None }
-  | Boot_failed message -> { model with phase = Failed message }
+      { model with phase = Ready; repo = Some repo; graph_config=config; rtc = None
+      ; journals_status = Journal_pending
+      ; context_revision = next_context_revision model }
+  | Boot_failed message ->
+      { model with phase = Failed message
+      ; journals_status = Journal_pending
+      ; context_revision = next_context_revision model }
   | Graph_config_loaded (repo, config) ->
       if model.repo=Some repo then {model with graph_config=config} else model
-  | Graph_closed -> { model with repo = None; graph_config=Wire.Map []; rtc = None }
+  | Graph_closed ->
+      { model with repo = None; graph_config=Wire.Map []; rtc = None
+      ; journals_status = Journal_pending
+      ; context_revision = next_context_revision model }
   | Repos_loaded repos -> { model with repos }
   | Page_loaded page ->
       { model with
         route_page = Some page
       ; page_missing = false
+      ; context_revision = next_context_revision model
       ; data_gen =
           (if
              (* spliced block trees reach the mounted flat row stream
@@ -127,12 +141,21 @@ let update (model : t) (action : Action.t) : t =
         route_page = None
       ; page_missing = true
       ; data_gen = model.data_gen + 1
+      ; journals_status =
+          (match model.route with
+           | Home | Journals -> Journal_failed
+           | _ -> model.journals_status)
+      ; context_revision = next_context_revision model
       }
-  | Journals_loaded js | Journals_spliced js ->
+  | Journals_loaded js ->
       (* the journals view is signal-driven end to end (keyed items,
          keyed blocks, dyn'd refs) — a publish never needs a data_gen
          bump; the collections repaint or reconcile themselves *)
-      { model with journals = js }
+      { model with journals = js; journals_status = Journal_loaded
+      ; context_revision = next_context_revision model }
+  | Journals_spliced js ->
+      { model with journals = js
+      ; context_revision = next_context_revision model }
   | Ref_count_loaded n ->
       { model with
         page_ref_count = n
@@ -150,6 +173,8 @@ let update (model : t) (action : Action.t) : t =
   | Navigate_to route ->
       { model with
         route
+      ; journals_status = Journal_pending
+      ; context_revision = next_context_revision model
       ; route_page = None
       ; page_missing = false
       ; page_ref_count = 0
