@@ -86,6 +86,11 @@ type view_ent =
   ; vgroup_by : string option (* property ident *)
   ; vgroup_sort_by : string option
   ; vgroup_desc : bool option
+  ; vgallery_display : string list
+  ; vgallery_asset : string option
+  ; vgallery_size : string option
+  ; vgallery_width : int option
+  ; vgallery_height : int option
   }
 
 let ident_of_value v =
@@ -118,6 +123,12 @@ let column_sizes = function
           | _ -> invalid_arg "Invalid view column width")
         entries
   | _ -> invalid_arg "Expected a view column widths map"
+
+let gallery_dimension m key =
+  match Option.bind (W.get m key) as_float with
+  | Some value when Float.is_finite value && value > 0. ->
+      Some (int_of_float (Float.round (max 100. (min 1024. value))))
+  | _ -> None
 
 let decode_view_ent (m : W.t) : view_ent option =
   match W.map_get_uuid m "block/uuid" with
@@ -174,8 +185,51 @@ let decode_view_ent (m : W.t) : view_ent option =
             (match W.get m "logseq.property.view/sort-groups-desc?" with
              | Some (W.Bool b) -> Some b
              | _ -> None)
+        ; vgallery_display =
+            W.elems
+              (Option.value
+                 (W.get m "logseq.property.view/gallery-display-properties")
+                 ~default:W.Nil)
+            |> List.filter_map ident_of_value
+        ; vgallery_asset =
+            ident_of_value
+              (Option.value
+                 (W.get m "logseq.property.view/gallery-asset-property-ident")
+                 ~default:W.Nil)
+        ; vgallery_size =
+            ident_of_value
+              (Option.value
+                 (W.get m "logseq.property.view/gallery-card-size")
+                 ~default:W.Nil)
+        ; vgallery_width =
+            gallery_dimension m "logseq.property.view/gallery-card-width"
+        ; vgallery_height =
+            gallery_dimension m "logseq.property.view/gallery-card-height"
         }
   | None -> None
+
+let gallery_dimensions view =
+  match view with
+  | Some { vgallery_size = Some "compact"; _ } -> 160, 232
+  | Some { vgallery_size = Some "custom"
+         ; vgallery_width = Some width; vgallery_height = Some height; _ }
+    when width > 0 && height > 0 ->
+      max 100 (min 1024 width), max 100 (min 1024 height)
+  | _ -> 220, 320
+
+let gallery_asset_ident ~asset_class ~infer ~cover_idents view =
+  if asset_class then Some "block/uuid"
+  else match Option.bind view (fun view -> view.vgallery_asset) with
+    | Some ident -> Some ident
+    | None -> if infer then (match cover_idents with [ident] -> Some ident | _ -> None)
+        else None
+
+let gallery_display_idents ~column_idents ~asset_ident view =
+  let configured = Option.fold ~none:[] ~some:(fun view -> view.vgallery_display) view in
+  let selected = if configured = [] then ["block/title"]
+    else List.filter (fun ident -> List.mem ident configured) column_idents in
+  List.filter (fun ident -> ident <> "select" && ident <> "id"
+    && Some ident <> asset_ident) selected
 
 (* view-data value decode *)
 type vrow_group =

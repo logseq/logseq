@@ -828,7 +828,7 @@ let ensure_full_action_rows inst on_done =
   if view_uuid = "" then finish (Error "No selected view")
   else
     let key = Db.key_view_data view_uuid ctx in
-    Db.snapshots
+    let fetch () = Db.snapshots
       ~f:(fun snap ->
         if not (fresh ()) then finish (Error "View context changed")
         else
@@ -845,13 +845,26 @@ let ensure_full_action_rows inst on_done =
                       let expected = match W.map_get_int wire "count" with
                         | Some count when count >= 0 -> count
                         | _ -> invalid_arg "Invalid full view-data count" in
-                      let rows_key = match W.get wire "partition" with
-                        | Some (W.Keyword ("grouped" | "grouped-list")) -> "groups"
-                        | Some (W.Keyword "flat") | None -> "rows"
-                        | _ -> invalid_arg "Invalid full view-data partition" in
-                      (match W.get wire rows_key with
-                       | Some (W.Array _ | W.List _) -> ()
-                       | _ -> invalid_arg "Invalid full view-data rows");
+                      let entries key value = match W.get value key with
+                        | Some (W.Array entries | W.List entries) -> entries
+                        | _ -> invalid_arg "Invalid full view-data rows" in
+                      let check_rows value =
+                        List.iter (fun row ->
+                          if W.as_uuid row = None then
+                            invalid_arg "Invalid full view-data row")
+                          (entries "rows" value) in
+                      (match W.get wire "partition" with
+                       | Some (W.Keyword "grouped") ->
+                           List.iter check_rows (entries "groups" wire)
+                       | Some (W.Keyword "grouped-list") ->
+                           List.iter (fun group ->
+                             List.iter (fun part ->
+                               if W.map_get_uuid part "breadcrumb-uuid" = None then
+                                 invalid_arg "Invalid full view-data partition";
+                               check_rows part) (entries "partitions" group))
+                             (entries "groups" wire)
+                       | Some (W.Keyword "flat") | None -> check_rows wire
+                       | _ -> invalid_arg "Invalid full view-data partition");
                       let data = Wr.decode_view_data wire in
                       let actual = List.length (row_uuids_of data) in
                       if expected > actual then
@@ -862,6 +875,10 @@ let ensure_full_action_rows inst on_done =
                       finish (Error "Full view data is invalid")))
           | Some _ -> finish (Error "Full view data is invalid"))
       [ Db.resource_view_data view_uuid ctx ]
+    in
+    try fetch () with e ->
+      Ui_services.log_error ("full view-data request failed", e);
+      finish (Error "Full view data is unavailable")
 
 let add_new_object inst =
   let repo = Db.repo () in
@@ -1003,18 +1020,15 @@ let debounced_refresh = lazy (Ui_services.timers_debounce 150)
 let refresh_live_insts () =
   (Lazy.force debounced_refresh) (fun () ->
       Hashtbl.iter (fun _ inst ->
-        match inst.V.kind with
-        | V.KQuery _ -> refresh inst
-        | _ ->
-            load_views inst ~on_done:(fun () ->
-              if Hashtbl.mem live inst.V.id then begin
-                let s = V.get inst in
-                match List.find_opt (fun v -> v.Wr.vu = s.V.view_uuid) s.V.views with
-                | Some v ->
-                    V.update inst (fun s -> V.apply_view_entity s v);
-                    refresh inst
-                | None -> ensure_default_view inst
-              end)) live)
+        load_views inst ~on_done:(fun () ->
+          if Hashtbl.mem live inst.V.id then begin
+            let s = V.get inst in
+            match List.find_opt (fun v -> v.Wr.vu = s.V.view_uuid) s.V.views with
+            | Some v ->
+                V.update inst (fun s -> V.apply_view_entity s v);
+                refresh inst
+            | None -> ensure_default_view inst
+          end)) live)
 
 let () =
   install_ops ();
