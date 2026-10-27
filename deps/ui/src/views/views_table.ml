@@ -510,10 +510,45 @@ let prop_cell ~blk (c : V.column) : t =
       inner_cell [ Ui_components.checkbox ~checked:b ~disabled:true [] ]
   | v -> inner_cell [ text ~value:(fmt_cell_value c v) [] ]
 
+let cell_id inst row_uuid column =
+  Printf.sprintf "table-%d-cell-%s-%s" inst.V.id row_uuid column
+
+let focus_cell inst row_uuid column =
+  V.update inst (fun s -> { s with V.table_cell_focus = Some (row_uuid, column) });
+  Option.iter (fun (cell : Ui_services.el) -> cell.focus ())
+    (Ui_services.dom_by_id (cell_id inst row_uuid column))
+
+let table_cell_navigation inst ~row_uuid ~column = function
+  | L.NavigationKey (_, key, _) when V.table_row_selected (V.get inst) row_uuid ->
+      (match key with
+       | "ArrowLeft" | "ArrowRight" as arrow ->
+           let cells = List.filter (fun c -> c.V.c_id <> "select")
+               (visible_columns (V.get inst)) in
+           let rec next = function
+             | c :: after :: _ when c.V.c_id = column -> Some after.V.c_id
+             | _ :: rest -> next rest
+             | [] -> None in
+           Option.iter (focus_cell inst row_uuid)
+             (next (if arrow = "ArrowLeft" then List.rev cells else cells))
+       | "Enter" ->
+           open_row_sidebar row_uuid;
+           V.update inst V.table_clear_selection
+       | "Escape" ->
+           V.update inst (fun s -> { s with V.table_cell_focus = None });
+           Option.iter (fun (row : Ui_services.el) -> row.focus ())
+             (Ui_services.dom_by_id ("ls-block-" ^ row_uuid))
+       | _ -> ())
+  | _ -> ()
+
 let cell_el inst ~row_uuid ~blk (c : V.column) : t =
   with_column_width inst c
   (Ui_components.with_props [ Ui_components.Prop.overflow `hidden ]
-  (box ~style_class:"ls-table-cell" ~height:32
+  (Ui_parts.class_signal (sig_of inst)
+     (fun s -> "ls-table-cell" ^
+       if s.V.table_cell_focus = Some (row_uuid, c.V.c_id) then " selected" else "")
+  (box ~height:32 ~accessibility_identifier:(cell_id inst row_uuid c.V.c_id)
+    ~data_attrs:["tabindex", "-1"]
+    ~on_navigation_key:(table_cell_navigation inst ~row_uuid ~column:c.V.c_id)
     [ (match c.V.c_id with
        | "select" -> select_cell inst ~row_uuid ~blk
        | "block/title" -> title_cell inst ~row_uuid ~blk c
@@ -539,7 +574,7 @@ let cell_el inst ~row_uuid ~blk (c : V.column) : t =
                  ; class_schema = false }
                in
                inner_cell [ Properties_value.view ~table_view:true ~hover:None pctx row ]
-           | None -> prop_cell ~blk c)) ]))
+           | None -> prop_cell ~blk c)) ])))
 
 (* ---------- header ---------- *)
 
@@ -810,12 +845,14 @@ let with_full_selection inst ~scope action =
   if initial.V.table_action_pending = None then begin
     let epoch = initial.V.table_selection_epoch + 1 in
     let gen = !(inst.V.data_gen) in
+    let revision = (Runtime.model ()).Model.context_revision in
     let repo = Runtime.repo () and route = Runtime.route () in
     let view = initial.V.view_uuid and context = V.ctx_of inst in
     let live = ref true in
     let current () =
       let s = V.get inst in
-      !live && Runtime.repo () = repo && Runtime.route () = route &&
+      !live && (Runtime.model ()).Model.context_revision = revision &&
+      Runtime.repo () = repo && Runtime.route () = route &&
       V.fetch_fresh inst gen && s.V.view_uuid = view && V.ctx_of inst = context &&
       s.V.table_selection_epoch = epoch in
     let finish () =
@@ -1097,49 +1134,21 @@ let flat_items (s : V.vstate) = List.map (row_item_of s) (all_row_uuids s)
 let keyed_row_key (u, blk) =
   u ^ "|" ^ string_of_int (Hashtbl.hash blk)
 
-(* cljs row keydown (views.cljs): only while the row is selected —
-   Enter opens the row in the sidebar and clears the selection,
-   ArrowLeft/Right move the .selected cell marker to the first/last
-   non-checkbox cell, Escape clears only the block selection
-   (state/clear-selection!) — the checkbox row-selection driving the
-   bulk action bar is NOT touched, so selected rows stay selected.
-   Rides the dom-event channel since kinds expose no key events; the
-   stop(e) half is adapter-side and not portable. *)
-let table_row_keydown inst ~row_uuid name payload =
-  if name = "keydown" && V.table_row_selected (V.get inst) row_uuid then
-    match Json_payload.str payload "key" with
+let table_row_navigation inst ~row_uuid ~columns = function
+  | L.NavigationKey (_, key, _) when V.table_row_selected (V.get inst) row_uuid ->
+    (match key with
     | "Enter" ->
         open_row_sidebar row_uuid;
         V.update inst V.table_clear_selection
     | "ArrowLeft" | "ArrowRight" as arrow ->
-        (match Ui_services.dom_by_id ("ls-block-" ^ row_uuid) with
-         | Some row_dom -> (
-             let cells =
-               row_dom.Ui_services.query_all ".ls-table-cell"
-               |> List.filter (fun (cell : Ui_services.el) ->
-                      cell.Ui_services.query ".ui__checkbox" = None)
-             in
-             let pick =
-               if arrow = "ArrowLeft" then List.nth_opt cells 0
-               else
-                 match List.rev cells with
-                 | c :: _ -> Some c
-                 | [] -> None
-             in
-             V.update inst V.table_clear_selection;
-             if arrow = "ArrowRight" then
-               row_dom.Ui_services.remove_class "selected";
-             match pick with
-             | Some cell ->
-                 cell.Ui_services.add_class "selected";
-                 cell.focus ()
-             | None -> ())
-         | None -> ())
+        let cells = List.filter (fun c -> c.V.c_id <> "select") columns in
+        let pick = List.nth_opt (if arrow = "ArrowLeft" then cells else List.rev cells) 0 in
+        Option.iter (fun c -> focus_cell inst row_uuid c.V.c_id) pick
     | "Escape" ->
-        (* cljs clears the block selection here, not the checkbox
-           row-selection — nothing to clear on our side *)
+        (* Dev clears block selection, not the checkbox row selection. *)
         ()
-    | _ -> ()
+    | _ -> ())
+  | _ -> ()
 
 (* cljs table-row: .ls-table-row.ls-block[blockid][data-id][tabindex=0]
    — the imperative side still reads `blockid`/data-id off .ls-block
@@ -1153,19 +1162,13 @@ let row_el inst (cols : V.column list) ~row_uuid ~blk : t =
   let pinned, free =
     List.partition (fun c -> is_pinned (V.get inst) c) cols
   in
-  (* the keydown DOM carrier keeps the raw node; layout + the selected
-     background ride props on the inner row, which still emits the
-     "selected" class for table_row_keydown's add/remove_class *)
   let sel_sig =
     Logseq_el.own ctx
       (Signal.map
          (fun (s : V.vstate) -> V.table_row_selected s row_uuid)
          (sig_of inst))
   in
-  Logseq_el.el ~key:("ls-tr-" ^ row_uuid) ~tag:"div"
-    ~events:"keydown"
-    ~on_dom_event:(table_row_keydown inst ~row_uuid)
-    [ Ui_parts.class_signal sel_sig
+  (Ui_parts.class_signal sel_sig
         (fun sel ->
           "ls-table-row ls-block" ^ if sel then " selected" else "")
         (Ui_parts.prop_signal Lui_protocol.BackgroundValue sel_sig
@@ -1175,7 +1178,8 @@ let row_el inst (cols : V.column list) ~row_uuid ~blk : t =
               [ Ui_components.Prop.overflow `hidden
               ; Ui_components.Prop.padding_bottom 1
               ; Ui_components.Prop.shadow "inset 0 -1px 0 hsl(var(--border))" ]
-              (row ~cross:`stretch ~height:33 ~min_height:33
+              (row ~key:("ls-tr-" ^ row_uuid) ~cross:`stretch ~height:33 ~min_height:33
+                 ~on_navigation_key:(table_row_navigation inst ~row_uuid ~columns:(pinned @ free))
                  ~max_height:33 ~transition:"background-color 150ms"
                  ~accessibility_identifier:("ls-block-" ^ row_uuid)
                  ~data_attrs:
@@ -1199,7 +1203,7 @@ let row_el inst (cols : V.column list) ~row_uuid ~blk : t =
                              [ box
                                  [ box ~style_class:"ls-table-cell"
                                      [ row ~cross:`center ~grow:1. [] ] ] ]
-                         | None -> [])) ]))) ]
+                         | None -> [])) ]))))
     ctx parent
 
 (* rows keyed under a parent — Virt_list for >=64 rows, keyed
@@ -1747,21 +1751,126 @@ let render_list inst s : t =
         (List.map (block_line s) (all_row_uuids s))
   | _ -> list_stream ~paginate:more inst (all_row_uuids s)
 
-(* Four cards per virtual row. The body remounts when the window or
-   the block table changes, so the cards are the mount-time snapshot.
-   virt-end grows the reference prefix; data-virt-count is omitted
-   once the index total is on screen, or every short row would cascade. *)
+let gallery_configuration inst (s : V.vstate) =
+  let cover_columns = List.filter
+    (fun c -> List.mem c.V.c_type ["asset"; "url"]) s.V.columns in
+  let cover = Wr.gallery_asset_ident ~asset_class:s.V.asset_class
+    ~infer:(List.mem inst.V.feature ["class-objects"; "query-result"])
+    ~cover_idents:(List.map (fun c -> c.V.c_id) cover_columns) s.V.view_ent in
+  let display = Wr.gallery_display_idents
+    ~column_idents:(List.map (fun c -> c.V.c_id) s.V.columns)
+    ~asset_ident:cover s.V.view_ent in
+  cover, display
+
+let gallery_remote_url value =
+  let values = match value with W.Array values | W.Set values -> values | _ -> [value] in
+  List.find_map (fun value ->
+    let value = match value with
+      | W.Map _ -> Option.value (W.get value "logseq.property/value") ~default:W.Nil
+      | value -> value in
+    match W.as_string value with
+    | Some url ->
+        let url = String.trim url in
+        if Str_util.starts_with "https://" url || Str_util.starts_with "http://" url
+        then Some url else None
+    | None -> None) values
+
+let gallery_asset_cover inst ~width ~height value : t =
+ fun context parent ->
+  let candidates = match value with W.Array xs | W.Set xs -> xs | _ -> [value] in
+  let asset = List.find_opt (fun value -> Wr.ref_uuid value <> None) candidates in
+  match asset with
+  | None -> spacer [] context parent
+  | Some entity when W.get entity "logseq.property.asset/type" <> None ->
+      Asset_dom.gallery_cover ~width ~height entity context parent
+  | Some entity ->
+      let uuid = Option.get (Wr.ref_uuid entity) in
+      let resolved = Signal.state context.Lui_ui.ui_scheduler W.Nil in
+      let generation = !(inst.V.data_gen) in
+      let revision = (Runtime.model ()).Model.context_revision in
+      let repo = Runtime.repo () and view = (V.get inst).V.view_uuid in
+      let live = ref true in
+      Signal.on_dispose context.Lui_ui.ui_scope (fun () -> live := false);
+      Views_db.get_blocks [uuid] ~metadata:true (fun entities ->
+        if !live && Runtime.repo () = repo && V.fetch_fresh inst generation &&
+           (Runtime.model ()).Model.context_revision = revision &&
+           (V.get inst).V.view_uuid = view then
+          match List.find_opt (fun entity -> Wr.ref_uuid entity = Some uuid) entities with
+          | Some entity -> Runtime.signal_set resolved entity
+          | None -> ());
+      (box ~width ~height [reactive (fun entity ->
+        Asset_dom.gallery_cover ~width ~height entity) (Signal.value resolved)]) context parent
+
+let gallery_card inst (row_uuid, blk) : t =
+  let dimensions (s : V.vstate) = Wr.gallery_dimensions s.V.view_ent in
+  let selected (s : V.vstate) = V.table_row_selected s row_uuid in
+  let config_equal (a : V.vstate) (b : V.vstate) =
+    a.V.view_ent = b.V.view_ent && a.V.columns = b.V.columns &&
+    a.V.asset_class = b.V.asset_class in
+  Ui_parts.int_prop L.WidthValue
+    ~value:(reactive (fun s -> fst (dimensions s)) (sig_of inst))
+  (Ui_parts.int_prop L.HeightValue
+    ~value:(reactive (fun s -> snd (dimensions s)) (sig_of inst))
+  (Ui_parts.string_prop L.BorderColorValue
+    ~value:(reactive (fun s -> if selected s then "hsl(var(--primary))"
+      else "hsl(var(--border))") (sig_of inst))
+  (Ui_parts.string_prop L.StyleClass
+    ~value:(reactive (fun s -> "ls-card-item content" ^
+      if selected s then " is-selected" else "") (sig_of inst))
+  (column ~key:row_uuid ~accessibility_identifier:("gallery-card-" ^ row_uuid)
+    ~corner_radius:6 ~border_width:1
+    [ row ~cross:`center ~height:32 [select_cell inst ~row_uuid ~blk]
+    ; reactive ~equal:config_equal (fun s ->
+        let cover, display = gallery_configuration inst s in
+        let width, height = dimensions s in
+        let media = match cover with
+          | Some ident ->
+              (match List.find_opt (fun c -> c.V.c_id = ident && c.V.c_type = "url") s.V.columns with
+               | Some column ->
+                   (match gallery_remote_url (cell_value blk column) with
+                    | Some url -> [image ~url ~alt:"" ~width
+                        ~height:(max 32 (height * 3 / 5))
+                        ~loading:`lazy_ ~referrer_policy:`no_referrer []]
+                    | None -> [])
+               | None ->
+                   let value = if ident = "block/uuid" then blk
+                     else match List.find_opt (fun c -> c.V.c_id = ident) s.V.columns with
+                       | Some column -> cell_value blk column
+                       | None -> W.Nil in
+                   [gallery_asset_cover inst ~width ~height:(max 32 (height * 3 / 5)) value])
+          | None -> [] in
+        column ~grow:1. ~min_height:0
+          (media @ [column ~padding:8 ~gap:4 ~min_width:0
+            (List.filter_map (fun ident ->
+              if ident = "block/title" then
+                let title = Wr.prop_text (cell_value blk (title_column ())) in
+                Some (Ui_parts.pressable
+                  ~on_press:(fun _ -> Runtime.mark_nav ();
+                    Platform.set_location_hash
+                      ("#/page/" ^ Ui_services.uri_encode_component row_uuid))
+                  (text ~style_class:"ls-gallery-card-title" ~value:title []))
+              else match List.find_opt (fun c -> c.V.c_id = ident) s.V.columns with
+                | Some ({ V.c_prop = Some property; _ } as column) ->
+                    let value = cell_value blk column in
+                    if value = W.Nil then None
+                    else
+                      let row = W.Map
+                        [W.Keyword "property", property;
+                         W.Keyword "property-id", W.Keyword ident;
+                         W.Keyword "value", value] in
+                      let pctx : Properties_value.ctx =
+                        { owner_key = "view-" ^ string_of_int inst.V.id
+                        ; block_uuid = row_uuid; block_id = Properties_data.entity_id_of blk
+                        ; refresh = (fun () -> refresh inst); is_page = is_page_row blk
+                        ; class_schema = false } in
+                      Some (box ~style_class:"ls-gallery-card-property"
+                        [Properties_value.view ~table_view:true ~hover:None pctx row])
+                | _ -> None) display)])) (sig_of inst) ]))))
+
+(* Chunking bounds each virtual item while FlexWrap adapts the cards to
+   the available width. The virtualizer measures each chunk's real height. *)
 let render_gallery inst (s : V.vstate) : t =
  fun ctx parent ->
-  let card ((u, blk) : row_item) =
-    box ~key:u ~style_class:"ls-card-item"
-      [ text
-          ~value:
-            (match W.get blk "block/title" with
-             | Some t_ -> Wr.prop_text t_
-             | None -> row_title s u)
-          [] ]
-  in
   let rec rows acc cur k = function
     | [] ->
         let acc = if cur = [] then acc else List.rev cur :: acc in
@@ -1772,25 +1881,27 @@ let render_gallery inst (s : V.vstate) : t =
   let shown = flat_items (windowed inst s) in
   let row_els =
     List.mapi
-      (fun i row ->
-        grid ~key:("gr" ^ string_of_int i) ~gap:8 ~columns:4
-          (List.map card row))
+      (fun i cards ->
+        row ~key:("gr" ^ string_of_int i) ~gap:8 ~flex_wrap:`wrap
+          (List.map (gallery_card inst) cards))
       (rows [] [] 0 shown)
   in
   let paginate = more_ref_rows inst s in
-  let node =
-    virtual_list ~key:"gal-window" ~grow:1. ~gap:8 ~item_extent:148.
+  let body ctx parent =
+    let node = virtual_list ~key:"gal-window" ~grow:1. ~gap:8
+      ~item_extent:(float_of_int (snd (Wr.gallery_dimensions s.V.view_ent) + 8))
       ~overscan:1
       ~data_attrs:
         (if paginate then
            [ ("data-virt-count", string_of_int (List.length row_els)) ]
          else [])
-      row_els ctx parent
-  in
-  if paginate then
-    Platform.register_dom_handler node ~events:"virt-end" (fun _ _ ->
-        (V.ops ()).V.o_load_more inst);
-  node
+      row_els ctx parent in
+    if paginate then
+      Platform.register_dom_handler node ~events:"virt-end" (fun _ _ ->
+          (V.ops ()).V.o_load_more inst);
+    node in
+  column ~gap:8 ~min_width:0 ~min_height:0 ~grow:1.
+    [action_bar inst; body] ctx parent
 
 let render_table inst s : t =
   let more = more_ref_rows inst s in

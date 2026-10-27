@@ -68,6 +68,7 @@ type vstate =
   ; table_selection_epoch : int
   ; table_action_pending : int option
   ; table_anchor : string option
+  ; table_cell_focus : (string * string) option
   ; table_resize : table_resize option
   ; hidden : Sset.t
   ; ordered : string list
@@ -145,6 +146,7 @@ let empty_vstate () : vstate =
   ; table_selection_epoch = 0
   ; table_action_pending = None
   ; table_anchor = None
+  ; table_cell_focus = None
   ; table_resize = None
   ; hidden = Sset.empty
   ; ordered = []
@@ -210,7 +212,7 @@ let table_row_selected (s : vstate) uuid =
 
 let table_selection_changed (s : vstate) =
   { s with table_selection_epoch = s.table_selection_epoch + 1
-  ; table_action_pending = None }
+  ; table_action_pending = None; table_cell_focus = None }
 
 let table_clear_selection (s : vstate) =
   table_selection_changed { s with selected = Sset.empty

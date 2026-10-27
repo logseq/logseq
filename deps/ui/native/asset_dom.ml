@@ -208,6 +208,19 @@ let file_cell_el (w : Wire.t) : Lui_elements.t =
   Lui_elements.box ~style_class:"block-content" ~max_height:30
     [ Lui_elements.image ~url:(asset_source file) ~alt:file ~max_height:30 [] ]
 
+let gallery_cover ~width ~height (value : W.t) : Lui_elements.t =
+  let block = Decode.block_of_wire value in
+  match block.Model.block_uuid, block.Model.block_asset_type with
+  | Some uuid, Some ext when List.mem ext
+      ["gif"; "svg"; "jpeg"; "ico"; "png"; "jpg"; "bmp"; "webp"; "avif";
+       "cr2"; "jxl"; "heic"] ->
+      let file = uuid ^ "." ^ ext in
+      let source = match block.Model.block_asset_url with
+        | Some url when url <> "" -> url
+        | _ -> asset_source file in
+      Lui_elements.image ~url:source ~alt:block.Model.block_title ~width ~height []
+  | _ -> Lui_elements.spacer []
+
 (* web opens PhotoSwipe on pdf preview thumbs; native shows previews
    inline via the asset extension tag — nothing to lightbox *)
 let preview_images (_items : Wire.t list) : unit = ()
@@ -271,4 +284,3 @@ let delete_asset uuid =
   ignore
     (Outliner_ops.apply_and_refresh
        [ Outliner_ops.delete_blocks [ uuid ] ])
-
