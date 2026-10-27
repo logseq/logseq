@@ -1146,11 +1146,62 @@ let flat_uuids () =
     (fun b -> b.Model.block_uuid)
     (S.flat_visible ~scope:(S.interaction_scope ()) ())
 
-(* cljs sends selected blocks to move/delete ops in document order;
-   String_set.elements is uuid-sorted, which corrupts worker ordering *)
+let selection_forest () =
+  let model = Runtime.model () in
+  let scope = S.selection_scope () in
+  let main_scope =
+    scope = "main"
+    || match Runtime.route () with Model.Block_zoom u -> scope = "zoom-" ^ u | _ -> false
+  in
+  if not main_scope then S.blocks_in_scope scope
+  else
+    let pages = match model.Model.route_page with Some p -> [p] | None -> model.journals in
+    List.concat_map
+      (fun (p : Model.page) -> match p.page_uuid with
+         | Some uuid ->
+             [{ (Model.empty_block ~uuid ~title:p.page_title ~is_page:true) with
+                Model.block_db_id = p.page_db_id; block_children = p.page_blocks }]
+         | None -> p.page_blocks)
+      pages
+
+type selected_snapshot =
+  { selection : S.String_set.t
+  ; scope : string
+  ; uuids : string list
+  ; blocks : Model.block list
+  ; roots : Model.block list
+  ; unresolved : S.String_set.t
+  }
+
+let selected_snapshot () =
+  let selection = S.selected () in
+  let seen = ref S.String_set.empty and ordered = ref [] in
+  let blocks = ref [] and roots = ref [] in
+  let rec walk under_selected forest =
+    List.iter (fun (b : Model.block) ->
+      let selected = match b.block_uuid with
+        | Some u -> S.String_set.mem u selection
+        | None -> false
+      in
+      (match b.block_uuid with
+       | Some u when selected && not (S.String_set.mem u !seen) ->
+           seen := S.String_set.add u !seen;
+           ordered := u :: !ordered;
+           blocks := b :: !blocks;
+           if not under_selected then roots := b :: !roots
+       | _ -> ());
+      walk (under_selected || selected) (S.children_of b)) forest
+  in
+  walk false (selection_forest ());
+  let unresolved = S.String_set.diff selection !seen in
+  (* Selection membership survives virtualization and transient model reloads. *)
+  { selection; scope = S.selection_scope (); roots = List.rev !roots
+  ; blocks = List.rev !blocks; unresolved
+  ; uuids = List.rev !ordered @ S.String_set.elements unresolved }
+
+(* Worker operations consume document order, never UUID sort order. *)
 let selected_uuids () =
-  let sel = S.selected () in
-  List.filter (fun u -> S.String_set.mem u sel) (flat_uuids ())
+  (selected_snapshot ()).uuids
 
 let index_of lst u =
   let rec go i = function
@@ -1164,11 +1215,9 @@ let index_of lst u =
    block without being part of the flat list — a selection anchored on
    it extends down into the blocks *)
 let anchor_is_page_title anchor =
-  match
-    Ui_services.dom_query (".ls-page-title .ls-block[data-blockid='" ^ anchor ^ "']")
-  with
-  | Some _ -> true
-  | None -> false
+  let model = Runtime.model () in
+  let pages = match model.Model.route_page with Some p -> [p] | None -> model.journals in
+  List.exists (fun (p : Model.page) -> p.page_uuid = Some anchor) pages
 
 (* range anchor..head (inclusive) in visible order; [] when either
    endpoint isn't a visible block (e.g. a journal row's page uuid from a
@@ -1420,62 +1469,80 @@ let move_blocks_up_down ?uuid up =
   in
   move_up_down_tail := pending
 
-let delete_selection () =
-  let before = S.history_cursor () in
-  let opts () = Ops.history_opts ~before ~after:(S.history_cursor ()) () in
-  let uuids = selected_uuids () in
+let selection_delete_pending = ref false
+
+let delete_selected_uuids ~selected ~scope ~before uuids =
   match uuids with
   | [] -> ()
-  | _ ->
-      (* first selected in flat visible order — String_set.elements is
-         sorted by uuid, not position *)
-      let sel = S.selected () in
-      let first =
-        match
-          List.find_opt (fun u -> S.String_set.mem u sel) (flat_uuids ())
-        with
-        | Some u -> u
-        | None -> List.hd uuids
-      in
+  | _ when !selection_delete_pending -> ()
+  | first :: _ ->
+      selection_delete_pending := true;
+      let context = Runtime.repo (), Runtime.route () in
       let prev =
-        match S.prev_visible ~scope:(S.selection_scope ()) first with
+        match S.prev_visible ~scope first with
         | Some p -> p.Model.block_uuid
         | None -> None
       in
-      (* cljs enters edit mode on the previous block, caret at end *)
-      (match prev with
-       | Some pu -> (
-           match S.find pu with
-           | Some b ->
-               (* stored titles are id-ref form — go through the same
-                  title_for_edit rewrite as enter_edit *)
-               ignore
-                 (let* buffer = Ops.title_for_edit (String.trim b.Model.block_title) in
-                 S.set_silent (fun st ->
-                     { st with
-                       S.editing =
-                         Some
-                           (S.mk_editing ~uuid:pu ~buffer ~scope:(S.selection_scope ())
-                              ~base:buffer ~caret:(String.length buffer) ())
-                     ; selected = S.String_set.empty
-                     ; anchor = None
-                     ; action_bar = false
-                     });
-                 with_focus_after ~restore:None pu
-                   (String.length buffer)
-                   (Ops.apply_and_refresh ~opts:(opts ())
-                      [ Ops.delete_blocks uuids ]);
-                 Js.Promise.resolve ())
-           | None ->
-               ignore (Ops.apply_and_refresh ~opts:(opts ()) [ Ops.delete_blocks uuids ]))
-       | None ->
-           S.set_silent (fun st ->
-               { st with
-                 S.selected = S.String_set.empty
-               ; anchor = None
-               ; action_bar = false
-               });
-           ignore (Ops.apply_and_refresh ~opts:(opts ()) [ Ops.delete_blocks uuids ]))
+      let p =
+        let* previous =
+          match Option.bind prev S.find with
+          | Some b when not (List.mem (Option.get b.Model.block_uuid) uuids) ->
+              let* buffer = Ops.title_for_edit (String.trim b.Model.block_title) in
+              Js.Promise.resolve (Some (Option.get b.block_uuid, buffer))
+          | _ -> Js.Promise.resolve None
+        in
+        let after =
+          match previous with
+          | Some (uuid, buffer) -> Wire.Map
+              [ Wire.Keyword "block-uuid", Wire.Uuid uuid
+              ; Wire.Keyword "scope", Wire.String scope
+              ; Wire.Keyword "caret", Wire.Int (String.length buffer)
+              ; Wire.Keyword "anchor", Wire.Nil ]
+          | None -> Wire.Map
+              [ Wire.Keyword "scope", Wire.String scope
+              ; Wire.Keyword "selected-blocks", Wire.List []
+              ; Wire.Keyword "selection-anchor", Wire.Nil ]
+        in
+        if context <> (Runtime.repo (), Runtime.route ()) then Js.Promise.resolve ()
+        else
+          let* response = Ops.apply_result
+              ~opts:(Ops.history_opts ~before ~after ()) [Ops.delete_blocks uuids] in
+          match response with
+          | None -> Js.Promise.resolve ()
+          | Some _ when context <> (Runtime.repo (), Runtime.route ()) -> Js.Promise.resolve ()
+          | Some _ ->
+              let* () = Ops.refresh_via_delta response in
+              if context = (Runtime.repo (), Runtime.route ())
+                 && scope = S.selection_scope () && S.String_set.equal selected (S.selected ())
+              then (
+                let editing = match previous, S.editing () with
+                  | Some (uuid, buffer), None when S.find uuid <> None ->
+                      Some (S.mk_editing ~uuid ~buffer ~scope ~base:buffer
+                              ~caret:(String.length buffer) ())
+                  | _, current -> current
+                in
+                S.set (fun st -> {st with S.editing = editing;
+                   selected = S.String_set.empty; anchor = None; action_bar = false});
+                match editing with
+                | Some e -> request_focus e.S.uuid e.S.model.Edit_model.caret
+                | None -> ());
+              Js.Promise.resolve ()
+      in
+      ignore
+        ((let* () = p in
+          selection_delete_pending := false;
+          Js.Promise.resolve ())
+         |> Js.Promise.catch (fun error ->
+              selection_delete_pending := false;
+              Ui_services.log_error ("delete-selection failed", error);
+              Js.Promise.resolve ()))
+
+let delete_selection () =
+  let snapshot = selected_snapshot () in
+  if S.String_set.is_empty snapshot.unresolved then
+    delete_selected_uuids ~selected:snapshot.selection ~scope:snapshot.scope
+      ~before:(S.history_cursor ()) snapshot.uuids
+  else Ui_services.log_error "selection entities unavailable"
 
 (* ---- drag & drop ---- *)
 
@@ -1556,43 +1623,53 @@ let export_titles blocks =
   List.iter (go 0) blocks;
   Buffer.contents buf
 
+let selected_copy_blocks ~plain snapshot =
+  if S.String_set.is_empty snapshot.unresolved then
+    Some (if plain then snapshot.blocks else snapshot.roots)
+  else (
+    Ui_services.log_error "selection entities unavailable";
+    None)
+
+let selection_text ~plain blocks =
+  if plain then String.concat "\n" (List.map (fun b -> b.Model.block_title) blocks)
+  else export_titles blocks
+
+let remember_selection_copy ~plain blocks text =
+  S.clipboard := (if plain then [] else blocks);
+  S.clipboard_text := text
+
 let copy_selection ev =
-  let sel = S.selected () in
-  match selected_uuids () with
-  | [] -> ()
-  | uuids ->
-      (* keep only topmost selected roots — a parent tree already
-         carries its children; copying child rows too would emit
-         duplicate maps on paste *)
-      let roots =
-        List.filter
-          (fun u -> not (has_selected_ancestor sel u))
-          uuids
-      in
-      let blocks = List.filter_map S.find roots in
-      S.clipboard := blocks;
-      S.clipboard_text := export_titles blocks;
-      ev.Ui_services.clipboard_set "text/plain" !(S.clipboard_text);
+  match selected_copy_blocks ~plain:false (selected_snapshot ()) with
+  | None | Some [] -> ()
+  | Some blocks ->
+      let text = selection_text ~plain:false blocks in
+      ev.Ui_services.clipboard_set "text/plain" text;
+      remember_selection_copy ~plain:false blocks text;
       ev.Ui_services.prevent_default ()
 
-let cut_selection ev =
-  copy_selection ev;
-  delete_selection ()
+let write_selection_copy ~plain ~cut =
+  let snapshot = selected_snapshot () in
+  let before = S.history_cursor () in
+  let context = Runtime.repo (), Runtime.route () in
+  match selected_copy_blocks ~plain snapshot with
+  | None | Some [] -> ()
+  | Some blocks ->
+      let text = selection_text ~plain blocks in
+      let task = Ui_task.bind (Ui_services.clipboard_write_text text) (fun () ->
+          remember_selection_copy ~plain blocks text;
+          if cut && context = (Runtime.repo (), Runtime.route ()) then
+            delete_selected_uuids ~selected:snapshot.selection ~scope:snapshot.scope
+              ~before snapshot.uuids;
+          Ui_task.resolve ()) in
+      ignore (Ui_task.catch task (fun error ->
+          Ui_services.log_error ("copy-selection failed", error);
+          Ui_task.resolve ()))
 
-(* palette-invoked copy: no copy event, so write the system clipboard
-   directly; same topmost-roots reduction as copy_selection *)
-let copy_selection_text () =
-  let sel = S.selected () in
-  match selected_uuids () with
-  | [] -> ()
-  | uuids ->
-      let roots =
-        List.filter (fun u -> not (has_selected_ancestor sel u)) uuids
-      in
-      let blocks = List.filter_map S.find roots in
-      S.clipboard := blocks;
-      S.clipboard_text := String.concat "\n" (List.map (fun b -> b.Model.block_title) blocks);
-      Ui_services.clipboard_copy !(S.clipboard_text)
+let copy_selection_text ?(plain = false) () = write_selection_copy ~plain ~cut:false
+let cut_selection_text () = write_selection_copy ~plain:false ~cut:true
+let cut_selection ev =
+  ev.Ui_services.prevent_default ();
+  cut_selection_text ()
 
 (* ---- external paste (handler.paste.cljs/paste-copied-text) ----
 
