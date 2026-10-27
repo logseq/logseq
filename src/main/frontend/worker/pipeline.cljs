@@ -280,14 +280,21 @@
                    block-after (d/entity db-after id)
                    ;; When a block becomes a page, or a page becomes a block, its
                    ;; descendant blocks still point :block/page at the old page;
-                   ;; re-point them at `page-id`.
+                   ;; re-point them at `page-id`. The walk stops at a nested page:
+                   ;; its blocks belong to it, not to the converted node.
                    children-page-tx (fn [page-id]
-                                      (keep (fn [child-id]
-                                              (let [child (d/entity db-after child-id)]
-                                                (when (and child (not (ldb/page? child)))
-                                                  {:db/id child-id
-                                                   :block/page page-id})))
-                                            (ldb/get-block-full-children-ids db-after id)))]
+                                      (loop [parent-ids [id]
+                                             tx []]
+                                        (if-let [parent-id (first parent-ids)]
+                                          (let [child-ids (->> (d/datoms db-after :avet :block/parent parent-id)
+                                                               (map :e)
+                                                               (remove #(ldb/page? (d/entity db-after %))))]
+                                            (recur (into (rest parent-ids) child-ids)
+                                                   (into tx (map (fn [child-id]
+                                                                   {:db/id child-id
+                                                                    :block/page page-id})
+                                                                 child-ids))))
+                                          tx)))]
                (when block-after
                  (cond
                    ;; move non-page block to Library
