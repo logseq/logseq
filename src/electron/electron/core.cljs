@@ -50,12 +50,13 @@
   ;; electron-updater took about 115 ms, in the app open's path when it ran
   ;; right after the window was created. Returns its teardown.
   (let [*dispose (atom nil)
-        *torn-down? (atom false)]
-    (.once (.-webContents win) "did-finish-load"
-           (fn []
-             (when-not @*torn-down?
-               (reset! *dispose (init-updater {:repo "logseq/logseq"
-                                               :win win})))))
+        *torn-down? (atom false)
+        init! (fn []
+                (when-not @*torn-down?
+                  (reset! *dispose (init-updater {:repo "logseq/logseq"
+                                                  :win win}))))
+        contents (.-webContents win)]
+    (lifecycle/when-loaded! contents init!)
     #(do (reset! *torn-down? true)
          (when-let [dispose @*dispose] (dispose)))))
 
