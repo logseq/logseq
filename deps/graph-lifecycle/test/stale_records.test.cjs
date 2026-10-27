@@ -357,6 +357,24 @@ test('worker-side checks report a vanished state.json with a coded error instead
   });
 });
 
+// The sqlite error is reported as it is, with the phase that met it and the lease database's path.
+for (const [description, damage, phase] of [['not a database', file => fs.writeFileSync(file, 'this is not a database'.repeat(20)), 'lease-begin'],
+  ['without permissions', file => fs.chmodSync(file, 0), 'lease-open']]) {
+  test(`a lease database that is ${description} is refused with its sqlite error and left as it is`, async () => {
+    await withGraph(async (storage, repo) => {
+      const file = path.join(lifecycle.context(storage, repo).dir, 'lease.sqlite');
+      damage(file);
+      const before = description === 'not a database' ? fs.readFileSync(file) : null;
+      for (const operation of [() => lifecycle.createGraph(storage, repo), () => lifecycle.stopGraph(storage, repo, 'cli'),
+        () => lifecycle.stopOutdatedWorkers(storage, REVISION, repo)])
+        await assert.rejects(operation(), error => (error instanceof AggregateError ? error.errors : [error])
+          .every(cause => cause.code === 'ERR_SQLITE_ERROR' && cause.phase === phase && cause.dbPath === file));
+      if (before) assert.equal(fs.readFileSync(file).equals(before), true, 'the lease database was rewritten');
+      fs.chmodSync(file, 0o600);
+    });
+  });
+}
+
 test('observing a graph whose state.json is damaged reports it instead of throwing', async () => {
   await withGraph(async (storage, repo) => {
     const { generation } = lifecycle.snapshot(storage, repo);
