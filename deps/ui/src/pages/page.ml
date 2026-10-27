@@ -1565,7 +1565,7 @@ let page_view_ms (ms : Model.t Signal.signal) : t =
             ])
         ; reactive ~equal:linked_refs_eq linked_refs_el ms
         ; reactive ~equal:unlinked_refs_eq unlinked_refs_el ms
-        ; Selection_bar.view ()
+        ; Selection_bar.view ~model:ms ()
         ]))
     ctx parent
 
@@ -1624,7 +1624,7 @@ let region (ms : Model.t Signal.signal) : t =
           (* cljs container.cljs: journals render inside a plain
              route-root div *)
           box ~key:"journals-root"
-            [ journals_view_ms ms; Selection_bar.view () ]
+            [ journals_view_ms ms; Selection_bar.view ~model:ms () ]
       | Model.Ready, Model.Not_found n -> not_found_view n
       | Model.Ready, Model.All_pages ->
           (* cljs all_pages.cljs renders .ls-all-pages inside the page
