@@ -3,8 +3,8 @@
             [frontend.handler.editor.pending-save :as pending-save]
             [goog.object :as gobj]))
 
-(use-fixtures :each {:before pending-save/reset!
-                     :after pending-save/reset!})
+(use-fixtures :each {:before pending-save/clear-all!
+                     :after pending-save/clear-all!})
 
 (deftest persist-and-entries-round-trip-test
   (let [repo "logseq_db_pending"
@@ -62,10 +62,10 @@
                                    :configurable true
                                    :writable true})
     (try
-      (pending-save/reset!)
+      (pending-save/clear-all!)
       (f items)
       (finally
-        (pending-save/reset!)
+        (pending-save/clear-all!)
         (if had-storage?
           (js/Object.defineProperty js/globalThis
                                     "sessionStorage"

@@ -10,9 +10,8 @@
 (def storage-key
   "ls-pending-block-saves")
 
-(defonce ^:private *saves
-  "nil until the first read hydrates from sessionStorage."
-  (atom nil))
+;; nil until the first read hydrates from sessionStorage
+(defonce ^:private *saves (atom nil))
 
 (defn- session-storage
   []
@@ -109,7 +108,7 @@
   []
   (loaded-saves))
 
-(defn reset!
+(defn clear-all!
   "Clear in-memory and session copies. Used by tests."
   []
   (persist-saves! {}))

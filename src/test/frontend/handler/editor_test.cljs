@@ -37,11 +37,11 @@
 
 (use-fixtures :each {:before (fn []
                               (async done
-                                     (pending-save/reset!)
+                                     (pending-save/clear-all!)
                                      (test-helper/start-test-db!)
                                      (done)))
                      :after (fn []
-                              (pending-save/reset!)
+                              (pending-save/clear-all!)
                               (state/set-current-repo! nil)
                               (test-helper/destroy-test-db!))})
 
@@ -446,21 +446,21 @@
                  :block/uuid block-uuid
                  :block/title "old"}
           first-save (p/deferred)]
-      (pending-save/reset!)
-      (-> (p/with-redefs [state/get-current-repo (constantly repo)
-                          db-subs/block-snapshot
-                          (constantly {:status :ready :value block})
-                          conn/get-db (constantly nil)
-                          editor/wrap-parse-block identity
-                          frontend-outliner-op/save-block! (constantly nil)
-                          db-transact/apply-outliner-ops (fn [_ _ _] first-save)]
-            (editor/save-block-if-changed! block "kept-across-reload")
-            (is (= [{:block-uuid block-uuid
-                     :title "kept-across-reload"}]
-                   (pending-save/entries repo))
-                "Escape starts an async worker write; the title must survive a reload before ack")
-            (p/resolve! first-save nil)
-            first-save)
+      (pending-save/clear-all!)
+      (with-redefs [state/get-current-repo (constantly repo)
+                    db-subs/block-snapshot
+                    (constantly {:status :ready :value block})
+                    conn/get-db (constantly nil)
+                    editor/wrap-parse-block identity
+                    frontend-outliner-op/save-block! (constantly nil)
+                    db-transact/apply-outliner-ops (fn [_ _ _] first-save)]
+        (editor/save-block-if-changed! block "kept-across-reload")
+        (is (= [{:block-uuid block-uuid
+                 :title "kept-across-reload"}]
+               (pending-save/entries repo))
+            "Escape starts an async worker write; the title must survive a reload before ack")
+        (p/resolve! first-save nil))
+      (-> first-save
           (p/then
            (fn [_]
              (is (empty? (pending-save/entries repo))
@@ -479,7 +479,7 @@
                  :block/title "old"}
           save-calls (atom [])
           tx-calls (atom [])]
-      (pending-save/reset!)
+      (pending-save/clear-all!)
       (pending-save/persist! repo block-uuid "lost-on-reload")
       (-> (p/with-redefs [state/get-current-repo (constantly repo)
                           db-async/<get-block
@@ -520,7 +520,7 @@
                  :block/uuid block-uuid
                  :block/title "already-saved"}
           save-calls (atom [])]
-      (pending-save/reset!)
+      (pending-save/clear-all!)
       (pending-save/persist! repo block-uuid "already-saved")
       (-> (p/with-redefs [state/get-current-repo (constantly repo)
                           db-async/<get-block
@@ -556,14 +556,14 @@
                  :block/uuid block-uuid
                  :block/title "old"}
           first-save (p/deferred)]
-      (pending-save/reset!)
-      (p/with-redefs [state/get-current-repo (constantly repo)
-                      db-subs/block-snapshot
-                      (constantly {:status :ready :value block})
-                      conn/get-db (constantly nil)
-                      editor/wrap-parse-block identity
-                      frontend-outliner-op/save-block! (constantly nil)
-                      db-transact/apply-outliner-ops (fn [_ _ _] first-save)]
+      (pending-save/clear-all!)
+      (with-redefs [state/get-current-repo (constantly repo)
+                    db-subs/block-snapshot
+                    (constantly {:status :ready :value block})
+                    conn/get-db (constantly nil)
+                    editor/wrap-parse-block identity
+                    frontend-outliner-op/save-block! (constantly nil)
+                    db-transact/apply-outliner-ops (fn [_ _ _] first-save)]
         (editor/save-block-if-changed! block "retry-after-reload")
         (p/reject! first-save (js/Error. "worker gone")))
       (-> first-save
@@ -583,7 +583,7 @@
                :block/title "old"}
         input #js {:value "  draft-before-reload  "}
         first-save (p/deferred)]
-    (pending-save/reset!)
+    (pending-save/clear-all!)
     (with-redefs [state/editor-in-composition? (constantly false)
                   state/get-editor-action (constantly nil)
                   state/get-current-repo (constantly repo)
