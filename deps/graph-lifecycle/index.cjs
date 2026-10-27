@@ -394,11 +394,15 @@ function publicationScan() {
 async function discover(ctx, current, scan, registeredOnly = false) {
   const exists = scan ? scan.pidExists : pidExists;
   const targets = new Map();
+  const goneDuplicates = [];
   for (const record of current.workers) {
     validateRegistration(ctx, current, record);
-    if (targets.has(record.pid)) fail('Duplicate worker registration');
     const target = { ...record, ...readRuntime(ctx, record, exists) };
-    targets.set(record.pid, target);
+    if (targets.has(record.pid)) {
+      // Two registrations of one PID cannot be told apart while it runs; once it is gone both are only stale.
+      if (exists(record.pid)) fail('Duplicate worker registration');
+      goneDuplicates.push(target);
+    } else targets.set(record.pid, target);
   }
   const attach = (target, candidate) => {
     if (target.port && target.port !== candidate.port) fail('Worker publication identity mismatch');
@@ -436,7 +440,7 @@ async function discover(ctx, current, scan, registeredOnly = false) {
   }
   const results = await Promise.allSettled(probes.map(probe => probe()));
   for (const result of results) if (result.status === 'rejected') throw result.reason;
-  return { targets: [...targets.values()] };
+  return { targets: [...targets.values(), ...goneDuplicates] };
 }
 // The lock is created with writeFileSync, so a crash or a full disk can leave it empty or truncated,
 // and a lock without a holder PID has no live owner to wait for.
