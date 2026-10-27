@@ -377,6 +377,11 @@ let loaded_route : Model.route option ref = ref None
    whole route while the first fetch was still running *)
 let loading_route : Model.route option ref = ref None
 
+let page_not_found ~strict route =
+  if strict || !loaded_route <> Some route then (
+    loaded_route := None;
+    Runtime.send Action.Page_load_failed)
+
 let stale_page (p : Model.page) () =
   match (Runtime.model ()).Model.route_page with
   | Some c -> c.Model.page_uuid <> p.Model.page_uuid
@@ -472,10 +477,8 @@ let rec load_page_ref ?(invoke = Runtime.invoke) ?(current = fun () -> true)
           (let* _ = Outliner_ops.apply_create_page n in
            load_page_ref ~invoke ~current ~strict for_route ref_v)
       | _ ->
-          if (not (is_stale ())) && !loaded_route <> Some for_route
-          then Runtime.send Action.Page_load_failed;
-          if strict then Js.Promise.reject (Failure "Recovery page is missing")
-          else Js.Promise.resolve ())))
+          if not (is_stale ()) then page_not_found ~strict for_route;
+          Js.Promise.resolve ())))
   |> Js.Promise.catch (fun error ->
          if (not (is_stale ())) && !loaded_route <> Some for_route then
            Runtime.send Action.Page_load_failed;
@@ -662,18 +665,16 @@ let load_block_zoom ?(invoke = Runtime.invoke) ?(current = fun () -> true)
                              if strict then Js.Promise.reject (Js.Exn.anyToExnInternal e) else Js.Promise.resolve ()))
          | _ ->
              if
-               current () && (not (stale (Model.Block_zoom uuid)))
-               && !loaded_route <> Some (Model.Block_zoom uuid)
-             then Runtime.send Action.Page_load_failed;
-             if strict then Js.Promise.reject (Failure "Recovery block is missing")
-             else Js.Promise.resolve ())
+               current () && gen = !Runtime.load_gen
+               && not (stale (Model.Block_zoom uuid))
+             then page_not_found ~strict (Model.Block_zoom uuid);
+             Js.Promise.resolve ())
      | _ ->
          if
-           current () && (not (stale (Model.Block_zoom uuid)))
-           && !loaded_route <> Some (Model.Block_zoom uuid)
-         then Runtime.send Action.Page_load_failed;
-         if strict then Js.Promise.reject (Failure "Recovery block is missing")
-         else Js.Promise.resolve ()))
+           current () && gen = !Runtime.load_gen
+           && not (stale (Model.Block_zoom uuid))
+         then page_not_found ~strict (Model.Block_zoom uuid);
+         Js.Promise.resolve ()))
   |> Js.Promise.catch (fun e ->
          Ui_services.log_error ("load_block_zoom failed", e);
          if
