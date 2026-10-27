@@ -196,6 +196,8 @@ type windowHost struct {
 
 	sizeKnown       bool
 	width, height   float32
+	titlebarKnown   bool
+	titlebar        ui.TitleBar
 	appearanceKnown bool
 	dark            bool
 }
@@ -388,6 +390,23 @@ func (h *windowHost) view(c *ui.Context) {
 			return
 		}
 		if err := h.runtime.PlatformEvent(platformReply{Name: "window-size", Payload: string(payload)}); err != nil {
+			h.fail(err)
+			return
+		}
+	}
+	titlebar := c.TitleBar()
+	if !h.titlebarKnown || titlebar != h.titlebar {
+		h.titlebarKnown, h.titlebar = true, titlebar
+		payload, err := json.Marshal(struct {
+			Height float32 `json:"height"`
+			Left   float32 `json:"left"`
+			Right  float32 `json:"right"`
+		}{titlebar.Height, titlebar.Left, titlebar.Right})
+		if err != nil {
+			h.fail(err)
+			return
+		}
+		if err := h.runtime.PlatformEvent(platformReply{Name: "window-titlebar", Payload: string(payload)}); err != nil {
 			h.fail(err)
 			return
 		}

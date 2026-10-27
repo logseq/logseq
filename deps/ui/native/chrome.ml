@@ -145,14 +145,21 @@ let rtc_item (ms : Model.t Signal.signal) : t =
       | Some _ -> rtc_item_btn ms)
     ms
 
+let leading_toolbar ~key ~in_sidebar ~state ~controls : t =
+ fun context parent ->
+  let inset = Host.titlebar_left_signal
+    ~scheduler:context.Lui_ui.ui_scheduler ~scope:context.Lui_ui.ui_scope in
+  Ui_components.leading_toolbar ~key ~in_sidebar ~safe_area:0
+    ~safe_area_signal:inset ~state ~is_open:(fun (m : Model.t) -> m.left_sidebar_open)
+    ~controls context parent
+
 (* cljs container.cljs: single .cp__header row — .l [sidebar-toggle,
    search], .r [rtc, home, dots, right-toggle]. *)
 let topbar (ms : Model.t Signal.signal) : t list =
   [ row ~key:"head" ~accessibility_identifier:"head"
       ~style_class:"cp__header" ~cross:`center ~main:`space_between
       ~height:48 ~data_attrs:[ ("data-window-titlebar", "true") ]
-      [ Ui_components.leading_toolbar ~key:"head-leading" ~in_sidebar:false
-          ~safe_area:80 ~state:ms ~is_open:(fun (m : Model.t) -> m.left_sidebar_open)
+      [ leading_toolbar ~key:"head-leading" ~in_sidebar:false ~state:ms
           ~controls:(fun () -> [left_menu_btn (); search_btn ()])
       ; Ui_components.with_props [Ui_components.Prop.overflow `hidden;Ui_components.Prop.padding_right 6]
           (row ~key:"head-acts" ~cross:`center ~grow:1. ~min_width:0 ~main:`end_
@@ -256,8 +263,7 @@ let left_sidebar (ms : Model.t Signal.signal) =
        ~background:"var(--left-sidebar-bg-color)" ~style_class:"left-sidebar-inner as-container"
        [row ~key:"ls-top" ~height:48 ~min_height:48 ~cross:`center ~style_class:"left-sidebar-top"
           ~data_attrs:["data-window-titlebar","true"]
-          [Ui_components.leading_toolbar ~key:"sidebar-leading" ~in_sidebar:true ~safe_area:80
-             ~state:ms ~is_open:(fun (m : Model.t) -> m.left_sidebar_open)
+          [leading_toolbar ~key:"sidebar-leading" ~in_sidebar:true ~state:ms
              ~controls:(fun () -> [left_menu_btn ();search_btn ()])];
         column ~key:"ls-wrap" ~grow:1. ~min_height:0 ~margin_top:4
           [column ~key:"ls-head" ~gap:4 ~margin_bottom:4 ~style_class:"sidebar-header-container"

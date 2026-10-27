@@ -172,6 +172,25 @@ let set_window_size w h =
 let inner_width () = !width_ref
 let inner_height () = !height_ref
 
+let titlebar_left = ref 0
+let titlebar_listeners : (int, int -> unit) Hashtbl.t = Hashtbl.create 2
+let titlebar_listener_id = ref 0
+
+let set_titlebar_left left =
+  let left = int_of_float (Float.ceil left) in
+  if left <> !titlebar_left then begin
+    titlebar_left := left;
+    Hashtbl.iter (fun _ notify -> notify left) titlebar_listeners
+  end
+
+let titlebar_left_signal ~scheduler ~scope =
+  let state = Signal.state scheduler !titlebar_left in
+  incr titlebar_listener_id;
+  let id = !titlebar_listener_id in
+  Hashtbl.add titlebar_listeners id (Signal.set state);
+  Signal.on_dispose scope (fun () -> Hashtbl.remove titlebar_listeners id);
+  Signal.own_signal scope (Signal.value state)
+
 (* set by the native host: perform a dom-op / open-url / clipboard *)
 let host_op : (string -> string -> unit) ref = ref (fun _ _ -> ())
 
