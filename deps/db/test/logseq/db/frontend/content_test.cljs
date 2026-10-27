@@ -55,6 +55,31 @@
                                          [{:block/title "another test" :block/uuid (random-uuid)}]
                                          {:replace-tag? false})))))
 
+(def ^:private dollar-pattern-titles
+  ["cost$$" "a$&b" "a$`b" "a$'b"])
+
+(deftest content-id-ref->page-keeps-dollar-patterns-in-title
+  (let [page-uuid #uuid "11111111-1111-1111-1111-111111111111"]
+    (doseq [title dollar-pattern-titles]
+      (is (= (str "see " title " and " title)
+             (db-content/content-id-ref->page
+              (str "see " (page-ref/->page-ref page-uuid) " and " (page-ref/->page-ref page-uuid))
+              [{:block/title title :block/uuid page-uuid}]))
+          (str "title " (pr-str title))))))
+
+(deftest id-ref->title-ref-keeps-dollar-patterns-in-title
+  (let [page-uuid #uuid "11111111-1111-1111-1111-111111111111"
+        id-ref (page-ref/->page-ref page-uuid)]
+    (doseq [title dollar-pattern-titles]
+      (let [refs [{:block/title title :block/uuid page-uuid}]
+            opts {:replace-block-id? true}]
+        (is (= (str "see " (page-ref/->page-ref title))
+               (db-content/id-ref->title-ref (str "see " id-ref) refs opts))
+            (str "page ref, title " (pr-str title)))
+        (is (= (str "see #" title)
+               (db-content/id-ref->title-ref (str "see #" id-ref) refs opts))
+            (str "tag ref, title " (pr-str title)))))))
+
 (deftest recur-replace-uuid-in-block-title-test
   (let [uuid-a #uuid "11111111-1111-1111-1111-111111111111"
         uuid-b #uuid "22222222-2222-2222-2222-222222222222"

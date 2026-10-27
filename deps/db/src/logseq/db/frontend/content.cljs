@@ -33,7 +33,7 @@
   (reduce
    (fn [content ref]
      (if (:block/title ref)
-       (string/replace content (page-ref/->page-ref (:block/uuid ref)) (:block/title ref))
+       (common-util/replace-literal content (page-ref/->page-ref (:block/uuid ref)) (:block/title ref))
        content))
    content
    refs))
@@ -69,12 +69,12 @@
          (fn [content ref]
            (if (:block/title ref)
              (let [content' (if (not (string/includes? (:block/title ref) " "))
-                              (string/replace content
-                                              (str "#" (page-ref/->page-ref (:block/uuid ref)))
-                                              (str "#" (:block/title ref)))
+                              (common-util/replace-literal content
+                                                           (str "#" (page-ref/->page-ref (:block/uuid ref)))
+                                                           (str "#" (:block/title ref)))
                               content)]
-               (string/replace content' (page-ref/->page-ref (:block/uuid ref))
-                               (page-ref/->page-ref (:block/title ref))))
+               (common-util/replace-literal content' (page-ref/->page-ref (:block/uuid ref))
+                                            (page-ref/->page-ref (:block/title ref))))
              content))
          content
          (sort-refs refs))

@@ -2,6 +2,8 @@
   (:require [cljs.test :refer [deftest is testing]]
             [datascript.core :as d]
             [logseq.common.util :as common-util]
+            [logseq.common.util.block-ref :as block-ref]
+            [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
             [logseq.db.common.delete-blocks :as delete-blocks]
             [logseq.db.test.helper :as db-test]))
@@ -310,3 +312,31 @@
           extra (delete-blocks/update-refs-history @conn retracts {})]
       (is (some #(= [:db/retractEntity (:db/id history)] %) extra))
       (is (not-any? #(= [:db/add (:db/id history) :block/title "History entry"] %) extra)))))
+
+(deftest delete-blocks-keeps-dollar-patterns-in-deleted-block-title
+  (testing "a deleted block title is written into referencing blocks as typed"
+    (doseq [deleted-title ["cost$$" "a$&b" "a$`b" "a$'b"]]
+      (let [conn (db-test/create-conn-with-blocks
+                  {:pages-and-blocks
+                   [{:page {:block/title "Page"}
+                     :blocks [{:block/title deleted-title}]}]})
+            deleted-block (db-test/find-block-by-content @conn deleted-title)
+            page (:block/page deleted-block)
+            referrer-uuid (random-uuid)
+            now (common-util/time-ms)
+            raw-title (str "see " (block-ref/->block-ref (str (:block/uuid deleted-block)))
+                           " and " (page-ref/->page-ref (str (:block/uuid deleted-block))))
+            _ (d/transact! conn [{:block/uuid referrer-uuid
+                                  :block/title raw-title
+                                  :block/raw-title raw-title
+                                  :block/created-at now
+                                  :block/updated-at now
+                                  :block/page (:db/id page)
+                                  :block/parent (:db/id page)
+                                  :block/order "a0"
+                                  :block/refs (:db/id deleted-block)}])
+            referrer (d/entity @conn [:block/uuid referrer-uuid])
+            retracts [[:db/retractEntity (:db/id deleted-block)]]
+            extra (delete-blocks/update-refs-history @conn retracts {})]
+        (is (some #(= [:db/add (:db/id referrer) :block/title (str "see " deleted-title " and " deleted-title)] %) extra)
+            (str "title " (pr-str deleted-title)))))))
