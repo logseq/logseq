@@ -62,6 +62,32 @@
                           (is false (str error))
                           (done)))))))
 
+(deftest deadline-date-links-to-journal-page-by-journal-day-test
+  (async done
+    (let [journal-uuid #uuid "11111111-1111-1111-1111-111111111111"
+          looked-up-days (atom [])
+          local-noon (fn [month day] (.getTime (js/Date. 2026 (dec month) day 12 0 0)))]
+      (-> (p/with-redefs [state/get-date-formatter (constantly "yyyy-MM-dd")
+                          db-async/<get-journal-page-by-day
+                          (fn [_repo journal-day]
+                            (swap! looked-up-days conj journal-day)
+                            ;; The journal's :block/name is in the default format, not
+                            ;; in the configured one
+                            (p/resolved (when (= 20261027 journal-day)
+                                          {:block/uuid journal-uuid
+                                           :block/name "oct 27th, 2026"
+                                           :block/title "2026-10-27"
+                                           :block/journal-day 20261027})))]
+            (p/let [existing (#'property-value/<journal-page-ref "test" (local-noon 10 27))
+                    missing (#'property-value/<journal-page-ref "test" (local-noon 10 28))]
+              (is (= [20261027 20261028] @looked-up-days))
+              (is (= {:block/uuid journal-uuid} existing)
+                  "The link targets the existing journal page, whatever the configured title format")
+              (is (= {:block/name "Oct 28th, 2026"} missing)
+                  "A day without a journal page keeps linking by its default-format journal name")))
+          (p/catch (fn [error] (is false (str error))))
+          (p/finally done)))))
+
 (deftest alias-value-click-opens-property-selector-test
   (let [popup-event* (atom nil)
         event #js {:preventDefault (fn [])

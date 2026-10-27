@@ -501,7 +501,7 @@
                                  [:create-page [title options]])
                           today-journal?
                           (assoc :create-today-journal? true
-                                 :today-journal-name title))]
+                                 :today-journal-day (:block/journal-day page)))]
             {:tx-meta tx-meta
              :tx-data txs
              :title title
