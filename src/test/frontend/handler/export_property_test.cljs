@@ -5,6 +5,7 @@
             [clojure.string :as string]
             [datascript.core :as d]
             [frontend.handler.export.common :as export-common]
+            [frontend.state :as state]
             [frontend.worker.export :as worker-export]
             [logseq.common.export.file :as common-file]
             [logseq.common.util.date-time :as date-time-util]
@@ -48,7 +49,7 @@
                                nil))]
       (is (= (str "  deadline:: " expected-datetime "\n"
                   "  P1:: hello")
-             (@#'common-file/block-properties-content nil {} "  " {}))))))
+             (@#'common-file/block-properties-content nil {} 1 {} {}))))))
 
 (deftest default-property-value-children-are-exported
   (let [conn (db-test/create-conn-with-blocks
@@ -97,43 +98,88 @@
            content))
     (is (not (string/includes? content "should not appear")))))
 
-(deftest selected-block-text-export-includes-default-property-value-children
+(deftest selected-block-text-export-preserves-property-value-hierarchy
   (let [conn (db-test/create-conn-with-blocks
-              {:properties {:user.property/qa-transfer-note {:logseq.property/type :default}
-                            :user.property/qa-website {:logseq.property/type :url}}
+              {:properties {:user.property/notes {:logseq.property/type :default}
+                            :user.property/summary {:logseq.property/type :default}}
                :pages-and-blocks
-               [{:page {:block/title "QA-Text-Transfer"}
-                 :blocks [{:block/title "QA transfer owner"
+               [{:page {:block/title "Page A"}
+                 :blocks [{:block/title "Owner"
                            :build/properties
-                           {:user.property/qa-transfer-note
+                           {:user.property/notes
                             {:build/property-value :block
-                             :block/title "QA property value"
+                             :block/title "Value"
                              :build/children
-                             [{:block/title "QA value child"
-                               :build/children [{:block/title "QA value grandchild"}]}]}
-                            :user.property/qa-website
+                             [{:block/title "Value child"
+                               :build/children [{:block/title "Value grandchild"}]}]}
+                            :user.property/summary "Second value"}
+                           :build/children [{:block/title "Ordinary child"}]}
+                          {:block/title "Control"}]}]})
+        owner (db-test/find-block-by-content @conn "Owner")
+        control (db-test/find-block-by-content @conn "Control")]
+    (doseq [indent ["\t" "  " "    " "        "]]
+      (with-redefs [state/get-export-bullet-indentation (constantly indent)]
+        (let [content (worker-export/export-blocks-as-format
+                       @conn [(:block/uuid owner) (:block/uuid control)] :markdown
+                       {:remove-options #{}} (export-common/get-content-config))]
+          (is (= [[0 "Owner"] [1 "Value"] [2 "Value child"] [3 "Value grandchild"]
+                  [1 "Second value"] [1 "Ordinary child"] [0 "Control"]]
+                 (->> (string/split-lines content)
+                      (keep (fn [line]
+                              (when-let [[_ tabs title] (re-matches #"(\t*)- (.*)" line)]
+                                [(count tabs) title])))
+                      vec))))))))
+
+(deftest selected-block-export-removes-properties-recursively
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties {:user.property/notes {:logseq.property/type :default}}
+               :pages-and-blocks
+               [{:page {:block/title "Page A"}
+                 :blocks [{:block/title "Owner"
+                           :build/children
+                           [{:block/title "Child"
+                             :build/properties
+                             {:user.property/notes
+                              {:build/property-value :block
+                               :block/title "Value"
+                               :build/children [{:block/title "Value child"}]}}}]}]}]})
+        owner (db-test/find-block-by-content @conn "Owner")]
+    (is (= "- Owner\n\t- Child\n"
+           (worker-export/export-blocks-as-format
+            @conn [(:block/uuid owner)] :markdown
+            {:remove-options #{:property}} (export-common/get-content-config))))))
+
+(deftest selected-block-export-filters-collapsed-property-values
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties {:user.property/notes {:logseq.property/type :default}
+                            :user.property/summary {:logseq.property/type :default}}
+               :pages-and-blocks
+               [{:page {:block/title "Page A"}
+                 :blocks [{:block/title "Owner"
+                           :build/properties
+                           {:user.property/notes
                             {:build/property-value :block
-                             :block/title "https://example.com"
-                             :build/children [{:block/title "url value child"}]}}
-                           :build/children [{:block/title "QA ordinary child"}]}
-                          {:block/title "QA transfer control"}]}]})
-        owner (db-test/find-block-by-content @conn "QA transfer owner")
-        control (db-test/find-block-by-content @conn "QA transfer control")
-        content-config (export-common/get-content-config)
-        content (worker-export/export-blocks-as-format
-                 @conn
-                 [(:block/uuid owner) (:block/uuid control)]
-                 :markdown
-                 {:remove-options #{}}
-                 content-config)]
-    (is (true? (:export-default-property-values-as-blocks? content-config)))
-    (is (string/includes? content "QA property value"))
-    (is (string/includes? content "QA value child"))
-    (is (string/includes? content "QA value grandchild"))
-    (is (string/includes? content "QA ordinary child"))
-    (is (string/includes? content "QA transfer control"))
-    (is (string/includes? content "https://example.com"))
-    (is (not (string/includes? content "url value child")))))
+                             :block/title "Collapsed value"
+                             :build/children [{:block/title "Hidden child"}]}
+                            :user.property/summary
+                            {:build/property-value :block
+                             :block/title "Expanded value"
+                             :build/children
+                             [{:block/title "Collapsed child"
+                               :block/collapsed? true
+                               :build/children [{:block/title "Hidden grandchild"}]}]}}}]}]})
+        owner (db-test/find-block-by-content @conn "Owner")
+        collapsed-value (db-test/find-block-by-content @conn "Collapsed value")]
+    (d/transact! conn [{:db/id (:db/id collapsed-value) :block/collapsed? true}])
+    (doseq [open-only? [false true]]
+      (let [content (worker-export/export-blocks-as-format
+                     @conn [(:block/uuid owner)] :markdown
+                     {:other-options {:open-blocks-only open-only?}}
+                     (export-common/get-content-config))]
+        (is (= (not open-only?) (string/includes? content "Hidden child")))
+        (is (= (not open-only?) (string/includes? content "Hidden grandchild")))
+        (is (string/includes? content "Collapsed value"))
+        (is (string/includes? content "Collapsed child"))))))
 
 (deftest highlighted-export-preserves-code-and-math-content
   (let [conn (db-test/create-conn-with-blocks
