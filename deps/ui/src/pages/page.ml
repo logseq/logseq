@@ -742,12 +742,17 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
     ]
   in
   (* Title content owns editing; header actions own their button presses. *)
-  row ~key:"page-title" ~grow:1. ~cross:`start
+  (* Page and journal titles sit outside the outliner data-cid containers;
+     selection therefore resolves these rows to the main scope. *)
+  (match page.page_uuid with
+   | Some uuid -> Lazy_children.track_mounted ~scope:"main" ~uuid
+   | None -> Fun.id)
+    (row ~key:"page-title" ~grow:1. ~cross:`start
     ~style_class:"ls-page-title content title"
     ~data_attrs:
       [ ("data-testid", "page title")
       ; ("style", "border-radius:calc(var(--radius) - 4px)") ]
-    body
+    body)
     ) ctx parent
 
 let blocks_inner ?puuid ?(virtualize = false) ?(library = false)
