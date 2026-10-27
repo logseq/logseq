@@ -306,7 +306,19 @@ let table_range_selection () =
   let next = select cleared ["a"; "b"; "c"] "c" true true in
   check "Deselecting the anchor ends the previous range"
     (cleared.V.table_anchor = None &&
-      V.Sset.equal next.V.selected (V.Sset.of_list ["c"; "outside"]))
+      V.Sset.equal next.V.selected (V.Sset.of_list ["c"; "outside"]));
+  let all = V.table_select_all_rows initial true in
+  let excluded = select all ["a"; "b"] "b" false false in
+  let group = V.table_set_rows excluded ~rows:["a"] ~checked:false in
+  check "Select-all includes later rows while row and group exclusions stay local"
+    (V.table_row_selected all "later" &&
+      not (V.table_row_selected group "a") &&
+      not (V.table_row_selected group "b") && V.table_row_selected group "later");
+  let pending = { group with V.table_action_pending = Some group.V.table_selection_epoch } in
+  let cleared = V.table_clear_selection pending in
+  check "Clearing selection retires pending full-data actions and all-row membership"
+    (not (V.table_row_selected cleared "later") && cleared.V.table_action_pending = None &&
+      cleared.V.table_selection_epoch > pending.V.table_selection_epoch)
 
 let table_resize_transaction () =
   let module V = Views_state in
