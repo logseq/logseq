@@ -80,6 +80,38 @@
                (db-content/id-ref->title-ref (str "see #" id-ref) refs opts))
             (str "tag ref, title " (pr-str title)))))))
 
+(def ^:private bracketed-tag-titles
+  ["alpha" "a$$" "a\"b" "a\\b" "a|b" "a(b" "中文" "a.b"
+   "a." "a," "a)" "a b" "a. b"])
+
+(deftest title-ref->id-ref-converts-bracketed-tag
+  (let [page-uuid #uuid "11111111-1111-1111-1111-111111111111"]
+    (doseq [title bracketed-tag-titles]
+      (is (= (str "see #" (page-ref/->page-ref page-uuid) " end")
+             (db-content/title-ref->id-ref (str "see #" (page-ref/->page-ref title) " end")
+                                           [{:block/title title :block/uuid page-uuid}]))
+          (str "title " (pr-str title))))))
+
+(deftest id-ref->title-ref-shows-tag-as-the-same-tag
+  (let [page-uuid #uuid "11111111-1111-1111-1111-111111111111"
+        id-text (str "see #" (page-ref/->page-ref page-uuid) " end")
+        show (fn [title]
+               (db-content/id-ref->title-ref id-text
+                                             [{:block/title title :block/uuid page-uuid}]
+                                             {:replace-block-id? true}))]
+    (testing "the shown text saves back to the same id ref"
+      (doseq [title bracketed-tag-titles]
+        (is (= id-text (db-content/title-ref->id-ref (show title) [{:block/title title :block/uuid page-uuid}]))
+            (str "title " (pr-str title)))))
+    (testing "titles that cannot end a hashtag keep the brackets"
+      (doseq [title ["a." "a," "a)" "a b"]]
+        (is (= (str "see #" (page-ref/->page-ref title) " end") (show title))
+            (str "title " (pr-str title)))))
+    (testing "simple titles are shown as #title"
+      (doseq [title ["alpha" "a$$" "a.b"]]
+        (is (= (str "see #" title " end") (show title))
+            (str "title " (pr-str title)))))))
+
 (deftest recur-replace-uuid-in-block-title-test
   (let [uuid-a #uuid "11111111-1111-1111-1111-111111111111"
         uuid-b #uuid "22222222-2222-2222-2222-222222222222"

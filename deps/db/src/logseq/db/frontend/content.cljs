@@ -38,6 +38,13 @@
    content
    refs))
 
+(defn- plain-hashtag-title?
+  "True when a tag with this title can be written as `#title` instead of
+  `#[[title]]` and still be read as the same tag."
+  [title]
+  (and (not (string/includes? title " "))
+       (not (common-util/safe-re-find #"[,.)]$" title))))
+
 (defn- sort-refs
   "Nested pages first"
   [refs]
@@ -68,7 +75,7 @@
         (reduce
          (fn [content ref]
            (if (:block/title ref)
-             (let [content' (if (not (string/includes? (:block/title ref) " "))
+             (let [content' (if (plain-hashtag-title? (:block/title ref))
                               (common-util/replace-literal content
                                                            (str "#" (page-ref/->page-ref (:block/uuid ref)))
                                                            (str "#" (:block/title ref)))
@@ -93,19 +100,23 @@
   (boolean (some->> title (re-find id-ref-pattern))))
 
 (defn- replace-tag-ref
+  "Replaces `#[[page-name]]` and, when the title can be written that way, `#page-name`
+  with `#[[id]]`"
   [content page-name id]
-  (let [page (if (string/includes? page-name " ") (page-ref/->page-ref page-name) page-name)
-        wrapped-id (page-ref/->page-ref id)
-        page-name (common-util/format "#%s" page)
-        r (common-util/format "#%s" wrapped-id)]
-    ;; hash tag parsing rules https://github.com/logseq/mldoc/blob/701243eaf9b4157348f235670718f6ad19ebe7f8/test/test_markdown.ml#L631
-    ;; Safari doesn't support look behind, don't use
-    ;; TODO: parse via mldoc
-    (string/replace content
-                    (re-pattern (str "(?i)(^|\\s|\\()(" (common-util/escape-regex-chars page-name) ")(?=[,\\.\\)]*($|\\s|\\)))"))
-                    ;;    case_insense^    ^lhs   ^_grp2                       look_ahead^         ^_grp3
-                    (fn [[_match lhs _grp2 _grp3]]
-                      (str lhs r)))))
+  (let [r (str "#" (page-ref/->page-ref id))]
+    (reduce
+     (fn [content tag-text]
+       ;; hash tag parsing rules https://github.com/logseq/mldoc/blob/701243eaf9b4157348f235670718f6ad19ebe7f8/test/test_markdown.ml#L631
+       ;; Safari doesn't support look behind, don't use
+       ;; TODO: parse via mldoc
+       (string/replace content
+                       (re-pattern (str "(?i)(^|\\s|\\()(" (common-util/escape-regex-chars tag-text) ")(?=[,\\.\\)]*($|\\s|\\)))"))
+                       ;;    case_insense^    ^lhs   ^_grp2                       look_ahead^         ^_grp3
+                       (fn [[_match lhs _grp2 _grp3]]
+                         (str lhs r))))
+     content
+     (cond-> [(str "#" (page-ref/->page-ref page-name))]
+       (plain-hashtag-title? page-name) (conj (str "#" page-name))))))
 
 (defn- replace-page-ref
   [content page-name id]
@@ -206,7 +217,7 @@
   [id->title matched hash-prefix id]
   (if-let [ref-title (get id->title id)]
     (if (and (= "#" hash-prefix)
-             (not (string/includes? ref-title " ")))
+             (plain-hashtag-title? ref-title))
       (str "#" ref-title)
       (str hash-prefix (page-ref/->page-ref ref-title)))
     matched))
