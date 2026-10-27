@@ -11,33 +11,65 @@ module S = Editor_state
 module Uc = Ui_components
 module D = Properties_data
 
-let view_parent_uuid uuids =
-  let mounted_parent =
-    List.find_map
-      (fun uuid ->
-        match Ui_services.dom_by_id ("ls-block-" ^ uuid) with
-        | Some el -> (
-            match el.Ui_services.closest "[data-pu]" with
-            | Some parent -> parent.Ui_services.attr "data-pu"
-            | None -> None)
-        | None -> None)
-      uuids
-  in
-  match mounted_parent with
-  | Some _ as parent -> parent
-  | None -> (
-      match (Runtime.route (), S.selection_scope ()) with
-      | Model.Block_zoom uuid, scope when scope = "zoom-" ^ uuid -> Some uuid
-      | _, "main" ->
-          Option.bind (Runtime.model ()).Model.route_page (fun page ->
-              page.Model.page_uuid)
-      | _ -> None)
+type parent_state =
+  | Pending
+  | Invalid of string
+  | Unsupported_scope of string
+  | Ready of string
 
-let selection_context sel =
-  ( Runtime.repo (),
-    Runtime.route (),
-    S.selection_scope (),
-    if sel = [] then None else view_parent_uuid sel )
+let rec contains_block uuid blocks =
+  List.exists
+    (fun (block : Model.block) ->
+      block.block_uuid = Some uuid || contains_block uuid block.block_children)
+    blocks
+
+let contains_selection uuid (page : Model.page) =
+  page.page_uuid = Some uuid || contains_block uuid page.page_blocks
+
+let ready_parent (page : Model.page) =
+  match page.page_uuid with
+  | Some uuid when uuid <> "" -> Ready uuid
+  | _ -> Invalid "missing-parent-uuid"
+
+let resolve_parent (model : Model.t) ~scope ~selected =
+  let page_parent first =
+    if model.page_missing then Invalid "page-load-failed"
+    else
+      match model.route_page with
+      | None -> Pending
+      | Some page when contains_selection first page -> ready_parent page
+      | Some _ -> Invalid "selection-outside-page"
+  in
+  match (model.phase, model.repo, selected) with
+  | Model.Booting, _, _ | Model.Ready, None, _ -> Pending
+  | Model.Failed reason, _, _ -> Invalid reason
+  | _, _, [] -> Invalid "empty-selection"
+  | Model.Ready, Some _, first :: _ -> (
+      match (model.route, scope) with
+      | (Model.Home | Model.Journals), "main" -> (
+          match model.journals_status with
+          | Model.Journal_pending -> Pending
+          | Model.Journal_failed -> Invalid "journal-load-failed"
+          | Model.Journal_loaded -> (
+              match List.filter (contains_selection first) model.journals with
+              | [ page ] -> ready_parent page
+              | [] -> Invalid "missing-journal-owner"
+              | _ -> Invalid "ambiguous-journal-owner"))
+      | (Model.Page _ | Model.Library), "main" -> page_parent first
+      | Model.Block_zoom uuid, scope when scope = "zoom-" ^ uuid -> (
+          match model.route_page with
+          | Some page when page.page_uuid <> Some uuid ->
+              Invalid "zoom-parent-mismatch"
+          | _ -> page_parent first)
+      | _ -> Unsupported_scope scope)
+
+let selection_context (model : Model.t) sel =
+  let scope = S.selection_scope () in
+  ( model.repo,
+    model.route,
+    scope,
+    model.context_revision,
+    resolve_parent model ~scope ~selected:sel )
 
 let with_mounted_anchor sel render : t =
  fun ctx parent ->
@@ -51,12 +83,12 @@ let with_mounted_anchor sel render : t =
      mounted)
     ctx parent
 
-let with_cut_eligibility sel render : t =
+let with_cut_eligibility model sel render : t =
  fun ctx parent ->
-  let ((_, _, _, uuid) as key) = selection_context sel in
-  match uuid with
-  | None -> render None ctx parent
-  | Some uuid ->
+  let ((_, _, _, _, parent_state) as key) = selection_context model sel in
+  match parent_state with
+  | Pending | Invalid _ | Unsupported_scope _ -> render None ctx parent
+  | Ready uuid ->
       let load =
         Ui_effect.load ~sched:ctx.Lui_ui.ui_scheduler ~scope:ctx.Lui_ui.ui_scope
           (Subs_state.task_of_promise (D.entity_by_uuid uuid))
@@ -84,7 +116,7 @@ let parent_of (b : Model.block) =
 
 let can_cut sel eligibility =
   match eligibility with
-  | Some (key, true) when key = selection_context sel ->
+  | Some (key, true) when key = selection_context (Runtime.model ()) sel ->
       sel <> []
       && List.for_all
            (fun uuid ->
@@ -95,11 +127,11 @@ let can_cut sel eligibility =
   | _ -> false
 
 let selection_matches snapshot uuids =
-  snapshot = selection_context uuids
+  snapshot = selection_context (Runtime.model ()) uuids
   && S.String_set.equal (S.selected ()) (S.String_set.of_list uuids)
 
 let restore_bar uuids =
-  let snapshot = selection_context uuids in
+  let snapshot = selection_context (Runtime.model ()) uuids in
   fun () ->
     if uuids <> [] && selection_matches snapshot uuids && S.editing () = None
     then Editor_actions.show_action_bar ()
@@ -114,7 +146,15 @@ let open_prop_dlg ~remove uuids =
 
 let open_tags ~scope = function
   | uuid :: _ as uuids ->
-      Properties_dialog.open_for_block_with_property ~scope
+      let context_revision () =
+        let model = Runtime.model () in
+        match
+          resolve_parent model ~scope:(S.selection_scope ()) ~selected:uuids
+        with
+        | Ready _ -> Some model.context_revision
+        | Pending | Invalid _ | Unsupported_scope _ -> None
+      in
+      Properties_dialog.open_for_block_with_property ~scope ~context_revision
         ~on_close:(restore_bar uuids) ~uuids uuid ~ident:"block/tags"
   | [] -> ()
 
@@ -219,23 +259,24 @@ let install_listeners () =
                      | None -> ())
                  0)))
 
-let same_bar_state (left, lp, lc, ld) (right, rp, rc, rd) =
+let same_bar_state (left, lp, lc, ld, lm) (right, rp, rc, rd, rm) =
   S.String_set.equal left.S.selected right.S.selected
   && left.S.selection_scope = right.S.selection_scope
   && left.S.action_bar = right.S.action_bar
   && left.S.editing = None = (right.S.editing = None)
   && lp = rp && lc = rc
   && ld = None = (rd = None)
+  && lm.Model.context_revision = rm.Model.context_revision
 
-let rec view () : t =
+let rec view ~model () : t =
  (* mount-order independent: ensure creates the editor state on first
      use, so the bar works even on pages where it precedes the first
      block row (gating on S.ready here left it permanently unmounted) *)
  fun ctx parent ->
   S.ensure ctx;
-  node () ctx parent
+  node ~model () ctx parent
 
-and node () : t =
+and node ~model () : t =
  fun ctx parent ->
   (install_listeners ();
    let owner_scope = ctx.Lui_ui.ui_scope in
@@ -251,20 +292,25 @@ and node () : t =
    in
    let dialog = Properties_dialog.state_signal ctx.Lui_ui.ui_scheduler in
    reactive ~equal:same_bar_state
-     (fun (state : S.t) popup cmdk dialog ->
+     (fun (state : S.t) popup cmdk dialog (model : Model.t) ->
        if
          popup || cmdk || dialog <> None || state.S.editing <> None
          || not state.S.action_bar
        then Logseq_el.nothing
        else
          let sel = Editor_actions.selected_uuids () in
-         match sel with
-         | [] -> Logseq_el.nothing
-         | first :: _ ->
+         match
+           ( sel,
+             resolve_parent model ~scope:state.S.selection_scope ~selected:sel
+           )
+         with
+         | [], _ | _, (Pending | Invalid _ | Unsupported_scope _) ->
+             Logseq_el.nothing
+         | first :: _, Ready _ ->
              with_mounted_anchor sel (function
                | None -> Logseq_el.nothing
                | Some anchor ->
-                   with_cut_eligibility sel (fun eligibility ->
+                   with_cut_eligibility model sel (fun eligibility ->
                        (* The retained anchor owns scroll/resize positioning and
                  viewport collision handling on both hosts. *)
                        popover ~transition:Ui_components.popover_transition
@@ -280,7 +326,7 @@ and node () : t =
                            more are icon-only cells; copy and the
                            property actions keep their text labels;
                            thin dividers separate every cell *)
-                                 let snapshot = selection_context sel in
+                                 let snapshot = selection_context model sel in
                                  let sbtn ~key ~label ?icon ?text ~on_press () =
                                    Ui_components.button ~key ~variant:`ghost
                                      ~size:`sm ~label ?icon ?text
@@ -386,5 +432,5 @@ and node () : t =
                                        ])
                                    (List.mapi (fun i it -> (i, it)) items)));
                          ])))
-     (S.signal ()) popup cmdk (Signal.value dialog))
+     (S.signal ()) popup cmdk (Signal.value dialog) model)
     ctx parent
