@@ -604,7 +604,7 @@ let refresh inst =
 
 let select_view inst v =
   V.update inst (fun s ->
-      { (V.apply_view_entity s v) with V.selected = V.Sset.empty });
+      V.table_clear_selection (V.apply_view_entity s v));
   refresh inst
 
 let load_views inst ~on_done =
