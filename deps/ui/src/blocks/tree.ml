@@ -33,6 +33,11 @@ let block_key (b : Model.block) =
   | Some u -> u
   | None -> "block-" ^ string_of_int (Option.value b.block_db_id ~default:0)
 
+let track_mounted_row ~scope (b : Model.block) child =
+  match b.block_uuid with
+  | Some uuid -> Lazy_children.track_mounted ~scope ~uuid child
+  | None -> child
+
 (* -- per-row signals -- *)
 
 (* drag affordance classes come from the native bullet-drag gesture —
@@ -803,7 +808,8 @@ and row_el ~depth ~editable ~virtualize scope ~(library : bool)
   (* the reload key is scope-namespaced: the same block uuid renders in the
      main list, sidebars, previews and embeds simultaneously, and a bare
      ls-<uuid> key makes those distinct rows claim each other's DOM node *)
-  Ui_parts.class_signal (row_class_sig uuid blank embed b) Fun.id
+  track_mounted_row ~scope b
+    (Ui_parts.class_signal (row_class_sig uuid blank embed b) Fun.id
     (column ~key:("ls-" ^ scope ^ "-" ^ key)
        ~accessibility_identifier:("ls-block-" ^ key)
        ~transition:Ui_components.block_transition
@@ -834,7 +840,7 @@ and row_el ~depth ~editable ~virtualize scope ~(library : bool)
     ; (if has_children && not (Comments.is_comments_area b) then
          children_el ~depth ~editable ~library ~virtualize uuid scope b
        else Logseq_el.nothing)
-    ])
+    ]))
 
 (* keyed-row variant of row_el: the .ls-block shell is a stable node
    (keyed reconcile needs a node per item) and the content inside it is
@@ -867,7 +873,8 @@ and row_sig ~depth ~editable ~library ~virtualize scope
             || contains_sub title ("((" ^ u ^ "))"))
       ib
   in
-  (Ui_parts.class_signal (row_class_sig_of bs) Fun.id
+  (track_mounted_row ~scope b0
+    (Ui_parts.class_signal (row_class_sig_of bs) Fun.id
     (column ~key:("ls-" ^ scope ^ "-" ^ key)
        ~accessibility_identifier:("ls-block-" ^ key)
        ~transition:Ui_components.block_transition
@@ -909,7 +916,7 @@ and row_sig ~depth ~editable ~library ~virtualize scope
         (Render.query_below_el
            (Option.value b0.Model.block_uuid ~default:""))
     ; row_children ~depth ~editable ~library ~virtualize scope bs
-    ]))
+    ])))
     ctx parent
 
 and row_children ~depth ~editable ~library ~virtualize scope
@@ -1047,7 +1054,8 @@ and block_row_static ?(depth = 0) ?(library = false) (b : Model.block) : t =
   let embed = b.block_link <> None in
   let has_children = b.block_children <> [] in
   let blank = String.trim b.block_title = "" in
-  Ui_parts.class_signal (row_class_sig uuid blank embed b) Fun.id
+  track_mounted_row ~scope:"ref" b
+    (Ui_parts.class_signal (row_class_sig uuid blank embed b) Fun.id
     (column ~key:("rfs-" ^ key)
        ~accessibility_identifier:("ls-block-" ^ key)
        ~transition:Ui_components.block_transition
@@ -1102,7 +1110,7 @@ and block_row_static ?(depth = 0) ?(library = false) (b : Model.block) : t =
     ; Properties_area.block_area ~scope:"reference" ~uuid
     ; (if has_children then children_static_el ~depth ~library uuid b
        else Logseq_el.nothing)
-    ]))
+    ])))
   ctx parent
 
 and children_static_el ~depth ~library uuid (b : Model.block) : t =
