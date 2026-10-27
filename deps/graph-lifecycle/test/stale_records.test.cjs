@@ -69,6 +69,24 @@ for (const [description, repo] of [['of one graph', 'stale graph'], ['of every g
   });
 }
 
+test('startup cleanup removes the publications of a retired worker from every root it inspected', async () => {
+  await withGraph(async (storage, repo) => {
+    const otherRoot = path.join(storage.root, 'other root');
+    const opened = lifecycle.resolveStorage(otherRoot, storage.graphsDir);
+    registerLeftoverWorker(storage, repo, STALE_PID); // registered under the first root
+    const lists = [storage.root, opened.root].map(root => path.join(root, 'server-list'));
+    for (const list of lists) fs.writeFileSync(list, `${STALE_PID} 4000\n`);
+    const restore = denySignalZero(STALE_PID);
+    try {
+      await lifecycle.stopOutdatedWorkers(opened, REVISION, repo); // the graph is opened through the second root
+      await assert.rejects(lifecycle.stopGraph(opened, repo, 'cli'), { code: 'server-not-found' });
+    } finally {
+      restore();
+    }
+    for (const list of lists) assert.equal(fs.readFileSync(list, 'utf8'), '');
+  });
+});
+
 const LONG_AGO = new Date(Date.now() - 60000);
 
 function exitedPid() {

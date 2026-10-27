@@ -633,8 +633,14 @@ async function upgradeGraph(ctx, revision, initialScan, registeredOnly) {
           await terminate(ctx, target, false, false, exists);
           await cleanup(ctx, current, [target]);
           // A gone worker's publication has no port on the target, so cleanup left it in server-list, where
-          // the strict probes of later start and stop calls would meet its unsignalable PID again.
-          if (!exists(target.pid)) await removeEntries(target.root, scan.matching(target.root, target.pid));
+          // the strict probes of later start and stop calls would meet its unsignalable PID again. Discovery
+          // looked for it in every root of this graph, so it is removed from every one of them.
+          if (!exists(target.pid)) {
+            for (const root of new Set([ctx.root, ...current.workers.map(record => record.root)])) {
+              const published = scan.matching(root, target.pid);
+              if (published.length) await removeEntries(root, published);
+            }
+          }
           current.workers = current.workers.filter(record => record.ticket !== target.ticket);
           writeJSON(ctx.stateFile, current);
           retired.push(target);
