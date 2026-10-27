@@ -108,10 +108,11 @@ function pidExists(pid, { unsignalableIsGone = false } = {}) {
     throw error;
   }
 }
-// A publication whose PID cannot be signalled may be a worker of this graph that was never registered, so where
-// EPERM is an error (stop and delete) it is probed through its port instead of failing on the PID.
-function publishedPidMayRun(exists, pid) {
-  try { return exists(pid); }
+// A publication whose PID cannot be signalled may be a worker of this graph that was never registered. It is never
+// taken for gone, whichever probe the caller uses for registered workers: it is probed through its port instead,
+// and neither refused on its PID nor removed from server-list.
+function publishedPidMayRun(pid) {
+  try { return pidExists(pid); }
   catch (error) { if (error.code === 'EPERM') return true; throw error; }
 }
 function signalProcess(pid, signal) {
@@ -404,7 +405,7 @@ function publicationScan() {
       if (!grouped.has(root)) grouped.set(root, (async () => {
         const groups = new Map();
         const results = await Promise.allSettled(read(root).publications.map(async candidate => {
-          if (!exists(candidate.pid)) return;
+          if (!publishedPidMayRun(candidate.pid)) return;
           let value;
           try { value = await probe(candidate); }
           catch (error) { if (!ignorableDiscoveryError(error)) throw error; }
@@ -453,12 +454,12 @@ async function discover(ctx, current, scan, registeredOnly = false) {
       }
       if (!registeredOnly) probes.push(async () => {
         for (const { candidate, value } of await scan.forGraph(root, ctx.repo))
-          if (exists(candidate.pid) && !targets.has(candidate.pid)) checkUnregistered(value);
+          if (publishedPidMayRun(candidate.pid) && !targets.has(candidate.pid)) checkUnregistered(value);
       });
     } else {
       for (const candidate of entries(root)) {
         const target = targets.get(candidate.pid);
-        if (!(target ? exists(candidate.pid) : publishedPidMayRun(exists, candidate.pid))) continue;
+        if (!(target ? exists(candidate.pid) : publishedPidMayRun(candidate.pid))) continue;
         if (target) attach(target, candidate);
         else probes.push(async () => {
           let value;
