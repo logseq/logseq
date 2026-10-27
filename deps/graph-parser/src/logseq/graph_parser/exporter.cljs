@@ -2962,6 +2962,22 @@
     (boolean (or (some #{:logseq.class/Tag} (:block/tags p))
                  (some-> (:db/ident p) namespace db-class/user-class-namespace?)))))
 
+(defn- get-class-occupied-property-names
+  "New property names whose page is, or becomes in this file, a class: the property gets its own
+  entity instead of taking over the page."
+  [new-properties pages-tx existing-pages import-state new-class-uuids]
+  (let [new-class-page-names (set (keep #(when (contains? new-class-uuids (:block/uuid %)) (:block/name %))
+                                        pages-tx))]
+    (into #{}
+          (keep (fn [kw-name]
+                  (when (or (contains? new-class-page-names (name kw-name))
+                            (when-let [existing-uuid (get existing-pages (name kw-name))]
+                              (or (existing-named-page-is-class? import-state existing-uuid)
+                                  ;; an existing page that becomes a class in this file
+                                  (contains? new-class-uuids existing-uuid))))
+                    kw-name)))
+          new-properties)))
+
 (defn- split-pages-and-properties-tx
   "Separates new pages from new properties tx in preparation for properties to
   be transacted separately. Also builds property pages tx and converts existing
@@ -2970,18 +2986,8 @@
   distinct property entity is created instead."
   [pages-tx old-properties existing-pages import-state upstream-properties new-class-uuids]
   (let [new-properties (set/difference (set (keys @(:property-schemas import-state))) (set old-properties))
-        new-class-page-names (set (keep #(when (contains? new-class-uuids (:block/uuid %)) (:block/name %))
-                                        pages-tx))
-        class-occupied-property-names
-        (into #{}
-              (keep (fn [kw-name]
-                      (when (or (contains? new-class-page-names (name kw-name))
-                                (when-let [existing-uuid (get existing-pages (name kw-name))]
-                                  (or (existing-named-page-is-class? import-state existing-uuid)
-                                      ;; an existing page that becomes a class in this file
-                                      (contains? new-class-uuids existing-uuid))))
-                        kw-name)))
-              new-properties)
+        class-occupied-property-names (get-class-occupied-property-names new-properties pages-tx existing-pages
+                                                                         import-state new-class-uuids)
         page-tx-for-new-property?
         (fn [page]
           (let [property-name (keyword (:block/name page))]
