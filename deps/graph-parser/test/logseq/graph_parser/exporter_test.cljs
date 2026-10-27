@@ -565,6 +565,24 @@
       (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
           "Imported graph validates"))))
 
+(deftest-async import-title-property-of-a-block-does-not-rename-the-page
+  (p/let [dir (write-temp-file-graph
+               {"logseq/config.edn" "{:meta/version 1 :file/name-format :triple-lowbar}\n"
+                "pages/Pg.md" "- block one\n- block two\n  title:: block title\n"
+                "pages/Titled.md" "title:: Real Title\n\n- block three\n  title:: other title\n"
+                "journals/2026_01_06.md" "- journal one\n- journal two\n  title:: journal block title\n"})
+          conn (db-test/create-conn)
+          _ (import-file-graph-to-db dir conn {})]
+    (is (some? (db-test/find-page-by-title @conn "Pg"))
+        "A title property on a block doesn't rename the page")
+    (is (nil? (db-test/find-page-by-title @conn "block title")))
+    (is (some? (db-test/find-page-by-title @conn "Real Title"))
+        "A title property of the page still renames it")
+    (is (some? (db-test/find-page-by-title @conn "Jan 6th, 2026"))
+        "A title property on a block doesn't rename a journal")
+    (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+        "Imported graph validates")))
+
 (deftest-async import-page-template-property
   (p/let [file (write-temp-graph-file "pages/t.md" "template:: tt\n\n- first block\n")
           conn (db-test/create-conn)
