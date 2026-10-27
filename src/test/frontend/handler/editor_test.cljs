@@ -1573,6 +1573,43 @@
                         "Delete must use the editor state captured by its keydown.")))
           (p/finally done)))))
 
+(defn- backspace-in-empty-numbered-block
+  "Backspace at position 0 of an empty block. `edit-block` is what the editor
+  captured when editing started, `latest-block` what the renderer shows now."
+  [edit-block latest-block]
+  (let [calls (atom [])]
+    (-> (p/with-redefs [state/get-input (constantly #js {:value ""})
+                        cursor/pos (constantly 0)
+                        util/stop (constantly nil)
+                        state/get-current-repo (constantly test-helper/test-db)
+                        state/get-edit-block (constantly edit-block)
+                        editor/get-state (constantly {:config {}})
+                        util/get-prev-block-non-collapsed-non-embed (constantly nil)
+                        db-async/<get-block-sibling (fn [& _] (p/resolved nil))
+                        db-subs/block-snapshot (constantly {:status :ready :value latest-block})
+                        editor/save-current-block! (fn [& _] (swap! calls conj :save))
+                        editor/remove-block-own-order-list-type!
+                        (fn [_block] (swap! calls conj :remove-list-type))
+                        editor/delete-block-inner! (fn [& _] (swap! calls conj :delete-block))]
+          (#'editor/delete-block-when-zero-pos! nil))
+        (p/then (fn [] @calls)))))
+
+(deftest backspace-in-numbered-block-uses-the-latest-list-type-test
+  (async done
+    (let [numbered {:db/id 1
+                    :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+                    :block/title ""
+                    :block/page {:db/id 10}
+                    :logseq.property/order-list-type {:block/title "number"}}
+          plain (dissoc numbered :logseq.property/order-list-type)]
+      (-> (p/let [first-backspace (backspace-in-empty-numbered-block numbered numbered)
+                  second-backspace (backspace-in-empty-numbered-block numbered plain)]
+            (is (= [:save :remove-list-type] first-backspace)
+                "The first Backspace turns the numbered block back into a bullet")
+            (is (= [:delete-block] second-backspace)
+                "Once the list type is gone, Backspace deletes the block even though the editor still holds the block it captured when editing started"))
+          (p/finally done)))))
+
 (deftest editor-delete-guards-nil-input-test
   (testing "stale editing state without a textarea is a no-op"
     (let [deleted (atom [])]
