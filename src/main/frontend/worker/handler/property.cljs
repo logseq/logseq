@@ -414,7 +414,10 @@
                             :block/order new-order}
                            (outliner-core/block-with-updated-at
                             {:db/id block-id}))
-                     {:outliner-op :save-block}))))
+                     {:outliner-op :save-block})
+      ;; the tx report can't be sent back to the renderer ("Cannot write TxReport"): the reorder
+      ;; succeeded, but the call failed
+      nil)))
 
 (def ^:private display-property-keys
   [:db/id
