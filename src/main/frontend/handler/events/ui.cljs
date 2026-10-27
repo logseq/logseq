@@ -377,6 +377,9 @@
     :align (if (util/mobile?) :top :center)
     :style {:max-width "500px"}}))
 
+(defevent! :graph/add-existing-local [[_ source]]
+  (repo/add-existing-local-graph! source))
+
 (defevent! :dialog-select/graph-open []
   (select/dialog-select! :graph-open))
 
