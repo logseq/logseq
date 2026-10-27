@@ -834,6 +834,20 @@
     (is (= ready-view-data (#'views/view-paint-source nil ready-view-data))
         "Typing into the view search changes the resource key before the worker returns; keep the old view mounted so the input stays open.")))
 
+(deftest previous-paint-survives-search-input-change-only-test
+  (let [view-uuid (random-uuid)
+        asc [{:id :block/title :asc? true}]
+        desc [{:id :block/title :asc? false}]
+        key-for (fn [sorting input]
+                  (:previous-paint-key
+                   (#'views/loaded-view-resource-plan
+                    view-uuid :class-objects sorting nil input nil nil 990)))]
+    (is (some? (key-for asc "")))
+    (is (= (key-for asc "") (key-for asc "a") (key-for asc "ab"))
+        "Typing in the search box must not drop the previous paint, or the search input unmounts on the first keystroke.")
+    (is (not= (key-for asc "a") (key-for desc "a"))
+        "A new sort order still drops the previous paint.")))
+
 (deftest first-window-fills-a-tall-viewport-from-screen-height-test
   (let [view-uuid (random-uuid)
         plan (#'views/loaded-view-resource-plan
