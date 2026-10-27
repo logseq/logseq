@@ -826,6 +826,24 @@
         (is (false? (:ready? (#'views/loaded-view-paint nil)))
             "A cold view stays on the short skeleton until that first window exists.")))))
 
+(deftest open-buttons-render-only-in-the-name-column-test
+  (let [block {:db/id 1
+               :block/uuid (random-uuid)
+               :block/title "Project"}
+        button-count (fn [property-ident]
+                       (with-redefs [state/get-component (constantly (fn [& _] nil))
+                                     util/mobile? (constantly false)]
+                         (count (re-seq #"<button"
+                                        (render-static
+                                         (views/block-title-interactive
+                                          block
+                                          {:property-ident property-ident
+                                           :width 200}))))))]
+    (is (= 2 (button-count :block/title))
+        "The name column keeps its open and open-in-sidebar buttons.")
+    (is (zero? (button-count :logseq.property/description))
+        "A text property cell must not repeat the name column's open buttons.")))
+
 (deftest first-window-fills-a-tall-viewport-from-screen-height-test
   (let [view-uuid (random-uuid)
         plan (#'views/loaded-view-resource-plan
