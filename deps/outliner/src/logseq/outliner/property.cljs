@@ -883,6 +883,34 @@
       (ldb/transact! conn tx-data
                      {:outliner-op :save-block}))))
 
+(defn- delete-replaced-value-blocks!
+  "Deletes the value blocks of `property` (with their children) in `value-ids`
+  that no node holds any more, e.g. the old text of a property that was just set
+  to another text. A value block that another node still holds is kept."
+  [conn property value-ids]
+  (let [db @conn
+        orphans (->> value-ids
+                     (keep #(d/entity db %))
+                     (filter (fn [value]
+                               (and (= (:db/id property)
+                                       (:db/id (:logseq.property/created-from-property value)))
+                                    (not (entity-util/page? value))
+                                    (not (ldb/closed-value? value))
+                                    (not= (:db/id (:logseq.property/default-value property))
+                                          (:db/id value))
+                                    (empty? (d/q '[:find [?e ...]
+                                                   :in $ ?property-ident ?value-id
+                                                   :where [?e ?property-ident ?value-id]]
+                                                 db (:db/ident property) (:db/id value)))))))
+        tx-data (->> orphans
+                     (mapcat (fn [value]
+                               (cons (:db/id value)
+                                     (ldb/get-block-full-children-ids db (:db/id value)))))
+                     distinct
+                     (map (fn [block-id] [:db/retractEntity block-id])))]
+    (when (seq tx-data)
+      (ldb/transact! conn tx-data {:outliner-op :save-block}))))
+
 (defn ^:large-vars/cleanup-todo set-block-property!
   "Updates a block property's value for an existing property-id and block.  If
   property is a ref type, automatically handles a raw property value i.e. you
@@ -953,7 +981,15 @@
                                     (= existing-value v'))]
                (throw-error-if-self-value block v' ref?)
                (when-not value-matches?
-                 (raw-set-block-property! conn block property v'))))))))))
+                 (raw-set-block-property! conn block property v')
+                 (when ref?
+                   (let [old-ids (many-ref-value-ids existing-value)
+                         new-ids (many-ref-value-ids v')]
+                     (delete-replaced-value-blocks!
+                      conn property
+                      (if (and many? (not (coll? v')))
+                        #{}
+                        (set/difference old-ids new-ids))))))))))))))
 
 (defn upsert-property!
   "Updates property if property-id is given. Otherwise creates a property

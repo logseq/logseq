@@ -209,6 +209,43 @@
         [:any test-uuid] test-uuid
         [nil test-uuid] test-uuid))))
 
+(deftest set-block-property-deletes-the-replaced-text-value-block
+  (testing "Setting a text property to a new value deletes the old value block"
+    (let [conn (db-test/create-conn-with-blocks
+                {:properties {:text {:logseq.property/type :default}}
+                 :pages-and-blocks
+                 [{:page {:block/title "page1"}
+                   :blocks [{:block/title "b1" :build/properties {:text "one"}}]}]})
+          b1 (db-test/find-block-by-content @conn "b1")
+          old-value-id (:db/id (:user.property/text b1))]
+      (is (some? old-value-id))
+      (outliner-property/set-block-property! conn (:block/uuid b1) :user.property/text "beta")
+      (let [b1' (d/entity @conn (:db/id b1))]
+        (is (= "beta" (db-property/property-value-content (:user.property/text b1'))))
+        (is (nil? (:block/title (d/entity @conn old-value-id)))
+            "The old value block is not left behind")
+        (is (empty? (->> (d/q '[:find [?b ...]
+                                :where [?b :block/title "one"]]
+                              @conn)))
+            "No block with the old value remains"))))
+
+  (testing "A value block that another block still holds is kept"
+    (let [conn (db-test/create-conn-with-blocks
+                {:properties {:text {:logseq.property/type :default}}
+                 :pages-and-blocks
+                 [{:page {:block/title "page1"}
+                   :blocks [{:block/title "b1" :build/properties {:text "one"}}
+                            {:block/title "b2"}]}]})
+          b1 (db-test/find-block-by-content @conn "b1")
+          b2 (db-test/find-block-by-content @conn "b2")
+          shared-value-id (:db/id (:user.property/text b1))]
+      (outliner-property/set-block-property! conn (:block/uuid b2) :user.property/text shared-value-id)
+      (outliner-property/set-block-property! conn (:block/uuid b1) :user.property/text "beta")
+      (is (= shared-value-id (:db/id (:user.property/text (d/entity @conn (:db/id b2)))))
+          "The other block still has its value")
+      (is (= "one" (:block/title (d/entity @conn shared-value-id)))
+          "The shared value block is kept"))))
+
 (deftest create-property-text-block!
   (testing "Create a new :default property value"
     (let [conn (db-test/create-conn-with-blocks
