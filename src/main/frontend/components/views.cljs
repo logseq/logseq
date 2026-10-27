@@ -3990,9 +3990,11 @@
   (or view-data previous-view-data))
 
 (defn- view-paint-identity
-  "Exclude search input from a windowed resource context's paint identity."
-  [window-context]
-  (dissoc window-context :input))
+  "Exclude search input from a resource context's paint identity. A view that
+  is not windowed (e.g. Linked References) has no window context, so its full
+  context stands in: otherwise a new filter or sort keeps the old rows."
+  [{:keys [window-context full-context]}]
+  (dissoc (or window-context full-context) :input))
 
 (defn- retained-view-paint
   "Keep the previous payload while its paint identity is unchanged."
@@ -4027,7 +4029,7 @@
                                         viewport-height)
         window-context (:window-context plan)
         window-context-key (pr-str window-context)
-        paint-identity-key (pr-str (view-paint-identity window-context))
+        paint-identity-key (pr-str (view-paint-identity plan))
         window-or-full-data (db-hooks/use-resource (:resource-key plan))
         [previous-view-data set-previous-view-data!] (hooks/use-state nil)
         [retained-paint-identity-key set-retained-paint-identity-key!]

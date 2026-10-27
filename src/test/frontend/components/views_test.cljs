@@ -826,6 +826,25 @@
         (is (false? (:ready? (#'views/loaded-view-paint nil)))
             "A cold view stays on the short skeleton until that first window exists.")))))
 
+(deftest paint-identity-changes-with-sort-and-filter-of-a-non-windowed-view-test
+  (let [view-uuid (random-uuid)
+        asc [{:id :block/title :asc? true}]
+        desc [{:id :block/title :asc? false}]
+        filters {:filters [[:block/title :text-contains "a"]]}
+        plan-for (fn [sorting filters input]
+                   (#'views/loaded-view-resource-plan
+                    view-uuid :linked-references sorting filters input nil nil 990))
+        key-for (fn [sorting filters input]
+                  (#'views/view-paint-identity (plan-for sorting filters input)))]
+    (is (nil? (:window-context (plan-for asc nil "")))
+        "Linked references are not windowed, so the identity cannot come from the window context.")
+    (is (= (key-for asc nil "") (key-for asc nil "a"))
+        "Typing in the search box keeps the previous paint.")
+    (is (not= (key-for asc nil "") (key-for desc nil ""))
+        "A new sort order drops the previous paint, so old rows are not left selectable.")
+    (is (not= (key-for asc nil "") (key-for asc filters ""))
+        "A new filter drops the previous paint, so old rows are not left selectable.")))
+
 (deftest open-buttons-render-only-in-the-name-column-test
   (let [block {:db/id 1
                :block/uuid (random-uuid)
