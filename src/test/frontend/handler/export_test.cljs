@@ -141,7 +141,17 @@
         :block/uuid #uuid "00000000-0000-4000-8000-000000000709"
         :build/children [{:block/title ""
                           :build/keep-uuid? true
-                          :block/uuid #uuid "00000000-0000-4000-8000-000000000708"}]}]})
+                          :block/uuid #uuid "00000000-0000-4000-8000-000000000708"}]}
+       {:block/title "has a property"
+        :build/keep-uuid? true
+        :block/uuid #uuid "00000000-0000-4000-8000-000000000711"
+        :build/properties {:embedsecret "hidden value"}}
+       {:block/title "parent of a property embed"
+        :build/keep-uuid? true
+        :block/uuid #uuid "00000000-0000-4000-8000-000000000710"
+        :build/children [{:block/title ""
+                          :build/keep-uuid? true
+                          :block/uuid #uuid "00000000-0000-4000-8000-000000000712"}]}]})
 
 (defn- load-export-test-files!
   []
@@ -166,7 +176,10 @@
                    :block/link [:block/uuid #uuid "00000000-0000-4000-8000-000000000701"]]
                   [:db/add [:block/uuid #uuid "00000000-0000-4000-8000-000000000708"]
                    :block/link [:block/uuid #uuid "00000000-0000-4000-8000-000000000707"]]
-                  [:db/add [:block/uuid #uuid "00000000-0000-4000-8000-000000000707"] :block/collapsed? true]])))
+                  [:db/add [:block/uuid #uuid "00000000-0000-4000-8000-000000000707"] :block/collapsed? true]
+                  ;; 712, a child of 710, embeds 711, which has a property
+                  [:db/add [:block/uuid #uuid "00000000-0000-4000-8000-000000000712"]
+                   :block/link [:block/uuid #uuid "00000000-0000-4000-8000-000000000711"]]])))
 
 (use-fixtures :once
   {:before (fn []
@@ -569,6 +582,16 @@
           "the embed shows the embedded block's children, not the embedding block's own")
       (is (= "- parent of an embed\n\t- collapsed" (string/trim open-only))
           "the export's open-blocks-only option applies inside the embed")
+      (done))))
+
+(deftest export-blocks-as-markdown-without-properties-in-a-nested-embed
+  (async done
+    (p/let [content (<export-blocks-as-markdown
+                     [#uuid "00000000-0000-4000-8000-000000000710"]
+                     {:remove-options #{:property}})]
+      (is (string/includes? content "has a property") content)
+      (is (not (string/includes? content "hidden value"))
+          (str "an export without properties leaves them out of an embed in a child block too: " content))
       (done))))
 
 (deftest export-page-as-markdown-preserves-semantic-block-formatting

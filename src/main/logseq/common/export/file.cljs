@@ -457,7 +457,7 @@
                         (transform-content db f level opts context))
               new-content
               (if-let [children (and (not embed) (seq (:block/children f)))]
-                (cons content (tree->file-content-aux db children (assoc (select-keys opts [:open-blocks-only?])
+                (cons content (tree->file-content-aux db children (assoc (select-keys opts [:open-blocks-only? :include-properties?])
                                                                           :init-level (inc level))
                                                      context))
                 [content])]
