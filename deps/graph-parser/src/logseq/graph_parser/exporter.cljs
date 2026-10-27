@@ -1847,7 +1847,10 @@
   (when (and asset-link-or-name
              (not (get @assets asset-link-or-name))
              (pdf-file? path))
-    (let [external? (external-linked-pdf? asset-link-or-name path)
+    (let [;; A Zotero PDF is an external reference, like a linked file, so it doesn't need to be on disk
+          ;; (asset-path is only set for Zotero PDFs)
+          external? (or (external-linked-pdf? asset-link-or-name path)
+                        (some? asset-path))
           remote? (or (remote-http-url? asset-link-or-name)
                       (remote-http-url? path))]
       (cond

@@ -1537,6 +1537,49 @@ abc
       (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
           "Imported graph validates"))))
 
+(deftest-async import-zotero-pdf-annotations-when-the-pdf-is-missing
+  (let [annotation-id #uuid "cccccccc-cccc-cccc-cccc-cccccccccccc"
+        dir (fs/mkdtempSync (node-path/join (os/tmpdir) "logseq-zotero-missing-"))
+        graph-dir (node-path/join dir "graph")
+        config (pr-str {:meta/version 1
+                        :file/name-format :triple-lowbar
+                        :zotero/settings-v2 {"default" {:zotero-data-directory (node-path/join dir "zotero")
+                                                        :zotero-linked-attachment-base-directory (node-path/join dir "base")}}})]
+    (doseq [[relative-path content]
+            {"logseq/config.edn" config
+             "pages/Paper.md" "- [Paper.pdf](zotero://select/library/items/KEY12345) {{zotero-linked-file \"attachments:Paper.pdf\"}}\n"
+             "pages/Notes.md" (str "- see ((" annotation-id "))\n")
+             "pages/hls__Paper.md" (str "file:: [Paper.pdf](zotero://select/library/items/KEY12345)\n\n"
+                                      "- Highlighted text\n"
+                                      "  ls-type:: annotation\n"
+                                      "  hl-page:: 3\n"
+                                      "  hl-color:: yellow\n"
+                                      "  id:: " annotation-id "\n")
+             "assets/Paper.edn" (str "{:highlights [{:id #uuid \"" annotation-id "\","
+                                     " :page 3,"
+                                     " :position {:bounding {:x1 1 :y1 2 :x2 3 :y2 4 :width 10 :height 20},"
+                                     "            :rects (),"
+                                     "            :page 3},"
+                                     " :content {:text \"Highlighted text\"},"
+                                     " :properties {:color \"yellow\"}}]}")}]
+      (let [file-path (node-path/join graph-dir relative-path)]
+        (fs/mkdirSync (node-path/dirname file-path) #js {:recursive true})
+        (fs/writeFileSync file-path content)))
+    (p/let [conn (db-test/create-conn)
+            _ (import-file-graph-to-db graph-dir conn {})
+            asset (db-test/find-block-by-content @conn "Paper")
+            annotation (d/entity @conn [:block/uuid annotation-id])
+            notes-block (db-test/find-block-by-content @conn #"^see ")]
+      (is (some? asset)
+          "A Zotero PDF that is not on disk is still imported as an external Asset")
+      (is (= "Highlighted text" (:block/title annotation))
+          "The annotation of the missing PDF is imported")
+      (is (= (str "see " (page-ref/->page-ref annotation-id))
+             (:block/title notes-block))
+          "A block reference to the annotation still resolves")
+      (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+          "Imported graph validates"))))
+
 (deftest-async import-asset-links-in-page-and-block-property-values
   (let [pdf-bytes "%PDF-1.1\n%%EOF\n"
         graph-dir (write-temp-file-graph
