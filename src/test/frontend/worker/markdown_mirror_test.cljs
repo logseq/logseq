@@ -372,11 +372,12 @@
     (let [{:keys [platform files]} (fake-platform)
           page-uuid #uuid "33333333-3333-4333-8333-333333333337"
           conn (db-test/create-conn-with-blocks
-                {:properties {:user.property/notes {:logseq.property/type :default}}
+                {:properties {:user.property/notes {:logseq.property/type :default
+                                                    :db/cardinality :db.cardinality/many}}
                  :pages-and-blocks [{:page {:block/title "Properties"
                                              :block/uuid page-uuid}
                                      :blocks [{:block/title "body"
-                                               :build/properties {:user.property/notes "property value bullet"}}
+                                               :build/properties {:user.property/notes #{"property value bullet"}}}
                                               {:block/title "after"}]}]})
           page (db-test/find-page-by-title @conn "Properties")]
       (-> (markdown-mirror/<mirror-page! test-repo @conn (:db/id page) {:platform platform})
@@ -470,11 +471,9 @@
           (p/then (fn [_]
                     (let [content (get @files (page-path "pages/Issue.md"))]
                       (is (= (str (page-marker (:block/uuid page)) "\n"
-                                  "* reproducible-steps::\n"
-                                  "  - Open settings\n\n"
+                                  "* reproducible-steps:: Open settings\n\n"
                                   "- TODO ## TODO body\n"
-                                  "  * reproducible-steps::\n"
-                                  "    - Click mirror\n"
+                                  "  * reproducible-steps:: Click mirror\n"
                                   "  * rating:: 5")
                              content)))))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
@@ -921,13 +920,33 @@
           (p/then (fn [_]
                     (let [content (get @files (page-path "pages/Page Props.md"))]
                       (is (= (str (page-marker (:block/uuid page)) "\n"
-                                  "* p1::\n"
-                                  "  - hello\n"
+                                  "* p1:: hello\n"
                                   "* p2:: 1\n"
-                                  "* p3::\n"
-                                  "  - Author 1\n\n"
+                                  "* p3:: Author 1\n\n"
                                   "- body")
                              content)))))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest page-mirror-exports-single-value-text-property-on-one-line-test
+  (async done
+    (let [{:keys [platform files]} (fake-platform)
+          conn (db-test/create-conn-with-blocks
+                {:properties {:user.property/single {:logseq.property/type :default}
+                              :user.property/multiple {:logseq.property/type :default
+                                                       :db/cardinality :db.cardinality/many}}
+                 :pages-and-blocks [{:page {:block/title "Cardinality"}
+                                     :blocks [{:block/title "body"
+                                               :build/properties {:user.property/single "some value"
+                                                                  :user.property/multiple #{"listed value"}}}]}]})
+          page (db-test/find-page-by-title @conn "Cardinality")]
+      (-> (markdown-mirror/<mirror-page! test-repo @conn (:db/id page) {:platform platform})
+          (p/then (fn [_]
+                    (let [content (get @files (page-path "pages/Cardinality.md"))]
+                      (is (string/includes? content "* single:: some value")
+                          "a property without Multiple values is one property line")
+                      (is (string/includes? content "* multiple::\n    - listed value")
+                          "a property with Multiple values is a list of value blocks"))))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
 
@@ -972,14 +991,11 @@
           (p/then (fn [_]
                     (let [content (get @files (page-path "journals/2026_05_05.md"))]
                       (is (= (str (page-marker (:block/uuid journal)) "\n"
-                                  "* p1::\n"
-                                  "  - hey\n\n"
+                                  "* p1:: hey\n\n"
                                   "- TODO hello great test\n"
-                                  "  * p1::\n"
-                                  "    - hello\n"
+                                  "  * p1:: hello\n"
                                   "  * p2:: 1\n"
-                                  "  * p3::\n"
-                                  "    - Author 1")
+                                  "  * p3:: Author 1")
                              content)))))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
