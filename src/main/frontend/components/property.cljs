@@ -788,13 +788,10 @@
   (when (seq properties)
     (ordered-properties block properties opts)))
 
-(defonce ^:private *show-hidden-properties-block-ids
-  (atom #{}))
-
 (defn toggle-hidden-properties-visibility!
   [block-uuid]
   (when block-uuid
-    (swap! *show-hidden-properties-block-ids
+    (swap! state/*show-hidden-properties-block-ids
            (fn [ids]
              (if (contains? ids block-uuid)
                (disj ids block-uuid)
@@ -802,9 +799,9 @@
 
 (defn hidden-properties-visible?
   [block-uuid]
-  (contains? @*show-hidden-properties-block-ids block-uuid))
+  (contains? @state/*show-hidden-properties-block-ids block-uuid))
 
-(defn- use-hidden-properties-visible
+(defn use-hidden-properties-visible
   [block-uuid]
   (let [[visible? set-visible!] (hooks/use-state (hidden-properties-visible? block-uuid))
         watch-key (hooks/use-memo #(str "hidden-properties-visible-" (random-uuid)) [])]
@@ -813,14 +810,14 @@
        (set-visible! (hidden-properties-visible? block-uuid))
        (if block-uuid
          (do
-           (add-watch *show-hidden-properties-block-ids watch-key
+           (add-watch state/*show-hidden-properties-block-ids watch-key
                       (fn [_key _ref old-ids new-ids]
                         (let [old-visible? (contains? old-ids block-uuid)
                               new-visible? (contains? new-ids block-uuid)]
                           (when (not= old-visible? new-visible?)
                             (set-visible! new-visible?)))))
            (fn []
-             (remove-watch *show-hidden-properties-block-ids watch-key)))
+             (remove-watch state/*show-hidden-properties-block-ids watch-key)))
          (fn [])))
      [block-uuid])
     visible?))
