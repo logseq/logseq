@@ -45,6 +45,17 @@
   (when (seq caller-selected-blocks)
     loaded-selected-blocks))
 
+(defn- trash-button-handlers
+  "The delete confirmation opens on click, not pointer-down: the pointer-up that
+  ends the press would otherwise count as an outside click and close it. The
+  pointer-down is still stopped so the press does not clear the selection."
+  [on-cut]
+  {:on-pointer-down util/stop
+   :on-click (fn [e]
+               (util/stop e)
+               (on-cut)
+               (state/pub-event! [:editor/hide-action-bar]))})
+
 (hsx/defc action-group
   [{:keys [on-cut on-copy selected-blocks hide-dots? button-border? view-parent outliner?]
     :or {on-cut #(editor-handler/cut-selection-blocks true)
@@ -122,11 +133,7 @@
          (t :property/unset-property))
         (when-not (contains? #{:logseq.class/Page} (:db/ident view-parent))
           (shui/toolbar-button
-           (assoc button-opts
-                  :on-pointer-down (fn [e]
-                                     (util/stop e)
-                                     (on-cut)
-                                     (state/pub-event! [:editor/hide-action-bar])))
+           (merge button-opts (trash-button-handlers on-cut))
            (ui/icon "trash" {:size 13})))
         (when-not hide-dots?
           (shui/toolbar-button
