@@ -6,6 +6,30 @@
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]))
 
+(deftest view-filter-data-keeps-empty-value-when-switching-is-and-is-not
+  (let [conn (d/create-conn db-schema/schema)]
+    (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+    (doseq [operator [:is :is-not]]
+      (is (= :empty
+             (:value-after-operator-change
+              (worker-view/view-filter-data
+               @conn
+               {:property {:db/ident :block/tags
+                           :logseq.property/type :node}
+                :property-ident :block/tags
+                :operator operator
+                :value :empty})))
+          (str "Empty value is kept when changing to " operator)))
+    (is (nil? (:value-after-operator-change
+               (worker-view/view-filter-data
+                @conn
+                {:property {:db/ident :block/tags
+                            :logseq.property/type :node}
+                 :property-ident :block/tags
+                 :operator :text-contains
+                 :value :empty})))
+        "Empty value is dropped for operators that cannot use it")))
+
 (deftest view-filter-data-prepares-operators-and-normalized-values
   (let [conn (d/create-conn db-schema/schema)
         page-uuid #uuid "22222222-2222-2222-2222-222222222222"
