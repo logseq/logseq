@@ -690,6 +690,14 @@ let platform_event payload =
              |> Js.Promise.catch (fun error ->
                   result false (Printexc.to_string error);
                   Js.Promise.resolve ())))
+      else if name = "platform-error" then (
+        let field key =
+          match json with
+          | Js.Json.JObject fields ->
+              Option.get (Js.Json.decodeString (List.assoc key fields))
+          | _ -> invalid_arg "Invalid native platform error" in
+        let message = field "operation" ^ ": " ^ field "message" in
+        Host.enqueue (fun () -> Toast.error message))
       else if name = "window-size" then (
         let f k =
           match json with

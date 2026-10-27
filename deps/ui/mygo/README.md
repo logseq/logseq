@@ -58,6 +58,14 @@ layout; the input sink does not maintain a second document. Theme snapshots feed
 the backend's scoped color defaults. Native file dialogs, downloads, clipboard,
 image decoding and shutdown saving use their real platform services.
 
+Clipboard-write and external-URL OS failures return a `platform-error` event with
+`{"operation":"open-url","message":"<system error>"}` rather than terminating
+the window. The shared native application shows the actual error as a persistent
+toast; this is not a success acknowledgement. Malformed payloads and unsupported
+request names remain fatal protocol errors. Rebuild the native library and host
+together. The desktop must provide its own real default applications; the host
+does not substitute a browser launcher.
+
 This is not a claim of desktop feature or visual parity. Full-window acceptance
 is separate from builds and headless contract tests. Raw CSS classes are not a
 stylesheet engine; unsupported markup/media and imperative operations are

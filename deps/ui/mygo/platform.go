@@ -154,7 +154,7 @@ func (s *platformServices) handle(name, payload string) ([]platformReply, error)
 	switch name {
 	case "clipboard":
 		// WriteText discards errors; the transfer API preserves native failures.
-		return nil, mygo.Clipboard.Write(transfer.TextData(payload))
+		return platformOperationReply(name, mygo.Clipboard.Write(transfer.TextData(payload)))
 	case "clipboard-read":
 		if payload != "" {
 			return nil, fmt.Errorf("expected an empty payload")
@@ -184,7 +184,7 @@ func (s *platformServices) handle(name, payload string) ([]platformReply, error)
 		if parsed.Scheme == "" || strings.ContainsAny(payload, "\x00\r\n") {
 			return nil, fmt.Errorf("expected an absolute external URL")
 		}
-		return nil, mygo.Shell.OpenExternal(payload)
+		return platformOperationReply(name, mygo.Shell.OpenExternal(payload))
 	case "app-icons":
 		var icons map[string]string
 		if err := platformObject(payload, &icons); err != nil {
@@ -360,6 +360,14 @@ func platformObject(payload string, result any) error {
 		return fmt.Errorf("decode JSON object: %w", err)
 	}
 	return nil
+}
+
+func platformOperationReply(operation string, err error) ([]platformReply, error) {
+	if err == nil {
+		return nil, nil
+	}
+	log.Printf("logseq: platform operation %s: %v", operation, err)
+	return platformJSONReply("platform-error", map[string]string{"operation": operation, "message": err.Error()})
 }
 
 func platformJSONReply(name string, value any) ([]platformReply, error) {
