@@ -798,6 +798,12 @@
  :graph/view-mode-all-pages "All pages"
  :graph/view-mode-tags "Tags"
 
+ :graph.add-existing/action "Add existing graph"
+ :graph.add-existing/file-action "Open db.sqlite or ZIP"
+ :graph.add-existing/folder-action "Open graph folder"
+ :graph.add-existing/missing-db-error "This folder is missing db.sqlite. Choose a Logseq DB graph folder, a db.sqlite file, or a SQLite+assets ZIP."
+ :graph.add-existing/unsupported-error "Choose a graph folder, a db.sqlite file, or a SQLite+assets ZIP."
+
  :graph.diagnostics/checksum-failed-error "Failed to compute graph checksum diagnostics."
  :graph.diagnostics/checksum-recomputed-success "Checksum recomputed. Recomputed: {1}, local: {2}, remote: {3}. Downloaded {4}.edn with {5} blocks and checksum attributes {6}."
  :graph.diagnostics/checksum-unavailable-warning "Unable to compute checksum diagnostics for the current graph."

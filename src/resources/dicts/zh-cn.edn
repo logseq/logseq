@@ -798,6 +798,12 @@
  :graph/view-mode-all-pages "所有页面"
  :graph/view-mode-tags "标签"
 
+ :graph.add-existing/action "添加已有图谱"
+ :graph.add-existing/file-action "打开 db.sqlite 或 ZIP"
+ :graph.add-existing/folder-action "打开图谱文件夹"
+ :graph.add-existing/missing-db-error "此文件夹缺少 db.sqlite。请选择 Logseq DB 图谱文件夹、db.sqlite 文件或 SQLite+资源 ZIP。"
+ :graph.add-existing/unsupported-error "请选择图谱文件夹、db.sqlite 文件或 SQLite+资源 ZIP。"
+
  :graph.diagnostics/checksum-failed-error "计算图谱校验和诊断失败。"
  :graph.diagnostics/checksum-recomputed-success "已重新计算校验和。重新计算结果：{1}，本地：{2}，远端：{3}。已下载 {4}.edn，包含 {5} 个 block 和校验和属性 {6}。"
  :graph.diagnostics/checksum-unavailable-warning "无法为当前图谱计算校验和诊断。"
