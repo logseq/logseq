@@ -213,6 +213,69 @@ let remove_view_property view_uuid ident f =
     [ Outliner_ops.op "remove-block-property" [ W.Uuid view_uuid; W.Keyword ident ] ]
     f
 
+let set_gallery_display_properties view_uuid idents f =
+  let source_repo = repo () in
+  let route = Runtime.route () in
+  let fresh () = repo () = source_repo && Runtime.route () = route in
+  let rec resolve acc = function
+    | [] -> Js.Promise.resolve (List.rev acc)
+    | ident :: rest ->
+        let* property =
+          Runtime.invoke3 "thread-api/pull" (W.String source_repo)
+            (W.String "[:db/id]") (W.Keyword ident)
+        in
+        match W.map_get_int property "db/id" with
+        | Some id -> resolve (W.Int id :: acc) rest
+        | None -> failwith "Gallery display property has no db/id"
+  in
+  (let* ids = resolve [] idents in
+   if not (fresh ()) then failwith "Gallery context changed";
+   let* () = Outliner_ops.apply
+     [ Outliner_ops.op "set-block-property"
+         [ W.Uuid view_uuid
+         ; W.Keyword "logseq.property.view/gallery-display-properties"
+         ; W.Array ids ] ]
+   in
+   if fresh () then f ();
+   Js.Promise.resolve ())
+  |> catch_write |> ignore
+
+let set_gallery_asset_property view_uuid ident f =
+  let source_repo = repo () in
+  let route = Runtime.route () in
+  let fresh () = repo () = source_repo && Runtime.route () = route in
+  (let* property =
+     Runtime.invoke3 "thread-api/pull" (W.String source_repo)
+       (W.String "[:db/id]") (W.Keyword ident)
+   in
+   let id = match W.map_get_int property "db/id" with
+     | Some id -> id
+     | None -> failwith "Gallery cover property has no db/id" in
+   if not (fresh ()) then failwith "Gallery context changed";
+   let* () = Outliner_ops.apply
+     [ Outliner_ops.op "set-block-property"
+         [ W.Uuid view_uuid
+         ; W.Keyword "logseq.property.view/gallery-asset-property"
+         ; W.Int id ] ]
+   in
+   if fresh () then f ();
+   Js.Promise.resolve ())
+  |> catch_write |> ignore
+
+let set_gallery_card_size view_uuid size f =
+  if not (List.mem size ["default"; "compact"]) then
+    invalid_arg "Invalid gallery card size";
+  set_view_property view_uuid "logseq.property.view/gallery-card-size"
+    (W.Keyword size) f
+
+let set_gallery_dimensions view_uuid width height f =
+  let set ident value = Outliner_ops.op "set-block-property"
+    [W.Uuid view_uuid; W.Keyword ident; value] in
+  apply_ops
+    [ set "logseq.property.view/gallery-card-size" (W.Keyword "custom")
+    ; set "logseq.property.view/gallery-card-width" (W.Int (max 100 (min 1024 width)))
+    ; set "logseq.property.view/gallery-card-height" (W.Int (max 100 (min 1024 height))) ] f
+
 let save_block_title uuid title f =
   let _ =
     (let* op = Outliner_ops.save_block_parsed uuid title in

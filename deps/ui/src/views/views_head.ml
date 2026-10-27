@@ -484,6 +484,75 @@ let groupable_columns inst =
     (Views_table.page_column ()) :: cols
   else cols
 
+let gallery_custom_size inst view : t = fun ctx parent ->
+  let width, height = Wr.gallery_dimensions view in
+  let width = Signal.state ctx.Lui_ui.ui_scheduler (string_of_int width) in
+  let height = Signal.state ctx.Lui_ui.ui_scheduler (string_of_int height) in
+  let view_uuid = (V.get inst).V.view_uuid in
+  let commit () =
+    match int_of_string_opt (Signal.get_state width),
+          int_of_string_opt (Signal.get_state height) with
+    | Some width, Some height when (V.get inst).V.view_uuid = view_uuid ->
+        Views_db.set_gallery_dimensions view_uuid width height (fun () -> refresh inst);
+        P.close_all ()
+    | _ -> ()
+  in
+  let field label draft =
+    column ~gap:4
+      [ text ~value:(I.t label) []
+      ; Ui_components.input ~label:(I.t label)
+          ~text:(reactive (fun text -> text) (Signal.value draft))
+          ~on_input:(function L.TextChanged (_, text) -> Signal.set draft text | _ -> ())
+          ~on_submit:(fun _ -> commit ()) [] ]
+  in
+  column ~gap:8 ~width:240 ~max_width:280 ~padding:12
+    [ text ~value:(I.t "view.gallery/custom-size") []
+    ; field "view.gallery/width" width
+    ; field "view.gallery/height" height
+    ; Ui_components.button ~variant:`default ~text:(I.t "ui/save") ~size:`sm
+        ~disabled:(reactive (fun width height ->
+          int_of_string_opt width = None || int_of_string_opt height = None)
+          (Signal.value width) (Signal.value height))
+        ~on_press:(fun _ -> commit ()) [] ] ctx parent
+
+let gallery_menu_items inst =
+  let s = V.get inst in
+  if s.V.display_type <> "gallery" then []
+  else
+    let cover_columns = List.filter
+      (fun c -> List.mem c.V.c_type ["asset"; "url"]) s.V.columns in
+    let cover = Wr.gallery_asset_ident ~asset_class:s.V.asset_class
+      ~infer:(List.mem inst.V.feature ["class-objects"; "query-result"])
+      ~cover_idents:(List.map (fun c -> c.V.c_id) cover_columns) s.V.view_ent in
+    let columns = List.filter (fun c -> c.V.c_id <> "select" && c.V.c_id <> "id"
+      && Some c.V.c_id <> cover) s.V.columns in
+    let display = Wr.gallery_display_idents
+      ~column_idents:(List.map (fun c -> c.V.c_id) columns)
+      ~asset_ident:cover s.V.view_ent in
+    let after () = if (V.get inst).V.view_uuid = s.V.view_uuid then refresh inst in
+    let size = Option.bind s.V.view_ent (fun view -> view.Wr.vgallery_size) in
+    [ P.MSub (I.t "view.gallery/display-properties",
+        List.map (fun c -> P.MCheck (c.V.c_name, List.mem c.V.c_id display,
+          fun checked ->
+            let selected = if checked then c.V.c_id :: display
+              else List.filter ((<>) c.V.c_id) display in
+            Views_db.set_gallery_display_properties s.V.view_uuid
+              (List.filter_map (fun c ->
+                if List.mem c.V.c_id selected then Some c.V.c_id else None) columns) after)) columns) ]
+    @ (if cover_columns = [] then [] else
+        [ P.MSub (I.t "view.gallery/cover-property",
+            List.map (fun c -> P.MCheck (c.V.c_name, cover = Some c.V.c_id,
+              fun checked -> if checked then
+                Views_db.set_gallery_asset_property s.V.view_uuid c.V.c_id after)) cover_columns) ])
+    @ [ P.MSub (I.t "view.gallery/card-size",
+        [ P.MCheck (I.t "view.gallery/default-size", size = None || size = Some "default",
+            fun checked -> if checked then
+              Views_db.set_gallery_card_size s.V.view_uuid "default" after)
+        ; P.MCheck (I.t "view.gallery/compact-size", size = Some "compact",
+            fun checked -> if checked then
+              Views_db.set_gallery_card_size s.V.view_uuid "compact" after)
+        ; P.MCustom (gallery_custom_size inst s.V.view_ent) ]) ]
+
 let rec show_more_menu inst =
   match Ui_services.dom_by_id ("vmore-" ^ string_of_int inst.V.id) with
   | None -> ()
@@ -552,7 +621,7 @@ let rec show_more_menu inst =
           in
           ignore
             (P.show_menu ~anchor ~align_end:true
-               (subs
+               (gallery_menu_items inst @ subs
                 @ [ P.MItem ((I.t "view/export-edn"), fun () -> (V.ops ()).V.o_export inst)
                   ]))
 
