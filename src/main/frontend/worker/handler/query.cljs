@@ -240,6 +240,45 @@
      :tasks? (contains? rules-found :task)
      :opaque? (boolean (seq opaque-rules))}))
 
+(defn- recycled-eids
+  "Ids of the recycled roots (they carry :logseq.property/deleted-at) and of
+  everything below them, which carries no deleted-at of its own."
+  [db]
+  (loop [queue (mapv :e (d/datoms db :avet :logseq.property/deleted-at))
+         seen (transient #{})]
+    (if-let [id (peek queue)]
+      (if (contains? seen id)
+        (recur (pop queue) seen)
+        (recur (into (pop queue) (map :e) (d/datoms db :avet :block/parent id))
+               (conj! seen id)))
+      (persistent! seen))))
+
+(defn- ref-attributes
+  "Attributes whose values are entity ids: schema refs and ref-typed properties"
+  [db]
+  (into (into #{}
+              (comp (filter (fn [[_ schema]] (= :db.type/ref (:db/valueType schema))))
+                    (map key))
+              (d/schema db))
+        (comp (filter (fn [datom] (= :db.type/ref (:v datom))))
+              (keep (fn [datom] (:db/ident (d/entity db (:e datom))))))
+        (d/datoms db :aevt :db/valueType)))
+
+(defn- without-recycled
+  "db as if its recycled entities were permanently deleted: no datom of a
+  recycled entity and none pointing at one. Recycling keeps every attribute on
+  the entity, so left in, it would still match inside joins, `not` and aggregates
+  of a query, whose result is only filtered afterwards."
+  [db]
+  (let [recycled (recycled-eids db)]
+    (if (empty? recycled)
+      db
+      (let [ref-attrs (ref-attributes db)]
+        (d/filter db (fn [_ datom]
+                       (not (or (contains? recycled (:e datom))
+                                (and (contains? ref-attrs (:a datom))
+                                     (contains? recycled (:v datom)))))))))))
+
 (defn execute-custom-query
   [db query-m context]
   (when-not (and (map? query-m)
@@ -258,7 +297,7 @@
         resolved-inputs (mapv #(resolve-custom-query-input db % context) inputs)
         query-args (cond-> resolved-inputs
                      rules-required? (conj rules-input))]
-    (apply d/q resolved-query db query-args)))
+    (apply d/q resolved-query (without-recycled db) query-args)))
 
 (defn- require-query-context!
   [context]
