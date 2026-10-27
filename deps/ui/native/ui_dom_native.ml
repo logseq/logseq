@@ -77,14 +77,17 @@ let rec json_of_js (v : Js.Json.t) : Json.t =
 let task_of (p : 'a Js.Promise.t) : 'a Ui_task.t =
   Ui_task.create (fun ~resolve ~reject ->
       Js.Promise.then_ (fun v -> resolve v; Js.Promise.resolve ()) p
-      |> Js.Promise.catch (fun _ ->
-          reject (Failure "host promise rejected");
+      |> Js.Promise.catch (fun error ->
+          reject error;
           Js.Promise.resolve ())
       |> ignore)
 
 let file_of_json (f : Js.Json.t) : Ui_services.file =
   { Ui_services.file_name = Browser_ui.file_name f
   ; file_size = Browser_ui.file_size f
+  ; file_relative_path = Dom_ext.str_prop "relative-path" f
+  ; file_last_modified =
+      Option.bind (jfield "last-modified" f) Js.Json.decodeNumber
   ; file_text =
       (fun () ->
         task_of

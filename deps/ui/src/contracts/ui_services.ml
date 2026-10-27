@@ -210,6 +210,11 @@ type timers = {
 type file = {
   file_name : string;
   file_size : float;
+  (* Inside the selected directory, '/'-separated, without the root name,
+     absolute prefixes, empty segments, '.' or '..'. Single files use None. *)
+  file_relative_path : string option;
+  (* Epoch milliseconds; None when the host cannot supply a timestamp. *)
+  file_last_modified : float option;
   file_text : unit -> string Ui_task.t;
   (* Raw bytes as a binary string — the Wire.Binary payload shape. *)
   file_binary : unit -> string Ui_task.t;

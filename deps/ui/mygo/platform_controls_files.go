@@ -8,6 +8,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"io/fs"
 	"mime"
 	"os"
 	"path/filepath"
@@ -109,20 +111,15 @@ func (s *platformServices) desktopFileRequest(op string, request map[string]json
 			if ctx.Err() != nil {
 				return nil, ctx.Err()
 			}
-			files := make([]map[string]any, 0, len(paths))
-			for _, path := range paths {
-				info, statErr := os.Stat(path)
-				if statErr != nil {
-					err = errors.Join(err, statErr)
-					continue
-				}
-				size := info.Size()
-				if info.IsDir() {
-					size = 0
-				}
-				files = append(files, map[string]any{"name": filepath.Base(path), "size": size, "path": path})
+			var files []map[string]any
+			if err == nil {
+				files, err = platformPickedFiles(ctx, paths, directory)
 			}
-			replies, encodeErr := platformJSONReply("files-picked", map[string]any{"request": id, "files": files})
+			result := map[string]any{"request": id, "files": files}
+			if err != nil {
+				result["error"] = err.Error()
+			}
+			replies, encodeErr := platformJSONReply("files-picked", result)
 			return replies, errors.Join(err, encodeErr)
 		})
 	}
@@ -167,6 +164,135 @@ func (s *platformServices) desktopFileRequest(op string, request map[string]json
 		}
 		return nil, platformWriteDownload(path, data)
 	})
+}
+
+func platformPickedFiles(ctx context.Context, paths []string, directory bool) ([]map[string]any, error) {
+	if directory {
+		if len(paths) == 0 {
+			return nil, nil
+		}
+		if len(paths) != 1 {
+			return nil, fmt.Errorf("select exactly one graph directory")
+		}
+		return platformDirectoryFiles(ctx, paths[0])
+	}
+	files := make([]map[string]any, 0, len(paths))
+	for _, path := range paths {
+		info, err := os.Stat(path)
+		if err != nil {
+			return nil, err
+		}
+		size := info.Size()
+		if info.IsDir() {
+			size = 0
+		}
+		files = append(files, map[string]any{
+			"name": filepath.Base(path), "size": size, "path": path,
+			"last-modified": float64(info.ModTime().UnixMilli()),
+		})
+	}
+	return files, nil
+}
+
+// Directory bytes are captured while the selected root is open. No absolute
+// paths reach the importer and later file reads cannot follow a replaced path.
+func platformDirectoryFiles(ctx context.Context, path string) ([]map[string]any, error) {
+	root, err := os.OpenRoot(path)
+	if err != nil {
+		return nil, platformDirectoryError("open", ".", err)
+	}
+	defer root.Close()
+	var files []map[string]any
+	err = fs.WalkDir(root.FS(), ".", func(name string, entry fs.DirEntry, walkErr error) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if walkErr != nil {
+			return platformDirectoryError("enumerate", name, walkErr)
+		}
+		if name == "." {
+			return nil
+		}
+		if platformIgnoredImportPath(name, entry.IsDir()) {
+			if entry.IsDir() {
+				return fs.SkipDir
+			}
+			return nil
+		}
+		if entry.Type()&fs.ModeSymlink != 0 {
+			return fmt.Errorf("graph directory contains a symbolic link: %q", name)
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		if !entry.Type().IsRegular() {
+			return fmt.Errorf("graph directory contains a non-regular file: %q", name)
+		}
+		file, err := root.Open(name)
+		if err != nil {
+			return platformDirectoryError("open", name, err)
+		}
+		defer file.Close()
+		info, err := file.Stat()
+		if err != nil {
+			return platformDirectoryError("stat", name, err)
+		}
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("graph entry is not a regular file: %q", name)
+		}
+		data, err := io.ReadAll(io.LimitReader(file, info.Size()+1))
+		if err != nil {
+			return platformDirectoryError("read", name, err)
+		}
+		if int64(len(data)) != info.Size() {
+			return fmt.Errorf("graph file changed size during selection: %q", name)
+		}
+		files = append(files, map[string]any{
+			"name": name, "relative-path": name, "size": info.Size(),
+			"last-modified": float64(info.ModTime().UnixMilli()),
+			"data-b64":      base64.StdEncoding.EncodeToString(data),
+		})
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	if len(files) == 0 {
+		return nil, fmt.Errorf("selected graph directory contains no importable files")
+	}
+	return files, nil
+}
+
+// Match file-graph import exclusions before reading bytes. Assets are exempt,
+// including binary extensions, as in the shared/dev import contract.
+func platformIgnoredImportPath(name string, directory bool) bool {
+	if name == "assets" || strings.HasPrefix(name, "assets/") {
+		return false
+	}
+	for _, part := range strings.Split(name, "/") {
+		if strings.HasPrefix(part, ".") || part == "node_modules" {
+			return true
+		}
+	}
+	for _, ignored := range []string{"logseq/bak", "logseq/version-files", "logseq/graphs-txid.edn"} {
+		if name == ignored || strings.HasPrefix(name, ignored+"/") ||
+			strings.HasSuffix(name, "/"+ignored) || strings.Contains(name, "/"+ignored+"/") {
+			return true
+		}
+	}
+	if directory {
+		return false
+	}
+	ext := strings.ToLower(filepath.Ext(name))
+	return ext != "" && !slices.Contains([]string{".md", ".markdown", ".org", ".js", ".edn", ".css"}, ext)
+}
+
+func platformDirectoryError(op, name string, err error) error {
+	var pathError *os.PathError
+	if errors.As(err, &pathError) {
+		err = pathError.Err
+	}
+	return fmt.Errorf("selected graph %s %q: %w", op, name, err)
 }
 
 // Confirm supports an asynchronous model producer without inventing a DOM
