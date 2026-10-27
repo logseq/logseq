@@ -700,7 +700,13 @@ let cmdk_empty ~key children : t =
    rotated arrow transform remain CSS deco rules; pointer-events stays
    off so the bubble never steals hover from its own trigger. *)
 let tooltip_content ~key ~at ~arrow_x ~above children : t =
-  with_props
+ fun ctx parent ->
+  let viewport = Ui_services.viewport_width_signal
+    ~scheduler:ctx.Lui_ui.ui_scheduler ~scope:ctx.Lui_ui.ui_scope in
+  Ui_parts.int_prop P.MaxWidth
+    ~value:(reactive (fun viewport ->
+      int_of_float (Float.max 0. (Float.min 320. (viewport -. 10.)))) viewport)
+    (with_props
     [ Prop.z_index 50
     ; Prop.pointer_enabled false
     ; ( Prop.shadow
@@ -710,7 +716,7 @@ let tooltip_content ~key ~at ~arrow_x ~above children : t =
     (popover ~transition:popover_transition ~key ~accessibility_identifier:"lui-tooltip" ~at
        ~style_class:"ui__tooltip-content" ~gap:6
        ~data_attrs:[ "role", "tooltip" ]
-       ~padding_horizontal:12 ~padding_vertical:6 ~max_width:320
+       ~padding_horizontal:12 ~padding_vertical:6
        ~corner_radius:6 ~border_width:1
        ~border_color:"hsl(var(--border))" ~background:"hsl(var(--popover))"
        ~foreground:"hsl(var(--popover-foreground))"
@@ -728,7 +734,7 @@ let tooltip_content ~key ~at ~arrow_x ~above children : t =
                ~height:8 ~border_width:1
                ~border_color:"hsl(var(--border))"
                ~background:"hsl(var(--popover))" [])
-        ]))
+        ]))) ctx parent
 
 let ls_tooltip_col ~key children : t =
   column ~key ~cross:`start ~gap:4 children
@@ -1117,11 +1123,7 @@ let flat_toolbar ~key ?(cls = "") ?opacity_signal ~label children : t =
    is hand-rolled (not the dialog kind) because outside presses must
    NOT dismiss; it rides a cover popover for the scrim + Escape.
 
-   Web keeps position:fixed + left/top/translate centering through the
-   documented data-attrs style pair (left:%/transform have no prop);
-   the native host anchors absolute children through the parent's flex
-   centering —
-   the same mechanism .cp__dialog-shell uses. *)
+   Both backends center the in-flow card through the cover column. *)
 let alert_dialog_overlay ~key children =
   with_props
     [ Prop.position `fixed; Prop.inset 0.; Prop.z_index 999 ]
@@ -1131,20 +1133,23 @@ let alert_dialog_overlay ~key children =
          "color-mix(in oklab, var(--lui-c-background) 80%, transparent)"
        children)
 
-let alert_dialog_content ~key ~data_attrs children =
-  with_props
-    [ Prop.position `fixed; Prop.z_index 999
+let alert_dialog_content ~key ~data_attrs children : t =
+ fun ctx parent ->
+  let viewport = Ui_services.viewport_width_signal
+    ~scheduler:ctx.Lui_ui.ui_scheduler ~scope:ctx.Lui_ui.ui_scope in
+  Ui_parts.int_prop P.WidthValue
+    ~value:(reactive (fun viewport ->
+      int_of_float (Float.max 0. (Float.min 512. (viewport -. 32.)))) viewport)
+    (with_props
+    [ Prop.position `relative; Prop.z_index 999
+    ; Prop.max_height_viewport 0.9; Prop.overflow `auto
     ; ( Prop.shadow "0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px \
             rgb(0 0 0 / 0.1)" ) ]
-    (column ~key ~gap:16 ~padding:24 ~max_width:512 ~corner_radius:8
+    (column ~key ~gap:16 ~padding:24 ~min_width:0 ~max_width:512 ~corner_radius:8
        ~border_width:1 ~border_color:"hsl(var(--border))"
        ~background:"var(--ls-primary-background-color, var(--lui-c-background))"
        ~style_class:"ui__alert-dialog-content"
-       ~data_attrs:
-         ( ( "style"
-           , "left:50%;top:50%;width:100%;transform:translate(-50%,-50%)" )
-         :: data_attrs )
-       children)
+       ~data_attrs children)) ctx parent
 
 (* gap-2 column (the deleted rule's text-align:left is the inherited
    default — no ancestor centers) *)
