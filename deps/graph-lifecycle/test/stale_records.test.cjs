@@ -1,5 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
+const cp = require('node:child_process');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -67,3 +68,57 @@ for (const [description, repo] of [['of one graph', 'stale graph'], ['of every g
     });
   });
 }
+
+const LONG_AGO = new Date(Date.now() - 60000);
+
+function exitedPid() {
+  return cp.spawnSync(process.execPath, ['--version']).pid;
+}
+
+// Runs the startup cleanup of a leftover worker, which rewrites server-list under server-list.lock.
+async function cleanUpLeftoverWorkerWithLock(storage, repo, lockText, lockTime) {
+  registerLeftoverWorker(storage, repo, exitedPid());
+  const lock = path.join(storage.root, 'server-list.lock');
+  fs.writeFileSync(lock, lockText);
+  if (lockTime) fs.utimesSync(lock, lockTime, lockTime);
+  await lifecycle.stopOutdatedWorkers(storage, REVISION, repo);
+  assert.equal(fs.existsSync(lock), false, 'the lock is released');
+  assert.deepEqual(lifecycle.snapshot(storage, repo).workers, []);
+}
+
+for (const [description, lockText] of [['empty', ''], ['truncated', '{"pid":'], ['not JSON', 'garbage'],
+  ['JSON null', 'null'], ['missing its holder PID', '{"lock-id":"abc"}']]) {
+  test(`startup cleanup reclaims a server-list lock that is ${description}`, async () => {
+    await withGraph((storage, repo) => cleanUpLeftoverWorkerWithLock(storage, repo, lockText, LONG_AGO));
+  });
+}
+
+test('startup cleanup reclaims a freshly written unusable server-list lock once it stays unusable', async () => {
+  await withGraph((storage, repo) => cleanUpLeftoverWorkerWithLock(storage, repo, '', null));
+});
+
+test('startup cleanup reclaims a server-list lock held by an exited process', async () => {
+  await withGraph((storage, repo) =>
+    cleanUpLeftoverWorkerWithLock(storage, repo, JSON.stringify({ pid: exitedPid(), 'lock-id': 'abc' }), null));
+});
+
+test('startup cleanup reclaims a server-list lock whose holder PID now belongs to another user', async () => {
+  await withGraph(async (storage, repo) => {
+    const restore = denySignalZero(STALE_PID);
+    try {
+      await cleanUpLeftoverWorkerWithLock(storage, repo, JSON.stringify({ pid: STALE_PID, 'lock-id': 'abc' }), null);
+    } finally {
+      restore();
+    }
+  });
+});
+
+test('startup cleanup does not take a server-list lock held by a live process', async () => {
+  await withGraph(async (storage, repo) => {
+    registerLeftoverWorker(storage, repo, exitedPid());
+    const lock = path.join(storage.root, 'server-list.lock');
+    fs.writeFileSync(lock, JSON.stringify({ pid: process.pid, 'lock-id': 'live' }));
+    await assert.rejects(lifecycle.stopOutdatedWorkers(storage, REVISION, repo), /Timed out acquiring server-list lock/);
+    assert.equal(JSON.parse(fs.readFileSync(lock, 'utf8'))['lock-id'], 'live');
+  });
+});
