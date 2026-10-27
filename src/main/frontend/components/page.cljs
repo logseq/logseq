@@ -191,11 +191,19 @@
 
 (hsx/defc block-route-root
   [block-uuid block config hide-add-button?]
-  (let [child-uuids (db-hooks/use-children block-uuid)]
-    [:div.page-blocks-inner.relative
-     (block/page-root-virtual-list config [block-uuid])
-     (when-not (hide-block-route-add-button? block hide-add-button?)
-       (add-button block child-uuids config))]))
+  (let [child-uuids (db-hooks/use-children block-uuid)
+        {:keys [status value error]}
+        (db-hooks/use-block-projection-snapshot
+         (get-in block [:block/page :block/uuid]) :block/title)
+        config (assoc config :current-page-title value)]
+    (case status
+      :ready
+      [:div.page-blocks-inner.relative
+       (block/page-root-virtual-list config [block-uuid])
+       (when-not (hide-block-route-add-button? block hide-add-button?)
+         (add-button block child-uuids config))]
+      (:loading :missing) nil
+      :error (throw error))))
 
 (hsx/defc page-blocks-cp
   [page {:keys [hide-add-button? on-page-blocks-rendered] :as option}]
