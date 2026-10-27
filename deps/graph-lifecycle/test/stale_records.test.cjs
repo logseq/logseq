@@ -452,6 +452,29 @@ test('admission while something holds the graph reports it as locked, not as EPE
   });
 });
 
+async function closedPort() {
+  const server = require('node:net').createServer();
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  const { port } = server.address();
+  await new Promise(resolve => server.close(resolve));
+  return port;
+}
+
+test('stop and delete probe an unregistered server-list entry with an unsignalable PID instead of failing with EPERM', async () => {
+  await withGraph(async (storage, repo) => {
+    const list = path.join(storage.root, 'server-list');
+    fs.writeFileSync(list, `${STALE_PID} ${await closedPort()}\n`);
+    const restore = denySignalZero(STALE_PID);
+    try {
+      await assert.rejects(lifecycle.stopGraph(storage, repo, 'cli'), { code: 'server-not-found' });
+      const deleted = await lifecycle.deleteGraph(storage, repo);
+      assert.equal(deleted.existed, true);
+    } finally {
+      restore();
+    }
+  });
+});
+
 test('stop and delete still refuse to go on past a PID this user may not signal', async () => {
   await withGraph(async (storage, repo) => {
     registerLeftoverWorker(storage, repo, STALE_PID);
