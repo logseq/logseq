@@ -775,6 +775,38 @@
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
 
+(deftest page-mirror-writes-a-code-block-id-after-a-longer-fence-test
+  (async done
+    (let [{:keys [platform files]} (fake-platform)
+          code-uuid #uuid "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa4"
+          embed-uuid #uuid "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb5"
+          conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "Fence Page"}
+                   :blocks [{:block/title "a\n```\nb"
+                             :block/uuid code-uuid
+                             :build/keep-uuid? true
+                             :build/tags [:logseq.class/Code-block]
+                             :build/properties {:logseq.property.node/display-type :code
+                                                :logseq.property.code/lang "markdown"}}
+                            {:block/title ""
+                             :block/uuid embed-uuid
+                             :build/keep-uuid? true}]}]})
+          _ (d/transact! conn [{:db/id (:db/id (d/entity @conn [:block/uuid embed-uuid]))
+                                :block/link (:db/id (d/entity @conn [:block/uuid code-uuid]))}])
+          page (db-test/find-page-by-title @conn "Fence Page")]
+      (-> (markdown-mirror/<mirror-page! test-repo @conn (:db/id page) {:platform platform})
+          (p/then (fn [_]
+                    (let [content (get @files (page-path "pages/Fence Page.md"))
+                          lines (string/split-lines content)
+                          id-at (.indexOf lines (str "  id:: " code-uuid))
+                          closing-at (.lastIndexOf lines "  ````")]
+                      (is (pos? closing-at) (str "the code holds ``` so its fence is longer: " content))
+                      (is (= (inc closing-at) id-at)
+                          (str "the id follows the closing fence, not the ``` line inside the code: " content)))))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
 (deftest page-mirror-writes-embedded-node-as-embed-macro-test
   (async done
     (let [{:keys [platform files]} (fake-platform)

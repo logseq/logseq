@@ -393,6 +393,18 @@
   [content]
   (string/starts-with? (string/trim (or content "")) "```"))
 
+(defn- code-fence-marker
+  "The backticks opening a code fence (\"```\", or longer when the code holds a run of backticks), or nil."
+  [content]
+  (second (re-find #"^\s*(`{3,})" (or content ""))))
+
+(defn- closes-code-fence?
+  "A line that closes the fence opened by marker: only backticks, at least as many (a shorter run inside the code
+  is code)."
+  [line marker]
+  (let [t (string/trim (or line ""))]
+    (boolean (and (re-matches #"`{3,}" t) (>= (count t) (count marker))))))
+
 (defn- normalize-rendered-match-text
   [content]
   (-> (or content "")
@@ -538,20 +550,20 @@
            lines initial-lines
            seen-block? false
            property-indent nil
-           in-code-block? false
+           in-code-block? nil ; the opening fence's backticks while inside a code block
            fence-id-line nil]
       (if (nil? line)
         (string/join "\n" lines)
         (cond
           in-code-block?
-          (let [closing? (code-fence-block-line? line)]
+          (let [closing? (closes-code-fence? line in-code-block?)]
             (recur more
                    (cons block-line-info' more-block-line-infos)
                    (cond-> (conj lines line)
                      (and closing? fence-id-line) (conj fence-id-line))
                    seen-block?
                    property-indent
-                   (not closing?)
+                   (when-not closing? in-code-block?)
                    (when-not closing? fence-id-line)))
 
           (property-value-line? line property-indent)
@@ -570,8 +582,8 @@
                              (and insert-blank-before-first-block?
                                   (not seen-block?)) (conj "")
                              true (into (decorate-block-line block-line-info' line options)))
-                    fence? (and (:code-block? block-line-info')
-                                (code-fence-block-line? title))]
+                    fence? (when (:code-block? block-line-info')
+                             (code-fence-marker title))]
                 (recur more
                        more-block-line-infos
                        lines'
