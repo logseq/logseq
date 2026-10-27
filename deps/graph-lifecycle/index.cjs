@@ -26,6 +26,12 @@ function readJSON(file) {
   try { return JSON.parse(fs.readFileSync(file, 'utf8')); }
   catch (error) { if (error.code === 'ENOENT') return null; throw error; }
 }
+// state.json is replaced atomically, so one that cannot be read or parsed was damaged from outside. Like other
+// invalid lifecycle metadata it is refused with a coded error and left as it is, never rewritten.
+function readState(file) {
+  try { return readJSON(file); }
+  catch (error) { throw Object.assign(new Error(`Invalid lifecycle state: ${error.message}`, { cause: error }), { code: 'server-stop-failed' }); }
+}
 function writeJSON(file, value) {
   const temporary = `${file}.${id()}.tmp`;
   try {
@@ -75,7 +81,7 @@ function context(storage, repo) {
     stateFile: path.join(dir, 'state.json') };
 }
 function snapshot(storage, repo) {
-  return readJSON(path.join(storage.lifecycleDir, encodeGraph(repo), 'state.json'));
+  return readState(path.join(storage.lifecycleDir, encodeGraph(repo), 'state.json'));
 }
 function sameStorage(ctx, value) {
   return value && value.graphsDir && value.lifecycleDir
@@ -129,7 +135,7 @@ async function acquireLease(ctx, operation, checkWaiting) {
       released = true;
       try {
         // The action may have replaced the generation or advanced deletion state.
-        const latest = readJSON(ctx.stateFile);
+        const latest = readState(ctx.stateFile);
         if (latest?.owner?.id !== owner.id) fail('Lifecycle lease ownership changed');
         delete latest.owner;
         writeJSON(ctx.stateFile, latest);
@@ -150,12 +156,13 @@ async function withLease(ctx, operation, action, checkWaiting) {
   try { return await action(); } finally { release(); }
 }
 function state(ctx) {
-  let value = readJSON(ctx.stateFile);
+  let value = readState(ctx.stateFile);
   if (value === null && !fs.existsSync(ctx.stateFile)) {
     value = { generation: id(), phase: fs.existsSync(ctx.graphDir) ? 'available' : 'absent', workers: [] };
     writeJSON(ctx.stateFile, value);
   }
-  if (!value || !Array.isArray(value.workers) || typeof value.generation !== 'string' || typeof value.phase !== 'string')
+  if (!value || !Array.isArray(value.workers) || typeof value.generation !== 'string' || typeof value.phase !== 'string'
+      || value.workers.some(record => !record || typeof record !== 'object' || Array.isArray(record)))
     fail('Invalid lifecycle state');
   return value;
 }
@@ -222,7 +229,7 @@ async function admit({ storage, repo, ticket, generation, owner }) {
       return runtime;
     } catch (error) { handle.release(); throw error; }
   }, ticket ? () => {
-    const current = readJSON(ctx.stateFile);
+    const current = readState(ctx.stateFile);
     if (current?.generation !== generation || !current.workers.some(record => record.ticket === ticket && record.pid === process.pid))
       fail('Worker admission registration was revoked', 'server-start-failed');
   } : undefined);
@@ -231,8 +238,8 @@ function assertOwnership(runtime) {
   const handle = ownership.get(runtime);
   if (!handle) fail('Graph ownership handle is missing', 'repo-locked');
   handle.assert();
-  const current = readJSON(runtime.stateFile);
-  if (current.generation !== runtime.generation || !registered(current, runtime))
+  const current = readState(runtime.stateFile);
+  if (!current || current.generation !== runtime.generation || !registered(current, runtime))
     fail('Graph ownership admission changed', 'repo-locked');
 }
 function releaseOwnership(runtime) {
@@ -254,7 +261,8 @@ function runtimeRecord(runtime) {
     'ownership-protocol': runtime['ownership-protocol'] };
 }
 function checkAdmission(runtime) {
-  const current = readJSON(runtime.stateFile);
+  const current = readState(runtime.stateFile);
+  if (!current) fail('Worker admission registration changed', 'server-start-failed');
   requireAvailable(runtime, current, runtime.generation);
   if (!registered(current, runtime)) fail('Worker admission registration changed', 'server-start-failed');
 }
@@ -272,7 +280,8 @@ function recordStop(runtime, error) {
     error: error ? String(error.message || error) : null });
 }
 function abortAdmission(runtime, error) {
-  if (registered(readJSON(runtime.stateFile), runtime)) recordStop(runtime, error);
+  const current = readState(runtime.stateFile);
+  if (current && registered(current, runtime)) recordStop(runtime, error);
 }
 function entries(root) {
   let raw;
@@ -947,7 +956,14 @@ function observe(storage, repo, generation, onChange) {
   let previous;
   const inspect = () => {
     if (closed) return;
-    const current = readJSON(ctx.stateFile);
+    let current;
+    try { current = readState(ctx.stateFile); }
+    catch (error) {
+      // A damaged state.json is no reason to stop watching or to throw out of a timer.
+      const key = `unreadable: ${error.message}`;
+      if (key !== previous) { previous = key; onChange({ phase: 'observation-failed', error: error.message }); }
+      return;
+    }
     if (!current || current.generation !== generation || current.phase !== 'available') {
       const key = JSON.stringify([current?.generation, current?.phase]);
       if (key !== previous) { previous = key; onChange(current); }

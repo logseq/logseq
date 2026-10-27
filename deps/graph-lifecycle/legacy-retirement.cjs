@@ -24,7 +24,8 @@ module.exports = function ({ fail, readJSON, writeJSON, graphName, canonicalRoot
     const exists = scan ? scan.pidExists : pidExists;
     const original = artifact(file);
     const disk = parse(original);
-    const records = current.workers.filter(record => record['ownership-protocol'] === undefined);
+    // A record without a root cannot be correlated with a legacy lock; discover refuses it as an invalid registration.
+    const records = current.workers.filter(record => record['ownership-protocol'] === undefined && typeof record.root === 'string');
     if (original === null && !records.length) return [];
     const recordsBefore = JSON.stringify(current.workers);
     const runtimeBefore = new Map(records.map(record => [record.ticket, artifact(runtimeFile(ctx, record.ticket))]));
@@ -136,7 +137,7 @@ module.exports = function ({ fail, readJSON, writeJSON, graphName, canonicalRoot
     }
     for (const record of records) fs.rmSync(runtimeFile(ctx, record.ticket), { force: true });
     if (records.length) {
-      current.workers = current.workers.filter(record => record['ownership-protocol'] !== undefined);
+      current.workers = current.workers.filter(record => !records.includes(record));
       writeJSON(ctx.stateFile, current);
     }
     return retired;
