@@ -333,17 +333,28 @@
                        (if (set? val-or-vals) val-or-vals [val-or-vals]))))
        set))
 
+(declare merge-blocks-with-same-uuid)
+
+(defn- merge-two-blocks-with-same-uuid
+  "Merges two exports of one block. Their :build/children are merged by child
+  uuid so that a child exported in full is not replaced by a shallow copy of it."
+  [block1 block2]
+  (cond-> (merge block1 block2)
+    (and (:build/children block1) (:build/children block2))
+    (assoc :build/children (merge-blocks-with-same-uuid
+                            (into (vec (:build/children block1)) (:build/children block2))))))
+
 (defn- merge-blocks-with-same-uuid
   "Keeps one block per :block/uuid, at the position of its first occurrence, so
   that a block exported twice (e.g. as a selected block and as a referenced
-  one) is not imported at two positions. The occurrences are merged. Blocks
-  without a :block/uuid are kept as is."
+  one) is not imported at two positions. The occurrences are merged, including
+  their children. Blocks without a :block/uuid are kept as is."
   [blocks]
   (let [merged-by-uuid (->> blocks
                             (filter :block/uuid)
                             (group-by :block/uuid)
                             (into {} (map (fn [[block-uuid same-uuid-blocks]]
-                                            [block-uuid (apply merge same-uuid-blocks)]))))]
+                                            [block-uuid (reduce merge-two-blocks-with-same-uuid same-uuid-blocks)]))))]
     (first
      (reduce (fn [[result seen-uuids] block]
                (let [block-uuid (:block/uuid block)]
