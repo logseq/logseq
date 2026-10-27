@@ -1,120 +1,98 @@
-(* Query value block (cljs components/query/builder.cljs): a block that
-   is the target of the owner's logseq.property/query ref renders
-   .cp__query-builder in place of its text content. The add-filter
-   button opens a filter/operator select (component-select); picking
-   "tags" chains to a class picker, and the clause is saved as dsl text
-   on this block's title — (tags [[uuid]]) — via save-block.
-
-   The add-filter button installs its own click listener (same pattern as
-   Asset_dom / Views_builder) — the document-level handler in editor_keys
-   only has to keep .cp__query-builder out of the enter_edit path. *)
+(* Query value blocks use the same clause editor as query results. The
+   block snapshot owns the source; a mount owns only its unsaved draft. *)
 
 open Promise_ext
-module S = Properties_state
-module I18n = I18n
+module B = Views_builder
 module W = Wire
 
+type state =
+  { tree : B.clause
+  ; refs : (string, string) Hashtbl.t
+  ; properties : (string, string) Hashtbl.t
+  ; saving : bool
+  }
 
+let next_id = ref 0
 
-(* cljs query-builder/db-based-block-filters + operators *)
-let filters =
-  [ "tags"; "page reference"; "property"; "task"; "priority"; "page"
-  ; "full text search"; "between"; "sample" ]
-
-let operators = [ "and"; "or"; "not" ]
-
-(* cljs filter-label — en.edn keys *)
-let filter_label = function
-  | "tags" -> I18n.t "property.built-in/tags"
-  | "page reference" -> I18n.t "query.builder/filter-page-reference-label"
-  | "property" -> I18n.t "class.built-in/property"
-  | "task" -> I18n.t "class.built-in/task"
-  | "priority" -> I18n.t "property.built-in/priority"
-  | "page" -> I18n.t "query.builder/filter-page-label"
-  | "full text search" -> I18n.t "query.builder/filter-full-text-search-label"
-  | "between" -> I18n.t "view.filter/operator-between"
-  | "sample" -> I18n.t "query.builder/filter-sample-label"
-  | other -> other
-
-(* save the dsl title on the query value block (cljs add-watch :updated
-   -> editor-handler/save-block!) *)
-let save_dsl uuid dsl =
-  ignore
-    (let* sop = Outliner_ops.save_block_parsed uuid dsl in
-     Outliner_ops.apply_and_refresh [ sop ])
-
-let open_select ~anchor ~placeholder items =
-  (* the select's text_field autofocuses on mount *)
-  ignore
-    (Properties_popup.open_anchored anchor
-       (Properties_select.view ~placeholder items))
-
-(* class picker after choosing "tags" — cljs lists all classes by
-   title *)
-let open_class_picker ~anchor value_uuid =
-  ignore
-    (let* w = Properties_data.all_classes () in
-    let classes =
-      match w with W.Array xs | W.List xs -> xs | _ -> []
-    in
-    let items =
-      List.filter_map
-        (fun c ->
-          match
-            ( W.map_get_string c "block/title"
-            , W.map_get_uuid c "block/uuid" )
-          with
-          | Some title, Some u ->
-              Some
-                (Properties_select.item ~tip:u title
-                   (fun () ->
-                     S.pop_overlay ();
-                     save_dsl value_uuid
-                       ("(tags [[" ^ u ^ "]])")))
-          | _ -> None)
-        classes
-    in
-    (* replace the filter select with the class picker *)
-    S.pop_overlay ();
-    open_select ~anchor ~placeholder:(I18n.t "query.builder/add-filter-or-operator-placeholder") items;
-    Js.Promise.resolve ())
-
-let open_filter_picker ~anchor value_uuid =
-  let items =
-    List.map
-      (fun f ->
-        Properties_select.item (filter_label f) (fun () ->
-            if f = "tags" then open_class_picker ~anchor value_uuid
-            else ()))
-      (filters @ operators)
+let block_el uuid (b : Model.block) : Lui_elements.t = fun context ->
+  incr next_id;
+  let key = "block-" ^ uuid ^ "-" ^ string_of_int !next_id in
+  let scope = context.Lui_ui.ui_scope in
+  let alive () = not (Signal.scope_is_disposed scope) in
+  let st = Signal.state context.Lui_ui.ui_scheduler
+      { tree = B.tree_of_src b.block_title
+      ; refs = Hashtbl.create 8
+      ; properties = Hashtbl.create 8
+      ; saving = false
+      } in
+  let source = Signal.own_signal scope (Signal.value st) in
+  let update f =
+    if alive () then begin
+      Signal.set st (f (Signal.get source));
+      Runtime.flush ()
+    end
   in
-  open_select ~anchor ~placeholder:(I18n.t "query.builder/add-filter-or-operator-placeholder") items
-
-(* .cp__query-builder > .cp__query-builder-filter > button.add-filter —
-   cljs renders the "Filter" label whenever loc=[0] (the root add-filter),
-   regardless of the query title *)
-let block_el uuid (_b : Model.block) : Lui_elements.t =
-  Lui_elements.box ~key:("qwrap-" ^ uuid) ~style_class:"cp__query-builder"
-    [ Lui_elements.box ~key:("qfilter-" ^ uuid)
-       
-        [ (* TODO(component): the button kind renders ~text inside its
-             .lui-button-label span — Playwright's button:text('filter')
-             locator only matches when the button itself is the smallest
-             element containing the text, i.e. a direct text node. Keep
-             Logseq_el.el ~text until the e2e contract or the adapter changes. *)
-          Logseq_el.el ~key:("qb-" ^ uuid) ~tag:"button" ~id:("qb-" ^ uuid)
-            ~style_class:
-              "jtrigger !px-1 h-6 add-filter text-muted-foreground"
-            ~attrs:[ ("type", "button") ]
-            ~events:"click"
-            ~on_dom_event:(fun name _ ->
-              if name = "click" then
-                match Ui_services.dom_by_id ("qb-" ^ uuid) with
-                | Some btn -> open_filter_picker ~anchor:btn uuid
-                | None -> ())
-            ~text:(I18n.t "query.builder/filter")
-            [ Lui_elements.icon ~key:("qi-" ^ uuid) ~name:(`app "plus")
-                ~style_class:"ui__icon" []
-            ]
-        ]
-    ]
+  let save tree =
+    let before = Signal.get source in
+    if alive () && not before.saving then begin
+      let dsl = B.tree_to_dsl tree in
+      if dsl = B.tree_to_dsl before.tree then
+        update (fun s -> { s with tree })
+      else begin
+        update (fun s -> { s with tree; saving = true });
+        ignore
+          ((let* op = Outliner_ops.save_block_parsed uuid dsl in
+            let* result = Outliner_ops.apply_and_refresh_result [ op ] in
+            (match result with None -> failwith "Query builder save requires an open graph" | Some _ -> ());
+            update (fun s -> { s with saving = false });
+            Js.Promise.resolve ())
+           |> Js.Promise.catch (fun error ->
+               Ui_services.log_error ("query builder save failed", error);
+               Toast.error (I18n.t "ui/save-changes-error");
+               update (fun s -> { s with tree = before.tree; saving = false });
+               Js.Promise.resolve ()))
+      end
+    end
+  in
+  Views_db.get_all_properties (fun properties ->
+      let titles = Hashtbl.create (List.length properties) in
+      List.iter (fun p ->
+          match W.get p "db/ident", W.map_get_string p "block/title" with
+          | Some ident, Some title ->
+              Option.iter (fun ident -> Hashtbl.replace titles ident title)
+                (Views_wire.ident_of_value ident)
+          | _ -> ()) properties;
+      update (fun s -> { s with properties = titles }));
+  Views_db.pull_many
+    "[:block/uuid {:block/refs [:block/uuid :block/title]}]" [ uuid ]
+    (fun blocks ->
+      let refs = Hashtbl.create 8 in
+      List.iter (fun block ->
+          List.iter (fun entity ->
+              match W.map_get_uuid entity "block/uuid", W.map_get_string entity "block/title" with
+              | Some uuid, Some title -> Hashtbl.replace refs uuid title
+              | _ -> ())
+            (match W.get block "block/refs" with Some rs -> W.args_list rs | None -> []))
+        blocks;
+      update (fun s -> { s with refs }));
+  (reactive (fun state ->
+       let tree = ref state.tree in
+       let editor : B.editor =
+         { key
+         ; disabled = state.saving
+         ; active = (fun () ->
+             alive () &&
+             let current = Signal.get source in
+             not current.saving && current.tree == state.tree)
+         ; ref_title = (fun uuid -> Hashtbl.find_opt state.refs uuid)
+         ; property_title = (fun ident -> Hashtbl.find_opt state.properties ident)
+         ; remember_ref = (fun uuid title ->
+             update (fun s ->
+                 let refs = Hashtbl.copy s.refs in
+                 Hashtbl.replace refs uuid title;
+                 { s with refs }))
+         ; save
+         }
+       in
+       B.editor_el editor ~tree)
+     source) context

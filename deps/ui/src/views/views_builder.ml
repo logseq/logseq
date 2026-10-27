@@ -25,6 +25,17 @@ type clause =
   | COp of string * clause list
   | CItem of string * barg list
   | CText of string
+  | CInvalid of string
+
+type editor =
+  { key : string
+  ; disabled : bool
+  ; active : unit -> bool
+  ; ref_title : string -> string option
+  ; property_title : string -> string option
+  ; remember_ref : string -> string -> unit
+  ; save : clause -> unit
+  }
 
 let filters =
   [ "tags"; "page reference"; "property"; "task"; "priority"; "page"
@@ -40,7 +51,8 @@ let refresh inst = (V.ops ()).V.o_refresh inst
 
 let rec to_dsl = function
   (* cljs ->dsl* unwraps [:page-ref x] to a bare [[x]] symbol *)
-  | CText s -> "\"" ^ s ^ "\""
+  | CText s -> Edn.to_string (W.String s)
+  | CInvalid _ -> invalid_arg "Cannot save an invalid query"
   | CItem ("page-ref", [ a ]) ->
       (* cljs ->dsl* collapses [:page-ref v] to the bare [[v]] form *)
       a.a_dsl
@@ -51,33 +63,102 @@ let rec to_dsl = function
   | COp (op, xs) ->
       "(" ^ op ^ " " ^ String.concat " " (List.map to_dsl xs) ^ ")"
 
-(* simplify: [:and x] -> x, empty ops collapse *)
+(* Keep untouched operator branches; an empty root is the blank query. *)
 let rec simplify = function
-  | COp (op, xs) -> (
-      let xs' = List.filter_map simplify_arg xs in
-      match op, xs' with
-      | "and", [] -> None
-      | _, [] -> None
-      | ("and" | "or"), [ x ] -> Some x
-      | _ -> Some (COp (op, xs')))
+  | COp ("and", []) -> None
+  | COp (op, children) ->
+      let children = List.map (fun child ->
+          Option.value (simplify child) ~default:child) children in
+      (match op, children with
+       | ("and" | "or"), [ child ] -> Some child
+       | _ -> Some (COp (op, children)))
   | c -> Some c
-and simplify_arg c = simplify c
 
 let tree_to_dsl (t : clause) : string =
-  match simplify t with
-  | None -> ""
-  | Some c -> to_dsl c
+  match simplify t with None -> "" | Some c -> to_dsl c
 
 (* ---------- dsl parse (edn -> clause tree) ---------- *)
+
+let is_ref s =
+  let n = String.length s in
+  n >= 4 && String.sub s 0 2 = "[[" && String.sub s (n - 2) 2 = "]]"
 
 let unwrap s =
   let n = String.length s in
   if n >= 2 && s.[0] = '"' && s.[n - 1] = '"' then String.sub s 1 (n - 2)
   else s
 
+(* Like the worker pre-transform, quote page references outside strings
+   before reading EDN. Validate delimiters because the config reader also
+   accepts partial input and intentionally reads only the first form. *)
+let read_source src =
+  let n = String.length src in
+  let buf = Buffer.create n in
+  let fail message = raise (Edn.Parse_error message) in
+  let rec string_end i =
+    if i >= n then fail "Unterminated query string"
+    else match src.[i] with
+    | '\\' when i + 1 < n && List.mem src.[i + 1] [ 'n'; 't'; 'r'; '"'; '\\' ] ->
+        string_end (i + 2)
+    | '\\' -> fail "Unsupported query string escape"
+    | '"' -> i + 1
+    | _ -> string_end (i + 1)
+  in
+  let rec ref_end i =
+    if i + 1 >= n then fail "Unterminated page reference"
+    else if src.[i] = ']' && src.[i + 1] = ']' then i + 2
+    else ref_end (i + 1)
+  in
+  let rec scan i stack =
+    if i = n then (if stack <> [] then fail "Unterminated query clause")
+    else match src.[i] with
+    | '"' ->
+        let stop = string_end (i + 1) in
+        Buffer.add_substring buf src i (stop - i);
+        scan stop stack
+    | ';' ->
+        let stop = match String.index_from_opt src i '\n' with Some j -> j | None -> n in
+        Buffer.add_substring buf src i (stop - i);
+        scan stop stack
+    | '[' when i + 1 < n && src.[i + 1] = '[' ->
+        let stop = ref_end (i + 2) in
+        Buffer.add_string buf (Edn.to_string (W.String (String.sub src i (stop - i))));
+        scan stop stack
+    | '#' when i + 1 < n && src.[i + 1] <> '{'
+        && (i = 0 || Edn.is_delim src.[i - 1])
+        && not (i + 5 <= n && String.sub src i 5 = "#uuid")
+        && not (i + 5 <= n && String.sub src i 5 = "#inst") ->
+        let start = i + 1 in
+        let stop =
+          if start + 1 < n && src.[start] = '[' && src.[start + 1] = '[' then ref_end (start + 2)
+          else
+            let rec token j = if j < n && not (Edn.is_delim src.[j]) then token (j + 1) else j in
+            token start
+        in
+        let value = String.sub src start (stop - start) in
+        if value = "" then fail "Empty query tag";
+        Buffer.add_string buf (Edn.to_string (W.String (if is_ref value then value else "[[" ^ value ^ "]]")));
+        scan stop stack
+    | '{' when i = 0 || src.[i - 1] <> '#' -> fail "Unsupported query map"
+    | ('(' | '[' | '{') as c ->
+        Buffer.add_char buf c;
+        scan (i + 1) (c :: stack)
+    | (')' | ']' | '}') as c ->
+        let expected = match c with ')' -> '(' | ']' -> '[' | _ -> '{' in
+        (match stack with
+        | head :: tail when head = expected -> Buffer.add_char buf c; scan (i + 1) tail
+        | _ -> fail "Mismatched query delimiter")
+    | c -> Buffer.add_char buf c; scan (i + 1) stack
+  in
+  scan 0 [];
+  let text = Buffer.contents buf in
+  let form, stop = Edn.parse_value text 0 in
+  if Edn.skip_ws text stop <> String.length text then fail "Unexpected form after query";
+  form
+
 let arg_of_wire (w : W.t) : barg =
   match w with
-  | W.Array [ W.Array (inner :: _) ] | W.List [ W.List (inner :: _) ] ->
+  | W.Array [ W.Array [ inner ] ] | W.List [ W.List [ inner ] ] ->
       (* [[x]] page-ref *)
       let name =
         match inner with
@@ -88,19 +169,21 @@ let arg_of_wire (w : W.t) : barg =
   | W.Array _ | W.List _ ->
       let s = Edn.to_string w in
       { a_dsl = s; a_disp = s }
-  | W.String s -> { a_dsl = "\"" ^ s ^ "\""; a_disp = s }
-  | W.Symbol s | W.Keyword s -> { a_dsl = ":" ^ s; a_disp = s }
+  | W.String s -> { a_dsl = (if is_ref s then s else Edn.to_string w); a_disp = s }
+  | W.Symbol s | W.Keyword s -> { a_dsl = Edn.to_string w; a_disp = s }
   | other ->
       let s = Edn.to_string other in
       { a_dsl = s; a_disp = s }
 
 let rec clause_of_wire (w : W.t) : clause option =
   match w with
-  | W.List (W.Symbol f :: args) | W.List (W.Keyword f :: args)
-  | W.Array (W.Symbol f :: args) | W.Array (W.Keyword f :: args) ->
+  | W.List (W.Symbol f :: args) | W.Array (W.Symbol f :: args) ->
       if is_op f then
-        Some (COp (f, List.filter_map clause_of_wire args))
+        let children = List.map clause_of_wire args in
+        if List.exists Option.is_none children then None
+        else Some (COp (f, List.filter_map Fun.id children))
       else Some (CItem (f, List.map arg_of_wire args))
+  | W.String s when is_ref s -> Some (CItem ("page-ref", [ arg_of_wire w ]))
   | W.String s -> Some (CText s)
   | W.Array [ W.Array _ ] | W.List [ W.List _ ] ->
       Some (CItem ("page-ref", [ arg_of_wire w ]))
@@ -108,13 +191,13 @@ let rec clause_of_wire (w : W.t) : clause option =
 
 let tree_of_src (src : string) : clause =
   let t = String.trim src in
-  match (try Some (Edn.parse t) with _ -> None) with
-  | Some w -> (
-      match clause_of_wire w with
-      | Some (COp _ as op) -> op
-      | Some c -> COp ("and", [ c ])
-      | None -> COp ("and", []))
-  | None -> COp ("and", [])
+  if t = "" then COp ("and", [])
+  else try
+    match clause_of_wire (read_source t) with
+    | Some (COp _ as op) -> op
+    | Some c -> COp ("and", [ c ])
+    | None -> CInvalid src
+  with Edn.Parse_error _ -> CInvalid src
 
 (* ---------- tree surgery (cljs loc semantics: index includes the
    operator at position 0 of each group) ---------- *)
@@ -150,7 +233,7 @@ let rec remove_at t loc =
 
 let rec replace_at t loc x =
   match loc, t with
-  | [ 0 ], _ -> x
+  | [], _ | [ 0 ], _ -> x
   | 0 :: rest, _ -> replace_at t rest x
   | i :: rest, COp (op, cs) when i >= 1 ->
       COp
@@ -174,6 +257,25 @@ let wrap_op t loc op =
   | Some c -> replace_at t loc (COp (op, [ c ]))
   | None -> t
 
+let unwrap_at t loc =
+  match get_at t loc with
+  | Some (COp (_, children)) ->
+      let path = match List.rev loc with 0 :: rest -> List.rev rest | _ -> loc in
+      let rec splice t = function
+        | [] | [ 0 ] -> COp ("and", children)
+        | 0 :: rest -> splice t rest
+        | [ i ] -> (match t with
+            | COp (op, clauses) -> COp (op, List.concat
+                (List.mapi (fun j c -> if j = i - 1 then children else [ c ]) clauses))
+            | _ -> t)
+        | i :: rest -> (match t with
+            | COp (op, clauses) -> COp (op, List.mapi
+                (fun j c -> if j = i - 1 then splice c rest else c) clauses)
+            | _ -> t)
+      in
+      splice t path
+  | _ -> t
+
 (* ---------- display ---------- *)
 
 let strip_ref s =
@@ -189,7 +291,7 @@ let disp_args inst args =
   List.map
     (fun a ->
       let d = strip_ref a.a_disp in
-      match Hashtbl.find_opt (V.get inst).V.ref_titles d with
+      match inst.ref_title d with
       | Some t -> t
       | None -> d)
     args
@@ -197,14 +299,14 @@ let disp_args inst args =
 let clause_label inst (c : clause) : string =
   match c with
   | CText s -> I.builder_search s
+  | CInvalid message -> message
   | CItem (f, args) -> (
       match f, disp_args inst args with
       | ("task" | "priority"), vs -> f ^ ": " ^ String.concat " | " vs
       | ("property" | "private-property"), k :: vs -> (
           let title =
-            match Hashtbl.find_opt (V.get inst).V.all_props k with
-            | Some p ->
-                Option.value (W.map_get_string p "block/title") ~default:k
+            match inst.property_title k with
+            | Some title -> title
             | None -> (
                 match String.rindex_opt k '/' with
                 | Some i ->
@@ -228,63 +330,59 @@ let clause_label inst (c : clause) : string =
 (* ---------- pickers ---------- *)
 
 let commit inst ~tree () =
-  let qsrc = tree_to_dsl !tree in
-  V.update inst (fun s -> { s with V.qsrc });
-  let buuid =
-    let s = V.get inst in
-    if s.V.query_block_uuid <> "" then s.V.query_block_uuid
-    else
-      match inst.V.kind with
-      | V.KQuery { block_uuid } -> block_uuid
-      | _ -> ""
-  in
-  Db.save_block_title buuid qsrc (fun () -> refresh inst)
+  if inst.active () then inst.save !tree
 
 (* value picker for a chosen property ident *)
-let value_picker inst ~tree ~loc ~anchor ident =
-  let add_clause v =
-    let clause = CItem ("property", [ { a_dsl = ":" ^ ident; a_disp = ident }; v ]) in
+let value_picker inst ~tree ~loc ~anchor ~head ident =
+  let add_clause args =
+    let clause = CItem (head, { a_dsl = ":" ^ ident; a_disp = ident } :: args) in
     tree := append_at !tree loc clause;
     commit inst ~tree ()
   in
-  Db.get_closed_values ident (fun cvs ->
-      let items, extra_vals =
+  Db.get_closed_values ident (fun cvs -> if inst.active () then
+      let items =
         if cvs <> [] then
-          ( List.filter_map
-              (fun cv -> W.map_get_string cv "block/title")
-              cvs
-          , true )
-        else ([], false)
+          List.filter_map (fun cv ->
+              Option.map (fun title -> W.String title)
+                (W.map_get_string cv "block/title")) cvs
+        else []
       in
       let open_select its =
         ignore
           (P.show_select ~anchor ~placeholder:ident
              ~wrap_cls:"query-builder-picker"
              ~items:
-               (P.fixed_items (List.map
-                  (fun t ->
-                    { P.si_label = t
-                    ; si_value = t
-                    ; si_extra = None
+               (P.fixed_items
+                ({ P.si_label = I.t "query.builder/all-values-label"
+                 ; si_value = "all"; si_extra = None }
+                :: List.mapi
+                  (fun index value ->
+                    { P.si_label = (arg_of_wire value).a_disp
+                    ; si_value = "value-" ^ string_of_int index
+                    ; si_extra = Some value
                     })
                   its))
              ~on_chosen:(fun it _ _ ->
-               add_clause { a_dsl = "\"" ^ it.P.si_value ^ "\""; a_disp = it.si_value })
+               match it.P.si_extra with
+               | None -> add_clause []
+               | Some value -> add_clause [ arg_of_wire value ])
              ())
       in
-      if extra_vals then open_select items
+      if cvs <> [] then open_select items
       else
-        Db.get_property_values ident (fun vs ->
+        Db.get_property_values ident (fun vs -> if inst.active () then
             let its =
               List.filter_map
-                (fun v -> W.map_get_string v "label")
+                (fun v -> match W.get v "label" with
+                  | Some W.Nil | None -> None
+                  | Some label -> Some label)
                 (Wr.W.elems vs)
             in
             open_select its))
 
 (* property picker: list of props + "Show built-in properties" toggle *)
 let rec property_picker inst ~tree ~loc ~anchor ~include_builtin =
-  Db.get_all_properties (fun props ->
+  Db.get_all_properties (fun props -> if inst.active () then
       let items =
         List.filter_map
           (fun p ->
@@ -308,39 +406,28 @@ let rec property_picker inst ~tree ~loc ~anchor ~include_builtin =
       in
       let head () =
         Some
-          (Logseq_el.el
-             ~attrs:
-               [ ( "style"
-                 , "display:flex;justify-content:space-between;gap:4px;\
-                    align-items:center;padding:0 4px 4px;\
-                    border-bottom:1px solid hsl(var(--border))" ) ]
-             [ Logseq_el.el ~tag:"label"
-                 ~attrs:
-                   [ ("for", "built-in")
-                   ; ( "style"
-                     , "opacity:0.5;cursor:pointer;user-select:none;\
-                        font-size:0.875rem" ) ]
-                 ~text:(I.t "query.builder/show-built-in-properties") []
-             ; Logseq_el.el ~tag:"input"
-                 ~attrs:
-                   (([ ("id", "built-in"); ("type", "checkbox") ]
-                    @ (if include_builtin then [ ("checked", "") ] else [])))
-                 ~events:"change"
-                 ~on_dom_event:(fun _ payload ->
-                   property_picker inst ~tree ~loc ~anchor
-                     ~include_builtin:(Json_payload.bool payload "checked"))
-                 [] ])
+          (row ~main:`space_between ~cross:`center ~gap:4 ~padding:4
+             [ Ui_components.checkbox
+                 ~label:(I.t "query.builder/show-built-in-properties")
+                 ~text:(I.t "query.builder/show-built-in-properties")
+                 ~checked:include_builtin
+                 ~on_toggle:(function
+                   | Lui_protocol.ToggleChanged (_, checked) ->
+                       P.close_all ();
+                       property_picker inst ~tree ~loc ~anchor ~include_builtin:checked
+                   | _ -> ()) [] ])
       in
       ignore
         (P.show_select ~anchor ~placeholder:(I.t "select/default-prompt") ~items:(P.fixed_items items)
            ~extra:(fun () -> head ())
            ~wrap_cls:"query-builder-picker"
            ~on_chosen:(fun it _ _ ->
-             value_picker inst ~tree ~loc ~anchor it.P.si_value)
+             value_picker inst ~tree ~loc ~anchor
+               ~head:(if include_builtin then "private-property" else "property") it.P.si_value)
            ()))
 
 let closed_value_multi inst ~tree ~loc ~anchor ident name =
-  Db.get_closed_values ident (fun cvs ->
+  Db.get_closed_values ident (fun cvs -> if inst.active () then
       let items =
         List.filter_map
           (fun cv -> W.map_get_string cv "block/title")
@@ -358,7 +445,7 @@ let closed_value_multi inst ~tree ~loc ~anchor ident name =
              if vs <> [] then begin
                let args =
                  List.map
-                   (fun v -> { a_dsl = "\"" ^ v ^ "\""; a_disp = v })
+                   (fun v -> { a_dsl = Edn.to_string (W.String v); a_disp = v })
                    vs
                in
                tree := append_at !tree loc (CItem (name, args));
@@ -368,7 +455,7 @@ let closed_value_multi inst ~tree ~loc ~anchor ident name =
            ()))
 
 let page_picker inst ~tree ~loc ~anchor kind =
-  Db.get_all_page_titles (fun titles ->
+  Db.get_all_page_titles (fun titles -> if inst.active () then
       let items =
         List.map
           (fun t ->
@@ -391,7 +478,7 @@ let page_picker inst ~tree ~loc ~anchor kind =
            ()))
 
 let tag_picker inst ~tree ~loc ~anchor =
-  Db.get_all_classes (fun classes ->
+  Db.get_all_classes (fun classes -> if inst.active () then
       let items =
         List.filter_map
           (fun c ->
@@ -412,10 +499,7 @@ let tag_picker inst ~tree ~loc ~anchor =
              (* seed uuid -> title so a re-parsed [[uuid]] clause still
                 resolves before refresh_block re-reads the value block's
                 block/refs (async) *)
-             let s = V.get inst in
-             let ref_titles = Hashtbl.copy s.V.ref_titles in
-             Hashtbl.replace ref_titles it.P.si_value it.si_label;
-             V.update inst (fun s -> { s with V.ref_titles });
+             inst.remember_ref it.P.si_value it.si_label;
              tree :=
                append_at !tree loc
                  (CItem ("tags", [ { a_dsl = "[[" ^ it.P.si_value ^ "]]"; a_disp = it.si_label } ]));
@@ -423,27 +507,24 @@ let tag_picker inst ~tree ~loc ~anchor =
            ()))
 
 let between_picker inst ~tree ~loc ~anchor =
-  Db.get_all_page_titles (fun titles ->
-      let pick start_label on_done =
-        ignore
-          (P.show_select ~anchor ~placeholder:start_label
-             ~items:
-               (P.fixed_items (List.map
-                  (fun t ->
-                    { P.si_label = t; si_value = t; si_extra = None })
-                  titles))
-             ~wrap_cls:"query-builder-picker" ~on_chosen:on_done ())
-      in
-      pick (I.t "query.builder/between-start-label") (fun s _ _ ->
-          pick (I.t "query.builder/between-end-label") (fun e _ _ ->
-              tree :=
-                append_at !tree loc
-                  (CItem
-                     ( "between"
-                     , [ { a_dsl = "[[" ^ s.P.si_value ^ "]]"; a_disp = s.si_value }
-                       ; { a_dsl = "[[" ^ e.P.si_value ^ "]]"; a_disp = e.si_value }
-                       ] ));
-              commit inst ~tree ())))
+  let pick label on_pick =
+    if inst.active () then
+      ignore (P.show_custom ~anchor ~cls:"query-builder-picker"
+        (column ~padding:8 ~gap:8
+          [ text ~value:label []
+          ; Ui_components.date_picker
+              ~week_starts_on:(Sdk_config.calendar_week_starts_on ())
+              ~month_label:I.calendar_month_label ~day_label:I.calendar_day_label
+              ~translate:I.t
+              ~on_pick:(fun ms ->
+                P.close_top ();
+                if inst.active () then on_pick (Dates.journal_title_of ms)) ]))
+  in
+  pick (I.t "query.builder/between-start-label") (fun start ->
+    pick (I.t "query.builder/between-end-label") (fun finish ->
+      let arg title = { a_dsl = "[[" ^ title ^ "]]"; a_disp = title } in
+      tree := append_at !tree loc (CItem ("between", [ arg start; arg finish ]));
+      commit inst ~tree ()))
 
 let full_text_picker inst ~tree ~loc ~anchor =
   let value = ref "" in
@@ -540,16 +621,8 @@ let clause_popup inst ~tree ~loc ~anchor ~is_op_clause =
          [ P.MItem
              ( (I.t "query.builder/unwrap-operator")
              , fun () ->
-                 (match get_at !tree loc with
-                  | Some (COp (_, [ single ])) ->
-                      tree := replace_at !tree loc single;
-                      commit inst ~tree ()
-                  | Some (COp (_, xs)) ->
-                      (* unwrap: splice children into the group *)
-                      let c = COp ("and", xs) in
-                      tree := replace_at !tree loc c;
-                      commit inst ~tree ()
-                  | _ -> ())) ]
+                 tree := unwrap_at !tree loc;
+                 commit inst ~tree ()) ]
        else [])
     @ [ P.MSub
           ( (I.t "query.builder/wrap-filter-with-label")
@@ -563,6 +636,29 @@ let clause_popup inst ~tree ~loc ~anchor ~is_op_clause =
               operators )
       ]
   in
+  let items =
+    if is_op_clause then
+      items @ [ P.MSub
+        ( I.t "query.builder/replace-with-label"
+        , List.map (fun op -> P.MItem (String.uppercase_ascii op, fun () ->
+            match get_at !tree loc with
+            | Some (COp (_, children)) ->
+                tree := replace_at !tree loc (COp (op, children));
+                commit inst ~tree ()
+            | _ -> ())) operators ) ]
+    else
+      let replace () =
+        let draft = ref (COp ("and", [])) in
+        let editor = { inst with save = (fun value ->
+            match value with
+            | COp ("and", [ clause ]) ->
+                tree := replace_at !tree loc clause;
+                commit inst ~tree ()
+            | _ -> invalid_arg "Query replacement requires one clause") } in
+        picker editor ~tree:draft ~loc:[ 0 ] ~anchor
+      in
+      items @ [ P.MItem (I.t "query.builder/replace-with-label", replace) ]
+  in
   ignore (P.show_menu ~anchor items)
 
 (* ---------- clause tree rendering (declarative) ---------- *)
@@ -570,9 +666,9 @@ let clause_popup inst ~tree ~loc ~anchor ~is_op_clause =
 let loc_key loc =
   match loc with [] -> "0" | _ -> String.concat "-" (List.map string_of_int loc)
 
-let clause_id inst loc = "qbc-" ^ string_of_int inst.V.id ^ "-" ^ loc_key loc
-let op_id inst loc = "qbo-" ^ string_of_int inst.V.id ^ "-" ^ loc_key loc
-let add_id inst loc = "qba-" ^ string_of_int inst.V.id ^ "-" ^ loc_key loc
+let clause_id inst loc = "qbc-" ^ inst.key ^ "-" ^ loc_key loc
+let op_id inst loc = "qbo-" ^ inst.key ^ "-" ^ loc_key loc
+let add_id inst loc = "qba-" ^ inst.key ^ "-" ^ loc_key loc
 
 let rec clause_el inst ~tree ~loc (c : clause) : t =
   match c with
@@ -590,8 +686,10 @@ let rec clause_el inst ~tree ~loc (c : clause) : t =
         [ row ~key:"btn" ~gap:8 ~padding_horizontal:4 ~cross:`center
             ~border_width:1 ~corner_radius:4
            
-            [ text ~key:"a" ~accessibility_identifier:id
-                ~style_class:"query-clause" ~value:(clause_label inst c)
+            [ Ui_components.button ~variant:`ghost ~size:`sm ~height:24
+                ~key:"a" ~accessibility_identifier:id ~disabled:inst.disabled
+                ~style_class:"query-clause" ~text:(clause_label inst c)
+                ~label:(clause_label inst c)
                 ~on_press:(fun _ ->
                   match Ui_services.dom_by_id id with
                   | Some anchor ->
@@ -603,9 +701,10 @@ let rec clause_el inst ~tree ~loc (c : clause) : t =
 
 and op_label_el inst ~tree ~loc kind : t =
   let id = op_id inst loc in
-  text ~key:("qbo-" ^ loc_key loc) ~accessibility_identifier:id
+  Ui_components.button ~variant:`ghost ~size:`sm ~height:24
+    ~key:("qbo-" ^ loc_key loc) ~accessibility_identifier:id ~disabled:inst.disabled
     ~style_class:"query-clause"
-    ~value:(String.uppercase_ascii kind)
+    ~text:(String.uppercase_ascii kind) ~label:(String.uppercase_ascii kind)
     ~on_press:(fun _ ->
       match Ui_services.dom_by_id id with
       | Some anchor -> clause_popup inst ~tree ~loc ~anchor ~is_op_clause:true
@@ -615,6 +714,7 @@ and op_label_el inst ~tree ~loc kind : t =
 and add_filter_btn inst ~tree ~loc ~with_label : t =
   let id = add_id inst loc in
   Ui_components.button ~variant:`ghost ~key:("qba-" ^ loc_key loc) ~accessibility_identifier:id
+    ~disabled:inst.disabled
     ~icon:(`app "plus") ~size:`sm ~height:24 ~foreground:"muted-foreground"
     ~label:(I.t "view.filter/filter")
     ?text:(if with_label then Some (I.t "view.filter/filter") else None)
@@ -628,7 +728,8 @@ and add_filter_btn inst ~tree ~loc ~with_label : t =
 
 and clauses_group inst ~tree ~loc ~kind ~clauses : t =
   let parens = loc = [ 0 ] && (kind <> "and" || List.length clauses > 1) in
-  box ~key:("qg-" ^ loc_key loc)
+  Ui_components.with_props [ Ui_components.Prop.flex_wrap `wrap ]
+  (row ~key:("qg-" ^ loc_key loc) ~gap:4 ~cross:`center
     ( (if parens then
          [ text ~key:"pl" ~value:"(" [] ]
        else [])
@@ -643,12 +744,17 @@ and clauses_group inst ~tree ~loc ~kind ~clauses : t =
        else [])
     @ (if loc <> [ 0 ] then
          [ add_filter_btn inst ~tree ~loc ~with_label:false ]
-       else []) )
+       else []) ))
 
-(* the builder panel rendered inside .custom-query-results for dsl queries *)
-let builder_el inst ~tree : t =
-  box ~style_class:"cp__query-builder"
-    [ box ~key:"f"
+let editor_el inst ~tree : t =
+  match !tree with
+  | CInvalid message ->
+      column ~style_class:"cp__query-builder" ~gap:4
+        [ text ~value:(I.t "query/error") []
+        ; text ~value:message [] ]
+  | _ ->
+  column ~style_class:"cp__query-builder"
+    [ column ~key:"f" ~gap:4
         ( (match !tree with
            | COp ("and", []) -> []
            | t ->
@@ -660,6 +766,35 @@ let builder_el inst ~tree : t =
                [ clauses_group inst ~tree ~loc:[ 0 ] ~kind ~clauses ])
         @ [ add_filter_btn inst ~tree ~loc:[ 0 ] ~with_label:true ] )
     ]
+
+(* Views and query value blocks share the editor; only ownership and
+   persistence differ. No synthetic Views instance is needed. *)
+let editor_of_inst inst ~active =
+    { key = "view-" ^ string_of_int inst.V.id
+    ; disabled = false
+    ; active
+    ; ref_title = (fun uuid -> Hashtbl.find_opt (V.get inst).V.ref_titles uuid)
+    ; property_title = (fun ident ->
+        Option.bind (Hashtbl.find_opt (V.get inst).V.all_props ident)
+          (fun p -> W.map_get_string p "block/title"))
+    ; remember_ref = (fun uuid title ->
+        let refs = Hashtbl.copy (V.get inst).V.ref_titles in
+        Hashtbl.replace refs uuid title;
+        V.update inst (fun s -> { s with V.ref_titles = refs }))
+    ; save = (fun tree ->
+        let qsrc = tree_to_dsl tree in
+        let s = V.get inst in
+        let uuid = if s.V.query_block_uuid <> "" then s.V.query_block_uuid
+          else match inst.V.kind with V.KQuery { block_uuid } -> block_uuid
+          | _ -> invalid_arg "Query builder requires a query value block" in
+        V.update inst (fun s -> { s with V.qsrc });
+        Db.save_block_title uuid qsrc (fun () -> refresh inst))
+    }
+
+let builder_el inst ~tree : t = fun context ->
+  editor_el
+    (editor_of_inst inst ~active:(fun () -> not (Signal.scope_is_disposed context.Lui_ui.ui_scope)))
+    ~tree context
 
 (* per-inst clause trees, re-parsed when the query source changed *)
 let trees : (int, clause ref * string) Hashtbl.t = Hashtbl.create 8
