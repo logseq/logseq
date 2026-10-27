@@ -431,6 +431,38 @@
 
     (import-second-time-assertions conn conn2 "page1" original-data {:skip-updated-at? true})))
 
+(deftest import-class-and-property-pages-when-they-exist-with-different-uuids
+  (let [class-uuid (random-uuid)
+        property-uuid (random-uuid)
+        original-data
+        {:classes {:user.class/C1 {:block/uuid class-uuid
+                                   :build/keep-uuid? true}}
+         :properties {:user.property/p1 {:logseq.property/type :default
+                                         :block/uuid property-uuid
+                                         :build/keep-uuid? true}}
+         :pages-and-blocks [{:page {:block/uuid class-uuid}
+                             :blocks [{:block/title "class block"}]}
+                            {:page {:block/uuid property-uuid}
+                             :blocks [{:block/title "property block"}]}]}
+        conn (db-test/create-conn-with-blocks (assoc original-data :build-existing-tx? true))
+        ;; The class and property exist but have different uuids e.g. from an earlier import
+        ;; that didn't keep uuids
+        conn2 (db-test/create-conn-with-blocks {:classes {:user.class/C1 {}}
+                                                :properties {:user.property/p1 {:logseq.property/type :default}}})
+        _ (export-page-and-import-to-another-graph conn conn2 "C1")
+        _ (export-page-and-import-to-another-graph conn conn2 "p1")
+        block-titles (fn [ident] (set (map :block/title (:block/_page (d/entity @conn2 ident)))))]
+
+    (is (not= class-uuid (:block/uuid (d/entity @conn2 :user.class/C1))))
+    (is (= #{"class block"} (block-titles :user.class/C1))
+        "Blocks are imported to the existing class page")
+    (is (= #{"property block"} (block-titles :user.property/p1))
+        "Blocks are imported to the existing property page")
+    (is (nil? (d/entity @conn2 [:block/uuid class-uuid]))
+        "No page is created with the exported class uuid")
+    (is (nil? (d/entity @conn2 [:block/uuid property-uuid]))
+        "No page is created with the exported property uuid")))
+
 (deftest import-journal-page
   (let [original-data
         {:pages-and-blocks
