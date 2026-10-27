@@ -1,5 +1,6 @@
 (ns frontend.handler.db-based.import-test
   (:require [cljs.test :refer [async deftest is]]
+            [clojure.string :as string]
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.fs :as fs]
@@ -80,13 +81,13 @@
 (deftest import-existing-local-graph-imports-folder-sqlite-and-assets-test
   (async done
     (let [calls (atom [])]
-      (-> (p/with-redefs [fs/file-exists? (fn [path]
+      (-> (p/with-redefs [                          fs/file-exists? (fn [path]
                                             (swap! calls conj [:exists path])
-                                            (p/resolved (or (re-find #"db\\.sqlite$" path)
-                                                            (re-find #"/assets$" path))))
+                                            (p/resolved (or (string/ends-with? path "db.sqlite")
+                                                            (string/ends-with? path "/assets"))))
                           fs/read-file-raw (fn [_dir path]
                                              (swap! calls conj [:read path])
-                                             (p/resolved (if (re-find #"db\\.sqlite$" path)
+                                             (p/resolved (if (string/ends-with? path "db.sqlite")
                                                            "sqlite-bytes"
                                                            "asset-bytes")))
                           fs/readdir (fn [dir _opts]
