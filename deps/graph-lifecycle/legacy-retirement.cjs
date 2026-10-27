@@ -31,7 +31,7 @@ module.exports = function ({ fail, readJSON, writeJSON, graphName, canonicalRoot
     const runtimeBefore = new Map(records.map(record => [record.ticket, artifact(runtimeFile(ctx, record.ticket))]));
     const roots = new Set([ctx.root, ...records.map(record => record.root)]);
     const publications = [...roots].flatMap(root => (scan ? scan.entries(root) : entries(root)).map(entry => ({ ...entry, root })));
-    const dead = publications.filter(entry => !publishedPidMayRun(exists, entry.pid));
+    const dead = publications.filter(entry => !publishedPidMayRun(entry.pid));
     const candidates = new Map();
     for (const record of records) {
       const raw = runtimeBefore.get(record.ticket);
@@ -132,7 +132,9 @@ module.exports = function ({ fail, readJSON, writeJSON, graphName, canonicalRoot
     }
     if (actual !== null) fs.unlinkSync(file);
     for (const root of roots) {
-      const removed = publications.filter(entry => entry.root === root && (dead.includes(entry) || candidates.has(entry.pid)));
+      // A publication of a PID that cannot be signalled is left in place: it is probed, never refused or trusted.
+      const removed = publications.filter(entry => entry.root === root
+        && (dead.includes(entry) || (candidates.has(entry.pid) && !publishedPidMayRun(entry.pid))));
       if (removed.length) await removeEntries(root, removed);
     }
     for (const record of records) fs.rmSync(runtimeFile(ctx, record.ticket), { force: true });
