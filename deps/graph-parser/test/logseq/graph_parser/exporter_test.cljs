@@ -583,6 +583,26 @@
     (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
         "Imported graph validates")))
 
+(deftest-async import-namespaced-tag-of-a-namespace-page-convert-all-tags
+  (p/let [dir (write-temp-file-graph
+               {"logseq/config.edn" "{:meta/version 1 :file/name-format :triple-lowbar}\n"
+                "pages/ns___a___b.md" "- x1\n"
+                "pages/other.md" "- o1 #ns/a\n"})
+          conn (db-test/create-conn)
+          _ (import-file-graph-to-db dir conn {:convert-all-tags? true})
+          db @conn
+          pages-named-a (d/q '[:find [?e ...] :where [?e :block/name "a"]] db)
+          b-page (db-test/find-page-by-title db "b")
+          tagged-block (db-test/find-block-by-content db #"^o1")]
+    (is (= 1 (count pages-named-a))
+        "The namespace page and the tag are the same node")
+    (is (= (set pages-named-a) #{(:db/id (:block/parent (d/entity db (:db/id b-page))))})
+        "The child of the namespace page has the tag as its parent")
+    (is (= (set pages-named-a) (set (map :db/id (:block/tags (d/entity db (:db/id tagged-block))))))
+        "The block is tagged with that node")
+    (is (empty? (map :entity (:errors (db-validate/validate-local-db! db))))
+        "Imported graph validates")))
+
 (deftest-async import-page-template-property
   (p/let [file (write-temp-graph-file "pages/t.md" "template:: tt\n\n- first block\n")
           conn (db-test/create-conn)

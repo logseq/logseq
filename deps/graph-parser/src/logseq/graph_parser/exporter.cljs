@@ -321,6 +321,21 @@
             (name-entities (ns-util/get-last-part full-name)))
       (some :block/uuid (name-entities full-name)))))
 
+(defn- find-existing-namespace-page-uuid
+  "Finds a page that is not a class by the namespaced name of a tag and returns its :block/uuid.
+   A namespace page that was imported before the tag is converted to the class"
+  [db {full-name :block/name block-ns :block/namespace}]
+  (when block-ns
+    (some (fn [datom]
+            (let [e (d/entity db (:e datom))]
+              (when (and (not (ldb/class? e)) (not (ldb/property? e)))
+                (let [parent (:block/parent e)
+                      parents (cond-> (if parent (vec (ldb/get-page-parents parent)) [])
+                                parent (conj parent))]
+                  (when (= full-name (string/join ns-util/namespace-char (map :block/name (conj parents e))))
+                    (:block/uuid e))))))
+          (d/datoms db :avet :block/name (ns-util/get-last-part full-name)))))
+
 (defn- convert-tag-to-class
   "Converts a tag block with class or returns nil if this tag should be removed
    because it has been moved"
@@ -345,10 +360,13 @@
           ;; Creates or updates page within same tx
           (let [class-m (find-or-create-class db (:block/title tag-block) all-idents tag-block)
                 property-uuid? (property-entity-uuid? db (:block/uuid tag-block))
+                existing-page-uuid (find-existing-namespace-page-uuid db tag-block)
                 class-m' (-> (merge tag-block class-m
                                     (cond
                                       internal-tag-conflict?
                                       {:block/uuid (common-uuid/gen-uuid :db-ident-block-uuid (:db/ident class-m))}
+                                      existing-page-uuid
+                                      {:block/uuid existing-page-uuid}
                                       (or property-uuid? (not (:block/uuid tag-block)))
                                       {:block/uuid (find-or-gen-class-uuid db page-names-to-uuids (:block/name tag-block) (:db/ident class-m))}))
                              ;; override with imported timestamps
