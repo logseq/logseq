@@ -1059,6 +1059,22 @@
                      [property-map v])))))
        (db-property-build/build-property-values-tx-m new-block)))
 
+(declare convert-block-refs-to-page-refs)
+
+(defn- convert-block-refs-in-property-value
+  "Converts ((uuid)) in the text of a property value block to [[uuid]] like the title of
+   a block and adds the refs"
+  [pvalue]
+  (let [block-ref-ids (when (and (map? pvalue) (string? (:block/title pvalue)))
+                        (->> (re-seq block-ref/block-ref-re (:block/title pvalue))
+                             (map second)
+                             (filter common-util/uuid-string?)))]
+    (if (seq block-ref-ids)
+      (-> pvalue
+          (update :block/title convert-block-refs-to-page-refs)
+          (update :block/refs (fn [refs] (into (vec refs) (map #(vector :block/uuid (uuid %))) block-ref-ids))))
+      pvalue)))
+
 (defn- build-properties-and-values
   "For given block properties, builds property values tx and returns a map with
   updated properties in :block-properties and any property values tx in :pvalues-tx"
@@ -1087,7 +1103,9 @@
           block-properties (-> (merge props' (db-property-build/build-properties-with-ref-values pvalue-tx-m))
                                (update-keys get-ident'))]
       {:block-properties block-properties
-       :pvalues-tx (into (mapcat #(if (set? %) % [%]) (vals pvalue-tx-m)))})))
+       :pvalues-tx (->> (vals pvalue-tx-m)
+                        (mapcat #(if (set? %) % [%]))
+                        (mapv convert-block-refs-in-property-value))})))
 
 (def ignored-built-in-properties
   "Ignore built-in properties that are already imported or not supported in db graphs"
