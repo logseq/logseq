@@ -2989,7 +2989,9 @@
         ;; transacted separately the property pages
         property-page-properties-tx (keep (fn [b]
                                             (when-let [page-properties (not-empty (db-property/properties b))]
-                                              (merge page-properties {:block/uuid (:block/uuid b)
+                                              ;; A property placeholder page can have the class attributes of a tag of the same name
+                                              (merge (dissoc page-properties :logseq.property.class/extends)
+                                                     {:block/uuid (:block/uuid b)
                                                                       :block/tags (-> (remove #(= :logseq.class/Page %) (:block/tags page-properties))
                                                                                       (conj :logseq.class/Property))})))
                                           properties-tx)]
