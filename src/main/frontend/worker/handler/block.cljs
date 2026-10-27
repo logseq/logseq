@@ -701,12 +701,7 @@
 
 (def-thread-api :thread-api/get-blocks
   [repo requests]
-  (if (worker-state/get-datascript-conn repo)
-    (get-blocks-response repo requests)
-    ;; Before the worker has opened the graph (e.g. right after a reload),
-    ;; answer every request as a missing block: the renderer expects one
-    ;; result per request.
-    (mapv (fn [{:keys [id]}] {:id id}) requests)))
+  (get-blocks-response repo requests))
 
 (def-thread-api :thread-api/get-block-refs
   [repo id]
