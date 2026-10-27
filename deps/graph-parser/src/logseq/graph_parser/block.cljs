@@ -713,12 +713,14 @@
                     (update :properties-order (fn [keys'] (vec (remove #{:collapsed} keys')))))
                 block)
         title (cond->> (get-block-content encoded-content block format pos-meta block-pattern)
+                ;; Planning lines go first because properties are only removed when they directly
+                ;; follow the first line
+                remove-deadline-scheduled?
+                (gp-property/remove-deadline-scheduled)
                 remove-properties?
                 (#(gp-property/remove-properties (get block :format :markdown) % (:marker block)))
                 remove-logbook?
-                (gp-property/remove-logbook)
-                remove-deadline-scheduled?
-                (gp-property/remove-deadline-scheduled))
+                (gp-property/remove-logbook))
         block (assoc block :block/title title)
         block (if (seq timestamps)
                 (merge block (timestamps->scheduled-and-deadline timestamps))

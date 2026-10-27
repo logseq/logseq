@@ -483,6 +483,28 @@
     (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
         "Imported graph validates")))
 
+(deftest-async import-properties-after-planning-line-are-not-in-title
+  (p/let [file (write-temp-graph-file
+                "pages/planned.md"
+                (str "- planned block\n"
+                     "  SCHEDULED: <2026-01-05 Mon>\n"
+                     "  DEADLINE: <2026-01-09 Fri>\n"
+                     "  kind:: v1\n"
+                     "- plain block\n"
+                     "  kind:: v2\n"))
+          conn (db-test/create-conn)
+          _ (db-pipeline/add-listener conn)
+          _ (import-files-to-db [file] conn {})
+          planned (db-test/find-block-by-content @conn #"planned block")
+          plain (db-test/find-block-by-content @conn #"plain block")]
+    (is (= "planned block" (:block/title planned))
+        "Properties after planning lines are not part of the title")
+    (is (= "v1" (some-> (:user.property/kind planned) db-property/property-value-content))
+        "The property after the planning lines is imported")
+    (is (= "plain block" (:block/title plain)))
+    (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+        "Imported graph validates")))
+
 (deftest-async import-page-template-property
   (p/let [file (write-temp-graph-file "pages/t.md" "template:: tt\n\n- first block\n")
           conn (db-test/create-conn)
