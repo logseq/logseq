@@ -136,7 +136,7 @@ let rec write b (w : Wire.t) =
   | Wire.Bool v -> Buffer.add_string b (string_of_bool v)
   | Wire.Int n -> Buffer.add_string b (string_of_int n)
   | Wire.Int64 n -> Buffer.add_string b (Int64.to_string n)
-  | Wire.Float f -> Buffer.add_string b (Printf.sprintf "%g" f)
+  | Wire.Float f -> Buffer.add_string b (Printf.sprintf "%.17g" f)
   | Wire.String s -> Buffer.add_string b (esc_str s)
   | Wire.Keyword s -> Buffer.add_string b (":" ^ s)
   | Wire.Symbol s -> Buffer.add_string b s

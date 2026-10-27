@@ -2137,7 +2137,8 @@ let test_views_builder () =
   check "simplify single and" (simplify (COp ("and", [ task ])) = Some task);
   check "simplify empty" (simplify (COp ("and", [])) = None);
   check "simplify not kept"
-    (simplify (COp ("not", [ task ])) = Some (COp ("not", [ task ])));
+    (simplify (COp ("not", [ task; COp ("or", []) ]))
+     = Some (COp ("not", [ task; COp ("or", []) ])));
   check "simplify nested collapse"
     (simplify (COp ("and", [ COp ("or", [ task ]) ])) = Some task);
   eqs "tree_to_dsl collapse" "(task \"TODO\")" (tree_to_dsl (COp ("and", [ task ])));
@@ -2157,9 +2158,8 @@ let test_views_builder () =
   check "arg keyword" (arg_of_wire (Wire.Keyword "k") = barg ":k" "k");
   check "arg int" (arg_of_wire (Wire.Int 3) = barg "3" "3");
   (* clause_of_wire *)
-  (match clause_of_wire (Wire.List [ Wire.Symbol "and"; Wire.Symbol "x" ]) with
-   | Some (COp ("and", _)) -> check "clause op" true
-   | _ -> check "clause op" false);
+  check "clause op rejects unsupported children instead of dropping them"
+    (clause_of_wire (Wire.List [ Wire.Symbol "and"; Wire.Symbol "x" ]) = None);
   (match
      clause_of_wire
        (Wire.List [ Wire.Symbol "property"; Wire.Keyword "k" ])
@@ -2181,8 +2181,8 @@ let test_views_builder () =
   (match tree_of_src "\"text\"" with
    | COp ("and", [ CText "text" ]) -> check "tree_of_src text wrap" true
    | _ -> check "tree_of_src text wrap" false);
-  check "tree_of_src non-op" (tree_of_src "sym" = COp ("and", []));
-  check "tree_of_src malformed" (tree_of_src "(broken" = COp ("and", []));
+  check "tree_of_src preserves unsupported source" (tree_of_src "sym" = CInvalid "sym");
+  check "tree_of_src preserves malformed source" (tree_of_src "(broken" = CInvalid "(broken");
   (* loc-based tree surgery: loc [i] at a group indexes clause i-1;
      [0] targets the group node itself *)
   let ta, tb, tc = (ci "a" [], ci "b" [], ci "c" []) in
@@ -2209,9 +2209,8 @@ let test_views_builder () =
   check "replace_at nested"
     (replace_at t [ 2; 2; 0 ] ta
      = COp ("and", [ ta; COp ("or", [ tb; ta ]) ]));
-  (* a loc that stops at a clause index descends into it rather than
-     replacing it, so [i] alone is a no-op *)
-  check "replace_at leaf no-op" (replace_at t [ 1 ] tc = t);
+  check "replace_at leaf preserves sibling branches"
+    (replace_at t [ 1 ] tc = COp ("and", [ tc; tor ]));
   check "wrap_op"
     (wrap_op t [ 2; 0 ] "not"
      = COp ("and", [ ta; COp ("not", [ tor ]) ]));

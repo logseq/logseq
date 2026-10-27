@@ -2474,7 +2474,9 @@ let run_views ~registry ~profile ~finish =
     check "view rename retains the focused input while typing"
       (List.exists (fun n -> n.M.id=input.M.id) (nodes editor));
     ignore (Lui_app.dispose editor.S.app)) rename;
-  Views_builder.full_text_picker inst ~tree:(ref (Views_builder.COp ("and",[])))
+  Views_builder.full_text_picker
+    (Views_builder.editor_of_inst inst ~active:(fun () -> true))
+    ~tree:(ref (Views_builder.COp ("and",[])))
     ~loc:[] ~anchor:(popup_anchor ());
   let full_text_rendered = try S.flush sorting;true with Invalid_argument _ -> false in
   check "query builder full-text input only uses supported component properties" full_text_rendered;
