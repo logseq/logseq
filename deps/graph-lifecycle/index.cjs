@@ -108,6 +108,12 @@ function pidExists(pid, { unsignalableIsGone = false } = {}) {
     throw error;
   }
 }
+// A publication whose PID cannot be signalled may be a worker of this graph that was never registered, so where
+// EPERM is an error (stop and delete) it is probed through its port instead of failing on the PID.
+function publishedPidMayRun(exists, pid) {
+  try { return exists(pid); }
+  catch (error) { if (error.code === 'EPERM') return true; throw error; }
+}
 function signalProcess(pid, signal) {
   if (pid === process.pid) fail('Cannot stop the calling process');
   if (!pidExists(pid)) return;
@@ -451,8 +457,8 @@ async function discover(ctx, current, scan, registeredOnly = false) {
       });
     } else {
       for (const candidate of entries(root)) {
-        if (!exists(candidate.pid)) continue;
         const target = targets.get(candidate.pid);
+        if (!(target ? exists(candidate.pid) : publishedPidMayRun(exists, candidate.pid))) continue;
         if (target) attach(target, candidate);
         else probes.push(async () => {
           let value;
@@ -612,7 +618,7 @@ async function shutdownAndWait(ctx, target, deleting, responsive) {
 }
 
 const legacy = require('./legacy-retirement.cjs')({ fail, readJSON, writeJSON, graphName, canonicalRoot,
-  sameStorage, pidExists, entries, request, shutdownAndWait, removeEntries, runtimeFile, state });
+  sameStorage, pidExists, publishedPidMayRun, entries, request, shutdownAndWait, removeEntries, runtimeFile, state });
 
 async function probeUpgradeTarget(ctx, target, operationDeadline) {
   const exists = existsFor(ctx);
