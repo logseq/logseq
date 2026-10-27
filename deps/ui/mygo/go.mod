@@ -29,4 +29,4 @@ require (
 	golang.org/x/text v0.43.0 // indirect
 )
 
-replace github.com/egoist/mygo => github.com/logseq/mygo v0.0.0-20261026012209-183f6afcb33a
+replace github.com/egoist/mygo => github.com/logseq/mygo v0.0.0-20261027021041-11ecc0c0f1d4
