@@ -7016,6 +7016,31 @@ let () =
         "invalid-config";
       remove_tree root);
 
+  test "CLI parity graph import rejects an EDN input that is not a map"
+    (fun () ->
+      let root = temp_dir "logseq-cli-import-shape-" in
+      List.iteri
+        (fun index content ->
+          let input = Node.Path.join [| root; "input" ^ string_of_int index |] in
+          write_file input content;
+          let output =
+            run_cli_lifecycle
+              [|
+                "--root-dir"; root; "-g"; "shape"; "graph"; "import"; "--type";
+                "edn"; "--input"; input;
+              |]
+          in
+          let name = "import of " ^ String.escaped content in
+          expect_int (name ^ " exit") 1 output.exit_code;
+          let stdout = stdout_text (name ^ " stdout") output in
+          expect_named_contains (name ^ " code") stdout "invalid-options";
+          expect_named_not_contains (name ^ " is not reported imported") stdout
+            "Imported")
+        [ ""; "nil"; "[1 2 3]"; "42" ];
+      expect_bool "no graph was created" false
+        (Node.Fs.existsSync (Node.Path.join [| root; "graphs"; "shape" |]));
+      remove_tree root);
+
   test "CLI parity --help=false does not ask for help" (fun () ->
       let root = temp_dir "logseq-cli-help-false-" in
       let ran =
