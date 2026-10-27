@@ -3395,6 +3395,30 @@
               {:block/title "hello"
                :logseq.property/created-from-property {:db/ident :user.property/p1}})))))
 
+(deftest db-collapsable-ignores-hidden-properties-test
+  (testing "a block whose properties are all hidden has nothing to expand"
+    (is (not (editor/db-collapsable?
+              {:block/title "hidden only"
+               :block.temp/property-keys [:user.property/p1 :user.property/p2]
+               :block.temp/display-properties
+               {:full-properties []
+                :hidden-properties [{:property-id :user.property/p1}
+                                    {:property-id :user.property/p2}]}}))))
+
+  (testing "a visible property row makes the block collapsable"
+    (is (editor/db-collapsable?
+         {:block/title "visible and hidden"
+          :block.temp/property-keys [:user.property/p1 :user.property/p2]
+          :block.temp/display-properties
+          {:full-properties [{:property-id :user.property/p1}]
+           :hidden-properties [{:property-id :user.property/p2}]}})))
+
+  (testing "query blocks stay collapsable when every property row is hidden"
+    (is (editor/db-collapsable?
+         {:block/title "query"
+          :logseq.property/query {:block/title "q"}
+          :block.temp/display-properties {:full-properties [] :hidden-properties []}}))))
+
 (deftest moved-rows-are-found-in-the-view-they-were-selected-in-test
   ;; a block can be drawn twice (an embed above it, the sidebar): the moved
   ;; row is the one in the container the block was selected in

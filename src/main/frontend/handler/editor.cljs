@@ -3721,8 +3721,13 @@
 
 (defn db-collapsable?
   [block & _opts]
-  (let [property-keys (or (seq (:block.temp/property-keys block))
-                          (filter db-property/property? (keys block)))
+  (let [display-properties (:block.temp/display-properties block)
+        ;; The properties area renders only the visible rows; hidden and
+        ;; empty-hidden properties leave nothing to expand.
+        property-keys (if display-properties
+                        (map :property-id (:full-properties display-properties))
+                        (or (seq (:block.temp/property-keys block))
+                            (filter db-property/property? (keys block))))
         properties (->> property-keys
                         (remove db-property/db-attribute-properties)
                         (remove #{:logseq.property/created-by-ref
