@@ -290,7 +290,55 @@ let grouped_table_selection ~registry ~profile =
       check "Bulk actions use current row order once, without stale selections"
         (Views_table.selected_uuids inst = ["b"; "a"; "c"]))
 
+let table_range_selection () =
+  let module V = Views_state in
+  let initial = { (V.empty_vstate ()) with
+    V.selected = V.Sset.of_list ["a"; "outside"]; table_anchor = Some "a" } in
+  let select state rows uuid checked shift =
+    V.table_select_row state ~rows ~uuid ~checked ~shift in
+  let ranged = select initial ["c"; "b"; "a"] "c" true true in
+  check "A range follows the current order and preserves outside selection"
+    (V.Sset.equal ranged.V.selected (V.Sset.of_list ["a"; "b"; "c"; "outside"]));
+  let missing = select initial ["b"; "c"] "c" true true in
+  check "A filtered-out anchor does not select unrelated rows"
+    (V.Sset.equal missing.V.selected (V.Sset.of_list ["a"; "c"; "outside"]));
+  let cleared = select initial ["a"; "b"; "c"] "a" false false in
+  let next = select cleared ["a"; "b"; "c"] "c" true true in
+  check "Deselecting the anchor ends the previous range"
+    (cleared.V.table_anchor = None &&
+      V.Sset.equal next.V.selected (V.Sset.of_list ["c"; "outside"]))
+
+let table_resize_transaction () =
+  let module V = Views_state in
+  let initial = { (V.empty_vstate ()) with
+    V.view_uuid = "table-a"; sized = V.Smap.singleton "title" 180 } in
+  let start = V.start_table_resize initial ~owner:7 ~column:"title" ~x:50. ~width:180 in
+  let move = V.move_table_resize start ~owner:7 ~x:82.6 in
+  check "Resize preview leaves the persisted-width map unchanged"
+    (move.V.sized = initial.V.sized &&
+      Option.map (fun r -> r.V.resize_preview) move.V.table_resize = Some 213);
+  let cancel = V.finish_table_resize move ~owner:7 ~commit:false in
+  check "Cancelling a drag rolls back without changing committed widths"
+    (cancel.V.table_resize = None && cancel.V.sized = initial.V.sized);
+  let release = V.finish_table_resize move ~owner:7 ~commit:true in
+  check "Release commits the rounded preview once"
+    (release.V.table_resize = None && V.Smap.find "title" release.V.sized = 213 &&
+      V.finish_table_resize release ~owner:7 ~commit:true = release);
+  let low = V.move_table_resize start ~owner:7 ~x:(-1000.) in
+  let high = V.move_table_resize start ~owner:7 ~x:1000. in
+  check "Resize previews clamp to the table's supported width range"
+    (Option.map (fun r -> r.V.resize_preview) low.V.table_resize = Some 40 &&
+      Option.map (fun r -> r.V.resize_preview) high.V.table_resize = Some 500);
+  check "A disposed older header cannot finish another header's drag"
+    (V.finish_table_resize move ~owner:8 ~commit:false = move);
+  let switched = { move with V.view_uuid = "table-b" } in
+  let stale = V.finish_table_resize switched ~owner:7 ~commit:true in
+  check "A previous view's drag never commits into the current view"
+    (stale.V.table_resize = None && stale.V.sized = initial.V.sized)
+
 let run_views ~registry ~profile ~finish =
+  table_resize_transaction ();
+  table_range_selection ();
   grouped_table_selection ~registry ~profile;
   settings_config ~registry ~profile;
   flashcards_config ~registry ~profile;
@@ -2261,7 +2309,8 @@ let run_views ~registry ~profile ~finish =
         {o_refresh=(fun _ -> incr refreshes); o_refresh_src=(fun _ _ -> ());
          o_create_view=(fun _ -> ()); o_rename_box=(fun _ _ -> Lui_elements.spacer []);
          o_export=(fun _ -> ()); o_add_object=(fun _ -> ());
-         o_title_of_uuid=(fun _ uuid -> uuid); o_load_more=(fun _ -> ())};
+         o_title_of_uuid=(fun _ uuid -> uuid); o_load_more=(fun _ -> ());
+         o_full_action_rows=(fun _ reply -> reply (Error "Full action rows are not installed"))};
       Views_head.sorting_popup inst (popup_anchor ());
       Lui_elements.column
         [Views_table.foldable inst ~key:"tab-fixture"

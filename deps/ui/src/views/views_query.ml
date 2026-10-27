@@ -132,7 +132,8 @@ let spec_of cfg block_uuid = function
 let set_query_error inst message =
   V.update inst (fun s ->
       { s with V.query_error = Some message; query_rows = [];
-        query_scalar_rows = []; query_view = W.Nil })
+        query_scalar_rows = []; query_view = W.Nil;
+        data = Wr.VEmpty; items_count = 0; query_idents = [] })
 
 let decode_result inst (v : W.t) =
   match W.get v "error" with
@@ -159,6 +160,9 @@ let decode_result inst (v : W.t) =
             ; query_rows = []
             ; query_scalar_rows = items
             ; query_view = Option.value (W.get v "view") ~default:W.Nil
+            ; data = Wr.VEmpty
+            ; items_count = 0
+            ; query_idents = []
             }))
 
 (* uuids inside the :view hiccup hydrate to titles via inst blocks *)
@@ -187,6 +191,9 @@ let run inst (f : unit -> unit) =
               ; query_rows = []
               ; query_scalar_rows = []
               ; query_view = W.Nil
+              ; data = Wr.VEmpty
+              ; items_count = 0
+              ; query_idents = []
               });
           f ()
       | Ok src_kind ->
@@ -209,6 +216,7 @@ let run inst (f : unit -> unit) =
                        | view ->
                            let uuids = collect_uuids view [] in
                            Db.get_blocks uuids ~metadata:true (fun ents ->
+                             if V.fetch_fresh inst gen then begin
                                V.update inst (fun s ->
                                    let blocks = Hashtbl.copy s.V.blocks in
                                    List.iter
@@ -219,7 +227,8 @@ let run inst (f : unit -> unit) =
                                        | None -> ())
                                      ents;
                                    { s with V.blocks });
-                               f ()))
+                               f ()
+                             end))
                     end)
                   [ Db.resource_query spec ]
           in
@@ -334,12 +343,12 @@ let refresh_block inst f =
    tagged parent. The first refresh_block may still be in flight when
    the user commits, so the uuid is resolved through the parent's
    logseq.property/query ref on demand instead of guessed. *)
-let save_src inst src =
+let save_src ?(after = fun () -> ()) inst src =
   match inst.V.kind with
   | V.KQuery { block_uuid } ->
       let s = V.get inst in
       if s.V.query_block_uuid <> "" then
-        Db.save_block_title s.V.query_block_uuid src (fun () -> ())
+        Db.save_block_title s.V.query_block_uuid src after
       else
         Db.get_blocks [ block_uuid ] ~metadata:true ~children:true
           ~include_property_block:true
@@ -352,7 +361,7 @@ let save_src inst src =
                     | Some u ->
                         V.update inst (fun s ->
                             { s with V.query_block_uuid = u });
-                        Db.save_block_title u src (fun () -> ())
+                        Db.save_block_title u src after
                     | None -> ())
                 | None -> ())
             | [] -> ())

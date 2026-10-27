@@ -114,7 +114,11 @@ let column_size (c : V.column) =
 
 let column_width (s : V.vstate) (c : V.column) =
   if c.V.c_id = "id" then 48
-  else Option.value (V.Smap.find_opt c.V.c_id s.V.sized) ~default:(column_size c)
+  else
+    match s.V.table_resize with
+    | Some resize when resize.V.resize_view = s.V.view_uuid &&
+        resize.V.resize_column = c.V.c_id -> resize.V.resize_preview
+    | _ -> Option.value (V.Smap.find_opt c.V.c_id s.V.sized) ~default:(column_size c)
 
 let with_column_width inst c elem =
   Ui_parts.int_prop L.WidthValue
@@ -288,6 +292,23 @@ let cell_value blk (c : V.column) : W.t =
 
 (* ---------- cells ---------- *)
 
+let all_row_uuids (s : V.vstate) =
+  let rows = match s.V.data with
+  | Wr.VFlat { rows; _ } -> rows
+  | Wr.VGrouped gs -> List.concat_map (fun g -> g.Wr.grows) gs
+  | Wr.VGroupedList gs ->
+      List.concat_map (fun g -> List.concat_map snd g.Wr.glparts) gs
+  | Wr.VEmpty -> []
+  in
+  let seen = ref V.Sset.empty in
+  List.filter (fun uuid ->
+      if V.Sset.mem uuid !seen then false
+      else (seen := V.Sset.add uuid !seen; true)) rows
+
+let select_row inst ~uuid ~checked ~shift =
+  V.update inst (fun state ->
+      V.table_select_row state ~rows:(all_row_uuids state) ~uuid ~checked ~shift)
+
 (* The selection target is 32 points; its centered 16-point chrome
    appears while hovered or checked. *)
 let checkbox_el inst ~jtrigger ~id ~aria_label ~shown ~on_toggle : t =
@@ -324,13 +345,8 @@ let select_cell inst ~row_uuid ~blk : t =
         [ checkbox_el inst ~jtrigger:true ~id:(dbid ^ "-checkbox")
             ~aria_label:(I.t "view.table/select-row")
             ~shown:(fun (s : V.vstate) -> V.Sset.mem row_uuid s.V.selected)
-            ~on_toggle:(fun on ->
-              V.update inst (fun s ->
-                  { s with
-                    V.selected =
-                      (if on then V.Sset.add row_uuid s.V.selected
-                       else V.Sset.remove row_uuid s.V.selected)
-                  })) ])
+            ~on_toggle:(fun checked ->
+              select_row inst ~uuid:row_uuid ~checked ~shift:false) ])
     ]
 
 let open_row_sidebar row_uuid =
@@ -522,19 +538,6 @@ let cell_el inst ~row_uuid ~blk (c : V.column) : t =
            | None -> prop_cell ~blk c)) ]))
 
 (* ---------- header ---------- *)
-
-let all_row_uuids (s : V.vstate) =
-  let rows = match s.V.data with
-  | Wr.VFlat { rows; _ } -> rows
-  | Wr.VGrouped gs -> List.concat_map (fun g -> g.Wr.grows) gs
-  | Wr.VGroupedList gs ->
-      List.concat_map (fun g -> List.concat_map snd g.Wr.glparts) gs
-  | Wr.VEmpty -> []
-  in
-  let seen = ref V.Sset.empty in
-  List.filter (fun uuid ->
-      if V.Sset.mem uuid !seen then false
-      else (seen := V.Sset.add uuid !seen; true)) rows
 
 let selected_row_uuids (s : V.vstate) =
   List.filter (fun uuid -> V.Sset.mem uuid s.V.selected) (all_row_uuids s)

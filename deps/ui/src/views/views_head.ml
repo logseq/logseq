@@ -35,21 +35,7 @@ let ghost_btn ?(extra = "") ~title_ icon_name ~on_click : t =
     [ icon ~name:(Icons.name_ref icon_name) ~point_size:18 [] ]
 
 let count_of (s : V.vstate) =
-  if s.V.items_count > 0 then s.V.items_count
-  else
-  match s.V.data with
-  | Wr.VFlat { rows; _ } -> List.length rows
-  | Wr.VGrouped gs ->
-      List.fold_left (fun acc g -> acc + List.length g.Wr.grows) 0 gs
-  | Wr.VGroupedList gs ->
-      List.fold_left
-        (fun acc g ->
-          acc
-          + List.fold_left
-              (fun acc2 (_, rows) -> acc2 + List.length rows)
-              0 g.Wr.glparts)
-        0 gs
-  | Wr.VEmpty -> 0
+  max s.V.items_count (Wr.row_count s.V.data)
 
 let set_filters inst fs or_ =
   V.update inst (fun s -> { s with V.filters = fs; filters_or = or_ });
@@ -490,7 +476,8 @@ let groupable_columns inst =
         && c.V.c_id <> "block.temp/refs-count"
         && List.mem c.V.c_type
              [ "checkbox"; "class"; "date"; "default"; "node"; "number"
-             ; "string"; "url" ])
+             ; "string"; "url" ]
+        && (not c.V.c_many || List.mem c.V.c_type [ "class"; "default"; "node" ]))
       s.V.columns
   in
   if List.exists (fun c -> c.V.c_id = "block/page") s.V.columns then
@@ -654,9 +641,13 @@ let search_items inst : t list =
              ~on_input:(fun ev ->
                match ev with
                | L.TextChanged (_, v) ->
+                   let view_uuid = (V.get inst).V.view_uuid in
+                   V.update inst (fun s -> { s with V.input = v });
                    deb (fun () ->
-                       V.update inst (fun s -> { s with V.input = v });
-                       refresh inst)
+                       let s = V.get inst in
+                       if not (Signal.scope_is_disposed ctx.Lui_ui.ui_scope)
+                          && s.V.search_open && s.V.view_uuid = view_uuid
+                          && s.V.input = v then refresh inst)
                | _ -> ())
              []))
        ctx parent)
