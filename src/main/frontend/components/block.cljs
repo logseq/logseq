@@ -3930,7 +3930,7 @@
       (boolean (editor-handler/block-default-collapsed? block config)))))
 
 (defn- build-config
-  [config block {:keys [navigating-block navigated?]}]
+  [config block {:keys [navigating-block navigated? *query-result]}]
   (cond-> config
     navigated?
     (assoc :id (str navigating-block))
@@ -3942,8 +3942,10 @@
           ;; This :query-result atom is used by the query function feature to share results between
           ;; the parent's query block and the children blocks. This works because config is shared
           ;; between parent and children blocks
+    ;; The atom must outlive a re-render: a child rendered with an earlier render's config
+    ;; would otherwise wait on an atom the query no longer fills.
     (nil? (:query-result config))
-    (assoc :query-result (atom nil))
+    (assoc :query-result (or *query-result (atom nil)))
 
     true
     (block-handler/attach-order-list-state block)
@@ -4171,7 +4173,9 @@
         custom-query? (boolean (:custom-query? config*))
         *navigating-block (get container-state ::navigating-block)
         {:block/keys [uuid title]} block
-        config (build-config config* block {:navigated? navigated? :navigating-block navigating-block})
+        *query-result (hooks/use-memo #(atom nil) [])
+        config (build-config config* block {:navigated? navigated? :navigating-block navigating-block
+                                            :*query-result *query-result})
         level (:level config)
         *control-show? (get container-state ::control-show?)
         temp-collapsed? (rfx/use-sub [:ui/collapsed-blocks
