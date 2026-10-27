@@ -5,12 +5,44 @@
 
 open Promise_ext
 type message_handler = string -> Wire.t -> unit
+type scope = Daemon_client.scope = { repo : string; epoch : int }
+type outcome = Daemon_client.outcome = Not_sent | Outcome_unknown
+type request_failure = Daemon_client.request_failure =
+  { scope : scope option
+  ; method_name : string
+  ; outcome : outcome
+  ; cause : exn
+  }
+exception Request_failed = Daemon_client.Request_failed
+type phase = Daemon_client.phase = Disconnected | Recovering | Ready | Failed of exn
+type lifecycle = Daemon_client.lifecycle = { scope : scope option; phase : phase }
+type invoke = Daemon_client.invoke
+type bootstrap = Daemon_client.bootstrap =
+  { scope : scope
+  ; invoke : invoke
+  ; is_current : unit -> bool
+  }
 
 type t =
   { invoke_fn : string -> Wire.t list -> Wire.t Js.Promise.t
   ; mutable on_message : message_handler
   ; dead : string Js.Promise.t
+  ; daemon : Daemon_client.transport option
+  ; inflight_reads : (string, Wire.t Js.Promise.t) Hashtbl.t
   }
+
+let supports_recovery t = Option.is_some t.daemon
+let daemon_exn t =
+  match t.daemon with
+  | Some daemon -> daemon
+  | None -> invalid_arg "Daemon recovery is unavailable for this worker"
+
+let configure_recovery t ~on_state ~on_request_failure ~rehydrate =
+  Daemon_client.configure_recovery (daemon_exn t) ~on_state ~on_request_failure ~rehydrate
+
+let lifecycle t = Daemon_client.lifecycle (daemon_exn t)
+let connect t ~repo = Daemon_client.connect (daemon_exn t) ~repo
+let disconnect t = Option.iter Daemon_client.disconnect t.daemon
 
 (* renderer-side api registry the worker calls back through
    Comlink.expose ({remoteInvoke}) — kept for when the daemon grows a
@@ -47,9 +79,6 @@ let install_stub_handlers () =
    display/bidirectional/get-blocks x2 — each queue behind one another.
    Same (method, args) while in-flight shares one promise; writes
    (apply-outliner-ops, transact) are never merged. *)
-let inflight_reads : (string, Wire.t Js.Promise.t) Hashtbl.t =
-  Hashtbl.create 16
-
 (* Callers pass names with a "thread-api/" routing prefix; classify on
    the method part. *)
 let method_name (name : string) : string =
@@ -69,13 +98,17 @@ let dedup_method (name : string) : bool =
 let run_invoke t name args =
   if not (dedup_method name) then t.invoke_fn name args
   else begin
-    let key = name ^ "|" ^ Transit.to_string (Wire.Array args) in
-    match Hashtbl.find_opt inflight_reads key with
+    let daemon = daemon_exn t in
+    let key =
+      string_of_int daemon.epoch ^ "|" ^ daemon.repo ^ "|" ^ name ^ "|"
+      ^ Transit.to_string (Wire.Array args)
+    in
+    match Hashtbl.find_opt t.inflight_reads key with
     | Some p -> p
     | None ->
         let p = t.invoke_fn name args in
-        Hashtbl.replace inflight_reads key p;
-        let release _ = Hashtbl.remove inflight_reads key in
+        Hashtbl.replace t.inflight_reads key p;
+        let release _ = Hashtbl.remove t.inflight_reads key in
         ignore
           (Js.Promise.then_
              (fun r -> release (); Js.Promise.resolve r)
@@ -123,6 +156,8 @@ let create () =
     { invoke_fn = (fun name args -> Daemon_client.invoke tr name args)
     ; on_message = (fun _ _ -> ())
     ; dead = tr.Daemon_client.dead
+    ; daemon = Some tr
+    ; inflight_reads = Hashtbl.create 16
     }
   in
   tr.Daemon_client.sink <-
