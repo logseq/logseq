@@ -135,6 +135,20 @@ let encode_graph repo =
     name;
   Buffer.contents b
 
+let repo_of_graph_directory directory =
+  let name =
+    Uri.pct_decode
+      (String.map (fun c -> if c = '~' then '%' else c) directory)
+  in
+  if not (String.is_valid_utf_8 name)
+     || String.trim name = ""
+     || name = "Unlinked graphs" || name = "backup"
+     || String.starts_with ~prefix:"logseq_db_" name
+     || String.starts_with ~prefix:"logseq_local_" name
+     || encode_graph name <> directory
+  then None
+  else Some ("logseq_db_" ^ name)
+
 let realpath p = try Unix.realpath p with _ -> p
 
 let sha256_hex s =
@@ -389,7 +403,9 @@ let list_repo_names () : Wire.t list =
     |> List.filter (fun name ->
            name <> "" && name.[0] <> '.'
            && Sys.is_directory (Filename.concat dir name))
-    |> List.map (fun name -> Wire.String ("logseq_db_" ^ name))
+    |> List.filter_map (fun name ->
+           Option.map (fun repo -> Wire.String repo)
+             (repo_of_graph_directory name))
 
 (* ---------- attach + prewarm ---------- *)
 
