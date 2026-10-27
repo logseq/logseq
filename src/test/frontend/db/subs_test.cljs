@@ -4,6 +4,8 @@
             [frontend.db.subs :as subs]
             [frontend.state :as state]
             [frontend.worker.db-listener :as db-listener]
+            [frontend.worker.handler.block :as block-handler]
+            [frontend.worker.render-delta :as render-delta]
             [frontend.worker.handler.render-resource.engine :as render-engine]
             [logseq.db :as ldb]
             [logseq.db.test.helper :as db-test]
@@ -249,6 +251,51 @@
                 (fn []
                   (when-let [unsubscribe! @unsubscribe]
                     (unsubscribe!)))))))))
+
+(deftest orderless-children-roundtrip-through-snapshots-and-deltas-test
+  (async done
+         (let [conn (db-test/create-conn)
+               parent-uuid (random-uuid)
+               child-uuid (random-uuid)]
+           (d/transact! conn [{:db/id -1
+                              :block/uuid parent-uuid
+                              :block/tx-id 1
+                              :block/title "Parent"
+                              :block/name "parent"
+                              :block/tags :logseq.class/Page}
+                             {:block/uuid child-uuid
+                              :block/tx-id 1
+                              :block/title "Child"
+                              :block/name "child"
+                              :block/tags :logseq.class/Page
+                              :block/parent -1}])
+           (finish-async!
+            done
+            (p/with-redefs [subs/<load-children
+                            (fn [_graph-id requested-parent]
+                              (let [{:keys [basis-rev parent-tx-id items]}
+                                    (block-handler/direct-children-membership @conn requested-parent)]
+                                (p/resolved (children-patch basis-rev requested-parent parent-tx-id items))))]
+              (let [unsubscribe (subs/subscribe-children! parent-uuid (fn []))]
+                (->
+                 (p/let [_ (p/delay 0)
+                         _ (is (= {:status :ready :value [child-uuid]}
+                                  (subs/children-snapshot parent-uuid)))]
+                   (doseq [[tx-data expected]
+                           [[[[:db/add [:block/uuid parent-uuid] :logseq.property/deleted-at 1000]] []]
+                            [[[:db/retract [:block/uuid parent-uuid] :logseq.property/deleted-at 1000]] [child-uuid]]]]
+                     (let [report (d/transact! conn tx-data)
+                           commit (render-delta/build
+                                   {:graph-id test-graph-id
+                                    :rev (:max-tx (:db-after report))
+                                    :blocks {}
+                                    :deleted-block-uuids #{}
+                                    :affected-keys #{}
+                                    :tx-report report})]
+                       (subs/apply-delta! (-> commit ldb/write-transit-str ldb/read-transit-str))
+                       (is (= {:status :ready :value expected}
+                              (subs/children-snapshot parent-uuid))))))
+                 (p/finally unsubscribe))))))))
 
 (deftest block-changed-uses-only-tx-id-test
   (let [block-uuid (random-uuid)
