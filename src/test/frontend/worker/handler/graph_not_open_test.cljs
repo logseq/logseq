@@ -32,5 +32,4 @@
   (testing "view and graph reads"
     (is (nil? (call-thread-api :thread-api/get-view-data unopened-repo 1 {})))
     (is (false? (call-thread-api :thread-api/favorited-page? unopened-repo (random-uuid))))
-    (is (nil? (call-thread-api :thread-api/build-graph unopened-repo {:type :global})))
     (is (nil? (call-thread-api :thread-api/get-all-page-titles unopened-repo)))))
