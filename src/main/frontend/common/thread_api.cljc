@@ -42,6 +42,42 @@
          (throw e)))))
 
 #?(:cljs
+   (defonce ^:private *opening-graphs
+     ;; repo -> promise that settles when its :thread-api/create-or-open-db call does
+     (atom {})))
+
+#?(:cljs
+   (def ^:private graph-open-wait-ms
+     "How long a call for a graph that is being opened waits for the open before it runs anyway."
+     30000))
+
+#?(:cljs
+   (defn- call-with-graph-open-gate
+     "Applies a thread api. After a reload the renderer sends calls for the current graph (reads for the page it
+     renders, search, the graph view) right behind the call that opens it; the worker would run them on a graph that
+     has no conn yet. So :thread-api/create-or-open-db marks its repo as opening until it settles, and a call whose
+     first argument is a repo being opened waits for that first (at most graph-open-wait-ms)."
+     [qkw f args]
+     (let [repo (first args)]
+       (cond
+         (and (= qkw :thread-api/create-or-open-db) (string? repo))
+         (let [result (apply f args)
+               settled (-> (p/promise result)
+                           (p/then (constantly nil))
+                           (p/catch (constantly nil)))]
+           (swap! *opening-graphs assoc repo settled)
+           (p/finally settled
+                      (fn [] (swap! *opening-graphs (fn [m] (cond-> m (identical? (get m repo) settled) (dissoc repo))))))
+           result)
+
+         (and (string? repo) (get @*opening-graphs repo))
+         (p/let [_ (p/race [(get @*opening-graphs repo) (p/delay graph-open-wait-ms)])]
+           (apply f args))
+
+         :else
+         (apply f args)))))
+
+#?(:cljs
    (defn remote-function
      "Return a promise whose value is a transit string."
      [qualified-kw-str args-transit-str]
@@ -53,7 +89,7 @@
          (let [args (ldb/read-transit-str args-transit-str)
                handler-started-at (.now js/performance)]
            (try
-             (let [result-promise (apply f args)]
+             (let [result-promise (call-with-graph-open-gate qkw f args)]
                (->
                 (p/let [result result-promise
                         handler-completed-at (.now js/performance)
