@@ -39,6 +39,18 @@ let selection_context sel =
     S.selection_scope (),
     if sel = [] then None else view_parent_uuid sel )
 
+let with_mounted_anchor sel render : t =
+ fun ctx parent ->
+  let mounted = Lazy_children.mounted_uuids ~scope:(S.selection_scope ()) ctx in
+  let anchor_of mounted =
+    List.find_opt (fun uuid -> Lazy_children.Mounted_uuids.mem uuid mounted) sel
+  in
+  (reactive
+     ~equal:(fun left right -> anchor_of left = anchor_of right)
+     (fun mounted -> render (anchor_of mounted))
+     mounted)
+    ctx parent
+
 let with_cut_eligibility sel render : t =
  fun ctx parent ->
   let ((_, _, _, uuid) as key) = selection_context sel in
@@ -207,9 +219,14 @@ let install_listeners () =
                      | None -> ())
                  0)))
 
-(* cljs hides the action-bar while another popup is up — fold the
-   popup/cmdk flags into the same reactive source (nested reactive has no parent
-   node to anchor to) *)
+let same_bar_state (left, lp, lc, ld) (right, rp, rc, rd) =
+  S.String_set.equal left.S.selected right.S.selected
+  && left.S.selection_scope = right.S.selection_scope
+  && left.S.action_bar = right.S.action_bar
+  && left.S.editing = None = (right.S.editing = None)
+  && lp = rp && lc = rc
+  && ld = None = (rd = None)
+
 let rec view () : t =
  (* mount-order independent: ensure creates the editor state on first
      use, so the bar works even on pages where it precedes the first
@@ -221,179 +238,151 @@ let rec view () : t =
 and node () : t =
  fun ctx parent ->
   (install_listeners ();
-   (* every map level holds an upstream subscription on the shared state
-       signals — own each so the mount scope releases them *)
-   let sel_sig =
-     Logseq_el.own ctx
-       (Signal.map2
-          (fun _sel bar -> (Editor_actions.selected_uuids (), bar))
-          (S.selected_sig ()) (S.action_bar_sig ()))
+   let popup =
+     match Popups_state.non_cm_popup_signal () with
+     | Some signal -> signal
+     | None -> Signal.constant ctx.Lui_ui.ui_scheduler false
    in
-   let source =
-     let base =
-       Logseq_el.own ctx
-         (Signal.map (fun (sel, bar) -> (sel, bar, false, false)) sel_sig)
-     in
-     let with_popup =
-       match Popups_state.non_cm_popup_signal () with
-       | Some ps ->
-           Logseq_el.own ctx
-             (Signal.map2 (fun (sel, bar, _, c) p -> (sel, bar, p, c)) base ps)
-       | None -> base
-     in
-     let with_cmdk =
-       match Cmdk_state.open_signal () with
-       | Some cs ->
-           Logseq_el.own ctx
-             (Signal.map2
-                (fun (sel, bar, p, _) c -> (sel, bar, p, c))
-                with_popup cs)
-       | None -> with_popup
-     in
-     let with_editing =
-       Logseq_el.own ctx
-         (Signal.map2
-            (fun (sel, bar, p, c) editing ->
-              (sel, bar, p || editing <> None, c))
-            with_cmdk (S.editing_sig ()))
-     in
-     let ds = Properties_dialog.state_signal ctx.Lui_ui.ui_scheduler in
-     Logseq_el.own ctx
-       (Signal.map2
-          (fun (sel, bar, p, c) dialog -> (sel, bar, p || dialog <> None, c))
-          with_editing (Signal.value ds))
+   let cmdk =
+     match Cmdk_state.open_signal () with
+     | Some signal -> signal
+     | None -> Signal.constant ctx.Lui_ui.ui_scheduler false
    in
-   reactive
-     (fun ((sel : string list), (bar : bool), (popup : bool), (cmdk : bool)) ->
-       if popup || cmdk || not bar then Logseq_el.nothing
+   let dialog = Properties_dialog.state_signal ctx.Lui_ui.ui_scheduler in
+   reactive ~equal:same_bar_state
+     (fun (state : S.t) popup cmdk dialog ->
+       if
+         popup || cmdk || dialog <> None || state.S.editing <> None
+         || not state.S.action_bar
+       then Logseq_el.nothing
        else
+         let sel = Editor_actions.selected_uuids () in
          match sel with
          | [] -> Logseq_el.nothing
-         | first :: _ -> (
-             match
-               List.find_opt
-                 (fun uuid ->
-                   Ui_services.dom_by_id ("ls-block-" ^ uuid) <> None)
-                 sel
-             with
-             | None -> Logseq_el.nothing
-             | Some anchor ->
-                 with_cut_eligibility sel (fun eligibility ->
-                     (* The retained anchor owns scroll/resize positioning and
+         | first :: _ ->
+             with_mounted_anchor sel (function
+               | None -> Logseq_el.nothing
+               | Some anchor ->
+                   with_cut_eligibility sel (fun eligibility ->
+                       (* The retained anchor owns scroll/resize positioning and
                  viewport collision handling on both hosts. *)
-                     popover ~transition:Ui_components.popover_transition
-                       ~key:"sbar" ~anchor_target:("ls-block-" ^ anchor)
-                       ~anchor:`above ~anchor_alignment:`start ~anchor_offset:8.
-                       ~style_class:"selection-action-bar"
-                       ~data_attrs:[ ("data-keep-selection", "true") ]
-                       [
-                         Uc.action_bar_capsule ~key:"sbg"
-                           ~border_color:"hsl(var(--border))" ~border_width:1
-                           (row ~key:"sbr" ~gap:0 ~cross:`stretch
-                              ((* cljs shui segmented bar: tags/comment/delete/
+                       popover ~transition:Ui_components.popover_transition
+                         ~key:"sbar" ~anchor_target:("ls-block-" ^ anchor)
+                         ~anchor:`above ~anchor_alignment:`start
+                         ~anchor_offset:8. ~style_class:"selection-action-bar"
+                         ~data_attrs:[ ("data-keep-selection", "true") ]
+                         [
+                           Uc.action_bar_capsule ~key:"sbg"
+                             ~border_color:"hsl(var(--border))" ~border_width:1
+                             (row ~key:"sbr" ~gap:0 ~cross:`stretch
+                                ((* cljs shui segmented bar: tags/comment/delete/
                            more are icon-only cells; copy and the
                            property actions keep their text labels;
                            thin dividers separate every cell *)
-                               let snapshot = selection_context sel in
-                               let sbtn ~key ~label ?icon ?text ~on_press () =
-                                 Ui_components.button ~key ~variant:`ghost
-                                   ~size:`sm ~label ?icon ?text
-                                   ~on_press:(fun ev ->
-                                     if selection_matches snapshot sel then
-                                       on_press ev)
-                                   []
-                               in
-                               let sep k =
-                                 divider ~key:k ~orientation:`vertical []
-                               in
-                               let items =
-                                 [
-                                   sbtn ~key:"sb-tag"
-                                     ~label:(I18n.t "property/set-tags")
-                                     ~icon:(`app "hash")
-                                     ~on_press:(fun _ -> open_tags sel)
-                                     ();
-                                 ]
-                                 @ (let targets = comment_targets sel in
-                                    if targets = [] then []
-                                    else
-                                      [
-                                        sbtn ~key:"sb-cmt"
-                                          ~label:
-                                            (I18n.t "block.comments/add-comment")
-                                          ~icon:(`app "message-circle")
-                                          ~on_press:(fun _ ->
-                                            Comments.ensure_for targets)
-                                          ();
-                                      ])
-                                 @ [
-                                     sbtn ~key:"sb-cpy"
-                                       ~label:(I18n.t "ui/copy")
-                                       ~text:(I18n.t "ui/copy")
-                                       ~on_press:(fun _ ->
-                                         Editor_actions.copy_selection_text ())
-                                       ();
-                                     sbtn ~key:"sb-set"
-                                       ~label:(I18n.t "property/set-property")
-                                       ~text:(I18n.t "property/set-property")
-                                       ~on_press:(fun _ ->
-                                         open_prop_dlg ~remove:false sel)
-                                       ();
-                                     sbtn ~key:"sb-uns"
-                                       ~label:(I18n.t "property/unset-property")
-                                       ~text:(I18n.t "property/unset-property")
-                                       ~on_press:(fun _ ->
-                                         open_prop_dlg ~remove:true sel)
+                                 let snapshot = selection_context sel in
+                                 let sbtn ~key ~label ?icon ?text ~on_press () =
+                                   Ui_components.button ~key ~variant:`ghost
+                                     ~size:`sm ~label ?icon ?text
+                                     ~on_press:(fun ev ->
+                                       if selection_matches snapshot sel then
+                                         on_press ev)
+                                     []
+                                 in
+                                 let sep k =
+                                   divider ~key:k ~orientation:`vertical []
+                                 in
+                                 let items =
+                                   [
+                                     sbtn ~key:"sb-tag"
+                                       ~label:(I18n.t "property/set-tags")
+                                       ~icon:(`app "hash")
+                                       ~on_press:(fun _ -> open_tags sel)
                                        ();
                                    ]
-                                 @ (if can_cut sel eligibility then
-                                      [
-                                        sbtn ~key:"sb-del"
-                                          ~label:
-                                            (I18n.t "editor/delete-selection")
-                                          ~icon:(`app "trash")
-                                          ~on_press:(fun _ ->
-                                            Editor_actions.delete_selection ())
-                                          ();
-                                      ]
-                                    else [])
-                                 @ [
-                                     sbtn ~key:"sb-mor"
-                                       ~label:(I18n.t "ui/show-more")
-                                       ~icon:(`app "dots")
-                                       ~on_press:(fun _ ->
-                                         (* cljs: the bar's dots menu is a dropdown
+                                   @ (let targets = comment_targets sel in
+                                      if targets = [] then []
+                                      else
+                                        [
+                                          sbtn ~key:"sb-cmt"
+                                            ~label:
+                                              (I18n.t
+                                                 "block.comments/add-comment")
+                                            ~icon:(`app "message-circle")
+                                            ~on_press:(fun _ ->
+                                              Comments.ensure_for targets)
+                                            ();
+                                        ])
+                                   @ [
+                                       sbtn ~key:"sb-cpy"
+                                         ~label:(I18n.t "ui/copy")
+                                         ~text:(I18n.t "ui/copy")
+                                         ~on_press:(fun _ ->
+                                           Editor_actions.copy_selection_text ())
+                                         ();
+                                       sbtn ~key:"sb-set"
+                                         ~label:(I18n.t "property/set-property")
+                                         ~text:(I18n.t "property/set-property")
+                                         ~on_press:(fun _ ->
+                                           open_prop_dlg ~remove:false sel)
+                                         ();
+                                       sbtn ~key:"sb-uns"
+                                         ~label:
+                                           (I18n.t "property/unset-property")
+                                         ~text:
+                                           (I18n.t "property/unset-property")
+                                         ~on_press:(fun _ ->
+                                           open_prop_dlg ~remove:true sel)
+                                         ();
+                                     ]
+                                   @ (if can_cut sel eligibility then
+                                        [
+                                          sbtn ~key:"sb-del"
+                                            ~label:
+                                              (I18n.t "editor/delete-selection")
+                                            ~icon:(`app "trash")
+                                            ~on_press:(fun _ ->
+                                              Editor_actions.delete_selection ())
+                                            ();
+                                        ]
+                                      else [])
+                                   @ [
+                                       sbtn ~key:"sb-mor"
+                                         ~label:(I18n.t "ui/show-more")
+                                         ~icon:(`app "dots")
+                                         ~on_press:(fun _ ->
+                                           (* cljs: the bar's dots menu is a dropdown
                                   anchored to the trigger button — the last
                                   .lui-button in the capsule *)
-                                         match
-                                           ( !Popups_state.active,
-                                             Ui_services.dom_query
-                                               ".selection-action-bar \
-                                                .lui-button:last-child" )
-                                         with
-                                         | Some st, Some btn ->
-                                             let ax, atop, abot =
-                                               Popups_state.anchor_of_el btn
-                                             in
-                                             Popups_state.open_cm
-                                               ~allow_cut:
-                                                 (can_cut sel eligibility)
-                                               ~allow_delete:
-                                                 (can_cut sel eligibility) st
-                                               ~ax ~atop ~abot ~block_id:first
-                                               ~multi:true
-                                         | _ -> ())
-                                       ();
-                                   ]
-                               in
-                               List.concat_map
-                                 (fun (i, item) ->
-                                   if i = 0 then [ item ]
-                                   else
-                                     [
-                                       sep (Printf.sprintf "sb-sep-%d" i); item;
-                                     ])
-                                 (List.mapi (fun i it -> (i, it)) items)));
-                       ])))
-     source)
+                                           match
+                                             ( !Popups_state.active,
+                                               Ui_services.dom_query
+                                                 ".selection-action-bar \
+                                                  .lui-button:last-child" )
+                                           with
+                                           | Some st, Some btn ->
+                                               let ax, atop, abot =
+                                                 Popups_state.anchor_of_el btn
+                                               in
+                                               Popups_state.open_cm
+                                                 ~allow_cut:
+                                                   (can_cut sel eligibility)
+                                                 ~allow_delete:
+                                                   (can_cut sel eligibility) st
+                                                 ~ax ~atop ~abot ~block_id:first
+                                                 ~multi:true
+                                           | _ -> ())
+                                         ();
+                                     ]
+                                 in
+                                 List.concat_map
+                                   (fun (i, item) ->
+                                     if i = 0 then [ item ]
+                                     else
+                                       [
+                                         sep (Printf.sprintf "sb-sep-%d" i);
+                                         item;
+                                       ])
+                                   (List.mapi (fun i it -> (i, it)) items)));
+                         ])))
+     (S.signal ()) popup cmdk (Signal.value dialog))
     ctx parent
