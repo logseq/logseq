@@ -435,6 +435,29 @@ async function discover(ctx, current, scan, registeredOnly = false) {
   for (const result of results) if (result.status === 'rejected') throw result.reason;
   return { targets: [...targets.values()] };
 }
+// The lock is created with writeFileSync, so a crash or a full disk can leave it empty or truncated,
+// and a lock without a holder PID has no live owner to wait for.
+// Returns null when the lock is gone, otherwise its raw text and its holder (null when unusable).
+function readServerListLock(lockFile) {
+  let raw;
+  try { raw = fs.readFileSync(lockFile, 'utf8'); }
+  catch (error) { if (error.code === 'ENOENT') return null; throw error; }
+  try {
+    const holder = JSON.parse(raw);
+    if (holder && Number.isSafeInteger(holder.pid) && holder.pid > 0) return { raw, holder };
+  } catch (error) { if (!(error instanceof SyntaxError)) throw error; }
+  return { raw, holder: null };
+}
+// A live writer's lock is briefly empty between creating the file and writing the holder, so an
+// unusable lock only counts as stale once it has stayed unusable for this long (milliseconds).
+const UNUSABLE_LOCK_GRACE = 500;
+// The lock only guards server-list rewrites and its holders are this user's lifecycle processes, so a
+// holder PID this user cannot signal has been reused and the lock is stale.
+function serverListLockIsStale(lockFile, lock) {
+  if (lock.holder) return !pidExists(lock.holder.pid, { unsignalableIsGone: true });
+  try { return Date.now() - fs.statSync(lockFile).mtimeMs >= UNUSABLE_LOCK_GRACE; }
+  catch (error) { if (error.code === 'ENOENT') return false; throw error; }
+}
 async function removeEntries(root, removed) {
   const lockFile = path.join(root, 'server-list.lock');
   const owner = { pid: process.pid, 'lock-id': id() };
@@ -443,9 +466,10 @@ async function removeEntries(root, removed) {
     try { fs.writeFileSync(lockFile, JSON.stringify(owner), { flag: 'wx' }); break; }
     catch (error) {
       if (error.code !== 'EEXIST') throw error;
-      const previous = readJSON(lockFile);
-      if (previous && !pidExists(previous.pid)) {
-        if (readJSON(lockFile)?.['lock-id'] === previous['lock-id']) fs.unlinkSync(lockFile);
+      const previous = readServerListLock(lockFile);
+      if (previous && serverListLockIsStale(lockFile, previous)) {
+        // Another process may reclaim the same stale lock first; remove it only while it is still the one judged stale.
+        if (readServerListLock(lockFile)?.raw === previous.raw) fs.rmSync(lockFile, { force: true });
       }
       if (Date.now() >= deadline) fail('Timed out acquiring server-list lock');
       await sleep(25);
@@ -460,7 +484,7 @@ async function removeEntries(root, removed) {
       fs.renameSync(temporary, file);
     } finally { fs.rmSync(temporary, { force: true }); }
   } finally {
-    if (readJSON(lockFile)?.['lock-id'] !== owner['lock-id']) fail('Server-list lock ownership changed');
+    if (readServerListLock(lockFile)?.holder?.['lock-id'] !== owner['lock-id']) fail('Server-list lock ownership changed');
     fs.unlinkSync(lockFile);
   }
 }
