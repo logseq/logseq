@@ -16,7 +16,7 @@
   []
   (let [graph (state/get-current-repo)]
     (p/do!
-     (db-async/<get-block graph (date/today))
+     (db-async/<get-journal-page-by-day graph (date/today-journal-day))
      (p/let [add-page-result (db-async/<get-block-with-children graph common-config/quick-add-page-name)
              add-page (editor/worker-block-with-children add-page-result)
              user-id (when-let [id-str (user-handler/user-uuid)] (uuid id-str))
@@ -44,7 +44,9 @@
   (let [graph (state/get-current-repo)]
     (p/do!
      (editor/save-current-block!)
-     (p/let [today-result (db-async/<get-block-with-children graph (date/today))
+     (p/let [today-page (db-async/<get-journal-page-by-day graph (date/today-journal-day))
+             today-result (when-let [today-uuid (:block/uuid today-page)]
+                            (db-async/<get-block-with-children graph today-uuid))
              today (editor/worker-block-with-children today-result)
              add-page-result (db-async/<get-block-with-children graph common-config/quick-add-page-name)
              add-page (editor/worker-block-with-children add-page-result)]
