@@ -508,7 +508,7 @@
 
 (hsx/defc ^:large-vars/cleanup-todo block-title-interactive
   "Used on table view"
-  [block* {:keys [create-new-block width row property]}]
+  [block* {:keys [create-new-block width row property property-ident]}]
   (let [*ref (hooks/use-ref nil)
         [opacity set-opacity!] (hooks/use-state 0)
         [focus-timeout set-focus-timeout!] (hooks/use-state nil)
@@ -585,7 +585,10 @@
             (render block*)))]
        [:div])
 
+     ;; The open buttons belong to the name column only. A text property
+     ;; cell (such as Description) would repeat them on the same row.
      (when (and (not (util/mobile?))
+                (= :block/title property-ident)
                 (not (first-window-title-preview? block)))
        (let [class (mobile-btn-class opacity)]
          [:div.absolute.-right-1
