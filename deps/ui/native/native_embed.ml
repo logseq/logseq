@@ -711,6 +711,19 @@ let platform_event payload =
         Host.enqueue (fun () ->
           Host.set_window_size width height;
           Platform.emit_event "resize" json))
+      else if name = "window-titlebar" then (
+        let invalid () = invalid_arg "Invalid native window titlebar insets" in
+        let fields = match json with
+          | Js.Json.JObject fields
+            when List.sort String.compare (List.map fst fields) = ["height"; "left"; "right"] -> fields
+          | _ -> invalid () in
+        let inset key =
+          match Js.Json.decodeNumber (List.assoc key fields) with
+          | Some value when Float.is_finite value && value >= 0.
+              && value < float_of_int max_int -> value
+          | _ -> invalid () in
+        let _height = inset "height" and left = inset "left" and _right = inset "right" in
+        Host.enqueue (fun () -> Host.set_titlebar_left left))
       else if name = "appearance" then (
         match json with
         | Js.Json.JObject kvs -> (

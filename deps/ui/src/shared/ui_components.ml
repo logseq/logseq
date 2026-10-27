@@ -189,13 +189,14 @@ let header_right_sidebar_toggle element : t =
 
 (* Exactly one leading toolbar is interactive: the open sidebar owns it,
    otherwise the detail header does. Only the native host reserves traffic lights. *)
-let leading_toolbar ~key ~in_sidebar ~safe_area ~state ~is_open ~controls =
+let leading_toolbar ?safe_area_signal ~key ~in_sidebar ~safe_area ~state ~is_open ~controls : t =
   reactive
     ~equal:(fun a b -> is_open a = is_open b)
     (fun value ->
       if is_open value = in_sidebar then
-        row ~key ~height:48 ~min_height:48 ~cross:`center
-          ~margin_left:safe_area ~padding_horizontal:8 (controls ())
+        Ui_parts.int_prop P.MarginLeft ?value_signal:safe_area_signal
+          (row ~key ~height:48 ~min_height:48 ~cross:`center
+             ~margin_left:safe_area ~padding_horizontal:8 (controls ()))
       else spacer ~key:(key ^ "-empty") []) state
 
 let native_performance ~label ~unavailable ~format_fps () : t =
