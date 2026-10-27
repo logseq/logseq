@@ -1140,6 +1140,15 @@ let execute_graph_import mode graph repo opts config =
     (function
       | Error err ->
           pure (Cli_result.error ~command:Command_id.Graph_import mode err)
+      | Ok input_data
+        when opts.import_type = Import_edn
+             && Option.is_none (Edn_util.as_map input_data) ->
+          pure
+            (Cli_result.error ~command:Command_id.Graph_import mode
+               (Error.invalid_options
+                  (opts.input
+                 ^ ": an EDN import must be an EDN map, as written by graph \
+                    export")))
       | Ok input_data ->
           let import_after_stop () =
             bind (Server_runtime.create_graph config repo) (function
