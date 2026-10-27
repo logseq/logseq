@@ -231,9 +231,25 @@ for (const [description, content] of [['empty', ''], ['truncated', '{"ticket":"l
   });
 }
 
+test('startup cleanup retires a registration whose PID was reused by an unrelated process, runtime file unreadable', async () => {
+  await withGraph(async (storage, repo) => {
+    const unrelated = cp.spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });
+    try {
+      registerLeftoverWorker(storage, repo, unrelated.pid);
+      fs.writeFileSync(leftoverRuntimeFile(storage, repo), '{broken');
+      await lifecycle.stopOutdatedWorkers(storage, REVISION, repo);
+      assert.deepEqual(lifecycle.snapshot(storage, repo).workers, []);
+      assert.equal(unrelated.exitCode, null, 'the unrelated process was left alone');
+    } finally {
+      unrelated.kill();
+    }
+  });
+});
+
 test('startup cleanup refuses, with a coded error, a live worker whose runtime file is unreadable', async () => {
   await withGraph(async (storage, repo) => {
     const worker = cp.spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });
+    const holder = lifecycle.acquireOwnership(lifecycle.context(storage, repo));
     try {
       registerLeftoverWorker(storage, repo, worker.pid);
       fs.writeFileSync(leftoverRuntimeFile(storage, repo), '{broken');
@@ -242,6 +258,7 @@ test('startup cleanup refuses, with a coded error, a live worker whose runtime f
       assert.equal(lifecycle.snapshot(storage, repo).workers.length, 1);
       assert.equal(fs.readFileSync(leftoverRuntimeFile(storage, repo), 'utf8'), '{broken');
     } finally {
+      holder.release();
       worker.kill();
     }
   });
