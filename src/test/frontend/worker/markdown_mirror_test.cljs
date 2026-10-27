@@ -950,6 +950,30 @@
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
 
+(deftest page-mirror-exports-properties-of-single-text-property-value-test
+  (async done
+    (let [{:keys [platform files]} (fake-platform)
+          conn (db-test/create-conn-with-blocks
+                {:properties {:user.property/notes {:logseq.property/type :default}
+                              :user.property/rating {:logseq.property/type :number}}
+                 :pages-and-blocks [{:page {:block/title "Value Properties"}
+                                     :blocks [{:block/title "body"
+                                               :build/properties
+                                               {:user.property/notes
+                                                {:build/property-value :block
+                                                 :block/title "Draft"
+                                                 :build/properties {:user.property/rating 5}}}}]}]})
+          page (db-test/find-page-by-title @conn "Value Properties")]
+      (-> (markdown-mirror/<mirror-page! test-repo @conn (:db/id page) {:platform platform})
+          (p/then (fn [_]
+                    (let [content (get @files (page-path "pages/Value Properties.md"))]
+                      (is (string/includes? content "- Draft")
+                          "the value of a single-value property is a value block")
+                      (is (string/includes? content "rating:: 5")
+                          "the properties of the value are exported"))))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
 (deftest page-mirror-exports-node-property-values-as-page-refs-test
   (async done
     (let [{:keys [platform files]} (fake-platform)
