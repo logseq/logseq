@@ -84,10 +84,17 @@ function sameStorage(ctx, value) {
 }
 
 // PID existence deliberately does not establish OS process-instance identity.
-function pidExists(pid) {
+// EPERM means the PID belongs to a process this user cannot signal. Delete, stop and start treat that as an
+// error, because they must not go on while a process they cannot stop may hold the graph. Startup cleanup of
+// leftover records passes `unsignalableIsGone`: a worker is always signalable by the user who started it, so
+// such a PID has been reused by someone else's process and the record is stale.
+function pidExists(pid, { unsignalableIsGone = false } = {}) {
   if (!Number.isSafeInteger(pid) || pid <= 0) fail('Invalid PID');
   try { process.kill(pid, 0); return true; }
-  catch (error) { if (error.code === 'ESRCH') return false; throw error; }
+  catch (error) {
+    if (error.code === 'ESRCH' || (unsignalableIsGone && error.code === 'EPERM')) return false;
+    throw error;
+  }
 }
 function signalProcess(pid, signal) {
   if (pid === process.pid) fail('Cannot stop the calling process');
@@ -251,8 +258,8 @@ function checkAdmission(runtime) {
   requireAvailable(runtime, current, runtime.generation);
   if (!registered(current, runtime)) fail('Worker admission registration changed', 'server-start-failed');
 }
-function pending(target) {
-  return !target.phase && target.expires > Date.now() && pidExists(target.parent);
+function pending(target, exists = pidExists) {
+  return !target.phase && target.expires > Date.now() && exists(target.parent);
 }
 function registered(current, runtime) {
   return current.workers.some(record => Object.entries(runtimeRecord(runtime))
@@ -334,6 +341,7 @@ function ignorableDiscoveryError(error) {
 // Routing observations live for one upgrade scan only. Shutdown still validates
 // the current registration and endpoint under the graph's lease.
 function publicationScan() {
+  const exists = pid => pidExists(pid, { unsignalableIsGone: true });
   const roots = new Map();
   const probes = new Map();
   const grouped = new Map();
@@ -355,6 +363,7 @@ function publicationScan() {
     return probes.get(key);
   };
   return {
+    pidExists: exists,
     entries: root => read(root).publications,
     matching: (root, pid) => read(root).byPid.get(pid) || [],
     probe,
@@ -362,7 +371,7 @@ function publicationScan() {
       if (!grouped.has(root)) grouped.set(root, (async () => {
         const groups = new Map();
         const results = await Promise.allSettled(read(root).publications.map(async candidate => {
-          if (!pidExists(candidate.pid)) return;
+          if (!exists(candidate.pid)) return;
           let value;
           try { value = await probe(candidate); }
           catch (error) { if (!ignorableDiscoveryError(error)) throw error; }
@@ -380,6 +389,7 @@ function publicationScan() {
   };
 }
 async function discover(ctx, current, scan, registeredOnly = false) {
+  const exists = scan ? scan.pidExists : pidExists;
   const targets = new Map();
   for (const record of current.workers) {
     validateRegistration(ctx, current, record);
@@ -401,15 +411,15 @@ async function discover(ctx, current, scan, registeredOnly = false) {
   for (const root of new Set([ctx.root, ...current.workers.map(record => record.root)])) {
     if (scan) {
       for (const target of targets.values()) {
-        if (pidExists(target.pid)) for (const candidate of scan.matching(root, target.pid)) attach(target, candidate);
+        if (exists(target.pid)) for (const candidate of scan.matching(root, target.pid)) attach(target, candidate);
       }
       if (!registeredOnly) probes.push(async () => {
         for (const { candidate, value } of await scan.forGraph(root, ctx.repo))
-          if (pidExists(candidate.pid) && !targets.has(candidate.pid)) checkUnregistered(value);
+          if (exists(candidate.pid) && !targets.has(candidate.pid)) checkUnregistered(value);
       });
     } else {
       for (const candidate of entries(root)) {
-        if (!pidExists(candidate.pid)) continue;
+        if (!exists(candidate.pid)) continue;
         const target = targets.get(candidate.pid);
         if (target) attach(target, candidate);
         else probes.push(async () => {
@@ -462,8 +472,8 @@ async function waitExit(pid, milliseconds) {
   } while (Date.now() < deadline);
   return !pidExists(pid);
 }
-async function terminate(ctx, target, deleting, verified = false) {
-  if (!pidExists(target.pid)) return;
+async function terminate(ctx, target, deleting, verified = false, exists = pidExists) {
+  if (!exists(target.pid)) return;
   if (ownershipAvailable(ctx)) {
     // Free ownership fences abandoned tickets, but a verified endpoint still has
     // to exit before management can complete a stop or filesystem mutation.
@@ -478,7 +488,7 @@ async function terminate(ctx, target, deleting, verified = false) {
         return;
       }
     }
-    const waiting = pending(target);
+    const waiting = pending(target, exists);
     if (waiting) {
       const latest = state(ctx);
       latest.workers = latest.workers.filter(record => record.ticket !== target.ticket);
@@ -530,10 +540,10 @@ async function shutdownAndWait(ctx, target, deleting, responsive) {
 const legacy = require('./legacy-retirement.cjs')({ fail, readJSON, writeJSON, graphName, canonicalRoot,
   sameStorage, pidExists, entries, request, shutdownAndWait, removeEntries, runtimeFile, state });
 
-async function probeUpgradeTarget(ctx, target, operationDeadline) {
+async function probeUpgradeTarget(ctx, target, operationDeadline, exists) {
   const deadline = Math.min(operationDeadline, Date.now() + HEALTH_PROBE_BUDGET);
   for (;;) {
-    if (!pidExists(target.pid)) return { target };
+    if (!exists(target.pid)) return { target };
     try {
       return { target, value: await health(ctx, target, target.port, Math.max(1, deadline - Date.now())) };
     } catch (error) {
@@ -564,6 +574,8 @@ async function upgradeGraph(ctx, revision, initialScan, registeredOnly) {
   let publicationDeadline;
   let generation;
   let scan = initialScan;
+  // Startup cleanup takes an unsignalable PID for a reused one (see pidExists); every scan probes alike.
+  const exists = initialScan.pidExists;
   for (;;) {
     checkDeadline();
     const observed = await withLease(ctx, 'upgrade', async () => {
@@ -580,9 +592,12 @@ async function upgradeGraph(ctx, revision, initialScan, registeredOnly) {
         // Free ownership fences expired/abandoned admissions. Preserve the
         // existing unverified termination rules; never signal a recycled PID
         // merely because an earlier endpoint probe succeeded.
-        if (available && !pending(target)) {
-          await terminate(ctx, target, false);
+        if (available && !pending(target, exists)) {
+          await terminate(ctx, target, false, false, exists);
           await cleanup(ctx, current, [target]);
+          // A gone worker's publication has no port on the target, so cleanup left it in server-list, where
+          // the strict probes of later start and stop calls would meet its unsignalable PID again.
+          if (!exists(target.pid)) await removeEntries(target.root, scan.matching(target.root, target.pid));
           current.workers = current.workers.filter(record => record.ticket !== target.ticket);
           writeJSON(ctx.stateFile, current);
           retired.push(target);
@@ -591,7 +606,7 @@ async function upgradeGraph(ctx, revision, initialScan, registeredOnly) {
       return live;
     }, checkDeadline);
     if (!observed.length) return retired;
-    const unpublished = observed.find(target => pidExists(target.pid) && !target.port);
+    const unpublished = observed.find(target => exists(target.pid) && !target.port);
     if (unpublished) {
       if (waitingTicket !== unpublished.ticket) {
         waitingTicket = unpublished.ticket;
@@ -605,7 +620,7 @@ async function upgradeGraph(ctx, revision, initialScan, registeredOnly) {
       scan = publicationScan();
       continue;
     }
-    const probes = await Promise.all(observed.map(target => probeUpgradeTarget(ctx, target, deadline)));
+    const probes = await Promise.all(observed.map(target => probeUpgradeTarget(ctx, target, deadline, exists)));
     const applied = await withLease(ctx, 'upgrade', async () => {
       checkDeadline();
       const current = state(ctx);
@@ -620,16 +635,16 @@ async function upgradeGraph(ctx, revision, initialScan, registeredOnly) {
       for (let index = 0; index < probes.length; index++) {
         const target = latest[index];
         const { value, error } = probes[index];
-        if (pidExists(target.pid)) {
-          if (available && !pending(target)) {
-            await terminate(ctx, target, false);
+        if (exists(target.pid)) {
+          if (available && !pending(target, exists)) {
+            await terminate(ctx, target, false, false, exists);
           } else {
             if (error) throw error;
             // An exited worker can have been replaced between the PID and HTTP
             // observations; let the next scan verify the new state instead.
             if (!value) return false;
             if (value.revision === revision) continue;
-            await terminate(ctx, target, false, true);
+            await terminate(ctx, target, false, true, exists);
           }
         }
         await cleanup(ctx, current, [target]);
