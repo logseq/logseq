@@ -5,6 +5,8 @@
             [frontend.routes :as routes]
             [logseq.shui.hooks :as hooks]))
 
+(def ^:private page-uuid-for-config #uuid "33333333-3333-3333-3333-333333333333")
+
 (def ^:private tag-page
   {:block/title "Tag"
    :block/tags [{:db/ident :logseq.class/Tag}]})
@@ -20,6 +22,20 @@
   (is (false? (#'page/defer-class-page-below-fold? tag-page {:tag-dialog? true})))
   (is (false? (#'page/defer-class-page-below-fold? plain-page {}))
       "Ordinary pages still load their block tree on first paint."))
+
+(deftest query-current-page-is-the-page-holding-a-zoomed-block-test
+  (let [render-config #'page/page-render-config
+        page {:block/uuid page-uuid-for-config
+              :block/title "Host page"}
+        zoomed-block {:block/uuid (random-uuid)
+                      :block/title "Milestone"
+                      :block/page {:db/id 2
+                                   :block/uuid page-uuid-for-config
+                                   :block/title "Host page"}}]
+    (is (= "Host page" (:current-page-title (render-config page {} false)))
+        "A page is its own current page.")
+    (is (= "Host page" (:current-page-title (render-config zoomed-block {} false)))
+        "A zoomed-in block uses the title of its page, not its own.")))
 
 (defn- below-fold
   "Runs `use-below-fold-ready` with a stubbed state cell. Returns what the
