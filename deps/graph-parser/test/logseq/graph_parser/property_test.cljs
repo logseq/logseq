@@ -65,3 +65,15 @@
 
       (gp-property/remove-properties :markdown "** hello\nx:: y\n\na:: b\n")
       "** hello\n\na:: b")))
+
+(deftest test-remove-properties-after-table
+  (testing "properties that follow a table are removed"
+    (are [x y] (= x y)
+      (gp-property/remove-properties :markdown "| a | b |\n|---|---|\n| c | d |\nkey:: v")
+      "| a | b |\n|---|---|\n| c | d |"
+
+      (gp-property/remove-properties :markdown "| a | b |\n|---|---|\n| c | d |\nkey:: v\nother:: w")
+      "| a | b |\n|---|---|\n| c | d |"))
+  (testing "text after the first line is kept"
+    (is (= "text\n| a | b |\n| c | d |\nkey:: v"
+           (gp-property/remove-properties :markdown "text\n| a | b |\n| c | d |\nkey:: v")))))
