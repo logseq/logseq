@@ -671,7 +671,7 @@ let write_pretty_edn path data =
     Cli_unix.write_text_file path
       Ustring.(of_string (Pretty_print.pprint_edn data) |> to_string);
     Cli_effect.pure (Ok ())
-  with exn -> Cli_effect.pure (Error (Error.exception_error exn))
+  with exn -> Cli_effect.pure (Error (File_error.of_exn ~path exn))
 
 let graph_export_message mode _config path =
   Cli_result.ok ~command:Command_id.Graph_export mode

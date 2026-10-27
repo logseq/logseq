@@ -2831,7 +2831,7 @@ let execute_create_asset mode config repo path create_action =
                               (Cli_result.error ~command:Command_id.Upsert_asset
                                  mode
                                  (Error.make Error.Asset_file_copy_failed
-                                    (Printexc.to_string exn)))))))))
+                                    (Exn_message.to_string exn)))))))))
 
 let execute_update_asset mode invoke_config repo id uuid content =
   let open Cli_effect in
