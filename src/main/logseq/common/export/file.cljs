@@ -118,25 +118,28 @@
       (property-value->string db property v context))))
 
 (defn- property-value-children-content
-  [db value-entity spaces-tabs context]
-  (when-let [children (seq (ldb/sort-by-order (:block/_parent value-entity)))]
-    (let [indent (or (:export-bullet-indentation context) "  ")
-          child-level (+ 2 (quot (count spaces-tabs) (max 1 (count indent))))]
+  [db value-entity level opts context]
+  (when-not (and (:open-blocks-only? opts) (:block/collapsed? value-entity))
+    (when-let [children (seq (ldb/sort-by-order (:block/_parent value-entity)))]
       (->> children
            (map (fn [child]
-                  (block->content db (:block/uuid child) {:init-level child-level} context)))
+                  (block->content db (:block/uuid child)
+                                  (assoc (dissoc opts :link :include-page-properties?)
+                                         :init-level (inc level))
+                                  context)))
            (string/join "\n")
            not-empty))))
 
 (defn- default-property-value-block-content
-  [db property v spaces-tabs context]
-  (let [line (str spaces-tabs "- " (property-value-block-title db property v context))
+  [db property v level opts context]
+  (let [spaces-tabs (apply str (repeat (dec level) (or (:export-bullet-indentation context) "  ")))
+        line (str spaces-tabs "- " (property-value-block-title db property v context))
         value-entity (when-let [id (:db/id v)]
                        (d/entity db id))
         properties-content (when value-entity
-                             (block-properties-content db value-entity (str spaces-tabs "  ") context))
+                             (block-properties-content db value-entity level opts context))
         children-content (when value-entity
-                           (property-value-children-content db value-entity spaces-tabs context))]
+                           (property-value-children-content db value-entity level opts context))]
     (cond-> line
       properties-content
       (str "\n" properties-content)
@@ -144,9 +147,9 @@
       (str "\n" children-content))))
 
 (defn- property-value-blocks-content
-  [db property v spaces-tabs context]
+  [db property v level opts context]
   (->> (property-values->seq db property v context)
-       (map #(default-property-value-block-content db property % spaces-tabs context))
+       (map #(default-property-value-block-content db property % level opts context))
        (string/join "\n")))
 
 (defn- property-line-content
@@ -167,8 +170,13 @@
               (:block/closed-value-property value)))))
 
 (defn- block-properties-content
-  [db block spaces-tabs context]
-  (let [block (or (when-let [id (:db/id block)]
+  [db block level opts context]
+  (let [spaces-tabs (if (zero? level)
+                     ""
+                     (str (apply str (repeat (dec level) (or (:export-bullet-indentation context) "  ")))
+                          "  "))
+        value-level (+ level (if (:export-properties-as-list-items? context) 2 1))
+        block (or (when-let [id (:db/id block)]
                     (d/entity db id))
                   (when-let [block-uuid (:block/uuid block)]
                     (d/entity db [:block/uuid block-uuid]))
@@ -196,7 +204,7 @@
                            (if (default-property-values-as-blocks? property value context)
                              (str (property-line-content property-title nil spaces-tabs context)
                                   "\n"
-                                  (property-value-blocks-content db property value (str spaces-tabs "  ") context))
+                                  (property-value-blocks-content db property value value-level opts context))
                              (property-line-content
                               property-title
                               (property-value->string db property value context)
@@ -343,7 +351,7 @@
 
 (defn- transform-content
   [db b level {:keys [heading-to-list? include-properties?]
-               :or {include-properties? true}} context]
+               :or {include-properties? true} :as opts} context]
   (let [heading (:logseq.property/heading b)
         ;; replace [[uuid]] with block's content
         title (block-title-content db b context)
@@ -378,7 +386,7 @@
               " ")
         content (str prefix sep new-content)]
     (if-let [properties-content (when-not (false? include-properties?)
-                                  (block-properties-content db b property-spaces-tabs context))]
+                                  (block-properties-content db b level opts context))]
       (str content "\n" properties-content)
       content)))
 
@@ -391,7 +399,8 @@
         (let [page? (nil? (:block/page f))
               content (cond
                         (and page? (not link) (:include-page-properties? opts))
-                        (block-properties-content db f "" context)
+                        (when-not (false? (:include-properties? opts))
+                          (block-properties-content db f 0 opts context))
 
                         (and page? (not link))
                         nil
@@ -400,7 +409,10 @@
                         (transform-content db f level opts context))
               new-content
               (if-let [children (seq (:block/children f))]
-                (cons content (tree->file-content-aux db children {:init-level (inc level)} context))
+                (cons content (tree->file-content-aux db children
+                                                    (assoc (dissoc opts :link :include-page-properties?)
+                                                           :init-level (inc level))
+                                                    context))
                 [content])]
           (conj! block-contents new-content)
           (recur r level))))))
@@ -438,8 +450,7 @@
         tree (otree/blocks->vec-tree db blocks (str root-block-uuid))
         tree (if (:open-blocks-only? tree->file-opts)
                (remove-collapsed-descendants tree)
-               tree)
-        tree->file-opts (dissoc tree->file-opts :open-blocks-only?)]
+               tree)]
     (tree->file-content db tree
                         (assoc tree->file-opts :init-level init-level)
                         context)))
