@@ -944,7 +944,7 @@
   (when-let [date (t/to-default-time-zone (tc/from-long value))]
     (let [content [:div.ls-datetime.flex.flex-row.gap-1.items-center
                    (when-let [page-cp (state/get-component :block/page-cp)]
-                     (let [page-title (date/journal-name date)]
+                     (let [page-title (date/journal-block-name date)]
                        ^{:key page-title}
                        [:span.inline-flex (date-page-link-props other-position?)
                         (page-cp {:disable-preview? true
