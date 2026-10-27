@@ -524,20 +524,34 @@ let cell_el inst ~row_uuid ~blk (c : V.column) : t =
 (* ---------- header ---------- *)
 
 let all_row_uuids (s : V.vstate) =
-  match s.V.data with
+  let rows = match s.V.data with
   | Wr.VFlat { rows; _ } -> rows
   | Wr.VGrouped gs -> List.concat_map (fun g -> g.Wr.grows) gs
   | Wr.VGroupedList gs ->
       List.concat_map (fun g -> List.concat_map snd g.Wr.glparts) gs
   | Wr.VEmpty -> []
+  in
+  let seen = ref V.Sset.empty in
+  List.filter (fun uuid ->
+      if V.Sset.mem uuid !seen then false
+      else (seen := V.Sset.add uuid !seen; true)) rows
+
+let selected_row_uuids (s : V.vstate) =
+  List.filter (fun uuid -> V.Sset.mem uuid s.V.selected) (all_row_uuids s)
+
+let selected_uuids inst = selected_row_uuids (V.get inst)
 
 let sortable c =
   not
     (List.mem c.V.c_id
        [ "select"; "id"; "block/page"; "block.temp/refs-count" ])
 
-let header_select_cell inst : t =
-  let shown (s : V.vstate) = not (V.Sset.is_empty s.V.selected) in
+let header_select_cell ?rows inst : t =
+  let row_uuids s = Option.value rows ~default:(all_row_uuids s) in
+  let shown (s : V.vstate) =
+    let uuids = row_uuids s in
+    uuids <> [] && List.for_all (fun uuid -> V.Sset.mem uuid s.V.selected) uuids
+  in
   row ~cross:`center ~main:`center ~width:32 ~height:32
     [ checkbox_el inst ~jtrigger:false ~id:"header-checkbox" ~shown
         ~aria_label:(I.t "view.table/select-all")
@@ -545,11 +559,10 @@ let header_select_cell inst : t =
           V.update inst (fun s ->
               { s with
                 V.selected =
-                  (if on then
-                     List.fold_left
-                       (fun acc u -> V.Sset.add u acc)
-                       s.V.selected (all_row_uuids s)
-                   else V.Sset.empty)
+                  List.fold_left
+                    (fun acc uuid ->
+                      if on then V.Sset.add uuid acc else V.Sset.remove uuid acc)
+                    s.V.selected (row_uuids s)
               })) ]
 
 (* cljs header-cp: text-variant button holding the title span and a sort
@@ -677,7 +690,7 @@ let open_property_menu inst ~anchor (c : V.column) (p : W.t) =
 let header_cell_id inst (c : V.column) =
   "vhc-" ^ string_of_int inst.V.id ^ "-" ^ c.V.c_id
 
-let header_cell inst (c : V.column) : t =
+let header_cell ?rows inst (c : V.column) : t =
   with_column_width inst c
   (if Ui_services.env_publishing () then
     box [ text ~value:c.V.c_name [] ]
@@ -691,7 +704,7 @@ let header_cell inst (c : V.column) : t =
         ; Ui_components.Prop.font_weight 500 ]
         (box ~style_class:"ls-table-header-cell"
            ~foreground:fg
-           [ header_select_cell inst ])
+           [ header_select_cell ?rows inst ])
   | _ ->
       let menu () =
         match c.V.c_prop with
@@ -738,14 +751,15 @@ let page_row_uuids inst =
       match Hashtbl.find_opt s.V.blocks u with
       | Some blk -> is_page_row blk
       | None -> inst.V.feature = "all-pages")
-    (V.Sset.elements s.V.selected)
+    (selected_row_uuids s)
 
 let delete_selected inst () =
   let s = V.get inst in
-  let sel = V.Sset.elements s.V.selected in
+  let sel = selected_row_uuids s in
   if sel <> [] then begin
     let pages = page_row_uuids inst in
-    let blocks = List.filter (fun u -> not (List.mem u pages)) sel in
+    let page_set = V.Sset.of_list pages in
+    let blocks = List.filter (fun u -> not (V.Sset.mem u page_set)) sel in
     let do_delete () =
       Views_db.delete_blocks blocks (fun () ->
           List.iter (fun p -> Views_db.delete_page p (fun () -> ())) pages;
@@ -784,9 +798,6 @@ let delete_selected inst () =
            ~confirm_label:(I.t "ui/yes") ~on_confirm:do_delete ())
     else do_delete ()
   end
-
-let selected_uuids inst =
-  V.Sset.elements (V.get inst).V.selected
 
 (* cljs selection/action-group on-copy: copy-selection-blocks writes the
    selected rows' titles to the system clipboard and clears selection *)
@@ -838,7 +849,7 @@ let action_bar inst : t =
          [])
   in
   if_
-    ~test:(reactive (fun s -> not (V.Sset.is_empty s.V.selected)) isig)
+    ~test:(reactive (fun s -> selected_row_uuids s <> []) isig)
     (box ~key:"tac" ~margin_left:32 ~margin_top:1
        [
          toolbar ~style_class:"table-action-bar" ~orientation:`horizontal
@@ -851,7 +862,7 @@ let action_bar inst : t =
                ~value:
                  (reactive
                     (fun (s : V.vstate) ->
-                      I.selected_count (V.Sset.cardinal s.V.selected))
+                      I.selected_count (List.length (selected_row_uuids s)))
                     isig)
                [];
              action ~label:(I.t "property/set-tags") ~icon:(`app "hash")
@@ -1073,9 +1084,9 @@ let row_stream ?(paginate = false) inst cols uuids : t =
 
 (* the header — one static mount per body snapshot; sort arrow is a
    reactive prop off the inst signal *)
-let table_header inst cols : t =
+let table_header ?rows inst cols : t =
   let cell_item c =
-    let cell = header_cell inst c in
+    let cell = header_cell ?rows inst c in
     if c.V.c_id = "select" then
       box ~accessibility_identifier:"Select" [ cell ]
     else box [ cell ]
@@ -1205,7 +1216,7 @@ let grouped_table ?(paginate = false) inst ~rows : t =
             [ Ui_components.Prop.position `relative ]
             (box
             [ overlay
-                [ table_header inst cols
+                [ table_header ~rows inst cols
                 ; align `top_leading (action_bar inst) ]
             ; box ~accessibility_identifier:"virtuoso-item-list"
                 ~data_attrs:[ ("data-testid", "virtuoso-item-list") ]

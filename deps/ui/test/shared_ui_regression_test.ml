@@ -249,7 +249,49 @@ let flashcards_config ~registry ~profile =
       (List.exists (fun node -> class_has node "all-pages-nav") (nodes session));
     ignore (Lui_app.dispose session.S.app))
 
+let grouped_table_selection ~registry ~profile =
+  let module V = Views_state in
+  let instance = ref None in
+  let session = S.mount ~registry ~profile ~initial:Model.initial
+      ~reducer:(fun model () -> model)
+      ~view:(fun context _ _ ->
+        let inst = V.make ~sched:context.Lui_ui.ui_scheduler
+            ~kind:V.KAllPages ~feature:"all-pages" ~owner:Wire.Nil in
+        instance := Some inst;
+        V.set inst { (V.empty_vstate ()) with
+          V.loading = false;
+          columns = [Views_table.builtin_column "select" "" "select" ()];
+          selected = V.Sset.of_list ["a"; "c"; "stale"];
+          data = Views_wire.VGrouped
+            [ { gv = Wire.Nil; grows = ["b"; "a"] }
+            ; { gv = Wire.Nil; grows = ["c"; "b"] } ] };
+        Lui_elements.column
+          [ Views_table.grouped_table inst ~rows:["b"; "a"]
+          ; Views_table.grouped_table inst ~rows:["c"; "b"] ]) () in
+  Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose session.S.app))
+    (fun () ->
+      let inst = Option.get !instance in
+      let headers = List.filter
+          (fun node -> M.string_prop node "accessibility-identifier" =
+            Some "header-checkbox") (nodes session) in
+      let header = List.hd headers in
+      check "A partially selected group is not checked as a fully selected group"
+        (Hashtbl.find_opt header.M.props "checked" <> Some (P.BoolValue true));
+      S.toggle session header.M.id true;
+      check "Selecting a group preserves the other group's selected rows"
+        (V.Sset.equal (V.get inst).V.selected
+           (V.Sset.of_list ["a"; "b"; "c"; "stale"]));
+      S.toggle session header.M.id false;
+      check "Clearing a group preserves selection outside that group"
+        (V.Sset.equal (V.get inst).V.selected
+           (V.Sset.of_list ["c"; "stale"]));
+      V.update inst (fun state -> { state with
+        V.selected = V.Sset.of_list ["a"; "b"; "c"; "stale"] });
+      check "Bulk actions use current row order once, without stale selections"
+        (Views_table.selected_uuids inst = ["b"; "a"; "c"]))
+
 let run_views ~registry ~profile ~finish =
+  grouped_table_selection ~registry ~profile;
   settings_config ~registry ~profile;
   flashcards_config ~registry ~profile;
   let previous_flush = !Runtime.app_flush in
@@ -281,7 +323,9 @@ let run_views ~registry ~profile ~finish =
     let created = Views_state.make ~sched ~kind:Views_state.KAllPages
       ~feature:"neutral-button-parity" ~owner:Wire.Nil in
     let selected = { (Views_state.empty_vstate ()) with
-      Views_state.selected=Views_state.Sset.singleton "neutral-row" } in
+      Views_state.selected=Views_state.Sset.singleton "neutral-row";
+      data=Views_wire.VFlat { rows=["neutral-row"]; count=1;
+        previews=Hashtbl.create 0; qprops=[] } } in
     let table = {created with Views_state.st=Signal.state sched selected} in
     Lui_elements.column
       [Right_sidebar_view.topbar_btn "contents" (I18n.t "page/contents") (fun () -> ());
