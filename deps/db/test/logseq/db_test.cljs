@@ -3,6 +3,7 @@
             [datascript.core :as d]
             [datascript.storage :as ds-storage :refer [IStorage]]
             [logseq.db :as ldb]
+            [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.frontend.validate :as db-validate]
             [logseq.db.test.helper :as db-test]))
 
@@ -80,6 +81,20 @@
            (:block/title (ldb/get-journal-page-by-day @conn 20260410))))
     (is (= "Apr 11th, 2026"
            (:block/title (ldb/get-journal-page-by-day @conn 20260411))))))
+
+(deftest journal-title-without-title-format-uses-default-format
+  ;; Reproduces https://github.com/logseq/db-test/issues/1168
+  ;; A graph whose Journal class has no title-format (the property is missing on
+  ;; one client) rendered every date reference as an empty [[]].
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks
+               [{:page {:build/journal 20260410}}]})]
+    (d/transact! conn [[:db/retract :logseq.class/Journal :logseq.property.journal/title-format]])
+    (is (nil? (:logseq.property.journal/title-format (d/entity @conn :logseq.class/Journal)))
+        "The Journal class has no title format")
+    (let [journal (ldb/get-journal-page-by-day @conn 20260410)]
+      (is (= "Apr 10th, 2026" (entity-plus/lookup-kv-then-entity journal :block/title))
+          "The journal title falls back to the default format"))))
 
 (defn- create-sibling-conn
   [middle-attrs]
