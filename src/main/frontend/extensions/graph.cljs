@@ -1,5 +1,6 @@
 (ns frontend.extensions.graph
-  (:require [frontend.extensions.graph.pixi :as pixi]
+  (:require [frontend.components.lazy-graph :as lazy-graph]
+            [frontend.extensions.graph.pixi :as pixi]
             [io.factorhouse.hsx.core :as hsx]
             [logseq.shui.hooks :as hooks]
             ))
@@ -141,3 +142,5 @@
       :role "application"
       :tabIndex 0
       :aria-label (:aria-label opts)}]))
+
+(lazy-graph/register-renderer! graph-2d)

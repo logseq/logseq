@@ -10,7 +10,6 @@
             [frontend.components.editor :as editor]
             [frontend.components.page :as page]
             [frontend.components.reference :as reference]
-            [frontend.components.user.login :as user.login]
             [frontend.config :as config]
             [frontend.context.i18n :as i18n]
             [frontend.db.restore :as db-restore]
@@ -164,7 +163,6 @@
 
       (register-components-fns!)
       (user-handler/restore-tokens-from-localstorage)
-      (user.login/setup-configure!)
       (when (util/electron?)
         (el/listen!))
 
