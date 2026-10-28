@@ -922,7 +922,9 @@ let delete_selected inst s current () =
               List.map (fun page -> Outliner_ops.remove_block_property page ident) pages
           | _ -> [] in
       let operations = (if blocks = [] then [] else [Outliner_ops.delete_blocks blocks]) @ page_operations in
-      if operations <> [] then begin
+      if operations = [] then begin
+        if not keep_selection then V.update inst V.table_clear_selection
+      end else begin
         let open Promise_ext in
         ignore ((let* result = Outliner_ops.apply_result operations in
           (match result with
@@ -965,7 +967,7 @@ let delete_selected inst s current () =
   match inst.V.kind with
   | V.KTagPage uuid | V.KPropertyPage uuid ->
       let open Promise_ext in
-      ignore ((let* owner = Properties_data.entity (W.Uuid uuid) in
+      ignore ((let* owner = Properties_data.entity_by_uuid uuid in
         (match Properties_data.untag owner with
          | W.Map _ as owner -> prepare (Some owner)
          | _ -> if current () then Toast.error (I.t "view/error"));
