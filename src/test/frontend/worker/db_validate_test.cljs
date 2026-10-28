@@ -68,6 +68,42 @@
         (is (= page-id (:db/id (:block/parent repaired-block))))
         (is (empty? (:errors (worker-db-validate/validate-db conn))))))))
 
+(deftest validate-db-reports-the-blocks-it-repaired
+  (let [conn (create-db-graph-conn)
+        page-id (get (:tempids
+                      (d/transact! conn [{:db/id "page"
+                                          :block/uuid (random-uuid)
+                                          :block/created-at 1
+                                          :block/updated-at 1
+                                          :block/name "test page"
+                                          :block/title "Test Page"
+                                          :block/tags :logseq.class/Page}]))
+                     "page")
+        block-id (get (:tempids
+                       (d/transact! conn [{:db/id "block"
+                                           :block/created-at 1
+                                           :block/updated-at 2
+                                           :block/page page-id
+                                           :block/parent page-id
+                                           :block/order "a0"
+                                           :block/title ""}]))
+                      "block")
+        notifications (atom [])]
+    (with-redefs [shared-service/broadcast-to-clients!
+                  (fn [topic payload]
+                    (when (= :notification topic)
+                      (swap! notifications conj (first payload))))]
+      (let [result (with-transact-pipeline #(worker-db-validate/validate-db conn))]
+        (is (empty? (:errors result))
+            "The repair leaves nothing to report as an error")
+        (is (some #{block-id} (:fixed-entity-ids result))
+            "The result says which block the repair changed")
+        (is (re-find #"fixed \d+ invalid block" (first @notifications))
+            "The notification says data was fixed instead of calling the graph valid"))
+      (let [result (worker-db-validate/validate-db conn)]
+        (is (empty? (:fixed-entity-ids result))
+            "A second run has nothing to fix")))))
+
 (deftest validate-db-repairs-invalid-pages-properties-and-classes
   (let [conn (create-db-graph-conn)
         journal-id (get (:tempids

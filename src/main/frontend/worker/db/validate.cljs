@@ -284,13 +284,24 @@
          :entity (:entity error)
          :error (dissoc error :entity))))
 
+(defn- log-fixes!
+  [fix-datoms]
+  (prn :debug :fixed-invalid-blocks (vec fix-datoms)))
+
 (defn- validate-and-fix-invalid-blocks!
+  "Repairs invalid blocks until none are left to repair. The result carries
+  `:fixed-entity-ids`, every entity the repairs touched, because the final
+  `:errors` only describes what is still invalid after them."
   [conn]
-  (loop [{:keys [errors] :as result} (validate-db-result @conn)]
+  (loop [{:keys [errors] :as result} (validate-db-result @conn)
+         fixed-entity-ids []]
     (log-validation-errors! errors)
-    (if (and (seq errors) (fix-invalid-blocks! conn errors))
-      (recur (validate-db-result @conn))
-      result)))
+    (if-let [fix-datoms (and (seq errors) (fix-invalid-blocks! conn errors))]
+      (do
+        (log-fixes! fix-datoms)
+        (recur (validate-db-result @conn)
+               (into fixed-entity-ids (map :e) fix-datoms)))
+      (assoc result :fixed-entity-ids (vec (distinct fixed-entity-ids))))))
 
 (defn- fix-missing-internal-page-parent-orders!
   [conn]
@@ -311,7 +322,7 @@
     (fix-num-prefix-db-idents! conn)
     (fix-missing-internal-page-parent-orders! conn))
 
-  (let [{:keys [errors datom-count entities invalid-entity-ids]}
+  (let [{:keys [errors datom-count entities invalid-entity-ids fixed-entity-ids]}
         (if fix
           (validate-and-fix-invalid-blocks! conn)
           (let [{:keys [errors] :as result} (validate-db-result @conn)]
@@ -333,11 +344,16 @@
                                                  :warning false]))
 
         (shared-service/broadcast-to-clients! :notification
-                                              [(str "Your graph is valid! " counts)
+                                              [(str (if (seq fixed-entity-ids)
+                                                      (str "Validation fixed " (count fixed-entity-ids) " invalid block(s). Your graph is valid now! ")
+                                                      "Your graph is valid! ")
+                                                    counts)
                                                :success false])))
-    (merge {:errors errors
-            :invalid-entity-ids invalid-entity-ids}
-           counts)))
+    (cond-> (merge {:errors errors
+                    :invalid-entity-ids invalid-entity-ids}
+                   counts)
+      (seq fixed-entity-ids)
+      (assoc :fixed-entity-ids fixed-entity-ids))))
 
 (defn recompute-checksum-diagnostics
   [_repo conn {:keys [local-checksum remote-checksum] :as _sync-diagnostics}]
