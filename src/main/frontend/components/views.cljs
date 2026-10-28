@@ -1908,6 +1908,23 @@
     :number-lte "<="
     :between (t :view.filter/operator-between)))
 
+(defn- <change-filter-operator!
+  "Switches the operator of the filter at `idx`. The clause has no value yet when
+  the user has not entered one (or cleared it), so it is [property operator]."
+  [property operator filters set-filters! idx]
+  (p/let [data (db-async/<get-view-filter-data property
+                                               {:operator operator
+                                                :value (nth (get-in filters [:filters idx]) 2 nil)})
+          value' (:value-after-operator-change data)]
+    (set-filters!
+     (update filters :filters
+             (fn [col]
+               (update col idx
+                       (fn [[property _old-operator _value]]
+                         (if value'
+                           [property operator value']
+                           [property operator]))))))))
+
 (hsx/defc filter-operator
   [property operator filters set-filters! idx]
   (let [[operators set-operators!] (hooks/use-state nil)]
@@ -1929,19 +1946,7 @@
       {:align "start"}
       (for [operator (or operators [])]
         (shui/dropdown-menu-item
-         {:on-click (fn []
-                      (p/let [data (db-async/<get-view-filter-data property
-                                                                    {:operator operator
-                                                                     :value (nth (get-in filters [:filters idx]) 2)})
-                              value' (:value-after-operator-change data)]
-                        (set-filters!
-                         (update filters :filters
-                                 (fn [col]
-                                   (update col idx
-                                           (fn [[property _old-operator _value]]
-                                             (if value'
-                                               [property operator value']
-                                               [property operator]))))))))}
+         {:on-click #(<change-filter-operator! property operator filters set-filters! idx)}
          (operator->text operator)))))))
 
 (hsx/defc between
