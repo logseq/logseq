@@ -1131,8 +1131,8 @@ let nav_items () =
 
 let nav_gap = 8
 
-let nav_menu_height _viewport =
-  let count = List.length (nav_items ()) in
+let nav_menu_height viewport =
+  let count = List.length (nav_items ()) - (if viewport < 640. then 1 else 0) in
   (count * Ui_components.nav_item_height) + ((count - 1) * nav_gap)
 
 let tab_title tab =
@@ -1141,14 +1141,21 @@ let tab_title tab =
   | None -> (T.t "settings/general")
 
 let nav_item ~key (id, label, icn) =
-  C.class_signal (S.signal ())
+  let content = C.class_signal (S.signal ())
     (fun (s : S.t) ->
       if s.tab = id then "active settings-menu-item"
       else "settings-menu-item")
     (Ui_components.nav_item ~key ~data_id:id ~icon:icn
        ~text:label
        ~selected:(reactive (fun (s : S.t) -> s.tab = id) (S.signal ()))
-       ~on_press:(fun _ -> S.set_tab id) ())
+       ~on_press:(fun _ -> S.set_tab id) ()) in
+  if id<>"keymap" then content
+  else fun ctx parent ->
+    let viewport=Ui_services.viewport_width_signal ~scheduler:ctx.Lui_ui.ui_scheduler
+      ~scope:ctx.Lui_ui.ui_scope in
+    Ui_parts.string_prop Lui_protocol.DisplayValue
+      ~value:(reactive (fun viewport -> if viewport>=640. then "inline-flex" else "none") viewport)
+      content ctx parent
 
 let pane_of ~modal ~keymap ctx tab =
   match tab with

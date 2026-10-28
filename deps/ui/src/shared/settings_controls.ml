@@ -143,7 +143,7 @@ let action_row ~key ~label ?description ~actions ?(desc = [])
          (fun d -> Ui_components.form_desc ~key:(key ^ "-d") ~value:d)
          description)
     ~control:
-      (row ~key:(key ^ "-rc") ~cross:`center ~gap:8 ~min_width:0 ~flex_wrap:`wrap
+      (row ~key:(key ^ "-rc") ~cross:`center ~gap:8 ~min_width:0
          ?grow:(if stretch then Some 1. else None)
          [ box ~key:(key ^ "-a")
              ?grow:(if stretch then Some 1. else None)
