@@ -416,7 +416,8 @@
                             :block/order new-order}
                            (outliner-core/block-with-updated-at
                             {:db/id block-id}))
-                     {:outliner-op :save-block}))))
+                     {:outliner-op :save-block})
+      nil)))
 
 (def ^:private display-property-keys
   [:db/id
