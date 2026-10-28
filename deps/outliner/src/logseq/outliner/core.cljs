@@ -12,7 +12,6 @@
             [logseq.db :as ldb]
             [logseq.db.common.order :as db-order]
             [logseq.db.frontend.class :as db-class]
-            [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.outliner.datascript :as ds]
@@ -336,55 +335,6 @@
        (not (d/entity db [:block/uuid (second ref')]))
        (not (contains? created-uuids (second ref')))))
 
-(defn- title-ref-targets
-  "The uuid and spellings (the title, and the full name of a namespace page
-  whose title is only its last part) a resolved ref needs to replace its
-  name-spelled `[[Page]]` in a block title. Empty when the ref isn't a page."
-  [db ref']
-  (let [existing (cond
-                   (vector? ref')
-                   (d/entity db ref')
-
-                   (and (map? ref') (:block/uuid ref'))
-                   (d/entity db [:block/uuid (:block/uuid ref')])
-
-                   (and (map? ref') (:db/id ref'))
-                   (d/entity db (:db/id ref')))
-        page-ref (cond
-                   existing
-                   (when (ldb/page? existing)
-                     {:block/uuid (:block/uuid existing)
-                      :block/title (:block/title existing)
-                      :spellings [(:block/title existing) (ldb/get-title-with-parents existing)]})
-
-                   (and (map? ref') (:block/uuid ref') (string? (:block/title ref')))
-                   {:block/uuid (:block/uuid ref')
-                    :block/title (:block/title ref')
-                    :block.temp/original-page-name (:block.temp/original-page-name ref')
-                    :spellings [(:block/title ref')]})]
-    (when (and (:block/uuid page-ref) (string? (:block/title page-ref)))
-      (->> (:spellings page-ref)
-           (filter string?)
-           distinct
-           (map (fn [spelling]
-                  (-> (dissoc page-ref :spellings)
-                      (assoc :block/title spelling))))))))
-
-(defn- id-ref-titles
-  "Stores the page refs of a title the way the app does: `[[uuid]]`, not
-  `[[Page]]`. A rebuild of a block's refs reads only the uuid spelling, so a
-  `[[Page]]` kept by name loses its ref, and the title goes stale when the page
-  is renamed."
-  [db {:block/keys [refs] :as block}]
-  (let [targets (mapcat #(title-ref-targets db %) refs)
-        ->id-refs (fn [title]
-                    (if (and (string? title) (string/includes? title "[[") (seq targets))
-                      (db-content/title-ref->id-ref title targets {:replace-tag? false})
-                      title))]
-    (cond-> block
-      (contains? block :block/title) (update :block/title ->id-refs)
-      (contains? block :block/raw-title) (update :block/raw-title ->id-refs))))
-
 (defn- resolve-page-refs
   ([db block]
    (resolve-page-refs db block nil))
@@ -430,14 +380,13 @@
                                                     (page-ref/->page-ref new-uuid)))
                                   title
                                   replacements))]
-       {:block (->> (cond-> (assoc block :block/refs refs'
-                                         :block/tags tags')
-                      (and (seq replacements) (string? (:block/title block)))
-                      (update :block/title replace-refs)
+       {:block (cond-> (assoc block :block/refs refs'
+                                    :block/tags tags')
+                 (and (seq replacements) (string? (:block/title block)))
+                 (update :block/title replace-refs)
 
-                      (and (seq replacements) (string? (:block/raw-title block)))
-                      (update :block/raw-title replace-refs))
-                    (id-ref-titles db))
+                 (and (seq replacements) (string? (:block/raw-title block)))
+                 (update :block/raw-title replace-refs))
         :page-txs page-txs})
      {:block block})))
 
