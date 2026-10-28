@@ -304,6 +304,22 @@
                             :graph-uuid graph-uuid
                             :base base})))))
 
+(defn- <local-graph-exists?
+  "Asks the persistence layer (disk on desktop, OPFS in the browser) whether
+  `graph` already exists. The in-memory repo list can lag behind another window
+  or the CLI creating the graph. When the lookup fails, answers true so that the
+  caller never deletes a graph it cannot show it created."
+  [graph]
+  (-> (p/let [graphs (db-persist/get-all-graphs)]
+        (let [graph-key (string/lower-case graph)]
+          (boolean (some #(= graph-key (some-> (:name %) string/lower-case))
+                         graphs))))
+      (p/catch (fn [error]
+                 (log/error :db-sync/check-local-graph-exists-failed
+                            {:graph graph
+                             :error error})
+                 true))))
+
 (defn- <remove-failed-download-graph!
   [graph]
   (-> (p/do! (db-persist/delete-graph! graph))
@@ -332,7 +348,8 @@
              incomplete-graph? (atom false)]
          (-> (if (and graph-uuid base)
                (p/let [_ (user-handler/<ensure-id&access-token!)
-                       _ (reset! incomplete-graph? true)
+                       graph-existed? (<local-graph-exists? graph)
+                       _ (reset! incomplete-graph? (not graph-existed?))
                        _ (<ensure-download-runtime-bound! graph)
                        _ (state/<invoke-db-worker :thread-api/db-sync-download-graph-by-id
                                                  graph graph-uuid graph-e2ee?)
