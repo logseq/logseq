@@ -263,6 +263,28 @@
     (is (= ref-target (ldb/get-journal-page-by-day @conn 20261028))
         "the day's journal is the one the ref points to")))
 
+(deftest create-journal-without-title-format
+  ;; A Journal class without a title-format made every date title a plain page.
+  (let [conn (journal-title-format-conn nil)
+        [_ page-uuid] (outliner-page/create! conn "Mar 5th, 2025" {:redirect? false})
+        journal (ldb/get-journal-page-by-day @conn 20250305)]
+    (is (some? journal) "the title in the default format creates the day's journal")
+    (is (= page-uuid (:block/uuid journal)))))
+
+(deftest create-today-journal-with-title-in-a-stale-editor-format
+  ;; The editor's date format was changed from another client and not reloaded: it
+  ;; asks for today's journal with a title the graph's format cannot parse, which
+  ;; made a plain page instead of the journal.
+  (let [conn (journal-title-format-conn "yyyy/MM/dd")
+        today (date-time-util/date->int (js/Date.))
+        stale-title (date-time-util/int->journal-title today "E, dd.MM.yyyy")]
+    (outliner-page/create! conn stale-title {:redirect? false
+                                             :split-namespace? false
+                                             :today-journal? true})
+    (let [journal (ldb/get-journal-page-by-day @conn today)]
+      (is (some? journal) "today has a journal")
+      (is (= [:logseq.class/Journal] (map :db/ident (:block/tags journal)))))))
+
 (deftest insert-blocks-missing-uuid-refs-become-broken
   ;; Both ref shapes produced for a uuid with no entity — a generated page map
   ;; and a [:block/uuid id] lookup — are dropped, and the title keeps the uuid
