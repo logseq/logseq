@@ -2075,7 +2075,7 @@
     ;; (not= (gobj/get native-e "inputType") "insertFromPaste")
     (cond
       (and (= content "1. ") (= last-input-char " ") input-id edit-block
-           (not (own-order-number-list? edit-block)))
+           (not (own-order-number-list? (latest-renderer-block edit-block))))
       (p/let [_ (state/pub-event! [:editor/toggle-own-number-list edit-block])]
         (state/set-edit-content! input-id ""))
 
@@ -2405,7 +2405,7 @@
               content value]
           (cond
             (and (string/blank? content)
-                 (own-order-number-list? block)
+                 (own-order-number-list? (latest-renderer-block block))
                  (not (some-> (:block/parent block)
                               (own-order-number-list?))))
             (remove-block-own-order-list-type! block)
