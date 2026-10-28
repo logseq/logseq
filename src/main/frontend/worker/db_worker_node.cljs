@@ -318,6 +318,27 @@
    :storage (select-keys (js->clj @*admission :keywordize-keys true) [:root :graphsDir :lifecycleDir])
    :revision (build-version/revision)})
 
+(def ^:private max-logged-error-chars 1000)
+
+(defn- truncate-for-log
+  [value]
+  (when value
+    (let [text (str value)]
+      (if (> (count text) max-logged-error-chars)
+        (str (subs text 0 max-logged-error-chars) "...[truncated]")
+        text))))
+
+;; The error object itself is not logged: its ex-data can hold the whole
+;; DataScript DB (`:got` of a failed assertion), which wrote multi-GB log files.
+(defn- invoke-error-log-entry
+  [error {:keys [status code message method-kw]}]
+  {:status status
+   :code code
+   :message (truncate-for-log message)
+   :method method-kw
+   :stack (when (instance? js/Error error)
+            (truncate-for-log (.-stack error)))})
+
 (defn- log-invoke-error!
   [res error method-kw]
   (let [data (ex-data error)
@@ -328,11 +349,10 @@
                  :error {:code code
                          :message message}}]
     (log/error :db-worker-node-invoke-failed
-               {:status status
-                :code code
-                :error error
-                :message message
-                :method method-kw})
+               (invoke-error-log-entry error {:status status
+                                              :code code
+                                              :message message
+                                              :method-kw method-kw}))
     (send-json! res status payload)))
 
 (defn- assert-lock-owner!
