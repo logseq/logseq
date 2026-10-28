@@ -6,6 +6,7 @@
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.op :as outliner-op]
             [logseq.outliner.page :as outliner-page]
+            [logseq.outliner.property :as outliner-property]
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.common.util.date-time :as date-time-util]
@@ -368,6 +369,56 @@
           child' (db-test/find-block-by-content @conn "child")]
       (is (nil? parent'))
       (is (nil? child')))))
+
+(defn- number-value-blocks
+  "The value blocks of the number property `property`, as their numbers."
+  [db property]
+  (set (map #(:logseq.property/value (d/entity db %))
+            (d/q '[:find [?e ...]
+                   :in $ ?p
+                   :where [?e :logseq.property/created-from-property ?p]]
+                 db (:db/id (d/entity db property))))))
+
+(deftest delete-blocks-deletes-the-number-values-it-held
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties {:num {:logseq.property/type :number}}
+               :pages-and-blocks [{:page {:block/title "page1"}
+                                   :blocks [{:block/title "b1"}
+                                            {:block/title "b2"}
+                                            {:block/title "b3"}]}]})
+        block (fn [title] (db-test/find-block-by-content @conn title))]
+    (outliner-property/set-block-property! conn (:block/uuid (block "b1")) :user.property/num 7)
+    (outliner-property/set-block-property! conn (:block/uuid (block "b2")) :user.property/num 8)
+    (outliner-property/set-block-property! conn (:block/uuid (block "b3")) :user.property/num 8)
+    (is (= #{7 8} (number-value-blocks @conn :user.property/num)))
+
+    (outliner-core/delete-blocks! conn [(block "b1")] {})
+    (is (= #{8} (number-value-blocks @conn :user.property/num))
+        "A number value no block holds any more is deleted with the block")
+
+    (outliner-core/delete-blocks! conn [(block "b2")] {})
+    (is (= #{8} (number-value-blocks @conn :user.property/num))
+        "A number value another block holds is kept")
+    (is (= 8 (:logseq.property/value (:user.property/num (block "b3")))))))
+
+(deftest delete-blocks-deletes-the-number-value-and-history-of-the-block
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties {:num {:logseq.property/type :number
+                                  :logseq.property/enable-history? true}}
+               :pages-and-blocks [{:page {:block/title "page1"}
+                                   :blocks [{:block/title "b1"}]}]})
+        b1 (db-test/find-block-by-content @conn "b1")]
+    (outliner-property/set-block-property! conn (:block/uuid b1) :user.property/num 7)
+    (d/transact! conn [{:block/uuid (random-uuid)
+                        :block/created-at 1
+                        :block/updated-at 1
+                        :logseq.property.history/block (:db/id b1)
+                        :logseq.property.history/property (:db/id (d/entity @conn :user.property/num))
+                        :logseq.property.history/ref-value (:db/id (:user.property/num (d/entity @conn (:db/id b1))))}])
+    (outliner-core/delete-blocks! conn [(d/entity @conn (:db/id b1))] {})
+    (is (empty? (number-value-blocks @conn :user.property/num)))
+    (is (empty? (d/q '[:find [?h ...] :where [?h :logseq.property.history/block]] @conn))
+        "The history of the deleted block goes with it")))
 
 (deftest delete-blocks-removes-range-comments-when-all-targets-are-deleted
   (let [now (js/Date.now)
