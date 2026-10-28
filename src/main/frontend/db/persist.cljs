@@ -21,7 +21,9 @@
 
 (defn get-all-graphs
   []
-  (p/let [repos (persist-db/<list-db)
+  (p/let [[repos electron-disk-graphs]
+          (p/all [(persist-db/<list-db)
+                  (when (util/electron?) (ipc/ipc "getGraphs"))])
           repos' (->> repos
                       (remove (fn [{:keys [name]}]
                                 (or (local-file-based-graph? name)
@@ -29,8 +31,7 @@
                       (map
                        (fn [{:keys [name] :as repo}]
                          (assoc repo :name
-                                (common-config/canonicalize-db-version-repo name)))))
-          electron-disk-graphs (when (util/electron?) (ipc/ipc "getGraphs"))]
+                                (common-config/canonicalize-db-version-repo name)))))]
     (distinct
      (concat
       repos'
