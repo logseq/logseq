@@ -1624,3 +1624,41 @@
         (let [refs (ref-ids conn block-uuid)]
           (is (not (contains? refs (:db/id foo))) "the page of the old title")
           (is (contains? refs (:db/id property)) "the key of the property"))))))
+
+(deftest name-spelled-page-ref-in-title-survives-a-later-refs-rebuild-test
+  (let [conn (create-refs-test-conn)
+        page (ldb/get-page @conn "page1")
+        foo (ldb/get-page @conn "Foo")
+        tag (d/entity @conn :user.class/TagA)
+        block-uuid (random-uuid)]
+    (with-transact-pipeline
+      (fn []
+        (testing "a block created with a [[Page]] title, as the CLI sends it"
+          (outliner-op/apply-ops!
+           conn
+           [(insert-titled-block-op {:block/uuid block-uuid
+                                     :block/title "two [[Foo]]"
+                                     :block/refs [[:block/uuid (:block/uuid foo)]]}
+                                    page)]
+           {})
+          (is (contains? (ref-ids conn block-uuid) (:db/id foo)))
+          (outliner-op/apply-ops! conn [[:batch-set-property [[block-uuid] :block/tags (:db/id tag) {}]]] {})
+          (is (contains? (ref-ids conn block-uuid) (:db/id foo))
+              "setting a tag rebuilds the refs and keeps the page of the title")
+          (is (= "two [[Foo]]" (:block/title (d/entity @conn [:block/uuid block-uuid])))))
+        (testing "a block saved with a [[New page]] title"
+          (outliner-op/apply-ops!
+           conn
+           [[:save-block [{:block/uuid block-uuid
+                           :block/title "now [[Bar]]"
+                           :block/refs [{:block/title "Bar"
+                                         :block/name "bar"
+                                         :block/tags [:logseq.class/Page]}]}
+                          {}]]]
+           {})
+          (let [bar (ldb/get-page @conn "Bar")]
+            (is (some? bar) "the page is created")
+            (is (contains? (ref-ids conn block-uuid) (:db/id bar)))
+            (outliner-op/apply-ops! conn [[:batch-delete-property-value [[block-uuid] :block/tags (:db/id tag)]]] {})
+            (is (contains? (ref-ids conn block-uuid) (:db/id bar))
+                "removing a tag rebuilds the refs and keeps the page of the title")))))))

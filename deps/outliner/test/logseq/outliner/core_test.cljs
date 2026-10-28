@@ -720,3 +720,41 @@
       (is (nil? (db-test/find-block-by-content @conn "doomed")))
       (is (> (page-updated-at conn page) before)
           "Deleting a child block must bump the page :block/updated-at"))))
+
+(deftest name-spelled-page-ref-in-title-is-stored-as-id-ref
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "existing"}]}
+               {:page {:block/title "Foo"}}])
+        foo (ldb/get-page @conn "Foo")
+        existing (db-test/find-block-by-content @conn "existing")
+        foo-ref {:block/uuid (:block/uuid foo) :block/title "Foo" :block/name "foo"}
+        stored-title (fn [block-uuid]
+                       (d/q '[:find ?title .
+                              :in $ ?uuid
+                              :where [?b :block/uuid ?uuid] [?b :block/title ?title]]
+                            @conn block-uuid))
+        insert-titled! (fn [title refs]
+                         (let [block-uuid (random-uuid)]
+                           (outliner-core/insert-blocks!
+                            conn
+                            [{:block/uuid block-uuid :block/title title :block/refs refs}]
+                            existing
+                            {:sibling? true :keep-uuid? true})
+                           block-uuid))]
+    (testing "a [[Page]] title with the page as a [:block/uuid ..] ref"
+      (let [block-uuid (insert-titled! "two [[foo]] and [[Foo]]" [[:block/uuid (:block/uuid foo)]])]
+        (is (= (str "two [[" (:block/uuid foo) "]] and [[" (:block/uuid foo) "]]")
+               (stored-title block-uuid)))
+        (is (= [(:db/id foo)]
+               (map :db/id (:block/refs (d/entity @conn [:block/uuid block-uuid])))))))
+    (testing "a [[Page]] title with the page as a map ref"
+      (let [block-uuid (insert-titled! "see [[Foo]]" [foo-ref])]
+        (is (= (str "see [[" (:block/uuid foo) "]]") (stored-title block-uuid)))))
+    (testing "a [[Namespace/Page]] whose title is only its last part"
+      (let [[_ page-uuid] (outliner-page/create! conn "ns/sub Page" {:split-namespace? true})
+            block-uuid (insert-titled! "see [[ns/sub Page]]" [[:block/uuid page-uuid]])]
+        (is (= (str "see [[" page-uuid "]]") (stored-title block-uuid)))))
+    (testing "a [[Page]] that is not among the refs is left as typed"
+      (let [block-uuid (insert-titled! "see [[Other]]" [[:block/uuid (:block/uuid foo)]])]
+        (is (= "see [[Other]]" (stored-title block-uuid)))))))
