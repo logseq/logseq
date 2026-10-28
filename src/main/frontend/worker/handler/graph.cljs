@@ -1,11 +1,11 @@
 (ns frontend.worker.handler.graph
   "Graph metadata, favorites, and overview operations for the db worker."
   (:require [cljs.cache :as cache]
-            [clojure.string :as string]
             [datascript.core :as d]
             [frontend.common.cache :as common.cache]
             [frontend.common.thread-api :refer [def-thread-api]]
             [frontend.worker.graph-view :as graph-view]
+            [frontend.worker.handler.page :as worker-page]
             [frontend.worker.plain-value :as worker-plain]
             [frontend.worker.state :as worker-state]
             [logseq.common.config :as common-config]
@@ -55,15 +55,9 @@
       (->> page-ids
            distinct
            (take 20)
-           (keep #(some->> (d/entity db %)
-                           (entity->plain-map db)))
-           (filter ldb/page?)
-           (remove ldb/hidden?)
-           (remove (fn [entity]
-                     (or (and (ldb/property? entity)
-                              (true? (:logseq.property/hide? entity)))
-                         (string/blank? (:block/title entity)))))
-           vec))))
+           (keep #(d/entity db %))
+           (filter worker-page/eligible-for-recent?)
+           (mapv #(entity->plain-map db %))))))
 
 (defn- favorite-page-ops
   [db page-block-uuid]
