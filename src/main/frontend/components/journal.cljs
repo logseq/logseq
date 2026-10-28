@@ -102,6 +102,8 @@
         [:div#journals.h-full
          (ui/virtualized-list
           {:custom-scroll-parent (util/app-scroll-container-node)
+           :default-item-height default-journal-height
+           :initial-item-count 1
            :data (to-array journal-uuids)
            :compute-item-key (fn [_idx journal-uuid]
                                (str "journal-" journal-uuid))
