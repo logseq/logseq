@@ -71,15 +71,17 @@
 
 (defonce root (rdc/createRoot (.getElementById js/document "root")))
 
+(defn- mount! []
+  (.render ^js root (rfx/provider (page/current-page)))
+  (display-welcome-message))
+
 (defn ^:export start []
   (when-not (util/capacitor?)
     (when config/dev?
       (md/start!))
     (set-router!)
 
-    (.render ^js root (rfx/provider (page/current-page)))
-
-    (display-welcome-message)))
+    (mount!)))
 
 (defn ^:export init []
   ;; init is called ONCE when the page loads
