@@ -101,6 +101,85 @@
               {:db/id 2
                :logseq.property/order-list-type {:block/title "roman"}}))))
 
+(def ^:private numbering-block-id #uuid "11111111-1111-1111-1111-111111111111")
+
+(defn- renderer-snapshot-numbered
+  "The renderer's snapshot of the block after it was numbered while it was being edited."
+  [block-uuid]
+  {:status :ready
+   :value {:block/uuid block-uuid
+           :logseq.property/order-list-type {:block/title "number"}}})
+
+(deftest handle-last-input-does-not-toggle-a-block-numbered-while-editing-test
+  (let [stale-edit-block {:block/uuid numbering-block-id :block/title ""}
+        published (atom [])
+        type-one-dot-space! (fn [snapshot-fn]
+                              (p/with-redefs [state/get-input (constantly #js {:value "1. "})
+                                              state/get-edit-input-id (constantly "edit-block-1")
+                                              state/get-edit-block (constantly stale-edit-block)
+                                              state/get-editor-args (constantly [nil nil {}])
+                                              state/pub-event! (fn [event] (swap! published conj event))
+                                              state/set-edit-content! (constantly nil)
+                                              cursor/pos (constantly 3)
+                                              db-subs/block-snapshot snapshot-fn]
+                                (editor/handle-last-input)))]
+    (async done
+      (-> (p/do!
+           (type-one-dot-space! (constantly {:status :loading}))
+           (is (= [[:editor/toggle-own-number-list stale-edit-block]] @published)
+               "a block that is not numbered is numbered by typing 1. ")
+           (reset! published [])
+           (type-one-dot-space! renderer-snapshot-numbered)
+           (is (empty? @published)
+               "a block numbered after editing started is left alone, not toggled off"))
+          (p/finally done)))))
+
+(deftest keydown-new-block-on-an-empty-block-numbered-while-editing-removes-the-number-test
+  (let [stale-block {:db/id 1
+                     :block/uuid numbering-block-id
+                     :block/title ""}
+        removed (atom [])
+        inserted (atom [])]
+    (with-redefs [editor/auto-complete? (constantly false)
+                  db-subs/block-snapshot renderer-snapshot-numbered
+                  editor/remove-block-own-order-list-type! (fn [block]
+                                                             (swap! removed conj (:block/uuid block)))
+                  editor/insert-new-block! (fn [& args]
+                                             (swap! inserted conj args))]
+      (#'editor/keydown-new-block {:block stale-block
+                                   :config {}
+                                   :value ""})
+      (is (= [numbering-block-id] @removed))
+      (is (empty? @inserted)))))
+
+(deftest backspace-at-start-of-a-block-numbered-while-editing-removes-the-number-test
+  (let [stale-block {:db/id 1
+                     :block/uuid numbering-block-id
+                     :block/title ""
+                     :block/page {:db/id 10}}
+        removed (atom [])
+        deleted (atom [])]
+    (async done
+      (-> (p/with-redefs [state/get-input (constantly #js {:value ""})
+                          cursor/pos (constantly 0)
+                          util/stop (constantly nil)
+                          state/get-current-repo (constantly test-helper/test-db)
+                          state/get-edit-block (constantly stale-block)
+                          db-async/<get-block-sibling (fn [& _] (p/resolved nil))
+                          db-subs/block-snapshot renderer-snapshot-numbered
+                          editor/get-state (constantly {:config {}})
+                          editor/save-current-block! (constantly nil)
+                          editor/remove-block-own-order-list-type! (fn [block]
+                                                                     (swap! removed conj (:block/uuid block)))
+                          editor/delete-block-inner! (fn [& args]
+                                                       (swap! deleted conj args))
+                          util/get-prev-block-non-collapsed-non-embed (constantly nil)]
+            (p/do!
+             (#'editor/delete-block-when-zero-pos! nil)
+             (is (= [numbering-block-id] @removed))
+             (is (empty? @deleted))))
+          (p/finally done)))))
+
 (deftest selected-delete-restores-the-mounted-previous-block-test
   (let [block-id (random-uuid)
         block {:db/id 1

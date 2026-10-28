@@ -1,11 +1,13 @@
 (ns frontend.handler.events-test
-  (:require [cljs.test :refer [deftest is testing]]
+  (:require [cljs.test :refer [async deftest is testing]]
             [frontend.components.rtc.download-progress :as download-progress]
+            [frontend.db.async :as db-async]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.events :as events]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
-            [logseq.shui.ui :as shui]))
+            [logseq.shui.ui :as shui]
+            [promesa.core :as p]))
 
 (deftest download-graph-progress-surface-test
   (let [calls (atom [])]
@@ -28,6 +30,42 @@
         (download-progress/show! "My notes")
         (download-progress/hide!)
         (is (= [:popup :popup-hide] (mapv first @calls)))))))
+
+(defn- toggle-own-number-list-calls
+  "Runs :editor/toggle-own-number-list for `edit-block` (the map captured when editing started)
+  while the db holds `current-block`; resolves to the list-type calls it made."
+  [edit-block current-block]
+  (let [calls (atom [])
+        toggle! (get @@#'events/event-definitions :editor/toggle-own-number-list)]
+    (p/with-redefs [state/get-current-repo (constantly "test-repo")
+                    db-async/<get-block (fn [_repo block-id & _]
+                                          (p/resolved (when (= block-id (:block/uuid current-block))
+                                                        current-block)))
+                    editor-handler/make-block-as-own-order-list! (fn [block]
+                                                                   (swap! calls conj [:make (:block/uuid block)]))
+                    editor-handler/remove-block-own-order-list-type! (fn [block]
+                                                                       (swap! calls conj [:remove (:block/uuid block)]))]
+      (p/then (toggle! [:editor/toggle-own-number-list edit-block])
+              (fn [_] @calls)))))
+
+(deftest toggle-own-number-list-reads-the-current-block-test
+  (let [block-id #uuid "11111111-1111-1111-1111-111111111111"
+        unnumbered {:block/uuid block-id :block/title "item"}
+        numbered (assoc unnumbered :logseq.property/order-list-type {:block/title "number"})]
+    (async done
+      (-> (p/do!
+           (p/let [calls (toggle-own-number-list-calls unnumbered numbered)]
+             (is (= [[:remove block-id]] calls)
+                 "A block numbered after editing started must be un-numbered, not numbered again."))
+           (p/let [calls (toggle-own-number-list-calls numbered unnumbered)]
+             (is (= [[:make block-id]] calls)
+                 "A block un-numbered after editing started must be numbered."))
+           (p/let [calls (toggle-own-number-list-calls unnumbered unnumbered)]
+             (is (= [[:make block-id]] calls)
+                 "A block that is not numbered gets numbered.")))
+          (p/catch (fn [error]
+                     (is false (str "unexpected error: " error))))
+          (p/finally done)))))
 
 (deftest refocus-upsert-type-block-test
   (let [source-id #uuid "11111111-1111-1111-1111-111111111111"
