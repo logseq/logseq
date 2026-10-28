@@ -43,16 +43,15 @@
      :blocks [{:block/title "anchor"}]}]))
 
 (deftest insert-same-block-repeated-page-refs-creates-one-page
-  (let [conn (conn-with-target)
-        block-uuid (random-uuid)]
+  (let [conn (conn-with-target)]
     (paste-blocks!
      conn
-     [{:block/uuid block-uuid
+     [{:block/uuid (random-uuid)
        :block/title "see [[internet]] and [[internet]]"
        :block/refs [(page-ref-map "internet")
                     (page-ref-map "internet")]}])
     (is (= 1 (page-count @conn "internet")))
-    (let [block (d/entity @conn [:block/uuid block-uuid])
+    (let [block (db-test/find-block-by-content @conn "see [[internet]] and [[internet]]")
           ref-uuids (into #{} (map :block/uuid) (:block/refs block))]
       (is (= 1 (count ref-uuids))))))
 
