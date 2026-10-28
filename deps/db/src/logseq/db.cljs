@@ -566,12 +566,15 @@
     (d/entity db (get-first-page-by-name db page-name))))
 
 (defn get-journal-page-by-day
-  "Get a journal page given its :block/journal-day value."
+  "Get a journal page given its :block/journal-day value. A recycled journal is
+  not the day's journal: callers that find none create the day's journal, which
+  restores the recycled one."
   [db journal-day]
   (when (and db journal-day)
-    (when-let [eid (some-> (first (d/datoms db :avet :block/journal-day journal-day))
-                           :e)]
-      (d/entity db eid))))
+    (some->> (d/datoms db :avet :block/journal-day journal-day)
+             (map #(d/entity db (:e %)))
+             (remove recycled?)
+             first)))
 
 (def get-built-in-page db-db/get-built-in-page)
 

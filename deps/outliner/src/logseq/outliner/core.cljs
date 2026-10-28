@@ -268,11 +268,25 @@
            (seq (set/intersection (ref-tag-idents ref)
                                   #{:logseq.class/Page :logseq.class/Journal})))))
 
+(defn- journal-ref-day
+  "The journal day of a ref the editor parsed as a journal: its title follows the
+  editor's date format, which may differ from the graph's."
+  [ref]
+  (let [day (:block/journal-day ref)]
+    (when (and (int? day)
+               (or (= "journal" (:block/type ref))
+                   (contains? (ref-tag-idents ref) :logseq.class/Journal)))
+      day)))
+
 (defn- resolve-page-ref
   [db ref tag-names]
   (if (new-page-ref? ref)
-    (let [class? (contains? tag-names (:block/name ref))]
-      (if-let [page (and (not class?) (ldb/get-page db (:block/name ref)))]
+    (let [class? (contains? tag-names (:block/name ref))
+          journal-day (when-not class? (journal-ref-day ref))]
+      ;; A journal is found by its day, not by the ref's name, which follows the
+      ;; editor's date format. A recycled journal is not found: `create` restores it.
+      (if-let [page (cond journal-day (ldb/get-journal-page-by-day db journal-day)
+                          (not class?) (ldb/get-page db (:block/name ref)))]
         [(merge (select-keys page [:db/id :block/uuid :block/title :block/name :db/ident])
                 (select-keys ref [:block.temp/original-page-name]))
          nil]
