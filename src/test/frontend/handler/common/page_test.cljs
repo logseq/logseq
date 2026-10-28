@@ -290,6 +290,25 @@
     {:block/title (str title " #" page-ref/left-brackets tag-uuid page-ref/right-brackets)
      :block/tags [(assoc tag :block/uuid tag-uuid)]}))
 
+(deftest-async create-page-with-tag-typed-in-title-does-not-reuse-same-title-page-test
+  (let [conn (db-test/create-conn-with-blocks
+              {:classes {:Fruit {}}
+               :pages-and-blocks [{:page {:block/title "Apple"}}]})
+        apple (db-test/find-page-by-title @conn "Apple")
+        fruit (db-test/find-page-by-title @conn "Fruit")]
+    (p/let [result (p/with-redefs [db-editor-handler/wrap-parse-block
+                                   (fn [_]
+                                     (parsed-tagged-page "Apple" {:block/uuid (:block/uuid fruit)
+                                                                  :block/title "Fruit"
+                                                                  :db/ident (:db/ident fruit)}))]
+                     (<create-with-graph! conn "Apple #Fruit"))
+            created (d/entity @conn (:db/id result))]
+      (is (not= (:db/id apple) (:db/id created))
+          "typing a tag in the title creates a new page instead of opening the untagged page with the same title")
+      (is (= "Apple" (:block/title created)))
+      (is (contains? (set (map :block/title (:block/tags created))) "Fruit"))
+      (is (= 2 (count (d/q '[:find [?e ...] :where [?e :block/title "Apple"]] @conn)))))))
+
 (deftest-async create-page-rejects-db-less-tag-named-tag
   (let [calls (atom [])]
     (p/with-redefs [state/get-current-repo (constantly "test")
