@@ -722,6 +722,24 @@
         "Selecting the text of one block must match every block with that text")
     (is (= ["Other"] (filter-by :is-not)))))
 
+(deftest get-view-data-query-result-match-any-without-clauses-keeps-every-row-test
+  (let [conn (note-topic-conn)
+        view-id (create-view-id conn :query-result)
+        option {:view-feature-type :query-result
+                :query-entity-ids [(title-id conn "Apple block")
+                                   (title-id conn "Orange block")]
+                :sorting [{:id :block/title :asc? true}]}]
+    (doseq [or? [true false]]
+      (is (= ["Apple block" "Orange block"]
+             (result-titles conn (db-view/get-view-data @conn view-id
+                                                       (assoc option :filters {:or? or? :filters []}))))
+          (str "A view without filter clauses shows every row, with :or? " or?))
+      (is (= ["Orange block"]
+             (result-titles conn (db-view/get-view-data @conn view-id
+                                                       (assoc option :filters {:or? or? :filters []}
+                                                              :input "orange"))))
+          "The search input still applies"))))
+
 (deftest get-view-data-class-objects-number-filter-and-sort-test
   (let [conn (topic-conn
               [{:page {:block/title "A" :build/tags [:Topic]
