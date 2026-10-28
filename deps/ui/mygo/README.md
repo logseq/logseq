@@ -41,6 +41,13 @@ their typed ABI rather than disguising them as extension events. Geometry is
 queried only after a committed frame. Focus and imperative scrolling use LUI's
 production host services, including its node-lifetime and scroll-token checks.
 
+Checkbox detail events preserve checked state and modifier bits through
+`lui_ocaml_toggle_changed_detail`. Captured pointer move/cancel events use the
+same pointer-detail ABI as down/up, and navigation accepts Enter, Space and
+Escape as well as directional keys. Rebuild the native library and host
+together: startup requires the detail exports and rejects an older library
+instead of dropping events or stripping modifiers.
+
 Native initialization requires exactly `{"paintsCaret":boolean}` as its JSON
 payload, independent of the platform and host profile codes. MyGo sends
 `{"paintsCaret":false}` before view construction: the shared OCaml editor owns
