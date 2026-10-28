@@ -2806,8 +2806,10 @@
       (and (:page-title? config) (entity/page? block) (string/blank? (:block/title block)))
       [:div.opacity-75 (t :ui/untitled)]
 
-      (and (ldb/asset? block)
-           (= :pdf (some-> (:logseq.property.asset/type block) string/lower-case keyword)))
+      ;; Images, audio and video are rendered by the block content path, which
+      ;; adds the editable title below them. Every other file type (pdf, txt,
+      ;; xlsx, ...) is shown as an asset link in place of the title.
+      (and (ldb/asset? block) (not (img-audio-video? block)))
       (asset-cp config block)
 
       (:raw-title? config)
