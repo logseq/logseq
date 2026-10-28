@@ -1,8 +1,11 @@
 (ns electron.context-menu
   (:require [electron.i18n :refer [t]]
             [electron.utils :as utils]
-            ["electron" :refer [Menu MenuItem shell] :as electron]
-            ["electron-dl" :refer [download]]))
+            ["electron" :refer [Menu MenuItem shell] :as electron]))
+
+(defn- download
+  ([win url] ((.-download (js/require "electron-dl")) win url))
+  ([win url options] ((.-download (js/require "electron-dl")) win url options)))
 
 ;; context menu is registered in window/setup-window-listeners!
 (defn setup-context-menu!
