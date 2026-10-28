@@ -9,27 +9,12 @@
             [medley.core :as medley]
             [tongue.core :as tongue]))
 
-(defn- locale-chain
-  "The locale and the parent tags tongue falls back through for it:
-  :zh-Hant gives :zh-Hant and :zh."
-  [locale]
-  (let [parts (string/split (name locale) #"-")]
-    (map #(keyword (string/join "-" (take % parts))) (range (count parts) 0 -1))))
-
-(defn- locale-dicts
-  "The dicts tongue reads to translate into `locale`: the locale's own and its
-  parent tags', plus English as the fallback when `fallback?`."
-  [locale fallback?]
-  (let [ks (cond-> (set (locale-chain locale)) fallback? (conj :en))]
-    (cond-> (select-keys dicts/dicts ks)
-      fallback? (assoc :tongue/fallback :en))))
-
 (def ^:private translator
   "A tongue translator per locale, with or without the English fallback, built
   on its first use. Built at load over every locale's dict, the two
   translators took about 170 ms of an app open, for the one locale it shows."
   (memoize (fn [locale fallback?]
-             (tongue/build-translate (locale-dicts locale fallback?)))))
+             (tongue/build-translate (dicts/locale-dicts locale fallback?)))))
 
 (defn translate
   [locale & args]

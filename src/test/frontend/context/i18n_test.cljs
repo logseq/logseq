@@ -5,6 +5,31 @@
             [frontend.state :as state]
             [tongue.core :as tongue]))
 
+(deftest locale-dicts-realize-only-the-locale-its-parents-and-english-test
+  (let [realized (atom [])
+        all-dicts {:en (delay (swap! realized conj :en) {:test/key "English"})
+                   :zh (delay (swap! realized conj :zh) {:test/key "Chinese"})
+                   :zh-Hant (delay (swap! realized conj :zh-Hant) {:test/key "Traditional"})
+                   :de (delay (swap! realized conj :de) {:test/key "Deutsch"})}]
+    (is (empty? @realized))
+
+    (testing "a locale's own dict, its parent tag's and the English fallback are realized"
+      (let [with-fallback (dicts/locale-dicts all-dicts :zh-Hant true)]
+        (is (= #{:en :zh :zh-Hant} (set @realized)))
+        (is (= {:test/key "Traditional"} (:zh-Hant with-fallback)))
+        (is (= :en (:tongue/fallback with-fallback)))
+        (is (not (realized? (:de all-dicts))))))
+
+    (testing "without the fallback English is not read, and a realized dict is not read again"
+      (reset! realized [])
+      (let [strict (dicts/locale-dicts all-dicts :zh false)]
+        (is (= {:zh {:test/key "Chinese"}} strict))
+        (is (empty? @realized))))
+
+    (testing "an unknown locale only gets the fallback"
+      (is (= {:en {:test/key "English"} :tongue/fallback :en}
+             (dicts/locale-dicts all-dicts :xx true))))))
+
 (defn- set-language!
   [language]
   (state/set-preferred-language! language))
@@ -59,9 +84,10 @@
 
 (deftest per-locale-translators-match-one-over-every-locale-test
   (testing "every key of every locale, with and without the English fallback, translates as one translator built over every locale's dict does"
-    (let [full (tongue/build-translate (assoc dicts/dicts :tongue/fallback :en))
-          strict (tongue/build-translate dicts/dicts)
-          ks (into #{} (mapcat keys) (vals dicts/dicts))
+    (let [all-dicts (into {} (map (fn [[locale dictionary]] [locale (dicts/realize-dict dictionary)])) dicts/dicts)
+          full (tongue/build-translate (assoc all-dicts :tongue/fallback :en))
+          strict (tongue/build-translate all-dicts)
+          ks (into #{} (mapcat keys) (vals all-dicts))
           mismatches (for [locale (conj (keys dicts/dicts) :xx-YY)
                            k ks
                            :let [a [(outcome #(full locale k)) (outcome #(strict locale k))]
