@@ -91,8 +91,13 @@
   (-> (p/do!
        (p/let [root-dir' (ipc/ipc "getLogseqDotDirRoot")]
          (reset! root-dir root-dir'))
-       (ensure-global-config-file!)
-       (restore-global-config!))
+       (-> (restore-global-config!)
+           (p/catch (fn [error]
+                      (if (or (= "ENOENT" (.-code error))
+                              (re-find #"\bENOENT\b" (ex-message error)))
+                        (p/do! (ensure-global-config-file!)
+                               (restore-global-config!))
+                        (p/rejected error))))))
       (p/timeout 6000)
       (p/catch (fn [e]
                  (js/console.error "cannot start global-config" e)))))
