@@ -174,7 +174,8 @@
       (p/let [files (fs/readdir assets-dir {:path-only? true})
               assets (->> files
                           (keep (fn [file-path]
-                                  (let [file-name (path/filename file-path)]
+                                  (let [prefix (str (string/replace (path/path-normalize assets-dir) #"/+$" "") "/")
+                                        file-name (subs (path/path-normalize file-path) (count prefix))]
                                     (when-not (string/blank? file-name)
                                       {:path file-path :file-name file-name}))))
                           vec)
@@ -183,7 +184,7 @@
                   (state/set-state! :graph/importing :sqlite-dir)
                   (state/set-state! :graph/importing-state {:total total
                                                             :current-idx 0
-                                                            :current-page "Assets"}))]
+                                                            :step :assets}))]
         (p/loop [remaining assets
                  copied 0
                  failed []]
@@ -206,7 +207,7 @@
                     (when (pos? total)
                       (state/set-state! :graph/importing-state {:total total
                                                                 :current-idx next-copied
-                                                                :current-page "Assets"}))
+                                                                :step :assets}))
                     (p/recur (subvec remaining 1) next-copied failed)))))))))))
 
 (defn import-from-sqlite-db!
@@ -247,9 +248,11 @@
               (state/set-state! :graph/importing :sqlite-zip)
               (state/set-state! :graph/importing-state {:total asset-total
                                                         :current-idx 0
-                                                        :current-page "Assets"}))]
+                                                        :step :assets}))]
     (if-not entry
-      (notification/show! (t :import/zip-missing-db-sqlite) :error)
+      (do
+        (clear-importing-state!)
+        (notification/show! (t :import/zip-missing-db-sqlite) :error))
       (do
         (shui/dialog-close!)
         (p/let [sqlite-buffer (.async ^js (:entry entry) "arraybuffer")]
@@ -267,7 +270,7 @@
                                       (when (pos? total)
                                         (state/set-state! :graph/importing-state {:total total
                                                                                   :current-idx current
-                                                                                  :current-page "Assets"})))})]
+                                                                                  :step :assets})))})]
                (notify-copied-assets! {:copied copied :failed failed} asset-total)
                (clear-importing-state!)
                (finished-ok-handler)))))))))
