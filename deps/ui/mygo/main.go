@@ -72,6 +72,10 @@ func run() (result error) {
 		host.backend = luimygo.New(luimygo.Config{
 			Extensions: host.services.extensions(),
 			Dispatch:   host.dispatch,
+			InputValue: host.services.BindInputValue,
+			InputControl: func(n luimygo.Node, e ui.Element, text string) {
+				host.services.BindInputControl(n, e, text)
+			},
 		})
 		if err := installApplicationIcons(host.backend, os.Getenv("LOGSEQ_NATIVE_ASSET_DIR")); err != nil {
 			host.fail(err)
@@ -101,6 +105,10 @@ func run() (result error) {
 			}
 			prevented, err := r.DocumentEvent(name, payload)
 			if err != nil {
+				host.fail(err)
+				return true
+			}
+			if err := host.drain(); err != nil {
 				host.fail(err)
 				return true
 			}

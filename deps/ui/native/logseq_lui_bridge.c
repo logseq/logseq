@@ -540,8 +540,8 @@ LUI_EXPORT int32_t lui_ocaml_document_event_utf8(const char *data,
     result = caml_callback_exn(*handler, payload);
     if (Is_exception_result(result))
       report_ocaml_exception("lui_ocaml_document_event", result);
-    else
-      accepted = Bool_val(result) ? 2 : 1;
+    else if (emit_patch("lui_ocaml_document_event", Field(result, 1)))
+      accepted = Bool_val(Field(result, 0)) ? 2 : 1;
     CAMLdrop;
   }
   caml_enter_blocking_section();

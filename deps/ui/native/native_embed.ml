@@ -878,7 +878,7 @@ module Ffi = struct
       (match !current_app with
        | Some app -> app_flush_checked app
        | None -> invalid_arg "Document event before application initialization");
-      prevented)
+      prevented, encode_batches (take_patches_dbg "document"))
   let root_node = root_node
   let editor_snapshot block_id =
     with_entry_lock (fun () ->

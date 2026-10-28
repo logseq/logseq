@@ -24,8 +24,8 @@ github.com/go-text/typesetting v0.3.5 h1:XZPUooClHY0Vf/rFyUyuPRNEkawARaFzLMQcXLS
 github.com/go-text/typesetting v0.3.5/go.mod h1:XZO1hD+nQVyvVa5IicQk7FsCa4PFQaJ2soWAP1f//68=
 github.com/go-text/typesetting-utils v0.0.0-20260419141703-4ffe8874dabc h1:8FGo2It5K75XkavhTiCKExUfVaVDS1feBnLCru5qeoY=
 github.com/go-text/typesetting-utils v0.0.0-20260419141703-4ffe8874dabc/go.mod h1:3/62I4La/HBRX9TcTpBj4eipLiwzf+vhI+7whTc9V7o=
-github.com/logseq/lui/platform/mygo v0.0.0-20261028100039-b2093ed27228 h1:wF+CEfGXP6qDYc3tjianhe0XCtAkgySpuwDXHHJwoOE=
-github.com/logseq/lui/platform/mygo v0.0.0-20261028100039-b2093ed27228/go.mod h1:XattIenNnZbkI0eNEK1J4DR4GQNdFT0DSxhy/TKAdik=
+github.com/logseq/lui/platform/mygo v0.0.0-20261028135546-1f44501efe0b h1:PRCulOiU9gPO01lGxi4aKJEEZI0HO3ceJIfUcXkXpW4=
+github.com/logseq/lui/platform/mygo v0.0.0-20261028135546-1f44501efe0b/go.mod h1:XattIenNnZbkI0eNEK1J4DR4GQNdFT0DSxhy/TKAdik=
 github.com/logseq/mygo v0.0.0-20261028085919-6efea658eff8 h1:m0H4t3KFzUr+OtuaegXyDktkMK5AxuZcg7jlmsKFBEs=
 github.com/logseq/mygo v0.0.0-20261028085919-6efea658eff8/go.mod h1:dVav53PwF2xEotjf4oA5lTY2Jp2exgzyjLhbSXhbMwE=
 github.com/sergeymakinen/go-bmp v1.0.0 h1:SdGTzp9WvCV0A1V0mBeaS7kQAwNLdVJbmHlqNWq0R+M=

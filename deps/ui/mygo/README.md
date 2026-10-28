@@ -66,7 +66,11 @@ OCaml library must be rebuilt together; assets and persistence configuration
 remain environment-owned and are not part of this payload.
 
 The host routes document input synchronously through OCaml before native default
-handling. Editor caret, selection and pointer queries use committed retained text
+handling. Document callbacks publish their flushed patches with the prevention
+result; the UI thread applies them before returning to native default handling.
+Standard text controls and raw extension inputs share the host's imperative
+value/selection queues, node-lifetime checks and committed-frame acknowledgements.
+Editor caret, selection and pointer queries use committed retained text
 layout; the input sink does not maintain a second document. Theme snapshots feed
 the backend's scoped color defaults. Native file dialogs, downloads, clipboard,
 image decoding and shutdown saving use their real platform services.
