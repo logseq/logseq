@@ -252,8 +252,18 @@
   [route]
   (let [{:keys [data]} route]
     (when-let [data-name (:name data)]
-      (p/let [title (get-title data-name (:path-params route))]
-        (set! (. js/document.body.dataset -page) title)))))
+      (if @state/db-worker-ready?
+        (p/let [title (get-title data-name (:path-params route))]
+          (set! (. js/document.body.dataset -page) title))
+        ;; After a reload the first route match runs before the db-worker
+        ;; exists, so the title can't be resolved yet. `body[data-page]` gates
+        ;; the PDF viewer layout (pdf.css), so label the current route once
+        ;; the db-worker is up.
+        (add-watch state/db-worker-ready? ::update-page-label
+                   (fn [_key _ref _old ready?]
+                     (when ready?
+                       (remove-watch state/db-worker-ready? ::update-page-label)
+                       (update-page-label! (state/get-route-match)))))))))
 
 (defn jump-to-anchor!
   [anchor-text]
