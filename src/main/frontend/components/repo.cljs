@@ -650,12 +650,15 @@
   []
   (boolean (and (util/electron?) (not config/publishing?))))
 
-(defn- on-existing-local-graph-imported!
+(defn- <on-existing-local-graph-imported!
   []
-  (state/pub-event! [:graph/sync-context])
-  (notification/show! (t :import/file-finished) :success)
-  (route-handler/redirect-to-home!)
-  (js/setTimeout ui-handler/re-render-root! 500))
+  (p/do!
+   (graph/<upsert-current-graph-registry!)
+   (graph/remember-current-graph-id-in-tab!)
+   (state/pub-event! [:graph/sync-context])
+   (notification/show! (t :import/file-finished) :success)
+   (route-handler/redirect-to-home!)
+   (js/setTimeout ui-handler/re-render-root! 500)))
 
 (hsx/defc add-existing-graph-name-dialog
   [default-name on-submit]
@@ -692,7 +695,7 @@
       (ui/button (t :ui/submit)
                  {:on-click submit!})]]))
 
-(defn add-existing-local-graph!
+(defn <add-existing-local-graph!
   [source]
   (when (existing-local-graph-action?)
     (p/let [^js ret (ipc/ipc :showOpenDialog
@@ -709,8 +712,8 @@
            (db-import-handler/suggested-graph-name path)
            (fn [graph-name]
              (shui/dialog-close!)
-             (db-import-handler/import-existing-local-graph!
-              path graph-name on-existing-local-graph-imported!)))
+             (db-import-handler/<import-existing-local-graph!
+              path graph-name <on-existing-local-graph-imported!)))
          {:id :add-existing-graph-name
           :title (t :import/new-graph-name)})))))
 
@@ -722,7 +725,7 @@
      :data-testid "add-existing-graph-folder"
      :on-click (fn []
                  (shui/dialog-close!)
-                 (add-existing-local-graph! :folder))}
+                 (<add-existing-local-graph! :folder))}
     (t :graph.add-existing/folder-action))
    (shui/button
     {:variant :secondary
@@ -730,7 +733,7 @@
      :data-testid "add-existing-graph-file"
      :on-click (fn []
                  (shui/dialog-close!)
-                 (add-existing-local-graph! :file))}
+                 (<add-existing-local-graph! :file))}
     (t :graph.add-existing/file-action))])
 
 (defn choose-existing-local-graph-source!

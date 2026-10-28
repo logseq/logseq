@@ -79,6 +79,9 @@
 (defmethod handle :readFile [_window [_ path]]
   (utils/read-file path))
 
+(defmethod handle :readGraphImportSnapshot [_window [_ path]]
+  (db/<read-import-snapshot path))
+
 (defmethod handle :readFileRaw [_window [_ path]]
   (utils/read-file-raw path))
 
@@ -296,9 +299,9 @@
 (defmethod handle :openDialog [^js _window _messages]
   (open-dir-dialog))
 
-(defmethod handle :showOpenDialog [_window [_ ^js options]]
-  (p/let [^js result (.showOpenDialog dialog options)]
-    result))
+(defmethod handle :showOpenDialog [_window [_ options]]
+  (p/let [^js result (.showOpenDialog dialog (bean/->js options))]
+    (bean/->clj result)))
 
 (defmethod handle :getLogseqDotDirRoot []
   (utils/get-ls-dotdir-root))

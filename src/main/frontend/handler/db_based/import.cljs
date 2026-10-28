@@ -3,6 +3,7 @@
   (:require ["jszip" :as JSZip]
             [clojure.edn :as edn]
             [clojure.string :as string]
+            [electron.ipc :as ipc]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.fs :as fs]
@@ -277,12 +278,12 @@
         (<import-from-sqlite-zip-buffer zip-buffer bare-graph-name finished-ok-handler))
       (p/catch handle-zip-import-error!)))
 
-(defn- import-from-sqlite-and-assets!
+(defn- <import-from-sqlite-and-assets!
   [{:keys [sqlite-path assets-dir]} bare-graph-name finished-ok-handler]
   (-> (p/let [exists? (fs/file-exists? sqlite-path)]
         (if-not exists?
           (notification/show! (t :graph.add-existing/missing-db-error) :error)
-          (p/let [buffer (fs/read-file-raw nil sqlite-path)]
+          (p/let [buffer (ipc/ipc :readGraphImportSnapshot sqlite-path)]
             (import-from-sqlite-db!
              buffer
              bare-graph-name
@@ -300,7 +301,7 @@
           (t :import/unexpected-error (or (.-message e) (str e)))
           :error)))))
 
-(defn import-existing-local-graph!
+(defn <import-existing-local-graph!
   "Import a local DB graph folder, db.sqlite, or official SQLite+assets ZIP."
   [path bare-graph-name finished-ok-handler]
   (let [kind (classify-existing-graph-path path)]
@@ -311,9 +312,9 @@
           (p/catch handle-zip-import-error!))
 
       (:sqlite-file :graph-dir)
-      (import-from-sqlite-and-assets! (sqlite-source path kind)
-                                      bare-graph-name
-                                      finished-ok-handler)
+      (<import-from-sqlite-and-assets! (sqlite-source path kind)
+                                       bare-graph-name
+                                       finished-ok-handler)
 
       (notification/show! (t :graph.add-existing/unsupported-error) :error))))
 
