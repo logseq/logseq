@@ -8,18 +8,19 @@
             [malli.error :as me]
             [malli.util :as mu]))
 
-(def ^:private db-schema-validator (m/validator db-malli-schema/DB))
-(def ^:private db-schema-explainer (m/explainer db-malli-schema/DB))
-(def ^:private closed-db-schema-validator (m/validator (mu/closed-schema db-malli-schema/DB)))
-(def ^:private closed-db-schema-explainer (m/explainer (mu/closed-schema db-malli-schema/DB)))
+(def ^:private db-schema-validator (delay (m/validator db-malli-schema/DB)))
+(def ^:private db-schema-explainer (delay (m/explainer db-malli-schema/DB)))
+(def ^:private closed-db-schema (delay (mu/closed-schema db-malli-schema/DB)))
+(def ^:private closed-db-schema-validator (delay (m/validator @closed-db-schema)))
+(def ^:private closed-db-schema-explainer (delay (m/explainer @closed-db-schema)))
 
 (defn get-schema-validator
   [closed-schema?]
-  (if closed-schema? closed-db-schema-validator db-schema-validator))
+  @(if closed-schema? closed-db-schema-validator db-schema-validator))
 
 (defn get-schema-explainer
   [closed-schema?]
-  (if closed-schema? closed-db-schema-explainer db-schema-explainer))
+  @(if closed-schema? closed-db-schema-explainer db-schema-explainer))
 
 (def ^:private bookkeeping-attrs
   #{:block/created-at :block/updated-at})
@@ -117,9 +118,8 @@
                   #(dissoc % :block.temp/load-status :block.temp/has-children?)
                   (db-malli-schema/update-properties-in-ents db ent-maps*))
         errors (binding [db-malli-schema/*db-for-validate-fns* db]
-                 (-> (map (fn [e]
-                            (dissoc e :db/id))
-                          ent-maps) closed-db-schema-explainer :errors))]
+                 (:errors ((get-schema-explainer true)
+                           (map (fn [e] (dissoc e :db/id)) ent-maps))))]
     (cond-> {:datom-count (count datoms)
              :entities ent-maps*}
       (some? errors)
