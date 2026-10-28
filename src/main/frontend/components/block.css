@@ -1639,8 +1639,14 @@ html.is-mac {
     @apply h-6;
   }
 
+  /* rounded-full on a multi-line pill is a half-height-radius ellipse that clips the key at the top left. */
   .bottom-properties-row[data-expanded="true"] .bottom-property-pill {
     @apply h-auto max-w-full items-start;
+    border-radius: 12px;
+  }
+
+  .bottom-properties-row[data-expanded="true"] .bottom-property-pill::after {
+    border-radius: 12px;
   }
 
   .bottom-properties-row[data-expanded="true"] .bottom-property-content {
