@@ -407,7 +407,7 @@
     (when (and comments-class
                (not (rtc-tx-or-download-graph? tx-meta))
                (not (:undo? tx-meta))
-               (not (:redo? tx-meta)))
+               (not (:db-sync/replayed-tx-data? tx-meta)))
       (->> tx-data
            (keep (fn [datom]
                    (when (and (= :block/tags (:a datom))
