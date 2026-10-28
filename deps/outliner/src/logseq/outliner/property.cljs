@@ -533,6 +533,8 @@
       (and (integer? v)
            (or (not number-property?)
                (and (not (false? entity-id?))
+                    ;; 0 and negative numbers are values, never entity ids (`d/entity` throws on them)
+                    (pos-int? v)
                     (= property-id (:db/ident (:logseq.property/created-from-property (d/entity @conn v)))))))
       v
 
