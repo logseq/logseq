@@ -296,9 +296,11 @@
    mt/json-transformer))
 
 (defn- ->coercer [schema]
-  (ma/coercer schema json-transformer nil
-              #(ma/-fail! ::db-sync-malli-coerce
-                          (select-keys % [:value]))))
+  (let [coercer (delay
+                  (ma/coercer schema json-transformer nil
+                              #(ma/-fail! ::db-sync-malli-coerce
+                                          (select-keys % [:value]))))]
+    (fn [value] (@coercer value))))
 
 (def ws-client-message-coercer (->coercer ws-client-message-schema))
 (def ws-server-message-coercer (->coercer ws-server-message-schema))
