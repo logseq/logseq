@@ -105,7 +105,7 @@ func run() (result error) {
 				return true
 			}
 			return prevented
-		}, host.services.codeMirrorComposing)
+		}, host.services.codeMirrorComposition)
 		host.document.Pointer = host.services.EditorPointer
 		host.document.Observe = host.services.ViewportInput
 		host.services.mutations.Activate = func(n luimygo.Node) error {

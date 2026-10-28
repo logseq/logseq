@@ -21,22 +21,23 @@ type DocumentEvents struct {
 	Observe func(ui.InputEvent, luimygo.InputNode)
 	// Pointer routes editor gestures after unprevented document capture and
 	// before MyGo target delivery. A zero target still allows active drags.
-	Pointer             func(ev ui.InputEvent, target int64) bool
-	codeMirrorComposing func(luimygo.InputNode) bool
-	backend             *luimygo.Backend
-	dispatch            DocumentDispatch
-	context             *ui.Context
-	services            ui.Services
-	pressed             luimygo.InputNode
-	composing           bool
-	compositionNode     int64
+	Pointer               func(ev ui.InputEvent, target int64) bool
+	codeMirrorComposition func(*ui.Context, luimygo.InputNode) codeMirrorComposition
+	backend               *luimygo.Backend
+	dispatch              DocumentDispatch
+	context               *ui.Context
+	services              ui.Services
+	pressed               luimygo.InputNode
+	composing             bool
+	compositionTarget     luimygo.InputNode
+	compositionSource     codeMirrorCompositionSource
 }
 
-func NewDocumentEvents(backend *luimygo.Backend, dispatch DocumentDispatch, codeMirrorComposing func(luimygo.InputNode) bool) *DocumentEvents {
-	if backend == nil || dispatch == nil || codeMirrorComposing == nil {
+func NewDocumentEvents(backend *luimygo.Backend, dispatch DocumentDispatch, codeMirrorComposition func(*ui.Context, luimygo.InputNode) codeMirrorComposition) *DocumentEvents {
+	if backend == nil || dispatch == nil || codeMirrorComposition == nil {
 		panic("document input requires a backend and synchronous OCaml dispatch")
 	}
-	return &DocumentEvents{backend: backend, dispatch: dispatch, codeMirrorComposing: codeMirrorComposing}
+	return &DocumentEvents{backend: backend, dispatch: dispatch, codeMirrorComposition: codeMirrorComposition}
 }
 
 // Capture installs the window callback AFTER backend.View on every frame.
@@ -52,7 +53,7 @@ func (s *platformServices) renderDocumentEvents(c *ui.Context, n luimygo.Node, _
 	e := ui.Box(c).Size(0, 0)
 	d := ui.Local(e, "document-events", func() DocumentEvents { return DocumentEvents{} })
 	d.backend = s.backend
-	d.codeMirrorComposing = s.codeMirrorComposing
+	d.codeMirrorComposition = s.codeMirrorComposition
 	d.Observe = s.ViewportInput
 	d.dispatch = func(name, payload string) bool {
 		extensionEmit(n, emit, "dom-event", map[string]any{"name": name, "payload": payload})
@@ -95,10 +96,18 @@ func (d *DocumentEvents) input(ev ui.InputEvent, host ui.InputTarget) bool {
 	return prevented
 }
 
+func (d *DocumentEvents) clearComposition() {
+	d.composing = false
+	d.compositionTarget = luimygo.InputNode{}
+	d.compositionSource = codeMirrorCompositionSource{}
+}
+
 func (d *DocumentEvents) event(ev ui.InputEvent, target luimygo.InputNode) bool {
-	if d.compositionNode != target.Node.ID {
-		d.composing = false
-		d.compositionNode = target.Node.ID
+	composition := d.codeMirrorComposition(d.context, target)
+	codeMirror := target.Node.Identifier == "logseq-codemirror"
+	if !d.compositionTarget.Current() || d.compositionTarget.Node.ID != target.Node.ID ||
+		codeMirror && (!composition.focused || d.compositionSource != composition.source) {
+		d.clearComposition()
 	}
 	switch ev.Kind {
 	case ui.InputKeyDown, ui.InputKeyUp:
@@ -112,8 +121,8 @@ func (d *DocumentEvents) event(ev ui.InputEvent, target luimygo.InputNode) bool 
 		}
 		payload := extensionDOMKey(ev, key)
 		payload["isComposing"] = d.composing
-		if target.Node.Identifier == "logseq-codemirror" {
-			payload["isComposing"] = d.codeMirrorComposing(target)
+		if codeMirror {
+			payload["isComposing"] = d.composing || composition.focused && composition.composing
 		}
 		return d.send(target, name, payload)
 	case ui.InputPointerDown, ui.InputPointerUp, ui.InputPointerMove, ui.InputClick:
@@ -154,11 +163,17 @@ func (d *DocumentEvents) event(ev ui.InputEvent, target luimygo.InputNode) bool 
 		} else if ev.Text == "" {
 			name = "compositionend"
 		}
-		d.composing = ev.Text != ""
+		d.composing = ev.Text != "" && target.Current() && (!codeMirror || composition.focused)
+		if d.composing {
+			d.compositionTarget = target
+			d.compositionSource = composition.source
+		} else {
+			d.clearComposition()
+		}
 		d.send(target, name, map[string]any{"data": ev.Text, "isComposing": d.composing})
 	case ui.InputText:
 		wasComposing := d.composing
-		d.composing = false
+		d.clearComposition()
 		return d.send(target, "beforeinput", map[string]any{"data": ev.Text,
 			"inputType": "insertText", "isComposing": wasComposing})
 	}
