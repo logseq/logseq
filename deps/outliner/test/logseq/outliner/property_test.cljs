@@ -1053,3 +1053,52 @@
       (is (= #{0 2}
              (set (map db-property/property-value-content
                        (:user.property/nums (db-test/find-block-by-content @conn "b1")))))))))
+
+(defn- history-record-values
+  "The ids of the value blocks the history records of `property` point at."
+  [db property]
+  (set (d/q '[:find [?v ...]
+              :in $ ?p
+              :where
+              [?h :logseq.property.history/property ?p]
+              [?h :logseq.property.history/ref-value ?v]]
+            db (:db/id (d/entity db property)))))
+
+(defn- add-history-record!
+  "Records the current value of `property` on the block `block-uuid`, as the worker does for a property that keeps history."
+  [conn block-uuid property]
+  (let [block (d/entity @conn [:block/uuid block-uuid])]
+    (d/transact! conn [{:block/uuid (random-uuid)
+                        :block/created-at 1
+                        :block/updated-at 1
+                        :logseq.property.history/block (:db/id block)
+                        :logseq.property.history/property (:db/id (d/entity @conn property))
+                        :logseq.property.history/ref-value (:db/id (get block property))}])))
+
+(deftest changing-a-number-value-keeps-the-value-its-history-records
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties {:num {:logseq.property/type :number
+                                  :logseq.property/enable-history? true}}
+               :pages-and-blocks [{:page {:block/title "page1"}
+                                   :blocks [{:block/title "b1"}
+                                            {:block/title "b2"}]}]})
+        b1 (:block/uuid (db-test/find-block-by-content @conn "b1"))
+        b2 (:block/uuid (db-test/find-block-by-content @conn "b2"))]
+    (testing "setting the property to another number"
+      (outliner-property/set-block-property! conn b1 :user.property/num 4)
+      (add-history-record! conn b1 :user.property/num)
+      (outliner-property/set-block-property! conn b1 :user.property/num 5)
+      (is (= 1 (count (history-record-values @conn :user.property/num)))
+          "The history record of the old value is kept")
+      (is (= #{4} (set (map db-property/property-value-content
+                            (map #(d/entity @conn %) (history-record-values @conn :user.property/num)))))
+          "with the old value block it points at"))
+
+    (testing "removing the property from the block"
+      (outliner-property/set-block-property! conn b2 :user.property/num 8)
+      (add-history-record! conn b2 :user.property/num)
+      (outliner-property/remove-block-property! conn b2 :user.property/num)
+      (is (contains? (set (map db-property/property-value-content
+                               (map #(d/entity @conn %) (history-record-values @conn :user.property/num))))
+                     8)
+          "The history record of the removed value is kept"))))
