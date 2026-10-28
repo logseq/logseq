@@ -4160,15 +4160,41 @@
                     (select-all-blocks! {:page (:block/name parent)})))))
             (select-all-blocks! {})))))))
 
+(defn- untitled-library-page
+  "The page being edited when Enter just created it in the Library and it still
+  has no title, else nil."
+  [input-id]
+  (let [[_ _ config] (state/get-editor-args)
+        edit-block (state/get-edit-block)
+        block (when edit-block (latest-renderer-block edit-block))]
+    (when (and (:library? config)
+               block
+               (entity/page? block)
+               (string/blank? (:block/title block))
+               (string/blank? (editor-input-value input-id)))
+      block)))
+
+(defn- delete-untitled-library-page!
+  "Hard-delete a page that never got a title, so it is left neither as an
+  Untitled page in the Library nor in the Recycle page."
+  [page]
+  (ui-outliner-tx/transact!
+   {:outliner-op :delete-page}
+   (outliner-op/delete-page! (:block/uuid page))
+   (outliner-op/recycle-delete-permanently! (:block/uuid page))))
+
 (defn escape-editing
   [& {:keys [select? save-block? editing-another-block?]
       :or {save-block? true}}]
-  (let [input-id (state/get-edit-input-id)]
+  (let [input-id (state/get-edit-input-id)
+        untitled-page (when save-block? (untitled-library-page input-id))]
     (p/do!
-     (when save-block? (save-current-block!))
+     (if untitled-page
+       (delete-untitled-library-page! untitled-page)
+       (when save-block? (save-current-block!)))
      ;; a click during the save opened another editor: it stays open
      (when (still-editing? input-id)
-       (if select?
+       (if (and select? (not untitled-page))
          (when-let [node (some-> (state/get-input) (util/rec-get-node "ls-block"))]
            (state/exit-editing-and-set-selected-blocks! [node]))
          (when-not editing-another-block?
