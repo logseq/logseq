@@ -5,9 +5,13 @@
 
 (deftest coercer-compiles-on-first-use-and-is-shared-test
   (let [calls (atom 0)]
-    (with-redefs [ma/coercer (fn [& _]
-                              (swap! calls inc)
-                              identity)]
+    ;; ma/coercer has several arities, so the source's four-argument call compiles to a direct call of the
+    ;; replacement's `cljs$core$IFn$_invoke$arity$4`: only a multi-arity fn has that property
+    (with-redefs [ma/coercer (fn
+                               ([_schema] (swap! calls inc) identity)
+                               ([_schema _transformer _respond _raise]
+                                (swap! calls inc)
+                                identity))]
       (let [coerce (#'db-sync-schema/->coercer [:map [:value :string]])]
         (is (zero? @calls))
         (is (= {:value "first"} (coerce {:value "first"})))
