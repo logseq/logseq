@@ -33,7 +33,21 @@
        (nil? (:block/updated-at entity))
        (int? (:block/created-at entity))))
 
+(defn- tx-op-entity-id
+  "The entity a requested tx-data item (a vector op or a map) is about, resolved
+  in `db`; nil when it is not an existing entity."
+  [db tx-op]
+  (let [e (cond (map? tx-op) (:db/id tx-op)
+                (sequential? tx-op) (second tx-op))]
+    (when (or (number? e) (keyword? e))
+      (d/entid db e))))
+
 (defn- ^:large-vars/cleanup-todo fix-invalid-blocks!
+  "Repairs the entities in `errors`. Returns nil when nothing changed, else the
+  committed `:fix-datoms` and `:fixed-entity-ids`, the entities the repairs
+  asked to change. The datoms also include what the transact pipeline stamps
+  on other entities (e.g. `:block/tx-id` on the blocks referencing a repaired
+  one), so they can't be used to tell which entities were repaired."
   [conn errors]
   (let [db @conn
         fix-tx-data (mapcat
@@ -190,8 +204,11 @@
         tx-data (concat fix-tx-data
                         class-as-properties)]
     (when (seq tx-data)
-      (let [tx-report (ldb/transact! conn tx-data {:fix-db? true})]
-        (seq (:tx-data tx-report))))))
+      (let [fixed-entity-ids (into [] (keep #(tx-op-entity-id db %)) tx-data)
+            tx-report (ldb/transact! conn tx-data {:fix-db? true})]
+        (when-let [fix-datoms (seq (:tx-data tx-report))]
+          {:fix-datoms fix-datoms
+           :fixed-entity-ids fixed-entity-ids})))))
 
 (defn- fix-num-prefix-db-idents!
   "Fix invalid db/ident keywords for both classes and properties"
@@ -290,17 +307,18 @@
 
 (defn- validate-and-fix-invalid-blocks!
   "Repairs invalid blocks until none are left to repair. The result carries
-  `:fixed-entity-ids`, every entity the repairs touched, because the final
+  `:fixed-entity-ids`, every entity the repairs targeted, because the final
   `:errors` only describes what is still invalid after them."
   [conn]
   (loop [{:keys [errors] :as result} (validate-db-result @conn)
          fixed-entity-ids []]
     (log-validation-errors! errors)
-    (if-let [fix-datoms (and (seq errors) (fix-invalid-blocks! conn errors))]
+    (if-let [{:keys [fix-datoms] round-ids :fixed-entity-ids}
+             (and (seq errors) (fix-invalid-blocks! conn errors))]
       (do
         (log-fixes! fix-datoms)
         (recur (validate-db-result @conn)
-               (into fixed-entity-ids (map :e) fix-datoms)))
+               (into fixed-entity-ids round-ids)))
       (assoc result :fixed-entity-ids (vec (distinct fixed-entity-ids))))))
 
 (defn- fix-missing-internal-page-parent-orders!
