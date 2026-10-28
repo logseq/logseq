@@ -336,7 +336,12 @@
           [(merge (select-keys page [:db/id :block/uuid :block/title :block/name :db/ident])
                   (select-keys ref [:block.temp/original-page-name]))
            nil]
-          (let [{:keys [page-uuid tx-data]} (outliner-page/create db (:block/title ref)
+          (let [{:keys [page-uuid tx-data]} (outliner-page/create db
+                                                                   ;; The graph's own title format may be missing or differ
+                                                                   ;; from the editor's: the default format always parses
+                                                                   (if-let [journal-day (:block/journal-day ref)]
+                                                                     (date-time-util/int->journal-title journal-day date-time-util/default-journal-title-formatter)
+                                                                     (:block/title ref))
                                                                    {:uuid (:block/uuid ref)
                                                                     :class? class?
                                                                     :journal? (or (= "journal" (:block/type ref))
