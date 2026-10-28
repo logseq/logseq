@@ -3,7 +3,7 @@
             [frontend.components.graph-actions :as graph-actions]
             [frontend.components.svg :as svg]
             [frontend.context.i18n :refer [t]]
-            [frontend.extensions.graph :as graph]
+            [frontend.components.lazy-graph :as graph]
             [frontend.rfx :as rfx]
             [frontend.state :as state]
             [frontend.ui :as ui]
