@@ -152,6 +152,16 @@
                             (reset! worker-state/*state state-prev)
                             (done)))))))
 
+(deftest snapshot-stream-request-url-test
+  (doseq [[server-url expected]
+          [["http://127.0.0.1:8787/sync/graph-1/snapshot/stream?graph-id=graph-1"
+            "https://sync.example.test/sync/graph-1/snapshot/stream?graph-id=graph-1"]
+           ["https://assets.example.test/graph-1.snapshot?X-Amz-Signature=abc"
+            "https://assets.example.test/graph-1.snapshot?X-Amz-Signature=abc"]]]
+    (is (= expected
+           (#'sync-download/snapshot-stream-request-url
+            "https://sync.example.test" "graph-1" server-url)))))
+
 (deftest download-rejects-snapshot-without-a-journal-position-test
   (async done
          (let [config-prev @worker-state/*db-sync-config
