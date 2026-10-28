@@ -139,6 +139,17 @@
 
       nil)))
 
+(defn- startup-ready
+  [ui-ready runtime-ready]
+  (p/all [ui-ready
+          (-> runtime-ready
+              (p/catch
+               (fn [error]
+                 ;; Runtime failure must not publish readiness before UI settles.
+                 (-> ui-ready
+                     (p/catch (fn [_] nil))
+                     (p/then (fn [_] (p/rejected error)))))))]))
+
 (defn start!
   [render]
   (state/set-db-restoring! true)
@@ -164,13 +175,10 @@
 
       (log/info ::start-web-worker {})
 
-      (-> ui-ready
+      (-> (startup-ready ui-ready (persist-db/<start-runtime!))
           (p/then
-           (fn []
-             (p/let [t2 (util/time-ms)
-                     _ (persist-db/<start-runtime!)
-                     _ (log/info ::db-worker-spent-time (- (util/time-ms) t2))
-                     repos (repo-handler/get-repos)
+           (fn [_]
+             (p/let [repos (repo-handler/get-repos)
                      _ (state/set-repos! repos)
                      _ (mobile-util/hide-splash) ;; hide splash as early as ui is stable
                      url-target (current-url-target)
