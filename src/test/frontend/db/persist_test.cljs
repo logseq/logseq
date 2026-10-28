@@ -31,6 +31,27 @@
                    (is false (str error))))
         (p/finally done))))
 
+(deftest graph-discovery-starts-independent-sources-together-test
+  (async done
+    (let [worker-result (p/deferred)
+          disk-started? (atom false)]
+      (-> (p/with-redefs [util/electron? (constantly true)
+                          persist-db/<list-db (fn [] worker-result)
+                          ipc/ipc (fn [channel]
+                                    (is (= "getGraphs" channel))
+                                    (reset! disk-started? true)
+                                    (p/resolved #js ["disk"]))]
+            (let [result (db-persist/get-all-graphs)]
+              (p/let [_ (p/create (fn [resolve _reject]
+                                   (js/setTimeout #(resolve nil) 0)))]
+                (is @disk-started? "Disk discovery must not wait for the worker response")
+                (p/resolve! worker-result [{:name "worker"}])
+                (p/let [graphs result]
+                  (is (= #{"logseq_db_worker" "logseq_db_disk"}
+                         (set (map :name graphs))))))))
+          (p/catch #(is false (str %)))
+          (p/finally done)))))
+
 (deftest delete-graph-on-electron-quiesces-clients-before-ipc
   (async done
     (let [call-log (atom [])]
