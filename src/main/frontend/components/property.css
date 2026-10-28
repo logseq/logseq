@@ -67,7 +67,19 @@
 
 .ls-properties-area {
   .properties-panel {
-    @apply rounded-md overflow-hidden;
+    @apply grid rounded-md overflow-hidden;
+    grid-template-columns: subgrid;
+
+    > div:has(> .property-panel-row),
+    .property-pair.property-panel-row {
+      display: grid;
+      grid-column: 1 / -1;
+      grid-template-columns: subgrid;
+    }
+
+    .property-pair.property-panel-row {
+      padding-right: 0;
+    }
   }
 
   .properties-panel-header {
@@ -76,8 +88,6 @@
 
   .property-pair.property-panel-row {
     @apply grid items-start pr-3 gap-3 w-full;
-    /* Fixed key column so every row shares one value-column axis.
-       Per-row fit-content(260px) sized keys independently (150–260px). */
     grid-template-columns: 160px minmax(0, 1fr);
     margin-left: 0;
   }
@@ -164,10 +174,32 @@
     min-width: 15px;
   }
 
-  .property-value-panel.ls-block.property-value-container:not(:has(> .property-panel-bullet)) {
-    /* Reserve the in-flow bullet slot (16px) plus gap-1 so filled default/url
-       values start on the same axis as rows that render a bullet. */
-    padding-left: calc(16px + 0.25rem);
+  .property-value-panel .property-block-container {
+    margin-left: 0;
+
+    /* Text and URL values render their own block bullet. Match the panel
+       bullet slot while keeping the expand control outside the value column. */
+    > .ls-block > .block-main-container,
+    > .blocks-container > .blocks-list-wrap > .ls-block > .block-main-container {
+      @apply gap-1;
+
+      > .block-control-wrap {
+        @apply justify-center shrink-0;
+        width: 16px;
+        min-width: 16px;
+
+        > .block-control {
+          position: absolute;
+          right: 100%;
+        }
+
+        > .bullet-link-wrap .bullet-container {
+          width: 15px;
+          height: 15px;
+          min-width: 15px;
+        }
+      }
+    }
   }
 
   .property-panel-edit-btn {
@@ -577,6 +609,17 @@ a.control-link {
 
 .ls-page-title .ls-page-properties > .ls-new-property {
   @apply mt-2;
+}
+
+.ls-properties-area:has(> .properties-panel) {
+  @apply grid gap-x-3 pr-3;
+
+  /* Visible and expanded hidden properties share the same bounded key column. */
+  grid-template-columns: fit-content(min(360px, 45%)) minmax(0, 1fr);
+
+  > * {
+    grid-column: 1 / -1;
+  }
 }
 
 .ls-property-add {
