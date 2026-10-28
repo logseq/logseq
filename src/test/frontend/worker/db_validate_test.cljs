@@ -104,6 +104,53 @@
         (is (empty? (:fixed-entity-ids result))
             "A second run has nothing to fix")))))
 
+(deftest validate-db-reports-only-the-blocks-it-targeted
+  (let [conn (create-db-graph-conn)
+        page-id (get (:tempids
+                      (d/transact! conn [{:db/id "page"
+                                          :block/uuid (random-uuid)
+                                          :block/created-at 1
+                                          :block/updated-at 1
+                                          :block/name "test page"
+                                          :block/title "Test Page"
+                                          :block/tags :logseq.class/Page}]))
+                     "page")
+        invalid-block-id (get (:tempids
+                               (d/transact! conn [{:db/id "block"
+                                                   :block/created-at 1
+                                                   :block/updated-at 2
+                                                   :block/page page-id
+                                                   :block/parent page-id
+                                                   :block/order "a0"
+                                                   :block/title ""}]))
+                              "block")
+        referencing-block-id (get (:tempids
+                                   (d/transact! conn [{:db/id "referencing"
+                                                       :block/uuid (random-uuid)
+                                                       :block/created-at 1
+                                                       :block/updated-at 2
+                                                       :block/page page-id
+                                                       :block/parent page-id
+                                                       :block/order "a1"
+                                                       :block/title "references the invalid block"
+                                                       :block/refs [invalid-block-id]}]))
+                                  "referencing")
+        notifications (atom [])]
+    (is (= [invalid-block-id]
+           (distinct (map #(:db/id (:entity %)) (:errors (db-validate/validate-db @conn)))))
+        "Only the block without a uuid is invalid")
+    (with-redefs [shared-service/broadcast-to-clients!
+                  (fn [topic payload]
+                    (when (= :notification topic)
+                      (swap! notifications conj (first payload))))]
+      (let [result (with-transact-pipeline #(worker-db-validate/validate-db conn))]
+        (is (nat-int? (:block/tx-id (d/entity @conn referencing-block-id)))
+            "The transact pipeline stamps the valid block that references the repaired one")
+        (is (= [invalid-block-id] (:fixed-entity-ids result))
+            "The valid block that only references the repaired one isn't reported as fixed")
+        (is (re-find #"fixed 1 invalid block" (first @notifications))
+            "The notification counts the repaired block only")))))
+
 (deftest validate-db-repairs-invalid-pages-properties-and-classes
   (let [conn (create-db-graph-conn)
         journal-id (get (:tempids
