@@ -1338,7 +1338,11 @@
                        (fn [value]
                          (when-not (empty-value? value)
                            (if (de/entity? value)
-                             (if (match-property-value-as-entity? value group-by-property)
+                             ;; A closed value is a shared entity: keep it as the group key so the
+                             ;; group sorts by its :block/order and shows its icon, also when the
+                             ;; user added it (it has no :db/ident).
+                             (if (or group-by-closed-values?
+                                     (match-property-value-as-entity? value group-by-property))
                                value
                                (db-property/property-value-content value))
                              value)))
