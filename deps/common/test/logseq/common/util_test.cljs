@@ -80,3 +80,11 @@
       (js/Date. 0)
       "2020-01-02T03:04:05.000Z"
       js/NaN)))
+
+(deftest page-name-sanity-lc-ignores-nil-and-non-strings
+  (testing "nil and non-strings do not throw on toLowerCase"
+    (is (nil? (common-util/page-name-sanity-lc nil)))
+    (is (nil? (common-util/page-name-sanity-lc :page)))
+    (is (nil? (common-util/page-name-sanity-lc 1))))
+  (testing "strings still normalize"
+    (is (= "foo bar" (common-util/page-name-sanity-lc "Foo Bar")))))

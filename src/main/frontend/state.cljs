@@ -63,13 +63,23 @@
                  (reset! ready? (fn? worker))))
     ready?))
 
+(defn db-worker-uninitialized-error
+  ([]
+   (db-worker-uninitialized-error {}))
+  ([data]
+   (ex-info "db-worker has not been initialized" data)))
+
+(defn db-worker-uninitialized-error?
+  [error]
+  (= "db-worker has not been initialized" (ex-message error)))
+
 (defn <invoke-db-worker
   "invoke db-worker thread api"
   [qkw & args]
   (let [worker @*db-worker]
     (when (nil? worker)
       (prn :<invoke-db-worker-error qkw)
-      (throw (ex-info "db-worker has not been initialized" {})))
+      (throw (db-worker-uninitialized-error)))
     (p/let [result (apply worker qkw args)]
       (if (or (instance? ExceptionInfo result)
               (instance? js/Error result))
