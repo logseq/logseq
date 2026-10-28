@@ -5,7 +5,7 @@ go 1.27.3
 require (
 	github.com/ebitengine/purego v0.11.1
 	github.com/egoist/mygo v0.6.4
-	github.com/logseq/lui/platform/mygo v0.0.0-20261028052441-7175d6b2123b
+	github.com/logseq/lui/platform/mygo v0.0.0-20261028100039-b2093ed27228
 )
 
 require (
