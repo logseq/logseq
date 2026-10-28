@@ -3,6 +3,7 @@
   (:require [clojure.string :as string]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
+            [frontend.db.persist :as db-persist]
             [frontend.handler.notification :as notification]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.user :as user-handler]
@@ -303,6 +304,15 @@
                             :graph-uuid graph-uuid
                             :base base})))))
 
+(defn- <remove-failed-download-graph!
+  [graph]
+  (-> (p/do! (db-persist/delete-graph! graph))
+      (p/catch (fn [error]
+                 (log/error :db-sync/remove-failed-download-graph-failed
+                            {:graph graph
+                             :error error})
+                 nil))))
+
 (defn <rtc-download-graph!
   ([graph-name graph-uuid]
    (<rtc-download-graph! graph-name graph-uuid true))
@@ -317,13 +327,16 @@
                    :graph-uuid graph-uuid
                    :message "Preparing graph snapshot download"}])
        (let [graph-e2ee? (normalize-graph-e2ee? graph-e2ee?)
-             base (http-base)]
+             base (http-base)
+             graph (str config/db-version-prefix graph-name)
+             incomplete-graph? (atom false)]
          (-> (if (and graph-uuid base)
                (p/let [_ (user-handler/<ensure-id&access-token!)
-                       graph (str config/db-version-prefix graph-name)
+                       _ (reset! incomplete-graph? true)
                        _ (<ensure-download-runtime-bound! graph)
                        _ (state/<invoke-db-worker :thread-api/db-sync-download-graph-by-id
                                                  graph graph-uuid graph-e2ee?)
+                       _ (reset! incomplete-graph? false)
                        _ (when (util/electron?)
                            (state/<invoke-db-worker :thread-api/db-sync-download-missing-assets
                                                    graph graph-uuid))]
@@ -333,7 +346,10 @@
                                      :graph-uuid graph-uuid
                                      :base base})))
              (p/catch (fn [error]
-                        (throw error)))
+                        (p/do!
+                         (when @incomplete-graph?
+                           (<remove-failed-download-graph! graph))
+                         (throw error))))
              (p/finally
                (fn []
                  (state/set-state! :rtc/downloading-graph-uuid nil)))))))))
