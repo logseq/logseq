@@ -107,7 +107,7 @@ func run() (result error) {
 			return prevented
 		}, host.services.codeMirrorComposition)
 		host.document.Pointer = host.services.EditorPointer
-		host.document.Observe = host.services.ViewportInput
+		host.document.Observe = host.services.ObserveDocumentInput
 		host.services.mutations.Activate = func(n luimygo.Node) error {
 			if n.Identifier == "logseq-input" || n.Identifier == "logseq-textarea" {
 				return fmt.Errorf("native input activation requires the control's default action")

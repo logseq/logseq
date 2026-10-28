@@ -51,12 +51,20 @@ func (d *DocumentEvents) Capture(c *ui.Context) {
 	c.CaptureInput(d.input)
 }
 
+func (s *platformServices) ObserveDocumentInput(ev ui.InputEvent, target luimygo.InputNode) {
+	if ev.Kind == ui.InputPointerCancel {
+		s.CancelEditorPointer()
+		s.CancelViewportPress()
+	}
+	s.ViewportInput(ev, target)
+}
+
 func (s *platformServices) renderDocumentEvents(c *ui.Context, n luimygo.Node, _ func(), emit func(luimygo.Event)) {
 	e := ui.Box(c).Size(0, 0)
 	d := ui.Local(e, "document-events", func() DocumentEvents { return DocumentEvents{} })
 	d.backend = s.backend
 	d.codeMirrorComposition = s.codeMirrorComposition
-	d.Observe = s.ViewportInput
+	d.Observe = s.ObserveDocumentInput
 	d.dispatch = func(name, payload string) bool {
 		extensionEmit(n, emit, "dom-event", map[string]any{"name": name, "payload": payload})
 		return false // Carrier dispatch has no default-prevention return channel.
