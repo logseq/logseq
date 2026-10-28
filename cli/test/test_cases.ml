@@ -2099,6 +2099,62 @@ let () =
             fail_promise
               (Printf.sprintf "expected three invoke requests, got %d" !step)));
 
+  test_promise "upsert block update sends page refs from content" (fun () ->
+      let step = ref 0 in
+      let captured_apply_body = ref None in
+      let server =
+        invoke_server (fun body ->
+            incr step;
+            match !step with
+            | 1
+              when Js.String.includes ~search:"thread-api/pull" body
+                   && Js.String.includes ~search:"233" body ->
+                "[\"^ \
+                 \",\"~:db/id\",233,\"~:block/uuid\",\"~u00000000-0000-4000-8000-000000000233\"]"
+            | 2
+              when Js.String.includes ~search:"thread-api/apply-outliner-ops"
+                     body ->
+                captured_apply_body := Some body;
+                "[]"
+            | _ ->
+                fail_test
+                  (Printf.sprintf "unexpected request at step %d: %s" !step body);
+                "")
+      in
+      with_server server (fun base_url ->
+          let* output =
+            run_cli_p
+              ~env:[| ("LOGSEQ_CLI_BASE_URL", base_url) |]
+              [|
+                "--graph";
+                "alpha";
+                "--output";
+                "json";
+                "upsert";
+                "block";
+                "--id";
+                "233";
+                "--content";
+                "Foo links to [[bar_page]]";
+              |]
+          in
+          ignore (expect_cli_exit_zero "upsert block update page refs" output);
+          let body =
+            match !captured_apply_body with
+            | Some body -> body
+            | None ->
+                fail_test "missing captured apply body";
+                failwith "missing captured apply body"
+          in
+          expect_named_contains "save op" body "save-block";
+          expect_named_contains "block refs attr" body "block/refs";
+          expect_named_contains "page ref title" body "bar_page";
+          expect_named_contains "page ref tag" body "logseq.class/Page";
+          if !step = 2 then Js.Promise.resolve pass
+          else
+            fail_promise
+              (Printf.sprintf "expected two invoke requests, got %d" !step)));
+
   test_promise "upsert block create resolves inline block uuid property refs"
     (fun () ->
       let step = ref 0 in

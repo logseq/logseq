@@ -712,8 +712,23 @@ let apply_outliner_ops invoke_config repo ops =
     ~ops:(Edn_util.vector_t_vec ops)
     ~options:(Edn_util.map_t_vec Vec.empty)
 
+(* The [[Page]] links of the new title go in as :block/refs, as for a created
+   block: the worker creates a missing page and stores the link by id. *)
 let save_ops source_uuid = function
   | Some content ->
+      let refs, _tag_names = Add.title_references ~block_refs:false content in
+      let title_fields =
+        [|
+          (kw "block/uuid", Edn_util.uuid source_uuid);
+          (kw "block/title", Edn_util.string content);
+        |]
+      in
+      let fields =
+        if Vec.is_empty refs then title_fields
+        else
+          Array.append title_fields
+            [| (kw "block/refs", Edn_util.vector_vec refs) |]
+      in
       Vec.singleton
         (Edn_util.vector_vec
            (Vec.of_array
@@ -722,12 +737,7 @@ let save_ops source_uuid = function
                 Edn_util.vector_vec
                   (Vec.of_array
                      [|
-                       Edn_util.map_vec
-                         (Vec.of_array
-                            [|
-                              (kw "block/uuid", Edn_util.uuid source_uuid);
-                              (kw "block/title", Edn_util.string content);
-                            |]);
+                       Edn_util.map_vec (Vec.of_array fields);
                        Edn_util.map_vec Vec.empty;
                      |]);
               |]))
@@ -774,13 +784,33 @@ let execute_ops mode invoke_config action source_uuid target_uuid =
                     (Edn_util.map_vec
                        (Vec.of_array [| (kw "result", Edn_util.nil) |]))))
           else
-            bind (apply_outliner_ops invoke_config action.repo ops)
-              (fun result ->
-                pure
-                  (Cli_result.ok ~command:Command_id.Upsert_block mode
-                     (Raw
-                        (Edn_util.map_vec
-                           (Vec.of_array [| (kw "result", result) |]))))))
+            (* A namespaced [[a/b]] link is a name lookup that has to become
+               a page before the save, as when a block is created. *)
+            bind
+              (Add.materialize_name_lookups invoke_config action.repo
+                 ~target_lookup:Edn_util.nil ops)
+              (function
+                | Error err ->
+                    pure
+                      (Cli_result.error ~command:Command_id.Upsert_block mode
+                         err)
+                | Ok ((ops, _target), created_uuids) ->
+                    bind
+                      (catch
+                         (apply_outliner_ops invoke_config action.repo ops)
+                         (fun exn ->
+                           bind
+                             (catch
+                                (Add.rollback_pages invoke_config action.repo
+                                   created_uuids)
+                                (fun _ -> pure ()))
+                             (fun () -> Cli_effect.error exn)))
+                      (fun result ->
+                        pure
+                          (Cli_result.ok ~command:Command_id.Upsert_block mode
+                             (Raw
+                                (Edn_util.map_vec
+                                   (Vec.of_array [| (kw "result", result) |])))))))
 
 let resolve_optional_target_uuid invoke_config action =
   let open Cli_effect in
