@@ -210,12 +210,16 @@
 (defn- ^:large-vars/cleanup-todo row-matched?
   [db row filters input]
   (let [or? (:or? filters)
-        check-f (if or? some every?)]
+        check-f (if or? some every?)
+        clauses (:filters filters)]
     (and
      (if (string/blank? input)
        true
        (string/includes? (string/lower-case (:block/title row)) (string/lower-case input)))
-     (check-f
+     ;; No clauses match every row, also with "match any" (`some` of nothing is nil)
+     (or
+      (empty? clauses)
+      (check-f
       (fn [[property-ident operator match]]
         (if (nil? match)
           true
@@ -321,7 +325,7 @@
 
                    true)]
              result))))
-      (:filters filters)))))
+      clauses)))))
 
 (defn- ->filter-match-id
   [db v]
