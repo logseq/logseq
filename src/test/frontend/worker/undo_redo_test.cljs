@@ -1982,6 +1982,52 @@
       (is (= title (:block/raw-title (a))))
       (is (contains? (idents (:block/refs (a))) :user.class/Movie)))))
 
+(deftest local-graph-undo-of-block-delete-restores-block-references-test
+  (testing "undo of deleting a block gives the blocks that referred to it their ((uuid)) references back (logseq/db-test#1325)"
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          uuid-of (seed-outline!)
+          a-uuid (uuid-of "a")
+          c-uuid (uuid-of "c")
+          title (str "see ((" c-uuid "))")
+          a #(d/entity @conn [:block/uuid a-uuid])
+          a-refs #(set (map :block/uuid (:block/refs (a))))]
+      (apply-ops! conn [[:save-block [{:block/uuid a-uuid
+                                       :block/title title
+                                       :block/refs [[:block/uuid c-uuid]]} {}]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (is (= title (:block/raw-title (a))))
+      (is (contains? (a-refs) c-uuid))
+      (worker-undo-redo/clear-history! test-repo)
+      (apply-ops! conn [[:delete-blocks [[c-uuid] {}]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (is (= "see c" (:block/raw-title (a))))
+      (is (not (contains? (a-refs) c-uuid)))
+      (is (map? (worker-undo-redo/undo test-repo)))
+      (is (= title (:block/raw-title (a))))
+      (is (contains? (a-refs) c-uuid)))))
+
+(deftest local-graph-undo-of-block-delete-restores-page-links-by-uuid-test
+  (testing "undo of deleting a block puts it back with its page link stored by the page's uuid, not by its name (logseq/db-test#1326)"
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          _ (seed-tags-and-properties! conn)
+          a-uuid (:block/uuid (db-test/find-block-by-content @conn "a"))
+          movie-uuid (:block/uuid (d/entity @conn :user.class/Movie))
+          title (str "watch [[" movie-uuid "]]")
+          a #(d/entity @conn [:block/uuid a-uuid])]
+      (apply-ops! conn [[:save-block [{:block/uuid a-uuid
+                                       :block/title title
+                                       :block/refs [[:block/uuid movie-uuid]]} {}]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (is (= title (:block/raw-title (a))))
+      (worker-undo-redo/clear-history! test-repo)
+      (apply-ops! conn [[:delete-blocks [[a-uuid] {}]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (is (or (nil? (a)) (ldb/recycled? (a))))
+      (is (map? (worker-undo-redo/undo test-repo)))
+      (is (not (ldb/recycled? (a))))
+      (is (= title (:block/raw-title (a))))
+      (is (contains? (idents (:block/refs (a))) :user.class/Movie)))))
+
 (deftest local-graph-undo-of-property-delete-restores-tag-property-test
   (testing "undo of deleting a property makes it a tag property of its tags again (logseq/db-test#1311)"
     (let [conn (worker-state/get-datascript-conn test-repo)
