@@ -258,7 +258,8 @@
           (p/let [{:keys [error]}
                   (ui-outliner-tx/transact!
                    {:outliner-op :batch-import-edn}
-                   (outliner-op/batch-import-edn! export-map (when block {:current-block block})))]
+                   (outliner-op/batch-import-edn! export-map (cond-> {:validate-scope :tx}
+                                                               block (assoc :current-block block))))]
             ;; Also close cmd-k
             (shui/dialog-close-all!)
             (ui-handler/re-render-root!)
