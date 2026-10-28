@@ -658,6 +658,22 @@
         (is (string/includes? html "Real page"))
         (is (not (string/includes? html untitled)))))))
 
+(deftest change-filter-operator-of-a-filter-without-value-test
+  (async done
+    (let [stored (atom nil)
+          property {:db/ident :user.property/note :logseq.property/type :default}
+          filters {:or? false :filters [[:user.property/note :text-contains]]}]
+      (with-redefs [db-async/<get-view-filter-data
+                    (fn [_property _opts] (p/resolved {:value-after-operator-change nil}))]
+        (-> (p/do! (#'views/<change-filter-operator! property :text-not-contains filters
+                                                     #(reset! stored %) 0))
+            (p/then (fn [_]
+                      (is (= [[:user.property/note :text-not-contains]] (:filters @stored))
+                          "A clause with no value changes its operator")))
+            (p/catch (fn [error]
+                       (is false (str "Changing the operator failed: " (ex-message error)))))
+            (p/finally done))))))
+
 (deftest list-view-preview-paints-title-before-block-container-test
   (let [row-uuid (random-uuid)
         preview {:block/uuid row-uuid
