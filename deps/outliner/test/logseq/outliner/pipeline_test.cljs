@@ -1,8 +1,10 @@
 (ns logseq.outliner.pipeline-test
-  (:require [cljs.test :refer [deftest is]]
+  (:require [cljs.test :refer [deftest is testing]]
             [datascript.core :as d]
             [logseq.common.util.page-ref :as page-ref]
+            [logseq.db :as ldb]
             [logseq.db.test.helper :as db-test]
+            [logseq.outliner.page :as outliner-page]
             [logseq.outliner.pipeline :as outliner-pipeline]))
 
 (deftest block-content-refs
@@ -13,6 +15,31 @@
     (is (= [(:db/id block)]
            (outliner-pipeline/block-content-refs @conn
                                                  {:block/title (str "ref to " (page-ref/->page-ref (:block/uuid block)))})))))
+
+(deftest db-rebuild-block-refs-resolves-name-spelled-page-links
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "existing"}]}
+               {:page {:block/title "Foo"}}])
+        [_ sub-page-uuid] (outliner-page/create! conn "ns/sub Page" {:split-namespace? true})
+        foo (ldb/get-page @conn "Foo")
+        sub-page (d/entity @conn [:block/uuid sub-page-uuid])
+        block (db-test/find-block-by-content @conn "existing")
+        rebuilt-refs (fn [title]
+                       (set (outliner-pipeline/db-rebuild-block-refs
+                             @conn
+                             (assoc (d/pull @conn '[:db/id :block/uuid :block/title] (:db/id block))
+                                    :block/title title))))]
+    (testing "a [[Page]] in the title is a ref to the existing page of that name"
+      (is (contains? (rebuilt-refs "two [[Foo]]") (:db/id foo)))
+      (is (contains? (rebuilt-refs "two [[foo]]") (:db/id foo))
+          "the name is case-insensitive"))
+    (testing "a [[Namespace/Page]] is a ref to the page with that full name"
+      (is (contains? (rebuilt-refs "see [[ns/sub Page]]") (:db/id sub-page))))
+    (testing "a [[Page]] that names no page is not a ref"
+      (is (empty? (rebuilt-refs "see [[Nope]] and [[ns/nope]]"))))
+    (testing "the uuid spelling is still a ref"
+      (is (contains? (rebuilt-refs (str "see " (page-ref/->page-ref (:block/uuid foo)))) (:db/id foo))))))
 
 (deftest db-rebuild-block-refs-for-query-block
   (let [conn (db-test/create-conn-with-blocks
