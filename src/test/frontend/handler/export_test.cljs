@@ -110,7 +110,7 @@
       :blocks
       [{:block/title "has text property children"
         :build/keep-uuid? true
-        :block/uuid #uuid "00000000-0000-4000-8000-000000000701"
+        :block/uuid #uuid "00000000-0000-4000-8000-000000000801"
         :build/properties
         {:user.property/notes
          {:build/property-value :block
@@ -553,7 +553,7 @@
 (deftest export-blocks-as-markdown-keeps-text-property-value-children
   (async done
     (p/let [content (<export-blocks-as-markdown
-                     [#uuid "00000000-0000-4000-8000-000000000701"]
+                     [#uuid "00000000-0000-4000-8000-000000000801"]
                      {:remove-options #{}})]
       (is (string/includes? content "note value"))
       (is (string/includes? content "note child")
