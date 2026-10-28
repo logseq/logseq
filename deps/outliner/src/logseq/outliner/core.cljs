@@ -281,8 +281,17 @@
                                                                   :class? class?
                                                                   :journal? (or (= "journal" (:block/type ref))
                                                                                 (contains? (ref-tag-idents ref)
-                                                                                           :logseq.class/Journal))})]
-          [(cond-> (assoc (select-keys ref [:block/title :block/name :block.temp/original-page-name])
+                                                                                           :logseq.class/Journal))})
+              ;; `create` finds an existing journal through its day, not its name: the
+              ;; journal's title and name win over the ref's, which follow the date
+              ;; format and would rename the journal.
+              existing-journal (when (uuid? page-uuid)
+                                 (let [page (d/entity db [:block/uuid page-uuid])]
+                                   (when (:block/journal-day page)
+                                     page)))]
+          [(cond-> (assoc (merge (select-keys ref [:block/title :block/name :block.temp/original-page-name])
+                                 (when existing-journal
+                                   (select-keys existing-journal [:block/title :block/name])))
                           :block/uuid page-uuid)
              class? (assoc :db/ident (or (some :db/ident tx-data)
                                          (:db/ident (d/entity db [:block/uuid page-uuid])))))
