@@ -126,6 +126,10 @@
                     [:div])]
       (render-static (journal/all-journals))
       (is (= [[:journals]] @resource-keys))
+      (is (= 1 (:initial-item-count @virtual-opts))
+          "The first journal renders without waiting for viewport measurement.")
+      (is (= @#'journal/default-journal-height (:default-item-height @virtual-opts))
+          "Use the same estimate as the placeholder, while measuring real rows normally.")
       (is (nil? (:items-rendered @virtual-opts))
           "Scrolling does not schedule a second resource path.")
       (is (fn? (:is-scrolling @virtual-opts))
