@@ -601,6 +601,7 @@
          (let [worker-calls (atom [])]
            (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
                                user-handler/<ensure-id&access-token! (fn [] (p/resolved true))
+                               db-persist/get-all-graphs (fn [] (p/resolved []))
                                state/<invoke-db-worker (fn [& args]
                                                          (swap! worker-calls conj args)
                                                          (p/resolved :ok))
@@ -626,6 +627,7 @@
            (reset! state/*db-worker nil)
            (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
                                user-handler/<ensure-id&access-token! (fn [] (p/resolved true))
+                               db-persist/get-all-graphs (fn [] (p/resolved []))
                                state/<invoke-db-worker (fn [& _] (p/resolved :ok))
                                state/pub-event! (fn [& _] nil)
                                state/set-state! (fn [k v]
@@ -651,6 +653,7 @@
            (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
                                user-handler/<ensure-id&access-token! (fn [] (p/resolved true))
                                util/electron? (fn [] true)
+                               db-persist/get-all-graphs (fn [] (p/resolved []))
                                persist-db/<open-and-fetch-schema (fn [repo _opts]
                                                              (reset! runtime-bound-repo repo)
                                                              (p/resolved {:schema {}}))
@@ -695,6 +698,7 @@
                                user-handler/<ensure-id&access-token! (fn []
                                                                        (p/resolved true))
                                util/electron? (fn [] true)
+                               db-persist/get-all-graphs (fn [] (p/resolved []))
                                persist-db/<open-and-fetch-schema (fn [_repo _opts]
                                                              (p/resolved {:schema {}}))
                                state/<invoke-db-worker (fn [& args]
@@ -722,6 +726,7 @@
            (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
                                user-handler/<ensure-id&access-token! (fn [] (p/resolved true))
                                util/electron? (fn [] false)
+                               db-persist/get-all-graphs (fn [] (p/resolved []))
                                persist-db/<open-and-fetch-schema (fn [& args]
                                                              (swap! runtime-rebind-calls conj args)
                                                              (p/resolved {:schema {}}))
@@ -747,6 +752,7 @@
            (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
                                user-handler/<ensure-id&access-token! (fn [] (p/resolved true))
                                util/electron? (fn [] true)
+                               db-persist/get-all-graphs (fn [] (p/resolved [{:name "logseq_db_other"}]))
                                persist-db/<open-and-fetch-schema (fn [_repo _opts]
                                                                    (p/resolved {:schema {}}))
                                db-persist/delete-graph! (fn [graph]
@@ -774,6 +780,7 @@
            (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
                                user-handler/<ensure-id&access-token! (fn [] (p/resolved true))
                                util/electron? (fn [] true)
+                               db-persist/get-all-graphs (fn [] (p/resolved []))
                                persist-db/<open-and-fetch-schema (fn [_repo _opts]
                                                                    (p/rejected bind-error))
                                db-persist/delete-graph! (fn [graph]
@@ -789,6 +796,64 @@
                (p/catch (fn [error]
                           (is (identical? bind-error error))
                           (is (= ["logseq_db_db1"] @deleted-graphs))
+                          (finish-async-test! done)))))))
+
+(deftest rtc-download-graph-keeps-existing-local-graph-when-download-fails-test
+  (async done
+         (let [deleted-graphs (atom [])
+               download-error (ex-info "snapshot download failed" {:status 500})]
+           (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
+                               user-handler/<ensure-id&access-token! (fn [] (p/resolved true))
+                               util/electron? (fn [] true)
+                               ;; Another window or the CLI created the graph after this window's repo list was read.
+                               db-persist/get-all-graphs (fn [] (p/resolved [{:name "logseq_db_other"}
+                                                                              {:name "logseq_db_db1"}]))
+                               persist-db/<open-and-fetch-schema (fn [_repo _opts]
+                                                                   (p/resolved {:schema {}}))
+                               db-persist/delete-graph! (fn [graph]
+                                                          (swap! deleted-graphs conj graph)
+                                                          (p/resolved nil))
+                               state/<invoke-db-worker (fn [op & _]
+                                                         (if (= :thread-api/db-sync-download-graph-by-id op)
+                                                           (p/rejected download-error)
+                                                           (p/resolved :ok)))
+                               state/pub-event! (fn [& _] nil)
+                               state/set-state! (fn [& _] nil)]
+                 (db-sync/<rtc-download-graph! "db1" "graph-1" false))
+               (p/then (fn [_]
+                         (is false "download should have failed")
+                         (finish-async-test! done)))
+               (p/catch (fn [error]
+                          (is (identical? download-error error))
+                          (is (empty? @deleted-graphs))
+                          (finish-async-test! done)))))))
+
+(deftest rtc-download-graph-keeps-local-graph-when-existence-check-fails-test
+  (async done
+         (let [deleted-graphs (atom [])
+               download-error (ex-info "snapshot download failed" {:status 500})]
+           (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
+                               user-handler/<ensure-id&access-token! (fn [] (p/resolved true))
+                               util/electron? (fn [] true)
+                               db-persist/get-all-graphs (fn [] (p/rejected (ex-info "list failed" {})))
+                               persist-db/<open-and-fetch-schema (fn [_repo _opts]
+                                                                   (p/resolved {:schema {}}))
+                               db-persist/delete-graph! (fn [graph]
+                                                          (swap! deleted-graphs conj graph)
+                                                          (p/resolved nil))
+                               state/<invoke-db-worker (fn [op & _]
+                                                         (if (= :thread-api/db-sync-download-graph-by-id op)
+                                                           (p/rejected download-error)
+                                                           (p/resolved :ok)))
+                               state/pub-event! (fn [& _] nil)
+                               state/set-state! (fn [& _] nil)]
+                 (db-sync/<rtc-download-graph! "db1" "graph-1" false))
+               (p/then (fn [_]
+                         (is false "download should have failed")
+                         (finish-async-test! done)))
+               (p/catch (fn [error]
+                          (is (identical? download-error error))
+                          (is (empty? @deleted-graphs))
                           (finish-async-test! done)))))))
 
 (deftest rtc-download-graph-keeps-local-graph-when-sign-in-fails-test
@@ -820,6 +885,7 @@
            (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
                                user-handler/<ensure-id&access-token! (fn [] (p/resolved true))
                                util/electron? (fn [] true)
+                               db-persist/get-all-graphs (fn [] (p/resolved []))
                                persist-db/<open-and-fetch-schema (fn [_repo _opts]
                                                                    (p/resolved {:schema {}}))
                                db-persist/delete-graph! (fn [graph]
@@ -846,6 +912,7 @@
            (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
                                user-handler/<ensure-id&access-token! (fn [] (p/resolved true))
                                util/electron? (fn [] true)
+                               db-persist/get-all-graphs (fn [] (p/resolved []))
                                persist-db/<open-and-fetch-schema (fn [_repo _opts]
                                                              (p/resolved {:schema {}}))
                                state/<invoke-db-worker (fn [& args]
