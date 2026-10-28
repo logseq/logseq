@@ -10,7 +10,7 @@
             [frontend.components.page :as page]
             [frontend.components.plugins :as plugins]
             [frontend.components.repo :as repo]
-            [frontend.components.settings :as settings]
+            [frontend.components.lazy-settings :as settings]
             [frontend.components.user.login :as login]
             [frontend.config :as config]
             [io.factorhouse.hsx.core :as hsx]

@@ -1,6 +1,6 @@
 (ns frontend.components.theme
   (:require [electron.ipc :as ipc]
-            [frontend.components.settings :as settings]
+            [frontend.components.lazy-settings :as settings]
             [frontend.config :as config]
             [frontend.context.i18n :as i18n :refer [t]]
             [frontend.extensions.pdf.core :as pdf]
