@@ -32,6 +32,52 @@
   []
   (edn/read-string (str (fs-node/readFileSync (global-config-handler/global-config-path)))))
 
+(deftest-async start-reads-existing-config-without-stat-or-create
+  {}
+  (let [previous-state (state/get-state)
+        previous-root @global-config-handler/root-dir]
+    (-> (p/with-redefs [ipc/ipc (fn [& _] (p/resolved "/existing"))
+                        fs/read-file (fn [& _] (p/resolved "{:test/value 42}"))
+                        fs/mkdir-if-not-exists (fn [& _] (throw (js/Error. "Unexpected mkdir")))
+                        fs/create-if-not-exists (fn [& _] (throw (js/Error. "Unexpected file stat")))]
+          (p/do! (global-config-handler/start {})
+                 (is (= 42 (:test/value (state/get-global-config))))))
+        (p/finally #(do (state/replace-state! previous-state)
+                        (reset! global-config-handler/root-dir previous-root))))))
+
+(deftest-async start-recovers-wrapped-desktop-missing-file-error
+  {}
+  (let [reads (atom 0)
+        creates (atom 0)
+        previous-state (state/get-state)
+        previous-root @global-config-handler/root-dir]
+    (-> (p/with-redefs [ipc/ipc (fn [& _] (p/resolved "/missing"))
+                        fs/read-file (fn [& _]
+                                       (if (= 1 (swap! reads inc))
+                                         (p/rejected (ex-info "Error invoking readFile: ENOENT: missing" {}))
+                                         (p/resolved "{:test/value 7}")))
+                        fs/mkdir-if-not-exists (fn [& _] (p/resolved nil))
+                        fs/create-if-not-exists (fn [& _]
+                                                 (swap! creates inc)
+                                                 (p/resolved false))]
+          (p/do! (global-config-handler/start {})
+                 (is (= 1 @creates))
+                 (is (= 7 (:test/value (state/get-global-config))))))
+        (p/finally #(do (state/replace-state! previous-state)
+                        (reset! global-config-handler/root-dir previous-root))))))
+
+(deftest-async start-does-not-create-over-unreadable-config
+  {}
+  (let [creates (atom 0)
+        previous-root @global-config-handler/root-dir]
+    (-> (p/with-redefs [ipc/ipc (fn [& _] (p/resolved "/unreadable"))
+                        fs/read-file (fn [& _] (p/rejected (ex-info "EACCES: permission denied" {})))
+                        fs/mkdir-if-not-exists (fn [& _] (swap! creates inc))
+                        fs/create-if-not-exists (fn [& _] (swap! creates inc))]
+          (p/do! (global-config-handler/start {})
+                 (is (zero? @creates))))
+        (p/finally #(reset! global-config-handler/root-dir previous-root)))))
+
 (deftest-async start-creates-missing-global-config-edn
   {:before (node-fixtures/setup-get-fs!)
    :after (node-fixtures/restore-get-fs!)}
