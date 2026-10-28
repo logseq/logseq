@@ -1556,3 +1556,71 @@
           (is (not (ldb/internal-page? converted)))
           (is (= (:db/id page) (:db/id converted)))
           (is (some? (:block/name converted))))))))
+
+(defn- ref-ids
+  [conn block-uuid]
+  (set (map :db/id (:block/refs (d/entity @conn [:block/uuid block-uuid])))))
+
+(defn- create-refs-test-conn
+  []
+  (db-test/create-conn-with-blocks
+   {:pages-and-blocks [{:page {:block/title "page1"}}
+                       {:page {:block/title "Foo"}}]
+    :classes {:TagA {}}
+    :properties {:pn {:logseq.property/type :number}}}))
+
+(defn- insert-titled-block-op
+  [block page]
+  [:insert-blocks [[block]
+                   (:block/uuid page)
+                   {:outliner-op :insert-blocks
+                    :keep-uuid? true
+                    :bottom? true}]])
+
+(deftest multi-op-batch-rebuilds-refs-of-its-metadata-ops-test
+  (let [conn (create-refs-test-conn)
+        page (ldb/get-page @conn "page1")
+        foo (ldb/get-page @conn "Foo")
+        tag (d/entity @conn :user.class/TagA)
+        property (d/entity @conn :user.property/pn)
+        block-uuid (random-uuid)]
+    (with-transact-pipeline
+      (fn []
+        (outliner-op/apply-ops!
+         conn
+         [(insert-titled-block-op {:block/uuid block-uuid
+                                   :block/title (str "see " (page-ref/->page-ref (:block/uuid foo)))
+                                   :block/refs [[:block/uuid (:block/uuid foo)]]}
+                                  page)
+          [:batch-set-property [[block-uuid] :block/tags (:db/id tag) {}]]
+          [:batch-set-property [[block-uuid] :user.property/pn 3 {}]]]
+         {})
+        (let [refs (ref-ids conn block-uuid)]
+          (is (contains? refs (:db/id foo)) "the page in the title")
+          (is (contains? refs (:db/id tag)) "the tag")
+          (is (contains? refs (:db/id property)) "the key of the property"))))))
+
+(deftest multi-op-batch-drops-refs-of-the-title-it-replaces-test
+  (let [conn (create-refs-test-conn)
+        page (ldb/get-page @conn "page1")
+        foo (ldb/get-page @conn "Foo")
+        property (d/entity @conn :user.property/pn)
+        block-uuid (random-uuid)]
+    (with-transact-pipeline
+      (fn []
+        (outliner-op/apply-ops!
+         conn
+         [(insert-titled-block-op {:block/uuid block-uuid
+                                   :block/title (str "see " (page-ref/->page-ref (:block/uuid foo)))
+                                   :block/refs [[:block/uuid (:block/uuid foo)]]}
+                                  page)]
+         {})
+        (is (contains? (ref-ids conn block-uuid) (:db/id foo)))
+        (outliner-op/apply-ops!
+         conn
+         [[:save-block [{:block/uuid block-uuid :block/title "plain"} {}]]
+          [:batch-set-property [[block-uuid] :user.property/pn 3 {}]]]
+         {})
+        (let [refs (ref-ids conn block-uuid)]
+          (is (not (contains? refs (:db/id foo))) "the page of the old title")
+          (is (contains? refs (:db/id property)) "the key of the property"))))))
