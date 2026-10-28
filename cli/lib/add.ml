@@ -1189,6 +1189,22 @@ let rewrite_name_lookups ~target ids ops =
                                 (Vec.nth args 2);
                             |]);
                      |])
+            | Some "save-block", Some args when Vec.length args = 2 ->
+                (* Refs in a saved block take [:block/uuid] lookups like
+                   the inserted ones. *)
+                Edn_util.vector_vec
+                  (Vec.of_array
+                     [|
+                       Vec.nth items 0;
+                       Edn_util.vector_vec
+                         (Vec.of_array
+                            [|
+                              rewrite ~as_uuid:false ~in_blocks:true
+                                (Vec.nth args 0);
+                              rewrite ~as_uuid:false ~in_blocks:true
+                                (Vec.nth args 1);
+                            |]);
+                     |])
             | _ -> rewrite ~as_uuid:false ~in_blocks:false op)
         | _ -> rewrite ~as_uuid:false ~in_blocks:false op)
       ops,
