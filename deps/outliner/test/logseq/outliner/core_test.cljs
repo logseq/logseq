@@ -251,6 +251,18 @@
       (is (not (ldb/recycled? journal)) "the ref restored the recycled journal")
       (is (= [journal-uuid] (map :block/uuid (:block/refs block)))))))
 
+(deftest insert-blocks-ref-parsed-as-journal-only-by-the-editor-makes-the-journal
+  ;; The editor's date format was changed from another client and not reloaded: it
+  ;; parses the ref as a journal and the graph's format does not. The ref made a
+  ;; plain page with the journal's uuid, so the day never got a journal.
+  (let [conn (journal-title-format-conn "yyyy/MM/dd")
+        block (insert-date-ref! conn "Wed, 28.10.2026" "E, dd.MM.yyyy")
+        ref-target (first (:block/refs block))]
+    (is (= 20261028 (:block/journal-day ref-target)) "the ref points to a journal")
+    (is (= [:logseq.class/Journal] (map :db/ident (:block/tags ref-target))))
+    (is (= ref-target (ldb/get-journal-page-by-day @conn 20261028))
+        "the day's journal is the one the ref points to")))
+
 (deftest insert-blocks-missing-uuid-refs-become-broken
   ;; Both ref shapes produced for a uuid with no entity — a generated page map
   ;; and a [:block/uuid id] lookup — are dropped, and the title keeps the uuid
