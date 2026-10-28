@@ -28,7 +28,8 @@ type DocumentEvents struct {
 	context               *ui.Context
 	services              ui.Services
 	pressed               luimygo.InputNode
-	preventMouse          bool
+	buttons               int
+	preventMouse          int
 	composing             bool
 	compositionTarget     luimygo.InputNode
 	compositionSource     codeMirrorCompositionSource
@@ -87,6 +88,9 @@ func (d *DocumentEvents) input(ev ui.InputEvent, host ui.InputTarget) bool {
 		d.Observe(ev, target)
 	}
 	prevented := d.event(ev, target)
+	if ev.Kind == ui.InputPointerCancel {
+		return false
+	}
 	if !prevented && d.Pointer != nil && (ev.Kind == ui.InputPointerDown || ev.Kind == ui.InputPointerUp || ev.Kind == ui.InputPointerMove) {
 		id := target.Node.ID
 		if id != 0 && !target.Current() {
@@ -101,6 +105,32 @@ func (d *DocumentEvents) clearComposition() {
 	d.composing = false
 	d.compositionTarget = luimygo.InputNode{}
 	d.compositionSource = codeMirrorCompositionSource{}
+}
+
+func (d *DocumentEvents) resetPointer() {
+	d.buttons = 0
+	d.preventMouse = 0
+	d.pressed = luimygo.InputNode{}
+}
+
+func (d *DocumentEvents) cancelPointer(target luimygo.InputNode, payload map[string]any) bool {
+	if d.buttons == 0 {
+		return false
+	}
+	d.resetPointer()
+	if target.Node.ID != 0 && !target.Current() {
+		target = luimygo.InputNode{}
+	}
+	return d.send(target, "pointercancel", payload)
+}
+
+func (d *DocumentEvents) Blur() {
+	if d.buttons != 0 {
+		d.cancelPointer(luimygo.InputNode{}, map[string]any{"buttons": 0})
+	} else {
+		d.resetPointer()
+	}
+	d.send(luimygo.InputNode{}, "blur", nil)
 }
 
 func (d *DocumentEvents) event(ev ui.InputEvent, target luimygo.InputNode) bool {
@@ -126,14 +156,25 @@ func (d *DocumentEvents) event(ev ui.InputEvent, target luimygo.InputNode) bool 
 			payload["isComposing"] = d.composing || composition.focused && composition.composing
 		}
 		return d.send(target, name, payload)
-	case ui.InputPointerDown, ui.InputPointerUp, ui.InputPointerMove, ui.InputClick:
+	case ui.InputPointerDown, ui.InputPointerUp, ui.InputPointerMove, ui.InputPointerCancel, ui.InputClick:
+		if ev.Kind == ui.InputPointerDown {
+			d.buttons |= 1 << ev.Button
+		} else if ev.Kind == ui.InputPointerUp {
+			d.buttons &^= 1 << ev.Button
+		}
 		payload := documentPointer(ev)
+		payload["buttons"] = d.buttons
 		switch ev.Kind {
 		case ui.InputPointerDown:
 			d.pressed = target
-			d.preventMouse = d.send(target, "pointerdown", payload)
-			taken := d.preventMouse
-			if !d.preventMouse {
+			button := 1 << ev.Button
+			d.preventMouse &^= button
+			prevented := d.send(target, "pointerdown", payload)
+			if prevented {
+				d.preventMouse |= button
+			}
+			taken := prevented
+			if !prevented {
 				taken = d.send(target, "mousedown", payload)
 			}
 			if ev.Button == 1 {
@@ -141,18 +182,23 @@ func (d *DocumentEvents) event(ev ui.InputEvent, target luimygo.InputNode) bool 
 			}
 			return taken
 		case ui.InputPointerUp:
+			button := 1 << ev.Button
+			prevented := d.preventMouse&button != 0
 			taken := d.send(target, "pointerup", payload)
-			if !d.preventMouse {
+			if !prevented {
 				taken = d.send(target, "mouseup", payload) || taken
 			}
-			d.preventMouse = false
+			d.preventMouse &^= button
 			return taken
 		case ui.InputPointerMove:
 			taken := d.send(target, "pointermove", payload)
-			if !d.preventMouse {
+			if d.preventMouse == 0 {
 				taken = d.send(target, "mousemove", payload) || taken
 			}
 			return taken
+		case ui.InputPointerCancel:
+			payload["buttons"] = 0
+			return d.cancelPointer(target, payload)
 		case ui.InputClick:
 			// Never deliver a press to a replacement of the same retained ID.
 			if d.pressed.Node.ID != 0 && !d.pressed.Current() {
@@ -166,6 +212,7 @@ func (d *DocumentEvents) event(ev ui.InputEvent, target luimygo.InputNode) bool 
 		}
 	case ui.InputScroll:
 		payload := documentPointer(ev)
+		payload["buttons"] = d.buttons
 		payload["deltaX"], payload["deltaY"], payload["deltaMode"] = ev.DX, ev.DY, 0
 		return d.send(target, "wheel", payload)
 	case ui.InputCommand:

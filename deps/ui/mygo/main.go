@@ -147,6 +147,7 @@ func run() (result error) {
 		host.window.OnBlur(func() {
 			host.services.CancelViewportPress()
 			host.services.CancelEditorPointer()
+			host.document.Blur()
 		})
 		if err := host.services.StartDesktopServices(host.window, func(replies []platformReply, err error) {
 			for _, reply := range replies {
