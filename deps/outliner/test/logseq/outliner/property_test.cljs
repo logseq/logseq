@@ -1041,3 +1041,37 @@
       (outliner-property/batch-set-property! conn [child-id] :logseq.property.class/extends root-id)
       (is (= [:user.class/Parent] (extends-idents))
           "Root Tag is not added alongside another parent"))))
+
+(deftest set-block-property-stores-zero-and-negative-numbers
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties {:num {:logseq.property/type :number}
+                            :nums {:logseq.property/type :number :db/cardinality :many}}
+               :pages-and-blocks [{:page {:block/title "page1"}
+                                   :blocks [{:block/title "b1"}
+                                            {:block/title "b2"}
+                                            {:block/title "b3"}]}]})
+        block-uuid (fn [title] (:block/uuid (db-test/find-block-by-content @conn title)))
+        number-of (fn [title property]
+                    (db-property/property-value-content (get (db-test/find-block-by-content @conn title) property)))]
+    (testing "set-block-property! with 0, also over an existing value, and with a negative number"
+      (outliner-property/set-block-property! conn (block-uuid "b1") :user.property/num 0)
+      (is (= 0 (number-of "b1" :user.property/num)))
+      (outliner-property/set-block-property! conn (block-uuid "b1") :user.property/num 3)
+      (outliner-property/set-block-property! conn (block-uuid "b1") :user.property/num 0)
+      (is (= 0 (number-of "b1" :user.property/num)))
+      (outliner-property/set-block-property! conn (block-uuid "b1") :user.property/num -3)
+      (is (= -3 (number-of "b1" :user.property/num))))
+
+    (testing "batch-set-property! without :entity-id? sets 0"
+      (outliner-property/batch-set-property! conn [(block-uuid "b2")] :user.property/num 0)
+      (is (= 0 (number-of "b2" :user.property/num))))
+
+    (testing "the text typed into a number input, \"0\", sets 0"
+      (outliner-property/set-block-property! conn (block-uuid "b3") :user.property/num "0")
+      (is (= 0 (number-of "b3" :user.property/num))))
+
+    (testing "a many-valued number property accepts 0 among its values"
+      (outliner-property/batch-set-property! conn [(block-uuid "b1")] :user.property/nums [0 2])
+      (is (= #{0 2}
+             (set (map db-property/property-value-content
+                       (:user.property/nums (db-test/find-block-by-content @conn "b1")))))))))
