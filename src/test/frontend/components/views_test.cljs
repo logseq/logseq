@@ -8,6 +8,7 @@
             [frontend.components.all-pages :as all-pages]
             [frontend.components.property.value :as property-value]
             [frontend.components.views :as views]
+            [frontend.dicts :as dicts]
             [frontend.db.async :as db-async]
             [frontend.db.hooks :as db-hooks]
             [frontend.db.subs :as subs]
@@ -113,6 +114,12 @@
 (use-fixtures :each
   {:before #(subs/reset-graph! test-graph-id)
    :after #(subs/reset-graph! test-graph-id)})
+
+(deftest compiled-default-view-titles-preserve-every-language-test
+  (doseq [[feature-type title-key] @#'views/default-view-title-key-by-feature-type]
+    (is (= (set (keep #(get (dicts/realize-dict %) title-key) (vals dicts/dicts)))
+           (get @#'views/default-view-title-candidates feature-type))
+        (str "Default titles for " feature-type " match every shipped language"))))
 
 (deftest table-property-value-receives-view-parent
   (let [view-parent {:db/ident :logseq.class/Task}
