@@ -362,11 +362,13 @@
                                                  :warning false]))
 
         (shared-service/broadcast-to-clients! :notification
-                                              [(str (if (seq fixed-entity-ids)
-                                                      (str "Validation fixed " (count fixed-entity-ids) " invalid block(s). Your graph is valid now! ")
-                                                      "Your graph is valid! ")
-                                                    counts)
-                                               :success false])))
+                                              (if (seq fixed-entity-ids)
+                                                ;; The client translates it, with the plural of the user's locale
+                                                [nil :success false nil nil
+                                                 {:i18n-key :graph.validation/fixed-invalid-blocks
+                                                  :i18n-args [(count fixed-entity-ids) (str counts)]}]
+                                                [(str "Your graph is valid! " counts)
+                                                 :success false]))))
     (cond-> (merge {:errors errors
                     :invalid-entity-ids invalid-entity-ids}
                    counts)

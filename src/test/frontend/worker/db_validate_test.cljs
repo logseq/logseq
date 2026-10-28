@@ -1,6 +1,7 @@
 (ns frontend.worker.db-validate-test
   (:require [cljs.test :refer [deftest is]]
             [datascript.core :as d]
+            [frontend.context.i18n :as i18n]
             [frontend.worker.db.validate :as worker-db-validate]
             [frontend.worker.pipeline :as worker-pipeline]
             [frontend.worker.shared-service :as shared-service]
@@ -92,14 +93,21 @@
     (with-redefs [shared-service/broadcast-to-clients!
                   (fn [topic payload]
                     (when (= :notification topic)
-                      (swap! notifications conj (first payload))))]
-      (let [result (with-transact-pipeline #(worker-db-validate/validate-db conn))]
+                      (swap! notifications conj payload)))]
+      (let [result (with-transact-pipeline #(worker-db-validate/validate-db conn))
+            {:keys [i18n-key i18n-args]} (nth (first @notifications) 5)]
         (is (empty? (:errors result))
             "The repair leaves nothing to report as an error")
         (is (some #{block-id} (:fixed-entity-ids result))
             "The result says which block the repair changed")
-        (is (re-find #"fixed \d+ invalid block" (first @notifications))
-            "The notification says data was fixed instead of calling the graph valid"))
+        (is (= :graph.validation/fixed-invalid-blocks i18n-key)
+            "The notification is translated on the client and says data was fixed instead of calling the graph valid")
+        (is (= 1 (first i18n-args)))
+        (is (= "Validation fixed 1 invalid block. Your graph is valid now! counts"
+               (i18n/t-en i18n-key 1 "counts")))
+        (is (= "Validation fixed 2 invalid blocks. Your graph is valid now! counts"
+               (i18n/t-en i18n-key 2 "counts"))
+            "The English text pluralizes"))
       (let [result (worker-db-validate/validate-db conn)]
         (is (empty? (:fixed-entity-ids result))
             "A second run has nothing to fix")))))
@@ -142,13 +150,13 @@
     (with-redefs [shared-service/broadcast-to-clients!
                   (fn [topic payload]
                     (when (= :notification topic)
-                      (swap! notifications conj (first payload))))]
+                      (swap! notifications conj payload)))]
       (let [result (with-transact-pipeline #(worker-db-validate/validate-db conn))]
         (is (nat-int? (:block/tx-id (d/entity @conn referencing-block-id)))
             "The transact pipeline stamps the valid block that references the repaired one")
         (is (= [invalid-block-id] (:fixed-entity-ids result))
             "The valid block that only references the repaired one isn't reported as fixed")
-        (is (re-find #"fixed 1 invalid block" (first @notifications))
+        (is (= [1] (take 1 (:i18n-args (nth (first @notifications) 5))))
             "The notification counts the repaired block only")))))
 
 (deftest validate-db-repairs-invalid-pages-properties-and-classes
