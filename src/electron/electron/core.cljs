@@ -412,6 +412,8 @@
                       ^js win (win/create-main-window!)
                       _ (reset! *win win)]
 
+                  ;; OS registration is independent of rendering or navigation.
+                  (js/setImmediate #(register-default-protocol-client! app'))
                   (utils/<restore-proxy-settings)
 
                   (js-utils/disableXFrameOptions win)
@@ -499,7 +501,6 @@
                             {:scheme     FILE_ASSETS_SCHEME
                              :privileges (assoc privileges :stream true)}]))
 
-      (register-default-protocol-client! app)
       (set-app-menu!)
       (i18n/on-locale-change! set-app-menu!)
       (setup-deeplink!)
