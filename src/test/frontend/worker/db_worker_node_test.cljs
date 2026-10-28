@@ -10,6 +10,7 @@
             [frontend.worker.db-worker-node :as db-worker-node]
             [frontend.worker.platform.node :as platform-node]
             [goog.object :as gobj]
+            [lambdaisland.glogi :as log]
             [logseq.cli.root-dir :as cli-root]
             [logseq.cli.server :as cli-server]
             [logseq.cli.style :as style]
@@ -1796,6 +1797,32 @@
                             (if-let [stop! (:stop! @daemon)]
                               (-> (stop!) (p/finally (fn [] (done))))
                               (done))))))))
+
+(deftest db-worker-node-invoke-error-log-does-not-contain-error-data
+  (let [records (atom [])
+        handler (fn [record] (swap! records conj record))
+        huge-db (apply str (repeat 1000000 "x"))
+        error (ex-info "Assert failed" {:code :exception :got huge-db})
+        written (atom nil)
+        res #js {:writeHead (fn [status _headers] (reset! written {:status status}))
+                 :end (fn [body] (swap! written assoc :body body))}]
+    (log/add-handler handler)
+    (try
+      (#'db-worker-node/log-invoke-error! res error :thread-api/pull)
+      (finally
+        (log/remove-handler handler)))
+    (let [logged (->> @records
+                      (filter #(string/includes? (pr-str (:message %)) "db-worker-node-invoke-failed"))
+                      first)
+          logged-text (pr-str (:message logged))]
+      (is (some? logged))
+      (is (string/includes? logged-text "Assert failed"))
+      (is (string/includes? logged-text "thread-api/pull"))
+      (is (< (count logged-text) 10000)
+          "the log entry must not embed the error's ex-data")
+      (is (nil? (:exception logged))))
+    (is (= 500 (:status @written)))
+    (is (string/includes? (:body @written) "Assert failed"))))
 
 (deftest close-bound-repo-releases-db-after-sync-stop-fails
   (async done
