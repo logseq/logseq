@@ -44,7 +44,8 @@
 
 (defn- rebuild-block-refs
   [{:keys [tx-meta db-after db-before]} blocks]
-  (when (or (and (:outliner-op tx-meta) (refs-need-recalculated? tx-meta))
+  (when (or (and (or (:outliner-op tx-meta) (:rebuild-block-refs? tx-meta))
+                 (refs-need-recalculated? tx-meta))
             (:rtc-tx? tx-meta)
             (:rtc-op? tx-meta)
             (imported-data? tx-meta))
