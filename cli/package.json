@@ -6,7 +6,7 @@
     "test": "opam exec -- dune runtest"
   },
   "devDependencies": {
-    "vite": "^8.0.16"
+    "vite": "^8.1.6"
   },
   "dependencies": {
     "@logseq/graph-lifecycle": "file:../deps/graph-lifecycle",
