@@ -65,8 +65,6 @@
 
            (->
             (p/do!
-             (when (config/global-config-enabled?)
-               (global-config-handler/start {:repo repo}))
              (when (config/plugin-config-enabled?)
                (plugin-config-handler/start)))
             (p/finally
@@ -156,8 +154,10 @@
   (let [t1 (util/time-ms)
         ui-ready (p/do!
                   (idb/start)
-                  (get-system-info)
-                  (plugin-handler/setup!)
+                  (p/all [(get-system-info)
+                          (plugin-handler/setup!)
+                          (when (config/global-config-enabled?)
+                            (global-config-handler/start {}))])
                   (render))]
 
       (set-global-error-notification!)
