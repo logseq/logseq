@@ -7,6 +7,7 @@
             ["path" :as node-path]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
+            [electron.assets-protocol :as assets-protocol]
             [electron.cli-install :as cli-install]
             [electron.configs :as cfgs]
             [electron.db :as db]
@@ -81,25 +82,8 @@
   (.registerFileProtocol
    protocol FILE_ASSETS_SCHEME
    (fn [^js request callback]
-     (let [url (.-url request)
-           url (decode-protected-assets-schema-path url)
-           ;; Query and fragment belong to the document URL, not the filename.
-           path (-> (first (string/split url #"[?#]" 2))
-                    (string/replace "assets://" "")
-                    (js/decodeURIComponent))]
-       (cond (or (string/starts-with? path "/")
-                 (re-find #"(?i)^/[a-zA-Z]:" path))
-             (callback #js {:path path})
-
-             ;; assume windows unc path
-             utils/win32?
-             (do (logger/debug :resolve-assets-url url)
-                 (callback #js {:path (str "//" path)}))
-
-             :else
-             (do
-               (logger/warn ::resolve-assets-url "Unknown assets url" url)
-               (callback #js {:path path}))))))
+     (let [url (decode-protected-assets-schema-path (.-url request))]
+       (callback #js {:path (assets-protocol/url->file-path url utils/win32?)}))))
 
   (.registerFileProtocol
    protocol FILE_LSP_SCHEME
