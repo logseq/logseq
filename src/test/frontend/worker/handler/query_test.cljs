@@ -60,3 +60,35 @@
       (is (= #{"parent"} (leaves conn))))
     (is (some? (d/entity @conn [:block/uuid (:block/uuid (db-test/find-block-by-content @conn "nested"))]))
         "The recycled block is still in the graph")))
+
+(deftest recycled-filter-is-computed-once-per-db-snapshot-test
+  (let [conn (create-streams-conn
+              [{:page {:block/title "parent" :build/tags [:stream]}}
+               {:page {:block/title "child" :build/tags [:stream]
+                       :build/properties {:streamOf [:build/page {:block/title "parent"}]}}}
+               {:page {:block/title "other"}}])
+        without-recycled #'query-handler/without-recycled
+        recycle-page! (fn [title]
+                        (ldb/transact! conn
+                                       (recycle/recycle-page-tx-data
+                                        @conn (db-test/find-page-by-title @conn title) {})
+                                       {:outliner-op :delete-page}))]
+    (recycle-page! "child")
+    (let [before @conn
+          filtered (without-recycled before)]
+      (is (not (identical? before filtered)) "The recycled child is filtered out")
+      (is (identical? filtered (without-recycled before))
+          "Query blocks on the same snapshot share one filtered db")
+      (is (= #{"parent"} (set (query-handler/execute-custom-query before leaf-query {}))))
+      (is (identical? filtered (without-recycled before))
+          "Running a query does not replace it")
+      (recycle-page! "other")
+      (let [after @conn]
+        (is (not (identical? filtered (without-recycled after)))
+            "A transaction gives a new snapshot, which is filtered again")
+        (is (nil? (some #{(:db/id (db-test/find-page-by-title after "other"))}
+                        (map :e (d/datoms (without-recycled after) :eavt))))
+            "The page recycled by that transaction is filtered out of the new snapshot")
+        (is (some? (some #{(:db/id (db-test/find-page-by-title before "other"))}
+                         (map :e (d/datoms (without-recycled before) :eavt))))
+            "The old snapshot still has it")))))
