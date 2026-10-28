@@ -282,30 +282,43 @@
   [db ref tag-names]
   (if (new-page-ref? ref)
     (let [class? (contains? tag-names (:block/name ref))
-          journal-day (when-not class? (journal-ref-day ref))]
-      ;; A journal is found by its day, not by the ref's name, which follows the
-      ;; editor's date format. A recycled journal is not found: `create` restores it.
-      (if-let [page (cond journal-day (ldb/get-journal-page-by-day db journal-day)
+          journal-day (when-not class? (journal-ref-day ref))
+          ;; A journal is found by its day: its name and title don't follow the
+          ;; ref's date format, and a recycled journal is not found, so `create`
+          ;; restores it.
+          journal-page (when journal-day (ldb/get-journal-page-by-day db journal-day))]
+      (if-let [page (cond journal-day journal-page
                           (not class?) (ldb/get-page db (:block/name ref)))]
         [(merge (select-keys page [:db/id :block/uuid :block/title :block/name :db/ident])
                 (select-keys ref [:block.temp/original-page-name]))
          nil]
-        (let [{:keys [page-uuid tx-data]} (outliner-page/create db (:block/title ref)
+        (let [{:keys [page-uuid tx-data]} (outliner-page/create db
+                                                                 ;; The graph's own title format may be missing or differ
+                                                                 ;; from the editor's: the default format always parses
+                                                                 (if journal-day
+                                                                   (date-time-util/int->journal-title journal-day date-time-util/default-journal-title-formatter)
+                                                                   (:block/title ref))
                                                                  {:uuid (:block/uuid ref)
                                                                   :class? class?
                                                                   :journal? (or (= "journal" (:block/type ref))
                                                                                 (contains? (ref-tag-idents ref)
                                                                                            :logseq.class/Journal))})
-              ;; `create` finds an existing journal through its day, not its name: the
-              ;; journal's title and name win over the ref's, which follow the date
-              ;; format and would rename the journal.
-              existing-journal (when (uuid? page-uuid)
-                                 (let [page (d/entity db [:block/uuid page-uuid])]
-                                   (when (:block/journal-day page)
-                                     page)))]
+              ;; `create` finds an existing journal through its day, or makes one for a
+              ;; title the editor did not parse as a journal: the journal's title and name
+              ;; win over the ref's, which follow the editor's date format and would
+              ;; rename the journal.
+              journal (when (uuid? page-uuid)
+                        (or (let [page (d/entity db [:block/uuid page-uuid])]
+                              (when (:block/journal-day page)
+                                page))
+                            (some #(when (and (map? %)
+                                              (= page-uuid (:block/uuid %))
+                                              (:block/journal-day %))
+                                     %)
+                                  tx-data)))]
           [(cond-> (assoc (merge (select-keys ref [:block/title :block/name :block.temp/original-page-name])
-                                 (when existing-journal
-                                   (select-keys existing-journal [:block/title :block/name])))
+                                 (when journal
+                                   (select-keys journal [:block/title :block/name])))
                           :block/uuid page-uuid)
              class? (assoc :db/ident (or (some :db/ident tx-data)
                                          (:db/ident (d/entity db [:block/uuid page-uuid])))))
