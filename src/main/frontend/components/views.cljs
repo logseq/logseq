@@ -1787,7 +1787,7 @@
        (if (and view-entity property-ident)
          (p/let [data (db-async/<get-view-filter-data property
                                                       {:view-id (:db/id view-entity)
-                                                       :query-entity-ids (:query-entity-ids opts)})]
+                                                       :query-row-uuids (:query-row-uuids opts)})]
            (set-filter-data! data))
          (set-filter-data! nil)))
      [property-ident])
@@ -1980,7 +1980,7 @@
         :on-click (fn [e]
                     (p/let [filter-data (db-async/<get-view-filter-data property
                                                                         {:view-id (:db/id view-entity)
-                                                                         :query-entity-ids (:query-entity-ids opts)
+                                                                         :query-row-uuids (:query-row-uuids opts)
                                                                          :operator operator})
                             many? (:many? filter-data)
                             items (case (:value-source filter-data)
