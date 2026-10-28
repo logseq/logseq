@@ -48,6 +48,12 @@ Escape as well as directional keys. Rebuild the native library and host
 together: startup requires the detail exports and rejects an older library
 instead of dropping events or stripping modifiers.
 
+Native checkbox, radio, switch and slider snapshots expose an interactive
+`input` target to delegated document selectors. These are flattened native
+controls, not replicas of the Web label/input subtree. Block-selection capture
+therefore excludes them before handling modifier gestures, without per-view
+exceptions or bypassing document default prevention.
+
 Native initialization requires exactly `{"paintsCaret":boolean}` as its JSON
 payload, independent of the platform and host profile codes. MyGo sends
 `{"paintsCaret":false}` before view construction: the shared OCaml editor owns

@@ -96,9 +96,8 @@ let ext_shallow_snapshot (rt : Lui_runtime.application) node : Js.Json.t =
           String.sub ident 7 (String.length ident - 7)
         else ident
     | None -> (
-        (* standard kinds present the HTML tag their DOM twin would carry
-           (matching the host's DOM tag naming) — delegated selectors
-           like a[data-ref] / button.x match on it *)
+        (* Standard kinds expose HTML target semantics for delegated selectors.
+           Native controls flatten the Web label/input subtree to its input. *)
         match kind with
         | Some Lui_protocol.Link -> "a"
         | Some
@@ -108,7 +107,9 @@ let ext_shallow_snapshot (rt : Lui_runtime.application) node : Js.Json.t =
         | Some
             ( Lui_protocol.Input | Lui_protocol.TextField
             | Lui_protocol.SearchField | Lui_protocol.SecureField
-            | Lui_protocol.NumberStepper ) ->
+            | Lui_protocol.NumberStepper | Lui_protocol.Checkbox
+            | Lui_protocol.Radio | Lui_protocol.SwitchControl
+            | Lui_protocol.Slider ) ->
             "input"
         | Some Lui_protocol.Textarea -> "textarea"
         | Some (Lui_protocol.Select | Lui_protocol.Combobox) -> "select"
