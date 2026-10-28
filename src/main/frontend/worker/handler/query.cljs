@@ -264,11 +264,7 @@
               (keep (fn [datom] (:db/ident (d/entity db (:e datom))))))
         (d/datoms db :aevt :db/valueType)))
 
-(defn- without-recycled
-  "db as if its recycled entities were permanently deleted: no datom of a
-  recycled entity and none pointing at one. Recycling keeps every attribute on
-  the entity, so left in, it would still match inside joins, `not` and aggregates
-  of a query, whose result is only filtered afterwards."
+(defn- filter-recycled
   [db]
   (let [recycled (recycled-eids db)]
     (if (empty? recycled)
@@ -278,6 +274,21 @@
                        (not (or (contains? recycled (:e datom))
                                 (and (contains? ref-attrs (:a datom))
                                      (contains? recycled (:v datom)))))))))))
+
+(defonce ^:private without-recycled-cache (js/WeakMap.))
+
+(defn- without-recycled
+  "db as if its recycled entities were permanently deleted: no datom of a
+  recycled entity and none pointing at one. Recycling keeps every attribute on
+  the entity, so left in, it would still match inside joins, `not` and aggregates
+  of a query, whose result is only filtered afterwards.
+  Cached per db value: the query blocks of a page all run on the same snapshot,
+  and a transaction gives a new db value."
+  [db]
+  (or (.get without-recycled-cache db)
+      (let [filtered (filter-recycled db)]
+        (.set without-recycled-cache db filtered)
+        filtered)))
 
 (defn execute-custom-query
   [db query-m context]
