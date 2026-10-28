@@ -506,12 +506,28 @@
   [block]
   (true? (:block.temp/first-window-preview? block)))
 
+(defn- untitled-text?
+  "A page without a title has a blank title or, when it was created from a
+  reference, its uuid as title."
+  [text]
+  (or (string/blank? text)
+      (some? (parse-uuid text))))
+
+(defn- table-title-text
+  "Text of a name cell. An untitled page reads `Untitled`, as in page references,
+  so that its row can still be seen, opened and selected."
+  [block]
+  (let [text (first-window-title-text block)]
+    (if (untitled-text? text)
+      (t :ui/untitled)
+      text)))
+
 (defn- first-window-block-title
   "Tags/Movies first paint spent block-title hooks on every preview row."
   [block]
   [:div.table-block-title.relative.flex.items-center.w-full.h-full.cursor-pointer
    [:div.flex.flex-row
-    [:div (first-window-title-text block)]]])
+    [:div (table-title-text block)]]])
 
 (defn- first-window-list-block
   "List view first paint should show the preview title before full block hydration."
@@ -587,8 +603,9 @@
        [:div.flex.flex-row
         (let [render (fn [block]
                        [:div
-                        (if (first-window-title-preview? block)
-                          (first-window-title-text block)
+                        (if (or (first-window-title-preview? block)
+                                (untitled-text? (first-window-title-text block)))
+                          (table-title-text block)
                           (inline-title
                            {:table? true
                             :block/uuid (:block/uuid block)}

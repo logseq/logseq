@@ -8,6 +8,7 @@
             [frontend.components.all-pages :as all-pages]
             [frontend.components.property.value :as property-value]
             [frontend.components.views :as views]
+            [frontend.context.i18n :refer [t]]
             [frontend.db.async :as db-async]
             [frontend.db.hooks :as db-hooks]
             [frontend.db.subs :as subs]
@@ -630,6 +631,32 @@
           "First-window titles paint when view-data arrives, before the block snapshot.")
       (is (empty? @calls)
           "Preview paint must not subscribe use-block on the first frame."))))
+
+(deftest table-name-cell-shows-untitled-for-a-page-without-title-test
+  (let [untitled (t :ui/untitled)
+        render-cell (fn [title]
+                      (let [block {:block/uuid (random-uuid) :block/title title}]
+                        (render-static
+                         (views/block-title-interactive block {:width 200}))))
+        preview-cell-texts (fn [title]
+                             (filter string?
+                                     (tree-seq coll? seq
+                                               (#'views/first-window-block-title
+                                                {:block/uuid (random-uuid)
+                                                 :block/title title
+                                                 :block.temp/first-window-preview? true}))))]
+    (is (not (string/blank? untitled)))
+    (with-redefs [state/get-component (fn [k]
+                                        (when (= :block/inline-title k)
+                                          (fn [_config text] (.createElement react "span" nil text))))]
+      (doseq [title ["" "  " nil (str (random-uuid))]]
+        (is (string/includes? (render-cell title) untitled)
+            (str "A table name cell with title " (pr-str title) " must not be empty"))
+        (is (some #{untitled} (preview-cell-texts title))
+            (str "A first-window name cell with title " (pr-str title) " must not be empty")))
+      (let [html (render-cell "Real page")]
+        (is (string/includes? html "Real page"))
+        (is (not (string/includes? html untitled)))))))
 
 (deftest list-view-preview-paints-title-before-block-container-test
   (let [row-uuid (random-uuid)
