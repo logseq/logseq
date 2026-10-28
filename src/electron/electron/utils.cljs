@@ -1,8 +1,6 @@
 (ns electron.utils
   (:require ["electron" :refer [app BrowserWindow session]]
             ["fs-extra" :as fs]
-            ["node-fetch" :default node-fetch]
-            ["open" :as open-module]
             ["path" :as node-path]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
@@ -24,11 +22,15 @@
 
 (defonce dev? (not prod?))
 (defonce *fetchAgent (atom nil))
-(defonce extract-zip (js/require "extract-zip"))
-(defonce https-proxy-agent (js/require "https-proxy-agent"))
-(defonce socks-proxy-agent (js/require "socks-proxy-agent"))
-(defonce open-external
-  (interop/default-function-or-module open-module))
+(defonce ^:private https-proxy-agent (delay (js/require "https-proxy-agent")))
+(defonce ^:private socks-proxy-agent (delay (js/require "socks-proxy-agent")))
+(defonce ^:private open-external
+  (delay (interop/default-function-or-module (js/require "open"))))
+(defonce ^:private node-fetch
+  (delay (interop/default-function-or-module (js/require "node-fetch"))))
+
+(defn extract-zip [source options]
+  ((js/require "extract-zip") source options))
 
 (declare <resolve-fetch-proxy)
 
@@ -36,16 +38,16 @@
   ([target] (open target nil))
   ([target options]
    (if options
-     (open-external target (bean/->js options))
-     (open-external target))))
+     (@open-external target (bean/->js options))
+     (@open-external target))))
 
 (defn- <build-fetch-agent
   [{:keys [protocol host port]}]
   (when (and protocol host port (contains? #{"http" "socks5"} protocol))
     (let [proxy-url (str protocol "://" host ":" port)]
       (if-let [ctor (case protocol
-                     "http" (.-HttpsProxyAgent ^js https-proxy-agent)
-                     "socks5" (.-SocksProxyAgent ^js socks-proxy-agent)
+                     "http" (.-HttpsProxyAgent ^js @https-proxy-agent)
+                     "socks5" (.-SocksProxyAgent ^js @socks-proxy-agent)
                      nil)]
         (new ctor proxy-url)
         (do
@@ -101,7 +103,7 @@
   ([url options]
    (let [options (or options {})]
      (p/let [agent (<resolve-fetch-agent url options)]
-       (node-fetch url (bean/->js (cond-> (dissoc options :proxy)
+       (@node-fetch url (bean/->js (cond-> (dissoc options :proxy)
                                     (some? agent) (assoc :agent agent))))))))
 
 (defn fix-win-path!
