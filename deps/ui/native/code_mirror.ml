@@ -4,6 +4,8 @@
 open Lui_elements
 module W = Wire
 
+let composition_active (ev : Ui_services.ev) = ev.composing
+
 let on_native_event uuid ~name ~value ~key =
   if not (Ui_services.env_publishing ()) && uuid <> "" then
     match name, value with

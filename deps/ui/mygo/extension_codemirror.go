@@ -14,8 +14,61 @@ type codeMirrorTextState struct {
 	role           string
 	uuid           string
 	language       string
+	handle         ui.Handle
+	focusEpoch     uint64
 	focused        bool
 	focusRequested bool
+}
+
+type codeMirrorCompositionSource struct {
+	target     platformTarget
+	state      *codeMirrorTextState
+	buffer     *editor.Buffer
+	role, uuid string
+	focusEpoch uint64
+}
+
+type codeMirrorComposition struct {
+	source    codeMirrorCompositionSource
+	focused   bool
+	composing bool
+}
+
+func (s *platformServices) currentCodeMirrorSource(source codeMirrorCompositionSource) bool {
+	if !s.liveTarget(source.target) {
+		return false
+	}
+	n, ok := s.backend.Node(source.target.id)
+	return ok && n.Identifier == "logseq-codemirror" &&
+		n.String("source-role") == source.role && n.String("uuid") == source.uuid &&
+		source.state.role == source.role && source.state.uuid == source.uuid &&
+		source.state.editor.Buffer == source.buffer
+}
+
+func (s *platformServices) syncCodeMirrorSources(snapshot bool) {
+	if snapshot {
+		s.codeMirrorSources = nil
+		return
+	}
+	for id, source := range s.codeMirrorSources {
+		if !s.currentCodeMirrorSource(source) {
+			delete(s.codeMirrorSources, id)
+		}
+	}
+}
+
+// Key targets come from MyGo's actual focused ancestry, never an OCaml ID.
+func (s *platformServices) codeMirrorComposition(c *ui.Context, target luimygo.InputNode) codeMirrorComposition {
+	if !target.Current() {
+		return codeMirrorComposition{}
+	}
+	source, ok := s.codeMirrorSources[target.Node.ID]
+	if !ok || !s.currentCodeMirrorSource(source) ||
+		target.Node.String("source-role") != source.role || target.Node.String("uuid") != source.uuid {
+		return codeMirrorComposition{}
+	}
+	return codeMirrorComposition{source: source, focused: source.state.handle.Focused(c),
+		composing: source.state.editor.Composing()}
 }
 
 func (s *codeMirrorTextState) reconcile(role, uuid, value string) {
@@ -97,9 +150,12 @@ func (services *platformServices) renderLogseqCodeMirror(c *ui.Context, n luimyg
 		return true
 	}
 	root.Children(func() {
-		e := editor.View(c, &s.editor).Key(role + ":" + s.uuid).WidthPercent(100)
+		e := editor.View(c, &s.editor).Key(role + ":" + s.uuid).WidthPercent(100).Bind(&s.handle)
 		services.bind(n, e)
 		focused := e.Focused()
+		if focused != s.focused {
+			s.focusEpoch++
+		}
 		if role == "block" {
 			if focused != s.focused {
 				name := "blur"
@@ -116,6 +172,13 @@ func (services *platformServices) renderLogseqCodeMirror(c *ui.Context, n luimyg
 				s.focusRequested = true
 			}
 		}
-		s.focused = focused
+		s.focused = e.Focused()
+		if services.codeMirrorSources == nil {
+			services.codeMirrorSources = make(map[int64]codeMirrorCompositionSource)
+		}
+		services.codeMirrorSources[n.ID] = codeMirrorCompositionSource{
+			target: services.controlTarget(n.ID), state: s, buffer: s.editor.Buffer,
+			role: role, uuid: s.uuid, focusEpoch: s.focusEpoch,
+		}
 	})
 }

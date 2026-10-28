@@ -210,11 +210,34 @@ type block_instance =
   { cm : t
   ; mutable committed : string
   ; mutable composition : composition option
+  ; mutable composition_live : bool
   ; mutable synchronizing : bool
   ; mutable listeners : (D.el * string * (D.ev -> unit) * bool) list
   }
 
 let instances : (string, block_instance) Hashtbl.t = Hashtbl.create 8
+
+let composition_sources : (unit -> bool) list ref = ref []
+
+let register_composition_source source =
+  composition_sources := source :: !composition_sources;
+  fun () ->
+    composition_sources :=
+      List.filter (fun current -> current != source) !composition_sources
+
+let focused_client el =
+  D.el_is_connected el
+  && (match D.active_element () with Some active -> active == el | None -> false)
+
+let composition_active (ev : Ui_services.ev) =
+  ev.composing
+  || Hashtbl.fold
+       (fun _ st active ->
+         active || (st.composition_live
+                    && D.el_is_connected (get_wrapper st.cm)
+                    && focused_client (get_input st.cm)))
+       instances false
+  || List.exists (fun source -> source ()) !composition_sources
 
 let with_model_update st f =
   let previous = st.synchronizing in
@@ -346,6 +369,7 @@ let on_cm_blur uuid c =
   match current_instance uuid c with
   | None -> ()
   | Some st ->
+      st.composition_live <- false;
       cancel_composition st;
       (match S.editing () with
        | Some e when e.S.uuid = uuid -> A.blur_commit ()
@@ -467,6 +491,7 @@ let mount ?(read_only = false) uuid textarea =
   release_instance uuid;
   let st =
     { cm = c; committed = get_value c; composition = None
+    ; composition_live = false
     ; synchronizing = false; listeners = [] }
   in
   Hashtbl.replace instances uuid st;
@@ -482,6 +507,7 @@ let mount ?(read_only = false) uuid textarea =
   listen (get_input c) "compositionstart" true (fun _ ->
       if current_instance uuid c <> None then begin
         cancel_composition st;
+        st.composition_live <- true;
         st.composition <- Some
           { history = get_history c; selections = list_selections c
           ; cancelled = false }
@@ -491,6 +517,7 @@ let mount ?(read_only = false) uuid textarea =
       match current_instance uuid c, st.composition with
       | Some _, Some pending ->
           if pending.cancelled then cancel_composition st;
+          st.composition_live <- false;
           st.composition <- None;
           if not pending.cancelled then on_change uuid c
       | _ -> ());
