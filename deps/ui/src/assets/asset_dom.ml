@@ -732,6 +732,28 @@ let file_cell_el (w : W.t) : t =
     [ image ~url_signal:(Signal.value (src)) ~alt:file [] ]
     ctx parent
 
+let gallery_cover ~width ~height (value : W.t) : t =
+  let block = Decode.block_of_wire value in
+  match block.Model.block_uuid, block.Model.block_asset_type with
+  | Some uuid, Some ext when is_image ext ->
+      (match block.Model.block_asset_url with
+       | Some url when url <> "" ->
+           image ~url ~alt:block.Model.block_title ~width ~height
+             ~loading:`lazy_ ~referrer_policy:`no_referrer []
+       | _ -> fun context parent ->
+           let ready = ready_for uuid ext context in
+           let file = uuid ^ "." ^ ext in
+           if not (Runtime.signal_get ready) then resolve_img uuid file ext ready;
+           (box ~width ~height
+              [reactive (fun ready ->
+                 if not ready then spacer []
+                 else
+                   let url = Hashtbl.find A.url_cache (A.cache_key (repo ()) file) in
+                   image ~url ~alt:block.Model.block_title ~width ~height
+                     ~loading:`lazy_ ~referrer_policy:`no_referrer [])
+                 (Signal.value ready)]) context parent)
+  | _ -> spacer []
+
 (* ---------- command hookup ---------- *)
 
 (* "upload" is dispatched by the shared editor command dispatcher —
