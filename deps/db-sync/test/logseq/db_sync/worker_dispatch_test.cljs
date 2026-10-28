@@ -113,6 +113,29 @@
                             (swap! requests conj request)
                             (p/resolved (ok-json-response)))})})
 
+(deftest openapi-security-scheme-declares-the-scopes-operations-require-test
+  (async done
+         (-> (p/let [response (dispatch/handle-worker-fetch
+                               (js/Request. "http://localhost/openapi.json")
+                               #js {})
+                     text (.text response)]
+               (let [document (js/JSON.parse text)
+                     declared-scopes (set (js/Object.keys
+                                           (aget document "components" "securitySchemes" "oauth"
+                                                 "flows" "authorizationCode" "scopes")))
+                     required-scopes (->> (js/Object.values (aget document "paths"))
+                                          (mapcat (fn [path-item] (js/Object.values path-item)))
+                                          (mapcat (fn [operation]
+                                                    (mapcat #(array-seq (aget % "oauth"))
+                                                            (array-seq (aget operation "security")))))
+                                          set)]
+                 (is (= #{"logseq/read" "logseq/write"} required-scopes))
+                 (is (= required-scopes declared-scopes))))
+             (p/then (fn [] (done)))
+             (p/catch (fn [error]
+                        (is false (str error))
+                        (done))))))
+
 (deftest openapi-document-describes-semantic-api-and-oauth-scopes-test
   (async done
          (-> (p/let [response (dispatch/handle-worker-fetch
