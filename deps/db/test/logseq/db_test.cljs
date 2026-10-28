@@ -82,6 +82,24 @@
     (is (= "Apr 11th, 2026"
            (:block/title (ldb/get-journal-page-by-day @conn 20260411))))))
 
+(deftest get-journal-page-by-day-skips-recycled-journal
+  ;; A recycled journal is hidden, so it is not the day's journal: callers that
+  ;; find none (create today's journal, resolve a [[date]] ref) create the day's
+  ;; journal, which restores the recycled one.
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks
+               [{:page {:build/journal 20260410}}
+                {:page {:build/journal 20260411}}]})
+        recycled-journal (ldb/get-journal-page-by-day @conn 20260410)]
+    (d/transact! conn [{:db/id (:db/id recycled-journal)
+                        :logseq.property/deleted-at 1}])
+    (is (ldb/recycled? (d/entity @conn (:db/id recycled-journal))))
+    (is (nil? (ldb/get-journal-page-by-day @conn 20260410))
+        "A recycled journal is not found by its day")
+    (is (= "Apr 11th, 2026"
+           (:block/title (ldb/get-journal-page-by-day @conn 20260411)))
+        "A live journal is still found")))
+
 (deftest journal-title-without-title-format-uses-default-format
   ;; Reproduces https://github.com/logseq/db-test/issues/1168
   ;; A graph whose Journal class has no title-format (the property is missing on

@@ -208,6 +208,49 @@
         (is (= canonical-uuid
                (:block/uuid (first (:block/refs (first (:blocks result)))))))))))
 
+(defn- journal-title-format-conn
+  "A graph with a block \"host\" whose Journal class title-format is `title-format`
+  (nil removes it)."
+  [title-format]
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "host"}]}])]
+    (if title-format
+      (d/transact! conn [{:db/ident :logseq.class/Journal
+                          :logseq.property.journal/title-format title-format}])
+      (d/transact! conn [[:db/retract :logseq.class/Journal :logseq.property.journal/title-format]]))
+    conn))
+
+(defn- insert-date-ref!
+  "What the editor does for a typed `[[title]]`: parses the ref with its own date
+  format and no db, then inserts the block. Returns the inserted block."
+  [conn title editor-date-format]
+  (let [ref (gp-block/page-name->map title nil true editor-date-format)
+        block-uuid (random-uuid)]
+    (outliner-core/insert-blocks! conn
+                                  [{:block/uuid block-uuid
+                                    :block/title (str "see [[" (:block/uuid ref) "]]")
+                                    :block/refs [ref]}]
+                                  (db-test/find-block-by-content @conn "host")
+                                  {:sibling? true :keep-uuid? true})
+    (d/entity @conn [:block/uuid block-uuid])))
+
+(deftest insert-blocks-ref-to-recycled-journal-restores-it
+  ;; A recycled journal hid its day: a [[date]] ref to it linked to the hidden
+  ;; node and left the day without a live journal.
+  (let [conn (journal-title-format-conn "MMM do, yyyy")
+        ;; tomorrow, because deleting today's journal only empties it
+        journal-day (date-time-util/journal-day-plus (date-time-util/date->int (js/Date.)) 1)
+        journal-title (date-time-util/int->journal-title journal-day "MMM do, yyyy")
+        [_ journal-uuid] (outliner-page/create! conn journal-title {:redirect? false})]
+    (outliner-page/delete! conn journal-uuid :error-handler (fn [_]))
+    (is (ldb/recycled? (d/entity @conn [:block/uuid journal-uuid])))
+    (let [block (insert-date-ref! conn journal-title "MMM do, yyyy")
+          journal (ldb/get-journal-page-by-day @conn journal-day)]
+      (is (some? journal) "the day has a journal")
+      (is (not (ldb/recycled? journal)) "the ref restored the recycled journal")
+      (is (= [journal-uuid] (map :block/uuid (:block/refs block)))))))
+
 (deftest insert-blocks-missing-uuid-refs-become-broken
   ;; Both ref shapes produced for a uuid with no entity — a generated page map
   ;; and a [:block/uuid id] lookup — are dropped, and the title keeps the uuid
