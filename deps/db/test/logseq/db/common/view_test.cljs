@@ -1458,3 +1458,62 @@
     (is (= [10 2 1] desc-groups))
     ;; Explicit ascending order must reverse the default descending order.
     (is (= [1 2 10] asc-groups))))
+
+(defn- task-conn
+  []
+  (db-test/create-conn-with-blocks
+   {:classes {:SubTask {:build/class-extends [:logseq.class/Task]}}
+    :pages-and-blocks
+    [{:page {:block/title "page"}
+      :blocks [{:block/title "Backlog task" :build/tags [:logseq.class/Task]
+                :build/properties {:logseq.property/status :logseq.property/status.backlog}}
+               {:block/title "Default task" :build/tags [:logseq.class/Task]}
+               {:block/title "Default subtask" :build/tags [:SubTask]}
+               {:block/title "Doing task" :build/tags [:logseq.class/Task]
+                :build/properties {:logseq.property/status :logseq.property/status.doing}}
+               {:block/title "Done task" :build/tags [:logseq.class/Task]
+                :build/properties {:logseq.property/status :logseq.property/status.done}}]}]}))
+
+(defn- task-view-data
+  [conn option]
+  (let [class-id (:db/id (d/entity @conn :logseq.class/Task))
+        view-id (create-view-id conn :class-objects :view-for-id class-id)]
+    (db-view/get-view-data @conn view-id (merge {:view-feature-type :class-objects
+                                                 :view-for-id class-id}
+                                                option))))
+
+(deftest get-view-data-class-objects-filter-uses-property-default-test
+  (let [conn (task-conn)
+        todo-uuid (:block/uuid (d/entity @conn :logseq.property/status.todo))
+        filter-titles (fn [clause]
+                        (set (result-titles conn (task-view-data conn {:filters {:or? false
+                                                                                 :filters [clause]}}))))]
+    (is (= #{"Default task" "Default subtask"}
+           (filter-titles [:logseq.property/status :is #{todo-uuid}]))
+        "Tasks without a stored status match their Todo default")
+    (is (= #{"Backlog task" "Doing task" "Done task"}
+           (filter-titles [:logseq.property/status :is-not #{todo-uuid}])))
+    (is (= #{}
+           (filter-titles [:logseq.property/status :is :empty]))
+        "A defaulted status is not empty")))
+
+(deftest get-view-data-class-objects-sort-uses-property-default-test
+  (let [conn (task-conn)
+        result (task-view-data conn {:sorting [{:id :logseq.property/status :asc? true}]})
+        titles (result-titles conn result)]
+    (is (= 5 (:count result)))
+    (is (= "Backlog task" (first titles)))
+    (is (= #{"Default task" "Default subtask"} (set (subvec titles 1 3)))
+        "Defaulted tasks sort at the Todo closed-value position")
+    (is (= ["Doing task" "Done task"] (subvec titles 3)))))
+
+(deftest get-view-data-class-objects-filter-skips-default-for-non-members-test
+  (let [conn (topic-conn [{:page {:block/title "Topic page" :build/tags [:Topic]}}])
+        class-id (:db/id (d/entity @conn :user.class/Topic))
+        view-id (create-view-id conn :class-objects :view-for-id class-id)
+        result (db-view/get-view-data @conn view-id {:view-feature-type :class-objects
+                                                     :view-for-id class-id
+                                                     :filters {:or? false
+                                                               :filters [[:logseq.property/status :is :empty]]}})]
+    (is (= ["Topic page"] (result-titles conn result))
+        "Status default only applies to members of the classes that declare it")))

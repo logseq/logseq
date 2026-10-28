@@ -125,7 +125,7 @@
               new-ids (into #{} (remove seen) extends-ids)]
           (recur new-ids (into seen new-ids)))))))
 
-(defn- property-default-applies?
+(defn property-default-applies?
   "A default defined on a class-declared property only applies to members of
    those classes. Properties declared by no class keep their global default."
   [db eid property-eid]

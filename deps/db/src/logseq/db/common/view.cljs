@@ -434,6 +434,17 @@
   [db eid attr]
   (mapv :v (d/datoms db :eavt eid attr)))
 
+(defn- attr-values-with-default
+  "Stored values of the schema attr on eid, or the property default when none
+  is stored, matching what entity lookup returns."
+  [db eid {:keys [ident prop-eid default-value]}]
+  (let [vs (indexed-attr-values db eid ident)]
+    (if (and (empty? vs)
+             (some? default-value)
+             (entity-plus/property-default-applies? db eid prop-eid))
+      [default-value]
+      vs)))
+
 (defn- attr-keyword
   [db eid attr]
   (when-let [v (indexed-attr-value db eid attr)]
@@ -564,13 +575,19 @@
                                        closed-eids))
                          (into {} (map-indexed (fn [idx eid] [eid idx])
                                                (sort-by #(or (indexed-attr-value db % :block/order) "")
-                                                        closed-eids)))))]
+                                                        closed-eids)))))
+        default-value (when prop-eid
+                        (indexed-attr-value db prop-eid (if (= prop-type :checkbox)
+                                                          :logseq.property/scalar-default-value
+                                                          :logseq.property/default-value)))]
     {:ident property-ident
+     :prop-eid prop-eid
      :type prop-type
      :ref? ref?
      :many? (or (= property-ident :block/tags)
                 (= cardinality :db.cardinality/many))
-     :closed-order closed-order}))
+     :closed-order closed-order
+     :default-value default-value}))
 
 (defn- placeholder-raw-value?
   "empty-placeholder is a keyword on scalar attrs and a ref to the
@@ -590,7 +607,7 @@
 
     :else
     (let [vs (into [] (remove #(placeholder-raw-value? % empty-id ref?))
-                   (indexed-attr-values db eid ident))]
+                   (attr-values-with-default db eid schema))]
       (cond
         (empty? vs)
         nil
@@ -824,9 +841,9 @@
                   (common-util/get-timestamp match))}))
 
 (defn- clause-row
-  [db eid {:keys [ident ref?] :as schema} empty-id]
+  [db eid {:keys [ref?] :as schema} empty-id]
   (let [prop-type (:type schema)
-        raw (indexed-attr-values db eid ident)
+        raw (attr-values-with-default db eid schema)
         first-raw (first raw)]
     {:raw raw
      :ref? ref?
