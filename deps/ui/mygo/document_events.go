@@ -28,6 +28,7 @@ type DocumentEvents struct {
 	context               *ui.Context
 	services              ui.Services
 	pressed               luimygo.InputNode
+	preventMouse          bool
 	composing             bool
 	compositionTarget     luimygo.InputNode
 	compositionSource     codeMirrorCompositionSource
@@ -130,15 +131,28 @@ func (d *DocumentEvents) event(ev ui.InputEvent, target luimygo.InputNode) bool 
 		switch ev.Kind {
 		case ui.InputPointerDown:
 			d.pressed = target
-			taken := d.send(target, "mousedown", payload)
+			d.preventMouse = d.send(target, "pointerdown", payload)
+			taken := d.preventMouse
+			if !d.preventMouse {
+				taken = d.send(target, "mousedown", payload)
+			}
 			if ev.Button == 1 {
 				taken = d.send(target, "contextmenu", payload) || taken
 			}
 			return taken
 		case ui.InputPointerUp:
-			return d.send(target, "mouseup", payload)
+			taken := d.send(target, "pointerup", payload)
+			if !d.preventMouse {
+				taken = d.send(target, "mouseup", payload) || taken
+			}
+			d.preventMouse = false
+			return taken
 		case ui.InputPointerMove:
-			return d.send(target, "mousemove", payload)
+			taken := d.send(target, "pointermove", payload)
+			if !d.preventMouse {
+				taken = d.send(target, "mousemove", payload) || taken
+			}
+			return taken
 		case ui.InputClick:
 			// Never deliver a press to a replacement of the same retained ID.
 			if d.pressed.Node.ID != 0 && !d.pressed.Current() {
