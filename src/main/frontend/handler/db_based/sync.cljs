@@ -220,7 +220,7 @@
       (seq config/COGNITO-CLIENT-ID)
       (assoc :auth/oauth-client-id config/COGNITO-CLIENT-ID))))
 
-(defn- <sync-auth-state-to-db-worker!
+(defn <sync-auth-state-to-db-worker!
   []
   (p/let [_ (user-handler/<ensure-id&access-token!)
           payload (sync-app-state-payload)]
