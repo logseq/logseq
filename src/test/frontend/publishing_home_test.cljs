@@ -1,6 +1,7 @@
 (ns frontend.publishing-home-test
   "HTML export should honor :default-home as the published start page."
-  (:require [cljs.reader :as reader]
+  (:require [clojure.string :as string]
+            [cljs.reader :as reader]
             [cljs.test :refer [deftest is]]
             [electron.ipc :as ipc]
             [frontend.components.container :as container]
@@ -28,6 +29,8 @@
                                        :default-home {:page "My Home"}}
                          :html-options {:title "Published"}})
         published (parse-published-state html)]
+    (is (string/includes? html "static/js/pdf-loader.js"))
+    (is (not (string/includes? html "src=\"static/js/pdfjs/pdf.mjs\"")))
     (is (= "logseq_db_published" (:git/current-repo published))
         "Export writes :git/current-repo so restore does not guess from config keys")
     (is (= {:page "My Home"}

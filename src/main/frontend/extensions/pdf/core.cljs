@@ -985,7 +985,8 @@
                             :supportsMouseWheelZoomCtrlKey true
                             :supportsMouseWheelZoomMetaKey true}]
          (set-loader-state! {:status :loading})
-         (-> (get-doc$ (clj->js opts))
+         (-> (p/let [_ (js/window.loadLogseqPDF)]
+               (get-doc$ (clj->js opts)))
              (p/then (fn [doc]
                        (set-loader-state! {:pdf-document doc :status :completed})))
              (p/catch #(set-loader-state! {:error %})))
