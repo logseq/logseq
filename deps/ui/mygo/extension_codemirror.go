@@ -21,11 +21,12 @@ type codeMirrorTextState struct {
 }
 
 type codeMirrorCompositionSource struct {
-	target     platformTarget
-	state      *codeMirrorTextState
-	buffer     *editor.Buffer
-	role, uuid string
-	focusEpoch uint64
+	target           platformTarget
+	state            *codeMirrorTextState
+	buffer           *editor.Buffer
+	role, uuid       string
+	focusEpoch       uint64
+	windowFocusEpoch uint64
 }
 
 type codeMirrorComposition struct {
@@ -67,6 +68,7 @@ func (s *platformServices) codeMirrorComposition(c *ui.Context, target luimygo.I
 		target.Node.String("source-role") != source.role || target.Node.String("uuid") != source.uuid {
 		return codeMirrorComposition{}
 	}
+	source.windowFocusEpoch = c.WindowFocusEpoch()
 	return codeMirrorComposition{source: source, focused: source.state.handle.Focused(c),
 		composing: source.state.editor.Composing()}
 }
