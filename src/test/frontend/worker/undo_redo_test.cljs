@@ -1873,30 +1873,36 @@
       (is (= "page 1" (:block/title (d/entity @conn [:block/uuid page-uuid])))))))
 
 (deftest redo-create-namespaced-page-restores-uuid-test
-  (testing "redoing a namespaced page create restores the created pages' uuids"
-    (worker-undo-redo/clear-history! test-repo)
-    (let [conn (worker-state/get-datascript-conn test-repo)]
-      (apply-ops! conn
-                  [[:create-page ["ns/leaf-page" {:redirect? false
-                                                 :split-namespace? true
-                                                 :tags ()}]]]
-                  (local-tx-meta {:client-id "test-client"}))
-      (let [child (db-test/find-page-by-title @conn "leaf-page")
-            child-uuid (:block/uuid child)]
-        (is (some? child))
-        (is (map? (worker-undo-redo/undo test-repo)))
-        (let [deleted (db-test/find-page-by-title @conn "leaf-page")
-              deleted-ns (db-test/find-page-by-title @conn "ns")]
-          (is (true? (ldb/recycled? deleted)))
-          (is (true? (ldb/recycled? deleted-ns))))
-        (is (map? (worker-undo-redo/redo test-repo)))
-        (let [restored (db-test/find-page-by-title @conn "leaf-page")
-              restored-ns (db-test/find-page-by-title @conn "ns")]
-          (is (some? restored))
-          (is (= child-uuid (:block/uuid restored)))
-          (is (false? (ldb/recycled? restored)))
-          (is (false? (ldb/recycled? restored-ns)))
-          (is (= (:db/id restored-ns) (:db/id (:block/parent restored)))))))))
+  (doseq [class? [false true]]
+    (testing (str "namespace identities survive repeated undo/redo, class=" class?)
+      (worker-undo-redo/clear-history! test-repo)
+      (let [conn (worker-state/get-datascript-conn test-repo)
+            prefix (if class? "class-root" "page-root")
+            title (str prefix "/branch-" prefix "/leaf-" prefix)]
+        (apply-ops! conn
+                    [[:create-page [title {:redirect? false :split-namespace? true
+                                          :class? class? :tags ()}]]]
+                    (local-tx-meta {:client-id "test-client"}))
+        (let [parent (db-test/find-page-by-title @conn prefix)
+              branch (db-test/find-page-by-title @conn (str "branch-" prefix))
+              leaf (db-test/find-page-by-title @conn (str "leaf-" prefix))
+              uuids (mapv :block/uuid [parent branch leaf])
+              idents (mapv :db/ident [parent branch leaf])]
+          (is (every? uuid? uuids))
+          (doseq [_ (range 2)]
+            (is (map? (worker-undo-redo/undo test-repo)))
+            (is (map? (worker-undo-redo/redo test-repo)))
+            (let [restored (mapv #(d/entity @conn [:block/uuid %]) uuids)
+                  [parent' branch' leaf'] restored
+                  parent-ids (fn [e]
+                               (if class?
+                                 (set (map :db/id (:logseq.property.class/extends e)))
+                                 #{(:db/id (:block/parent e))}))]
+              (is (= uuids (mapv :block/uuid restored)))
+              (is (= idents (mapv :db/ident restored)))
+              (is (not-any? ldb/recycled? restored))
+              (is (contains? (parent-ids branch') (:db/id parent')))
+              (is (contains? (parent-ids leaf') (:db/id branch'))))))))))
 
 (deftest undo-create-property-with-existing-name-removes-new-property-test
   (testing "undoing a property create that reused an existing name removes the new property"
@@ -1924,7 +1930,35 @@
         (is (some? new-ident))
         (is (map? (worker-undo-redo/undo test-repo)))
         (is (nil? (d/entity @conn new-ident)))
-        (is (some? (d/entity @conn :user.property/rating)))))))
+        (is (some? (d/entity @conn :user.property/rating))))
+      (worker-undo-redo/clear-history! test-repo)
+      (apply-ops! conn
+                  [[:upsert-property [nil {:logseq.property/type :number} {:property-name "alpha"}]]
+                   [:upsert-property [nil {:logseq.property/type :number} {:property-name "beta"}]]]
+                  (local-tx-meta {:client-id "test-client" :outliner-op :upsert-property}))
+      (is (map? (worker-undo-redo/undo test-repo)))
+      (is (nil? (d/entity @conn :user.property/alpha)))
+      (is (nil? (d/entity @conn :user.property/beta)))
+      (is (map? (worker-undo-redo/redo test-repo)))
+      (is (= "alpha" (:block/title (d/entity @conn :user.property/alpha))))
+      (is (= "beta" (:block/title (d/entity @conn :user.property/beta)))))))
+
+(deftest redo-created-class-restores-property-created-in-same-batch-test
+  (worker-undo-redo/clear-history! test-repo)
+  (let [conn (worker-state/get-datascript-conn test-repo)
+        class-uuid (random-uuid)]
+    (apply-ops! conn
+                [[:create-page ["gamma" {:uuid class-uuid :class? true :redirect? false}]]
+                 [:upsert-property [:user.property/delta {:logseq.property/type :number}
+                                    {:property-name "delta"}]]
+                 [:class-add-property [class-uuid :user.property/delta]]]
+                (local-tx-meta {:client-id "test-client" :outliner-op :create-page}))
+    (doseq [_ (range 2)]
+      (is (map? (worker-undo-redo/undo test-repo)))
+      (is (map? (worker-undo-redo/redo test-repo)))
+      (let [tag (d/entity @conn [:block/uuid class-uuid])]
+        (is (= #{:user.property/delta}
+               (set (map :db/ident (:logseq.property.class/properties tag)))))))))
 
 (deftest undo-create-page-with-new-tag-removes-tag-test
   (testing "undoing a page create removes tags created in the same transaction"
@@ -1944,7 +1978,13 @@
         (is (some? tag))
         (is (map? (worker-undo-redo/undo test-repo)))
         (is (true? (ldb/recycled? (db-test/find-page-by-title @conn "alpha"))))
-        (is (nil? (d/entity @conn [:block/uuid tag-uuid])))))))
+        (is (nil? (d/entity @conn [:block/uuid tag-uuid])))
+        (is (map? (worker-undo-redo/redo test-repo)))
+        (let [restored (d/entity @conn [:block/uuid (:block/uuid page)])
+              restored-tag (d/entity @conn [:block/uuid tag-uuid])]
+          (is (false? (ldb/recycled? restored)))
+          (is (= (:db/ident tag) (:db/ident restored-tag)))
+          (is (contains? (set (map :block/uuid (:block/tags restored))) tag-uuid)))))))
 
 (deftest redo-create-slash-title-page-restores-uuid-test
   (testing "redoing the create of a page whose title contains a slash restores its uuid"

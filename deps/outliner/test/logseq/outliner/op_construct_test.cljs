@@ -559,24 +559,27 @@
                                         :logical-outdenting? nil}]]]
              inverse-outliner-ops)))))
 
-(deftest get-top-level-blocks-compares-document-position-test
-  (testing "selection order detection compares document position, not raw :block/order across parents"
+(deftest move-blocks-preserves-document-order-across-parents-test
+  (testing "moving a nested block and its following top-level block keeps document order"
     (let [conn (db-test/create-conn-with-blocks
                 {:pages-and-blocks
-                 [{:page {:block/title "page"}
+                 [{:page {:block/title "source"}
                    :blocks [{:block/title "b"
                              :build/children [{:block/title "b1"}
                                               {:block/title "b2"}]}
-                            {:block/title "c"}]}]})
+                            {:block/title "c"}]}
+                  {:page {:block/title "target"} :blocks []}]})
           b (db-test/find-block-by-content @conn "b")
           b2 (db-test/find-block-by-content @conn "b2")
           c (db-test/find-block-by-content @conn "c")
-          ;; b precedes c on the page even though b2's own order is after c's
           _ (d/transact! conn [{:db/id (:db/id b) :block/order "a"}
                                {:db/id (:db/id b2) :block/order "z"}
-                               {:db/id (:db/id c) :block/order "m"}])
-          result (#'outliner-core/get-top-level-blocks
-                  [(d/entity @conn (:db/id b2))
-                   (d/entity @conn (:db/id c))]
-                  false)]
-      (is (= ["b2" "c"] (mapv :block/title result))))))
+                               {:db/id (:db/id c) :block/order "m"}])]
+      (outliner-core/move-blocks! conn
+                                 [(d/entity @conn (:db/id b2)) (d/entity @conn (:db/id c))]
+                                 (db-test/find-page-by-title @conn "target")
+                                 {:sibling? false})
+      (is (= ["b2" "c"]
+             (->> (:block/_parent (db-test/find-page-by-title @conn "target"))
+                  ldb/sort-by-order
+                  (mapv :block/title)))))))
