@@ -182,7 +182,7 @@ let fetch_tag_names_for_repo origin_repo (names : string list)
             (List.map (fun n -> "\"" ^ edn_escape n ^ "\"") names)
         ^ "}"
       in
-      (let* w =
+      let* w =
         Runtime.invoke2 "thread-api/q" (Wire.String repo)
           (Wire.Array
              [ Wire.String
@@ -191,10 +191,7 @@ let fetch_tag_names_for_repo origin_repo (names : string list)
                    [(contains? " ^ set_edn ^ " ?n)]]")
              ])
       in
-      resolved (List.filter_map Wire.as_string (Wire.elems w)))
-      |> Js.Promise.catch (fun e ->
-             Ui_services.log_error ("tag-name lookup failed", e);
-             resolved [])
+      resolved (List.filter_map Wire.as_string (Wire.elems w))
 
 let fetch_tag_names names = fetch_tag_names_for_repo (repo ()) names
 
@@ -209,7 +206,7 @@ let fetch_ref_uuids_for_repo origin_repo (names : string list)
             (List.map (fun n -> "\"" ^ edn_escape n ^ "\"") names)
         ^ "}"
       in
-      (let* w =
+      let* w =
         Runtime.invoke2 "thread-api/q" (Wire.String repo)
           (Wire.Array
              [ Wire.String
@@ -224,10 +221,7 @@ let fetch_ref_uuids_for_repo origin_repo (names : string list)
              | [ Wire.String n; u ] ->
                  Option.map (fun uuid -> (n, uuid)) (Wire.as_uuid u)
              | _ -> None)
-           (Wire.elems w)))
-      |> Js.Promise.catch (fun e ->
-             Ui_services.log_error ("page-ref uuid lookup failed", e);
-             resolved [])
+           (Wire.elems w))
 
 let fetch_ref_uuids names = fetch_ref_uuids_for_repo (repo ()) names
 
