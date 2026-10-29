@@ -546,6 +546,101 @@
           (common-util/page-name-sanity-lc page-name)
           tags'))))))
 
+(defn uniqueness-parent-ids
+  "Ids that define an entity's title-uniqueness group.
+
+   An empty set is the top-level group:
+   - pages with no parent, or with Library as parent
+   - tags that only extend built-in classes (including Root Tag)
+
+   User-tag extends and non-Library page parents are namespace parents, so the
+   same title is allowed under different parents."
+  [entity]
+  (cond
+    (nil? entity)
+    #{}
+
+    (class? entity)
+    (->> (:logseq.property.class/extends entity)
+         (remove (fn [extend]
+                   (or (= :logseq.class/Root (:db/ident extend))
+                       (built-in? extend))))
+         (keep :db/id)
+         set)
+
+    :else
+    (let [parent (:block/parent entity)]
+      (if (and parent (not (db-db/library? parent)))
+        #{(:db/id parent)}
+        #{}))))
+
+(defn- uniqueness-parents-overlap?
+  [a-ids b-ids]
+  (or (and (empty? a-ids) (empty? b-ids))
+      (boolean (seq (set/intersection a-ids b-ids)))))
+
+(defn- normalize-uniqueness-parent-ids
+  [parent-ids]
+  (cond
+    (nil? parent-ids) #{}
+    (number? parent-ids) #{parent-ids}
+    :else (set (remove nil? parent-ids))))
+
+(defn- normalize-page-exists-tag-idents
+  [tags]
+  (let [tags' (if (coll? tags) tags [tags])]
+    (into []
+          (keep (fn [tag]
+                  (cond
+                    (keyword? tag) tag
+                    (:db/ident tag) (:db/ident tag))))
+          tags')))
+
+(defn page-exists-by-parent?
+  "Returns db ids of pages with `page-name` and one of `tags` that share a
+   uniqueness parent with `parent-ids`.
+
+   `parent-ids` nil or empty is the top-level group. A single id or collection
+   of ids matches pages that share any of those parents.
+
+   Optional `opts` may include `:exclude-id` to skip that entity (the page
+   being renamed).
+
+   Name matching follows `page-exists?`: exact :block/title when every tag is
+   Tag or Property, else :block/name (page-name-sanity-lc). This does not
+   change `page-exists?` or create lookup."
+  ([db page-name tags parent-ids]
+   (page-exists-by-parent? db page-name tags parent-ids {}))
+  ([db page-name tags parent-ids {:keys [exclude-id]}]
+   (when (and db page-name)
+     (let [tag-idents (normalize-page-exists-tag-idents tags)
+           parent-ids' (normalize-uniqueness-parent-ids parent-ids)]
+       (when (seq tag-idents)
+         (let [title-attr (if (every? #{:logseq.class/Tag :logseq.class/Property} tag-idents)
+                            :block/title
+                            :block/name)
+               lookup (if (= :block/title title-attr)
+                        page-name
+                        (common-util/page-name-sanity-lc page-name))]
+           (seq
+            (filter (fn [id]
+                      (uniqueness-parents-overlap?
+                       parent-ids'
+                       (uniqueness-parent-ids (d/entity db id))))
+                    (d/q (vec
+                          (concat
+                           '[:find [?b ...]
+                             :in $ ?eid ?name [?tag-ident ...]
+                             :where]
+                           [(vector '?b title-attr '?name)
+                            '[?b :block/tags ?tag]
+                            '[?tag :db/ident ?tag-ident]
+                            '[(not= ?b ?eid)]]))
+                         db
+                         (or exclude-id -1)
+                         lookup
+                         tag-idents)))))))))
+
 (defn get-page
   "Get a page given its unsanitized name or uuid"
   [db page-id-name-or-uuid]
