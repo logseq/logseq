@@ -177,6 +177,22 @@
                               0))]
            (str "pages/" (duplicate-stem (stem-index db) stem index) ".md")))))))
 
+(defn- legacy-page-relative-path
+  "Path a non-journal page had before pages were grouped by `stem-key`: pages
+  were grouped by the exact stem and ` (n)` appended in uuid order."
+  [db page]
+  (when (non-journal-page? page)
+    (when-let [stem (normalize-file-stem (:block/title page))]
+      (let [same-stem-pages (filter #(= stem (normalize-file-stem (:block/title %)))
+                                    (pages-with-file-stem db stem))
+            index (inc (or (first (keep-indexed
+                                   (fn [idx p]
+                                     (when (= (:block/uuid page) (:block/uuid p))
+                                       idx))
+                                   same-stem-pages))
+                           0))]
+        (str "pages/" (if (= 1 index) stem (str stem " (" index ")")) ".md")))))
+
 (defn- mirror-path
   [repo relative-path]
   (str (repo-mirror-dir repo) "/" relative-path))
@@ -264,6 +280,12 @@
   (if-let [f (:delete-file! (storage platform*))]
     (f path)
     (p/rejected (ex-info "platform storage/delete-file! missing" {:path path}))))
+
+(defn- <read-dir
+  "File names in directory `dir`; nil when the platform cannot list it."
+  [platform* dir]
+  (when-let [f (:read-dir! (storage platform*))]
+    (f dir)))
 
 (defn- supported-runtime?
   [platform*]
@@ -748,14 +770,74 @@
 (defn- keep-old-paths-of-other-jobs
   "Jobs run in parallel, so a page must not delete its old file when this batch
   still writes that file: another page took over its name, or the page's own
-  new path differs from it only in case. Paths are compared by `path-key`."
+  new path differs from it only in case. Paths are compared by `path-key`.
+  The kept path is left to `<delete-unowned-files!`, which removes it after the
+  batch when it is a separate file on a case-sensitive file system."
   [jobs]
   (let [new-path-keys (set (keep #(when-not (:delete? %) (some-> (:new-path %) path-key)) jobs))]
     (map (fn [{:keys [old-path] :as job}]
            (if (and old-path (contains? new-path-keys (path-key old-path)))
-             (assoc job :old-path nil)
+             (assoc job :old-path nil :kept-old-path old-path)
              job))
          jobs)))
+
+(defn- unowned-paths
+  "The `candidates` that exist (are in `present`) and no page owns (are not in
+  `owned`). A candidate that differs only in case from an owned path that is not
+  present itself is that page's file: a case-insensitive file system keeps the
+  name a file was created with."
+  [candidates present owned]
+  (let [owned-by-key (group-by path-key owned)]
+    (filter (fn [path]
+              (and (contains? present path)
+                   (not (contains? owned path))
+                   (every? #(contains? present %) (get owned-by-key (path-key path)))))
+            candidates)))
+
+(defn- <delete-unowned-files!
+  "Deletes the `candidates` that exist and no page owns. `owned` must hold
+  every page path that can differ from a candidate only in case."
+  [platform* candidates owned]
+  (if (empty? candidates)
+    (p/resolved nil)
+    (let [dirs (distinct (map #(subs % 0 (string/last-index-of % "/")) candidates))]
+      (p/let [listings (p/all (map #(<read-dir platform* %) dirs))
+              present (set (mapcat (fn [dir file-names]
+                                     (map #(str dir "/" %) file-names))
+                                   dirs listings))]
+        (p/all (map #(<delete-file! platform* %)
+                    (unowned-paths candidates present (set owned))))))))
+
+(defn- page-paths-for-file-name
+  "Paths of the pages whose file can be named like `path`: the pages sharing its
+  stem key, and the pages whose ` (n)` suffix gives its stem."
+  [repo db path opts]
+  (when-let [stem (second (re-matches #".*/pages/(.+)\.md$" path))]
+    (let [base-stem (second (re-matches duplicate-suffix-re stem))]
+      (->> (concat (pages-with-file-stem db stem)
+                   (when base-stem (pages-with-file-stem db base-stem)))
+           (keep #(some->> (page-relative-path db % opts) (mirror-path repo)))))))
+
+(defn- <delete-files-left-by-jobs!
+  "After a batch, deletes the files its pages left behind that no page owns: an
+  old path kept by `keep-old-paths-of-other-jobs`, and the path a written page
+  had before pages were grouped by `stem-key` (a mirror written by an older
+  version on a case-sensitive file system)."
+  [platform* repo jobs opts]
+  (let [candidates (distinct
+                    (mapcat (fn [{:keys [db page-id new-path kept-old-path delete?]}]
+                              (let [legacy-path (when-not delete?
+                                                  (some->> (d/entity db page-id)
+                                                           (legacy-page-relative-path db)
+                                                           (mirror-path repo)))]
+                                (keep (fn [path] (when path [path db]))
+                                      [kept-old-path
+                                       (when (not= legacy-path new-path) legacy-path)])))
+                            jobs))
+        owned (concat (keep #(when-not (:delete? %) (:new-path %)) jobs)
+                      (mapcat (fn [[path db]] (page-paths-for-file-name repo db path opts))
+                              candidates))]
+    (<delete-unowned-files! platform* (map first candidates) owned)))
 
 (defn- <run-job!
   [platform* {:keys [repo db page-id old-path new-path delete?]} opts]
@@ -778,6 +860,13 @@
                                   (= :unchanged (:reason result)))))
                 (<delete-file! platform* old-path))]
       result)))
+
+(defn- <run-jobs!
+  [platform* repo jobs opts]
+  (let [jobs (keep-old-paths-of-other-jobs jobs)]
+    (p/let [results (p/all (map #(<run-job! platform* % opts) jobs))
+            _ (<delete-files-left-by-jobs! platform* repo jobs opts)]
+      results)))
 
 (defn <handle-tx-report!
   [repo _conn {:keys [db-before db-after] :as tx-report} {:keys [platform defer?] :as opts}]
@@ -809,15 +898,29 @@
                 (schedule-flush! repo opts')
                 (p/resolved {:status :queued
                              :count (count jobs)}))
-              (p/all (map #(<run-job! platform* % opts') (keep-old-paths-of-other-jobs jobs)))))))
+              (<run-jobs! platform* repo jobs opts')))))
       (p/resolved {:status :skipped
                    :reason :disabled-or-unsupported}))))
 
 (defn <flush-repo!
   [repo {:keys [platform] :as opts}]
   (let [platform* (or platform (platform/current))
-        jobs (keep-old-paths-of-other-jobs (drain-repo-jobs! repo))]
-    (p/all (map #(<run-job! platform* % opts) jobs))))
+        jobs (drain-repo-jobs! repo)]
+    (<run-jobs! platform* repo jobs opts)))
+
+(defn- <delete-unowned-mirror-files!
+  "Regeneration removes the mirror files no page owns any more, such as a
+  page's file from before another page took its name."
+  [platform* repo db opts]
+  (let [owned (keep #(some->> (page-relative-path db % opts) (mirror-path repo))
+                    (mirrorable-pages db))
+        dirs (map #(mirror-path repo %) ["pages" "journals"])]
+    (p/let [listings (p/all (map #(<read-dir platform* %) dirs))
+            candidates (->> (mapcat (fn [dir file-names]
+                                      (map #(str dir "/" %) file-names))
+                                    dirs listings)
+                            (filter #(string/ends-with? % ".md")))]
+      (<delete-unowned-files! platform* candidates owned))))
 
 (defn <mirror-repo!
   [repo db {:keys [platform] :as opts}]
@@ -827,7 +930,8 @@
                    :reason :unsupported-runtime})
       (p/let [results (p/all
                        (map #(<mirror-page! repo db (:db/id %) (assoc opts :platform platform*))
-                            (mirrorable-pages db)))]
+                            (mirrorable-pages db)))
+              _ (<delete-unowned-mirror-files! platform* repo db opts)]
         {:status :completed
          :count (count results)
          :results results}))))
