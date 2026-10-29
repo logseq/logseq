@@ -86,6 +86,16 @@
     (is (empty? (map :entity (:errors (db-validate/validate-local-db! db))))
         "Imported graph validates")))
 
+(deftest-async bare-tag-after-namespace-tag-is-its-own-class
+  (p/let [conn (import-files-converting-tags! [["pages/c.md" "- c #work/x"]
+                                               ["pages/d.md" "- d #x"]])
+          db @conn
+          d-block (db-test/find-block-by-content db #"^d")
+          d-tags (remove :logseq.property/built-in? (:block/tags d-block))]
+    (is (= 2 (count (filter ldb/class? (pages-named db "x")))) "work/x and x are two classes")
+    (is (= 1 (count d-tags)) "The block has one user tag")
+    (is (not (some gp-block/namespace-child-page? d-tags)) "#x is the root class x, not work/x")))
+
 (deftest-async tag-naming-an-imported-journal-keeps-the-journal-a-journal
   (p/let [conn (import-files-converting-tags! [["journals/2025_12_31.md" "- j"]
                                                ["pages/a.md" "- t #[[Dec 31st, 2025]]"]])
