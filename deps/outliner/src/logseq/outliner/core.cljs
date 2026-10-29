@@ -278,6 +278,26 @@
                    (contains? (ref-tag-idents ref) :logseq.class/Journal)))
       day)))
 
+(defn- keep-journal-title-and-name
+  "`create` finds an existing journal through its day, or makes one for a title
+  the editor did not parse as a journal: the journal's title and name win over
+  the ref's, which follow the editor's date format and would rename the journal.
+  Takes and returns what `resolve-page-ref` returns."
+  [db [ref' tx-data :as resolved-ref]]
+  (let [page-uuid (:block/uuid ref')
+        journal (when (uuid? page-uuid)
+                  (or (let [page (d/entity db [:block/uuid page-uuid])]
+                        (when (:block/journal-day page)
+                          page))
+                      (some #(when (and (map? %)
+                                        (= page-uuid (:block/uuid %))
+                                        (:block/journal-day %))
+                               %)
+                            tx-data)))]
+    (if journal
+      [(merge ref' (select-keys journal [:block/title :block/name])) tx-data]
+      resolved-ref)))
+
 (defn- resolve-page-ref
   [db ref tag-names]
   (if (new-page-ref? ref)
@@ -302,23 +322,8 @@
                                                                   :class? class?
                                                                   :journal? (or (= "journal" (:block/type ref))
                                                                                 (contains? (ref-tag-idents ref)
-                                                                                           :logseq.class/Journal))})
-              ;; `create` finds an existing journal through its day, or makes one for a
-              ;; title the editor did not parse as a journal: the journal's title and name
-              ;; win over the ref's, which follow the editor's date format and would
-              ;; rename the journal.
-              journal (when (uuid? page-uuid)
-                        (or (let [page (d/entity db [:block/uuid page-uuid])]
-                              (when (:block/journal-day page)
-                                page))
-                            (some #(when (and (map? %)
-                                              (= page-uuid (:block/uuid %))
-                                              (:block/journal-day %))
-                                     %)
-                                  tx-data)))]
-          [(cond-> (assoc (merge (select-keys ref [:block/title :block/name :block.temp/original-page-name])
-                                 (when journal
-                                   (select-keys journal [:block/title :block/name])))
+                                                                                           :logseq.class/Journal))})]
+          [(cond-> (assoc (select-keys ref [:block/title :block/name :block.temp/original-page-name])
                           :block/uuid page-uuid)
              class? (assoc :db/ident (or (some :db/ident tx-data)
                                          (:db/ident (d/entity db [:block/uuid page-uuid])))))
@@ -343,7 +348,8 @@
                                   (select-keys ref [:block.temp/original-page-name]))
                             nil])
            seen]
-          (let [[ref' tx-data :as resolved-ref] (resolve-page-ref db ref tag-names)]
+          (let [[ref' tx-data :as resolved-ref] (cond->> (resolve-page-ref db ref tag-names)
+                                                  new-page? (keep-journal-title-and-name db))]
             [(conj resolved resolved-ref)
              (if (and new-page? (seq tx-data))
                (assoc seen dedup-key ref')
