@@ -10189,6 +10189,7 @@ let () = Native_embed.with_entry_lock (fun () ->
   and previous_queue=Queue.copy Editor_state.pending_edit_actions
   and previous_real= !Editor_state.pending_edit_real
   and previous_reload= !Runtime.reload_current_view
+  and previous_owned_reload= !Runtime.reload_current_view_owned
   and previous_refresh=Runtime.hooks.refresh_after_ops
   and previous_properties=Runtime.hooks.refresh_property_areas in
   Fun.protect ~finally:(fun () ->
@@ -10203,6 +10204,7 @@ let () = Native_embed.with_entry_lock (fun () ->
     Queue.iter (fun f -> Queue.add f Editor_state.pending_edit_actions) previous_queue;
     Editor_state.pending_edit_real:=previous_real;
     Runtime.reload_current_view:=previous_reload;
+    Runtime.reload_current_view_owned:=previous_owned_reload;
     Runtime.hooks.refresh_after_ops<-previous_refresh;
     Runtime.hooks.refresh_property_areas<-previous_properties;
     Editor_actions.cancel_pending_focus ()) (fun () ->
@@ -10216,6 +10218,8 @@ let () = Native_embed.with_entry_lock (fun () ->
       Editor_state.structure_pending:=false;Queue.clear Editor_state.pending_edit_actions;
       Editor_state.pending_edit_real:=0;
       Runtime.reload_current_view:=(fun () -> Js.Promise.resolve ());
+      Runtime.reload_current_view_owned:=(fun origin ->
+        Js.Promise.resolve (Runtime.Reload_unchanged origin));
       let writes=ref [] and complete=ref (fun () -> ()) in
       let refreshed ()=Subs_state.task_of_promise (Js.Promise.resolve ()) in
       Runtime.hooks.refresh_after_ops<-refreshed;

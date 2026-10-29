@@ -1969,8 +1969,7 @@ let () =
           (Editor_state.st, Editor_state.field_sigs_opt,
            Editor_state.active_frame, Editor_state.pending_focus_actions,
            Editor_state.pending_edit_actions, Editor_state.optimistic_input_replay)
-      ; "split_actions", Obj.repr
-          (Editor_actions.split_commits, Editor_actions.split_restore)
+      ; "split_actions", Obj.repr Editor_actions.active_split_batch
       ; "inline_caches", Obj.repr
           (Render_inline.pull_caches, Render_inline.invalidated_gens,
            Render_inline.minted_meta)
@@ -2010,7 +2009,10 @@ let () =
           ; "page_signals",`Int (Hashtbl.length Subs_state.page_items)
           ; "journal_signals",`Int (Hashtbl.length Subs_state.journal_items)
           ; "property_areas",`Int (Hashtbl.length Properties_state.areas)
-          ; "pending_split_actions",`Int (Queue.length Editor_actions.split_commits)
+          ; "pending_split_actions",`Int
+              (match !(Editor_actions.active_split_batch) with
+               | None -> 0
+               | Some batch -> Queue.length batch.commits)
           ; "pending_edit_actions",`Int (Queue.length Editor_state.pending_edit_actions)
           ; "worker_reads",`Int (Hashtbl.length Worker_client.inflight_reads)
           ]
