@@ -520,10 +520,10 @@
 
 (deftest task-query-requires-task-class
   (load-test-files
-   {:classes {:Projekt {:build/class-properties [:logseq.property/status]}
+   {:classes {:Record {:build/class-properties [:logseq.property/status]}
               :Work {:build/class-extends [:logseq.class/Task]}}
     :pages-and-blocks
-    [{:page {:block/title "Projekt page" :build/tags [:Projekt]}}
+    [{:page {:block/title "Record page" :build/tags [:Record]}}
      {:page {:block/title "page1"}
       :blocks [{:block/title "explicit todo task"
                 :build/tags [:logseq.class/Task]
@@ -532,10 +532,10 @@
                 :build/tags [:logseq.class/Task]}
                {:block/title "work subclass task"
                 :build/tags [:Work]}
-               {:block/title "projekt default status"
-                :build/tags [:Projekt]}
-               {:block/title "projekt explicit todo"
-                :build/tags [:Projekt]
+               {:block/title "record default status"
+                :build/tags [:Record]}
+               {:block/title "record explicit todo"
+                :build/tags [:Record]
                 :build/properties {:logseq.property/status :logseq.property/status.todo}}]}]})
 
   (is (= #{"explicit todo task" "implicit todo task" "work subclass task"}

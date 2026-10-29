@@ -300,34 +300,3 @@
              (titles '[:find (pull ?b [:block/title]) :where (priority ?b #{"Very High"})])))
       (is (= ["urgent task"]
              (titles '[:find (pull ?b [:block/title]) :where (priority ?b #{"very high"})]))))))
-
-(deftest task-rule-requires-task-class
-  (let [conn (db-test/create-conn-with-blocks
-              {:classes {:Projekt {:build/class-properties [:logseq.property/status]}
-                         :Work {:build/class-extends [:logseq.class/Task]}}
-               :pages-and-blocks
-               [{:page {:block/title "Projekt page" :build/tags [:Projekt]}}
-                {:page {:block/title "Page1"}
-                 :blocks [{:block/title "explicit todo task"
-                           :build/tags [:logseq.class/Task]
-                           :build/properties {:logseq.property/status :logseq.property/status.todo}}
-                          {:block/title "implicit todo task"
-                           :build/tags [:logseq.class/Task]}
-                          {:block/title "work subclass task"
-                           :build/tags [:Work]}
-                          {:block/title "projekt default status"
-                           :build/tags [:Projekt]}
-                          {:block/title "projekt explicit todo"
-                           :build/tags [:Projekt]
-                           :build/properties {:logseq.property/status :logseq.property/status.todo}}
-                          {:block/title "priority only"
-                           :build/properties {:logseq.property/priority :logseq.property/priority.high}}]}]})
-        titles (fn [q] (->> (q-with-rules q @conn)
-                            (map (comp :block/title first))
-                            set))]
-    (is (= #{"explicit todo task" "implicit todo task" "work subclass task"}
-           (titles '[:find (pull ?b [:block/title]) :where (task ?b #{"Todo"})]))
-        "task rule matches Task and Task subclasses, not a non-Task class that declares Status default Todo")
-    (is (= #{"priority only"}
-           (titles '[:find (pull ?b [:block/title]) :where (priority ?b #{"High"})]))
-        "priority still matches Priority-only blocks that are not tagged Task")))
