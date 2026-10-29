@@ -374,6 +374,8 @@ let reload_current_view_owned origin =
     | Model.File _ | Model.Not_found _ | Model.Settings ->
         Js.Promise.resolve (Runtime.Reload_unchanged origin)
 
+let () = Runtime.reload_current_view_owned := reload_current_view_owned
+
 (* scroll-end pagination — the next [journals_chunk] days fetch + append;
    days already loaded (e.g. a fresh page created mid-session) are
    deduped by uuid so the keyed list never sees the same day twice *)
@@ -774,7 +776,6 @@ let load_block_zoom uuid =
 
 let load_route (route : Model.route) =
   loading_route := Some route;
-  Runtime.reload_current_view_owned := reload_current_view_owned;
   (* the non-page refresh hook belongs to the route that assigned it —
      re-arm it per route so callers (page-icon writes, the refresh
      fallback) reload *this* view instead of whatever route last set it *)
