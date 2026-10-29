@@ -372,6 +372,11 @@ let merge_collapsed add rem =
   if S.ready () then S.set_silent apply
   else S.defer_init apply
 
+exception Worker_load_error of Wire.t
+
+let check_loader_result value =
+  if Rtc_error.is_error value then raise (Worker_load_error value)
+
 (* Fetch the linked entity's blocks for every :block/link (embed) block in
    a decoded tree and attach them as block_embed_children. Recurses into
    fetched trees; [ancestors] is the chain of linked db ids guarding
@@ -390,14 +395,14 @@ let rec fill_embed_children repo ancestors collapsed
     let embed_p =
       match b.Model.block_link with
       | Some link_id when not (List.mem link_id ancestors) ->
-          (let* w =
+          let* w =
             Runtime.invoke3 "thread-api/get-page-blocks-tree"
               (Wire.String repo) (Wire.Int link_id) Wire.Nil
           in
+          check_loader_result w;
           collapsed := collect_collapsed !collapsed w;
           fill_embed_children repo (link_id :: ancestors)
-            collapsed (Decode.blocks_of_wire w))
-          |> Js.Promise.catch (fun _ -> Js.Promise.resolve [])
+            collapsed (Decode.blocks_of_wire w)
       | _ -> Js.Promise.resolve []
     in
     let* a = Js.Promise.all [| children_p; embed_p |] in
@@ -459,6 +464,7 @@ let tag_titles repo ids : (int * (string * string * bool * string * Node_icon.t 
                       ]) ])
             ids))
   in
+  check_loader_result w;
   Js.Promise.resolve
     (List.filter_map
        (fun pair ->
@@ -547,6 +553,7 @@ let resolve_page_tags repo (page : Model.page) : Model.page Js.Promise.t =
     Runtime.invoke2 "thread-api/get-case-page" (Wire.String repo)
       (Wire.String page.Model.page_title)
   in
+  check_loader_result w;
   (* get-case-page encodes multi-ref values as a plain set of
             entity ids (unlike the {:db/id} stubs in entity maps) *)
   let ids =
@@ -611,6 +618,7 @@ let fetch_zoom_blocks repo uuid : Wire.t Js.Promise.t =
              ]
          ])
   in
+  check_loader_result w;
   match Wire.elems w with
   | [ pair ] -> (
       let blk =
@@ -699,6 +707,7 @@ let prefetch_anchor_refs_for ~current repo (blocks : Model.block list) :
          Runtime.invoke2 "thread-api/get-blocks" (Wire.String repo)
            (Wire.Array reqs)
        in
+       check_loader_result w;
        if current () then Render_inline.prime_pull_caches repo w;
        Js.Promise.resolve ())
 
@@ -711,6 +720,7 @@ let prefetch_anchor_refs repo blocks =
    ~plain skips the collapse/embed/view shaping — sidebar items only need
    decoded + tag-resolved blocks and must not touch editor collapse state. *)
 let blocks_of_tree_wire_for ~current ?(plain = false) repo (p : Model.page) blocks_w =
+  check_loader_result blocks_w;
   if plain then resolve_block_tags_for (Some repo) (Decode.blocks_of_wire blocks_w)
   else
     let collapsed = ref S.String_set.empty in
@@ -749,6 +759,7 @@ let fetch_zoom_parents repo uuid : Model.block list Js.Promise.t =
     Runtime.invoke2 "thread-api/get-block-parents" (Wire.String repo)
       (Wire.List [ Wire.Keyword "block/uuid"; Wire.Uuid uuid ])
   in
+  check_loader_result parents_w;
   Js.Promise.resolve
     (Wire.elems parents_w
      |> List.filter_map (fun w ->
