@@ -120,10 +120,11 @@
    (component-page/batch-delete-dialog selected-rows ok-handler)))
 
 (defevent! :modal/show-cards [[_ cards-id]]
-  (shui/dialog-open!
-   (fn [] (fsrs/cards-view cards-id nil))
-   {:id :srs
-    :label :flashcards__cp}))
+  (when (state/enable-flashcards?)
+    (shui/dialog-open!
+     (fn [] (fsrs/cards-view cards-id nil))
+     {:id :srs
+      :label :flashcards__cp})))
 
 (defevent! :modal/show-themes-modal [[_ classic?]]
   (if classic?
