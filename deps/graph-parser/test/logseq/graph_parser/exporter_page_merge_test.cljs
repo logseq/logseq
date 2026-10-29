@@ -185,6 +185,16 @@
     (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
         "Imported graph validates")))
 
+(deftest-async alias-of-a-journal-imported-before-the-journal-file
+  (p/let [conn (export-file-graph-in-order! [["pages/a.md" "alias:: [[Jan 5th, 2026]]\n\n- x"]
+                                             ["journals/2026_01_05.md" "- j"]])
+          journal (db-test/find-journal-by-journal-day @conn 20260105)
+          a (ldb/get-page @conn "a")]
+    (is (= #{"j"} (page-block-titles journal)) "The journal file is imported")
+    (is (= [(:db/id journal)] (map :db/id (:block/alias a))) "a's alias is the journal")
+    (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+        "Imported graph validates")))
+
 (deftest-async journal-file-and-page-file-with-tags-for-same-date-make-one-valid-journal
   (p/let [conn (import-files! [["journals/2023_06_21.md" "- j1"]
                                ["pages/Jun 21st, 2023.md" "tags:: foo\n\n- p1"]])
