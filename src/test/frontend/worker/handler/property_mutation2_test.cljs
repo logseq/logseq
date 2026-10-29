@@ -106,8 +106,11 @@
     (is (every? #(and (map? %) (not (de/entity? %))) (:initial-choices data))
         "choices are plain maps")
     (testing "extends options hide the extends-hidden tags"
-      (is (= (set (map :db/ident (worker-property/get-all-classes @conn {:except-extends-hidden-tags? true})))
-             (set (map :db/ident (:extends-class-options data)))))
+      ;; the Root Tag is the implicit parent: whether it is also offered is not what this checks
+      (is (= (disj (set (map :db/ident (worker-property/get-all-classes @conn {:except-extends-hidden-tags? true})))
+                   :logseq.class/Root)
+             (disj (set (map :db/ident (:extends-class-options data)))
+                   :logseq.class/Root)))
       (is (not= (set (map :db/ident (:extends-class-options data)))
                 (set (map :db/ident (:all-classes data))))))
     (testing "class ids are not duplicated and the root class is not a choice class"
