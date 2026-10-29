@@ -58,3 +58,57 @@
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))))
           (p/finally done)))))
+
+(deftest kv-store-keeps-every-key-of-overlapping-writers-test
+  (async done
+    ;; Each platform has its own kv-store, as the worker of each graph process
+    ;; does, so only the lock file orders their writes
+    (let [root-dir (node-helper/create-tmp-dir "platform-node-kv-store-writers")
+          writer-keys (fn [writer] (map #(str "writer-" writer "-key-" %) (range 5)))]
+      (-> (p/let [kvs (p/all (repeatedly 4 #(<kv root-dir)))
+                  _ (p/all (for [[writer kv] (map-indexed vector kvs)
+                                 k (writer-keys writer)]
+                             ((:set! kv) k k)))
+                  kv-reopened (<kv root-dir)
+                  all-keys (mapcat writer-keys (range 4))
+                  values (p/all (map (:get kv-reopened) all-keys))]
+            (is (= all-keys values) "Every key of every writer is in the file")
+            (is (not (fs/existsSync (node-path/join root-dir "kv-store.json.lock")))
+                "The writers released the lock file"))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest kv-store-write-waits-for-a-held-lock-test
+  (async done
+    (let [root-dir (node-helper/create-tmp-dir "platform-node-kv-store-held-lock")
+          lock-path (node-path/join root-dir "kv-store.json.lock")]
+      (-> (p/let [kv (<kv root-dir)
+                  _ (fs/writeFileSync lock-path "other process")
+                  ;; In a vector so that p/let does not wait for the write here
+                  [write] [((:set! kv) "k" "v")]
+                  _ (p/delay 200)
+                  value-while-locked ((:get kv) "k")
+                  _ (fs/rmSync lock-path)
+                  _ write
+                  value ((:get kv) "k")]
+            (is (nil? value-while-locked) "The write waits while another process holds the lock")
+            (is (= "v" value) "The write runs once the lock is released"))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest kv-store-write-removes-a-stale-lock-test
+  (async done
+    (let [root-dir (node-helper/create-tmp-dir "platform-node-kv-store-stale-lock")
+          lock-path (node-path/join root-dir "kv-store.json.lock")
+          minute-ago (/ (- (js/Date.now) 60000) 1000)]
+      (-> (p/let [kv (<kv root-dir)
+                  _ (fs/writeFileSync lock-path "dead process")
+                  _ (fs/utimesSync lock-path minute-ago minute-ago)
+                  _ ((:set! kv) "k" "v")
+                  value ((:get kv) "k")]
+            (is (= "v" value) "A lock left by a dead process does not block the write"))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally done)))))
