@@ -269,12 +269,21 @@ let rewrite_title title resolved =
 type parsed = { title : string; refs : Wire.t list; tags : Wire.t list }
 
 let parse ?(origin_repo = Sdk_util.repo ()) title =
+  let cache_context_revision =
+    let entry_model = Runtime.model () in
+    if entry_model.Model.repo = Some origin_repo then
+      Some entry_model.Model.context_revision
+    else None
+  in
   let names, tags, hash = scan_title title in
   let* resolved = resolve_names ~origin_repo names tags hash in
+  let fresh_model = Runtime.model () in
   (* seed the render pull caches with the resolved metas: a remounted
      [[uuid]] anchor then paints its title immediately instead of
      waiting on a worker pull *)
-  if (Runtime.model ()).Model.repo = Some origin_repo then
+  if fresh_model.Model.repo = Some origin_repo
+     && cache_context_revision = Some fresh_model.Model.context_revision
+  then
     List.iter
       (fun r ->
         if r.fresh then Render_inline.prime_ref_metas [ (r.name, r.uuid) ]
