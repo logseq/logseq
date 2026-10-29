@@ -1695,6 +1695,15 @@
            (js/console.error error)
            (log/error :save-block-failed error)))))))
 
+(defn save-current-block-when-hidden!
+  "Saves the text being edited when the page is hidden: the window is
+  minimized or reloaded, the tab switched, the app sent to the background (on
+  mobile the OS may then kill it). The auto-save timer never fires there."
+  [visibility-state]
+  (when (and (= "hidden" visibility-state)
+             (state/get-edit-block))
+    (save-current-block! {:flush-input? true})))
+
 (defn save-current-block-before-navigate!
   "Closes any open editor popup so the raw textarea value is persisted,
    then exits editing."
@@ -2017,10 +2026,19 @@
 
 (declare handle-last-input)
 
+(defn- typing-tag-at-cursor?
+  "True while the text before the cursor ends in a tag being typed (`#ta`,
+  `#[[my ta`): saving it would create a tag for the half-typed name. A tag
+  elsewhere in the block is complete and does not hold back the save."
+  [value cursor-pos]
+  (let [before-cursor (subs value 0 (min (count value) (or cursor-pos (count value))))]
+    (boolean (re-find #"#(?:\[\[[^\]]*|\S+)$" before-cursor))))
+
 (defn edit-box-on-change!
   [e block id]
   (when (current-edit-block? block)
     (let [value (util/evalue e)
+          cursor-pos (some-> e .-target util/get-selection-start)
           repo (state/get-current-repo)]
       (state/set-edit-content! id value false)
       (clear-block-auto-save-timeout!)
@@ -2029,8 +2047,7 @@
               (js/setTimeout
                (fn []
                  (when (and (state/input-idle? repo :diff 450)
-                          ;; don't auto-save block if it has tags
-                            (not (re-find #"#\S+" value)))
+                            (not (typing-tag-at-cursor? value cursor-pos)))
                    ; don't auto-save for page's properties block
                    (save-current-block! {:skip-properties? true})))
                450))
