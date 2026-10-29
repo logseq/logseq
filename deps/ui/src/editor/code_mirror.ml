@@ -217,6 +217,8 @@ type block_instance =
 
 let instances : (string, block_instance) Hashtbl.t = Hashtbl.create 8
 
+let file_instance : block_instance option ref = ref None
+
 let composition_sources : (unit -> bool) list ref = ref []
 
 let register_composition_source source =
@@ -237,6 +239,11 @@ let composition_active (ev : Ui_services.ev) =
                     && D.el_is_connected (get_wrapper st.cm)
                     && focused_client (get_input st.cm)))
        instances false
+  || (match !file_instance with
+      | Some st -> st.composition_live
+                   && D.el_is_connected (get_wrapper st.cm)
+                   && focused_client (get_input st.cm)
+      | None -> false)
   || List.exists (fun source -> source ()) !composition_sources
 
 let with_model_update st f =
@@ -702,22 +709,24 @@ let copy_button uuid =
          Ui_task.resolve ()))
   | None -> ()
 
-(* -- file-page editor (#/file/<path>) --
+(* File editors share committed-document semantics with code blocks,
+   but publish through the file controller rather than block saves. *)
 
-   Same vendored CM5 as code blocks, mounted without the block wiring:
-   change/blur just report the doc to the caller (file_view saves via
-   the file transact), Esc persists instead of exiting an edit state
-   that does not exist here. *)
-
-external to_textarea : t -> unit = "toTextArea" [@@mel.send]
-
-let file_instance : t option ref = ref None
+let current_file_instance c =
+  match !file_instance with
+  | Some st when st.cm == c && D.el_is_connected (get_wrapper c) -> Some st
+  | _ -> None
 
 let unmount_file () =
   match !file_instance with
-  | Some c ->
-      to_textarea c;
-      file_instance := None
+  | Some st ->
+      file_instance := None;
+      List.iter
+        (fun (el, name, f, capture) -> remove_listener el name f capture)
+        st.listeners;
+      st.listeners <- [];
+      cancel_composition st;
+      to_textarea st.cm
   | None -> ()
 
 let mount_file ~on_change textarea =
@@ -729,8 +738,18 @@ let mount_file ~on_change textarea =
       (Option.value (D.el_get_attr textarea "data-lang") ~default:"")
   in
   let mode = cm_mode lang in
+  let publish c =
+    match current_file_instance c with
+    | Some st when not st.synchronizing && st.composition = None ->
+        let value = get_value c in
+        if value <> st.committed then begin
+          st.committed <- value;
+          on_change value
+        end
+    | _ -> ()
+  in
   let extra_keys =
-    Js.Dict.fromList [ ("Esc", fun c -> on_change (get_value c)) ]
+    Js.Dict.fromList [ ("Esc", publish) ]
   in
   let opts =
     Js.Dict.fromList
@@ -746,9 +765,49 @@ let mount_file ~on_change textarea =
   (* extraKeys values are cm callbacks, not json — set via js_set *)
   Web_dom.js_set opts_json "extraKeys" extra_keys;
   let c = from_textarea (cm ()) textarea opts_json in
-  file_instance := Some c;
-  on_event c "change" (fun c -> on_change (get_value c));
-  on_event c "blur" (fun c -> on_change (get_value c));
+  let st =
+    { cm = c; committed = get_value c; composition = None
+    ; composition_live = false; synchronizing = false; listeners = [] }
+  in
+  file_instance := Some st;
+  on_event c "change" publish;
+  on_event c "blur" (fun c ->
+      match current_file_instance c with
+      | Some st ->
+          st.composition_live <- false;
+          cancel_composition st;
+          publish c
+      | None -> ());
+  on_dom_event c "keydown" (fun c ev ->
+      match current_file_instance c with
+      | Some st when composing_key st ev ->
+          ignore_cm_event ev true;
+          D.ev_stop_propagation ev
+      | None ->
+          ignore_cm_event ev true;
+          D.ev_stop_propagation ev
+      | _ -> ());
+  let listen name capture f =
+    let input = get_input c in
+    D.el_listen input name f capture;
+    st.listeners <- (input, name, f, capture) :: st.listeners
+  in
+  listen "compositionstart" true (fun _ ->
+      if current_file_instance c <> None then begin
+        cancel_composition st;
+        st.composition_live <- true;
+        st.composition <- Some
+          { history = get_history c; selections = list_selections c
+          ; cancelled = false }
+      end);
+  listen "compositionend" false (fun _ ->
+      match current_file_instance c, st.composition with
+      | Some _, Some pending ->
+          if pending.cancelled then cancel_composition st;
+          st.composition_live <- false;
+          st.composition <- None;
+          if not pending.cancelled then publish c
+      | _ -> ());
   save c;
   refresh c;
   match mode_file lang with
@@ -756,8 +815,8 @@ let mount_file ~on_change textarea =
       ignore
         (ensure_mode file
          |> Js.Promise.then_ (fun () ->
-                (match !file_instance with
-                 | Some c' when c' == c ->
+                (match current_file_instance c with
+                 | Some _ ->
                      set_option c "mode" (Js.Json.string mode)
                  | _ -> ());
                 Js.Promise.resolve ()))
