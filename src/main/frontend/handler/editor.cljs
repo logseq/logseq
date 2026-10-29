@@ -2039,10 +2039,11 @@
 (defn- typing-tag-at-cursor?
   "True while the text before the cursor ends in a tag being typed (`#ta`,
   `#[[my ta`): saving it would create a tag for the half-typed name. A tag
-  elsewhere in the block is complete and does not hold back the save."
+  elsewhere in the block is complete and does not hold back the save. A `#`
+  inside a word (a URL fragment like `example.com/#anchor`) is not a tag."
   [value cursor-pos]
   (let [before-cursor (subs value 0 (min (count value) (or cursor-pos (count value))))]
-    (boolean (re-find #"#(?:\[\[[^\]]*|\S+)$" before-cursor))))
+    (boolean (re-find #"(?:^|\s)#(?:\[\[[^\]]*|\S+)$" before-cursor))))
 
 (defn edit-box-on-change!
   [e block id]
