@@ -309,7 +309,7 @@ function logEvent(opts, event) {
   }
 }
 
-export function recordStressOutcome(summary, event) {
+function recordStressOutcome(summary, event) {
   if (event.event === "worker-error") {
     summary.workerErrors += 1;
     summary.unexpectedErrors += 1;
@@ -330,7 +330,7 @@ export function recordStressOutcome(summary, event) {
   }
 }
 
-export function assertStressRunSucceeded(summary) {
+function assertStressRunSucceeded(summary) {
   if (summary.unexpectedErrors > 0) {
     throw new Error(`Stress run completed with ${summary.unexpectedErrors} unexpected errors; see operation-summary`);
   }
@@ -1267,7 +1267,7 @@ async function createStressTree(opts, state, page, stamp, context) {
   return response;
 }
 
-export function assertStressTree(response, stamp, createdIds) {
+function assertStressTree(response, stamp, createdIds) {
   const rows = response.parsed?.data?.result;
   const fail = () => { throw new Error("create-tree preflight failed: expected a persisted root, nested child and ordered sibling"); };
   if (!response.ok || !Array.isArray(rows) || rows.length !== 3 || createdIds.length !== 3 || new Set(createdIds).size !== 3) {
@@ -1287,7 +1287,7 @@ export function assertStressTree(response, stamp, createdIds) {
   }
 }
 
-export async function preflightCreateTree(opts, state) {
+async function preflightCreateTree(opts, state) {
   const stamp = `${state.runId} ${opts.clientName} preflight`;
   const context = { op: "preflight-create-tree" };
   const created = await createStressTree(opts, state, opts.page, stamp, context);
@@ -2314,7 +2314,7 @@ async function multiClientTodayJournalRace(opts, cluster, context) {
   }
 }
 
-export async function runOperation(opts, state, workerId, seq, forcedOp = null) {
+async function runOperation(opts, state, workerId, seq, forcedOp = null) {
   const op = forcedOp || weightedOperation(opts);
   const stamp = `${state.runId} worker=${workerId} seq=${seq} op=${op}`;
   await refreshLiveIdsIfNeeded(opts, state, "operation");
