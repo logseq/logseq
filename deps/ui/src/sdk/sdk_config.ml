@@ -57,7 +57,7 @@ let read_config repo =
 let write_config repo (cfg : Wire.t) =
   let cfg=validate_config cfg in
   let now_ms = Int64.of_float (Js.Date.now ()) in
-  let* _ =
+  let* result =
     Runtime.invoke "thread-api/transact"
       [ Wire.String repo
       ; Wire.Array
@@ -74,6 +74,7 @@ let write_config repo (cfg : Wire.t) =
       ; Wire.Nil
       ]
   in
+  if Rtc_error.is_error result then failwith "Failed to write graph configuration";
   Runtime.send (Action.Graph_config_loaded (repo,cfg));
   Js.Promise.resolve ()
 
