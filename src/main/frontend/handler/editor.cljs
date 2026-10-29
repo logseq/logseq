@@ -173,6 +173,16 @@
            (when content-changed?
              (save-block-with-pending-title! block value opts))))))))
 
+(defn- last-saved-title
+  "The block's last saved title: a save still in flight, else the renderer
+  snapshot. `:editor/block` keeps the title from when editing started, so an
+  edit undone back to it would look saved."
+  [block]
+  (let [block (latest-renderer-block block)]
+    (get @*pending-block-save-titles
+         (:block/uuid block)
+         (:block/title block))))
+
 (defn- compute-fst-snd-block-text
   [value selection-start selection-end]
   (when (string? value)
@@ -2210,7 +2220,7 @@
   (let [editing-block (when-let [editing-block (state/get-edit-block)]
                         (assoc editing-block :block/title (state/get-edit-content)))
         has-unsaved-edits (and editing-block
-                               (not= (:block/title (state/get-edit-block))
+                               (not= (last-saved-title (state/get-edit-block))
                                      (state/get-edit-content)))
         target-block (or target-block editing-block)
         block target-block
@@ -2750,7 +2760,8 @@
                                                             :direction direction}
                                                      (:exclude-property? move-opts)
                                                      (assoc :exclude-property? true)))
-            {:block/keys [uuid title]} (state/get-edit-block)
+            {:block/keys [uuid]} (state/get-edit-block)
+            title (some-> (state/get-edit-block) last-saved-title)
             property-value-container (when (property-value-node? sibling-block)
                                        sibling-block)
             sibling-block (or (property-value-inner-block property-value-container)
