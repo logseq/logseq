@@ -2473,8 +2473,10 @@
 
 (defn- update-page-alias
   [m page-names-to-uuids]
+  ;; A map, not a [:block/uuid ..] lookup ref: an alias can name a journal of this
+  ;; import whose file is imported later, so its page does not exist yet
   (update m :block/alias (fn [aliases]
-                           (map #(vector :block/uuid (get-page-uuid page-names-to-uuids (:block/name %) {:block %}))
+                           (map #(hash-map :block/uuid (get-page-uuid page-names-to-uuids (:block/name %) {:block %}))
                                 aliases))))
 
 (defn- build-new-page-or-class
