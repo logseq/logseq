@@ -93,6 +93,18 @@
     (is (= [(:db/id plain-page)] (map :db/id (:block/refs later-block)))
         "[[b]] links to the root page b, not to projects/b")))
 
+(deftest-async nested-namespace-page-keeps-its-root-namespace-parent
+  (p/let [conn (import-files! [["pages/b.md" "- r"]
+                               ["pages/projects___sub___b.md" "- d"]
+                               ["pages/sub___b.md" "- s"]])
+          db @conn
+          root-sub (root-page db "sub")
+          s-page (:block/page (db-test/find-block-by-content db "s"))]
+    (is (= 2 (count (pages-named db "sub"))) "projects/sub and sub are two pages")
+    (is (some? root-sub) "sub/b creates a root page sub")
+    (is (= (:db/id root-sub) (:db/id (:block/parent s-page)))
+        "The page of pages/sub___b.md is under the root page sub")))
+
 (deftest-async journal-file-and-page-file-for-same-date-make-one-valid-journal
   (p/let [conn (import-files! [["journals/2023_06_21.md" "- j1"]
                                ["pages/Jun 21st, 2023.md" "- p1"]])
