@@ -7,7 +7,16 @@
             [promesa.core :as p]))
 
 (def max-asset-size (* 100 1024 1024))
-(def max-encrypted-asset-size (* 200 1024 1024))
+
+;; Must match the request body that is actually received. Cloudflare Workers
+;; Free/Pro reject bodies above ~100 MiB before this handler runs, so a larger
+;; encrypted-body allowance is unreachable.
+(def max-encrypted-asset-size max-asset-size)
+
+(defn encrypted-transit-body-size
+  "Byte length of the canonical transit `[iv ciphertext]` PUT body."
+  [plaintext-size]
+  (+ 27 (* 4 (js/Math.ceil (/ (+ plaintext-size 16) 3)))))
 
 (def ^:private asset-type->content-type
   {"png" "image/png"
@@ -157,7 +166,8 @@
     (or (not (number? size)) (neg? size))
     (p/resolved (http/error-response "invalid asset size" 400))
 
-    (> size max-asset-size)
+    (or (> size max-asset-size)
+        (and e2ee? (> (encrypted-transit-body-size size) max-encrypted-asset-size)))
     (p/resolved (http/error-response "asset too large" 413))
 
     (nil? body)
@@ -170,7 +180,7 @@
           {encrypted-body :body encrypted-promise :pipe-promise}
           (when e2ee? (encrypted-asset-body decoded-body size))
           source-body (or encrypted-body decoded-body)
-          upload-size (if e2ee? (+ 27 (* 4 (js/Math.ceil (/ (+ size 16) 3)))) size)
+          upload-size (if e2ee? (encrypted-transit-body-size size) size)
           {stream-body :body fixed-length-promise :pipe-promise} (fixed-length-body source-body upload-size)
           put-promise (.put bucket key (or stream-body source-body)
                             #js {:httpMetadata #js {:contentType (or content-type "application/octet-stream")}

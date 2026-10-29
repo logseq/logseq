@@ -1860,6 +1860,7 @@
  :storage.recycle/retention-desc "已删除的页面和块会保留在此处，直到被恢复或在 30 天后被自动垃圾回收。"
  :storage.recycle/title "回收站"
 
+ :sync/asset-too-large-error "无法同步 \"{1}\"，因为文件过大，无法上传。"
  :sync/assets-downloading "正在下载资源"
  :sync/assets-downloading-count "正在下载资源（{1}）"
  :sync/assets-uploading "正在上传资源"

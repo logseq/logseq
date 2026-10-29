@@ -1,5 +1,5 @@
 (ns frontend.worker.sync.assets-test
-  (:require [cljs.test :refer [async deftest is]]
+  (:require [cljs.test :refer [async deftest is testing]]
             [datascript.core :as d]
             [frontend.common.crypt :as crypt]
             [frontend.worker.platform :as platform]
@@ -8,6 +8,7 @@
             [frontend.worker.sync :as db-sync]
             [frontend.worker.sync.assets :as sync-assets]
             [frontend.worker.sync.client-op :as client-op]
+            [frontend.worker.sync.crypt :as sync-crypt]
             [frontend.worker.sync.presence :as sync-presence]
             [logseq.db :as ldb]
             [logseq.db.frontend.schema :as db-schema]
@@ -28,6 +29,50 @@
   (if (fn? task)
     (task)
     (p/resolved nil)))
+
+(defn- upload-asset-conn
+  [asset-uuid {:keys [title size]}]
+  (let [conn (d/create-conn db-schema/schema)]
+    (ldb/transact! conn [{:block/uuid asset-uuid
+                          :block/title (or title "large-asset.pdf")
+                          :logseq.property.asset/type "pdf"
+                          :logseq.property.asset/checksum "sha-256-value"
+                          :logseq.property.asset/size (or size 1024)}])
+    conn))
+
+(defn- process-update-asset-op!
+  [repo graph-id asset-uuid]
+  (#'sync-assets/process-asset-op!
+   repo
+   graph-id
+   {:block/uuid asset-uuid
+    :update-asset [:update-asset 10 {:block-uuid asset-uuid}]}
+   {:current-client-f (constantly {:repo repo})
+    :broadcast-rtc-state!-f (fn [_client] nil)
+    :fail-fast-f (fn [tag data]
+                   (throw (ex-info (name tag) data)))}))
+
+(deftest e2ee-upload-size-gate-accounts-for-transit-overhead-test
+  (testing "E2EE transit+Base64 overhead rejects files that pass the plaintext 100 MiB gate"
+    (let [miB (* 1024 1024)]
+      (is (false? (sync-assets/plaintext-too-large? (* 53 miB) true)))
+      (is (true? (sync-assets/plaintext-too-large? (* 80 miB) true)))
+      (is (false? (sync-assets/plaintext-too-large? sync-assets/max-asset-size false)))
+      (is (true? (sync-assets/plaintext-too-large? (inc sync-assets/max-asset-size) false)))
+      (is (false? (sync-assets/plaintext-too-large? sync-assets/max-e2ee-plaintext-size true)))
+      (is (true? (sync-assets/plaintext-too-large? (inc sync-assets/max-e2ee-plaintext-size) true)))
+      (is (<= (sync-assets/encrypted-transit-body-size sync-assets/max-e2ee-plaintext-size)
+              sync-assets/max-upload-body-size))
+      (is (sync-assets/upload-body-too-large?
+           (sync-assets/encrypted-transit-body-size (inc sync-assets/max-e2ee-plaintext-size))))))
+
+  (testing "transit encoding of [iv ciphertext] matches the documented body-size formula"
+    (let [plaintext-size 32
+          iv (js/Uint8Array. 12)
+          ciphertext (js/Uint8Array. (+ plaintext-size 16))
+          body (ldb/write-transit-str [iv ciphertext])]
+      (is (= (count body)
+             (sync-assets/encrypted-transit-body-size plaintext-size))))))
 
 (deftest request-asset-download-skips-existing-local-asset-test
   (async done
@@ -228,6 +273,235 @@
                    (set! js/fetch original-fetch)
                    (reset! worker-state/*db-sync-config db-sync-config)
                    (done)))))))
+
+(deftest upload-remote-asset-rejects-oversized-e2ee-payload-without-fetch-test
+  (async done
+         (let [repo "asset-upload-repo"
+               graph-id "graph-1"
+               asset-uuid (random-uuid)
+               checksum "sha-256-value"
+               asset-bytes (js/Uint8Array. #js [1 2 3])
+               fetch-called? (atom false)
+               original-fetch js/fetch
+               db-sync-config @worker-state/*db-sync-config]
+           (reset! worker-state/*db-sync-config
+                   {:http-base "https://sync.example.test"})
+           (set! js/fetch
+                 (fn [& _args]
+                   (reset! fetch-called? true)
+                   (p/resolved #js {:ok true
+                                     :status 200})))
+           (-> (p/with-redefs [sync-assets/upload-body-too-large? (fn [_] true)
+                               sync-assets/graph-aes-key
+                               (fn [_repo _graph-id _fail-fast-f]
+                                 (p/resolved "aes-key"))
+                               platform/current (fn [] {})
+                               platform/asset-read-bytes!
+                               (fn [_platform _repo _file-name]
+                                 (p/resolved asset-bytes))
+                               crypt/<encrypt-uint8array
+                               (fn [_aes-key _payload]
+                                 (p/resolved [(js/Uint8Array. 12) (js/Uint8Array. 19)]))
+                               shared-service/broadcast-to-clients!
+                               (fn [& _] nil)]
+                 (sync-assets/upload-remote-asset!
+                  repo graph-id asset-uuid "png" checksum))
+               (p/then
+                (fn [_]
+                  (is false "expected oversized e2ee payload to reject")))
+               (p/catch
+                (fn [error]
+                  (is (= :rtc.exception/asset-too-large (:type (ex-data error))))
+                  (is (= 413 (get-in (ex-data error) [:data :status])))
+                  (is (false? @fetch-called?))))
+               (p/finally
+                 (fn []
+                   (set! js/fetch original-fetch)
+                   (reset! worker-state/*db-sync-config db-sync-config)
+                   (done)))))))
+
+(deftest upload-remote-asset-treats-http-413-as-permanent-too-large-test
+  (async done
+         (let [repo "asset-upload-repo"
+               graph-id "graph-1"
+               asset-uuid (random-uuid)
+               checksum "sha-256-value"
+               asset-bytes (js/Uint8Array. #js [1 2 3])
+               original-fetch js/fetch
+               db-sync-config @worker-state/*db-sync-config]
+           (reset! worker-state/*db-sync-config
+                   {:http-base "https://sync.example.test"})
+           (set! js/fetch
+                 (fn [& _args]
+                   (p/resolved #js {:ok false
+                                     :status 413})))
+           (-> (p/with-redefs [sync-assets/graph-aes-key
+                               (fn [_repo _graph-id _fail-fast-f]
+                                 (p/resolved nil))
+                               platform/current (fn [] {})
+                               platform/asset-read-bytes!
+                               (fn [_platform _repo _file-name]
+                                 (p/resolved asset-bytes))
+                               shared-service/broadcast-to-clients!
+                               (fn [& _] nil)]
+                 (sync-assets/upload-remote-asset!
+                  repo graph-id asset-uuid "png" checksum))
+               (p/then
+                (fn [_]
+                  (is false "expected HTTP 413 to reject")))
+               (p/catch
+                (fn [error]
+                  (is (= :rtc.exception/asset-too-large (:type (ex-data error))))
+                  (is (= 413 (get-in (ex-data error) [:data :status])))))
+               (p/finally
+                 (fn []
+                   (set! js/fetch original-fetch)
+                   (reset! worker-state/*db-sync-config db-sync-config)
+                   (done)))))))
+
+(deftest process-asset-op-drops-e2ee-update-when-transit-body-exceeds-limit-test
+  (async done
+         (let [repo "asset-upload-repo"
+               graph-id "graph-1"
+               asset-uuid (random-uuid)
+               conn (upload-asset-conn asset-uuid {:title "huge.pdf"
+                                                   :size (* 80 1024 1024)})
+               upload-calls (atom [])
+               removed (atom [])
+               notifications (atom [])]
+           (-> (p/with-redefs [worker-state/get-datascript-conn (fn [_repo] conn)
+                               sync-crypt/graph-e2ee? (fn [_repo] true)
+                               client-op/remove-asset-op (fn [repo' asset-uuid']
+                                                           (swap! removed conj [repo' asset-uuid']))
+                               sync-assets/upload-remote-asset!
+                               (fn [& args]
+                                 (swap! upload-calls conj args)
+                                 (p/resolved nil))
+                               shared-service/broadcast-to-clients!
+                               (fn [event payload]
+                                 (when (= :notification event)
+                                   (swap! notifications conj payload)))]
+                 (process-update-asset-op! repo graph-id asset-uuid))
+               (p/then
+                (fn [_]
+                  (is (= [] @upload-calls)
+                      "oversized e2ee assets must not start an upload")
+                  (is (= [[repo asset-uuid]] @removed))
+                  (is (= 1 (count @notifications)))
+                  (is (= :sync/asset-too-large-error
+                         (get-in (first @notifications) [5 :i18n-key])))
+                  (is (= ["huge.pdf"]
+                         (get-in (first @notifications) [5 :i18n-args])))))
+               (p/catch
+                (fn [error]
+                  (is false (str "unexpected error: " error))))
+               (p/finally done)))))
+
+(deftest process-asset-op-does-not-retry-permanent-413-test
+  (async done
+         (let [repo "asset-upload-repo"
+               graph-id "graph-1"
+               asset-uuid (random-uuid)
+               conn (upload-asset-conn asset-uuid {:title "report.pdf"
+                                                   :size (* 20 1024 1024)})
+               upload-calls (atom [])
+               removed (atom [])
+               notifications (atom [])]
+           (-> (p/with-redefs [worker-state/get-datascript-conn (fn [_repo] conn)
+                               sync-crypt/graph-e2ee? (fn [_repo] true)
+                               client-op/remove-asset-op (fn [repo' asset-uuid']
+                                                           (swap! removed conj [repo' asset-uuid']))
+                               sync-assets/upload-remote-asset!
+                               (fn [& args]
+                                 (swap! upload-calls conj args)
+                                 (p/rejected (ex-info "asset too large"
+                                                      {:type :rtc.exception/asset-too-large
+                                                       :data {:status 413
+                                                              :body-size (* 28 1024 1024)}})))
+                               shared-service/broadcast-to-clients!
+                               (fn [event payload]
+                                 (when (= :notification event)
+                                   (swap! notifications conj payload)))]
+                 (process-update-asset-op! repo graph-id asset-uuid))
+               (p/then
+                (fn [_]
+                  (is (= 1 (count @upload-calls)))
+                  (is (= [[repo asset-uuid]] @removed)
+                      "a 413 must drop the op instead of leaving it pending")
+                  (is (= 1 (count @notifications)))
+                  (is (= :sync/asset-too-large-error
+                         (get-in (first @notifications) [5 :i18n-key])))))
+               (p/catch
+                (fn [error]
+                  (is false (str "unexpected error: " error))))
+               (p/finally done)))))
+
+(deftest process-asset-op-keeps-pending-op-on-transient-upload-failure-test
+  (async done
+         (let [repo "asset-upload-repo"
+               graph-id "graph-1"
+               asset-uuid (random-uuid)
+               conn (upload-asset-conn asset-uuid {:size 2048})
+               removed (atom [])]
+           (-> (p/with-redefs [worker-state/get-datascript-conn (fn [_repo] conn)
+                               sync-crypt/graph-e2ee? (fn [_repo] false)
+                               client-op/remove-asset-op (fn [repo' asset-uuid']
+                                                           (swap! removed conj [repo' asset-uuid']))
+                               sync-assets/upload-remote-asset!
+                               (fn [& _args]
+                                 (p/rejected (ex-info "upload-asset failed"
+                                                      {:type :rtc.exception/upload-asset-failed
+                                                       :data {:status 500}})))
+                               shared-service/broadcast-to-clients!
+                               (fn [& _] nil)]
+                 (process-update-asset-op! repo graph-id asset-uuid))
+               (p/then
+                (fn [_]
+                  (is (= [] @removed)
+                      "transient upload failures must stay queued for retry")))
+               (p/catch
+                (fn [error]
+                  (is false (str "unexpected error: " error))))
+               (p/finally done)))))
+
+(deftest process-asset-op-uploads-small-e2ee-asset-test
+  (async done
+         (let [repo "asset-upload-repo"
+               graph-id "graph-1"
+               asset-uuid (random-uuid)
+               conn (upload-asset-conn asset-uuid {:title "photo.png"
+                                                   :size 4096})
+               upload-calls (atom [])
+               removed (atom [])
+               notifications (atom [])]
+           (-> (p/with-redefs [worker-state/get-datascript-conn (fn [_repo] conn)
+                               sync-crypt/graph-e2ee? (fn [_repo] true)
+                               client-op/remove-asset-op (fn [repo' asset-uuid']
+                                                           (swap! removed conj [repo' asset-uuid']))
+                               ldb/transact!
+                               (fn [conn* tx-data _tx-meta]
+                                 (d/transact! conn* tx-data))
+                               sync-assets/upload-remote-asset!
+                               (fn [& args]
+                                 (swap! upload-calls conj args)
+                                 (p/resolved nil))
+                               shared-service/broadcast-to-clients!
+                               (fn [event payload]
+                                 (when (= :notification event)
+                                   (swap! notifications conj payload)))]
+                 (process-update-asset-op! repo graph-id asset-uuid))
+               (p/then
+                (fn [_]
+                  (is (= [[repo graph-id asset-uuid "pdf" "sha-256-value"]] @upload-calls))
+                  (is (= [[repo asset-uuid]] @removed))
+                  (is (= [] @notifications))
+                  (is (= {:checksum "sha-256-value" :type "pdf"}
+                         (:logseq.property.asset/remote-metadata
+                          (d/entity @conn [:block/uuid asset-uuid]))))))
+               (p/catch
+                (fn [error]
+                  (is false (str "unexpected error: " error))))
+               (p/finally done)))))
 
 (deftest upload-remote-asset-records-missing-local-file-test
   (async done
