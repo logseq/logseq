@@ -925,6 +925,12 @@ let delete_selected inst s current () =
       if operations = [] then begin
         if not keep_selection then V.update inst V.table_clear_selection
       end else begin
+        let epoch = (V.get inst).V.table_selection_epoch in
+        let finish () =
+          if (V.get inst).V.table_action_pending = Some epoch then
+            V.update inst (fun s -> { s with V.table_action_pending = None })
+        in
+        V.update inst (fun s -> { s with V.table_action_pending = Some epoch });
         let open Promise_ext in
         ignore ((let* result = Outliner_ops.apply_result operations in
           (match result with
@@ -932,7 +938,10 @@ let delete_selected inst s current () =
                V.update inst V.table_clear_selection;
                refresh inst
            | _ -> ());
-          Js.Promise.resolve ()) |> Js.Promise.catch (fun _ -> Js.Promise.resolve ()))
+          finish ();
+          Js.Promise.resolve ()) |> Js.Promise.catch (fun _ ->
+            finish ();
+            Js.Promise.resolve ()))
       end
     end in
     if need_confirm then
