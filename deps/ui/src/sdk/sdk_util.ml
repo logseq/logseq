@@ -354,9 +354,9 @@ let resolve_title_refs_for_repo origin_repo (ops : Wire.t list)
 let resolve_title_refs ops = resolve_title_refs_for_repo (repo ()) ops
 
 
-let get_many ids =
+let get_many_for_repo origin_repo ids =
   let* w =
-    Runtime.invoke2 "thread-api/get-blocks" (Wire.String (repo ()))
+    Runtime.invoke2 "thread-api/get-blocks" (Wire.String origin_repo)
       (Wire.Array
          (List.map
             (fun id ->
@@ -366,11 +366,22 @@ let get_many ids =
   in
   Js.Promise.resolve (List.map Wire.block_of_pair (Wire.elems w))
 
+let get_many ids = get_many_for_repo (repo ()) ids
 
 (* dispatch outliner ops; each op entry is [kw-name, [args...]].
    Response is {result: <last op result>, ...} — unwrap it. *)
-let apply_ops ops opts =
-  let origin_repo = repo () in
+let apply_ops_for_repo origin_repo ops opts =
+  let context_revision =
+    let entry_model = Runtime.model () in
+    if entry_model.Model.repo = Some origin_repo then
+      Some entry_model.Model.context_revision
+    else None
+  in
+  let context_is_current () =
+    let fresh_model = Runtime.model () in
+    fresh_model.Model.repo = Some origin_repo
+    && context_revision = Some fresh_model.Model.context_revision
+  in
   let* ops = resolve_title_refs_for_repo origin_repo ops in
   let* w =
     Runtime.invoke3 "thread-api/apply-outliner-ops"
@@ -387,16 +398,25 @@ let apply_ops ops opts =
      refresh before resolving so callers observe applied
      state (matches cljs' reactive frontend db) *)
   let* () =
-    Subs_state.promise_of_task (Runtime.hooks.refresh_property_areas ())
+    if context_is_current () then
+      Subs_state.promise_of_task (Runtime.hooks.refresh_property_areas ())
+    else resolved ()
   in
   let* () =
-    Subs_state.promise_of_task (Runtime.hooks.refresh_after_ops ())
+    if context_is_current () then
+      Subs_state.promise_of_task (Runtime.hooks.refresh_after_ops ())
+    else resolved ()
   in
   Js.Promise.resolve result
 
-let apply_op op args =
-  apply_ops [ Wire.Array [ Wire.Keyword op; Wire.Array args ] ]
+let apply_ops ops opts = apply_ops_for_repo (repo ()) ops opts
+
+let apply_op_for_repo origin_repo op args =
+  apply_ops_for_repo origin_repo
+    [ Wire.Array [ Wire.Keyword op; Wire.Array args ] ]
     (Wire.Map [])
+
+let apply_op op args = apply_op_for_repo (repo ()) op args
 
 (* get-blocks [{id, opts}] -> [[{id, block?}...]] — resolve first result *)
 let get_by_id_for_repo origin_repo id_wire =
@@ -475,11 +495,13 @@ let eid_wire_of_json (j : Js.Json.t) : Wire.t option =
           | None -> None))
   | _ -> None
 
-let get_entity_json j =
+let get_entity_json_for_repo origin_repo j =
   match eid_wire_of_json j with
-  | Some (Wire.String s) -> get_entity s
-  | Some w -> get_by_id w
+  | Some (Wire.String s) -> get_entity_for_repo origin_repo s
+  | Some w -> get_by_id_for_repo origin_repo w
   | None -> Js.Promise.resolve Wire.Nil
+
+let get_entity_json j = get_entity_json_for_repo (repo ()) j
 
 let get_entity_ident ident = get_by_id (Wire.Keyword ident)
 
