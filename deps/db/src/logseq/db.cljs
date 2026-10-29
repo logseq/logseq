@@ -322,7 +322,10 @@
   Not nestable; throws when called inside another `:batch-tx?`."
   [conn tx-meta batch-tx-fn & {:keys [listen-db]}]
   (let [db-before @conn
-        *tx-data (atom [])]
+        *tx-data (atom [])
+        ;; Once the batch is stored, the graph file holds it, so a later error
+        ;; (e.g. from a listener) must not roll the in-memory db back
+        *stored? (volatile! false)]
     (try
       (when (:batch-tx? @conn)
         (throw (ex-info "batch-transact! can't be nested called" {:tx-meta tx-meta})))
@@ -333,6 +336,7 @@
       (batch-transact-cleanup! conn)
       (when-some [_storage (storage/storage @conn)]
         (d/store @conn)
+        (vreset! *stored? true)
         ;; batch-transact! bypasses conn/store-after-transact!, so keep tail bookkeeping in sync
         ;; with the just-persisted root snapshot.
         (swap! (:atom conn) assoc
@@ -348,7 +352,8 @@
         tx-report)
       (catch :default e
         (log/error e)
-        (reset! conn db-before)
+        (when-not @*stored?
+          (reset! conn db-before))
         (throw e))
       (finally
         (batch-transact-cleanup! conn)
