@@ -506,6 +506,23 @@
           (let [v-uuid (create-property-text-block! conn nil property-id v {})]
             (:db/id (d/entity @conn [:block/uuid v-uuid])))))))
 
+(defn- other-node-text-value
+  "The text value block `v` when it belongs to a node other than `block-id`. A
+  text value block is a child of the node it was created for, so it can't be
+  shared: deleting that node deletes it."
+  [db property-id v block-id]
+  (when (and block-id (pos-int? v))
+    (let [value (d/entity db v)
+          property (d/entity db property-id)
+          parent-id (:db/id (:block/parent value))]
+      (when (and (contains? #{:default :url} (:logseq.property/type property))
+                 (= property-id (:db/ident (:logseq.property/created-from-property value)))
+                 (not (ldb/closed-value? value))
+                 parent-id
+                 (not= parent-id (:db/id property))
+                 (not= parent-id (:db/id (d/entity db block-id))))
+        value))))
+
 (defn- convert-ref-property-value
   "Converts a ref property's value whether it's an integer or a string. Creates
    a property ref value for a string value if necessary"
@@ -514,6 +531,11 @@
     (cond
       (and (qualified-keyword? v) (not= :keyword property-type))
       (db-ident->eid @conn v)
+
+      (other-node-text-value @conn property-id v block-id)
+      (find-or-create-property-value conn property-id
+                                     (db-property/property-value-content (d/entity @conn v))
+                                     block-id)
 
       (and (coll? v)
            (every? integer? v)
