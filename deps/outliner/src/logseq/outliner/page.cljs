@@ -417,16 +417,25 @@
         entity
         (recur (:block/parent entity) (conj seen (:db/id entity)))))))
 
-(defn- recycled-parents-restore-tx
-  "Tx data restoring the recycled trees that existing `namespace-pages` lie in,
-  so a page created under them is not born inside the Recycle."
-  [db namespace-pages]
-  (->> namespace-pages
-       (filter de/entity?)
-       (filter ldb/recycled?)
-       (keep recycled-root)
-       (common-util/distinct-by :db/id)
-       (mapcat #(outliner-recycle/restore-tx-data db %))))
+(defn- split-namespace-pages-restoring-recycled
+  "`split-namespace-pages`, after restoring the recycled trees its existing pages
+  lie in, so a page created under them is not born inside the Recycle. Each
+  restore is planned against the db as the restores before it leave it, and the
+  pages are looked up again after it, so a page the restore brings back (or
+  re-attaches under its parent) is found instead of created a second time.
+  Returns `{:pages .. :restore-tx ..}`."
+  [db page date-formatter create-class?]
+  (loop [db' db
+         restore-tx []]
+    (let [pages (split-namespace-pages db' page date-formatter create-class?)
+          recycled (some->> pages
+                            (some #(when (and (de/entity? %) (ldb/recycled? %)) %))
+                            recycled-root)
+          tx (some->> recycled (outliner-recycle/restore-tx-data db') (remove nil?) seq)]
+      (if tx
+        (recur (:db-after (d/with db' tx)) (into restore-tx tx))
+        {:pages pages
+         :restore-tx restore-tx}))))
 
 (defn ^:large-vars/cleanup-todo ^:api create
   "Pure function without side effects"
@@ -512,13 +521,14 @@
                                                  :page-uuid (when (uuid? uuid') uuid')
                                                  :skip-existing-page-check? true})
                    encrypted-title? (assoc :block/name encrypted-name))
-            [page parents'] (if (and (not (:block/journal-day page))
-                                     (not encrypted-title?)
-                                     (text/namespace-page? title)
-                                     split-namespace?)
-                              (let [pages (split-namespace-pages db page date-formatter class?)]
-                                [(last pages) (butlast pages)])
-                              [page nil])]
+            [page parents' restore-tx] (if (and (not (:block/journal-day page))
+                                                (not encrypted-title?)
+                                                (text/namespace-page? title)
+                                                split-namespace?)
+                                         (let [{:keys [pages restore-tx]}
+                                               (split-namespace-pages-restoring-recycled db page date-formatter class?)]
+                                           [(last pages) (butlast pages) restore-tx])
+                                         [page nil nil])]
         (when (and page (or (nil? (:db/ident page))
                             ;; New page creation must not override built-in entities
                             (not (db-malli-schema/internal-ident? (:db/ident page)))))
@@ -543,7 +553,7 @@
                                            :tags resolved-tags
                                            :class-ident-namespace class-ident-namespace}))
                 txs (concat
-                     (recycled-parents-restore-tx db (cons page parents'))
+                     restore-tx
                      ;; transact doesn't support entities
                      (remove de/entity? parents')
                      page-txs)

@@ -252,15 +252,19 @@
         [[] (some-> parent :block/_parent ldb/sort-by-order last :block/order)]
         children)))))
 
-(defn- validate-restored-page-name!
-  "Throws the duplicate-name notification when `tx-data` restores page `root` next
-  to a live page with the same name. A recycled page is parented under the
-  Recycle, so its name was free to be taken while it was there."
-  [db root tx-data]
-  (when (ldb/page? root)
-    (let [db' (:db-after (d/with db (remove nil? tx-data)))
-          root' (d/entity db' (:db/id root))]
-      (outliner-validate/validate-unique-by-name-and-tags db' (:block/title root') root'))))
+(defn- validate-restored-page-names!
+  "Throws the duplicate-name notification when `tx-data` puts a page next to a live
+  page with the same name: the restored root, and every page relinked under a
+  restored parent. A recycled page is parented under the Recycle, so its name was
+  free to be taken while it was there."
+  [db tx-data]
+  (let [{:keys [db-after] tx-datoms :tx-data} (d/with db (remove nil? tx-data))]
+    (doseq [page (->> tx-datoms
+                      (keep (fn [datom] (when (= :block/parent (:a datom)) (:e datom))))
+                      distinct
+                      (map #(d/entity db-after %))
+                      (filter ldb/page?))]
+      (outliner-validate/validate-unique-by-name-and-tags db-after (:block/title page) page))))
 
 (defn ^:api restore-tx-data
   [db root]
@@ -294,7 +298,7 @@
           relink-tx (when (ldb/page? root)
                       (mapcat #(relink-waiting-children-tx db %) (page-descendants root)))
           tx-data (concat clear-structure [root-tx] subtree-page-tx (remove nil? clear-meta) relink-tx)]
-      (validate-restored-page-name! db root tx-data)
+      (validate-restored-page-names! db tx-data)
       tx-data)))
 
 (defn ^:api restore!
