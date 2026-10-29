@@ -777,6 +777,36 @@
                                :i18n-key :page.validation/alias-batch-multiple-owners
                                :message "Aliases can't be batch-set on multiple pages."}}))))
 
+(defn- released-value-blocks-tx
+  "Tx data deleting the text value blocks of `property` among `value-ids` that
+  no node outside `releasing-ids` holds, once those nodes stop holding them.
+  Closed values, pages and the property's default value are kept."
+  [db property value-ids releasing-ids]
+  (let [releasing-ids (set releasing-ids)
+        default-value-id (:db/id (:logseq.property/default-value property))
+        released (->> (distinct value-ids)
+                      (keep #(d/entity db %))
+                      (filter (fn [value]
+                                (and (= (:db/id property)
+                                        (:db/id (:logseq.property/created-from-property value)))
+                                     (not (entity-util/page? value))
+                                     (not (ldb/closed-value? value))
+                                     (not= default-value-id (:db/id value))
+                                     (every? (fn [holder-id] (contains? releasing-ids holder-id))
+                                             (d/q '[:find [?e ...]
+                                                    :in $ ?property-ident ?value-id
+                                                    :where [?e ?property-ident ?value-id]]
+                                                  db (:db/ident property) (:db/id value)))))))]
+    (when (seq released)
+      (:tx-data (outliner-core/delete-blocks db released {})))))
+
+(defn- entity-ids
+  [value]
+  (cond
+    (de/entity? value) [(:db/id value)]
+    (coll? value) (keep #(when (de/entity? %) (:db/id %)) value)
+    :else nil))
+
 (defn ^:large-vars/cleanup-todo batch-set-property!
   "Sets properties for multiple blocks. Automatically handles property value refs.
    Does no validation of property values. For :many properties, passing a collection
@@ -818,27 +848,37 @@
                 v)
            _ (when (nil? v')
                (throw (ex-info "Property value must be not nil" {:v v})))
-           txs (doall
-                (mapcat
-                 (fn [eid]
-                   (if-let [block (d/entity @conn eid)]
-                     (let [v' (if (and default-url-not-closed?
-                                       (not (and (keyword? v) entity-id?)))
-                                (convert-ref-property-values conn property-id v' property-type
-                                                             {:many? many?
-                                                              :block-id (:db/id block)})
-                                v')]
-                       (throw-error-if-self-value block v' ref?)
-                       (throw-error-if-invalid-property-value @conn property v')
-                       (when (= property-id :block/alias)
-                         (doseq [alias-id (if (coll? v') v' [v'])]
-                           (when (number? alias-id)
-                             (throw-error-if-invalid-alias @conn block alias-id))))
-                       (build-property-value-tx-data conn block property-id v'))
-                     (js/console.error "Skipping setting a block's property because the block id could not be found:" eid)))
-                 block-eids))]
+           blocks+values (doall
+                          (keep
+                           (fn [eid]
+                             (if-let [block (d/entity @conn eid)]
+                               (let [v' (if (and default-url-not-closed?
+                                                 (not (and (keyword? v) entity-id?)))
+                                          (convert-ref-property-values conn property-id v' property-type
+                                                                       {:many? many?
+                                                                        :block-id (:db/id block)})
+                                          v')]
+                                 (throw-error-if-self-value block v' ref?)
+                                 (throw-error-if-invalid-property-value @conn property v')
+                                 (when (= property-id :block/alias)
+                                   (doseq [alias-id (if (coll? v') v' [v'])]
+                                     (when (number? alias-id)
+                                       (throw-error-if-invalid-alias @conn block alias-id))))
+                                 [block v'])
+                               (js/console.error "Skipping setting a block's property because the block id could not be found:" eid)))
+                           block-eids))
+           txs (mapcat (fn [[block v']] (build-property-value-tx-data conn block property-id v'))
+                       blocks+values)
+           ;; A scalar added to a :many property keeps the block's other values
+           replaced-value-ids (when (and ref? (not (and many? (not (coll? v)))))
+                                (let [set-ids (set (mapcat (fn [[_ v']] (if (coll? v') v' [v'])) blocks+values))]
+                                  (remove set-ids
+                                          (mapcat (fn [[block _]] (entity-ids (get block property-id)))
+                                                  blocks+values))))
+           released-tx (released-value-blocks-tx @conn property replaced-value-ids
+                                                 (map (comp :db/id first) blocks+values))]
        (when (seq txs)
-         (ldb/transact! conn txs {:outliner-op :batch-set-property}))))))
+         (ldb/transact! conn (concat txs released-tx) {:outliner-op :batch-set-property}))))))
 
 (defn remove-block-property!
   [conn eid property-id]
@@ -1084,7 +1124,9 @@
                      (remove-block-property! conn (:db/id block) property-id)
                      (when match-id
                        (ldb/transact! conn
-                                      [[:db/retract (:db/id block) property-id match-id]]
+                                      (concat
+                                       [[:db/retract (:db/id block) property-id match-id]]
+                                       (released-value-blocks-tx @conn property [match-id] [(:db/id block)]))
                                       {:outliner-op :save-block})))))))))))))
 
 (defn delete-property-value!
