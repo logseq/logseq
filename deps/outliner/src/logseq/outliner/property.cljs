@@ -896,6 +896,18 @@
       (ldb/transact! conn tx-data
                      {:outliner-op :save-block}))))
 
+(defn- throw-error-no-matching-choice
+  [value]
+  (let [reason "it isn't one of the property's choices"]
+    (throw (ex-info "Invalid choice"
+                    {:error :value-invalid
+                     :value value
+                     :type :notification
+                     :payload {:message (str "Invalid choice \"" value "\" for this property: " reason ".")
+                               :i18n-key :property.choice/invalid
+                               :i18n-args [value reason]
+                               :type :warning}}))))
+
 (defn ^:large-vars/cleanup-todo set-block-property!
   "Updates a block property's value for an existing property-id and block.  If
   property is a ref type, automatically handles a raw property value i.e. you
@@ -920,7 +932,12 @@
                 (normalize-extends-value @conn v)
 
                 ref?
-                (convert-ref-property-value conn property-id v property-type {:block-id block-eid})
+                (let [v' (convert-ref-property-value conn property-id v property-type {:block-id block-eid})]
+                  ;; nil removes the property, so a value that matches no choice must not become nil
+                  (when (and (some? v) (nil? v')
+                             (seq (entity-plus/lookup-kv-then-entity property :property/closed-values)))
+                    (throw-error-no-matching-choice v))
+                  v')
 
                 :else
                 v)]
