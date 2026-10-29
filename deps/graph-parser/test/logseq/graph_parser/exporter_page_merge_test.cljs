@@ -36,13 +36,13 @@
 
 (defn- import-files!
   "Imports the files in the given order, as export-file-graph does"
-  [files]
+  [files & [user-config]]
   (let [conn (db-test/create-conn)
         _ (db-pipeline/add-listener conn)
         notifications (atom [])
         _ (reset! gp-block/*export-to-db-graph? true)]
     (-> (p/let [doc-options (gp-exporter/build-doc-options
-                             {:macros {} :file/name-format :triple-lowbar}
+                             (merge {:macros {} :file/name-format :triple-lowbar} user-config)
                              {:notify-user #(swap! notifications conj %)
                               :<read-file <read-file
                               :default-config {}
@@ -132,6 +132,58 @@
         "Imported graph validates")
     (is (true? (outliner-page/delete! conn (:block/uuid page)))
         "The imported journal page can be deleted")))
+
+(deftest-async date-tag-then-page-file-then-journal-file-make-one-valid-journal
+  (p/let [conn (import-files! [["pages/Work.md" "- zq1x\n- w #[[Dec 31st, 2025]] [[Jun 21st, 2023]] #[[Dec 31st, 2025]]\n"]
+                               ["pages/Dec 31st, 2025.md" "- p1 [[Work]] [[PROJECTS]]\n"]
+                               ["journals/2025_12_31.md" "- j1 #[[Work/tasks]] [[JUN 21ST, 2023]] #[[Tasks]]\n"]
+                               ["journals/2023_06_21.md" "- zq8x #[[Jun 21st, 2023]] [[Jun 21st, 2023]]\n"]])
+          page (db-test/find-journal-by-journal-day @conn 20251231)
+          page-tags (set (map :db/ident (:block/tags page)))
+          w-block (db-test/find-block-by-content @conn #"^w ")]
+    (is (= 1 (count (pages-named @conn "dec 31st, 2025"))) "There is one page for the date")
+    (is (= 2 (count (page-block-titles page))) "Both files' blocks are on the journal page")
+    (is (not (contains? page-tags :logseq.class/Page)) "The journal is not also tagged #Page")
+    (is (contains? (set (map :db/id (:block/refs w-block))) (:db/id page)) "The tag refs the journal")
+    (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+        "Imported graph validates")))
+
+(defn- export-file-graph-in-order!
+  "Imports the files with export-file-graph and a config.edn without a journal title
+  format, in the given order: the exporter sorts files by :path, so each file's
+  path gets a directory of its rank"
+  [files]
+  (let [conn (db-test/create-conn)
+        dir (fs/mkdtempSync (node-path/join (os/tmpdir) "logseq-graph-parser-test-"))
+        config-path (node-path/join dir "logseq/config.edn")
+        _ (doseq [[rel content] (cons ["logseq/config.edn" "{:meta/version 1 :preferred-format :markdown :file/name-format :triple-lowbar}"] files)]
+            (fs/mkdirSync (node-path/dirname (node-path/join dir rel)) #js {:recursive true})
+            (fs/writeFileSync (node-path/join dir rel) content))
+        doc-files (map-indexed (fn [i [rel _]]
+                                 {:path (str dir "/o" i "/" rel) :fs-path (node-path/join dir rel) ::rpath rel})
+                               files)]
+    (db-pipeline/add-listener conn)
+    (p/let [_ (gp-exporter/export-file-graph
+               conn conn {:path config-path ::rpath "logseq/config.edn"} (vec doc-files)
+               {:rpath-key ::rpath
+                :notify-user (constantly nil)
+                :<read-file (fn [f] (p/let [s (fs/readFileSync (or (:fs-path f) (:path f)))] (str s)))
+                :default-config {}
+                :user-options {:convert-all-tags? false}
+                :<get-file-stat (fn [pth] (.stat (js/require "fs/promises") pth))
+                :<read-and-copy-asset (fn [_ _ _] (throw (js/Error. "no assets in this graph")))})]
+      conn)))
+
+(deftest-async page-file-named-like-a-journal-file-is-that-journal-without-a-title-format
+  (p/let [conn (export-file-graph-in-order! [["pages/Dec 31st, 2025.md" "- p1"]
+                                             ["journals/2025_12_31.md" "- j1"]])
+          page (db-test/find-journal-by-journal-day @conn 20251231)
+          page-tags (set (map :db/ident (:block/tags page)))]
+    (is (= 1 (count (pages-named @conn "dec 31st, 2025"))) "There is one page for the date")
+    (is (= #{"j1" "p1"} (page-block-titles page)) "Both files' blocks are on the journal page")
+    (is (not (contains? page-tags :logseq.class/Page)) "The journal is not also tagged #Page")
+    (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+        "Imported graph validates")))
 
 (deftest-async journal-file-and-page-file-with-tags-for-same-date-make-one-valid-journal
   (p/let [conn (import-files! [["journals/2023_06_21.md" "- j1"]

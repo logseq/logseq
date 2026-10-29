@@ -362,7 +362,13 @@
           ;; Creates or updates page within same tx
           (let [class-m (find-or-create-class db (:block/title tag-block) all-idents tag-block)
                 property-uuid? (property-entity-uuid? db (:block/uuid tag-block))
-                existing-page-uuid (find-existing-namespace-page-uuid db tag-block)
+                ;; A page of this full name, e.g. work/b from an earlier [[work/b]], becomes the class.
+                ;; The import's name index also has pages of this file that are not in the db yet.
+                existing-page-uuid (or (find-existing-namespace-page-uuid db tag-block)
+                                       (when (:block/namespace tag-block)
+                                         (let [page-uuid (get @page-names-to-uuids (:block/name tag-block))]
+                                           (when (and page-uuid (not (property-entity-uuid? db page-uuid)))
+                                             page-uuid))))
                 class-m' (-> (merge tag-block class-m
                                     (cond
                                       internal-tag-conflict?
@@ -2488,9 +2494,14 @@
 (defn- get-page-parents
   "Like ldb/get-page-parents but using all-existing-page-uuids"
   [node all-existing-page-uuids]
-  (let [get-parent (fn get-parent [n]
+  (let [;; A parent is a map, a [:block/uuid id] ref, or, for a class's extends, a collection of them
+        parent-uuid (fn parent-uuid [p]
+                      (cond (map? p) (:block/uuid p)
+                            (and (vector? p) (= :block/uuid (first p))) (second p)
+                            (coll? p) (some parent-uuid p)))
+        get-parent (fn get-parent [n]
                      (let [parent (or (:logseq.property.class/extends n) (:block/parent n))]
-                       (when-let [parent-id (:block/uuid parent)]
+                       (when-let [parent-id (parent-uuid parent)]
                          (or (get all-existing-page-uuids parent-id)
                              (throw (ex-info (str "No parent page found for " (pr-str (:block/uuid parent)))
                                              {:node n}))))))]
@@ -2504,8 +2515,8 @@
 
 (defn- page-name-lookup-key
   [p classes-from-property-parents all-existing-page-uuids]
-  (if-let [parents (and (or (contains? (:block/tags p) :logseq.class/Tag)
-                            (contains? (:block/tags p) :logseq.class/Page))
+  ;; :block/tags is a vector in some txs, e.g. a new class's
+  (if-let [parents (and (some #{:logseq.class/Tag :logseq.class/Page} (:block/tags p))
                        (not (contains? classes-from-property-parents (:block/title p)))
                        (get-page-parents p all-existing-page-uuids))]
     (string/join ns-util/namespace-char (map :block/name (conj (vec parents) p)))
@@ -2521,14 +2532,28 @@
         classes @(:classes-from-property-parents import-state)]
     (swap! (:page-names-to-uuids import-state)
            (fn [m]
-             (reduce (fn [acc p]
-                       (if (and (:block/uuid p)
-                                (not (some #{:logseq.class/Property} (:block/tags p)))
-                                (not (some-> (:db/ident p) db-malli-schema/user-property?)))
-                         (assoc acc (page-name-lookup-key p classes uuid->page) (:block/uuid p))
-                         acc))
-                     m
-                     pages)))))
+             (let [keyed (keep (fn [p]
+                                 (when (and (:block/uuid p)
+                                            (not (some #{:logseq.class/Property} (:block/tags p)))
+                                            (not (some-> (:db/ident p) db-malli-schema/user-property?)))
+                                   [(page-name-lookup-key p classes uuid->page) p]))
+                               pages)
+                   ;; A namespace page can also be saved without its parent in the same txs,
+                   ;; e.g. as the page map of a tag converted to a class. Its bare name
+                   ;; would name it as the root page of that name.
+                   namespaced-uuids (set (keep (fn [[k p]] (when (not= k (:block/name p)) (:block/uuid p))) keyed))]
+               (reduce (fn [acc [k p]]
+                         (let [page-uuid (:block/uuid p)
+                               bare-key? (= k (:block/name p))]
+                           (cond
+                             (and bare-key? (contains? namespaced-uuids page-uuid))
+                             (cond-> acc
+                               (= page-uuid (get acc k)) (dissoc k))
+
+                             :else
+                             (assoc acc k page-uuid))))
+                       m
+                       keyed))))))
 
 (defn- get-page-names-to-uuids
   "Saved pages only. Journal name->uuid stays in :journal-page-name-uuids and is
@@ -2757,6 +2782,23 @@
          page))
      pages)))
 
+(defn- as-journal-of-this-import
+  "A page file named like a journal file of this import, e.g. pages/Dec 31st, 2025.md
+  next to journals/2025_12_31.md, is that journal whichever file is imported first.
+  The page is not recognized as a journal when the graph's journal title format
+  differs from the canonical title the journal files are indexed by."
+  [page journal-page-name-uuids]
+  (if-let [journal-uuid (and (not (:block/journal-day page))
+                             (get journal-page-name-uuids (:block/name page)))]
+    (if-let [journal-day (date-time-util/journal-title->int
+                          (:block/title page) [date-time-util/default-journal-title-formatter])]
+      (assoc page
+             :block/uuid journal-uuid
+             :block/journal-day journal-day
+             :block/tags (conj (vec (remove #{:logseq.class/Page} (:block/tags page))) :logseq.class/Journal))
+      page)
+    page))
+
 (defn- build-pages-tx
   "Given all the pages and blocks parsed from a file, return a map containing
   all pages to be transacted, pages' properties and additional
@@ -2786,7 +2828,8 @@
                                       (assoc :block/updated-at file-page-updated-at)))))
                        ;; sanitize alias declarations before transacting
                        (sanitize-page-aliases-for-import! (:alias-owners import-state)
-                                                          (:ignored-properties import-state)))
+                                                          (:ignored-properties import-state))
+                       (->> (map #(as-journal-of-this-import % journal-page-name-uuids))))
         ;; Build all named ents once per import file to speed up named lookups
         all-existing-page-uuids (get-page-names-to-uuids import-state)
         all-pages (map #(modify-page-tx % all-existing-page-uuids) all-pages*)

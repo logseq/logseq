@@ -5,6 +5,7 @@
             ["os" :as os]
             ["path" :as node-path]
             [cljs.test :refer [is]]
+            [datascript.core :as d]
             [logseq.common.path :as path]
             [logseq.db :as ldb]
             [logseq.db.frontend.validate :as db-validate]
@@ -56,6 +57,32 @@
     (is (some? journal) "The tag's date is a journal page")
     (is (not (ldb/class? journal)) "The journal page is not a class")
     (is (contains? (set (map :db/id (:block/refs block))) (:db/id journal)) "The block refs the journal")
+    (is (empty? (map :entity (:errors (db-validate/validate-local-db! db))))
+        "Imported graph validates")))
+
+(defn- pages-named [db page-name]
+  (map #(d/entity db (:e %)) (d/datoms db :avet :block/name page-name)))
+
+(deftest-async namespace-tag-class-does-not-take-a-root-page-of-its-last-name
+  (p/let [conn (import-files-converting-tags! [["pages/c.md" "- c #projects/x"]
+                                               ["pages/x.md" "- in x"]
+                                               ["pages/d.md" "- d [[x]]"]])
+          db @conn
+          root-x (first (remove ldb/class? (pages-named db "x")))
+          d-block (db-test/find-block-by-content db #"^d ")]
+    (is (some? root-x) "pages/x.md creates a root page x")
+    (is (= #{"in x"} (set (map :block/title (:block/_page root-x)))) "x has the blocks of pages/x.md")
+    (is (= [(:db/id root-x)] (map :db/id (:block/refs d-block))) "[[x]] links to the root page x")))
+
+(deftest-async namespace-ref-then-namespace-tag-make-one-work-b
+  (p/let [conn (import-files-converting-tags! [["pages/c.md" "- c [[work/b]]"]
+                                               ["pages/d.md" "- d #work/b"]])
+          db @conn
+          work (ldb/get-page db "work")
+          under-work (filter #(or (= (:db/id work) (:db/id (:block/parent %)))
+                                  (some (fn [p] (= (:db/id work) (:db/id p))) (:logseq.property.class/extends %)))
+                             (pages-named db "b"))]
+    (is (= 1 (count under-work)) "There is one work/b")
     (is (empty? (map :entity (:errors (db-validate/validate-local-db! db))))
         "Imported graph validates")))
 
