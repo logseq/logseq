@@ -46,7 +46,9 @@
 (deftest auto-save-runs-in-a-block-that-holds-a-tag-test
   (testing "a complete tag elsewhere in the block does not stop the auto-save"
     (is (true? (auto-saves? "task #project and more" 22)))
-    (is (true? (auto-saves? "see https://example.com/#anchor today" 37))))
+    (is (true? (auto-saves? "see https://example.com/#anchor today" 37)))
+    (is (true? (auto-saves? "see https://example.com/#anchor" 31))
+        "a URL fragment at the cursor is not a tag being typed"))
   (testing "a tag being typed at the cursor still holds the save back"
     (is (false? (auto-saves? "task #proj" 10)))
     (is (false? (auto-saves? "task #[[my proj" 15)))))
