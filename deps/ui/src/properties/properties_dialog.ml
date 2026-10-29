@@ -77,11 +77,15 @@ let publish d =
   | Some s -> Runtime.signal_set s d
   | None -> ()
 
+let is_current d =
+  match !current with Some active -> active == d | None -> false
+
 let set_phase d p =
-  d.d_phase <- p;
-  match d.d_phase_sig with
-  | Some s -> Runtime.signal_set s p
-  | None -> ()
+  if is_current d then (
+    d.d_phase <- p;
+    match d.d_phase_sig with
+    | Some s -> Runtime.signal_set s p
+    | None -> ())
 
 let close () =
   retire_open ();
@@ -113,13 +117,30 @@ let owners d =
 (* ---------- writes shared by phases ---------- *)
 
 let close_current d =
-  match !current with Some active when active == d -> close () | _ -> ()
+  if is_current d then close ()
+
+let write_error d error =
+  Ui_services.log_error ("property write failed", error);
+  if is_current d then S.toast_error (I18n.t "ui/save-changes-error")
+
+let write_result task =
+  Js.Promise.catch (fun error -> Js.Promise.resolve (Error error))
+    (let* result = task in Js.Promise.resolve (Ok result))
+
+let run_write d task on_success =
+  let phase = d.d_phase in
+  ignore
+    (let* result = write_result task in
+     if is_current d && d.d_phase == phase then
+       (match result with
+        | Ok value -> on_success value
+        | Error error -> write_error d error);
+     Js.Promise.resolve ())
 
 let finish_write d task =
-  ignore (let* _ = task in
+  run_write d task (fun _ ->
     S.refresh_all ();
-    close_current d;
-    Js.Promise.resolve ())
+    close_current d)
 
 let for_owners d write =
   let rec run = function
@@ -151,15 +172,14 @@ let is_many prop =
 let add_empty_text_block d prop =
   let ident = ident_of prop in
   !(Editor_state.close_block_editor) ();
-  V.set_pending_edit ~block_uuid:d.d_target.uuid ~ident;
-  (let* _ = for_owners d (fun block_uuid ->
-    D.create_property_text_block ~block_uuid ~ident
-      ~title:"" ~new_block_id:(Ui_services.env_random_uuid ()) ())
-  in
-  S.refresh_now ();
-  close_current d;
-  Js.Promise.resolve ())
-  |> ignore
+  run_write d
+    (for_owners d (fun block_uuid ->
+       D.create_property_text_block ~block_uuid ~ident
+         ~title:"" ~new_block_id:(Ui_services.env_random_uuid ()) ()))
+    (fun () ->
+      V.set_pending_edit ~block_uuid:d.d_target.uuid ~ident;
+      S.refresh_now ();
+      close_current d)
 
 (* chosen an existing property from the select *)
 let rec property_chosen d prop =
@@ -250,19 +270,16 @@ and on_type_chosen d name ty =
           (fun _ -> Js.Promise.resolve W.Nil)
           p)
   in
-  (match D.untag res with
+  (if is_current d then match D.untag res with
    | W.Nil ->
        S.toast_error (I18n.t "property/create-error")
    | W.Map _ as prop ->
        if d.d_target.is_tag then (
-         (match ident_of prop with
+         match ident_of prop with
           | "" -> ()
           | ident ->
-              ignore
-                (D.class_add_property ~class_uuid:d.d_target.uuid
-                   ~ident));
-         S.refresh_all ();
-         close ())
+              finish_write d
+                (D.class_add_property ~class_uuid:d.d_target.uuid ~ident))
        else (
          match ty with
          | "checkbox" ->
@@ -503,11 +520,18 @@ let date_value_view d prop : t =
   in
   let write value =
     incr writes;
-    ignore (let* _ = D.batch_set_property ~block_uuids:owners ~ident ~value in
-      decr writes;
-      S.refresh_all ();
-      if !dismiss_after_write && !writes = 0 then close_current d;
-      Js.Promise.resolve ())
+    ignore
+      (let* result = write_result
+         (D.batch_set_property ~block_uuids:owners ~ident ~value) in
+       decr writes;
+       (match result with
+        | Ok _ ->
+            S.refresh_all ();
+            if !dismiss_after_write && !writes = 0 then close_current d
+        | Error error ->
+            dismiss_after_write := false;
+            write_error d error);
+       Js.Promise.resolve ())
   in
   (reactive (function
     | None -> column ~width:556 []
