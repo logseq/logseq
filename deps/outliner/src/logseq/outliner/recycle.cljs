@@ -4,12 +4,12 @@
             [logseq.common.util :as common-util]
             [logseq.common.uuid :as common-uuid]
             [logseq.db :as ldb]
+            [logseq.db.frontend.content :as db-content]
+            [logseq.outliner.value-blocks :as value-blocks]
             [logseq.db.common.delete-blocks :as delete-blocks]
             [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.common.initial-data :as common-initial-data]
-            [logseq.db.common.order :as db-order]
-            [logseq.db.frontend.content :as db-content]
-            [logseq.outliner.value-blocks :as value-blocks]))
+            [logseq.db.common.order :as db-order]))
 
 (def ^:private recycle-page-title "Recycle")
 (def ^:private retention-ms (* 30 24 3600 1000))
@@ -98,30 +98,6 @@
                (conj result page')))
       result)))
 
-(defn- page-block-subtree-ids
-  [db page]
-  (let [root-blocks (->> (concat (:block/_page page)
-                                 (remove ldb/page? (block-children page)))
-                         (common-util/distinct-by :db/id)
-                         ldb/sort-by-order)]
-    (->> root-blocks
-         (mapcat (fn [block]
-                   (map :db/id (block-subtree db block)))))))
-
-(defn- page-tree-ids
-  [db page]
-  (->> (page-descendants page)
-       (mapcat (fn [page']
-                 (cons (:db/id page')
-                       (page-block-subtree-ids db page'))))
-       distinct))
-
-(defn- deleted-by-id
-  [db deleted-by-uuid]
-  (some-> deleted-by-uuid
-          (#(d/entity db [:block/uuid %]))
-          :db/id))
-
 (defn- retracted-pages-refs-title-tx
   "Turns the [[uuid]] refs to the pages `tx-data` removes for good into those
   pages' titles, so the blocks that referred to them stay readable instead of
@@ -156,12 +132,33 @@
                   (:db/id (d/entity db id)))))
         set)))
 
+(defn- page-block-subtree-ids
+  [db page]
+  (let [root-blocks (->> (concat (:block/_page page)
+                                 (remove ldb/page? (block-children page)))
+                         (common-util/distinct-by :db/id)
+                         ldb/sort-by-order)]
+    (->> root-blocks
+         (mapcat (fn [block]
+                   (map :db/id (block-subtree db block)))))))
+
+(defn- page-tree-ids
+  [db page]
+  (->> (page-descendants page)
+       (mapcat (fn [page']
+                 (cons (:db/id page')
+                       (page-block-subtree-ids db page'))))
+       distinct))
+
+(defn- deleted-by-id
+  [db deleted-by-uuid]
+  (some-> deleted-by-uuid
+          (#(d/entity db [:block/uuid %]))
+          :db/id))
+
 (defn- with-delete-cleanup-tx
   [db tx-data]
-  (distinct (concat tx-data
-                    (retracted-pages-refs-title-tx db tx-data)
-                    (owned-value-blocks-tx db tx-data)
-                    (delete-blocks/update-refs-history db tx-data {}))))
+  (distinct (concat tx-data (delete-blocks/update-refs-history db tx-data {}))))
 
 (defn recycle-blocks-tx-data
   [db blocks {:keys [deleted-by-uuid now-ms]}]
@@ -326,6 +323,14 @@
       (ldb/transact! conn tx-data {:outliner-op :restore-recycled})
       true)))
 
+(defn- with-permanent-delete-cleanup-tx
+  "`with-delete-cleanup-tx`, and the refs and property value blocks of the nodes
+  `tx-data` removes cleaned up too."
+  [db tx-data]
+  (distinct (concat (with-delete-cleanup-tx db tx-data)
+                    (retracted-pages-refs-title-tx db tx-data)
+                    (owned-value-blocks-tx db tx-data))))
+
 (defn ^:api permanently-delete-tx-data
   [db root]
   (when (and root (recycled? root))
@@ -338,7 +343,7 @@
                     [:db/retractEntity [:block/uuid block-uuid]]))
              distinct
              seq
-             (with-delete-cleanup-tx db)
+             (with-permanent-delete-cleanup-tx db)
              seq)))
 
 (defn ^:api permanently-delete!
@@ -366,7 +371,7 @@
                  (map (fn [node] [:db/retractEntity (:db/id node)]) (block-subtree db entity)))))
      distinct
      seq
-     (with-delete-cleanup-tx db))))
+     (with-permanent-delete-cleanup-tx db))))
 
 (defn ^:api gc!
   [conn opts]
