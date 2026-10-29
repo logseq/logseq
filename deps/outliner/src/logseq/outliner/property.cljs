@@ -163,20 +163,10 @@
               [:db/retract (:db/id class) :logseq.property.class/extends (:db/id parent)]))
           (:logseq.property.class/extends class))))
 
-(defn- root-class-eid
-  [db]
-  (:db/id (d/entity db :logseq.class/Root)))
-
 (defn- canonical-extends-ids
   [db value]
-  (let [parent-ids (vec (->entity-ids db value))
-        parent-ids' (remove (class-ancestor-ids db parent-ids) parent-ids)
-        root-id (root-class-eid db)
-        without-root (remove #(= % root-id) parent-ids')]
-    ;; Root is the implicit default parent, never a co-parent of another class.
-    (if (seq without-root)
-      without-root
-      parent-ids')))
+  (let [parent-ids (vec (->entity-ids db value))]
+    (remove (class-ancestor-ids db parent-ids) parent-ids)))
 
 (defn- normalize-extends-value
   [db value]
@@ -185,23 +175,14 @@
       (first ids)
       ids)))
 
-(defn- root-extends-ref?
-  "True when value is a single Extends parent that is Root Tag."
-  [db value]
-  (and (single-entity-ref? value)
-       (= (first (->entity-ids db value)) (root-class-eid db))))
-
-(defn- other-extends-parents
-  [block]
-  (remove #(= :logseq.class/Root (:db/ident %))
-          (or (:logseq.property.class/extends block) [])))
-
 (defn- ignore-root-extends-add?
-  "Root Tag is implicit. Ignore adding it once another parent is already set."
+  "Returns true when adding a normalized Root ref would create a redundant parent."
   [db block property-id value]
   (and (= property-id :logseq.property.class/extends)
-       (root-extends-ref? db value)
-       (seq (other-extends-parents block))))
+       (integer? value)
+       (= :logseq.class/Root (:db/ident (d/entity db value)))
+       (some #(not= :logseq.class/Root (:db/ident %))
+             (:logseq.property.class/extends block))))
 
 (defn- redundant-extends-retraction-tx-data
   [db class value]
@@ -213,7 +194,8 @@
      (mapcat #(direct-extends-retraction-tx-data (d/entity db %) inherited-parent-ids)
              (db-class/get-structured-children db (:db/id class))))))
 
-(defn- build-property-value-tx-data
+(defn- build-normalized-property-value-tx-data
+  "Builds property transactions. Extends refs in `value` must be normalized."
   [conn block property-id value]
   (when (and (some? value)
              (not (ignore-root-extends-add? @conn block property-id value)))
@@ -224,9 +206,8 @@
           multiple-values-empty? (and (sequential? old-value)
                                       (contains? (set (map :db/ident old-value)) :logseq.property/empty-placeholder))
           extends? (= property-id :logseq.property.class/extends)
-          tx-value (if extends?
-                     (let [value' (normalize-extends-value @conn value)]
-                       (if (coll? value') (set value') value'))
+          tx-value (if (and extends? (coll? value))
+                     (set value)
                      value)
           update-block-tx (cond-> (outliner-core/block-with-updated-at {:db/id (:db/id block)})
                             true
@@ -242,10 +223,16 @@
         (conj [:db/retract (:db/id update-block-tx) property-id])
         extends?
         (into (redundant-extends-retraction-tx-data @conn block value))
-        extends?
-        (conj [:db/retract (:db/id update-block-tx) :logseq.property.class/extends :logseq.class/Root])
         true
         (conj update-block-tx)))))
+
+(defn- build-property-value-tx-data
+  [conn block property-id value]
+  (build-normalized-property-value-tx-data
+   conn block property-id
+   (if (and (= property-id :logseq.property.class/extends) (some? value))
+     (normalize-extends-value @conn value)
+     value)))
 
 (defn- get-property-value-schema
   "Gets a malli schema to validate the property value for the given property type and builds
@@ -843,7 +830,7 @@
                          (doseq [alias-id (if (coll? v') v' [v'])]
                            (when (number? alias-id)
                              (throw-error-if-invalid-alias @conn block alias-id))))
-                       (build-property-value-tx-data conn block property-id v'))
+                       (build-normalized-property-value-tx-data conn block property-id v'))
                      (js/console.error "Skipping setting a block's property because the block id could not be found:" eid)))
                  block-eids))]
        (when (seq txs)
