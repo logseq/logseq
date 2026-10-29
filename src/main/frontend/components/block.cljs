@@ -2957,11 +2957,9 @@
               (when (= 1 button)
                 (remember-block-pointer! e)
                 (block-selection/set-pointer-down!))
-              ;; util/stop'd pointerdowns below suppress the mousedown that
-              ;; would otherwise flush the editor via escape-editing
               (when-let [editing-block (state/get-edit-block)]
                 (when-not (= (:block/uuid editing-block) (:block/uuid block))
-                  (editor-handler/save-current-block!)))
+                  (editor-handler/escape-editing)))
               (cond
                 (and meta? shift?)
                 (when-not (empty? selection-blocks)
