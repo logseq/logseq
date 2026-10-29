@@ -304,6 +304,23 @@
    first
    (d/entity db)))
 
+(defn- get-recycled-page-by-original-parent
+  "A page in the Recycle that was deleted from under `parent-id`."
+  [db parent-id child-title]
+  (some->>
+   (d/q
+    '[:find [?b ...]
+      :in $ ?p ?child-name
+      :where
+      [?b :logseq.property.recycle/original-parent ?p]
+      [?b :block/name ?child-name]
+      [?b :logseq.property/deleted-at]]
+    db
+    parent-id
+    (common-util/page-name-sanity-lc child-title))
+   first
+   (d/entity db)))
+
 (defn- page-with-parent-and-order
   "Apply to namespace pages"
   [db page & {:keys [parent]}]
@@ -336,7 +353,11 @@
                                    (ldb/get-page db part)
 
                                    (de/entity? parent)
-                                   (get-page-by-parent db (:db/id parent) part create-class?))
+                                   ;; a recycled page is found by its original
+                                   ;; parent, and restored like a recycled root
+                                   (or (get-page-by-parent db (:db/id parent) part create-class?)
+                                       (when-not create-class?
+                                         (get-recycled-page-by-original-parent db (:db/id parent) part))))
                             result (or page
                                        (gp-block/page-name->map part db true date-formatter
                                                                 {:page-uuid (when last-part? block-uuid)
