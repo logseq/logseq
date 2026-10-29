@@ -167,3 +167,50 @@
         (outliner-property/delete-property-value! conn [:block/uuid b1-uuid] :user.property/items x-id))
       (is (= {["y" 1] 1} (value-blocks-by-holders conn :user.property/items)))
       (is (empty? (:errors (db-validate/validate-local-db! @conn)))))))
+
+(defn- holds-choice-with-content?
+  [conn title property-id content]
+  (let [value (block-value conn title property-id)
+        choice-ids (set (map :db/id (:block/_closed-value-property (d/entity @conn property-id))))]
+    (and (contains? choice-ids (:db/id value))
+         (= content (db-property/property-value-content value)))))
+
+(deftest upsert-closed-value-turns-existing-values-into-choices
+  (testing "A text property's values become choices when it gets its first choice"
+    (let [conn (db-test/create-conn-with-blocks
+                {:properties {:color {:logseq.property/type :default}}
+                 :pages-and-blocks [{:page {:block/title "page1"}
+                                     :blocks [{:block/title "A"} {:block/title "B"} {:block/title "C"}]}]})]
+      (doseq [[title value] [["A" "red"] ["B" "red"] ["C" "blue"]]]
+        (outliner-property/set-block-property! conn [:block/uuid (block-uuid conn title)] :user.property/color value))
+      (outliner-property/upsert-closed-value! conn :user.property/color {:value "green"})
+      (is (= #{"red" "blue" "green"}
+             (set (map db-property/property-value-content
+                       (:block/_closed-value-property (d/entity @conn :user.property/color))))))
+      (doseq [[title value] [["A" "red"] ["B" "red"] ["C" "blue"]]]
+        (is (holds-choice-with-content? conn title :user.property/color value) title))
+      (is (empty? (:errors (db-validate/validate-local-db! @conn))))))
+
+  (testing "A new choice with the text of an existing value becomes that value's choice"
+    (let [conn (db-test/create-conn-with-blocks
+                {:properties {:color {:logseq.property/type :default}}
+                 :pages-and-blocks [{:page {:block/title "page1"}
+                                     :blocks [{:block/title "A"}]}]})]
+      (outliner-property/set-block-property! conn [:block/uuid (block-uuid conn "A")] :user.property/color "red")
+      (outliner-property/upsert-closed-value! conn :user.property/color {:value "red"})
+      (is (= ["red"] (map db-property/property-value-content
+                          (:block/_closed-value-property (d/entity @conn :user.property/color)))))
+      (is (holds-choice-with-content? conn "A" :user.property/color "red"))
+      (is (empty? (:errors (db-validate/validate-local-db! @conn))))))
+
+  (testing "A number property's values become choices"
+    (let [conn (db-test/create-conn-with-blocks
+                {:properties {:size {:logseq.property/type :number}}
+                 :pages-and-blocks [{:page {:block/title "page1"}
+                                     :blocks [{:block/title "b1"} {:block/title "b2"}]}]})]
+      (outliner-property/set-block-property! conn [:block/uuid (block-uuid conn "b1")] :user.property/size 210)
+      (outliner-property/set-block-property! conn [:block/uuid (block-uuid conn "b2")] :user.property/size 211)
+      (outliner-property/upsert-closed-value! conn :user.property/size {:value 5})
+      (is (holds-choice-with-content? conn "b1" :user.property/size 210))
+      (is (holds-choice-with-content? conn "b2" :user.property/size 211))
+      (is (empty? (:errors (db-validate/validate-local-db! @conn)))))))
