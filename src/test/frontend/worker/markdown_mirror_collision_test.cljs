@@ -4,7 +4,9 @@
   (:require [cljs.test :refer [async deftest is]]
             [clojure.string :as string]
             [datascript.core :as d]
+            [frontend.test.node-helper :as node-helper]
             [frontend.worker.markdown-mirror :as markdown-mirror]
+            [frontend.worker.platform.node :as platform-node]
             [logseq.db.test.helper :as db-test]
             [promesa.core :as p]))
 
@@ -39,9 +41,18 @@
                                                                (swap! files dissoc (file-key path))
                                                                (swap! names dissoc (file-key path))
                                                                (resolve nil))
-                                                             0))))}
+                                                             0))))
+                           :read-dir! (fn [dir]
+                                        (p/resolved
+                                         (vec (keep (fn [path]
+                                                      (when (string/starts-with? path (str dir "/"))
+                                                        (let [file-name (subs path (inc (count dir)))]
+                                                          (when-not (string/includes? file-name "/")
+                                                            file-name))))
+                                                    (vals @names)))))}
                  :broadcast {:post-message! (fn [& _] nil)}}
       :files files
+      :put-file! (fn [relative-path content] (put-file! (mirror-file relative-path) content))
       :read-file (fn [relative-path] (get @files (file-key (mirror-file relative-path))))
       :file-exists? (fn [relative-path] (contains? @files (file-key (mirror-file relative-path))))})))
 
@@ -158,3 +169,59 @@
                      _ (markdown-mirror/<handle-tx-report! test-repo conn tx-report {:platform platform})]
                (is (string/includes? (str (read-file "pages/Notes.md")) "lower body")
                    "the old path `pages/notes.md` is the page's own new file"))))))
+
+(deftest regenerating-removes-a-legacy-case-variant-file-test
+  (async done
+         (let [{:keys [platform put-file! read-file file-exists?]} (fake-platform)
+               conn (notes-pages-conn)]
+           ;; written on Linux before case variants were grouped: one file per exact title
+           (put-file! "pages/Notes.md" "legacy upper")
+           (put-file! "pages/notes.md" "legacy lower")
+           (with-mirror-enabled
+            done
+            #(p/let [_ (markdown-mirror/<mirror-repo! test-repo @conn {:platform platform})]
+               (is (string/includes? (str (read-file "pages/Notes.md")) "upper body"))
+               (is (string/includes? (str (read-file "pages/notes (2).md")) "lower body"))
+               (is (not (file-exists? "pages/notes.md"))
+                   "the stale copy of the page that moved to `notes (2).md` is removed"))))))
+
+(deftest regenerating-keeps-a-page-file-listed-under-another-case-test
+  (async done
+         (let [{:keys [platform put-file! read-file]} (fake-platform {:case-insensitive? true})
+               conn (notes-pages-conn)]
+           ;; the file system keeps the name `notes.md` when `pages/Notes.md` is written
+           (put-file! "pages/notes.md" "legacy")
+           (with-mirror-enabled
+            done
+            #(p/let [_ (markdown-mirror/<mirror-repo! test-repo @conn {:platform platform})]
+               (is (string/includes? (str (read-file "pages/Notes.md")) "upper body"))
+               (is (string/includes? (str (read-file "pages/notes (2).md")) "lower body")))))))
+
+(deftest writing-a-moved-page-removes-its-legacy-file-test
+  (async done
+         (let [{:keys [platform put-file! read-file file-exists?]} (fake-platform)
+               conn (notes-pages-conn)]
+           (put-file! "pages/Notes.md" "legacy upper")
+           (put-file! "pages/notes.md" "legacy lower")
+           (with-mirror-enabled
+            done
+            #(p/let [block-id (:db/id (db-test/find-block-by-content @conn "lower body"))
+                     tx-report (d/transact! conn [[:db/add block-id :block/title "lower body edited"]])
+                     _ (markdown-mirror/<handle-tx-report! test-repo conn tx-report {:platform platform})]
+               (is (string/includes? (str (read-file "pages/notes (2).md")) "lower body edited"))
+               (is (file-exists? "pages/Notes.md") "the other page's file is kept")
+               (is (not (file-exists? "pages/notes.md"))
+                   "the stale copy at the page's pre-upgrade path is removed"))))))
+
+(deftest node-platform-reads-mirror-dir-file-names-test
+  (async done
+         (let [root-dir (node-helper/create-tmp-dir "markdown-mirror-read-dir")]
+           (-> (p/let [platform (platform-node/node-platform {:root-dir root-dir})
+                       storage (:storage platform)
+                       _ ((:write-text-atomic! storage) "graph-a/mirror/markdown/pages/page.md" "mirror")
+                       names ((:read-dir! storage) "graph-a/mirror/markdown/pages")
+                       missing ((:read-dir! storage) "graph-a/mirror/markdown/journals")]
+                 (is (= ["page.md"] names))
+                 (is (= [] missing) "a missing directory has no files"))
+               (p/catch (fn [error] (is false (str error))))
+               (p/finally done)))))
