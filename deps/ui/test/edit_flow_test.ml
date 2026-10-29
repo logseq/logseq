@@ -423,7 +423,7 @@ let test_pending_save_order (h : host) =
   calls := [];
   Ops.schedule_save "b1" "hellozq";
   (match !Ops.pending_save with
-   | Some ("b1", "hellozq") -> check "save queued pending" true
+   | Some { Ops.uuid = "b1"; title = "hellozq"; _ } -> check "save queued pending" true
    | _ -> check "save queued pending" false);
   let* () = Ops.undo () in
   (match !calls with
