@@ -1461,7 +1461,13 @@
              ;; FIXME: move-blocks should be pure fn
              ;; (prn "==>> move blocks tx:" tx-data)
              (ldb/transact! conn tx-data {:sibling? sibling?
-                                          :outliner-op (or outliner-op :move-blocks)}))))))))
+                                          :outliner-op (or outliner-op :move-blocks)})
+             ;; a page moved under a new parent must not land next to a
+             ;; sibling page with its name; throwing discards the whole batch
+             (when (ldb/page? block)
+               (let [moved (d/entity @conn (:db/id block))]
+                 (when (not= (:db/id (:block/parent block)) (:db/id (:block/parent moved)))
+                   (outliner-validate/validate-unique-by-name-and-tags @conn (:block/title moved) moved)))))))))))
 
 (defn- move-blocks
   "Move `blocks` to `target-block` as siblings or children."
