@@ -3418,3 +3418,45 @@
         "Escape during the move keeps nothing selected")
     (is (false? (#'editor/reselect-moved-rows? ["b" "c"] [:b2] before before))
         "a row not drawn yet: no partial selection")))
+
+(deftest select-parent-target-uses-page-ness-not-nested-parent-test
+  (let [child-uuid #uuid "11111111-1111-1111-1111-111111111111"
+        grandchild-uuid #uuid "22222222-2222-2222-2222-222222222222"
+        page-uuid #uuid "33333333-3333-3333-3333-333333333333"
+        grandchild {:block/uuid grandchild-uuid
+                    :block/title "grandchild text"
+                    :block/parent {:db/id 10
+                                   :block/uuid child-uuid
+                                   :block/title "child"}
+                    :block/parent-uuid child-uuid}
+        child {:block/uuid child-uuid
+               :block/title "child"
+               :block/parent {:db/id 1
+                              :block/uuid page-uuid
+                              :block/name "page"
+                              :block/title "page"
+                              :block/tags [:logseq.class/Page]}
+               :block/parent-uuid page-uuid}]
+    (testing "DB worker parent summaries omit nested :block/parent"
+      (is (nil? (:block/parent (:block/parent grandchild)))
+          "The reported worker summary has no parent-of-parent field")
+      (is (= {:select-block child-uuid}
+             (#'editor/select-parent-target grandchild "page"))
+          "Nested block expands to its parent block")
+      (is (= {:select-all-page "page"}
+             (#'editor/select-parent-target child "page"))
+          "Top-level block whose parent is a page selects the whole page"))
+    (testing "zoomed-in root stays put"
+      (is (nil? (#'editor/select-parent-target grandchild (str grandchild-uuid)))))
+    (testing "file-graph parent entities still expand"
+      (is (= {:select-block child-uuid}
+             (#'editor/select-parent-target
+              (assoc-in grandchild [:block/parent :block/parent] {:block/name "page"})
+              "page"))))
+    (testing "parent uuid fallback when the parent summary is only a db id"
+      (is (= {:select-block child-uuid}
+             (#'editor/select-parent-target
+              {:block/uuid grandchild-uuid
+               :block/parent {:db/id 10}
+               :block/parent-uuid child-uuid}
+              "page"))))))
