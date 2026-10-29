@@ -987,6 +987,7 @@ let option_card ~key ~thumbnail ~label ?(min_height = 0)
     (Ui_parts.float_prop P.Opacity
       ~value:(reactive (fun active -> if active then 1. else 0.9) selected)
     (list_item ~key ~on_press ~selected_signal:selected ~background:"transparent"
+       ~foreground:"hsl(var(--foreground))"
        ~min_height:0 ~width:100 ~padding_vertical:0 ~padding_horizontal:0
        (* cljs li: <i> thumbnail 92x63 on top, <strong> label centered
           below — column keeps the label under the image instead of
