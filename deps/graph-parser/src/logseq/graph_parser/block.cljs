@@ -314,12 +314,18 @@
 ;; Hack to detect export as some fns are too deeply nested to be refactored to get explicit option
 (def *export-to-db-graph? (atom false))
 
-(defn- get-page
-  "Similar to get-page but only for file graphs"
+(defn get-page
+  "Similar to get-page but only for file graphs and file graph import. An import
+  skips pages with a namespace parent: the db stores `projects/b` with the name
+  `b`, so a bare `b` names a different page."
   [db page-name]
   (when (and db (string? page-name))
-    (d/entity db
-              (first (sort (map :e (entity-util/get-pages-by-name db page-name)))))))
+    (->> (entity-util/get-pages-by-name db page-name)
+         (map :e)
+         sort
+         (map #(d/entity db %))
+         (remove #(and @*export-to-db-graph? (:block/parent %)))
+         first)))
 
 (defn- page-name-string->map
   [original-page-name db date-formatter
