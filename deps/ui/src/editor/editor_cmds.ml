@@ -150,13 +150,7 @@ let run ~command ~block ~value : outcome =
               h.clipboard_write title;
               Handled
           | "cut" ->
-              let title =
-                match Editor_state.find uuid with
-                | Some b -> b.Model.block_title
-                | None -> ""
-              in
-              h.clipboard_write title;
-              apply [ Outliner_ops.delete_blocks [ uuid ] ];
+              Editor_actions.cut_block_text uuid;
               Handled
           | "delete" ->
               apply [ Outliner_ops.delete_blocks [ uuid ] ];
