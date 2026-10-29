@@ -288,6 +288,41 @@ let update (model : t) (action : Action.t) : t =
 
 (* the single dispatch path — every action gets its effect pass, then
    the state transition (wired as the Lui_app reducer in main.ml) *)
+type publication =
+  { before : t
+  ; after : t
+  ; before_generation : int
+  ; after_generation : int
+  }
+
+let publication_observer : (Action.t * (publication -> unit)) option ref = ref None
+
+let capture_publication action dispatch =
+  let has_identity = match action with
+    | Action.Page_loaded _ | Action.Journals_loaded _
+    | Action.Journals_spliced _ | Action.Navigate_to _ -> true
+    | _ -> false in
+  if not has_identity then (ignore (dispatch ()); None) else
+  let previous = !publication_observer in
+  let publication = ref None in
+  publication_observer :=
+    Some (action, fun model ->
+      if !publication = None then publication := Some model);
+  (* Melange cannot restore the raw backtrace used by Fun.protect. *)
+  let dispatched = try Ok (dispatch ()) with error -> Error error in
+  publication_observer := previous;
+  match dispatched with
+  | Ok true -> !publication
+  | Ok false -> None
+  | Error error -> raise error
+
 let apply (model : t) (action : Action.t) : t =
+  let before_generation = !Subs_state.load_gen in
   effects action;
-  update model action
+  let next = update model action in
+  (match !publication_observer with
+   | Some (expected, observe) when action == expected ->
+       observe { before = model; after = next
+               ; before_generation; after_generation = !Subs_state.load_gen }
+   | _ -> ());
+  next
