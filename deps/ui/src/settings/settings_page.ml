@@ -1070,24 +1070,34 @@ let home_page_row ctx =
   let home_text =
     Signal.state ctx.Lui_ui.ui_scheduler current
   in
+  let saving = Signal.state ctx.Lui_ui.ui_scheduler false in
   C.it_row ~key:"homep" ~label:(T.t "settings.features/home-default-page")
     [ box ~key:"homep-w" ~style_class:"ls-select-wrap" ~grow:1.
         [ Ui_components.input ~key:"homep-in"
             ~accessibility_identifier:"home-default-page" ~width:220
             ~height:26
             ~style_class:"form-input is-small" ~text:current
+            ~disabled:(reactive (fun value -> value) (Signal.value saving))
             ~on_input:(fun ev ->
               match ev with
               | Lui_protocol.TextChanged (_, q) ->
                   Runtime.signal_set home_text q
               | _ -> ())
             ~on_submit:(fun _ ->
-              let value = Runtime.signal_get home_text in
-              S.set_home_page value (fun res ->
-                  match res with
-                  | S.Home_ok -> Toast.success (T.t "settings.features/home-default-page-update-success")
-                  | S.Home_missing ->
-                      Toast.warning (T.page_not_found_msg value)))
+              if not (Runtime.signal_get saving) then begin
+                Runtime.signal_set saving true;
+                let repo = Runtime.repo () in
+                let value = Runtime.signal_get home_text in
+                S.set_home_page value (fun res ->
+                  if Ui_effect.alive ctx.Lui_ui.ui_scope then begin
+                    Runtime.signal_set saving false;
+                    if Runtime.repo () = repo then
+                      match res with
+                      | S.Home_ok -> Toast.success (T.t "settings.features/home-default-page-update-success")
+                      | S.Home_missing -> Toast.warning (T.page_not_found_msg value)
+                      | S.Home_error -> Toast.error (T.t "ui/save-changes-error")
+                  end)
+              end)
             []
         ]
     ]

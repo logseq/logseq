@@ -140,19 +140,24 @@ let map_dissoc key kvs =
       match k with Wire.Keyword s -> s <> key | _ -> true)
     kvs
 
-let set_config ?(on_saved = fun () -> ()) key v =
+let set_config ?(on_saved = fun () -> ())
+    ?(on_error = fun () -> Toast.error (I18n.t "ui/save-changes-error")) key v =
   let cfg' =
     match (Runtime.model ()).Model.graph_config with
     | Wire.Map kvs -> Wire.Map (map_assoc key v kvs)
     | _ -> invalid_arg "Graph configuration must be an EDN map"
   in
-  ignore
-    ((let* () = Sdk_config.write_config (repo ()) cfg' in
-      on_saved ();
-      Js.Promise.resolve ())
-     |> Js.Promise.catch (fun _ ->
-          Toast.error (I18n.t "ui/save-changes-error");
-          Js.Promise.resolve ()))
+  let r = repo () in
+  match Sdk_config.write_config r cfg' with
+  | write ->
+      ignore
+        ((let* () = write in
+          on_saved ();
+          Js.Promise.resolve ())
+         |> Js.Promise.catch (fun _ ->
+              on_error ();
+              Js.Promise.resolve ()))
+  | exception _ -> on_error ()
 
 let config_set_bool key b = set_config key (Wire.Bool b)
 
@@ -164,33 +169,41 @@ let config_toggle key ~default =
 type home_result =
   | Home_ok
   | Home_missing
+  | Home_error
 
 let set_home_page name k =
+  let r = repo () in
   let write page_opt =
-    let home =
-      match config_get "default-home" with
-      | Some (Wire.Map kvs) -> kvs
-      | _ -> []
-    in
-    let home' =
-      match page_opt with
-      | Some n -> map_assoc "page" (Wire.String n) home
-      | None -> map_dissoc "page" home
-    in
-    set_config ~on_saved:(fun () -> k Home_ok) "default-home" (Wire.Map home')
+    if repo () <> r then k Home_error
+    else begin
+      let home =
+        match config_get "default-home" with
+        | Some (Wire.Map kvs) -> kvs
+        | _ -> []
+      in
+      let home' =
+        match page_opt with
+        | Some n -> map_assoc "page" (Wire.String n) home
+        | None -> map_dissoc "page" home
+      in
+      set_config ~on_saved:(fun () -> k Home_ok) ~on_error:(fun () -> k Home_error)
+        "default-home" (Wire.Map home')
+    end
   in
   if String.trim name = "" then write None
   else
-    ignore
-      (let* w =
-        pull (repo ()) "[:db/id]"
-          (Wire.Array
-             [ Wire.Keyword "block/name"; Wire.String (page_name_lc name) ])
-      in
-      Js.Promise.resolve
-        (match w with
-        | Wire.Map _ -> write (Some name)
-        | _ -> k Home_missing))
+    match pull r "[:db/id]"
+      (Wire.Array [ Wire.Keyword "block/name"; Wire.String (page_name_lc name) ]) with
+    | lookup ->
+        ignore
+          ((let* w = lookup in
+            Js.Promise.resolve
+              (match w with
+               | Wire.Map _ -> write (Some name)
+               | Wire.Nil -> k Home_missing
+               | _ -> k Home_error))
+           |> Js.Promise.catch (fun _ -> k Home_error; Js.Promise.resolve ()))
+    | exception _ -> k Home_error
 
 (* ---- storage-backed prefs ---- *)
 
