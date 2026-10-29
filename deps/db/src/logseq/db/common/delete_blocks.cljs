@@ -165,10 +165,18 @@
                (conj result entity)))
       result)))
 
+(defn- imported-data-tx?
+  "An EDN import retracts all current entities before adding the imported ones, which
+  reuse entity ids. Cleaning up what refers to the retracted entities would delete
+  imported data such as property history."
+  [tx-meta]
+  (:logseq.db.sqlite.export/imported-data? tx-meta))
+
 (defn expand-delete-blocks-tx
   "Expands delete-blocks retracts to the current DB subtree before transacting."
-  [db txs {:keys [outliner-op]}]
-  (if (= :delete-blocks outliner-op)
+  [db txs {:keys [outliner-op] :as tx-meta}]
+  (if (and (= :delete-blocks outliner-op)
+           (not (imported-data-tx? tx-meta)))
     (let [subtree-tx (->> (retracted-entities db txs)
                           (filter block-entity?)
                           (mapcat block-subtree-entities)
@@ -225,5 +233,6 @@
 (defn update-refs-history
   "When an entity is deleted, related property history, views and reactions
    are deleted"
-  [db txs _opts]
-  (seq (build-cleanup-tx db txs)))
+  [db txs opts]
+  (when-not (imported-data-tx? opts)
+    (seq (build-cleanup-tx db txs))))
