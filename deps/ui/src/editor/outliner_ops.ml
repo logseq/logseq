@@ -6,6 +6,12 @@
 open Promise_ext
 module S = Editor_state
 
+let context_current (context : Model.t) =
+  let model = Runtime.model () in
+  model.Model.repo = context.Model.repo
+  && model.route = context.route
+  && model.context_revision = context.context_revision
+
 let kw k v = (Wire.Keyword k, v)
 let str k v = (Wire.String k, v)
 
@@ -345,8 +351,12 @@ let rec collect_collapsed set (w : Wire.t) =
       | Some children -> collect_collapsed set children
       | None -> set)
 
-let set_collapsed set =
-  let apply st = { st with S.collapsed = set } in
+let set_collapsed ?current set =
+  let apply st =
+    if Option.fold ~none:true ~some:(fun f -> f ()) current then
+      { st with S.collapsed = set }
+    else st
+  in
   (* on an empty page the first op's refresh runs before any block_row has
      mounted the editor state — defer the sync until ensure *)
   if S.ready () then S.set_silent apply
@@ -476,14 +486,14 @@ let tag_titles repo ids : (int * (string * string * bool * string * Node_icon.t 
          | _ -> None)
        (Wire.elems w))
 
-let resolve_block_tags (blocks : Model.block list) : Model.block list Js.Promise.t =
+let resolve_block_tags_for repo (blocks : Model.block list) : Model.block list Js.Promise.t =
   let ids =
     List.sort_uniq compare (List.fold_left collect_tag_ids [] blocks)
   in
   match ids with
   | [] -> Js.Promise.resolve blocks
   | _ -> (
-      match (Runtime.model ()).Model.repo with
+      match repo with
       | None -> Js.Promise.resolve blocks
       | Some repo ->
           let* titles = tag_titles repo ids in
@@ -527,6 +537,9 @@ let resolve_block_tags (blocks : Model.block list) : Model.block list Js.Promise
             }
           in
           Js.Promise.resolve (List.map fill blocks))
+
+let resolve_block_tags blocks =
+  resolve_block_tags_for (Runtime.model ()).Model.repo blocks
 
 (* the page entity's own block/tags -> resolved titles (page-title chips) *)
 let resolve_page_tags repo (page : Model.page) : Model.page Js.Promise.t =
@@ -639,7 +652,7 @@ let title_ref_tokens (title : string) : string list =
 (* one get-blocks batch resolving every [[ref]] target on the page —
    primes the pull caches so anchors mount on hits instead of paying a
    thread-api/pull each (the N+1 pull storm the nav profile shows) *)
-let prefetch_anchor_refs repo (blocks : Model.block list) :
+let prefetch_anchor_refs_for ~current repo (blocks : Model.block list) :
     unit Js.Promise.t =
   let rec collect acc (b : Model.block) =
     List.fold_left collect
@@ -686,36 +699,48 @@ let prefetch_anchor_refs repo (blocks : Model.block list) :
          Runtime.invoke2 "thread-api/get-blocks" (Wire.String repo)
            (Wire.Array reqs)
        in
-       Js.Promise.resolve (Render_inline.prime_pull_caches repo w))
-      |> Js.Promise.catch (fun _ -> Js.Promise.resolve ())
+       if current () then Render_inline.prime_pull_caches repo w;
+       Js.Promise.resolve ())
+
+let prefetch_anchor_refs repo blocks =
+  let context = Runtime.model () in
+  prefetch_anchor_refs_for ~current:(fun () -> context_current context) repo blocks
 
 (* shared page-blocks pipeline: collapse-state collection → embed-children
    fill → collapse application → library view filter → tag-title resolution.
    ~plain skips the collapse/embed/view shaping — sidebar items only need
    decoded + tag-resolved blocks and must not touch editor collapse state. *)
-let blocks_of_tree_wire ?(plain = false) repo (p : Model.page) blocks_w =
-  if plain then resolve_block_tags (Decode.blocks_of_wire blocks_w)
+let blocks_of_tree_wire_for ~current ?(plain = false) repo (p : Model.page) blocks_w =
+  if plain then resolve_block_tags_for (Some repo) (Decode.blocks_of_wire blocks_w)
   else
     let collapsed = ref S.String_set.empty in
     collapsed := collect_collapsed !collapsed blocks_w;
     let decoded = Decode.blocks_of_wire blocks_w in
-    let* () = prefetch_anchor_refs repo decoded in
+    let* () = prefetch_anchor_refs_for ~current repo decoded in
     let* blocks =
       fill_embed_children repo (ancestors_of p) collapsed decoded
     in
-    set_collapsed !collapsed;
-    resolve_block_tags
+    if current () then set_collapsed ~current !collapsed;
+    resolve_block_tags_for (Some repo)
       (Decode.view_blocks ~library:p.Model.page_is_library blocks)
 
-let fetch_page_blocks ?(plain = false) repo (p : Model.page) =
+let blocks_of_tree_wire ?plain repo p blocks_w =
+  let context = Runtime.model () in
+  blocks_of_tree_wire_for ~current:(fun () -> context_current context) ?plain repo p blocks_w
+
+let fetch_page_blocks_for ~current ?(plain = false) repo (p : Model.page) =
   let* v =
     Runtime.invoke3 "thread-api/get-page-blocks-tree" (Wire.String repo)
       (Wire.page_ref
          (Option.value p.Model.page_uuid ~default:p.Model.page_title))
       Wire.Nil
   in
-  let* blocks = blocks_of_tree_wire ~plain repo p v in
+  let* blocks = blocks_of_tree_wire_for ~current ~plain repo p v in
   Js.Promise.resolve (Model.page_outliner_blocks p blocks)
+
+let fetch_page_blocks ?plain repo p =
+  let context = Runtime.model () in
+  fetch_page_blocks_for ~current:(fun () -> context_current context) ?plain repo p
 
 (* block-zoom breadcrumb chain: ancestor titles must be refetched on
    refresh too — a renamed parent shows stale text otherwise *)
