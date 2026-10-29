@@ -242,11 +242,12 @@ log_info "Extracting archive..."
 unzip -q logseq.zip
 
 # Find the extracted directory
-EXTRACTED_DIR=$(find . -maxdepth 2 -type d -name "Logseq-linux-x86_64*" | head -1)
+EXTRACTED_DIR=$(find . -maxdepth 2 -type d -name "Logseq-linux-64*" | head -1)
 
 if [[ -z "$EXTRACTED_DIR" ]]; then
-    log_warn "Failed to find extracted directory. Checking old file pattern..."
-    EXTRACTED_DIR=$(find . -maxdepth 2 -type d -name "Logseq-linux-x64*" | head -1)
+    if [[ -f "logseq" ]]; then
+        EXTRACTED_DIR=$(pwd)
+    fi
 fi
 
 if [[ -z "$EXTRACTED_DIR" ]]; then
