@@ -4132,6 +4132,20 @@
       {:select-all-page (or (:block/name parent)
                             (some-> (:block/uuid parent) str))})))
 
+(defn- select-parent-block-node
+  "Parent row in the selected child's view. An embed or sidebar copy of the
+   same uuid is ignored; if this view has no parent row, keep the selection."
+  [selected-node parent-uuid]
+  (when (and selected-node parent-uuid)
+    (let [parent-id (str parent-uuid)
+          visual (get-node-parent selected-node)
+          container-id (row-container-id selected-node)
+          rows (util/get-blocks-by-id parent-uuid)]
+      (or (when (= parent-id (dom/attr visual "blockid"))
+            visual)
+          (when container-id
+            (some #(when (= container-id (row-container-id %)) %) rows))))))
+
 (defn select-parent [e]
   (let [edit-input (some-> (state/get-edit-input-id) gdom/getElement)
         edit-block (state/get-edit-block)
@@ -4156,19 +4170,19 @@
       (do
         (util/stop e)
         (when-not (state/get-state :selection/selected-all?)
-          (if-let [block-id (some-> (first (state/get-selection-blocks))
-                                    (dom/attr "blockid")
-                                    uuid)]
-            (p/let [block (db-async/<get-block (state/get-current-repo) block-id)]
-              (when block
-                (let [target (select-parent-target block (state/get-current-page))]
-                  (cond
-                    (:select-block target)
-                    (state/exit-editing-and-set-selected-blocks!
-                     [(util/get-first-block-by-id (:select-block target))])
+          (if-let [selected (first (state/get-selection-blocks))]
+            (if-let [block-id (some-> selected (dom/attr "blockid") uuid)]
+              (p/let [block (db-async/<get-block (state/get-current-repo) block-id)]
+                (when block
+                  (let [target (select-parent-target block (state/get-current-page))]
+                    (cond
+                      (:select-block target)
+                      (when-let [parent-node (select-parent-block-node selected (:select-block target))]
+                        (state/exit-editing-and-set-selected-blocks! [parent-node]))
 
-                    (:select-all-page target)
-                    (select-all-blocks! {:page (:select-all-page target)})))))
+                      (:select-all-page target)
+                      (select-all-blocks! {:page (:select-all-page target)})))))
+              (select-all-blocks! {}))
             (select-all-blocks! {})))))))
 
 (defn escape-editing

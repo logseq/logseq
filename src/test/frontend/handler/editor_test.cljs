@@ -3460,3 +3460,37 @@
                :block/parent {:db/id 10}
                :block/parent-uuid child-uuid}
               "page"))))))
+
+(deftest select-parent-block-node-stays-in-the-selected-view-test
+  (let [parent-uuid #uuid "11111111-1111-1111-1111-111111111111"
+        embed-parent (js-obj "id" "embed-parent")
+        page-parent (js-obj "id" "page-parent")
+        page-child (js-obj "id" "page-child")]
+    (with-redefs [editor/get-node-parent (fn [node]
+                                           (when (= node page-child) page-parent))
+                  editor/row-container-id (fn [node]
+                                            (case (.-id node)
+                                              "page-child" 3
+                                              "page-parent" 3
+                                              "embed-parent" 7
+                                              nil))
+                  util/get-blocks-by-id (fn [_] [embed-parent page-parent])
+                  dom/attr (fn [node attr]
+                             (when (and (= attr "blockid") (= node page-parent))
+                               (str parent-uuid)))]
+      (is (= page-parent
+             (#'editor/select-parent-block-node page-child parent-uuid))
+          "prefers the parent in the child's view over an earlier embed copy")))
+  (let [parent-uuid #uuid "11111111-1111-1111-1111-111111111111"
+        embed-parent (js-obj "id" "embed-parent")
+        page-child (js-obj "id" "page-child")]
+    (with-redefs [editor/get-node-parent (constantly nil)
+                  editor/row-container-id (fn [node]
+                                            (case (.-id node)
+                                              "page-child" 3
+                                              "embed-parent" 7
+                                              nil))
+                  util/get-blocks-by-id (fn [_] [embed-parent])
+                  dom/attr (constantly nil)]
+      (is (nil? (#'editor/select-parent-block-node page-child parent-uuid))
+          "keeps the current selection when the parent is only drawn in another view"))))
