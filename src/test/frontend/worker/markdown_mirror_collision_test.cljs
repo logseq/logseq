@@ -85,7 +85,7 @@
 
 (deftest rename-into-a-stem-group-rewrites-the-shifted-page-test
   (async done
-         (let [{:keys [platform files]} (fake-platform)
+         (let [{:keys [platform read-file file-exists?]} (fake-platform)
                ;; sorts first, so it takes index 1 of the "Foo" group once renamed
                bar-uuid #uuid "11111111-1111-4111-8111-111111111111"
                foo-uuid #uuid "22222222-2222-4222-8222-222222222222"
@@ -93,17 +93,19 @@
                      {:pages-and-blocks [{:page {:block/title "Bar" :block/uuid bar-uuid}
                                           :blocks [{:block/title "bar body"}]}
                                          {:page {:block/title "Foo" :block/uuid foo-uuid}
-                                          :blocks [{:block/title "foo body"}]}]})
-               has-body? (fn [body] (some #(string/includes? % body) (vals @files)))]
+                                          :blocks [{:block/title "foo body"}]}]})]
            (markdown-mirror/set-enabled! test-repo true)
            (-> (p/let [_ (markdown-mirror/<mirror-repo! test-repo @conn {:platform platform})
                        bar-id (:db/id (d/entity @conn [:block/uuid bar-uuid]))
                        tx-report (d/transact! conn [[:db/add bar-id :block/title "Foo"]
                                                     [:db/add bar-id :block/name "foo"]])
                        _ (markdown-mirror/<handle-tx-report! test-repo conn tx-report {:platform platform})]
-                 (is (has-body? "bar body") "the renamed page is mirrored")
-                 (is (has-body? "foo body") "the page whose duplicate index shifted is still mirrored")
-                 (is (not (contains? @files (str (markdown-mirror/repo-mirror-dir test-repo) "/pages/Bar.md")))
+                 (is (= ["pages/Foo.md" "pages/Foo (2).md"] (paths-by-uuid @conn [bar-uuid foo-uuid])))
+                 (is (string/includes? (str (read-file "pages/Foo.md")) "bar body")
+                     "the renamed page is mirrored at its assigned path")
+                 (is (string/includes? (str (read-file "pages/Foo (2).md")) "foo body")
+                     "the page whose duplicate index shifted is mirrored at its assigned path")
+                 (is (not (file-exists? "pages/Bar.md"))
                      "the renamed page's old file is removed"))
                (p/catch (fn [error] (is false (str error))))
                (p/finally (fn []
