@@ -5,6 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { fork } = require('node:child_process');
 const { once } = require('node:events');
+const http = require('node:http');
 const lifecycle = require('../../deps/graph-lifecycle');
 const execFileAsync = require('node:util').promisify(require('node:child_process').execFile);
 const cli = path.resolve(__dirname, '../../static/logseq-cli.js');
@@ -256,6 +257,180 @@ async function sqliteWorker(storage, repo = 'demo', revision = 'current', mode =
     script: path.join(__dirname, 'db-worker-node-lifecycle-fixture.cjs'),
     extraArgs: ['--mode', mode, '--health-field', 'revision', '--health-value', JSON.stringify(revision)] });
 }
+
+async function healthRequested(storage) {
+  const deadline = Date.now() + 5000;
+  while (!fs.existsSync(path.join(storage.root, 'health-requested'))) {
+    assert.ok(Date.now() < deadline, 'Worker must receive the delayed health request');
+    await new Promise(resolve => setTimeout(resolve, 10));
+  }
+}
+
+test('a slow healthy worker is verified without holding the upgrade lease', async t => {
+  const storage = fixture(t);
+  const target = await sqliteWorker(storage, 'demo', 'current', 'slow-health');
+  fs.writeFileSync(path.join(storage.root, 'delay-health'), 'yes');
+  const checking = lifecycle.stopOutdatedWorkers(storage, 'current', 'demo').then(
+    value => ({ value }), error => ({ error }));
+  await healthRequested(storage);
+  const started = performance.now();
+  await lifecycle.withLease(lifecycle.context(storage, 'demo'), 'concurrent-management', () => {});
+  assert.ok(performance.now() - started < 1000, 'A slow health endpoint must not monopolize the management lease');
+  const result = await checking;
+  assert.equal(result.error, undefined);
+  assert.deepEqual(result.value, []);
+  assert.equal(lifecycle.snapshot(storage, 'demo').workers[0].ticket, target.ticket);
+  assert.ok(lifecycle.pidExists(target.pid));
+});
+
+for (const revision of ['current', 'old']) {
+  test(`eight concurrent ensures preserve one worker after slow health, revision=${revision}`, async t => {
+    const storage = fixture(t);
+    const target = await sqliteWorker(storage, 'demo', revision, 'slow-health');
+    fs.writeFileSync(path.join(storage.root, 'delay-health'), 'yes');
+    const results = await Promise.allSettled(Array.from({ length: 8 }, async () => {
+      await lifecycle.stopOutdatedWorkers(storage, 'current', 'demo');
+      return lifecycle.startGraph({ storage, repo: 'demo',
+        script: path.join(__dirname, 'db-worker-node-lifecycle-fixture.cjs'), extraArgs: ['--mode', 'normal'] });
+    }));
+    assert.ok(results.every(result => result.status === 'fulfilled'), results.map(result => result.reason?.message).join('\n'));
+    const pids = new Set(results.map(result => result.value.pid));
+    assert.equal(pids.size, 1);
+    assert.equal(pids.has(target.pid), revision === 'current');
+    assert.equal(lifecycle.snapshot(storage, 'demo').workers.length, 1);
+    assert.equal(lifecycle.snapshot(storage, 'demo').owner, undefined);
+  });
+}
+
+test('upgrade rechecks generation after an unlocked health probe and preserves replacement evidence', async t => {
+  const storage = fixture(t);
+  const target = await sqliteWorker(storage, 'demo', 'old', 'slow-health');
+  fs.writeFileSync(path.join(storage.root, 'delay-health'), 'yes');
+  const checking = lifecycle.stopOutdatedWorkers(storage, 'current', 'demo').then(
+    value => ({ value }), error => ({ error }));
+  await healthRequested(storage);
+  const ctx = lifecycle.context(storage, 'demo');
+  await lifecycle.withLease(ctx, 'replacement', () => {
+    const current = lifecycle.snapshot(storage, 'demo');
+    current.generation = 'replacement-generation';
+    current.workers = [];
+    fs.writeFileSync(ctx.stateFile, JSON.stringify(current));
+  });
+  const result = await checking;
+  assert.ok(result.error);
+  assert.ok(lifecycle.pidExists(target.pid));
+  assert.equal(lifecycle.snapshot(storage, 'demo').generation, 'replacement-generation');
+  assert.deepEqual(lifecycle.snapshot(storage, 'demo').workers, []);
+});
+
+test('upgrade ignores stale health when ticket and publication change within the same generation', async t => {
+  const storage = fixture(t);
+  const target = await sqliteWorker(storage, 'demo', 'old', 'slow-health');
+  fs.writeFileSync(path.join(storage.root, 'delay-health'), 'yes');
+  const checking = lifecycle.stopOutdatedWorkers(storage, 'current', 'demo').then(
+    value => ({ value }), error => ({ error }));
+  await healthRequested(storage);
+  const ticket = 'replacement-ticket';
+  const endpoint = http.createServer((_, response) => {
+    response.setHeader('Connection', 'close');
+    response.end(JSON.stringify({ ...target, ticket, revision: 'current', port: endpoint.address().port }));
+  });
+  endpoint.listen(0, '127.0.0.1');
+  await once(endpoint, 'listening');
+  t.after(() => { endpoint.closeAllConnections(); endpoint.close(); });
+  const ctx = lifecycle.context(storage, 'demo');
+  let replacement;
+  await lifecycle.withLease(ctx, 'replace-publication', () => {
+    const current = lifecycle.snapshot(storage, 'demo');
+    replacement = { ...current.workers[0], ticket };
+    current.workers = [replacement];
+    fs.writeFileSync(path.join(ctx.dir, `runtime-${ticket}.json`), JSON.stringify({
+      ...replacement, port: endpoint.address().port, phase: 'ready',
+    }));
+    fs.writeFileSync(path.join(storage.root, 'server-list'), `${target.pid} ${endpoint.address().port}\n`);
+    fs.writeFileSync(ctx.stateFile, JSON.stringify(current));
+  });
+  const result = await checking;
+  assert.equal(result.error, undefined);
+  assert.deepEqual(result.value, []);
+  assert.ok(lifecycle.pidExists(target.pid));
+  assert.deepEqual(lifecycle.snapshot(storage, 'demo').workers, [replacement]);
+});
+
+test('upgrade deadline also fences the second lease after a successful health probe', async t => {
+  const storage = fixture(t);
+  const target = await sqliteWorker(storage, 'demo', 'old', 'slow-health');
+  fs.writeFileSync(path.join(storage.root, 'delay-health'), 'yes');
+  const { DatabaseSync } = require('node:sqlite');
+  const exec = DatabaseSync.prototype.exec;
+  const request = http.request;
+  const now = Date.now;
+  let healthEnded;
+  let blocked;
+  let timer;
+  const healthComplete = new Promise(resolve => { healthEnded = resolve; });
+  const queued = new Promise(resolve => { blocked = resolve; });
+  http.request = function (options, callback) {
+    return request.call(this, options, response => {
+      if (options.port === target.port && options.path === '/healthz') response.once('end', healthEnded);
+      callback(response);
+    });
+  };
+  const checking = lifecycle.stopOutdatedWorkers(storage, 'current', 'demo').then(
+    value => ({ value }), error => ({ error }));
+  try {
+    await healthRequested(storage);
+    await lifecycle.withLease(lifecycle.context(storage, 'demo'), 'apply-barrier', async () => {
+      DatabaseSync.prototype.exec = function (sql) {
+        try { return exec.call(this, sql); }
+        catch (error) {
+          if (sql === 'BEGIN IMMEDIATE' && error.errcode === 5) blocked();
+          throw error;
+        }
+      };
+      await Promise.race([Promise.all([healthComplete, queued]), new Promise((_, reject) => {
+        timer = setTimeout(() => reject(Error('Verified health must queue for the held second lease')), 8000);
+      })]);
+      clearTimeout(timer);
+      Date.now = () => now() + 31000;
+    });
+    const result = await checking;
+    assert.match(result.error?.message || '', /upgrade verification deadline/);
+    assert.ok(lifecycle.pidExists(target.pid));
+    assert.equal(lifecycle.snapshot(storage, 'demo').workers[0].ticket, target.ticket);
+  } finally {
+    clearTimeout(timer);
+    Date.now = now;
+    http.request = request;
+    DatabaseSync.prototype.exec = exec;
+    await checking;
+  }
+});
+
+test('upgrade retires an expired unpublished startup instead of waiting for it to publish', async t => {
+  const storage = fixture(t);
+  await lifecycle.createGraph(storage, 'demo');
+  const starting = lifecycle.startGraph({ storage, repo: 'demo',
+    script: path.join(__dirname, 'db-worker-node-lifecycle-fixture.cjs'),
+    extraArgs: ['--mode', 'before-admission'] }).then(value => ({ value }), error => ({ error }));
+  const deadline = Date.now() + 5000;
+  while (!fs.existsSync(path.join(storage.root, 'before-admission'))) {
+    assert.ok(Date.now() < deadline);
+    await new Promise(resolve => setTimeout(resolve, 10));
+  }
+  const ctx = lifecycle.context(storage, 'demo');
+  const [target] = lifecycle.snapshot(storage, 'demo').workers;
+  await lifecycle.withLease(ctx, 'expire-fixture', () => {
+    const current = lifecycle.snapshot(storage, 'demo');
+    current.workers[0].expires = 0;
+    fs.writeFileSync(ctx.stateFile, JSON.stringify(current));
+  });
+  const retired = await lifecycle.stopOutdatedWorkers(storage, 'current', 'demo');
+  assert.deepEqual(retired.map(worker => worker.ticket), [target.ticket]);
+  assert.equal(lifecycle.pidExists(target.pid), false);
+  assert.deepEqual(lifecycle.snapshot(storage, 'demo').workers, []);
+  assert.ok((await starting).error);
+});
 
 test('upgrade discovery ignores noncanonical directories without changing them', async t => {
   const storage = fixture(t);
