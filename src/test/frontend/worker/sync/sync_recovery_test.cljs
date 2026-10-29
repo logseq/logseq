@@ -8,10 +8,13 @@
             [frontend.worker.sync :as db-sync]
             [frontend.worker.sync.apply-txs :as sync-apply]
             [frontend.worker.sync.client-op :as client-op]
+            [frontend.worker.sync.crypt :as sync-crypt]
             [frontend.worker.sync.handle-message :as sync-handle-message]
             [frontend.worker.undo-redo :as undo-redo]
+            [logseq.db.sqlite.util :as sqlite-util]
             [logseq.db.test.helper :as db-test]
             [logseq.outliner.core :as outliner-core]
+            [logseq.outliner.op :as outliner-op]
             [promesa.core :as p]))
 
 (def ^:private test-repo "sync-recovery-test-repo")
@@ -235,3 +238,63 @@
           (set! js/clearInterval original-clear-interval)
           (set! js/setTimeout original-set-timeout))))))
 
+(defn- child-titles
+  [db parent-id]
+  (->> (:block/_parent (d/entity db parent-id))
+       (sort-by :block/order)
+       (mapv :block/title)))
+
+(deftest pull-ok-passes-the-server-tx-id-test
+  (testing "pull/ok keeps the tx id the server stored, so the client can see its own txs"
+    (async done
+           (let [tx-id (random-uuid)
+                 *remote-txs (atom nil)
+                 client (test-client #js {} [])
+                 raw-message (js/JSON.stringify
+                              (clj->js {:type "pull/ok"
+                                        :t 1
+                                        :txs [{:t 1
+                                               :tx (sqlite-util/write-transit-str [])
+                                               :tx-id (str tx-id)}]}))]
+             (-> (p/with-redefs [client-op/get-local-tx (constantly 0)
+                                 client-op/update-local-tx (fn [& _] nil)
+                                 sync-handle-message/sync-counts (constantly {})
+                                 shared-service/broadcast-to-clients! (fn [& _] nil)
+                                 sync-crypt/graph-e2ee? (constantly false)
+                                 sync-crypt/<ensure-graph-aes-key (fn [& _] (p/resolved nil))
+                                 sync-apply/apply-remote-txs! (fn [_repo _client remote-txs]
+                                                                (reset! *remote-txs remote-txs))
+                                 sync-apply/enqueue-flush-pending! (fn [& _] nil)]
+                   (sync-handle-message/handle-message! test-repo client raw-message))
+                 (p/then (fn [_]
+                           (is (= [tx-id] (mapv :tx-id @*remote-txs)))))
+                 (p/catch (fn [error] (is nil (str error))))
+                 (p/finally done))))))
+
+(deftest pulled-own-move-is-not-replayed-test
+  (testing "a pending move up/down the pull shows the server applied moves the block once"
+    (async done
+           (let [{:keys [conn client-ops-conn parent child3]} (setup-parent-child)
+                 parent-id (:db/id parent)]
+             (-> (p/resolved nil)
+                 (p/then
+                  (fn [_]
+                   (with-conns conn client-ops-conn
+                   (fn []
+                     (outliner-op/apply-ops! conn
+                                             [[:move-blocks-up-down [[(:block/uuid child3)] true]]]
+                                             {:client-id "test-client" :local-tx? true})
+                     (is (= ["child 1" "child 3" "child 2"] (child-titles @conn parent-id)))
+                     (let [local-tx (first (sync-apply/pending-txs test-repo))
+                           remote-txs [{:t 1
+                                        :tx-id (:tx-id local-tx)
+                                        :outliner-op :move-blocks-up-down
+                                        :tx-data (:tx local-tx)}]]
+                       (p/with-redefs [shared-service/broadcast-to-clients! (fn [& _] nil)]
+                         (p/let [_ (sync-apply/apply-remote-txs! test-repo nil remote-txs)]
+                           (is (= ["child 1" "child 3" "child 2"] (child-titles @conn parent-id))
+                               "The block moved once, not once more by a replay")
+                           (is (empty? (sync-apply/pending-txs test-repo))
+                               "The pulled tx is acknowledged, so it is not uploaded again"))))))))
+                 (p/catch (fn [error] (is nil (str error))))
+                 (p/finally done))))))
