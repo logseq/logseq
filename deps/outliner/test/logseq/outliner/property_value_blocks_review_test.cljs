@@ -257,3 +257,53 @@
       (let [history (add-history! conn "b1" :user.property/note)]
         (outliner-property/batch-set-property! conn [(block-uuid conn "b1")] :user.property/note "two")
         (is (= "one" (history-content conn history)))))))
+
+(defn- conn-with-default-value
+  "A conn whose property `property-id` has the default value `default`"
+  [properties titles property-id default]
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties properties
+               :pages-and-blocks [{:page {:block/title "page1"}
+                                   :blocks (mapv (fn [title] {:block/title title}) titles)}]})]
+    (outliner-property/create-property-text-block! conn (:db/id (d/entity @conn property-id))
+                                                   :logseq.property/default-value default {})
+    conn))
+
+(deftest replaced-values-of-a-property-with-a-default-value
+  (testing "batch-set-property! sets the new value, not the empty placeholder"
+    (let [conn (conn-with-default-value {:color {:logseq.property/type :default}} ["A"] :user.property/color "blue")]
+      (outliner-property/set-block-property! conn [:block/uuid (block-uuid conn "A")] :user.property/color "red")
+      (outliner-property/batch-set-property! conn [(block-uuid conn "A")] :user.property/color "green")
+      (is (= "green" (some-> (block-value conn "A" :user.property/color) db-property/property-value-content)))
+      (is (= {["green" 1] 1 ["blue" 0] 1} (value-blocks-by-holders conn :user.property/color))
+          "red is deleted and the default value stays")))
+
+  (testing "Removing one of several values keeps the others"
+    (let [conn (conn-with-default-value {:items {:logseq.property/type :default :db/cardinality :db.cardinality/many}}
+                                        ["b1"] :user.property/items "z")]
+      (outliner-property/batch-set-property! conn [(block-uuid conn "b1")] :user.property/items ["x" "y"])
+      (let [x-id (some #(when (= "x" (:block/title %)) (:db/id %))
+                       (block-value conn "b1" :user.property/items))]
+        (outliner-property/delete-property-value! conn [:block/uuid (block-uuid conn "b1")] :user.property/items x-id))
+      (is (= #{"y"} (set (map db-property/property-value-content (block-value conn "b1" :user.property/items)))))
+      (is (= {["y" 1] 1 ["z" 0] 1} (value-blocks-by-holders conn :user.property/items)))))
+
+  (testing "Values turned into choices: their holders hold the choice, not the empty placeholder"
+    (let [conn (conn-with-default-value {:color {:logseq.property/type :default}} ["A" "B"] :user.property/color "blue")]
+      (outliner-property/set-block-property! conn [:block/uuid (block-uuid conn "A")] :user.property/color "red")
+      (outliner-property/set-block-property! conn [:block/uuid (block-uuid conn "B")] :user.property/color "red")
+      (outliner-property/upsert-closed-value! conn :user.property/color {:value "green"})
+      (is (holds-choice-with-content? conn "A" :user.property/color "red"))
+      (is (holds-choice-with-content? conn "B" :user.property/color "red"))
+      (is (= {["red" 2] 1 ["green" 0] 1 ["blue" 0] 1} (value-blocks-by-holders conn :user.property/color))
+          "The other copy of red is deleted"))))
+
+(deftest batch-set-property-with-a-set-replaces-many-values
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties {:items {:logseq.property/type :default :db/cardinality :db.cardinality/many}}
+               :pages-and-blocks [{:page {:block/title "page1"}
+                                   :blocks [{:block/title "b1"}]}]})]
+    (outliner-property/batch-set-property! conn [(block-uuid conn "b1")] :user.property/items ["a"])
+    (outliner-property/batch-set-property! conn [(block-uuid conn "b1")] :user.property/items #{"b" "c"})
+    (is (= #{"b" "c"} (set (map db-property/property-value-content (block-value conn "b1" :user.property/items)))))
+    (is (= {["b" 1] 1 ["c" 1] 1} (value-blocks-by-holders conn :user.property/items)))))
