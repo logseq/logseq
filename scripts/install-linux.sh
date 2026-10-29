@@ -207,14 +207,14 @@ cd "$TEMP_DIR"
 if [[ "$VERSION" == "latest" ]]; then
     log_info "Fetching latest release information..."
     LATEST_RELEASE=$(curl -s https://api.github.com/repos/logseq/logseq/releases/latest)
-    DOWNLOAD_URL=$(echo "$LATEST_RELEASE" | grep -o '"browser_download_url": "[^"]*Logseq-linux-x64-[^"]*\.zip"' | cut -d'"' -f4)
+    DOWNLOAD_URL=$(echo "$LATEST_RELEASE" | grep -o '"browser_download_url": "[^"]*Logseq-linux-x86_64-[^"]*\.zip"' | cut -d'"' -f4)
     
     if [[ -z "$DOWNLOAD_URL" ]]; then
         log_error "Could not find download URL for latest version"
         exit 1
     fi
 else
-    DOWNLOAD_URL="https://github.com/logseq/logseq/releases/download/${VERSION}/Logseq-linux-x64-${VERSION}.zip"
+    DOWNLOAD_URL="https://github.com/logseq/logseq/releases/download/${VERSION}/Logseq-linux-x86_64-${VERSION}.zip"
 fi
 
 log_info "Download URL: $DOWNLOAD_URL"
