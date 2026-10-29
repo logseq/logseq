@@ -1581,7 +1581,7 @@
                                      acc))]
           ;; restore top-down so each page's original parent is already live;
           ;; re-read entities per step so prior restores are visible
-          (doseq [ancestor (concat (reverse recycled-ancestors) [existing-page])]
+          (doseq [ancestor (concat recycled-ancestors [existing-page])]
             (let [fresh (d/entity @conn (:db/id ancestor))]
               (ldb/transact! conn
                              (outliner-recycle/restore-tx-data @conn fresh)

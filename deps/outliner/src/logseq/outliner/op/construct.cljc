@@ -663,7 +663,7 @@
 
     :create-page
     (let [[title opts] args
-          page-uuid (created-page-uuid-from-tx-data db tx-data title)]
+          page-uuid (or (:uuid opts) (created-page-uuid-from-tx-data db tx-data title))]
       [:create-page [title
                      (cond-> (or opts {})
                        page-uuid
@@ -1003,15 +1003,11 @@
                                  (restore-plans->ops db-before root-plans))]
           ;; Put the page's blocks back before its attributes: a property
           ;; value of the page can be one of those blocks.
-          (cond-> []
-            create-op
-            (conj create-op)
-            (seq restore-root-ops)
-            (into restore-root-ops)
-            page-save-op
-            (conj page-save-op)
-            :always
-            seq))
+          (seq (cond-> [create-op]
+                 (seq restore-root-ops)
+                 (into restore-root-ops)
+                 page-save-op
+                 (conj page-save-op))))
 
         today-page?
         (when (every? some? root-plans)
@@ -1021,6 +1017,79 @@
         ;; Soft-deleted pages are moved to Recycle with recycle metadata.
         ;; Use restore semantics instead of save-block to retract recycle markers.
         [:restore-recycled [page-uuid]]))))
+
+(defn- page-creation-order
+  "Returns dependencies before their users, excluding entities already in `titles`."
+  [page titles]
+  (loop [pending (list [page false])
+         seen #{}
+         result []]
+    (if-let [[entity expanded?] (first pending)]
+      (let [remaining (rest pending)
+            eid (:db/id entity)]
+        (cond
+          (or (nil? entity) (ldb/built-in? entity))
+          (recur remaining seen result)
+
+          expanded?
+          (recur remaining seen (conj result entity))
+
+          (or (contains? titles eid) (contains? seen eid))
+          (recur remaining seen result)
+
+          :else
+          (let [dependencies (concat [(:block/parent entity)]
+                                     (:logseq.property.class/extends entity)
+                                     (:block/tags entity))]
+            (recur (concat (map #(vector % false) dependencies)
+                           (cons [entity true] remaining))
+                   (conj seen eid)
+                   result))))
+      result)))
+
+(defn- page-history-ops
+  [db-before db-after entity full-title original-op]
+  (let [create-op (or original-op
+                      [:create-page
+                       [full-title
+                        (cond-> {:uuid (:block/uuid entity)
+                                 :class? (boolean (ldb/class? entity))
+                                 :redirect? false
+                                 :split-namespace? true}
+                          (:db/ident entity)
+                          (assoc :properties {:db/ident (:db/ident entity)}))]])
+        save-op (cond
+                  (ldb/class? entity)
+                  (entity->save-op db-after entity)
+
+                  (and original-op
+                       (some #(nil? (d/entity db-before (:db/id %))) (:block/tags entity)))
+                  (build-inverse-save-block db-after
+                                            (select-keys entity [:block/uuid :block/tags :block/refs])
+                                            nil))]
+    (cond-> [create-op]
+      save-op (conj save-op))))
+
+(defn- expand-create-page-history
+  [db-before db-after {:keys [titles] :as state} [op [_title opts] :as op-entry]]
+  (let [page (when (= :create-page op)
+               (d/entity db-after [:block/uuid (:uuid opts)]))]
+    (if (and page (nil? (d/entity db-before (:db/id page))))
+      (reduce
+        (fn [{:keys [titles] :as acc} entity]
+          (let [parent-entities (cons (:block/parent entity) (:logseq.property.class/extends entity))
+                parent-title (some #(get titles (:db/id %)) parent-entities)
+                full-title (str (when parent-title (str parent-title "/")) (:block/title entity))
+                acc (assoc-in acc [:titles (:db/id entity)] full-title)]
+            (if (d/entity db-before (:db/id entity))
+              acc
+              (let [[create-op save-op] (page-history-ops db-before db-after entity full-title
+                                                         (when (= (:db/id page) (:db/id entity)) op-entry))]
+                (cond-> (update acc :ops conj create-op)
+                  save-op (update :snapshots conj save-op))))))
+        state
+        (page-creation-order page titles))
+      (update state :ops conj op-entry))))
 
 (defn- restore-target-insert-op
   [db-before db-after target-id opts]
@@ -1581,5 +1650,14 @@
                                      vec
                                      (->> (mapv #(normalize-op-entry-ids db-before %))))
         _ (assert-no-stale-numeric-ids! db-before inverse-outliner-ops :inverse-outliner-ops)]
-    {:forward-outliner-ops forward-outliner-ops
+    {:forward-outliner-ops (if (seq (:db-sync/forward-outliner-ops tx-meta))
+                            forward-outliner-ops
+                            (when (seq forward-outliner-ops)
+                              (let [{:keys [ops snapshots]}
+                                    (reduce #(expand-create-page-history db-before db-after %1 %2)
+                                            {:titles {} :ops [] :snapshots []}
+                                            forward-outliner-ops)]
+                                ;; Final-state snapshots can reference entities created by later ops.
+                                ;; Append them after creation and keep them out of inverse derivation.
+                                (into ops snapshots))))
      :inverse-outliner-ops inverse-outliner-ops}))
