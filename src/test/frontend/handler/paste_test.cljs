@@ -266,6 +266,9 @@
       (p/with-redefs
        [commands/delete-selection! (constantly nil)
         commands/simple-insert! (fn [_input text] (p/resolved text))
+        ;; the text goes to the open editor's input; there is none under node
+        state/get-edit-input-id (constantly "edit-block-test")
+        state/get-input (constantly nil)
         util/stop (constantly nil)
         util/get-selected-text (constantly "")
         utils/getCopiedBlocksFromMemory (constantly nil)
