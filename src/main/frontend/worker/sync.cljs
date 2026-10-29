@@ -133,6 +133,13 @@
   (when-let [*inflight (:inflight client)]
     (reset! *inflight [])))
 
+(defn- clear-pending-pull!
+  "Forgets the pull sent on a socket that is gone: its reply never comes, and
+  the marker would make every later pull from the same t a duplicate."
+  [client]
+  (when-let [*pending (:pending-pull-since client)]
+    (reset! *pending nil)))
+
 (defn- ws-base-url
   []
   (sync-auth/ws-base-url @worker-state/*db-sync-config))
@@ -277,6 +284,7 @@
           (log/info :db-sync/ws-closed {:repo repo})
           (clear-stale-ws-loop-timer! client)
           (clear-inflight! client)
+          (clear-pending-pull! client)
           (update-online-users! client [])
           (set-ws-state! client :closed)
           (schedule-reconnect! repo client url :close))))
@@ -314,6 +322,7 @@
                              (log/warn :db-sync/ws-stale-closed {:repo repo :ready-state (ready-state ws)})
                              (clear-stale-ws-loop-timer! current)
                              (clear-inflight! current)
+                             (clear-pending-pull! current)
                              (update-online-users! current [])
                              (set-ws-state! current :closed)
                              (schedule-reconnect! repo current url :stale-closed))))))
@@ -356,6 +365,7 @@
               (touch-last-ws-message! updated)
               (set-ws-state! updated :open)
               (sync-util/clear-last-sync-error! updated)
+              (clear-pending-pull! updated)
               (send! ws {:type "hello" :client repo})
               (sync-assets/enqueue-asset-sync!
                repo updated

@@ -175,3 +175,63 @@
             (is (= 1 (aget row "pending")))
             (is (not= 1 (aget row "failed")))
             (is (= 1 (count @*delays)))))))))
+
+(deftest ws-close-forgets-the-unanswered-pull-test
+  (testing "a pull sent on a socket that closed does not block the pulls of the next socket"
+    (async done
+           (let [*sent (atom [])
+                 original-set-timeout js/setTimeout
+                 prev-client @worker-state/*db-sync-client
+                 old-ws #js {:readyState 3 :close (fn [] nil)}
+                 client (assoc (test-client old-ws [])
+                               :reconnect (atom {:attempt 0 :timer nil})
+                               :stale-kill-timer (atom nil))]
+             (reset! (:pending-pull-since client) 10)
+             (set! js/setTimeout (fn [_f _ms] :timeout-id))
+             (reset! worker-state/*db-sync-client client)
+             (-> (p/with-redefs [shared-service/broadcast-to-clients! (fn [& _] nil)
+                                 sync-handle-message/sync-counts (constantly {})
+                                 client-op/get-local-tx (constantly 10)
+                                 sync-apply/enqueue-flush-pending! (fn [& _] nil)]
+                   (#'db-sync/attach-ws-handlers! test-repo client old-ws "wss://sync.example.test/sync/graph-1")
+                   ((.-onclose old-ws) #js {})
+                   (is (nil? @(:pending-pull-since client)))
+                   (let [client' (assoc client :ws (capture-ws *sent))]
+                     (sync-handle-message/handle-message!
+                      test-repo client'
+                      (js/JSON.stringify (clj->js {:type "changed" :t 11})))
+                     (p/then @(:send-queue client')
+                             (fn [_]
+                               (is (= [{:type "pull" :since 10}] @*sent))))))
+                 (p/catch (fn [error] (is nil (str error))))
+                 (p/finally (fn []
+                              (set! js/setTimeout original-set-timeout)
+                              (reset! worker-state/*db-sync-client prev-client)
+                              (done))))))))
+
+(deftest stale-ws-close-forgets-the-unanswered-pull-test
+  (let [original-set-interval js/setInterval
+        original-clear-interval js/clearInterval
+        original-set-timeout js/setTimeout
+        prev-client @worker-state/*db-sync-client
+        *interval-f (atom nil)
+        ws #js {:readyState 3 :close (fn [] nil)}
+        client (assoc (test-client ws [])
+                      :reconnect (atom {:attempt 0 :timer nil})
+                      :stale-kill-timer (atom nil))]
+    (reset! (:pending-pull-since client) 10)
+    (set! js/setInterval (fn [f _ms] (reset! *interval-f f) :interval-id))
+    (set! js/clearInterval (fn [_] nil))
+    (set! js/setTimeout (fn [_f _ms] :timeout-id))
+    (reset! worker-state/*db-sync-client client)
+    (with-redefs [shared-service/broadcast-to-clients! (fn [& _] nil)]
+      (try
+        (#'db-sync/close-stale-ws-loop client ws "wss://sync.example.test/sync/graph-1")
+        (@*interval-f)
+        (is (nil? @(:pending-pull-since client)))
+        (finally
+          (reset! worker-state/*db-sync-client prev-client)
+          (set! js/setInterval original-set-interval)
+          (set! js/clearInterval original-clear-interval)
+          (set! js/setTimeout original-set-timeout))))))
+
