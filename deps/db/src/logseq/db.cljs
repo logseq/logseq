@@ -110,45 +110,6 @@
                  (or @*debounce-fn d/store))]
          (f @conn))))))
 
-(defn- tail-max-tx
-  "The largest tx among the datoms of the stored tail restore-conn replayed."
-  [conn]
-  (reduce (fn [max-tx datoms]
-            (reduce (fn [max-tx datom] (max max-tx (:tx datom))) max-tx datoms))
-          0
-          (:tx-tail @(:atom conn))))
-
-(defn restore-storage-conn
-  "Restores a datascript connection from `storage`, or nil when it holds no db.
-  A restore replays each stored tail entry (the datoms of 1 transact!) and
-  sets :max-tx to the tx of its first datom. A transaction the worker
-  pipeline extends spans several tx ids (1 d/with each) in 1 entry, and the
-  replayed datoms keep their own tx ids, so the restored :max-tx fell short
-  of the one the graph had: the next transaction took a tx id the graph's
-  datoms already carried, and the checksum, stored with the :max-tx it
-  covers, was recomputed on every such reopen. Take the largest tx of the
-  tail's datoms."
-  [storage]
-  (when-let [conn (d/restore-conn storage)]
-    (let [max-tx (tail-max-tx conn)]
-      (when (> max-tx (:max-tx @conn))
-        (swap! conn assoc :max-tx max-tx))
-      conn)))
-
-(defn- reload-conn-from-storage!
-  "A store that throws, in any storage and at any point, leaves the in-memory
-  db ahead of or apart from what the storage holds. Its b-tree nodes can be
-  marked as stored without their rows on disk, so the next store would write
-  a root that points at missing rows, and its tail bookkeeping no longer
-  matches the stored root. Continue from what the storage holds."
-  [conn]
-  (when-some [storage (storage/storage @conn)]
-    (try
-      (when-some [restored (restore-storage-conn storage)]
-        (swap! (:atom conn) merge (select-keys @(:atom restored) [:db :tx-tail :db-last-stored])))
-      (catch :default e
-        (log/error :reload-conn-from-storage-failed {:error (str e)})))))
-
 (defn- should-run-transact-pipeline?
   [conn db tx-meta]
   (and (entity-plus/db-based-graph? db)
@@ -189,6 +150,45 @@
   (let [debug-data (invalid-tx-log-data tx-meta tx-data errors tx-report)]
     (log/error :invalid-data debug-data)
     (throw (ex-info "DB write failed with invalid data" debug-data))))
+
+(defn- tail-max-tx
+  "The largest tx among the datoms of the stored tail restore-conn replayed."
+  [conn]
+  (reduce (fn [max-tx datoms]
+            (reduce (fn [max-tx datom] (max max-tx (:tx datom))) max-tx datoms))
+          0
+          (:tx-tail @(:atom conn))))
+
+(defn restore-storage-conn
+  "Restores a datascript connection from `storage`, or nil when it holds no db.
+  A restore replays each stored tail entry (the datoms of 1 transact!) and
+  sets :max-tx to the tx of its first datom. A transaction the worker
+  pipeline extends spans several tx ids (1 d/with each) in 1 entry, and the
+  replayed datoms keep their own tx ids, so the restored :max-tx fell short
+  of the one the graph had: the next transaction took a tx id the graph's
+  datoms already carried, and the checksum, stored with the :max-tx it
+  covers, was recomputed on every such reopen. Take the largest tx of the
+  tail's datoms."
+  [storage]
+  (when-let [conn (d/restore-conn storage)]
+    (let [max-tx (tail-max-tx conn)]
+      (when (> max-tx (:max-tx @conn))
+        (swap! conn assoc :max-tx max-tx))
+      conn)))
+
+(defn- reload-conn-from-storage!
+  "A store that throws, in any storage and at any point, leaves the in-memory
+  db ahead of or apart from what the storage holds. Its b-tree nodes can be
+  marked as stored without their rows on disk, so the next store would write
+  a root that points at missing rows, and its tail bookkeeping no longer
+  matches the stored root. Continue from what the storage holds."
+  [conn]
+  (when-some [storage (storage/storage @conn)]
+    (try
+      (when-some [restored (restore-storage-conn storage)]
+        (swap! (:atom conn) merge (select-keys @(:atom restored) [:db :tx-tail :db-last-stored])))
+      (catch :default e
+        (log/error :reload-conn-from-storage-failed {:error (str e)})))))
 
 (defn- transact-sync
   [conn tx-data tx-meta]
