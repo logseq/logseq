@@ -6,13 +6,26 @@
             [frontend.state :as state]
             [logseq.db :as ldb]))
 
+(defn- editing-block-rendered-title
+  "The editing block's title in the renderer store, read before a delta is applied."
+  []
+  (when-let [editing-block-uuid (:block/uuid (state/get-edit-block))]
+    (let [{:keys [status value]} (db-subs/block-snapshot editing-block-uuid)]
+      (when (= :ready status)
+        (:block/title value)))))
+
 (defn- update-editing-block-title-if-changed!
-  [blocks]
+  "Puts a title the tx changed into the editor. A delta also carries the
+  editing block when only its children, properties or references changed; its
+  title then equals the one rendered before, and the editor keeps the text
+  typed since the last save."
+  [blocks title-before]
   (when-let [editing-block-uuid (:block/uuid (state/get-edit-block))]
     (when-let [title (:block/title (get blocks editing-block-uuid))]
       (let [editing-title (state/get-edit-content)]
-        (when (not= (string/trim (or editing-title ""))
-                    (string/trim title))
+        (when (and (not= title-before title)
+                   (not= (string/trim (or editing-title ""))
+                         (string/trim title)))
           (state/set-edit-content! title))))))
 
 (defn- current-page-deleted?
@@ -42,9 +55,10 @@
 
 (defn invoke-hooks
   [{:keys [repo tx-meta delta]}]
-  (when delta
-    (db-subs/apply-delta! delta))
-  (let [{:keys [initial-pages? end?]} tx-meta
+  (let [editing-title-before (editing-block-rendered-title)
+        _ (when delta
+            (db-subs/apply-delta! delta))
+        {:keys [initial-pages? end?]} tx-meta
         current-page (state/get-current-page)
         blocks (:blocks delta)
         deleted (:deleted delta)]
@@ -74,7 +88,7 @@
         (do
           (when (or (not= (:client-id tx-meta) (:client-id (state/get-state)))
                     (= :apply-template (:outliner-op tx-meta)))
-            (update-editing-block-title-if-changed! blocks))
+            (update-editing-block-title-if-changed! blocks editing-title-before))
 
           (state/set-state! :editor/start-pos nil)
 
