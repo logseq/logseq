@@ -428,8 +428,7 @@ let get_by_id id_wire = get_by_id_for_repo (repo ()) id_wire
    get-case-page returns raw entity attrs (property values as bare eids,
    no :block/properties) — a hit is re-fetched through get-blocks by uuid
    so the wire carries the sdk entity shape. *)
-let get_entity id_or_name =
-  let origin_repo = repo () in
+let get_entity_for_repo origin_repo id_or_name =
   let get_by_id = get_by_id_for_repo origin_repo in
   if Wire.is_uuid_string id_or_name then get_by_id (Wire.String id_or_name)
   else
@@ -452,6 +451,8 @@ let get_entity id_or_name =
         match Wire.map_get_uuid w "block/uuid" with
         | Some u -> get_by_id (Wire.Uuid u)
         | None -> Js.Promise.resolve w)
+
+let get_entity id_or_name = get_entity_for_repo (repo ()) id_or_name
 
 (* api args can be uuid strings, page names, db ids (numbers) or
    lookup maps like {id: n} / {uuid: "..."} — normalize to wire eid *)
