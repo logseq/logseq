@@ -2573,7 +2573,7 @@
   [db all-existing-page-uuids page-name]
   (or (get all-existing-page-uuids page-name)
       (when page-name
-        (when-let [page (ldb/get-page db page-name)]
+        (when-let [page (gp-block/get-page db page-name)]
           (when (and (not (ldb/built-in? page))
                      (not (ldb/property? page)))
             (:block/uuid page))))))
