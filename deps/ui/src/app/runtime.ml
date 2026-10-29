@@ -60,6 +60,10 @@ let reload_current_view_owned :
     (reload_origin -> reload_result Js.Promise.t) ref =
   ref (fun _ -> invalid_arg "Owned view reload is not installed")
 
+let refresh_after_ops_owned :
+    (reload_origin -> reload_result Js.Promise.t) ref =
+  ref (fun _ -> invalid_arg "Owned operation refresh is not installed")
+
 (* the journals list's scroll-end pagination hook — the router installs
    load_more_journals so page.ml stays below the routing layer *)
 let journals_load_more : (unit -> unit Js.Promise.t) ref =
