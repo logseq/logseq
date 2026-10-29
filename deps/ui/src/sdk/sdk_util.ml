@@ -171,8 +171,9 @@ let hashtag_names (title : string) : string list =
   go 0 []
 
 (* names that resolve to class entities (tagged :logseq.class/Tag) *)
-let fetch_tag_names (names : string list) : string list Js.Promise.t =
-  match names, repo () with
+let fetch_tag_names_for_repo origin_repo (names : string list)
+    : string list Js.Promise.t =
+  match names, origin_repo with
   | [], _ | _, "" -> resolved []
   | names, repo ->
       let set_edn =
@@ -195,9 +196,11 @@ let fetch_tag_names (names : string list) : string list Js.Promise.t =
              Ui_services.log_error ("tag-name lookup failed", e);
              resolved [])
 
-let fetch_ref_uuids (names : string list)
+let fetch_tag_names names = fetch_tag_names_for_repo (repo ()) names
+
+let fetch_ref_uuids_for_repo origin_repo (names : string list)
     : (string * string) list Js.Promise.t =
-  match repo () with
+  match origin_repo with
   | "" -> resolved []
   | repo ->
       let set_edn =
@@ -225,6 +228,8 @@ let fetch_ref_uuids (names : string list)
       |> Js.Promise.catch (fun e ->
              Ui_services.log_error ("page-ref uuid lookup failed", e);
              resolved [])
+
+let fetch_ref_uuids names = fetch_ref_uuids_for_repo (repo ()) names
 
 (* page-ref stub — resolve-page-refs turns block/type "page" stubs into
    the real page (creating it when the name is unknown) *)
@@ -324,7 +329,8 @@ let rec rewrite_title_refs ~(tags : string list)
   | Wire.Set xs -> Wire.Set (List.map (rewrite_title_refs ~tags known) xs)
   | _ -> w
 
-let resolve_title_refs (ops : Wire.t list) : Wire.t list Js.Promise.t =
+let resolve_title_refs_for_repo origin_repo (ops : Wire.t list)
+    : Wire.t list Js.Promise.t =
   let titles =
     List.rev (List.concat_map (fun w -> collect_title_strings w []) ops)
   in
@@ -339,15 +345,18 @@ let resolve_title_refs (ops : Wire.t list) : Wire.t list Js.Promise.t =
      | [] -> resolved ([], [])
      | _ ->
          Js.Promise.all2
-           (fetch_ref_uuids names, fetch_tag_names names))
+           (fetch_ref_uuids_for_repo origin_repo names,
+            fetch_tag_names_for_repo origin_repo names))
   in
   resolved
     (List.map (rewrite_title_refs ~tags known) ops)
 
+let resolve_title_refs ops = resolve_title_refs_for_repo (repo ()) ops
 
-let get_many ids =
+
+let get_many_for_repo origin_repo ids =
   let* w =
-    Runtime.invoke2 "thread-api/get-blocks" (Wire.String (repo ()))
+    Runtime.invoke2 "thread-api/get-blocks" (Wire.String origin_repo)
       (Wire.Array
          (List.map
             (fun id ->
@@ -357,14 +366,26 @@ let get_many ids =
   in
   Js.Promise.resolve (List.map Wire.block_of_pair (Wire.elems w))
 
+let get_many ids = get_many_for_repo (repo ()) ids
 
 (* dispatch outliner ops; each op entry is [kw-name, [args...]].
    Response is {result: <last op result>, ...} — unwrap it. *)
-let apply_ops ops opts =
-  let* ops = resolve_title_refs ops in
+let apply_ops_for_repo origin_repo ops opts =
+  let context_revision =
+    let entry_model = Runtime.model () in
+    if entry_model.Model.repo = Some origin_repo then
+      Some entry_model.Model.context_revision
+    else None
+  in
+  let context_is_current () =
+    let fresh_model = Runtime.model () in
+    fresh_model.Model.repo = Some origin_repo
+    && context_revision = Some fresh_model.Model.context_revision
+  in
+  let* ops = resolve_title_refs_for_repo origin_repo ops in
   let* w =
     Runtime.invoke3 "thread-api/apply-outliner-ops"
-      (Wire.String (repo ()))
+      (Wire.String origin_repo)
       (Wire.Array ops)
       opts
   in
@@ -377,21 +398,30 @@ let apply_ops ops opts =
      refresh before resolving so callers observe applied
      state (matches cljs' reactive frontend db) *)
   let* () =
-    Subs_state.promise_of_task (Runtime.hooks.refresh_property_areas ())
+    if context_is_current () then
+      Subs_state.promise_of_task (Runtime.hooks.refresh_property_areas ())
+    else resolved ()
   in
   let* () =
-    Subs_state.promise_of_task (Runtime.hooks.refresh_after_ops ())
+    if context_is_current () then
+      Subs_state.promise_of_task (Runtime.hooks.refresh_after_ops ())
+    else resolved ()
   in
   Js.Promise.resolve result
 
-let apply_op op args =
-  apply_ops [ Wire.Array [ Wire.Keyword op; Wire.Array args ] ]
+let apply_ops ops opts = apply_ops_for_repo (repo ()) ops opts
+
+let apply_op_for_repo origin_repo op args =
+  apply_ops_for_repo origin_repo
+    [ Wire.Array [ Wire.Keyword op; Wire.Array args ] ]
     (Wire.Map [])
 
+let apply_op op args = apply_op_for_repo (repo ()) op args
+
 (* get-blocks [{id, opts}] -> [[{id, block?}...]] — resolve first result *)
-let get_by_id id_wire =
+let get_by_id_for_repo origin_repo id_wire =
   let* w =
-    Runtime.invoke2 "thread-api/get-blocks" (Wire.String (repo ()))
+    Runtime.invoke2 "thread-api/get-blocks" (Wire.String origin_repo)
       (Wire.Array
          [ Wire.Map
              [ (Wire.String "id", id_wire); (Wire.String "opts", Wire.Map []) ]
@@ -408,6 +438,8 @@ let get_by_id id_wire =
              | _ -> Wire.Nil))
      | _ -> Wire.Nil)
 
+let get_by_id id_wire = get_by_id_for_repo (repo ()) id_wire
+
 (* id-or-name -> entity wire (uuid / namespaced ident / page name).
    cljs resolves page args via [:block/name (page-name-sanity-lc name)] —
    get-case-page matches :block/title exactly; a miss falls back to
@@ -416,11 +448,12 @@ let get_by_id id_wire =
    get-case-page returns raw entity attrs (property values as bare eids,
    no :block/properties) — a hit is re-fetched through get-blocks by uuid
    so the wire carries the sdk entity shape. *)
-let get_entity id_or_name =
+let get_entity_for_repo origin_repo id_or_name =
+  let get_by_id = get_by_id_for_repo origin_repo in
   if Wire.is_uuid_string id_or_name then get_by_id (Wire.String id_or_name)
   else
     let* w =
-      Runtime.invoke2 "thread-api/get-case-page" (Wire.String (repo ()))
+      Runtime.invoke2 "thread-api/get-case-page" (Wire.String origin_repo)
         (Wire.String id_or_name)
     in
     match w with
@@ -438,6 +471,8 @@ let get_entity id_or_name =
         match Wire.map_get_uuid w "block/uuid" with
         | Some u -> get_by_id (Wire.Uuid u)
         | None -> Js.Promise.resolve w)
+
+let get_entity id_or_name = get_entity_for_repo (repo ()) id_or_name
 
 (* api args can be uuid strings, page names, db ids (numbers) or
    lookup maps like {id: n} / {uuid: "..."} — normalize to wire eid *)
@@ -460,11 +495,13 @@ let eid_wire_of_json (j : Js.Json.t) : Wire.t option =
           | None -> None))
   | _ -> None
 
-let get_entity_json j =
+let get_entity_json_for_repo origin_repo j =
   match eid_wire_of_json j with
-  | Some (Wire.String s) -> get_entity s
-  | Some w -> get_by_id w
+  | Some (Wire.String s) -> get_entity_for_repo origin_repo s
+  | Some w -> get_by_id_for_repo origin_repo w
   | None -> Js.Promise.resolve Wire.Nil
+
+let get_entity_json j = get_entity_json_for_repo (repo ()) j
 
 let get_entity_ident ident = get_by_id (Wire.Keyword ident)
 
