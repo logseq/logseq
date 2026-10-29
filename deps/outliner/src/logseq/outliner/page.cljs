@@ -288,19 +288,18 @@
         title (common-util/remove-boundary-slashes title)]
     title))
 
-(defn- get-page-by-parent-name
-  [db parent-title child-title class?]
+(defn- get-page-by-parent
+  [db parent-id child-title class?]
   (some->>
    (d/q
     '[:find [?b ...]
-      :in $ ?attribute ?parent-name ?child-name
+      :in $ ?attribute ?p ?child-name
       :where
       [?b ?attribute ?p]
-      [?b :block/name ?child-name]
-      [?p :block/name ?parent-name]]
+      [?b :block/name ?child-name]]
     db
     (if class? :logseq.property.class/extends :block/parent)
-    (common-util/page-name-sanity-lc parent-title)
+    parent-id
     (common-util/page-name-sanity-lc child-title))
    first
    (d/entity db)))
@@ -326,19 +325,26 @@
              parts (->> (string/split title ns-util/parent-re)
                         (map string/trim)
                         (remove string/blank?))
-             pages (map-indexed
-                    (fn [idx part]
+             pages (reduce
+                    (fn [pages [idx part]]
                       (let [last-part? (= idx (dec (count parts)))
-                            page (if (zero? idx)
+                            parent (peek pages)
+                            ;; a part exists only under the page found for the
+                            ;; part before it, not under any page with that name
+                            page (cond
+                                   (zero? idx)
                                    (ldb/get-page db part)
-                                   (get-page-by-parent-name db (nth parts (dec idx)) part create-class?))
+
+                                   (de/entity? parent)
+                                   (get-page-by-parent db (:db/id parent) part create-class?))
                             result (or page
                                        (gp-block/page-name->map part db true date-formatter
                                                                 {:page-uuid (when last-part? block-uuid)
                                                                  :skip-existing-page-check? true
                                                                  :class? class?}))]
-                        result))
-                    parts)]
+                        (conj pages result)))
+                    []
+                    (map-indexed vector parts))]
          (cond
            (and (not class?) (not (every? ldb/internal-page? pages)))
            (throw (ex-info "Cannot create this page unless all parents are pages"
@@ -507,13 +513,16 @@
           (let [page-uuid (if-let [journal-day (:block/journal-day page)]
                             (common-uuid/gen-uuid :journal-page-uuid journal-day)
                             (:block/uuid page))
-                page (assoc page :block/uuid page-uuid)
-                page-txs (build-page-tx db properties page
-                                        {:class? class?
-                                         :tags resolved-tags
-                                         :class-ident-namespace class-ident-namespace})
+                ;; the namespaced page already exists under its parents
+                existing-page? (de/entity? page)
+                page (if existing-page? page (assoc page :block/uuid page-uuid))
+                page-txs (when-not existing-page?
+                           (build-page-tx db properties page
+                                          {:class? class?
+                                           :tags resolved-tags
+                                           :class-ident-namespace class-ident-namespace}))
                 txs (concat
-                     (recycled-parents-restore-tx db parents')
+                     (recycled-parents-restore-tx db (cons page parents'))
                      ;; transact doesn't support entities
                      (remove de/entity? parents')
                      page-txs)
