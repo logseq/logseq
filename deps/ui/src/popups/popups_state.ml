@@ -191,6 +191,7 @@ type t =
   { vs : view Signal.state
   ; gen : int ref (* stale-response guard *)
   ; session : int ref
+  ; cache_repo : string option ref
   ; titles : string list ref
   ; page_exact_titles : string list ref (* parentless internal pages/journals *)
   ; tag_titles : (string * string option) list ref
@@ -211,6 +212,7 @@ let make scheduler : t =
     { vs = Signal.state scheduler { ac = None; cm = None; pv = None }
   ; gen = ref 0
   ; session = ref 0
+  ; cache_repo = ref None
   ; titles = ref []
   ; page_exact_titles = ref []
     ; tag_titles = ref []
@@ -1102,6 +1104,14 @@ let load_templates t =
 
 let open_ac ?tpos ?(autopair = true) t kind =
   invalidate_ac t;
+  let graph = repo () in
+  if !(t.cache_repo) <> Some graph then (
+    t.cache_repo := Some graph;
+    t.titles := [];
+    t.page_exact_titles := [];
+    t.tag_titles := [];
+    t.tag_exact_titles := [];
+    t.templates := []);
   let session = !(t.session) in
   let auuid = Option.value (Editor_state.editing_uuid ()) ~default:"" in
   let pos = Editor_sink.popup_pos auuid in
@@ -1486,19 +1496,32 @@ let inline_tag_text ac title =
    block/tags (existing class or a new "New tag" class). The "New tag"
    row always takes the class path even when a plain page exists. *)
 let apply_tag t ac ~create ~inline title =
-  match Editor_state.editing_uuid () with
-  | None -> ()
-  | Some buuid ->
+  match Editor_state.editing () with
+  | Some editing when editing.uuid = ac.auuid ->
+      let buuid = editing.uuid in
       let repo_v = repo () in
+      let gen = !(t.gen) and session = !(t.session) in
+      let awaiting_lookup () =
+        gen = !(t.gen) && session = !(t.session) && repo_v = repo ()
+        && match Editor_state.editing () with
+           | Some current ->
+               current.epoch == editing.epoch
+               && current.model.version = editing.model.version
+               && current.model.caret = editing.model.caret
+               && current.model.anchor = editing.model.anchor
+               && not (Edit_model.composing current.model)
+           | None -> false
+      in
       let save_and_tag dbid =
         (* emit already stripped "#q" from the buffer; persist the new
            buffer and the tag in one batch *)
         let rest =
           [ Outliner_ops.set_block_property buuid "block/tags" (Wire.Int dbid) ]
         in
-        ignore
-          (Outliner_ops.apply_parsed_and_refresh ~rest
-             [ (buuid, Editor_actions.live_buffer buuid) ])
+        if repo_v = repo () then
+          ignore
+            (Outliner_ops.apply_parsed_and_refresh ~rest
+               [ (buuid, Editor_actions.live_buffer buuid) ])
       in
       (* cljs tag-in-page-auto-complete?: "#" typed inside a [[ pair
          still erases the query but skips the tag/class attach — the
@@ -1529,6 +1552,8 @@ let apply_tag t ac ~create ~inline title =
                  (Wire.Array [ Outliner_ops.create_class title ])
                  (Wire.Map [])
              in
+             if repo_v <> repo () then Js.Promise.resolve ()
+             else
              let* e =
                Runtime.invoke2 "thread-api/get-case-page"
                  (Wire.String repo_v) (Wire.String title)
@@ -1545,7 +1570,8 @@ let apply_tag t ac ~create ~inline title =
             Runtime.invoke2 "thread-api/get-case-page" (Wire.String repo_v)
               (Wire.String title)
           in
-          match w with
+          if not (awaiting_lookup ()) then Js.Promise.resolve ()
+          else match w with
           | Wire.Map _ -> (
               match Wire.map_get_int w "db/id" with
               | None -> Js.Promise.resolve ()
@@ -1574,6 +1600,7 @@ let apply_tag t ac ~create ~inline title =
           | _ ->
               create_and_tag ();
               Js.Promise.resolve ())
+  | _ -> ()
 
 let apply_template t _ac uuid =
   match Editor_state.editing_uuid () with
