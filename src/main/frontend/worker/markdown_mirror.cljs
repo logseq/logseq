@@ -80,15 +80,25 @@
   (and (ldb/page? page)
        (not (ldb/journal? page))))
 
+(defn- stem-key
+  "Stems that differ only in case name one file on case-insensitive file
+  systems (macOS, Windows), so pages are grouped by the lower-cased stem."
+  [stem]
+  (some-> stem string/lower-case))
+
+(defn- page-stem-key
+  [page]
+  (when (non-journal-page? page)
+    (stem-key (normalize-file-stem (:block/title page)))))
+
 (defn- build-stem-index
-  "One-time build of normalized file stem -> non-journal page uuids.
+  "One-time build of lower-cased normalized file stem -> non-journal page uuids.
   Kept current incrementally by update-stem-index on each tx-report."
   [db]
   (reduce (fn [m datom]
             (let [page (d/entity db (:e datom))]
-              (if-let [stem (when (non-journal-page? page)
-                              (normalize-file-stem (:block/title page)))]
-                (update m stem (fnil conj #{}) (:block/uuid page))
+              (if-let [k (page-stem-key page)]
+                (update m k (fnil conj #{}) (:block/uuid page))
                 m)))
           {}
           (d/datoms db :avet :block/name)))
@@ -106,25 +116,47 @@
   (reduce (fn [m page-id]
             (let [before (d/entity db-before page-id)
                   after (d/entity db-after page-id)
-                  m (if-let [old-stem (when (non-journal-page? before)
-                                        (normalize-file-stem (:block/title before)))]
-                      (let [uuids (disj (get m old-stem) (:block/uuid before))]
+                  m (if-let [old-key (page-stem-key before)]
+                      (let [uuids (disj (get m old-key) (:block/uuid before))]
                         (if (empty? uuids)
-                          (dissoc m old-stem)
-                          (assoc m old-stem uuids)))
+                          (dissoc m old-key)
+                          (assoc m old-key uuids)))
                       m)]
-              (if-let [new-stem (when (non-journal-page? after)
-                                  (normalize-file-stem (:block/title after)))]
-                (update m new-stem (fnil conj #{}) (:block/uuid after))
+              (if-let [new-key (page-stem-key after)]
+                (update m new-key (fnil conj #{}) (:block/uuid after))
                 m)))
           index
           page-ids))
 
 (defn- pages-with-file-stem
   [db stem]
-  (->> (get (stem-index db) stem)
+  (->> (get (stem-index db) (stem-key stem))
        (keep #(d/entity db [:block/uuid %]))
        (sort-by (comp str :block/uuid))))
+
+(defn- duplicate-stem
+  "Stem of the `n`th (1-based) page sharing `stem`: ` (2)`, ` (3)`, ... are
+  appended, skipping a suffixed stem that another page has as its own title."
+  [index stem n]
+  (if (= 1 n)
+    stem
+    (nth (remove #(contains? index (stem-key %))
+                 (map #(str stem " (" % ")") (iterate inc 2)))
+         (- n 2))))
+
+(def ^:private duplicate-suffix-re #"^(.*) \(\d+\)$")
+
+(defn- stem-group-page-ids
+  "Pages whose file name can change when the pages under stem `k` change: the
+  pages sharing `k`, and the pages whose ` (n)` suffix skips `k`."
+  [db-before db-after index-before index-after k]
+  (let [base-key (second (re-matches duplicate-suffix-re k))]
+    (->> (concat (get index-before k) (get index-after k)
+                 (when base-key
+                   (concat (get index-before base-key) (get index-after base-key))))
+         (keep (fn [page-uuid]
+                 (:db/id (or (d/entity db-after [:block/uuid page-uuid])
+                             (d/entity db-before [:block/uuid page-uuid]))))))))
 
 (defn page-relative-path
   ([db page]
@@ -142,11 +174,8 @@
                                          (when (= (:block/uuid page) (:block/uuid p))
                                            idx))
                                        duplicate-pages))
-                              0))
-               stem' (if (= 1 index)
-                       stem
-                       (str stem " (" index ")"))]
-           (str "pages/" stem' ".md")))))))
+                              0))]
+           (str "pages/" (duplicate-stem (stem-index db) stem index) ".md")))))))
 
 (defn- mirror-path
   [repo relative-path]
@@ -710,6 +739,17 @@
                       (or (:debounce-ms opts) 1000))]
       (swap! *repo->flush-timeout assoc repo timeout-id))))
 
+(defn- keep-old-paths-of-other-jobs
+  "Jobs run in parallel, so a page must not delete its old file when that path
+  is now another page's file (a page took over its name)."
+  [jobs]
+  (let [new-paths (set (keep #(when-not (:delete? %) (:new-path %)) jobs))]
+    (map (fn [{:keys [old-path new-path] :as job}]
+           (if (and old-path (not= old-path new-path) (contains? new-paths old-path))
+             (assoc job :old-path nil)
+             job))
+         jobs)))
+
 (defn- <run-job!
   [platform* {:keys [repo db page-id old-path new-path delete?]} opts]
   (cond
@@ -739,7 +779,16 @@
              (supported-runtime? platform*))
       (let [affected-ids (affected-page-ids tx-report)
             index-before (stem-index db-before)
-            index-after (update-stem-index index-before db-before db-after affected-ids)]
+            index-after (update-stem-index index-before db-before db-after affected-ids)
+            affected-ids (into affected-ids
+                               (comp (mapcat (fn [page-id]
+                                               [(page-stem-key (d/entity db-before page-id))
+                                                (page-stem-key (d/entity db-after page-id))]))
+                                     (remove nil?)
+                                     (distinct)
+                                     (mapcat #(stem-group-page-ids db-before db-after
+                                                                   index-before index-after %)))
+                               affected-ids)]
         (.set stem-index-cache db-after index-after)
         (if (get-in tx-report [:tx-meta :from-disk?])
           (p/resolved {:status :skipped
@@ -753,14 +802,14 @@
                 (schedule-flush! repo opts')
                 (p/resolved {:status :queued
                              :count (count jobs)}))
-              (p/all (map #(<run-job! platform* % opts') jobs))))))
+              (p/all (map #(<run-job! platform* % opts') (keep-old-paths-of-other-jobs jobs)))))))
       (p/resolved {:status :skipped
                    :reason :disabled-or-unsupported}))))
 
 (defn <flush-repo!
   [repo {:keys [platform] :as opts}]
   (let [platform* (or platform (platform/current))
-        jobs (drain-repo-jobs! repo)]
+        jobs (keep-old-paths-of-other-jobs (drain-repo-jobs! repo))]
     (p/all (map #(<run-job! platform* % opts) jobs))))
 
 (defn <mirror-repo!
