@@ -95,3 +95,33 @@
       (outliner-core/delete-blocks! conn [(d/entity @conn [:block/uuid (block-uuid conn "A")])] {})
       (doseq [title ["X" "Y" "Z"]]
         (is (= "red" (some-> (value-of title) db-property/property-value-content)))))))
+
+(deftest set-block-property-with-no-matching-choice-is-refused
+  (testing "Status"
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "page1"}
+                  :blocks [{:block/title "task"}]}])
+          task-uuid (block-uuid conn "task")
+          task #(d/entity @conn [:block/uuid task-uuid])]
+      (outliner-property/batch-set-property! conn [task-uuid] :logseq.property/status :logseq.property/status.doing)
+      (is (thrown-with-msg? js/Error #"Invalid choice"
+                            (outliner-property/set-block-property! conn [:block/uuid task-uuid] :logseq.property/status "Finished")))
+      (is (= :logseq.property/status.doing (:db/ident (:logseq.property/status (task)))))
+      (is (= #{:logseq.class/Task} (set (map :db/ident (:block/tags (task))))))))
+
+  (testing "A user property with choices"
+    (let [conn (db-test/create-conn-with-blocks
+                {:properties {:color {:logseq.property/type :default
+                                      :build/closed-values [{:value "red" :uuid (random-uuid)}
+                                                            {:value "blue" :uuid (random-uuid)}]}}
+                 :pages-and-blocks [{:page {:block/title "page1"}
+                                     :blocks [{:block/title "b1"}]}]})
+          b1-uuid (block-uuid conn "b1")]
+      (outliner-property/set-block-property! conn [:block/uuid b1-uuid] :user.property/color "red")
+      (is (thrown-with-msg? js/Error #"Invalid choice"
+                            (outliner-property/set-block-property! conn [:block/uuid b1-uuid] :user.property/color "green")))
+      (is (= "red" (db-property/property-value-content (block-value conn "b1" :user.property/color))))
+      (testing "and nil still removes the value"
+        (outliner-property/set-block-property! conn [:block/uuid b1-uuid] :user.property/color nil)
+        (is (nil? (block-value conn "b1" :user.property/color)))))))
+
