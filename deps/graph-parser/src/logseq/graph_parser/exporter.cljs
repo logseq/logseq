@@ -321,7 +321,8 @@
                 (when (= full-name (string/join ns-util/namespace-char (map :block/name (conj parents e))))
                   (:block/uuid e))))
             (name-entities (ns-util/get-last-part full-name)))
-      (some :block/uuid (name-entities full-name)))))
+      ;; A namespaced class work/x has the name x too; #x is a different class
+      (some :block/uuid (remove gp-block/namespace-child-page? (name-entities full-name))))))
 
 (defn- find-existing-namespace-page-uuid
   "Finds a page that is not a class by the namespaced name of a tag and returns its :block/uuid.
