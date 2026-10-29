@@ -777,6 +777,16 @@
                                :i18n-key :page.validation/alias-batch-multiple-owners
                                :message "Aliases can't be batch-set on multiple pages."}}))))
 
+(defn- retract-value-blocks-tx
+  "Tx data retracting `values` with their children. Not outliner-core/delete-blocks:
+  for a property with a default value, it sets the holders of one deleted value
+  block to the empty placeholder, which would overwrite their new value."
+  [db values]
+  (->> values
+       (mapcat (fn [value] (cons (:db/id value) (ldb/get-block-full-children-ids db (:db/id value)))))
+       distinct
+       (map (fn [id] [:db/retractEntity id]))))
+
 (defn- released-value-blocks-tx
   "Tx data deleting the text value blocks of `property` among `value-ids` that
   no node outside `releasing-ids` holds, once those nodes stop holding them.
@@ -799,8 +809,7 @@
                                                     :in $ ?property-ident ?value-id
                                                     :where [?e ?property-ident ?value-id]]
                                                   db (:db/ident property) (:db/id value)))))))]
-    (when (seq released)
-      (:tx-data (outliner-core/delete-blocks db released {})))))
+    (retract-value-blocks-tx db released)))
 
 (defn- entity-ids
   [value]
@@ -871,14 +880,16 @@
                            block-eids))
            txs (mapcat (fn [[block v']] (build-property-value-tx-data conn block property-id v'))
                        blocks+values)
-           ;; A scalar added to a :many property keeps the block's other values
-           replaced-value-ids (when (and ref? (not (and many? (not (coll? v)))))
-                                (let [set-ids (set (mapcat (fn [[_ v']] (if (coll? v') v' [v'])) blocks+values))]
-                                  (remove set-ids
-                                          (mapcat (fn [[block _]] (entity-ids (get block property-id)))
-                                                  blocks+values))))
-           released-tx (released-value-blocks-tx @conn property replaced-value-ids
-                                                 (map (comp :db/id first) blocks+values))]
+           ;; The blocks whose values build-property-value-tx-data replaces: a :many
+           ;; property's values are replaced by a sequential value, and kept otherwise
+           replacing (when ref?
+                       (filter (fn [[_ v']] (or (not many?) (sequential? v'))) blocks+values))
+           set-ids (set (mapcat (fn [[_ v']] (if (coll? v') v' [v'])) blocks+values))
+           released-tx (released-value-blocks-tx @conn property
+                                                 (remove set-ids
+                                                         (mapcat (fn [[block _]] (entity-ids (get block property-id)))
+                                                                 replacing))
+                                                 (map (comp :db/id first) replacing))]
        (when (seq txs)
          (ldb/transact! conn (concat txs released-tx) {:outliner-op :batch-set-property}))))))
 
@@ -1439,7 +1450,7 @@
                              {:outliner-op :add-existing-values-to-closed-values})
               (when (seq copies)
                 (ldb/transact! conn
-                               (:tx-data (outliner-core/delete-blocks @conn (keep #(d/entity @conn (:db/id %)) copies) {}))
+                               (retract-value-blocks-tx @conn copies)
                                {:outliner-op :add-existing-values-to-closed-values})))))))))
 
 (defn delete-closed-value!
