@@ -4107,6 +4107,31 @@
             state/exit-editing-and-set-selected-blocks!)))
    (state/set-state! :selection/selected-all? true)))
 
+(defn- select-parent-page?
+  "True when `parent` is a page. DB worker ref summaries omit the parent's own
+  :block/parent, so page-ness cannot be inferred from a nested parent link."
+  [parent]
+  (boolean
+   (or (:block/name parent)
+       (entity/page? parent))))
+
+(defn- select-parent-target
+  "Next Mod+A expansion from a selected block's worker/file entity.
+   Returns nil to stop, {:select-block uuid}, or {:select-all-page page}."
+  [block current-page]
+  (let [parent (:block/parent block)
+        parent-uuid (or (:block/uuid parent) (:block/parent-uuid block))]
+    (cond
+      (= current-page (str (:block/uuid block)))
+      nil
+
+      (and parent-uuid (not (select-parent-page? parent)))
+      {:select-block parent-uuid}
+
+      (select-parent-page? parent)
+      {:select-all-page (or (:block/name parent)
+                            (some-> (:block/uuid parent) str))})))
+
 (defn select-parent [e]
   (let [edit-input (some-> (state/get-edit-input-id) gdom/getElement)
         edit-block (state/get-edit-block)
@@ -4136,18 +4161,14 @@
                                     uuid)]
             (p/let [block (db-async/<get-block (state/get-current-repo) block-id)]
               (when block
-                (let [parent (:block/parent block)]
+                (let [target (select-parent-target block (state/get-current-page))]
                   (cond
-                    (= (state/get-current-page) (str (:block/uuid block)))
-                    nil
-
-                    (and parent (:block/parent parent))
+                    (:select-block target)
                     (state/exit-editing-and-set-selected-blocks!
-                     [(util/get-first-block-by-id (:block/uuid parent))])
+                     [(util/get-first-block-by-id (:select-block target))])
 
-                    (:block/name parent)
-                    ;; page block
-                    (select-all-blocks! {:page (:block/name parent)})))))
+                    (:select-all-page target)
+                    (select-all-blocks! {:page (:select-all-page target)})))))
             (select-all-blocks! {})))))))
 
 (defn escape-editing
