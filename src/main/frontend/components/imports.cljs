@@ -12,6 +12,7 @@
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.db-based.import :as db-import-handler]
             [frontend.handler.file-graph-import :as file-graph-import]
+            [frontend.handler.graph :as graph-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.route :as route-handler]
@@ -647,29 +648,33 @@
   (state/<invoke-db-worker :thread-api/search-build-blocks-indice-in-worker repo)
   nil)
 
-(defn- finish-file-graph-import!
+(defn- add-client-ignored-files
+  [import-result client-ignored-files]
+  (let [client-ignored (mapv #(assoc % :reason :skipped-by-file-picker) client-ignored-files)]
+    (cond-> import-result
+      (seq client-ignored)
+      (-> (update :ignored-files-detail into client-ignored)
+          (update :ignored-files-count (fnil + 0) (count client-ignored))))))
+
+(defn- <finish-file-graph-import!
   [repo import-result client-ignored-files]
-  (clear-file-graph-importing-ui!)
-  (let [client-ignored (->> client-ignored-files
-                            (map #(assoc % :reason :skipped-by-file-picker))
-                            vec)
-        import-result (cond-> import-result
-                        (seq client-ignored)
-                        (-> (update :ignored-files-detail into client-ignored)
-                            (update :ignored-files-count (fnil + 0) (count client-ignored))))]
-    (when (seq import-result)
-      (doseq [notification (:notifications import-result)]
-        (show-notification notification))
-      (validate-imported-data import-result)
-      (when (import-report-needed? import-result)
-        (open-import-report! import-result))))
-  (notification/show! (t :import/file-finished) :success)
-  (state/pub-event! [:graph/sync-context])
-  (state/pub-event! [:graph/ready repo])
-  (route-handler/redirect-to-home!)
-  (ui-handler/re-render-root!)
-  (start-imported-graph-search-index! repo)
-  nil)
+  (p/let [_ (graph-handler/<upsert-current-graph-registry!)
+          _ (graph-handler/remember-current-graph-id-in-tab!)]
+    (clear-file-graph-importing-ui!)
+    (let [import-result (add-client-ignored-files import-result client-ignored-files)]
+      (when (seq import-result)
+        (doseq [notification (:notifications import-result)]
+          (show-notification notification))
+        (validate-imported-data import-result)
+        (when (import-report-needed? import-result)
+          (open-import-report! import-result))))
+    (notification/show! (t :import/file-finished) :success)
+    (state/pub-event! [:graph/sync-context])
+    (state/pub-event! [:graph/ready repo])
+    (route-handler/redirect-to-home!)
+    (ui-handler/re-render-root!)
+    (start-imported-graph-search-index! repo)
+    nil))
 
 (defn- transport-error?
   [error]
@@ -697,7 +702,7 @@
                                   (import-files-finished?))]
     (if keep-imported-graph?
       (p/let [_ (repo-handler/restore-and-setup-repo! current-repo {:file-graph-import? true})]
-        (finish-file-graph-import! current-repo {} nil))
+        (<finish-file-graph-import! current-repo {} nil))
       (do
         (clear-file-graph-importing-ui!)
         (when created-new-graph?
@@ -714,14 +719,8 @@
         nil))))
 
 (defn- import-file-graph
-  ([*files user-options config-file client-ignored-files]
-   (import-file-graph *files user-options config-file client-ignored-files nil))
-  ([*files
-    {:keys [graph-name] :as user-options}
-    config-file
-    client-ignored-files
-    {:keys [<confirm-scan]}]
-   (let [previous-repo (state/get-current-repo)
+  [*files {:keys [graph-name] :as user-options} config-file client-ignored-files]
+  (let [previous-repo (state/get-current-repo)
         expected-repo (str config/db-version-prefix graph-name)]
     (start-file-graph-import-session! *files)
     (-> (p/let [file-metas (mapv import-file-descriptor *files)
@@ -737,7 +736,8 @@
                                                            {:code :import-scan/failed}
                                                            error)))))
                 _ (close-scan-dialog!)
-                proceed? ((or <confirm-scan <confirm-import-scan!) scan-result)]
+                proceed? (<confirm-import-scan!
+                          (add-client-ignored-files scan-result client-ignored-files))]
           (when proceed?
             (state/set-state! :graph/importing :file-graph)
             (state/set-state! :graph/importing-state file-graph-import-initial-ui-state)
@@ -756,11 +756,11 @@
                       ;; set so :graph/restored does not start a second search build.
                       _ (repo-handler/restore-and-setup-repo! repo {:file-graph-import? true})]
                 (log/info :import-file-graph {:msg (str "Import finished in " (/ (t/in-millis (t/interval start-time (t/now))) 1000) " seconds")})
-                (finish-file-graph-import! repo import-result client-ignored-files)))))
+                (<finish-file-graph-import! repo import-result client-ignored-files)))))
         (p/catch (fn [error]
                    (abort-file-graph-import! error previous-repo)))
         (p/finally (fn []
-                     (file-graph-import/clear-file-graph-import-session!)))))))
+                     (file-graph-import/clear-file-graph-import-session!))))))
 
 (defn import-file-to-db-handler
   "Import from a graph folder as a DB-based graph"
