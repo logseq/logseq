@@ -119,6 +119,20 @@
         "The imported journal page can be deleted")
     (is (ldb/recycled? (d/entity @conn (:db/id page))) "The deleted journal page is in the Recycle")))
 
+(deftest-async page-file-before-journal-file-for-same-date-make-one-valid-journal
+  (p/let [conn (import-files! [["pages/Jun 21st, 2023.md" "- p1"]
+                               ["journals/2023_06_21.md" "- j1"]])
+          page (db-test/find-journal-by-journal-day @conn 20230621)
+          page-tags (set (map :db/ident (:block/tags page)))]
+    (is (= 1 (count (pages-named @conn "jun 21st, 2023"))) "There is one page for the date")
+    (is (= #{"j1" "p1"} (page-block-titles page)) "Both files' blocks are on the journal page")
+    (is (contains? page-tags :logseq.class/Journal) "The page is a journal")
+    (is (not (contains? page-tags :logseq.class/Page)) "The journal is not also tagged #Page")
+    (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+        "Imported graph validates")
+    (is (true? (outliner-page/delete! conn (:block/uuid page)))
+        "The imported journal page can be deleted")))
+
 (deftest-async journal-file-and-page-file-with-tags-for-same-date-make-one-valid-journal
   (p/let [conn (import-files! [["journals/2023_06_21.md" "- j1"]
                                ["pages/Jun 21st, 2023.md" "tags:: foo\n\n- p1"]])
