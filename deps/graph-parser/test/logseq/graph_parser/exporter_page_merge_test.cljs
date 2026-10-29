@@ -1,17 +1,20 @@
 (ns ^:node-only logseq.graph-parser.exporter-page-merge-test
-  "File-graph import cases where a page file is merged into the wrong page"
+  "File-graph import cases where a page file is merged into the wrong page or
+  gives an existing page a tag it cannot have"
   (:require ["fs" :as fs]
             ["os" :as os]
             ["path" :as node-path]
             [cljs.test :refer [is]]
             [datascript.core :as d]
             [logseq.common.path :as path]
+            [logseq.db :as ldb]
             [logseq.db.frontend.validate :as db-validate]
             [logseq.db.test.helper :as db-test]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.exporter :as gp-exporter]
             [logseq.graph-parser.test.helper :as test-helper :include-macros true :refer [deftest-async]]
             [logseq.outliner.db-pipeline :as db-pipeline]
+            [logseq.outliner.page :as outliner-page]
             [promesa.core :as p]))
 
 (defn- <read-file
@@ -89,3 +92,27 @@
     (is (some? plain-page) "[[b]] creates a root page b")
     (is (= [(:db/id plain-page)] (map :db/id (:block/refs later-block)))
         "[[b]] links to the root page b, not to projects/b")))
+
+(deftest-async journal-file-and-page-file-for-same-date-make-one-valid-journal
+  (p/let [conn (import-files! [["journals/2023_06_21.md" "- j1"]
+                               ["pages/Jun 21st, 2023.md" "- p1"]])
+          page (db-test/find-journal-by-journal-day @conn 20230621)
+          page-tags (set (map :db/ident (:block/tags page)))]
+    (is (= #{"j1" "p1"} (page-block-titles page)) "Both files' blocks are on the journal page")
+    (is (contains? page-tags :logseq.class/Journal) "The page is a journal")
+    (is (not (contains? page-tags :logseq.class/Page)) "The journal is not also tagged #Page")
+    (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+        "Imported graph validates")
+    (is (true? (outliner-page/delete! conn (:block/uuid page)))
+        "The imported journal page can be deleted")
+    (is (ldb/recycled? (d/entity @conn (:db/id page))) "The deleted journal page is in the Recycle")))
+
+(deftest-async journal-file-and-page-file-with-tags-for-same-date-make-one-valid-journal
+  (p/let [conn (import-files! [["journals/2023_06_21.md" "- j1"]
+                               ["pages/Jun 21st, 2023.md" "tags:: foo\n\n- p1"]])
+          page (db-test/find-journal-by-journal-day @conn 20230621)
+          page-tags (set (map :db/ident (:block/tags page)))]
+    (is (contains? page-tags :logseq.class/Journal) "The page is a journal")
+    (is (not (contains? page-tags :logseq.class/Page)) "The journal is not also tagged #Page")
+    (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+        "Imported graph validates")))
