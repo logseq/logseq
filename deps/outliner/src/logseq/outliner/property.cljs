@@ -1268,15 +1268,53 @@
                                         :logseq.property/description
                                         description)))))))))))
 
+(defn- same-text-values-to-choices-tx
+  "Tx data making every node that holds a text value block of `property` whose
+  content is the content of one of `choices` hold that choice instead, and
+  deleting those value blocks. Otherwise they stay values that aren't choices,
+  which validate-db deletes."
+  [db property choices]
+  (let [property-ident (:db/ident property)
+        choice-ids (set (map :db/id choices))
+        choice-by-content (into {} (map (juxt db-property/property-value-content identity)) choices)
+        default-value-id (:db/id (:logseq.property/default-value property))
+        copies (->> (d/datoms db :avet :logseq.property/created-from-property (:db/id property))
+                    (map #(d/entity db (:e %)))
+                    (remove (fn [value]
+                              (or (contains? choice-ids (:db/id value))
+                                  (ldb/closed-value? value)
+                                  (entity-util/page? value)
+                                  (= default-value-id (:db/id value)))))
+                    (keep (fn [value]
+                            (when-let [choice (choice-by-content (db-property/property-value-content value))]
+                              [value choice]))))]
+    (when (seq copies)
+      (concat
+       (mapcat (fn [[value choice]]
+                 (mapcat (fn [{holder-id :e}]
+                           [[:db/retract holder-id property-ident (:db/id value)]
+                            [:db/add holder-id property-ident (:db/id choice)]])
+                         (d/datoms db :avet property-ident (:db/id value))))
+               copies)
+       (:tx-data (outliner-core/delete-blocks db (map first copies) {}))))))
+
 (defn add-existing-values-to-closed-values!
-  "Adds existing values as closed values and returns their new block uuids"
+  "Adds existing values as closed values and returns their new block uuids.
+  A value whose content is already a choice's, or another given value's, isn't
+  added: the nodes that hold it hold that choice instead."
   [conn property-id values]
   (when-let [property (d/entity @conn property-id)]
     (when (seq values)
       (let [values' (remove string/blank? values)]
         (assert (every? uuid? values') "existing values should all be UUIDs")
-        (let [values (keep #(d/entity @conn [:block/uuid %]) values')]
-          (when (seq values)
+        (let [choices (:block/_closed-value-property property)
+              choice-contents (set (map db-property/property-value-content choices))
+              values (->> values'
+                          (keep #(d/entity @conn [:block/uuid %]))
+                          (remove #(contains? choice-contents (db-property/property-value-content %)))
+                          (common-util/distinct-by db-property/property-value-content))
+              copies-tx (same-text-values-to-choices-tx @conn property (concat choices values))]
+          (when (or (seq values) (seq copies-tx))
             (let [property-db-id (:db/id property)
                   value-property-tx (map (fn [id]
                                            {:db/id id
@@ -1285,7 +1323,7 @@
                                             :block/page property-db-id})
                                          (map :db/id values))
                   property-tx (outliner-core/block-with-updated-at {:db/id property-db-id})]
-              (ldb/transact! conn (cons property-tx value-property-tx)
+              (ldb/transact! conn (concat [property-tx] value-property-tx copies-tx)
                              {:outliner-op :add-existing-values-to-closed-values}))))))))
 
 (defn delete-closed-value!
