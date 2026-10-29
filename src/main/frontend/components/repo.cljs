@@ -1,14 +1,18 @@
 (ns frontend.components.repo
-  (:require [clojure.string :as string]
+  (:require [cljs-bean.core :as bean]
+            [clojure.string :as string]
+            [electron.ipc :as ipc]
             [frontend.components.rtc.indicator :as rtc-indicator]
             [frontend.config :as config]
             [frontend.context.i18n :as i18n :refer [t]]
+            [frontend.handler.db-based.import :as db-import-handler]
             [frontend.handler.db-based.sync :as rtc-handler]
             [frontend.handler.events.rtc-error :as rtc-error]
             [frontend.handler.graph :as graph]
             [frontend.handler.notification :as notification]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.route :as route-handler]
+            [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user-handler]
             [frontend.mobile.util :as mobile-util]
             [frontend.rfx :as rfx]
@@ -24,6 +28,8 @@
             [medley.core :as medley]
             [promesa.core :as p]
             [io.factorhouse.hsx.core :as hsx]))
+
+(declare existing-local-graph-action? choose-existing-local-graph-source!)
 
 (defn graph-sync-icon-name
   [{:keys [remote? graph-e2ee?]}]
@@ -340,7 +346,14 @@
          [:div.mr-8
           (ui/button
            (t :graph/create-new)
-           :on-click #(state/pub-event! [:graph/new-db-graph]))]])
+           :on-click #(state/pub-event! [:graph/new-db-graph]))]
+         (when (existing-local-graph-action?)
+           [:div.mr-8
+            (ui/button
+             (t :graph.add-existing/action)
+             :class "add-existing-graph-btn"
+             :data-testid "add-existing-graph"
+             :on-click choose-existing-local-graph-source!)])])
 
       [:div
        [:h2.text-lg.font-medium.mb-4 (t :graph/local-graphs)]
@@ -436,6 +449,15 @@
        :on-click (fn [] (route-handler/redirect! {:to :import}))}
       (shui/tabler-icon "database-import")
       [:span (t :import/notes)]))
+
+   (when (existing-local-graph-action?)
+     (shui/button
+      {:size :sm :variant :ghost
+       :class "add-existing-graph-btn"
+       :data-testid "add-existing-graph"
+       :on-click choose-existing-local-graph-source!}
+      (shui/tabler-icon "folder-plus")
+      [:span (t :graph.add-existing/action)]))
 
    (when-not config/publishing?
      (shui/button {:size :sm :variant :ghost
@@ -622,6 +644,106 @@
   (or (include-reserved-chars? graph-name)
       (string/includes? graph-name "+")
       (string/includes? graph-name "/")))
+
+(defn existing-local-graph-action?
+  "Electron DB builds can re-add a local graph from disk after OS reinstall."
+  []
+  (boolean (and (util/electron?) (not config/publishing?))))
+
+(defn- <on-existing-local-graph-imported!
+  []
+  (p/do!
+   (graph/<upsert-current-graph-registry!)
+   (graph/remember-current-graph-id-in-tab!)
+   (state/pub-event! [:graph/sync-context])
+   (notification/show! (t :import/file-finished) :success)
+   (route-handler/redirect-to-home!)
+   (js/setTimeout ui-handler/re-render-root! 500)))
+
+(hsx/defc add-existing-graph-name-dialog
+  [default-name on-submit]
+  (let [[input set-input!] (hooks/use-state (or default-name ""))
+        submit! (fn []
+                  (let [graph-name (string/trim input)]
+                    (cond
+                      (string/blank? graph-name)
+                      (notification/show! (t :import/empty-graph-name) :error)
+
+                      (invalid-graph-name? graph-name)
+                      (invalid-graph-name-warning)
+
+                      (repo-handler/graph-already-exists? graph-name)
+                      (notification/show! (t :import/graph-name-conflict) :error)
+
+                      :else
+                      (on-submit graph-name))))]
+    [:div.container
+     [:div.sm:flex.sm:items-start
+      [:div.mt-3.text-center.sm:mt-0.sm:text-left
+       [:h3#modal-headline.leading-6.font-medium.pb-2
+        (t :import/new-graph-name)]]]
+     (shui/input
+      {:auto-focus true
+       :value input
+       :placeholder (t :graph/name-placeholder)
+       :on-change (fn [e]
+                    (set-input! (util/evalue e)))
+       :on-key-down (fn [e]
+                      (when (= "Enter" (util/ekey e))
+                        (submit!)))})
+     [:div.mt-5.sm:mt-4.flex
+      (ui/button (t :ui/submit)
+                 {:on-click submit!})]]))
+
+(defn <add-existing-local-graph!
+  [source]
+  (when (existing-local-graph-action?)
+    (p/let [^js ret (ipc/ipc :showOpenDialog
+                             (merge {:title (t :graph.add-existing/action)}
+                                    (case source
+                                      :folder {:properties ["openDirectory"]}
+                                      {:properties ["openFile"]
+                                       :filters [{:name "Logseq"
+                                                  :extensions ["sqlite" "zip"]}]})))
+            path (some-> (bean/->clj ret) :filePaths first)]
+      (when-not (string/blank? path)
+        (shui/dialog-open!
+         #(add-existing-graph-name-dialog
+           (db-import-handler/suggested-graph-name path)
+           (fn [graph-name]
+             (shui/dialog-close!)
+             (db-import-handler/<import-existing-local-graph!
+              path graph-name <on-existing-local-graph-imported!)))
+         {:id :add-existing-graph-name
+          :title (t :import/new-graph-name)})))))
+
+(hsx/defc add-existing-graph-source-dialog
+  []
+  [:div.flex.flex-col.gap-3.p-1
+   (shui/button
+    {:class "add-existing-graph-folder-btn"
+     :data-testid "add-existing-graph-folder"
+     :on-click (fn []
+                 (shui/dialog-close!)
+                 (<add-existing-local-graph! :folder))}
+    (t :graph.add-existing/folder-action))
+   (shui/button
+    {:variant :secondary
+     :class "add-existing-graph-file-btn"
+     :data-testid "add-existing-graph-file"
+     :on-click (fn []
+                 (shui/dialog-close!)
+                 (<add-existing-local-graph! :file))}
+    (t :graph.add-existing/file-action))])
+
+(defn choose-existing-local-graph-source!
+  []
+  (when (existing-local-graph-action?)
+    (shui/dialog-open!
+     add-existing-graph-source-dialog
+     {:id :add-existing-graph-source
+      :title (t :graph.add-existing/action)})))
+
 
 (defn ensure-e2ee-rsa-key-for-cloud!
   [{:keys [cloud? graph-e2ee? refresh-token token user-uuid e2ee-rsa-key-ensured?]} set-e2ee-rsa-key-ensured?]
