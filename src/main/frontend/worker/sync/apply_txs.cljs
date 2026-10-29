@@ -1578,6 +1578,10 @@
     :upsert-property
     (apply outliner-property/upsert-property! conn args)
 
+    :restore-property-usage
+    (let [[blocks] args]
+      (ldb/transact! conn blocks {:outliner-op :restore-property-usage}))
+
     :restore-recycled
     (let [[root-id] args
           root-ref (cond
