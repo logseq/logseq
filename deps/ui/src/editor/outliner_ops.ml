@@ -12,6 +12,77 @@ let context_current (context : Model.t) =
   && model.route = context.route
   && model.context_revision = context.context_revision
 
+type refresh_owner =
+  { entry : Runtime.reload_origin
+  ; mutable cursor : Runtime.reload_origin option
+  ; mutable published : bool
+  ; mutable outcome : Runtime.reload_result option
+  }
+
+let refresh_owner entry =
+  { entry; cursor = Some entry; published = false; outcome = None }
+
+let refresh_owner_for = function
+  | Some owner -> Some owner
+  | None -> Option.map refresh_owner (Runtime.capture_reload_origin ())
+
+let refresh_current ?owner context =
+  match owner with
+  | None -> context_current context
+  | Some owner -> (
+      match owner.cursor with
+      | Some cursor when Runtime.reload_origin_current cursor -> true
+      | _ -> owner.cursor <- None; false)
+
+let send_refresh ?owner action =
+  match owner with
+  | None -> Runtime.send action
+  | Some owner -> (
+      match owner.cursor with
+      | Some cursor when Runtime.reload_origin_current cursor ->
+          owner.cursor <-
+            Option.bind (Runtime.send_with_publication action)
+              (Runtime.advance_publication cursor);
+          if Option.is_some owner.cursor then owner.published <- true
+      | _ -> owner.cursor <- None)
+
+let owned_refresh_result owner =
+  match owner.outcome with
+  | Some (Runtime.Reload_failed _ as result) -> result
+  | Some result ->
+      if Runtime.reload_result_current result then result
+      else Runtime.Reload_superseded
+  | None -> (
+      match owner.cursor with
+      | Some cursor when Runtime.reload_origin_current cursor ->
+          if owner.published then
+            Runtime.Reload_published
+              { publication_origin = owner.entry
+              ; publication_generation = cursor.reload_generation
+              ; publication_revision = cursor.reload_revision }
+          else if cursor = owner.entry then Runtime.Reload_unchanged cursor
+          else Runtime.Reload_superseded
+      | _ -> Runtime.Reload_superseded)
+
+let owned_refresh_cursor entry result =
+  if not (Runtime.reload_result_current result) then None else
+  match result with
+  | Runtime.Reload_published publication
+    when publication.publication_origin = entry ->
+      Some { entry with
+        reload_generation = publication.publication_generation
+      ; reload_revision = publication.publication_revision }
+  | Runtime.Reload_unchanged cursor when cursor = entry -> Some cursor
+  | _ -> None
+
+exception Owned_refresh_failed of Runtime.reload_result
+
+let require_refresh_success owner =
+  match owned_refresh_result owner with
+  | Runtime.Reload_failed _ as result ->
+      Js.Promise.reject (Owned_refresh_failed result)
+  | _ -> Js.Promise.resolve ()
+
 let kw k v = (Wire.Keyword k, v)
 let str k v = (Wire.String k, v)
 
@@ -115,11 +186,12 @@ let source_block uuid =
 (* Prose is trimmed at editing boundaries, never during autosave. *)
 let trim_title uuid title = if source_block uuid then title else String.trim title
 
-(* Only in-flight autosaves occupy this table. Explicit saves and newer
-   input invalidate their preparation before it can submit stale text. *)
-let autosave_revisions : (string, int) Hashtbl.t = Hashtbl.create 4
+(* Explicit saves and newer input supersede preparation only within the
+   same origin repo. Navigation retires UI actions, not committed text. *)
+let autosave_revisions : (string option * string, int) Hashtbl.t = Hashtbl.create 4
 let autosave_revision = ref 0
-let invalidate_autosave uuid = Hashtbl.remove autosave_revisions uuid
+let invalidate_autosave uuid =
+  Hashtbl.remove autosave_revisions ((Runtime.model ()).Model.repo, uuid)
 
 (* cljs wrap-parse-block on save: markdown headings normalize into
    logseq.property/heading, and [[page]]/#tag references resolve into
@@ -128,9 +200,8 @@ let invalidate_autosave uuid = Hashtbl.remove autosave_revisions uuid
    Sync text-only parsing must never run here: a #tag ref emitted as a
    bare {name,title,fresh-uuid} map upserts nothing, minting a partial
    duplicate entity that fails tx validation *)
-let block_map_parsed ?(page = false) uuid title =
-  invalidate_autosave uuid;
-  if source_block uuid then
+let block_map_parsed_source ?(page = false) ~origin_repo ~source uuid title =
+  if source then
     Js.Promise.resolve
       (* An explicit empty ref set marks source as parsed; omitted refs
          ask the worker to extract page references from the title. *)
@@ -145,7 +216,7 @@ let block_map_parsed ?(page = false) uuid title =
         (strip_markdown_heading title lvl, Some lvl)
     | _ -> (title, None)
   in
-  let* p = Title_refs.parse title in
+  let* p = Title_refs.parse ~origin_repo title in
   Js.Promise.resolve
     (Wire.Map
        ([ str "block/uuid" (Wire.Uuid uuid)
@@ -162,6 +233,11 @@ let block_map_parsed ?(page = false) uuid title =
            , Wire.String (page_name_sanity_lc p.Title_refs.title) )
          ]
        else []))
+
+let block_map_parsed ?page uuid title =
+  let origin_repo = Runtime.repo () in
+  invalidate_autosave uuid;
+  block_map_parsed_source ?page ~origin_repo ~source:(source_block uuid) uuid title
 
 let save_block_parsed uuid title =
   let* bm = block_map_parsed uuid title in
@@ -362,12 +438,14 @@ let set_collapsed ?current set =
   if S.ready () then S.set_silent apply
   else S.defer_init apply
 
-let merge_collapsed add rem =
+let merge_collapsed ?current add rem =
   let apply st =
-    { st with
-      S.collapsed =
-        S.String_set.union add (S.String_set.diff st.S.collapsed rem)
-    }
+    if Option.fold ~none:true ~some:(fun f -> f ()) current then
+      { st with
+        S.collapsed =
+          S.String_set.union add (S.String_set.diff st.S.collapsed rem)
+      }
+    else st
   in
   if S.ready () then S.set_silent apply
   else S.defer_init apply
@@ -805,29 +883,39 @@ let fetch_unlinked_exists ~stale:(is_stale : unit -> bool)
    — the e2e bounding-xy on the editor row races exactly that node
    replacement. A stale refresh carries strictly older data than the
    in-flight one, so only the newest applies. *)
-let refresh_gen = ref 0
-
-let refresh_page () : unit Js.Promise.t =
-  let route_at_start = Runtime.route () in
-  incr refresh_gen;
-  let gen = !refresh_gen in
-  match ((Runtime.model ()).Model.repo, (Runtime.model ()).Model.route_page) with
+let refresh_page_then ?owner after : unit Js.Promise.t =
+  let owner = refresh_owner_for owner in
+  let context = Runtime.model () in
+  let current () = refresh_current ?owner context in
+  match context.Model.repo, context.Model.route_page with
   | Some repo, Some page -> (
-      incr Runtime.load_gen;
+      let reserved =
+        match owner with
+        | None -> incr Runtime.load_gen; true
+        | Some owner -> (
+            match owner.cursor with
+            | Some cursor when Runtime.reload_origin_current cursor ->
+                incr Runtime.load_gen;
+                owner.cursor <-
+                  Some { cursor with reload_generation = !Runtime.load_gen };
+                true
+            | _ -> owner.cursor <- None; false)
+      in
+      if not reserved then Js.Promise.resolve () else (
       fetch_unlinked_exists
-        ~stale:(fun () -> Runtime.route () <> route_at_start)
+        ~stale:(fun () -> not (current ()))
         page;
       let blocks_p =
-        match Runtime.route (), page.Model.page_uuid with
+        match context.route, page.Model.page_uuid with
         | Model.Block_zoom _, Some u ->
             let* v = fetch_zoom_blocks repo u in
-            (blocks_of_tree_wire repo page) v
-        | _ -> fetch_page_blocks repo page
+            blocks_of_tree_wire_for ~current repo page v
+        | _ -> fetch_page_blocks_for ~current repo page
       in
       (let* blocks = blocks_p in
       (* a newer refresh superseded this fetch — a stale apply
                 would tear the open editor (stale model resyncs) *)
-      if !refresh_gen <> gen then Js.Promise.resolve ()
+      if not (current ()) then Js.Promise.resolve ()
       else
         let page =
           { page with
@@ -836,7 +924,7 @@ let refresh_page () : unit Js.Promise.t =
           }
         in
         let* page =
-          (match Runtime.route () with
+          (match context.route with
            | Model.Block_zoom uuid ->
                let* page_parents = fetch_zoom_parents repo uuid in
                Js.Promise.resolve
@@ -846,27 +934,76 @@ let refresh_page () : unit Js.Promise.t =
         (* the worker's tree is authoritative
                   again — drop committed-buffer title
                   overrides *)
+        if not (current ()) then Js.Promise.resolve () else begin
         S.clear_overrides ();
         (* the user may have navigated while the
            refetch was in-flight — never
            overwrite the new route's page *)
-        if Runtime.route () = route_at_start then
-          (let _ = Ui_services.perf_mark "refresh:page-loaded" in Runtime.send (Action.Page_loaded page));
-        Js.Promise.resolve ())
+        Ui_services.perf_mark "refresh:page-loaded";
+        send_refresh ?owner (Action.Page_loaded page);
+        (* Page_loaded advances the authoritative context once. A further
+           transition during publication must not restore old history. *)
+        if current () then after () else Js.Promise.resolve ()
+        end)
       |> Js.Promise.catch (fun e ->
              Ui_services.log_error ("refresh_page failed", e);
-             Js.Promise.resolve ()))
-  | Some _, None ->
+             (match owner with
+              | Some owner ->
+                  owner.outcome <-
+                    Some (Runtime.Reload_failed
+                            { failure_message = "refresh_page failed"
+                            ; failure_cause = Some e })
+              | None -> ());
+             Js.Promise.resolve ())))
+  | Some _, None when current () ->
       (* journals / other non-page views reload through the router hook *)
-      !Runtime.reload_current_view ()
+      (match owner with
+       | None ->
+           let* () = !Runtime.reload_current_view () in
+           if current () then after () else Js.Promise.resolve ()
+       | Some owner ->
+           match owner.cursor with
+           | Some entry when Runtime.reload_origin_current entry ->
+               let* result = !Runtime.reload_current_view_owned entry in
+               owner.cursor <- owned_refresh_cursor entry result;
+               (match result with
+                | Runtime.Reload_failed _ -> owner.outcome <- Some result
+                | Runtime.Reload_published _ -> owner.published <- true
+                | _ -> ());
+               if current () then after () else Js.Promise.resolve ()
+           | _ -> owner.cursor <- None; Js.Promise.resolve ())
   | _ -> Js.Promise.resolve ()
+
+let refresh_page () = refresh_page_then (fun () -> Js.Promise.resolve ())
+
+let refresh_page_owned_result entry =
+  let owner = refresh_owner entry in
+  if not (refresh_current ~owner (Runtime.model ())) then
+    Js.Promise.resolve Runtime.Reload_superseded
+  else
+    (let* () = refresh_page_then ~owner (fun () -> Js.Promise.resolve ()) in
+     Js.Promise.resolve (owned_refresh_result owner))
+    |> Js.Promise.catch (fun cause ->
+        Js.Promise.resolve
+          (Runtime.Reload_failed
+             { failure_message = "refresh_page failed"
+             ; failure_cause = Some cause }))
 
 (* debounced save-block for in-flight typing: cljs persists the editing
    buffer to the db on a debounce so reads (API calls, undo) see it even
    while the editor stays open *)
 let save_timer = ref 0
-let pending_save : (string * string) option ref = ref None
-let pending_save_opts = ref (Wire.Map [])
+type queued_save =
+  { context : Model.t
+  ; origin : Runtime.reload_origin option
+  ; uuid : string
+  ; title : string
+  ; source : bool
+  ; opts : Wire.t
+  ; revision : int
+  ; editor : S.editing option
+  }
+let pending_save : queued_save option ref = ref None
 let pending_save_ready : (unit -> unit) option ref = ref None
 
 let history_opts ?(opts = Wire.Map []) ~before ~after () =
@@ -882,7 +1019,7 @@ let current_history_opts opts =
   | _ -> let cursor = S.history_cursor () in
          history_opts ~opts ~before:cursor ~after:cursor ()
 
-let cancel_pending_save () =
+let clear_pending_save () =
   Ui_services.timers_clear_timeout !save_timer;
   pending_save := None;
   pending_save_ready := None
@@ -900,46 +1037,153 @@ let op_names ops =
          | _ -> "?")
        ops)
 
-(* cljs saves the editing buffer on keydown before structure ops —
-   flush the queued keystroke save instead of dropping it, so ops like
-   indent/move don't lose text typed within the debounce window *)
-let rec apply_result ?(flush_save = true) ?(opts = Wire.Map []) ops : Wire.t option Js.Promise.t
-    =
-  match (if flush_save then !pending_save else None) with
-  | Some (uuid, title) ->
-      let save_opts = !pending_save_opts in
-      let opts = current_history_opts opts in
-      cancel_pending_save ();
-      let* sop = save_block_parsed uuid title in
-      let* _ = apply_result ~opts:save_opts [ sop ] in
-      apply_result ~opts ops
-  | None -> (
-      if flush_save then Ui_services.timers_clear_timeout !save_timer;
-      match (Runtime.model ()).Model.repo with
-      | None -> Js.Promise.resolve None
-      | Some repo ->
-          let opts =
-            match opts with
-            | Wire.Map kvs ->
-                current_history_opts (Wire.Map (kvs @ [ kw "ui/perf-id" (perf_id ()) ]))
-            | _ -> opts
-          in
-          let p = (let* r =
-            Runtime.invoke3 "thread-api/apply-outliner-ops" (Wire.String repo)
-              (Wire.Array ops) opts
-          in
-          (* callers that ignore the response (autosave, the pending_save
-             flush) never refresh — queue the delta so the next refresh
-             or broadcast merges the change it carries *)
+let submit_result ?current context opts ops : Wire.t option Js.Promise.t =
+  let current =
+    match current with
+    | Some current -> current
+    | None -> fun () -> context_current context
+  in
+  match context.Model.repo with
+  | None -> Js.Promise.resolve None
+  | Some repo ->
+      let opts =
+        match opts with
+        | Wire.Map kvs ->
+            current_history_opts (Wire.Map (kvs @ [ kw "ui/perf-id" (perf_id ()) ]))
+        | _ -> opts
+      in
+      let p =
+        let* r = Runtime.invoke3 "thread-api/apply-outliner-ops"
+            (Wire.String repo) (Wire.Array ops) opts in
+        check_loader_result r;
+        (* Autosave has no immediate refresh. Only its current context
+           may consume the returned delta on a later broadcast. *)
+        if current () then
           (match Wire.get r "delta" with
            | Some d -> Page_delta.stash_deferred d
            | None -> ());
-          Js.Promise.resolve (Some r)) in
-          p |> Js.Promise.catch (fun e ->
-                 Ui_services.log_error
-                   ("apply-outliner-ops failed", op_names ops, e);
-                 Toast.error (I18n.t "ui/save-changes-error");
-                 p))
+        Js.Promise.resolve (if current () then Some r else None)
+      in
+      p |> Js.Promise.catch (fun e ->
+          Ui_services.log_error ("apply-outliner-ops failed", op_names ops, e);
+          if current () then Toast.error (I18n.t "ui/save-changes-error");
+          p)
+
+let take_pending_save () =
+  match !pending_save with
+  | None -> None
+  | Some save -> clear_pending_save (); Some save
+
+let pending_save_for uuid =
+  match !pending_save with
+  | Some save when save.uuid = uuid && context_current save.context -> (
+      match save.editor, S.editing () with
+      | Some origin, Some editor when origin.S.epoch == editor.S.epoch -> Some save
+      | None, None -> Some save
+      | _ -> None)
+  | _ -> None
+
+let take_pending_save_for uuid =
+  match pending_save_for uuid with
+  | None -> None
+  | Some save -> clear_pending_save (); Some save
+
+let accept_save ?opts uuid title =
+  let context = Runtime.model () in
+  let origin = Runtime.capture_reload_origin () in
+  let source = source_block uuid in
+  let editor = S.editing () in
+  let opts =
+    match opts with
+    | Some opts -> opts
+    | None -> (
+        match take_pending_save_for uuid with
+        | Some save -> save.opts
+        | None -> current_history_opts (Wire.Map []))
+  in
+  incr autosave_revision;
+  let save =
+    { context; origin; uuid; title; source; opts; revision = !autosave_revision; editor }
+  in
+  Hashtbl.replace autosave_revisions (context.repo, uuid) save.revision;
+  save
+
+let save_editor_matches save =
+  match save.editor, S.editing () with
+      | Some origin, Some editor -> origin.S.epoch == editor.S.epoch
+      | None, None -> true
+      | _ -> false
+
+let save_editor_current save =
+  context_current save.context && save_editor_matches save
+
+let save_current save =
+  Hashtbl.find_opt autosave_revisions (save.context.repo, save.uuid)
+  = Some save.revision
+
+let release_save save =
+  if save_current save then
+    Hashtbl.remove autosave_revisions (save.context.repo, save.uuid)
+
+let save_pending_result save =
+  if not (save_current save) then Js.Promise.resolve None else
+  let write =
+    let* bm =
+      block_map_parsed_source ~origin_repo:(Option.get save.context.repo)
+        ~source:save.source save.uuid save.title
+    in
+    if not (save_current save) then Js.Promise.resolve None else
+    let* result = submit_result save.context save.opts [ op "save-block" [ bm; Wire.Map [] ] ] in
+    let current = save_current save in
+    if current then begin
+      release_save save;
+      if context_current save.context && Option.is_some save.editor then
+        S.set_silent (fun st ->
+            match st.S.editing, save.editor with
+            | Some e, Some origin when e.uuid = save.uuid && e.buffer = save.title
+                && e.epoch == origin.epoch ->
+                { st with S.editing = Some { e with S.base = save.title } }
+            | _ -> st)
+    end;
+    Js.Promise.resolve (if current then result else None)
+  in
+  write |> Js.Promise.catch (fun _ -> release_save save; write)
+
+let save_pending save =
+  let* _ = save_pending_result save in
+  Js.Promise.resolve ()
+
+let cancel_pending_save () =
+  match take_pending_save () with
+  | None -> ()
+  | Some save ->
+      if context_current save.context then release_save save
+      else ignore (save_pending save)
+
+(* Flush committed text before structural actions without transferring
+   the initiating action into a new graph or route after the await. *)
+let rec apply_result_for ?current context ?(flush_save = true) ?(opts = Wire.Map []) ops =
+  let is_current =
+    match current with
+    | Some current -> current
+    | None -> fun () -> context_current context
+  in
+  if not (is_current ()) then Js.Promise.resolve None else
+  match (if flush_save then take_pending_save () else None) with
+  | Some pending ->
+      let opts = current_history_opts opts in
+      let* () = save_pending pending in
+      apply_result_for ?current context ~opts ops
+  | None ->
+      if flush_save then Ui_services.timers_clear_timeout !save_timer;
+      submit_result ?current context opts ops
+
+let apply_result ?current ?flush_save ?opts ops =
+  let context = Runtime.model () in
+  let owner = refresh_owner_for None in
+  let current = Option.value current
+      ~default:(fun () -> refresh_current ?owner context) in
+  apply_result_for ~current context ?flush_save ?opts ops
 
 let apply ?opts ops =
   let* _ = apply_result ?opts ops in
@@ -971,56 +1215,69 @@ let page_still_current (route : Model.route) (page : Model.page) =
 
 (* parse (uuid, title) pairs into save ops, prepend to rest, apply *)
 let apply_parsed ?opts ~rest pairs =
+  let context = Runtime.model () in
+  let owner = refresh_owner_for None in
+  let current () = refresh_current ?owner context in
   let* a =
     Js.Promise.all
       (Array.of_list (List.map (fun (u, t) -> save_block_parsed u t) pairs))
   in
-  apply ?opts (Array.to_list a @ rest)
+  let* _ = apply_result_for ~current context ?opts (Array.to_list a @ rest) in
+  Js.Promise.resolve ()
 
 (* page-delta splice path: op responses carry the worker's render delta
    ({blocks, deleted, children, rev}) — patch only the touched rows
    instead of refetching+remounting the whole page (cljs apply-delta!).
    refresh_page is the fallback when the delta can't splice *)
-let delta_helpers (page : Model.page) : Page_delta.helpers =
+let delta_helpers_for ?owner context (page : Model.page) : Page_delta.helpers =
+  let current () = refresh_current ?owner context in
   (* the splice pipeline works in Ui_task; each enrichment hook is an
      adapter over the worker's promise fetches *)
   { Page_delta.resolve =
       (fun bs ->
         Subs_state.task_of_promise
-          (match (Runtime.model ()).Model.repo with
-           | None -> resolve_block_tags bs
+          (match context.Model.repo with
+           | None -> Js.Promise.resolve bs
            | Some repo ->
-               let* () = prefetch_anchor_refs repo bs in
-               resolve_block_tags bs))
+               let* () = prefetch_anchor_refs_for
+                   ~current repo bs in
+               resolve_block_tags_for (Some repo) bs))
   ; fill_embeds =
       (fun bs ->
         Subs_state.task_of_promise
-          (match (Runtime.model ()).Model.repo with
+          (match context.Model.repo with
            | None -> Js.Promise.resolve bs
            | Some repo ->
                let collapsed = ref S.String_set.empty in
                let* bs' =
                  fill_embed_children repo (ancestors_of page) collapsed bs
                in
-               merge_collapsed !collapsed S.String_set.empty;
+               if current () then
+                 merge_collapsed ~current !collapsed S.String_set.empty;
                Js.Promise.resolve bs'))
-  ; merge_collapsed
+  ; merge_collapsed =
+      (fun collapsed expanded ->
+        if current () then merge_collapsed ~current collapsed expanded)
   ; refresh_page_fields =
       (fun p ->
         Subs_state.task_of_promise
-          (match (Runtime.model ()).Model.repo with
+          (match context.Model.repo with
            | Some repo -> resolve_page_tags repo p
            | None -> Js.Promise.resolve p))
   }
+
+let delta_helpers page = delta_helpers_for (Runtime.model ()) page
 
 (* fold the queued deferred deltas then [delta] onto [page],
    ~strict:false — op-side patches are absolute set-ops.
    Returns the merged page plus every uuid the folded deltas touched, so
    the caller can drop only the title overrides the tx caught up to *)
-let apply_queued _page delta =
+let apply_queued ?owner _page delta =
+  let owner = refresh_owner_for owner in
   let deltas = Page_delta.drain_deferred () @ [ delta ] in
   let touched = List.concat_map Page_delta.delta_uuids deltas in
-  let context = Runtime.repo (), Runtime.route () in
+  let context = Runtime.model () in
+  let current () = refresh_current ?owner context in
   let perf =
     match Sys.getenv_opt "LOGSEQ_PERF" with Some _ -> true | None -> false
   in
@@ -1034,10 +1291,11 @@ let apply_queued _page delta =
          let ( let* ) = Ui_task.( let* ) in
          let rec attempt () =
            let checkpoint = Page_delta.checkpoint_apply () in
-           match (Runtime.model ()).Model.route_page with
+           match (if current () then (Runtime.model ()).Model.route_page else None) with
            | Some base -> (
-               let h = delta_helpers base in
+               let h = delta_helpers_for ?owner context base in
                let rec go page = function
+                 | _ when not (current ()) -> Ui_task.resolve None
                  | _ when not (Page_delta.checkpoint_current checkpoint) -> Ui_task.resolve (Some base)
                  | [] -> Ui_task.resolve (Some page)
                  | d :: rest -> (
@@ -1055,22 +1313,22 @@ let apply_queued _page delta =
                in
                let* a = go base deltas in
                match a, (Runtime.model ()).Model.route_page with
-               | Some _, Some current
-                 when context = (Runtime.repo (), Runtime.route ())
-                      && current != base
-                      && current.Model.page_uuid = base.Model.page_uuid
+               | Some _, Some live_page
+                 when current ()
+                      && live_page != base
+                      && live_page.Model.page_uuid = base.Model.page_uuid
                       && Page_delta.restore_unpublished checkpoint ->
                    attempt ()
                | _ ->
                    (match a with
                     | Some page when page != base
                         && Page_delta.checkpoint_current checkpoint
-                        && context = (Runtime.repo (), Runtime.route ())
+                        && current ()
                         && (match (Runtime.model ()).Model.route_page with
                             | Some current -> current == base | None -> false) ->
                         let t0 = ms () in
                         Ui_services.perf_mark "splice:page-loaded";
-                        Runtime.send (Action.Page_loaded page);
+                        send_refresh ?owner (Action.Page_loaded page);
                         if perf then Printf.eprintf "[perf] op.send %.1fms\n%!" (ms () -. t0)
                     | _ -> ());
                    Ui_task.resolve (a, touched, deltas))
@@ -1081,7 +1339,10 @@ let apply_queued _page delta =
    the route page lives in current_journals, so the page-route splice
    can't see it; apply each delta to the journal day it touches and
    push the changed day into its mounted item signal *)
-let refresh_journals_via_delta (delta : Wire.t) : unit Js.Promise.t =
+let refresh_journals_via_delta ?owner (delta : Wire.t) : unit Js.Promise.t =
+  let owner = refresh_owner_for owner in
+  let context = Runtime.model () in
+  let current () = refresh_current ?owner context in
   let deltas = Page_delta.drain_deferred () @ [ delta ] in
   let touched = List.concat_map Page_delta.delta_uuids deltas in
   let start_js = !Runtime.current_journals in
@@ -1092,7 +1353,7 @@ let refresh_journals_via_delta (delta : Wire.t) : unit Js.Promise.t =
           | [] -> Ui_task.resolve (Page_delta.Applied js)
           | d :: rest -> (
               let* applied =
-                Page_delta.apply_to_journals ~strict:false delta_helpers
+                Page_delta.apply_to_journals ~strict:false (delta_helpers_for ?owner context)
                   js d
               in
               match applied with
@@ -1103,11 +1364,13 @@ let refresh_journals_via_delta (delta : Wire.t) : unit Js.Promise.t =
         let* merged = go start_js deltas in
         (* a navigation mid-splice emptied the journals — this publish
            would resurrect the old route's days *)
-        let still_current = !Runtime.current_journals == start_js in
+        let still_current () = current ()
+            && !Runtime.current_journals == start_js in
         match merged with
-        | Page_delta.Applied js' when js' != start_js && still_current ->
+        | Page_delta.Applied js' when js' != start_js && still_current () ->
             ignore (Ui_services.perf_mark "jdelta:applied");
-            Runtime.send (Action.Journals_loaded js');
+            S.prune_overrides touched;
+            send_refresh ?owner (Action.Journals_loaded js');
             Ui_task.resolve ()
         | Page_delta.Applied _ | Page_delta.Unchanged ->
             ignore (Ui_services.perf_mark "jdelta:unchanged");
@@ -1115,7 +1378,7 @@ let refresh_journals_via_delta (delta : Wire.t) : unit Js.Promise.t =
         | Page_delta.Failed -> (
             (* a touched day couldn't splice — refetch just the days the
                deltas touch, never the whole route *)
-            match !Runtime.current_repo with
+            match (if still_current () then context.Model.repo else None) with
             | Some repo -> (
                 let touched_day (p : Model.page) =
                   List.exists
@@ -1130,7 +1393,8 @@ let refresh_journals_via_delta (delta : Wire.t) : unit Js.Promise.t =
                       else
                         let* blocks =
                           Subs_state.task_of_promise
-                            (fetch_page_blocks repo p)
+                            (fetch_page_blocks_for
+                               ~current repo p)
                         in
                         refetch
                           ({ p with
@@ -1142,18 +1406,23 @@ let refresh_journals_via_delta (delta : Wire.t) : unit Js.Promise.t =
                 in
                 let* js' = refetch [] start_js in
                 ignore (Ui_services.perf_mark "jdelta:refetch");
-                if still_current then (
-                  Runtime.send (Action.Journals_loaded js');
+                if still_current () then (
+                  S.prune_overrides touched;
+                  send_refresh ?owner (Action.Journals_loaded js');
                   (* the refetched days already contain these deltas'
                      effects — marking their revs seeds the basis so the
                      next broadcast splices instead of refetching *)
                   List.iter Page_delta.note_applied_of_delta deltas);
                 Ui_task.resolve ())
-            | None -> Subs_state.task_of_promise (refresh_page ())))
+            | None ->
+                if current () then
+                  Subs_state.task_of_promise
+                    (refresh_page_then ?owner (fun () -> Js.Promise.resolve ()))
+                else Ui_task.resolve ()))
   in
   Subs_state.promise_of_task task
   |> Js.Promise.then_ (fun () ->
-         S.prune_overrides touched;
+         if current () then S.prune_overrides touched;
          Js.Promise.resolve ())
 
 (* Journals/Home counterpart of apply_queued: each delta belongs to
@@ -1172,8 +1441,15 @@ let refresh_journals_via_delta (delta : Wire.t) : unit Js.Promise.t =
 let side_refresh_pending : Model.page list ref = ref []
 let side_refresh_props = ref false
 let side_refresh_armed = ref false
+let side_refresh_context : Model.t option ref = ref None
 
 let request_side_refresh ~props owners =
+  (match !side_refresh_context with
+   | Some context when not (context_current context) ->
+       side_refresh_pending := [];
+       side_refresh_props := false
+   | _ -> ());
+  side_refresh_context := Some (Runtime.model ());
   side_refresh_pending :=
     List.fold_left
       (fun acc (p : Model.page) ->
@@ -1195,17 +1471,24 @@ let request_side_refresh ~props owners =
            side_refresh_pending := [];
            let props = !side_refresh_props in
            side_refresh_props := false;
-           if props then
-             ignore (Runtime.hooks.refresh_property_areas ());
-           List.iter
-             (fun p -> Runtime.hooks.refresh_journal_side p)
-             owners)
+           let context = !side_refresh_context in
+           side_refresh_context := None;
+           match context with
+           | Some context when context_current context ->
+               if props then
+                 ignore (Runtime.hooks.refresh_property_areas ());
+               List.iter
+                 (fun p -> Runtime.hooks.refresh_journal_side p)
+                 owners
+           | _ -> ())
          250)
   end
 
-let splice_journals ?(strict = false) (deltas : Wire.t list) :
+let splice_journals_for ?owner ?(strict = false) ~props (deltas : Wire.t list) :
     bool Js.Promise.t =
-  let context = Runtime.repo (), Runtime.route () in
+  let owner = refresh_owner_for owner in
+  let context = Runtime.model () in
+  let current () = refresh_current ?owner context in
   let deltas = Page_delta.drain_deferred () @ deltas in
   let touched = List.concat_map Page_delta.delta_uuids deltas in
   let build_index (js : Model.page list) =
@@ -1232,7 +1515,7 @@ let splice_journals ?(strict = false) (deltas : Wire.t list) :
          let rec attempt () =
            let checkpoint = Page_delta.checkpoint_apply () in
            let base = (Runtime.model ()).Model.journals in
-           match base with
+           match (if current () then base else []) with
            | [] -> Ui_task.resolve false
            | _ ->
                let arr = Array.of_list base in
@@ -1270,7 +1553,7 @@ let splice_journals ?(strict = false) (deltas : Wire.t list) :
                      | i :: rest -> (
                          let j = arr.(i) in
                          let* applied =
-                           Page_delta.apply_to_page ~strict (delta_helpers j)
+                           Page_delta.apply_to_page ~strict (delta_helpers_for ?owner context j)
                              j d
                          in
                          match applied with
@@ -1295,24 +1578,33 @@ let splice_journals ?(strict = false) (deltas : Wire.t list) :
                ignore
                  (Ui_services.perf_mark
                     (if ok then "jdelta:spliced" else "jdelta:unmatched"));
-               if ok && context = (Runtime.repo (), Runtime.route ())
+               if ok && current ()
                   && (Runtime.model ()).Model.journals != base
                   && Page_delta.restore_unpublished checkpoint then
                  attempt ()
                else begin
                  if ok && Page_delta.checkpoint_current checkpoint
-                    && context = (Runtime.repo (), Runtime.route ())
+                    && current ()
                     && (Runtime.model ()).Model.journals == base
                     && !owners <> [] then begin
-                   Runtime.send (Action.Journals_spliced (Array.to_list arr));
-                   S.prune_overrides touched;
-                   request_side_refresh ~props:false !owners
+                   let journals = Array.to_list arr in
+                   send_refresh ?owner (Action.Journals_spliced journals);
+                   if current () then begin
+                     S.prune_overrides touched;
+                     request_side_refresh ~props !owners
+                   end
                  end;
                  Ui_task.resolve ok
                end
          in attempt ()))
 
-let refresh_via_delta (resp : Wire.t option) : unit Js.Promise.t =
+let splice_journals ?strict deltas = splice_journals_for ?strict ~props:false deltas
+
+let refresh_via_delta ?owner (resp : Wire.t option) : unit Js.Promise.t =
+  let owner = refresh_owner_for owner in
+  let context = Runtime.model () in
+  let current () = refresh_current ?owner context in
+  if not (current ()) then Js.Promise.resolve () else
   match
     (Option.bind resp (fun r -> Wire.get r "delta"), (Runtime.model ()).Model.route_page)
   with
@@ -1323,18 +1615,18 @@ let refresh_via_delta (resp : Wire.t option) : unit Js.Promise.t =
          repaint; off-route the day store still updates *)
       match Runtime.route () with
       | Model.Journals | Model.Home -> (
-          let* ok = splice_journals [ delta ] in
-          if ok then (
-            (* property areas hold worker data outside the spliced
-               model — debounced with the journals side refresh *)
-            request_side_refresh ~props:true [];
-            Js.Promise.resolve ())
-          else refresh_page ())
-      | _ -> refresh_journals_via_delta delta)
+          let* ok = splice_journals_for ?owner ~props:true [ delta ] in
+          if ok then Js.Promise.resolve ()
+          else if current () then
+            refresh_page_then ?owner (fun () -> Js.Promise.resolve ())
+          else Js.Promise.resolve ())
+      | _ -> refresh_journals_via_delta ?owner delta)
   | Some delta, Some page -> (
       let route_at_start = Runtime.route () in
-      let* applied, touched, deltas = apply_queued page delta in      match applied with
-      | Some page' when page_still_current route_at_start page' ->
+      let* applied, touched, deltas = apply_queued ?owner page delta in
+      match applied with
+      | Some page' when page_still_current route_at_start page'
+          && current () ->
           (* the spliced rows are authoritative for the uuids the tx
              touched — drop their committed-buffer title overrides like
              refresh_page does, but keep in-flight commits the tx
@@ -1358,31 +1650,54 @@ let refresh_via_delta (resp : Wire.t option) : unit Js.Promise.t =
       | Some _ ->
           (* page moved on mid-splice — this page is gone *)
           Js.Promise.resolve ()
-      | None ->
-          let* () = refresh_page () in
+      | None when current () ->
+          refresh_page_then ?owner (fun () ->
           (* the fresh fetch contains every attempted delta — seed the
              basis so later broadcasts splice *)
           List.iter Page_delta.note_applied_of_delta deltas;
           Js.Promise.resolve ())
+      | None -> Js.Promise.resolve ())
   | Some delta, None ->
       (* no page store — the fresh reload already contains the delta's
          effects; seed the basis after it so later broadcasts splice *)
-      let* () = refresh_page () in
-      Page_delta.note_applied_of_delta delta;
+      refresh_page_then ?owner (fun () ->
+        Page_delta.note_applied_of_delta delta;
+        Js.Promise.resolve ())
+  | _ -> refresh_page_then ?owner (fun () -> Js.Promise.resolve ())
+
+let save_committed ?(after = fun () -> ()) save =
+  let owner = Option.map refresh_owner save.origin in
+  let* result = save_pending_result save in
+  match result, owner with
+  | Some _, Some owner when save_editor_current save
+      && refresh_current ~owner save.context ->
+      if Dialogs_state.ready () && Dialogs_state.is_open "quick-add" then
+        Quick_add_state.reload ();
+      let* () = refresh_via_delta ~owner result in
+      let* () = require_refresh_success owner in
+      if refresh_current ~owner save.context && save_editor_matches save then after ();
       Js.Promise.resolve ()
-  | _ -> refresh_page ()
+  | _ -> Js.Promise.resolve ()
 
 let apply_and_refresh ?opts ops =
-  let* resp = apply_result ?opts ops in
-  let* () = refresh_via_delta resp in
+  let context = Runtime.model () in
+  let owner = refresh_owner_for None in
+  let current () = refresh_current ?owner context in
+  let* resp = apply_result_for ~current context ?opts ops in
+  if not (current ()) then Js.Promise.resolve () else begin
   (* the quick-add dialog's block list lives outside
             .page-blocks-inner; a page refresh alone won't repaint it *)
   if Dialogs_state.ready () && Dialogs_state.is_open "quick-add" then
     Quick_add_state.reload ();
-  Js.Promise.resolve ()
+  refresh_via_delta ?owner resp
+  end
 
 let apply_and_refresh_deferred ?opts ops =
-  let* resp = apply_result ?opts ops in
+  let context = Runtime.model () in
+  let owner = refresh_owner_for None in
+  let current () = refresh_current ?owner context in
+  let* resp = apply_result_for ~current context ?opts ops in
+  if not (current ()) then Js.Promise.resolve () else
   if S.ready () && S.editing () <> None then (
     (* the deferred refresh would drop the op's delta — queue it so the
        next refresh/broadcast merges the saves it carries *)
@@ -1390,7 +1705,7 @@ let apply_and_refresh_deferred ?opts ops =
      | Some d -> Page_delta.stash_deferred d
      | None -> ());
     Js.Promise.resolve ())
-  else refresh_via_delta resp
+  else refresh_via_delta ?owner resp
 
 (* cljs insert-blocks! result {:blocks [...inserted maps]} — last block's
    real uuid (keep-uuid? regenerates on collision, so callers cannot
@@ -1408,54 +1723,31 @@ let last_inserted_uuid (resp : Wire.t option) : string option =
 
 
 let schedule_save uuid title =
-  invalidate_autosave uuid;
-  let context = Runtime.repo (), Runtime.route () in
+  let context = Runtime.model () in
   let before =
-    match !pending_save with
-    | Some (u, _) when u = uuid ->
-        Option.get (Wire.map_get !pending_save_opts "undo-redo/editor-info")
+    match pending_save_for uuid with
+    | Some save ->
+        Option.get (Wire.map_get save.opts "undo-redo/editor-info")
     | _ -> Option.value !S.history_input_before ~default:(S.history_cursor ())
   in
   S.history_input_before := None;
   let opts = history_opts ~before ~after:(S.history_cursor ()) () in
-  cancel_pending_save ();
-  pending_save := Some (uuid, title);
-  pending_save_opts := opts;
+  (match take_pending_save () with
+   | Some save when save.uuid <> uuid || save.context.repo <> context.repo ->
+       ignore (save_pending save)
+   | _ -> ());
+  let save = accept_save ~opts uuid title in
+  pending_save := Some save;
   let rec save_when_ready () =
-    if context <> (Runtime.repo (), Runtime.route ()) then
-      cancel_pending_save ()
-    else if !S.structure_pending then
-      pending_save_ready := Some save_when_ready
-    else (
-        pending_save := None;
-        let parsed = save_block_parsed uuid title in
-        incr autosave_revision;
-        let revision = !autosave_revision in
-        Hashtbl.replace autosave_revisions uuid revision;
-        let current () = Hashtbl.find_opt autosave_revisions uuid = Some revision in
-        let save =
-          let* sop = parsed in
-          if not (current ()) then Js.Promise.resolve ()
-          else if context <> (Runtime.repo (), Runtime.route ()) then (
-            Hashtbl.remove autosave_revisions uuid;
-            Js.Promise.resolve ())
-          else (
-            let* _ = apply_result ~flush_save:false ~opts [ sop ] in
-            if current () then (
-              Hashtbl.remove autosave_revisions uuid;
-              if context = (Runtime.repo (), Runtime.route ()) then (
-                (* Advance the clean base only for the submitted revision. *)
-                S.set_silent (fun st ->
-                    match st.S.editing with
-                    | Some e when e.S.uuid = uuid && e.S.buffer = title ->
-                        { st with S.editing = Some { e with S.base = title } }
-                    | _ -> st)));
-            Js.Promise.resolve ())
-        in
-        ignore
-          (save |> Js.Promise.catch (fun _error ->
-               if current () then Hashtbl.remove autosave_revisions uuid;
-               save)))
+    match !pending_save with
+    | Some current when current == save ->
+        if context_current context && !S.structure_pending then
+          pending_save_ready := Some save_when_ready
+        else begin
+          clear_pending_save ();
+          ignore (save_pending save)
+        end
+    | _ -> ()
   in
   save_timer := Ui_services.timers_timeout save_when_ready 400
 
@@ -1537,16 +1829,22 @@ let title_on_entry uuid title =
 (* parse (uuid, title) pairs into save ops, prepend to rest, apply +
    splice the response delta *)
 let apply_parsed_and_refresh ?opts ~rest pairs =
+  let context = Runtime.model () in
+  let owner = refresh_owner_for None in
+  let current () = refresh_current ?owner context in
   let* a =
     Js.Promise.all
       (Array.of_list (List.map (fun (u, t) -> save_block_parsed u t) pairs))
   in
-  let* resp = apply_result ?opts (Array.to_list a @ rest) in
-  refresh_via_delta resp
+  let* resp = apply_result_for ~current context ?opts (Array.to_list a @ rest) in
+  if current () then refresh_via_delta ?owner resp else Js.Promise.resolve ()
 
 let apply_and_refresh_result ?opts ops =
-  let* r = apply_result ?opts ops in
-  let* () = refresh_via_delta r in
+  let context = Runtime.model () in
+  let owner = refresh_owner_for None in
+  let current () = refresh_current ?owner context in
+  let* r = apply_result_for ~current context ?opts ops in
+  let* () = if current () then refresh_via_delta ?owner r else Js.Promise.resolve () in
   Js.Promise.resolve r
 
 
@@ -1556,6 +1854,7 @@ let apply_and_refresh_result ?opts ops =
    Returns the promise so callers that move editing afterwards (paste)
    sequence after the model write *)
 let resync_open_editor ?(force = false) () : unit Js.Promise.t =
+  let context = Runtime.model () in
   match S.editing () with
   | None -> Js.Promise.resolve ()
   | Some e -> (
@@ -1575,11 +1874,12 @@ let resync_open_editor ?(force = false) () : unit Js.Promise.t =
                     opened with and the stored title moved since. undo/redo
                     force it — the user asked for the revert even when an
                     unsaved edit is in flight *)
-          if (force || (e.S.buffer = e.S.base)) && e.S.buffer <> title
+          if context_current context
+             && (force || (e.S.buffer = e.S.base)) && e.S.buffer <> title
           then
             S.set (fun st ->
                 match st.S.editing with
-                | Some e' when e'.uuid = e.uuid ->
+                | Some e' when e'.uuid = e.uuid && e'.epoch == e.epoch ->
                     { st with
                    S.editing =
                      Some
@@ -1594,26 +1894,25 @@ let resync_open_editor ?(force = false) () : unit Js.Promise.t =
           Js.Promise.resolve ())
 
 let flush_pending_save () =
-  match !pending_save with
+  match take_pending_save () with
   | None -> Js.Promise.resolve ()
-  | Some (uuid, title) ->
-      let opts = !pending_save_opts in
-      cancel_pending_save ();
-      let* sop = save_block_parsed uuid title in
-      apply ~opts [ sop ]
+  | Some pending -> save_pending pending
 
 let undo () =
-  let context = Runtime.repo (), Runtime.route () in
-  let current () = context = (Runtime.repo (), Runtime.route ()) in
-  match (Runtime.model ()).Model.repo with
+  let context = Runtime.model () in
+  let owner = refresh_owner_for None in
+  let current () = refresh_current ?owner context in
+  match context.Model.repo with
   | Some repo ->
       (let* () = flush_pending_save () in
       if not (current ()) then Js.Promise.resolve () else
       let* result = Runtime.invoke1 "thread-api/undo-redo-undo" (Wire.String repo) in
       if not (current ()) then Js.Promise.resolve () else (
       S.clear_overrides ();
-      let* () = refresh_page () in
-      if current () then !(S.restore_history) result else Js.Promise.resolve ()))
+      let* () = refresh_page_then ?owner (fun () -> !(S.restore_history) result) in
+      match owner with
+      | Some owner -> require_refresh_success owner
+      | None -> Js.Promise.resolve ()))
       |> Js.Promise.catch (fun e ->
              Ui_services.log_error ("undo failed", e);
              Toast.error (I18n.t "editor/undo-error");
@@ -1621,17 +1920,20 @@ let undo () =
   | None -> Js.Promise.resolve ()
 
 let redo () =
-  let context = Runtime.repo (), Runtime.route () in
-  let current () = context = (Runtime.repo (), Runtime.route ()) in
-  match (Runtime.model ()).Model.repo with
+  let context = Runtime.model () in
+  let owner = refresh_owner_for None in
+  let current () = refresh_current ?owner context in
+  match context.Model.repo with
   | Some repo ->
       (let* () = flush_pending_save () in
       if not (current ()) then Js.Promise.resolve () else
       let* result = Runtime.invoke1 "thread-api/undo-redo-redo" (Wire.String repo) in
       if not (current ()) then Js.Promise.resolve () else (
       S.clear_overrides ();
-      let* () = refresh_page () in
-      if current () then !(S.restore_history) result else Js.Promise.resolve ()))
+      let* () = refresh_page_then ?owner (fun () -> !(S.restore_history) result) in
+      match owner with
+      | Some owner -> require_refresh_success owner
+      | None -> Js.Promise.resolve ()))
       |> Js.Promise.catch (fun e ->
              Ui_services.log_error ("redo failed", e);
              Toast.error (I18n.t "editor/redo-error");
@@ -1641,5 +1943,6 @@ let redo () =
 (* sdk bridge (and other non-editor mutation paths) refresh the view
    through this Runtime hook *)
 let () =
+  Runtime.refresh_after_ops_owned := refresh_page_owned_result;
   Runtime.hooks.refresh_after_ops <-
     (fun () -> Subs_state.task_of_promise (refresh_page ()))

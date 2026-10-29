@@ -2147,19 +2147,27 @@ let subs_stage_d () =
 (* ---------------- runner ---------------- *)
 
 let edit_flow_host () : Edit_flow_test.host =
+  let actual_model () = Lui_app.model (s ()).S.app in
+  let restore (model : Model.t) =
+    let current = actual_model () in
+    (match model.repo with
+     | Some repo when current.repo <> Some repo ->
+         Runtime.send (Action.Boot_graph_ready (repo, model.graph_config))
+     | Some repo when current.graph_config <> model.graph_config ->
+         Runtime.send (Action.Graph_config_loaded (repo, model.graph_config))
+     | None when current.repo <> None -> Runtime.send Action.Graph_closed
+     | _ -> ());
+    Runtime.send (Action.Navigate_to model.route);
+    Option.iter (fun page -> Runtime.send (Action.Page_loaded page)) model.route_page
+  in
   { repo = "logseq_db_test"
   ; stage =
-      (fun rp ->
-        drive_model :=
-          { !drive_model with
-            Model.route_page = rp
-          ; repo = Some "logseq_db_test"
-          ; route = Model.Page "p"
-          })
-  ; sync_page =
-      (fun () ->
-        drive_model :=
-          { !drive_model with Model.route_page = !Runtime.current_page })
+      (fun _ ->
+        let current = actual_model () in
+        if current.repo <> Some "logseq_db_test" then
+          Runtime.send (Action.Boot_graph_ready ("logseq_db_test", current.graph_config));
+        Runtime.send (Action.Navigate_to (Model.Page "p")))
+  ; sync_page = (fun () -> ())
   ; wait_ms =
       (fun ms ->
         Js.Promise.make (fun ~resolve ~reject:_ ->
@@ -2173,8 +2181,8 @@ let edit_flow_host () : Edit_flow_test.host =
           (fun () -> failwith why)
           (Js.Promise.resolve ()))
   ; base_handler = worker_handler
-  ; snapshot = (fun () -> !drive_model)
-  ; restore = (fun m -> drive_model := m)
+  ; snapshot = actual_model
+  ; restore
   ; native = false
   }
 
@@ -2246,8 +2254,23 @@ let run ~finish =
                   subs_stage_c ();
                   when_done !subs_pipeline_t (fun () ->
                       subs_stage_d ();
+                      let host = edit_flow_host () in
+                      let previous_reader = !Runtime.read_model in
+                      let previous_context = host.snapshot () in
+                      let cleanup () =
+                        Fun.protect
+                          ~finally:(fun () -> Runtime.read_model := previous_reader)
+                          (fun () -> host.restore previous_context)
+                      in
+                      Runtime.read_model := (fun () -> Lui_app.model (s ()).S.app);
+                      let operation =
+                        try Edit_flow_test.async_stage host
+                        with error -> cleanup (); raise error
+                      in
+                      let settled =
+                        operation |> Js.Promise.catch (fun _ -> cleanup (); operation)
+                      in
                       ignore
                         (Js.Promise.then_
-                           (fun () -> finish (); Js.Promise.resolve ())
-                           (Edit_flow_test.async_stage
-                              (edit_flow_host ())))))))))
+                           (fun () -> cleanup (); finish (); Js.Promise.resolve ())
+                           settled)))))))
