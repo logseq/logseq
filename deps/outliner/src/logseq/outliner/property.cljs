@@ -1293,8 +1293,31 @@
       scoped-class-id
       (conj [:db/add [:block/uuid block-id] :logseq.property/choice-classes scoped-class-id]))))
 
-(defn upsert-closed-value!
-  "id should be a block UUID or nil"
+(declare add-existing-values-to-closed-values!)
+
+(defn- non-choice-value-uuids
+  "The uuids of the value blocks of `property` that nodes hold and that aren't
+  its choices"
+  [db property]
+  (->> (d/q '[:find [?v ...]
+              :in $ ?property-ident
+              :where [_ ?property-ident ?v]]
+            db (:db/ident property))
+       (keep #(d/entity db %))
+       (filter #(= (:db/id property) (:db/id (:logseq.property/created-from-property %))))
+       (remove ldb/closed-value?)
+       (map :block/uuid)))
+
+(defn- non-choice-values-to-choices!
+  "Makes the values nodes hold for the property that aren't its choices choices
+  too, as Add choice offers in the UI: a property with choices can only hold
+  its choices, and validate-db deletes the others."
+  [conn property-id]
+  (when-let [value-uuids (seq (non-choice-value-uuids @conn (d/entity @conn property-id)))]
+    (add-existing-values-to-closed-values! conn property-id value-uuids)))
+
+(defn ^:large-vars/cleanup-todo upsert-closed-value!
+  "id should be a block UUID or nil. The property's other values become choices too."
   [conn property-id {:keys [id value description _scoped-class-id] :as opts}]
   (assert (or (nil? id) (uuid? id)))
   (let [db @conn
@@ -1339,6 +1362,7 @@
              {:outliner-op :upsert-closed-value}
              (fn [conn]
                (ldb/transact! conn tx-data)
+               (non-choice-values-to-choices! conn property-id)
                (when (seq description)
                  (if-let [desc-ent (and id (:logseq.property/description (d/entity db [:block/uuid id])))]
                    (ldb/transact! conn
