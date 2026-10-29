@@ -739,13 +739,20 @@
                       (or (:debounce-ms opts) 1000))]
       (swap! *repo->flush-timeout assoc repo timeout-id))))
 
+(defn- path-key
+  "Paths that differ only in case name one file on case-insensitive file
+  systems, as stems are grouped by `stem-key`."
+  [path]
+  (string/lower-case path))
+
 (defn- keep-old-paths-of-other-jobs
-  "Jobs run in parallel, so a page must not delete its old file when that path
-  is now another page's file (a page took over its name)."
+  "Jobs run in parallel, so a page must not delete its old file when this batch
+  still writes that file: another page took over its name, or the page's own
+  new path differs from it only in case. Paths are compared by `path-key`."
   [jobs]
-  (let [new-paths (set (keep #(when-not (:delete? %) (:new-path %)) jobs))]
-    (map (fn [{:keys [old-path new-path] :as job}]
-           (if (and old-path (not= old-path new-path) (contains? new-paths old-path))
+  (let [new-path-keys (set (keep #(when-not (:delete? %) (some-> (:new-path %) path-key)) jobs))]
+    (map (fn [{:keys [old-path] :as job}]
+           (if (and old-path (contains? new-path-keys (path-key old-path)))
              (assoc job :old-path nil)
              job))
          jobs)))

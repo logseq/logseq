@@ -10,19 +10,40 @@
 
 (def ^:private test-repo "logseq_db_mirror-collision")
 
+(defn- mirror-file
+  [relative-path]
+  (str (markdown-mirror/repo-mirror-dir test-repo) "/" relative-path))
+
 (defn- fake-platform
-  []
-  (let [files (atom {})]
-    {:platform {:env {:runtime :node}
-                :storage {:read-text! (fn [path] (p/resolved (get @files path)))
-                          :write-text-atomic! (fn [path content]
-                                                (swap! files assoc path content)
-                                                (p/resolved nil))
-                          :delete-file! (fn [path]
-                                          (swap! files dissoc path)
-                                          (p/resolved nil))}
-                :broadcast {:post-message! (fn [& _] nil)}}
-     :files files}))
+  "Mirror storage on a case-sensitive file system (Linux), or, with
+  `:case-insensitive? true`, on one that resolves case variants of a path to
+  one file and keeps the name the file was created with (macOS, Windows).
+  A delete lands after the writes started with it, as a slower `fs.rm` would."
+  ([] (fake-platform {}))
+  ([{:keys [case-insensitive?]}]
+   (let [files (atom {}) ; file key -> content
+         names (atom {}) ; file key -> path the file was created with
+         file-key (if case-insensitive? string/lower-case identity)
+         put-file! (fn [path content]
+                     (swap! names update (file-key path) #(or % path))
+                     (swap! files assoc (file-key path) content))]
+     {:platform {:env {:runtime :node}
+                 :storage {:read-text! (fn [path] (p/resolved (get @files (file-key path))))
+                           :write-text-atomic! (fn [path content]
+                                                 (put-file! path content)
+                                                 (p/resolved nil))
+                           :delete-file! (fn [path]
+                                           (p/create
+                                            (fn [resolve _reject]
+                                              (js/setTimeout (fn []
+                                                               (swap! files dissoc (file-key path))
+                                                               (swap! names dissoc (file-key path))
+                                                               (resolve nil))
+                                                             0))))}
+                 :broadcast {:post-message! (fn [& _] nil)}}
+      :files files
+      :read-file (fn [relative-path] (get @files (file-key (mirror-file relative-path))))
+      :file-exists? (fn [relative-path] (contains? @files (file-key (mirror-file relative-path))))})))
 
 (defn- paths-by-uuid
   [db uuids]
@@ -77,3 +98,63 @@
                (p/finally (fn []
                             (markdown-mirror/set-enabled! test-repo false)
                             (done)))))))
+
+(defn- with-mirror-enabled
+  [done <f]
+  (markdown-mirror/set-enabled! test-repo true)
+  (-> (<f)
+      (p/catch (fn [error] (is false (str error))))
+      (p/finally (fn []
+                   (markdown-mirror/set-enabled! test-repo false)
+                   (done)))))
+
+(defn- rename-page!
+  [conn page-uuid title]
+  (let [page-id (:db/id (d/entity @conn [:block/uuid page-uuid]))]
+    (d/transact! conn [[:db/add page-id :block/title title]
+                       [:db/add page-id :block/name (string/lower-case title)]])))
+
+(def ^:private upper-uuid #uuid "11111111-1111-4111-8111-111111111111")
+(def ^:private lower-uuid #uuid "22222222-2222-4222-8222-222222222222")
+
+(defn- notes-pages-conn
+  "`Notes` sorts first, so it keeps `pages/Notes.md` and `notes` gets the suffix."
+  []
+  (db-test/create-conn-with-blocks
+   {:pages-and-blocks [{:page {:block/title "Notes" :block/uuid upper-uuid}
+                        :blocks [{:block/title "upper body"}]}
+                       {:page {:block/title "notes" :block/uuid lower-uuid}
+                        :blocks [{:block/title "lower body"}]}]}))
+
+(deftest a-departing-page-keeps-the-file-a-case-variant-takes-over-test
+  (async done
+         (let [{:keys [platform read-file file-exists?]} (fake-platform {:case-insensitive? true})
+               conn (notes-pages-conn)]
+           (with-mirror-enabled
+            done
+            #(p/let [_ (markdown-mirror/<mirror-repo! test-repo @conn {:platform platform})
+                     _ (is (= ["pages/Notes.md" "pages/notes (2).md"]
+                              (paths-by-uuid @conn [upper-uuid lower-uuid])))
+                     tx-report (rename-page! conn upper-uuid "Other")
+                     _ (markdown-mirror/<handle-tx-report! test-repo conn tx-report {:platform platform})]
+               (is (= ["pages/Other.md" "pages/notes.md"]
+                      (paths-by-uuid @conn [upper-uuid lower-uuid])))
+               (is (string/includes? (str (read-file "pages/Other.md")) "upper body"))
+               (is (string/includes? (str (read-file "pages/notes.md")) "lower body")
+                   "the departing page's old path `pages/Notes.md` is the surviving page's file")
+               (is (not (file-exists? "pages/notes (2).md"))
+                   "the surviving page's old file is removed"))))))
+
+(deftest a-case-only-rename-keeps-the-page-file-test
+  (async done
+         (let [{:keys [platform read-file]} (fake-platform {:case-insensitive? true})
+               conn (db-test/create-conn-with-blocks
+                     {:pages-and-blocks [{:page {:block/title "notes" :block/uuid lower-uuid}
+                                          :blocks [{:block/title "lower body"}]}]})]
+           (with-mirror-enabled
+            done
+            #(p/let [_ (markdown-mirror/<mirror-repo! test-repo @conn {:platform platform})
+                     tx-report (rename-page! conn lower-uuid "Notes")
+                     _ (markdown-mirror/<handle-tx-report! test-repo conn tx-report {:platform platform})]
+               (is (string/includes? (str (read-file "pages/Notes.md")) "lower body")
+                   "the old path `pages/notes.md` is the page's own new file"))))))
