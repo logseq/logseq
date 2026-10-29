@@ -110,6 +110,45 @@
                  (or @*debounce-fn d/store))]
          (f @conn))))))
 
+(defn- tail-max-tx
+  "The largest tx among the datoms of the stored tail restore-conn replayed."
+  [conn]
+  (reduce (fn [max-tx datoms]
+            (reduce (fn [max-tx datom] (max max-tx (:tx datom))) max-tx datoms))
+          0
+          (:tx-tail @(:atom conn))))
+
+(defn restore-storage-conn
+  "Restores a datascript connection from `storage`, or nil when it holds no db.
+  A restore replays each stored tail entry (the datoms of 1 transact!) and
+  sets :max-tx to the tx of its first datom. A transaction the worker
+  pipeline extends spans several tx ids (1 d/with each) in 1 entry, and the
+  replayed datoms keep their own tx ids, so the restored :max-tx fell short
+  of the one the graph had: the next transaction took a tx id the graph's
+  datoms already carried, and the checksum, stored with the :max-tx it
+  covers, was recomputed on every such reopen. Take the largest tx of the
+  tail's datoms."
+  [storage]
+  (when-let [conn (d/restore-conn storage)]
+    (let [max-tx (tail-max-tx conn)]
+      (when (> max-tx (:max-tx @conn))
+        (swap! conn assoc :max-tx max-tx))
+      conn)))
+
+(defn- reload-conn-from-storage!
+  "A store that throws, in any storage and at any point, leaves the in-memory
+  db ahead of or apart from what the storage holds. Its b-tree nodes can be
+  marked as stored without their rows on disk, so the next store would write
+  a root that points at missing rows, and its tail bookkeeping no longer
+  matches the stored root. Continue from what the storage holds."
+  [conn]
+  (when-some [storage (storage/storage @conn)]
+    (try
+      (when-some [restored (restore-storage-conn storage)]
+        (swap! (:atom conn) merge (select-keys @(:atom restored) [:db :tx-tail :db-last-stored])))
+      (catch :default e
+        (log/error :reload-conn-from-storage-failed {:error (str e)})))))
+
 (defn- should-run-transact-pipeline?
   [conn db tx-meta]
   (and (entity-plus/db-based-graph? db)
@@ -174,14 +213,27 @@
               (and tx-report (seq (:tx-data tx-report)))
               (if (compare-and-set! conn db (:db-after tx-report))
                 (do
-                  (dc/store-after-transact! conn tx-report)
+                  (try
+                    (dc/store-after-transact! conn tx-report)
+                    (catch :default e
+                      (reload-conn-from-storage! conn)
+                      (throw e)))
                   (dc/run-callbacks conn tx-report)
                   tx-report)
                 (recur))
 
               :else
               tx-report))
-          (d/transact! conn tx-data tx-meta))))
+          (try
+            (d/transact! conn tx-data tx-meta)
+            (catch :default e
+              ;; d/transact! stores before it runs the listeners, so an error
+              ;; after the conn changed may come from its store
+              (when (and (not (identical? db @conn))
+                         (not (:skip-store? @conn))
+                         (not (:skip-store? tx-meta)))
+                (reload-conn-from-storage! conn))
+              (throw e))))))
     (catch :default e
       (when-not (or (:db-sync/suppress-transact-failed-log? tx-meta)
                     (and (:db-sync/suppress-stale-rebase-transact-failed-log? tx-meta)
@@ -323,8 +375,9 @@
   [conn tx-meta batch-tx-fn & {:keys [listen-db]}]
   (let [db-before @conn
         *tx-data (atom [])
-        ;; Once the batch is stored, the graph file holds it, so a later error
-        ;; (e.g. from a listener) must not roll the in-memory db back
+        ;; Once the batch is stored, or the conn reloaded after its store
+        ;; failed, the conn matches the storage, so a later error (e.g. from a
+        ;; listener) must not roll the in-memory db back
         *stored? (volatile! false)]
     (try
       (when (:batch-tx? @conn)
@@ -335,7 +388,14 @@
         (batch-tx-fn conn))
       (batch-transact-cleanup! conn)
       (when-some [_storage (storage/storage @conn)]
-        (d/store @conn)
+        (try
+          (d/store @conn)
+          (catch :default e
+            ;; Continue from the storage, not from db-before: the failed store
+            ;; can have marked nodes db-before shares as stored
+            (reload-conn-from-storage! conn)
+            (vreset! *stored? true)
+            (throw e)))
         (vreset! *stored? true)
         ;; batch-transact! bypasses conn/store-after-transact!, so keep tail bookkeeping in sync
         ;; with the just-persisted root snapshot.
