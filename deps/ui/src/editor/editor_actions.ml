@@ -1471,6 +1471,10 @@ let move_blocks_up_down ?uuid up =
 
 let selection_delete_pending = ref false
 
+let action_context () =
+  let model = Runtime.model () in
+  model.Model.repo, model.Model.route, model.Model.context_revision
+
 let delete_selected_uuids ~selected ~scope ~before uuids =
   match uuids with
   | [] -> ()
@@ -1478,6 +1482,7 @@ let delete_selected_uuids ~selected ~scope ~before uuids =
   | first :: _ ->
       selection_delete_pending := true;
       let context = Runtime.repo (), Runtime.route () in
+      let publication = action_context () in
       let prev =
         match S.prev_visible ~scope first with
         | Some p -> p.Model.block_uuid
@@ -1503,13 +1508,13 @@ let delete_selected_uuids ~selected ~scope ~before uuids =
               ; Wire.Keyword "selected-blocks", Wire.List []
               ; Wire.Keyword "selection-anchor", Wire.Nil ]
         in
-        if context <> (Runtime.repo (), Runtime.route ()) then Js.Promise.resolve ()
+        if publication <> action_context () then Js.Promise.resolve ()
         else
           let* response = Ops.apply_result
               ~opts:(Ops.history_opts ~before ~after ()) [Ops.delete_blocks uuids] in
           match response with
           | None -> Js.Promise.resolve ()
-          | Some _ when context <> (Runtime.repo (), Runtime.route ()) -> Js.Promise.resolve ()
+          | Some _ when publication <> action_context () -> Js.Promise.resolve ()
           | Some _ ->
               let* () = Ops.refresh_via_delta response in
               if context = (Runtime.repo (), Runtime.route ())
@@ -1647,23 +1652,40 @@ let copy_selection ev =
       remember_selection_copy ~plain:false blocks text;
       ev.Ui_services.prevent_default ()
 
+let write_clipboard_text text on_written =
+  let write =
+    try Ui_services.clipboard_write_text text
+    with error -> Ui_task.reject error
+  in
+  let task = Ui_task.bind write (fun () ->
+      on_written ();
+      Ui_task.resolve ()) in
+  ignore (Ui_task.catch task (fun error ->
+      Ui_services.log_error ("clipboard write failed", error);
+      Ui_task.resolve ()))
+
 let write_selection_copy ~plain ~cut =
   let snapshot = selected_snapshot () in
   let before = S.history_cursor () in
-  let context = Runtime.repo (), Runtime.route () in
+  let context = action_context () in
   match selected_copy_blocks ~plain snapshot with
   | None | Some [] -> ()
   | Some blocks ->
       let text = selection_text ~plain blocks in
-      let task = Ui_task.bind (Ui_services.clipboard_write_text text) (fun () ->
+      write_clipboard_text text (fun () ->
           remember_selection_copy ~plain blocks text;
-          if cut && context = (Runtime.repo (), Runtime.route ()) then
+          if cut && context = action_context () then
             delete_selected_uuids ~selected:snapshot.selection ~scope:snapshot.scope
-              ~before snapshot.uuids;
-          Ui_task.resolve ()) in
-      ignore (Ui_task.catch task (fun error ->
-          Ui_services.log_error ("copy-selection failed", error);
-          Ui_task.resolve ()))
+              ~before snapshot.uuids)
+
+let cut_block_text uuid =
+  match S.find uuid with
+  | None -> ()
+  | Some block ->
+      let context = action_context () in
+      write_clipboard_text block.Model.block_title (fun () ->
+          if context = action_context () then
+            ignore (Ops.apply_and_refresh [ Ops.delete_blocks [ uuid ] ]))
 
 let copy_selection_text ?(plain = false) () = write_selection_copy ~plain ~cut:false
 let cut_selection_text () = write_selection_copy ~plain:false ~cut:true
@@ -2185,9 +2207,9 @@ let toggle_open_blocks () =
   if pairs <> [] then ignore (Ops.apply [ Ops.collapse_expand pairs ])
 
 let restore_history result =
-  let context = Runtime.repo (), Runtime.route () in
+  let context = action_context () in
   let editing = S.editing () in
-  let current () = context = (Runtime.repo (), Runtime.route ())
+  let current () = context = action_context ()
       && (match editing, S.editing () with
           | None, None -> true
           | Some before, Some now -> before.S.uuid = now.S.uuid
