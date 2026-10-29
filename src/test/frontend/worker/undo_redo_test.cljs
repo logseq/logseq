@@ -1662,7 +1662,8 @@
   (let [conn (worker-state/get-datascript-conn test-repo)]
     (sqlite-build/create-blocks
      conn
-     {:properties {:related {:logseq.property/type :node
+     {:properties {:related {:block/title "related"
+                             :logseq.property/type :node
                              :db/cardinality :db.cardinality/many}}
       :pages-and-blocks
       [{:page {:block/title "refs 1"}
@@ -1853,56 +1854,82 @@
              (set (map :block/uuid (get (d/entity @conn [:block/uuid x-uuid]) related))))))))
 
 (deftest undo-delete-of-property-restores-view-group-by-test
-  (testing "undoing a property delete restores :logseq.property.view/group-by-property on views that referenced it"
-    (let [conn (worker-state/get-datascript-conn test-repo)
-          {:keys [page-uuid]} (seed-page-parent-child!)
-          page-id (:db/id (d/entity @conn [:block/uuid page-uuid]))
-          view-uuid (random-uuid)
-          property-id :user.property/undo-note]
-      (apply-ops! conn
-                  [[:upsert-property [property-id
-                                      {:logseq.property/type :default}
-                                      {:property-name "undo-note"}]]]
-                  (local-tx-meta {:client-id "test-client"}))
-      (let [property-uuid (:block/uuid (d/entity @conn property-id))]
+  (testing "property deletion undo restores values and view grouping through redo"
+    (doseq [[cardinality property-id values]
+            [[:one :user.property/group-note-one ["Open" "Closed"]]
+             [:many :user.property/group-note-many [["Open" "Closed"] ["Closed"]]]]]
+      (let [conn (worker-state/get-datascript-conn test-repo)
+            {:keys [page-uuid parent-uuid child-uuid]} (seed-page-parent-child!)
+            page-id (:db/id (d/entity @conn [:block/uuid page-uuid]))
+            view-uuid (random-uuid)
+            class-properties (fn []
+                               (set (map :db/ident
+                                         (:logseq.property.class/properties
+                                          (d/entity @conn :logseq.class/Page)))))
+            block-values (fn []
+                           (mapv (fn [block-uuid]
+                                   (let [value (get (d/entity @conn [:block/uuid block-uuid]) property-id)
+                                         entities (if (= cardinality :many)
+                                                    value
+                                                    (when value [value]))]
+                                     (set (map (juxt :block/uuid :block/title) entities))))
+                                 [parent-uuid child-uuid]))]
         (apply-ops! conn
-                    [[:set-block-property [page-uuid property-id "alpha"]]]
+                    [[:upsert-property [property-id
+                                        {:logseq.property/type :default
+                                         :db/cardinality cardinality}
+                                        {:property-name "Note"}]]]
                     (local-tx-meta {:client-id "test-client"}))
+        (doseq [[block-uuid value] (map vector [parent-uuid child-uuid] values)
+                item (if (= cardinality :many) value [value])]
+          (apply-ops! conn
+                      [[:set-block-property [block-uuid property-id item]]]
+                      (local-tx-meta {:client-id "test-client"})))
         (apply-ops! conn
                     [[:insert-blocks [[{:block/uuid view-uuid
-                                        :block/title "undo group-by view"
+                                        :block/title "grouped view"
                                         :logseq.property.view/feature-type :all-pages
                                         :logseq.property.view/type :logseq.property.view/type.table}]
                                       page-id
-                                      {:sibling? false
-                                       :keep-uuid? true}]]]
+                                      {:sibling? false :keep-uuid? true}]]]
                     (local-tx-meta {:client-id "test-client"}))
         (apply-ops! conn
                     [[:set-block-property [view-uuid
                                            :logseq.property.view/group-by-property
                                            property-id]]]
                     (local-tx-meta {:client-id "test-client"}))
-        (is (= property-id
-               (:db/ident (:logseq.property.view/group-by-property
-                           (d/entity @conn [:block/uuid view-uuid])))))
-        (worker-undo-redo/clear-history! test-repo)
-        (apply-ops! conn
-                    [[:delete-page [property-uuid {}]]]
-                    (local-tx-meta {:client-id "test-client"}))
-        (is (nil? (d/entity @conn property-id)))
-        (is (nil? (:logseq.property.view/group-by-property
-                   (d/entity @conn [:block/uuid view-uuid]))))
-        (is (map? (worker-undo-redo/undo test-repo)))
-        (let [property (d/entity @conn property-id)
-              view (d/entity @conn [:block/uuid view-uuid])]
-          (is (= property-uuid (:block/uuid property)))
+        (d/transact! conn [[:db/add :logseq.class/Page :logseq.property.class/properties property-id]])
+        (let [property-uuid (:block/uuid (d/entity @conn property-id))
+              original-values (block-values)
+              original-class-properties (class-properties)]
+          (is (= (mapv #(set (if (= cardinality :many) % [%])) values)
+                 (mapv #(set (map second %)) original-values)))
+          (worker-undo-redo/clear-history! test-repo)
+          (apply-ops! conn
+                      [[:delete-page [property-uuid {}]]]
+                      (local-tx-meta {:client-id "test-client"}))
+          (is (nil? (d/entity @conn property-id)))
+          (is (not (contains? (class-properties) property-id)))
+          (is (= [#{} #{}] (block-values)))
+          (is (nil? (:logseq.property.view/group-by-property
+                     (d/entity @conn [:block/uuid view-uuid]))))
+          (is (map? (worker-undo-redo/undo test-repo)))
+          (is (= property-uuid (:block/uuid (d/entity @conn property-id))))
+          (is (= original-values (block-values)))
+          (is (= original-class-properties (class-properties)))
           (is (= property-id
-                 (:db/ident (:logseq.property.view/group-by-property view)))))
-        (is (map? (worker-undo-redo/redo test-repo)))
-        (is (nil? (d/entity @conn property-id)))
-        (is (nil? (:logseq.property.view/group-by-property
-                   (d/entity @conn [:block/uuid view-uuid]))))
-        (is (map? (worker-undo-redo/undo test-repo)))
-        (is (= property-id
-               (:db/ident (:logseq.property.view/group-by-property
-                           (d/entity @conn [:block/uuid view-uuid])))))))))
+                 (:db/ident (:logseq.property.view/group-by-property
+                             (d/entity @conn [:block/uuid view-uuid])))))
+          (is (map? (worker-undo-redo/redo test-repo)))
+          (is (nil? (d/entity @conn property-id)))
+          (is (not (contains? (class-properties) property-id)))
+          (is (= [#{} #{}] (block-values)))
+          (is (nil? (:logseq.property.view/group-by-property
+                     (d/entity @conn [:block/uuid view-uuid]))))
+          (is (map? (worker-undo-redo/undo test-repo)))
+          (is (= property-uuid (:block/uuid (d/entity @conn property-id))))
+          (is (= original-values (block-values)))
+          (is (= original-class-properties (class-properties)))
+          (is (= property-id
+                 (:db/ident (:logseq.property.view/group-by-property
+                             (d/entity @conn [:block/uuid view-uuid]))))))))))

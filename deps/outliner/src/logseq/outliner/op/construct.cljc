@@ -23,7 +23,8 @@
     :delete-page
     :restore-recycled
     :recycle-delete-permanently
-    :upsert-property})
+    :upsert-property
+    :restore-property-usage})
 
 (def ^:private transient-block-keys
   #{:db/id
@@ -947,29 +948,31 @@
   [db-before ent]
   (build-inverse-save-block db-before (into {} ent) nil))
 
-(defn- incoming-ref-holders
-  [page attr]
-  (when (and (keyword? attr) (namespace attr))
-    (get page (keyword (namespace attr) (str "_" (name attr))))))
-
-(defn- restore-incoming-ref-save-ops
-  "Save-block ops that put `attr` back on other entities that referenced `page`.
-   :db/retractEntity drops those incoming refs; the delete-page inverse must
-   restore them after the page exists again."
-  [page attr]
-  (let [value-ref (or (:db/ident page)
-                      (when-let [page-uuid (:block/uuid page)]
-                        [:block/uuid page-uuid]))]
-    (when value-ref
-      (->> (incoming-ref-holders page attr)
-           (keep (fn [holder]
-                   (when-let [holder-uuid (:block/uuid holder)]
-                     (when (not= (:db/id holder) (:db/id page))
-                       [:save-block [{:block/uuid holder-uuid
-                                      attr value-ref}
-                                     {}]]))))
-           vec
-           seq))))
+(defn- restore-property-usage-ops
+  "Restore property values and incoming references after recreating `property`."
+  [db-before property]
+  (let [incoming-refs (for [[attr schema] (d/schema db-before)
+                            :when (= :db.type/ref (:db/valueType schema))
+                            datom (d/datoms db-before :avet attr (:db/id property))]
+                        datom)
+        usage-datoms (concat (d/datoms db-before :avet (:db/ident property))
+                             incoming-refs)
+        blocks (reduce (fn [blocks {:keys [e a]}]
+                         (cond-> (assoc-in blocks [e a] nil)
+                           (= a :block/refs)
+                           (assoc-in [e :block/title] nil)))
+                       {}
+                       usage-datoms)]
+    ;; Property associations can belong to built-in classes, which save-block
+    ;; cannot edit. Restore the captured attributes in one stable transaction.
+    (when (seq blocks)
+      [[:restore-property-usage
+        [(mapv (fn [[eid attrs]]
+                 (let [[_ [block]] (build-inverse-save-block db-before (assoc attrs :db/id eid) {})]
+                   (-> block
+                       (dissoc :block/uuid)
+                       (assoc :db/id [:block/uuid (:block/uuid block)]))))
+               blocks)]]])))
 
 (defn- build-inverse-delete-page
   [db-before db-after page-uuid]
@@ -998,20 +1001,18 @@
                             {:property-name (:block/title page)}]])
               restore-root-ops (when (every? some? root-plans)
                                  (restore-plans->ops db-before root-plans))
-              restore-group-by-ops (restore-incoming-ref-save-ops
-                                    page :logseq.property.view/group-by-property)]
+              restore-usage-ops (when (ldb/property? page)
+                                  (restore-property-usage-ops db-before page))]
           ;; Put the page's blocks back before its attributes: a property
-          ;; value of the page can be one of those blocks. Restore incoming
-          ;; view group-by refs after the property exists again.
-          (cond-> []
-            create-op
-            (conj create-op)
+          ;; value of the page can be one of those blocks. Restore property
+          ;; usages after the property and its value blocks exist again.
+          (cond-> [create-op]
             (seq restore-root-ops)
             (into restore-root-ops)
             page-save-op
             (conj page-save-op)
-            (seq restore-group-by-ops)
-            (into restore-group-by-ops)
+            (seq restore-usage-ops)
+            (into restore-usage-ops)
             :always
             seq))
 
