@@ -1236,13 +1236,24 @@
        (map second)
        (distinct)))
 
+(defn- block-document-order-path
+  "The :db/id of the page, then the :block/order of each ancestor down to
+  `block`, so blocks under different parents still compare in document order."
+  [block]
+  (loop [block block
+         path ()]
+    (if-let [parent (:block/parent block)]
+      (recur parent (conj path (:block/order block)))
+      (conj path (:db/id block)))))
+
 (defn- get-top-level-blocks
   [top-level-blocks non-consecutive?]
   (let [reversed? (and (not non-consecutive?)
                        (:block/order (first top-level-blocks))
                        (:block/order (second top-level-blocks))
-                       (> (compare (:block/order (first top-level-blocks))
-                                   (:block/order (second top-level-blocks))) 0))]
+                       (pos? (compare-order-paths
+                              (block-document-order-path (first top-level-blocks))
+                              (block-document-order-path (second top-level-blocks)))))]
     (if reversed? (reverse top-level-blocks) top-level-blocks)))
 
 (def ^:private comments-tag-ident :logseq.class/Comments)

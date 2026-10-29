@@ -85,13 +85,6 @@
                           "redo-mismatch children up-down:nested*"
                           "redo-mismatch children move:cross-*"
                           "redo-mismatch children move:nested*"]
-   ;; Redo of creating a namespaced page (\"ns/child\") makes new pages.
-   "logseq/db-test#1298" ["redo-mismatch nodes create-page:*"
-                          "redo-mismatch nodes create-tag:*"]
-   ;; Undo of a rename is refused while another page holds the old title.
-   "logseq/db-test#1296" ["undo-mismatch title rename-page:*"]
-   ;; Undo of creating a property named like an existing one leaves it.
-   "logseq/db-test#1299" ["undo-mismatch nodes new-property:*"]
    ;; Undo of deleting a block leaves node property values that pointed at it
    ;; empty.
    "logseq/db-test#1302" ["undo-mismatch props delete:*"]

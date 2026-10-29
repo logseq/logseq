@@ -277,51 +277,72 @@
        distinct
        vec))
 
+(defn- created-page-title-match?
+  "Whether `page` is the page that `title` names. A page can keep a slash in
+  its title verbatim (e.g. a journal '2026/09/26'), while a namespaced title
+  like 'ns/child' creates the leaf page titled 'child' under 'ns'; pages link
+  to their parents through :block/parent and class pages through
+  :logseq.property.class/extends, so match each title part against the page
+  and its ancestor chain."
+  [page title]
+  (or (= title (:block/title page))
+      (let [parts (->> (string/split title #"/")
+                       (map string/trim)
+                       (remove string/blank?)
+                       reverse)]
+        (letfn [(ancestor-match? [page parts]
+                  (cond
+                    (nil? page) false
+                    (empty? parts) true
+                    (not= (first parts) (:block/title page)) false
+                    :else (let [rest-parts (rest parts)]
+                            (or (empty? rest-parts)
+                                (boolean
+                                 (some #(ancestor-match? % rest-parts)
+                                       (->> (cons (:block/parent page)
+                                                  (seq (:logseq.property.class/extends page)))
+                                            (remove nil?))))))))]
+          (ancestor-match? page parts)))))
+
 (defn- created-page-uuid-from-tx-data
-  [tx-data title]
-  (or
-   (some (fn [item]
-           (when (and (map? item)
-                      (= title (:block/title item))
-                      (:block/uuid item))
-             (:block/uuid item)))
-         tx-data)
-   (let [grouped (group-by :e tx-data)]
-     (some (fn [[_ datoms]]
-             (let [title' (some (fn [datom]
-                                  (when (and (= :block/title (:a datom))
-                                             (true? (:added datom)))
-                                    (:v datom)))
-                                datoms)
-                   uuid' (some (fn [datom]
-                                 (when (and (= :block/uuid (:a datom))
-                                            (true? (:added datom)))
-                                   (:v datom)))
-                               datoms)]
-               (when (and (= title title') (uuid? uuid'))
-                 uuid')))
-           grouped))))
+  [db tx-data title]
+  (some (fn [item]
+          (when-let [uuid' (cond
+                             ;; tx-data datom (Datom record or datom map)
+                             (and (= :block/uuid (:a item))
+                                  (true? (:added item)))
+                             (:v item)
+
+                             ;; db/add vector
+                             (and (vector? item)
+                                  (= :db/add (first item))
+                                  (>= (count item) 4)
+                                  (= :block/uuid (nth item 2)))
+                             (nth item 3)
+
+                             ;; input tx map
+                             (and (map? item)
+                                  (nil? (:a item))
+                                  (:block/uuid item))
+                             (:block/uuid item)
+
+                             :else nil)]
+            (when (uuid? uuid')
+              (let [page (d/entity db [:block/uuid uuid'])]
+                (when (and page
+                           (ldb/page? page)
+                           (created-page-title-match? page title))
+                  uuid')))))
+        tx-data))
 
 (defn- created-db-ident-from-tx-data
   [tx-data]
   (or
    (some (fn [item]
-           (when (and (map? item)
-                      (qualified-keyword? (:db/ident item)))
-             (:db/ident item)))
-         tx-data)
-   (some (fn [item]
-           (when (and (map? item)
-                      (= :db/ident (:a item))
+           (when (and (= :db/ident (:a item))
+                      (true? (:added item))
                       (qualified-keyword? (:v item)))
              (:v item)))
-         tx-data)
-   (some (fn [item]
-           (when (and (vector? item)
-                      (keyword? (nth item 1 nil))
-                      (= :db/ident (nth item 1 nil))
-                      (qualified-keyword? (nth item 2 nil)))
-             (nth item 2)))
          tx-data)
    (some (fn [item]
            (when (and (vector? item)
@@ -330,6 +351,12 @@
                       (= :db/ident (nth item 2))
                       (qualified-keyword? (nth item 3)))
              (nth item 3)))
+         tx-data)
+   (some (fn [item]
+           (when (and (map? item)
+                      (nil? (:a item))
+                      (qualified-keyword? (:db/ident item)))
+             (:db/ident item)))
          tx-data)))
 
 (defn- property-ident-by-title
@@ -636,7 +663,7 @@
 
     :create-page
     (let [[title opts] args
-          page-uuid (created-page-uuid-from-tx-data tx-data title)]
+          page-uuid (or (:uuid opts) (created-page-uuid-from-tx-data db tx-data title))]
       [:create-page [title
                      (cond-> (or opts {})
                        page-uuid
@@ -663,8 +690,8 @@
     :upsert-property
     (let [[property-id schema opts] args
           property-id' (or (stable-entity-ref db property-id)
-                           (property-ident-by-title db (:property-name opts))
-                           (created-db-ident-from-tx-data tx-data))]
+                           (created-db-ident-from-tx-data tx-data)
+                           (property-ident-by-title db (:property-name opts)))]
       [:upsert-property [property-id' schema opts]])
 
     [op args]))
@@ -976,15 +1003,11 @@
                                  (restore-plans->ops db-before root-plans))]
           ;; Put the page's blocks back before its attributes: a property
           ;; value of the page can be one of those blocks.
-          (cond-> []
-            create-op
-            (conj create-op)
-            (seq restore-root-ops)
-            (into restore-root-ops)
-            page-save-op
-            (conj page-save-op)
-            :always
-            seq))
+          (seq (cond-> [create-op]
+                 (seq restore-root-ops)
+                 (into restore-root-ops)
+                 page-save-op
+                 (conj page-save-op))))
 
         today-page?
         (when (every? some? root-plans)
@@ -994,6 +1017,79 @@
         ;; Soft-deleted pages are moved to Recycle with recycle metadata.
         ;; Use restore semantics instead of save-block to retract recycle markers.
         [:restore-recycled [page-uuid]]))))
+
+(defn- page-creation-order
+  "Returns dependencies before their users, excluding entities already in `titles`."
+  [page titles]
+  (loop [pending (list [page false])
+         seen #{}
+         result []]
+    (if-let [[entity expanded?] (first pending)]
+      (let [remaining (rest pending)
+            eid (:db/id entity)]
+        (cond
+          (or (nil? entity) (ldb/built-in? entity))
+          (recur remaining seen result)
+
+          expanded?
+          (recur remaining seen (conj result entity))
+
+          (or (contains? titles eid) (contains? seen eid))
+          (recur remaining seen result)
+
+          :else
+          (let [dependencies (concat [(:block/parent entity)]
+                                     (:logseq.property.class/extends entity)
+                                     (:block/tags entity))]
+            (recur (concat (map #(vector % false) dependencies)
+                           (cons [entity true] remaining))
+                   (conj seen eid)
+                   result))))
+      result)))
+
+(defn- page-history-ops
+  [db-before db-after entity full-title original-op]
+  (let [create-op (or original-op
+                      [:create-page
+                       [full-title
+                        (cond-> {:uuid (:block/uuid entity)
+                                 :class? (boolean (ldb/class? entity))
+                                 :redirect? false
+                                 :split-namespace? true}
+                          (:db/ident entity)
+                          (assoc :properties {:db/ident (:db/ident entity)}))]])
+        save-op (cond
+                  (ldb/class? entity)
+                  (entity->save-op db-after entity)
+
+                  (and original-op
+                       (some #(nil? (d/entity db-before (:db/id %))) (:block/tags entity)))
+                  (build-inverse-save-block db-after
+                                            (select-keys entity [:block/uuid :block/tags :block/refs])
+                                            nil))]
+    (cond-> [create-op]
+      save-op (conj save-op))))
+
+(defn- expand-create-page-history
+  [db-before db-after {:keys [titles] :as state} [op [_title opts] :as op-entry]]
+  (let [page (when (= :create-page op)
+               (d/entity db-after [:block/uuid (:uuid opts)]))]
+    (if (and page (nil? (d/entity db-before (:db/id page))))
+      (reduce
+        (fn [{:keys [titles] :as acc} entity]
+          (let [parent-entities (cons (:block/parent entity) (:logseq.property.class/extends entity))
+                parent-title (some #(get titles (:db/id %)) parent-entities)
+                full-title (str (when parent-title (str parent-title "/")) (:block/title entity))
+                acc (assoc-in acc [:titles (:db/id entity)] full-title)]
+            (if (d/entity db-before (:db/id entity))
+              acc
+              (let [[create-op save-op] (page-history-ops db-before db-after entity full-title
+                                                         (when (= (:db/id page) (:db/id entity)) op-entry))]
+                (cond-> (update acc :ops conj create-op)
+                  save-op (update :snapshots conj save-op))))))
+        state
+        (page-creation-order page titles))
+      (update state :ops conj op-entry))))
 
 (defn- restore-target-insert-op
   [db-before db-after target-id opts]
@@ -1038,6 +1134,25 @@
       (let [[group remaining] (split-at group-size entries)]
         (recur remaining (next sizes) (conj groups group)))
       (mapcat identity (reverse groups)))))
+
+(defn- dedupe-inverse-delete-pages
+  "Keeps only the last [:delete-page uuid] op for a uuid. Several
+  :create-page inverses can delete the same namespace ancestor or tag created
+  in the same transaction; a second delete would re-recycle it and overwrite
+  its recorded original-parent. Keeping the last occurrence also orders the
+  shared parent after every new page that records it as its parent."
+  [ops]
+  (->> (reduce (fn [[seen acc] op]
+                 (let [uuid' (when (and (= :delete-page (first op))
+                                        (sequential? (second op)))
+                               (first (second op)))]
+                   (if (and uuid' (contains? seen uuid'))
+                     [seen acc]
+                     [(cond-> seen uuid' (conj uuid'))
+                      (conj acc op)])))
+               [#{} '()]
+               (reverse ops))
+       second))
 
 (defn- ^:large-vars/cleanup-todo build-strict-inverse-outliner-ops
   [db-before db-after tx-data forward-ops forward-op-group-sizes]
@@ -1086,7 +1201,35 @@
                           :create-page
                           (let [[_title opts] args]
                             (when-let [page-uuid (:uuid opts)]
-                              [:delete-page [page-uuid {}]]))
+                              (let [page (d/entity db-after [:block/uuid page-uuid])
+                                    created-this-tx? (fn [e]
+                                                       (and (ldb/page? e)
+                                                            (not (ldb/built-in? e))
+                                                            (nil? (d/entity db-before (:db/id e)))))
+                                    created-tag-uuids
+                                    (->> (:block/tags page)
+                                         (filter (fn [tag]
+                                                   (and (ldb/class? tag)
+                                                        (not (ldb/built-in? tag))
+                                                        (nil? (d/entity db-before (:db/id tag))))))
+                                         (map :block/uuid)
+                                         (distinct))
+                                    created-ancestor-uuids
+                                    (->> (tree-seq (constantly true)
+                                                   (fn [e]
+                                                     (->> (cons (:block/parent e)
+                                                                (seq (:logseq.property.class/extends e)))
+                                                          (remove nil?)
+                                                          (filter created-this-tx?)))
+                                                   page)
+                                         rest
+                                         (map :block/uuid)
+                                         (distinct))]
+                                (into (into (mapv (fn [uuid'] [:delete-page [uuid' {}]])
+                                                  created-tag-uuids)
+                                            [[:delete-page [page-uuid {}]]])
+                                      (mapv (fn [uuid'] [:delete-page [uuid' {}]])
+                                            created-ancestor-uuids)))))
 
                           :delete-page
                           (let [[page-uuid _opts] args]
@@ -1116,6 +1259,7 @@
                                    (sequential? (first %)))
                             %
                             [%]))
+                 dedupe-inverse-delete-pages
                  vec
                  seq)))))
 
@@ -1506,5 +1650,14 @@
                                      vec
                                      (->> (mapv #(normalize-op-entry-ids db-before %))))
         _ (assert-no-stale-numeric-ids! db-before inverse-outliner-ops :inverse-outliner-ops)]
-    {:forward-outliner-ops forward-outliner-ops
+    {:forward-outliner-ops (if (seq (:db-sync/forward-outliner-ops tx-meta))
+                            forward-outliner-ops
+                            (when (seq forward-outliner-ops)
+                              (let [{:keys [ops snapshots]}
+                                    (reduce #(expand-create-page-history db-before db-after %1 %2)
+                                            {:titles {} :ops [] :snapshots []}
+                                            forward-outliner-ops)]
+                                ;; Final-state snapshots can reference entities created by later ops.
+                                ;; Append them after creation and keep them out of inverse derivation.
+                                (into ops snapshots))))
      :inverse-outliner-ops inverse-outliner-ops}))
