@@ -1512,16 +1512,12 @@ let apply_tag t ac ~create ~inline title =
                && not (Edit_model.composing current.model)
            | None -> false
       in
-      let save_and_tag dbid =
-        (* emit already stripped "#q" from the buffer; persist the new
-           buffer and the tag in one batch *)
-        let rest =
+      let attach_tag dbid =
+        let ops =
           [ Outliner_ops.set_block_property buuid "block/tags" (Wire.Int dbid) ]
         in
         if repo_v = repo () then
-          ignore
-            (Outliner_ops.apply_parsed_and_refresh ~rest
-               [ (buuid, Editor_actions.live_buffer buuid) ])
+          ignore (Outliner_ops.apply_and_refresh ops)
       in
       (* cljs tag-in-page-auto-complete?: "#" typed inside a [[ pair
          still erases the query but skips the tag/class attach — the
@@ -1559,7 +1555,7 @@ let apply_tag t ac ~create ~inline title =
                  (Wire.String repo_v) (Wire.String title)
              in
              (match Wire.map_get_int e "db/id" with
-              | Some dbid -> save_and_tag dbid
+              | Some dbid -> attach_tag dbid
               | None -> ());
              Js.Promise.resolve ())
       in
@@ -1580,7 +1576,7 @@ let apply_tag t ac ~create ~inline title =
                    | Some _ ->
                        insert ();
                        close_ac t;
-                       if not (tag_in_ref ()) then save_and_tag dbid;
+                       if not (tag_in_ref ()) then attach_tag dbid;
                        Js.Promise.resolve ()
                    | None ->
                        (* cljs tag-on-chosen-handler: a plain page
@@ -1595,7 +1591,7 @@ let apply_tag t ac ~create ~inline title =
                              "thread-api/convert-page-to-tag"
                              (Wire.String repo_v) (Wire.Int dbid)
                          in
-                         save_and_tag dbid;
+                         attach_tag dbid;
                          Js.Promise.resolve ()))
           | _ ->
               create_and_tag ();
