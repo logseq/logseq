@@ -673,27 +673,31 @@
 
 (defn- kv-store
   [data-dir]
+  ;; The worker of every open graph has its own kv-store on this file, so each
+  ;; get reads the file and each set! merges its key into what the file holds
+  ;; then. A set! replaces the file by a rename, so an interrupted write leaves
+  ;; the previous file.
   (let [kv-path (node-path/join data-dir "kv-store.json")
-        state (atom nil)
-        <load! (fn []
-                 (if (some? @state)
-                   (p/resolved @state)
-                   (-> (fs/readFile kv-path "utf8")
-                       (p/then (fn [contents]
-                                 (let [data (parse-kv-state contents)]
-                                   (reset! state data)
-                                   @state)))
-                       (p/catch (fn [_]
-                                  (reset! state {})
-                                  @state)))))]
+        *last-write (atom (p/resolved nil))
+        <read-state (fn []
+                      (-> (fs/readFile kv-path "utf8")
+                          (p/then parse-kv-state)
+                          (p/catch (fn [_] {}))))
+        <write-key! (fn [k value]
+                      (let [tmp-path (node-path/join data-dir (str ".kv-store.json.tmp-" (random-uuid)))]
+                        (p/let [state (<read-state)
+                                _ (fs/writeFile tmp-path (serialize-kv-state (assoc state k value)) "utf8")]
+                          (fs/rename tmp-path kv-path))))]
     {:get (fn [k]
-            (p/let [_ (<load!)]
-              (get @state k)))
+            (p/let [state (<read-state)]
+              (get state k)))
+     ;; Writes in this process run one after another so none reads the file
+     ;; before the previous one replaced it
      :set! (fn [k value]
-             (p/let [_ (<load!)
-                     _ (swap! state assoc k value)
-                     payload (serialize-kv-state @state)]
-               (fs/writeFile kv-path payload "utf8")))}))
+             (swap! *last-write
+                    (fn [last-write]
+                      (p/then (p/catch last-write (constantly nil))
+                              (fn [_] (<write-key! k value))))))}))
 
 (defn- track-platform-writes
   [platform]
