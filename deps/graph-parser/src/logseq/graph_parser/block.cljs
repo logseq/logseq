@@ -314,6 +314,15 @@
 ;; Hack to detect export as some fns are too deeply nested to be refactored to get explicit option
 (def *export-to-db-graph? (atom false))
 
+(defn namespace-child-page?
+  "A page under a namespace parent: a page's parent is :block/parent, a class's
+  parent is the class it extends other than Root"
+  [page]
+  (boolean
+   (or (:block/parent page)
+       (some #(not= :logseq.class/Root (:db/ident %))
+             (:logseq.property.class/extends page)))))
+
 (defn get-page
   "Similar to get-page but only for file graphs and file graph import. An import
   skips pages with a namespace parent: the db stores `projects/b` with the name
@@ -324,7 +333,7 @@
          (map :e)
          sort
          (map #(d/entity db %))
-         (remove #(and @*export-to-db-graph? (:block/parent %)))
+         (remove #(and @*export-to-db-graph? (namespace-child-page? %)))
          first)))
 
 (defn- page-name-string->map
