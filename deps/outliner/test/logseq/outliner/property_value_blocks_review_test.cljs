@@ -125,3 +125,45 @@
         (outliner-property/set-block-property! conn [:block/uuid b1-uuid] :user.property/color nil)
         (is (nil? (block-value conn "b1" :user.property/color)))))))
 
+(deftest replaced-text-value-blocks-are-deleted
+  (testing "batch-set-property! deletes the value block it replaces"
+    (let [conn (db-test/create-conn-with-blocks
+                {:properties {:note {:logseq.property/type :default}}
+                 :pages-and-blocks [{:page {:block/title "page1"}
+                                     :blocks [{:block/title "b1"} {:block/title "b2"}]}]})
+          b1-uuid (block-uuid conn "b1")
+          b2-uuid (block-uuid conn "b2")]
+      (outliner-property/batch-set-property! conn [b1-uuid b2-uuid] :user.property/note "one")
+      (outliner-property/batch-set-property! conn [b1-uuid] :user.property/note "two")
+      (is (= {["one" 1] 1 ["two" 1] 1} (value-blocks-by-holders conn :user.property/note)))
+      (outliner-property/batch-set-property! conn [b1-uuid b2-uuid] :user.property/note "three")
+      (is (= {["three" 1] 2} (value-blocks-by-holders conn :user.property/note)))))
+
+  (testing "batch-set-property! keeps a value block another node still holds"
+    (let [conn (db-test/create-conn-with-blocks
+                {:properties {:color {:logseq.property/type :default
+                                      :build/closed-values [{:value "red" :uuid (random-uuid)}
+                                                            {:value "blue" :uuid (random-uuid)}]}}
+                 :pages-and-blocks [{:page {:block/title "page1"}
+                                     :blocks [{:block/title "b1"} {:block/title "b2"}]}]})
+          b1-uuid (block-uuid conn "b1")]
+      (outliner-property/batch-set-property! conn [b1-uuid (block-uuid conn "b2")] :user.property/color "red")
+      (outliner-property/batch-set-property! conn [b1-uuid] :user.property/color "blue")
+      (is (= #{"red" "blue"}
+             (set (map db-property/property-value-content
+                       (:block/_closed-value-property (d/entity @conn :user.property/color)))))
+          "Choices are never deleted")
+      (is (= "red" (db-property/property-value-content (block-value conn "b2" :user.property/color))))))
+
+  (testing "Removing one of several values deletes its value block"
+    (let [conn (db-test/create-conn-with-blocks
+                {:properties {:items {:logseq.property/type :default :db/cardinality :db.cardinality/many}}
+                 :pages-and-blocks [{:page {:block/title "page1"}
+                                     :blocks [{:block/title "b1"}]}]})
+          b1-uuid (block-uuid conn "b1")]
+      (outliner-property/batch-set-property! conn [b1-uuid] :user.property/items ["x" "y"])
+      (let [x-id (some #(when (= "x" (:block/title %)) (:db/id %))
+                       (block-value conn "b1" :user.property/items))]
+        (outliner-property/delete-property-value! conn [:block/uuid b1-uuid] :user.property/items x-id))
+      (is (= {["y" 1] 1} (value-blocks-by-holders conn :user.property/items)))
+      (is (empty? (:errors (db-validate/validate-local-db! @conn)))))))
