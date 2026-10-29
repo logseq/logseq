@@ -291,13 +291,15 @@
         (swap! page-names-to-uuids assoc page-name new-uuid)
         new-uuid))))
 
-(defn- convert-tag? [tag-name {:keys [convert-all-tags? tag-classes]}]
+(defn- convert-tag? [{tag-name :block/name :as tag-block} {:keys [convert-all-tags? tag-classes]}]
   (and (or convert-all-tags?
            (contains? tag-classes tag-name)
            ;; built-in tags that always convert
            (contains? #{"card"} tag-name))
        ;; Disallow tags as it breaks :block/tags
-       (not (contains? #{"tags"} tag-name))))
+       (not (contains? #{"tags"} tag-name))
+       ;; A journal page can't be a class
+       (not (:block/journal-day tag-block))))
 
 (defn- find-existing-class
   "Finds a class by :block/name (indexed, not unique) and, for namespaced tags, parent path.
@@ -348,7 +350,7 @@
       (when (:new-class? (meta class-m)) (swap! classes-tx conj class-m'))
       (assert (:block/uuid class-m') "Class must have a :block/uuid")
       [:block/uuid (:block/uuid class-m')])
-    (when (convert-tag? (:block/name tag-block) user-options)
+    (when (convert-tag? tag-block user-options)
       (let [existing-tag-uuid (find-existing-class db tag-block)
             internal-tag-conflict? (contains? #{"tag" "property" "page" "journal" "asset"} (:block/name tag-block))]
         (cond
@@ -395,7 +397,7 @@
   (if (seq (:block/tags block))
     (let [page-tags (->> (:block/tags block)
                          (remove #(or (:block.temp/new-class %)
-                                      (convert-tag? (:block/name %) user-options)
+                                      (convert-tag? % user-options)
                                       ;; Ignore new class tags from extract e.g. :logseq.class/Journal
                                       (logseq-class-ident? %)))
                          (map #(vector :block/uuid (get-page-uuid (:page-names-to-uuids per-file-state) (:block/name %) {:block %})))
@@ -461,7 +463,7 @@
                                            ;; Filter out new classes already set on a block e.g. :logseq.class/Query
                                            (logseq-class-ident? %))
                                       (:block/tags block))
-                convert-tag?' #(convert-tag? (:block/name %) user-options)]
+                convert-tag?' #(convert-tag? % user-options)]
             (cond-> block
               remove-inline-tags?
               (update :block/title
