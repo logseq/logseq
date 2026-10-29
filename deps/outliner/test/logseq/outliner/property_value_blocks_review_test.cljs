@@ -7,6 +7,7 @@
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.validate :as db-validate]
             [logseq.db.test.helper :as db-test]
+            [logseq.outliner.core :as outliner-core]
             [logseq.outliner.property :as outliner-property]))
 
 (defn- block-uuid
@@ -68,3 +69,29 @@
             "A holds the red choice")
         (is (= "red" (db-property/property-value-content (block-value conn "A" :user.property/color)))))
       (is (empty? (:errors (db-validate/validate-local-db! @conn)))))))
+
+(deftest batch-set-property-with-another-node-text-value-copies-it
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties {:color {:logseq.property/type :default}}
+               :pages-and-blocks [{:page {:block/title "page1"}
+                                   :blocks [{:block/title "A"} {:block/title "X"} {:block/title "Y"} {:block/title "Z"}]}]})
+        value-of #(block-value conn % :user.property/color)]
+    (outliner-property/set-block-property! conn [:block/uuid (block-uuid conn "A")] :user.property/color "red")
+    ;; Batch editing lists get-property-values and passes the chosen value's id
+    (let [red-id (-> (db-view/get-property-values @conn :user.property/color {}) first :value :db/id)]
+      (outliner-property/batch-set-property! conn [(block-uuid conn "X") (block-uuid conn "Y")]
+                                             :user.property/color red-id {:entity-id? true})
+      (outliner-property/set-block-property! conn [:block/uuid (block-uuid conn "Z")] :user.property/color red-id)
+      (testing "Each node gets a value block of its own with the same text"
+        (doseq [title ["X" "Y" "Z"]]
+          (is (= "red" (db-property/property-value-content (value-of title))))
+          (is (not= red-id (:db/id (value-of title))))
+          (is (= (block-uuid conn title) (:block/uuid (:block/parent (value-of title))))))
+        (is (= red-id (:db/id (value-of "A")))))
+      (testing "Setting a node's own value block again keeps it"
+        (outliner-property/batch-set-property! conn [(block-uuid conn "A")] :user.property/color red-id {:entity-id? true})
+        (is (= red-id (:db/id (value-of "A"))))))
+    (testing "Deleting the node whose value was picked keeps the other nodes' values"
+      (outliner-core/delete-blocks! conn [(d/entity @conn [:block/uuid (block-uuid conn "A")])] {})
+      (doseq [title ["X" "Y" "Z"]]
+        (is (= "red" (some-> (value-of title) db-property/property-value-content)))))))
