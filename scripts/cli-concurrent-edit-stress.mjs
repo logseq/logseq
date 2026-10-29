@@ -294,6 +294,9 @@ function ensureStressConfig(opts) {
 }
 
 function logEvent(opts, event) {
+  if (opts.runSummary) {
+    recordStressOutcome(opts.runSummary, event);
+  }
   const payload = {
     ts: new Date().toISOString(),
     graph: opts.graph,
@@ -301,8 +304,35 @@ function logEvent(opts, event) {
     ...event,
   };
   appendFileSync(opts.logFile, `${JSON.stringify(payload)}\n`, "utf8");
-  if (event.level === "error" || event.level === "warn" || event.event === "summary") {
+  if (event.level === "error" || event.level === "warn" || event.event === "summary" || event.event === "operation-summary") {
     console.log(JSON.stringify(payload));
+  }
+}
+
+export function recordStressOutcome(summary, event) {
+  if (event.event === "worker-error") {
+    summary.workerErrors += 1;
+    summary.unexpectedErrors += 1;
+    return;
+  }
+  if (event.event !== "cli" && event.event !== "http") {
+    return;
+  }
+  const key = `${event.event}:${event.context.op}`;
+  const counts = (summary.operations[key] ||= { ok: 0, expectedRace: 0, unexpectedErrors: 0 });
+  if (event.outcome === "ok") {
+    counts.ok += 1;
+  } else if (event.outcome === "race-conflict") {
+    counts.expectedRace += 1;
+  } else {
+    counts.unexpectedErrors += 1;
+    summary.unexpectedErrors += 1;
+  }
+}
+
+export function assertStressRunSucceeded(summary) {
+  if (summary.unexpectedErrors > 0) {
+    throw new Error(`Stress run completed with ${summary.unexpectedErrors} unexpected errors; see operation-summary`);
   }
 }
 
@@ -1222,6 +1252,55 @@ async function createBlock(opts, state, content, targetArgs, context) {
   for (const id of resultIds(response)) {
     state.activeIds.add(id);
   }
+}
+
+async function createStressTree(opts, state, page, stamp, context) {
+  const blocks = `- tree root ${stamp}\n  - tree child ${stamp}\n- tree sibling ${stamp}`;
+  const response = await runCli(
+    opts,
+    ["upsert", "block", "--graph", opts.graph, "--target-page", page, "--blocks", blocks],
+    { ...context, page },
+  );
+  for (const id of resultIds(response)) {
+    state.activeIds.add(id);
+  }
+  return response;
+}
+
+export function assertStressTree(response, stamp, createdIds) {
+  const rows = response.parsed?.data?.result;
+  const fail = () => { throw new Error("create-tree preflight failed: expected a persisted root, nested child and ordered sibling"); };
+  if (!response.ok || !Array.isArray(rows) || rows.length !== 3 || createdIds.length !== 3 || new Set(createdIds).size !== 3) {
+    fail();
+  }
+  const [root, child, sibling] = ["root", "child", "sibling"].map((kind) => rows.find((row) => row["block/title"] === `tree ${kind} ${stamp}`));
+  const pageId = root?.["block/page"]?.["db/id"];
+  if (!root || !child || !sibling || !Number.isInteger(pageId) ||
+      !rows.every((row) => Number.isInteger(row["db/id"]) && createdIds.includes(row["db/id"]) && row["block/page"]?.["db/id"] === pageId) ||
+      new Set(rows.map((row) => row["db/id"])).size !== 3 ||
+      root["block/parent"]?.["db/id"] !== pageId ||
+      sibling["block/parent"]?.["db/id"] !== pageId ||
+      child["block/parent"]?.["db/id"] !== root["db/id"] ||
+      typeof root["block/order"] !== "string" || !root["block/order"] ||
+      typeof sibling["block/order"] !== "string" || !(root["block/order"] < sibling["block/order"])) {
+    fail();
+  }
+}
+
+export async function preflightCreateTree(opts, state) {
+  const stamp = `${state.runId} ${opts.clientName} preflight`;
+  const context = { op: "preflight-create-tree" };
+  const created = await createStressTree(opts, state, opts.page, stamp, context);
+  if (!created.ok) {
+    throw new Error("create-tree preflight failed: CLI rejected the tree fixture");
+  }
+  const ids = resultIds(created);
+  const titles = ["root", "child", "sibling"].map((kind) => ednString(`tree ${kind} ${stamp}`));
+  const response = await runCli(opts, ["query", "--graph", opts.graph, "--query",
+    `[:find [(pull ?b [:db/id :block/title {:block/parent [:db/id]} {:block/page [:db/id]} :block/order]) ...] :where [?b :block/title ?title] [(contains? #{${titles.join(" ")}} ?title)]]`],
+    { ...context, phase: "verify-persisted-tree" });
+  assertStressTree(response, stamp, ids);
+  logEvent(opts, { event: "create-tree-preflight", level: "info", client: opts.clientName, ids });
 }
 
 function randomPage(state) {
@@ -2235,7 +2314,7 @@ async function multiClientTodayJournalRace(opts, cluster, context) {
   }
 }
 
-async function runOperation(opts, state, workerId, seq, forcedOp = null) {
+export async function runOperation(opts, state, workerId, seq, forcedOp = null) {
   const op = forcedOp || weightedOperation(opts);
   const stamp = `${state.runId} worker=${workerId} seq=${seq} op=${op}`;
   await refreshLiveIdsIfNeeded(opts, state, "operation");
@@ -2273,18 +2352,7 @@ async function runOperation(opts, state, workerId, seq, forcedOp = null) {
 
     case "create-tree": {
       const page = randomPage(state);
-      const blocks = `[
-        {:block/title ${ednString(`tree root ${stamp}`)}
-         :block/children [{:block/title ${ednString(`tree child ${stamp}`)}}]}
-        {:block/title ${ednString(`tree sibling ${stamp}`)}}]`;
-      const response = await runCli(
-        opts,
-        ["upsert", "block", "--graph", opts.graph, "--target-page", page, "--blocks", blocks],
-        { workerId, seq, op, page },
-      );
-      for (const id of resultIds(response)) {
-        state.activeIds.add(id);
-      }
+      await createStressTree(opts, state, page, stamp, { workerId, seq, op });
       return;
     }
 
@@ -2873,6 +2941,7 @@ async function buildSeedClient(opts, runId) {
   state.repo = graphServerRepo(clientOpts, graphServer);
   await validateClientGraph({ opts: clientOpts }, "preflight");
   await ensureStressMetadata(clientOpts, state);
+  await preflightCreateTree(clientOpts, state);
   await refreshLiveIds(clientOpts, state, "startup");
   await waitForSyncSettled(clientOpts, { op: "seed-startup-settle", client: clientOpts.clientName }, false);
   return { opts: clientOpts, state, graphServer };
@@ -2888,6 +2957,7 @@ async function buildReplicaClient(opts, clientIndex, runId) {
   await validateClientGraph({ opts: clientOpts }, "preflight");
   await waitForSyncSettled(clientOpts, { op: "replica-startup-settle", client: clientOpts.clientName }, false);
   await refreshStressTagIds(clientOpts, state, "replica-startup");
+  await preflightCreateTree(clientOpts, state);
   await refreshLiveIds(clientOpts, state, "replica-startup");
   return { opts: clientOpts, state, graphServer };
 }
@@ -2902,6 +2972,7 @@ async function buildStressClients(opts, runId) {
 
 async function main() {
   const opts = parseArgs(process.argv.slice(2));
+  opts.runSummary = { unexpectedErrors: 0, workerErrors: 0, operations: {} };
   mkdirSync(dirname(opts.logFile), { recursive: true });
   const runId = `stress-${Date.now()}`;
 
@@ -2938,6 +3009,7 @@ async function main() {
     totalOpsStarted = cluster.nextSeq;
   }
 
+  let finalError = null;
   for (const client of clients) {
     let settleError = null;
     try {
@@ -2951,10 +3023,19 @@ async function main() {
     await validateClientGraph(client, "final").catch((error) => {
       settleError = settleError || error;
     });
-    if (settleError) {
-      throw settleError;
-    }
+    finalError = finalError || settleError;
   }
+
+  logEvent(opts, {
+    event: "operation-summary",
+    level: opts.runSummary.unexpectedErrors > 0 ? "error" : "info",
+    runId,
+    ...opts.runSummary,
+  });
+  if (finalError) {
+    throw finalError;
+  }
+  assertStressRunSucceeded(opts.runSummary);
 
   logEvent(opts, {
     event: "stop",

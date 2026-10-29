@@ -101,6 +101,8 @@ jobs:
           pnpm --dir deps/db-sync build:node-adapter
 
       - name: Verify stress tests
+        env:
+          LOGSEQ_STRESS_TEST_BIN: ${{ github.workspace }}/static/logseq-cli.js
         run: |
           node --test scripts/cli-concurrent-edit-stress.test.mjs
           node --test scripts/cli-sync-stress-workflow.test.mjs

@@ -21,6 +21,7 @@ test("CLI sync stress workflow runs local sync/offline stress and validates the 
   assert.match(workflow, /LOGSEQ_CLI_ROOT_DIR/);
   assert.match(workflow, /HOME: \$\{\{ github\.workspace \}\}\/tmp\/cli-sync-stress\/home/);
   assert.match(workflow, /node scripts\/cli-concurrent-edit-stress\.mjs/);
+  assert.match(workflow, /LOGSEQ_STRESS_TEST_BIN: \$\{\{ github\.workspace \}\}\/static\/logseq-cli\.js/);
   assert.match(workflow, /--sync/);
   assert.match(workflow, /--offline/);
   assert.match(workflow, /--no-e2ee/);
