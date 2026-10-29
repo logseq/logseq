@@ -171,8 +171,9 @@ let hashtag_names (title : string) : string list =
   go 0 []
 
 (* names that resolve to class entities (tagged :logseq.class/Tag) *)
-let fetch_tag_names (names : string list) : string list Js.Promise.t =
-  match names, repo () with
+let fetch_tag_names_for_repo origin_repo (names : string list)
+    : string list Js.Promise.t =
+  match names, origin_repo with
   | [], _ | _, "" -> resolved []
   | names, repo ->
       let set_edn =
@@ -195,9 +196,11 @@ let fetch_tag_names (names : string list) : string list Js.Promise.t =
              Ui_services.log_error ("tag-name lookup failed", e);
              resolved [])
 
-let fetch_ref_uuids (names : string list)
+let fetch_tag_names names = fetch_tag_names_for_repo (repo ()) names
+
+let fetch_ref_uuids_for_repo origin_repo (names : string list)
     : (string * string) list Js.Promise.t =
-  match repo () with
+  match origin_repo with
   | "" -> resolved []
   | repo ->
       let set_edn =
@@ -225,6 +228,8 @@ let fetch_ref_uuids (names : string list)
       |> Js.Promise.catch (fun e ->
              Ui_services.log_error ("page-ref uuid lookup failed", e);
              resolved [])
+
+let fetch_ref_uuids names = fetch_ref_uuids_for_repo (repo ()) names
 
 (* page-ref stub — resolve-page-refs turns block/type "page" stubs into
    the real page (creating it when the name is unknown) *)
@@ -324,7 +329,8 @@ let rec rewrite_title_refs ~(tags : string list)
   | Wire.Set xs -> Wire.Set (List.map (rewrite_title_refs ~tags known) xs)
   | _ -> w
 
-let resolve_title_refs (ops : Wire.t list) : Wire.t list Js.Promise.t =
+let resolve_title_refs_for_repo origin_repo (ops : Wire.t list)
+    : Wire.t list Js.Promise.t =
   let titles =
     List.rev (List.concat_map (fun w -> collect_title_strings w []) ops)
   in
@@ -339,10 +345,13 @@ let resolve_title_refs (ops : Wire.t list) : Wire.t list Js.Promise.t =
      | [] -> resolved ([], [])
      | _ ->
          Js.Promise.all2
-           (fetch_ref_uuids names, fetch_tag_names names))
+           (fetch_ref_uuids_for_repo origin_repo names,
+            fetch_tag_names_for_repo origin_repo names))
   in
   resolved
     (List.map (rewrite_title_refs ~tags known) ops)
+
+let resolve_title_refs ops = resolve_title_refs_for_repo (repo ()) ops
 
 
 let get_many ids =
@@ -361,10 +370,11 @@ let get_many ids =
 (* dispatch outliner ops; each op entry is [kw-name, [args...]].
    Response is {result: <last op result>, ...} — unwrap it. *)
 let apply_ops ops opts =
-  let* ops = resolve_title_refs ops in
+  let origin_repo = repo () in
+  let* ops = resolve_title_refs_for_repo origin_repo ops in
   let* w =
     Runtime.invoke3 "thread-api/apply-outliner-ops"
-      (Wire.String (repo ()))
+      (Wire.String origin_repo)
       (Wire.Array ops)
       opts
   in
@@ -389,9 +399,9 @@ let apply_op op args =
     (Wire.Map [])
 
 (* get-blocks [{id, opts}] -> [[{id, block?}...]] — resolve first result *)
-let get_by_id id_wire =
+let get_by_id_for_repo origin_repo id_wire =
   let* w =
-    Runtime.invoke2 "thread-api/get-blocks" (Wire.String (repo ()))
+    Runtime.invoke2 "thread-api/get-blocks" (Wire.String origin_repo)
       (Wire.Array
          [ Wire.Map
              [ (Wire.String "id", id_wire); (Wire.String "opts", Wire.Map []) ]
@@ -408,6 +418,8 @@ let get_by_id id_wire =
              | _ -> Wire.Nil))
      | _ -> Wire.Nil)
 
+let get_by_id id_wire = get_by_id_for_repo (repo ()) id_wire
+
 (* id-or-name -> entity wire (uuid / namespaced ident / page name).
    cljs resolves page args via [:block/name (page-name-sanity-lc name)] —
    get-case-page matches :block/title exactly; a miss falls back to
@@ -417,10 +429,12 @@ let get_by_id id_wire =
    no :block/properties) — a hit is re-fetched through get-blocks by uuid
    so the wire carries the sdk entity shape. *)
 let get_entity id_or_name =
+  let origin_repo = repo () in
+  let get_by_id = get_by_id_for_repo origin_repo in
   if Wire.is_uuid_string id_or_name then get_by_id (Wire.String id_or_name)
   else
     let* w =
-      Runtime.invoke2 "thread-api/get-case-page" (Wire.String (repo ()))
+      Runtime.invoke2 "thread-api/get-case-page" (Wire.String origin_repo)
         (Wire.String id_or_name)
     in
     match w with
