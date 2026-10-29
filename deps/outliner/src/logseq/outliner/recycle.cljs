@@ -2,6 +2,7 @@
   "Recycle-based soft delete helpers for DB graphs"
   (:require [datascript.core :as d]
             [logseq.common.util :as common-util]
+            [logseq.outliner.validate :as outliner-validate]
             [logseq.common.uuid :as common-uuid]
             [logseq.db :as ldb]
             [logseq.db.common.delete-blocks :as delete-blocks]
@@ -251,6 +252,16 @@
         [[] (some-> parent :block/_parent ldb/sort-by-order last :block/order)]
         children)))))
 
+(defn- validate-restored-page-name!
+  "Throws the duplicate-name notification when `tx-data` restores page `root` next
+  to a live page with the same name. A recycled page is parented under the
+  Recycle, so its name was free to be taken while it was there."
+  [db root tx-data]
+  (when (ldb/page? root)
+    (let [db' (:db-after (d/with db (remove nil? tx-data)))
+          root' (d/entity db' (:db/id root))]
+      (outliner-validate/validate-unique-by-name-and-tags db' (:block/title root') root'))))
+
 (defn ^:api restore-tx-data
   [db root]
   (when-let [{:keys [parent page order parent-pending?]} (restore-target db root)]
@@ -281,8 +292,10 @@
           ;; pages under `root` come back with it, so pages waiting on them
           ;; are re-attached too
           relink-tx (when (ldb/page? root)
-                      (mapcat #(relink-waiting-children-tx db %) (page-descendants root)))]
-      (concat clear-structure [root-tx] subtree-page-tx (remove nil? clear-meta) relink-tx))))
+                      (mapcat #(relink-waiting-children-tx db %) (page-descendants root)))
+          tx-data (concat clear-structure [root-tx] subtree-page-tx (remove nil? clear-meta) relink-tx)]
+      (validate-restored-page-name! db root tx-data)
+      tx-data)))
 
 (defn ^:api restore!
   [conn root-uuid]
