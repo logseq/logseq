@@ -216,7 +216,9 @@ let remove_view_property view_uuid ident f =
 let set_gallery_display_properties view_uuid idents f =
   let source_repo = repo () in
   let route = Runtime.route () in
-  let fresh () = repo () = source_repo && Runtime.route () = route in
+  let revision = (Runtime.model ()).Model.context_revision in
+  let fresh () = repo () = source_repo && Runtime.route () = route
+    && (Runtime.model ()).Model.context_revision = revision in
   let rec resolve acc = function
     | [] -> Js.Promise.resolve (List.rev acc)
     | ident :: rest ->
@@ -243,7 +245,9 @@ let set_gallery_display_properties view_uuid idents f =
 let set_gallery_asset_property view_uuid ident f =
   let source_repo = repo () in
   let route = Runtime.route () in
-  let fresh () = repo () = source_repo && Runtime.route () = route in
+  let revision = (Runtime.model ()).Model.context_revision in
+  let fresh () = repo () = source_repo && Runtime.route () = route
+    && (Runtime.model ()).Model.context_revision = revision in
   (let* property =
      Runtime.invoke3 "thread-api/pull" (W.String source_repo)
        (W.String "[:db/id]") (W.Keyword ident)

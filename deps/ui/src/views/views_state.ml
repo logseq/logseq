@@ -125,6 +125,7 @@ type inst =
         (* bumped at every data fetch issue — a response resolving
            under an older generation is stale (the view already moved
            to a newer context) and must not paint *)
+  ; data_context_revision : int ref
   }
 
 let empty_vstate () : vstate =
@@ -189,15 +190,19 @@ let make ~sched ~kind ~feature ~owner : inst =
   ; owner
   ; st = Signal.state sched (empty_vstate ())
   ; data_gen = ref 0
+  ; data_context_revision = ref (Runtime.model ()).Model.context_revision
   }
 
 (* issue a new fetch generation — responses resolving under an older
    one are dropped *)
 let new_fetch inst : int =
   incr inst.data_gen;
+  inst.data_context_revision := (Runtime.model ()).Model.context_revision;
   !(inst.data_gen)
 
-let fetch_fresh inst gen = !(inst.data_gen) = gen
+let fetch_fresh inst gen =
+  !(inst.data_gen) = gen
+  && (Runtime.model ()).Model.context_revision = !(inst.data_context_revision)
 
 let get inst : vstate = Runtime.signal_get inst.st
 

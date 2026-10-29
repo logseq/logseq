@@ -945,10 +945,9 @@ let install_ops () =
 
 (* ---------- mount ---------- *)
 
-(* one inst per {{query}} block: the block row is rebuilt on every save, so
-   a new .custom-query-results shell re-attaches the existing inst instead
-   of leaving a stale duplicate mounted *)
-let query_insts : (string, V.inst) Hashtbl.t = Hashtbl.create 8
+(* one inst per {{query}} block in the current navigation context: block-row
+   rebuilds re-attach it without carrying state across navigation *)
+let query_insts : (string, int * V.inst) Hashtbl.t = Hashtbl.create 8
 
 (* currently-mounted insts — refreshed on the worker's sync-db-changes
    broadcast; an inst leaves the table when its host unmounts *)
@@ -957,16 +956,17 @@ let live : (int, V.inst) Hashtbl.t = Hashtbl.create 16
 let view ~kind ~owner : t =
  fun ctx parent ->
   let sched = ctx.Lui_ui.ui_scheduler in
+  let revision = (Runtime.model ()).Model.context_revision in
   let inst, fresh =
     match kind with
     | V.KQuery { block_uuid } -> (
         match Hashtbl.find_opt query_insts block_uuid with
-        | Some inst -> (inst, false)
-        | None ->
+        | Some (cached_revision, inst) when cached_revision = revision -> (inst, false)
+        | _ ->
             let inst =
               V.make ~sched ~kind ~feature:(feature_of_kind kind) ~owner
             in
-            Hashtbl.replace query_insts block_uuid inst;
+            Hashtbl.replace query_insts block_uuid (revision, inst);
             (* staged, not flushed — V.update flushes, and a flush inside
                the element mount corrupts the pending op stream *)
             Signal.set inst.V.st
@@ -988,12 +988,14 @@ let view ~kind ~owner : t =
     Js.Promise.(
       resolve ()
       |> then_ (fun () ->
-          (match kind, fresh with
-           | V.KQuery _, _ -> refresh inst
-           | _, true ->
-               load_views inst ~on_done:(fun () ->
-                   ensure_default_view inst)
-           | _ -> ());
+          if not (Signal.scope_is_disposed ctx.Lui_ui.ui_scope)
+             && (Runtime.model ()).Model.context_revision = revision then
+            (match kind, fresh with
+             | V.KQuery _, _ -> refresh inst
+             | _, true ->
+                 load_views inst ~on_done:(fun () ->
+                     ensure_default_view inst)
+             | _ -> ());
           resolve ()));
   Signal.on_dispose ctx.Lui_ui.ui_scope (fun () ->
       Hashtbl.remove live inst.V.id;
@@ -1010,8 +1012,9 @@ let view ~kind ~owner : t =
    .custom-query-results *)
 let toggle_query_editor ~block_uuid =
   match Hashtbl.find_opt query_insts block_uuid with
-  | Some inst -> Views_query.toggle_source_editor inst
-  | None -> ()
+  | Some (revision, inst) when revision = (Runtime.model ()).Model.context_revision ->
+      Views_query.toggle_source_editor inst
+  | _ -> ()
 
 (* re-run every mounted view — subscribed to the worker's
    "sync-db-changes" broadcast (Runtime.on_sync, run by worker_events) so
