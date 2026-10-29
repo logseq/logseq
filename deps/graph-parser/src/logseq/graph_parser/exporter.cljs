@@ -2608,6 +2608,11 @@
          merge
          (into {} (mapcat journal-page-name-uuid-entries) doc-files)))
 
+(defn- existing-page-has-other-page-class?
+  [db page-uuid]
+  (some #(contains? (disj db-class/page-classes :logseq.class/Page) (:db/ident %))
+        (:block/tags (d/entity db [:block/uuid page-uuid]))))
+
 (defn- build-existing-page
   [m db page-uuid {:keys [page-names-to-uuids] :as per-file-state} {:keys [notify-user import-state file-created-at file-updated-at] :as options}]
   (let [file-page? (::file-page? m)
@@ -2636,7 +2641,10 @@
         (seq (:block/alias m))
         (update-page-alias page-names-to-uuids)
         (:block/tags m)
-        (update-page-tags db (:user-options options) per-file-state (:all-idents import-state))))))
+        (update-page-tags db (:user-options options) per-file-state (:all-idents import-state))
+        ;; A page file for a page that is already e.g. a #Journal must not also add #Page
+        (existing-page-has-other-page-class? db page-uuid)
+        (update :block/tags (fn [tags] (vec (remove #{:logseq.class/Page} tags))))))))
 
 (defn- modify-page-tx
   "Modifies page tx from graph-parser for use with DB graphs. Currently modifies
