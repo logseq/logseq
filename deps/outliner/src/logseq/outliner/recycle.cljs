@@ -187,8 +187,10 @@
   [db root]
   (let [original-parent (resolve-entity db (:logseq.property.recycle/original-parent root))
         original-page (resolve-entity db (:logseq.property.recycle/original-page root))
+        ;; `ldb/recycled?` also checks ancestors: a parent inside a recycled
+        ;; tree is pending, or the restored root would stay hidden in it
         parent-valid? (and original-parent
-                           (not (recycled? original-parent))
+                           (not (ldb/recycled? original-parent))
                            (d/entity db (:db/id original-parent)))
         parent-pending? (and original-parent (not parent-valid?))]
     (cond
@@ -207,7 +209,7 @@
 
       (and original-page
            (d/entity db (:db/id original-page))
-           (not (recycled? original-page)))
+           (not (ldb/recycled? original-page)))
       {:parent original-page
        :page original-page
        :order (restore-order original-page)}
@@ -276,8 +278,10 @@
                                    {:db/id (:db/id node)
                                     :block/page (:db/id page)})
                                  subtree))
+          ;; pages under `root` come back with it, so pages waiting on them
+          ;; are re-attached too
           relink-tx (when (ldb/page? root)
-                      (relink-waiting-children-tx db root))]
+                      (mapcat #(relink-waiting-children-tx db %) (page-descendants root)))]
       (concat clear-structure [root-tx] subtree-page-tx (remove nil? clear-meta) relink-tx))))
 
 (defn ^:api restore!
