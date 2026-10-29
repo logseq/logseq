@@ -89,4 +89,4 @@ let open_lang_picker uuid =
 
 (* file route: no native CodeMirror — the plain textarea stays the editor
    (its on_input already persists via file_view's debounced save) *)
-let attach_file_editor ~on_change:_ () = ()
+let attach_file_editor ~on_change:_ () = fun () -> ()

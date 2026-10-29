@@ -217,7 +217,12 @@ type block_instance =
 
 let instances : (string, block_instance) Hashtbl.t = Hashtbl.create 8
 
-let file_instance : block_instance option ref = ref None
+type file_owner =
+  { mutable file_live : bool
+  ; mutable file_editor : block_instance option
+  }
+
+let file_instance : file_owner option ref = ref None
 
 let composition_sources : (unit -> bool) list ref = ref []
 
@@ -240,10 +245,10 @@ let composition_active (ev : Ui_services.ev) =
                     && focused_client (get_input st.cm)))
        instances false
   || (match !file_instance with
-      | Some st -> st.composition_live
+      | Some { file_live = true; file_editor = Some st } -> st.composition_live
                    && D.el_is_connected (get_wrapper st.cm)
                    && focused_client (get_input st.cm)
-      | None -> false)
+      | _ -> false)
   || List.exists (fun source -> source ()) !composition_sources
 
 let with_model_update st f =
@@ -712,34 +717,40 @@ let copy_button uuid =
 (* File editors share committed-document semantics with code blocks,
    but publish through the file controller rather than block saves. *)
 
-let current_file_instance c =
+let current_file_instance owner c =
   match !file_instance with
-  | Some st when st.cm == c && D.el_is_connected (get_wrapper c) -> Some st
+  | Some current when current == owner && owner.file_live ->
+      (match owner.file_editor with
+       | Some st when st.cm == c && D.el_is_connected (get_wrapper c) -> Some st
+       | _ -> None)
   | _ -> None
 
-let unmount_file () =
-  match !file_instance with
-  | Some st ->
-      file_instance := None;
-      List.iter
-        (fun (el, name, f, capture) -> remove_listener el name f capture)
-        st.listeners;
-      st.listeners <- [];
-      cancel_composition st;
-      to_textarea st.cm
-  | None -> ()
+let dispose_file owner =
+  if owner.file_live then begin
+    owner.file_live <- false;
+    (match !file_instance with
+     | Some current when current == owner -> file_instance := None
+     | _ -> ());
+    match owner.file_editor with
+    | Some st ->
+        owner.file_editor <- None;
+        List.iter
+          (fun (el, name, f, capture) -> remove_listener el name f capture)
+          st.listeners;
+        st.listeners <- [];
+        cancel_composition st;
+        to_textarea st.cm
+    | None -> ()
+  end
 
-let mount_file ~on_change textarea =
-  (* a previous file editor's wrapper is inert once its route unmounted —
-     but release the doc before rebinding so it can't double-save *)
-  unmount_file ();
+let mount_file ~owner ~on_change textarea =
   let lang =
     normalize_lang
       (Option.value (D.el_get_attr textarea "data-lang") ~default:"")
   in
   let mode = cm_mode lang in
   let publish c =
-    match current_file_instance c with
+    match current_file_instance owner c with
     | Some st when not st.synchronizing && st.composition = None ->
         let value = get_value c in
         if value <> st.committed then begin
@@ -769,21 +780,18 @@ let mount_file ~on_change textarea =
     { cm = c; committed = get_value c; composition = None
     ; composition_live = false; synchronizing = false; listeners = [] }
   in
-  file_instance := Some st;
+  owner.file_editor <- Some st;
   on_event c "change" publish;
   on_event c "blur" (fun c ->
-      match current_file_instance c with
+      match current_file_instance owner c with
       | Some st ->
           st.composition_live <- false;
           cancel_composition st;
           publish c
       | None -> ());
   on_dom_event c "keydown" (fun c ev ->
-      match current_file_instance c with
+      match current_file_instance owner c with
       | Some st when composing_key st ev ->
-          ignore_cm_event ev true;
-          D.ev_stop_propagation ev
-      | None ->
           ignore_cm_event ev true;
           D.ev_stop_propagation ev
       | _ -> ());
@@ -793,7 +801,7 @@ let mount_file ~on_change textarea =
     st.listeners <- (input, name, f, capture) :: st.listeners
   in
   listen "compositionstart" true (fun _ ->
-      if current_file_instance c <> None then begin
+      if current_file_instance owner c <> None then begin
         cancel_composition st;
         st.composition_live <- true;
         st.composition <- Some
@@ -801,7 +809,7 @@ let mount_file ~on_change textarea =
           ; cancelled = false }
       end);
   listen "compositionend" false (fun _ ->
-      match current_file_instance c, st.composition with
+      match current_file_instance owner c, st.composition with
       | Some _, Some pending ->
           if pending.cancelled then cancel_composition st;
           st.composition_live <- false;
@@ -815,28 +823,31 @@ let mount_file ~on_change textarea =
       ignore
         (ensure_mode file
          |> Js.Promise.then_ (fun () ->
-                (match current_file_instance c with
+                (match current_file_instance owner c with
                  | Some _ ->
                      set_option c "mode" (Js.Json.string mode)
                  | _ -> ());
                 Js.Promise.resolve ()))
   | None -> ()
 
-let mount_file_async ~on_change el =
+let mount_file_async ~owner ~on_change el =
   ignore
     (ensure_core ()
      |> Js.Promise.then_ (fun () ->
-            if D.el_is_connected el then mount_file ~on_change el;
+            if owner.file_live && D.el_is_connected el then
+              mount_file ~owner ~on_change el;
             Js.Promise.resolve ()))
 
 (* file_view calls this after the flush that mounts its textarea;
    native has no CodeMirror so its twin is a no-op *)
 let attach_file_editor ~on_change () =
-  match
-    D.el_query D.document_el ".ls-file-page .code-editor textarea"
-  with
-  | Some el -> mount_file_async ~on_change el
-  | None -> ()
+  Option.iter dispose_file !file_instance;
+  let owner = { file_live = true; file_editor = None } in
+  file_instance := Some owner;
+  (match D.el_query D.document_el ".ls-file-page .code-editor textarea" with
+   | Some el -> mount_file_async ~owner ~on_change el
+   | None -> ());
+  fun () -> dispose_file owner
 
 let installed = ref false
 
