@@ -780,7 +780,8 @@
 (defn- released-value-blocks-tx
   "Tx data deleting the text value blocks of `property` among `value-ids` that
   no node outside `releasing-ids` holds, once those nodes stop holding them.
-  Closed values, pages and the property's default value are kept."
+  Closed values, pages, the property's default value and values a property
+  history record holds are kept."
   [db property value-ids releasing-ids]
   (let [releasing-ids (set releasing-ids)
         default-value-id (:db/id (:logseq.property/default-value property))
@@ -792,6 +793,7 @@
                                      (not (entity-util/page? value))
                                      (not (ldb/closed-value? value))
                                      (not= default-value-id (:db/id value))
+                                     (empty? (:logseq.property.history/_ref-value value))
                                      (every? (fn [holder-id] (contains? releasing-ids holder-id))
                                              (d/q '[:find [?e ...]
                                                     :in $ ?property-ident ?value-id
@@ -1374,10 +1376,11 @@
                                         description)))))))))))
 
 (defn- same-text-values-to-choices-tx
-  "Tx data making every node that holds a text value block of `property` whose
-  content is the content of one of `choices` hold that choice instead, and
-  deleting those value blocks. Otherwise they stay values that aren't choices,
-  which validate-db deletes."
+  "The value blocks of `property` whose content is the content of one of
+  `choices` (:copies), and the tx data making the nodes and history records
+  that hold them hold that choice instead (:repoint-tx), so the copies can be
+  deleted. Otherwise they stay values that aren't choices, which validate-db
+  deletes."
   [db property choices]
   (let [property-ident (:db/ident property)
         choice-ids (set (map :db/id choices))
@@ -1393,15 +1396,19 @@
                     (keep (fn [value]
                             (when-let [choice (choice-by-content (db-property/property-value-content value))]
                               [value choice]))))]
-    (when (seq copies)
-      (concat
-       (mapcat (fn [[value choice]]
-                 (mapcat (fn [{holder-id :e}]
-                           [[:db/retract holder-id property-ident (:db/id value)]
-                            [:db/add holder-id property-ident (:db/id choice)]])
-                         (d/datoms db :avet property-ident (:db/id value))))
-               copies)
-       (:tx-data (outliner-core/delete-blocks db (map first copies) {}))))))
+    {:copies (map first copies)
+     ;; The property history that records a copy records the choice instead: deleting
+     ;; the copy would delete those history records
+     :repoint-tx (mapcat (fn [[value choice]]
+                           (concat
+                            (mapcat (fn [{holder-id :e}]
+                                      [[:db/retract holder-id property-ident (:db/id value)]
+                                       [:db/add holder-id property-ident (:db/id choice)]])
+                                    (d/datoms db :avet property-ident (:db/id value)))
+                            (map (fn [history]
+                                   [:db/add (:db/id history) :logseq.property.history/ref-value (:db/id choice)])
+                                 (:logseq.property.history/_ref-value value))))
+                         copies)}))
 
 (defn add-existing-values-to-closed-values!
   "Adds existing values as closed values and returns their new block uuids.
@@ -1418,8 +1425,8 @@
                           (keep #(d/entity @conn [:block/uuid %]))
                           (remove #(contains? choice-contents (db-property/property-value-content %)))
                           (common-util/distinct-by db-property/property-value-content))
-              copies-tx (same-text-values-to-choices-tx @conn property (concat choices values))]
-          (when (or (seq values) (seq copies-tx))
+              {:keys [copies repoint-tx]} (same-text-values-to-choices-tx @conn property (concat choices values))]
+          (when (or (seq values) (seq copies))
             (let [property-db-id (:db/id property)
                   value-property-tx (map (fn [id]
                                            {:db/id id
@@ -1428,8 +1435,12 @@
                                             :block/page property-db-id})
                                          (map :db/id values))
                   property-tx (outliner-core/block-with-updated-at {:db/id property-db-id})]
-              (ldb/transact! conn (concat [property-tx] value-property-tx copies-tx)
-                             {:outliner-op :add-existing-values-to-closed-values}))))))))
+              (ldb/transact! conn (concat [property-tx] value-property-tx repoint-tx)
+                             {:outliner-op :add-existing-values-to-closed-values})
+              (when (seq copies)
+                (ldb/transact! conn
+                               (:tx-data (outliner-core/delete-blocks @conn (keep #(d/entity @conn (:db/id %)) copies) {}))
+                               {:outliner-op :add-existing-values-to-closed-values})))))))))
 
 (defn delete-closed-value!
   "Returns true when deleted or if not deleted displays warning and returns false"

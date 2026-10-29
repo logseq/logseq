@@ -214,3 +214,46 @@
       (is (holds-choice-with-content? conn "b1" :user.property/size 210))
       (is (holds-choice-with-content? conn "b2" :user.property/size 211))
       (is (empty? (:errors (db-validate/validate-local-db! @conn)))))))
+
+(defn- add-history!
+  "Adds a property history record of `title`'s `property-id` that records its current value"
+  [conn title property-id]
+  (let [history-uuid (random-uuid)]
+    (d/transact! conn [{:block/uuid history-uuid
+                        :block/created-at 1
+                        :logseq.property.history/block [:block/uuid (block-uuid conn title)]
+                        :logseq.property.history/property property-id
+                        :logseq.property.history/ref-value (:db/id (block-value conn title property-id))}])
+    history-uuid))
+
+(defn- history-content
+  [conn history-uuid]
+  (some-> (d/entity @conn [:block/uuid history-uuid])
+          :logseq.property.history/ref-value
+          db-property/property-value-content))
+
+(deftest value-blocks-recorded-by-property-history-keep-their-history
+  (testing "A copy turned into a choice: its history records the choice"
+    (let [conn (db-test/create-conn-with-blocks
+                {:properties {:color {:logseq.property/type :default}}
+                 :pages-and-blocks [{:page {:block/title "page1"}
+                                     :blocks [{:block/title "A"} {:block/title "B"}]}]})]
+      (outliner-property/set-block-property! conn [:block/uuid (block-uuid conn "A")] :user.property/color "red")
+      (outliner-property/set-block-property! conn [:block/uuid (block-uuid conn "B")] :user.property/color "red")
+      (let [a-history (add-history! conn "A" :user.property/color)
+            b-history (add-history! conn "B" :user.property/color)]
+        (outliner-property/upsert-closed-value! conn :user.property/color {:value "green"})
+        (is (holds-choice-with-content? conn "A" :user.property/color "red"))
+        (is (holds-choice-with-content? conn "B" :user.property/color "red"))
+        (is (= "red" (history-content conn a-history)))
+        (is (= "red" (history-content conn b-history))))))
+
+  (testing "A replaced value: its history keeps it"
+    (let [conn (db-test/create-conn-with-blocks
+                {:properties {:note {:logseq.property/type :default}}
+                 :pages-and-blocks [{:page {:block/title "page1"}
+                                     :blocks [{:block/title "b1"}]}]})]
+      (outliner-property/batch-set-property! conn [(block-uuid conn "b1")] :user.property/note "one")
+      (let [history (add-history! conn "b1" :user.property/note)]
+        (outliner-property/batch-set-property! conn [(block-uuid conn "b1")] :user.property/note "two")
+        (is (= "one" (history-content conn history)))))))
