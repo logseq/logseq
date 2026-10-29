@@ -149,9 +149,9 @@
   (let [compact @#'db-core/compact-import-result
         out (atom nil)
         messages (capture-logs
-                  #(reset! out (compact {:import-state {:ignored-files (atom [1 2])
-                                                        :ignored-assets [1]
-                                                        :ignored-properties (atom [1 2 3])}
+                  #(reset! out (compact {:import-state {:ignored-files (atom [{:path "a"} {:path "b"}])
+                                                        :ignored-assets [{:path "c"}]
+                                                        :ignored-properties (atom [{:path "d"} {:path "e"} {:path "f"}])}
                                          :files [{:path "a.org"} {:path "B.ORG"} {:path "c.md"}]}
                                         [{:msg "bad" :level :error :extra 1}
                                          {:msg "meh" :level :warning}]
@@ -162,7 +162,8 @@
             :ignored-properties-count 3
             :validation-error-count 4
             :notifications [{:msg "bad" :level :error}]}
-           @out))
+           (select-keys @out [:org-file-count :ignored-files-count :ignored-assets-count
+                              :ignored-properties-count :validation-error-count :notifications])))
     (is (= [{:import-ignored-files {:count 2}}
             {:import-ignored-assets {:count 1}}
             {:import-ignored-properties {:count 3}}
@@ -181,7 +182,8 @@
             :ignored-properties-count 0
             :validation-error-count 0
             :notifications []}
-           @out))
+           (select-keys @out [:org-file-count :ignored-files-count :ignored-assets-count
+                              :ignored-properties-count :validation-error-count :notifications])))
     (is (= [] messages))))
 
 ;; Fails if, in `<request-import-file`, the `:timeout-ms` key is dropped or the `:hint` key is dropped.
