@@ -38,16 +38,17 @@ let file_ext path =
 
 let view ~path (_ms : Model.t Signal.signal) : t =
  fun ctx parent ->
+  let repo = Runtime.repo () in
   let content_st = Signal.state ctx.Lui_ui.ui_scheduler "" in
   let load_st = Signal.state ctx.Lui_ui.ui_scheduler Ui_effect.Loading in
   let debounced = Ui_services.timers_debounce 500 in
   (* save is controller-owned: a pending debounced write still lands
      after the view unmounts *)
-  let on_edit s = debounced (fun () -> save (Runtime.repo ()) path s) in
+  let on_edit s = debounced (fun () -> save repo path s) in
   Ui_effect.task ~scope:ctx.Lui_ui.ui_scope
     (Subs_state.task_of_promise
        (Runtime.invoke2 "thread-api/get-file-content"
-          (Wire.String (Runtime.repo ()))
+          (Wire.String repo)
           (Wire.String path)))
     ~ok:(fun w ->
       (match w with
