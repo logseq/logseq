@@ -380,6 +380,27 @@
        [page])
      (remove nil?))))
 
+(defn- recycled-root
+  "The entity in `entity`'s parent chain, itself included, that was put in the Recycle."
+  [entity]
+  (loop [entity entity
+         seen #{}]
+    (when (and entity (not (contains? seen (:db/id entity))))
+      (if (:logseq.property/deleted-at entity)
+        entity
+        (recur (:block/parent entity) (conj seen (:db/id entity)))))))
+
+(defn- recycled-parents-restore-tx
+  "Tx data restoring the recycled trees that existing `namespace-pages` lie in,
+  so a page created under them is not born inside the Recycle."
+  [db namespace-pages]
+  (->> namespace-pages
+       (filter de/entity?)
+       (filter ldb/recycled?)
+       (keep recycled-root)
+       (common-util/distinct-by :db/id)
+       (mapcat #(outliner-recycle/restore-tx-data db %))))
+
 (defn ^:large-vars/cleanup-todo ^:api create
   "Pure function without side effects"
   [db title*
@@ -492,6 +513,7 @@
                                          :tags resolved-tags
                                          :class-ident-namespace class-ident-namespace})
                 txs (concat
+                     (recycled-parents-restore-tx db parents')
                      ;; transact doesn't support entities
                      (remove de/entity? parents')
                      page-txs)
