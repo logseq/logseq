@@ -467,6 +467,7 @@
   can preview what an import would create and skip. Nothing is persisted."
   [config-file files opts]
   (let [conn (sqlite-export/create-conn)
+        initial-entity-ids (into #{} (map :e) (d/datoms @conn :eavt))
         notifications (atom [])
         options (-> opts
                     (assoc :notify-user #(swap! notifications conj %)
@@ -477,11 +478,16 @@
                                                    (<read-and-copy-import-asset nil file assets buffer-handler true))))]
     (p/let [result (gp-exporter/export-file-graph conn conn config-file files options)
             validation (worker-db-validate/validate-db conn :fix false :silent? true)
-            db @conn]
+            db @conn
+            imported-count (fn [attr]
+                             (transduce (remove #(contains? initial-entity-ids (:e %)))
+                                        (completing (fn [total _] (inc total)))
+                                        0
+                                        (d/datoms db :avet attr)))]
       (assoc (compact-import-result result @notifications validation)
-             :page-count (d/q '[:find (count ?p) . :where [?p :block/name _]] db)
-             :journal-count (d/q '[:find (count ?p) . :where [?p :block/journal-day _]] db)
-             :block-count (d/q '[:find (count ?b) . :where [?b :block/page _]] db)))))
+             :page-count (imported-count :block/name)
+             :journal-count (imported-count :block/journal-day)
+             :block-count (imported-count :block/page)))))
 
 
 (defn upsert-addr-content!

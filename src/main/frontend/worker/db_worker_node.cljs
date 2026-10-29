@@ -219,6 +219,7 @@
     :thread-api/db-sync-update-presence
     :thread-api/db-sync-ensure-user-rsa-keys
     :thread-api/list-db
+    :thread-api/scan-file-graph
     :thread-api/get-version
     :thread-api/set-context
     :thread-api/sync-app-state
