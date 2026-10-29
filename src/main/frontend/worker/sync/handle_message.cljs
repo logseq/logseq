@@ -157,6 +157,24 @@
             (sync-log-state/rtc-log :rtc.log/checksum-mismatch mismatch-data)
             (log/warn :db-sync/checksum-mismatch mismatch-data)))))))
 
+(def ^:private retryable-reject-flush-delay-ms 1000)
+
+(defn- retryable-tx-reject?
+  "A reject the server sends for a transient failure: the rejected txs are
+  still valid and must stay in the outbox to be sent again."
+  [message]
+  (or (true? (:retryable message))
+      (= "snapshot upload in progress" (:reason message))))
+
+(defn- retry-after-tx-reject!
+  "Keeps the rejected txs pending and sends them again: after a pull when the
+  server's t moved past ours, else after a delay."
+  [repo client remote-tx local-tx]
+  (if (and (number? remote-tx) (> remote-tx local-tx))
+    (request-pull! client local-tx)
+    (js/setTimeout #(sync-apply/enqueue-flush-pending! repo client)
+                   retryable-reject-flush-delay-ms)))
+
 (defn- handle-tx-reject!
   [repo client message local-tx]
   (sync-apply/clear-upload-response-timeout! client)
@@ -207,19 +225,28 @@
                             (seq missing-block-uuids) (assoc :missing-block-uuids (vec missing-block-uuids))
                             (contains? message :error-detail) (assoc :error-detail (:error-detail message))
                             (some? data) (assoc :data data))]
-        (if (or (contains? message :success-tx-ids)
-                (contains? message :failed-tx-id))
+        (if (retryable-tx-reject? message)
           (do
             (sync-apply/mark-pending-txs-false! repo successful-tx-ids)
-            (when failed-tx-id
-              (sync-apply/rollback-and-mark-failed-txs! repo [failed-tx-id])))
-          ;; Backward compatibility for older servers without per-tx reject metadata.
-          (sync-apply/rollback-and-mark-failed-txs! repo inflight))
-        (reset! (:inflight client) [])
-        (broadcast-rtc-state! client)
-        (sync-log-state/rtc-log :rtc.log/tx-rejected rejected-data)
-        (fail-fast :db-sync/tx-rejected
-                   rejected-data)))))
+            (reset! (:inflight client) [])
+            (broadcast-rtc-state! client)
+            (sync-log-state/rtc-log :rtc.log/tx-rejected rejected-data)
+            (log/warn :db-sync/tx-rejected-retryable rejected-data)
+            (retry-after-tx-reject! repo client remote-tx local-tx))
+          (do
+            (if (or (contains? message :success-tx-ids)
+                    (contains? message :failed-tx-id))
+              (do
+                (sync-apply/mark-pending-txs-false! repo successful-tx-ids)
+                (when failed-tx-id
+                  (sync-apply/rollback-and-mark-failed-txs! repo [failed-tx-id])))
+              ;; Backward compatibility for older servers without per-tx reject metadata.
+              (sync-apply/rollback-and-mark-failed-txs! repo inflight))
+            (reset! (:inflight client) [])
+            (broadcast-rtc-state! client)
+            (sync-log-state/rtc-log :rtc.log/tx-rejected rejected-data)
+            (fail-fast :db-sync/tx-rejected
+                       rejected-data)))))))
 
 (defn- handle-hello!
   [repo client local-tx remote-tx remote-checksum]
