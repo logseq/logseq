@@ -185,6 +185,17 @@
     (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
         "Imported graph validates")))
 
+(deftest-async date-page-file-and-an-alias-of-that-date-make-one-journal
+  (p/let [conn (export-file-graph-in-order! [["pages/Jan 5th, 2026.md" "- p"]
+                                             ["pages/w.md" "alias:: [[Jan 5th, 2026]]\n\n- w"]])
+          page (db-test/find-journal-by-journal-day @conn 20260105)
+          page-tags (set (map :db/ident (:block/tags page)))]
+    (is (= 1 (count (pages-named @conn "jan 5th, 2026"))) "There is one page for the date")
+    (is (= #{"p"} (page-block-titles page)) "The page file's blocks are on the journal")
+    (is (not (contains? page-tags :logseq.class/Page)) "The journal is not also tagged #Page")
+    (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+        "Imported graph validates")))
+
 (deftest-async alias-of-a-journal-imported-before-the-journal-file
   (p/let [conn (export-file-graph-in-order! [["pages/a.md" "alias:: [[Jan 5th, 2026]]\n\n- x"]
                                              ["journals/2026_01_05.md" "- j"]])

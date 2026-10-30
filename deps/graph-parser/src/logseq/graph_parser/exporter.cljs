@@ -2785,22 +2785,28 @@
          page))
      pages)))
 
-(defn- as-journal-of-this-import
-  "A page file named like a journal file of this import, e.g. pages/Dec 31st, 2025.md
-  next to journals/2025_12_31.md, is that journal whichever file is imported first.
-  The page is not recognized as a journal when the graph's journal title format
-  differs from the canonical title the journal files are indexed by."
-  [page journal-page-name-uuids]
-  (if-let [journal-uuid (and (not (:block/journal-day page))
-                             (get journal-page-name-uuids (:block/name page)))]
-    (if-let [journal-day (date-time-util/journal-title->int
-                          (:block/title page) [date-time-util/default-journal-title-formatter])]
-      (assoc page
-             :block/uuid journal-uuid
-             :block/journal-day journal-day
-             :block/tags (conj (vec (remove #{:logseq.class/Page} (:block/tags page))) :logseq.class/Journal))
-      page)
-    page))
+(defn- as-journal-page
+  "A pages/ file named like a journal day, e.g. pages/Dec 31st, 2025.md, is that
+  journal, as [[Dec 31st, 2025]] and an alias of that name are, whichever file is
+  imported first. Its title is that of a journal file of the import (indexed by the
+  canonical title) or a journal title in the graph's format."
+  [page journal-page-name-uuids date-formatter]
+  (if (:block/journal-day page)
+    page
+    (let [[title page-name day] (when date-formatter
+                                  (gp-block/convert-page-if-journal (:block/title page) date-formatter
+                                                                    {:export-to-db-graph? true}))
+          day (or day
+                  (when (contains? journal-page-name-uuids (:block/name page))
+                    (date-time-util/journal-title->int
+                     (:block/title page) [date-time-util/default-journal-title-formatter])))]
+      (if day
+        (cond-> (assoc page
+                       :block/uuid (common-uuid/gen-uuid :journal-page-uuid day)
+                       :block/journal-day day
+                       :block/tags (conj (vec (remove #{:logseq.class/Page} (:block/tags page))) :logseq.class/Journal))
+          page-name (assoc :block/title title :block/name page-name))
+        page))))
 
 (defn- build-pages-tx
   "Given all the pages and blocks parsed from a file, return a map containing
@@ -2832,7 +2838,8 @@
                        ;; sanitize alias declarations before transacting
                        (sanitize-page-aliases-for-import! (:alias-owners import-state)
                                                           (:ignored-properties import-state))
-                       (->> (map #(as-journal-of-this-import % journal-page-name-uuids))))
+                       (->> (map #(as-journal-page % journal-page-name-uuids
+                                                   (get-date-formatter (import-user-config options))))))
         ;; Build all named ents once per import file to speed up named lookups
         all-existing-page-uuids (get-page-names-to-uuids import-state)
         all-pages (map #(modify-page-tx % all-existing-page-uuids) all-pages*)
