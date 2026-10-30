@@ -593,6 +593,167 @@ abc
       (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
           "Imported graph validates"))))
 
+(defn- status-history
+  "Ordered [created-at status] pairs of a task's imported status history"
+  [db title]
+  (let [block (db-test/find-block-by-content db title)]
+    (->> (d/q '[:find ?h
+                :in $ ?b
+                :where [?h :logseq.property.history/block ?b]]
+              db (:db/id block))
+         (map (comp #(d/entity db %) first))
+         (sort-by :block/created-at)
+         (mapv (fn [h]
+                 (let [status (:logseq.property.history/ref-value h)]
+                   [(:block/created-at h)
+                    (or (some-> (:db/ident status) name (string/replace #"^status\." ""))
+                        (db-property/closed-value-content status))]))))))
+
+(defn- clock-ms
+  [y mo d h mi s]
+  (date-time-util/local-datetime->ms y mo d h mi s))
+
+(def ^:private clock-history-graph
+  (str
+   "- TODO todo one clock\n"
+   "  :LOGBOOK:\n"
+   "  CLOCK: [2024-01-03 Wed 10:00:15]--[2024-01-03 Wed 11:00:15] =>  01:00:00\n"
+   "  :END:\n"
+   "- DONE done two clocks\n"
+   "  :LOGBOOK:\n"
+   "  CLOCK: [2024-01-03 Wed 10:00:00]--[2024-01-03 Wed 11:00:00] =>  01:00:00\n"
+   "  CLOCK: [2024-01-03 Wed 13:00:00]--[2024-01-03 Wed 14:30:00] =>  01:30:00\n"
+   "  :END:\n"
+   "- DOING doing no logbook\n"
+   "- NOW now no logbook\n"
+   "- DOING doing completed only\n"
+   "  :LOGBOOK:\n"
+   "  CLOCK: [2024-01-03 Wed 10:00:00]--[2024-01-03 Wed 11:00:00] =>  01:00:00\n"
+   "  :END:\n"
+   "- NOW now completed only\n"
+   "  :LOGBOOK:\n"
+   "  CLOCK: [2024-01-03 Wed 10:00:00]--[2024-01-03 Wed 11:00:00] =>  01:00:00\n"
+   "  :END:\n"
+   "- DOING doing open final\n"
+   "  :LOGBOOK:\n"
+   "  CLOCK: [2024-01-03 Wed 10:00:00]--[2024-01-03 Wed 11:00:00] =>  01:00:00\n"
+   "  CLOCK: [2024-01-03 Wed 13:00:00]\n"
+   "  :END:\n"
+   "- TODO todo open inconsistent\n"
+   "  :LOGBOOK:\n"
+   "  CLOCK: [2024-01-03 Wed 13:00:00]\n"
+   "  :END:\n"
+   "- WAITING waiting completed\n"
+   "  :LOGBOOK:\n"
+   "  CLOCK: [2024-01-03 Wed 10:00:00]--[2024-01-03 Wed 11:00:00] =>  01:00:00\n"
+   "  :END:\n"
+   "- DONE duration shorter wins\n"
+   "  :LOGBOOK:\n"
+   "  CLOCK: [2024-01-03 Wed 10:00:00]--[2024-01-03 Wed 14:00:00] =>  01:15:00\n"
+   "  :END:\n"
+   "- DONE adjusted overlap\n"
+   "  :LOGBOOK:\n"
+   "  CLOCK: [2024-01-03 Wed 10:00:00]--[2024-01-03 Wed 11:00:00] =>  05:00:00\n"
+   "  CLOCK: [2024-01-03 Wed 13:00:00]--[2024-01-03 Wed 14:00:00] =>  01:00:00\n"
+   "  :END:\n"
+   "- DONE malformed clock line\n"
+   "  :LOGBOOK:\n"
+   "  CLOCK: [2024-01-03 Wed 10:00:00]--[2024-01-03 Wed 11:00:00] =>  01:00:00\n"
+   "  CLOCK: garbage\n"
+   "  :END:\n"
+   "- DONE adjacent boundary\n"
+   "  :LOGBOOK:\n"
+   "  CLOCK: [2024-01-03 Wed 10:00:00]--[2024-01-03 Wed 11:00:00] =>  01:00:00\n"
+   "  CLOCK: [2024-01-03 Wed 11:00:00]--[2024-01-03 Wed 12:00:00] =>  01:00:00\n"
+   "  :END:\n"
+   "- DONE two logbook drawers\n"
+   "  :LOGBOOK:\n"
+   "  CLOCK: [2024-01-03 Wed 07:00:00]--[2024-01-03 Wed 08:00:00] =>  01:00:00\n"
+   "  :END:\n"
+   "  :LOGBOOK:\n"
+   "  CLOCK: [2024-01-03 Wed 20:00:00]--[2024-01-03 Wed 21:00:00] =>  01:00:00\n"
+   "  :END:\n"
+   "- DONE zero-length then real\n"
+   "  :LOGBOOK:\n"
+   "  CLOCK: [2024-01-03 Wed 09:00:00]--[2024-01-03 Wed 09:00:00] =>  00:00:00\n"
+   "  CLOCK: [2024-01-03 Wed 10:00:00]--[2024-01-03 Wed 10:30:00] =>  00:30:00\n"
+   "  :END:\n"
+   "- TODO zero-length only\n"
+   "  :LOGBOOK:\n"
+   "  CLOCK: [2024-01-03 Wed 09:00:00]--[2024-01-03 Wed 09:00:00]\n"
+   "  :END:\n"
+   "- plain block with logbook\n"
+   "  :LOGBOOK:\n"
+   "  CLOCK: [2024-01-03 Wed 10:00:00]--[2024-01-03 Wed 11:00:00] =>  01:00:00\n"
+   "  :END:\n"))
+
+(deftest-async import-og-clock-history-disabled
+  (p/let [file (write-temp-graph-file "pages/clocks.md" clock-history-graph)
+          conn (db-test/create-conn)
+          _ (db-pipeline/add-listener conn)
+          {:keys [import-state]} (import-files-to-db [file] conn {})]
+    (is (empty? (d/q '[:find [?h ...] :where [?h :logseq.property.history/block]] @conn))
+        "No status history is created when the option is off")
+    (is (= :logseq.property/status.todo (:db/ident (block-status @conn "todo one clock"))))
+    (is (= "todo one clock" (:block/title (db-test/find-block-by-content @conn #"todo one clock")))
+        "Logbook text is still removed from the title")
+    (is (= 0 (:tasks-imported @(:clock-history import-state))))))
+
+(deftest-async import-og-clock-history-enabled
+  (p/let [file (write-temp-graph-file "pages/clocks.md" clock-history-graph)
+          conn (db-test/create-conn)
+          _ (db-pipeline/add-listener conn)
+          {:keys [import-state]} (import-files-to-db [file] conn {:import-clock-history? true})
+          t (fn [h m s] (clock-ms 2024 1 3 h m s))
+          history #(status-history @conn %)
+          report @(:clock-history import-state)]
+    (testing "completed clocks"
+      (is (= [[(t 10 0 15) "doing"] [(t 11 0 15) "todo"]] (history "todo one clock"))
+          "Seconds survive and a Todo task closes with Todo")
+      (is (= [[(t 10 0 0) "doing"] [(t 11 0 0) "todo"] [(t 13 0 0) "doing"] [(t 14 30 0) "done"]]
+             (history "done two clocks")))
+      (is (= [[(t 10 0 0) "doing"] [(t 11 15 0) "done"]] (history "duration shorter wins"))
+          "Printed duration wins over the recorded end")
+      (is (= [[(t 10 0 0) "doing"] [(t 11 0 0) "WAITING"]] (history "waiting completed"))
+          "A custom status closes the final interval"))
+    (testing "doing tasks"
+      (is (= [] (history "doing no logbook")) "No invented history")
+      (is (= [] (history "now no logbook")))
+      (is (= [[(t 10 0 0) "doing"] [(t 11 0 0) "todo"]] (history "doing completed only"))
+          "Last completed interval closes with Todo")
+      (is (= :logseq.property/status.doing (:db/ident (block-status @conn "doing completed only")))
+          "Current status stays Doing")
+      (is (= [[(t 10 0 0) "doing"] [(t 11 0 0) "todo"]] (history "now completed only")))
+      (is (= [[(t 10 0 0) "doing"] [(t 11 0 0) "todo"] [(t 13 0 0) "doing"]]
+             (history "doing open final"))
+          "An open final clock ends the history with a Doing event"))
+    (testing "tasks whose clocks can't be converted get no history"
+      (doseq [title ["todo open inconsistent" "adjusted overlap" "malformed clock line"]]
+        (is (= [] (history title)) title))
+      (is (= :logseq.property/status.todo (:db/ident (block-status @conn "todo open inconsistent")))
+          "Status is preserved"))
+    (testing "adjacent intervals keep strict order"
+      (is (= [[(t 10 0 0) "doing"] [(dec (t 11 0 0)) "todo"] [(t 11 0 0) "doing"] [(t 12 0 0) "done"]]
+             (history "adjacent boundary"))))
+    (testing "clocks in every logbook drawer of a task are imported"
+      (is (= [[(t 7 0 0) "doing"] [(t 8 0 0) "todo"] [(t 20 0 0) "doing"] [(t 21 0 0) "done"]]
+             (history "two logbook drawers"))))
+    (testing "zero-length clocks are ignored and never cost the task its other clocks"
+      (is (= [[(t 10 0 0) "doing"] [(t 10 30 0) "done"]] (history "zero-length then real")))
+      (is (= [] (history "zero-length only")))
+      (is (= :logseq.property/status.todo (:db/ident (block-status @conn "zero-length only")))))
+    (testing "non-task blocks acquire no history"
+      (is (empty? (task-blocks-by-title @conn "plain block with logbook")))
+      (is (= [] (history "plain block with logbook"))))
+    (testing "report"
+      (is (= {:tasks-imported 10 :tasks-skipped 3 :completed-sessions 13 :open-sessions 1}
+             (select-keys report [:tasks-imported :tasks-skipped :completed-sessions :open-sessions])))
+      (is (= #{:open-clock-inconsistent :overlapping-clocks :malformed-clock-line
+               :duration-adjusted :boundary-adjusted :zero-length-clock}
+             (set (map :type (:diagnostics report))))))
+    (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+        "Imported graph validates")))
+
 (deftest-async import-preserves-legacy-task-markers-as-status-choices
   (p/let [file (write-temp-graph-file
                  "pages/tasks.md"

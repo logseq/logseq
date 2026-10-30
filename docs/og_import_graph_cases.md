@@ -72,6 +72,16 @@ GitHub `logseq/db-test` issues with the `import` label were audited on 2026-06-2
 - Expected import behavior: keep both temporal dates, keep the repeat metadata attached to the repeated temporal property, and ensure the `repeat-type` built-in property exists so the imported DB validates.
 - Regression test: `logseq.graph-parser.exporter-test/import-repeated-deadline-and-scheduled`.
 
+### Task clock history (opt-in)
+
+- Source issue: [db-test#1474](https://github.com/logseq/db-test/issues/1474).
+- Case: an OG task has a `:LOGBOOK:` drawer with `CLOCK:` entries, and the import option "Import task clock history" is on. The option is off by default; with it off, no clock history is created and logbook text is only removed from the title.
+- Expected import behavior: DB task time is derived from status history, so each valid clock becomes a `Doing` history event at its start and a closing event at its end. Intermediate intervals close with `Todo`. The last completed interval closes with the task's imported status, or with `Todo` when that status is `Doing`, so no timer runs from an old end. A final open clock on a `Doing` task ends the history with a `Doing` event at its real start. A printed duration that disagrees with the recorded range wins over the recorded end. A task that has no clock entries gets no history, so a `Doing` task without clocks stays untimed.
+- A clock with the same start and end and no printed duration (or a printed zero) records no time. It is ignored and reported, and the task's other clocks are still imported. A zero-length range with a positive printed duration uses the duration.
+- Contradictory data is reported and the task gets no history, never a guess: unreadable clock lines, reversed or otherwise invalid ranges, overlapping intervals (after the printed duration is applied), more than one open clock, an open clock that is not last, an open clock on a task that is not `Doing`, and an unclosed drawer. Intervals that end exactly when the next one starts keep a strict order by closing the earlier one 1 ms early.
+- Timestamps are read in the machine's local time, and seconds are preserved. Times skipped by a daylight-saving change are rejected; a repeated hour resolves to its first occurrence.
+- Regression tests: `logseq.graph-parser.exporter.clock-test` (parsing, reconciliation, ordering and DST), `logseq.graph-parser.exporter-test/import-og-clock-history-enabled` and `import-og-clock-history-disabled`, and `frontend.worker.handler.clock-history-import-test` (derived time through `task-spent-time`).
+
 ### Linked external PDF annotations
 
 - Source issue: #923.
