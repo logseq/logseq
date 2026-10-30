@@ -540,6 +540,9 @@
    :extract-code-snippets?
    {:alias :C
     :desc "Extract code fence(s) to #Code"}
+   :import-clock-history?
+   {:alias :H
+    :desc "Convert OG task CLOCK entries to status history"}
    :validate
    {:alias :V
     :desc "Validate db after creation"}
@@ -596,6 +599,11 @@
         (println "Ignored assets:" (pr-str ignored-assets)))
       (when-let [ignored-files (seq @(:ignored-files import-state))]
         (println (count ignored-files) "ignored file(s):" (pr-str (vec ignored-files))))
+      (when (:import-clock-history? user-options)
+        (let [{:keys [diagnostics] :as report} @(:clock-history import-state)]
+          (println "Clock history:" (pr-str (dissoc report :diagnostics)))
+          (doseq [diagnostic diagnostics]
+            (println "  " (pr-str diagnostic)))))
       (when (:verbose options') (println "Transacted" (count (d/datoms @conn :eavt)) "datoms"))
       (println "Created graph" (str db-name "!"))
       (when (:profile options)

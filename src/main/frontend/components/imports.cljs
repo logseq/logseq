@@ -194,6 +194,7 @@
                    {:defaultValues {:graph-name initial-name
                                     :extract-code-snippets? false
                                     :convert-all-tags? false
+                                    :import-clock-history? false
                                     :tag-classes ""
                                     :remove-inline-tags? true
                                     :property-classes ""
@@ -233,6 +234,11 @@
                                                  (t :import/all-tags-desc)
                                                  (fn [_]
                                                    (set-convert-all-tags-input! (not convert-all-tags-input))))
+
+                          (import-checkbox-field "import-clock-history?"
+                                                 (t :import/clock-history-option)
+                                                 (t :import/clock-history-desc)
+                                                 nil)
 
                           (shui/form-field {:name "tag-classes"}
                                            (fn [field _error]
@@ -274,7 +280,13 @@
 ;; Ignored items and validation errors are reported by the import report
 ;; dialog; this only covers org files, which are not part of that report.
 (defn- validate-imported-data
-  [{:keys [org-file-count]}]
+  [{:keys [org-file-count clock-history]}]
+  (when clock-history
+    (let [{:keys [tasks-imported tasks-skipped completed-sessions open-sessions adjusted-count]} clock-history]
+      (notification/show! (t :import/clock-history-summary tasks-imported completed-sessions open-sessions
+                             adjusted-count tasks-skipped)
+                          (if (pos? (+ tasks-skipped adjusted-count)) :warning :info)
+                          false)))
   (when (pos? (or org-file-count 0))
     (notification/show! (t :import/org-files-imported org-file-count)
                         :info false))
@@ -333,9 +345,45 @@
        (when dispatch-key (str " [" (name dispatch-key) "]"))
        " — " errors))
 
+(defn- clock-ms-text
+  [ms]
+  (when ms
+    (.toLocaleString (js/Date. ms) js/undefined #js {:dateStyle "medium" :timeStyle "medium"})))
+
+(defn- clock-history-reason-text
+  [{:keys [type recorded-end effective-end printed-duration raw]}]
+  (case type
+    :duration-adjusted (t :import.clock-history/duration-adjusted printed-duration
+                          (clock-ms-text recorded-end) (clock-ms-text effective-end))
+    :boundary-adjusted (t :import.clock-history/boundary-adjusted)
+    :invalid-duration (t :import.clock-history/invalid-duration printed-duration)
+    :invalid-recorded-end (t :import.clock-history/invalid-recorded-end)
+    :invalid-range (t :import.clock-history/invalid-range)
+    :malformed-clock-line (t :import.clock-history/malformed-clock-line raw)
+    :malformed-logbook (t :import.clock-history/malformed-logbook)
+    :overlapping-clocks (t :import.clock-history/overlapping-clocks)
+    :multiple-open-clocks (t :import.clock-history/multiple-open-clocks)
+    :open-clock-not-final (t :import.clock-history/open-clock-not-final)
+    :open-clock-inconsistent (t :import.clock-history/open-clock-inconsistent)
+    :zero-length-clock (t :import.clock-history/zero-length-clock)
+    (str type)))
+
+(defn- clock-history-item-md
+  [{:keys [title file] :as item}]
+  (str "`" (or (not-empty title) (t :import/report-untitled-task)) "`"
+       (when file (str " (" file ")"))
+       " — " (clock-history-reason-text item)))
+
+(defn- clock-history-item-view
+  [{:keys [title file] :as item}]
+  [:span
+   [:code (or (not-empty title) (t :import/report-untitled-task))]
+   (when file [:span.text-xs.text-muted-foreground.ml-1 (str "(" file ")")])
+   (str " — " (clock-history-reason-text item))])
+
 (defn- build-import-report-md
   [{:keys [ignored-files-detail ignored-assets-detail ignored-properties-detail
-           validation-errors-detail notifications]}]
+           validation-errors-detail clock-history-detail notifications]}]
   (str "# " (t :import/report-title) "\n\n"
        (when (seq ignored-files-detail)
          (str "## " (t :import/report-ignored-files) "\n\n"
@@ -349,6 +397,9 @@
        (when (seq validation-errors-detail)
          (str "## " (t :import/report-validation-errors) "\n\n"
               (import-report-items-md validation-errors-detail validation-error-md) "\n\n"))
+       (when (seq clock-history-detail)
+         (str "## " (t :import/report-clock-history) "\n\n"
+              (import-report-items-md clock-history-detail clock-history-item-md) "\n\n"))
        (when (seq notifications)
          (str "## " (t :import/report-errors) "\n\n"
               (import-report-items-md notifications :msg) "\n\n"))))
@@ -410,7 +461,7 @@
 (hsx/defc import-report-dialog
   [import-result]
   (let [{:keys [ignored-files-detail ignored-assets-detail ignored-properties-detail
-                validation-errors-detail notifications]} import-result]
+                validation-errors-detail clock-history-detail notifications]} import-result]
     [:div.container
      [:div.sm:flex.sm:items-start
       [:div.mt-3.text-center.sm:mt-0.sm:text-left
@@ -429,6 +480,9 @@
       (import-report-section (t :import/report-validation-errors)
                              validation-errors-detail
                              validation-error-item-view)
+      (import-report-section (t :import/report-clock-history)
+                             clock-history-detail
+                             clock-history-item-view)
       (import-report-section (t :import/report-errors)
                              notifications
                              notification-item-view)]
@@ -442,9 +496,10 @@
 (defn- import-report-needed?
   [{:keys [ignored-files-count ignored-assets-count ignored-properties-count validation-error-count
            ignored-files-detail ignored-assets-detail ignored-properties-detail
-           validation-errors-detail notifications]}]
+           validation-errors-detail clock-history-detail notifications]}]
   (boolean (or (seq ignored-files-detail) (seq ignored-assets-detail)
                (seq ignored-properties-detail) (seq validation-errors-detail)
+               (seq clock-history-detail)
                (seq notifications)
                (pos? (or ignored-files-count 0)) (pos? (or ignored-assets-count 0))
                (pos? (or ignored-properties-count 0)) (pos? (or validation-error-count 0)))))

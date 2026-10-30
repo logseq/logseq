@@ -38,6 +38,7 @@
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.emoji-data :as emoji-data]
+            [logseq.graph-parser.exporter.clock :as clock]
             [logseq.graph-parser.exporter.finalize :as exporter-finalize]
             [logseq.graph-parser.extract :as extract]
             [logseq.graph-parser.import-profile :as import-profile]
@@ -2340,6 +2341,60 @@
     {:block-after-built-in-props block-after-built-in-props
      :properties-tx (concat properties-tx deadline-properties-tx)}))
 
+(defn- logbook-lines
+  "Raw lines of the first logbook drawer in a block's ast, or nil"
+  [ast-blocks]
+  (some (fn [ast]
+          (when (and (= "Drawer" (first ast)) (= "logbook" (string/lower-case (str (second ast)))))
+            (nth ast 2)))
+        ast-blocks))
+
+(defn- unclosed-logbook?
+  [ast-blocks]
+  (and (not (logbook-lines ast-blocks))
+       (boolean (re-find #"(?i):LOGBOOK:" (pr-str ast-blocks)))))
+
+(defn- record-clock-history!
+  [{:keys [import-state file]} block {:keys [skip? events diagnostics completed-sessions open-sessions]}]
+  (let [entry-context {:file file :block-uuid (:block/uuid block) :title (:block/title block)}]
+    (swap! (:clock-history import-state)
+           (fn [report]
+             (cond-> (update report :diagnostics into (map #(merge entry-context %) diagnostics))
+               skip? (update :tasks-skipped inc)
+               (and (not skip?) (seq events)) (-> (update :tasks-imported inc)
+                               (update :completed-sessions + completed-sessions)
+                               (update :open-sessions + open-sessions)))))))
+
+(defn- build-clock-history-tx
+  "Converts a task's OG logbook CLOCK entries into status history entities when
+  the :import-clock-history? option is on. Returns tx data. Tasks without
+  clock entries, or whose clocks can't be converted without guessing, get no
+  history; the latter are reported in the import state."
+  [block ast-blocks options]
+  (let [status (:logseq.property/status block)]
+    (when (and (get-in options [:user-options :import-clock-history?]) status)
+      (let [lines (logbook-lines ast-blocks)
+            result (cond
+                     lines
+                     (clock/build-history lines
+                                          {:status status
+                                           :doing? (= status :logseq.property/status.doing)}
+                                          {:todo :logseq.property/status.todo
+                                           :doing :logseq.property/status.doing})
+                     (unclosed-logbook? ast-blocks)
+                     {:skip? true :diagnostics [{:type :malformed-logbook}]})]
+        (when result
+          (record-clock-history! options block result)
+          (when-not (:skip? result)
+            (mapv (fn [{:keys [ms status]}]
+                    {:block/uuid (common-uuid/gen-uuid)
+                     :block/created-at ms
+                     :block/updated-at ms
+                     :logseq.property.history/block [:block/uuid (:block/uuid block)]
+                     :logseq.property.history/property :logseq.property/status
+                     :logseq.property.history/ref-value status})
+                  (:events result))))))))
+
 (defn- complete-block-tx-data
   [db block* block-after-assets pre-blocks per-file-state walked-ast-blocks
    {:keys [import-state journal-created-ats] :as options}
@@ -2366,12 +2421,14 @@
                    (dissoc :block/format :block.temp/ast-blocks))
         embed-links (:block.temp/embed-links block')
         [final-block code-children-tx] (handle-code-blocks (dissoc block' :block.temp/embed-links) options)
-        embed-children (mapv #(build-embed-child-block final-block %) embed-links)]
+        embed-children (mapv #(build-embed-child-block final-block %) embed-links)
+        clock-history-tx (build-clock-history-tx block' (:block.temp/ast-blocks block*) options)]
     (when (seq embed-children)
       (swap! (:embed-child-uuids import-state) into (map :block/uuid embed-children)))
     (concat properties-tx asset-blocks-tx [final-block]
             embed-children
-            code-children-tx)))
+            code-children-tx
+            clock-history-tx)))
 
 (defn- import-progress!
   [options m]
@@ -2870,7 +2927,11 @@
    ;; Block uuids referenced during import; used for targeted missing-ref cleanup.
    :placeholder-ref-uuids (atom #{})
    ;; Generated embed children can be removed when their targets remain unresolved.
-   :embed-child-uuids (atom #{})})
+   :embed-child-uuids (atom #{})
+   ;; Counts and diagnostics for :import-clock-history?
+   :clock-history (atom {:tasks-imported 0 :tasks-skipped 0
+                         :completed-sessions 0 :open-sessions 0
+                         :diagnostics []})})
 
 (defn- build-tx-options [{:keys [user-options] :as options}]
   (merge
