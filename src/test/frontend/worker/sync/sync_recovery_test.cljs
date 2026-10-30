@@ -33,6 +33,8 @@
     (.get stmt (str tx-id))))
 
 (defn- setup-parent-child
+  "A graph that syncs: it has :logseq.kv/graph-remote?, as upload and download
+  set, so its local txs get the client-op rows these tests read."
   []
   (let [conn (db-test/create-conn-with-blocks
               {:pages-and-blocks
@@ -41,6 +43,7 @@
                            :build/children [{:block/title "child 1"}
                                             {:block/title "child 2"}
                                             {:block/title "child 3"}]}]}]})]
+    (d/transact! conn [(sqlite-util/kv :logseq.kv/graph-remote? true)] {:persist-op? false})
     {:conn conn
      :client-ops-conn (new-client-ops-db)
      :parent (db-test/find-block-by-content @conn "parent")
