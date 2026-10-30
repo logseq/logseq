@@ -666,6 +666,13 @@ abc
    "  CLOCK: [2024-01-03 Wed 10:00:00]--[2024-01-03 Wed 11:00:00] =>  01:00:00\n"
    "  CLOCK: [2024-01-03 Wed 11:00:00]--[2024-01-03 Wed 12:00:00] =>  01:00:00\n"
    "  :END:\n"
+   "- DONE two logbook drawers\n"
+   "  :LOGBOOK:\n"
+   "  CLOCK: [2024-01-03 Wed 07:00:00]--[2024-01-03 Wed 08:00:00] =>  01:00:00\n"
+   "  :END:\n"
+   "  :LOGBOOK:\n"
+   "  CLOCK: [2024-01-03 Wed 20:00:00]--[2024-01-03 Wed 21:00:00] =>  01:00:00\n"
+   "  :END:\n"
    "- DONE zero-length then real\n"
    "  :LOGBOOK:\n"
    "  CLOCK: [2024-01-03 Wed 09:00:00]--[2024-01-03 Wed 09:00:00] =>  00:00:00\n"
@@ -728,6 +735,9 @@ abc
     (testing "adjacent intervals keep strict order"
       (is (= [[(t 10 0 0) "doing"] [(dec (t 11 0 0)) "todo"] [(t 11 0 0) "doing"] [(t 12 0 0) "done"]]
              (history "adjacent boundary"))))
+    (testing "clocks in every logbook drawer of a task are imported"
+      (is (= [[(t 7 0 0) "doing"] [(t 8 0 0) "todo"] [(t 20 0 0) "doing"] [(t 21 0 0) "done"]]
+             (history "two logbook drawers"))))
     (testing "zero-length clocks are ignored and never cost the task its other clocks"
       (is (= [[(t 10 0 0) "doing"] [(t 10 30 0) "done"]] (history "zero-length then real")))
       (is (= [] (history "zero-length only")))
@@ -736,7 +746,7 @@ abc
       (is (empty? (task-blocks-by-title @conn "plain block with logbook")))
       (is (= [] (history "plain block with logbook"))))
     (testing "report"
-      (is (= {:tasks-imported 9 :tasks-skipped 3 :completed-sessions 11 :open-sessions 1}
+      (is (= {:tasks-imported 10 :tasks-skipped 3 :completed-sessions 13 :open-sessions 1}
              (select-keys report [:tasks-imported :tasks-skipped :completed-sessions :open-sessions])))
       (is (= #{:open-clock-inconsistent :overlapping-clocks :malformed-clock-line
                :duration-adjusted :boundary-adjusted :zero-length-clock}

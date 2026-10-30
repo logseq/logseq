@@ -2341,13 +2341,16 @@
     {:block-after-built-in-props block-after-built-in-props
      :properties-tx (concat properties-tx deadline-properties-tx)}))
 
+(defn- logbook-drawer?
+  [ast]
+  (and (= "Drawer" (first ast))
+       (= "logbook" (string/lower-case (str (second ast))))))
+
 (defn- logbook-lines
-  "Raw lines of the first logbook drawer in a block's ast, or nil"
+  "Raw lines of every logbook drawer in a block's ast, in source order, or nil"
   [ast-blocks]
-  (some (fn [ast]
-          (when (and (= "Drawer" (first ast)) (= "logbook" (string/lower-case (str (second ast)))))
-            (nth ast 2)))
-        ast-blocks))
+  (when-let [drawers (seq (filter logbook-drawer? ast-blocks))]
+    (mapcat #(nth % 2) drawers)))
 
 (defn- unclosed-logbook?
   [ast-blocks]

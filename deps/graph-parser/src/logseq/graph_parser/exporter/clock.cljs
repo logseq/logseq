@@ -11,7 +11,7 @@
   `build-history` runs all three. Anything that cannot be converted without
   guessing skips the whole task's history and is reported."
   (:require [clojure.string :as string]
-            [logseq.common.util.date-time :as date-time]))
+            [logseq.common.util.date-time :as date-time-util]))
 
 (def ^:private timestamp-re
   ;; [2021-11-07 Sun 12:00:15] with optional weekday and optional seconds
@@ -28,9 +28,9 @@
 (defn- parse-int [s] (when s (js/parseInt s 10)))
 
 (defn- groups->ms
-  [[year month day hour minute second]]
-  (date-time/local-datetime->ms (parse-int year) (parse-int month) (parse-int day)
-                                (parse-int hour) (parse-int minute) (or (parse-int second) 0)))
+  [[year month day hour minute sec]]
+  (date-time-util/local-datetime->ms (parse-int year) (parse-int month) (parse-int day)
+                                     (parse-int hour) (parse-int minute) (or (parse-int sec) 0)))
 
 (defn parse-duration-ms
   "Parses a printed duration such as `06:00:00`, `51:30:00` or `1:30`. Hours
@@ -176,10 +176,14 @@
   (let [open (filter :open? intervals)]
     (cond
       (> (count open) 1)
-      {:type :multiple-open-clocks :source-indexes (mapv :source-index open)}
+      {:type :multiple-open-clocks
+       :source-indexes (mapv :source-index open)
+       :starts (mapv :start open)}
 
       (and (seq open) (not (:open? (peek intervals))))
-      {:type :open-clock-not-final :source-index (:source-index (first open))}
+      {:type :open-clock-not-final
+       :source-index (:source-index (first open))
+       :start (:start (first open))}
 
       :else
       (some (fn [[a b]]
@@ -217,7 +221,8 @@
       (and open? (not doing?))
       {:skip? true
        :diagnostics [{:type :open-clock-inconsistent
-                      :source-index (:source-index (peek intervals))}]}
+                      :source-index (:source-index (peek intervals))
+                      :start (:start (peek intervals))}]}
 
       :else
       (let [last-idx (dec (count intervals))

@@ -350,8 +350,12 @@
   (when ms
     (.toLocaleString (js/Date. ms) js/undefined #js {:dateStyle "medium" :timeStyle "medium"})))
 
+(defn- clock-range-text
+  [{:keys [start end]}]
+  (str (clock-ms-text start) " – " (clock-ms-text end)))
+
 (defn- clock-history-reason-text
-  [{:keys [type recorded-end effective-end printed-duration raw]}]
+  [{:keys [type recorded-end effective-end printed-duration raw start starts] :as diagnostic}]
   (case type
     :duration-adjusted (t :import.clock-history/duration-adjusted printed-duration
                           (clock-ms-text recorded-end) (clock-ms-text effective-end))
@@ -361,10 +365,13 @@
     :invalid-range (t :import.clock-history/invalid-range)
     :malformed-clock-line (t :import.clock-history/malformed-clock-line raw)
     :malformed-logbook (t :import.clock-history/malformed-logbook)
-    :overlapping-clocks (t :import.clock-history/overlapping-clocks)
-    :multiple-open-clocks (t :import.clock-history/multiple-open-clocks)
-    :open-clock-not-final (t :import.clock-history/open-clock-not-final)
-    :open-clock-inconsistent (t :import.clock-history/open-clock-inconsistent)
+    :overlapping-clocks (t :import.clock-history/overlapping-clocks
+                           (clock-range-text (:first diagnostic))
+                           (clock-range-text (:second diagnostic)))
+    :multiple-open-clocks (t :import.clock-history/multiple-open-clocks
+                            (string/join ", " (map clock-ms-text starts)))
+    :open-clock-not-final (t :import.clock-history/open-clock-not-final (clock-ms-text start))
+    :open-clock-inconsistent (t :import.clock-history/open-clock-inconsistent (clock-ms-text start))
     :zero-length-clock (t :import.clock-history/zero-length-clock)
     (str type)))
 
