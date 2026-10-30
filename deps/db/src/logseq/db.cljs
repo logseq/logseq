@@ -190,6 +190,20 @@
       (catch :default e
         (log/error :reload-conn-from-storage-failed {:error (str e)})))))
 
+(defn- transact-reloading-on-failure!
+  "d/transact! for a write that skips the pipeline. d/transact! stores before it
+  runs the listeners, so an error after the conn changed may come from its
+  store: then continue from what the storage holds."
+  [conn db tx-data tx-meta]
+  (try
+    (d/transact! conn tx-data tx-meta)
+    (catch :default e
+      (when (and (not (identical? db @conn))
+                 (not (:skip-store? @conn))
+                 (not (:skip-store? tx-meta)))
+        (reload-conn-from-storage! conn))
+      (throw e))))
+
 (defn- transact-sync
   [conn tx-data tx-meta]
   (try
@@ -224,16 +238,7 @@
 
               :else
               tx-report))
-          (try
-            (d/transact! conn tx-data tx-meta)
-            (catch :default e
-              ;; d/transact! stores before it runs the listeners, so an error
-              ;; after the conn changed may come from its store
-              (when (and (not (identical? db @conn))
-                         (not (:skip-store? @conn))
-                         (not (:skip-store? tx-meta)))
-                (reload-conn-from-storage! conn))
-              (throw e))))))
+          (transact-reloading-on-failure! conn db tx-data tx-meta))))
     (catch :default e
       (when-not (or (:db-sync/suppress-transact-failed-log? tx-meta)
                     (and (:db-sync/suppress-stale-rebase-transact-failed-log? tx-meta)
