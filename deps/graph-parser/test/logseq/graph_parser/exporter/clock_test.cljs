@@ -1,6 +1,6 @@
 (ns logseq.graph-parser.exporter.clock-test
   (:require [cljs.test :refer [deftest is testing use-fixtures]]
-            [logseq.common.util.date-time :as date-time]
+            [logseq.common.util.date-time :as date-time-util]
             [logseq.graph-parser.exporter.clock :as clock]))
 
 (def ^:private refs {:todo :todo :doing :doing})
@@ -19,7 +19,7 @@
 
 (use-fixtures :once with-tz)
 
-(defn- ms [y mo d h mi s] (date-time/local-datetime->ms y mo d h mi s))
+(defn- ms [y mo d h mi s] (date-time-util/local-datetime->ms y mo d h mi s))
 
 (defn- history
   [lines status]
@@ -266,3 +266,21 @@
     (let [r (history [zero "CLOCK: [2024-01-03 Wed 19:00:00]"] :todo)]
       (is (:skip? r))
       (is (some #{:open-clock-inconsistent} (diag-types r))))))
+
+(deftest diagnostics-identify-the-entries-test
+  (testing "overlap names both ranges"
+    (let [r (history ["CLOCK: [2024-01-03 Wed 10:00:00]--[2024-01-03 Wed 12:00:00]"
+                      "CLOCK: [2024-01-03 Wed 11:00:00]--[2024-01-03 Wed 13:00:00]"] :done)
+          d (first (:diagnostics r))]
+      (is (= :overlapping-clocks (:type d)))
+      (is (= {:start t10 :end (ms 2024 1 3 12 0 0)} (:first d)))
+      (is (= {:start t11 :end (ms 2024 1 3 13 0 0)} (:second d)))))
+  (testing "open-clock problems carry the start of the open clock"
+    (is (= [t10 t13]
+           (:starts (first (:diagnostics (history ["CLOCK: [2024-01-03 Wed 10:00:00]"
+                                                   "CLOCK: [2024-01-03 Wed 13:00:00]"] :doing))))))
+    (is (= t10
+           (:start (first (:diagnostics (history ["CLOCK: [2024-01-03 Wed 10:00:00]"
+                                                  "CLOCK: [2024-01-03 Wed 13:00:00]--[2024-01-03 Wed 14:00:00]"] :doing))))))
+    (is (= t13
+           (:start (first (:diagnostics (history ["CLOCK: [2024-01-03 Wed 13:00:00]"] :done))))))))

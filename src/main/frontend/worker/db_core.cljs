@@ -270,11 +270,18 @@
   "Diagnostics for tasks whose history was imported with a changed value"
   [:duration-adjusted :boundary-adjusted :invalid-duration :invalid-recorded-end])
 
+(defn- clock-history-activity?
+  "The exporter always keeps a clock-history record, so only report it when the
+  option produced something to report"
+  [{:keys [tasks-imported tasks-skipped diagnostics]}]
+  (boolean (or (pos? (or tasks-imported 0)) (pos? (or tasks-skipped 0)) (seq diagnostics))))
+
 (defn- compact-clock-diagnostic
   "Identify the task and the clock values involved. Free text is bounded."
   [{:keys [file title raw] :as diagnostic}]
   (cond-> (select-keys diagnostic [:type :recorded-start :recorded-end :effective-end
-                                   :printed-duration :boundary])
+                                   :printed-duration :boundary :start :starts
+                                   :first :second :source-index :source-indexes])
     file (assoc :file (truncate-import-text file 300))
     title (assoc :title (truncate-import-text title 200))
     raw (assoc :raw (truncate-import-text (string/trim raw) 200))))
@@ -298,7 +305,7 @@
       (log/error :import-ignored-properties {:count (count ignored-props)}))
     (when (seq (:errors validation))
       (log/error :import-validation-errors {:count (count (:errors validation))}))
-    {:clock-history (when clock-history
+    {:clock-history (when (clock-history-activity? clock-history)
                       (let [diagnostic-types (frequencies (map :type (:diagnostics clock-history)))]
                         {:tasks-imported (:tasks-imported clock-history)
                          :tasks-skipped (:tasks-skipped clock-history)
