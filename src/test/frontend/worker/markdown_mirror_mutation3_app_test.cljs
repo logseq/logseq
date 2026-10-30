@@ -1,6 +1,7 @@
 (ns frontend.worker.markdown-mirror-mutation3-app-test
   "Third-run mutation tests for frontend.worker.markdown-mirror."
   (:require [cljs.test :refer [async deftest is testing]]
+            [clojure.string :as string]
             [datascript.core :as d]
             [frontend.worker.markdown-mirror :as markdown-mirror]
             [logseq.db.test.helper :as db-test]
@@ -87,6 +88,13 @@
 ;; ---------------------------------------------------------------------------
 ;; stem index
 
+(defn- stem-entry
+  "The page uuids the stem index holds for `stem`, whether it keys stems as
+  written or lower-cased (pages differing only in case share one file name)."
+  [index stem]
+  (some (fn [[k uuids]] (when (= (string/lower-case k) (string/lower-case stem)) uuids))
+        index))
+
 ;; Fails if, in `non-journal-page?`, `and` becomes `or`.
 ;; Fails if, in `update-stem-index`, `when` becomes `when-not`, the body becomes `nil`, `:block/title` becomes `:block/uuid` or `:block/uuid` becomes `:block/_parent`.
 (deftest update-stem-index-moves-renamed-pages-and-ignores-blocks-and-journals-test
@@ -112,14 +120,14 @@
                                       :block/title "Other" :block/name "other"}]))
         index-after (update-stem-index index-before db-before db-after
                                        [(:db/id solo) (:db/id dup-two) (:db/id solo-child)])]
-    (is (= #{uuid-1 uuid-2} (get index-before "Dup")))
-    (is (not (contains? index-before (:block/title journal))))
-    (is (not (contains? index-before "solo child")))
-    (is (not (contains? index-after "Solo")))
-    (is (= #{(:block/uuid solo)} (get index-after "Renamed")))
-    (is (= #{uuid-1} (get index-after "Dup")))
-    (is (= #{uuid-2} (get index-after "Other")))
-    (is (not (contains? index-after "solo child")))))
+    (is (= #{uuid-1 uuid-2} (stem-entry index-before "Dup")))
+    (is (nil? (stem-entry index-before (:block/title journal))))
+    (is (nil? (stem-entry index-before "solo child")))
+    (is (nil? (stem-entry index-after "Solo")))
+    (is (= #{(:block/uuid solo)} (stem-entry index-after "Renamed")))
+    (is (= #{uuid-1} (stem-entry index-after "Dup")))
+    (is (= #{uuid-2} (stem-entry index-after "Other")))
+    (is (nil? (stem-entry index-after "solo child")))))
 
 ;; Fails if, in `pages-with-file-stem`, the `(sort-by (comp str :block/uuid))` step is dropped or `:block/uuid` becomes `:block/_parent`.
 (deftest same-title-pages-are-ordered-by-uuid-not-creation-test
