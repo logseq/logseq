@@ -3324,6 +3324,70 @@
 ;; Higher level export fns
 ;; =======================
 
+(defn- unwrap-error
+  "nbb/sci rethrows as :sci/error and keeps the original as the cause."
+  [error]
+  (if (and error (= :sci/error (:type (ex-data error))) (ex-cause error))
+    (unwrap-error (ex-cause error))
+    error))
+
+(defn error-str
+  "Readable message from an Error, ExceptionInfo, or other thrown value."
+  [error]
+  (let [error (unwrap-error error)]
+    (or (ex-message error)
+        (when (instance? js/Error error)
+          (.-message error))
+        (when (string? error) error)
+        (try (pr-str error)
+             (catch :default _ "[unprintable error]")))))
+
+(defn file-import-error?
+  [error]
+  (let [error (unwrap-error error)]
+    (or (= :file-graph-import/file-failed (:code (ex-data error)))
+        (true? (gobj/get error "logseqFileImportError")))))
+
+(defn file-import-error
+  "Transit-safe ExceptionInfo attributing an import failure to a graph-relative file."
+  ([path error]
+   (file-import-error path error nil))
+  ([path error {:keys [block line]}]
+   (let [error (unwrap-error error)
+         data (ex-data error)
+         reason (if (file-import-error? error)
+                  (or (:reason data) (error-str error))
+                  (error-str error))
+         path (or path (:path data) (gobj/get error "logseqImportPath"))
+         block (or block (:block data) (:block/title data))
+         location (cond-> (or path "")
+                    (and (string? block) (not (string/blank? block)))
+                    (str " (block " (pr-str block) ")")
+                    line
+                    (str ":" line))
+         message (if (string/blank? location)
+                   reason
+                   (if (and (string? reason) (string/includes? reason (str path)))
+                     reason
+                     (str location ": " reason)))
+         import-error (ex-info message
+                               (cond-> {:code :file-graph-import/file-failed
+                                        :reason reason}
+                                 (and (string? path) (not (string/blank? path))) (assoc :path path)
+                                 (some? block) (assoc :block (str block))
+                                 (some? line) (assoc :line line)))]
+     ;; nbb can drop ex-data across promise boundaries; keep a JS flag too.
+     (gobj/set import-error "logseqFileImportError" true)
+     (when (and (string? path) (not (string/blank? path)))
+       (gobj/set import-error "logseqImportPath" path))
+     import-error)))
+
+(defn- import-file-display-path
+  [file options]
+  (or (when-let [rk (:rpath-key options)]
+        (get file rk))
+      (:path file)))
+
 (defn- export-doc-file
   [{:keys [path idx] :as file} conn <read-file
    {:keys [notify-user set-ui-state <export-file <get-file-stat]
@@ -3358,12 +3422,19 @@
         ;; returning val results in smoother ui updates
         m)
       (p/catch (fn [error]
-                 (notify-user {:msg (str "Import failed on " (pr-str path) " with error:\n" (.-message error))
-                               :level :error
-                               :ex-data {:path path :error error}})
-                 (when-let [ignored-files (get-in options [:import-state :ignored-files])]
-                   (swap! ignored-files conj {:path path :reason :export-failed}))
-                 nil))))
+                 (let [display-path (import-file-display-path file options)
+                       import-error (if (file-import-error? error)
+                                      error
+                                      (file-import-error display-path error))]
+                   (js/console.error error)
+                   (notify-user {:msg (ex-message import-error)
+                                 :level :error
+                                 :ex-data (assoc (ex-data import-error) :error error)})
+                   (when-let [ignored-files (get-in options [:import-state :ignored-files])]
+                     (swap! ignored-files conj {:path display-path :reason :export-failed}))
+                   (if (false? (:fail-fast? options))
+                     nil
+                     (throw import-error)))))))
 
 
 (defn export-doc-files
@@ -3415,10 +3486,13 @@
                                                {:entities :post-doc-files})))]
                     cleanup-tx-report)))
         (p/catch (fn [e]
-                   (notify-user {:msg (str "Import has unexpected error:\n" (.-message e))
-                                 :level :error
-                                 :ex-data {:error e}})
-                   (throw e)))))))
+                   (when-not (file-import-error? e)
+                     (notify-user {:msg (str "Import has unexpected error:\n" (error-str e))
+                                   :level :error
+                                   :ex-data {:error e}}))
+                   (throw (if (file-import-error? e)
+                            e
+                            (file-import-error nil e)))))))))
 
 (defn- default-save-file [conn path content]
   (ldb/transact! conn [{:file/path path
@@ -3665,7 +3739,8 @@
        :import-state (new-import-state)
        :macros (or (:macros options) (:macros config))}
       (merge (select-keys options [:set-ui-state :<export-file :notify-user :<get-file-stat :on-tx-report
-                                   :import-watchdog :log-fn :import-timeout-ms :import-heartbeat-ms]))))
+                                   :import-watchdog :log-fn :import-timeout-ms :import-heartbeat-ms
+                                   :fail-fast? :rpath-key]))))
 
 (defn- move-top-parent-pages-to-library
   [conn repo-or-conn]
@@ -3753,8 +3828,9 @@
   "Exports a file graph into a DB graph. Files is a seq of maps with :path.
   Options include :set-ui-state, :notify-user, :log-fn, :rpath-key, :<read-file,
   :<get-file-stat, :default-config, :user-options, :<save-config-file,
-  :<save-logseq-file, :<read-and-copy-asset, :import-timeout-ms, and
-  :import-heartbeat-ms. See export-doc-files for additional options."
+  :<save-logseq-file, :<read-and-copy-asset, :import-timeout-ms,
+  :import-heartbeat-ms, and :fail-fast? (default true). See export-doc-files
+  for additional options."
   [repo-or-conn conn config-file *files {:keys [<read-file <read-and-copy-asset rpath-key log-fn import-timeout-ms import-heartbeat-ms verbose]
                                          :or {rpath-key :path
                                               verbose false}
@@ -3801,8 +3877,11 @@
         (p/catch (fn [e]
                    (reset! gp-block/*export-to-db-graph? false)
                    (js/console.error e)
-                   ((:notify-user options)
-                    {:msg (str "Import has unexpected error:\n" (.-message e))
-                     :level :error
-                     :ex-data {:error e}})
-                   (throw e))))))
+                   (when-not (file-import-error? e)
+                     (when-let [notify (:notify-user options)]
+                       (notify {:msg (str "Import has unexpected error:\n" (error-str e))
+                                :level :error
+                                :ex-data {:error e}})))
+                   (throw (if (file-import-error? e)
+                            e
+                            (file-import-error nil e))))))))
