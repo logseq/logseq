@@ -582,7 +582,8 @@
                        true
                        (set/rename-keys {:all-tags :convert-all-tags? :remove-inline-tags :remove-inline-tags?}))
         _ (when (:verbose options) (prn :options user-options))
-        options' (merge {:user-options user-options}
+        options' (merge {:user-options user-options
+                         :fail-fast? (not (:continue options))}
                         (select-keys options [:files :verbose :continue :debug :validate :profile :profile-out]))
         profile-started (when (:profile options) (now-ms))]
     (p/let [{:keys [import-state]}

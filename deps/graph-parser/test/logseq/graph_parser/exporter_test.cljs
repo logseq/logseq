@@ -218,7 +218,9 @@
         config-file (first (filter #(string/ends-with? (:path %) "logseq/config.edn") *files))
         _ (assert config-file "No 'logseq/config.edn' found for file graph dir")
         options' (merge default-export-options
-                        {:user-options (merge {:convert-all-tags? false} (dissoc options :assets :verbose))
+                        {:user-options (merge {:convert-all-tags? false}
+                                              (dissoc options :assets :verbose :notify-user :fail-fast?
+                                                      :import-timeout-ms :import-heartbeat-ms :log-fn))
                         ;; asset file options
                          :<get-file-stat (fn [path]
                                            (let [abs-path (if (node-path/isAbsolute path)
@@ -228,7 +230,8 @@
                                              (.stat (js/require "fs/promises") abs-path)))
                          :<read-and-copy-asset (fn [file *assets buffer-handler]
                                                  (<read-and-copy-asset file *assets buffer-handler assets))}
-                        (select-keys options [:verbose :import-timeout-ms :import-heartbeat-ms :log-fn]))]
+                        (select-keys options [:verbose :import-timeout-ms :import-heartbeat-ms :log-fn
+                                              :notify-user :fail-fast?]))]
     (gp-exporter/export-file-graph conn conn config-file *files options')))
 
 (defn- import-files-to-db
@@ -1187,7 +1190,58 @@ abc
       (is (nil? (d/entity @conn [:block/uuid missing-uuid]))
           "Missing OG block ref placeholder is removed"))))
 
-(deftest export-doc-files-continues-after-export-file-failure
+(deftest file-import-error-is-transit-safe-and-names-file
+  (let [error (gp-exporter/file-import-error
+               "pages/T.md"
+               (ex-info "No property schema found for nil" {:errors [#js {:fn (fn [])}]}))
+        roundtrip (-> error ldb/write-transit-str ldb/read-transit-str)]
+    (is (= "pages/T.md: No property schema found for nil" (ex-message error)))
+    (is (= :file-graph-import/file-failed (:code (ex-data error))))
+    (is (= "pages/T.md" (:path (ex-data error))))
+    (is (= "No property schema found for nil" (:reason (ex-data error))))
+    (is (= (ex-message error) (ex-message roundtrip)))
+    (is (= (ex-data error) (ex-data roundtrip)))))
+
+(defn- assert-export-file-graph-fails
+  [rel-path content expected-reason]
+  (let [files (cond-> [["logseq/config.edn" "{:meta/version 1 :journal/page-title-format \"yyyy-MM-dd EEEE\"}"]
+                       [rel-path content]]
+                (= rel-path "pages/B.md")
+                (conj ["pages/A.md" "vegetarian:: false\n\n- a\n"]
+                      ["pages/Later.md" "- should not be imported\n"]))
+        graph-dir (write-temp-file-graph files)
+        conn (db-test/create-conn)]
+    (-> (import-file-graph-to-db graph-dir conn
+                                 {:notify-user (fn [_])})
+        (p/then (fn [_]
+                  (is false (str "expected import to fail for " rel-path))))
+        (p/catch (fn [error]
+                   (let [message (or (ex-message error) (.-message error) "")]
+                     (is (gp-exporter/file-import-error? error) rel-path)
+                     (is (or (= rel-path (:path (ex-data error)))
+                             (string/includes? message rel-path))
+                         rel-path)
+                     (is (string/includes? message expected-reason)
+                         (str rel-path " message: " message))
+                     (is (nil? (db-test/find-block-by-content @conn "should not be imported"))
+                         "Fail-fast does not import later files")))))))
+
+(deftest-async export-file-graph-fails-fast-with-relative-path-and-reason
+  (p/do!
+   (assert-export-file-graph-fails
+    "journals/2022_03_27.md"
+    "- {{query (and (todo now doing))}}\n  query-table:: false\n  query-sort-by:: clock-time\n"
+    "clock-time")
+   (assert-export-file-graph-fails
+    "pages/T.md"
+    "template:: x\n\n- a\n"
+    "No property schema found for nil")
+   (assert-export-file-graph-fails
+    "pages/B.md"
+    "vegetarian:: yes\n\n- b\n"
+    "Expected number or lookup ref for entity id, got nil")))
+
+(deftest export-doc-files-stops-at-first-export-file-failure
   (cljs.test/async
    done
    (let [attempted-paths (atom [])
@@ -1202,6 +1256,48 @@ abc
                       {:macros {} :file/name-format :triple-lowbar}
                       (merge default-export-options
                              {:notify-user #(swap! notifications conj %)
+                              :user-options {:convert-all-tags? false}
+                              :<export-file (fn [conn' {:file/keys [path content]} opts]
+                                              (swap! attempted-paths conj path)
+                                              (if (= path first-file)
+                                                (p/rejected failed-error)
+                                                (gp-exporter/<add-file-to-db-graph conn' path content opts)))}))]
+     (-> (gp-exporter/export-doc-files
+          conn
+          [{:path first-file} {:path second-file}]
+          <read-file
+          doc-options)
+         (p/then (fn [_]
+                   (is false "Default import must stop at the first file failure")
+                   (done)))
+         (p/catch (fn [error]
+                    (let [message (or (ex-message error) (.-message error) "")]
+                      (is (gp-exporter/file-import-error? error))
+                      (is (= [first-file] @attempted-paths)
+                          "Later files are not imported after the first failure")
+                      (is (string/includes? message "worker transact failed"))
+                      (is (some #(= :error (:level %)) @notifications)
+                          "The failed file is reported to the user")
+                      (is (nil? (db-test/find-block-by-content @conn "second"))
+                          "Later files are not imported")
+                      (done))))))))
+
+(deftest export-doc-files-continues-after-export-file-failure-when-fail-fast-disabled
+  (cljs.test/async
+   done
+   (let [attempted-paths (atom [])
+         failed-error (ex-info "worker transact failed" {:code :worker-transact-failed})
+         graph-dir (write-temp-file-graph [["pages/A.md" "- first\n"]
+                                           ["pages/B.md" "- second\n"]])
+         first-file (node-path/join graph-dir "pages/A.md")
+         second-file (node-path/join graph-dir "pages/B.md")
+         conn (db-test/create-conn)
+         notifications (atom [])
+         doc-options (gp-exporter/build-doc-options
+                      {:macros {} :file/name-format :triple-lowbar}
+                      (merge default-export-options
+                             {:fail-fast? false
+                              :notify-user #(swap! notifications conj %)
                               :user-options {:convert-all-tags? false}
                               :<export-file (fn [conn' {:file/keys [path content]} opts]
                                               (swap! attempted-paths conj path)
