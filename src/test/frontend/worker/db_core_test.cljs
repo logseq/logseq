@@ -75,7 +75,7 @@
           :thread-api/db-sync-close-db :thread-api/db-sync-invalidate-search-db
           :thread-api/db-sync-rehydrate-large-titles :thread-api/db-sync-import-prepare :thread-api/db-sync-import-rows-chunk
           :thread-api/db-sync-import-finalize :thread-api/release-access-handles :thread-api/db-exists
-          :thread-api/export-db-binary :thread-api/import-file-graph
+          :thread-api/export-db-binary :thread-api/import-file-graph :thread-api/scan-file-graph
           :thread-api/export-client-ops-db-binary :thread-api/backup-db-sqlite
           :thread-api/import-db-binary :thread-api/search-blocks :thread-api/search-upsert-blocks :thread-api/search-delete-blocks
           :thread-api/search-truncate-tables :thread-api/search-build-blocks-indice :thread-api/search-build-blocks-indice-in-worker
@@ -2841,6 +2841,44 @@
              (is false (str error))))
           (p/finally done))))
 
+(deftest scan-file-graph-rejects-with-file-and-reason
+  (async done
+         (->
+          (restoring-worker-state
+           (fn []
+             (let [scan! (get @thread-api/*thread-apis :thread-api/scan-file-graph)
+                   pipeline-before @ldb/*transact-pipeline-fn
+                   config-file {:path "logseq/config.edn"
+                                :file/content "{:meta/version 1 :journal/page-title-format \"yyyy-MM-dd EEEE\"}"}
+                   files [config-file
+                          {:path "journals/2022_03_27.md"
+                           :file/content (str "- {{query (and (todo now doing))}}\n"
+                                              "  query-table:: false\n"
+                                              "  query-sort-by:: clock-time\n")}]]
+               (is (fn? scan!))
+               (reset! worker-state/*main-thread (fn [& _] (p/resolved nil)))
+               (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+               (p/with-redefs
+                 [db-sync/update-local-sync-checksum! (fn [& _] nil)
+                  db-sync/handle-local-tx! (fn [& _] nil)
+                  shared-service/broadcast-to-clients! (fn [& _] nil)]
+                 (-> (scan! config-file files {:user-options {}})
+                     (p/then (fn [_]
+                               (is false "scan should reject")))
+                     (p/catch (fn [error]
+                                (is (= :file-graph-import/file-failed (:code (ex-data error))))
+                                (is (= "journals/2022_03_27.md" (:path (ex-data error))))
+                                (is (string/includes? (ex-message error) "clock-time"))
+                                (let [roundtrip (-> error ldb/write-transit-str ldb/read-transit-str)]
+                                  (is (= (ex-message error) (ex-message roundtrip)))
+                                  (is (= (ex-data error) (ex-data roundtrip))))))
+                     (p/finally (fn []
+                                  (reset! ldb/*transact-pipeline-fn pipeline-before))))))))
+          (p/catch
+           (fn [error]
+             (is false (str error))))
+          (p/finally done))))
+
 (deftest import-file-graph-reads-file-stat-from-path-string
   (async done
          (->
@@ -3174,6 +3212,28 @@
       (is (pos? (:tx-count payload)))
       (is (not (contains? payload :tx-data)))
       (is (string/includes? (:error payload) "store failed")))))
+
+(deftest transact-failed-logs-non-error-object-test
+  (let [conn (db-test/create-conn)
+        tx-data [{:db/id -1
+                  :block/uuid (random-uuid)
+                  :block/title "block-1"}]
+        logs (atom [])
+        original-error #js {:foo 1}]
+    (with-redefs [log/error (fn [& args]
+                              (swap! logs conj args))
+                  d/transact! (fn [& _] (throw original-error))]
+      (try
+        (ldb/transact! conn tx-data {:skip-validate-db? true})
+        (is false "expected transact! to throw")
+        (catch :default e
+          (is (identical? original-error e)))))
+    (let [payload (some (fn [args]
+                          (some #(when (and (map? %) (:tx-count %)) %) args))
+                        @logs)]
+      (is (some? payload))
+      (is (not (string/includes? (:error payload) "[object Object]"))
+          "Non-Error throws must not log as [object Object]"))))
 
 (deftest get-date-scheduled-or-deadlines-filters-sorts-and-groups-worker-results
   (restoring-worker-state
