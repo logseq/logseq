@@ -412,6 +412,10 @@
                       ^js win (win/create-main-window!)
                       _ (reset! *win win)]
 
+                  ;; The last graph's worker starts while the window loads, not when the
+                  ;; renderer asks for it after loading its scripts.
+                  (handler/prestart-db-worker! win)
+
                   ;; OS registration is independent of rendering or navigation.
                   (js/setImmediate #(register-default-protocol-client! app'))
                   (utils/<restore-proxy-settings)
