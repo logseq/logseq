@@ -287,17 +287,32 @@
      :important? {}}
     classes)))
 
+(defonce ^:private merged-classes-cache (js/Map.))
+(def ^:private merged-classes-cache-max 4096)
+
+(defn- merge-class-string
+  "The merged class string of the whitespace-separated classes in s. Every
+  button and menu item renders through cn with a handful of recurring class
+  strings, so the result is cached by s (cleared when it grows past its max)."
+  [s]
+  (or (.get merged-classes-cache s)
+      (let [merged (->> (string/split s #"\s+")
+                        (remove string/blank?)
+                        merge-classes
+                        (remove nil?)
+                        (string/join " "))]
+        (when (>= (.-size merged-classes-cache) merged-classes-cache-max)
+          (.clear merged-classes-cache))
+        (.set merged-classes-cache s merged)
+        merged)))
+
 (defn cn
   [& xs]
-  (->> xs
-       flatten
+  (->> (if (some sequential? xs) (flatten xs) xs)
        (remove #(or (nil? %) (false? %) (= "" %)))
        (map prop-name)
-       (mapcat #(string/split % #"\s+"))
-       (remove string/blank?)
-       merge-classes
-       (remove nil?)
-       (string/join " ")))
+       (string/join " ")
+       merge-class-string))
 
 (defn- with-class-props
   [^js props base-class extra-class]
