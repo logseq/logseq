@@ -9,6 +9,7 @@
             [frontend.worker.plain-value :as worker-plain]
             [frontend.worker.state :as worker-state]
             [logseq.common.config :as common-config]
+            [logseq.common.util :as common-util]
             [logseq.common.uuid :as common-uuid]
             [logseq.db :as ldb]
             [logseq.outliner.op :as outliner-op]))
@@ -17,14 +18,21 @@
   [db]
   (ldb/get-page db common-config/favorites-page-name))
 
-(defn- favorite-block
+(defn- favorite-blocks
+  "All blocks on the favorites page that link to `page-block-uuid`. Normally at
+   most one, but graphs can contain duplicates, e.g. imported from an OG
+   config.edn whose :favorites listed the same page under several spellings
+   (`foo` and `Foo` after a capitalization rename)."
   [db page-block-uuid]
   (let [page-block-id (:db/id (d/entity db [:block/uuid page-block-uuid]))]
     (when-let [page (and page-block-id (favorite-page db))]
-      (some (fn [block]
-              (when (= page-block-id (:db/id (:block/link block)))
-                block))
-            (ldb/get-page-blocks db (:db/id page))))))
+      (filter (fn [block]
+                (= page-block-id (:db/id (:block/link block))))
+              (ldb/get-page-blocks db (:db/id page))))))
+
+(defn- favorite-block
+  [db page-block-uuid]
+  (first (favorite-blocks db page-block-uuid)))
 
 (defn- entity->plain-map
   [db entity]
@@ -37,9 +45,10 @@
     (let [db @conn]
       (when-let [page (favorite-page db)]
         (->> (ldb/sort-by-order (:block/_parent page))
-             (keep (fn [block]
-                     (some->> (:block/link block)
-                              (entity->plain-map db))))
+             (keep :block/link)
+             ;; Show each page once even if several favorite blocks link to it
+             (common-util/distinct-by :db/id)
+             (keep #(entity->plain-map db %))
              (remove ldb/recycled?)
              vec)))))
 
@@ -75,8 +84,10 @@
 
 (defn- unfavorite-page-ops
   [db page-block-uuid]
-  (when-let [block (favorite-block db page-block-uuid)]
-    [[:delete-blocks [[(:block/uuid block)] {}]]]))
+  ;; Remove every block linking to the page so a duplicated favorite doesn't
+  ;; linger in the sidebar after unfavoriting
+  (when-let [blocks (seq (favorite-blocks db page-block-uuid))]
+    [[:delete-blocks [(mapv :block/uuid blocks) {}]]]))
 
 (def-thread-api :thread-api/set-page-favorite
   [repo page-block-uuid favorite?]
@@ -100,13 +111,22 @@
 (defn- reorder-favorites-ops
   [db favorite-page-uuids]
   (when-let [page (favorite-page db)]
-    (let [page-block-ids (keep #(page-block-db-id db %) favorite-page-uuids)
-          current-blocks (ldb/sort-by-order (ldb/get-page-blocks db (:db/id page)))]
-      (->> (map vector page-block-ids current-blocks)
-           (keep (fn [[page-block-id block]]
-                   (when (not= page-block-id (:db/id (:block/link block)))
-                     [:save-block [(assoc block :block/link page-block-id) nil]])))
-           vec))))
+    (let [page-block-ids (distinct (keep #(page-block-db-id db %) favorite-page-uuids))
+          page-block-id-set (set page-block-ids)
+          current-blocks (ldb/sort-by-order (ldb/get-page-blocks db (:db/id page)))
+          [reused-blocks extra-blocks] (split-at (count page-block-ids) current-blocks)
+          save-ops (keep (fn [[page-block-id block]]
+                           (when (not= page-block-id (:db/id (:block/link block)))
+                             [:save-block [(assoc block :block/link page-block-id) nil]]))
+                         (map vector page-block-ids reused-blocks))
+          ;; The sidebar shows deduped favorites, so leftover blocks that link
+          ;; to an already ordered page are duplicates and can be dropped
+          duplicate-uuids (->> extra-blocks
+                               (filter #(contains? page-block-id-set (:db/id (:block/link %))))
+                               (mapv :block/uuid))]
+      (cond-> (vec save-ops)
+        (seq duplicate-uuids)
+        (conj [:delete-blocks [duplicate-uuids {}]])))))
 
 (def-thread-api :thread-api/reorder-favorites
   [repo favorite-page-uuids]
