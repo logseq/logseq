@@ -2998,3 +2998,43 @@
               response (call-resource-raw api conn resource-key)]
           (is (string? (get-in response [:value :error :message])))
           (is (= [] (get-in response [:value :rows]))))))))
+
+(deftest favorites-resource-dedupes-pages-linked-twice-test
+  (when-let [api (render-resource-api)]
+    (let [conn (db-test/create-conn)
+          favorite-page (or (ldb/get-page @conn common-config/favorites-page-name)
+                            (let [favorite-page-uuid (random-uuid)]
+                              (d/transact! conn
+                                           [{:block/uuid favorite-page-uuid
+                                             :block/tx-id 1
+                                             :block/title common-config/favorites-page-name
+                                             :block/name common-config/favorites-page-name}])
+                              (ldb/get-page @conn common-config/favorites-page-name)))
+          favorite-page-id (:db/id favorite-page)
+          page-uuid (random-uuid)
+          ;; Two favorite blocks link the same page, e.g. an OG config.edn
+          ;; that listed it as both "foo" and "Foo" after a rename (#8596)
+          _ (d/transact! conn
+                         [{:db/id -1
+                           :block/uuid page-uuid
+                           :block/tx-id 2
+                           :block/title "Foo"
+                           :block/name "foo"
+                           :block/tags :logseq.class/Page}
+                          {:block/uuid (random-uuid)
+                           :block/tx-id 2
+                           :block/title ""
+                           :block/link -1
+                           :block/page favorite-page-id
+                           :block/parent favorite-page-id
+                           :block/order "a0"}
+                          {:block/uuid (random-uuid)
+                           :block/tx-id 2
+                           :block/title ""
+                           :block/link -1
+                           :block/page favorite-page-id
+                           :block/parent favorite-page-id
+                           :block/order "a1"}])
+          favorites-response (call-resource api conn [:favorites])]
+      (is (= [page-uuid]
+             (mapv :block/uuid (:value favorites-response)))))))
