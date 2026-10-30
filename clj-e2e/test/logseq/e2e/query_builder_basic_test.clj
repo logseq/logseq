@@ -127,4 +127,10 @@
       (w/click ".ls-query-setting")
       (assert/assert-is-visible
        (loc/filter ".ls-block[data-block-title='My tasks']" :has ".cp__query-builder"))
+      (assert/assert-is-visible
+       (loc/filter ".cp__query-builder .query-clause" :has-text "Task"))
+      (w/click ".ls-query-setting")
+      (w/click ".ls-query-setting")
+      (assert/assert-is-visible
+       (loc/filter ".cp__query-builder .query-clause" :has-text "Task"))
       (assert/assert-is-visible "#search-button"))))

@@ -2724,11 +2724,21 @@
   [query? advanced-query? show-query?]
   (and query? (not advanced-query?) (not show-query?)))
 
+(hsx/defc live-query-builder
+  "Subscribe to the query property block so remounts (gear toggle, title
+   refresh) initialize from the saved DSL instead of the parent's stale
+   nested snapshot."
+  [query-uuid fallback]
+  (let [query (or (db-hooks/use-block query-uuid) fallback)]
+    (ui/catch-error
+     (ui/block-error (t :query/error) {:content (or (:block/title query) "")})
+     (query-builder-component/builder query {}))))
+
 (hsx/defc query-builder-or-error
   [query]
-  (ui/catch-error
-   (ui/block-error (t :query/error) {:content (or (:block/title query) "")})
-   (query-builder-component/builder query {})))
+  (if-let [query-uuid (:block/uuid query)]
+    (live-query-builder query-uuid query)
+    nil))
 
 (hsx/defc block-title-aux
   [config block {:keys [query? *show-query?]}]
