@@ -207,14 +207,14 @@ cd "$TEMP_DIR"
 if [[ "$VERSION" == "latest" ]]; then
     log_info "Fetching latest release information..."
     LATEST_RELEASE=$(curl -s https://api.github.com/repos/logseq/logseq/releases/latest)
-    DOWNLOAD_URL=$(echo "$LATEST_RELEASE" | grep -o '"browser_download_url": "[^"]*Logseq-linux-x64-[^"]*\.zip"' | cut -d'"' -f4)
+    DOWNLOAD_URL=$(echo "$LATEST_RELEASE" | grep -o '"browser_download_url": "[^"]*Logseq-linux-x86_64-[^"]*\.zip"' | cut -d'"' -f4)
     
     if [[ -z "$DOWNLOAD_URL" ]]; then
         log_error "Could not find download URL for latest version"
         exit 1
     fi
 else
-    DOWNLOAD_URL="https://github.com/logseq/logseq/releases/download/${VERSION}/Logseq-linux-x64-${VERSION}.zip"
+    DOWNLOAD_URL="https://github.com/logseq/logseq/releases/download/${VERSION}/Logseq-linux-x86_64-${VERSION}.zip"
 fi
 
 log_info "Download URL: $DOWNLOAD_URL"
@@ -230,10 +230,8 @@ fi
 
 # Extract archive
 log_info "Extracting archive..."
-unzip -q logseq.zip
-
-# Find the extracted directory
-EXTRACTED_DIR=$(find . -maxdepth 2 -type d -name "Logseq-linux-x64*" | head -1)
+EXTRACTED_DIR="Logseq"
+unzip -q logseq.zip -d "$EXTRACTED_DIR"
 
 if [[ -z "$EXTRACTED_DIR" ]]; then
     log_error "Could not find extracted Logseq directory"
@@ -246,13 +244,13 @@ log_info "Installing files..."
 if [[ "$USER_INSTALL" == false ]]; then
     mkdir -p "$INSTALL_DIR"
     cp -r "$EXTRACTED_DIR"/* "$INSTALL_DIR/"
-    chmod +x "$INSTALL_DIR/Logseq"
-    ln -sf "$INSTALL_DIR/Logseq" "$BIN_DIR/logseq"
+    chmod +x "$INSTALL_DIR/logseq"
+    ln -sf "$INSTALL_DIR/logseq" "$BIN_DIR/logseq"
 else
     mkdir -p "$INSTALL_DIR"
     cp -r "$EXTRACTED_DIR"/* "$INSTALL_DIR/"
-    chmod +x "$INSTALL_DIR/Logseq"
-    ln -sf "$INSTALL_DIR/Logseq" "$BIN_DIR/logseq"
+    chmod +x "$INSTALL_DIR/logseq"
+    ln -sf "$INSTALL_DIR/logseq" "$BIN_DIR/logseq"
 fi
 
 # Fix sandbox permissions
@@ -288,7 +286,7 @@ if [[ "$SKIP_DESKTOP" == false ]]; then
 Version=1.0
 Name=Logseq
 Comment=Logseq - A privacy-first, open-source platform for knowledge management and collaboration
-Exec=$INSTALL_DIR/Logseq $([ "$USER_INSTALL" = true ] && echo "--no-sandbox") %U
+Exec=$INSTALL_DIR/logseq $([ "$USER_INSTALL" = true ] && echo "--no-sandbox") %U
 Icon=$ICON_DIR/logseq.png
 Terminal=false
 Type=Application
