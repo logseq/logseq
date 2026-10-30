@@ -8,6 +8,7 @@
             [clojure.string :as string]
             [dommy.core :as dom]
             [frontend.components.block.image :as block-image]
+            [frontend.components.block.status-history :as status-history]
             [frontend.components.dnd :as dnd]
             [frontend.components.icon :as icon-component]
             [frontend.components.property.config :as property-config]
@@ -33,6 +34,7 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [frontend.util.clock :as clock]
             [frontend.util.entity :as entity]
             [lambdaisland.glogi :as log]
             [logseq.common.config :as common-config]
@@ -737,6 +739,22 @@
         (fn [column] (ordered-id-set (:id column)))
         columns)))
     columns))
+
+(defn insert-query-time-spent-column
+  [columns time-spent-column]
+  (let [columns (vec columns)
+        insert-after-status (some (fn [[idx column]]
+                                    (when (= :logseq.property/status (:id column))
+                                      (inc idx)))
+                                  (map-indexed vector columns))
+        insert-before-created-at (some (fn [[idx column]]
+                                         (when (= :block/created-at (:id column))
+                                           idx))
+                                       (map-indexed vector columns))
+        insert-at (or insert-after-status insert-before-created-at (count columns))]
+    (concat (subvec columns 0 insert-at)
+            [time-spent-column]
+            (subvec columns insert-at))))
 
 (defonce groups-sort-by-options
   [[:view.table/group-journal-date :block/journal-day]
@@ -2373,6 +2391,15 @@
   [_display-type _view-partition _rows]
   true)
 
+(defn implicit-hidden-column-ids
+  [column-ids ordered-column-ids]
+  (set/difference (set column-ids)
+                  (set ordered-column-ids)
+                  #{:select
+                    :block/created-at
+                    :block/updated-at
+                    :block.temp/task-spent-time}))
+
 (defn- lazy-item-should-subscribe?
   "Preview rows painted titles first. Immediate use-block remounted
   every visible All Pages / Movies row before that frame committed."
@@ -3533,6 +3560,17 @@
                      (set-current-view-uuid! (:block/uuid view))))}
       (ui/icon "plus" {:size 15}))])))
 
+(defn query-heading-summary
+  "The total is omitted while loading (nil) and when nothing was tracked (0)."
+  [title total-seconds]
+  (let [tracked? (and total-seconds (pos? total-seconds))]
+    {:title title
+     :total (when tracked?
+              (t :view.table/total-time
+                 (clock/seconds->days:hours:minutes:seconds total-seconds)))
+     :exact-duration (when tracked?
+                       (clock/seconds->exact-duration total-seconds))}))
+
 (hsx/defc view-head
   [view-parent view-entity table columns input sorting
    set-input! add-new-object!
@@ -3551,9 +3589,25 @@
                        (set-hover? false))}
      [:div.flex.flex-row.items-center.gap-2
       (if (= view-feature-type :query-result)
-        [:div.font-medium.opacity-50.text-sm
-         (t (or title-key :view.table/default-title)
-            (:items-count option))]
+        (let [{:keys [title total exact-duration]}
+              (query-heading-summary
+                (t (or title-key :view.table/default-title)
+                   (:items-count option))
+                (:query-total-seconds option))]
+          [:div.font-medium.opacity-50.text-sm.flex.flex-row.gap-2
+           [:span title]
+           (when total
+             (shui/tooltip-provider
+              (shui/tooltip
+               {:delay 300}
+               (shui/tooltip-trigger
+                {:as-child true}
+                [:span {:role "group"
+                        :tab-index 0
+                        :aria-label (t :view.table/total-time exact-duration)}
+                 total])
+               (shui/tooltip-portal
+                (shui/tooltip-content {:side "bottom"} exact-duration)))))])
         (views-tab view-parent (:block/uuid view-entity)
                    (assoc option
                           :hover? hover?
@@ -3688,9 +3742,9 @@
                               (zipmap hidden-columns (repeat false))
                               ;; This case can happen for imported tables
                               (if (seq (:logseq.property.table/ordered-columns view-entity))
-                                (zipmap (set/difference (set (map :id columns))
-                                                        (set (:logseq.property.table/ordered-columns view-entity))
-                                                        #{:select :block/created-at :block/updated-at})
+                                (zipmap (implicit-hidden-column-ids
+                                         (map :id columns)
+                                         (:logseq.property.table/ordered-columns view-entity))
                                         (repeat false))
                                 {}))
                             (assoc :id false))
@@ -3850,15 +3904,38 @@
        (dissoc :add-new-object!))
      *scroller-ref]))
 
+(defn query-time-spent-column
+  [seconds-by-block]
+  {:id :block.temp/task-spent-time
+   :name (t :view.table/time-spent)
+   :sortable? false
+   :header header-cp
+   :cell (fn [_table row _column]
+           (when-let [seconds (get seconds-by-block (:block/uuid row))]
+             (when (pos? seconds)
+               (status-history/task-spent-time-value-cp seconds))))})
+
+(defn query-task-time-summary
+  "Combines the task-time summaries of the loaded view resources. Per-row
+  seconds come from every resource. The total is only exact when it comes from
+  a resource that covers every row, so a windowed query has no total until the
+  full resource has loaded."
+  [{:keys [windowed? window offset full]}]
+  {:seconds-by-block (merge (:seconds-by-block window)
+                            (:seconds-by-block offset)
+                            (:seconds-by-block full))
+   :total-seconds (:total-seconds (if windowed? full window))})
+
 (defn- get-query-columns
-  [config view-entity properties]
+  [config view-entity properties seconds-by-block]
   (let [advanced-query? (->> (:logseq.property/query view-entity)
                              :logseq.property.node/display-type
                              (= :code))]
-    (->> properties
-         (ldb/sort-by-order)
-         ((fn [cs] (build-columns config cs {:add-tags-column? false
-                                             :advanced-query? advanced-query?}))))))
+    (insert-query-time-spent-column
+     (build-columns config (ldb/sort-by-order properties)
+                    {:add-tags-column? false
+                     :advanced-query? advanced-query?})
+     (query-time-spent-column seconds-by-block))))
 
 (defn- view-display-type
   [view-entity view-feature-type]
@@ -4049,10 +4126,18 @@
                             (:row-previews offset-data))
         query? (= view-feature-type :query-result)
         properties (:properties view-data)
+        task-time-summary (when query?
+                            (query-task-time-summary
+                             {:windowed? (some? (:full-key plan))
+                              :window (:task-time-summary view-data)
+                              :offset (:task-time-summary offset-data)
+                              :full (:task-time-summary full-view-data)}))
         option (cond-> (assoc option
                               :view-parent (:logseq.property/view-for view-entity))
                  query?
-                 (assoc :columns (get-query-columns config view-entity properties))
+                 (assoc :columns (get-query-columns config view-entity properties
+                                                    (:seconds-by-block task-time-summary))
+                        :query-total-seconds (:total-seconds task-time-summary))
 
                  deactivate-deferred-view!
                  (assoc :foldable-options

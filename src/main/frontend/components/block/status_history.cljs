@@ -34,6 +34,19 @@
         ^{:key (str (:status-uuid item) "-" (:created-at item))}
         (status-history-row item))]]))
 
+(hsx/defc task-spent-time-value-cp
+  [seconds]
+  (shui/tooltip-provider
+   (shui/tooltip
+    {:delay 300}
+    (shui/tooltip-trigger
+     {:as-child true}
+     [:span.text-sm.text-muted-foreground
+      (clock/seconds->days:hours:minutes:seconds seconds)])
+    (shui/tooltip-portal
+     (shui/tooltip-content {:side "bottom"}
+                           (clock/seconds->exact-duration seconds))))))
+
 (hsx/defc task-spent-time-cp
   [block]
   (let [resource (db-hooks/use-resource [:block-task-time (:block/uuid block)])
@@ -49,4 +62,4 @@
                      (shui/popup-show! (.-target e)
                                        (fn [] (status-history-cp history))
                                        {:align :end}))}
-        (clock/seconds->days:hours:minutes:seconds seconds))])))
+        (task-spent-time-value-cp seconds))])))

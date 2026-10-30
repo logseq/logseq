@@ -2089,6 +2089,7 @@
                    :sorting sorting
                    :query-row-uuids [view-row]}]
             :watch #{[:entity query-view]
+                     [:task-time view-row]
                      [:attr :block/title]}
             :row view-row}]]
       (doseq [{:keys [key watch row]} cases]
@@ -2098,6 +2099,123 @@
           (is (uuid? row))
           (is (contains? (set (get-in response [:value :rows])) row))
           (is (every? uuid? (get-in response [:value :rows]))))))))
+
+(deftest query-view-data-resource-includes-complete-task-time-summary-test
+  (when-let [api (render-resource-api)]
+    (let [{:keys [conn task-block view-row]} (render-resource-fixture)
+          active-task (random-uuid)
+          active-todo-history (random-uuid)
+          active-history (random-uuid)
+          query-view (add-view! conn :query-result)
+          _ (d/transact! conn
+                         [{:block/uuid active-task
+                           :block/title "Active task"
+                           :logseq.property/status :logseq.property/status.doing}
+                          {:block/uuid active-history
+                           :block/created-at 2000
+                           :logseq.property.history/block [:block/uuid active-task]
+                           :logseq.property.history/property :logseq.property/status
+                           :logseq.property.history/ref-value :logseq.property/status.doing}
+                          {:block/uuid active-todo-history
+                           :block/created-at 1000
+                           :logseq.property.history/block [:block/uuid active-task]
+                           :logseq.property.history/property :logseq.property/status
+                           :logseq.property.history/ref-value :logseq.property/status.todo}])
+          resource-key [:view-data query-view
+                        {:feature-type :query-result
+                         :sorting []
+                         :query-row-uuids [task-block active-task view-row]}]]
+      (with-redefs [common-util/time-ms (constantly 106000)]
+        (let [response (call-resource api conn resource-key)]
+          (is (= {:total-seconds 107
+                  :seconds-by-block {task-block 3
+                                     active-task 104
+                                     view-row 0}}
+                 (get-in response [:value :task-time-summary]))
+              "The complete worker aggregate preserves durations longer than one minute.")
+          (is (every? (:watch-keys response)
+                      [[:task-time task-block]
+                       [:task-time active-task]
+                       [:task-time view-row]])))))))
+
+(defn- task-with-status-history-tx
+  "Builds a task with one history entry per [created-at status] pair."
+  [task-uuid final-status history]
+  (into [{:block/uuid task-uuid
+          :block/title (str "Task " task-uuid)
+          :logseq.property/status final-status}]
+        (map (fn [[created-at status]]
+               {:block/uuid (random-uuid)
+                :block/created-at created-at
+                :logseq.property.history/block [:block/uuid task-uuid]
+                :logseq.property.history/property :logseq.property/status
+                :logseq.property.history/ref-value status}))
+        history))
+
+(deftest query-view-data-resource-task-time-summary-large-durations-test
+  (when-let [api (render-resource-api)]
+    (let [{:keys [conn]} (render-resource-fixture)
+          query-view (add-view! conn :query-result)
+          multi-session (random-uuid)
+          long-a (random-uuid)
+          long-b (random-uuid)
+          day-ms (* 24 3600 1000)
+          long-ms (* 25 3600 1000)
+          _ (d/transact! conn
+                         (concat
+                          ;; Doing 1s-5s (4s) and 10s-16s (6s) sum to 10s.
+                          (task-with-status-history-tx
+                           multi-session :logseq.property/status.done
+                           [[1000 :logseq.property/status.doing]
+                            [5000 :logseq.property/status.todo]
+                            [10000 :logseq.property/status.doing]
+                            [16000 :logseq.property/status.done]])
+                          (task-with-status-history-tx
+                           long-a :logseq.property/status.done
+                           [[0 :logseq.property/status.doing]
+                            [long-ms :logseq.property/status.done]])
+                          (task-with-status-history-tx
+                           long-b :logseq.property/status.done
+                           [[0 :logseq.property/status.doing]
+                            [long-ms :logseq.property/status.done]])))
+          resource-key [:view-data query-view
+                        {:feature-type :query-result
+                         :sorting []
+                         :query-row-uuids [multi-session long-a long-b]}]]
+      (with-redefs [common-util/time-ms (constantly (* 3 day-ms))]
+        (let [summary (get-in (call-resource api conn resource-key)
+                              [:value :task-time-summary])]
+          (is (= {multi-session 10
+                  long-a 90000
+                  long-b 90000}
+                 (:seconds-by-block summary))
+              "Multiple Doing sessions sum, and a single task can exceed 24 hours.")
+          (is (= 180010 (:total-seconds summary))
+              "The aggregate crosses 24 hours (2d2h) across tasks."))))))
+
+(deftest query-view-data-resource-task-time-summary-covers-rows-beyond-first-window-test
+  (when-let [api (render-resource-api)]
+    (let [{:keys [conn]} (render-resource-fixture)
+          query-view (add-view! conn :query-result)
+          task-count 300
+          task-uuids (vec (repeatedly task-count random-uuid))
+          _ (d/transact! conn
+                         (mapcat (fn [task-uuid]
+                                   (task-with-status-history-tx
+                                    task-uuid :logseq.property/status.done
+                                    [[0 :logseq.property/status.doing]
+                                     [2000 :logseq.property/status.done]]))
+                                 task-uuids))
+          resource-key [:view-data query-view
+                        {:feature-type :query-result
+                         :sorting []
+                         :query-row-uuids task-uuids}]
+          response (call-resource api conn resource-key)
+          summary (get-in response [:value :task-time-summary])]
+      (is (= task-count (count (:seconds-by-block summary))))
+      (is (= (* 2 task-count) (:total-seconds summary)))
+      (is (every? (:watch-keys response)
+                  (map (fn [task-uuid] [:task-time task-uuid]) task-uuids))))))
 
 (deftest query-view-data-resource-returns-property-maps-for-columns-test
   (when-let [api (render-resource-api)]
