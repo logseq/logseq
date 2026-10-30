@@ -75,9 +75,25 @@
       (when (= 8 (count s))
         (str (subs s 0 4) "_" (subs s 4 6) "_" (subs s 6 8))))))
 
-(defn- non-journal-page?
+(defn- contents-page?
+  "The Contents page is created as built-in but holds ordinary user blocks."
+  [page]
+  (= "contents" (:block/name page)))
+
+(defn- mirrorable-page?
   [page]
   (and (ldb/page? page)
+       (or (not (ldb/built-in? page))
+           (contents-page? page))
+       (not (ldb/property? page))
+       (not (ldb/hidden? page))
+       (not (:logseq.property.user/email page))))
+
+(defn- mirrorable-non-journal-page?
+  "A page with a file under `pages/`. Only these share file stems: a property
+  `source` has no file, so it must not push the page `Source` to `Source (2).md`."
+  [page]
+  (and (mirrorable-page? page)
        (not (ldb/journal? page))))
 
 (defn- stem-key
@@ -88,11 +104,11 @@
 
 (defn- page-stem-key
   [page]
-  (when (non-journal-page? page)
+  (when (mirrorable-non-journal-page? page)
     (stem-key (normalize-file-stem (:block/title page)))))
 
 (defn- build-stem-index
-  "One-time build of lower-cased normalized file stem -> non-journal page uuids.
+  "One-time build of lower-cased normalized file stem -> mirrorable non-journal page uuids.
   Kept current incrementally by update-stem-index on each tx-report."
   [db]
   (reduce (fn [m datom]
@@ -181,7 +197,7 @@
   "Path a non-journal page had before pages were grouped by `stem-key`: pages
   were grouped by the exact stem and ` (n)` appended in uuid order."
   [db page]
-  (when (non-journal-page? page)
+  (when (mirrorable-non-journal-page? page)
     (when-let [stem (normalize-file-stem (:block/title page))]
       (let [same-stem-pages (filter #(= stem (normalize-file-stem (:block/title %)))
                                     (pages-with-file-stem db stem))
@@ -631,20 +647,6 @@
    page
    (block-content db (:block/uuid page) {:include-page-properties? true} options)
    options))
-
-(defn- contents-page?
-  "The Contents page is created as built-in but holds ordinary user blocks."
-  [page]
-  (= "contents" (:block/name page)))
-
-(defn- mirrorable-page?
-  [page]
-  (and (ldb/page? page)
-       (or (not (ldb/built-in? page))
-           (contents-page? page))
-       (not (ldb/property? page))
-       (not (ldb/hidden? page))
-       (not (:logseq.property.user/email page))))
 
 (defn- mirrorable-pages
   [db]

@@ -71,6 +71,15 @@
     (is (not= (string/lower-case path-1) (string/lower-case path-2))
         "the two files are distinct on a case-insensitive file system")))
 
+(deftest a-property-without-a-file-does-not-take-a-page-file-name-test
+  (let [;; sorts after the property's uuid, so it would come second in a shared stem group
+        page-uuid #uuid "ffffffff-ffff-4fff-bfff-ffffffffffff"
+        conn (db-test/create-conn-with-blocks
+              {:properties {:user.property/source {:logseq.property/type :node}}
+               :pages-and-blocks [{:page {:block/title "Source" :block/uuid page-uuid}}]})]
+    (is (= ["pages/Source.md"] (paths-by-uuid @conn [page-uuid]))
+        "the property `source` is not mirrored, so the page `Source` keeps its own name")))
+
 (deftest a-literal-suffixed-title-is-not-reused-as-a-duplicate-name-test
   (let [uuid-1 #uuid "11111111-1111-4111-8111-111111111111"
         uuid-2 #uuid "22222222-2222-4222-8222-222222222222"
