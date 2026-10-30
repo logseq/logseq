@@ -2718,6 +2718,18 @@
              :else
              (map-inline config' block-ast-title)))))))))
 
+(defn- show-simple-query-builder?
+  "Simple (non-advanced) queries keep the builder after they are named.
+   Advanced/code queries and the raw-query gear panel hide the inline builder."
+  [query? advanced-query? show-query?]
+  (and query? (not advanced-query?) (not show-query?)))
+
+(hsx/defc query-builder-or-error
+  [query]
+  (ui/catch-error
+   (ui/block-error (t :query/error) {:content (or (:block/title query) "")})
+   (query-builder-component/builder query {})))
+
 (hsx/defc block-title-aux
   [config block {:keys [query? *show-query?]}]
   (let [[hover? set-hover?] (hooks/use-state false)
@@ -2726,6 +2738,7 @@
         query (:logseq.property/query block)
         advanced-query? (and query? (= :code (:logseq.property.node/display-type query)))
         show-query? (and *show-query? @*show-query?)
+        show-builder? (show-simple-query-builder? query? advanced-query? show-query?)
         [property-validation-message set-property-validation-message!] (hooks/use-state nil)
         query-setting (when query?
                         (ui/tooltip
@@ -2753,43 +2766,49 @@
          (set-property-validation-message! nil))
        nil)
      (url-property-validation-effect-deps block))
-    [:div
-     (merge
-      {:class (if query?
-                "inline-flex"
-                "w-full inline")
-       :on-mouse-over #(set-hover? true)
-       :on-mouse-out #(set-hover? false)}
-      (when-let [on-title-click (:on-title-click config)]
-        (when (fn? on-title-click)
-          {:on-click on-title-click})))
-     (cond
-       (and query? blank? (or advanced-query? show-query?))
-      [:span.opacity-75.hover:opacity-100 (t :block/untitled-query)]
-       (and query? blank?)
-       (query-builder-component/builder query {})
-       :else
-       (text-block-title config block))
-     query-setting
-     (when (cards-block? block)
-       (ui/tooltip
-        (shui/button
-         {:variant :ghost
-          :size :sm
-          :class "!px-1 text-xs text-muted-foreground"
-          :on-click (fn [e]
-                      (util/stop e)
-                      (state/pub-event! [:modal/show-cards (:db/id block)]))}
-         (t :block/practice))
-        [:div (t :block/practice-cards)]))
-     (when-let [message property-validation-message]
-                 (ui/tooltip
-                  (shui/button
-                   {:size :sm
-                    :variant :ghost
-                    :class "ls-type-warning ls-small-icon px-1 !py-0 h-4 ml-1"}
-                   (ui/icon "alert-triangle"))
-                  [:div.opacity-75 message]))]))
+    (let [title-row
+          [:div
+           (merge
+            {:class (if query?
+                      "inline-flex"
+                      "w-full inline")
+             :on-mouse-over #(set-hover? true)
+             :on-mouse-out #(set-hover? false)}
+            (when-let [on-title-click (:on-title-click config)]
+              (when (fn? on-title-click)
+                {:on-click on-title-click})))
+           (cond
+             (and query? blank? (or advanced-query? show-query?))
+             [:span.opacity-75.hover:opacity-100 (t :block/untitled-query)]
+             (and show-builder? blank?)
+             (query-builder-or-error query)
+             :else
+             (text-block-title config block))
+           query-setting
+           (when (cards-block? block)
+             (ui/tooltip
+              (shui/button
+               {:variant :ghost
+                :size :sm
+                :class "!px-1 text-xs text-muted-foreground"
+                :on-click (fn [e]
+                            (util/stop e)
+                            (state/pub-event! [:modal/show-cards (:db/id block)]))}
+               (t :block/practice))
+              [:div (t :block/practice-cards)]))
+           (when-let [message property-validation-message]
+             (ui/tooltip
+              (shui/button
+               {:size :sm
+                :variant :ghost
+                :class "ls-type-warning ls-small-icon px-1 !py-0 h-4 ml-1"}
+               (ui/icon "alert-triangle"))
+              [:div.opacity-75 message]))]]
+      (if (and show-builder? (not blank?))
+        [:div.flex.flex-col
+         title-row
+         (query-builder-or-error query)]
+        title-row))))
 
 (hsx/defc block-title
   [config block {:keys [*show-query?]}]
@@ -2825,7 +2844,7 @@
          (latex/latex (:block/title block) true true)])
 
       (:logseq.property/query-block? block)
-      (query-builder-component/builder block {})
+      (query-builder-or-error block)
 
       :else
       (block-title-aux config block {:query? query?
@@ -4453,7 +4472,7 @@
             (src-cp (assoc config :code-block query) {:language "clojure"})
             [:div
              [:div.opacity-75.ml-5.text-sm.mb-1 (t :block/set-query-label)]
-             (block-container config query)])]))
+             (query-builder-or-error query)])]))
 
      (when (and (not (or (:table? config) (:property? config)))
                 (not hide-block-refs?)
