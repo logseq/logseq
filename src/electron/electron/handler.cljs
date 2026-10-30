@@ -255,19 +255,41 @@
   []
   (db-worker/stop-all-managed!))
 
+(defn- <runtime-opts
+  [generation]
+  (p/let [embedding-endpoint (when (cfgs/semantic-search-enabled?)
+                               (embedding-server/ensure-endpoint! app))]
+    (cond-> {:generation generation
+             :on-graph-lifecycle! notify-graph-lifecycle!}
+      embedding-endpoint
+      (assoc :embedding-endpoint embedding-endpoint
+             :embedding-model-id (.-LOGSEQ_EMBEDDING_MODEL js/process.env)))))
+
+(defn- remember-last-graph!
+  [repo]
+  (when (not= repo (cfgs/get-item :db-worker/last-repo))
+    (cfgs/set-item! :db-worker/last-repo repo)))
+
 (defmethod handle :db-worker-runtime [^js window [_ repo opts]]
   (if (string/blank? repo)
     (p/rejected (ex-info "repo is required" {:code :missing-repo}))
-    (p/let [embedding-endpoint (when (cfgs/semantic-search-enabled?)
-                                 (embedding-server/ensure-endpoint! app))]
-      (p/let [runtime (db-worker/ensure-runtime! (canonical-repo repo)
-                                                 (.-id window)
-                                                 (cond-> {:generation (:generation opts)
-                                                          :on-graph-lifecycle! notify-graph-lifecycle!}
-                                                   embedding-endpoint
-                                                   (assoc :embedding-endpoint embedding-endpoint
-                                                          :embedding-model-id (.-LOGSEQ_EMBEDDING_MODEL js/process.env))))]
+    (let [repo (canonical-repo repo)]
+      (p/let [opts' (<runtime-opts (:generation opts))
+              runtime (db-worker/ensure-runtime! repo (.-id window) opts')]
+        (remember-last-graph! repo)
         (select-keys runtime [:repo :root-dir :generation :base-url :auth-token :owned?])))))
+
+(defn prestart-db-worker!
+  "Starts the worker of the graph that was open last, for `window`, while the
+  window loads. The renderer's db-worker-runtime call for that graph then gets
+  this worker (or waits for its start); a call for another graph switches the
+  window's graph as any graph switch does."
+  [^js window]
+  (when-let [repo (some-> (cfgs/get-item :db-worker/last-repo) canonical-repo)]
+    (-> (p/let [opts (<runtime-opts nil)]
+          (db-worker/ensure-runtime! repo (.-id window) opts))
+        (p/catch (fn [error]
+                   (logger/info :db-worker/prestart-skipped {:repo repo :error (ex-message error)}))))))
 
 (defmethod handle :releaseDbWorkerRuntime [^js window [_ repo]]
   (if (string/blank? repo)
