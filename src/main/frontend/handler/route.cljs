@@ -7,6 +7,7 @@
             [frontend.date :as date]
             [frontend.db.async :as db-async]
             [frontend.extensions.pdf.utils :as pdf-utils]
+            [frontend.flows :as flows]
             [frontend.handler.graph :as graph-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.recent :as recent-handler]
@@ -248,12 +249,32 @@
              (apply-page-title! title)))
          0)))))
 
+(defn- graph-opened?
+  "True once the db-worker is up and the current graph is no longer being
+  restored (`:db/restoring?` is cleared after the worker opened the graph)."
+  []
+  (and @state/db-worker-ready?
+       (not @flows/db-restoring?)))
+
 (defn update-page-label!
   [route]
   (let [{:keys [data]} route]
     (when-let [data-name (:name data)]
-      (p/let [title (get-title data-name (:path-params route))]
-        (set! (. js/document.body.dataset -page) title)))))
+      (if (graph-opened?)
+        (p/let [title (get-title data-name (:path-params route))]
+          (set! (. js/document.body.dataset -page) title))
+        ;; After a reload the first route match runs before the graph is
+        ;; open: the db-worker is not up yet, or it is up but the graph is
+        ;; still being restored and the title would resolve to "Logseq".
+        ;; `body[data-page]` gates the PDF viewer layout (pdf.css), so label
+        ;; the current route once the graph is open.
+        (let [retry! (fn [_key _ref _old _new]
+                       (when (graph-opened?)
+                         (remove-watch state/db-worker-ready? ::update-page-label)
+                         (remove-watch flows/db-restoring? ::update-page-label)
+                         (update-page-label! (state/get-route-match))))]
+          (add-watch state/db-worker-ready? ::update-page-label retry!)
+          (add-watch flows/db-restoring? ::update-page-label retry!))))))
 
 (defn jump-to-anchor!
   [anchor-text]

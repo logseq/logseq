@@ -229,6 +229,83 @@
              (set! (.-document js/global) previous-document)
              (done)))))))
 
+(deftest page-label-is-set-once-db-worker-is-ready-test
+  (async done
+    (let [route {:data {:name :page}
+                 :path-params {:name "Page"}}
+          document #js {:title ""
+                        :body #js {:dataset #js {}}}
+          previous-document (.-document js/global)
+          previous-state (state/get-state)
+          previous-worker @state/*db-worker]
+      (set! (.-document js/global) document)
+      (state/swap-state! assoc :git/current-repo "test")
+      ;; Reload: the first route match runs before the db-worker exists
+      (reset! state/*db-worker nil)
+      (state/swap-state! assoc :route-match route)
+      (-> (p/do!
+           (let [result (route-handler/update-page-label! route)]
+             (when (p/promise? result)
+               ;; Without the fix this rejects because the db-worker is nil
+               (p/catch result (fn [_] nil))))
+           (p/delay 10)
+           (is (nil? (.-page (.-dataset (.-body document))))
+               "The title can't be resolved without a db-worker")
+           (reset! state/*db-worker
+                   (fn [& _args]
+                     (p/resolved {:page-title "Page"})))
+           (p/delay 10)
+           (is (= "Page" (.-page (.-dataset (.-body document))))
+               "body[data-page], which the PDF viewer layout needs, is set when the db-worker starts"))
+          (p/catch
+           (fn [error]
+             (is false (str error))))
+          (p/finally
+           (fn []
+             (state/replace-state! previous-state)
+             (reset! state/*db-worker previous-worker)
+             (set! (.-document js/global) previous-document)
+             (done)))))))
+
+(deftest page-label-waits-for-the-graph-to-be-restored-test
+  (async done
+    (let [route {:data {:name :page}
+                 :path-params {:name "Page"}}
+          document #js {:title ""
+                        :body #js {:dataset #js {}}}
+          previous-document (.-document js/global)
+          previous-state (state/get-state)
+          previous-worker @state/*db-worker
+          graph-open? (atom false)]
+      (set! (.-document js/global) document)
+      (state/swap-state! assoc :git/current-repo "test")
+      (state/set-db-restoring! true)
+      (state/swap-state! assoc :route-match route)
+      ;; Reload: the db-worker is up before the graph is open, and then it has
+      ;; no title for the page (like :thread-api/get-route-title).
+      (reset! state/*db-worker
+              (fn [& _args]
+                (p/resolved (when @graph-open? {:page-title "Page"}))))
+      (-> (p/do!
+           (route-handler/update-page-label! route)
+           (p/delay 10)
+           (is (not= "Logseq" (.-page (.-dataset (.-body document))))
+               "The title isn't resolved while the graph is being restored")
+           (reset! graph-open? true)
+           (state/set-db-restoring! false)
+           (p/delay 10)
+           (is (= "Page" (.-page (.-dataset (.-body document))))
+               "body[data-page] is set once the graph is open"))
+          (p/catch
+           (fn [error]
+             (is false (str error))))
+          (p/finally
+           (fn []
+             (state/replace-state! previous-state)
+             (reset! state/*db-worker previous-worker)
+             (set! (.-document js/global) previous-document)
+             (done)))))))
+
 (defn- page-route
   [page-name]
   {:data {:name :page}

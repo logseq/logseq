@@ -206,7 +206,13 @@
     (util/stop e)
     (state/clear-editor-action!)
     (p/let [repo (state/get-current-repo)
-            convert-page-to-tag? (:convert-page-to-tag? chosen-result)
+            ;; An alias of a tag stands in for that tag below; converting it
+            ;; would make a separate tag and leave the block off the real one.
+            alias-source (when (and (:convert-page-to-tag? chosen-result)
+                                    (:db/id chosen-result))
+                           (db-async/<get-alias-source-page repo (:db/id chosen-result)))
+            convert-page-to-tag? (and (:convert-page-to-tag? chosen-result)
+                                      (not (entity/class? alias-source)))
             chosen-result (<chosen-result repo chosen-result)
             _ (when (and convert-page-to-tag?
                          (entity/page? chosen-result)

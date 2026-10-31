@@ -822,6 +822,7 @@
  :graph.validation/config-preferred-format-warning "is not used in DB graphs as there is only markdown mode."
  :graph.validation/config-property-pages-enabled-warning "is not used in DB graphs as all properties have pages."
  :graph.validation/config-unused-in-db-graphs-warning "is not used in DB graphs."
+ :graph.validation/fixed-invalid-blocks (fn [n counts] (str "Validation fixed " n " invalid " (if (= 1 n) "block" "blocks") ". Your graph is valid now! " counts))
  :graph.validation/invalid-blocks-detected "Validation detected {1} invalid block(s). These blocks may be buggy. Attempting to fix invalid blocks. Run validation again to see if they were fixed."
  :graph.validation/name-reserved-characters-warning "Graph name can't contain following reserved characters:"
  :graph.validation/reserved-character-asterisk "asterisk"
@@ -1742,7 +1743,7 @@
  :settings.advanced/network-proxy "Network proxy"
 
  :settings.ai/enable-mcp-server "MCP Server"
- :settings.ai/enable-mcp-server-desc "Enable MCP Server to allow commmunication with local AI applications. MCP Server depends on HTTP API server."
+ :settings.ai/enable-mcp-server-desc "Enable MCP Server to allow communication with local AI applications. MCP Server depends on HTTP API server."
 
  :settings.editor/auto-expand-block-refs "Expand block references automatically when zoom-in"
  :settings.editor/auto-expand-block-refs-tip "This option controls whether to expand the block references automatically when zoom-in."

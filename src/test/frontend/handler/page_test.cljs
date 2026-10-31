@@ -442,6 +442,43 @@
              (done)))))))
 
 
+(deftest hashtag-convert-page-to-tag-skips-alias-of-a-tag-test
+  (async done
+    (let [page-id #uuid "88888888-8888-8888-8888-888888888888"
+          alias-page {:db/id 4
+                      :block/uuid page-id
+                      :block/title "test"
+                      :block/name "test"
+                      :block/tags [{:db/ident :logseq.class/Page}]}
+          tag {:db/id 5
+               :block/uuid #uuid "99999999-9999-9999-9999-999999999999"
+               :block/title "Example Tag"
+               :db/ident :user.class/Example-Tag
+               :block/tags [{:db/ident :logseq.class/Tag}]}
+          get-block-results (atom [alias-page])
+          calls (atom [])
+          restore! (install-convert-page-to-tag-stubs! get-block-results calls)]
+      (set! db-async/<get-alias-source-page
+            (fn [_repo _id]
+              (p/resolved tag)))
+      (-> (run-hashtag-convert-selection page-id)
+          (p/then
+           (fn []
+             (let [convert-calls (filter #(= :convert-page-to-tag (first %)) @calls)
+                   tag-call (some #(when (= :tag-on-chosen (first %)) %) @calls)]
+               (is (empty? convert-calls)
+                   "An alias of a tag must not be converted into a separate tag")
+               (is (= ["Example Tag" tag true]
+                      (subvec tag-call 1 4))
+                   "The block is tagged with the aliased tag"))))
+          (p/catch
+           (fn [error]
+             (is false (str error))))
+          (p/finally
+           (fn []
+             (restore!)
+             (done)))))))
+
 (deftest chosen-result-loads-uuid-result-through-worker-test
   (async done
     (let [tag-id #uuid "22222222-2222-2222-2222-222222222222"
