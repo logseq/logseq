@@ -6995,12 +6995,11 @@ let () = Native_embed.with_entry_lock (fun () ->
           ignore (Lui_app.flush app);ignore (A.store_changed surface);ignore (A.repaint surface);
           let nav=W.Rects.get (A.rects surface) aside and body=W.Rects.get (A.rects surface) article in
           if width<768. then (
-            check (Printf.sprintf "Narrow settings navigation compressed from its 248-point content to %.2f" (nav.h/.scale))
-              (abs_float (nav.h/.scale-.248.)<0.1);
+            let control=W.Rects.get (A.rects surface) keymap in
+            check "Narrow Settings must contain the full Keymap navigation control"
+              (control.h>0. && control.y>=nav.y && control.y+.control.h<=nav.y+.nav.h);
             check "Narrow Settings must stack the article below its navigation"
-              (body.y>=nav.y+.nav.h-.0.1 && abs_float (body.x-.nav.x)<0.1);
-            check "Narrow Settings must hide Keymap navigation like the reference"
-              ((W.Rects.get (A.rects surface) keymap).h=0.))
+              (body.y>=nav.y+.nav.h-.0.1 && abs_float (body.x-.nav.x)<0.1))
           else (
             check "Wide Settings must restore its fixed navigation width"
               (abs_float (nav.w/.scale-.256.)<0.1);
@@ -7116,7 +7115,7 @@ let () = Native_embed.with_entry_lock (fun () ->
           apply
             (A.handle surface
                (W.Input.Move
-                  ((r.x +. (r.w /. 2.)) /. scale, (r.y +. (40. *. scale)) /. scale)));
+                  ((r.x +. (r.w /. 2.)) /. scale, (r.y +. (r.h /. 2.)) /. scale)));
           apply (A.handle surface (W.Input.Wheel (0., amount)))
         in
         List.iter
@@ -7138,10 +7137,9 @@ let () = Native_embed.with_entry_lock (fun () ->
               (abs_float ((((rect dialog).h -. (rect inner).h) /. scale) -. 2.) < 0.1);
             List.iter
               (fun name ->
-                if name <> "keymap" || width >= 640. then
-                  expect
-                    (label ^ " must preserve 32-point navigation rows: " ^ name)
-                    (abs_float (((rect (nav_id name)).h /. scale) -. 32.) < 0.1))
+                expect
+                  (label ^ " must preserve 32-point navigation rows: " ^ name)
+                  (abs_float (((rect (nav_id name)).h /. scale) -. 32.) < 0.1))
               [ "general"; "editor"; "keymap"; "advanced"; "features" ];
             if width >= 768. && height >= 360. then
               expect
@@ -7153,23 +7151,26 @@ let () = Native_embed.with_entry_lock (fun () ->
               expect
                 (label ^ " navigation scrolling must not move the article")
                 (W.Ui.scroll_offset (A.ui surface) article = before));
-            expect
-              (label ^ " must expose a hit-testable Features control")
-              (visible features);
-            if visible features then (
-              let r = rect features in
-              let x, y =
-                ((r.x +. (r.w /. 2.)) /. scale, (r.y +. (r.h /. 2.)) /. scale)
-              in
-              apply
-                (A.handle surface
-                   (W.Input.Button_down (x, y, W.Input.Left, 1, W.Input.mods_none)));
-              apply
-                (A.handle surface
-                   (W.Input.Button_up (x, y, W.Input.Left, W.Input.mods_none)));
+            List.iter (fun (name, control) ->
+              if name = "keymap" && width < 768. then wheel features 2000.;
               expect
-                (label ^ " must activate the Features category")
-                ((Settings_state.value ()).tab = "features"));
+                (label ^ " must expose a hit-testable category: " ^ name)
+                (visible control);
+              if visible control then (
+                let r = rect control in
+                let x, y =
+                  ((r.x +. (r.w /. 2.)) /. scale, (r.y +. (r.h /. 2.)) /. scale)
+                in
+                apply
+                  (A.handle surface
+                     (W.Input.Button_down (x, y, W.Input.Left, 1, W.Input.mods_none)));
+                apply
+                  (A.handle surface
+                     (W.Input.Button_up (x, y, W.Input.Left, W.Input.mods_none)));
+                expect
+                  (label ^ " must activate the category: " ^ name)
+                  ((Settings_state.value ()).tab = name)))
+              ["features", features; "keymap", keymap];
             if width < 768. && height < 500. then (
               Settings_state.set_tab "general";
               refresh ();
@@ -7177,9 +7178,14 @@ let () = Native_embed.with_entry_lock (fun () ->
               expect
                 (label ^ " must scroll the stacked settings frame to its article")
                 (W.Ui.scroll_offset (A.ui surface) inner > 0.);
-              expect
-                (label ^ " must preserve the 248-point navigation content")
-                (abs_float (((rect aside).h /. scale) -. 248.) < 0.1));
+              let nav = rect aside in
+              List.iter (fun name ->
+                let control = rect (nav_id name) in
+                expect
+                  (label ^ " must contain the full navigation category: " ^ name)
+                  (control.h > 0. && control.y >= nav.y
+                   && control.y +. control.h <= nav.y +. nav.h))
+                ["general"; "editor"; "keymap"; "advanced"; "features"]);
             expect
               (label ^ " must retain navigation nodes across resize")
               (nav_id "features" = features))
