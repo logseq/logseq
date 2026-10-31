@@ -979,10 +979,9 @@ let install_ops () =
 
 (* ---------- mount ---------- *)
 
-(* one inst per {{query}} block: the block row is rebuilt on every save, so
-   a new .custom-query-results shell re-attaches the existing inst instead
-   of leaving a stale duplicate mounted *)
-let query_insts : (string, V.inst) Hashtbl.t = Hashtbl.create 8
+(* One inst per repo/query block: row saves re-attach the existing source
+   draft and editor. Model publications retire fetches, not the draft. *)
+let query_insts : (string * string, V.inst) Hashtbl.t = Hashtbl.create 8
 
 (* currently-mounted insts — refreshed on the worker's sync-db-changes
    broadcast; an inst leaves the table when its host unmounts *)
@@ -991,17 +990,23 @@ let live : (int, V.inst) Hashtbl.t = Hashtbl.create 16
 let view ~kind ~owner : t =
  fun ctx parent ->
   let sched = ctx.Lui_ui.ui_scheduler in
+  let repo = Runtime.repo () in
   let inst, fresh =
     match kind with
     | V.KQuery { block_uuid } -> (
-        match Hashtbl.find_opt query_insts block_uuid with
-        | Some inst when !(inst.V.data_context_revision) =
-            (Runtime.model ()).Model.context_revision -> (inst, false)
-        | _ ->
+        match Hashtbl.find_opt query_insts (repo, block_uuid) with
+        | Some inst ->
+            if !(inst.V.data_context_revision) <>
+                (Runtime.model ()).Model.context_revision then begin
+              incr inst.V.data_gen;
+              Signal.set inst.V.st (V.table_clear_selection (V.get inst))
+            end;
+            (inst, false)
+        | None ->
             let inst =
               V.make ~sched ~kind ~feature:(feature_of_kind kind) ~owner
             in
-            Hashtbl.replace query_insts block_uuid inst;
+            Hashtbl.replace query_insts (repo, block_uuid) inst;
             (* staged, not flushed — V.update flushes, and a flush inside
                the element mount corrupts the pending op stream *)
             Signal.set inst.V.st
@@ -1023,6 +1028,7 @@ let view ~kind ~owner : t =
     Js.Promise.(
       resolve ()
       |> then_ (fun () ->
+          if Ui_effect.alive ctx.Lui_ui.ui_scope && Runtime.repo () = repo then
           (match kind, fresh with
            | V.KQuery _, _ -> refresh inst
            | _, true ->
@@ -1044,7 +1050,7 @@ let view ~kind ~owner : t =
    the .ls-query-setting button render.ml emits inside
    .custom-query-results *)
 let toggle_query_editor ~block_uuid =
-  match Hashtbl.find_opt query_insts block_uuid with
+  match Hashtbl.find_opt query_insts (Runtime.repo (), block_uuid) with
   | Some inst -> Views_query.toggle_source_editor inst
   | None -> ()
 
