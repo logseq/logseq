@@ -158,13 +158,15 @@ let text_form_view ~title_v ~desc_v ~title_placeholder ~desc_placeholder
     || String.trim desc <> String.trim desc_v
   in
   (column ~gap:8 ~padding:8
-    [ Ui_components.text_field ~placeholder:title_placeholder ~text:title_v
+    [ Ui_components.text_field ~placeholder:title_placeholder
+        ~text:(reactive Fun.id (Signal.value title_st))
         ~on_input:(fun ev ->
           match ev with
           | Lui_protocol.TextChanged (_, t) -> Signal.set title_st t
           | _ -> ())
         []
-    ; Ui_components.textarea ~placeholder:desc_placeholder ~text:desc_v
+    ; Ui_components.textarea ~placeholder:desc_placeholder
+        ~text:(reactive Fun.id (Signal.value desc_st))
         ~on_input:(fun ev ->
           match ev with
           | Lui_protocol.TextChanged (_, t) -> Signal.set desc_st t
@@ -376,7 +378,7 @@ let default_value_pane_view m ~close : t =
             ~on_press:(fun _ -> Runtime.signal_set editing true) [])
      ; if_ ~test:(Signal.value editing)
          (Ui_components.text_field ~autofocus:true
-            ~text:""
+            ~text:(reactive Fun.id (Signal.value buffer))
             ~on_input:(fun ev ->
               match ev with
               | Lui_protocol.TextChanged (_, t) -> Signal.set buffer t
