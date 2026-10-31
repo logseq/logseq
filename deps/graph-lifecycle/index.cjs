@@ -728,6 +728,7 @@ async function startGraph({ storage, repo, script, owner = 'cli', createEmpty = 
       if (createEmpty) args.push('--create-empty-db');
       args.push(...extraArgs);
       const env = { ...process.env, ELECTRON_RUN_AS_NODE: '1' };
+      if (owner === 'electron' && env.NODE_USE_SYSTEM_CA === undefined) env.NODE_USE_SYSTEM_CA = '1';
       if (owner === 'electron' && !extraArgs.includes('--embedding-endpoint')) delete env.LOGSEQ_EMBEDDINGS_URL;
       const child = cp.spawn(process.execPath, args, { detached: owner !== 'electron',
         stdio: 'ignore', env });
