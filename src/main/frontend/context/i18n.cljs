@@ -9,10 +9,16 @@
             [medley.core :as medley]
             [tongue.core :as tongue]))
 
-(def dicts (merge dicts/dicts {:tongue/fallback :en}))
+(def ^:private translator
+  "A tongue translator per locale, with or without the English fallback, built
+  on its first use. Built at load over every locale's dict, the two
+  translators took about 170 ms of an app open, for the one locale it shows."
+  (memoize (fn [locale fallback?]
+             (tongue/build-translate (dicts/locale-dicts locale fallback?)))))
 
-(def translate
-  (tongue/build-translate dicts))
+(defn translate
+  [locale & args]
+  (apply (translator (keyword locale) true) locale args))
 
 (defn preferred-locale
   []
@@ -41,10 +47,11 @@
    :zh-CN "，"
    :zh-Hant "，"})
 
-(def ^:private translate-strict
-  "tongue translator built against the raw locale dicts without any fallback.
-  Returns a '{Missing key ...}' string for keys absent in the requested locale."
-  (tongue/build-translate dicts/dicts))
+(defn- translate-strict
+  "Translates without any fallback. Returns a '{Missing key ...}' string for
+  keys absent in the requested locale."
+  [locale & args]
+  (apply (translator (keyword locale) false) locale args))
 
 (defn t-locale
   "Translate using the user's current locale without English fallback for

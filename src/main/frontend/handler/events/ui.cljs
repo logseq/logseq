@@ -14,7 +14,7 @@
             [frontend.components.repo :as repo]
             [frontend.components.select :as select]
             [frontend.components.selection :as selection]
-            [frontend.components.settings :as settings]
+            [frontend.components.lazy-settings :as settings]
             [frontend.components.shell :as shell]
             [frontend.components.user.login :as login]
             [frontend.config :as config]

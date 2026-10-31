@@ -22,7 +22,7 @@
             [frontend.date :as date]
             [frontend.db.async :as db-async]
             [frontend.db.hooks :as db-hooks]
-            [frontend.extensions.graph :as graph]
+            [frontend.components.lazy-graph :as graph]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]

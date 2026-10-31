@@ -1,6 +1,22 @@
 (ns logseq.db-sync.malli-schema-test
   (:require [cljs.test :refer [deftest is testing]]
-            [logseq.db-sync.malli-schema :as db-sync-schema]))
+            [logseq.db-sync.malli-schema :as db-sync-schema]
+            [malli.core :as ma]))
+
+(deftest coercer-compiles-on-first-use-and-is-shared-test
+  (let [calls (atom 0)]
+    ;; ma/coercer has several arities, so the source's four-argument call compiles to a direct call of the
+    ;; replacement's `cljs$core$IFn$_invoke$arity$4`: only a multi-arity fn has that property
+    (with-redefs [ma/coercer (fn
+                               ([_schema] (swap! calls inc) identity)
+                               ([_schema _transformer _respond _raise]
+                                (swap! calls inc)
+                                identity))]
+      (let [coerce (#'db-sync-schema/->coercer [:map [:value :string]])]
+        (is (zero? @calls))
+        (is (= {:value "first"} (coerce {:value "first"})))
+        (is (= {:value "second"} (coerce {:value "second"})))
+        (is (= 1 @calls))))))
 
 (def ^:private request-samples
   {:graphs/create {:graph-name "Demo"}

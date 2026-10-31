@@ -46,9 +46,19 @@
 (defonce *quit-dirty? (volatile! true))
 
 (defn setup-updater! [^js win]
-  ;; manual/auto updater
-  (init-updater {:repo   "logseq/logseq"
-                 :win    win}))
+  ;; manual/auto updater, set up once the window has loaded: loading
+  ;; electron-updater took about 115 ms, in the app open's path when it ran
+  ;; right after the window was created. Returns its teardown.
+  (let [*dispose (atom nil)
+        *torn-down? (atom false)
+        init! (fn []
+                (when-not @*torn-down?
+                  (reset! *dispose (init-updater {:repo "logseq/logseq"
+                                                  :win win}))))
+        contents (.-webContents win)]
+    (lifecycle/when-loaded! contents init!)
+    #(do (reset! *torn-down? true)
+         (when-let [dispose @*dispose] (dispose)))))
 
 (defn open-url-handler
   "win - the main window instance (first renderer process)
@@ -402,6 +412,12 @@
                       ^js win (win/create-main-window!)
                       _ (reset! *win win)]
 
+                  ;; The last graph's worker starts while the window loads, not when the
+                  ;; renderer asks for it after loading its scripts.
+                  (handler/prestart-db-worker! win)
+
+                  ;; OS registration is independent of rendering or navigation.
+                  (js/setImmediate #(register-default-protocol-client! app'))
                   (utils/<restore-proxy-settings)
 
                   (js-utils/disableXFrameOptions win)
@@ -489,7 +505,6 @@
                             {:scheme     FILE_ASSETS_SCHEME
                              :privileges (assoc privileges :stream true)}]))
 
-      (register-default-protocol-client! app)
       (set-app-menu!)
       (i18n/on-locale-change! set-app-menu!)
       (setup-deeplink!)

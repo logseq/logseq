@@ -9,8 +9,16 @@
             [lambdaisland.glogi :as log]
             [tongue.core :as tongue]))
 
-(def ^:private translate
-  (tongue/build-translate (assoc dicts/dicts :tongue/fallback :en)))
+(def ^:private translator
+  ;; a locale's translator is built on its first use, from its own dicts, its
+  ;; parent tags' and English for the fallback (all 25 languages took about
+  ;; 280 ms of every main process start)
+  (memoize (fn [locale]
+             (tongue/build-translate (dicts/locale-dicts locale true)))))
+
+(defn- translate
+  [locale & args]
+  (apply (translator locale) locale args))
 
 (defonce ^:private *locale (atom :en))
 (defonce ^:private *on-locale-change (atom nil))

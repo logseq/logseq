@@ -1,11 +1,16 @@
 (ns electron.mcp-server
   "MCP server routes for the desktop API server."
-  (:require ["@modelcontextprotocol/sdk/server/mcp.js" :refer [McpServer]]
-            ["@modelcontextprotocol/sdk/server/streamableHttp.js" :refer [StreamableHTTPServerTransport]]
-            ["@modelcontextprotocol/sdk/types.js" :refer [isInitializeRequest]]
-            ["zod/v3" :as z] ;; zod 4 doesn't work w/ mcp - https://github.com/modelcontextprotocol/typescript-sdk/issues/925
-            [electron.mcp-transport :as mcp-transport]
+  (:require [electron.mcp-transport :as mcp-transport]
             [promesa.core :as p]))
+
+;; The MCP SDK and zod are loaded on the first /mcp request, not at main
+;; process start: loading them took about 210 ms of every app open, though
+;; the MCP server is off by default.
+(defn- sdk-mcp [] (js/require "@modelcontextprotocol/sdk/server/mcp.js"))
+(defn- sdk-http [] (js/require "@modelcontextprotocol/sdk/server/streamableHttp.js"))
+(defn- sdk-types [] (js/require "@modelcontextprotocol/sdk/types.js"))
+;; zod 4 doesn't work w/ mcp - https://github.com/modelcontextprotocol/typescript-sdk/issues/925
+(defn- zod [] (.-z (js/require "zod/v3")))
 
 ;; Server util fns
 ;; ===============
@@ -26,8 +31,9 @@
       (mcp-transport/handle-request! existing-transport req res (.-body req))
 
       (and (not session-id)
-           (isInitializeRequest (.-body req)))
-      (let [transport (StreamableHTTPServerTransport.
+           ((.-isInitializeRequest (sdk-types)) (.-body req)))
+      (let [StreamableHTTPServerTransport (.-StreamableHTTPServerTransport (sdk-http))
+            transport (StreamableHTTPServerTransport.
                        #js {:sessionIdGenerator (comp str random-uuid)
                             :enableDnsRebindingProtection true
                             :allowedHosts #js [(str host ":" port)]})
@@ -120,19 +126,21 @@
   [call-api-fn args]
   (call-api-fn "logseq.cli.upsertNodes" [(aget args "operations") #js {:dry-run (aget args "dry-run")}]))
 
-(def ^:large-vars/data-var api-tools
+(defn- ^:large-vars/data-var api-tools
   "MCP Tools when calling API server"
+  []
+  (let [z (zod)]
   {:listPages
    {:fn api-list-pages
     :config #js {:title "List Pages"
                  :description "List all pages in a graph"
                  :inputSchema
-                 #js {:expand (-> (z/boolean) .optional (.describe "Provide additional detail on each page"))}}}
+                 #js {:expand (-> (.boolean z) .optional (.describe "Provide additional detail on each page"))}}}
    :getPage
    {:fn api-get-page
     :config #js {:title "Get Page"
                  :description "Get a page's content including its blocks. A property and a tag are pages."
-                 :inputSchema #js {:pageName (-> (z/string) (.describe "The page's name or uuid"))}}}
+                 :inputSchema #js {:pageName (-> (.string z) (.describe "The page's name or uuid"))}}}
    :upsertNodes
    {:fn api-upsert-nodes
     :config
@@ -188,30 +196,30 @@
          * Before creating any page, tag or property, check that it exists with getPage"
          :inputSchema
          #js {:operations
-              (z/array
-               (z/object
-                #js {:operation   (z/enum #js ["add" "edit"])
-                     :entityType  (z/enum #js ["block" "page" "tag" "property"])
-                     :id          (.optional (z/union #js [(z/string) (z/number) (z/null)]))
-                     :data        (-> (z/object #js {}) (.passthrough))}))
-              :dry-run (-> (z/boolean) .optional (.describe "Pretend to do batch update. Does everything except actually commit change to db e.g. validation."))}}}
+              (.array z
+               (.object z
+                #js {:operation   (.enum z #js ["add" "edit"])
+                     :entityType  (.enum z #js ["block" "page" "tag" "property"])
+                     :id          (.optional (.union z #js [(.string z) (.number z) (.null z)]))
+                     :data        (-> (.object z #js {}) (.passthrough))}))
+              :dry-run (-> (.boolean z) .optional (.describe "Pretend to do batch update. Does everything except actually commit change to db e.g. validation."))}}}
    :searchBlocks
    {:fn api-search-blocks
     :config #js {:title "Search Blocks"
                  :description "Search graph for blocks containing search term"
-                 :inputSchema #js {:searchTerm (z/string)}}}
+                 :inputSchema #js {:searchTerm (.string z)}}}
    :listTags
    {:fn api-list-tags
     :config #js {:title "List Tags"
                  :description "List all tags in a graph"
                  :inputSchema
-                 #js {:expand (-> (z/boolean) .optional (.describe "Provide additional detail on each tag e.g. their parents (extends) and tag properties"))}}}
+                 #js {:expand (-> (.boolean z) .optional (.describe "Provide additional detail on each tag e.g. their parents (extends) and tag properties"))}}}
    :listProperties
    {:fn api-list-properties
     :config #js {:title "List Properties"
                  :description "List all properties in a graph"
                  :inputSchema
-                 #js {:expand (-> (z/boolean) .optional (.describe "Provide additional detail on each property e.g. property type, cardinality"))}}}})
+                 #js {:expand (-> (.boolean z) .optional (.describe "Provide additional detail on each property e.g. property type, cardinality"))}}}}))
 
 (defn call-api-tool [tool-fn api-fn args]
   (tool-fn (partial api-tool api-fn) args))
@@ -219,12 +227,13 @@
 ;; Server fns
 ;; ==========
 (defn create-mcp-server []
-  (McpServer. #js {:name "Logseq MCP Server"
-                   :version "0.1.0"}))
+  (let [McpServer (.-McpServer (sdk-mcp))]
+    (McpServer. #js {:name "Logseq MCP Server"
+                     :version "0.1.0"})))
 
 (defn create-mcp-api-server [api-fn]
   (let [mcp-server (create-mcp-server)]
-    (doseq [[k v] api-tools]
+    (doseq [[k v] (api-tools)]
       (.registerTool mcp-server
                      (name k)
                      (:config v)

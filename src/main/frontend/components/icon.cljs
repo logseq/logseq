@@ -22,7 +22,7 @@
             [promesa.core :as p]
             [io.factorhouse.hsx.core :as hsx]))
 
-(defonce emojis (vals (bean/->clj (gobj/get emoji-data "emojis"))))
+(defonce ^:private emojis (delay (vals (bean/->clj (gobj/get emoji-data "emojis")))))
 
 (defn icon
   [icon' & [opts]]
@@ -36,6 +36,7 @@
             item (cond
                    (and (= :emoji (:type icon')) (:id icon'))
                    [:span.ui__icon
+                    (do (ui/ensure-emoji-data!) nil)
                     [:em-emoji (merge {:id (:id icon')
                                        :style {:line-height 1}}
                                       (select-keys icon' [:skin])
@@ -89,7 +90,8 @@
 
 (defn- search-emojis
   [q]
-  (p/let [result (.search SearchIndex q)]
+  (p/let [_ (ui/ensure-emoji-data!)
+          result (.search SearchIndex q)]
     (bean/->clj result)))
 
 (defonce *tabler-icons (atom nil))
@@ -142,6 +144,7 @@
 
 (hsx/defc emoji-cp
   [{:keys [id name] :as emoji} {:keys [on-chosen hover]}]
+  (ui/ensure-emoji-data!)
   [:button.text-2xl.w-9.h-9.transition-opacity
    (cond->
     {:key (str "emoji-" id)
@@ -268,13 +271,13 @@
 (hsx/defc all-cp
   [opts]
   (let [used-items (get-used-items)
-        emoji-items (take 32 emojis)
+        emoji-items (take 32 @emojis)
         icon-items (take 48 (get-tabler-icons))
         opts (assoc opts :virtual-list? false)]
     [:div.all-pane.pb-10
      (when (seq used-items)
        (pane-section (t :ui/frequently-used) used-items opts))
-     (pane-section (t :icon/emojis-count (count emojis))
+     (pane-section (t :icon/emojis-count (count @emojis))
                    emoji-items
                    opts)
      (pane-section (t :icon/icons-count (count (get-tabler-icons)))
@@ -486,7 +489,7 @@
                opts)))]
          [:div.flex.flex-1.flex-col.gap-1
           (case tab
-            :emoji (emojis-cp emojis opts)
+            :emoji (emojis-cp @emojis opts)
             :icon (icons-cp (get-tabler-icons) opts)
             (all-cp opts))])]]
 
