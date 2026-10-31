@@ -65,7 +65,9 @@
   (let [datoms (d/datoms db :avet :block/page page-id)
         block-eids (mapv :e datoms)
         block-ents (map #(d/entity db %) block-eids)
-        blocks (map #(assoc % :block/title (db-content/recur-replace-uuid-in-block-title %)) block-ents)]
+        blocks (map #(assoc (api-util/with-embed-info (api-util/remove-hidden-properties %))
+                :db/id (:db/id %)
+                :block/title (db-content/recur-replace-uuid-in-block-title %)) block-ents)]
     (otree/blocks->vec-tree db blocks page-id)))
 
 (def remove-hidden-properties api-util/remove-hidden-properties)
