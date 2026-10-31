@@ -311,3 +311,32 @@
       "Tag dialog can add properties")
   (is (false? (#'property-component/page-title-property-surface? {:in-block-container? true}))
       "A page nested in the outliner cannot add properties"))
+
+(deftest class-property-rows-follow-block-order-test
+  (let [rows (#'property-component/class-property-rows
+              {:logseq.property.class/properties
+               #{{:block/uuid #uuid "00000000-0000-0000-0000-000000000001"
+                  :db/ident :user.property/third
+                  :block/order "a2"}
+                 {:block/uuid #uuid "00000000-0000-0000-0000-000000000002"
+                  :db/ident :user.property/first
+                  :block/order "a0"}
+                 {:block/uuid #uuid "00000000-0000-0000-0000-000000000003"
+                  :db/ident :user.property/second
+                  :block/order "a1"}}})]
+    (is (= [:user.property/first :user.property/second :user.property/third]
+           (map :property-ident rows))
+        "A tag page lists its properties in their configured order")))
+
+(deftest hidden-properties-only-area-keeps-reveal-toggle-test
+  (let [hidden-only {:full-properties []
+                     :hidden-properties [{:property-ident :user.property/hidden}]}]
+    (is (true? (#'property-component/hidden-properties-only-without-reveal?
+                (assoc hidden-only :show-hidden-properties-toggle-button? false)))
+        "A block with no way to reveal its hidden properties renders no area")
+    (is (false? (#'property-component/hidden-properties-only-without-reveal?
+                 (assoc hidden-only :show-hidden-properties-toggle-button? true)))
+        "A tagged page with only hidden properties still renders the Show hidden properties toggle")
+    (is (false? (#'property-component/hidden-properties-only-without-reveal?
+                 (assoc hidden-only :sidebar-properties? true)))
+        "Sidebar properties are still rendered")))
