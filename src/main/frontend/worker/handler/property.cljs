@@ -296,6 +296,9 @@
 (defn- convert-page-to-tag-tx
   [db page-id]
   (let [page (d/entity db page-id)
+        _ (outliner-validate/validate-unique-by-name-and-tags
+           db (:block/title page)
+           (assoc page :block/tags #{(d/entity db :logseq.class/Tag)}))
         class-tx (db-class/build-new-class db
                                            {:block/uuid (:block/uuid page)
                                             :block/title (:block/title page)

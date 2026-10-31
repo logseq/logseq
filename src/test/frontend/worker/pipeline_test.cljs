@@ -69,12 +69,12 @@
           :block/uuid (:block/uuid second-block)
           :block/title (str "#[[" tag-ref-uuid "]]")
           :block/tags [{:block/uuid tag-uuid
-                        :block/title "tag"
-                        :block/name "tag"
+                        :block/title "Category"
+                        :block/name "category"
                         :block/type "page"}]
           :block/refs [{:block/uuid tag-ref-uuid
-                        :block/title "tag"
-                        :block/name "tag"
+                        :block/title "Category"
+                        :block/name "category"
                         :block/type "page"}]})
         (let [block (d/entity @conn (:db/id second-block))
               tag (first (:block/tags block))]
@@ -134,6 +134,53 @@
 (defn- revision
   [db entity]
   (:block/tx-id (d/entity db (:db/id entity))))
+
+(deftest page-name-uniqueness-after-title-and-tag-changes
+  (doseq [[label initial-title initial-tag operation allowed?]
+          [["rename within a tag" "Cedar" :Kestrel :rename false]
+           ["rename across tags" "Cedar" :Lantern :rename true]
+           ["change only title case" "Cedar" :Lantern :case-only true]
+           ["add an overlapping tag" "juniper" :Lantern :add false]
+           ["merge a remote overlapping tag" "juniper" :Lantern :remote-add true]
+           ["batch add a shared tag" "juniper" :Lantern :batch-add false]
+           ["remove the distinguishing tag" "juniper" :Lantern :remove false]
+           ["change title and tag together" "Cedar" :Kestrel :replace-and-rename true]]]
+    (testing label
+      (let [conn (db-test/create-conn-with-blocks
+                  {:classes {:Kestrel {} :Lantern {} :Shared {}}
+                   :pages-and-blocks [{:page {:block/title "Juniper" :build/tags [:Kestrel]}}
+                                      {:page {:block/title initial-title :build/tags [initial-tag]}}]})
+            first-page (db-test/find-page-by-title @conn "Juniper")
+            second-page (db-test/find-page-by-title @conn initial-title)
+            first-tag (:db/id (db-test/find-page-by-title @conn "Kestrel"))
+            second-tag (:db/id (db-test/find-page-by-title @conn "Lantern"))
+            shared (:db/id (db-test/find-page-by-title @conn "Shared"))
+            first-id (:db/id first-page)
+            second-id (:db/id second-page)
+            db-before @conn
+            change! (fn []
+                      (case operation
+                        :rename (outliner-core/save-block! conn {:db/id second-id :block/title "juniper"})
+                        :case-only (outliner-core/save-block! conn {:db/id first-id :block/title "juniper"})
+                        :add (outliner-property/set-block-property! conn second-id :block/tags first-tag)
+                        :remote-add (ldb/transact! conn [[:db/add second-id :block/tags first-tag]] {:rtc-tx? true})
+                        :batch-add (outliner-property/batch-set-property! conn [first-id second-id] :block/tags shared)
+                        :remove (outliner-property/delete-property-value! conn second-id :block/tags second-tag)
+                        :replace-and-rename
+                        (ldb/transact! conn
+                                       [[:db/retract second-id :block/tags first-tag]
+                                        [:db/add second-id :block/tags second-tag]
+                                        {:db/id second-id :block/title "juniper" :block/name "juniper"}]
+                                       {:outliner-op :save-block})))]
+        (with-transact-pipeline
+          (fn []
+            (if allowed?
+              (do
+                (change!)
+                (is (= "juniper" (:block/title (d/entity @conn (if (= operation :case-only) first-id second-id))))))
+              (do
+                (silence-stderr #(is (thrown-with-msg? js/Error #"Duplicate page" (change!))))
+                (is (true? (identical? db-before @conn)) "A conflicting operation leaves the graph unchanged")))))))))
 
 (deftest nested-insert-keeps-parent-revision-test
   (let [conn (db-test/create-conn-with-blocks

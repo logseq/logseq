@@ -104,14 +104,13 @@
    * :show-new-when-not-exact-match? - Boolean to allow new values be entered. Default is false
    * :exact-match-exclude-items - A set of strings that can't be added as a new item. Default is #{}
    * :transform-fn - Optional fn to transform search results given results and current input
-   * :new-case-sensitive? - Boolean to allow new values to be case sensitive
    * :loading? - whether it's loading the items
    TODO: Describe more options"
   [{:keys [items limit on-chosen empty-placeholder grouped?
            prompt-key input-default-placeholder close-modal?
            extract-fn extract-chosen-fn host-opts on-input input-opts
            item-cp transform-fn tap-*input-val tap-*selected-choices
-           multiple-choices? on-apply new-case-sensitive?
+           multiple-choices? on-apply
            dropdown? show-new-when-not-exact-match? exact-match-exclude-items
            input-container initial-open? loading?
            clear-input-on-chosen?]
@@ -161,9 +160,9 @@
                           (fn? transform-fn)
                           (transform-fn input))
                         (remove nil?))
-        exact-transform-fn (if new-case-sensitive? identity string/lower-case)
-        exact-match? (contains? (set (map (comp exact-transform-fn str extract-fn) search-result'))
-                                (exact-transform-fn input))
+        choice-names (into #{} (map (comp string/lower-case str extract-fn)) full-choices)
+        normalized-input (string/lower-case input)
+        exact-match? (contains? choice-names normalized-input)
         search-result' (if (and multiple-choices? (not (string/blank? input)))
                          (sort-by (fn [item]
                                     (not (contains? selected-choices (:value item))))
@@ -175,14 +174,7 @@
                                (not exact-match?)
                                (not (string/blank? input))
                                (not (exact-match-exclude-items input)))
-                        (let [current-input (exact-transform-fn input)
-                              matches? (some (fn [item]
-                                               (and (string? item)
-                                                    (string? current-input)
-                                                    (string/includes?
-                                                     (string/lower-case item)
-                                                     (string/lower-case current-input))))
-                                             (set (map (comp exact-transform-fn str extract-fn) search-result')))]
+                        (let [matches? (some #(string/includes? % normalized-input) choice-names)]
                           (->>
                            (if matches?
                              (cons
