@@ -339,6 +339,10 @@ func (s *logseqEditorInput) SetMarkedText(r *ui.TextInputRange, text string, sel
 	if s.mounted && !s.focused {
 		return
 	}
+	// GTK can clear preedit after commit; this must not reopen composition.
+	if text == "" && !s.composing {
+		return
+	}
 	selected = ui.TextInputRange{
 		Start: ui.UTF16Len(text[:ui.UTF16ByteOffset(text, min(selected.Start, selected.End))]),
 		End:   ui.UTF16Len(text[:ui.UTF16ByteOffset(text, max(selected.Start, selected.End))]),

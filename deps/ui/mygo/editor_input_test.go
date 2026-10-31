@@ -77,6 +77,32 @@ func TestNativeEditorCompositionBoundaries(t *testing.T) {
 	}
 }
 
+func TestNativeEditorCompositionCompletionReleasesKeys(t *testing.T) {
+	for _, endBeforeCommit := range []bool{false, true} {
+		t.Run(map[bool]string{false: "commit then end", true: "end then commit"}[endBeforeCommit], func(t *testing.T) {
+			previous := logseqEditorServices.Snapshot
+			t.Cleanup(func() { logseqEditorServices.Snapshot = previous })
+			logseqEditorServices.Snapshot = func(string) (string, int, int, bool) { return "", 0, 0, true }
+			var events []luimygo.Event
+			input := &logseqEditorInput{emit: func(event luimygo.Event) { events = append(events, event) }}
+			input.SetMarkedText(nil, "nihao", ui.TextInputRange{Start: 5, End: 5})
+			if endBeforeCommit {
+				input.EndComposition()
+			}
+			input.ReplaceText(nil, "你好")
+			input.SetMarkedText(nil, "", ui.TextInputRange{})
+			input.EndComposition()
+			if !input.input(ui.InputEvent{Kind: ui.InputKeyDown, Key: ui.KeyHome}) {
+				t.Fatal("completed composition still intercepts Home")
+			}
+			if len(events) != 4 || events[2].Name != "composition" || events[2].Values["state"] != "end" ||
+				events[2].Values["text"] != "你好" || events[3].Name != "key" || events[3].Values["key"] != "Home" {
+				t.Fatalf("commit must finish once and release navigation: %+v", events)
+			}
+		})
+	}
+}
+
 func TestNativeEditorPartialPreeditCommit(t *testing.T) {
 	for _, tc := range []struct {
 		name, replacement, want string
