@@ -103,6 +103,50 @@
       (finally
         (ldb/register-transact-pipeline-fn! identity)))))
 
+(deftest save-block-ref-to-existing-journal-keeps-journal-name-with-custom-date-format-test
+  ;; Reproduces https://github.com/logseq/db-test/issues/1293
+  ;; `/today` inserts [[Fri, 25.09.2026]] under the date format `E, dd.MM.yyyy`, while
+  ;; the journal is named after the default format. Saving the block must reuse the
+  ;; journal, not rename it to the title typed in the ref.
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks
+               [{:page {:build/journal 20260925}
+                 :blocks [{:block/title "today"}]}]})
+        journal (db-test/find-journal-by-journal-day @conn 20260925)
+        block (db-test/find-block-by-content @conn "today")
+        custom-format "E, dd.MM.yyyy"
+        journal-name (:block/name journal)
+        _ (d/transact! conn [[:db/add :logseq.class/Journal :logseq.property.journal/title-format custom-format]])
+        title (date-time-util/int->journal-title 20260925 custom-format)
+        ref-uuid (random-uuid)]
+    (is (not= (common-util/page-name-sanity-lc title) journal-name)
+        "The ref's name differs from the journal's stored name")
+    (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+    (try
+      (let [error (try
+                    (outliner-core/save-block!
+                     conn
+                     {:db/id (:db/id block)
+                      :block/uuid (:block/uuid block)
+                      :block/title (str "[[" ref-uuid "]]")
+                      :block/refs [{:block/uuid ref-uuid
+                                    :block/title title
+                                    :block/name (common-util/page-name-sanity-lc title)
+                                    :block/journal-day 20260925
+                                    :block/type "journal"}]})
+                    nil
+                    (catch :default e e))
+            journal-after (db-test/find-journal-by-journal-day @conn 20260925)]
+        (is (nil? error) "Saving the block is not rejected")
+        (is (= journal-name (:block/name journal-after)) "The journal keeps its name")
+        (is (= (:block/uuid journal)
+               (:block/uuid (first (:block/refs (d/entity @conn (:db/id block))))))
+            "The block references the existing journal")
+        (is (= 1 (count (d/datoms @conn :avet :block/journal-day 20260925)))
+            "No second journal is created"))
+      (finally
+        (ldb/register-transact-pipeline-fn! identity)))))
+
 (defn- raw-block-title
   [db block]
   (when block
