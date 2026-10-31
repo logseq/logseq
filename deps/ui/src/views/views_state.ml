@@ -125,6 +125,9 @@ type inst =
         (* bumped at every data fetch issue — a response resolving
            under an older generation is stale (the view already moved
            to a newer context) and must not paint *)
+  ; data_context_revision : int ref
+  ; gallery_display_request : Ui_effect.request
+  ; gallery_asset_request : Ui_effect.request
   }
 
 let empty_vstate () : vstate =
@@ -189,17 +192,35 @@ let make ~sched ~kind ~feature ~owner : inst =
   ; owner
   ; st = Signal.state sched (empty_vstate ())
   ; data_gen = ref 0
+  ; data_context_revision = ref (Runtime.model ()).Model.context_revision
+  ; gallery_display_request = Ui_effect.request ()
+  ; gallery_asset_request = Ui_effect.request ()
   }
 
 (* issue a new fetch generation — responses resolving under an older
    one are dropped *)
 let new_fetch inst : int =
   incr inst.data_gen;
+  inst.data_context_revision := (Runtime.model ()).Model.context_revision;
   !(inst.data_gen)
 
-let fetch_fresh inst gen = !(inst.data_gen) = gen
+let fetch_fresh inst gen =
+  !(inst.data_gen) = gen
+  && (Runtime.model ()).Model.context_revision = !(inst.data_context_revision)
+
+let current_context () =
+  let revision = (Runtime.model ()).Model.context_revision in
+  let repo = Runtime.repo () and route = Runtime.route () in
+  fun () ->
+    (Runtime.model ()).Model.context_revision = revision
+    && Runtime.repo () = repo && Runtime.route () = route
 
 let get inst : vstate = Runtime.signal_get inst.st
+
+let current_view inst =
+  let current = current_context () in
+  let uuid = (get inst).view_uuid in
+  fun () -> current () && (get inst).view_uuid = uuid
 
 (* publish a new vstate — the only way view state changes *)
 let set inst (s : vstate) = Runtime.signal_set inst.st s
@@ -473,6 +494,7 @@ let resolve_property_id ident f =
      Runtime.invoke3 "thread-api/pull" (W.String (Views_db.repo ()))
        (W.String "[:db/id]") (W.Keyword ident)
    in
+   Outliner_ops.check_loader_result w;
    f (W.map_get_int w "db/id");
    Js.Promise.resolve ())
   |> Views_db.catch_quiet
@@ -486,6 +508,7 @@ let resolve_name_id name_lc f =
        (W.String "[:db/id]")
        (W.Array [ W.kw "block/name"; W.String name_lc ])
    in
+   Outliner_ops.check_loader_result w;
    f (W.map_get_int w "db/id");
    Js.Promise.resolve ())
   |> Views_db.catch_quiet
@@ -496,17 +519,20 @@ let owner_uuid (inst : inst) : string option =
 
 let persist_group_by inst =
   let s = get inst in
+  let view_current = current_view inst in
+  let current () = view_current () && (get inst).group_by = s.group_by in
   match s.group_by with
   | Some g ->
       resolve_property_id g (fun id ->
+        if current () then
           match id with
           | Some id ->
-              Views_db.set_view_property s.view_uuid
+              Views_db.set_view_property ~current s.view_uuid
                 "logseq.property.view/group-by-property" (W.Int id)
                 (fun () -> ())
           | None -> ())
   | None ->
-      Views_db.remove_view_property s.view_uuid
+      Views_db.remove_view_property ~current s.view_uuid
         "logseq.property.view/group-by-property" (fun () -> ())
 
 let persist_hidden inst =
@@ -530,15 +556,15 @@ let persist_display_type inst =
     (W.Keyword ("logseq.property.view/type." ^ s.display_type))
     (fun () -> ())
 
-let persist_group_sort_by inst v =
+let persist_group_sort_by ?current inst v =
   let s = get inst in
   match v with
   | Some id ->
-      Views_db.set_view_property s.view_uuid
+      Views_db.set_view_property ?current s.view_uuid
         "logseq.property.view/sort-groups-by-property"
         (W.Int id) (fun () -> ())
   | None ->
-      Views_db.remove_view_property s.view_uuid
+      Views_db.remove_view_property ?current s.view_uuid
         "logseq.property.view/sort-groups-by-property" (fun () -> ())
 
 let persist_group_desc inst d =
@@ -547,10 +573,14 @@ let persist_group_desc inst d =
     "logseq.property.view/sort-groups-desc?" (W.Bool d) (fun () -> ())
 
 let persist_group_sort_by_ident inst ident f =
+  let view_current = current_view inst in
+  let current () = view_current () && (get inst).group_sort_by = Some ident in
   update inst (fun s -> { s with group_sort_by = Some ident });
   resolve_property_id ident (fun id ->
-      persist_group_sort_by inst id;
-      f ())
+      if current () && id <> None then begin
+        persist_group_sort_by ~current inst id;
+        f ()
+      end)
 
 (* operations implemented by views_view.ml, registered at install time to
    keep the module graph acyclic (head/table renderers call back through

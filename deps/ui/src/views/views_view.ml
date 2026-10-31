@@ -333,6 +333,10 @@ let copy_blocks src =
   Hashtbl.iter (Hashtbl.add dst) src;
   dst
 
+let fail_view inst gen () =
+  if V.fetch_fresh inst gen then
+    V.update inst (fun s -> { s with V.loading = false; view_error = Some "" })
+
 (* [~merge] copies the previous table into a fresh one so [blocks ==]
    changes and a refetch does not wipe rows already on screen.
    [~set_limit] is published in that same update: the body must not
@@ -340,6 +344,7 @@ let copy_blocks src =
    [~fresh] drops a response whose snapshot was superseded. [~finally]
    runs on success and on worker failure so the batch ticket clears. *)
 let load_blocks ?(merge = false) ?set_limit ?(fresh = fun () -> true)
+    ?(on_error = fun () -> ())
     ?(finally = fun () -> ()) inst uuids f =
   let rec references acc = function
     | W.Uuid uuid -> uuid::acc
@@ -356,10 +361,11 @@ let load_blocks ?(merge = false) ?set_limit ?(fresh = fun () -> true)
               match set_limit with
               | None -> s
               | Some n -> { s with V.fetch_limit = n });
-          f ()
+          if fresh () then f ()
         end)
   in
-  if uuids = [] then
+  if not (fresh ()) then finally ()
+  else if uuids = [] then
     apply
       (if merge then copy_blocks (V.get inst).V.blocks else Hashtbl.create 64)
   else
@@ -367,7 +373,8 @@ let load_blocks ?(merge = false) ?set_limit ?(fresh = fun () -> true)
       if merge then copy_blocks (V.get inst).V.blocks
       else Hashtbl.create (max 16 (List.length uuids))
     in
-    Db.get_blocks uuids ~metadata:true ~on_error:finally (fun bs ->
+    Db.get_blocks uuids ~metadata:true
+      ~on_error:(fun () -> finally (); on_error ()) (fun bs ->
         List.iter
           (fun b ->
             match W.map_get_uuid b "block/uuid" with
@@ -377,9 +384,11 @@ let load_blocks ?(merge = false) ?set_limit ?(fresh = fun () -> true)
         apply blocks)
 
 let load_props inst f =
+  let gen = !(inst.V.data_gen) in
   if (V.get inst).V.props_loaded then f ()
   else
-    Db.get_all_properties (fun props ->
+    Db.get_all_properties ~on_error:(fail_view inst gen) (fun props ->
+      if V.fetch_fresh inst gen then begin
         let all_props = Hashtbl.create 17 in
         List.iter
           (fun p ->
@@ -391,18 +400,22 @@ let load_props inst f =
             | None -> ())
           props;
         V.update inst (fun s -> { s with V.props_loaded = true; all_props });
-        f ())
+        if V.fetch_fresh inst gen then f () end)
 
 let build_columns inst =
+  let gen = !(inst.V.data_gen) in
   let apply props =
-    let columns = Views_table.build_columns inst props in
-    V.update inst (fun s -> { s with V.columns })
+    if V.fetch_fresh inst gen then begin
+      let columns = Views_table.build_columns inst props in
+      V.update inst (fun s -> { s with V.columns })
+    end
   in
   match inst.V.kind with
   | V.KTagPage owner_uuid ->
       (* cljs objects.cljs build-class-object-columns: the Asset class
          gets an extra "File" column — detect it by the class ident *)
-      Db.get_blocks [ owner_uuid ] (fun ents ->
+      Db.get_blocks [ owner_uuid ] ~on_error:(fail_view inst gen) (fun ents ->
+        if V.fetch_fresh inst gen then begin
           let asset_class =
             match ents with
             | [ e ] ->
@@ -414,12 +427,13 @@ let build_columns inst =
           V.update inst (fun s -> { s with V.asset_class });
           (* thread-api entity refs take lookup-refs, not bare uuids *)
           Db.get_class_properties
+            ~on_error:(fail_view inst gen)
             (W.List [ W.Keyword "block/uuid"; W.Uuid owner_uuid ])
-            apply)
+            apply end)
   | V.KPropertyPage owner_uuid ->
       (* cljs build-property-object-columns: the property itself is the
          only property column *)
-      Db.get_all_properties (fun props ->
+      Db.get_all_properties ~on_error:(fail_view inst gen) (fun props ->
           apply
             (List.filter
                (fun p -> W.map_get_uuid p "block/uuid" = Some owner_uuid)
@@ -447,20 +461,14 @@ let load_view_data ?(fetch_limit = 0) inst =
              refresh) already superseded this request *)
           ()
       | None ->
-          V.update inst (fun s ->
-              { s with V.data = Wr.VEmpty; view_error = None; loading = false })
+          fail_view inst gen ()
       | Some v when W.get v "error" <> None ->
           let error = Option.get (W.get v "error") in
           let message = Option.get (W.map_get_string error "message") in
           V.update inst (fun s ->
               { s with V.data = Wr.VEmpty; view_error = Some message; loading = false })
       | Some v ->
-          let d =
-            try Wr.decode_view_data v
-            with e ->
-              Ui_services.log_error ("view-data decode failed", e);
-              Wr.VEmpty
-          in
+          let d = Wr.decode_view_data v in
           let continue () =
             if V.fetch_fresh inst gen then
               load_props inst (fun () ->
@@ -520,6 +528,7 @@ let load_view_data ?(fetch_limit = 0) inst =
                  and the count was winning and delaying the rows. *)
               load_blocks ~merge:growing ~set_limit:n
                 ~fresh:(fun () -> V.fetch_fresh inst gen)
+                ~on_error:(fail_view inst gen)
                 ~finally:(fun () -> ref_end inst ticket)
                 inst uuids (fun () ->
                   continue ();
@@ -556,16 +565,20 @@ let load_view_data ?(fetch_limit = 0) inst =
                  | v -> Views_query.collect_uuids v [])
             in
             load_blocks ~fresh:(fun () -> V.fetch_fresh inst gen)
+              ~on_error:(fail_view inst gen)
               inst uuids continue
           end
   in
   if Ui_services.env_publishing () && view_uuid = "" then
+    let repo = Db.repo () in
     let owner_ref = match inst.V.owner with
       | W.String name -> W.Array [ W.kw "block/name"; W.String name ]
       | W.Uuid uuid -> W.Array [ W.kw "block/uuid"; W.Uuid uuid ]
       | _ -> invalid_arg "View owner must be a page name or UUID" in
     ignore ((let* owner = Runtime.invoke3 "thread-api/pull"
-        (W.String (Db.repo ())) (W.String "[:db/id]") owner_ref in
+        (W.String repo) (W.String "[:db/id]") owner_ref in
+      Outliner_ops.check_loader_result owner;
+      if not (V.fetch_fresh inst gen) then Js.Promise.resolve () else
       let fields = match ctx with W.Map kvs -> kvs | _ -> assert false in
       let fields = List.map (fun (k, v) ->
         ((match k with
@@ -576,10 +589,12 @@ let load_view_data ?(fetch_limit = 0) inst =
       let fields = match W.get owner "db/id" with
         | Some id -> (W.kw "view-for-id", id) :: fields | None -> fields in
       let* data = Runtime.invoke3 "thread-api/get-view-data"
-          (W.String (Db.repo ())) W.Nil (W.Map fields) in
+          (W.String repo) W.Nil (W.Map fields) in
+      Outliner_ops.check_loader_result data;
       apply (Some data);
-      Js.Promise.resolve ()) |> Db.catch_quiet)
-  else Db.snapshots ~f:(fun snap -> apply (Wr.snapshot_slot_value snap key))
+      Js.Promise.resolve ()) |> Db.catch_quiet ~on_error:(fail_view inst gen))
+  else Db.snapshots ~on_error:(fail_view inst gen)
+    ~f:(fun snap -> apply (Db.snapshot_value snap key))
     [ Db.resource_view_data view_uuid ctx ]
 
 let refresh inst =
@@ -609,14 +624,19 @@ let select_view inst v =
 
 let load_views inst ~on_done =
   let gen = V.new_fetch inst in
+  let fail = fail_view inst gen in
   let key = Db.key_views inst.V.owner inst.V.feature in
   Db.snapshots
+    ~on_error:fail
     ~f:(fun snap ->
       if V.fetch_fresh inst gen then
-      match Wr.snapshot_slot_value snap key with
+      match Db.snapshot_value snap key with
       | Some (W.Array uuids) | Some (W.List uuids) -> (
-          let us = List.filter_map W.as_uuid uuids in
-          Db.get_blocks us ~metadata:true (fun ents ->
+          let us = List.map (fun uuid ->
+              match W.as_uuid uuid with
+              | Some uuid -> uuid
+              | None -> invalid_arg "Invalid view catalog UUID") uuids in
+          Db.get_blocks us ~metadata:true ~on_error:fail (fun ents ->
             if V.fetch_fresh inst gen then begin
               (* get_blocks order is storage order — tabs follow the
                  resource's uuid order (cljs view-uuids), which also picks
@@ -626,27 +646,30 @@ let load_views inst ~on_done =
                 (fun e ->
                   match Wr.decode_view_ent e with
                   | Some v -> Hashtbl.replace by_uuid v.Wr.vu v
-                  | None -> ())
+                  | None -> invalid_arg "Invalid view catalog entity")
                 ents;
+              if not (List.for_all (Hashtbl.mem by_uuid) us) then
+                invalid_arg "Incomplete view catalog entities";
               V.update inst (fun s ->
                   { s with
                     V.views = List.filter_map (Hashtbl.find_opt by_uuid) us
                   });
-              on_done () end))
-      | _ -> on_done ())
+              if V.fetch_fresh inst gen then on_done () end))
+      | _ -> fail ())
     [ Db.resource_views inst.V.owner inst.V.feature ]
 
 (* resolve the uuid of the owner page/entity behind inst.owner — f
    gets None when the page is absent (cljs all_pages gates the view on
    [:page-identity views-page-name] and renders nothing when missing) *)
-let owner_uuid inst f =
+let owner_uuid inst ~on_error f =
   match inst.V.owner with
   | W.Uuid u -> f (Some u)
   | W.String name -> (
       let key = Db.key_page_identity name in
       Db.snapshots
+        ~on_error
         ~f:(fun snap ->
-          match Wr.snapshot_slot_value snap key with
+          match Db.snapshot_value snap key with
           | Some (W.Uuid u) -> f (Some u)
           | _ -> f None)
         [ Db.res key ])
@@ -655,21 +678,27 @@ let owner_uuid inst f =
 (* cljs create-view! parents view blocks under the shared $$$views page
    (common-config/views-page-name) and skips the insert when that page
    cannot be resolved *)
-let views_page_uuid f =
+let views_page_uuid ~on_error f =
   let key = Db.key_page_identity "$$$views" in
   Db.snapshots
+    ~on_error
     ~f:(fun snap ->
-      match Wr.snapshot_slot_value snap key with
+      match Db.snapshot_value snap key with
       | Some (W.Uuid u) -> f (Some u)
       | _ -> f None)
     [ Db.res key ]
 
 let create_view ~title ~uuid inst ~after =
-  owner_uuid inst (function
+  let gen = !(inst.V.data_gen) in
+  let current () = V.fetch_fresh inst gen in
+  let on_error = fail_view inst gen in
+  owner_uuid inst ~on_error (function
+    | _ when not (current ()) -> ()
     | Some ouuid ->
-        views_page_uuid (function
+        views_page_uuid ~on_error (function
+          | _ when not (current ()) -> ()
           | Some vpuuid ->
-              Db.insert_view_block ~title ~uuid ~page_uuid:vpuuid
+              Db.insert_view_block ~current ~on_error ~title ~uuid ~page_uuid:vpuuid
                 ~owner_uuid:ouuid ~feature_type:inst.V.feature
                 ~after:(fun () ->
                   load_views inst ~on_done:(fun () -> after ())) ()
@@ -680,18 +709,23 @@ let create_view ~title ~uuid inst ~after =
    when the owner or $$$views page cannot be resolved the view settles
    into its empty state instead of staying on Loading *)
 let ensure_default_view inst =
+  let gen = !(inst.V.data_gen) in
+  let current () = V.fetch_fresh inst gen in
+  let on_error = fail_view inst gen in
   match (V.get inst).V.views with
   | v :: _ -> select_view inst v
   | [] when Ui_services.env_publishing () -> refresh inst
   | [] ->
-      owner_uuid inst (function
+      owner_uuid inst ~on_error (function
+        | _ when not (current ()) -> ()
         | Some ouuid ->
             let uuid =
               Db.gen_view_uuid ~owner:ouuid ~feature_type:inst.V.feature
             in
-            views_page_uuid (function
+            views_page_uuid ~on_error (function
+              | _ when not (current ()) -> ()
               | Some vpuuid ->
-                  Db.insert_view_block ~title:(default_view_title inst)
+                  Db.insert_view_block ~current ~on_error ~title:(default_view_title inst)
                     ~uuid ~page_uuid:vpuuid
                     ~owner_uuid:ouuid ~feature_type:inst.V.feature
                     ~after:(fun () ->
@@ -831,10 +865,11 @@ let ensure_full_action_rows inst on_done =
   else
     let key = Db.key_view_data view_uuid ctx in
     let fetch () = Db.snapshots
+      ~on_error:(fun () -> finish (Error "Full view data is unavailable"))
       ~f:(fun snap ->
         if not (fresh ()) then finish (Error "View context changed")
         else
-          match Wr.snapshot_slot_value snap key with
+          match Db.snapshot_value snap key with
           | None -> finish (Error "Full view data is unavailable")
           | Some (W.Map _ as wire) ->
               (match W.get wire "error" with
@@ -884,8 +919,7 @@ let ensure_full_action_rows inst on_done =
 
 let add_new_object inst =
   let repo = Db.repo () in
-  let context = repo, Runtime.route () in
-  let same_context () = context = (Db.repo (), Runtime.route ()) in
+  let same_context = V.current_view inst in
   let insert owner_uuid ~tags ~props =
     if same_context () then
       let uuid = Ui_services.env_random_uuid () in
@@ -961,8 +995,9 @@ let view ~kind ~owner : t =
     match kind with
     | V.KQuery { block_uuid } -> (
         match Hashtbl.find_opt query_insts block_uuid with
-        | Some inst -> (inst, false)
-        | None ->
+        | Some inst when !(inst.V.data_context_revision) =
+            (Runtime.model ()).Model.context_revision -> (inst, false)
+        | _ ->
             let inst =
               V.make ~sched ~kind ~feature:(feature_of_kind kind) ~owner
             in
@@ -999,7 +1034,7 @@ let view ~kind ~owner : t =
       Hashtbl.remove live inst.V.id;
       match inst.V.kind with
       | V.KQuery _ -> ()
-      | _ -> Views_builder.drop_tree inst);
+      | _ -> incr inst.V.data_gen; Views_builder.drop_tree inst);
   (match inst.V.kind with
    | V.KQuery _ -> query_view_el inst
    | _ -> view_el inst)
