@@ -1898,9 +1898,9 @@ let flush_pending_save () =
   | None -> Js.Promise.resolve ()
   | Some pending -> save_pending pending
 
-let undo () =
+let undo ?owner () =
   let context = Runtime.model () in
-  let owner = refresh_owner_for None in
+  let owner = refresh_owner_for owner in
   let current () = refresh_current ?owner context in
   match context.Model.repo with
   | Some repo ->
@@ -1919,9 +1919,9 @@ let undo () =
              Js.Promise.resolve ())
   | None -> Js.Promise.resolve ()
 
-let redo () =
+let redo ?owner () =
   let context = Runtime.model () in
-  let owner = refresh_owner_for None in
+  let owner = refresh_owner_for owner in
   let current () = refresh_current ?owner context in
   match context.Model.repo with
   | Some repo ->

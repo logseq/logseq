@@ -184,15 +184,7 @@ let insert_autopair (m : Edit_model.t) text =
 (* paste clipboard text into the editing block at the caret as a single
    block (cljs editor/paste-text-in-one-block-at-point) *)
 let paste_text_at_caret uuid =
-  ignore
-    (Ui_task.bind (Ui_services.clipboard_read_text ()) (fun text ->
-     (match A.edit_model uuid with
-      | Some m ->
-          let lo, hi = A.sel_span_of m in
-          A.splice_range uuid lo hi text;
-          Outliner_ops.schedule_save uuid (A.live_buffer uuid)
-      | None -> ());
-     Ui_task.resolve ()))
+  ignore (A.paste_clipboard_text uuid)
 
 
 (* -- editor-mode keys -- *)

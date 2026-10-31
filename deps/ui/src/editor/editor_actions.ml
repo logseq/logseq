@@ -1927,17 +1927,43 @@ let edit_last_inserted ?scope resp =
   | Some u -> enter_edit ?scope u (String.length (model_title u))
   | None -> ()
 
-let paste_focus () =
-  let context = Runtime.repo (), Runtime.route () in
+let paste_session_current () =
   let editing = S.editing () in
   let selection = S.history_cursor () in
-  let scope = match editing with Some e -> e.S.scope | None -> S.selection_scope () in
+  fun () ->
+    match editing, S.editing () with
+    | Some before, Some current -> before.S.epoch == current.S.epoch
+    | None, None -> S.history_cursor () = selection
+    | _ -> false
+
+let paste_context_current () =
+  let context = action_context () in
+  let generation = !Runtime.load_gen in
+  let session_current = paste_session_current () in
+  fun () ->
+    context = action_context () && generation = !Runtime.load_gen && session_current ()
+
+let paste_clipboard_text uuid =
+  match edit_model uuid with
+  | None -> Ui_task.resolve ()
+  | Some _ ->
+      let current = paste_context_current () in
+      Ui_task.bind (Ui_services.clipboard_read_text ()) (fun text ->
+          (if current () then
+             match edit_model uuid with
+             | Some m ->
+                 let lo, hi = sel_span_of m in
+                 splice_range uuid lo hi text;
+                 Ops.schedule_save uuid (live_buffer uuid)
+             | None -> ());
+          Ui_task.resolve ())
+
+let paste_focus () =
+  let context = Runtime.repo (), Runtime.route () in
+  let session_current = paste_session_current () in
+  let scope = match S.editing () with Some e -> e.S.scope | None -> S.selection_scope () in
   fun resp ->
-    if context = (Runtime.repo (), Runtime.route ())
-       && (match editing, S.editing () with
-           | Some before, Some current -> before.S.epoch == current.S.epoch
-           | None, None -> S.history_cursor () = selection
-           | _ -> false)
+    if context = (Runtime.repo (), Runtime.route ()) && session_current ()
     then edit_last_inserted ~scope resp
 
 let paste_history_opts target_uuid =
@@ -1959,14 +1985,17 @@ let paste_trees trees target_uuid ~replace_empty =
    places after [uuid] (cljs keep-uuid? + :outliner-real-op
    :paste-text under :outliner-op :paste) *)
 let paste_markdown_blocks uuid text ~replace_empty ~sibling =
+  let current = paste_context_current () in
+  let repo = Runtime.repo () in
   let focus = paste_focus () in
   let opts = paste_history_opts uuid in
   let* w =
     Runtime.invoke3 "thread-api/paste-extract-blocks"
-      (Wire.String (Runtime.repo ()))
+      (Wire.String repo)
       (Wire.String text)
       (Wire.String uuid)
   in
+  if not (current ()) then Js.Promise.resolve () else
   match w with
   | Wire.Array (_ :: _ as maps) -> (
       let* resp =
@@ -2365,11 +2394,28 @@ let restore_history result =
 
 let () = S.restore_history := restore_history
 
-let rec run_history operation =
-  if !S.structure_pending then
-    S.enqueue_edit_action ~real:true (fun () -> run_history operation)
-  else
-    run_structure ~restore:(S.editing ()) (operation ()) (fun () -> ())
+let history_owner : Ops.refresh_owner option ref = ref None
+
+let run_history operation =
+  let context = Runtime.model () in
+  let owner =
+    match !history_owner with
+    | Some owner when Ops.refresh_current ~owner context -> Some owner
+    | _ ->
+        let owner = Ops.refresh_owner_for None in
+        history_owner := owner;
+        owner
+  in
+  let rec run () =
+    if not (Ops.refresh_current ?owner context) then ()
+    else if !S.structure_pending then
+      S.enqueue_edit_action ~real:true run
+    else begin
+      Option.iter (fun owner -> owner.Ops.outcome <- None) owner;
+      run_structure ~restore:(S.editing ()) (operation ?owner ()) (fun () -> ())
+    end
+  in
+  run ()
 
 let undo () = run_history Ops.undo
 let redo () = run_history Ops.redo

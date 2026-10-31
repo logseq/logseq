@@ -185,17 +185,7 @@ let run ~command ~block ~value : outcome =
           | "edit-paste" -> (
               match Editor_actions.edit_model uuid with
               | Some _ ->
-                  ignore
-                    (Ui_task.bind (Ui_services.clipboard_read_text ())
-                       (fun text ->
-                         (match Editor_actions.edit_model uuid with
-                          | Some m ->
-                              let lo, hi = Editor_actions.sel_span_of m in
-                              Editor_actions.splice_range uuid lo hi text;
-                              Outliner_ops.schedule_save uuid
-                                (Editor_actions.live_buffer uuid)
-                          | None -> ());
-                         Ui_task.resolve ()));
+                  ignore (Editor_actions.paste_clipboard_text uuid);
                   Handled
               | None -> No_target)
           | "edit-select-all" -> (
