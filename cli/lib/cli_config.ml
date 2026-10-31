@@ -90,15 +90,22 @@ let read_file = Cli_unix.read_text_file
 let read_config_file path =
   if not (Cli_unix.file_exists path) then Ok None
   else
-    let content = read_file path in
-    if String.trim content = "" then Ok None
-    else
-      try Ok (Some (Melange_edn_melange.of_edn_string content |> value_of_edn))
-      with exn ->
+    match read_file path with
+    | exception exn ->
         Error
           (Error.make Error.Invalid_config
-             ("invalid config file: " ^ path ^ " (" ^ Printexc.to_string exn
-            ^ ")"))
+             ("cannot read config file: " ^ path ^ " ("
+            ^ Exn_message.to_string exn ^ ")"))
+    | content -> (
+        if String.trim content = "" then Ok None
+        else
+          try
+            Ok (Some (Melange_edn_melange.of_edn_string content |> value_of_edn))
+          with exn ->
+            Error
+              (Error.make Error.Invalid_config
+                 ("invalid config file: " ^ path ^ " ("
+                ^ Exn_message.to_string exn ^ ")")))
 
 let invalid_config message = Error.make Error.Invalid_config message
 

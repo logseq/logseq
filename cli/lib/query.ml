@@ -896,16 +896,28 @@ let execute_with_mode action config mode =
         | Error err ->
             pure (Output_mode.error ~command:Command_id.Query mode err)
         | Ok invoke_config ->
+            (* The worker rejects a query it cannot run (unknown variable and
+               so on) with an HTTP error. *)
             bind
-              (Transport.thread_api_q invoke_config ~repo
-                 ~query:(Edn_util.vector_t_vec (query_args query inputs)))
-              (fun value ->
-                pure
-                  (Cli_result.ok ~command:Command_id.Query mode
-                     (Query_result
-                        (Edn_util.map_vec
-                           (Vec.of_array
-                              [| (Edn_util.keyword "result", value) |]))))))
+              (catch
+                 (map
+                    (fun value -> Ok value)
+                    (Transport.thread_api_q invoke_config ~repo
+                       ~query:(Edn_util.vector_t_vec (query_args query inputs))))
+                 (function
+                   | Failure message ->
+                       pure (Error (Error.make Error.Invalid_query message))
+                   | exn -> error exn))
+              (function
+                | Error err ->
+                    pure (Output_mode.error ~command:Command_id.Query mode err)
+                | Ok value ->
+                    pure
+                      (Cli_result.ok ~command:Command_id.Query mode
+                         (Query_result
+                            (Edn_util.map_vec
+                               (Vec.of_array
+                                  [| (Edn_util.keyword "result", value) |]))))))
 
 let meta ?(examples = Vec.empty) id doc =
   {

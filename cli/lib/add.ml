@@ -246,13 +246,13 @@ let read_blocks (opts : opts) args =
       | exception exn ->
           Error
             (Error.make Error.Invalid_blocks
-               ("invalid blocks markdown: " ^ Printexc.to_string exn)))
+               ("invalid blocks markdown: " ^ Exn_message.to_string exn)))
   | None, Some path, _ -> (
       try Markdown_blocks.of_markdown (read_file path)
       with exn ->
         Error
           (Error.make Error.Invalid_blocks
-             (path ^ ": " ^ Printexc.to_string exn)))
+             (path ^ ": " ^ Exn_message.to_string exn)))
   | None, None, Some content when content <> "" ->
       Ok (Vec.singleton (Block.make ~title:content ()))
   | None, None, _ when not (Vec.is_empty args) ->
@@ -1187,6 +1187,22 @@ let rewrite_name_lookups ~target ids ops =
                                 (Vec.nth args 1);
                               rewrite ~as_uuid:false ~in_blocks:true
                                 (Vec.nth args 2);
+                            |]);
+                     |])
+            | Some "save-block", Some args when Vec.length args = 2 ->
+                (* Refs in a saved block take [:block/uuid] lookups like
+                   the inserted ones. *)
+                Edn_util.vector_vec
+                  (Vec.of_array
+                     [|
+                       Vec.nth items 0;
+                       Edn_util.vector_vec
+                         (Vec.of_array
+                            [|
+                              rewrite ~as_uuid:false ~in_blocks:true
+                                (Vec.nth args 0);
+                              rewrite ~as_uuid:false ~in_blocks:true
+                                (Vec.nth args 1);
                             |]);
                      |])
             | _ -> rewrite ~as_uuid:false ~in_blocks:false op)

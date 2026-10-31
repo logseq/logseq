@@ -44,7 +44,10 @@ let env_lookup env key = Vec.assoc_opt key env
 let is_option token =
   let is_blank c = c = ' ' || c = '\t' || c = '\n' || c = '\r' in
   let n = String.length token in
-  n > 0 && token.[0] = '-' && not (n > 1 && is_blank token.[1])
+  n > 0
+  && token.[0] = '-'
+  && (not (n > 1 && is_blank token.[1]))
+  && not (Cli_parse.is_negative_number token)
 let option_value key options =
   Vec.find_map
     (fun (candidate, value) -> if candidate = key then value else None)
@@ -200,9 +203,31 @@ let group_help_path registry path =
         && Vec.length command.Command_registry.path > Vec.length path)
       registry.Command_registry.commands
 
+(* A command can be followed by arguments, as in `show 1 --help`; its help is
+   the help of the longest command path the words start with. *)
+let command_path_prefix registry path =
+  Vec.fold_left
+    (fun longest command ->
+      let candidate = command.Command_registry.path in
+      match longest with
+      | Some current when Vec.length current >= Vec.length candidate -> longest
+      | _ -> if is_prefix candidate path then Some candidate else longest)
+    None registry.Command_registry.commands
+
+(* `--help` and `-h` ask for help; `--help=false` does not. *)
+let help_requested options =
+  Vec.exists
+    (fun (key, value) ->
+      key = "help"
+      &&
+      match value with
+      | None -> true
+      | Some value -> String.lowercase_ascii (String.trim value) = "true")
+    options
+
 let help_group registry options positional =
-  if option_present "help" options then Some positional
-  else if group_help_path registry positional then Some positional
+  if group_help_path registry positional then Some positional
+  else if help_requested options then command_path_prefix registry positional
   else None
 
 let profile_status exit_code =
@@ -299,11 +324,28 @@ let parse_args : type marker.
     if option_present "version" options then None
     else help_group app.registry options positional
   in
+  (* A group without `--help` is not asked for help, so its options still
+     have to be valid. *)
+  let group_options_error group =
+    if help_requested options then None
+    else
+      match
+        Cli_parse.validate_options group
+          (fst (Cli_parse.parse_tokens input.argv))
+      with
+      | Ok () -> None
+      | Error err -> Some err
+  in
   match help with
-  | Some group ->
-      Command_registry.render_help ~group app.registry
-      |> set_pending_message_output mode;
-      Error (Error.unknown_command "")
+  | Some group -> (
+      match group_options_error group with
+      | Some err ->
+          set_pending_error_output mode err;
+          Error err
+      | None ->
+          Command_registry.render_help ~group app.registry
+          |> set_pending_message_output mode;
+          Error (Error.unknown_command ""))
   | None -> (
       match parse_request app input with
       | Ok request -> Ok (Parsed_argv_state (input, request))
@@ -349,11 +391,28 @@ let ensure_action_graph_constraints config action =
       Error (graph_exists_error graph)
   | _ -> Ok ()
 
+(* An exception that escapes a stage (for example a failed worker request) is
+   reported like any other error, in the chosen output format, instead of
+   reaching `bin/main.ml` as a bare exception name on stderr. *)
+let recover_stage ~on_error stage =
+  try Cli_effect.catch (stage ()) on_error with exn -> on_error exn
+
+let pending_error_state ?command mode exn =
+  let err = Error.exception_error exn in
+  set_pending_error_output ?command mode err;
+  Cli_effect.pure (Error err)
+
 let resolve_config : type marker.
     app_context ->
     (parsed_argv, marker) state ->
     (resolved_config, not_final) state Error.build_result Cli_effect.t =
  fun app (Parsed_argv_state (input, request)) ->
+  recover_stage
+    ~on_error:
+      (pending_error_state
+         ~command:(Cli_request.command_id request)
+         (output_mode_of_globals request.Cli_request.globals))
+  @@ fun () ->
   Cli_effect.map
     (fun result ->
       match result with
@@ -407,6 +466,12 @@ let build_action : type marker.
     (resolved_config, marker) state ->
     (built_action, not_final) state Error.build_result Cli_effect.t =
  fun app (Resolved_config_state (config, request)) ->
+  recover_stage
+    ~on_error:
+      (pending_error_state
+         ~command:(Cli_request.command_id request)
+         (output_mode_of_config config))
+  @@ fun () ->
   Cli_effect.map
     (fun result ->
       match result with
@@ -432,6 +497,12 @@ let execute_action : type marker.
     (built_action, marker) state ->
     (executed_action, final) state Error.build_result Cli_effect.t =
  fun app (Built_action_state (config, action)) ->
+  let failed exn =
+    let (Output.Mode.Packed mode) = output_mode_of_config config in
+    let result = Cli_result.error mode (Error.exception_error exn) in
+    Cli_effect.pure (Ok (Executed_action_state (config, result)))
+  in
+  recover_stage ~on_error:failed @@ fun () ->
   Cli_effect.map
     (fun result ->
       Ok (Executed_action_state (config, with_registry_metadata app result)))

@@ -2,11 +2,23 @@
    starts a list item in a quoted free-text value such as --blocks, not
    an option. Every other dash prefix keeps the strict option meaning so
    `--1`-style tokens are still rejected as unknown options rather than
-   swallowed as values. *)
+   swallowed as values. A negative number such as `-5` is a value too, so
+   `--timeout-ms -5` reports the bad number instead of an unknown command. *)
+let is_negative_number token =
+  let n = String.length token in
+  n > 1
+  && token.[0] = '-'
+  && String.for_all (fun c -> (c >= '0' && c <= '9') || c = '.')
+       (String.sub token 1 (n - 1))
+  && String.exists (fun c -> c >= '0' && c <= '9') token
+
 let is_option token =
   let is_blank c = c = ' ' || c = '\t' || c = '\n' || c = '\r' in
   let n = String.length token in
-  n > 0 && token.[0] = '-' && not (n > 1 && is_blank token.[1])
+  n > 0
+  && token.[0] = '-'
+  && (not (n > 1 && is_blank token.[1]))
+  && not (is_negative_number token)
 
 let option_value key options =
   Vec.find_map
@@ -358,6 +370,16 @@ let validate_integer_option key options =
       Error (invalid_value key value "Expected integer")
   | _ -> Ok ()
 
+let validate_non_negative_option key options =
+  match Vec.assoc_opt key options with
+  | Some (Some value) -> (
+      match Int64.of_string_opt value with
+      | None -> Error (invalid_value key value "Expected integer")
+      | Some number when Int64.compare number 0L < 0 ->
+          Error (invalid_value key value "Expected a non-negative integer")
+      | Some _ -> Ok ())
+  | _ -> Ok ()
+
 let validate_integer_options keys options =
   Vec.fold_left
     (fun result key ->
@@ -441,8 +463,8 @@ let list_asset_sort_values =
     [| "id"; "title"; "asset-type"; "size"; "updated-at"; "created-at" |]
 
 let validate_list_common_values sort_values options =
-  Error.bind (validate_integer_option "limit" options) (fun () ->
-      Error.bind (validate_integer_option "offset" options) (fun () ->
+  Error.bind (validate_non_negative_option "limit" options) (fun () ->
+      Error.bind (validate_non_negative_option "offset" options) (fun () ->
           Error.bind
             (validate_member_option "order"
                (Vec.of_array [| "asc"; "desc" |])
@@ -453,7 +475,7 @@ let validate_list_common_values sort_values options =
                   validate_csv_member_option "fields" sort_values options))))
 
 let validate_global_values options =
-  Error.bind (validate_integer_option "timeout-ms" options) (fun () ->
+  Error.bind (validate_non_negative_option "timeout-ms" options) (fun () ->
       validate_member_option "output"
         (Vec.of_array [| "human"; "json"; "edn" |])
         options)
@@ -537,6 +559,10 @@ let validate_option_values path options =
                 validate_time_option "deadline" options))
       else if path2 path "upsert" "block" || path2 path "upsert" "asset" then
         validate_pos_value options
+      else if path2 path "upsert" "property" then
+        validate_member_option "cardinality"
+          (Vec.of_array [| "one"; "many" |])
+          options
       else Ok ())
 
 let validate_options path options =

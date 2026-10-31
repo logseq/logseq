@@ -6636,6 +6636,57 @@ let () =
           remove_tree root;
           Js.Promise.resolve pass));
 
+  test_promise "CLI parity graph import reports an import the worker rejected"
+    (fun () ->
+      let root = temp_dir "logseq-cli-graph-import-rejected-" in
+      let import_edn = Node.Path.join [| root; "import.edn" |] in
+      write_file import_edn "{:page \"Import Page\"}";
+      let calls = ref Vec.empty in
+      let rejection = "Imported EDN has 1 validation error(s)" in
+      let server =
+        invoke_server (fun body ->
+            calls := Vec.push_front !calls body;
+            if Js.String.includes ~search:"thread-api/import-edn" body then
+              "[\"^ \",\"~:error\",\"" ^ rejection ^ "\"]"
+            else "null")
+      in
+      with_server server (fun base_url ->
+          let cfg =
+            {
+              (config ~repo:"demo" ~root_dir:root ()) with
+              Cli_config.base_url = Some base_url;
+            }
+          in
+          let* result =
+            effect_to_promise
+              (execute_with_output Graph.execute
+                 (Graph.Graph_import
+                    {
+                      graph = Cli_primitive.create_graph "demo";
+                      repo = Cli_primitive.create_repo "demo";
+                      opts =
+                        {
+                          Graph.import_type = Graph.Import_edn;
+                          input = import_edn;
+                        };
+                      require_missing_graph = false;
+                    })
+                 cfg Output.Mode.Human)
+          in
+          expect_bool "rejected import is an error" true
+            (Cli_result.is_error result);
+          let output = Format_types.format_result result cfg in
+          expect_named_contains "rejected import message" output rejection;
+          expect_named_not_contains "rejected import is not reported imported"
+            output "Imported edn";
+          expect_bool "worker received the import" true
+            (Vec.exists
+               (fun body ->
+                 Js.String.includes ~search:"thread-api/import-edn" body)
+               !calls);
+          remove_tree root;
+          Js.Promise.resolve pass));
+
   test "CLI parity top-level graph constraints reject existing sqlite imports"
     (fun () ->
       let root = temp_dir "logseq-cli-graph-constraints-" in
@@ -6712,6 +6763,33 @@ let () =
       expect_named_contains "edn help status" edn_stdout ":status :ok";
       expect_named_contains "edn help message" edn_stdout "Usage: logseq");
 
+  test "CLI parity help for an unknown command is an unknown-command error"
+    (fun () ->
+      let unknown_top = run_cli_lifecycle [| "destroy-the-world2"; "--help" |] in
+      expect_int "unknown command help exit" 1 unknown_top.exit_code;
+      let unknown_top_stdout = stdout_text "unknown command stdout" unknown_top in
+      expect_named_contains "unknown command help code" unknown_top_stdout
+        "unknown-command";
+      expect_named_contains "unknown command help message" unknown_top_stdout
+        "destroy-the-world2";
+      expect_named_not_contains "unknown command help prints no usage"
+        unknown_top_stdout "Usage: logseq";
+      let unknown_sub = run_cli_lifecycle [| "graph"; "nonexistent"; "--help" |] in
+      expect_int "unknown subcommand help exit" 1 unknown_sub.exit_code;
+      expect_named_contains "unknown subcommand help code"
+        (stdout_text "unknown subcommand stdout" unknown_sub)
+        "unknown-command";
+      let known_group = run_cli_lifecycle [| "graph"; "--help" |] in
+      expect_int "group help exit" 0 known_group.exit_code;
+      expect_named_contains "group help usage"
+        (stdout_text "group help stdout" known_group)
+        "Usage: logseq graph";
+      let known_command = run_cli_lifecycle [| "graph"; "list"; "--help" |] in
+      expect_int "command help exit" 0 known_command.exit_code;
+      expect_named_contains "command help usage"
+        (stdout_text "command help stdout" known_command)
+        "Usage: logseq graph list");
+
   test "CLI parity main structured parse errors respect output modes" (fun () ->
       let json_output = run_cli_lifecycle [| "--output"; "json"; "wat" |] in
       expect_int "json parse exit" 1 json_output.exit_code;
@@ -6787,10 +6865,209 @@ let () =
         "Usage: logseq upsert block";
       expect_named_contains "upsert block examples" upsert_help "Examples:";
       let example_help = run_cli [| "example"; "upsert"; "--help" |] in
-      expect_named_contains "example upsert usage" example_help
-        "Usage: logseq example upsert";
-      expect_named_not_contains "example upsert group has no examples"
-        example_help "Examples:");
+      expect_named_contains "example selector usage is the example command"
+        example_help "Usage: logseq example [options]";
+      expect_named_not_contains "example selector is not a command word"
+        example_help "Usage: logseq example upsert");
+
+  test "CLI parity help for a command with arguments is the command help"
+    (fun () ->
+      let show_help = run_cli [| "show"; "123"; "--help" |] in
+      expect_named_contains "show usage" show_help "Usage: logseq show [options]";
+      expect_named_contains "show options" show_help "--page";
+      expect_named_not_contains "show argument is not a subcommand" show_help
+        "<subcommand>";
+      let completion_help = run_cli [| "completion"; "zsh"; "-h" |] in
+      expect_named_contains "completion usage" completion_help
+        "Usage: logseq completion [options]";
+      expect_named_not_contains "completion argument is not a subcommand"
+        completion_help "<subcommand>";
+      let junk = run_cli_lifecycle [| "show"; "show"; "--help" |] in
+      expect_int "repeated command word help exit" 0 junk.exit_code;
+      expect_named_not_contains "repeated command word is not echoed"
+        (stdout_text "repeated command word stdout" junk)
+        "Usage: logseq show show");
+
+  test "CLI parity a bare group still validates its options" (fun () ->
+      let expect_invalid name argv =
+        let output = run_cli_lifecycle argv in
+        expect_int (name ^ " exit") 1 output.exit_code;
+        expect_named_contains (name ^ " code")
+          (stdout_text (name ^ " stdout") output)
+          "invalid-options";
+        expect_named_not_contains (name ^ " prints no usage")
+          (stdout_text (name ^ " stdout") output)
+          "Usage: logseq"
+      in
+      expect_invalid "unknown option on group" [| "graph"; "--bogus" |];
+      expect_invalid "unknown option with value on group"
+        [| "list"; "--bogus"; "x" |];
+      expect_invalid "invalid output with no command" [| "-o"; "xml" |];
+      expect_invalid "invalid timeout on group"
+        [| "upsert"; "--timeout-ms"; "abc" |];
+      let json_output =
+        run_cli_lifecycle [| "-o"; "json"; "graph"; "--bogus" |]
+      in
+      expect_int "json group error exit" 1 json_output.exit_code;
+      let json_stdout = stdout_text "json group error stdout" json_output in
+      expect_valid_json "json group error output" json_stdout;
+      expect_named_contains "json group error status" json_stdout
+        "\"status\":\"error\"";
+      let group = run_cli_lifecycle [| "graph" |] in
+      expect_int "bare group exit" 0 group.exit_code;
+      expect_named_contains "bare group usage"
+        (stdout_text "bare group stdout" group)
+        "Usage: logseq graph";
+      let asked = run_cli_lifecycle [| "graph"; "--bogus"; "--help" |] in
+      expect_int "explicit help exit" 0 asked.exit_code);
+
+  test "CLI parity a negative number is an option value, not a command word"
+    (fun () ->
+      let expect_invalid_value name argv option_name =
+        let output = run_cli_lifecycle argv in
+        expect_int (name ^ " exit") 1 output.exit_code;
+        let stdout = stdout_text (name ^ " stdout") output in
+        expect_named_contains (name ^ " code") stdout "invalid-options";
+        expect_named_contains (name ^ " names the option") stdout
+          ("Invalid value for option :" ^ option_name);
+        expect_named_not_contains (name ^ " is not an unknown command") stdout
+          "unknown command"
+      in
+      expect_invalid_value "negative timeout"
+        [| "graph"; "list"; "--timeout-ms"; "-5" |]
+        "timeout-ms";
+      expect_invalid_value "negative limit"
+        [| "-g"; "demo"; "list"; "page"; "--limit"; "-5" |]
+        "limit";
+      expect_invalid_value "negative offset"
+        [| "-g"; "demo"; "list"; "page"; "--offset"; "-1" |]
+        "offset");
+
+  test "CLI parity upsert property rejects a cardinality outside one and many"
+    (fun () ->
+      let output =
+        run_cli_lifecycle
+          [|
+            "-g"; "demo"; "upsert"; "property"; "--name"; "p"; "--cardinality";
+            "bogus";
+          |]
+      in
+      expect_int "bad cardinality exit" 1 output.exit_code;
+      let stdout = stdout_text "bad cardinality stdout" output in
+      expect_named_contains "bad cardinality code" stdout "invalid-options";
+      expect_named_contains "bad cardinality message" stdout
+        "Invalid value for option :cardinality: bogus";
+      expect_named_contains "bad cardinality lists the choices" stdout
+        "one, many";
+      ignore
+        (expect_parse_ok "cardinality many parses"
+           [| "upsert"; "property"; "--name"; "p"; "--cardinality"; "many" |]));
+
+  test "CLI parity file errors are plain messages without exception text"
+    (fun () ->
+      let root = temp_dir "logseq-cli-file-errors-" in
+      let directory = Node.Path.join [| root; "a-directory" |] in
+      let garbage = Node.Path.join [| root; "garbage.edn" |] in
+      mkdir_p directory;
+      write_file garbage "{:a (";
+      let expect_plain_error name argv expected =
+        let output = run_cli_lifecycle argv in
+        expect_int (name ^ " exit") 1 output.exit_code;
+        let stdout = stdout_text (name ^ " stdout") output in
+        expect_named_contains (name ^ " message") stdout expected;
+        List.iter
+          (fun leak ->
+            expect_named_not_contains (name ^ " leaks " ^ leak) stdout leak)
+          [ "Cli_unix"; "Melange_edn"; "Error (exception)" ]
+      in
+      let import input =
+        [|
+          "--root-dir"; root; "-g"; "g"; "graph"; "import"; "--type"; "edn";
+          "--input"; input;
+        |]
+      in
+      expect_plain_error "missing import file" (import "/nonexistent")
+        "ENOENT";
+      expect_plain_error "import of a directory" (import directory) "EISDIR";
+      expect_plain_error "import of invalid edn" (import garbage) "invalid EDN";
+      expect_plain_error "missing blocks file"
+        [|
+          "--root-dir"; root; "-g"; "g"; "upsert"; "block"; "--blocks-file";
+          "/nonexistent";
+        |]
+        "ENOENT";
+      expect_plain_error "config that is a directory"
+        [| "--root-dir"; root; "--config"; directory; "graph"; "list" |]
+        "cannot read config file";
+      expect_plain_error "config that is invalid edn"
+        [| "--root-dir"; root; "--config"; garbage; "graph"; "list" |]
+        "invalid EDN";
+      let json_output =
+        run_cli_lifecycle
+          [|
+            "--root-dir"; root; "--config"; directory; "-o"; "json"; "graph";
+            "list";
+          |]
+      in
+      expect_int "json config error exit" 1 json_output.exit_code;
+      let json_stdout = stdout_text "json config error stdout" json_output in
+      expect_valid_json "json config error output" json_stdout;
+      expect_named_contains "json config error code" json_stdout
+        "invalid-config";
+      remove_tree root);
+
+  test "CLI parity graph import rejects an EDN input that is not a map"
+    (fun () ->
+      let root = temp_dir "logseq-cli-import-shape-" in
+      List.iteri
+        (fun index content ->
+          let input = Node.Path.join [| root; "input" ^ string_of_int index |] in
+          write_file input content;
+          let output =
+            run_cli_lifecycle
+              [|
+                "--root-dir"; root; "-g"; "shape"; "graph"; "import"; "--type";
+                "edn"; "--input"; input;
+              |]
+          in
+          let name = "import of " ^ String.escaped content in
+          expect_int (name ^ " exit") 1 output.exit_code;
+          let stdout = stdout_text (name ^ " stdout") output in
+          expect_named_contains (name ^ " code") stdout "invalid-options";
+          expect_named_not_contains (name ^ " is not reported imported") stdout
+            "Imported")
+        [ ""; "nil"; "[1 2 3]"; "42" ];
+      expect_bool "no graph was created" false
+        (Node.Fs.existsSync (Node.Path.join [| root; "graphs"; "shape" |]));
+      remove_tree root);
+
+  test "CLI parity --help=false does not ask for help" (fun () ->
+      let root = temp_dir "logseq-cli-help-false-" in
+      let ran =
+        run_cli_lifecycle
+          [| "--root-dir"; root; "graph"; "list"; "--help=false" |]
+      in
+      expect_int "graph list with --help=false exit" 0 ran.exit_code;
+      expect_named_not_contains "graph list with --help=false prints no usage"
+        (stdout_text "graph list with --help=false stdout" ran)
+        "Usage: logseq";
+      let spaced =
+        run_cli_lifecycle
+          [| "--root-dir"; root; "graph"; "list"; "--help"; "false" |]
+      in
+      expect_named_not_contains "graph list with --help false prints no usage"
+        (stdout_text "graph list with --help false stdout" spaced)
+        "Usage: logseq";
+      let asked = run_cli_lifecycle [| "graph"; "list"; "--help=true" |] in
+      expect_named_contains "--help=true prints usage"
+        (stdout_text "--help=true stdout" asked)
+        "Usage: logseq graph list";
+      let invalid = run_cli_lifecycle [| "graph"; "list"; "--help=maybe" |] in
+      expect_int "--help=maybe exit" 1 invalid.exit_code;
+      expect_named_contains "--help=maybe code"
+        (stdout_text "--help=maybe stdout" invalid)
+        "invalid-options";
+      remove_tree root);
 
   test
     "CLI parity structured example output keeps selector matched commands and \
