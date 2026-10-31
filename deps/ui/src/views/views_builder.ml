@@ -527,27 +527,29 @@ let between_picker inst ~tree ~loc ~anchor =
       commit inst ~tree ()))
 
 let full_text_picker inst ~tree ~loc ~anchor =
-  let value = ref "" in
   ignore
     (P.show_custom ~anchor ~cls:"query-builder-picker"
-       (Ui_components.with_props
+       (fun context parent ->
+        let value = Signal.state context.Lui_ui.ui_scheduler "" in
+        Ui_components.with_props
           [ Ui_components.Prop.font_size "0.875rem"
           ; Ui_components.Prop.line_height "1.25rem" ]
         (Ui_components.input ~style_class:"form-input"
           ~accessibility_identifier:"query-builder-search"
           ~placeholder:(I.t "view.filter/type-to-search") ~label:(I.t "view.filter/type-to-search")
           ~autofocus:true
+          ~text:(reactive Fun.id (Signal.value value))
           ~on_input:(function
-            | Lui_protocol.TextChanged (_, s) -> value := s
+            | Lui_protocol.TextChanged (_, s) -> Signal.set value s
             | _ -> ())
           ~on_submit:(fun _ ->
-            let v = String.trim !value in
+            let v = String.trim (Signal.get_state value) in
             if v <> "" then begin
               P.close_all ();
               tree := append_at !tree loc (CText v);
               commit inst ~tree ()
             end)
-          [])))
+          []) context parent))
 
 let sample_picker inst ~tree ~loc ~anchor =
   ignore
