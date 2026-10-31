@@ -1171,6 +1171,7 @@ let same_config ((s : S.t),(a : Model.t)) ((t : S.t),(b : Model.t)) =
   && a.graph_config = b.graph_config
 
 let article ~modal ~keymap ms ctx =
+  let viewport_height = 0.7 in
   let content (s : S.t) _ =
     let children =
       [ row ~key:"art-h" ~style_class:"cp__settings-header"
@@ -1187,18 +1188,19 @@ let article ~modal ~keymap ms ctx =
       ; pane_of ~modal ~keymap ctx s.tab
       ]
     in
+    let body =
+      column ~key:"settings-article-body" ~padding:16 ~min_width:0 ~min_height:0 children
+    in
     if s.tab = "keymap" then
-      column ~key:"settings-article-body" ~grow:1. ~min_width:0 ~min_height:0 children
-    else
-      scroll ~key:"settings-article-scroll" ~orientation:`vertical
-        ~grow:1. ~min_width:0 ~min_height:0
-        [column ~key:"settings-article-body" ~min_width:0 children]
+      Ui_components.with_props
+        [Ui_components.Prop.height_viewport viewport_height] body
+    else body
   in
   Ui_components.with_props
-    [Ui_components.Prop.height_viewport 0.7]
-    (column ~key:"settings-article" ~style_class:"settings-article"
+    [Ui_components.Prop.height_viewport viewport_height]
+    (scroll ~key:"settings-article" ~style_class:"settings-article" ~orientation:`vertical
     ~data_attrs:["role", "article"]
-    ~padding:16 ~grow:1. ~min_height:192 ~min_width:0
+    ~grow:1. ~min_height:192 ~min_width:0
        [reactive ~equal:same_config content (S.signal ()) ms])
 
 let inner ~modal ms : t =
