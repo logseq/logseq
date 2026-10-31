@@ -1213,11 +1213,8 @@ let ref_filter_dialog inst anchor =
                  (Ui_components.input ~style_class:"cp__filters-input"
                     ~grow:1. ~background:"transparent" ~border_width:0
                     ~text:(reactive Fun.id (Signal.value draft))
-                    ~data_attrs:
-                      [ ("type", "text")
-                      ; ("id", input_id)
-                      ; ( "placeholder"
-                        , I.t "reference.filter/search-placeholder" ) ]
+                    ~kind:`text ~accessibility_identifier:input_id
+                    ~placeholder:(I.t "reference.filter/search-placeholder")
                     ~autofocus:true
                     ~on_input:(function
                       | L.TextChanged (_, v) ->
