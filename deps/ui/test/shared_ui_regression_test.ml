@@ -543,7 +543,7 @@ let run_views ~registry ~profile ~finish =
   Runtime.read_model:=(fun () -> {Model.initial with repo=Some "editor-week-fixture";
     graph_config=Wire.Map [Wire.kw "start-of-week",Wire.Int 0]});
   let popup : Editor_commands.popup =
-    {kind=Cal_insert;uuid="calendar-keyboard-owner";from=0;cy=2024;cm=1;cd=31;
+    {kind=Cal_insert "";uuid="calendar-keyboard-owner";from=0;cy=2024;cm=1;cd=31;
      hour=0;tmin=0;x=0.;y=0.;menu=None;rpt=None} in
   Editor_commands.active:=Some popup;Editor_commands.popup_vs:=None;
   Editor_commands.nav_month 1;
@@ -2947,7 +2947,7 @@ let popup_press (ev : Ui_services.ev) =
       (Editor_state.mk_editing ~uuid:"b1" ~buffer:"text"
          ~scope:"main" ~base:"text" ()) });
   let popup : Editor_commands.popup =
-    { kind = Editor_commands.Link_form false; uuid = "b1"; from = 0
+    { kind = Editor_commands.Link_form { image = false; url = ""; label = "" }; uuid = "b1"; from = 0
     ; cy = 2026; cm = 10; cd = 9; hour = 0; tmin = 0; x = 0.; y = 0.
     ; menu = None; rpt = None } in
   Editor_commands.active := Some popup;
