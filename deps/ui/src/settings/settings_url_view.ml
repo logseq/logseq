@@ -22,6 +22,8 @@ let decimal_in_range limit s =
   && match int_of_string_opt s with Some value -> value <= limit | None -> false
 
 let valid_ipv6 address =
+  (* The longest IPv6 spelling includes six hextets and an IPv4 tail. *)
+  if String.length address > 45 then false else
   let count_groups ~ipv4 s =
     let rec count = function
       | [] -> Some 0
