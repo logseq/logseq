@@ -2241,12 +2241,17 @@ let run_views ~registry ~profile ~finish =
      && List.exists (fun n -> M.string_prop n "text"=Some "Other action") (nodes nested)
      && not (List.exists (fun n -> M.string_prop n "text"=Some "Child action") (nodes nested)));
   ignore (Lui_app.dispose nested.S.app);
-  let previous_context = !Popups_state.active and previous_highlight = !Popups_view.cm_hi_el in
+  let previous_context = !Popups_state.active in
   let previous_menu_query : string -> Js.Json.t array = Stub_dom.get_field document "querySelectorAll" in
   let previous_menu_id : string -> Js.Json.t = Stub_dom.get_field document "getElementById" in
+  let previous_menu_dispatch : Js.Json.t -> bool = Stub_dom.get_field document "dispatchEvent" in
   let foreign_menu=Stub_dom.make_element "div" and foreign_item=Stub_dom.make_element "div" in
   let owned_menu=Stub_dom.make_element "div" and owned_item=Stub_dom.make_element "div" in
   let foreign_actions=ref 0 and owned_actions=ref 0 in
+  Stub_dom.set_field document "dispatchEvent" (fun event ->
+    let name : string = Stub_dom.get_field event "type" in
+    if name="ls:editor-command" then (incr owned_actions; true)
+    else previous_menu_dispatch event);
   List.iter (fun menu -> Stub_dom.set_field menu "getBoundingClientRect" (fun () ->
     Js.Json.object_ (Js.Dict.fromList ["x",Js.Json.number 0.;"y",Js.Json.number 0.;
       "width",Js.Json.number 200.;"height",Js.Json.number 100.]))) [foreign_menu;owned_menu];
@@ -2263,14 +2268,16 @@ let run_views ~registry ~profile ~finish =
     (Option.is_some ((Ui_dom_web.el_of owned_item).Ui_services.closest
       "#missing-context-menu, #block-context-menu"));
   Stub_dom.set_field document "getElementById" (fun identifier ->
-    if identifier="block-context-menu" then owned_menu else previous_menu_id identifier);
+    if identifier="block-context-menu" then owned_menu
+    else if identifier="cm-item-0" then owned_item else previous_menu_id identifier);
   Stub_dom.set_field document "querySelectorAll" (fun selector ->
     if selector=".ui__dropdown-menu-content" then [|foreign_menu|]
     else previous_menu_query selector);
   Fun.protect ~finally:(fun () ->
     Stub_dom.set_field document "querySelectorAll" previous_menu_query;
     Stub_dom.set_field document "getElementById" previous_menu_id;
-    Popups_state.active:=previous_context;Popups_view.cm_hi_el:=previous_highlight) (fun () ->
+    Stub_dom.set_field document "dispatchEvent" previous_menu_dispatch;
+    Popups_state.active:=previous_context) (fun () ->
     let context_scheduler=Signal.scheduler () in
     let context=Popups_state.make context_scheduler in
     List.iter (fun key ->
@@ -2281,8 +2288,9 @@ let run_views ~registry ~profile ~finish =
       check ("a closed block menu cannot consume another menu's " ^ key)
         (not !consumed)) ["ArrowDown";"Enter"];
     check "block-menu listeners cannot focus or activate foreign menu items" (!foreign_actions=0);
-    let cm : Popups_state.cm = {cx=0.;cy=0.;atop=0.;flip=false;block_id="context-fixture";
-      multi=false;entries=[];sub_open=(-1);sub_xy=(0.,0.);tag=None;native=false;native_acts=[]} in
+    let cm : Popups_state.cm = {epoch=0;cx=0.;cy=0.;atop=0.;flip=false;block_id="context-fixture";
+      multi=false;entries=[Ci_item ("Action",None,"fixture-action")];
+      sub_open=(-1);sub_xy=(0.,0.);highlighted=None;tag=None;native=false;native_acts=[]} in
     Signal.set context.vs {ac=None;cm=Some cm;pv=None};
     Signal.stabilize context_scheduler;
     let key_in target key =

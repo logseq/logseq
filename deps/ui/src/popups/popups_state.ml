@@ -145,8 +145,11 @@ type cm_native_action =
   | Cna_heading of string
   | Cna_picker of cm_picker
 
+type cm_highlight = Main_item of int | Sub_item of int
+
 type cm =
-  { cx : float
+  { epoch : int
+  ; cx : float
     (* anchor element center-x — cljs popup-show! re-anchors
        pointer-opened dropdowns to the event target's rect and centers
        the content on it *)
@@ -161,6 +164,7 @@ type cm =
   ; entries : cm_item list
   ; sub_open : int (* index into entries, -1 = none *)
   ; sub_xy : float * float
+  ; highlighted : cm_highlight option
   ; tag : (string * int * bool) option
     (* Some (uuid, db/id, private?) => block-tag chip menu, not the
        block context menu *)
@@ -191,6 +195,7 @@ type t =
   { vs : view Signal.state
   ; gen : int ref (* stale-response guard *)
   ; session : int ref
+  ; cm_epoch : int ref
   ; cache_repo : string option ref
   ; titles : string list ref
   ; page_exact_titles : string list ref (* parentless internal pages/journals *)
@@ -212,6 +217,7 @@ let make scheduler : t =
     { vs = Signal.state scheduler { ac = None; cm = None; pv = None }
   ; gen = ref 0
   ; session = ref 0
+  ; cm_epoch = ref 0
   ; cache_repo = ref None
   ; titles = ref []
   ; page_exact_titles = ref []
@@ -305,6 +311,19 @@ let close_ac t =
   invalidate_ac t;
   set_ac t None
 let close_cm t = set_cm t None
+let next_cm_epoch t =
+  incr t.cm_epoch;
+  !(t.cm_epoch)
+
+let highlight_cm t highlighted =
+  match (get t).cm with
+  | Some cm when cm.highlighted <> highlighted ->
+      update t (fun v ->
+        match v.cm with
+        | Some cm -> { v with cm = Some { cm with highlighted } }
+        | None -> v)
+  | _ -> ()
+
 let close_pv t = set_pv t None
 
 let () = Editor_state.on_edit_exit (fun _uuid ->
@@ -2180,9 +2199,10 @@ let open_cm ?allow_cut ?allow_delete t ~ax ~atop ~abot ~block_id ~multi =
   close_ac t;
   let flip = anchor_above atop abot in
   let cm =
-    { cx = ax; cy = (if flip then atop else abot); atop; flip
+    { epoch = next_cm_epoch t
+    ; cx = ax; cy = (if flip then atop else abot); atop; flip
     ; block_id; multi; entries; sub_open = -1; sub_xy = (0., 0.)
-    ; tag = None; native = false; native_acts = [] }
+    ; highlighted = None; tag = None; native = false; native_acts = [] }
   in
   (* native NSMenu experiment: hand the serialized menu to the host;
      when it accepts, the LUI popover stays unmounted while the record
@@ -2199,12 +2219,12 @@ let open_cm ?allow_cut ?allow_delete t ~ax ~atop ~abot ~block_id ~multi =
 let open_cm_edit t ~ax ~atop ~abot ~block_id =
   close_ac t;
   let flip = anchor_above atop abot in
-  set_cm t
-    (Some
-       { cx = ax; cy = (if flip then atop else abot); atop; flip
-       ; block_id; multi = false; entries = edit_entries ()
-       ; sub_open = -1; sub_xy = (0., 0.); tag = None; native = false
-       ; native_acts = [] })
+  set_cm t (Some
+    { epoch = next_cm_epoch t
+    ; cx = ax; cy = (if flip then atop else abot); atop; flip
+    ; block_id; multi = false; entries = edit_entries ()
+    ; sub_open = -1; sub_xy = (0., 0.); tag = None; native = false
+    ; highlighted = None; native_acts = [] })
 ;;
 
 (* cljs block-tag popup (block.cljs): Go to #tag (mod+click) / Open in
@@ -2229,27 +2249,29 @@ let open_cm_tag t ~ax ~atop ~abot ~block_id ~tag_uuid ~tag_id ~tag_title
     ~priv =
   close_ac t;
   let flip = anchor_above atop abot in
-  set_cm t
-    (Some
-       { cx = ax; cy = (if flip then atop else abot); atop; flip
-       ; block_id; multi = false
-       ; entries = tag_entries ~title:tag_title ~priv
-       ; sub_open = -1; sub_xy = (0., 0.)
-       ; tag = Some (tag_uuid, tag_id, priv); native = false
-       ; native_acts = [] })
+  set_cm t (Some
+    { epoch = next_cm_epoch t
+    ; cx = ax; cy = (if flip then atop else abot); atop; flip
+    ; block_id; multi = false
+    ; entries = tag_entries ~title:tag_title ~priv
+    ; sub_open = -1; sub_xy = (0., 0.)
+    ; tag = Some (tag_uuid, tag_id, priv); native = false
+    ; highlighted = None; native_acts = [] })
 ;;
 
 let open_cm_sub t ~index ~x ~y =
   match (get t).cm with
   | Some cm when cm.sub_open <> index ->
-      set_cm t (Some { cm with sub_open = index; sub_xy = (x, y) })
+      set_cm t (Some { cm with sub_open = index; sub_xy = (x, y)
+                            ; highlighted = Some (Main_item index) })
   | _ -> ()
 ;;
 
 let close_cm_sub t =
   match (get t).cm with
   | Some cm when cm.sub_open <> -1 ->
-      set_cm t (Some { cm with sub_open = -1 })
+      set_cm t (Some { cm with sub_open = -1
+                            ; highlighted = Some (Main_item cm.sub_open) })
   | _ -> ()
 ;;
 

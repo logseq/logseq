@@ -1349,6 +1349,9 @@ let on_keydown ev =
   in
   if input_composing ev || Ui_services.env_publishing () || palette_open ()
      || palette_shortcut
+     || (match ev.Ui_services.target with
+         | Some target -> Popups_state.inside target
+         | None -> false)
   then ()
   else begin
   (if Lazy.force perf_keys then

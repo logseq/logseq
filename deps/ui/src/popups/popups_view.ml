@@ -543,8 +543,31 @@ let run_cm_color st l = close_cm_picker (); S.run_cm_color st l
 let run_cm_heading st l = close_cm_picker (); S.run_cm_heading st l
 ;;
 
-(* base-ui sets data-highlighted on the hovered item (bg-muted) *)
-let cm_hi_el : Ui_services.el option ref = ref None
+let cm_highlighted key (v : S.view) =
+  match v.S.cm with
+  | Some cm -> cm.S.highlighted = Some key
+  | None -> false
+
+let cm_item_attrs key attrs v =
+  let highlighted = cm_highlighted key v in
+  ("role", "menuitem") :: ("tabindex", if highlighted then "0" else "-1")
+  :: (if highlighted then ("data-highlighted", "") :: attrs else attrs)
+
+let cm_item_background key v =
+  if cm_highlighted key v then "var(--lx-gray-05, hsl(var(--muted)))"
+  else "transparent"
+
+let cm_item_id ~sub idx = function
+  | S.Ci_sub _ when not sub -> "cm-sub-" ^ string_of_int idx
+  | _ -> (if sub then "cm-sub-item-" else "cm-item-") ^ string_of_int idx
+
+let focus_cm_item st ~sub idx item =
+  S.highlight_cm st (Some (if sub then S.Sub_item idx else S.Main_item idx));
+  Option.iter
+    (fun it ->
+      it.Ui_services.focus ();
+      it.Ui_services.scroll_into_view_nearest ())
+    (Ui_services.dom_by_id (cm_item_id ~sub idx item))
 
 (* the sub-open routine is defined next to open_cm_picker far below;
    the sub-trigger's press handler goes through this ref so the row
@@ -553,7 +576,6 @@ let cm_press_open_ref : (S.t -> Ui_services.el -> unit) ref =
   ref (fun _st _trg -> ())
 
 let close_cm st =
-  cm_hi_el := None;
   close_cm_picker ();
   S.close_cm st
 
@@ -669,6 +691,7 @@ let cm_item_cls = "ui__dropdown-menu-item"
 let cm_item_el (st : S.t) (entry_sig : (int * S.cm_item) Signal.signal) : t =
  fun context parent ->
   let idx = fst (Signal.get entry_sig) in
+  let vs = Signal.value st.S.vs in
   (* keyed mounts run with parent=None, so the entry point must be a real
      node — wrap the dynamic branch in a box *)
   box ~key:"cm-entry"
@@ -690,12 +713,12 @@ let cm_item_el (st : S.t) (entry_sig : (int * S.cm_item) Signal.signal) : t =
             (menu_item ~key:"sub"
             ~style_class:"ui__dropdown-menu-sub-trigger"
             ~accessibility_identifier:("cm-sub-" ^ string_of_int idx)
+            ~background:(reactive (cm_item_background (S.Main_item idx)) vs)
             ~gap:0
             ~padding_horizontal:8 ~padding_vertical:6 ~corner_radius:4
-            ~data_attrs:
-              [ ("role", "menuitem")
-              ; ("data-cm-sub", string_of_int idx)
-              ]
+            ~data_attrs:(reactive (cm_item_attrs (S.Main_item idx)
+              [ ("data-cm-sub", string_of_int idx)
+              ; ("data-cm-item", string_of_int idx) ]) vs)
             ~on_press_detail:(fun ev ->
               match ev with
               | Lui_protocol.PressDetail (_, d) -> (
@@ -710,7 +733,11 @@ let cm_item_el (st : S.t) (entry_sig : (int * S.cm_item) Signal.signal) : t =
             [ Menu_item.submenu_content ~label ]))
       | S.Ci_item (label, scut, cmd) ->
           Menu_item.chrome (menu_item ~key:"item" ~style_class:cm_item_cls
-            ~data_attrs:[ ("role", "menuitem") ]
+            ~gap:4
+            ~accessibility_identifier:("cm-item-" ^ string_of_int idx)
+            ~background:(reactive (cm_item_background (S.Main_item idx)) vs)
+            ~data_attrs:(reactive (cm_item_attrs (S.Main_item idx)
+              [ ("data-cm-item", string_of_int idx) ]) vs)
             ~on_press:(fun _ -> run_cm_item st cmd)
             ~text:label
             (match scut with
@@ -720,11 +747,15 @@ let cm_item_el (st : S.t) (entry_sig : (int * S.cm_item) Signal.signal) : t =
     context parent
 ;;
 
-let cm_sub_item_el (st : S.t) (it : S.cm_item) : t =
+let cm_sub_item_el (st : S.t) idx (it : S.cm_item) : t =
   match it with
   | S.Ci_item (label, scut, cmd) ->
       Menu_item.chrome (menu_item ~key:"sub-item" ~style_class:cm_item_cls
-        ~data_attrs:[ ("role", "menuitem") ]
+        ~gap:4
+        ~accessibility_identifier:("cm-sub-item-" ^ string_of_int idx)
+        ~background:(reactive (cm_item_background (S.Sub_item idx)) (Signal.value st.S.vs))
+        ~data_attrs:(reactive (cm_item_attrs (S.Sub_item idx)
+          [ ("data-cm-sub-item", string_of_int idx) ]) (Signal.value st.S.vs))
         ~on_press:(fun _ -> run_cm_item st cmd)
         ~text:label
         (match scut with
@@ -748,7 +779,7 @@ let cm_sub_el (st : S.t) (x : float) (y : float) (items : S.cm_item list)
        ~style_class:"ui__dropdown-menu-sub-content"
        ~data_attrs:[ ("tabindex", "-1"); ("data-keep-selection", "") ]
        ~on_dismiss:(fun _ -> S.close_cm_sub st)
-       [ box ~key:"w" (List.map (cm_sub_item_el st) items) ])
+       [ box ~key:"w" (List.mapi (cm_sub_item_el st) items) ])
 ;;
 
 (* (idx, x, y, items) while a Sub_menu is open; None otherwise — the
@@ -802,6 +833,17 @@ let cm_popover (st : S.t) : t =
              | _ -> 280) vs)
            (popover ~transition:Ui_components.popover_transition ~key:"cm" ~role:`menu ~min_width:128 ~padding:4
               ~accessibility_identifier:"block-context-menu"
+              ~on_appear:(fun _ ->
+                match (S.get st).S.cm with
+                | Some cm when not cm.S.native ->
+                    Option.iter
+                      (fun (idx, item) -> focus_cm_item st ~sub:false idx item)
+                      (List.find_mapi
+                         (fun idx -> function
+                           | (S.Ci_item _ | S.Ci_sub _) as item -> Some (idx, item)
+                           | _ -> None)
+                         cm.S.entries)
+                | _ -> ())
               ~border_color:"hsl(var(--border))" ~border_width:1
               ~corner_radius:6
               ~at_signal:
@@ -860,11 +902,8 @@ let cm_popover (st : S.t) : t =
 
 let in_popups el = S.inside el;;
 
-let cm_highlight (el : Ui_services.el) =
-  (match !cm_hi_el with
-   | Some e -> e.Ui_services.rm_attr "data-highlighted"
-   | None -> ());
-  cm_hi_el :=
+let cm_highlight st (el : Ui_services.el) =
+  S.highlight_cm st
     (match
        el.Ui_services.closest
          ".ui__dropdown-menu-item, .ui__dropdown-menu-sub-trigger"
@@ -873,8 +912,10 @@ let cm_highlight (el : Ui_services.el) =
          it.Ui_services.closest
            "#block-context-menu, #block-context-submenu"
          <> None ->
-         it.Ui_services.set_attr "data-highlighted" "";
-         Some it
+         (match it.Ui_services.attr "data-cm-sub-item" with
+          | Some idx -> Option.map (fun i -> S.Sub_item i) (int_of_string_opt idx)
+          | None -> Option.bind (it.Ui_services.attr "data-cm-item")
+              (fun idx -> Option.map (fun i -> S.Main_item i) (int_of_string_opt idx)))
      | _ -> None)
 
 (* ---- page-ref hover preview ----
@@ -1071,27 +1112,36 @@ let menu_keydown st (ev : Ui_services.ev) =
     match (S.get st).S.cm, ev.Ui_services.target with
     | Some cm, Some target when not cm.S.native
         && target.Ui_services.closest "#block-context-menu, #block-context-submenu" <> None ->
+        let sub = cm.S.sub_open >= 0 in
+        let entries =
+          if not sub then Some cm.S.entries else
+          match S.cm_sub_at st cm.S.sub_open with
+          | Some (S.Sub_menu items) -> Some items
+          | _ -> None
+        in
+        Option.bind entries (fun entries ->
         Option.bind
           (Ui_services.dom_by_id
-             (if cm.S.sub_open >= 0 then "block-context-submenu" else "block-context-menu"))
+             (if sub then "block-context-submenu" else "block-context-menu"))
           (fun menu -> let _,_,width,_ = menu.Ui_services.rect () in
-            if width > 0. then Some menu else None)
+            if width > 0. || menu.Ui_services.rect_pending ()
+            then Some (cm, sub, entries) else None))
     | _ -> None
   in
   match menu with
   | None -> false
-  | Some m -> (
+  | Some (cm, sub, entries) -> (
+      let highlight idx = if sub then S.Sub_item idx else S.Main_item idx in
       let items =
-        m.Ui_services.query_all
-          ".ui__dropdown-menu-item:not([data-disabled]):not([aria-disabled='true']), .ui__dropdown-menu-sub-trigger:not([data-disabled])"
+        List.mapi (fun idx item -> idx, item) entries
+        |> List.filter (function _, (S.Ci_item _ | S.Ci_sub _) -> true | _ -> false)
       in
       match (ev.Ui_services.key, items) with
       | Some (("ArrowDown" | "ArrowUp" | "Home" | "End") as k), _ :: _ ->
           let cur =
             match
               List.find_index
-                (fun it ->
-                  it.Ui_services.attr "data-highlighted" <> None)
+                (fun (idx, _) -> cm.S.highlighted = Some (highlight idx))
                 items
             with
             | Some i -> i
@@ -1105,24 +1155,19 @@ let menu_keydown st (ev : Ui_services.ev) =
             | "Home" -> 0
             | _ -> n - 1
           in
-          let it = List.nth items i in
-          List.iter
-            (fun e ->
-              e.Ui_services.rm_attr "data-highlighted";
-              (* base-ui roving tabindex: only the active item is 0 *)
-              e.Ui_services.set_attr "tabindex" "-1")
-            items;
-          it.Ui_services.set_attr "data-highlighted" "";
-          it.Ui_services.set_attr "tabindex" "0";
-          cm_hi_el := Some it;
-          it.Ui_services.focus ();
-          it.Ui_services.scroll_into_view_nearest ();
+          let idx, item = List.nth items i in
+          focus_cm_item st ~sub idx item;
           true
       | Some "Enter", _ :: _ -> (
           match List.find_opt
-              (fun e -> e.Ui_services.attr "data-highlighted" <> None)
+              (fun (idx, _) -> cm.S.highlighted = Some (highlight idx))
               items with
-          | Some e -> e.Ui_services.click (); true
+          | Some (_, S.Ci_item (_, _, cmd)) -> run_cm_item st cmd; true
+          | Some (idx, (S.Ci_sub _ as item)) ->
+              Option.iter (!cm_press_open_ref st)
+                (Ui_services.dom_by_id (cm_item_id ~sub idx item));
+              true
+          | Some _ -> assert false
           | None -> true)
       | _ -> false)
 ;;
@@ -1143,7 +1188,9 @@ let handle_keydown st (ev : Ui_services.ev) =
         (match (S.get st).S.cm with
          | Some cm when cm.S.sub_open >= 0 ->
              close_cm_picker ();
-             S.close_cm_sub st
+             S.close_cm_sub st;
+             Option.iter (fun trigger -> trigger.Ui_services.focus ())
+               (Ui_services.dom_by_id ("cm-sub-" ^ string_of_int cm.S.sub_open))
          | _ -> close_cm st);
         ev.Ui_services.prevent_default ();
         ev.Ui_services.stop_immediate ()
@@ -1429,7 +1476,7 @@ let handle_mousemove st (ev : Ui_services.ev) =
   match ev.Ui_services.target with
   | Some el -> (
       cm_hover st el;
-      cm_highlight el;
+      cm_highlight st el;
       (match el.Ui_services.closest ".menu-link-wrap" with
        | Some wrap -> (
            match wrap.Ui_services.query ".menu-link" with
@@ -1503,21 +1550,14 @@ let render (_ms : Model.t Signal.signal) : t =
       (Signal.map (fun (v : S.view) -> v.S.ac <> None)
          (Signal.value (st.S.vs)))
   in
-  let cm_open =
-    Logseq_el.own context
-      (Signal.map
-         (fun (v : S.view) ->
-           (* a host-painted menu keeps cm in state (the reply needs the
-              block context) but never mounts the LUI popover *)
-           match v.S.cm with
-           | Some c -> not c.S.native
-           | None -> false)
-         (Signal.value (st.S.vs)))
-  in
   let body =
     Logseq_el.fragment
       [ if_ ~test:ac_open (ac_popover st)
-      ; if_ ~test:cm_open (cm_popover st)
+      ; keyed ~source:(reactive (fun (v : S.view) ->
+          match v.S.cm with
+          | Some cm when not cm.S.native -> [cm.S.epoch]
+          | _ -> []) (Signal.value st.S.vs))
+          ~key:Fun.id ~cmp:Int.compare ~mount:(fun _ -> cm_popover st)
       ; pv_dyn st
       ; Tooltip.el
       ; Editor_commands.popup_view ]

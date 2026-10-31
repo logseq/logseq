@@ -1013,7 +1013,13 @@ let option_card ~key ~thumbnail ~label ?(min_height = 0)
 
 let menu_item_chrome element =
   with_props
-    [ Prop.font_size "0.875rem"
+    [ Prop.variant `ghost
+    ; Prop.main `start
+    ; Prop.padding_horizontal 8
+    ; Prop.padding_vertical 6
+    ; Prop.corner_radius 4
+    ; Prop.min_height 32
+    ; Prop.font_size "0.875rem"
     ; Prop.line_height "1.25rem"
     ; Prop.foreground "inherit"
     ; Prop.hover_background "var(--lx-gray-05, hsl(var(--muted)))" ]
