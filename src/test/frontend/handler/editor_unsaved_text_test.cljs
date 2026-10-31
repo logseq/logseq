@@ -1,0 +1,90 @@
+(ns frontend.handler.editor-unsaved-text-test
+  "The editor saves what was typed: in blocks that hold a tag, when the page is
+  hidden, and when an edit was undone back to the text editing started with."
+  (:require [clojure.test :refer [async deftest is testing use-fixtures]]
+            [frontend.db.subs :as db-subs]
+            [frontend.db.transact :as db-transact]
+            [frontend.handler.block :as block-handler]
+            [frontend.handler.editor :as editor]
+            [frontend.state :as state]
+            [frontend.test.helper :as test-helper]
+            [promesa.core :as p]))
+
+(use-fixtures :each {:before (fn []
+                              (async done
+                                     (test-helper/start-test-db!)
+                                     (done)))
+                     :after (fn []
+                              (state/set-current-repo! nil)
+                              (test-helper/destroy-test-db!))})
+
+(defn- auto-saves?
+  "Types `value` with the cursor at `cursor-pos` and reports whether the
+  auto-save timer saves the block."
+  [value cursor-pos]
+  (let [block {:db/id 1
+               :block/uuid #uuid "44444444-4444-4444-4444-444444444444"
+               :block/title "before"}
+        *saves (atom 0)
+        original-set-timeout js/setTimeout]
+    (set! js/setTimeout (fn [f _ms] (f) :timeout-id))
+    (try
+      (with-redefs [state/get-edit-block (constantly block)
+                    state/set-edit-content! (fn [& _] nil)
+                    block-handler/mark-last-input-time! (fn [& _] nil)
+                    state/input-idle? (constantly true)
+                    editor/save-current-block! (fn [& _] (swap! *saves inc))
+                    editor/handle-last-input (fn [] nil)]
+        (editor/edit-box-on-change! #js {:target #js {:value value
+                                                      :selectionStart cursor-pos}}
+                                    block
+                                    "edit-block-input"))
+      (finally
+        (set! js/setTimeout original-set-timeout)))
+    (pos? @*saves)))
+
+(deftest auto-save-runs-in-a-block-that-holds-a-tag-test
+  (testing "a complete tag elsewhere in the block does not stop the auto-save"
+    (is (true? (auto-saves? "task #project and more" 22)))
+    (is (true? (auto-saves? "see https://example.com/#anchor today" 37)))
+    (is (true? (auto-saves? "see https://example.com/#anchor" 31))
+        "a URL fragment at the cursor is not a tag being typed"))
+  (testing "a tag being typed at the cursor still holds the save back"
+    (is (false? (auto-saves? "task #proj" 10)))
+    (is (false? (auto-saves? "task #[[my proj" 15)))))
+
+(deftest hidden-page-saves-the-editing-block-test
+  (let [*saves (atom [])]
+    (with-redefs [state/get-edit-block (constantly {:block/uuid (random-uuid)})
+                  editor/save-current-block! (fn [opts] (swap! *saves conj opts))]
+      (editor/save-current-block-when-hidden! "visible")
+      (is (empty? @*saves) "A visible page leaves the auto-save to the timer")
+      (editor/save-current-block-when-hidden! "hidden")
+      (is (= [{:flush-input? true}] @*saves)
+          "Hiding the page (reload, minimize, app sent to background) saves the typed text"))))
+
+(deftest paste-saves-an-edit-undone-back-to-the-start-text-test
+  (async done
+         (let [block-uuid #uuid "55555555-5555-5555-5555-555555555555"
+               ;; :editor/block keeps the title from when editing started
+               edit-start-block {:db/id 1
+                                 :block/uuid block-uuid
+                                 :block/title "foo"
+                                 :block/page {:db/id 2 :block/name "paste page"}}
+               *saved (atom [])]
+           (-> (p/with-redefs [state/get-edit-block (constantly edit-start-block)
+                               state/get-edit-content (constantly "foo")
+                               ;; "foox" was auto-saved meanwhile
+                               db-subs/block-snapshot (constantly {:status :ready
+                                                                   :value (assoc edit-start-block :block/title "foox")})
+                               editor/save-block-inner! (fn [block value _opts]
+                                                          (swap! *saved conj [(:block/uuid block) value])
+                                                          (p/resolved nil))
+                               db-transact/apply-outliner-ops (fn [& _] (p/resolved nil))]
+                 (-> (editor/paste-blocks [{:block/title "pasted"}] {:sibling? true})
+                     (p/catch (fn [_] nil))))
+               (p/then (fn [_]
+                         (is (= [[block-uuid "foo"]] @*saved)
+                             "The text typed back to \"foo\" replaces the auto-saved \"foox\"")))
+               (p/catch (fn [error] (is nil (str error))))
+               (p/finally done)))))

@@ -1712,9 +1712,20 @@
                            :local-tx-ids (pending-tx-ids local-txs)
                            :current-local-tx-ids (pending-tx-ids (pending-txs repo))}))))
 
+(defn- remote-acked-local-tx-ids
+  "Ids of the pending local txs the pulled txs already contain: the server
+  applied them but its ack was lost, e.g. to a ws drop."
+  [local-txs remote-txs]
+  (let [remote-tx-ids (set (keep :tx-id remote-txs))]
+    (into #{} (comp (map :tx-id) (filter remote-tx-ids)) local-txs)))
+
 (defn- apply-remote-tx-with-local-changes!
   [{:keys [repo conn local-txs remote-txs db-migrate? skip-final-validate?]}]
-  (let [tx-meta (cond-> {:rtc-tx? true
+  (let [acked-tx-ids (remote-acked-local-tx-ids local-txs remote-txs)
+        ;; An acked tx is reversed like the others and comes back with the
+        ;; remote txs; replaying it again would apply it twice.
+        rebase-txs (remove #(contains? acked-tx-ids (:tx-id %)) local-txs)
+        tx-meta (cond-> {:rtc-tx? true
                          :with-local-changes? true}
                   db-migrate?
                   (assoc :db-migrate? true
@@ -1725,7 +1736,7 @@
         *rebase-results (atom [])
         *remote-tx-results (atom [])
         rebase-db-before @conn
-        conflicts (remote-sync-conflicts rebase-db-before local-txs remote-txs)]
+        conflicts (remote-sync-conflicts rebase-db-before rebase-txs remote-txs)]
     (try
       (when (seq conflicts)
         (client-op/add-sync-conflicts! repo conflicts)
@@ -1741,7 +1752,7 @@
                                                        :db-before-local-reversal rebase-db-before))
 
                          (reset! *rebase-results
-                                 (rebase-local-txs! repo conn local-txs rebase-db-before)))
+                                 (rebase-local-txs! repo conn rebase-txs rebase-db-before)))
 
                        {:listen-db (fn [{:keys [tx-meta tx-data] :as tx-report}]
                                      (when (and (= :rebase (:outliner-op tx-meta))
@@ -1762,7 +1773,7 @@
                                 (keep :tx-id)
                                 distinct
                                 vec)]
-          (mark-pending-txs-false! repo stale-tx-ids))
+          (mark-pending-txs-false! repo (into stale-tx-ids acked-tx-ids)))
         {:remote-asset-tx-data (mapcat (comp :tx-data :report) @*remote-tx-results)})
 
       (catch :default e
