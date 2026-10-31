@@ -1,6 +1,8 @@
 (ns frontend.db.subs-loader-test
-  (:require [cljs.test :refer [deftest is]]
-            [frontend.db.subs-loader :as subs-loader]))
+  (:require [cljs.test :refer [async deftest is]]
+            [frontend.db.subs-loader :as subs-loader]
+            [frontend.state :as state]
+            [promesa.core :as p]))
 
 (defn- reset-loader! []
   (reset! @#'subs-loader/*batch {})
@@ -48,6 +50,49 @@
       (is (= 1 (count second-wave))
           "The remaining queue stays in the renderer for the next wave."))
     (reset-loader!)))
+
+(deftest a-failed-batch-retries-each-entry-alone-test
+  (async done
+    (reset-loader!)
+    (let [graph-id "graph"
+          live-key [:resource [:block-ref-count (random-uuid)]]
+          deleted-key [:resource [:block-comment-threads (random-uuid)]]
+          requests (atom [])
+          original-invoke state/<invoke-db-worker
+          original-ready? @state/db-worker-ready?
+          *flush (atom nil)]
+      (set! state/<invoke-db-worker
+            (fn [_api _graph-id request]
+              (swap! requests conj (:resources request))
+              (if (some #{(second deleted-key)} (:resources request))
+                (p/rejected (ex-info "Missing renderer resource entity" {:block-uuid :deleted}))
+                (p/resolved {:basis-rev 1
+                             :groups {live-key [live-key]}
+                             :slots {live-key {:value 3}}}))))
+      (reset! state/db-worker-ready? true)
+      (let [live (subs-loader/load! graph-id live-key #(reset! *flush %))
+            deleted (subs-loader/load! graph-id deleted-key #(reset! *flush %))]
+        (@*flush)
+        (-> (p/all [live (p/catch deleted (fn [error] [:rejected (ex-message error)]))])
+            (p/then
+             (fn [[live-value deleted-value]]
+               (is (= {:basis-rev 1 :slots {live-key {:value 3}}} live-value)
+                   "a resource batched with a failing one still loads")
+               (is (= [:rejected "Missing renderer resource entity"] deleted-value)
+                   "the failing resource is still rejected with the worker's error")
+               ;; requests without resources come from other watchers of db-worker-ready?
+               (let [resource-requests (filter seq @requests)]
+                 (is (= 2 (count (first resource-requests))) "the first request was the batch")
+                 (is (= #{[(second live-key)] [(second deleted-key)]} (set (rest resource-requests)))
+                     "then each entry went alone, once")
+                 (is (= 3 (count resource-requests))))))
+            (p/catch (fn [error] (is false (str error))))
+            (p/finally
+             (fn []
+               (set! state/<invoke-db-worker original-invoke)
+               (reset! state/db-worker-ready? original-ready?)
+               (reset-loader!)
+               (done))))))))
 
 (deftest loader-drops-unmounted-slots-before-worker-request-test
   (reset-loader!)
