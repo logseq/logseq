@@ -19,6 +19,7 @@
             [frontend.handler.common.editor :as editor-common-handler]
             [frontend.handler.db-based.editor :as db-editor-handler]
             [frontend.handler.editor.autopair :as editor-autopair]
+            [frontend.handler.editor.pending-save :as pending-save]
             [frontend.handler.export.html :as export-html]
             [frontend.handler.export.text :as export-text]
             [frontend.handler.notification :as notification]
@@ -137,17 +138,22 @@
 
 (defn- save-block-with-pending-title!
   [block value opts]
-  (let [block-uuid (:block/uuid block)]
+  (let [block-uuid (:block/uuid block)
+        repo (state/get-current-repo)]
     (swap! *pending-block-save-titles assoc block-uuid value)
+    (pending-save/persist! repo block-uuid value)
     (try
       (let [result (save-block-inner! block value opts)]
         (if (p/promise? result)
           (-> result
               (p/then (fn [_]
-                        (clear-pending-block-save-title! block-uuid value)))
+                        (clear-pending-block-save-title! block-uuid value)
+                        (pending-save/clear-if-match! repo block-uuid value)))
               (p/catch (fn [_]
                          (clear-pending-block-save-title! block-uuid value))))
-          (clear-pending-block-save-title! block-uuid value))
+          (do
+            (clear-pending-block-save-title! block-uuid value)
+            (pending-save/clear-if-match! repo block-uuid value)))
         result)
       (catch :default error
         (clear-pending-block-save-title! block-uuid value)
@@ -1697,11 +1703,53 @@
 
 (defn save-current-block-before-navigate!
   "Closes any open editor popup so the raw textarea value is persisted,
-   then exits editing."
+  then exits editing."
   []
   (state/clear-editor-action!)
   (save-current-block!)
   (state/clear-edit!))
+
+(defn flush-editor-on-unload!
+  "Synchronously persist whatever the editor still holds so a reload can
+  replay it. Then start a best-effort save in case the worker is still
+  reachable (desktop db-worker-node survives renderer reload)."
+  []
+  (let [repo (state/get-current-repo)
+        block (state/get-edit-block)
+        value (editor-input-value (state/get-edit-input-id))]
+    (when (and repo block (string? value))
+      (pending-save/persist! repo (:block/uuid block) (string/trim value)))
+    (when repo
+      (doseq [[block-uuid title] @*pending-block-save-titles]
+        (pending-save/persist! repo block-uuid title)))
+    (save-current-block! {:flush-input? true})))
+
+(defonce ^:private *unload-flush-installed? (atom false))
+
+(defn install-unload-flush!
+  []
+  (when (and (exists? js/window)
+             (not util/node-test?)
+             (compare-and-set! *unload-flush-installed? false true))
+    (.addEventListener js/window "pagehide" flush-editor-on-unload!)))
+
+(defn restore-pending-block-saves!
+  "Replay titles persisted before a reload. A no-op when the worker already
+  has the same title. Missing blocks are dropped from the store."
+  [repo]
+  (when repo
+    (p/all
+     (map (fn [{:keys [block-uuid title]}]
+            (-> (save-block! repo block-uuid title)
+                (p/then (fn [result]
+                          (when (nil? result)
+                            (pending-save/clear! repo block-uuid))))
+                (p/catch (fn [error]
+                           (log/error :restore-pending-block-save-failed
+                                      {:repo repo
+                                       :block-uuid block-uuid
+                                       :error error})))))
+          (pending-save/entries repo)))))
 
 (def insert-command! editor-common-handler/insert-command!)
 

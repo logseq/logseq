@@ -1391,6 +1391,29 @@
         (is (every? #(= title (:text %)) frames)
             frames)))))
 
+(deftest escape-then-immediate-reload-keeps-the-edit-test
+  (testing "Escape then reload before the worker ack still keeps the typed title"
+    (let [title (str "escape-reload-" (random-uuid))
+          page-name (p/get-page-name)]
+      (b/new-block "")
+      (w/fill util/editor-q title)
+      (k/esc)
+      (w/refresh)
+      (assert/assert-graph-loaded?)
+      (assert/assert-is-visible
+       (loc/filter ".block-title-wrap" :has-text title))
+      (let [contents (loop [remaining 20]
+                       (let [titles (->> (ls-api-call! :editor.getPageBlocksTree page-name)
+                                         (map #(get % "content"))
+                                         (remove string/blank?))]
+                         (if (or (some #{title} titles) (zero? remaining))
+                           titles
+                           (do
+                             (util/wait-timeout 100)
+                             (recur (dec remaining))))))]
+        (is (some #{title} contents)
+            (str "the worker DB must contain the escaped title after reload: " contents))))))
+
 (deftest new-page-reference-renders-on-the-first-frame-after-save-test
   (testing "a newly created page reference is never blank after Escape"
     (let [page-title (str "reference-first-frame-" (random-uuid))]

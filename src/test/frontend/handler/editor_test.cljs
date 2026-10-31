@@ -16,6 +16,7 @@
             [frontend.handler.editor.assets :as editor-assets]
             [frontend.handler.editor.autopair :as editor-autopair]
             [frontend.handler.editor.format :as editor-format]
+            [frontend.handler.editor.pending-save :as pending-save]
             [frontend.handler.paste :as paste-handler]
             [frontend.handler.property :as property-handler]
             [frontend.handler.route :as route-handler]
@@ -36,9 +37,11 @@
 
 (use-fixtures :each {:before (fn []
                               (async done
+                                     (pending-save/clear-all!)
                                      (test-helper/start-test-db!)
                                      (done)))
                      :after (fn []
+                              (pending-save/clear-all!)
                               (state/set-current-repo! nil)
                               (test-helper/destroy-test-db!))})
 
@@ -434,6 +437,171 @@
       (is (= 2 (count @tx-calls))
           "A revert must be queued behind an in-flight save instead of being compared with stale canonical data.")
       (p/resolve! first-save nil))))
+
+(deftest save-block-persists-title-until-the-worker-acknowledges-test
+  (async done
+    (let [repo "pending-save-ack-repo"
+          block-uuid #uuid "44444444-4444-4444-4444-444444444444"
+          block {:db/id 1
+                 :block/uuid block-uuid
+                 :block/title "old"}
+          first-save (p/deferred)]
+      (pending-save/clear-all!)
+      (with-redefs [state/get-current-repo (constantly repo)
+                    db-subs/block-snapshot
+                    (constantly {:status :ready :value block})
+                    conn/get-db (constantly nil)
+                    editor/wrap-parse-block identity
+                    frontend-outliner-op/save-block! (constantly nil)
+                    db-transact/apply-outliner-ops (fn [_ _ _] first-save)]
+        (editor/save-block-if-changed! block "kept-across-reload")
+        (is (= [{:block-uuid block-uuid
+                 :title "kept-across-reload"}]
+               (pending-save/entries repo))
+            "Escape starts an async worker write; the title must survive a reload before ack")
+        (p/resolve! first-save nil))
+      (-> first-save
+          (p/then
+           (fn [_]
+             (is (empty? (pending-save/entries repo))
+                 "The persisted title is cleared only after the worker acknowledges")))
+          (p/catch
+           (fn [error]
+             (is false (str error))))
+          (p/finally done)))))
+
+(deftest restore-pending-block-saves-replays-a-title-lost-before-worker-ack-test
+  (async done
+    (let [repo "pending-save-restore-repo"
+          block-uuid #uuid "55555555-5555-5555-5555-555555555555"
+          block {:db/id 1
+                 :block/uuid block-uuid
+                 :block/title "old"}
+          save-calls (atom [])
+          tx-calls (atom [])]
+      (pending-save/clear-all!)
+      (pending-save/persist! repo block-uuid "lost-on-reload")
+      (-> (p/with-redefs [state/get-current-repo (constantly repo)
+                          db-async/<get-block
+                          (fn [_repo id _opts]
+                            (p/resolved (when (= id block-uuid) block)))
+                          db-subs/block-snapshot
+                          (constantly {:status :ready :value block})
+                          conn/get-db (constantly nil)
+                          editor/wrap-parse-block identity
+                          frontend-outliner-op/save-block!
+                          (fn [block' opts]
+                            (swap! save-calls conj [block' opts]))
+                          db-transact/apply-outliner-ops
+                          (fn [db ops opts]
+                            (swap! tx-calls conj [db ops opts])
+                            :tx)]
+            (editor/restore-pending-block-saves! repo))
+          (p/then
+           (fn [_]
+             (is (= [[{:block/uuid block-uuid
+                       :block/title "lost-on-reload"}
+                      nil]]
+                    @save-calls)
+                 "A reload must replay the persisted title through the normal save path")
+             (is (= 1 (count @tx-calls)))
+             (is (empty? (pending-save/entries repo))
+                 "Successful replay clears the persisted title")))
+          (p/catch
+           (fn [error]
+             (is false (str error))))
+          (p/finally done)))))
+
+(deftest restore-pending-block-saves-skips-a-title-the-worker-already-has-test
+  (async done
+    (let [repo "pending-save-noop-repo"
+          block-uuid #uuid "66666666-6666-6666-6666-666666666666"
+          block {:db/id 1
+                 :block/uuid block-uuid
+                 :block/title "already-saved"}
+          save-calls (atom [])]
+      (pending-save/clear-all!)
+      (pending-save/persist! repo block-uuid "already-saved")
+      (-> (p/with-redefs [state/get-current-repo (constantly repo)
+                          db-async/<get-block
+                          (fn [_repo id _opts]
+                            (p/resolved (when (= id block-uuid) block)))
+                          db-subs/block-snapshot
+                          (constantly {:status :ready :value block})
+                          conn/get-db (constantly nil)
+                          editor/wrap-parse-block identity
+                          frontend-outliner-op/save-block!
+                          (fn [block' opts]
+                            (swap! save-calls conj [block' opts]))
+                          db-transact/apply-outliner-ops
+                          (fn [_ _ _]
+                            (throw (js/Error. "must not save an unchanged title")))]
+            (editor/restore-pending-block-saves! repo))
+          (p/then
+           (fn [_]
+             (is (empty? @save-calls)
+                 "Replay is a no-op when the worker already has the title")
+             (is (empty? (pending-save/entries repo))
+                 "A matching title is dropped from the persist store")))
+          (p/catch
+           (fn [error]
+             (is false (str error))))
+          (p/finally done)))))
+
+(deftest failed-save-keeps-the-persisted-title-for-a-reload-retry-test
+  (async done
+    (let [repo "pending-save-retry-repo"
+          block-uuid #uuid "88888888-8888-8888-8888-888888888888"
+          block {:db/id 1
+                 :block/uuid block-uuid
+                 :block/title "old"}
+          first-save (p/deferred)]
+      (pending-save/clear-all!)
+      (with-redefs [state/get-current-repo (constantly repo)
+                    db-subs/block-snapshot
+                    (constantly {:status :ready :value block})
+                    conn/get-db (constantly nil)
+                    editor/wrap-parse-block identity
+                    frontend-outliner-op/save-block! (constantly nil)
+                    db-transact/apply-outliner-ops (fn [_ _ _] first-save)]
+        (editor/save-block-if-changed! block "retry-after-reload")
+        (p/reject! first-save (js/Error. "worker gone")))
+      (-> first-save
+          (p/catch
+           (fn [_]
+             (is (= [{:block-uuid block-uuid
+                      :title "retry-after-reload"}]
+                    (pending-save/entries repo))
+                 "A failed in-flight save must stay persisted so the next load can retry")))
+          (p/finally done)))))
+
+(deftest flush-editor-on-unload-persists-the-current-editor-value-test
+  (let [repo "pending-save-unload-repo"
+        block-uuid #uuid "77777777-7777-7777-7777-777777777777"
+        block {:db/id 1
+               :block/uuid block-uuid
+               :block/title "old"}
+        input #js {:value "  draft-before-reload  "}
+        first-save (p/deferred)]
+    (pending-save/clear-all!)
+    (with-redefs [state/editor-in-composition? (constantly false)
+                  state/get-editor-action (constantly nil)
+                  state/get-current-repo (constantly repo)
+                  state/get-edit-input-id (constantly "editor")
+                  state/get-edit-block (constantly block)
+                  gdom/getElement (constantly input)
+                  db-subs/block-snapshot
+                  (constantly {:status :ready :value block})
+                  conn/get-db (constantly nil)
+                  editor/wrap-parse-block identity
+                  frontend-outliner-op/save-block! (constantly nil)
+                  db-transact/apply-outliner-ops (fn [_ _ _] first-save)]
+      (editor/flush-editor-on-unload!)
+      (is (= [{:block-uuid block-uuid
+               :title "draft-before-reload"}]
+             (pending-save/entries repo))
+          "pagehide must persist the textarea before the page is torn down"))
+    (p/resolve! first-save nil)))
 
 (deftest open-block-in-sidebar-loads-target-through-worker-test
   (async done
