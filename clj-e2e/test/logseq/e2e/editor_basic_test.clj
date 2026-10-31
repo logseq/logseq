@@ -1916,6 +1916,9 @@
       (is (= marker (util/get-edit-content)))
       (w/click
        (.first (loc/filter ".page-reference .page-ref" :has-text target-page)))
+      ;; navigation waits for the editor flush, so wait for the target's title
+      (assert/assert-is-visible
+       (loc/filter "div[data-testid='page title'] .block-title-wrap" :has-text target-page))
       (is (= target-page (p/get-page-name)))
       (p/goto-page host-page)
       (assert/assert-is-visible
@@ -1962,6 +1965,9 @@
       (assert/assert-is-visible ".ui__popover-content a.menu-link")
       (w/click
        (.first (loc/filter ".page-reference .page-ref" :has-text target-page)))
+      ;; navigation waits for the editor flush, so wait for the target's title
+      (assert/assert-is-visible
+       (loc/filter "div[data-testid='page title'] .block-title-wrap" :has-text target-page))
       (is (= target-page (p/get-page-name)))
       (p/goto-page host-page)
       (assert/assert-is-visible
