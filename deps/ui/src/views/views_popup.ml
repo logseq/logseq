@@ -602,7 +602,7 @@ let show_dialog ~headline ~(body : t list) ~on_confirm ?(confirm_label = (I.t "u
 (* escape hatch for callers that own their own content (filter pickers,
    rename boxes): renders [content] inside a caller-anchored popover so
    placement/dismissal stay consistent with the menu path. *)
-let show_custom ~(anchor : U.el) ?(align_end = false) ~cls (content : t) =
+let show_custom ~(anchor : U.el) ?(align_end = false) ?owner_scope ~cls (content : t) =
   let anchor_target = anchor_identifier anchor in
   close_all ();
   let id = !next_id + 1 in
@@ -612,7 +612,12 @@ let show_custom ~(anchor : U.el) ?(align_end = false) ~cls (content : t) =
          anchored_popover ~key:(Printf.sprintf "vp-c-%d" id)
            ~id:(Printf.sprintf "vp-c-%d" id) ~anchor:(Target anchor_target) ~align_end ~cls ~card:true
            ~on_dismiss:(fun _ -> close_entry id)
-           [ content ] context parent))
+           [ content ] context parent));
+  Option.iter (fun scope ->
+    Signal.on_dispose scope (fun () ->
+      ignore (U.timers_timeout (fun () ->
+        if List.exists (fun popup -> popup.p_id = id) !open_popups then
+          close_entry id) 0))) owner_scope
 
 (* ---------- the mounted stack ----------
 

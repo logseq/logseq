@@ -90,6 +90,7 @@ let hooks = Subs_state.app_hooks
 let editor_popup_open = ref false
 
 let on_sync = Subs_state.on_sync
+let off_sync = Subs_state.off_sync
 let run_sync_subs = Subs_state.run_sync_subs
 
 let current_graph_uuid = Subs_state.current_graph_uuid

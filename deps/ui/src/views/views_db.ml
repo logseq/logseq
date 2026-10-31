@@ -62,6 +62,9 @@ let key_page_identity name = W.Array [ W.kw "page-identity"; W.String name ]
 
 let key_ref_count uuid = W.Array [ W.kw "block-ref-count"; W.Uuid uuid ]
 
+let key_ref_pages_count uuid =
+  W.Array [ W.kw "linked-ref-pages-count"; W.Uuid uuid ]
+
 (* request resources are the bare key vectors; in the response the slot key
    is [:resource <key>] (see snapshot_slot_value) *)
 let res (k : W.t) = k

@@ -31,6 +31,10 @@ type logseqEditorInput struct {
 	marked           ui.TextInputRange
 	markedSelection  ui.TextInputRange
 	dragging         bool
+	pointerMoved     bool
+	pendingPointer   *ui.InputEvent
+	pointerOwner     platformTarget
+	pointerBlock     string
 	layout           *editorLayout
 	handle           ui.Handle
 }
@@ -86,6 +90,7 @@ func (s *logseqEditorInput) setFocused(focused bool) {
 	if focused {
 		s.send("focus", nil)
 	} else {
+		s.cancelPointer()
 		s.clearComposition()
 		s.send("blur", nil)
 	}
@@ -186,12 +191,19 @@ func (s *logseqEditorInput) input(ev ui.InputEvent) bool {
 			s.selectBytes(extensionRuneByte(source, ev.Start), extensionRuneByte(source, ev.End))
 			return true
 		}
-	case ui.InputPointerDown, ui.InputPointerMove:
+	case ui.InputPointerDown, ui.InputPointerMove, ui.InputPointerUp:
 		if ev.Kind == ui.InputPointerDown {
 			s.dragging = ev.Button == 0
+			s.pointerMoved = false
 		}
 		if !s.dragging {
 			return false
+		}
+		if ev.Kind == ui.InputPointerUp {
+			s.dragging = false
+			if !s.pointerMoved {
+				return true
+			}
 		}
 		offset, ok := s.offsetAt(ui.Point{X: ev.X, Y: ev.Y})
 		if !ok || offset < 0 {
@@ -203,13 +215,9 @@ func (s *logseqEditorInput) input(ev ui.InputEvent) bool {
 		if ev.Kind == ui.InputPointerDown && ev.Clicks == 2 {
 			s.send("dblclick", map[string]any{"offset": offset})
 		} else {
-			s.send("pointer", map[string]any{"offset": offset, "extend": ev.Kind == ui.InputPointerMove || ev.Mods&ui.Shift != 0})
+			s.send("pointer", map[string]any{"offset": offset, "extend": ev.Kind != ui.InputPointerDown || ev.Mods&ui.Shift != 0})
 		}
 		return true
-	case ui.InputPointerUp:
-		taken := s.dragging
-		s.dragging = false
-		return taken
 	case ui.InputCommand:
 		switch ev.Text {
 		case "delete":

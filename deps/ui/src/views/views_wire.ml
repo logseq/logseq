@@ -474,6 +474,14 @@ let decode_ref_counts (v : W.t) : (string * int) list =
              | _ -> None)
   | None -> []
 
+let decode_ref_counts_resource (v : W.t) : (string * int) list =
+  match W.get v "ref-pages-count" with
+  | Some (W.Array counts) ->
+      List.map (function
+        | W.Array [ W.String title; W.Int n ] when n >= 0 -> title, n
+        | _ -> invalid_arg "Invalid linked-reference page count") counts
+  | _ -> invalid_arg "Missing linked-reference page counts"
+
 let rec prop_text v =
   match v with
   | W.String s -> s

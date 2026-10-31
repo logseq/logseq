@@ -1067,23 +1067,65 @@ let refs_cog_class (s : V.vstate) =
   | true, true -> " text-warning"
   | false, false -> ""
 
-let ref_filter_dialog inst anchor =
+let ref_filter_dialog ~owner_scope inst anchor =
   let input_id = "vrfsearch-" ^ string_of_int inst.V.id in
   let lc s = String.lowercase_ascii (Str_util.trim s) in
-  P.show_custom ~anchor ~align_end:true
+  P.show_custom ~anchor ~align_end:true ~owner_scope
     ~cls:"ui__dropdown-menu-content"
     (fun context parent ->
       let sched = context.Lui_ui.ui_scheduler in
       let draft = Signal.state sched "" in
       let query = Signal.state sched "" in
-      (* bumped whenever include/exclude filters change so the chips
-         and ref rows re-render *)
-      let gen = Signal.state sched 0 in
       let deb = Ui_services.timers_debounce 200 in
-      let combined =
-        Signal.map2 (fun q g -> (q, g)) (Signal.value (query))
-          (Signal.value (gen))
+      let scope = context.Lui_ui.ui_scope in
+      let repo = Runtime.repo () and route = Runtime.route () in
+      let view_uuid = (V.get inst).V.view_uuid in
+      let current () =
+        Ui_effect.alive scope && Ui_effect.alive owner_scope
+        && Runtime.repo () = repo && Runtime.route () = route
+        && (V.get inst).V.view_uuid = view_uuid
       in
+      let counts = Signal.state sched Ui_effect.Loading in
+      let set_counts value =
+        Signal.set counts value;
+        Ui_services.request_flush ()
+      in
+      let key = Views_db.key_ref_pages_count
+        (match V.owner_uuid inst with
+         | Some uuid -> uuid
+         | None -> invalid_arg "Linked-reference filter owner must be a UUID")
+      in
+      let request = Ui_effect.request () in
+      let debounce_counts = Ui_services.timers_debounce 150 in
+      let refresh_counts () =
+        let ticket = Ui_effect.issue request in
+        let fresh () = current () && Ui_effect.is_current request ticket in
+        if current () then begin
+          set_counts Ui_effect.Loading;
+          debounce_counts (fun () ->
+            if fresh () then
+              let fail () =
+                if fresh () then
+                  set_counts
+                    (Ui_effect.Failed (Failure "Linked-reference page counts failed"))
+              in
+              Views_db.snapshots ~on_error:fail
+                ~f:(fun snap ->
+                  if fresh () then
+                    let value = match Views_db.snapshot_value snap key with
+                      | Some value -> value
+                      | None -> invalid_arg "Missing linked-reference page count resource"
+                    in
+                    set_counts
+                      (Ui_effect.Ready (Views_wire.decode_ref_counts_resource value)))
+                [ key ])
+        end
+      in
+      let subscription = Runtime.on_sync (fun _ -> refresh_counts ()) in
+      Signal.on_dispose scope (fun () ->
+        ignore (Ui_effect.issue request);
+        Runtime.off_sync subscription);
+      ignore (Ui_effect.timeout ~scope 0 refresh_counts);
       let ref_button title count_opt =
         Ui_components.with_props
           [ Ui_components.Prop.font_size "0.75rem" ]
@@ -1092,7 +1134,7 @@ let ref_filter_dialog inst anchor =
              [ ( Ui_components.Prop.hover_border
                    "var(--ls-secondary-text-color, \
                     hsl(var(--muted-foreground)))" ) ]
-             (Ui_components.button ~variant:`ghost ~border_width:1 ~corner_radius:6
+             (Ui_components.button ~variant:`ghost ~label:title ~border_width:1 ~corner_radius:6
                 ~padding_vertical:2 ~padding_horizontal:8
                 ~background:"transparent" ~style_class:"ls-ref-btn"
                 ~foreground:"inherit"
@@ -1103,7 +1145,7 @@ let ref_filter_dialog inst anchor =
                   column so delete-property-value targets the right
                   property *)
                match ev with
-               | Lui_protocol.PressDetail (_, d) ->
+               | Lui_protocol.PressDetail (_, d) when current () ->
                  let s = V.get inst in
                  let lcr = lc title in
                  let included =
@@ -1119,8 +1161,7 @@ let ref_filter_dialog inst anchor =
                         not (d.Lui_protocol.modifiers land 2 <> 0)
                       else included)
                    ~add:not_in_filters
-                   ~on_done:(fun () ->
-                     Signal.set gen (Signal.get_state gen + 1))
+                   ~on_done:refresh_counts
                | _ -> ())
              ([ text ~value:title [] ]
               @
@@ -1137,8 +1178,7 @@ let ref_filter_dialog inst anchor =
       in
       let chip_rows =
         reactive
-          (fun (_q, _g) ->
-            let s = V.get inst in
+          (fun s ->
             box ~display:`contents
               ((if s.V.ref_includes <> [] then
                   [ chip_row (I.t "reference.filter/includes")
@@ -1149,19 +1189,24 @@ let ref_filter_dialog inst anchor =
                  [ chip_row (I.t "reference.filter/excludes")
                      s.V.ref_excludes ]
                  else []))
-          combined
+          (sig_of inst)
       in
       let ref_rows =
         reactive
-          (fun (q, _g) ->
-            let s = V.get inst in
+          (fun q s loaded ->
+            match loaded with
+            | Ui_effect.Loading ->
+                text ~value:(I.t "ui/loading") ~padding:8 []
+            | Ui_effect.Failed _ ->
+                text ~value:(I.t "view/error") ~padding:8 []
+            | Ui_effect.Ready counts ->
             let in_filters n =
               List.exists
                 (fun (x, _) -> x = lc n)
                 (s.V.ref_includes @ s.V.ref_excludes)
             in
             let refs =
-              s.V.ref_pages_count
+              counts
               |> List.filter (fun (t, _) -> not (in_filters t))
               |> fun xs ->
               if q = "" then xs
@@ -1174,7 +1219,7 @@ let ref_filter_dialog inst anchor =
               row ~cross:`center ~gap:8 ~width:500 ~max_width:500
                 ~data_attrs:[ ("style", "flex-wrap:wrap") ]
                 (List.map (fun (t, n) -> ref_button t (Some n)) refs))
-          combined
+          (Signal.value query) (sig_of inst) (Signal.value counts)
       in
       (column ~style_class:"ls-filters filters" ~padding:16
          ~min_width:320 ~max_width:500
@@ -1217,11 +1262,13 @@ let ref_filter_dialog inst anchor =
                     ~placeholder:(I.t "reference.filter/search-placeholder")
                     ~autofocus:true
                     ~on_input:(function
-                      | L.TextChanged (_, v) ->
+                      | L.TextChanged (_, v) when current () ->
                           Signal.set draft v;
                           deb (fun () ->
-                            if not (Signal.scope_is_disposed context.Lui_ui.ui_scope)
-                            then Signal.set query v)
+                            if current () then begin
+                              Signal.set query v;
+                              Ui_services.request_flush ()
+                            end)
                       | _ -> ())
                     []) ]
          ; (* ls-filters-refs keeps its class — the :empty rule is a
@@ -1241,7 +1288,7 @@ let refs_filter_btn inst : t =
          match
            Ui_services.dom_by_id ("vrefcog-" ^ string_of_int inst.V.id)
          with
-         | Some a -> ref_filter_dialog inst a
+         | Some a -> ref_filter_dialog ~owner_scope:ctx.Lui_ui.ui_scope inst a
          | None -> ())
        [ icon ~name:(Icons.name_ref "filter-cog") ~point_size:18 [] ])
     ctx parent
