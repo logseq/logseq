@@ -315,6 +315,15 @@
 (defevent! :modal/keymap [[_]]
   (state/open-settings! :keymap))
 
+(defn- <current-block
+  "The edit block is a map captured when editing started, so it does not show
+  list-type changes made while editing. Read the block again before deciding."
+  [repo block]
+  (if-let [block-uuid (:block/uuid block)]
+    (p/let [current-block (db-async/<get-block repo block-uuid {:children? false})]
+      (or current-block block))
+    block))
+
 (defevent! :editor/toggle-own-number-list [[_ blocks]]
   (let [batch? (sequential? blocks)
         repo (state/get-current-repo)]
@@ -323,7 +332,7 @@
                                     (db-async/<get-block repo % {:children? false})
                                     %)
                                   blocks))
-                     blocks)]
+                     (<current-block repo blocks))]
       (if (and batch? (> (count blocks) 1))
         (editor-handler/toggle-blocks-as-own-order-list! blocks)
         (when-let [block (cond-> blocks batch? (first))]

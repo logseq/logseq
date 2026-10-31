@@ -2075,7 +2075,7 @@
     ;; (not= (gobj/get native-e "inputType") "insertFromPaste")
     (cond
       (and (= content "1. ") (= last-input-char " ") input-id edit-block
-           (not (own-order-number-list? edit-block)))
+           (not (own-order-number-list? (latest-renderer-block edit-block))))
       (p/let [_ (state/pub-event! [:editor/toggle-own-number-list edit-block])]
         (state/set-edit-content! input-id ""))
 
@@ -2405,7 +2405,7 @@
               content value]
           (cond
             (and (string/blank? content)
-                 (own-order-number-list? block)
+                 (own-order-number-list? (latest-renderer-block block))
                  (not (some-> (:block/parent block)
                               (own-order-number-list?))))
             (remove-block-own-order-list-type! block)
@@ -2998,7 +2998,7 @@
                        (not root-block?)
                        (not single-block?)
                        (not custom-query?))
-              (if (own-order-number-list? block)
+              (if (own-order-number-list? (latest-renderer-block block))
                 (p/do!
                  (save-current-block!)
                  (remove-block-own-order-list-type! block))
@@ -3721,8 +3721,18 @@
 
 (defn db-collapsable?
   [block & _opts]
-  (let [property-keys (or (seq (:block.temp/property-keys block))
-                          (filter db-property/property? (keys block)))
+  (let [display-properties (:block.temp/display-properties block)
+        ;; The properties area renders only the visible rows. Hidden and
+        ;; empty-hidden properties leave nothing to expand, unless the block's
+        ;; hidden properties are shown: then they must stay reopenable.
+        property-keys (if display-properties
+                        (map :property-id
+                             (concat (:full-properties display-properties)
+                                     (when (contains? @state/*show-hidden-properties-block-ids
+                                                      (:block/uuid block))
+                                       (:hidden-properties display-properties))))
+                        (or (seq (:block.temp/property-keys block))
+                            (filter db-property/property? (keys block))))
         properties (->> property-keys
                         (remove db-property/db-attribute-properties)
                         (remove #{:logseq.property/created-by-ref
@@ -4150,15 +4160,41 @@
                     (select-all-blocks! {:page (:block/name parent)})))))
             (select-all-blocks! {})))))))
 
+(defn- untitled-library-page
+  "The page being edited when Enter just created it in the Library and it still
+  has no title, else nil."
+  [input-id]
+  (let [[_ _ config] (state/get-editor-args)
+        edit-block (state/get-edit-block)
+        block (when edit-block (latest-renderer-block edit-block))]
+    (when (and (:library? config)
+               block
+               (entity/page? block)
+               (string/blank? (:block/title block))
+               (string/blank? (editor-input-value input-id)))
+      block)))
+
+(defn- delete-untitled-library-page!
+  "Hard-delete a page that never got a title, so it is left neither as an
+  Untitled page in the Library nor in the Recycle page."
+  [page]
+  (ui-outliner-tx/transact!
+   {:outliner-op :delete-page}
+   (outliner-op/delete-page! (:block/uuid page))
+   (outliner-op/recycle-delete-permanently! (:block/uuid page))))
+
 (defn escape-editing
   [& {:keys [select? save-block? editing-another-block?]
       :or {save-block? true}}]
-  (let [input-id (state/get-edit-input-id)]
+  (let [input-id (state/get-edit-input-id)
+        untitled-page (when save-block? (untitled-library-page input-id))]
     (p/do!
-     (when save-block? (save-current-block!))
+     (if untitled-page
+       (delete-untitled-library-page! untitled-page)
+       (when save-block? (save-current-block!)))
      ;; a click during the save opened another editor: it stays open
      (when (still-editing? input-id)
-       (if select?
+       (if (and select? (not untitled-page))
          (when-let [node (some-> (state/get-input) (util/rec-get-node "ls-block"))]
            (state/exit-editing-and-set-selected-blocks! [node]))
          (when-not editing-another-block?

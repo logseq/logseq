@@ -31,6 +31,9 @@
 (defonce *db-worker-thread (atom nil))
 (defonce *db-worker-client-id (atom (storage/get :db-worker-client-id)))
 (defonce *editor-info (atom nil))
+(defonce *show-hidden-properties-block-ids
+  ;; uuids of the blocks whose hidden properties are currently shown
+  (atom #{}))
 (defonce app-ready-promise (p/deferred))
 
 (def ^:private supported-locale-tags
