@@ -488,6 +488,7 @@ let show_select ~(anchor : U.el) ~items ~placeholder ?(multiple = false)
                 ; Ui_components.Prop.focus_shadow "none" ]
                 (Ui_components.input ~key:input_id ~accessibility_identifier:input_id
                    ~style_class:"cp__select-input" ~placeholder
+                   ~text:(reactive Fun.id qsig)
                    ~autofocus:true ~height:32
                    ~padding_horizontal:input_padding_horizontal ~padding_vertical:4
                    ~background:"transparent" ~border_width:0 ~corner_radius:0

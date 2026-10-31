@@ -717,7 +717,8 @@ let search_items inst : t list =
           [ Ui_components.Prop.font_size "0.875rem"
           ; Ui_components.Prop.focus_shadow "none" ]
           (Ui_components.input ~accessibility_identifier:input_id
-             ~placeholder:(I.t "view.filter/type-to-search") ~text:(V.get inst).V.input
+             ~placeholder:(I.t "view.filter/type-to-search")
+             ~text:(reactive (fun (s : V.vstate) -> s.V.input) (sig_of inst))
              ~width:183 ~height:28 ~autofocus:true ~border_width:0
              ~background:"transparent" ~padding_horizontal:12 ~padding_vertical:0
              ~on_input:(fun ev ->
@@ -1073,6 +1074,7 @@ let ref_filter_dialog inst anchor =
     ~cls:"ui__dropdown-menu-content"
     (fun context parent ->
       let sched = context.Lui_ui.ui_scheduler in
+      let draft = Signal.state sched "" in
       let query = Signal.state sched "" in
       (* bumped whenever include/exclude filters change so the chips
          and ref rows re-render *)
@@ -1210,6 +1212,7 @@ let ref_filter_dialog inst anchor =
                  [ Ui_components.Prop.focus_shadow "none" ]
                  (Ui_components.input ~style_class:"cp__filters-input"
                     ~grow:1. ~background:"transparent" ~border_width:0
+                    ~text:(reactive Fun.id (Signal.value draft))
                     ~data_attrs:
                       [ ("type", "text")
                       ; ("id", input_id)
@@ -1218,7 +1221,10 @@ let ref_filter_dialog inst anchor =
                     ~autofocus:true
                     ~on_input:(function
                       | L.TextChanged (_, v) ->
-                          deb (fun () -> Signal.set query v)
+                          Signal.set draft v;
+                          deb (fun () ->
+                            if not (Signal.scope_is_disposed context.Lui_ui.ui_scope)
+                            then Signal.set query v)
                       | _ -> ())
                     []) ]
          ; (* ls-filters-refs keeps its class — the :empty rule is a

@@ -747,13 +747,11 @@ let ensure_default_view inst =
    the returned box as MCustom inside the Rename MSub; the popup layer
    focuses the input when the sub-content opens. *)
 let rename_editor_box inst (v : Wr.view_ent) : Lui_elements.t =
-  (* the typed value lives in a ref the input's on_input keeps current;
-     submit (Enter) commits, Escape rides the enclosing popover's own
-     dismiss *)
-  let value = ref v.Wr.vtitle in
+ fun context parent ->
+  let value = Signal.state context.Lui_ui.ui_scheduler v.Wr.vtitle in
   let commit () =
     P.close_all ();
-    Db.save_block_title v.Wr.vu !value (fun () ->
+    Db.save_block_title v.Wr.vu (Signal.get_state value) (fun () ->
         load_views inst ~on_done:(fun () -> refresh inst))
   in
   column ~style_class:"block-title-wrap" ~padding:8 ~cross:`stretch
@@ -761,13 +759,13 @@ let rename_editor_box inst (v : Wr.view_ent) : Lui_elements.t =
         [ Ui_components.Prop.font_size "16px"
         ; Ui_components.Prop.focus_shadow "none" ]
         (Ui_components.input ~padding:6 ~height:32
-           ~text:v.Wr.vtitle ~autofocus:true
+           ~text:(reactive Fun.id (Signal.value value)) ~autofocus:true
            ~background:"transparent" ~border_width:0
            ~foreground:"var(--ls-secondary-text-color)"
            ~on_input:(function
-             | Lui_protocol.TextChanged (_, s) -> value := s
+             | Lui_protocol.TextChanged (_, s) -> Signal.set value s
              | _ -> ())
-           ~on_submit:(fun _ -> commit ()) []) ]
+           ~on_submit:(fun _ -> commit ()) []) ] context parent
 
 let export_edn inst =
   let s =
