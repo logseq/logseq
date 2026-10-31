@@ -2796,9 +2796,20 @@ let test_popups_state () =
   check "nlp next week" (ms_diff "Next week" > 604700000.);
   check "nlp today" (abs_float (ms_diff "Today") < 5000.);
   check "nlp unknown" (abs_float (ms_diff "Bogus") < 5000.);
+  let with_month_end_clock : (unit -> Dates.fields) -> Dates.fields =
+    [%mel.raw {js|function (read) {
+      const { mock } = require("node:test");
+      mock.timers.enable({ apis: ["Date"], now: new Date(2026, 9, 31, 12, 34, 56, 789) });
+      try { return read(); } finally { mock.timers.reset(); }
+    }|js}]
+  in
+  let next_month =
+    with_month_end_clock (fun () -> Dates.fields (Popups_state.nlp_date_of "Next month"))
+  in
   check "nlp next month"
-    ((Dates.fields (Popups_state.nlp_date_of "Next month")).month
-     = ((Dates.fields now).month mod 12) + 1);
+    (next_month =
+       { year = 2026; month = 12; day = 1; wday = 2
+       ; hours = 12; minutes = 34; seconds = 56; ms = 789 });
   check "nlp next year"
     ((Dates.fields (Popups_state.nlp_date_of "Next year")).year
      = (Dates.fields now).year + 1);
