@@ -28,6 +28,30 @@
   <title>Logseq: A privacy-first platform for knowledge management and collaboration</title>
   <meta content="logseq" property="og:site_name">
   <meta content="A privacy-first, open-source platform for knowledge management and collaboration." name="description">
+  <script id="theme-boot">
+    // Apply the stored theme before the first paint, so the window does not
+    // show the light theme until the app mounts. Mirrors the initial theme
+    // state in frontend.state; the app sets the same attributes once mounted.
+    (function () {
+      try {
+        var read = function (key) {
+          try { return JSON.parse(localStorage.getItem(key)); } catch (e) { return null; }
+        };
+        var theme = read('theme') === 'dark' ? 'dark' : 'light';
+        var systemTheme = read('system-theme?');
+        if (systemTheme === null) {
+          systemTheme = /Macintosh|Windows/.test(navigator.userAgent);
+        }
+        if (systemTheme) {
+          theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        }
+        document.documentElement.setAttribute('data-theme', theme);
+        if (theme === 'dark') {
+          document.documentElement.classList.add('dark');
+        }
+      } catch (e) {}
+    })();
+  </script>
 </head>
 <body>
 <div id="root"></div>
