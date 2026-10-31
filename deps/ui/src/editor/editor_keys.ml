@@ -1552,13 +1552,9 @@ let on_cut ev =
       when editing_clipboard_target e.S.uuid (ev.Ui_services.target)
            || editing_block_target (ev.Ui_services.target) -> (
         let lo, hi = A.sel_span e.S.uuid in
+        ev.Ui_services.prevent_default ();
         if lo <> hi then (
-          ev.Ui_services.clipboard_set "text/plain"
-            (String.sub e.S.buffer lo (hi - lo));
-          A.splice_range e.S.uuid lo hi "";
-          Outliner_ops.schedule_save e.S.uuid
-            (A.live_buffer e.S.uuid));
-        ev.Ui_services.prevent_default ())
+          ignore (A.cut_editing_text e.S.uuid)))
     | Some _ -> ()
     | None -> if not (is_editable_target ev.Ui_services.target) then A.cut_selection ev
 

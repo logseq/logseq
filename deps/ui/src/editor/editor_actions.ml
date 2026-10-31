@@ -1581,13 +1581,17 @@ let action_context () =
   model.Model.repo, model.Model.route, model.Model.context_revision
 
 let delete_selected_uuids ~selected ~scope ~before uuids =
+  let context = Runtime.model () in
+  let owner = Ops.refresh_owner_for None in
+  let current () =
+    Ops.refresh_current ?owner context
+    && scope = S.selection_scope () && selected == S.selected ()
+  in
   match uuids with
   | [] -> ()
-  | _ when !selection_delete_pending -> ()
+  | _ when !selection_delete_pending || not (current ()) -> ()
   | first :: _ ->
       selection_delete_pending := true;
-      let context = Runtime.repo (), Runtime.route () in
-      let publication = action_context () in
       let prev =
         match S.prev_visible ~scope first with
         | Some p -> p.Model.block_uuid
@@ -1613,17 +1617,21 @@ let delete_selected_uuids ~selected ~scope ~before uuids =
               ; Wire.Keyword "selected-blocks", Wire.List []
               ; Wire.Keyword "selection-anchor", Wire.Nil ]
         in
-        if publication <> action_context () then Js.Promise.resolve ()
+        if not (current ()) then Js.Promise.resolve ()
         else
-          let* response = Ops.apply_result
+          let* response = Ops.apply_result ~current
               ~opts:(Ops.history_opts ~before ~after ()) [Ops.delete_blocks uuids] in
           match response with
           | None -> Js.Promise.resolve ()
-          | Some _ when publication <> action_context () -> Js.Promise.resolve ()
+          | Some _ when not (current ()) -> Js.Promise.resolve ()
           | Some _ ->
-              let* () = Ops.refresh_via_delta response in
-              if context = (Runtime.repo (), Runtime.route ())
-                 && scope = S.selection_scope () && S.String_set.equal selected (S.selected ())
+              let* () = Ops.refresh_via_delta ?owner response in
+              let* () =
+                match owner with
+                | Some owner -> Ops.require_refresh_success owner
+                | None -> Js.Promise.resolve ()
+              in
+              if current ()
               then (
                 let editing = match previous, S.editing () with
                   | Some (uuid, buffer), None when S.find uuid <> None ->
@@ -1757,40 +1765,79 @@ let copy_selection ev =
       remember_selection_copy ~plain:false blocks text;
       ev.Ui_services.prevent_default ()
 
-let write_clipboard_text text on_written =
-  let write =
-    try Ui_services.clipboard_write_text text
-    with error -> Ui_task.reject error
-  in
+let write_clipboard_text ~current text on_written =
+  let write = Ui_services.clipboard_write_text text in
   let task = Ui_task.bind write (fun () ->
-      on_written ();
-      Ui_task.resolve ()) in
+      if not (current ()) then Ui_task.reject Ui_task.Cancelled
+      else (on_written (); Ui_task.resolve ())) in
   ignore (Ui_task.catch task (fun error ->
-      Ui_services.log_error ("clipboard write failed", error);
-      Ui_task.resolve ()))
+      (match error with Ui_task.Cancelled -> ()
+       | _ -> Ui_services.log_error ("clipboard write failed", error));
+      Ui_task.reject error));
+  task
+
+let clipboard_action_epoch = ref 0
+let cancel_clipboard_actions () = incr clipboard_action_epoch
+
+let clipboard_action_current () =
+  let context = action_context () and state = S.value () in
+  let model = Runtime.model () and owner = Ops.refresh_owner_for None in
+  let generation = !(Runtime.load_gen) and epoch = !clipboard_action_epoch in
+  fun () -> context = action_context () && generation = !(Runtime.load_gen)
+            && Ops.refresh_current ?owner model
+            && epoch = !clipboard_action_epoch && S.ready () && S.value () == state
+
+let cut_editing_text uuid =
+  match S.editing () with
+  | Some editing when editing.S.uuid = uuid && Option.is_some !S.active_frame ->
+      let lo,hi = sel_span_of editing.S.model in
+      if lo = hi then Ui_task.resolve ()
+      else
+        let current = clipboard_action_current () in
+        let frame = !S.active_frame in
+        let epoch = !(editing.S.epoch) in
+        let fresh () = current () &&
+          (match frame, !S.active_frame with
+           | Some original, Some live -> original == live
+           | _ -> false) &&
+          match S.editing () with
+          | Some live -> live.S.uuid = uuid && live.S.epoch == editing.S.epoch
+              && !(live.S.epoch) = epoch && live.S.model == editing.S.model
+              && live.S.buffer = editing.S.buffer && sel_span_of live.S.model = (lo,hi)
+          | None -> false in
+        write_clipboard_text ~current:fresh
+          (String.sub editing.S.buffer lo (hi-lo)) (fun () ->
+            splice_range uuid lo hi "";
+            Outliner_ops.schedule_save uuid (live_buffer uuid))
+  | _ -> Ui_task.reject Ui_task.Cancelled
 
 let write_selection_copy ~plain ~cut =
   let snapshot = selected_snapshot () in
   let before = S.history_cursor () in
-  let context = action_context () in
+  let current = clipboard_action_current () in
   match selected_copy_blocks ~plain snapshot with
   | None | Some [] -> ()
   | Some blocks ->
       let text = selection_text ~plain blocks in
-      write_clipboard_text text (fun () ->
+      ignore (write_clipboard_text ~current:(fun () -> current () &&
+          List.for_all (fun block ->
+            match block.Model.block_uuid with
+            | Some uuid -> (match S.find uuid with Some live -> live == block | None -> false)
+            | None -> false) snapshot.blocks) text (fun () ->
           remember_selection_copy ~plain blocks text;
-          if cut && context = action_context () then
+          if cut then
             delete_selected_uuids ~selected:snapshot.selection ~scope:snapshot.scope
-              ~before snapshot.uuids)
+              ~before snapshot.uuids))
 
 let cut_block_text uuid =
   match S.find uuid with
   | None -> ()
   | Some block ->
-      let context = action_context () in
-      write_clipboard_text block.Model.block_title (fun () ->
-          if context = action_context () then
-            ignore (Ops.apply_and_refresh [ Ops.delete_blocks [ uuid ] ]))
+      let current = clipboard_action_current () in
+      ignore (write_clipboard_text ~current:(fun () -> current () &&
+          match S.find uuid with Some live -> live == block | None -> false)
+        block.Model.block_title (fun () ->
+          ignore (Ops.apply_and_refresh [ Ops.delete_blocks [ uuid ] ])))
 
 let copy_selection_text ?(plain = false) () = write_selection_copy ~plain ~cut:false
 let cut_selection_text () = write_selection_copy ~plain:false ~cut:true

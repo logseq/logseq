@@ -1105,15 +1105,48 @@ let dom_op (e : env) (op : string) (body : string) =
 
 (* ---------- top-level envelope dispatch ---------- *)
 
+let clipboard_write_id = ref 0
+
+let clipboard_write payload =
+  let invalid () = invalid_arg "Invalid native clipboard write request" in
+  if not (String.is_valid_utf_8 payload) then invalid ();
+  let parsed = try J.from_string payload with Yojson.Json_error _ -> invalid () in
+  let id,text = match parsed with
+    | `Assoc fields when List.sort String.compare (List.map fst fields) =
+        ["request-id";"text"] ->
+        (match List.assoc "request-id" fields,List.assoc "text" fields with
+         | `String id,`String text -> id,text
+         | _ -> invalid ())
+    | _ -> invalid () in
+  let sequence = match int_of_string_opt id with
+    | Some n when n > 0 && string_of_int n = id -> n
+    | _ -> invalid () in
+  if Option.is_none !env then invalid_arg "Native host is disconnected";
+  Native_embed.with_entry_lock (fun () ->
+    if sequence <= !clipboard_write_id || sequence > !(Platform.clipboard_write_id)
+    then invalid ();
+    clipboard_write_id := sequence;
+    if Hashtbl.mem Platform.clipboard_writes id then begin
+      let ok = Lui_shell.clipboard_write text in
+      let fields = ["request-id",`String id;"ok",`Bool ok] in
+      let fields = if ok then fields else
+        fields @ ["error",`String "Native clipboard ownership was refused"] in
+      reply "clipboard-write-result" (`Assoc fields)
+    end)
+
 let handle (envelope : string) =
   match String.index_opt envelope '\n' with
+  | None when envelope = "clipboard-write" ->
+      invalid_arg "Invalid native clipboard write request"
   | None -> ()
   | Some i -> (
       let name = String.sub envelope 0 i in
       let payload =
         String.sub envelope (i + 1) (String.length envelope - i - 1)
       in
-      match !env with
+      match name with
+      | "clipboard-write" -> clipboard_write payload
+      | _ -> match !env with
       | None -> ()
       | Some e -> (
           match name with
@@ -1187,7 +1220,7 @@ let handle (envelope : string) =
                       (Option.value (jstr_opt "body" j) ~default:"")
                     ())
              | _ -> ())
-          | other -> log "platform request %s: %s" other payload))
+          | other -> log "platform request %s unsupported" other))
 
 let name_of req =
   try String.sub req 0 (String.index req '\n') with _ -> "?"

@@ -6,9 +6,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -156,6 +158,17 @@ func (s *platformServices) handle(name, payload string) ([]platformReply, error)
 	case "clipboard":
 		// WriteText discards errors; the transfer API preserves native failures.
 		return platformOperationReply(name, mygo.Clipboard.Write(transfer.TextData(payload)))
+	case "clipboard-write":
+		request, err := decodeClipboardWrite(payload)
+		if err != nil {
+			return nil, err
+		}
+		err = mygo.Clipboard.Write(transfer.TextData(request["text"]))
+		result := map[string]any{"request-id": request["request-id"], "ok": err == nil}
+		if err != nil {
+			result["error"] = err.Error()
+		}
+		return platformJSONReply("clipboard-write-result", result)
 	case "clipboard-read":
 		if payload != "" {
 			return nil, fmt.Errorf("expected an empty payload")
@@ -361,6 +374,53 @@ func platformObject(payload string, result any) error {
 		return fmt.Errorf("decode JSON object: %w", err)
 	}
 	return nil
+}
+
+func decodeClipboardWrite(payload string) (map[string]string, error) {
+	if !utf8.ValidString(payload) {
+		return nil, errors.New("clipboard-write: invalid UTF-8")
+	}
+	decoder := json.NewDecoder(strings.NewReader(payload))
+	start, err := decoder.Token()
+	if err != nil || start != json.Delim('{') {
+		return nil, errors.New("clipboard-write: expected object")
+	}
+	request := make(map[string]string, 2)
+	for decoder.More() {
+		key, err := decoder.Token()
+		if err != nil {
+			return nil, err
+		}
+		name, ok := key.(string)
+		if !ok || (name != "request-id" && name != "text") {
+			return nil, errors.New("clipboard-write: unknown field")
+		}
+		if _, duplicate := request[name]; duplicate {
+			return nil, errors.New("clipboard-write: duplicate field")
+		}
+		var value any
+		if err := decoder.Decode(&value); err != nil {
+			return nil, err
+		}
+		text, ok := value.(string)
+		if !ok {
+			return nil, errors.New("clipboard-write: expected string field")
+		}
+		request[name] = text
+	}
+	if _, err := decoder.Token(); err != nil {
+		return nil, err
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		return nil, errors.New("clipboard-write: trailing input")
+	}
+	id := request["request-id"]
+	number, err := strconv.ParseUint(id, 10, 63)
+	if len(request) != 2 || err != nil || number == 0 || strconv.FormatUint(number, 10) != id {
+		return nil, errors.New("clipboard-write: invalid request identity or missing text")
+	}
+	return request, nil
 }
 
 func platformOperationReply(operation string, err error) ([]platformReply, error) {

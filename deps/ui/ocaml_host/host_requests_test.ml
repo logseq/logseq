@@ -7,6 +7,11 @@ let () = Option.iter register_fixture_fonts (Sys.getenv_opt "LOGSEQ_NATIVE_FONT_
 
 let check message condition = if not condition then failwith message
 
+let () =
+  ignore (Bridge.take_requests ());
+  Host.set_host_op (fun name payload ->
+    Native_embed.platform_request (name ^ "\n" ^ payload))
+
 let icon_hooks = {Lui_paint.default_hooks with color_of=Theme_vars.color_of}
 
 let () =

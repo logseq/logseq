@@ -861,6 +861,56 @@ has real ownership, not to mirror a historical split plan.
 The UI stack uses Base UI and Tailwind 4. Read package.json and current component
 usage before changing dependency or styling conventions.
 
+### Native host clipboard requests
+
+The native app sends platform envelopes as `name\npayload`. The MyGo adapter
+handles them in `deps/ui/mygo/platform.go`; the Linux/macOS OCaml SDL host drains
+`Bridge.take_requests` through `Host_requests` on its UI thread. These are distinct
+consumers of the same app-private clipboard task contract.
+
+| Request | Payload | Completion |
+| --- | --- | --- |
+| `clipboard` | Raw text | Legacy unchecked write; no clipboard task ACK |
+| `clipboard-read` | Empty | `clipboard-read` with a `text` string; not write evidence |
+| `clipboard-write` | Exactly string fields `request-id` and `text` | One matching `clipboard-write-result` for an admitted, uncancelled request when Shell returns normally. A fatal Shell exception may terminate without a result. |
+
+For example, request `{"request-id":"1","text":"alpha"}` completes with
+`{"request-id":"1","ok":true}` only after the real native write succeeds. A
+refusal completes with `{"request-id":"1","ok":false,"error":"<reason>"}`.
+Success has no `error` field; failure requires a nonempty string. The application
+rejects unknown fields, duplicate fields, wrong types, noncanonical/zero/future
+identities and malformed or trailing JSON. Exception wording is not a protocol
+contract. The OCaml consumer also rejects repeated or out-of-order request IDs
+before writing, and validates issuance against the in-process app registry.
+
+`Host_requests` uses the checked `Shell.clipboard_write` bool, not SDL status,
+queue insertion, clipboard readback, or a local cache. Linux requires the Shell
+implementation that returns `gtk_clipboard_set_with_data` ownership acceptance
+and retains copied provider data until GTK clears it; the older unchecked Linux
+bool is insufficient. macOS uses the existing `NSPasteboard.setString` BOOL.
+The host must call Shell on its UI thread and continue pumping GTK even while
+idle. This synchronous boundary does not promise later ownership, successful
+target conversion, clipboard-manager persistence, or independent OS qualification.
+
+Negative ACK rejects the task as a real failure; malformed requests and runtime
+exceptions remain fail-fast and do not become success. Clipboard request bodies
+and decoder errors are not logged. Admission, the synchronous write and reply
+enqueue hold the application entry lock, so disposal cannot interleave them.
+A reply is queued onto the app mailbox only after the native call returns.
+Only a matching positive ACK can permit deletion,
+and the shared cut continuation must still revalidate owner, block, buffer,
+selection/revision, mount and route freshness. A stale continuation is Cancelled,
+not success or an OS refusal.
+
+Cancellation removes the app's pending request. The OCaml consumer skips an
+already-cancelled queued request without calling Shell or generating another
+terminal. Disposal cancels all pending tasks, invalidates action continuations,
+and disconnects the app's host operation; it does not reset monotonic IDs.
+A late result for a settled request is ignored and cannot delete a new owner.
+The OCaml consumer refuses writes without an installed host environment. Tests
+using an in-memory host establish protocol/domain behavior, not OS clipboard
+acceptance or external paste success.
+
 ### Engineering workflow
 
 Before changing a subsystem:

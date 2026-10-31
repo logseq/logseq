@@ -693,7 +693,9 @@ let platform_event payload =
       let json =
         try Js.Json.parseExn body with _ -> Js.Json.JObject []
       in
-      if name = "window-close-request" then
+      if name = "clipboard-write-result" then
+        Platform.note_clipboard_write (Yojson.Safe.from_string body)
+      else if name = "window-close-request" then
         Host.enqueue (fun () ->
           let result ok error =
             platform_request ("window-close-result\n" ^ Yojson.Safe.to_string
@@ -796,6 +798,9 @@ let dispose () =
   (* daemons deliberately outlive the app — they keep the repo admitted
      and the graph open so the next launch attaches instantly *)
   with_entry_lock (fun () ->
+    Editor_actions.cancel_clipboard_actions ();
+    Platform.cancel_clipboard_writes ();
+    Host.set_host_op Host.disconnected;
     Queue.clear pending_batches;
     (match !current_app with
      | Some app ->

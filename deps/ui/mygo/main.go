@@ -114,6 +114,9 @@ func run() (result error) {
 			}
 			return prevented
 		}, host.services.codeMirrorComposition)
+		logseqEditorServices.Cut = func(node int64) bool {
+			return host.document.dispatch("cut", fmt.Sprintf(`{"nodeId":%d}`, node))
+		}
 		host.document.Pointer = host.services.EditorPointer
 		host.document.Observe = host.services.ObserveDocumentInput
 		host.services.mutations.Activate = func(n luimygo.Node) error {

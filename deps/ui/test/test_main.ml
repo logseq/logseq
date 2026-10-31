@@ -10,6 +10,16 @@ let () =
   [%mel.raw
     "Object.defineProperty(globalThis.navigator,'platform',{value:'MacIntel'})"]
 
+(* The Node host has an in-memory clipboard, not an operating-system clipboard. *)
+let () =
+  [%mel.raw {|(() => {
+    let text = "";
+    Object.defineProperty(globalThis.navigator, "clipboard", {writable: true, configurable: true, value: {
+      writeText(value) { text = value; return Promise.resolve(); },
+      readText() { return Promise.resolve(text); }
+    }});
+  })()|}]
+
 let () = Platform_web.install ~request_flush:Runtime.flush ~dom:Ui_dom_web.ops ~timers:Ui_dom_web.timers ~files:Ui_dom_web.files
 
 (* document listeners attach through the services dom channel, so they

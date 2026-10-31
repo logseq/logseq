@@ -19,6 +19,7 @@ import (
 // current composition preview. Queries must run synchronously on the UI thread.
 var logseqEditorServices struct {
 	Snapshot func(blockID string) (source string, anchor, caret int, ok bool)
+	Cut      func(node int64) bool
 }
 
 type logseqEditorInput struct {
@@ -469,7 +470,13 @@ func (s *logseqEditorInput) editCommand(command string) bool {
 		return false
 	}
 	switch command {
-	case "copy", "cut":
+	case "cut":
+		if logseqEditorServices.Cut == nil {
+			panic("logseq: native editor cut service is missing")
+		}
+		logseqEditorServices.Cut(s.n.ID)
+		return true
+	case "copy":
 		text, a, b, ok := s.snapshot()
 		if !ok {
 			return false
@@ -481,9 +488,6 @@ func (s *logseqEditorInput) editCommand(command string) bool {
 		if err := mygo.Clipboard.Write(transfer.TextData(text[lo:hi])); err != nil {
 			extensionGap(s.n.Identifier, err.Error())
 			return true
-		}
-		if command == "cut" {
-			s.send("delete", map[string]any{"kind": "selection"})
 		}
 		return true
 	case "paste", "pasteAndMatchStyle":

@@ -28,6 +28,8 @@ github.com/logseq/lui/platform/mygo v0.0.0-20261028135546-1f44501efe0b h1:PRCulO
 github.com/logseq/lui/platform/mygo v0.0.0-20261028135546-1f44501efe0b/go.mod h1:XattIenNnZbkI0eNEK1J4DR4GQNdFT0DSxhy/TKAdik=
 github.com/logseq/lui/platform/mygo v0.0.0-20261030065628-f8c515622171 h1:Ds5thDHNlVGgPOCyiKsGdEhNHMH4UXda9yaoMSTlDBo=
 github.com/logseq/lui/platform/mygo v0.0.0-20261030065628-f8c515622171/go.mod h1:XattIenNnZbkI0eNEK1J4DR4GQNdFT0DSxhy/TKAdik=
+github.com/logseq/lui/platform/mygo v0.0.0-20261031184155-9f3095d479cd h1:cnp5Y6M83lUoLXYcqIo0ilSDlTCdhmSN7hxA+WfDppI=
+github.com/logseq/lui/platform/mygo v0.0.0-20261031184155-9f3095d479cd/go.mod h1:XattIenNnZbkI0eNEK1J4DR4GQNdFT0DSxhy/TKAdik=
 github.com/logseq/mygo v0.0.0-20261028164145-43c83de431ec h1:R6fxjMKL5JULnbobrUHKCcaWspKOI4VOOfUeNFiCiFQ=
 github.com/logseq/mygo v0.0.0-20261028164145-43c83de431ec/go.mod h1:dVav53PwF2xEotjf4oA5lTY2Jp2exgzyjLhbSXhbMwE=
 github.com/logseq/mygo v0.0.0-20261031004139-efb1ecce30b1 h1:FcC2XLk5GFmaOTudpGSFUiEr7ZaB51pqsWz11vO7E3g=
