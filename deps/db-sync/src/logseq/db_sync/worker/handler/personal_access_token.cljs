@@ -13,6 +13,10 @@
 (def ^:private rtc-groups #{"team" "rtc_2025_07_10"})
 (def ^:private collection-path "/api/v1/personal-access-tokens")
 (def ^:private user-info-url "https://api.logseq.com/file-sync/user_info")
+;; The only issuer whose tokens may be presented to Logseq's own user-info
+;; endpoint. A self-hosted server with its own Cognito pool must never send
+;; its users' tokens to a third party.
+(def ^:private logseq-cognito-issuer "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8")
 
 (defn route?
   [path]
@@ -30,21 +34,23 @@
       :else #{})))
 
 (defn- <rtc-user?
-  [request claims]
+  [request env claims]
   (let [claim-groups (claims-groups claims)]
     (if (seq claim-groups)
       (p/resolved (boolean (seq (set/intersection rtc-groups claim-groups))))
-      (-> (p/let [token (auth/token-from-request request)
-                  response (js/fetch user-info-url
+      (if (not= logseq-cognito-issuer (aget env "COGNITO_ISSUER"))
+        (p/resolved false)
+        (-> (p/let [token (auth/token-from-request request)
+                    response (js/fetch user-info-url
                                      #js {:method "POST"
                                           :headers #js {"authorization" (str "Bearer " token)
                                                         "content-type" "application/json"}
                                           :body "{}"})
-                  user-info (when (.-ok response) (.json response))
-                  user-groups (claims-groups
-                               #js {"cognito:groups" (some-> user-info (aget "UserGroups"))})]
-            (boolean (seq (set/intersection rtc-groups user-groups))))
-          (p/catch (fn [_] false))))))
+                    user-info (when (.-ok response) (.json response))
+                    user-groups (claims-groups
+                                 #js {"cognito:groups" (some-> user-info (aget "UserGroups"))})]
+              (boolean (seq (set/intersection rtc-groups user-groups))))
+            (p/catch (fn [_] false)))))))
 
 (defn- random-hex
   [size]
@@ -133,25 +139,29 @@
         user-id (aget claims "sub")]
     (if-not (string? user-id)
       (http/unauthorized)
-      (p/let [rtc-user? (<rtc-user? request claims)]
-        (cond
-          (not rtc-user?)
-          (http/forbidden)
+      ;; Minting, listing and deleting PATs is native-app surface: a token
+      ;; granted to a third-party OAuth client must not persist its access.
+      (if (auth/third-party-oauth-token? claims env)
+        (http/error-response "insufficient scope" 403)
+        (p/let [rtc-user? (<rtc-user? request env claims)]
+          (cond
+            (not rtc-user?)
+            (http/forbidden)
 
-          (and (= method "GET") (= path collection-path))
-          (p/let [tokens (index/<personal-access-tokens-list (aget env "DB") user-id)]
-            (http/json-response nil {:tokens tokens}))
+            (and (= method "GET") (= path collection-path))
+            (p/let [tokens (index/<personal-access-tokens-list (aget env "DB") user-id)]
+              (http/json-response nil {:tokens tokens}))
 
-          (and (= method "POST") (= path collection-path))
-          (<create! request env user-id)
+            (and (= method "POST") (= path collection-path))
+            (<create! request env user-id)
 
-          (and (= method "DELETE") (token-id-from-path path))
-          (p/let [_ (index/<personal-access-token-delete!
-                     (aget env "DB") (token-id-from-path path) user-id)]
-            (common/options-response))
+            (and (= method "DELETE") (token-id-from-path path))
+            (p/let [_ (index/<personal-access-token-delete!
+                       (aget env "DB") (token-id-from-path path) user-id)]
+              (common/options-response))
 
-          :else
-          (http/not-found))))))
+            :else
+            (http/not-found)))))))
 
 (defn handle
   [request env]
