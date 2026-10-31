@@ -9,6 +9,7 @@
             [logseq.common.util.page-ref :as page-ref]
             [logseq.common.uuid :as common-uuid]
             [logseq.db :as ldb]
+            [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.frontend.validate :as db-validate]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
@@ -168,6 +169,89 @@
            [{:page {:build/journal 20250220}}
             {:page {:build/journal 20250221}}]}))
       "In :pages-and-blocks, identical journals and their :blocks are merged"))
+
+(deftest merge-export-maps-keeps-one-block-per-uuid
+  (let [block-uuid (random-uuid)
+        other-uuid (random-uuid)
+        merged (#'sqlite-export/merge-export-maps
+                {:pages-and-blocks
+                 [{:page {:block/title "page1"}
+                   :blocks [{:block/title "alpha" :block/uuid block-uuid :build/keep-uuid? true}
+                            {:block/title "beta" :block/uuid other-uuid :build/keep-uuid? true}
+                            {:block/title "no uuid"}]}]}
+                {:pages-and-blocks
+                 [{:page {:block/title "page1"}
+                   :blocks [{:block/title "alpha" :block/uuid block-uuid :build/keep-uuid? true}
+                            {:block/title "no uuid"}]}]})
+        blocks (->> (:pages-and-blocks merged) (mapcat :blocks))]
+    (is (= ["alpha" "beta" "no uuid" "no uuid"]
+           (mapv :block/title blocks))
+        "A block exported twice stays at its first position; blocks without a uuid are kept")))
+
+(deftest import-selected-nodes-keeps-order-of-referenced-sibling
+  (let [alpha-uuid (random-uuid)
+        beta-title (str "order beta " (page-ref/->page-ref alpha-uuid))
+        conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks
+               [{:page {:block/title "page1"}
+                 :blocks [{:block/title "order alpha" :block/uuid alpha-uuid :build/keep-uuid? true}
+                          {:block/title beta-title}
+                          {:block/title "order gamma"}]}]})
+        node-ids (->> ["order alpha" beta-title "order gamma"]
+                      (mapv #(vector :block/uuid (:block/uuid (db-test/find-block-by-content @conn %)))))
+        conn2 (db-test/create-conn-with-import-map
+               (sqlite-export/build-export @conn {:export-type :selected-nodes :node-ids node-ids}))
+        page (db-test/find-page-by-title @conn2 "page1")
+        imported-titles (->> (:block/_page page)
+                             (sort-by :block/order)
+                             (mapv #(second (re-find #"^order (\w+)" (:block/title %)))))]
+    (is (= ["alpha" "beta" "gamma"] imported-titles)
+        "A selected block that another selected block refers to is imported once, in its original position")))
+
+(deftest merge-export-maps-keeps-fuller-child-of-block-exported-twice
+  (let [parent-uuid (random-uuid)
+        child-uuid (random-uuid)
+        merged (#'sqlite-export/merge-export-maps
+                {:pages-and-blocks
+                 [{:page {:block/title "page1"}
+                   :blocks [{:block/title "parent" :block/uuid parent-uuid :build/keep-uuid? true
+                             :build/children [{:block/title "child" :block/uuid child-uuid :build/keep-uuid? true
+                                               :build/properties {:user.property/p1 "on child"}}]}]}]}
+                {:pages-and-blocks
+                 [{:page {:block/title "page1"}
+                   :blocks [{:block/title "parent" :block/uuid parent-uuid :build/keep-uuid? true
+                             :build/children [{:block/title "child" :block/uuid child-uuid :build/keep-uuid? true}]}]}]})
+        blocks (->> (:pages-and-blocks merged) (mapcat :blocks))
+        children (mapcat :build/children blocks)]
+    (is (= 1 (count blocks)))
+    (is (= 1 (count children)))
+    (is (= {:user.property/p1 "on child"} (:build/properties (first children)))
+        "The child's properties survive the merge with a shallow copy of its parent")))
+
+(deftest import-selected-nodes-keeps-child-properties-when-parent-and-child-are-referenced
+  (let [parent-uuid (random-uuid)
+        child-uuid (random-uuid)
+        referrer-title (str "refers to " (page-ref/->page-ref parent-uuid)
+                            " and " (page-ref/->page-ref child-uuid))
+        conn (db-test/create-conn-with-blocks
+              {:properties {:user.property/p1 {:logseq.property/type :default}}
+               :classes {:user.class/C1 {}}
+               :pages-and-blocks
+               [{:page {:block/title "page1"}
+                 :blocks [{:block/title "parent" :block/uuid parent-uuid :build/keep-uuid? true
+                           :build/children [{:block/title "child" :block/uuid child-uuid :build/keep-uuid? true
+                                             :build/tags #{:user.class/C1}
+                                             :build/properties {:user.property/p1 "on child"}}]}
+                          {:block/title referrer-title}]}]})
+        node-ids (->> ["parent" referrer-title]
+                      (mapv #(vector :block/uuid (:block/uuid (db-test/find-block-by-content @conn %)))))
+        conn2 (db-test/create-conn-with-import-map
+               (sqlite-export/build-export @conn {:export-type :selected-nodes :node-ids node-ids}))
+        imported-child (db-test/find-block-by-content @conn2 "child")]
+    (is (= "on child" (:block/title (:user.property/p1 imported-child)))
+        "A child keeps its property when its parent and it are both referenced by a selected block")
+    (is (contains? (set (map :block/title (:block/tags imported-child))) "C1")
+        "A child keeps its tag when its parent and it are both referenced by a selected block")))
 
 (deftest import-block-in-same-graph
   (let [original-data
@@ -856,6 +940,23 @@
     (is (= (expand-properties (:properties original-data)) (:properties imported-nodes)))
     (is (= (expand-classes (:classes original-data)) (:classes imported-nodes)))))
 
+(deftest import-view-blocks-with-child-row
+  (testing "A view row whose parent block is also a row is exported and imported"
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "page1"}
+                   :blocks [{:block/title "parent"
+                             :build/children [{:block/title "child"}]}]}]})
+          rows (fn [db] (mapv #(vector :block/uuid (:block/uuid (db-test/find-block-by-content db %))) ["parent" "child"]))
+          export-map (sqlite-export/build-export @conn {:export-type :view-nodes :rows (rows @conn)})
+          titles (atom #{})
+          _ (walk/postwalk #(do (when (and (map? %) (:block/title %)) (swap! titles conj (:block/title %))) %)
+                           (mapcat :blocks (:pages-and-blocks export-map)))
+          conn2 (db-test/create-conn-with-import-map export-map)]
+      (is (= #{"parent" "child"} @titles) "Both rows are in the export")
+      (validate-db @conn2)
+      (is (some? (db-test/find-block-by-content @conn2 "child")) "The child row is imported"))))
+
 (deftest export-grouped-view-nodes-by-uuid
   (let [conn (db-test/create-conn-with-blocks
               {:pages-and-blocks
@@ -907,6 +1008,107 @@
            (:pages-and-blocks imported-nodes)))
     (is (= (expand-properties (:properties original-data)) (:properties imported-nodes)))
     (is (= (expand-classes (:classes original-data)) (:classes imported-nodes)))))
+
+(deftest import-selected-nodes-that-reference-each-other
+  (let [alpha-uuid (random-uuid)
+        conn (db-test/create-conn-with-blocks
+              {:properties {:user.property/source {:logseq.property/type :node}}
+               :pages-and-blocks [{:page {:block/title "page1"}
+                                   :blocks [{:block/title "alpha" :block/uuid alpha-uuid :build/keep-uuid? true}
+                                            {:block/title (str "see " (page-ref/->page-ref alpha-uuid))}
+                                            {:block/title "x"
+                                             :build/properties {:user.property/source [:block/uuid alpha-uuid]}}]}]})
+        node-ids (->> (:block/_page (db-test/find-page-by-title @conn "page1"))
+                      (sort-by :block/order)
+                      (mapv #(vector :block/uuid (:block/uuid %))))
+        conn2 (db-test/create-conn-with-import-map
+               (sqlite-export/build-export @conn {:export-type :selected-nodes :node-ids node-ids}))
+        _ (validate-db @conn2)]
+    (is (= ["alpha" (str "see " (page-ref/->page-ref alpha-uuid)) "x"]
+           (->> (:block/_page (db-test/find-page-by-title @conn2 "page1"))
+                (sort-by :block/order)
+                (mapv :block/title)))
+        "A selected block that another selected block references is imported once, in its place")))
+
+(deftest import-page-with-node-value-on-child-block
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties {:user.property/source {:logseq.property/type :node
+                                                   :db/cardinality :db.cardinality/many}}
+               :pages-and-blocks [{:page {:block/title "Alpha"}}
+                                  {:page {:block/title "page1"}
+                                   :blocks [{:block/title "parent"
+                                             :build/children [{:block/title "child"
+                                                               :build/properties {:user.property/source #{[:build/page {:block/title "Alpha"}]}}}]}]}]})
+        page (db-test/find-page-by-title @conn "page1")
+        conn2 (db-test/create-conn)
+        {:keys [init-tx block-props-tx]}
+        (-> (sqlite-export/build-export @conn {:export-type :page :page-id (:db/id page)})
+            (sqlite-export/build-import @conn2 {}))
+        _ (d/transact! conn2 (concat init-tx block-props-tx))
+        _ (validate-db @conn2)
+        child (db-test/find-block-by-content @conn2 "child")]
+    (is (= #{"Alpha"} (set (map :block/title (:user.property/source child))))
+        "A child block's node value pointing at a page outside the export imports")))
+
+(deftest import-block-with-refs-two-levels-deep
+  (let [beta-uuid (random-uuid)
+        middle-uuid (random-uuid)
+        conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks [{:page {:block/title "page1"}
+                                   :blocks [{:block/title "Beta" :block/uuid beta-uuid :build/keep-uuid? true}
+                                            {:block/title (str "middle " (page-ref/->page-ref beta-uuid))
+                                             :block/uuid middle-uuid :build/keep-uuid? true}
+                                            {:block/title (str "export " (page-ref/->page-ref middle-uuid))}]}]})
+        conn2 (db-test/create-conn-with-blocks
+               {:pages-and-blocks [{:page {:block/title "page2"}
+                                    :blocks [{:block/title "import"}]}]})
+        _ (export-block-and-import-to-another-block conn conn2 #"^export" "import")
+        middle (d/entity @conn2 [:block/uuid middle-uuid])]
+    (is (= "Beta" (:block/title (d/entity @conn2 [:block/uuid beta-uuid])))
+        "A block referenced by a referenced block is exported too")
+    (is (= (str "middle " (page-ref/->page-ref "Beta"))
+           (db-content/recur-replace-uuid-in-block-title middle))
+        "The referenced block's ref resolves, not a raw uuid")))
+
+(deftest import-selected-nodes-where-one-is-a-node-value-of-another
+  (let [alpha-uuid (random-uuid)
+        conn (db-test/create-conn-with-blocks
+              {:properties {:user.property/source {:logseq.property/type :node
+                                                   :db/cardinality :db.cardinality/many}}
+               :pages-and-blocks [{:page {:block/title "page1"}
+                                   :blocks [{:block/title "alpha" :block/uuid alpha-uuid :build/keep-uuid? true}
+                                            {:block/title "x"
+                                             :build/properties {:user.property/source #{[:block/uuid alpha-uuid]}}}]}]})
+        node-ids (->> (:block/_page (db-test/find-page-by-title @conn "page1"))
+                      (sort-by :block/order)
+                      (mapv #(vector :block/uuid (:block/uuid %))))
+        conn2 (db-test/create-conn-with-import-map
+               (sqlite-export/build-export @conn {:export-type :selected-nodes :node-ids node-ids}))
+        _ (validate-db @conn2)
+        x (db-test/find-block-by-content @conn2 "x")]
+    (is (= #{"alpha"} (set (map :block/title (:user.property/source x))))
+        "A selected block that is a many node value of another selected block keeps its uuid, so the value resolves")))
+
+(deftest import-block-with-node-value-whose-title-has-a-ref
+  (let [beta-uuid (random-uuid)
+        middle-uuid (random-uuid)
+        conn (db-test/create-conn-with-blocks
+              {:properties {:user.property/source {:logseq.property/type :node
+                                                   :db/cardinality :db.cardinality/many}}
+               :pages-and-blocks [{:page {:block/title "page1"}
+                                   :blocks [{:block/title "Beta" :block/uuid beta-uuid :build/keep-uuid? true}
+                                            {:block/title (str "middle " (page-ref/->page-ref beta-uuid))
+                                             :block/uuid middle-uuid :build/keep-uuid? true}
+                                            {:block/title "export"
+                                             :build/properties {:user.property/source #{[:block/uuid middle-uuid]}}}]}]})
+        conn2 (db-test/create-conn-with-blocks
+               {:pages-and-blocks [{:page {:block/title "page2"}
+                                    :blocks [{:block/title "import"}]}]})
+        _ (export-block-and-import-to-another-block conn conn2 #"^export" "import")
+        middle (d/entity @conn2 [:block/uuid middle-uuid])]
+    (is (= (str "middle " (page-ref/->page-ref "Beta"))
+           (db-content/recur-replace-uuid-in-block-title middle))
+        "A block that is a many node value is followed for the refs in its title")))
 
 (deftest export-selected-nodes-with-missing-node
   (let [conn (db-test/create-conn-with-blocks

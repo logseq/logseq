@@ -616,7 +616,10 @@
    a ::no-value value"
   [{:keys [pages-and-blocks properties classes]}]
   (let [page-block-properties (->> pages-and-blocks
-                                   (map #(-> (:blocks %) vec (conj (:page %))))
+                                   ;; nested blocks too: their property values can also need new pages
+                                   (map #(-> (vec (mapcat (fn [block] (tree-seq map? (comp seq :build/children) block))
+                                                          (:blocks %)))
+                                             (conj (:page %))))
                                    (mapcat (fn build-node-props-vec [nodes]
                                              (mapcat (fn [m]
                                                        (let [nested-pvalue-pages
