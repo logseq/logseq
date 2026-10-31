@@ -1,12 +1,57 @@
 (ns frontend.handler.db-based.import-test
-  (:require [cljs.test :refer [async deftest is]]
+  (:require [cljs.test :refer [async deftest is testing]]
             [frontend.config :as config]
             [frontend.db :as db]
+            [frontend.db.transact :as db-transact]
             [frontend.handler.db-based.import :as import-handler]
+            [frontend.handler.notification :as notification]
             [frontend.handler.repo :as repo-handler]
+            [frontend.handler.ui :as ui-handler]
             [frontend.persist-db :as persist-db]
             [frontend.state :as state]
+            [logseq.shui.ui :as shui]
             [promesa.core :as p]))
+
+(defn- <submit-import-edn-form
+  "Submits the Import EDN form with `edn-string` while there is no block being edited.
+   Resolves to the applied outliner ops and the shown notifications"
+  [edn-string]
+  (let [applied-ops (atom [])
+        notifications (atom [])]
+    (p/let [_ (p/with-redefs [state/get-editor-args (constantly nil)
+                              db-transact/apply-outliner-ops (fn [_conn ops _opts]
+                                                               (swap! applied-ops into ops)
+                                                               (p/resolved {}))
+                              notification/show! (fn [content status & _]
+                                                   (swap! notifications conj [content status]))
+                              shui/dialog-close-all! (constantly nil)
+                              ui-handler/re-render-root! (constantly nil)]
+                (@#'import-handler/import-edn-data-from-form (atom {:import-data edn-string}) nil))]
+      {:applied-ops @applied-ops
+       :notifications @notifications})))
+
+(deftest import-edn-block-without-current-block-does-not-import-test
+  (async done
+    (-> (p/let [{:keys [applied-ops notifications]}
+                (<submit-import-edn-form "{:logseq.db.sqlite.export/block {:block/title \"b1\"}
+                                          :pages-and-blocks []
+                                          :logseq.db.sqlite.export/export-type :block}")]
+          (is (empty? applied-ops) "Nothing is imported without a block to import into")
+          (is (= [:warning] (map second notifications))
+              "Only the no block found warning is shown"))
+        (p/catch (fn [error] (is false (str error))))
+        (p/finally done))))
+
+(deftest import-edn-page-without-current-block-imports-test
+  (async done
+    (-> (p/let [{:keys [applied-ops notifications]}
+                (<submit-import-edn-form "{:pages-and-blocks [{:page {:block/title \"page1\"}}]
+                                          :logseq.db.sqlite.export/export-type :page}")]
+          (testing "Importing something other than a block does not need a current block"
+            (is (= [:batch-import-edn] (map first applied-ops)))
+            (is (= [:success] (map second notifications)))))
+        (p/catch (fn [error] (is false (str error))))
+        (p/finally done))))
 
 (deftest import-from-sqlite-db-persists-import-marker-through-worker-test
   (async done

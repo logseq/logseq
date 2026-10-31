@@ -216,6 +216,11 @@
        (ref/->block-ref (:block/uuid ref-block))
        :owner-window (pdf-windows/resolve-own-window viewer)))))
 
+(defn- absolute-path?
+  [path]
+  (or (.isAbsolute util/node-path path)
+      (boolean (re-find #"^[a-zA-Z]:[/\\]" path))))
+
 (defn get-zotero-local-pdf-path
   [path & {:keys [id]}]
   (let [zotero-config (get-in (state/get-config) [:zotero/settings-v2 "default"])
@@ -224,7 +229,10 @@
         relative-path (subs path 14)]
     (cond
       (string/starts-with? path "zotero-link://")
-      (str "file://" (util/node-path.join zotero-linked-attachment-base-directory relative-path))
+      ;; A linked file outside of the base directory has an absolute path
+      (str "file://" (if (absolute-path? relative-path)
+                       relative-path
+                       (util/node-path.join zotero-linked-attachment-base-directory relative-path)))
 
       (string/starts-with? path "zotero-path://")
       (str "file://" (util/node-path.join zotero-data-directory "storage" relative-path))

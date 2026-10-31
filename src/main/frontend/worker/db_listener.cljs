@@ -171,11 +171,19 @@
   [_ {:keys [repo]} tx-report]
   (markdown-mirror/<handle-tx-report! repo nil tx-report {:defer? true}))
 
+(defn- partial-edn-import?
+  "An EDN import into an existing graph. Unlike the import that creates a graph,
+   it adds to a graph that already has a search index"
+  [tx-meta]
+  (and (= :batch-import-edn (:outliner-op tx-meta))
+       (not (:import-db? tx-meta))))
+
 (defn- skip-search-sync?
   [tx-meta]
   (or (:from-disk? tx-meta)
       (:logseq.graph-parser.exporter/imported-data? tx-meta)
-      (:logseq.db.sqlite.export/imported-data? tx-meta)))
+      (and (:logseq.db.sqlite.export/imported-data? tx-meta)
+           (not (partial-edn-import? tx-meta)))))
 
 (defmethod listen-db-changes :search
   [_ {:keys [repo]} {:keys [tx-meta] :as tx-report}]

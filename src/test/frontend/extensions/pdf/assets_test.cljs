@@ -2,6 +2,7 @@
   (:require [cljs.test :as test :refer [are async deftest testing]]
             [frontend.db.async :as db-async]
             [frontend.extensions.pdf.assets :as pdf-assets]
+            [frontend.state :as state]
             [frontend.util :as util]
             [frontend.extensions.pdf.utils :as pdf-utils]
             [promesa.core :as p]))
@@ -41,6 +42,23 @@
       "foo_bar" "foo_bar"
       "foo__bar" "foo__bar"
       "foo_bar.pdf" "foo_bar.pdf")))
+
+(deftest get-zotero-local-pdf-path-test
+  (with-redefs [state/get-config (constantly {:zotero/settings-v2
+                                              {"default" {:zotero-data-directory "/zotero"
+                                                          :zotero-linked-attachment-base-directory "/base"}}})]
+    (testing "a linked file inside the base directory is relative to it"
+      (test/is (= "file:///base/it/Paper.pdf"
+                  (pdf-assets/get-zotero-local-pdf-path "zotero-link://it/Paper.pdf"))))
+    (testing "a linked file outside the base directory has an absolute path that is used as is"
+      (test/is (= "file:///home/me/papers/Paper.pdf"
+                  (pdf-assets/get-zotero-local-pdf-path "zotero-link:///home/me/papers/Paper.pdf")))
+      (test/is (= "file://C:\\Users\\me\\Paper.pdf"
+                  (pdf-assets/get-zotero-local-pdf-path "zotero-link://C:\\Users\\me\\Paper.pdf"))
+               "including a Windows drive path"))
+    (testing "an imported file is relative to the Zotero storage"
+      (test/is (= "file:///zotero/storage/KEY12345/Paper.pdf"
+                  (pdf-assets/get-zotero-local-pdf-path "zotero-path://KEY12345/Paper.pdf"))))))
 
 (deftest inflate-asset-normalizes-local-assets-url-on-windows
   (with-redefs [util/electron? (constantly true)
