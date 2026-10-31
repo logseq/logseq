@@ -121,7 +121,7 @@
   "dependencies": {
     "@logseq/graph-lifecycle": "file:deps/graph-lifecycle",
     "@aparajita/capacitor-secure-storage": "^8.0.0",
-    "@base-ui/react": "^1.5.0",
+    "@base-ui/react": "^1.9.0",
     "@capacitor-community/safe-area": "8.0.1",
     "@capacitor/action-sheet": "^8.1.1",
     "@capacitor/android": "^8.3.1",
