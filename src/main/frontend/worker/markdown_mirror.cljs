@@ -75,20 +75,46 @@
       (when (= 8 (count s))
         (str (subs s 0 4) "_" (subs s 4 6) "_" (subs s 6 8))))))
 
-(defn- non-journal-page?
+(defn- contents-page?
+  "The Contents page is created as built-in but holds ordinary user blocks."
+  [page]
+  (= "contents" (:block/name page)))
+
+(defn- mirrorable-page?
   [page]
   (and (ldb/page? page)
+       (or (not (ldb/built-in? page))
+           (contents-page? page))
+       (not (ldb/property? page))
+       (not (ldb/hidden? page))
+       (not (:logseq.property.user/email page))))
+
+(defn- mirrorable-non-journal-page?
+  "A page with a file under `pages/`. Only these share file stems: a property
+  `source` has no file, so it must not push the page `Source` to `Source (2).md`."
+  [page]
+  (and (mirrorable-page? page)
        (not (ldb/journal? page))))
 
+(defn- stem-key
+  "Stems that differ only in case name one file on case-insensitive file
+  systems (macOS, Windows), so pages are grouped by the lower-cased stem."
+  [stem]
+  (some-> stem string/lower-case))
+
+(defn- page-stem-key
+  [page]
+  (when (mirrorable-non-journal-page? page)
+    (stem-key (normalize-file-stem (:block/title page)))))
+
 (defn- build-stem-index
-  "One-time build of normalized file stem -> non-journal page uuids.
+  "One-time build of lower-cased normalized file stem -> mirrorable non-journal page uuids.
   Kept current incrementally by update-stem-index on each tx-report."
   [db]
   (reduce (fn [m datom]
             (let [page (d/entity db (:e datom))]
-              (if-let [stem (when (non-journal-page? page)
-                              (normalize-file-stem (:block/title page)))]
-                (update m stem (fnil conj #{}) (:block/uuid page))
+              (if-let [k (page-stem-key page)]
+                (update m k (fnil conj #{}) (:block/uuid page))
                 m)))
           {}
           (d/datoms db :avet :block/name)))
@@ -106,25 +132,47 @@
   (reduce (fn [m page-id]
             (let [before (d/entity db-before page-id)
                   after (d/entity db-after page-id)
-                  m (if-let [old-stem (when (non-journal-page? before)
-                                        (normalize-file-stem (:block/title before)))]
-                      (let [uuids (disj (get m old-stem) (:block/uuid before))]
+                  m (if-let [old-key (page-stem-key before)]
+                      (let [uuids (disj (get m old-key) (:block/uuid before))]
                         (if (empty? uuids)
-                          (dissoc m old-stem)
-                          (assoc m old-stem uuids)))
+                          (dissoc m old-key)
+                          (assoc m old-key uuids)))
                       m)]
-              (if-let [new-stem (when (non-journal-page? after)
-                                  (normalize-file-stem (:block/title after)))]
-                (update m new-stem (fnil conj #{}) (:block/uuid after))
+              (if-let [new-key (page-stem-key after)]
+                (update m new-key (fnil conj #{}) (:block/uuid after))
                 m)))
           index
           page-ids))
 
 (defn- pages-with-file-stem
   [db stem]
-  (->> (get (stem-index db) stem)
+  (->> (get (stem-index db) (stem-key stem))
        (keep #(d/entity db [:block/uuid %]))
        (sort-by (comp str :block/uuid))))
+
+(defn- duplicate-stem
+  "Stem of the `n`th (1-based) page sharing `stem`: ` (2)`, ` (3)`, ... are
+  appended, skipping a suffixed stem that another page has as its own title."
+  [index stem n]
+  (if (= 1 n)
+    stem
+    (nth (remove #(contains? index (stem-key %))
+                 (map #(str stem " (" % ")") (iterate inc 2)))
+         (- n 2))))
+
+(def ^:private duplicate-suffix-re #"^(.*) \(\d+\)$")
+
+(defn- stem-group-page-ids
+  "Pages whose file name can change when the pages under stem `k` change: the
+  pages sharing `k`, and the pages whose ` (n)` suffix skips `k`."
+  [db-before db-after index-before index-after k]
+  (let [base-key (second (re-matches duplicate-suffix-re k))]
+    (->> (concat (get index-before k) (get index-after k)
+                 (when base-key
+                   (concat (get index-before base-key) (get index-after base-key))))
+         (keep (fn [page-uuid]
+                 (:db/id (or (d/entity db-after [:block/uuid page-uuid])
+                             (d/entity db-before [:block/uuid page-uuid]))))))))
 
 (defn page-relative-path
   ([db page]
@@ -142,11 +190,24 @@
                                          (when (= (:block/uuid page) (:block/uuid p))
                                            idx))
                                        duplicate-pages))
-                              0))
-               stem' (if (= 1 index)
-                       stem
-                       (str stem " (" index ")"))]
-           (str "pages/" stem' ".md")))))))
+                              0))]
+           (str "pages/" (duplicate-stem (stem-index db) stem index) ".md")))))))
+
+(defn- legacy-page-relative-path
+  "Path a non-journal page had before pages were grouped by `stem-key`: pages
+  were grouped by the exact stem and ` (n)` appended in uuid order."
+  [db page]
+  (when (mirrorable-non-journal-page? page)
+    (when-let [stem (normalize-file-stem (:block/title page))]
+      (let [same-stem-pages (filter #(= stem (normalize-file-stem (:block/title %)))
+                                    (pages-with-file-stem db stem))
+            index (inc (or (first (keep-indexed
+                                   (fn [idx p]
+                                     (when (= (:block/uuid page) (:block/uuid p))
+                                       idx))
+                                   same-stem-pages))
+                           0))]
+        (str "pages/" (if (= 1 index) stem (str stem " (" index ")")) ".md")))))
 
 (defn- mirror-path
   [repo relative-path]
@@ -235,6 +296,12 @@
   (if-let [f (:delete-file! (storage platform*))]
     (f path)
     (p/rejected (ex-info "platform storage/delete-file! missing" {:path path}))))
+
+(defn- <read-dir
+  "File names in directory `dir`; nil when the platform cannot list it."
+  [platform* dir]
+  (when-let [f (:read-dir! (storage platform*))]
+    (f dir)))
 
 (defn- supported-runtime?
   [platform*]
@@ -581,20 +648,6 @@
    (block-content db (:block/uuid page) {:include-page-properties? true} options)
    options))
 
-(defn- contents-page?
-  "The Contents page is created as built-in but holds ordinary user blocks."
-  [page]
-  (= "contents" (:block/name page)))
-
-(defn- mirrorable-page?
-  [page]
-  (and (ldb/page? page)
-       (or (not (ldb/built-in? page))
-           (contents-page? page))
-       (not (ldb/property? page))
-       (not (ldb/hidden? page))
-       (not (:logseq.property.user/email page))))
-
 (defn- mirrorable-pages
   [db]
   (->> (d/datoms db :avet :block/name)
@@ -710,6 +763,84 @@
                       (or (:debounce-ms opts) 1000))]
       (swap! *repo->flush-timeout assoc repo timeout-id))))
 
+(defn- path-key
+  "Paths that differ only in case name one file on case-insensitive file
+  systems, as stems are grouped by `stem-key`."
+  [path]
+  (string/lower-case path))
+
+(defn- keep-old-paths-of-other-jobs
+  "Jobs run in parallel, so a page must not delete its old file when this batch
+  still writes that file: another page took over its name, or the page's own
+  new path differs from it only in case. Paths are compared by `path-key`.
+  The kept path is left to `<delete-unowned-files!`, which removes it after the
+  batch when it is a separate file on a case-sensitive file system."
+  [jobs]
+  (let [new-path-keys (set (keep #(when-not (:delete? %) (some-> (:new-path %) path-key)) jobs))]
+    (map (fn [{:keys [old-path] :as job}]
+           (if (and old-path (contains? new-path-keys (path-key old-path)))
+             (assoc job :old-path nil :kept-old-path old-path)
+             job))
+         jobs)))
+
+(defn- unowned-paths
+  "The `candidates` that exist (are in `present`) and no page owns (are not in
+  `owned`). A candidate that differs only in case from an owned path that is not
+  present itself is that page's file: a case-insensitive file system keeps the
+  name a file was created with."
+  [candidates present owned]
+  (let [owned-by-key (group-by path-key owned)]
+    (filter (fn [path]
+              (and (contains? present path)
+                   (not (contains? owned path))
+                   (every? #(contains? present %) (get owned-by-key (path-key path)))))
+            candidates)))
+
+(defn- <delete-unowned-files!
+  "Deletes the `candidates` that exist and no page owns. `owned` must hold
+  every page path that can differ from a candidate only in case."
+  [platform* candidates owned]
+  (if (empty? candidates)
+    (p/resolved nil)
+    (let [dirs (distinct (map #(subs % 0 (string/last-index-of % "/")) candidates))]
+      (p/let [listings (p/all (map #(<read-dir platform* %) dirs))
+              present (set (mapcat (fn [dir file-names]
+                                     (map #(str dir "/" %) file-names))
+                                   dirs listings))]
+        (p/all (map #(<delete-file! platform* %)
+                    (unowned-paths candidates present (set owned))))))))
+
+(defn- page-paths-for-file-name
+  "Paths of the pages whose file can be named like `path`: the pages sharing its
+  stem key, and the pages whose ` (n)` suffix gives its stem."
+  [repo db path opts]
+  (when-let [stem (second (re-matches #".*/pages/(.+)\.md$" path))]
+    (let [base-stem (second (re-matches duplicate-suffix-re stem))]
+      (->> (concat (pages-with-file-stem db stem)
+                   (when base-stem (pages-with-file-stem db base-stem)))
+           (keep #(some->> (page-relative-path db % opts) (mirror-path repo)))))))
+
+(defn- <delete-files-left-by-jobs!
+  "After a batch, deletes the files its pages left behind that no page owns: an
+  old path kept by `keep-old-paths-of-other-jobs`, and the path a written page
+  had before pages were grouped by `stem-key` (a mirror written by an older
+  version on a case-sensitive file system)."
+  [platform* repo jobs opts]
+  (let [candidates (distinct
+                    (mapcat (fn [{:keys [db page-id new-path kept-old-path delete?]}]
+                              (let [legacy-path (when-not delete?
+                                                  (some->> (d/entity db page-id)
+                                                           (legacy-page-relative-path db)
+                                                           (mirror-path repo)))]
+                                (keep (fn [path] (when path [path db]))
+                                      [kept-old-path
+                                       (when (not= legacy-path new-path) legacy-path)])))
+                            jobs))
+        owned (concat (keep #(when-not (:delete? %) (:new-path %)) jobs)
+                      (mapcat (fn [[path db]] (page-paths-for-file-name repo db path opts))
+                              candidates))]
+    (<delete-unowned-files! platform* (map first candidates) owned)))
+
 (defn- <run-job!
   [platform* {:keys [repo db page-id old-path new-path delete?]} opts]
   (cond
@@ -732,6 +863,13 @@
                 (<delete-file! platform* old-path))]
       result)))
 
+(defn- <run-jobs!
+  [platform* repo jobs opts]
+  (let [jobs (keep-old-paths-of-other-jobs jobs)]
+    (p/let [results (p/all (map #(<run-job! platform* % opts) jobs))
+            _ (<delete-files-left-by-jobs! platform* repo jobs opts)]
+      results)))
+
 (defn <handle-tx-report!
   [repo _conn {:keys [db-before db-after] :as tx-report} {:keys [platform defer?] :as opts}]
   (let [platform* (or platform (platform/current))]
@@ -739,7 +877,16 @@
              (supported-runtime? platform*))
       (let [affected-ids (affected-page-ids tx-report)
             index-before (stem-index db-before)
-            index-after (update-stem-index index-before db-before db-after affected-ids)]
+            index-after (update-stem-index index-before db-before db-after affected-ids)
+            affected-ids (into affected-ids
+                               (comp (mapcat (fn [page-id]
+                                               [(page-stem-key (d/entity db-before page-id))
+                                                (page-stem-key (d/entity db-after page-id))]))
+                                     (remove nil?)
+                                     (distinct)
+                                     (mapcat #(stem-group-page-ids db-before db-after
+                                                                   index-before index-after %)))
+                               affected-ids)]
         (.set stem-index-cache db-after index-after)
         (if (get-in tx-report [:tx-meta :from-disk?])
           (p/resolved {:status :skipped
@@ -753,7 +900,7 @@
                 (schedule-flush! repo opts')
                 (p/resolved {:status :queued
                              :count (count jobs)}))
-              (p/all (map #(<run-job! platform* % opts') jobs))))))
+              (<run-jobs! platform* repo jobs opts')))))
       (p/resolved {:status :skipped
                    :reason :disabled-or-unsupported}))))
 
@@ -761,7 +908,21 @@
   [repo {:keys [platform] :as opts}]
   (let [platform* (or platform (platform/current))
         jobs (drain-repo-jobs! repo)]
-    (p/all (map #(<run-job! platform* % opts) jobs))))
+    (<run-jobs! platform* repo jobs opts)))
+
+(defn- <delete-unowned-mirror-files!
+  "Regeneration removes the mirror files no page owns any more, such as a
+  page's file from before another page took its name."
+  [platform* repo db opts]
+  (let [owned (keep #(some->> (page-relative-path db % opts) (mirror-path repo))
+                    (mirrorable-pages db))
+        dirs (map #(mirror-path repo %) ["pages" "journals"])]
+    (p/let [listings (p/all (map #(<read-dir platform* %) dirs))
+            candidates (->> (mapcat (fn [dir file-names]
+                                      (map #(str dir "/" %) file-names))
+                                    dirs listings)
+                            (filter #(string/ends-with? % ".md")))]
+      (<delete-unowned-files! platform* candidates owned))))
 
 (defn <mirror-repo!
   [repo db {:keys [platform] :as opts}]
@@ -771,7 +932,8 @@
                    :reason :unsupported-runtime})
       (p/let [results (p/all
                        (map #(<mirror-page! repo db (:db/id %) (assoc opts :platform platform*))
-                            (mirrorable-pages db)))]
+                            (mirrorable-pages db)))
+              _ (<delete-unowned-mirror-files! platform* repo db opts)]
         {:status :completed
          :count (count results)
          :results results}))))
