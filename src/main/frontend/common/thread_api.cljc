@@ -42,6 +42,54 @@
          (throw e)))))
 
 #?(:cljs
+   (defn- transit-safe-value
+     [v]
+     (cond
+       (or (nil? v) (boolean? v) (string? v) (keyword? v) (number? v)) v
+       (and (map? v) (seq v))
+       (not-empty
+        (into {}
+              (keep (fn [[k val]]
+                      (when-let [safe (transit-safe-value val)]
+                        [k safe])))
+              v))
+       :else nil)))
+
+#?(:cljs
+   (defn- error->transit-safe
+     "Keep transit-safe fields so a rejected worker call cannot take down
+      the process when ex-data contains entities, functions, or other values."
+     [error]
+     (let [message (or (ex-message error)
+                       (when (instance? js/Error error)
+                         (.-message error))
+                       "Unknown error")
+           data (ex-data error)
+           payload (transit-safe-value (:payload data))
+           safe (cond-> {}
+                  (keyword? (:code data)) (assoc :code (:code data))
+                  (keyword? (:type data)) (assoc :type (:type data))
+                  (keyword? (:error data)) (assoc :error (:error data))
+                  (string? (:path data)) (assoc :path (:path data))
+                  (string? (:reason data)) (assoc :reason (:reason data))
+                  (some? (:block data)) (assoc :block (str (:block data)))
+                  (some? (:line data)) (assoc :line (:line data))
+                  (some? (:status data)) (assoc :status (:status data))
+                  (some? payload) (assoc :payload payload))]
+       (ex-info (if (or (nil? message) (= "" message)) "Unknown error" message)
+                safe))))
+
+#?(:cljs
+   (defn- write-error-transit-str
+     [error qualified-kw-str]
+     (try
+       (ldb/write-transit-str (error->transit-safe error))
+       (catch :default _
+         (log/error :thread-api-write-transit-failed qualified-kw-str)
+         (ldb/write-transit-str (ex-info "Unknown error"
+                                         {:code :thread-api/unserializable-error}))))))
+
+#?(:cljs
    (defn remote-function
      "Return a promise whose value is a transit string."
      [qualified-kw-str args-transit-str]
@@ -71,7 +119,7 @@
                 (p/catch
                  (fn [error]
                    (let [handler-completed-at (.now js/performance)
-                         error-transit-str (write-transit-str-with-catch error qualified-kw-str)
+                         error-transit-str (write-error-transit-str error qualified-kw-str)
                          completed-at (.now js/performance)]
                      (log-worker-thread-api-call!
                       {:worker-call-id call-id

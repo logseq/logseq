@@ -684,6 +684,50 @@
         (and (string? message)
              (string/includes? message "Failed to fetch")))))
 
+(defn- import-error-path
+  [error]
+  (or (:path (ex-data error))
+      (some-> (ex-cause error) ex-data :path)))
+
+(defn- import-error-reason
+  [error]
+  (or (:reason (ex-data error))
+      (some-> (ex-cause error) ex-data :reason)
+      (ex-message (ex-cause error))
+      (some-> (ex-cause error) .-message)
+      (let [msg (or (ex-message error) (.-message error))]
+        (when (and (string? msg)
+                   (not= msg (t :import/scan-failed)))
+          msg))
+      (str error)))
+
+(defn- import-error-detail
+  [error]
+  (let [path (import-error-path error)
+        reason (import-error-reason error)]
+    (cond
+      (and (string? path) (not (string/blank? path))
+           (string? reason) (not (string/includes? reason path)))
+      (t :import/file-error path reason)
+
+      (string? reason)
+      reason
+
+      :else
+      (str error))))
+
+(defn- import-error-heading
+  [error]
+  (if (= :import-scan/failed (:code (ex-data error)))
+    (t :import/scan-failed)
+    (t :import/failed)))
+
+(defn- import-error-notification
+  [error]
+  [:div.flex.flex-col.gap-1
+   [:div.font-medium (import-error-heading error)]
+   [:div.text-sm.whitespace-pre-wrap (import-error-detail error)]])
+
 (defn- import-files-finished?
   "Keep-graph is safe only after export-file-graph returns (sqlite store +
   finalize). :finishing is set before those steps; current-idx reaches total
@@ -693,7 +737,11 @@
 
 (defn- abort-file-graph-import!
   [error previous-repo]
-  (log/error :import-file-graph-failed {:error error})
+  (log/error :import-file-graph-failed {:error error
+                                        :message (or (ex-message error) (.-message error))
+                                        :ex-data (ex-data error)
+                                        :cause (ex-cause error)
+                                        :cause-data (ex-data (ex-cause error))})
   (let [current-repo (state/get-current-repo)
         created-new-graph? (and previous-repo
                                 (not= previous-repo current-repo))
@@ -706,15 +754,14 @@
       (do
         (clear-file-graph-importing-ui!)
         (when created-new-graph?
-          (notification/show! (t :import/unexpected-error
-                                 (or (.-message error) (str error)))
+          (notification/show! (import-error-notification error)
                               :error)
           (state/pub-event! [:graph/switch previous-repo {:persist? false}]))
         (when (and (not created-new-graph?)
-                   (contains? #{:file-graph-import/graph-not-created :import-scan/failed}
+                   (contains? #{:file-graph-import/graph-not-created :import-scan/failed
+                                :file-graph-import/file-failed}
                               (:code (ex-data error))))
-          (notification/show! (t :import/unexpected-error
-                                 (or (.-message error) (str error)))
+          (notification/show! (import-error-notification error)
                               :error))
         nil))))
 
@@ -732,8 +779,12 @@
                 scan-result (-> (state/<invoke-db-worker :thread-api/scan-file-graph
                                                          serialized-config-file file-metas options)
                                 (p/catch (fn [error]
-                                           (throw (ex-info "Scanning the folder failed"
-                                                           {:code :import-scan/failed}
+                                           (throw (ex-info (or (ex-message error)
+                                                               (.-message error)
+                                                               (t :import/scan-failed))
+                                                           (merge {:code :import-scan/failed}
+                                                                  (select-keys (or (ex-data error) {})
+                                                                               [:path :reason :block :line]))
                                                            error)))))
                 _ (close-scan-dialog!)
                 proceed? (<confirm-import-scan!
