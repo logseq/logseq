@@ -8,13 +8,16 @@ const crypto = require('node:crypto');
 const cp = require('node:child_process');
 const http = require('node:http');
 const { ownershipPath, acquireOwnership } = require('./ownership.cjs');
+const { contextualError, sqliteOperation } = require('./diagnostics.cjs');
 const PROTOCOL = 'sqlite-v1';
 const ownership = new WeakMap();
 const children = new Map();
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-// One readiness poll is a 50ms sleep plus a health request capped at 1s; anything longer is a clock jump.
-const READY_POLL_MAX_ELAPSED = 2000;
+// Spend the old 1s probe + 5s exit-wait budget on verifying the endpoint, outside the lease.
+const HEALTH_PROBE_BUDGET = 6000;
+// One readiness poll includes the bounded health request and a 50ms sleep.
+const READY_POLL_MAX_ELAPSED = HEALTH_PROBE_BUDGET + 1000;
 const id = () => crypto.randomUUID();
 function fail(message, code = 'server-stop-failed') {
   throw Object.assign(new Error(message), { code });
@@ -95,7 +98,8 @@ function signalProcess(pid, signal) {
 
 async function acquireLease(ctx, operation, checkWaiting) {
   const { DatabaseSync } = require('node:sqlite');
-  const db = new DatabaseSync(path.join(ctx.dir, 'lease.sqlite'));
+  const file = path.join(ctx.dir, 'lease.sqlite');
+  const db = sqliteOperation(file, 'lease-open', () => new DatabaseSync(file));
   const deadline = Date.now() + 30000;
   let acquired = false;
   try {
@@ -103,7 +107,8 @@ async function acquireLease(ctx, operation, checkWaiting) {
       if (checkWaiting) checkWaiting();
       try { db.exec('BEGIN IMMEDIATE'); acquired = true; break; }
       catch (error) {
-        if (error.errcode !== 5 || Date.now() >= deadline) throw error;
+        if (error.errcode !== 5 || Date.now() >= deadline)
+          throw contextualError(error, { phase: 'lease-begin', dbPath: file, operation });
         await sleep(25);
       }
     }
@@ -122,7 +127,9 @@ async function acquireLease(ctx, operation, checkWaiting) {
         delete latest.owner;
         writeJSON(ctx.stateFile, latest);
       } finally {
-        try { db.exec('COMMIT'); } finally { db.close(); }
+        // This connection only holds an exclusion lock; state is persisted in JSON.
+        // COMMIT would unnecessarily request an exclusive lock against schema readers.
+        try { sqliteOperation(file, 'lease-release', () => db.exec('ROLLBACK')); } finally { db.close(); }
       }
     };
   } catch (error) {
@@ -270,7 +277,7 @@ function entries(root) {
     return { pid: Number(match[1]), port: Number(match[2]) };
   });
 }
-function request(port, endpoint, method = 'GET', headers = {}) {
+function request(port, endpoint, method = 'GET', headers = {}, timeoutMs = 1000) {
   return new Promise((resolve, reject) => {
     const req = http.request({ hostname: '127.0.0.1', port, path: endpoint, method, headers }, res => {
       let body = '';
@@ -279,7 +286,7 @@ function request(port, endpoint, method = 'GET', headers = {}) {
       res.on('end', () => { clearTimeout(timer); resolve({ status: res.statusCode, body }); });
       res.on('error', reject);
     });
-    const timer = setTimeout(() => req.destroy(Error('Worker request timeout')), 1000);
+    const timer = setTimeout(() => req.destroy(Error('Worker request timeout')), timeoutMs);
     req.on('error', error => { clearTimeout(timer); reject(error); });
     req.end();
   });
@@ -308,8 +315,8 @@ function readRuntime(ctx, record) {
     return runtime;
   }
 }
-async function health(ctx, target, port) {
-  const response = await request(port, '/healthz');
+async function health(ctx, target, port, timeoutMs = 1000) {
+  const response = await request(port, '/healthz', 'GET', {}, timeoutMs);
   const value = JSON.parse(response.body);
   if (![200, 503].includes(response.status) || value.pid !== target.pid || value.port !== port
       || !sameStorage(ctx, value.storage) || graphName(value.repo) !== ctx.repo
@@ -455,7 +462,7 @@ async function waitExit(pid, milliseconds) {
   } while (Date.now() < deadline);
   return !pidExists(pid);
 }
-async function terminate(ctx, target, deleting) {
+async function terminate(ctx, target, deleting, verified = false) {
   if (!pidExists(target.pid)) return;
   if (ownershipAvailable(ctx)) {
     // Free ownership fences abandoned tickets, but a verified endpoint still has
@@ -488,6 +495,7 @@ async function terminate(ctx, target, deleting) {
     return;
   }
   if (target.pid === process.pid) fail('Cannot stop the calling process');
+  if (verified) return shutdownAndWait(ctx, target, deleting, true);
   let responsive = false;
   if (target.port) {
     try { await health(ctx, target, target.port); responsive = true; }
@@ -522,6 +530,120 @@ async function shutdownAndWait(ctx, target, deleting, responsive) {
 const legacy = require('./legacy-retirement.cjs')({ fail, readJSON, writeJSON, graphName, canonicalRoot,
   sameStorage, pidExists, entries, request, shutdownAndWait, removeEntries, runtimeFile, state });
 
+async function probeUpgradeTarget(ctx, target, operationDeadline) {
+  const deadline = Math.min(operationDeadline, Date.now() + HEALTH_PROBE_BUDGET);
+  for (;;) {
+    if (!pidExists(target.pid)) return { target };
+    try {
+      return { target, value: await health(ctx, target, target.port, Math.max(1, deadline - Date.now())) };
+    } catch (error) {
+      if (!ignorableDiscoveryError(error) || Date.now() >= deadline) {
+        return { target, error: contextualError(error, {
+          phase: 'upgrade-health', repo: ctx.repo, pid: target.pid, port: target.port,
+        }) };
+      }
+      // Connection resets during teardown can recover or end in process exit.
+      // No lifecycle lease is held while waiting or making HTTP requests.
+      await sleep(50);
+    }
+  }
+}
+
+function sameTarget(first, second) {
+  return second && first.port === second.port && Object.entries(runtimeRecord(first))
+    .every(([key, value]) => second[key] === value);
+}
+
+async function upgradeGraph(ctx, revision, initialScan, registeredOnly) {
+  const retired = [];
+  const deadline = Date.now() + 30000;
+  const checkDeadline = () => {
+    if (Date.now() >= deadline) fail('Worker upgrade verification deadline exceeded', 'server-start-failed');
+  };
+  let waitingTicket;
+  let publicationDeadline;
+  let generation;
+  let scan = initialScan;
+  for (;;) {
+    checkDeadline();
+    const observed = await withLease(ctx, 'upgrade', async () => {
+      checkDeadline();
+      const current = state(ctx);
+      if (generation !== undefined && current.generation !== generation)
+        fail('Graph generation changed during upgrade', 'graph-not-exists');
+      generation = current.generation;
+      retired.push(...await legacy.retireGraph(ctx, current, scan));
+      const { targets } = await discover(ctx, current, scan, registeredOnly);
+      const available = ownershipAvailable(ctx);
+      const live = [];
+      for (const target of targets) {
+        // Free ownership fences expired/abandoned admissions. Preserve the
+        // existing unverified termination rules; never signal a recycled PID
+        // merely because an earlier endpoint probe succeeded.
+        if (available && !pending(target)) {
+          await terminate(ctx, target, false);
+          await cleanup(ctx, current, [target]);
+          current.workers = current.workers.filter(record => record.ticket !== target.ticket);
+          writeJSON(ctx.stateFile, current);
+          retired.push(target);
+        } else live.push(target);
+      }
+      return live;
+    }, checkDeadline);
+    if (!observed.length) return retired;
+    const unpublished = observed.find(target => pidExists(target.pid) && !target.port);
+    if (unpublished) {
+      if (waitingTicket !== unpublished.ticket) {
+        waitingTicket = unpublished.ticket;
+        publicationDeadline = Math.min(deadline, Date.now() + HEALTH_PROBE_BUDGET);
+      }
+      if (Date.now() >= publicationDeadline)
+        fail('Worker endpoint is not published; retry after initialization', 'server-start-failed');
+      // A concurrent ensure may just have admitted the successor. Let it publish
+      // under the same lease before taking a fresh registration snapshot.
+      await sleep(50);
+      scan = publicationScan();
+      continue;
+    }
+    const probes = await Promise.all(observed.map(target => probeUpgradeTarget(ctx, target, deadline)));
+    const applied = await withLease(ctx, 'upgrade', async () => {
+      checkDeadline();
+      const current = state(ctx);
+      if (current.generation !== generation)
+        fail('Graph generation changed during upgrade', 'graph-not-exists');
+      // Never act on the pre-wait registration/publication snapshot. Re-read both
+      // under exclusion and bind the health revision to that exact worker identity.
+      const { targets } = await discover(ctx, current, publicationScan(), true);
+      const latest = probes.map(probe => targets.find(target => sameTarget(probe.target, target)));
+      if (latest.some(target => !target)) return false;
+      const available = ownershipAvailable(ctx);
+      for (let index = 0; index < probes.length; index++) {
+        const target = latest[index];
+        const { value, error } = probes[index];
+        if (pidExists(target.pid)) {
+          if (available && !pending(target)) {
+            await terminate(ctx, target, false);
+          } else {
+            if (error) throw error;
+            // An exited worker can have been replaced between the PID and HTTP
+            // observations; let the next scan verify the new state instead.
+            if (!value) return false;
+            if (value.revision === revision) continue;
+            await terminate(ctx, target, false, true);
+          }
+        }
+        await cleanup(ctx, current, [target]);
+        current.workers = current.workers.filter(record => record.ticket !== target.ticket);
+        writeJSON(ctx.stateFile, current);
+        retired.push(target);
+      }
+      return true;
+    }, checkDeadline);
+    if (applied) return retired;
+    scan = publicationScan();
+  }
+}
+
 async function stopOutdatedWorkers(storage, revision, repo) {
   if (typeof revision !== 'string' || !revision) fail('Build revision is required');
   const names = repo === undefined
@@ -529,47 +651,8 @@ async function stopOutdatedWorkers(storage, revision, repo) {
       .map(entry => canonicalGraphDirectory(entry.name)).filter(name => name !== null)
     : [repo];
   const scan = publicationScan();
-  const results = await Promise.allSettled(names.map(name => {
-    const ctx = context(storage, name);
-    return withLease(ctx, 'upgrade', async () => {
-      const current = state(ctx);
-      const retired = await legacy.retireGraph(ctx, current, scan);
-      const { targets } = await discover(ctx, current, scan, repo !== undefined);
-      const available = ownershipAvailable(ctx);
-      for (const target of targets) {
-        if (available && !pending(target)) {
-          await terminate(ctx, target, false);
-          await cleanup(ctx, current, [target]);
-          current.workers = current.workers.filter(record => record.ticket !== target.ticket);
-          writeJSON(ctx.stateFile, current);
-          continue;
-        }
-        if (!pidExists(target.pid)) continue;
-        if (!target.port) fail('Worker endpoint is not published; retry after initialization', 'server-start-failed');
-        let value;
-        try { value = await health(ctx, target, target.port); }
-        catch (error) {
-          if (!ignorableDiscoveryError(error)) throw error;
-          // A worker mid-teardown can reset health checks while its process is
-          // still exiting; only a live unverified worker must be preserved.
-          if (!await waitExit(target.pid, 5000)) throw error;
-          await cleanup(ctx, current, [target]);
-          current.workers = current.workers.filter(record => record.ticket !== target.ticket);
-          writeJSON(ctx.stateFile, current);
-          retired.push(target);
-          continue;
-        }
-        if (typeof value.revision !== 'string' || !value.revision) fail('Worker revision is missing');
-        if (value.revision === revision) continue;
-        await terminate(ctx, target, false);
-        await cleanup(ctx, current, [target]);
-        current.workers = current.workers.filter(record => record.ticket !== target.ticket);
-        writeJSON(ctx.stateFile, current);
-        retired.push(target);
-      }
-      return retired;
-    });
-  }));
+  const results = await Promise.allSettled(names.map(name =>
+    upgradeGraph(context(storage, name), revision, scan, repo !== undefined)));
   const errors = results.filter(result => result.status === 'rejected').map(result => result.reason);
   if (errors.length) throw new AggregateError(errors, `Outdated worker cleanup failed: ${errors.map(error => error.message).join('; ')}`);
   return results.flatMap(result => result.value);
@@ -758,8 +841,13 @@ async function startGraph({ storage, repo, script, owner = 'cli', createEmpty = 
       const runtime = readRuntime(ctx, record);
       const port = runtime?.port || record.port;
       if (port) {
-        const value = await health(ctx, record, port);
-        if (value.status === 'ready') return { ...value, generation: record.generation };
+        try {
+          const value = await health(ctx, record, port, Math.max(1, Math.min(budget, HEALTH_PROBE_BUDGET)));
+          if (value.status === 'ready') return { ...value, generation: record.generation };
+        } catch (error) {
+          if (!ignorableDiscoveryError(error)) throw error;
+          if (budget <= 0) throw contextualError(error, { phase: 'startup-health', repo: ctx.repo, pid: record.pid, port });
+        }
       }
       if (budget <= 0) fail('Worker failed to become ready', 'server-start-failed');
       await sleep(50);
