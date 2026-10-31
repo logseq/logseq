@@ -1139,7 +1139,7 @@ let ref_filter_dialog inst anchor =
         reactive
           (fun (_q, _g) ->
             let s = V.get inst in
-            D.fragment
+            box ~display:`contents
               ((if s.V.ref_includes <> [] then
                   [ chip_row (I.t "reference.filter/includes")
                       s.V.ref_includes ]
