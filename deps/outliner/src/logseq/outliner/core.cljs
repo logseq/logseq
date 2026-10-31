@@ -629,11 +629,11 @@
     x))
 
 (defn- compute-block-parent
-  [block parent target-block top-level? sibling? get-new-id outliner-op replace-empty-target? idx]
+  [block parent target-block top-level? sibling? get-new-id replace-empty-target? idx]
   (cond
-    ;; replace existing block
-    (and (contains? #{:paste :insert-blocks} outliner-op)
-         replace-empty-target?
+    ;; replace existing block: `assign-temp-id` gives the first block the
+    ;; target's id, so it takes the target's parent whatever the op is
+    (and replace-empty-target?
          (string/blank? (:block/title target-block))
          (zero? idx))
     (get-id (:block/parent target-block))
@@ -809,7 +809,7 @@
           (let [{:keys [block page-txs]}
                 (resolve-page-refs db (remove-disallowed-inline-classes db block) {:batch-uuids batch-uuids})
                 top-level? (= (:block/level block) 1)
-                parent (compute-block-parent block parent target-block top-level? sibling? get-new-id outliner-op replace-empty-target? idx)
+                parent (compute-block-parent block parent target-block top-level? sibling? get-new-id replace-empty-target? idx)
                 order (nth orders idx)
                 _ (assert (and parent order) (str "Parent or order is nil: " {:parent parent :order order}))
                 template-ref-block-ids (when insert-template?
@@ -1461,7 +1461,13 @@
              ;; FIXME: move-blocks should be pure fn
              ;; (prn "==>> move blocks tx:" tx-data)
              (ldb/transact! conn tx-data {:sibling? sibling?
-                                          :outliner-op (or outliner-op :move-blocks)}))))))))
+                                          :outliner-op (or outliner-op :move-blocks)})
+             ;; a page moved under a new parent must not land next to a
+             ;; sibling page with its name; throwing discards the whole batch
+             (when (ldb/page? block)
+               (let [moved (d/entity @conn (:db/id block))]
+                 (when (not= (:db/id (:block/parent block)) (:db/id (:block/parent moved)))
+                   (outliner-validate/validate-unique-by-name-and-tags @conn (:block/title moved) moved)))))))))))
 
 (defn- move-blocks
   "Move `blocks` to `target-block` as siblings or children."
