@@ -1171,27 +1171,35 @@ let same_config ((s : S.t),(a : Model.t)) ((t : S.t),(b : Model.t)) =
   && a.graph_config = b.graph_config
 
 let article ~modal ~keymap ms ctx =
+  let content (s : S.t) _ =
+    let children =
+      [ row ~key:"art-h" ~style_class:"cp__settings-header"
+          ~cross:`center ~main:`start ~gap:8 ~height:40
+          ~padding_vertical:8
+          [ heading ~key:"art-ht" ~level:1
+              ~style_class:"cp__settings-category-title"
+              ~font_size:"1.25rem" ~font_weight:400 ~line_height:"1.75rem"
+              ~value:
+                (reactive (fun (s : S.t) -> tab_title s.tab)
+                   (S.signal ()))
+              []
+          ]
+      ; pane_of ~modal ~keymap ctx s.tab
+      ]
+    in
+    if s.tab = "keymap" then
+      column ~key:"settings-article-body" ~grow:1. ~min_width:0 ~min_height:0 children
+    else
+      scroll ~key:"settings-article-scroll" ~orientation:`vertical
+        ~grow:1. ~min_width:0 ~min_height:0
+        [column ~key:"settings-article-body" ~min_width:0 children]
+  in
   Ui_components.with_props
     [Ui_components.Prop.height_viewport 0.7]
-    (scroll ~key:"settings-article" ~style_class:"settings-article" ~orientation:`vertical
+    (column ~key:"settings-article" ~style_class:"settings-article"
     ~data_attrs:["role", "article"]
     ~padding:16 ~grow:1. ~min_height:192 ~min_width:0
-       [ column ~key:"settings-article-body" ~min_width:0
-         [ row ~key:"art-h" ~style_class:"cp__settings-header"
-           ~cross:`center ~main:`start ~gap:8 ~height:40
-           ~padding_vertical:8
-           [ heading ~key:"art-ht" ~level:1
-               ~style_class:"cp__settings-category-title"
-               ~font_size:"1.25rem" ~font_weight:400 ~line_height:"1.75rem"
-               ~value:
-                 (reactive (fun (s : S.t) -> tab_title s.tab)
-                    (S.signal ()))
-               []
-           ]
-       ; reactive ~equal:same_config (fun (s : S.t) _ -> pane_of ~modal ~keymap ctx s.tab)
-           (S.signal ()) ms
-         ]
-       ])
+       [reactive ~equal:same_config content (S.signal ()) ms])
 
 let inner ~modal ms : t =
  fun ctx parent ->
