@@ -490,6 +490,80 @@ or its revision is not newer. For child patches, a mounted slot whose base
 revision cannot be reconciled is marked stale and reloaded instead of being
 merged speculatively.
 
+#### On-demand linked-reference page counts
+
+The DB renderer accepts the two-element resource key
+`[:linked-ref-pages-count #uuid "<owner-uuid>"]`. It returns only
+`{:ref-pages-count [[title count] ...]}`; an empty result is
+`{:ref-pages-count []}`. Titles are strings and counts are positive integers,
+in the existing descending-count order. Missing titles, non-positive counts
+and unexpectedly absent aggregate metadata fail fast; no replacement title
+or empty result is invented. Invalid key arity and invalid UUID values use
+the existing renderer errors. A missing owner follows the existing snapshot
+envelope's watched empty-map behavior, not a fabricated empty count array;
+strict consumers must surface the missing count field as an error.
+
+This resource reuses `Db_view.get_linked_references` and its page-count
+aggregation, retaining the owner's includes/excludes, hidden-page/block,
+class, alias, ancestor and descendant semantics. It is not limited to the
+displayed row window and accepts no additional view filters or search context.
+It returns no rows, blocks or supplementary slots. The snapshot envelope still
+contains the resource's own value slot, watch keys and revision as usual.
+
+Request it only while the references filter popup is open. Consumers refresh
+it on relevant revisions and dispose their subscription with the popup. It
+does not change existing defaults, the first linked-reference row request,
+`linked_window`, or any page-name/namespace resolution rule.
+
+The application constructs the key with `Views_db.key_ref_pages_count` and
+decodes it with `Views_wire.decode_ref_counts_resource`, rather than using
+the permissive decoder for windowed view results. The filter popup starts
+in an explicit loading state and surfaces missing, malformed or rejected
+resources as an error, not an empty candidate list. Its candidate subtree
+reacts to counts, the search query and the current include/exclude state;
+the controlled input remains mounted independently of resource refreshes.
+
+Each popup has a private `Runtime.on_sync` subscription, removed with
+`Runtime.off_sync` on disposal. Sync events immediately retire the previous
+request ticket, then debounce the latest read by 150 ms. Successful filter
+saves also refresh counts. Closing the popup logically cancels pending work:
+no delayed read starts and in-flight results cannot update disposed state.
+The existing RPC is not transport-cancelled. Reopening creates a new request
+owner and subscription. Count updates and the existing 200 ms search debounce
+request a flush explicitly on both Web and MyGo.
+
+`Views_popup.show_custom` accepts an optional application-private
+`owner_scope`; the references picker supplies its launching view's scope.
+Disposing that owner immediately blocks actions/results and schedules closure
+of only that popup id with a zero-delay timer, never `close_all`. This prevents
+an old cleanup from closing a newer popup. Result guards also check the
+captured repo, route and selected view identity. The model's general
+`context_revision` is not a popup lifetime token: same-route page/journal
+publications increment it. Ordinary publications must not permanently retire
+an open picker. A fresh reopen after navigation does not reuse old tickets.
+
+Watch keys cover the owner entity (including saved includes/excludes), owner
+incoming refs, ref-scope (aliases and class hierarchy), and attributes for
+titles, refs, page ownership, parent hierarchy, tags/page identity, idents,
+view ownership, hiding and deletion. An owner with an ident also watches that
+attribute because the existing hidden-reference predicate reads it. Attribute
+watches are deliberately broader than the owner's current candidate set so
+newly eligible pages and descendant/ancestor edits invalidate counts. This
+does not use `watch-all`.
+
+Calculation starts from owner/alias-bounded incoming reference index seeks,
+not a whole-graph index scan. For P result pages, this renderer adds O(P)
+serialization work and payload pairs; existing count sorting is O(P log P).
+It inherits the existing aggregator's full
+eligible-reference, descendant, ancestor and owner-filter traversal costs;
+it is not constant-time or bounded by the visible row count. The value payload
+contains one pair per distinct eligible titled page, not per source row.
+Existing alias deduplication is O(A squared) for A aliases, and filtered
+subtree set/list operations can be superlinear; no overall linear bound is
+implied by the bounded initial seeks.
+Large-graph CPU latency and payload size require measurement; no performance
+claim follows from the small resource shape.
+
 #### Subscription store
 
 frontend.db.subs owns one immutable external store. Important resource

@@ -287,4 +287,39 @@ let host () : (Model.t, Action.t) Shared_scenarios_views.host =
   ; pending = (fun () -> List.map (fun (n, _, _) -> n) !parked)
   }
 
-let run ~finish = Shared_scenarios_views.run (host ()) ~finish
+let query_result_replacement () =
+  let module V = Views_state in
+  let scheduler = Signal.scheduler () in
+  List.iter (fun (name, result, scalar, error) ->
+      let inst = V.make ~sched:scheduler
+          ~kind:(V.KQuery { block_uuid = "query" }) ~feature:"query-result" ~owner:W.Nil in
+      Signal.set inst.V.st
+        { (V.empty_vstate ()) with
+          V.loading = false
+        ; qsrc = "(property :block/title)"
+        ; query_rows = [ "old-row" ]
+        ; query_idents = [ "block/title" ]
+        ; items_count = 12
+        ; data = Views_wire.VFlat
+            { rows = [ "old-row" ]; count = 12; previews = Hashtbl.create 0; qprops = [] }
+        };
+      Signal.stabilize scheduler;
+      Views_query.decode_result inst result;
+      Signal.stabilize scheduler;
+      let state = V.get inst in
+      check ("query replaces prior block results: " ^ name)
+        (state.V.query_rows = []
+         && Views_wire.row_count state.V.data = 0
+         && Views_head.count_of state = 0
+         && state.V.query_idents = []
+         && state.V.query_scalar_rows = scalar
+         && state.V.query_error = error))
+    [ "empty", W.Map [ kw "rows", W.Array [] ], [], None
+    ; "scalar", W.Map [ kw "rows", W.Array [ W.Int 3 ] ], [ W.Int 3 ], None
+    ; "error", W.Map [ kw "error", W.Map [ kw "message", W.String "invalid query" ] ],
+        [], Some "invalid query"
+    ]
+
+let run ~finish =
+  query_result_replacement ();
+  Shared_scenarios_views.run (host ()) ~finish

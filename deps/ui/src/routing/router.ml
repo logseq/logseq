@@ -106,19 +106,23 @@ let jump_to_anchor anchor =
   Ui_services.timers_clear_timeout !anchor_timer;
   poll_anchor anchor 0
 
-let fetch_blocks (p : Model.page) =
-  let* blocks = Outliner_ops.fetch_page_blocks (repo ()) p in
+let fetch_blocks ?(source_repo = repo ())
+    ?(current =
+        let context = Runtime.model () in
+        fun () -> Outliner_ops.context_current context) (p : Model.page) =
+  let* blocks = Outliner_ops.fetch_page_blocks_for ~current source_repo p in
   Js.Promise.resolve
     { p with
       Model.page_blocks = Model.merge_blocks p.Model.page_blocks blocks
     }
-let fetch_refs_blocks (p : Model.page) : Model.block list Js.Promise.t =
+let fetch_refs_blocks ?(source_repo = repo ()) (p : Model.page) : Model.block list Js.Promise.t =
   match p.Model.page_db_id with
   | Some id ->
       let* w =
         Runtime.invoke2 "thread-api/get-block-refs"
-          (Wire.String (repo ())) (Wire.Int id)
+          (Wire.String source_repo) (Wire.Int id)
       in
+      Outliner_ops.check_loader_result w;
       (* cljs block-ref-count gates the references section with
                 hidden-ref-id-pred, which excludes same-page refs — drop
                 them here so a self-reference never shows the section *)
@@ -205,19 +209,55 @@ let journals_initial = 3
 let journals_chunk = 2
 let journals_has_more = ref true
 let journals_loading_more = ref false
+let journals_loading_origin : Runtime.reload_origin option ref = ref None
 
-let collect_journal p =
-  let* p' = fetch_blocks p in
-  let* refs = fetch_refs_blocks p' in
+type journal_request =
+  { origin : Runtime.reload_origin
+  ; generation : int
+  }
+
+let journal_current request =
+  match request.origin.Runtime.reload_route with
+  | Model.Home | Model.Journals ->
+      Runtime.reload_origin_current
+        { request.origin with Runtime.reload_generation = request.generation }
+  | _ -> false
+
+let check_journal request =
+  if not (journal_current request) then failwith "Journal load superseded"
+
+let journal_await request promise =
+  let* value = promise in
+  check_journal request;
+  Js.Promise.resolve value
+
+let journal_wire request promise =
+  let* wire = journal_await request promise in
+  Outliner_ops.check_loader_result wire;
+  Js.Promise.resolve wire
+
+let journal_call request invoke =
+  try
+    check_journal request;
+    journal_wire request (invoke ())
+  with error -> Js.Promise.reject error
+
+let collect_journal request p =
+  check_journal request;
+  let source_repo = request.origin.Runtime.reload_repo in
+  let current () = journal_current request in
+  let* p' = journal_await request (fetch_blocks ~source_repo ~current p) in
+  let* refs = journal_await request (fetch_refs_blocks ~source_repo p') in
   (* title-tag chips need tag uuids/id for their context menu *)
-  Outliner_ops.resolve_page_tags (repo ())
-    { p' with Model.page_linked_refs = refs }
+  journal_await request
+    (Outliner_ops.resolve_page_tags source_repo
+       { p' with Model.page_linked_refs = refs })
 
 let journal_summaries w =
   match w with
   | Wire.Array xs | Wire.List xs ->
       List.filter_map Decode.page_of_summary xs
-  | _ -> []
+  | _ -> invalid_arg "Invalid latest journals response"
 
 (* cljs util/scroll-to-top on the app scroller *)
 let scroll_to_top () =
@@ -228,21 +268,21 @@ let scroll_to_top () =
 (* Navigate_to flushes before the host has laid out the new tree, and a
    later focus/lazy pass can leave the scroller parked on the page we
    just left. Reset once now and once after the next turn. *)
-let scroll_main_top () =
+let scroll_main_top ?(current = fun () -> true) () =
   scroll_to_top ();
-  ignore (Ui_services.timers_timeout (fun () -> scroll_to_top ()) 0)
+  ignore (Ui_services.timers_timeout (fun () -> if current () then scroll_to_top ()) 0)
 
 (* a journals list shorter than the scroller fires no scroll event —
    after each commit, pull the next chunk until the content overflows
    or the db runs out of days. Goes through the journals_load_more hook
    so it works for whichever loader the route installed *)
-let maybe_fill_journals () =
+let maybe_fill_journals ~current () =
   ignore
     (Ui_services.timers_timeout
        (fun () ->
          match Ui_services.dom_by_id "main-content-container" with
          | Some el
-           when !journals_has_more
+           when current () && !journals_has_more
              (* native DOM stubs report 0 metrics — 0<=0+1 would pump
                 every journal day eagerly *)
              && el.Ui_services.client_height () > 0.
@@ -252,87 +292,152 @@ let maybe_fill_journals () =
          | _ -> ())
        150)
 
-let load_journals () =
+let publish_journals request pages =
+  check_journal request;
+  match Runtime.send_with_publication (Action.Journals_loaded pages) with
+  | None -> Runtime.Reload_failed
+      { failure_message = "Journal publication was not reduced"; failure_cause = None }
+  | Some publication ->
+      let expected =
+        { request.origin with Runtime.reload_generation = request.generation } in
+      if not (Runtime.publication_current expected publication) then Runtime.Reload_superseded
+      else
+      let result = Runtime.Reload_published
+        { publication_origin = request.origin
+        ; publication_generation = publication.Update.after_generation
+        ; publication_revision = publication.Update.after.Model.context_revision } in
+      if Runtime.reload_result_current result then result
+      else Runtime.Reload_superseded
+
+let load_journals_owned origin =
+  if not (Runtime.reload_origin_current origin) then
+    Js.Promise.resolve Runtime.Reload_superseded
+  else
+  match origin.Runtime.reload_route with
+  | Model.Home | Model.Journals ->
+  incr Runtime.load_gen;
+  let request = { origin; generation = !Runtime.load_gen } in
   Ui_services.perf_mark "nav:journals";
-  journals_has_more := true;
-  journals_loading_more := false;
   (let* w =
-    Runtime.invoke2 "thread-api/get-latest-journals" (Wire.String (repo ()))
-      (Wire.Int journals_initial)
+    journal_call request (fun () ->
+      journals_has_more := true;
+      journals_loading_more := false;
+      journals_loading_origin := None;
+      Runtime.invoke2 "thread-api/get-latest-journals"
+        (Wire.String origin.Runtime.reload_repo) (Wire.Int journals_initial))
   in
   let pages = journal_summaries w in
-  if List.length pages < journals_initial then journals_has_more := false;
-  let* arr = Js.Promise.all (Array.of_list (List.map collect_journal pages)) in
-  let* js = Js.Promise.resolve (Array.to_list arr) in
-  Js.Promise.resolve
-    (match Runtime.route () with
-     | Model.Journals | Model.Home ->
-         Runtime.send (Action.Journals_loaded js);
-         scroll_main_top ();
-         maybe_fill_journals ()
-     | _ -> ()))
+  let* arr = journal_await request
+    (Js.Promise.all (Array.of_list (List.map (collect_journal request) pages))) in
+  journals_has_more := List.length pages >= journals_initial;
+  let result = publish_journals request (Array.to_list arr) in
+  let current () = Runtime.reload_result_current result in
+  if current () then begin
+    scroll_main_top ~current ();
+    maybe_fill_journals ~current ()
+  end;
+  Js.Promise.resolve result)
   |> Js.Promise.catch (fun e ->
-         Ui_services.log_error ("load_journals failed", e);
-         (match Runtime.route () with
-          | Model.Journals | Model.Home ->
-              Runtime.send Action.Page_load_failed
-          | _ -> ());
-         Js.Promise.resolve ())
+         if not (journal_current request) then
+           Js.Promise.resolve Runtime.Reload_superseded
+         else begin
+           Ui_services.log_error ("load_journals failed", e);
+           if not (journal_current request) then
+             Js.Promise.resolve Runtime.Reload_superseded
+           else begin
+             Runtime.send Action.Page_load_failed;
+             Js.Promise.resolve (Runtime.Reload_failed
+               { failure_message = "Journal load failed"; failure_cause = Some e })
+           end
+         end)
+  | _ -> Js.Promise.resolve (Runtime.Reload_failed
+      { failure_message = "Owned reload requires a journal route"; failure_cause = None })
+
+let load_journals () =
+  match Runtime.capture_reload_origin () with
+  | None -> Js.Promise.resolve ()
+  | Some origin ->
+      let* _ = load_journals_owned origin in
+      Js.Promise.resolve ()
+
+let reload_current_view_owned origin =
+  if not (Runtime.reload_origin_current origin) then
+    Js.Promise.resolve Runtime.Reload_superseded
+  else
+    match origin.Runtime.reload_route with
+    | Model.Home | Model.Journals -> load_journals_owned origin
+    | Model.Page _ | Model.Block_zoom _ | Model.Library ->
+        Js.Promise.resolve (Runtime.Reload_failed
+          { failure_message = "Use the page refresh path"; failure_cause = None })
+    | Model.All_pages | Model.All_graphs | Model.Import
+    | Model.Bug_report | Model.Bug_report_clipboard
+    | Model.File _ | Model.Not_found _ | Model.Settings ->
+        Js.Promise.resolve (Runtime.Reload_unchanged origin)
+
+let () = Runtime.reload_current_view_owned := reload_current_view_owned
 
 (* scroll-end pagination — the next [journals_chunk] days fetch + append;
    days already loaded (e.g. a fresh page created mid-session) are
    deduped by uuid so the keyed list never sees the same day twice *)
 let load_more_journals () : unit Js.Promise.t =
+  let loading_current = match !journals_loading_origin with
+    | Some origin -> Runtime.reload_origin_current origin
+    | None -> false in
   if
-    !journals_loading_more || not !journals_has_more
+    (!journals_loading_more && loading_current) || not !journals_has_more
     || !Runtime.current_journals = []
   then Js.Promise.resolve ()
-  else (
+  else match Runtime.capture_reload_origin () with
+  | None -> Js.Promise.resolve ()
+  | Some origin ->
+    let request = { origin; generation = origin.Runtime.reload_generation } in
+    if not (journal_current request) then Js.Promise.resolve () else
+    begin
     journals_loading_more := true;
+    journals_loading_origin := Some origin;
     (let* w =
-       Runtime.invoke3 "thread-api/get-latest-journals"
-         (Wire.String (repo ()))
-         (Wire.Int journals_chunk)
-         (Wire.Int (List.length !Runtime.current_journals))
+       journal_call request (fun () ->
+         Runtime.invoke3 "thread-api/get-latest-journals"
+           (Wire.String origin.Runtime.reload_repo)
+           (Wire.Int journals_chunk)
+           (Wire.Int (List.length !Runtime.current_journals)))
      in
      let pages = journal_summaries w in
-     if List.length pages < journals_chunk then
-       journals_has_more := false;
-     let* arr =
-       Js.Promise.all (Array.of_list (List.map collect_journal pages))
+     let* arr = journal_await request
+       (Js.Promise.all (Array.of_list (List.map (collect_journal request) pages)))
      in
-     (* the model route — !Runtime.current_route is None until a
-        Navigate_to action, so on the boot journals route every load
-        would be dropped here (infinite scroll dead on first load) *)
-     (match Runtime.route () with
-      | Model.Journals | Model.Home ->
-          let known =
-            List.fold_left
-              (fun s (p : Model.page) ->
-                match p.Model.page_uuid with
-                | Some u -> SSet.add u s
-                | None -> s)
-              SSet.empty !Runtime.current_journals
-          in
-          let fresh =
-            Array.to_list arr
-            |> List.filter (fun (p : Model.page) ->
-                   match p.Model.page_uuid with
-                   | Some u -> not (SSet.mem u known)
-                   | None -> true)
-          in
-          if fresh <> [] then (
-            Runtime.send
-              (Action.Journals_loaded
-                 (!Runtime.current_journals @ fresh));
-            maybe_fill_journals ())
-      | _ -> ());
+     journals_has_more := List.length pages >= journals_chunk;
      journals_loading_more := false;
+     journals_loading_origin := None;
+     let known =
+       List.fold_left
+         (fun s (p : Model.page) ->
+           match p.Model.page_uuid with
+           | Some u -> SSet.add u s
+           | None -> s)
+         SSet.empty !Runtime.current_journals
+     in
+     let fresh =
+       Array.to_list arr
+       |> List.filter (fun (p : Model.page) ->
+              match p.Model.page_uuid with
+              | Some u -> not (SSet.mem u known)
+              | None -> true)
+     in
+     if fresh <> [] then begin
+       let result = publish_journals request (!Runtime.current_journals @ fresh) in
+       if Runtime.reload_result_current result then
+         maybe_fill_journals ~current:(fun () -> Runtime.reload_result_current result) ()
+     end;
      Js.Promise.resolve ())
     |> Js.Promise.catch (fun e ->
-           journals_loading_more := false;
-           Ui_services.log_error ("load_more_journals failed", e);
-           Js.Promise.resolve ()))
+           if journal_current request then begin
+             journals_loading_more := false;
+             journals_loading_origin := None;
+             Ui_services.log_error ("load_more_journals failed", e)
+           end;
+           Js.Promise.resolve ())
+    end
 
 (* cljs go-to-journals!: a configured :default-home page takes over the
    home route, so the Journals nav lands on #/all-journals there and on
@@ -473,7 +578,12 @@ let rec load_page_ref for_route ref_v =
    page is missing). *)
 let load_home () =
   let repo = repo () in
+  let origin = Runtime.capture_reload_origin () in
+  let current () = match origin with
+    | Some origin -> Runtime.reload_origin_current origin
+    | None -> false in
   (let* cfg = Sdk_config.read_config repo in
+  if not (current ()) then Js.Promise.resolve () else
   let page_name =
     match Wire.get cfg "default-home" with
     | Some dh -> Wire.map_get_string dh "page"
@@ -485,10 +595,10 @@ let load_home () =
         Runtime.invoke2 "thread-api/get-page-route-info"
           (Wire.String repo) (Wire.String name)
       in
-      match Decode.page_of_summary info, stale Model.Home with
+      match Decode.page_of_summary info, (not (current ()) || stale Model.Home) with
       | Some p, false ->
           Runtime.send (Action.Navigate_to (Model.Page name));
-          let* p' = fetch_blocks p in
+          let* p' = fetch_blocks ~source_repo:repo p in
           let* p'' = Outliner_ops.resolve_page_tags repo p' in
           if not (stale (Model.Page name)) then (
             Editor_state.clear_overrides ();
@@ -511,9 +621,7 @@ let load_home () =
       load_journals ())
   |> Js.Promise.catch (fun e ->
          Ui_services.log_error ("load_home failed", e);
-         (match Runtime.route () with
-          | Model.Home -> Runtime.send Action.Page_load_failed
-          | _ -> ());
+         if current () then Runtime.send Action.Page_load_failed;
          Js.Promise.resolve ())
 
 let load_block_zoom uuid =
@@ -739,14 +847,20 @@ let resolve () =
       Editor_actions.exit_edit ~select:false;
       (* cljs unmounts its modal stack on route change *)
       if Dialogs_state.ready () then Dialogs_state.close_all ();
-      (* start the load's worker fetches before the commit — the
+      (* Page fetches start before the commit — the
          Navigate_to flush tears the old page down synchronously, and
          the route-info/tree invokes ride the worker during that span
          instead of queuing behind it. The load's continuations only
          run after the send, so their staleness checks still see the
-         committed route *)
-      load_route route;
-      Runtime.send (Action.Navigate_to route);
+         committed route. Journal ownership starts after Navigate_to,
+         against the committed context rather than the route we left. *)
+      (match route with
+       | Model.Journals | Model.Home ->
+           Runtime.send (Action.Navigate_to route);
+           load_route route
+       | _ ->
+           load_route route;
+           Runtime.send (Action.Navigate_to route));
       (* cljs events.cljs router/route-changed → plugin route hook *)
       Plugin_host.fire_route_changed route;
       (* the new route hasn't loaded yet — a lookup miss must be allowed
@@ -790,8 +904,14 @@ let init () =
      remove a mention) — refetch just that page's refs and republish *)
   Runtime.hooks.refresh_journal_side <-
     (fun p ->
+      match Runtime.capture_reload_origin () with
+      | None -> ()
+      | Some origin ->
+      let request = { origin; generation = origin.Runtime.reload_generation } in
+      if journal_current request then
       ignore
-        ((let* refs = fetch_refs_blocks p in
+        ((let* refs = journal_await request
+            (fetch_refs_blocks ~source_repo:origin.Runtime.reload_repo p) in
           Js.Promise.resolve
             (match Runtime.route () with
              | Model.Journals | Model.Home ->
@@ -805,8 +925,8 @@ let init () =
                          (Runtime.model ()).Model.journals))
              | _ -> ()))
          |> Js.Promise.catch (fun e ->
-                Ui_services.log_error
-                  ("journal refs refresh failed", e);
+                if journal_current request then
+                  Ui_services.log_error ("journal refs refresh failed", e);
                 Js.Promise.resolve ())));
   (* cljs all-journals' Virtuoso endReached — scroll doesn't bubble, so a
      capture listener on the document sees the app scroller's events;

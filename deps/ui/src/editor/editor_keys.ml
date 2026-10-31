@@ -20,6 +20,13 @@ let ( let* ) p f = Js.Promise.then_ f p
 
 let mods ev = ev.Ui_services.ctrl || ev.Ui_services.meta
 
+let input_composing ev =
+  ev.Ui_services.composing
+  || (match S.editing () with
+      | Some e -> Edit_model.composing e.S.model
+      | None -> false)
+  || Code_mirror.composition_active ev
+
 let uuid_of_prefixed prefix id =
   let n = String.length prefix in
   if String.length id > n && String.sub id 0 n = prefix then
@@ -177,15 +184,7 @@ let insert_autopair (m : Edit_model.t) text =
 (* paste clipboard text into the editing block at the caret as a single
    block (cljs editor/paste-text-in-one-block-at-point) *)
 let paste_text_at_caret uuid =
-  ignore
-    (Ui_task.bind (Ui_services.clipboard_read_text ()) (fun text ->
-     (match A.edit_model uuid with
-      | Some m ->
-          let lo, hi = A.sel_span_of m in
-          A.splice_range uuid lo hi text;
-          Outliner_ops.schedule_save uuid (A.live_buffer uuid)
-      | None -> ());
-     Ui_task.resolve ()))
+  ignore (A.paste_clipboard_text uuid)
 
 
 (* -- editor-mode keys -- *)
@@ -650,8 +649,9 @@ let palette_open () =
   | None -> false
 
 let on_global_key ev =
+  if input_composing ev then chord_seq := []
   (* the open cmdk palette owns every key *)
-  if (not (palette_open ())) && not (ev.Ui_services.composing) then
+  else if not (palette_open ()) then
     match stroke_of ev with
     | None -> ()
     | Some stroke ->
@@ -1339,7 +1339,12 @@ let on_keydown ev =
         | "m" -> ev.Ui_services.shift
         | _ -> false)
   in
-  if Ui_services.env_publishing () || palette_open () || palette_shortcut then ()
+  if input_composing ev || Ui_services.env_publishing () || palette_open ()
+     || palette_shortcut
+     || (match ev.Ui_services.target with
+         | Some target -> Popups_state.inside target
+         | None -> false)
+  then ()
   else begin
   (if Lazy.force perf_keys then
      Printf.eprintf "PERF kdown key=%s editing=%s ac=%b\n%!" (ev_key ev)

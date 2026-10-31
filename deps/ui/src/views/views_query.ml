@@ -132,7 +132,8 @@ let spec_of cfg block_uuid = function
 let set_query_error inst message =
   V.update inst (fun s ->
       { s with V.query_error = Some message; query_rows = [];
-        query_scalar_rows = []; query_view = W.Nil })
+        query_scalar_rows = []; query_view = W.Nil;
+        data = Wr.VEmpty; items_count = 0; query_idents = [] })
 
 let decode_result inst (v : W.t) =
   match W.get v "error" with
@@ -159,6 +160,9 @@ let decode_result inst (v : W.t) =
             ; query_rows = []
             ; query_scalar_rows = items
             ; query_view = Option.value (W.get v "view") ~default:W.Nil
+            ; data = Wr.VEmpty
+            ; items_count = 0
+            ; query_idents = []
             }))
 
 (* uuids inside the :view hiccup hydrate to titles via inst blocks *)
@@ -176,6 +180,12 @@ let run inst (f : unit -> unit) =
   | V.KQuery { block_uuid } -> (
       let src = (V.get inst).V.qsrc in
       let gen = V.new_fetch inst in
+      let fail () =
+        if V.fetch_fresh inst gen then begin
+          set_query_error inst "";
+          f ()
+        end
+      in
       match parse_src_result src with
       | Error message ->
           set_query_error inst message;
@@ -187,6 +197,9 @@ let run inst (f : unit -> unit) =
               ; query_rows = []
               ; query_scalar_rows = []
               ; query_view = W.Nil
+              ; data = Wr.VEmpty
+              ; items_count = 0
+              ; query_idents = []
               });
           f ()
       | Ok src_kind ->
@@ -199,16 +212,18 @@ let run inst (f : unit -> unit) =
             | Ok spec ->
                 let key = Db.key_query spec in
                 Db.snapshots
+                  ~on_error:fail
                   ~f:(fun snap ->
                     if V.fetch_fresh inst gen then begin
-                      (match Wr.snapshot_slot_value snap key with
+                      (match Db.snapshot_value snap key with
                        | Some v -> decode_result inst v
                        | None -> set_query_error inst (I.t "query/error"));
                       (match (V.get inst).V.query_view with
                        | W.Nil -> f ()
                        | view ->
                            let uuids = collect_uuids view [] in
-                           Db.get_blocks uuids ~metadata:true (fun ents ->
+                           Db.get_blocks uuids ~metadata:true ~on_error:fail (fun ents ->
+                             if V.fetch_fresh inst gen then begin
                                V.update inst (fun s ->
                                    let blocks = Hashtbl.copy s.V.blocks in
                                    List.iter
@@ -219,7 +234,8 @@ let run inst (f : unit -> unit) =
                                        | None -> ())
                                      ents;
                                    { s with V.blocks });
-                               f ()))
+                               f ()
+                             end))
                     end)
                   [ Db.resource_query spec ]
           in
@@ -228,6 +244,7 @@ let run inst (f : unit -> unit) =
             |> Js.Promise.then_ (fun cfg ->
                    run_with_cfg cfg;
                    Js.Promise.resolve ())
+            |> Db.catch_quiet ~on_error:fail
             |> ignore
           else run_with_cfg (W.Map []))
   | _ -> f ()
@@ -260,6 +277,11 @@ let refresh_block inst f =
   | V.KQuery { block_uuid } ->
       let gen = V.new_fetch inst in
       Db.get_blocks [ block_uuid ] ~metadata:true ~children:true
+        ~on_error:(fun () ->
+          if V.fetch_fresh inst gen then begin
+            set_query_error inst "";
+            V.update inst (fun s -> { s with V.loading = false })
+          end)
         ~include_property_block:true
         (fun ents ->
           if not (V.fetch_fresh inst gen) then ()
@@ -334,16 +356,19 @@ let refresh_block inst f =
    tagged parent. The first refresh_block may still be in flight when
    the user commits, so the uuid is resolved through the parent's
    logseq.property/query ref on demand instead of guessed. *)
-let save_src inst src =
+let save_src ?(after = fun () -> ()) inst src =
+  let current = V.current_context () in
+  let after () = if current () then after () in
   match inst.V.kind with
   | V.KQuery { block_uuid } ->
       let s = V.get inst in
       if s.V.query_block_uuid <> "" then
-        Db.save_block_title s.V.query_block_uuid src (fun () -> ())
+        Db.save_block_title s.V.query_block_uuid src after
       else
         Db.get_blocks [ block_uuid ] ~metadata:true ~children:true
           ~include_property_block:true
           (fun ents ->
+            if current () then
             match ents with
             | b :: _ -> (
                 match query_value_block b with
@@ -352,7 +377,7 @@ let save_src inst src =
                     | Some u ->
                         V.update inst (fun s ->
                             { s with V.query_block_uuid = u });
-                        Db.save_block_title u src (fun () -> ())
+                        Db.save_block_title u src after
                     | None -> ())
                 | None -> ())
             | [] -> ())

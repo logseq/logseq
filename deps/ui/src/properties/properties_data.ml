@@ -82,7 +82,7 @@ let row_type row =
 
 let row_many row =
   match getk (row_prop row) "db/cardinality" with
-  | Some "db.cardinality/many" -> true
+  | Some "db.cardinality/many" | Some "many" -> true
   | _ -> false
 
 let row_closed_values row =
@@ -136,11 +136,11 @@ let row_with_effective_value row =
       if eff = row_value row then row
       else
         W.Map
-          (List.map
+          ((W.String "value", eff) :: List.filter_map
              (fun (k, v) ->
                match k with
-               | W.Keyword "value" | W.String "value" -> (k, eff)
-               | _ -> (k, v))
+               | W.Keyword "value" | W.String "value" -> None
+               | _ -> Some (k, v))
              kvs)
   | _ -> row
 
@@ -165,7 +165,7 @@ let ref_is_class w =
   | Some tags ->
       List.exists
         (fun t ->
-          match gets t "db/ident" with
+          match getk (untag t) "db/ident" with
           | Some "logseq.class/Tag" -> true
           | _ -> false)
         (W.elems tags)
@@ -176,6 +176,11 @@ let value_elems w =
   | W.Set l | W.List l | W.Array l -> l
   | W.Nil -> []
   | other -> [ other ]
+
+let number_of_text text =
+  match Float.of_string_opt (String.trim text) with
+  | Some n when Float.is_finite n -> Some n
+  | _ -> None
 
 let rec value_display w =
   match w with

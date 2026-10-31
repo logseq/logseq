@@ -72,6 +72,10 @@ func run() (result error) {
 		host.backend = luimygo.New(luimygo.Config{
 			Extensions: host.services.extensions(),
 			Dispatch:   host.dispatch,
+			InputValue: host.services.BindInputValue,
+			InputControl: func(n luimygo.Node, e ui.Element, text string) {
+				host.services.BindInputControl(n, e, text)
+			},
 		})
 		if err := installApplicationIcons(host.backend, os.Getenv("LOGSEQ_NATIVE_ASSET_DIR")); err != nil {
 			host.fail(err)
@@ -104,10 +108,14 @@ func run() (result error) {
 				host.fail(err)
 				return true
 			}
+			if err := host.drain(); err != nil {
+				host.fail(err)
+				return true
+			}
 			return prevented
-		})
+		}, host.services.codeMirrorComposition)
 		host.document.Pointer = host.services.EditorPointer
-		host.document.Observe = host.services.ViewportInput
+		host.document.Observe = host.services.ObserveDocumentInput
 		host.services.mutations.Activate = func(n luimygo.Node) error {
 			if n.Identifier == "logseq-input" || n.Identifier == "logseq-textarea" {
 				return fmt.Errorf("native input activation requires the control's default action")
@@ -147,6 +155,7 @@ func run() (result error) {
 		host.window.OnBlur(func() {
 			host.services.CancelViewportPress()
 			host.services.CancelEditorPointer()
+			host.document.Blur()
 		})
 		if err := host.services.StartDesktopServices(host.window, func(replies []platformReply, err error) {
 			for _, reply := range replies {
@@ -331,6 +340,7 @@ func (h *windowHost) applyPatches(payload string, snapshot bool) error {
 			return err
 		}
 		h.services.AppliedBatch(applied, snapshot)
+		h.services.syncCodeMirrorSources(snapshot)
 		h.services.mutations.Sync()
 		h.services.resources.Sync()
 	}

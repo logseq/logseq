@@ -47,13 +47,13 @@ type resourceEventState struct {
 // One renderer belongs to one runtime/window. Its methods run on the UI thread;
 // workers publish only decoded immutable images behind resourceEntry.mu.
 type resourceRenderer struct {
-	backend *luimygo.Backend
-	owners  map[int64]resourceOwner
-	cache   map[resourceSource]*resourceEntry
-	workers chan struct{}
-	closed  bool
-	epoch   uint64
-	view    *ui.Context
+	backend      *luimygo.Backend
+	owners       map[int64]resourceOwner
+	cache        map[resourceSource]*resourceEntry
+	workers      chan struct{}
+	closed       bool
+	epoch        uint64
+	viewServices ui.Services
 
 	// ResolveAsset must use the current OCaml-owned graph mapping, not cwd.
 	// ResolveSource may resolve graph-relative src values through that same owner.
@@ -82,19 +82,17 @@ func (r *resourceRenderer) source(n luimygo.Node) (resourceSource, error) {
 	}
 	attrs := extensionAttrs(n)
 	source := attrs["src"]
-	if source == "" {
-		if filename := attrs["data-asset-file"]; filename != "" {
-			if filename != filepath.Base(filename) || strings.ContainsAny(filename, `/\`) || filename == "." || filename == ".." {
-				return resourceSource{}, errors.New("invalid graph asset filename")
-			}
-			if r.ResolveAsset == nil {
-				return resourceSource{}, errors.New("graph asset requires an OCaml-owned resolver")
-			}
-			var err error
-			source, err = r.ResolveAsset(filename)
-			if err != nil {
-				return resourceSource{}, errors.New("graph asset resolution failed")
-			}
+	if filename := attrs["data-asset-file"]; filename != "" {
+		if filename != filepath.Base(filename) || strings.ContainsAny(filename, `/\`) || filename == "." || filename == ".." {
+			return resourceSource{}, errors.New("invalid graph asset filename")
+		}
+		if r.ResolveAsset == nil {
+			return resourceSource{}, errors.New("graph asset requires an OCaml-owned resolver")
+		}
+		var err error
+		source, err = r.ResolveAsset(filename)
+		if err != nil {
+			return resourceSource{}, errors.New("graph asset resolution failed")
 		}
 	}
 	resolved, err := resourceSourceForURL(source)
@@ -156,9 +154,10 @@ func (r *resourceRenderer) BeginView(c *ui.Context) {
 	r.Sync()
 	r.epoch++
 	epoch := r.epoch
-	r.view = c
+	services := c.Services()
+	r.viewServices = services
 	c.AfterFrame(func() {
-		if r.epoch != epoch || r.view != c {
+		if r.epoch != epoch || r.viewServices != services {
 			return
 		}
 		for id, owner := range r.owners {
@@ -166,13 +165,13 @@ func (r *resourceRenderer) BeginView(c *ui.Context) {
 				r.release(id)
 			}
 		}
-		r.view = nil
+		r.viewServices = ui.Services{}
 	})
 }
 
 func (r *resourceRenderer) Close() {
 	r.closed = true
-	r.view = nil
+	r.viewServices = ui.Services{}
 	for id := range r.owners {
 		r.release(id)
 	}
@@ -245,7 +244,8 @@ func (r *resourceRenderer) Render(c *ui.Context, n luimygo.Node, tag string, _ f
 	if tag != "img" && tag != "svg" {
 		return false
 	}
-	committed := c == r.view
+	// Measure has its own runtime; only the real view may acquire or bind.
+	committed := r.viewServices != (ui.Services{}) && c.Services() == r.viewServices
 	var source resourceSource
 	var result resourceResult
 	if committed {

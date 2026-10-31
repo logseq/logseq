@@ -153,14 +153,20 @@ let text_form_view ~title_v ~desc_v ~title_placeholder ~desc_placeholder
   let sched = context.Lui_ui.ui_scheduler in
   let title_st = Signal.state sched title_v in
   let desc_st = Signal.state sched desc_v in
+  let changed title desc =
+    String.trim title <> String.trim title_v
+    || String.trim desc <> String.trim desc_v
+  in
   (column ~gap:8 ~padding:8
-    [ Ui_components.text_field ~placeholder:title_placeholder ~text:title_v
+    [ Ui_components.text_field ~placeholder:title_placeholder
+        ~text:(reactive Fun.id (Signal.value title_st))
         ~on_input:(fun ev ->
           match ev with
           | Lui_protocol.TextChanged (_, t) -> Signal.set title_st t
           | _ -> ())
         []
-    ; Ui_components.textarea ~placeholder:desc_placeholder ~text:desc_v
+    ; Ui_components.textarea ~placeholder:desc_placeholder
+        ~text:(reactive Fun.id (Signal.value desc_st))
         ~on_input:(fun ev ->
           match ev with
           | Lui_protocol.TextChanged (_, t) -> Signal.set desc_st t
@@ -168,9 +174,12 @@ let text_form_view ~title_v ~desc_v ~title_placeholder ~desc_placeholder
         []
     ; row ~main:`end_
         [ Ui_components.button ~variant:`primary ~text:(I18n.t "ui/save")
+            ~disabled:(reactive (fun title desc -> not (changed title desc))
+              (Signal.value title_st) (Signal.value desc_st))
             ~on_press:(fun _ ->
-              on_save (Runtime.signal_get title_st)
-                (Runtime.signal_get desc_st))
+              let title = Runtime.signal_get title_st
+              and desc = Runtime.signal_get desc_st in
+              if changed title desc then on_save title desc)
             []
         ]
     ])
@@ -188,19 +197,20 @@ let name_pane_view m ~close : t =
     (fun new_name new_desc ->
       let new_name = String.trim new_name
       and new_desc = String.trim new_desc in
-      (if new_name <> "" && new_name <> prop_title m then
-         ignore
-           (D.upsert_property ~ident:(prop_ident m) ~schema:(W.Map [])
-              ~property_name:new_name ()));
-      (match prop_uuid m with
-       | Some pu when new_desc <> "" ->
+      if new_name <> "" then (
+        (if new_name <> String.trim (prop_title m) then
            ignore
-             (D.set_block_property ~block_uuid:pu
-                ~ident:"logseq.property/description"
-                ~value:(W.String new_desc))
-       | _ -> ());
-      S.refresh_all ();
-      close ())
+             (D.upsert_property ~ident:(prop_ident m) ~schema:(W.Map [])
+                ~property_name:new_name ()));
+        (match prop_uuid m with
+         | Some pu when new_desc <> "" && new_desc <> String.trim desc_v ->
+             ignore
+               (D.set_block_property ~block_uuid:pu
+                  ~ident:"logseq.property/description"
+                  ~value:(W.String new_desc))
+         | _ -> ());
+        S.refresh_all ();
+        close ()))
 
 (* choices pane: scrollable list + add + per-choice edit *)
 let choices_pane_view m ~set_pane ~close : t =
@@ -330,6 +340,7 @@ let edit_choice_view m choice ~set_pane ~close : t =
     ~title_placeholder:(I18n.t "property/title-placeholder")
     ~desc_placeholder:(I18n.t "property/description-placeholder")
     (fun v _d ->
+      if String.trim v <> String.trim title_v then
       if is_add then (
         (* creating a choice while the owner is a tag scopes it to
            that class (cljs ->closed-choice-scope-opts) *)
@@ -367,7 +378,7 @@ let default_value_pane_view m ~close : t =
             ~on_press:(fun _ -> Runtime.signal_set editing true) [])
      ; if_ ~test:(Signal.value editing)
          (Ui_components.text_field ~autofocus:true
-            ~text:""
+            ~text:(reactive Fun.id (Signal.value buffer))
             ~on_input:(fun ev ->
               match ev with
               | Lui_protocol.TextChanged (_, t) -> Signal.set buffer t

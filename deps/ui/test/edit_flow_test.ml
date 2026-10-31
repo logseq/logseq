@@ -423,7 +423,7 @@ let test_pending_save_order (h : host) =
   calls := [];
   Ops.schedule_save "b1" "hellozq";
   (match !Ops.pending_save with
-   | Some ("b1", "hellozq") -> check "save queued pending" true
+   | Some { Ops.uuid = "b1"; title = "hellozq"; _ } -> check "save queued pending" true
    | _ -> check "save queued pending" false);
   let* () = Ops.undo () in
   (match !calls with
@@ -781,6 +781,70 @@ let test_history_after_navigation (h : host) =
   reset_editor ();
   Js.Promise.resolve ()
 
+let test_queued_history_origin (h : host) =
+  let rec run = function
+    | [] -> Js.Promise.resolve ()
+    | (label, operation, changed) :: rest ->
+        let* () = settle h 40 in
+        stage_page h [ Test_check.block "b1" "latest" ];
+        set_editing ~uuid:"b1" ~buffer:"latest" ~caret:6 ~base:"latest";
+        let page = Option.get !Runtime.current_page in
+        let source = ref [ "previous"; "earlier" ] in
+        let source_title = ref "latest" and destination_title = ref "destination" in
+        let first = ref true and complete = ref (fun () -> ()) in
+        let signal = ref (fun () -> ()) in
+        let started = Js.Promise.make (fun ~resolve ~reject:_ ->
+            signal := (fun () -> resolve true [@u])) in
+        let page_for repo =
+          { page with Model.page_blocks =
+              [ Test_check.block "b1"
+                  (if repo = h.repo then !source_title else !destination_title) ] }
+        in
+        Runtime.worker := Some
+          { Worker_client.invoke_fn = (fun name args ->
+              match name, args with
+              | ("thread-api/undo-redo-undo" | "thread-api/undo-redo-redo"), W.String repo :: _ ->
+                  if repo = h.repo then begin
+                    match !source with
+                    | title :: remaining -> source_title := title; source := remaining
+                    | [] -> ()
+                  end else destination_title := "destination history moved";
+                  if !first then begin
+                    first := false;
+                    Js.Promise.make (fun ~resolve ~reject:_ ->
+                        complete := (fun () -> resolve W.Nil [@u]);
+                        !signal ())
+                  end else Js.Promise.resolve W.Nil
+              | "thread-api/get-page-blocks-tree", W.String repo :: _ ->
+                  Js.Promise.resolve (page_w (page_for repo))
+              | _ -> Js.Promise.resolve (worker_handler h name args))
+          ; on_message = (fun _ _ -> ())
+          ; dead = Js.Promise.make (fun ~resolve:_ ~reject:_ -> ()) };
+        operation ();
+        let* _ = started in
+        operation ();
+        if changed then begin
+          let destination = page_for "other-graph" in
+          h.restore { (h.snapshot ()) with Model.repo = Some "other-graph";
+            route = Model.Page "destination"; route_page = Some destination };
+          set_editing ~uuid:"b1" ~buffer:"destination" ~caret:11 ~base:"destination"
+        end;
+        !complete ();
+        let* () = settle h 40 in
+        let expected = if changed then "destination" else "earlier" in
+        check label
+          (current_titles () = [ expected ]
+           && (editing_now ()).S.buffer = expected
+           && (editing_now ()).S.base = expected
+           && !destination_title = "destination");
+        reset_editor ();
+        run rest
+  in
+  run [ "queued undo follows its own refresh", A.undo, false;
+        "queued undo never acquires the destination graph", A.undo, true;
+        "queued redo follows its own refresh", A.redo, false;
+        "queued redo never acquires the destination graph", A.redo, true ]
+
 let test_delete_selection_history (h : host) =
   let* () = settle h 40 in
   stage_page h [ Test_check.block "b0" "previous";
@@ -871,6 +935,7 @@ let async_stage (h : host) : unit Js.Promise.t =
   let* () = test_exit_waits_for_save h in
   let* () = test_exit_after_navigation h in
   let* () = test_history_after_navigation h in
+  let* () = test_queued_history_origin h in
   let* () = test_delete_selection_history h in
   let* () = test_property_command_refresh h in
   h.restore saved;

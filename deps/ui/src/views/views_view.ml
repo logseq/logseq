@@ -156,7 +156,7 @@ let body_eq (a : V.vstate) (b : V.vstate) =
 
 (* Result refreshes must not retire the active filter editor's draft or focus. *)
 let body_el ?(equal=body_eq) inst : t =
-  column ~gap:0 ~min_width:0 ~margin_top:4 ~style_class:"ls-view-body" ~grow:1.
+  column ~gap:0 ~min_width:0 ~min_height:0 ~margin_top:4 ~style_class:"ls-view-body" ~grow:1.
     [ Views_head.filters_row ~margin_bottom:8 inst
     ; reactive ~equal (Views_table.result_el inst) (sig_of inst)
     ]
@@ -178,15 +178,10 @@ let view_el inst : t =
     | _ -> true
   in
   let inner =
-  box ~grow:1.
-    [ column ~gap:8 ~grow:1.
-        [ column ~gap:8 ~grow:1.
-            [ Views_table.foldable inst ~key:"view"
-                ~title:(Views_head.render_head inst)
-                ~body:(body_el ~equal inst)
-            ]
-        ]
-    ]
+    column ~gap:0 ~grow:1. ~min_width:0 ~min_height:0
+      [ Views_table.foldable inst ~key:"view"
+          ~title:(Views_head.render_head inst)
+          ~body:(body_el ~equal inst) ]
   in
   (* An empty linked-refs result (page with no mentions) unmounts the
      section once the snapshot has settled. While it is loading, or
@@ -204,6 +199,9 @@ let view_el inst : t =
                  && s.V.data <> Wr.VEmpty
                  && s.V.items_count = 0
                  && Wr.row_count s.V.data = 0
+                 && s.V.view_error = None
+                 && s.V.filters = [] && s.V.input = ""
+                 && s.V.ref_includes = [] && s.V.ref_excludes = []
                in
                not settled_empty)
              (Signal.value inst.V.st))
@@ -230,7 +228,7 @@ let query_content inst (s : V.vstate) : t =
   | `Blank -> spacer ~key:"blank" []
   | `Custom view ->
     (* :view fn output replaces the default table (cljs custom-query) *)
-    column (hiccup_els inst view)
+    column ~min_width:0 ~gap:0 (hiccup_els inst view)
   | `Error error ->
     Views_table.error_el ~title:(I.t "query/error") ~content:error
   | `Scalar rows ->
@@ -248,22 +246,17 @@ let query_content inst (s : V.vstate) : t =
     (* block results → the query-result view. cljs renders the foldable
        live-query shell ("Live query (n)" head + view-actions + table)
        even when the result is empty. Keep this shell during a refresh. *)
-    box ~style_class:"query-result"
-      [ column ~gap:8
-          [ column ~gap:8
-              [ Views_table.foldable inst ~key:"qr"
-                  ~title:(Views_head.render_head inst)
-                  ~body:(body_el inst)
-              ]
-          ]
-      ]
+    column ~style_class:"query-result" ~gap:0 ~grow:1. ~min_width:0 ~min_height:0
+      [ Views_table.foldable inst ~key:"qr"
+          ~title:(Views_head.render_head inst)
+          ~body:(body_el inst) ]
   | `Loading ->
     text ~value:(I.t "ui/loading") ~padding:8 ~foreground:"muted-foreground" []
 
 let query_view_el inst : t =
   Logseq_el.fragment
-    [ box 
-        [ column
+    [ column ~gap:0 ~min_width:0 ~min_height:0 ~grow:1.
+        [ column ~gap:0 ~min_width:0 ~min_height:0 ~grow:1.
             [ reactive ~equal:body_eq
                 (fun s ->
                   (* DSL queries, including blank ones, get the builder panel. *)
@@ -273,7 +266,8 @@ let query_view_el inst : t =
                       if s.V.is_advanced then spacer ~key:"builder-off" []
                       else Views_builder.builder_el inst ~tree:(Views_builder.tree_for inst))
                 (sig_of inst)
-            ; reactive ~equal:(fun a b -> query_content_key a=query_content_key b)
+            ; reactive ~equal:(fun a b -> query_content_key a=query_content_key b
+                && (a.V.query_view = W.Nil || a.V.blocks == b.V.blocks))
                 (query_content inst) (sig_of inst)
             ]
         ]
@@ -339,6 +333,10 @@ let copy_blocks src =
   Hashtbl.iter (Hashtbl.add dst) src;
   dst
 
+let fail_view inst gen () =
+  if V.fetch_fresh inst gen then
+    V.update inst (fun s -> { s with V.loading = false; view_error = Some "" })
+
 (* [~merge] copies the previous table into a fresh one so [blocks ==]
    changes and a refetch does not wipe rows already on screen.
    [~set_limit] is published in that same update: the body must not
@@ -346,6 +344,7 @@ let copy_blocks src =
    [~fresh] drops a response whose snapshot was superseded. [~finally]
    runs on success and on worker failure so the batch ticket clears. *)
 let load_blocks ?(merge = false) ?set_limit ?(fresh = fun () -> true)
+    ?(on_error = fun () -> ())
     ?(finally = fun () -> ()) inst uuids f =
   let rec references acc = function
     | W.Uuid uuid -> uuid::acc
@@ -362,10 +361,11 @@ let load_blocks ?(merge = false) ?set_limit ?(fresh = fun () -> true)
               match set_limit with
               | None -> s
               | Some n -> { s with V.fetch_limit = n });
-          f ()
+          if fresh () then f ()
         end)
   in
-  if uuids = [] then
+  if not (fresh ()) then finally ()
+  else if uuids = [] then
     apply
       (if merge then copy_blocks (V.get inst).V.blocks else Hashtbl.create 64)
   else
@@ -373,7 +373,8 @@ let load_blocks ?(merge = false) ?set_limit ?(fresh = fun () -> true)
       if merge then copy_blocks (V.get inst).V.blocks
       else Hashtbl.create (max 16 (List.length uuids))
     in
-    Db.get_blocks uuids ~metadata:true ~on_error:finally (fun bs ->
+    Db.get_blocks uuids ~metadata:true
+      ~on_error:(fun () -> finally (); on_error ()) (fun bs ->
         List.iter
           (fun b ->
             match W.map_get_uuid b "block/uuid" with
@@ -383,9 +384,11 @@ let load_blocks ?(merge = false) ?set_limit ?(fresh = fun () -> true)
         apply blocks)
 
 let load_props inst f =
+  let gen = !(inst.V.data_gen) in
   if (V.get inst).V.props_loaded then f ()
   else
-    Db.get_all_properties (fun props ->
+    Db.get_all_properties ~on_error:(fail_view inst gen) (fun props ->
+      if V.fetch_fresh inst gen then begin
         let all_props = Hashtbl.create 17 in
         List.iter
           (fun p ->
@@ -397,18 +400,22 @@ let load_props inst f =
             | None -> ())
           props;
         V.update inst (fun s -> { s with V.props_loaded = true; all_props });
-        f ())
+        if V.fetch_fresh inst gen then f () end)
 
 let build_columns inst =
+  let gen = !(inst.V.data_gen) in
   let apply props =
-    let columns = Views_table.build_columns inst props in
-    V.update inst (fun s -> { s with V.columns })
+    if V.fetch_fresh inst gen then begin
+      let columns = Views_table.build_columns inst props in
+      V.update inst (fun s -> { s with V.columns })
+    end
   in
   match inst.V.kind with
   | V.KTagPage owner_uuid ->
       (* cljs objects.cljs build-class-object-columns: the Asset class
          gets an extra "File" column — detect it by the class ident *)
-      Db.get_blocks [ owner_uuid ] (fun ents ->
+      Db.get_blocks [ owner_uuid ] ~on_error:(fail_view inst gen) (fun ents ->
+        if V.fetch_fresh inst gen then begin
           let asset_class =
             match ents with
             | [ e ] ->
@@ -420,12 +427,13 @@ let build_columns inst =
           V.update inst (fun s -> { s with V.asset_class });
           (* thread-api entity refs take lookup-refs, not bare uuids *)
           Db.get_class_properties
+            ~on_error:(fail_view inst gen)
             (W.List [ W.Keyword "block/uuid"; W.Uuid owner_uuid ])
-            apply)
+            apply end)
   | V.KPropertyPage owner_uuid ->
       (* cljs build-property-object-columns: the property itself is the
          only property column *)
-      Db.get_all_properties (fun props ->
+      Db.get_all_properties ~on_error:(fail_view inst gen) (fun props ->
           apply
             (List.filter
                (fun p -> W.map_get_uuid p "block/uuid" = Some owner_uuid)
@@ -453,22 +461,18 @@ let load_view_data ?(fetch_limit = 0) inst =
              refresh) already superseded this request *)
           ()
       | None ->
-          V.update inst (fun s ->
-              { s with V.data = Wr.VEmpty; view_error = None; loading = false })
+          fail_view inst gen ()
       | Some v when W.get v "error" <> None ->
           let error = Option.get (W.get v "error") in
           let message = Option.get (W.map_get_string error "message") in
           V.update inst (fun s ->
               { s with V.data = Wr.VEmpty; view_error = Some message; loading = false })
       | Some v ->
-          let d =
-            try Wr.decode_view_data v
-            with e ->
-              Ui_services.log_error ("view-data decode failed", e);
-              Wr.VEmpty
-          in
+          let d = Wr.decode_view_data v in
           let continue () =
-            load_props inst (fun () -> build_columns inst)
+            if V.fetch_fresh inst gen then
+              load_props inst (fun () ->
+                if V.fetch_fresh inst gen then build_columns inst)
           in
           if ref_kind inst then begin
             (* The worker may return a prefix (linked refs send
@@ -524,6 +528,7 @@ let load_view_data ?(fetch_limit = 0) inst =
                  and the count was winning and delaying the rows. *)
               load_blocks ~merge:growing ~set_limit:n
                 ~fresh:(fun () -> V.fetch_fresh inst gen)
+                ~on_error:(fail_view inst gen)
                 ~finally:(fun () -> ref_end inst ticket)
                 inst uuids (fun () ->
                   continue ();
@@ -559,16 +564,21 @@ let load_view_data ?(fetch_limit = 0) inst =
                  | W.Nil -> []
                  | v -> Views_query.collect_uuids v [])
             in
-            load_blocks inst uuids (fun () -> continue ())
+            load_blocks ~fresh:(fun () -> V.fetch_fresh inst gen)
+              ~on_error:(fail_view inst gen)
+              inst uuids continue
           end
   in
   if Ui_services.env_publishing () && view_uuid = "" then
+    let repo = Db.repo () in
     let owner_ref = match inst.V.owner with
       | W.String name -> W.Array [ W.kw "block/name"; W.String name ]
       | W.Uuid uuid -> W.Array [ W.kw "block/uuid"; W.Uuid uuid ]
       | _ -> invalid_arg "View owner must be a page name or UUID" in
     ignore ((let* owner = Runtime.invoke3 "thread-api/pull"
-        (W.String (Db.repo ())) (W.String "[:db/id]") owner_ref in
+        (W.String repo) (W.String "[:db/id]") owner_ref in
+      Outliner_ops.check_loader_result owner;
+      if not (V.fetch_fresh inst gen) then Js.Promise.resolve () else
       let fields = match ctx with W.Map kvs -> kvs | _ -> assert false in
       let fields = List.map (fun (k, v) ->
         ((match k with
@@ -579,10 +589,12 @@ let load_view_data ?(fetch_limit = 0) inst =
       let fields = match W.get owner "db/id" with
         | Some id -> (W.kw "view-for-id", id) :: fields | None -> fields in
       let* data = Runtime.invoke3 "thread-api/get-view-data"
-          (W.String (Db.repo ())) W.Nil (W.Map fields) in
+          (W.String repo) W.Nil (W.Map fields) in
+      Outliner_ops.check_loader_result data;
       apply (Some data);
-      Js.Promise.resolve ()) |> Db.catch_quiet)
-  else Db.snapshots ~f:(fun snap -> apply (Wr.snapshot_slot_value snap key))
+      Js.Promise.resolve ()) |> Db.catch_quiet ~on_error:(fail_view inst gen))
+  else Db.snapshots ~on_error:(fail_view inst gen)
+    ~f:(fun snap -> apply (Db.snapshot_value snap key))
     [ Db.resource_view_data view_uuid ctx ]
 
 let refresh inst =
@@ -607,17 +619,25 @@ let refresh inst =
 
 let select_view inst v =
   V.update inst (fun s ->
-      { (V.apply_view_entity s v) with V.selected = V.Sset.empty });
+      V.table_clear_selection (V.apply_view_entity s v));
   refresh inst
 
 let load_views inst ~on_done =
+  let gen = V.new_fetch inst in
+  let fail = fail_view inst gen in
   let key = Db.key_views inst.V.owner inst.V.feature in
   Db.snapshots
+    ~on_error:fail
     ~f:(fun snap ->
-      match Wr.snapshot_slot_value snap key with
+      if V.fetch_fresh inst gen then
+      match Db.snapshot_value snap key with
       | Some (W.Array uuids) | Some (W.List uuids) -> (
-          let us = List.filter_map W.as_uuid uuids in
-          Db.get_blocks us ~metadata:true (fun ents ->
+          let us = List.map (fun uuid ->
+              match W.as_uuid uuid with
+              | Some uuid -> uuid
+              | None -> invalid_arg "Invalid view catalog UUID") uuids in
+          Db.get_blocks us ~metadata:true ~on_error:fail (fun ents ->
+            if V.fetch_fresh inst gen then begin
               (* get_blocks order is storage order — tabs follow the
                  resource's uuid order (cljs view-uuids), which also picks
                  the default view (first tab) *)
@@ -626,27 +646,30 @@ let load_views inst ~on_done =
                 (fun e ->
                   match Wr.decode_view_ent e with
                   | Some v -> Hashtbl.replace by_uuid v.Wr.vu v
-                  | None -> ())
+                  | None -> invalid_arg "Invalid view catalog entity")
                 ents;
+              if not (List.for_all (Hashtbl.mem by_uuid) us) then
+                invalid_arg "Incomplete view catalog entities";
               V.update inst (fun s ->
                   { s with
                     V.views = List.filter_map (Hashtbl.find_opt by_uuid) us
                   });
-              on_done ()))
-      | _ -> on_done ())
+              if V.fetch_fresh inst gen then on_done () end))
+      | _ -> fail ())
     [ Db.resource_views inst.V.owner inst.V.feature ]
 
 (* resolve the uuid of the owner page/entity behind inst.owner — f
    gets None when the page is absent (cljs all_pages gates the view on
    [:page-identity views-page-name] and renders nothing when missing) *)
-let owner_uuid inst f =
+let owner_uuid inst ~on_error f =
   match inst.V.owner with
   | W.Uuid u -> f (Some u)
   | W.String name -> (
       let key = Db.key_page_identity name in
       Db.snapshots
+        ~on_error
         ~f:(fun snap ->
-          match Wr.snapshot_slot_value snap key with
+          match Db.snapshot_value snap key with
           | Some (W.Uuid u) -> f (Some u)
           | _ -> f None)
         [ Db.res key ])
@@ -655,21 +678,27 @@ let owner_uuid inst f =
 (* cljs create-view! parents view blocks under the shared $$$views page
    (common-config/views-page-name) and skips the insert when that page
    cannot be resolved *)
-let views_page_uuid f =
+let views_page_uuid ~on_error f =
   let key = Db.key_page_identity "$$$views" in
   Db.snapshots
+    ~on_error
     ~f:(fun snap ->
-      match Wr.snapshot_slot_value snap key with
+      match Db.snapshot_value snap key with
       | Some (W.Uuid u) -> f (Some u)
       | _ -> f None)
     [ Db.res key ]
 
 let create_view ~title ~uuid inst ~after =
-  owner_uuid inst (function
+  let gen = !(inst.V.data_gen) in
+  let current () = V.fetch_fresh inst gen in
+  let on_error = fail_view inst gen in
+  owner_uuid inst ~on_error (function
+    | _ when not (current ()) -> ()
     | Some ouuid ->
-        views_page_uuid (function
+        views_page_uuid ~on_error (function
+          | _ when not (current ()) -> ()
           | Some vpuuid ->
-              Db.insert_view_block ~title ~uuid ~page_uuid:vpuuid
+              Db.insert_view_block ~current ~on_error ~title ~uuid ~page_uuid:vpuuid
                 ~owner_uuid:ouuid ~feature_type:inst.V.feature
                 ~after:(fun () ->
                   load_views inst ~on_done:(fun () -> after ())) ()
@@ -680,18 +709,23 @@ let create_view ~title ~uuid inst ~after =
    when the owner or $$$views page cannot be resolved the view settles
    into its empty state instead of staying on Loading *)
 let ensure_default_view inst =
+  let gen = !(inst.V.data_gen) in
+  let current () = V.fetch_fresh inst gen in
+  let on_error = fail_view inst gen in
   match (V.get inst).V.views with
   | v :: _ -> select_view inst v
   | [] when Ui_services.env_publishing () -> refresh inst
   | [] ->
-      owner_uuid inst (function
+      owner_uuid inst ~on_error (function
+        | _ when not (current ()) -> ()
         | Some ouuid ->
             let uuid =
               Db.gen_view_uuid ~owner:ouuid ~feature_type:inst.V.feature
             in
-            views_page_uuid (function
+            views_page_uuid ~on_error (function
+              | _ when not (current ()) -> ()
               | Some vpuuid ->
-                  Db.insert_view_block ~title:(default_view_title inst)
+                  Db.insert_view_block ~current ~on_error ~title:(default_view_title inst)
                     ~uuid ~page_uuid:vpuuid
                     ~owner_uuid:ouuid ~feature_type:inst.V.feature
                     ~after:(fun () ->
@@ -713,13 +747,11 @@ let ensure_default_view inst =
    the returned box as MCustom inside the Rename MSub; the popup layer
    focuses the input when the sub-content opens. *)
 let rename_editor_box inst (v : Wr.view_ent) : Lui_elements.t =
-  (* the typed value lives in a ref the input's on_input keeps current;
-     submit (Enter) commits, Escape rides the enclosing popover's own
-     dismiss *)
-  let value = ref v.Wr.vtitle in
+ fun context parent ->
+  let value = Signal.state context.Lui_ui.ui_scheduler v.Wr.vtitle in
   let commit () =
     P.close_all ();
-    Db.save_block_title v.Wr.vu !value (fun () ->
+    Db.save_block_title v.Wr.vu (Signal.get_state value) (fun () ->
         load_views inst ~on_done:(fun () -> refresh inst))
   in
   column ~style_class:"block-title-wrap" ~padding:8 ~cross:`stretch
@@ -727,13 +759,13 @@ let rename_editor_box inst (v : Wr.view_ent) : Lui_elements.t =
         [ Ui_components.Prop.font_size "16px"
         ; Ui_components.Prop.focus_shadow "none" ]
         (Ui_components.input ~padding:6 ~height:32
-           ~text:v.Wr.vtitle ~autofocus:true
+           ~text:(reactive Fun.id (Signal.value value)) ~autofocus:true
            ~background:"transparent" ~border_width:0
            ~foreground:"var(--ls-secondary-text-color)"
            ~on_input:(function
-             | Lui_protocol.TextChanged (_, s) -> value := s
+             | Lui_protocol.TextChanged (_, s) -> Signal.set value s
              | _ -> ())
-           ~on_submit:(fun _ -> commit ()) []) ]
+           ~on_submit:(fun _ -> commit ()) []) ] context parent
 
 let export_edn inst =
   let s =
@@ -796,10 +828,96 @@ let load_more_rows inst =
         load_view_data ~fetch_limit:limit inst
     | _ -> ()
 
+(* Fetch the unwindowed resource for destructive actions without replacing
+   the visible prefix or hydrating the entire graph into the viewport. *)
+let ensure_full_action_rows inst on_done =
+  let context_revision = (Runtime.model ()).Model.context_revision in
+  let repo = Db.repo () in
+  let route = Runtime.route () in
+  let gen = !(inst.V.data_gen) in
+  let view_uuid = (V.get inst).V.view_uuid in
+  let full_ctx () =
+    match V.ctx_of inst with
+    | W.Map fields ->
+        W.Map
+          (List.filter
+             (fun (key, _) -> key <> W.kw "initial-row-count") fields)
+    | _ -> invalid_arg "View context must be a map"
+  in
+  let ctx = full_ctx () in
+  let fresh () =
+    (Runtime.model ()).Model.context_revision = context_revision
+    && Db.repo () = repo && Runtime.route () = route
+    && V.fetch_fresh inst gen
+    && (V.get inst).V.view_uuid = view_uuid
+    && full_ctx () = ctx
+  in
+  let settled = ref false in
+  let finish result =
+    if not !settled then begin
+      settled := true;
+      on_done (if fresh () then result else Error "View context changed")
+    end
+  in
+  if view_uuid = "" then finish (Error "No selected view")
+  else
+    let key = Db.key_view_data view_uuid ctx in
+    let fetch () = Db.snapshots
+      ~on_error:(fun () -> finish (Error "Full view data is unavailable"))
+      ~f:(fun snap ->
+        if not (fresh ()) then finish (Error "View context changed")
+        else
+          match Db.snapshot_value snap key with
+          | None -> finish (Error "Full view data is unavailable")
+          | Some (W.Map _ as wire) ->
+              (match W.get wire "error" with
+               | Some error ->
+                   finish (Error (Option.value
+                     (W.map_get_string error "message")
+                     ~default:"Full view data is unavailable"))
+               | None ->
+                   (try
+                      let expected = match W.map_get_int wire "count" with
+                        | Some count when count >= 0 -> count
+                        | _ -> invalid_arg "Invalid full view-data count" in
+                      let entries key value = match W.get value key with
+                        | Some (W.Array entries | W.List entries) -> entries
+                        | _ -> invalid_arg "Invalid full view-data rows" in
+                      let check_rows value =
+                        List.iter (fun row ->
+                          if W.as_uuid row = None then
+                            invalid_arg "Invalid full view-data row")
+                          (entries "rows" value) in
+                      (match W.get wire "partition" with
+                       | Some (W.Keyword "grouped") ->
+                           List.iter check_rows (entries "groups" wire)
+                       | Some (W.Keyword "grouped-list") ->
+                           List.iter (fun group ->
+                             List.iter (fun part ->
+                               if W.map_get_uuid part "breadcrumb-uuid" = None then
+                                 invalid_arg "Invalid full view-data partition";
+                               check_rows part) (entries "partitions" group))
+                             (entries "groups" wire)
+                       | Some (W.Keyword "flat") | None -> check_rows wire
+                       | _ -> invalid_arg "Invalid full view-data partition");
+                      let data = Wr.decode_view_data wire in
+                      let actual = List.length (row_uuids_of data) in
+                      if expected > actual then
+                        finish (Error "Full view data is incomplete")
+                      else finish (Ok data)
+                    with e ->
+                      Ui_services.log_error ("full view-data decode failed", e);
+                      finish (Error "Full view data is invalid")))
+          | Some _ -> finish (Error "Full view data is invalid"))
+      [ Db.resource_view_data view_uuid ctx ]
+    in
+    try fetch () with e ->
+      Ui_services.log_error ("full view-data request failed", e);
+      finish (Error "Full view data is unavailable")
+
 let add_new_object inst =
   let repo = Db.repo () in
-  let context = repo, Runtime.route () in
-  let same_context () = context = (Db.repo (), Runtime.route ()) in
+  let same_context = V.current_view inst in
   let insert owner_uuid ~tags ~props =
     if same_context () then
       let uuid = Ui_services.env_random_uuid () in
@@ -854,14 +972,14 @@ let install_ops () =
     ; o_add_object = add_new_object
     ; o_title_of_uuid = title_of_uuid
     ; o_load_more = load_more_rows
+    ; o_full_action_rows = ensure_full_action_rows
     }
 
 (* ---------- mount ---------- *)
 
-(* one inst per {{query}} block: the block row is rebuilt on every save, so
-   a new .custom-query-results shell re-attaches the existing inst instead
-   of leaving a stale duplicate mounted *)
-let query_insts : (string, V.inst) Hashtbl.t = Hashtbl.create 8
+(* One inst per repo/query block: row saves re-attach the existing source
+   draft and editor. Model publications retire fetches, not the draft. *)
+let query_insts : (string * string, V.inst) Hashtbl.t = Hashtbl.create 8
 
 (* currently-mounted insts — refreshed on the worker's sync-db-changes
    broadcast; an inst leaves the table when its host unmounts *)
@@ -870,16 +988,23 @@ let live : (int, V.inst) Hashtbl.t = Hashtbl.create 16
 let view ~kind ~owner : t =
  fun ctx parent ->
   let sched = ctx.Lui_ui.ui_scheduler in
+  let repo = Runtime.repo () in
   let inst, fresh =
     match kind with
     | V.KQuery { block_uuid } -> (
-        match Hashtbl.find_opt query_insts block_uuid with
-        | Some inst -> (inst, false)
+        match Hashtbl.find_opt query_insts (repo, block_uuid) with
+        | Some inst ->
+            if !(inst.V.data_context_revision) <>
+                (Runtime.model ()).Model.context_revision then begin
+              incr inst.V.data_gen;
+              Signal.set inst.V.st (V.table_clear_selection (V.get inst))
+            end;
+            (inst, false)
         | None ->
             let inst =
               V.make ~sched ~kind ~feature:(feature_of_kind kind) ~owner
             in
-            Hashtbl.replace query_insts block_uuid inst;
+            Hashtbl.replace query_insts (repo, block_uuid) inst;
             (* staged, not flushed — V.update flushes, and a flush inside
                the element mount corrupts the pending op stream *)
             Signal.set inst.V.st
@@ -901,6 +1026,7 @@ let view ~kind ~owner : t =
     Js.Promise.(
       resolve ()
       |> then_ (fun () ->
+          if Ui_effect.alive ctx.Lui_ui.ui_scope && Runtime.repo () = repo then
           (match kind, fresh with
            | V.KQuery _, _ -> refresh inst
            | _, true ->
@@ -912,7 +1038,7 @@ let view ~kind ~owner : t =
       Hashtbl.remove live inst.V.id;
       match inst.V.kind with
       | V.KQuery _ -> ()
-      | _ -> Views_builder.drop_tree inst);
+      | _ -> incr inst.V.data_gen; Views_builder.drop_tree inst);
   (match inst.V.kind with
    | V.KQuery _ -> query_view_el inst
    | _ -> view_el inst)
@@ -922,7 +1048,7 @@ let view ~kind ~owner : t =
    the .ls-query-setting button render.ml emits inside
    .custom-query-results *)
 let toggle_query_editor ~block_uuid =
-  match Hashtbl.find_opt query_insts block_uuid with
+  match Hashtbl.find_opt query_insts (Runtime.repo (), block_uuid) with
   | Some inst -> Views_query.toggle_source_editor inst
   | None -> ()
 
@@ -930,11 +1056,20 @@ let toggle_query_editor ~block_uuid =
    "sync-db-changes" broadcast (Runtime.on_sync, run by worker_events) so
    result membership updates live; debounced so a burst of tx broadcasts
    coalesces into one refetch *)
-let debounced_refresh f = Ui_services.timers_debounce 150 f
+let debounced_refresh = lazy (Ui_services.timers_debounce 150)
 
 let refresh_live_insts () =
-  debounced_refresh (fun () ->
-      Hashtbl.iter (fun _ inst -> refresh inst) live)
+  (Lazy.force debounced_refresh) (fun () ->
+      Hashtbl.iter (fun _ inst ->
+        load_views inst ~on_done:(fun () ->
+          if Hashtbl.mem live inst.V.id then begin
+            let s = V.get inst in
+            match List.find_opt (fun v -> v.Wr.vu = s.V.view_uuid) s.V.views with
+            | Some v ->
+                V.update inst (fun s -> V.apply_view_entity s v);
+                refresh inst
+            | None -> ensure_default_view inst
+          end)) live)
 
 let () =
   install_ops ();

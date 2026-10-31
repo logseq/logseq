@@ -221,7 +221,7 @@ let rec value_to_tx_value
         (fun (attrs, db_id) (k, v) ->
           match k with
           | Keyword "db/id" | String "db/id" ->
-            (attrs, entity_ref_of_value (Map [ (k, v) ]) )
+            (attrs, entity_ref_of_value v)
           | Keyword a | String a ->
             (match value_to_tx_value db ~hint a (normalize_value v) with
              | Some tv -> ((a, tv) :: attrs, db_id)

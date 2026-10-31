@@ -161,6 +161,8 @@ module Prop : sig
   val set_signal : Lui_ui.ui_context -> int -> s -> unit
 
   val font_size : string -> t
+  val variant : Lui_elements.variant -> t
+  val main : Lui_elements.main_alignment -> t
   val s_font_size : string Signal.signal -> s
   val line_height : string -> t
   val font_weight : int -> t
@@ -276,6 +278,12 @@ end = struct
     Lui_ui.value_property_signal ctx node prop (Signal.map enc src)
 
   let font_size v = str FontSize v
+  let variant v = str VariantValue (match v with
+    | `default -> "default" | `primary -> "primary" | `secondary -> "secondary"
+    | `outline -> "outline" | `ghost -> "ghost" | `destructive -> "destructive")
+  let main v = str MainAlignment (match v with
+    | `start -> "start" | `center -> "center" | `end_ -> "end"
+    | `space_between -> "space_between")
   let s_font_size v = sstr FontSize v
   let line_height v = str LineHeight v
   let font_weight v = int FontWeight v

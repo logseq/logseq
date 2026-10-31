@@ -120,6 +120,16 @@ let run ~command ~block ~value : outcome =
   | "upload" ->
       h.pick_files ();
       Handled
+  | ("copy" | "cut" | "delete")
+    when Editor_state.selection_active ()
+         && (match block with
+             | None -> false
+             | Some uuid -> Editor_state.String_set.mem uuid (Editor_state.selected ())) ->
+      (match command with
+       | "copy" -> Editor_actions.copy_selection_text ()
+       | "cut" -> Editor_actions.cut_selection_text ()
+       | _ -> Editor_actions.delete_selection ());
+      Handled
   | _ -> (
       match current_block block with
       | None -> No_target
@@ -140,13 +150,7 @@ let run ~command ~block ~value : outcome =
               h.clipboard_write title;
               Handled
           | "cut" ->
-              let title =
-                match Editor_state.find uuid with
-                | Some b -> b.Model.block_title
-                | None -> ""
-              in
-              h.clipboard_write title;
-              apply [ Outliner_ops.delete_blocks [ uuid ] ];
+              Editor_actions.cut_block_text uuid;
               Handled
           | "delete" ->
               apply [ Outliner_ops.delete_blocks [ uuid ] ];
@@ -181,17 +185,7 @@ let run ~command ~block ~value : outcome =
           | "edit-paste" -> (
               match Editor_actions.edit_model uuid with
               | Some _ ->
-                  ignore
-                    (Ui_task.bind (Ui_services.clipboard_read_text ())
-                       (fun text ->
-                         (match Editor_actions.edit_model uuid with
-                          | Some m ->
-                              let lo, hi = Editor_actions.sel_span_of m in
-                              Editor_actions.splice_range uuid lo hi text;
-                              Outliner_ops.schedule_save uuid
-                                (Editor_actions.live_buffer uuid)
-                          | None -> ());
-                         Ui_task.resolve ()));
+                  ignore (Editor_actions.paste_clipboard_text uuid);
                   Handled
               | None -> No_target)
           | "edit-select-all" -> (

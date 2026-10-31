@@ -1169,7 +1169,8 @@ let () = Native_embed.with_entry_lock (fun () ->
   let root = List.find (fun id ->
     Lui_store.string_prop store id "accessibility-identifier"
       = Some "app-container-wrapper") (Lui_store.preorder store) in
-  let scroll = List.find (fun id -> Lui_store.kind store id = "scroll")
+  let scroll = List.find (fun id ->
+    Lui_store.string_prop store id "accessibility-identifier" = Some "main-content-container")
       (Lui_store.preorder store) in
   let find_class cls = List.find (fun id ->
     match Lui_store.string_prop store id "style-class" with
@@ -1518,7 +1519,9 @@ let () = Native_embed.with_entry_lock (fun () ->
         {Settings_page.km_query="";km_filter=Keymap_data.All;km_collapsed=[];
          km_keys=[];km_recording=false;km_committed=false;km_revision=0} in
       let created=Views_state.make ~sched ~kind:Views_state.KAllPages ~feature:"neutral-theme" ~owner:Wire.Nil in
-      let state={ (Views_state.empty_vstate ()) with Views_state.selected=Views_state.Sset.singleton "neutral-row" } in
+      let state={ (Views_state.empty_vstate ()) with
+        Views_state.selected=Views_state.Sset.singleton "neutral-row";
+        data=Views_wire.VFlat {rows=["neutral-row"];count=1;previews=Hashtbl.create 0;qprops=[]} } in
       let table={created with Views_state.st=Signal.state sched state} in
       Lui_elements.column ~foreground:"foreground"
         [Right_sidebar_view.topbar_btn "contents" (I18n.t "page/contents") ignore;
@@ -5940,7 +5943,7 @@ let () = Native_embed.with_entry_lock (fun () ->
         let square = Lui_scene.rect (r.x+.(r.w-.16.*.scale)/.2.)
           (r.y+.(r.h-.16.*.scale)/.2.) (16.*.scale) (16.*.scale) in
         List.exists (function Lui_scene.Fill f -> f.frect=square && f.fopacity>0.9 | _ -> false) !painted in
-      let selected () = (Views_state.get inst).Views_state.selected in
+      let selected () = Views_state.Sset.of_list (Views_table.selected_uuids inst) in
       let apply actions =
         List.iter (function W.Dispatch event -> ignore (Lui_app.dispatch_event app event) | _ -> ()) actions;
         ignore (Lui_app.flush app);ignore (A.store_changed surface);ignore (A.repaint surface) in
@@ -5974,10 +5977,25 @@ let () = Native_embed.with_entry_lock (fun () ->
          && abs_float (bar_rect.y-.header_rect.y)<0.1
          && abs_float (bar_rect.h-.32.*.scale)<0.1);
       let actions = Lui_store.preorder store |> List.filter (fun id -> Lui_store.kind store id="button"
+        && Lui_store.string_prop store id "accessibility-label"<>Some (I18n.t "ui/cancel")
         && let rec inside id = match Lui_store.parent store id with
           | None -> false | Some parent -> parent=bar || inside parent in inside id) in
       expect "The page selection toolbar must expose all five bulk actions" (List.length actions=5);
-      Views_table.delete_selected inst ();
+      let snapshot = Views_state.get inst in
+      let context = Views_state.ctx_of inst in
+      let revision = (Runtime.model ()).Model.context_revision in
+      let repo = Runtime.repo () and route = Runtime.route () in
+      let gen = !(inst.Views_state.data_gen) in
+      let current () =
+        let state = Views_state.get inst in
+        (Runtime.model ()).Model.context_revision = revision
+        && Runtime.repo () = repo && Runtime.route () = route
+        && Views_state.fetch_fresh inst gen
+        && state.Views_state.view_uuid = snapshot.Views_state.view_uuid
+        && Views_state.ctx_of inst = context
+        && state.Views_state.table_selection_epoch = snapshot.Views_state.table_selection_epoch
+      in
+      Views_table.delete_selected inst snapshot current ();
       drawn_text:=[]; apply [];
       let confirmation = List.find (fun id -> Lui_store.kind store id="dialog") (Lui_store.preorder store) in
       let rec in_confirmation id = match Lui_store.parent store id with
@@ -5999,6 +6017,8 @@ let () = Native_embed.with_entry_lock (fun () ->
       apply (A.handle surface (W.Input.Move (580.,180.)));
       expect "A selected row loses its checkbox after the pointer leaves" (visible first);
       expect "An unselected row reveals its checkbox after another row is selected" (not (visible second));
+      (* A mixed header first selects all; a checked header clears the selection. *)
+      click header;
       click header;
       expect "The select-all region does not clear the selection" (Views_state.Sset.is_empty (selected ()));
       click header;
@@ -6358,22 +6378,47 @@ let () = Native_embed.with_entry_lock (fun () ->
   let previous_worker = !Runtime.worker and previous_model = !Runtime.read_model
   and previous_flush = !Runtime.app_flush
   and previous_dialog = !Properties_dialog.current
-  and previous_signal = !Properties_dialog.current_sig in
+  and previous_signal = !Properties_dialog.current_sig
+  and previous_ops = !Views_state.ops_ref in
+  let rows = ["row-a";"row-b"] in
+  let view_uuid = "property-fixture-view" in
+  let full_resource = ref None in
+  let map fields = Wire.Map (List.map (fun (key,value) -> Wire.Keyword key,value) fields) in
+  let block uuid = map ["block/uuid",Wire.Uuid uuid;"block/title",Wire.String uuid;
+    "db/id",Wire.Int (if uuid="row-a" then 123 else 124)] in
+  let metadata_request uuid = map ["id",Wire.Uuid uuid;"opts",map
+    ["block-metadata?",Wire.Bool true;"children?",Wire.Bool false;
+     "include-property-block?",Wire.Bool false]] in
+  let render_request = Wire.Map [Wire.String "id",Wire.Uuid "row-a";
+    Wire.String "opts",map ["render-data?",Wire.Bool true]] in
   let properties = List.init 30 (fun index -> Wire.Map
     [Wire.Keyword "db/ident",Wire.Keyword ("test/property-"^string_of_int index);
      Wire.Keyword "block/title",Wire.String (Printf.sprintf "Property %02d" index);
      Wire.Keyword "logseq.property/type",Wire.Keyword "number"]) in
-  Runtime.worker:=Some {Worker_client.invoke_fn=(fun name _ ->
-    Js.Promise.resolve (match name with
-      | "thread-api/get-all-properties" -> Wire.List properties
-      | "thread-api/get-property-values" -> Wire.List []
+  Views_view.install_ops ();
+  Runtime.worker:=Some {Worker_client.invoke_fn=(fun name args ->
+    Js.Promise.resolve (match name,args with
+      | "thread-api/get-all-properties",_ -> Wire.List properties
+      | "thread-api/get-property-values",_ -> Wire.List []
+      | "thread-api/get-render-snapshots",[Wire.String "property-fixture";request]
+        when request=map ["blocks",Wire.Array [];"children",Wire.Array [];
+          "resources",Wire.Array [Option.get !full_resource]] ->
+          map ["slots",Wire.Map [Wire.Array [Wire.Keyword "resource";Option.get !full_resource],
+            map ["value",map ["partition",Wire.Keyword "flat";
+              "rows",Wire.Array (List.map (fun uuid -> Wire.Uuid uuid) rows);
+              "count",Wire.Int 2]]]]
+      | "thread-api/get-blocks",[Wire.String "property-fixture";Wire.Array requests]
+        when requests=List.map metadata_request rows ->
+          Wire.Array (List.map (fun uuid -> map ["block",block uuid]) rows)
+      | "thread-api/get-blocks",[Wire.String "property-fixture";Wire.Array [request]]
+        when request=render_request -> Wire.Array [map ["block",block "row-a"]]
       | _ -> failwith ("Unexpected property fixture request: "^name)));
     on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
   Runtime.read_model:=(fun () -> {Model.initial with repo=Some "property-fixture"});
   Fun.protect ~finally:(fun () ->
     Runtime.worker:=previous_worker;Runtime.read_model:=previous_model;
     Runtime.app_flush:=previous_flush;Properties_dialog.current:=previous_dialog;
-    Properties_dialog.current_sig:=previous_signal) (fun () ->
+    Properties_dialog.current_sig:=previous_signal;Views_state.ops_ref:=previous_ops) (fun () ->
     List.iter (fun scale ->
       Properties_dialog.current:=None;Properties_dialog.current_sig:=None;
       let inst_cell = ref None in
@@ -6391,8 +6436,14 @@ let () = Native_embed.with_entry_lock (fun () ->
           let inst = Views_state.make ~sched:context.Lui_ui.ui_scheduler
             ~kind:Views_state.KAllPages ~feature:"all-pages" ~owner:Wire.Nil in
           let state = {(Views_state.empty_vstate ()) with
-            Views_state.selected=Views_state.Sset.of_list ["row-a";"row-b"]} in
+            Views_state.selected=Views_state.Sset.of_list rows;view_uuid;
+            data=Views_wire.VFlat {rows;count=2;previews=Hashtbl.create 0;qprops=[]}} in
           let inst = {inst with Views_state.st=Signal.state context.Lui_ui.ui_scheduler state} in
+          let full_context = match Views_state.ctx_of inst with
+            | Wire.Map fields -> Wire.Map (List.filter
+                (fun (key,_) -> key<>Wire.kw "initial-row-count") fields)
+            | _ -> failwith "Invalid property fixture context" in
+          full_resource:=Some (Views_db.key_view_data view_uuid full_context);
           inst_cell:=Some inst;
           Lui_elements.column ~grow:1.
             [Lui_elements.box ~height:96 [];Views_table.action_bar inst;
@@ -6505,7 +6556,10 @@ let () = Native_embed.with_entry_lock (fun () ->
           let selected_keys () = row_ids () |> List.filter (fun id ->
               Lui_store.string_prop store id "background"=
                 Some "var(--lx-gray-04, var(--ls-menu-hover-color, hsl(var(--secondary))))")
-            |> List.filter_map (fun id -> Lui_store.string_prop store id "key") in
+            |> List.filter_map (fun row -> List.find_map (fun id ->
+                if Lui_query.is_desc store id row && Lui_store.kind store id="text" then
+                  Lui_store.string_prop store id "text"
+                else None) (ids ())) in
           let key key mods = apply (A.handle surface (W.Input.Key_down (key,mods,false))) in
           key W.Input.Arrow_up W.Input.mods_none;
           expect "Previous does not wrap to the final property" (selected_keys ()=["Property 29"]);
@@ -6941,12 +6995,11 @@ let () = Native_embed.with_entry_lock (fun () ->
           ignore (Lui_app.flush app);ignore (A.store_changed surface);ignore (A.repaint surface);
           let nav=W.Rects.get (A.rects surface) aside and body=W.Rects.get (A.rects surface) article in
           if width<768. then (
-            check (Printf.sprintf "Narrow settings navigation compressed from its 248-point content to %.2f" (nav.h/.scale))
-              (abs_float (nav.h/.scale-.248.)<0.1);
+            let control=W.Rects.get (A.rects surface) keymap in
+            check "Narrow Settings must contain the full Keymap navigation control"
+              (control.h>0. && control.y>=nav.y && control.y+.control.h<=nav.y+.nav.h);
             check "Narrow Settings must stack the article below its navigation"
-              (body.y>=nav.y+.nav.h-.0.1 && abs_float (body.x-.nav.x)<0.1);
-            check "Narrow Settings must hide Keymap navigation like the reference"
-              ((W.Rects.get (A.rects surface) keymap).h=0.))
+              (body.y>=nav.y+.nav.h-.0.1 && abs_float (body.x-.nav.x)<0.1))
           else (
             check "Wide Settings must restore its fixed navigation width"
               (abs_float (nav.w/.scale-.256.)<0.1);
@@ -7062,7 +7115,7 @@ let () = Native_embed.with_entry_lock (fun () ->
           apply
             (A.handle surface
                (W.Input.Move
-                  ((r.x +. (r.w /. 2.)) /. scale, (r.y +. (40. *. scale)) /. scale)));
+                  ((r.x +. (r.w /. 2.)) /. scale, (r.y +. (r.h /. 2.)) /. scale)));
           apply (A.handle surface (W.Input.Wheel (0., amount)))
         in
         List.iter
@@ -7084,10 +7137,9 @@ let () = Native_embed.with_entry_lock (fun () ->
               (abs_float ((((rect dialog).h -. (rect inner).h) /. scale) -. 2.) < 0.1);
             List.iter
               (fun name ->
-                if name <> "keymap" || width >= 640. then
-                  expect
-                    (label ^ " must preserve 32-point navigation rows: " ^ name)
-                    (abs_float (((rect (nav_id name)).h /. scale) -. 32.) < 0.1))
+                expect
+                  (label ^ " must preserve 32-point navigation rows: " ^ name)
+                  (abs_float (((rect (nav_id name)).h /. scale) -. 32.) < 0.1))
               [ "general"; "editor"; "keymap"; "advanced"; "features" ];
             if width >= 768. && height >= 360. then
               expect
@@ -7099,23 +7151,26 @@ let () = Native_embed.with_entry_lock (fun () ->
               expect
                 (label ^ " navigation scrolling must not move the article")
                 (W.Ui.scroll_offset (A.ui surface) article = before));
-            expect
-              (label ^ " must expose a hit-testable Features control")
-              (visible features);
-            if visible features then (
-              let r = rect features in
-              let x, y =
-                ((r.x +. (r.w /. 2.)) /. scale, (r.y +. (r.h /. 2.)) /. scale)
-              in
-              apply
-                (A.handle surface
-                   (W.Input.Button_down (x, y, W.Input.Left, 1, W.Input.mods_none)));
-              apply
-                (A.handle surface
-                   (W.Input.Button_up (x, y, W.Input.Left, W.Input.mods_none)));
+            List.iter (fun (name, control) ->
+              if name = "keymap" && width < 768. then wheel features 2000.;
               expect
-                (label ^ " must activate the Features category")
-                ((Settings_state.value ()).tab = "features"));
+                (label ^ " must expose a hit-testable category: " ^ name)
+                (visible control);
+              if visible control then (
+                let r = rect control in
+                let x, y =
+                  ((r.x +. (r.w /. 2.)) /. scale, (r.y +. (r.h /. 2.)) /. scale)
+                in
+                apply
+                  (A.handle surface
+                     (W.Input.Button_down (x, y, W.Input.Left, 1, W.Input.mods_none)));
+                apply
+                  (A.handle surface
+                     (W.Input.Button_up (x, y, W.Input.Left, W.Input.mods_none)));
+                expect
+                  (label ^ " must activate the category: " ^ name)
+                  ((Settings_state.value ()).tab = name)))
+              ["features", features; "keymap", keymap];
             if width < 768. && height < 500. then (
               Settings_state.set_tab "general";
               refresh ();
@@ -7123,9 +7178,14 @@ let () = Native_embed.with_entry_lock (fun () ->
               expect
                 (label ^ " must scroll the stacked settings frame to its article")
                 (W.Ui.scroll_offset (A.ui surface) inner > 0.);
-              expect
-                (label ^ " must preserve the 248-point navigation content")
-                (abs_float (((rect aside).h /. scale) -. 248.) < 0.1));
+              let nav = rect aside in
+              List.iter (fun name ->
+                let control = rect (nav_id name) in
+                expect
+                  (label ^ " must contain the full navigation category: " ^ name)
+                  (control.h > 0. && control.y >= nav.y
+                   && control.y +. control.h <= nav.y +. nav.h))
+                ["general"; "editor"; "keymap"; "advanced"; "features"]);
             expect
               (label ^ " must retain navigation nodes across resize")
               (nav_id "features" = features))
@@ -8571,6 +8631,7 @@ let () = Native_embed.with_entry_lock (fun () ->
   let module W = Wire in
   let previous_worker = !Runtime.worker and previous_model = !Runtime.read_model
   and previous_flush = !Runtime.app_flush
+  and previous_reload = !Runtime.reload_current_view
   and previous_dialog = !Properties_dialog.current
   and previous_signal = !Properties_dialog.current_sig
   and previous_overlays = !Properties_state.view_overlays_state in
@@ -8581,8 +8642,10 @@ let () = Native_embed.with_entry_lock (fun () ->
     {year=2024;month=1;day=31;hours=13;minutes=45;seconds=0;ms=0;wday=0} in
   Fun.protect ~finally:(fun () ->
     Runtime.worker:=previous_worker;Runtime.read_model:=previous_model;
+    Runtime.reload_current_view:=previous_reload;
     Runtime.app_flush:=previous_flush;Properties_dialog.current:=previous_dialog;
     Properties_dialog.current_sig:=previous_signal;Properties_state.view_overlays_state:=previous_overlays) (fun () ->
+    Runtime.reload_current_view:=(fun () -> Js.Promise.resolve ());
     List.iter (fun (entry,is_datetime) ->
       let ty = if is_datetime then "datetime" else "date" in
       let ident=if is_datetime then "logseq.property/deadline" else "test/calendar-date" in
@@ -10132,6 +10195,7 @@ let () = Native_embed.with_entry_lock (fun () ->
   and previous_queue=Queue.copy Editor_state.pending_edit_actions
   and previous_real= !Editor_state.pending_edit_real
   and previous_reload= !Runtime.reload_current_view
+  and previous_owned_reload= !Runtime.reload_current_view_owned
   and previous_refresh=Runtime.hooks.refresh_after_ops
   and previous_properties=Runtime.hooks.refresh_property_areas in
   Fun.protect ~finally:(fun () ->
@@ -10146,6 +10210,7 @@ let () = Native_embed.with_entry_lock (fun () ->
     Queue.iter (fun f -> Queue.add f Editor_state.pending_edit_actions) previous_queue;
     Editor_state.pending_edit_real:=previous_real;
     Runtime.reload_current_view:=previous_reload;
+    Runtime.reload_current_view_owned:=previous_owned_reload;
     Runtime.hooks.refresh_after_ops<-previous_refresh;
     Runtime.hooks.refresh_property_areas<-previous_properties;
     Editor_actions.cancel_pending_focus ()) (fun () ->
@@ -10159,6 +10224,8 @@ let () = Native_embed.with_entry_lock (fun () ->
       Editor_state.structure_pending:=false;Queue.clear Editor_state.pending_edit_actions;
       Editor_state.pending_edit_real:=0;
       Runtime.reload_current_view:=(fun () -> Js.Promise.resolve ());
+      Runtime.reload_current_view_owned:=(fun origin ->
+        Js.Promise.resolve (Runtime.Reload_unchanged origin));
       let writes=ref [] and complete=ref (fun () -> ()) in
       let refreshed ()=Subs_state.task_of_promise (Js.Promise.resolve ()) in
       Runtime.hooks.refresh_after_ops<-refreshed;
@@ -10971,6 +11038,7 @@ let () = Native_embed.with_entry_lock (fun () ->
                Right_sidebar_view.item_title (Sidebar_state.item_of_page page)) pages)) items]) in
       Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app)) (fun () ->
         ignore (Lui_app.start app);ignore (Lui_app.flush app);
+        Runtime.read_model:=(fun () -> Lui_app.model app);
         let st = Option.get !sidebar in
         let both_icons name =
           List.length (List.filter (fun id -> Lui_store.string_prop store id "name"=Some name)
@@ -11220,6 +11288,7 @@ let () = Native_embed.with_entry_lock (fun () ->
           else None) (subtree (root name)) in
         List.iter (fun (label,wire,search_icons,recent_icons,tree_icons,library_icons,color) ->
           payload:=wire;
+          Cmdk_state.set st {(Cmdk_state.get st) with open_=true};
           let loaded=ref None in
           ignore (Ui_task.bind (Cmdk_state.run_search services "search-icon-fixture" "Task" false 10)
             (fun (items,total) -> loaded:=Some (items,total);Ui_task.resolve ()));

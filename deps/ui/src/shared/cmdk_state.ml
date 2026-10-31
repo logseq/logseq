@@ -8,6 +8,60 @@
    Ui_services (storage, nav hash, literal text, flush). *)
 
 module Svs = Cmdk_services
+
+module Find_in_page = struct
+  type state =
+    { query : string
+    ; match_case : bool
+    ; total : int
+    ; current : int
+    ; revision : int
+    ; composing : bool
+    }
+
+  type action =
+    | Query of string
+    | Match_case of bool
+    | Results of { revision : int; total : int }
+    | Previous
+    | Next
+    | Clear
+    | Close
+    | Composing of bool
+
+  let initial =
+    { query = ""; match_case = false; total = 0; current = 0
+    ; revision = 0; composing = false }
+
+  let invalidate state =
+    { state with total = 0; current = 0; revision = state.revision + 1 }
+
+  (* The page/ref/search owner supplies results and reveals the selected match.
+     Revisions retire replies across query, case and composition changes. *)
+  let update state = function
+    | Query query when query <> state.query -> invalidate { state with query }
+    | Match_case match_case when match_case <> state.match_case ->
+        invalidate { state with match_case }
+    | Results { revision; total }
+      when revision = state.revision && not state.composing && state.query <> "" ->
+        let total = max 0 total in
+        { state with total; current = if total = 0 then 0 else 1 }
+    | Previous when state.total > 0 && not state.composing ->
+        { state with current = if state.current <= 1 then state.total else state.current - 1 }
+    | Next when state.total > 0 && not state.composing ->
+        { state with current = if state.current >= state.total then 1 else state.current + 1 }
+    | Clear | Close -> invalidate { state with query = ""; composing = false }
+    | Composing composing when composing <> state.composing ->
+        invalidate { state with composing }
+    | _ -> state
+
+  let key_action state ~shift key =
+    if state.composing then None
+    else match key with
+      | "Escape" -> Some Close
+      | "Enter" -> Some (if shift then Previous else Next)
+      | _ -> None
+end
 module Json = Cmdk_json
 
 let ( let* ) = Ui_task.bind
@@ -126,8 +180,11 @@ type view =
 type t =
   { vs : view Signal.state
   ; req : Ui_effect.request (* stale-response guard *)
+  ; recents_req : Ui_effect.request
   ; svs : Svs.t
   ; source_rows : Wire.t list ref (* retain the last search's entity metadata *)
+  ; source_total : int ref
+  ; source_query : string ref
   }
 
 let initial_view =
@@ -164,7 +221,10 @@ let make ?(register = true) scheduler svs : t =
    | None -> services_ref := Some svs
    | Some _ -> ());
   let vs = Signal.state scheduler initial_view in
-  let st = { vs; req = Ui_effect.request (); svs; source_rows = ref [] } in
+  let st =
+    { vs; req = Ui_effect.request (); recents_req = Ui_effect.request ()
+    ; svs; source_rows = ref []; source_total = ref 0; source_query = ref "" }
+  in
   (* the modal palette is the singleton shortcuts dispatch through;
      sidebar cmdk blocks are independent and must not steal the refs *)
   if register then begin
@@ -753,26 +813,39 @@ let group_order ?(source_rows = []) v q rows total =
   in
   visible_groups v groups |> insert_create_after_first_match
 
-let apply_results ?(source_rows = []) st q move_mode expanded rows total =
+let apply_results ?(source_rows = []) ?(keep_highlight = false)
+    st q move_mode expanded rows total =
   ignore move_mode;
   ignore expanded;
   set_in st (fun v ->
       if v.input <> q then v (* stale — input moved on *)
       else
         let () = st.source_rows := source_rows in
+        let () = st.source_total := total in
+        let () = st.source_query := q in
+        let highlighted =
+          if keep_highlight then
+            Array.find_opt (fun (it : item) -> it.idx = v.hl) (flat_items v)
+          else None
+        in
         let groups =
           group_order ~source_rows v q rows total
           |> List.filter (fun g -> g.gitems <> [])
           |> renumber
         in
-        { v with
-          groups
-        ; hl =
-            (match groups with
-             | g :: _ -> (
-                 match g.gitems with x :: _ -> x.idx | [] -> -1)
-             | [] -> -1)
-        })
+        let selected =
+          Option.bind highlighted (fun previous ->
+              List.find_map (fun g ->
+                  List.find_opt (fun (it : item) ->
+                      it.ikey = previous.ikey && it.gid = previous.gid)
+                    g.gitems) groups)
+        in
+        let hl = match selected, groups with
+          | Some it, _ -> it.idx
+          | None, { gitems = it :: _; _ } :: _ -> it.idx
+          | _ -> -1
+        in
+        { v with groups; hl })
 
 (* ~clear:false keeps the previous groups visible while the async search
    is in flight — cljs keeps rendering the last results during the input
@@ -794,7 +867,7 @@ let refresh ?(clear = true) st =
               | _ -> nodes_limit v.move_mode v.expanded)
          in
          let rows = List.mapi (fun i row -> item_of_row row i) source_rows in
-         if Ui_effect.is_current st.req gen then
+         if Ui_effect.is_current st.req gen && st.svs.Svs.repo () = Some repo then
            apply_results ~source_rows st v.input v.move_mode v.expanded rows total;
          Ui_task.resolve ())  |> fun t -> Ui_task.catch t (fun e ->
                 st.svs.Svs.console_error "cmdk search failed" e;
@@ -861,6 +934,7 @@ let recents_item_of_wire w =
   | None -> None
 
 let load_recents st repo =
+  let gen = Ui_effect.issue st.recents_req in
   let ids =
     Wire.List
       (List.map
@@ -878,8 +952,15 @@ let load_recents st repo =
            List.filter_map recents_item_of_wire xs
        | _ -> []
      in
-     set_in st (fun v -> { v with recents = items });
-     refresh st;
+     if Ui_effect.is_current st.recents_req gen
+        && st.svs.Svs.repo () = Some repo && (get st).open_ then (
+       set_in st (fun v -> { v with recents = items });
+       let v = get st in
+       if v.input = !(st.source_query) then (
+         let source_rows = !(st.source_rows) in
+         let rows = List.mapi (fun i row -> item_of_row row i) source_rows in
+         apply_results ~source_rows ~keep_highlight:true st
+           v.input v.move_mode v.expanded rows !(st.source_total)));
      Ui_task.resolve ())  |> fun t -> Ui_task.catch t (fun _ -> Ui_task.resolve ()))
 
 let on_input st q =
@@ -964,6 +1045,7 @@ let load_last_search (svs : Svs.t) : (string * group_id option) option =
 
 let open_palette ?(move = false) st =
   ignore (Ui_effect.issue st.req);
+  ignore (Ui_effect.issue st.recents_req);
   (* publish the reset view before opening: the mount reads derived signals
      whose republish lags the source publish by one stabilize round, so
      this separate flush guarantees every derived map already carries the
@@ -974,7 +1056,7 @@ let open_palette ?(move = false) st =
   let tip = if svs.Svs.random () < 0.5 then 0 else 1 in
   let saved = if move then None else load_last_search svs in
   set_in st (fun v ->
-          { v with groups = []; hl = -1
+          { v with groups = []; hl = -1; recents = []
           ; input = (match saved with Some (q, _) -> q | None -> "")
           ; move_mode = move
           ; mouse = false
@@ -999,6 +1081,8 @@ let open_palette ?(move = false) st =
   svs.Svs.focus_input_init q
 
 let close st =
+  ignore (Ui_effect.issue st.req);
+  ignore (Ui_effect.issue st.recents_req);
   let v = get st in
   (* cljs persist-cmdk-query-state! runs on unmount and every committed
      action; move mode is outside the default context. A command-palette
@@ -1057,6 +1141,27 @@ let move_hl st dir =
     in
     set_in st (fun v -> { v with hl = i; mouse = false });
     st.svs.Svs.scroll_row_index i
+
+let jump_hl st last =
+  let n = Array.length (flat_items (get st)) in
+  if n > 0 then (
+    let i = if last then n - 1 else 0 in
+    set_hl st i false;
+    st.svs.Svs.scroll_row_index i)
+
+let page_hl st direction =
+  let v = get st in
+  let n = Array.length (flat_items v) in
+  if n > 0 then (
+    let page_size =
+      List.find_map (fun g ->
+          if List.exists (fun (it : item) -> it.idx = v.hl) g.gitems
+          then Some (max 1 g.glimit) else None) v.groups
+      |> Option.value ~default:1
+    in
+    let i = max 0 (min (n - 1) (v.hl + direction * page_size)) in
+    set_hl st i false;
+    st.svs.Svs.scroll_row_index i)
 
 let toggle_expand st gid expand =
   set_in st (fun v ->

@@ -23,14 +23,11 @@ let outliner_op (tx_meta : tx_meta) : string option =
 
 (* cljs refs-need-recalculated? *)
 let refs_need_recalculated (tx_meta : tx_meta) : bool =
-  match outliner_op tx_meta with
-  | Some "collapse-expand-blocks" | Some "delete-blocks" -> false
-  | _ -> not (flag tx_meta "undo?" || flag tx_meta "redo?")
+  Db_tx.pipeline_refs_need_recalculated tx_meta
 
 (* cljs imported-data? *)
 let imported_data (tx_meta : tx_meta) : bool =
-  flag tx_meta "logseq.graph-parser.exporter/imported-data?"
-  || flag tx_meta "logseq.db.sqlite.export/imported-data?"
+  Db_tx.pipeline_imported_data tx_meta
 
 (* tx forms → tx_op *)
 let retract (e : int) (a : attr) (v : value) : tx_op =
@@ -53,10 +50,7 @@ let ent_of_datom_v (db : db) (v : value) : entity option =
 let rebuild_block_refs (report : tx_report) (blocks : entity list)
     : tx_op list =
   let tx_meta = report.tx_meta in
-  if
-    (outliner_op tx_meta <> None && refs_need_recalculated tx_meta)
-    || flag tx_meta "rtc-tx?" || flag tx_meta "rtc-op?"
-    || imported_data tx_meta
+  if Db_tx.pipeline_refs_enabled tx_meta
   then
     List.concat_map
       (fun (block : entity) ->
@@ -79,16 +73,18 @@ let rebuild_block_refs (report : tx_report) (blocks : entity list)
             in
             if ref_ids = old_ref_ids then []
             else
+              let ids = List.fold_left
+                  (fun s id -> Db_reference.IdSet.add id s)
+                  Db_reference.IdSet.empty ref_ids in
+              let old_ids = List.fold_left
+                  (fun s id -> Db_reference.IdSet.add id s)
+                  Db_reference.IdSet.empty old_ref_ids in
               List.map
                 (fun id -> retract block.id "block/refs" (Ref id))
-                (List.filter
-                   (fun id -> not (List.mem id ref_ids))
-                   old_ref_ids)
+                (Db_reference.IdSet.elements (Db_reference.IdSet.diff old_ids ids))
               @ List.map
                   (fun id -> add block.id "block/refs" (Ref id))
-                  (List.filter
-                     (fun id -> not (List.mem id old_ref_ids))
-                     ref_ids)
+                  (Db_reference.IdSet.elements (Db_reference.IdSet.diff ids old_ids))
         | _ -> [])
       blocks
   else []
@@ -1317,15 +1313,120 @@ let revision_owner_ids (report : tx_report) : entity_id list =
          (fun (d : datom) -> if revision_datom d then Some d.e else None)
          report.tx_data)
 
+(* ---------- reference/revision tail ---------- *)
+
+let reference_revision_txs ?(current_refs = false) (report : tx_report) =
+  let tx_meta = report.tx_meta in
+  let blocks, _pages = Ds_report.get_blocks_and_pages report in
+  let deleted_blocks =
+    Outliner_pipeline.filter_deleted_blocks report.tx_data
+  in
+  let deleted_block_ids =
+    List.fold_left
+      (fun s (id, _) -> Db_reference.IdSet.add id s)
+      Db_reference.IdSet.empty deleted_blocks
+  in
+  let surviving_blocks =
+    List.filter
+      (fun (b : entity) -> current_refs || not (Db_reference.IdSet.mem b.id deleted_block_ids))
+      blocks
+  in
+  let block_refs =
+    if Db_tx.pipeline_rebuilds_refs tx_meta && surviving_blocks <> []
+    then
+      let basis =
+        if current_refs then { report with db_before = report.db_after }
+        else report
+      in
+      rebuild_block_refs basis surviving_blocks
+    else []
+  in
+  let revision_ids = revision_owner_ids report in
+  let tx_id_data =
+    let db_after = report.db_after in
+    let tx_id = db_after.max_tx + 1 in
+    List.filter_map
+      (fun db_id ->
+        if
+          (current_refs || not (Db_reference.IdSet.mem db_id deleted_block_ids))
+          && (match entity db_after (Entity_id db_id) with
+              | Some e -> Ldb.value e "block/uuid" <> None
+              | None -> false)
+        then
+          Some
+            (Block_map.to_tx_op db_after
+               [ "db/id", Int64 (Int64.of_int db_id); "block/tx-id", Int64 (Int64.of_int tx_id) ])
+        else None)
+      revision_ids
+  in
+  block_refs @ tx_id_data
+
+let inherit_reference_attrs (source : db) (target : db) =
+  match List.find_opt (fun (db, _) -> db == source) !reference_attrs_cache with
+  | Some (_, attrs) -> cache_push target attrs
+  | None -> ()
+
+let carry_reference_attrs (report : tx_report) =
+  let seen = Hashtbl.create 8 in
+  let property_definition_changed =
+    List.exists
+      (fun (d : datom) ->
+        List.mem d.a reference_attr_definition_attrs
+        &&
+        (d.v = Keyword "logseq.class/Property"
+         ||
+         (if Hashtbl.mem seen d.e then false
+          else begin
+            Hashtbl.add seen d.e ();
+            List.exists
+              (fun db ->
+                match entity db (Entity_id d.e) with
+                | Some e -> Ldb.is_property e
+                | None -> false)
+              [ report.db_before; report.db_after ]
+          end)))
+      report.tx_data
+  in
+  if not property_definition_changed then
+    inherit_reference_attrs report.db_before report.db_after
+
+let preview_reference_report ~tx_meta (db : db) ops : tx_report =
+  let report = Db_tx.with_report ~tx_meta db ops in
+  (* Preserve the cache key of the immutable source snapshot. *)
+  { report with db_before = db }
+
+let finish_current_reference_tail (report : tx_report) =
+  carry_reference_attrs report;
+  match reference_revision_txs ~current_refs:true report with
+  | [] -> report
+  | ops ->
+      let tail = preview_reference_report ~tx_meta:report.tx_meta report.db_after ops in
+      carry_reference_attrs tail;
+      { report with db_after = tail.db_after
+      ; tx_data = report.tx_data @ tail.tx_data }
+
+let normalize_current_refs (report : tx_report) =
+  let current = report.db_after in
+  let blocks, _ = Ds_report.get_blocks_and_pages report in
+  (* Only the refs delta compares current state; batch history stays intact. *)
+  let basis = { report with db_before = current } in
+  match rebuild_block_refs basis blocks with
+  | [] -> { basis with tx_data = []; tempids = [] }
+  | ops ->
+      preview_reference_report ~tx_meta:report.tx_meta current ops
+      |> finish_current_reference_tail
+
+let cleanup_reference_tail (db : db) tx_meta ops =
+  match Db_tx.prepare_tx_ops db tx_meta ops with
+  | [] -> invalid_arg "Orphan cleanup requires a nonempty prepared transaction"
+  | prepared ->
+      preview_reference_report ~tx_meta db prepared |> finish_current_reference_tail
+
 (* ---------- transact-pipeline ---------- *)
 
 let transact_pipeline (tx_report : tx_report) : tx_report =
   let tx_meta = tx_report.tx_meta in
-  let derive_extra_data =
-    not
-      (flag tx_meta "sync-download-graph?" || flag tx_meta "reverse?"
-       || flag tx_meta "transact-remote?" || imported_data tx_meta)
-  in
+  let derive_extra_data = Db_tx.pipeline_derives_extra_data tx_meta in
   if derive_extra_data && not (rtc_tx_or_download_graph tx_meta) then
     ensure_journal_page_protected_attrs_not_updated tx_report;
   let extra_tx_data =
@@ -1341,45 +1442,7 @@ let transact_pipeline (tx_report : tx_report) : tx_report =
       ; db_after = result.db_after }
     else tx_report
   in
-  let blocks, _pages = Ds_report.get_blocks_and_pages tx_report' in
-  let deleted_blocks =
-    Outliner_pipeline.filter_deleted_blocks tx_report'.tx_data
-  in
-  let deleted_block_ids =
-    List.fold_left
-      (fun s (id, _) -> Db_reference.IdSet.add id s)
-      Db_reference.IdSet.empty deleted_blocks
-  in
-  let surviving_blocks =
-    List.filter
-      (fun (b : entity) -> not (Db_reference.IdSet.mem b.id deleted_block_ids))
-      blocks
-  in
-  let block_refs =
-    if (derive_extra_data || imported_data tx_meta)
-       && surviving_blocks <> []
-    then rebuild_block_refs tx_report' surviving_blocks
-    else []
-  in
-  let revision_ids = revision_owner_ids tx_report' in
-  let tx_id_data =
-    let db_after = tx_report'.db_after in
-    let tx_id = db_after.max_tx + 1 in
-    List.filter_map
-      (fun db_id ->
-        if
-          not (Db_reference.IdSet.mem db_id deleted_block_ids)
-          && (match entity db_after (Entity_id db_id) with
-              | Some e -> Ldb.value e "block/uuid" <> None
-              | None -> false)
-        then
-          Some
-            (Block_map.to_tx_op db_after
-               [ "db/id", Int64 (Int64.of_int db_id); "block/tx-id", Int64 (Int64.of_int tx_id) ])
-        else None)
-      revision_ids
-  in
-  let block_refs_tx_id_data = block_refs @ tx_id_data in
+  let block_refs_tx_id_data = reference_revision_txs tx_report' in
   let replace_tx_report =
     if block_refs_tx_id_data <> [] then
       Some

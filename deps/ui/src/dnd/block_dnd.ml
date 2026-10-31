@@ -123,29 +123,32 @@ let hide_indicator () =
 let dragging_uuid : string option ref = ref None
 let drop_target : (string * string) option ref = ref None
 
+let clear_drop_target () =
+  drop_target := None;
+  hide_indicator ()
+
 let on_drag_start ev _m =
+  dragging_uuid := None;
   (match K.op_source (K.ev_operation ev) with
    | Some d -> dragging_uuid := Some (K.entity_uuid (K.entity_data d))
    | None -> ());
-  drop_target := None;
-  hide_indicator ()
+  clear_drop_target ()
 
 (* pointer coordinates for a monitor event: the native pointer event
    when present (dragstart/dragmove/dragend), else the operation
    position (dragover fires on target change and carries none). The
-   operation position is client-relative, so pageX falls back to
-   clientX + scrollX — the same value native pageX reports. *)
+   target rectangles and operation positions are both client-relative. *)
 let coords_of ev op =
   match K.ev_native ev with
-  | Some nev -> (K.page_x nev, K.client_y nev)
+  | Some nev -> (K.client_x nev, K.client_y nev)
   | None -> (
       match K.pos_current (K.op_position op) with
-      | Some pt -> (K.pt_x pt +. Web_dom.win_scroll_x, K.pt_y pt)
+      | Some pt -> (K.pt_x pt, K.pt_y pt)
       | None -> (0.0, 0.0))
 
 (* cljs block-drag-over: near the top of the first block -> :top; deep
    indent (x-offset > 50) -> :nested; else :sibling *)
-let update_drop_target src tgt_el page_x client_y =
+let update_drop_target src tgt_el client_x client_y =
   match Web_dom.el_get_attr tgt_el "data-blockid" with
   | Some tgt when tgt <> src && not (A.is_descendant tgt src) ->
       let rect = Web_dom.el_bounding_rect tgt_el in
@@ -155,7 +158,7 @@ let update_drop_target src tgt_el page_x client_y =
         | None -> false
       in
       let near_top = Float.abs (client_y -. Web_dom.rect_top rect) <= 16.0 in
-      let x_off = page_x -. Web_dom.rect_left rect in
+      let x_off = client_x -. Web_dom.rect_left rect in
       let move_to =
         if first && near_top then "top"
         else if x_off > 50.0 then "nested"
@@ -164,14 +167,12 @@ let update_drop_target src tgt_el page_x client_y =
       drop_target := Some (tgt, move_to);
       show_indicator tgt_el move_to
   | _ ->
-      drop_target := None;
-      hide_indicator ()
+      clear_drop_target ()
 
 (* dragmove (per pointer move) and dragover (per target change) share
    this: over a valid block -> Some(tgt, move_to); over an invalid one
-   -> None; over nothing -> keep the last candidate, matching the
-   native listener's `| None -> ()` so a drop outside any block still
-   applies the last hovered position *)
+   -> None. Leaving all targets must cancel the candidate, not move a
+   block to a position that is no longer under the pointer. *)
 let update_from_event ev =
   if S.ready () then
     match !dragging_uuid with
@@ -182,20 +183,22 @@ let update_from_event ev =
         | Some dp -> (
             match K.droppable_element dp with
             | Some el ->
-                let page_x, client_y = coords_of ev op in
-                update_drop_target src el page_x client_y
-            | None -> drop_target := None)
-        | None -> ())
+                let client_x, client_y = coords_of ev op in
+                update_drop_target src el client_x client_y
+            | None -> clear_drop_target ())
+        | None -> clear_drop_target ())
+  else clear_drop_target ()
 
 let on_drag_end ev _m =
-  (if not (K.ev_canceled ev) then
+  (if S.ready () && not (K.ev_canceled ev) then begin
+     update_from_event ev;
      match (!dragging_uuid, !drop_target) with
      | Some src, Some (tgt, move_to) ->
          A.drop_dragged_block src tgt move_to
-     | _ -> ());
+     | _ -> ()
+   end);
   dragging_uuid := None;
-  drop_target := None;
-  hide_indicator ()
+  clear_drop_target ()
 
 (* ---------- install ---------- *)
 

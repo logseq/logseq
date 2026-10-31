@@ -101,9 +101,9 @@ let () = Editor_state.close_property_editor := fun () -> !close_editor ()
 (* ---------- writes ---------- *)
 
 let set_scalar ctx ~ident ~value =
-  D.set_block_property ~block_uuid:ctx.block_uuid ~ident ~value
-  |> ignore;
-  S.refresh_all ()
+  ignore (let* _ = D.set_block_property ~block_uuid:ctx.block_uuid ~ident ~value in
+    S.refresh_all ();
+    Js.Promise.resolve ())
 
 (* text/url: create a value block (or update the existing one) *)
 let save_text_value ctx row new_title =
@@ -134,7 +134,7 @@ let commit_or_cancel ctx row value =
   let ident = D.row_ident row |> Option.value ~default:"" in
   match D.row_type row with
   | "number" -> (
-      match Float.of_string_opt (String.trim value) with
+      match D.number_of_text value with
       | Some n -> set_scalar ctx ~ident ~value:(W.Float n)
       | None -> ())
   | _ -> save_text_value ctx row value;
@@ -144,12 +144,11 @@ let commit_or_cancel ctx row value =
 
 (* parses "YYYY-MM-DD" -> journal day int YYYYMMDD *)
 let parse_date s =
-  match String.split_on_char '-' (String.trim s) with
-  | [ y; m; d ]
-    when String.length y = 4 && String.length m = 2
-         && String.length d = 2 -> (
-      try Some (int_of_string (y ^ m ^ d)) with _ -> None)
-  | _ -> None
+  let s = String.trim s in
+  if String.length s <> 10 then None
+  else Option.map (fun ms ->
+    let f = Dates.fields ms in
+    (f.year * 10000) + (f.month * 100) + f.day) (Dates.parse_local_datetime s)
 
 let today_day () =
   let f = Ui_services.time_local_fields (Ui_services.time_now ()) in
@@ -225,26 +224,26 @@ let block_tag_ids ctx f =
   |> ignore
 
 (* choice db/ids excluded by any of the owner's tags *)
-let gather_exclusions tag_ids f =
-  let acc = ref [] in
-  let rec go = function
-    | [] -> f !acc
+let exclusions_for_tags tag_ids =
+  let rec go acc = function
+    | [] -> Js.Promise.resolve acc
     | id :: rest ->
         (let* ent =
           Runtime.invoke3 "thread-api/pull" (D.repo ())
             (W.String "[:db/id {:logseq.property/choice-exclusions [:db/id]}]")
             (W.Int id)
         in
-        (match D.getf (D.untag ent) "logseq.property/choice-exclusions" with
-         | Some xs ->
-             acc :=
-               !acc @ List.filter_map D.entity_id_of (W.elems xs)
-         | None -> ());
-        go rest;
-        Js.Promise.resolve ())
-        |> ignore
+        let excluded = match D.getf (D.untag ent) "logseq.property/choice-exclusions" with
+          | Some xs -> List.filter_map D.entity_id_of (W.elems xs)
+          | None -> [] in
+        go (List.rev_append excluded acc) rest)
   in
-  go tag_ids
+  go [] tag_ids
+
+let gather_exclusions tag_ids f =
+  ignore (let* exclusions = exclusions_for_tags tag_ids in
+    f exclusions;
+    Js.Promise.resolve ())
 
 (* choice shown for owner? — scoped choices need a tag intersection;
    choices excluded on any of the owner's tags are hidden *)
@@ -263,6 +262,14 @@ let choice_visible choice tag_ids exclusions =
   in
   scoped_ok && not excluded
 
+let closed_values_for_owner ~block_uuid values =
+  let* block = Runtime.invoke3 "thread-api/pull" (D.repo ())
+    (W.String "[:block/uuid {:block/tags [:db/id]}]") (D.uuid_ref block_uuid) in
+  let tag_ids = Option.fold ~none:[] ~some:(fun w -> List.filter_map D.entity_id_of (W.elems w))
+    (D.getf (D.untag block) "block/tags") in
+  let* exclusions = exclusions_for_tags tag_ids in
+  Js.Promise.resolve (List.filter (fun choice -> choice_visible choice tag_ids exclusions) values)
+
 (* node-type value pickers: initial items come from
    get-property-node-selector-data, filtering re-queries the worker via
    search-blocks (cljs property-value-select-node). on_pick gets the
@@ -271,16 +278,23 @@ let node_items_source ~block ~prop ~on_pick =
   let to_item v =
     match D.entity_id_of v with
     | Some id ->
-        Some (Sel.item (D.ref_title v) (fun () -> on_pick id))
+        Some (Sel.item ~key:("entity-" ^ string_of_int id) (D.ref_title v) (fun () -> on_pick id))
     | None -> None
   in
   let items_of w = List.filter_map to_item (W.elems w) in
+  let classes = Option.fold ~none:[] ~some:W.elems (D.getf prop "logseq.property/classes") in
+  let classes_only = D.getk prop "logseq.property/type" = Some "class"
+    || D.getk prop "db/ident" = Some "block/tags" in
+  let scoped = List.exists (fun c ->
+    match D.getk c "db/ident" with
+    | Some "logseq.class/Root" | Some "logseq.class/Page" -> false
+    | _ -> true) classes in
   let initial =
     (match D.entity_id_of prop with
      | Some property_id ->
          let* w = D.node_selector_data ~property_id ~block in
          Js.Promise.resolve
-           (match D.getf w "initial-choices" with
+           (match D.getf w (if classes_only then "class-options" else "initial-choices") with
             | Some v -> items_of v
             | None -> [])
      | None -> Js.Promise.resolve [])
@@ -295,6 +309,10 @@ let node_items_source ~block ~prop ~on_pick =
   let on_search q =
     let q' = String.trim q in
     if q' = "" then initial
+    else if scoped || classes_only then
+      let* items = initial in
+      Js.Promise.resolve
+        (Fuzzy.fuzzy_search ~extract:(fun it -> it.Sel.it_title) ~limit:100 items q')
     else
       let searched =
         (let* w = D.search_blocks q in
@@ -333,28 +351,37 @@ let closed_value_icon_id value =
 
 (* cljs <create-page-if-not-exists!: class-type and block/tags values
    are classes *)
+let create_node prop text =
+  let classes = Option.fold ~none:[] ~some:W.elems (D.getf prop "logseq.property/classes") in
+  let classes = List.filter (fun c -> D.getk c "db/ident" <> Some "logseq.class/Root") classes in
+  let class_ = D.getk prop "logseq.property/type" = Some "class"
+    || D.getk prop "db/ident" = Some "block/tags"
+    || (classes <> [] && List.for_all (fun c -> D.getk c "db/ident" = Some "logseq.class/Tag") classes) in
+  let tags = List.filter_map D.entity_uuid_of classes |> List.take 1 in
+  D.apply "create-page"
+    [ W.String (String.trim text)
+    ; W.Map [ W.Keyword "class?", W.Bool class_
+            ; W.Keyword "tags", W.Array (List.map (fun uuid -> W.Uuid uuid) tags) ] ]
+
 let new_node ctx row ~close text =
   ignore
     (let* res =
-       if D.row_type row = "class" || D.row_ident row = Some "block/tags"
-       then D.create_class text
-       else D.create_page text
+       create_node (D.row_prop row) text
      in
-     let* () =
-       match D.create_result_uuid res with
+     match D.create_result_uuid res with
        | Some uuid -> (
            let* id = D.db_id_of_uuid uuid in
            match id with
            | Some id ->
                let ident =
                  D.row_ident row |> Option.value ~default:"" in
-               set_scalar ctx ~ident ~value:(W.Int id);
+               let* _ = D.set_block_property ~block_uuid:ctx.block_uuid
+                 ~ident ~value:(W.Int id) in
+               ctx.refresh ();
+               close ();
                Js.Promise.resolve ()
            | None -> Js.Promise.resolve ())
-       | None -> Js.Promise.resolve ()
-     in
-     close ();
-     Js.Promise.resolve ())
+       | None -> Js.Promise.resolve ())
 
 (* ---------- views ---------- *)
 
@@ -461,11 +488,8 @@ let scalar_edit_cell ctx row : t =
          (value_button ~text:initial ~on_press:(fun _ ->
               open_editor ~steal:true ()))
      ; if_ ~test:(Signal.value editing)
-         (* ~text evaluates eagerly when the cell mounts, before
-            open_editor registers active_editor — read the local buffer
-            (seeded with the current value) instead of edit_buffer *)
          (Ui_components.text_field ~autofocus:true
-            ~text:(Runtime.signal_get buffer)
+            ~text:(reactive Fun.id (Signal.value buffer))
             ~on_input:(fun ev ->
               match ev with
               | Lui_protocol.TextChanged (_, t) ->
@@ -1011,8 +1035,8 @@ let extends_view ctx row : t =
         Runtime.signal_set picker_st (Some (options, selected'))
   in
   let chips = ref_chips row in
-  (column ~gap:2 ~grow:1.0
-     [ Lui_elements.row ~gap:4 ~cross:`center
+  (column ~gap:2 ~grow:1.0 ~min_width:0
+     [ Lui_elements.row ~gap:4 ~cross:`center ~min_width:0 ~flex_wrap:`wrap
          (chips
          @ [ Ui_components.button ~variant:`ghost ~icon:(`app "plus") ~text:""
                ~label:(I18n.t "property/select-property-placeholder")
@@ -1098,7 +1122,7 @@ let closed_value_view ~positioned ~table_view ctx row : t =
                              match D.entity_id_of c with
                              | Some id ->
                                  Some
-                                   (Sel.item ?icon:(closed_value_icon_id c) ~checked:(D.entity_id_of value = Some id) title (fun () ->
+                                   (Sel.item ~key:("entity-" ^ string_of_int id) ?icon:(closed_value_icon_id c) ~checked:(D.entity_id_of value = Some id) title (fun () ->
                                         set_scalar ctx ~ident
                                           ~value:(W.Int id);
                                         close ()))
@@ -1140,8 +1164,8 @@ let node_view ctx row : t =
   let ident = D.row_ident row |> Option.value ~default:"" in
   let close () = Runtime.signal_set open_ false in
   let chips = ref_chips row in
-  (column ~gap:2 ~grow:1.0
-     [ Lui_elements.row ~gap:4 ~cross:`center
+  (column ~gap:2 ~grow:1.0 ~min_width:0
+     [ Lui_elements.row ~gap:4 ~cross:`center ~min_width:0 ~flex_wrap:`wrap
          (chips
          @ [ Ui_components.button ~variant:`ghost ~icon:(`app "plus") ~text:""
                ~label:(I18n.t "property/select-property-placeholder")
@@ -1171,7 +1195,8 @@ let node_view ctx row : t =
            (picker_dropdown ~open_
               ~placeholder:
                 (I18n.t1 "property/set-placeholder" (D.row_title row))
-              ~new_option:(Some (new_node ctx row ~close))
+              ~new_option:(if List.mem (D.row_type row) ["node";"class"] then
+                Some (new_node ctx row ~close) else None)
               ~initial ~on_search)
              context' parent')
      ])
@@ -1280,30 +1305,21 @@ and icon_view ctx row : t =
    control-wrap (hidden fold arrow + bullet) + a non-flex content wrap
    so inline values (links) keep inline layout and line-box height *)
 and block_value_wrap (inner : t) : t =
-  Lui_elements.box ~style_class:"property-block-container content"
-    ~data_attrs:[ ("style", "width:100%") ]
-    [ Lui_elements.box ~style_class:"ls-block"
+  Lui_elements.column ~min_width:0 ~grow:1. ~style_class:"property-block-container content"
+    [ Lui_elements.column ~min_width:0 ~grow:1. ~style_class:"ls-block"
         ~transition:Ui_components.block_transition
-        [ Lui_elements.row ~gap:4 ~cross:`start ~grow:1.0
+        [ Lui_elements.row ~gap:4 ~cross:`start ~grow:1.0 ~min_width:0
             ~style_class:"block-main-container"
             [ Lui_elements.row ~gap:0 ~cross:`center
                 ~style_class:"block-control-wrap"
-                ~data_attrs:[ ("style", "display:flex;flex-direction:row;\
-                  align-items:center") ]
                 [ Ui_components.with_props
                     [ Ui_components.Prop.pressed_opacity 0.3 ]
                     (box ~style_class:"block-control"
-                       ~min_width:22 ~min_height:22 ~opacity:0.4
-                       ~data_attrs:
-                         [ ( "style"
-                           , "font-size:0.875rem;line-height:1.42857;\
-                              margin-top:1px;padding:0.125rem;\
-                              user-select:none;cursor:default;\
-                              text-decoration:none" ) ]
+                       ~min_width:22 ~min_height:22 ~opacity:0.4 ~margin_top:1 ~padding:2
                        [])
                 ; box ~style_class:"bullet-container"
                     [ box ~style_class:"bullet" [] ] ]
-            ; Lui_elements.box ~grow:1.0
+            ; Lui_elements.column ~grow:1.0 ~min_width:0
                 [ inner ] ] ] ]
 
 (* cljs url values render the external-link inline inside the plain
@@ -1316,13 +1332,8 @@ and url_view ctx row : t =
   if url = "" then scalar_edit_cell ctx row
   else
     (Ui_components.with_props
-         [ Ui_components.Prop.text_decoration "none" ]
+         [ Ui_components.Prop.text_decoration "none";
+           Ui_components.Prop.white_space `normal; Ui_components.Prop.min_width 0 ]
          (link ~url ~target:`blank ~style_class:"external-link"
-         ~data_attrs:
-           [ ("data-type", "url")
-           ; ( "style"
-             , "border-bottom:1px solid;\
-                overflow-wrap:anywhere;word-break:break-word;\
-                white-space:normal;min-width:0;max-width:100%" )
-           ]
+         ~data_attrs:[ ("data-type", "url") ]
          ~text:url []))

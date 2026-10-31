@@ -177,6 +177,8 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
   (* async emoji search token — a stale fill must not clobber a newer
      query's results *)
   let gen = ref 0 in
+  let alive = ref true in
+  Signal.on_dispose context.Lui_ui.ui_scope (fun () -> alive := false; incr gen);
   let get () = Runtime.signal_get st in
   let update f = Runtime.signal_set st (f (get ())) in
 
@@ -270,7 +272,9 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
   let row_h = 44. and eager_rows = 8 and group_rows = 6 in
   let grid_rows label items =
     let rows =
-      List.map (fun r -> row ~gap:4 ~padding_vertical:4 r) (chunks 9 items)
+      List.map
+        (fun r -> grid ~columns:9 ~gap:0 ~min_width:0 ~padding_vertical:4 r)
+        (chunks 9 items)
     in
     let rec split i acc = function
       | [] -> (List.rev acc, [])
@@ -293,15 +297,13 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
      flex-wrap, which the native layout engine ignores — a single
      unwrapped row shrink-compresses every cell to a few px *)
   let pane_section label (items : t list) : t =
-    Ui_components.with_props [ Ui_components.Prop.overflow `auto ]
-      (column ~grow:1.
-         ~data_attrs:[ ("style", "padding-left: 0.5rem") ]
-         (box ~style_class:"hd"
-            [ text ~as_:`Strong ~style_class:"ls-ep-section-title" ~value:label
-                ~font_size:"0.75rem" ~font_weight:500
-                ~foreground:"var(--lx-gray-07, hsl(var(--muted-foreground)))"
-                [] ]
-          :: [ column ~gap:0 (grid_rows label items) ]))
+    column ~padding_horizontal:8 ~min_width:0
+      [ box ~style_class:"hd"
+          [ text ~as_:`Strong ~style_class:"ls-ep-section-title" ~value:label
+              ~font_size:"0.75rem" ~font_weight:500
+              ~foreground:"hsl(var(--muted-foreground))"
+              [] ]
+      ; column ~gap:0 (grid_rows label items) ]
   in
 
   let used_item_btns () : t list =
@@ -334,7 +336,7 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
       update (fun s -> { s with emoji_results = [] })
     else
       Emoji_mart.search v (fun entries ->
-          if g = !gen then
+          if !alive && g = !gen then
             update (fun s -> { s with emoji_results = entries }))
   in
 
@@ -367,8 +369,8 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
       match s.tab with
       | Tab_all ->
           let used = used_item_btns () in
-          column ~gap:4 ~grow:1.
-            [ column ~data_attrs:[ ("style", "padding-bottom: 2.5rem") ]
+          column ~gap:4
+            [ Ui_components.with_props [Ui_components.Prop.padding_bottom 40] (column
                 ((if used = [] then []
                   else
                     [ pane_section
@@ -384,7 +386,7 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
                          [ string_of_int (List.length (icon_items ())) ])
                       (List.map
                          (fun (d, k) -> item_btn (Tabler_item (d, k)))
-                         (take 48 (icon_items ()))) ]) ]
+                         (take 48 (icon_items ()))) ])) ]
       | Tab_emoji ->
           (* cljs emojis-cp renders its own flex-1 flex-col gap-1 div
              inside the outer one *)
@@ -393,8 +395,8 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
             |> List.filter (fun (t, _, _) -> t = "emoji")
             |> List.map (fun (_, id, name) -> item_btn (Emoji_item (id, name)))
           in
-          column ~gap:4 ~grow:1.
-            [ column ~gap:4 ~grow:1.
+          column ~gap:4
+            [ column ~gap:4
                 ((if used = [] then []
                   else
                     [ pane_section
@@ -408,7 +410,7 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
       | Tab_icon ->
           (* the unfiltered table is ~6200 icons: pane_section windows
              the grid (lazy row groups) instead of capping it *)
-          column ~gap:4 ~grow:1.
+          column ~gap:4
             [ pane_section
                 (I.tf "icon/icons-count"
                    [ string_of_int (List.length (icon_items ())) ])
@@ -424,7 +426,7 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
         List.map (fun (id, name) -> Emoji_item (id, name)) s.emoji_results
         @ icons
       in
-      column ~gap:4 ~grow:1.
+      column ~gap:4
         (if items = [] then []
          else
            [ pane_section
@@ -441,6 +443,8 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
 
   (Ui_components.with_props
      [ Ui_components.Prop.position `relative
+     ; Ui_components.Prop.max_width_viewport 1.
+     ; Ui_components.Prop.max_height_viewport 1.
      ; Ui_components.Prop.overflow `hidden ]
      (* fixed height: the picker is a shrink-to-fit popover and the
        scroll body contributes no intrinsic height — without an explicit
@@ -448,9 +452,7 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
        the always-tall icon grid to the same 408px cap anyway. *)
     (column ~style_class:"cp__emoji-icon-picker"
         ~width:380 ~height:408
-        ~data_attrs:
-          [ ("data-keep-selection", "true")
-          ; ("style", "max-width: calc(100vw - 16px)") ]
+        ~data_attrs:[ ("data-keep-selection", "true") ]
         [ row ~key:"ft" ~cross:`center ~padding:12 ~height:40
             ~background:
               "var(--lx-gray-02, var(--ls-secondary-background-color, \
@@ -541,7 +543,7 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
          (fun s -> "bd " ^ tab_name s.tab)
          (scroll ~key:"bd" ~orientation:`vertical ~grow:1.
             ~padding_horizontal:4 ~padding_vertical:4
-            [ box
+            [ column ~min_width:0
                 [ reactive
                     ~equal:(fun (a : pstate) b ->
                        a.q = b.q && a.tab = b.tab
@@ -577,8 +579,8 @@ let open_picker_with_opts ~(anchor : Ui_services.el) ~(del : bool)
   in
   let key =
     if opts.sub then
-      Properties_popup.open_anchored_right ~cls:pop_cls anchor content
-    else Properties_popup.open_anchored ~cls:pop_cls anchor content
+      Properties_popup.open_anchored_right ~cls:pop_cls ~padding:0 anchor content
+    else Properties_popup.open_anchored ~cls:pop_cls ~padding:0 anchor content
   in
   key_ref := key;
   key

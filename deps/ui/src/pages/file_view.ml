@@ -36,18 +36,21 @@ let file_ext path =
   | Some i -> String.sub path (i + 1) (String.length path - i - 1)
   | None -> ""
 
-let view ~path (_ms : Model.t Signal.signal) : t =
+let controller ~repo ~path : t =
  fun ctx parent ->
   let content_st = Signal.state ctx.Lui_ui.ui_scheduler "" in
   let load_st = Signal.state ctx.Lui_ui.ui_scheduler Ui_effect.Loading in
   let debounced = Ui_services.timers_debounce 500 in
   (* save is controller-owned: a pending debounced write still lands
      after the view unmounts *)
-  let on_edit s = debounced (fun () -> save (Runtime.repo ()) path s) in
+  let on_edit s =
+    if Ui_effect.alive ctx.Lui_ui.ui_scope then
+      debounced (fun () -> save repo path s)
+  in
   Ui_effect.task ~scope:ctx.Lui_ui.ui_scope
     (Subs_state.task_of_promise
        (Runtime.invoke2 "thread-api/get-file-content"
-          (Wire.String (Runtime.repo ()))
+          (Wire.String repo)
           (Wire.String path)))
     ~ok:(fun w ->
       (match w with
@@ -59,7 +62,8 @@ let view ~path (_ms : Model.t Signal.signal) : t =
          it to CodeMirror once the lazy core chunk lands *)
       ignore
         (Ui_effect.timeout ~scope:ctx.Lui_ui.ui_scope 0 (fun () ->
-             Code_mirror.attach_file_editor ~on_change:on_edit ())))
+             let dispose = Code_mirror.attach_file_editor ~on_change:on_edit () in
+             Signal.on_dispose ctx.Lui_ui.ui_scope dispose)))
     ~error:(fun e ->
       Runtime.signal_set load_st (Ui_effect.Failed e));
   let editor () =
@@ -102,3 +106,18 @@ let view ~path (_ms : Model.t Signal.signal) : t =
      ; editor ()
      ])
     ctx parent
+
+let view ~path (ms : Model.t Signal.signal) : t =
+  let identity (model : Model.t) =
+    match model.phase, model.repo, model.route with
+    | Model.Ready, Some repo, Model.File current_path when current_path = path ->
+        Some (repo, current_path)
+    | _ -> None
+  in
+  reactive
+    ~equal:(fun a b -> identity a = identity b)
+    (fun model ->
+      match identity model with
+      | Some (repo, path) -> controller ~repo ~path
+      | None -> box ~key:"file" [])
+    ms

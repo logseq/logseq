@@ -32,11 +32,20 @@ type t =
   ; crumbs : string list Signal.state (* block breadcrumb titles *)
   ; due_labels : string list Signal.state (* per-rating "in <time>" hints *)
   ; info_open : bool Signal.state
+  ; grading : bool Signal.state
+  ; session : int ref
   }
 
 let st_ref : t option ref = ref None
 
 let repo = Runtime.repo
+
+let active st graph session =
+  Runtime.signal_get st.open_ && repo () = graph && !(st.session) = session
+
+let restart st =
+  incr st.session;
+  Runtime.signal_set st.grading false
 
 let q repo query =
   Runtime.invoke2 "thread-api/q" (Wire.String repo)
@@ -134,7 +143,8 @@ let decks_of_wire repo w =
   Js.Promise.resolve (Array.to_list a)
 
 let load_decks st repo =
-  (let* v = cards_class_eid repo in
+  let session = !(st.session) in
+  let* v = cards_class_eid repo in
    let* w =
      match v with None -> Js.Promise.resolve (Wire.Array [])
    | Some cid ->
@@ -142,9 +152,8 @@ let load_decks st repo =
          (Wire.String repo) (Wire.Int cid)
    in
    let* decks = decks_of_wire repo w in
-   Runtime.signal_set st.decks decks;
-   Js.Promise.resolve ())
-  |> ignore
+   if active st repo session then Runtime.signal_set st.decks decks;
+   Js.Promise.resolve ()
 
 let ids_of_wire w =
   match w with
@@ -179,6 +188,8 @@ let load_current st repo =
   Runtime.signal_set st.crumbs [];
   Runtime.signal_set st.due_labels [];
   let pos = Runtime.signal_get st.pos in
+  let session = !(st.session) in
+  let current () = active st repo session && Runtime.signal_get st.pos = pos in
   match List.nth_opt (Runtime.signal_get st.cards) pos with
   | None -> ()
   | Some eid ->
@@ -204,7 +215,7 @@ let load_current st repo =
                  | _ -> None))
          | _ -> None
        in
-       Runtime.signal_set st.cur blk;
+       if current () then Runtime.signal_set st.cur blk;
        (* breadcrumb — cljs block-breadcrumb shows page + ancestors *)
        let* parents =
          Runtime.invoke3 "thread-api/get-block-parents"
@@ -220,7 +231,7 @@ let load_current st repo =
              | None -> Wire.map_get_string p "block/name")
            (Wire.elems parents)
        in
-       Runtime.signal_set st.crumbs crumbs;
+       if current () then Runtime.signal_set st.crumbs crumbs;
        (* due hints on the rating buttons — cljs btn-with-shortcut shows
           util/human-time of each rating's next :due *)
        let* w =
@@ -244,22 +255,27 @@ let load_current st repo =
            ~now
        in
        (match card with
-        | Some c ->
+        | Some c when current () ->
             Runtime.signal_set st.due_labels
               (Fsrs_sched.due_labels ~now c)
-        | None -> ());
+        | _ -> ());
        Js.Promise.resolve ())
       |> ignore
 
 let load_cards st repo =
+  restart st;
+  let session = !(st.session) in
+  Runtime.signal_set st.cur None;
+  Runtime.signal_set st.cards [];
   (let sel_arg = sel_arg st in
    let* due_w = card_ids repo sel_arg ~due_only:true in
    let* all_w = card_ids repo sel_arg ~due_only:false in
-   Runtime.signal_set st.all_cards (ids_of_wire all_w);
-   Runtime.signal_set st.cards (ids_of_wire due_w);
-   Runtime.signal_set st.pos 0;
-   set_phase st "init";
-   load_current st repo;
+   if active st repo session then (
+     Runtime.signal_set st.all_cards (ids_of_wire all_w);
+     Runtime.signal_set st.cards (ids_of_wire due_w);
+     Runtime.signal_set st.pos 0;
+     set_phase st "init";
+     load_current st repo);
    Js.Promise.resolve ())
   |> ignore
 
@@ -275,8 +291,12 @@ let rate st rating =
       (match List.nth_opt (Runtime.signal_get st.cards) pos with
        | None -> ()
        | Some eid ->
-           if r_ = "" then ()
-           else
+           let session = !(st.session) in
+           if r_ = "" || not (active st r_ session)
+              || Runtime.signal_get st.grading
+              || Runtime.signal_get st.phase <> "show-answer" then ()
+           else (
+             Runtime.signal_set st.grading true;
              (let* w =
                 Runtime.invoke3 "thread-api/pull" (Wire.String r_)
                   (Wire.String
@@ -286,7 +306,9 @@ let rate st rating =
                   (Wire.Int eid)
               in
               let now = Int64.of_float (Ui_services.time_now ()) in
-              (match
+              let* () =
+                if not (active st r_ session) then Js.Promise.resolve ()
+                else match
                  Fsrs_sched.card_of_property_wire
                    (match Wire.get w "logseq.property.fsrs/state" with
                     | Some (Wire.Map _ as m) -> m
@@ -298,13 +320,14 @@ let rate st rating =
                         Fsrs_sched.ms_of_wire)
                    ~now
                with
-               | None -> Js.Promise.resolve ()
+               | None -> failwith "Cannot grade a card without FSRS state"
                | Some card -> (
                    let next = Fsrs_sched.next_card ~now card r in
                    match Wire.map_get_uuid w "block/uuid" with
-                   | None -> Js.Promise.resolve ()
+                   | None -> failwith "Cannot grade a card without a block UUID"
                    | Some uuid ->
-                       Outliner_ops.apply
+                       if not (active st r_ session) then Js.Promise.resolve ()
+                       else Outliner_ops.apply
                          ~opts:(Outliner_ops.op_opts "set-block-property")
                          [ Outliner_ops.set_block_property uuid
                              "logseq.property.fsrs/state"
@@ -312,12 +335,22 @@ let rate st rating =
                          ; Outliner_ops.set_block_property uuid
                              "logseq.property.fsrs/due"
                              (Wire.Int64 next.Fsrs_sched.due)
-                         ])))
-             |> ignore);
-      set_phase st "init";
-      Runtime.signal_set st.pos (pos + 1);
-      load_current st r_;
-      !refresh_due_count ()
+                         ])
+              in
+              if active st r_ session then (
+                Runtime.signal_set st.grading false;
+                set_phase st "init";
+                Runtime.signal_set st.pos (pos + 1);
+                load_current st r_;
+                !refresh_due_count ());
+              Js.Promise.resolve ())
+             |> Js.Promise.catch (fun error ->
+                  if active st r_ session then Runtime.signal_set st.grading false;
+                  Ui_services.log_error ("Card grading failed", error);
+                  if active st r_ session then
+                    Toast.error (I18n.t1 "ui/error-boundary-error" "cards-grade:failed");
+                  Js.Promise.resolve ())
+             |> ignore))
 
 let toggle_opts st =
   Runtime.signal_set st.opts_open (not (Runtime.signal_get st.opts_open))
@@ -333,6 +366,7 @@ let select_deck st i =
 
 (* cljs practice-again! — review the whole scope, due or not *)
 let practice_again st =
+  restart st;
   Runtime.signal_set st.cards (Runtime.signal_get st.all_cards);
   Runtime.signal_set st.pos 0;
   set_phase st "init";
@@ -340,6 +374,7 @@ let practice_again st =
   if r = "" then () else load_current st r
 
 let close st =
+  restart st;
   Runtime.signal_set st.open_ false;
   Render_inline.cloze_reveal_all := false;
   Runtime.signal_set st.info_open false;
@@ -349,6 +384,7 @@ let close st =
    journal, then close the modal and route to that page *)
 let add_cards_block st =
   let r = repo () in
+  let session = !(st.session) in
   if r <> "" then
     ignore
       (let* _ = Graph.create_today_journal r in
@@ -359,6 +395,7 @@ let add_cards_block st =
        in
        match Wire.map_get_uuid page "block/uuid" with
        | None -> Js.Promise.resolve ()
+       | Some _ when not (active st r session) -> Js.Promise.resolve ()
        | Some puuid ->
            let uuid = Ui_services.env_random_uuid () in
            let* _ =
@@ -375,11 +412,13 @@ let add_cards_block st =
                    puuid ~sibling:false
                ]
            in
-           close st;
-           Sidebar_state.navigate_to_page title;
+           if active st r session then (
+             close st;
+             Sidebar_state.navigate_to_page title);
            Js.Promise.resolve ())
 
 let open_modal st eid_opt =
+  restart st;
   Render_inline.cloze_reveal_all := false;
   Runtime.signal_set st.open_ true;
   Runtime.signal_set st.opts_open false;
@@ -394,22 +433,15 @@ let open_modal st eid_opt =
   let r = repo () in
   if r = "" then ()
   else (
-    load_decks st r;
+    let session = !(st.session) in
+    (let* () = load_decks st r in
+    if active st r session then (
     match eid_opt with
     | None ->
         Runtime.signal_set st.sel (-1);
         load_cards st r
     | Some e ->
-        (* the Practice button's deck: decks load async — poll until
-           they land, then select the matching one (cljs
-           initial-cards-id); unknown eid falls back to All cards *)
-        let rec wait_sel tries =
           let decks = Runtime.signal_get st.decks in
-          if decks = [] && tries > 0 then
-            ignore
-              (Ui_services.timers_timeout
-                 (fun () -> wait_sel (tries - 1)) 20)
-          else (
             let idx =
               match
                 List.find_index (fun d -> d.deck_eid = e) decks
@@ -418,9 +450,8 @@ let open_modal st eid_opt =
               | None -> -1
             in
             Runtime.signal_set st.sel idx;
-            load_cards st r)
-        in
-        wait_sel 50)
+            load_cards st r);
+    Js.Promise.resolve ()) |> ignore)
 
 (* due-count badge for the sidebar nav — cljs :srs/cards-due-count *)
 module Due_count = State_cell.Make (struct
@@ -509,6 +540,8 @@ let init (ms : Model.t Signal.signal) : t =
         ; crumbs = Signal.state owner []
         ; due_labels = Signal.state owner []
         ; info_open = Signal.state owner false
+        ; grading = Signal.state owner false
+        ; session = ref 0
         }
       in
       st_ref := Some st;

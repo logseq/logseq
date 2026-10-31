@@ -129,22 +129,40 @@ let localization () =
     check "Timestamp choices resolve the initialized locale"
       (List.exists (fun (_,label) -> label="Translated Custom date") (I18n.timestamp_options ())))
 
-let settings_config ~registry ~profile =
+let settings_config ~registry ~profile ~finish =
   let previous_settings = !Settings_state.st and previous_model = !Runtime.read_model
-  and previous_worker = !Runtime.worker and previous_flush = !Runtime.app_flush in
-  Fun.protect ~finally:(fun () ->
+  and previous_worker = !Runtime.worker and previous_flush = !Runtime.app_flush
+  and previous_send = !Runtime.app_send and previous_published = !Sdk_config.published_config in
+  let rec next = function
+  | [] ->
     Settings_state.st:=previous_settings;Runtime.read_model:=previous_model;
-    Runtime.worker:=previous_worker;Runtime.app_flush:=previous_flush) (fun () ->
-    List.iter (fun owner ->
+    Runtime.worker:=previous_worker;Runtime.app_flush:=previous_flush;
+    Runtime.app_send:=previous_send;Sdk_config.published_config:=previous_published;
+    finish ()
+  | owner::rest ->
       Settings_state.st:=None;
+      Sdk_config.published_config:=None;
       let config checked = Wire.Map [Wire.kw "ui/show-brackets?",Wire.Bool checked;
         Wire.kw "start-of-week",Wire.Int 2;Wire.kw "custom-fixture",Wire.String "retained"] in
+      let files=Hashtbl.create 2 in
+      List.iter (fun repo -> Hashtbl.add files repo (config false))
+        ["settings-config-fixture";"second-settings-fixture"];
       let current=ref {Model.initial with repo=Some "settings-config-fixture";
-        graph_config=config false} and requests=ref [] in
+        graph_config=config false} in
       Runtime.read_model:=(fun () -> !current);
       Runtime.worker:=Some {Worker_client.invoke_fn=(fun name args ->
-        requests:=(name,args)::!requests;
-        Js.Promise.make (fun ~resolve:_ ~reject:_ -> ()));
+        match name,args with
+        | "thread-api/get-file-content",[Wire.String repo;Wire.String "logseq/config.edn"] ->
+            Js.Promise.resolve (Wire.String (Edn.to_string (Hashtbl.find files repo)))
+        | "thread-api/pull",[Wire.String repo;Wire.String _;_] ->
+            ignore (Hashtbl.find files repo);
+            Js.Promise.resolve Wire.Nil
+        | "thread-api/transact",Wire.String repo::Wire.Array [file]::_ ->
+            (match Wire.get file "file/content" with
+             | Some (Wire.String content) -> Hashtbl.replace files repo (Edn.parse content)
+             | _ -> failwith "Settings fixture requires config file content");
+            Js.Promise.resolve Wire.Nil
+        | _ -> failwith ("Unexpected Settings config request: " ^ name));
         on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
       let session=S.mount ~registry ~profile ~initial:!current
         ~reducer:(fun model action ->
@@ -154,6 +172,15 @@ let settings_config ~registry ~profile =
           | "page" -> Settings_page.view ms
           | _ -> Settings_page.modal_body ms) () in
       Runtime.app_flush:=(fun () -> S.flush session);
+      let complete=ref (fun () -> ()) in
+      let saved=Js.Promise.make (fun ~resolve ~reject:_ ->
+        complete:=(fun () -> resolve true [@u])) in
+      Runtime.app_send:=(fun action ->
+        let changed=Lui_app.send session.S.app action in
+        (match action with
+         | Action.Graph_config_loaded ("second-settings-fixture",_) -> !complete ()
+         | _ -> ());
+        changed);
       if owner<>"appearance" then (Settings_state.set_tab "editor";S.flush session);
       let switch () =
         let rec descendant node =
@@ -167,6 +194,7 @@ let settings_config ~registry ~profile =
       check (owner ^ " reads persisted config before Settings has loaded")
         (Hashtbl.find_opt (switch ()).M.props "checked"=Some (P.BoolValue false));
       let publish repo cfg =
+        Hashtbl.replace files repo cfg;
         ignore (Lui_app.send session.S.app (Action.Graph_config_loaded (repo,cfg)));
         S.flush session in
       publish "settings-config-fixture" (config true);
@@ -180,15 +208,15 @@ let settings_config ~registry ~profile =
       check (owner ^ " follows the newly opened graph configuration")
         (Hashtbl.find_opt (switch ()).M.props "checked"=Some (P.BoolValue false));
       S.toggle session (switch ()).M.id true;
-      check (owner ^ " preserves other graph preferences when toggled")
-        (List.exists (function
-          | "thread-api/transact",Wire.String repo::Wire.Array [file]::_ ->
-              repo="second-settings-fixture" &&
-              (match Wire.get file "file/content" with
-               | Some (Wire.String content) -> Edn.parse content=config true
-               | _ -> false)
-          | _ -> false) !requests);
-      ignore (Lui_app.dispose session.S.app)) ["appearance";"page";"dialog"])
+      ignore (Js.Promise.then_ (fun _ ->
+        check (owner ^ " preserves other graph preferences when toggled")
+          (Hashtbl.find files "second-settings-fixture"=config true
+           && Hashtbl.find files "settings-config-fixture"=config false
+           && (!current).Model.graph_config=config true);
+        ignore (Lui_app.dispose session.S.app);
+        next rest;Js.Promise.resolve ()) saved)
+  in
+  next ["appearance";"page";"dialog"]
 
 let flashcards_config ~registry ~profile =
   let previous_settings = !Settings_state.st and previous_model = !Runtime.read_model
@@ -249,8 +277,110 @@ let flashcards_config ~registry ~profile =
       (List.exists (fun node -> class_has node "all-pages-nav") (nodes session));
     ignore (Lui_app.dispose session.S.app))
 
+let grouped_table_selection ~registry ~profile =
+  let module V = Views_state in
+  let instance = ref None in
+  let session = S.mount ~registry ~profile ~initial:Model.initial
+      ~reducer:(fun model () -> model)
+      ~view:(fun context _ _ ->
+        let inst = V.make ~sched:context.Lui_ui.ui_scheduler
+            ~kind:V.KAllPages ~feature:"all-pages" ~owner:Wire.Nil in
+        instance := Some inst;
+        V.set inst { (V.empty_vstate ()) with
+          V.loading = false;
+          columns = [Views_table.builtin_column "select" "" "select" ()];
+          selected = V.Sset.of_list ["a"; "c"; "stale"];
+          data = Views_wire.VGrouped
+            [ { gv = Wire.Nil; grows = ["b"; "a"] }
+            ; { gv = Wire.Nil; grows = ["c"; "b"] } ] };
+        Lui_elements.column
+          [ Views_table.grouped_table inst ~rows:["b"; "a"]
+          ; Views_table.grouped_table inst ~rows:["c"; "b"] ]) () in
+  Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose session.S.app))
+    (fun () ->
+      let inst = Option.get !instance in
+      let headers = List.filter
+          (fun node -> M.string_prop node "accessibility-identifier" =
+            Some "header-checkbox") (nodes session) in
+      let header = List.hd headers in
+      check "A partially selected group is not checked as a fully selected group"
+        (Hashtbl.find_opt header.M.props "checked" <> Some (P.BoolValue true));
+      S.dispatch session (P.ToggleChangedDetail (header.M.id, true, 0));
+      check "Selecting a group preserves the other group's selected rows"
+        (V.Sset.equal (V.get inst).V.selected
+           (V.Sset.of_list ["a"; "b"; "c"; "stale"]));
+      S.dispatch session (P.ToggleChangedDetail (header.M.id, false, 0));
+      check "Clearing a group preserves selection outside that group"
+        (V.Sset.equal (V.get inst).V.selected
+           (V.Sset.of_list ["c"; "stale"]));
+      V.update inst (fun state -> { state with
+        V.selected = V.Sset.of_list ["a"; "b"; "c"; "stale"] });
+      check "Bulk actions use current row order once, without stale selections"
+        (Views_table.selected_uuids inst = ["b"; "a"; "c"]))
+
+let table_range_selection () =
+  let module V = Views_state in
+  let initial = { (V.empty_vstate ()) with
+    V.selected = V.Sset.of_list ["a"; "outside"]; table_anchor = Some "a" } in
+  let select state rows uuid checked shift =
+    V.table_select_row state ~rows ~uuid ~checked ~shift in
+  let ranged = select initial ["c"; "b"; "a"] "c" true true in
+  check "A range follows the current order and preserves outside selection"
+    (V.Sset.equal ranged.V.selected (V.Sset.of_list ["a"; "b"; "c"; "outside"]));
+  let missing = select initial ["b"; "c"] "c" true true in
+  check "A filtered-out anchor does not select unrelated rows"
+    (V.Sset.equal missing.V.selected (V.Sset.of_list ["a"; "c"; "outside"]));
+  let cleared = select initial ["a"; "b"; "c"] "a" false false in
+  let next = select cleared ["a"; "b"; "c"] "c" true true in
+  check "Deselecting the anchor ends the previous range"
+    (cleared.V.table_anchor = None &&
+      V.Sset.equal next.V.selected (V.Sset.of_list ["c"; "outside"]));
+  let all = V.table_select_all_rows initial true in
+  let excluded = select all ["a"; "b"] "b" false false in
+  let group = V.table_set_rows excluded ~rows:["a"] ~checked:false in
+  check "Select-all includes later rows while row and group exclusions stay local"
+    (V.table_row_selected all "later" &&
+      not (V.table_row_selected group "a") &&
+      not (V.table_row_selected group "b") && V.table_row_selected group "later");
+  let pending = { group with V.table_action_pending = Some group.V.table_selection_epoch } in
+  let cleared = V.table_clear_selection pending in
+  check "Clearing selection retires pending full-data actions and all-row membership"
+    (not (V.table_row_selected cleared "later") && cleared.V.table_action_pending = None &&
+      cleared.V.table_selection_epoch > pending.V.table_selection_epoch)
+
+let table_resize_transaction () =
+  let module V = Views_state in
+  let initial = { (V.empty_vstate ()) with
+    V.view_uuid = "table-a"; sized = V.Smap.singleton "title" 180 } in
+  let start = V.start_table_resize initial ~owner:7 ~column:"title" ~x:50. ~width:180 in
+  let move = V.move_table_resize start ~owner:7 ~x:82.6 in
+  check "Resize preview leaves the persisted-width map unchanged"
+    (move.V.sized = initial.V.sized &&
+      Option.map (fun r -> r.V.resize_preview) move.V.table_resize = Some 213);
+  let cancel = V.finish_table_resize move ~owner:7 ~commit:false in
+  check "Cancelling a drag rolls back without changing committed widths"
+    (cancel.V.table_resize = None && cancel.V.sized = initial.V.sized);
+  let release = V.finish_table_resize move ~owner:7 ~commit:true in
+  check "Release commits the rounded preview once"
+    (release.V.table_resize = None && V.Smap.find "title" release.V.sized = 213 &&
+      V.finish_table_resize release ~owner:7 ~commit:true = release);
+  let low = V.move_table_resize start ~owner:7 ~x:(-1000.) in
+  let high = V.move_table_resize start ~owner:7 ~x:1000. in
+  check "Resize previews clamp to the table's supported width range"
+    (Option.map (fun r -> r.V.resize_preview) low.V.table_resize = Some 40 &&
+      Option.map (fun r -> r.V.resize_preview) high.V.table_resize = Some 500);
+  check "A disposed older header cannot finish another header's drag"
+    (V.finish_table_resize move ~owner:8 ~commit:false = move);
+  let switched = { move with V.view_uuid = "table-b" } in
+  let stale = V.finish_table_resize switched ~owner:7 ~commit:true in
+  check "A previous view's drag never commits into the current view"
+    (stale.V.table_resize = None && stale.V.sized = initial.V.sized)
+
 let run_views ~registry ~profile ~finish =
-  settings_config ~registry ~profile;
+  table_resize_transaction ();
+  table_range_selection ();
+  grouped_table_selection ~registry ~profile;
+  settings_config ~registry ~profile ~finish:(fun () ->
   flashcards_config ~registry ~profile;
   let previous_flush = !Runtime.app_flush in
   let previous_preset = Ui_services.storage_get "ls-icon-color-preset" in
@@ -281,7 +411,9 @@ let run_views ~registry ~profile ~finish =
     let created = Views_state.make ~sched ~kind:Views_state.KAllPages
       ~feature:"neutral-button-parity" ~owner:Wire.Nil in
     let selected = { (Views_state.empty_vstate ()) with
-      Views_state.selected=Views_state.Sset.singleton "neutral-row" } in
+      Views_state.selected=Views_state.Sset.singleton "neutral-row";
+      data=Views_wire.VFlat { rows=["neutral-row"]; count=1;
+        previews=Hashtbl.create 0; qprops=[] } } in
     let table = {created with Views_state.st=Signal.state sched selected} in
     Lui_elements.column
       [Right_sidebar_view.topbar_btn "contents" (I18n.t "page/contents") (fun () -> ());
@@ -411,7 +543,7 @@ let run_views ~registry ~profile ~finish =
   Runtime.read_model:=(fun () -> {Model.initial with repo=Some "editor-week-fixture";
     graph_config=Wire.Map [Wire.kw "start-of-week",Wire.Int 0]});
   let popup : Editor_commands.popup =
-    {kind=Cal_insert;uuid="calendar-keyboard-owner";from=0;cy=2024;cm=1;cd=31;
+    {kind=Cal_insert "";uuid="calendar-keyboard-owner";from=0;cy=2024;cm=1;cd=31;
      hour=0;tmin=0;x=0.;y=0.;menu=None;rpt=None} in
   Editor_commands.active:=Some popup;Editor_commands.popup_vs:=None;
   Editor_commands.nav_month 1;
@@ -2137,12 +2269,17 @@ let run_views ~registry ~profile ~finish =
      && List.exists (fun n -> M.string_prop n "text"=Some "Other action") (nodes nested)
      && not (List.exists (fun n -> M.string_prop n "text"=Some "Child action") (nodes nested)));
   ignore (Lui_app.dispose nested.S.app);
-  let previous_context = !Popups_state.active and previous_highlight = !Popups_view.cm_hi_el in
+  let previous_context = !Popups_state.active in
   let previous_menu_query : string -> Js.Json.t array = Stub_dom.get_field document "querySelectorAll" in
   let previous_menu_id : string -> Js.Json.t = Stub_dom.get_field document "getElementById" in
+  let previous_menu_dispatch : Js.Json.t -> bool = Stub_dom.get_field document "dispatchEvent" in
   let foreign_menu=Stub_dom.make_element "div" and foreign_item=Stub_dom.make_element "div" in
   let owned_menu=Stub_dom.make_element "div" and owned_item=Stub_dom.make_element "div" in
   let foreign_actions=ref 0 and owned_actions=ref 0 in
+  Stub_dom.set_field document "dispatchEvent" (fun event ->
+    let name : string = Stub_dom.get_field event "type" in
+    if name="ls:editor-command" then (incr owned_actions; true)
+    else previous_menu_dispatch event);
   List.iter (fun menu -> Stub_dom.set_field menu "getBoundingClientRect" (fun () ->
     Js.Json.object_ (Js.Dict.fromList ["x",Js.Json.number 0.;"y",Js.Json.number 0.;
       "width",Js.Json.number 200.;"height",Js.Json.number 100.]))) [foreign_menu;owned_menu];
@@ -2159,14 +2296,16 @@ let run_views ~registry ~profile ~finish =
     (Option.is_some ((Ui_dom_web.el_of owned_item).Ui_services.closest
       "#missing-context-menu, #block-context-menu"));
   Stub_dom.set_field document "getElementById" (fun identifier ->
-    if identifier="block-context-menu" then owned_menu else previous_menu_id identifier);
+    if identifier="block-context-menu" then owned_menu
+    else if identifier="cm-item-0" then owned_item else previous_menu_id identifier);
   Stub_dom.set_field document "querySelectorAll" (fun selector ->
     if selector=".ui__dropdown-menu-content" then [|foreign_menu|]
     else previous_menu_query selector);
   Fun.protect ~finally:(fun () ->
     Stub_dom.set_field document "querySelectorAll" previous_menu_query;
     Stub_dom.set_field document "getElementById" previous_menu_id;
-    Popups_state.active:=previous_context;Popups_view.cm_hi_el:=previous_highlight) (fun () ->
+    Stub_dom.set_field document "dispatchEvent" previous_menu_dispatch;
+    Popups_state.active:=previous_context) (fun () ->
     let context_scheduler=Signal.scheduler () in
     let context=Popups_state.make context_scheduler in
     List.iter (fun key ->
@@ -2177,8 +2316,9 @@ let run_views ~registry ~profile ~finish =
       check ("a closed block menu cannot consume another menu's " ^ key)
         (not !consumed)) ["ArrowDown";"Enter"];
     check "block-menu listeners cannot focus or activate foreign menu items" (!foreign_actions=0);
-    let cm : Popups_state.cm = {cx=0.;cy=0.;atop=0.;flip=false;block_id="context-fixture";
-      multi=false;entries=[];sub_open=(-1);sub_xy=(0.,0.);tag=None;native=false;native_acts=[]} in
+    let cm : Popups_state.cm = {epoch=0;cx=0.;cy=0.;atop=0.;flip=false;block_id="context-fixture";
+      multi=false;entries=[Ci_item ("Action",None,"fixture-action")];
+      sub_open=(-1);sub_xy=(0.,0.);highlighted=None;tag=None;native=false;native_acts=[]} in
     Signal.set context.vs {ac=None;cm=Some cm;pv=None};
     Signal.stabilize context_scheduler;
     let key_in target key =
@@ -2217,7 +2357,8 @@ let run_views ~registry ~profile ~finish =
         {o_refresh=(fun _ -> incr refreshes); o_refresh_src=(fun _ _ -> ());
          o_create_view=(fun _ -> ()); o_rename_box=(fun _ _ -> Lui_elements.spacer []);
          o_export=(fun _ -> ()); o_add_object=(fun _ -> ());
-         o_title_of_uuid=(fun _ uuid -> uuid); o_load_more=(fun _ -> ())};
+         o_title_of_uuid=(fun _ uuid -> uuid); o_load_more=(fun _ -> ());
+         o_full_action_rows=(fun _ reply -> reply (Error "Full action rows are not installed"))};
       Views_head.sorting_popup inst (popup_anchor ());
       Lui_elements.column
         [Views_table.foldable inst ~key:"tab-fixture"
@@ -2798,7 +2939,7 @@ let run_views ~registry ~profile ~finish =
       Graphs_ops.on_repos_changed := repos_changed_before;
       async_selection_check (fun () -> filter_value_check (fun () ->
         filter_reference_titles_check (fun () -> filter_edit_check (fun () -> filter_operator_check (fun () -> page_name_filter_check (fun () -> filter_input_check ();filter_scope_check ();config_boot_check (fun () -> config_save_check (fun () -> custom_date_check (fun () -> type_choice_check (fun () -> Runtime.app_flush := previous_flush;finish ()))))))))));
-      Js.Promise.resolve ()) (Js.Promise.resolve ()))
+      Js.Promise.resolve ()) (Js.Promise.resolve ())))
 
 let popup_press (ev : Ui_services.ev) =
   let state_before = Editor_state.read () in
@@ -2806,7 +2947,7 @@ let popup_press (ev : Ui_services.ev) =
       (Editor_state.mk_editing ~uuid:"b1" ~buffer:"text"
          ~scope:"main" ~base:"text" ()) });
   let popup : Editor_commands.popup =
-    { kind = Editor_commands.Link_form false; uuid = "b1"; from = 0
+    { kind = Editor_commands.Link_form { image = false; url = ""; label = "" }; uuid = "b1"; from = 0
     ; cy = 2026; cm = 10; cd = 9; hour = 0; tmin = 0; x = 0.; y = 0.
     ; menu = None; rpt = None } in
   Editor_commands.active := Some popup;

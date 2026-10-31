@@ -108,6 +108,7 @@ let rating_btn st i (r, label_key, sc, style, hex) =
         ~foreground:"rgb(23,23,23)"
         ~style_class:(id ^ " " ^ style)
         ~label:(t_ label_key)
+        ~disabled:(reactive Fun.id (Signal.value st.Cards_state.grading))
         ~tooltip:(I18n.t1 "flashcard/shortcut-tooltip" sc)
         ~variant:`secondary ~size:`sm
         ~on_press:(fun _ -> Cards_state.rate st r)

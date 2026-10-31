@@ -13,11 +13,11 @@ import (
 // viewportRenderer implements the native lazy-row protocol using committed
 // host bindings. Only marked rows visited by the real frame are candidates.
 type viewportRenderer struct {
-	view    *ui.Context
-	epoch   uint64
-	rows    map[int64]*viewportRow
-	pressed luimygo.InputNode
-	button  int
+	viewServices ui.Services
+	epoch        uint64
+	rows         map[int64]*viewportRow
+	pressed      luimygo.InputNode
+	button       int
 }
 
 type viewportRow struct {
@@ -37,15 +37,16 @@ type viewportRow struct {
 func (v *viewportRenderer) BeginView(s *platformServices, c *ui.Context) {
 	v.epoch++
 	epoch := v.epoch
-	v.view = c
+	services := c.Services()
+	v.viewServices = services
 	width, height := c.Size()
 	window := ui.Rect{W: width, H: height}
 	generation := s.backend.Generation()
 	c.AfterFrame(func() {
-		if v.epoch != epoch || v.view != c {
+		if v.epoch != epoch || v.viewServices != services {
 			return
 		}
-		defer func() { v.view = nil }()
+		defer func() { v.viewServices = ui.Services{} }()
 		if s.backend.Generation() != generation {
 			return
 		}
@@ -141,7 +142,7 @@ func (v *viewportRenderer) BeginView(s *platformServices, c *ui.Context) {
 }
 
 func (v *viewportRenderer) Bind(s *platformServices, c *ui.Context, n luimygo.Node, e ui.Element, emit func(luimygo.Event)) {
-	if v.view != c || s.desktop.closed {
+	if v.viewServices == (ui.Services{}) || v.viewServices != c.Services() || s.desktop.closed {
 		return
 	}
 	attrs := extensionAttrs(n)

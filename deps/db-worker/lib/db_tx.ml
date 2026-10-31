@@ -151,6 +151,45 @@ let normalize_tx (txs : tx_op list) : tx_op list =
       | _ -> Some tx)
     txs
 
+let prepare_tx_ops (db : db) (tx_meta : tx_meta) (tx_ops : tx_op list) =
+  let tx_ops = normalize_tx tx_ops in
+  let outliner_op =
+    match tx_meta_lookup tx_meta "outliner-op" with
+    | Some (Keyword s) | Some (String s) -> s
+    | _ -> ""
+  in
+  let tx_ops = Delete_blocks.expand_delete_blocks_tx db tx_ops ~outliner_op in
+  tx_ops @ Delete_blocks.update_refs_history db tx_ops
+
+let pipeline_imported_data tx_meta =
+  tx_meta_flag tx_meta "logseq.graph-parser.exporter/imported-data?"
+  || tx_meta_flag tx_meta "logseq.db.sqlite.export/imported-data?"
+
+let pipeline_derives_extra_data tx_meta =
+  not
+    (tx_meta_flag tx_meta "sync-download-graph?"
+     || tx_meta_flag tx_meta "reverse?"
+     || tx_meta_flag tx_meta "transact-remote?"
+     || pipeline_imported_data tx_meta)
+
+let pipeline_refs_need_recalculated tx_meta =
+  match tx_meta_lookup tx_meta "outliner-op" with
+  | Some (Keyword "collapse-expand-blocks" | Keyword "delete-blocks") -> false
+  | _ -> not (tx_meta_flag tx_meta "undo?" || tx_meta_flag tx_meta "redo?")
+
+let pipeline_refs_enabled tx_meta =
+  let outliner_refs =
+    match tx_meta_lookup tx_meta "outliner-op" with
+    | Some (Keyword _) -> pipeline_refs_need_recalculated tx_meta
+    | _ -> false
+  in
+  outliner_refs || tx_meta_flag tx_meta "rtc-tx?"
+  || tx_meta_flag tx_meta "rtc-op?" || pipeline_imported_data tx_meta
+
+let pipeline_rebuilds_refs tx_meta =
+  (pipeline_derives_extra_data tx_meta || pipeline_imported_data tx_meta)
+  && pipeline_refs_enabled tx_meta
+
 (* ---- transact-sync ---- *)
 
 exception Invalid_tx of string
@@ -185,6 +224,12 @@ let should_run_pipeline (conn : conn) (db : db) (tx_meta : tx_meta) : bool =
 
 let should_validate_pipeline_result (tx_meta : tx_meta) : bool =
   not (tx_meta_flag tx_meta "fix-db?")
+
+type before_validation = tx_report -> datom list
+
+let finalizer_eligible conn db tx_meta =
+  should_run_pipeline conn db tx_meta && pipeline_rebuilds_refs tx_meta
+  && Option.is_some !transact_pipeline_fn
 
 let throw_if_page_has_block_parent (db : db) (tx_data : datom list) =
   let bad =
@@ -234,7 +279,8 @@ let log_transact_failed (tx_meta : tx_meta) (tx_ops : tx_op list) (e : exn) :
       ; "tx-count", string_of_int (List.length tx_ops)
       ; "error", Printexc.to_string e ]
 
-let rec transact_sync_ (conn : conn) (tx_ops : tx_op list) (tx_meta : tx_meta)
+let rec transact_sync_ ?(before_validation : before_validation option)
+    (conn : conn) (tx_ops : tx_op list) (tx_meta : tx_meta)
     : tx_report =
   if tx_ops = [] then
     { db_before = Conn.db conn
@@ -245,12 +291,28 @@ let rec transact_sync_ (conn : conn) (tx_ops : tx_op list) (tx_meta : tx_meta)
     }
   else begin
     let db = Conn.db conn in
+    if Option.is_some before_validation && not (finalizer_eligible conn db tx_meta)
+    then invalid_arg "Before-validation finalizer requires the canonical worker pipeline";
     if should_run_pipeline conn db tx_meta then begin
       let report0 = with_report ~tx_meta db tx_ops in
       let report =
         match !transact_pipeline_fn with
         | Some f -> f report0
         | None -> report0
+      in
+      let report =
+        match before_validation with
+        | None -> report
+        | Some finalize ->
+            if not (finalizer_eligible conn db tx_meta) then
+              invalid_arg "Before-validation finalizer lost the canonical worker pipeline";
+            match finalize report with
+            | [] -> report
+            | datoms ->
+                let tail = with_report ~tx_meta report.db_after
+                    (List.map (fun d -> Raw_datom d) datoms) in
+                { report with db_after = tail.db_after
+                ; tx_data = report.tx_data @ tail.tx_data }
       in
       throw_if_page_has_block_parent report.db_after report.tx_data;
       let valid, errors =
@@ -279,7 +341,7 @@ let rec transact_sync_ (conn : conn) (tx_ops : tx_op list) (tx_meta : tx_meta)
                (Printf.sprintf "DB write failed with invalid data (%d errors)"
                   (List.length errors)))
         end else
-          transact_sync_ conn tx_ops tx_meta
+          transact_sync_ ?before_validation conn tx_ops tx_meta
       end
       else if report.tx_data <> [] then
         (* cljs compare-and-set! — conn must still hold the db the report
@@ -289,31 +351,24 @@ let rec transact_sync_ (conn : conn) (tx_ops : tx_op list) (tx_meta : tx_meta)
           ignore (commit_tx_report conn report);
           report
         end else
-          transact_sync_ conn tx_ops tx_meta
+          transact_sync_ ?before_validation conn tx_ops tx_meta
       else report
     end else
       transact_conn ~tx_meta conn tx_ops
   end
 
-let transact_sync (conn : conn) (tx_ops : tx_op list) (tx_meta : tx_meta)
+let transact_sync ?before_validation (conn : conn) (tx_ops : tx_op list) (tx_meta : tx_meta)
     : tx_report =
-  try transact_sync_ conn tx_ops tx_meta
+  try transact_sync_ ?before_validation conn tx_ops tx_meta
   with e ->
     log_transact_failed tx_meta tx_ops e;
     raise e
 
 (* ldb/transact! — worker path always takes the conn branch *)
-let transact ?(tx_meta : tx_meta = []) (conn : conn) (tx_ops : tx_op list)
+let transact ?before_validation ?(tx_meta : tx_meta = [])
+    (conn : conn) (tx_ops : tx_op list)
     : tx_report =
-  let tx_ops = normalize_tx tx_ops in
-  let outliner_op =
-    match tx_meta_lookup tx_meta "outliner-op" with
-    | Some (Keyword s) | Some (String s) -> s
-    | _ -> ""
-  in
-  let tx_ops = Delete_blocks.expand_delete_blocks_tx (Conn.db conn) tx_ops ~outliner_op in
-  let cleanup = Delete_blocks.update_refs_history (Conn.db conn) tx_ops in
-  let tx_ops = tx_ops @ cleanup in
+  let tx_ops = prepare_tx_ops (Conn.db conn) tx_meta tx_ops in
   if tx_ops = [] then
     { db_before = Conn.db conn
     ; db_after = Conn.db conn
@@ -328,7 +383,7 @@ let transact ?(tx_meta : tx_meta = []) (conn : conn) (tx_ops : tx_op list)
        else tx_meta)
       |> fun m -> if flags.skip_store then ("skip-store?", Bool true) :: m else m
     in
-    transact_sync conn tx_ops tx_meta
+    transact_sync ?before_validation conn tx_ops tx_meta
 
 (* ldb/batch-transact-with-temp-conn! — batched txs on an isolated in-memory
    conn (reads storage-backed data, never writes), then a single commit.

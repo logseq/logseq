@@ -311,6 +311,8 @@ static int dispatch_pointer_detail(const char *name, int64_t node,
 LUI_POINTER_DETAIL_EXPORT(lui_ocaml_press_detail)
 LUI_POINTER_DETAIL_EXPORT(lui_ocaml_pointer_down)
 LUI_POINTER_DETAIL_EXPORT(lui_ocaml_pointer_up)
+LUI_POINTER_DETAIL_EXPORT(lui_ocaml_pointer_move)
+LUI_POINTER_DETAIL_EXPORT(lui_ocaml_pointer_cancel)
 LUI_POINTER_DETAIL_EXPORT(lui_ocaml_context_menu_press)
 
 LUI_EXPORT int32_t lui_ocaml_pointer_enter(int64_t node) {
@@ -329,6 +331,20 @@ LUI_EXPORT int32_t lui_ocaml_toggle_changed(int64_t node, int32_t checked) {
     result = emit_patch("lui_ocaml_toggle_changed",
                         caml_callback2_exn(*dispatch, Val_long(node),
                                            Val_bool(checked)));
+  }
+  caml_enter_blocking_section();
+  return result;
+}
+
+LUI_EXPORT int32_t lui_ocaml_toggle_changed_detail(int64_t node,
+    int32_t checked, int32_t modifiers) {
+  int result = 0;
+  caml_leave_blocking_section();
+  const value *dispatch = caml_named_value("lui_ocaml_toggle_changed_detail");
+  if (dispatch != NULL) {
+    result = emit_patch("lui_ocaml_toggle_changed_detail",
+                        caml_callback3_exn(*dispatch, Val_long(node),
+                                           Val_bool(checked), Val_long(modifiers)));
   }
   caml_enter_blocking_section();
   return result;
@@ -524,8 +540,8 @@ LUI_EXPORT int32_t lui_ocaml_document_event_utf8(const char *data,
     result = caml_callback_exn(*handler, payload);
     if (Is_exception_result(result))
       report_ocaml_exception("lui_ocaml_document_event", result);
-    else
-      accepted = Bool_val(result) ? 2 : 1;
+    else if (emit_patch("lui_ocaml_document_event", Field(result, 1)))
+      accepted = Bool_val(Field(result, 0)) ? 2 : 1;
     CAMLdrop;
   }
   caml_enter_blocking_section();

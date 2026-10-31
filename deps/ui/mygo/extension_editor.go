@@ -26,10 +26,15 @@ type logseqEditorInput struct {
 	emit             func(luimygo.Event)
 	focused, mounted bool
 	composing        bool
+	compositionEnded bool
 	preedit          string // Transient IME text only, never a document mirror.
 	marked           ui.TextInputRange
 	markedSelection  ui.TextInputRange
 	dragging         bool
+	pointerMoved     bool
+	pendingPointer   *ui.InputEvent
+	pointerOwner     platformTarget
+	pointerBlock     string
 	layout           *editorLayout
 	handle           ui.Handle
 }
@@ -70,18 +75,25 @@ func (services *platformServices) renderLogseqEditor(c *ui.Context, n luimygo.No
 		e.Focus()
 	}
 	focused := e.Focused()
-	if focused != s.focused {
-		s.focused = focused
-		if focused {
-			s.send("focus", nil)
-		} else {
-			s.send("blur", nil)
-		}
-	}
+	s.setFocused(focused)
 }
 
 func (s *logseqEditorInput) send(name string, values map[string]any) {
 	extensionEmit(s.n, s.emit, name, values)
+}
+
+func (s *logseqEditorInput) setFocused(focused bool) {
+	if focused == s.focused {
+		return
+	}
+	s.focused = focused
+	if focused {
+		s.send("focus", nil)
+	} else {
+		s.cancelPointer()
+		s.clearComposition()
+		s.send("blur", nil)
+	}
 }
 
 func (s *logseqEditorInput) snapshot() (string, int, int, bool) {
@@ -161,19 +173,14 @@ func (s *logseqEditorInput) input(ev ui.InputEvent) bool {
 			(key == "Enter" && ev.Mods&(ui.Shift|ui.Ctrl|ui.Super) == 0) ||
 			(strings.EqualFold(key, "a") && ev.Mods&(ui.Ctrl|ui.Super) != 0)
 	case ui.InputText:
-		if s.composing {
-			s.composing, s.preedit = false, ""
-			s.send("composition", map[string]any{"state": "end", "text": ev.Text})
-		} else {
-			s.send("insert", map[string]any{"text": ev.Text})
-		}
+		s.ReplaceText(nil, ev.Text)
 		return true
 	case ui.InputCompose:
+		if s.mounted && !s.focused {
+			return true
+		}
 		if ev.Text == "" {
-			if s.composing {
-				s.composing, s.preedit = false, ""
-				s.send("composition", map[string]any{"state": "cancel"})
-			}
+			s.CancelComposition()
 		} else {
 			index := ui.UTF16Len(ev.Text[:extensionRuneByte(ev.Text, ev.Caret)])
 			s.SetMarkedText(nil, ev.Text, ui.TextInputRange{Start: index, End: index})
@@ -184,12 +191,19 @@ func (s *logseqEditorInput) input(ev ui.InputEvent) bool {
 			s.selectBytes(extensionRuneByte(source, ev.Start), extensionRuneByte(source, ev.End))
 			return true
 		}
-	case ui.InputPointerDown, ui.InputPointerMove:
+	case ui.InputPointerDown, ui.InputPointerMove, ui.InputPointerUp:
 		if ev.Kind == ui.InputPointerDown {
 			s.dragging = ev.Button == 0
+			s.pointerMoved = false
 		}
 		if !s.dragging {
 			return false
+		}
+		if ev.Kind == ui.InputPointerUp {
+			s.dragging = false
+			if !s.pointerMoved {
+				return true
+			}
 		}
 		offset, ok := s.offsetAt(ui.Point{X: ev.X, Y: ev.Y})
 		if !ok || offset < 0 {
@@ -201,13 +215,9 @@ func (s *logseqEditorInput) input(ev ui.InputEvent) bool {
 		if ev.Kind == ui.InputPointerDown && ev.Clicks == 2 {
 			s.send("dblclick", map[string]any{"offset": offset})
 		} else {
-			s.send("pointer", map[string]any{"offset": offset, "extend": ev.Kind == ui.InputPointerMove || ev.Mods&ui.Shift != 0})
+			s.send("pointer", map[string]any{"offset": offset, "extend": ev.Kind != ui.InputPointerDown || ev.Mods&ui.Shift != 0})
 		}
 		return true
-	case ui.InputPointerUp:
-		taken := s.dragging
-		s.dragging = false
-		return taken
 	case ui.InputCommand:
 		switch ev.Text {
 		case "delete":
@@ -253,49 +263,92 @@ func (s *logseqEditorInput) Selection() ui.TextInputSelection {
 }
 
 func (s *logseqEditorInput) MarkedRange() (ui.TextInputRange, bool) {
-	return s.marked, s.composing
+	return s.marked, s.composing && !s.compositionEnded
 }
 
 func (s *logseqEditorInput) replaceRange(r *ui.TextInputRange) bool {
 	if r == nil {
 		return true // OCaml owns the current selection/composition.
 	}
+	start, end := min(r.Start, r.End), max(r.Start, r.End)
 	if s.composing {
-		if *r == s.marked {
+		if start == s.marked.Start && end == s.marked.End {
 			return true
 		}
-		extensionGap(s.n.Identifier, "partial replacement of active preedit is not supported by the OCaml composition contract")
+		extensionGap(s.n.Identifier, "replacement outside active preedit requires an OCaml composition range contract")
 		return false
 	}
 	text, _, _, ok := s.snapshot()
 	if !ok {
 		return false
 	}
-	s.selectBytes(ui.UTF16ByteOffset(text, r.Start), ui.UTF16ByteOffset(text, max(r.Start, r.End)))
+	s.selectBytes(ui.UTF16ByteOffset(text, start), ui.UTF16ByteOffset(text, end))
 	return true
 }
 
+func (s *logseqEditorInput) replacePreedit(r *ui.TextInputRange, text string) (string, int, bool) {
+	if !s.composing || r == nil {
+		return text, 0, false
+	}
+	start, end := min(r.Start, r.End), max(r.Start, r.End)
+	if start < s.marked.Start || end > s.marked.End {
+		return text, 0, false
+	}
+	lo := ui.UTF16ByteOffset(s.preedit, start-s.marked.Start)
+	hi := ui.UTF16ByteOffset(s.preedit, end-s.marked.Start)
+	return s.preedit[:lo] + text + s.preedit[hi:], ui.UTF16Len(s.preedit[:lo]), true
+}
+
+func (s *logseqEditorInput) clearComposition() {
+	s.composing, s.preedit = false, ""
+	s.compositionEnded = false
+	s.marked, s.markedSelection = ui.TextInputRange{}, ui.TextInputRange{}
+}
+
 func (s *logseqEditorInput) ReplaceText(r *ui.TextInputRange, text string) {
+	if s.mounted && !s.focused {
+		return
+	}
+	caret := -1
+	if combined, prefix, ok := s.replacePreedit(r, text); ok {
+		if prefix+ui.UTF16Len(text) < ui.UTF16Len(combined) {
+			caret = s.marked.Start + prefix + ui.UTF16Len(text)
+		}
+		text, r = combined, nil
+	}
 	if !s.replaceRange(r) {
 		return
 	}
 	if s.composing {
-		s.composing, s.preedit = false, ""
+		s.clearComposition()
 		s.send("composition", map[string]any{"state": "end", "text": text})
+		if caret >= 0 {
+			if source, _, _, ok := s.snapshot(); ok {
+				byteCaret := ui.UTF16ByteOffset(source, caret)
+				s.selectBytes(byteCaret, byteCaret)
+			} else {
+				extensionGap(s.n.Identifier, "source/selection snapshot absent after composition commit")
+			}
+		}
 	} else {
 		s.send("insert", map[string]any{"text": text})
 	}
 }
 
 func (s *logseqEditorInput) SetMarkedText(r *ui.TextInputRange, text string, selected ui.TextInputRange) {
+	if s.mounted && !s.focused {
+		return
+	}
+	selected = ui.TextInputRange{
+		Start: ui.UTF16Len(text[:ui.UTF16ByteOffset(text, min(selected.Start, selected.End))]),
+		End:   ui.UTF16Len(text[:ui.UTF16ByteOffset(text, max(selected.Start, selected.End))]),
+	}
 	// A native IME may replace only part of its active preedit. This transient
 	// string is IME state, not an independently editable document.
-	if s.composing && r != nil && r.Start >= s.marked.Start && r.End <= s.marked.End && r.End >= r.Start && *r != s.marked {
-		lo := ui.UTF16ByteOffset(s.preedit, r.Start-s.marked.Start)
-		hi := ui.UTF16ByteOffset(s.preedit, r.End-s.marked.Start)
-		selected.Start += r.Start - s.marked.Start
-		selected.End += r.Start - s.marked.Start
-		text = s.preedit[:lo] + text + s.preedit[hi:]
+	if combined, prefix, ok := s.replacePreedit(r, text); ok {
+		selected.Start += prefix
+		selected.End += prefix
+		text = combined
 		r = nil
 	}
 	if !s.replaceRange(r) {
@@ -308,17 +361,34 @@ func (s *logseqEditorInput) SetMarkedText(r *ui.TextInputRange, text string, sel
 		}
 		start := ui.UTF16Len(source[:min(anchor, caret)])
 		if r != nil {
-			start = max(0, r.Start)
+			start = ui.UTF16Len(source[:ui.UTF16ByteOffset(source, min(r.Start, r.End))])
 		}
 		s.marked.Start = start
 		s.composing = true
 		s.send("composition", map[string]any{"state": "start"})
 	}
 	s.preedit = text
+	s.compositionEnded = false
 	length := ui.UTF16Len(text)
 	s.marked.End = s.marked.Start + length
 	s.markedSelection = ui.TextInputRange{Start: s.marked.Start + min(max(0, selected.Start), length), End: s.marked.Start + min(max(0, selected.End), length)}
 	s.send("composition", map[string]any{"state": "update", "text": text})
+}
+
+// Native end can precede the final candidate. Retain only transient preedit
+// until ReplaceText confirms it or CancelComposition discards it.
+func (s *logseqEditorInput) EndComposition() {
+	if s.composing {
+		s.compositionEnded = true
+	}
+}
+
+func (s *logseqEditorInput) CancelComposition() {
+	if !s.composing {
+		return
+	}
+	s.clearComposition()
+	s.send("composition", map[string]any{"state": "cancel"})
 }
 
 func (s *logseqEditorInput) UnmarkText() {
@@ -326,7 +396,7 @@ func (s *logseqEditorInput) UnmarkText() {
 		return
 	}
 	text := s.preedit
-	s.composing, s.preedit = false, ""
+	s.clearComposition()
 	s.send("composition", map[string]any{"state": "end", "text": text})
 }
 

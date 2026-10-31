@@ -447,7 +447,7 @@ let ev_of (e : Js.Json.t) : Ui_services.ev =
   ; shift = j_bool e "shiftKey"
   ; meta = j_bool e "metaKey"
   ; ctrl = j_bool e "ctrlKey"
-  ; composing = j_bool e "isComposing"
+  ; composing = j_bool e "isComposing" || num e "keyCode" = 229.
   ; key
   ; key_char =
       (match key with

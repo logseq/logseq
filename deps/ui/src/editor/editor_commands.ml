@@ -96,9 +96,9 @@ let month_names () =
      ; "format.month/october"; "format.month/november"; "format.month/december" |]
 
 type popup_kind =
-  | Cal_insert (* "date picker": Enter writes [[journal]] at the slash range *)
-  | Cal_prop of string (* scheduled/deadline: Enter sets a datetime prop *)
-  | Link_form of bool (* link/image-link form; bool = image *)
+  | Cal_insert of string (* natural-language date draft *)
+  | Cal_prop of string * string (* property ident and natural-language date draft *)
+  | Link_form of { image : bool; url : string; label : string }
 
 (* cljs repeat-setting panel state — resolved async from the worker and
    rendered as the right column of the date picker for datetime
@@ -218,13 +218,13 @@ let insert_at_trigger p text =
 let commit_cal p =
   let d = day_date p in
   match p.kind with
-  | Cal_insert ->
+  | Cal_insert _ ->
       let nv, caret =
         insert_at_trigger p ("[[" ^ Dates.journal_title_of d ^ "]]")
       in
       Ops.schedule_save p.uuid nv;
       close_popup p ~focus_caret:caret
-  | Cal_prop ident ->
+  | Cal_prop (ident, _) ->
       let op =
         Ops.set_block_property p.uuid ident (W.Float (Dates.to_ms d))
       in
@@ -321,21 +321,22 @@ let open_choice_menu sel items =
    handles ISO / "Sep 30, 2026" style input, else the warning toast *)
 let parse_nlp_date s = Dates.parse s
 
-let nlp_commit () =
-  match Ui_services.dom_query "#date-time-picker .ls-date-nlp" with
-  | Some input -> (
-      let v = String.trim (input.Ui_services.value ()) in
-      if v <> "" then
-        match parse_nlp_date v with
-        | Some d ->
-            let f = Dates.fields d in
-            update_p (fun p ->
-                { p with cy = f.Dates.year; cm = f.Dates.month
-                       ; cd = f.Dates.day });
-            with_p commit_cal
-        | None ->
-            Toast.warning (I18n.tf "date/invalid-date-warning" [ v ]))
-  | None -> ()
+let nlp_commit p =
+  let v =
+    match p.kind with
+    | Cal_insert text | Cal_prop (_, text) -> String.trim text
+    | Link_form _ -> invalid_arg "nlp_commit: not a calendar popup"
+  in
+  if v <> "" then
+    match parse_nlp_date v with
+    | Some d ->
+        let f = Dates.fields d in
+        update_p (fun p ->
+            { p with cy = f.Dates.year; cm = f.Dates.month
+                   ; cd = f.Dates.day });
+        with_p commit_cal
+    | None ->
+        Toast.warning (I18n.tf "date/invalid-date-warning" [ v ])
 
 (* cljs open-editor-popup! anchors at the caret mirror span; a popup
    opened on a selected (non-editing) block — the `p d` chord — anchors
@@ -823,7 +824,13 @@ let opt_eq f a b =
   | None, None -> true
   | _ -> false
 
-let kind_eq = opt_eq (fun a b -> a.kind = b.kind)
+let kind_eq =
+  opt_eq (fun left right ->
+      match left.kind, right.kind with
+      | Cal_insert _, Cal_insert _ -> true
+      | Cal_prop (left_ident, _), Cal_prop (right_ident, _) -> left_ident = right_ident
+      | Link_form left_draft, Link_form right_draft -> left_draft.image = right_draft.image
+      | _ -> false)
 
 let cal_eq =
   opt_eq (fun a b -> a.cy = b.cy && a.cm = b.cm && a.cd = b.cd)
@@ -889,7 +896,22 @@ let cal_body ps (p : popup) : t =
                      [ ("tabindex", "-1")
                      ; ("style", "margin-top: 0.5rem") ]
                    ~placeholder:(I18n.t "ui/date-natural-language-placeholder")
-                   ~on_submit:(fun _ -> nlp_commit ())
+                   ~text:(reactive
+                     (function
+                       | Some { kind = Cal_insert text; _ }
+                       | Some { kind = Cal_prop (_, text); _ } -> text
+                       | _ -> "") ps)
+                   ~on_input:(function
+                     | P.TextChanged (_, text) ->
+                         update_p (fun p ->
+                           let kind = match p.kind with
+                             | Cal_insert _ -> Cal_insert text
+                             | Cal_prop (ident, _) -> Cal_prop (ident, text)
+                             | Link_form _ -> invalid_arg "NLP input: not a calendar popup"
+                           in
+                           { p with kind })
+                     | _ -> ())
+                   ~on_submit:(fun _ -> with_p nlp_commit)
                    [] ]
            ; if_ ~test:(reactive rpt_open ps) (repeat_panel ps) ]
        ; reactive ~equal:menu_eq
@@ -903,15 +925,14 @@ let cal_body ps (p : popup) : t =
    p-2/gap-2 column — one column at 15px inset (7+8) reproduces the
    same content box: 288 wide, 258-wide inputs, Submit button below *)
 let submit_link p =
-  let url, label =
-    match Ui_services.dom_query_all ".ls-editor-link-form input" with
-    | [ u; l ] ->
-        ( String.trim (u.Ui_services.value ())
-        , String.trim (l.Ui_services.value ()) )
-    | _ -> ("", "")
+  let url, label, image =
+    match p.kind with
+    | Link_form { url; label; image } ->
+        (String.trim url, String.trim label, image)
+    | _ -> invalid_arg "submit_link: not a link popup"
   in
   let label = if label = "" then url else label in
-  let bang = (match p.kind with Link_form true -> "!" | _ -> "") in
+  let bang = if image then "!" else "" in
   let nv, caret =
     insert_at_trigger p
       (bang ^ "[" ^ label ^ "](" ^ url ^ ")")
@@ -919,20 +940,38 @@ let submit_link p =
   Ops.schedule_save p.uuid nv;
   close_popup p ~focus_caret:caret
 
-let link_form_body p : t =
+let link_form_body ps : t =
   column ~key:"link" ~style_class:"ls-editor-link-form" ~gap:8
     ~padding:15 ~width:288
     [ Ui_components.input ~key:"url" ~placeholder:(I18n.t "ui/link") ~autofocus:true
+        ~text:(reactive
+          (function Some { kind = Link_form draft; _ } -> draft.url | _ -> "") ps)
+        ~on_input:(function
+          | P.TextChanged (_, url) ->
+              update_p (fun p -> match p.kind with
+                | Link_form draft -> { p with kind = Link_form { draft with url } }
+                | _ -> invalid_arg "URL input: not a link popup")
+          | _ -> ())
+        ~on_submit:(fun _ -> with_p submit_link)
         []
-    ; Ui_components.input ~key:"label" ~placeholder:(I18n.t "ui/label") []
+    ; Ui_components.input ~key:"label" ~placeholder:(I18n.t "ui/label")
+        ~text:(reactive
+          (function Some { kind = Link_form draft; _ } -> draft.label | _ -> "") ps)
+        ~on_input:(function
+          | P.TextChanged (_, label) ->
+              update_p (fun p -> match p.kind with
+                | Link_form draft -> { p with kind = Link_form { draft with label } }
+                | _ -> invalid_arg "Label input: not a link popup")
+          | _ -> ())
+        ~on_submit:(fun _ -> with_p submit_link) []
     ; Ui_components.button ~key:"submit" ~variant:`primary ~size:`sm ~width:258
         ~height:28 ~min_height:28 ~text:(I18n.t "ui/submit")
-        ~on_press:(fun _ -> submit_link p) [] ]
+        ~on_press:(fun _ -> with_p submit_link) [] ]
 
 let popup_body ps (p : popup) : t =
   match p.kind with
-  | Link_form _ -> link_form_body p
-  | Cal_insert | Cal_prop _ -> cal_body ps p
+  | Link_form _ -> link_form_body ps
+  | Cal_insert _ | Cal_prop _ -> cal_body ps p
 
 let popup_popover context ps : t =
   popover ~transition:Ui_components.popover_transition ~key:"editor-popup"
@@ -1195,7 +1234,7 @@ let open_cal kind uuid from =
   Runtime.editor_popup_open := true;
   publish ();
   (match kind with
-   | Cal_prop ident -> load_repeat p ident
+   | Cal_prop (ident, _) -> load_repeat p ident
    | _ -> ())
 
 (* ---------- link / image-link form ---------- *)
@@ -1203,7 +1242,7 @@ let open_cal kind uuid from =
 let open_link_form image uuid from =
   let x, y = cal_pos uuid in
   let p =
-    { kind = Link_form image; uuid; from; cy = 0; cm = 0; cd = 0
+    { kind = Link_form { image; url = ""; label = "" }; uuid; from; cy = 0; cm = 0; cd = 0
     ; hour = 0; tmin = 0; x; y; menu = None; rpt = None }
   in
   active := Some p;
@@ -1219,12 +1258,12 @@ let popup_key ~key ~inside ~prevent_default =
   | None -> false
   | Some p -> (
       match (p.kind, key) with
-      | (Cal_insert | Cal_prop _),
+      | (Cal_insert _ | Cal_prop _),
           ("ArrowRight" | "ArrowLeft" | "ArrowDown" | "ArrowUp"
           | "Home" | "End" | "PageUp" | "PageDown") ->
           (* The focused control owns navigation; only stop editor routing. *)
           true
-      | (Cal_insert | Cal_prop _), "Enter" ->
+      | (Cal_insert _ | Cal_prop _), "Enter" ->
           prevent_default ();
           commit_cal p;
           true
@@ -1239,7 +1278,7 @@ let popup_key ~key ~inside ~prevent_default =
            | None -> close_popup p);
           true
       | Link_form _, _ -> false (* inputs handle their own keys *)
-      | (Cal_insert | Cal_prop _), _ ->
+      | (Cal_insert _ | Cal_prop _), _ ->
           (* swallow keys aimed at the calendar so e.g. typing does not
              reach the textarea while a day button is focused *)
           if inside () then (prevent_default (); true) else false)
@@ -1473,16 +1512,16 @@ let run_editor_cmd uuid command from to_ =
   (* date-picker/link/image-link keep the trigger text while the popup
      is open — [from] anchors it for the commit replace *)
   match command with
-  | "date-picker" -> open_cal Cal_insert uuid from
+  | "date-picker" -> open_cal (Cal_insert "") uuid from
   | "link" -> open_link_form false uuid from
   | "image-link" -> open_link_form true uuid from
   | _ ->
   let caret = clear_range uuid from to_ in
   match command with
   | "scheduled" ->
-      open_cal (Cal_prop "logseq.property/scheduled") uuid caret
+      open_cal (Cal_prop ("logseq.property/scheduled", "")) uuid caret
   | "deadline" ->
-      open_cal (Cal_prop "logseq.property/deadline") uuid caret
+      open_cal (Cal_prop ("logseq.property/deadline", "")) uuid caret
   | "quote" -> upsert_type_block ~caret uuid "quote"
   | "math-block" -> upsert_type_block ~caret uuid "math"
   | "code-block" -> upsert_type_block ~exit:true ~caret uuid "code"
@@ -1535,9 +1574,9 @@ let on_command (ev : Ui_services.ev) =
                owns *)
             match command with
             | "deadline" ->
-                open_cal (Cal_prop "logseq.property/deadline") uuid 0
+                open_cal (Cal_prop ("logseq.property/deadline", "")) uuid 0
             | "scheduled" ->
-                open_cal (Cal_prop "logseq.property/scheduled") uuid 0
+                open_cal (Cal_prop ("logseq.property/scheduled", "")) uuid 0
             (* cljs :editor/new-property {:property-key k} — p s/p p/p t
                land in that property's value editor *)
             | "add-property" ->

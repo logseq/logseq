@@ -50,6 +50,9 @@ type components = {
 
 type typography = {
   font_family : string;
+  font_stack : string;
+  root_text_size : string;
+  line_height : string;
   page_text_size : string;
   page_title_size : string;
   text_header : string;
@@ -72,6 +75,12 @@ type snapshot = {
 
 let typography =
   { font_family = "Inter"
+  ; font_stack =
+      "var(--ls-font-family, var(--lx-font-family)), sans-serif, system-ui, \
+       -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', \
+       Arial, 'Noto Sans', serif, Apple Color Emoji, Segoe UI Emoji, Segoe UI Symbol"
+  ; root_text_size = "16px"
+  ; line_height = "1.5"
   ; page_text_size = "1em"
   ; page_title_size = "36px"
   ; text_header = "0.75rem"
@@ -244,6 +253,9 @@ let canonical_vars (c : colors) (cs : components) (t : typography) =
   ; "--lx-warning-color", c.warning
   ; "--lx-warning-foreground", c.on_accent
   ; "--lx-font-family", t.font_family
+  ; "--lx-font-stack", t.font_stack
+  ; "--lx-root-text-size", t.root_text_size
+  ; "--lx-line-height", t.line_height
   ; "--lx-text-page", t.page_text_size
   ; "--lx-text-title", t.page_title_size
   ; "--lx-text-header", t.text_header

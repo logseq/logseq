@@ -228,6 +228,8 @@ type toast =
   ; toast_key : string option (* sdk show_msg key — close_msg targets it *)
   }
 
+type journals_status = Journal_pending | Journal_loaded | Journal_failed
+
 type t =
   { phase : phase
   ; repo : string option
@@ -238,6 +240,8 @@ type t =
                            renders inline (t :page/not-found), keeping
                            the chrome, not the route-level 404 *)
   ; journals : page list
+  ; journals_status : journals_status
+  ; context_revision : int
   ; page_ref_count : int (* cljs [:block-ref-count page-uuid] — the
                               unfiltered total gating the linked-references
                               section *)
@@ -282,6 +286,8 @@ let initial =
   ; route_page = None
   ; page_missing = false
   ; journals = []
+  ; journals_status = Journal_pending
+  ; context_revision = 0
   ; page_ref_count = 0
   ; unlinked_exists = false
   ; repos = []

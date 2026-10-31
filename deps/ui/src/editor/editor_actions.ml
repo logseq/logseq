@@ -345,15 +345,87 @@ let request_focus uuid caret =
      the arm rides the next flush pass *)
   ignore (Ui_services.timers_timeout apply_focus 0)
 
-let run_structure ?recover ~restore p finish =
+type split_commit =
+  { persist : context:Model.t -> current:(unit -> bool) -> Wire.t option Js.Promise.t
+  ; save : Ops.queued_save option
+  ; context : Model.t
+  ; restore : S.editing
+  ; replay_after : int
+  }
+
+type split_batch =
+  { owner : Ops.refresh_owner
+  ; commits : split_commit Queue.t
+  ; mutable running : bool
+  ; mutable restore : S.editing option
+  ; mutable replay_after : int
+  ; mutable last_response : Wire.t option
+  }
+
+let active_split_batch : split_batch option ref = ref None
+
+let split_owned batch =
+  match !active_split_batch with Some active -> active == batch | None -> false
+
+let split_current batch =
+  if not (split_owned batch) then (batch.owner.cursor <- None; false)
+  else Ops.refresh_current ~owner:batch.owner (Runtime.model ())
+
+let retire_split batch =
+  batch.owner.cursor <- None;
+  if split_owned batch then begin
+    active_split_batch := None;
+    S.optimistic_split_ready := false;
+    S.optimistic_input_replay := []
+  end
+
+type structure_guard =
+  { structure_current : unit -> bool
+  ; structure_owned : unit -> bool
+  ; structure_refresh : unit -> unit Js.Promise.t
+  ; structure_finish : unit -> unit
+  }
+
+let run_structure ?recover ?current_guard ~restore p finish =
   let context = Runtime.repo (), Runtime.route () in
   let started_at = Ui_services.time_now () in
   Ui_services.perf_mark "editor:structure-start";
-  S.structure_pending := true;
-  let current () = context = (Runtime.repo (), Runtime.route ()) in
-  let settled = p |> Js.Promise.catch (fun _error ->
+  (match current_guard with
+   | None -> Option.iter retire_split !active_split_batch
+   | Some _ -> ());
+  let current () =
+    match current_guard with
+    | Some guard -> guard.structure_current ()
+    | None -> context = (Runtime.repo (), Runtime.route ())
+  in
+  let owned () =
+    match current_guard with
+    | Some guard -> guard.structure_owned ()
+    | None -> true
+  in
+  if Option.is_none current_guard || current () then S.structure_pending := true;
+  let release () = if owned () then S.structure_pending := false in
+  let drain () =
+    if Option.is_none current_guard || current () then begin
+      Runtime.flush_now ();
+      S.drain_edit_actions ();
+      Ops.resume_pending_save ()
+    end
+  in
+  let settled = p |> Js.Promise.catch (fun _ ->
       let restore = match recover with Some f -> f (current ()) | None -> restore in
-      let* () = if current () then Ops.refresh_page () else Js.Promise.resolve () in
+      let recovery =
+        if not (current ()) then Js.Promise.resolve () else
+        match current_guard with
+        | Some guard -> guard.structure_refresh ()
+        | None -> Ops.refresh_page ()
+      in
+      let* () =
+        match current_guard with
+        | None -> recovery
+        | Some _ -> recovery |> Js.Promise.catch (fun _ ->
+            p)
+      in
       if current () then (
         let restore =
           match restore, S.editing () with
@@ -364,23 +436,30 @@ let run_structure ?recover ~restore p finish =
         match restore with
         | Some e -> request_focus e.S.uuid e.S.model.Edit_model.caret
         | None -> S.pending_focus := None);
-      S.structure_pending := false;
-      Runtime.flush_now ();
-      S.drain_edit_actions ();
-      Ops.resume_pending_save ();
+      release ();
+      drain ();
       p) in
-  ignore
-    (let* () = settled in
+  let finished =
+    let* () = settled in
      Ui_services.perf_mark (Printf.sprintf "editor:structure-settled duration=%.1fms queued=%d"
        (Ui_services.time_now () -. started_at) (Queue.length S.pending_edit_actions));
      ignore (Ui_services.perf_mark "struct:resolved");
-     S.structure_pending := false;
+     release ();
      if current () then finish ();
-     Runtime.flush_now ();
-     S.drain_edit_actions ();
-     Ops.resume_pending_save ();
+     drain ();
      ignore (Ui_services.perf_mark "struct:drained");
-     Js.Promise.resolve ())
+     Js.Promise.resolve ()
+  in
+  ignore (match current_guard with
+    | None -> finished
+    | Some guard ->
+        (let* () = finished in
+         guard.structure_finish ();
+         Js.Promise.resolve ())
+        |> Js.Promise.catch (fun _ ->
+            release ();
+            guard.structure_finish ();
+            finished))
 
 (* Arm the optimistic editor now and again after canonical rows land. *)
 let with_focus_after ~restore uuid caret p =
@@ -401,36 +480,25 @@ let model_title uuid =
 
 let display_title uuid = S.title_for uuid (model_title uuid)
 
-let commit_result uuid buf =
-  Ops.invalidate_autosave uuid;
-  let opts =
-    match !Ops.pending_save with
-    | Some (u, _) when u = uuid -> !Ops.pending_save_opts
-    | _ -> Ops.current_history_opts (Wire.Map [])
-  in
-  (match !Ops.pending_save with
-   | Some (u, _) when u = uuid -> Ops.cancel_pending_save ()
-   | _ -> ());
+let commit_result ?(after = fun () -> ()) uuid buf =
   (* compare against the persisted title, not display_title — the
      override may already hold buf (exit_edit sets it first) and
      normalization (heading strip, ref rewrite) can make the saved
      title differ from the buffer *)
   if buf <> model_title uuid then (
-    S.override_title uuid (Ops.normalized_title uuid buf);
-      let* sop = Ops.save_block_parsed uuid buf in
-      let* _ = Ops.apply_and_refresh ~opts [ sop ] in
-      S.retire_title_override uuid (Ops.normalized_title uuid buf);
-      (* the buffer is now persisted — advance base so the undo
-                resync gate treats it as clean and can restore reverted
-                titles instead of masking them with the pre-undo text *)
-      S.set_silent (fun st ->
-          match st.S.editing with
-          | Some e when e.S.uuid = uuid && e.S.buffer = buf ->
-              { st with
-                S.editing = Some { e with S.base = buf } }
-          | _ -> st);
-      Js.Promise.resolve ())
-  else Js.Promise.resolve ()
+    let save = Ops.accept_save uuid buf in
+    let title = Ops.normalized_title uuid buf in
+    S.override_title uuid title;
+    Ops.save_committed ~after:(fun () ->
+        S.retire_title_override uuid title;
+        after ()) save)
+  else (
+    let origin = Runtime.capture_reload_origin () in
+    Option.iter Ops.release_save (Ops.take_pending_save_for uuid);
+    (match origin with
+     | Some origin when Runtime.reload_origin_current origin -> after ()
+     | _ -> ());
+    Js.Promise.resolve ())
 
 let commit uuid buf = ignore (commit_result uuid buf)
 
@@ -533,6 +601,7 @@ let rec exit_edit ~select =
              dead. Input typed mid-commit changes source and still
              aborts the exit *)
           | Some current when current.S.uuid = e.uuid && current.S.scope = e.scope
+                              && current.S.epoch == e.S.epoch
                               && String.equal current.S.model.Edit_model.source
                                    e.S.model.Edit_model.source ->
               (if Lazy.force perf_keys then
@@ -553,11 +622,7 @@ let rec exit_edit ~select =
         in
         (* Exit belongs to the editing session, even when its route changes
            while the save is pending. A newer session must remain intact. *)
-        let p =
-          let* () = commit_result e.uuid buf in
-          finish_exit ();
-          Js.Promise.resolve ()
-        in
+        let p = commit_result ~after:finish_exit e.uuid buf in
         run_structure ~restore:(Some e) p (fun () -> ())
 
 (* click outside the editor commits without selecting *)
@@ -623,13 +688,14 @@ let library_context () =
    the standalone page route, or the day page inside current_journals.
    The worker delta stays authoritative and splices the real record over
    these placeholders when it lands *)
-let optimistic_edit (f : Model.page -> Model.page option) =
+let optimistic_edit ?owner (f : Model.page -> Model.page option) =
   match !Runtime.current_page with
   | Some page -> (
       match f page with
       | Some page' ->
           Page_delta.mark_own_commit page';
-          (let _ = Ui_services.perf_mark "optimistic:page-loaded" in Runtime.send (Action.Page_loaded page'))
+          (let _ = Ui_services.perf_mark "optimistic:page-loaded" in
+           Ops.send_refresh ?owner (Action.Page_loaded page'))
       | None -> ())
   | None -> (
       let rec loop acc = function
@@ -637,7 +703,7 @@ let optimistic_edit (f : Model.page -> Model.page option) =
         | (p : Model.page) :: rest -> (
             match f p with
             | Some p' ->
-                Runtime.send
+                Ops.send_refresh ?owner
                   (Action.Journals_spliced
                      (List.rev_append acc (p' :: rest)))
             | None -> loop (p :: acc) rest)
@@ -691,52 +757,94 @@ let ltrim s =
 (* Keep Enter's optimistic rows mounted until the ordered commit batch
    catches up. Publishing each intermediate delta would replace future
    placeholders and move the active sink underneath rapid typing. *)
-type split_commit =
-  { persist : unit -> Wire.t option Js.Promise.t
-  ; restore : S.editing
-  ; replay_after : int
-  }
+let split_batch_for () =
+  match !active_split_batch with
+  | Some batch when split_current batch && !S.optimistic_split_ready -> batch
+  | previous ->
+      let entry = Option.get (Runtime.capture_reload_origin ()) in
+      Option.iter retire_split previous;
+      let batch =
+        { owner = Ops.refresh_owner entry; commits = Queue.create (); running = false
+        ; restore = None; replay_after = 0; last_response = None }
+      in
+      active_split_batch := Some batch;
+      batch
 
-let split_commits : split_commit Queue.t = Queue.create ()
-let split_restore = ref None
-let split_replay_after = ref 0
-
-let enqueue_split ~restore persist =
-  Queue.add { persist; restore; replay_after = !S.optimistic_input_seq } split_commits;
-  if not !S.optimistic_split_ready then (
-    S.optimistic_split_ready := true;
-    let context = Runtime.repo (), Runtime.route () in
-    let rec drain last_response =
-      if context <> (Runtime.repo (), Runtime.route ()) then (
-        Queue.clear split_commits;
-        S.optimistic_split_ready := false;
-        S.optimistic_input_replay := [];
-        Js.Promise.resolve ())
-      else if Queue.is_empty split_commits then (
-        S.optimistic_split_ready := false;
-        Ops.refresh_via_delta last_response)
+let enqueue_split batch ~context ~save ~restore persist =
+  Queue.add { persist; save; context; restore; replay_after = !S.optimistic_input_seq }
+    batch.commits;
+  if not batch.running then (
+    batch.running <- true;
+    if split_current batch then S.optimistic_split_ready := true;
+    let current () = split_current batch in
+    let persist_save job =
+      match job.save with
+      | None -> Js.Promise.resolve ()
+      | Some save -> Ops.save_pending save
+    in
+    let rec drain_saves () =
+      if Queue.is_empty batch.commits then Js.Promise.resolve () else
+      let job = Queue.take batch.commits in
+      let operation = let* () = persist_save job in drain_saves () in
+      operation |> Js.Promise.catch (fun _ ->
+          let* () = drain_saves () |> Js.Promise.catch (fun later ->
+              Ui_services.log_error ("split origin save failed", later);
+              Js.Promise.resolve ()) in
+          operation)
+    in
+    let rec drain () =
+      ignore (current ());
+      if Queue.is_empty batch.commits then (
+        if not (current ()) then Js.Promise.resolve () else (
+          S.optimistic_split_ready := false;
+          let* () = Ops.refresh_via_delta ~owner:batch.owner batch.last_response in
+          Ops.require_refresh_success batch.owner))
       else (
-        let job = Queue.take split_commits in
-        split_restore := Some job.restore;
-        split_replay_after := job.replay_after;
-        let* response = job.persist () in
-        drain response)
+        let job = Queue.take batch.commits in
+        batch.restore <- Some job.restore;
+        batch.replay_after <- job.replay_after;
+        let operation = let* () = persist_save job in
+         let* response =
+           if current () then job.persist ~context:job.context ~current
+           else Js.Promise.resolve None in
+         if current () then batch.last_response <- response;
+         drain () in
+        operation |> Js.Promise.catch (fun _ ->
+            let* () = drain_saves () |> Js.Promise.catch (fun later ->
+                Ui_services.log_error ("split origin save failed", later);
+                Js.Promise.resolve ()) in
+            operation))
     in
-    let recover current =
-      S.optimistic_split_ready := false;
-      Queue.clear split_commits;
-      if current then Ops.cancel_pending_save ();
-      let queued = Queue.copy S.pending_edit_actions in
-      Queue.clear S.pending_edit_actions;
-      List.rev !S.optimistic_input_replay
-      |> List.iter (fun (seq, replay) ->
-          if current && seq > !split_replay_after then S.enqueue_edit_action ~real:true replay);
-      S.optimistic_input_replay := [];
-      Queue.iter (fun f -> Queue.add f S.pending_edit_actions) queued;
-      !split_restore
+    let recover is_current =
+      if split_owned batch && is_current then begin
+        S.optimistic_split_ready := false;
+        (match S.editing () with
+         | Some e -> Option.iter Ops.release_save (Ops.take_pending_save_for e.S.uuid)
+         | None -> ());
+        let queued = Queue.copy S.pending_edit_actions in
+        Queue.clear S.pending_edit_actions;
+        List.rev !S.optimistic_input_replay
+        |> List.iter (fun (seq, replay) ->
+            if seq > batch.replay_after then
+              S.enqueue_edit_action ~real:true (fun () -> if current () then replay ()));
+        S.optimistic_input_replay := [];
+        Queue.iter (fun f -> Queue.add f S.pending_edit_actions) queued
+      end;
+      batch.restore
     in
-    let p = drain None in
-    run_structure ~recover ~restore:(Some restore) p (fun () ->
+    let current_guard =
+      { structure_current = current
+      ; structure_owned = (fun () -> split_owned batch)
+      ; structure_refresh = (fun () ->
+          batch.owner.outcome <- None;
+          let* () = Ops.refresh_page_then ~owner:batch.owner
+              (fun () -> Js.Promise.resolve ()) in
+          Ops.require_refresh_success batch.owner)
+      ; structure_finish = (fun () -> retire_split batch)
+      }
+    in
+    let p = drain () in
+    run_structure ~recover ~current_guard ~restore:(Some restore) p (fun () ->
         S.optimistic_input_replay := [];
         match S.editing () with
         | Some e -> request_focus e.S.uuid e.S.model.Edit_model.caret
@@ -809,24 +917,19 @@ let split_at_cursor uuid =
               (S.mk_editing ~uuid:new_uuid ~buffer:after ~scope:e.scope ~base:after ())) () in
         (* Capture this block's debounce now, before the next editor can
            schedule a save for a UUID the worker has not inserted yet. *)
-        let save = Option.map (fun (u, title) -> u, title, !Ops.pending_save_opts) !Ops.pending_save in
-        Ops.cancel_pending_save ();
-        let context = Runtime.repo (), Runtime.route () in
-        let apply opts ops =
-          if context = (Runtime.repo (), Runtime.route ()) then
-            Ops.apply_result ~flush_save:false ~opts ops
-          else Js.Promise.resolve None in
-        let persist () =
-          let* () = match save with
-            | None -> Js.Promise.resolve ()
-            | Some (u, title, opts) ->
-                let* op = Ops.save_block_parsed u title in
-                let* _ = apply opts [ op ] in
-                Js.Promise.resolve () in
+        let context = Runtime.model () in
+        let source = Ops.source_block uuid in
+        let batch = split_batch_for () in
+        let save = Ops.take_pending_save () in
+        let persist ~context ~current =
+          if not (current ()) then Js.Promise.resolve None else
+          let origin_repo = Option.get context.Model.repo in
           let* a = Js.Promise.all
-              [| Ops.block_map_parsed uuid before
-               ; Ops.block_map_parsed ~page:library new_uuid after |] in
-          apply opts
+              [| Ops.block_map_parsed_source ~origin_repo ~source uuid before
+               ; Ops.block_map_parsed_source ~page:library ~origin_repo
+                   ~source:false new_uuid after |] in
+          if not (current ()) then Js.Promise.resolve None else
+          Ops.apply_result_for ~current context ~flush_save:false ~opts
             ([ Ops.op "save-block" [ a.(0); Wire.Map [] ]
             ; Ops.insert_blocks [ a.(1) ] uuid ~sibling ]
             @ if above then [ Ops.move_blocks [ uuid ] new_uuid ~sibling:true ] else [])
@@ -835,13 +938,14 @@ let split_at_cursor uuid =
         (* optimistic insert: mount the new row and retitle the split
            block synchronously — the worker delta splices the real
            record over the placeholder when it lands *)
-        optimistic_edit (fun p ->
+        optimistic_edit ~owner:batch.owner (fun p ->
             Model.split_insert ~above p ~uuid ~before
               ~new_block:
                 (Model.empty_block ~uuid:new_uuid ~title:after
                    ~is_page:library)
               ~sibling);
         mark "splice";
+        if split_current batch then begin
         (* the exit-edit repaint lands before the worker delta — pin the
            saved title so the row doesn't flash the pre-split text *)
         S.override_title uuid (Ops.normalized_title uuid before);
@@ -859,7 +963,8 @@ let split_at_cursor uuid =
         mark "editing";
         S.click_point := None;
         request_focus new_uuid 0;
-        enqueue_split ~restore:e persist;
+        end;
+        enqueue_split batch ~context ~save ~restore:e persist;
         mark "focus-arm"
   | _ -> ()
 
@@ -1146,11 +1251,62 @@ let flat_uuids () =
     (fun b -> b.Model.block_uuid)
     (S.flat_visible ~scope:(S.interaction_scope ()) ())
 
-(* cljs sends selected blocks to move/delete ops in document order;
-   String_set.elements is uuid-sorted, which corrupts worker ordering *)
+let selection_forest () =
+  let model = Runtime.model () in
+  let scope = S.selection_scope () in
+  let main_scope =
+    scope = "main"
+    || match Runtime.route () with Model.Block_zoom u -> scope = "zoom-" ^ u | _ -> false
+  in
+  if not main_scope then S.blocks_in_scope scope
+  else
+    let pages = match model.Model.route_page with Some p -> [p] | None -> model.journals in
+    List.concat_map
+      (fun (p : Model.page) -> match p.page_uuid with
+         | Some uuid ->
+             [{ (Model.empty_block ~uuid ~title:p.page_title ~is_page:true) with
+                Model.block_db_id = p.page_db_id; block_children = p.page_blocks }]
+         | None -> p.page_blocks)
+      pages
+
+type selected_snapshot =
+  { selection : S.String_set.t
+  ; scope : string
+  ; uuids : string list
+  ; blocks : Model.block list
+  ; roots : Model.block list
+  ; unresolved : S.String_set.t
+  }
+
+let selected_snapshot () =
+  let selection = S.selected () in
+  let seen = ref S.String_set.empty and ordered = ref [] in
+  let blocks = ref [] and roots = ref [] in
+  let rec walk under_selected forest =
+    List.iter (fun (b : Model.block) ->
+      let selected = match b.block_uuid with
+        | Some u -> S.String_set.mem u selection
+        | None -> false
+      in
+      (match b.block_uuid with
+       | Some u when selected && not (S.String_set.mem u !seen) ->
+           seen := S.String_set.add u !seen;
+           ordered := u :: !ordered;
+           blocks := b :: !blocks;
+           if not under_selected then roots := b :: !roots
+       | _ -> ());
+      walk (under_selected || selected) (S.children_of b)) forest
+  in
+  walk false (selection_forest ());
+  let unresolved = S.String_set.diff selection !seen in
+  (* Selection membership survives virtualization and transient model reloads. *)
+  { selection; scope = S.selection_scope (); roots = List.rev !roots
+  ; blocks = List.rev !blocks; unresolved
+  ; uuids = List.rev !ordered @ S.String_set.elements unresolved }
+
+(* Worker operations consume document order, never UUID sort order. *)
 let selected_uuids () =
-  let sel = S.selected () in
-  List.filter (fun u -> S.String_set.mem u sel) (flat_uuids ())
+  (selected_snapshot ()).uuids
 
 let index_of lst u =
   let rec go i = function
@@ -1164,11 +1320,9 @@ let index_of lst u =
    block without being part of the flat list — a selection anchored on
    it extends down into the blocks *)
 let anchor_is_page_title anchor =
-  match
-    Ui_services.dom_query (".ls-page-title .ls-block[data-blockid='" ^ anchor ^ "']")
-  with
-  | Some _ -> true
-  | None -> false
+  let model = Runtime.model () in
+  let pages = match model.Model.route_page with Some p -> [p] | None -> model.journals in
+  List.exists (fun (p : Model.page) -> p.page_uuid = Some anchor) pages
 
 (* range anchor..head (inclusive) in visible order; [] when either
    endpoint isn't a visible block (e.g. a journal row's page uuid from a
@@ -1420,62 +1574,85 @@ let move_blocks_up_down ?uuid up =
   in
   move_up_down_tail := pending
 
-let delete_selection () =
-  let before = S.history_cursor () in
-  let opts () = Ops.history_opts ~before ~after:(S.history_cursor ()) () in
-  let uuids = selected_uuids () in
+let selection_delete_pending = ref false
+
+let action_context () =
+  let model = Runtime.model () in
+  model.Model.repo, model.Model.route, model.Model.context_revision
+
+let delete_selected_uuids ~selected ~scope ~before uuids =
   match uuids with
   | [] -> ()
-  | _ ->
-      (* first selected in flat visible order — String_set.elements is
-         sorted by uuid, not position *)
-      let sel = S.selected () in
-      let first =
-        match
-          List.find_opt (fun u -> S.String_set.mem u sel) (flat_uuids ())
-        with
-        | Some u -> u
-        | None -> List.hd uuids
-      in
+  | _ when !selection_delete_pending -> ()
+  | first :: _ ->
+      selection_delete_pending := true;
+      let context = Runtime.repo (), Runtime.route () in
+      let publication = action_context () in
       let prev =
-        match S.prev_visible ~scope:(S.selection_scope ()) first with
+        match S.prev_visible ~scope first with
         | Some p -> p.Model.block_uuid
         | None -> None
       in
-      (* cljs enters edit mode on the previous block, caret at end *)
-      (match prev with
-       | Some pu -> (
-           match S.find pu with
-           | Some b ->
-               (* stored titles are id-ref form — go through the same
-                  title_for_edit rewrite as enter_edit *)
-               ignore
-                 (let* buffer = Ops.title_for_edit (String.trim b.Model.block_title) in
-                 S.set_silent (fun st ->
-                     { st with
-                       S.editing =
-                         Some
-                           (S.mk_editing ~uuid:pu ~buffer ~scope:(S.selection_scope ())
-                              ~base:buffer ~caret:(String.length buffer) ())
-                     ; selected = S.String_set.empty
-                     ; anchor = None
-                     ; action_bar = false
-                     });
-                 with_focus_after ~restore:None pu
-                   (String.length buffer)
-                   (Ops.apply_and_refresh ~opts:(opts ())
-                      [ Ops.delete_blocks uuids ]);
-                 Js.Promise.resolve ())
-           | None ->
-               ignore (Ops.apply_and_refresh ~opts:(opts ()) [ Ops.delete_blocks uuids ]))
-       | None ->
-           S.set_silent (fun st ->
-               { st with
-                 S.selected = S.String_set.empty
-               ; anchor = None
-               ; action_bar = false
-               });
-           ignore (Ops.apply_and_refresh ~opts:(opts ()) [ Ops.delete_blocks uuids ]))
+      let p =
+        let* previous =
+          match Option.bind prev S.find with
+          | Some b when not (List.mem (Option.get b.Model.block_uuid) uuids) ->
+              let* buffer = Ops.title_for_edit (String.trim b.Model.block_title) in
+              Js.Promise.resolve (Some (Option.get b.block_uuid, buffer))
+          | _ -> Js.Promise.resolve None
+        in
+        let after =
+          match previous with
+          | Some (uuid, buffer) -> Wire.Map
+              [ Wire.Keyword "block-uuid", Wire.Uuid uuid
+              ; Wire.Keyword "scope", Wire.String scope
+              ; Wire.Keyword "caret", Wire.Int (String.length buffer)
+              ; Wire.Keyword "anchor", Wire.Nil ]
+          | None -> Wire.Map
+              [ Wire.Keyword "scope", Wire.String scope
+              ; Wire.Keyword "selected-blocks", Wire.List []
+              ; Wire.Keyword "selection-anchor", Wire.Nil ]
+        in
+        if publication <> action_context () then Js.Promise.resolve ()
+        else
+          let* response = Ops.apply_result
+              ~opts:(Ops.history_opts ~before ~after ()) [Ops.delete_blocks uuids] in
+          match response with
+          | None -> Js.Promise.resolve ()
+          | Some _ when publication <> action_context () -> Js.Promise.resolve ()
+          | Some _ ->
+              let* () = Ops.refresh_via_delta response in
+              if context = (Runtime.repo (), Runtime.route ())
+                 && scope = S.selection_scope () && S.String_set.equal selected (S.selected ())
+              then (
+                let editing = match previous, S.editing () with
+                  | Some (uuid, buffer), None when S.find uuid <> None ->
+                      Some (S.mk_editing ~uuid ~buffer ~scope ~base:buffer
+                              ~caret:(String.length buffer) ())
+                  | _, current -> current
+                in
+                S.set (fun st -> {st with S.editing = editing;
+                   selected = S.String_set.empty; anchor = None; action_bar = false});
+                match editing with
+                | Some e -> request_focus e.S.uuid e.S.model.Edit_model.caret
+                | None -> ());
+              Js.Promise.resolve ()
+      in
+      ignore
+        ((let* () = p in
+          selection_delete_pending := false;
+          Js.Promise.resolve ())
+         |> Js.Promise.catch (fun error ->
+              selection_delete_pending := false;
+              Ui_services.log_error ("delete-selection failed", error);
+              Js.Promise.resolve ()))
+
+let delete_selection () =
+  let snapshot = selected_snapshot () in
+  if S.String_set.is_empty snapshot.unresolved then
+    delete_selected_uuids ~selected:snapshot.selection ~scope:snapshot.scope
+      ~before:(S.history_cursor ()) snapshot.uuids
+  else Ui_services.log_error "selection entities unavailable"
 
 (* ---- drag & drop ---- *)
 
@@ -1556,43 +1733,70 @@ let export_titles blocks =
   List.iter (go 0) blocks;
   Buffer.contents buf
 
+let selected_copy_blocks ~plain snapshot =
+  if S.String_set.is_empty snapshot.unresolved then
+    Some (if plain then snapshot.blocks else snapshot.roots)
+  else (
+    Ui_services.log_error "selection entities unavailable";
+    None)
+
+let selection_text ~plain blocks =
+  if plain then String.concat "\n" (List.map (fun b -> b.Model.block_title) blocks)
+  else export_titles blocks
+
+let remember_selection_copy ~plain blocks text =
+  S.clipboard := (if plain then [] else blocks);
+  S.clipboard_text := text
+
 let copy_selection ev =
-  let sel = S.selected () in
-  match selected_uuids () with
-  | [] -> ()
-  | uuids ->
-      (* keep only topmost selected roots — a parent tree already
-         carries its children; copying child rows too would emit
-         duplicate maps on paste *)
-      let roots =
-        List.filter
-          (fun u -> not (has_selected_ancestor sel u))
-          uuids
-      in
-      let blocks = List.filter_map S.find roots in
-      S.clipboard := blocks;
-      S.clipboard_text := export_titles blocks;
-      ev.Ui_services.clipboard_set "text/plain" !(S.clipboard_text);
+  match selected_copy_blocks ~plain:false (selected_snapshot ()) with
+  | None | Some [] -> ()
+  | Some blocks ->
+      let text = selection_text ~plain:false blocks in
+      ev.Ui_services.clipboard_set "text/plain" text;
+      remember_selection_copy ~plain:false blocks text;
       ev.Ui_services.prevent_default ()
 
-let cut_selection ev =
-  copy_selection ev;
-  delete_selection ()
+let write_clipboard_text text on_written =
+  let write =
+    try Ui_services.clipboard_write_text text
+    with error -> Ui_task.reject error
+  in
+  let task = Ui_task.bind write (fun () ->
+      on_written ();
+      Ui_task.resolve ()) in
+  ignore (Ui_task.catch task (fun error ->
+      Ui_services.log_error ("clipboard write failed", error);
+      Ui_task.resolve ()))
 
-(* palette-invoked copy: no copy event, so write the system clipboard
-   directly; same topmost-roots reduction as copy_selection *)
-let copy_selection_text () =
-  let sel = S.selected () in
-  match selected_uuids () with
-  | [] -> ()
-  | uuids ->
-      let roots =
-        List.filter (fun u -> not (has_selected_ancestor sel u)) uuids
-      in
-      let blocks = List.filter_map S.find roots in
-      S.clipboard := blocks;
-      S.clipboard_text := String.concat "\n" (List.map (fun b -> b.Model.block_title) blocks);
-      Ui_services.clipboard_copy !(S.clipboard_text)
+let write_selection_copy ~plain ~cut =
+  let snapshot = selected_snapshot () in
+  let before = S.history_cursor () in
+  let context = action_context () in
+  match selected_copy_blocks ~plain snapshot with
+  | None | Some [] -> ()
+  | Some blocks ->
+      let text = selection_text ~plain blocks in
+      write_clipboard_text text (fun () ->
+          remember_selection_copy ~plain blocks text;
+          if cut && context = action_context () then
+            delete_selected_uuids ~selected:snapshot.selection ~scope:snapshot.scope
+              ~before snapshot.uuids)
+
+let cut_block_text uuid =
+  match S.find uuid with
+  | None -> ()
+  | Some block ->
+      let context = action_context () in
+      write_clipboard_text block.Model.block_title (fun () ->
+          if context = action_context () then
+            ignore (Ops.apply_and_refresh [ Ops.delete_blocks [ uuid ] ]))
+
+let copy_selection_text ?(plain = false) () = write_selection_copy ~plain ~cut:false
+let cut_selection_text () = write_selection_copy ~plain:false ~cut:true
+let cut_selection ev =
+  ev.Ui_services.prevent_default ();
+  cut_selection_text ()
 
 (* ---- external paste (handler.paste.cljs/paste-copied-text) ----
 
@@ -1723,17 +1927,43 @@ let edit_last_inserted ?scope resp =
   | Some u -> enter_edit ?scope u (String.length (model_title u))
   | None -> ()
 
-let paste_focus () =
-  let context = Runtime.repo (), Runtime.route () in
+let paste_session_current () =
   let editing = S.editing () in
   let selection = S.history_cursor () in
-  let scope = match editing with Some e -> e.S.scope | None -> S.selection_scope () in
+  fun () ->
+    match editing, S.editing () with
+    | Some before, Some current -> before.S.epoch == current.S.epoch
+    | None, None -> S.history_cursor () = selection
+    | _ -> false
+
+let paste_context_current () =
+  let context = action_context () in
+  let generation = !Runtime.load_gen in
+  let session_current = paste_session_current () in
+  fun () ->
+    context = action_context () && generation = !Runtime.load_gen && session_current ()
+
+let paste_clipboard_text uuid =
+  match edit_model uuid with
+  | None -> Ui_task.resolve ()
+  | Some _ ->
+      let current = paste_context_current () in
+      Ui_task.bind (Ui_services.clipboard_read_text ()) (fun text ->
+          (if current () then
+             match edit_model uuid with
+             | Some m ->
+                 let lo, hi = sel_span_of m in
+                 splice_range uuid lo hi text;
+                 Ops.schedule_save uuid (live_buffer uuid)
+             | None -> ());
+          Ui_task.resolve ())
+
+let paste_focus () =
+  let context = Runtime.repo (), Runtime.route () in
+  let session_current = paste_session_current () in
+  let scope = match S.editing () with Some e -> e.S.scope | None -> S.selection_scope () in
   fun resp ->
-    if context = (Runtime.repo (), Runtime.route ())
-       && (match editing, S.editing () with
-           | Some before, Some current -> before.S.epoch == current.S.epoch
-           | None, None -> S.history_cursor () = selection
-           | _ -> false)
+    if context = (Runtime.repo (), Runtime.route ()) && session_current ()
     then edit_last_inserted ~scope resp
 
 let paste_history_opts target_uuid =
@@ -1755,14 +1985,17 @@ let paste_trees trees target_uuid ~replace_empty =
    places after [uuid] (cljs keep-uuid? + :outliner-real-op
    :paste-text under :outliner-op :paste) *)
 let paste_markdown_blocks uuid text ~replace_empty ~sibling =
+  let current = paste_context_current () in
+  let repo = Runtime.repo () in
   let focus = paste_focus () in
   let opts = paste_history_opts uuid in
   let* w =
     Runtime.invoke3 "thread-api/paste-extract-blocks"
-      (Wire.String (Runtime.repo ()))
+      (Wire.String repo)
       (Wire.String text)
       (Wire.String uuid)
   in
+  if not (current ()) then Js.Promise.resolve () else
   match w with
   | Wire.Array (_ :: _ as maps) -> (
       let* resp =
@@ -2108,9 +2341,9 @@ let toggle_open_blocks () =
   if pairs <> [] then ignore (Ops.apply [ Ops.collapse_expand pairs ])
 
 let restore_history result =
-  let context = Runtime.repo (), Runtime.route () in
+  let context = action_context () in
   let editing = S.editing () in
-  let current () = context = (Runtime.repo (), Runtime.route ())
+  let current () = context = action_context ()
       && (match editing, S.editing () with
           | None, None -> true
           | Some before, Some now -> before.S.uuid = now.S.uuid
@@ -2161,11 +2394,28 @@ let restore_history result =
 
 let () = S.restore_history := restore_history
 
-let rec run_history operation =
-  if !S.structure_pending then
-    S.enqueue_edit_action ~real:true (fun () -> run_history operation)
-  else
-    run_structure ~restore:(S.editing ()) (operation ()) (fun () -> ())
+let history_owner : Ops.refresh_owner option ref = ref None
+
+let run_history operation =
+  let context = Runtime.model () in
+  let owner =
+    match !history_owner with
+    | Some owner when Ops.refresh_current ~owner context -> Some owner
+    | _ ->
+        let owner = Ops.refresh_owner_for None in
+        history_owner := owner;
+        owner
+  in
+  let rec run () =
+    if not (Ops.refresh_current ?owner context) then ()
+    else if !S.structure_pending then
+      S.enqueue_edit_action ~real:true run
+    else begin
+      Option.iter (fun owner -> owner.Ops.outcome <- None) owner;
+      run_structure ~restore:(S.editing ()) (operation ?owner ()) (fun () -> ())
+    end
+  in
+  run ()
 
 let undo () = run_history Ops.undo
 let redo () = run_history Ops.redo

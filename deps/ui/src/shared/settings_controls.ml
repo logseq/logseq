@@ -111,6 +111,7 @@ let toggle_row ~key ~label ?(label_extra = []) ?(detail = [])
     ?(density = `regular) ?binding ~on ~on_checked () =
   let control =
     row ~key:(key ^ "-i") ~gap:16 ~cross:`center ~min_height:24
+      ~min_width:0 ~flex_wrap:`wrap
       ?max_width:(match binding with Some _ -> Some 320 | None -> None)
       (switch_controls ~key ~on ~on_checked
          ~extra:(match binding with Some _ -> [] | None -> detail)
@@ -119,7 +120,7 @@ let toggle_row ~key ~label ?(label_extra = []) ?(detail = [])
   let side =
     match binding with
     | Some b ->
-        [ row ~key:(key ^ "-k") ~grow:1. ~main:`end_ ~cross:`center
+        [ row ~key:(key ^ "-k") ~grow:1. ~min_width:0 ~main:`end_ ~cross:`center
             [ kbd_seq ~key:(key ^ "-ks") ~binding:b
                 (String.split_on_char ' ' b) ]
         ]

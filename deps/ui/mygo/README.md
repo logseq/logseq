@@ -41,6 +41,19 @@ their typed ABI rather than disguising them as extension events. Geometry is
 queried only after a committed frame. Focus and imperative scrolling use LUI's
 production host services, including its node-lifetime and scroll-token checks.
 
+Checkbox detail events preserve checked state and modifier bits through
+`lui_ocaml_toggle_changed_detail`. Captured pointer move/cancel events use the
+same pointer-detail ABI as down/up, and navigation accepts Enter, Space and
+Escape as well as directional keys. Rebuild the native library and host
+together: startup requires the detail exports and rejects an older library
+instead of dropping events or stripping modifiers.
+
+Native checkbox, radio, switch and slider snapshots expose an interactive
+`input` target to delegated document selectors. These are flattened native
+controls, not replicas of the Web label/input subtree. Block-selection capture
+therefore excludes them before handling modifier gestures, without per-view
+exceptions or bypassing document default prevention.
+
 Native initialization requires exactly `{"paintsCaret":boolean}` as its JSON
 payload, independent of the platform and host profile codes. MyGo sends
 `{"paintsCaret":false}` before view construction: the shared OCaml editor owns
@@ -53,7 +66,11 @@ OCaml library must be rebuilt together; assets and persistence configuration
 remain environment-owned and are not part of this payload.
 
 The host routes document input synchronously through OCaml before native default
-handling. Editor caret, selection and pointer queries use committed retained text
+handling. Document callbacks publish their flushed patches with the prevention
+result; the UI thread applies them before returning to native default handling.
+Standard text controls and raw extension inputs share the host's imperative
+value/selection queues, node-lifetime checks and committed-frame acknowledgements.
+Editor caret, selection and pointer queries use committed retained text
 layout; the input sink does not maintain a second document. Theme snapshots feed
 the backend's scoped color defaults. Native file dialogs, downloads, clipboard,
 image decoding and shutdown saving use their real platform services.

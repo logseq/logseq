@@ -24,6 +24,7 @@ module D = Web_dom
 type emit_fn = string -> wire_value String_map.t -> unit
 
 external element_to_json : W.Element.t -> D.el = "%identity"
+external event_composing : D.ev -> bool = "isComposing" [@@mel.get]
 
 external remove_listener : D.el -> string -> (D.ev -> unit) -> unit =
   "removeEventListener" [@@mel.send]
@@ -39,8 +40,12 @@ type cm_state =
   ; mutable read_only : bool
   ; mutable role : string
   ; mutable built : bool
+  ; mutable composing : bool
+  ; mutable composition_cancelled : bool
+  ; mutable input_value : string
   ; mutable line : D.el option
   ; mutable listeners : (D.el * string * (D.ev -> unit)) list
+  ; mutable unregister_composition : (unit -> unit) option
   }
 
 external cm_state_get : W.Element.t -> cm_state Js.Undefined.t = "__lsCm"
@@ -75,7 +80,7 @@ let emit_cm st name ?value ?key () =
 let mount_block st =
   match st.line with
   | Some textarea when st.role = "block" && st.uuid <> "" ->
-      Code_mirror.mount_async ~read_only:st.read_only st.uuid textarea
+      Code_mirror.mount_async st.uuid textarea
   | _ -> ()
 
 let build_block el st =
@@ -106,20 +111,75 @@ let build_query el st =
   D.el_set_text_content line st.value;
   D.el_append_child (element_to_json el) line;
   st.line <- Some line;
-  let on_input _ =
-    emit_cm st "input" ~value:(D.el_text_content line) ()
+  st.input_value <- st.value;
+  let uuid = st.uuid in
+  let current () =
+    st.role = "query" && st.uuid = uuid
+    && (match Js.Undefined.toOption (cm_state_get el) with
+        | Some current -> current == st
+        | None -> false)
+    && (match st.line with Some current -> current == line | None -> false)
+    && D.el_is_connected line
+  in
+  st.unregister_composition <- Some
+    (Code_mirror.register_composition_source (fun () ->
+         current () && st.composing && Code_mirror.focused_client line));
+  let on_input ev =
+    if current ()
+       && not (st.composition_cancelled || st.read_only || st.composing
+               || event_composing ev)
+    then begin
+      let value = D.el_text_content line in
+      if value <> st.input_value then begin
+        st.input_value <- value;
+        emit_cm st "input" ~value ()
+      end
+    end
+  in
+  let on_composition_start _ =
+    if current () && not st.read_only then begin
+      st.composition_cancelled <- false;
+      st.composing <- true
+    end
+  in
+  let on_composition_end ev =
+    if current () then begin
+      st.composing <- false;
+      if st.composition_cancelled then D.el_set_text_content line st.input_value
+      else on_input ev;
+      st.composition_cancelled <- false
+    end
+  in
+  let on_blur _ =
+    if current () && st.composing then begin
+      st.composition_cancelled <- true;
+      st.composing <- false;
+      D.el_set_text_content line st.input_value
+    end
+  in
+  let on_focus _ =
+    if current () then st.composition_cancelled <- false
   in
   let on_keydown ev =
     match D.ev_key ev with
-    | ("Enter" | "Escape") as key ->
+    | (("Enter" | "Escape") as key)
+      when current ()
+           && not (st.read_only || st.composing || event_composing ev) ->
         D.ev_prevent_default ev;
         emit_cm st "key" ~key ~value:(D.el_text_content line) ()
     | _ -> ()
   in
   D.el_on line "input" on_input;
   D.el_on line "keydown" on_keydown;
+  D.el_on line "compositionstart" on_composition_start;
+  D.el_on line "compositionend" on_composition_end;
+  D.el_on line "blur" on_blur;
+  D.el_on line "focus" on_focus;
   st.listeners <-
-    [ (line, "input", on_input); (line, "keydown", on_keydown) ]
+    [ (line, "input", on_input); (line, "keydown", on_keydown)
+    ; (line, "compositionstart", on_composition_start)
+    ; (line, "compositionend", on_composition_end)
+    ; (line, "blur", on_blur); (line, "focus", on_focus) ]
 
 let build el st =
   if st.built then ()
@@ -132,16 +192,30 @@ let build el st =
         invalid_arg ("logseq-codemirror: unknown source-role " ^ role)
   end
 
-(* textarea value/attr and query line text follow prop updates, but a
-   mounted CM doc ignores textarea.value writes — same observable
-   behavior as the old dom path (sync_titles pushes real updates through
-   the instance). Line writes are skipped while focused so an eval echo
-   can't clobber the caret. *)
+let clear el st =
+  Option.iter (fun unregister -> unregister ()) st.unregister_composition;
+  st.unregister_composition <- None;
+  List.iter
+    (fun (target, name, f) -> remove_listener target name f)
+    st.listeners;
+  st.listeners <- [];
+  if st.role = "block" && st.uuid <> "" then Code_mirror.unmount st.uuid;
+  D.el_replace_children (element_to_json el);
+  W.Element.removeAttribute "style" el;
+  st.line <- None;
+  st.composing <- false;
+  st.composition_cancelled <- false;
+  st.built <- false
+
+(* Focused query drafts survive evaluation snapshots. Block props are
+   controlled values, including updates to a mounted CodeMirror doc. *)
 let set_property el prop value =
   let st = state_of el in
   match (prop, value) with
   | "uuid", StringValue v -> (
+      if st.uuid <> v then clear el st;
       st.uuid <- v;
+      if st.role <> "" then build el st;
       match (st.line, st.role) with
       | Some line, "block" ->
           D.el_set_id line ("edit-block-" ^ v);
@@ -150,26 +224,37 @@ let set_property el prop value =
   | "lang", StringValue v -> (
       st.lang <- v;
       match (st.line, st.role) with
-      | Some line, "block" -> D.el_set_attr line "data-lang" v
+      | Some line, "block" ->
+          D.el_set_attr line "data-lang" v;
+          Code_mirror.set_language st.uuid v
       | _ -> ())
   | "value", StringValue v -> (
       st.value <- v;
+      if st.role = "block" then Code_mirror.set_controlled_value st.uuid v;
       match st.line with
+      | Some line when st.role = "query" && st.composing ->
+          st.composition_cancelled <- true;
+          st.input_value <- v;
+          if D.el_text_content line <> v then D.el_set_text_content line v
       | Some line
         when (match D.active_element () with
               | Some a -> a != line
               | None -> true) -> (
           match st.role with
           | "query" ->
-              if D.el_text_content line <> v then
-                D.el_set_text_content line v
-          | _ ->
-              if D.el_value line <> v then D.el_set_value line v)
+              st.input_value <- v;
+              if D.el_text_content line <> v then D.el_set_text_content line v
+          | _ -> if D.el_value line <> v then D.el_set_value line v)
       | _ -> ())
   | "read-only", BoolValue b -> (
       st.read_only <- b;
       match st.role with
       | "block" ->
+          (match st.line with
+           | Some line ->
+               if b then D.el_set_attr line "readonly" ""
+               else D.el_remove_attr line "readonly"
+           | None -> ());
           if st.uuid <> "" then Code_mirror.set_read_only st.uuid b
       | "query" -> (
           match st.line with
@@ -180,6 +265,7 @@ let set_property el prop value =
       | _ -> ())
   | "source-role", StringValue v ->
       if v <> "" then begin
+        if st.role <> v then clear el st;
         st.role <- v;
         build el st
       end
@@ -199,12 +285,7 @@ let cleanup el =
   match Js.Undefined.toOption (cm_state_get el) with
   | None -> ()
   | Some st ->
-      List.iter
-        (fun (target, name, f) -> remove_listener target name f)
-        st.listeners;
-      st.listeners <- [];
-      if st.role = "block" && st.uuid <> "" then
-        Code_mirror.unmount st.uuid
+      clear el st
 
 let adapter : web_extension_adapter =
   { web_extension_create =
@@ -219,8 +300,12 @@ let adapter : web_extension_adapter =
           ; read_only = false
           ; role = ""
           ; built = false
+          ; composing = false
+          ; composition_cancelled = false
+          ; input_value = ""
           ; line = None
           ; listeners = []
+          ; unregister_composition = None
           };
         el)
   ; web_extension_set_property = set_property

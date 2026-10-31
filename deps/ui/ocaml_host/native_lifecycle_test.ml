@@ -134,12 +134,15 @@ let () = Native_embed.with_entry_lock (fun () ->
   let failures = ref [] in
   let expect message condition = if not condition then failures := message :: !failures in
   let queries = ref 0 and menu_node = ref None and target = ref None in
+  let focused = ref (-1) and clicked = ref 0 and item_nodes = ref [] in
   let previous_context = !Popups_state.active in
   let scheduler = Signal.scheduler () in
   let context = Popups_state.make scheduler in
   let dom = { Ui_dom_native.ops with by_id = (fun identifier ->
     incr queries;
-    if identifier="block-context-menu" then !menu_node else None) } in
+    if identifier="block-context-menu" then !menu_node
+    else List.assoc_opt identifier !item_nodes);
+    dispatch_json = (fun name _ -> if name="ls:editor-command" then incr clicked) } in
   Platform.install_ui_services ~paints_caret:true ~assert_owner:Native_embed.assert_entry_owner
     ~request_flush:(fun () -> ()) ~dom ~timers:Ui_dom_native.timers ~files:Ui_dom_native.files;
   let event key =
@@ -155,8 +158,9 @@ let () = Native_embed.with_entry_lock (fun () ->
   let base = Ui_dom_native.el_of (Js.Json.JObject []) in
   target:=Some {base with Ui_services.closest=(fun selector ->
     if selector="#block-context-menu, #block-context-submenu" then Some base else None)};
-  let cm : Popups_state.cm = {cx=0.;cy=0.;atop=0.;flip=false;block_id="context-fixture";
-    multi=false;entries=[];sub_open=(-1);sub_xy=(0.,0.);tag=None;native=false;native_acts=[]} in
+  let cm : Popups_state.cm = {epoch=0;cx=0.;cy=0.;atop=0.;flip=false;block_id="context-fixture";
+    multi=false;entries=[Ci_item ("First",None,"fixture-first");Ci_item ("Last",None,"fixture-last")];
+    sub_open=(-1);sub_xy=(0.,0.);highlighted=None;tag=None;native=false;native_acts=[]} in
   Signal.set context.vs {ac=None;cm=Some cm;pv=None};
   Signal.stabilize scheduler;
   List.iter (fun key ->
@@ -164,7 +168,6 @@ let () = Native_embed.with_entry_lock (fun () ->
     expect "A missing menu consumed navigation" (not (Popups_view.menu_keydown context (event (Some key))));
     expect "Supported menu navigation did not resolve its owned menu" (!queries = 1))
     ["ArrowDown"; "ArrowUp"; "Home"; "End"; "Enter"];
-  let focused = ref (-1) and clicked = ref 0 in
   let item index =
     let attrs = Hashtbl.create 4 in
     let base = Ui_dom_native.el_of (Js.Json.JObject []) in
@@ -174,6 +177,7 @@ let () = Native_embed.with_entry_lock (fun () ->
       scroll_into_view_nearest = (fun () -> ());
       click = (fun () -> incr clicked) } in
   let items = [item 0; item 1] in
+  item_nodes := List.mapi (fun index node -> "cm-item-" ^ string_of_int index, node) items;
   let base = Ui_dom_native.el_of (Js.Json.JObject []) in
   let menu = {base with Ui_services.rect = (fun () -> 0.,0.,100.,80.);
     query_all = (fun _ -> items)} in
@@ -188,9 +192,10 @@ let () = Native_embed.with_entry_lock (fun () ->
   expect "A hidden menu consumed navigation"
     (not (Popups_view.menu_keydown context (event (Some "ArrowDown"))));
   menu_node := Some {menu with Ui_services.query_all = (fun _ -> [])};
+  Signal.set context.vs {ac=None;cm=Some {cm with entries=[]};pv=None};
+  Signal.stabilize scheduler;
   expect "An empty menu consumed navigation"
     (not (Popups_view.menu_keydown context (event (Some "ArrowDown"))));
-  Popups_view.cm_hi_el := None;
   let nodes = List.init 2048 (fun _ -> Js.Json.JObject
     ["className",Js.Json.JString "ls-block"]) in
   Dom_ext.doc_elements_provider := (fun () -> nodes);

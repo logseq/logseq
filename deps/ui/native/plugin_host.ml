@@ -1,9 +1,15 @@
-(* Native stub of sdk/plugin_host.ml — the JS plugin runtime
-   (LSPluginCore sandbox) does not exist on native, so every surface
-   reports "no plugins". api_methods stays empty so Sdk_api installs
-   cleanly. *)
+(* Native has no LSPluginCore sandbox. Queries report no loaded plugins;
+   commands and SDK requests must report the missing capability. *)
 
 type ui_item = { it_pid : string; it_type : string; it_opts : Js.Json.t }
+
+let unavailable capability = "native:LSPluginCore." ^ capability ^ ":unavailable"
+
+let report_unavailable capability =
+  Toast.error (I18n.t1 "plugin/remote-error" (unavailable capability))
+
+let reject_unavailable capability =
+  Js.Promise.reject (Failure (unavailable capability))
 
 let getf (o : Js.Json.t) (k : string) : Js.Json.t =
   match o with
@@ -36,9 +42,9 @@ let diagnostic_plugins () : (string * string) list = []
 let slot_id it = "pl-injected-ui-item-pl-" ^ jstr it.it_opts "key" ^ "-" ^ it.it_pid
 let inject_toolbar_ui () = ()
 let pinned () : string list = []
-let toggle_pinned (_ : string) = ()
+let toggle_pinned (_ : string) = report_unavailable "togglePinned"
 let slash_cmd_tags () : (string * string) list = []
-let exec_slash_command ?insert:_ _pid _tag = ()
+let exec_slash_command ?insert:_ _pid _tag = report_unavailable "execSlashCommand"
 let fire_db_hooks (_ : Wire.t) = ()
 let fire_route_changed (_ : Model.route) = ()
 
@@ -50,11 +56,11 @@ let setup () = ()
 
 let palette_commands () : Commands_data.cmd list = []
 
-let exec_palette_command (_cid : string) : unit = ()
+let exec_palette_command (_cid : string) = report_unavailable "execPaletteCommand"
 
 let jobj pairs = Js.Json.object_ (Js.Dict.fromList pairs)
 let jstr_ s = Js.Json.string s
-let meth _o _m _args : Js.Json.t = Js.Json.null
+let meth _o method_ _args : Js.Json.t = invalid_arg (unavailable method_)
 let installed : Js.Json.t Js.Dict.t = Js.Dict.empty ()
 
 let bump () =
@@ -149,13 +155,13 @@ let fetch_stats () : Js.Json.t Js.Promise.t =
           bump ();
           resolve j);
       p
-let call_button_action _pid _action _key = ()
-let check_or_update _id _repo _only_check = ()
+let call_button_action _pid _action _key = report_unavailable "callButtonAction"
+let check_or_update _id _repo _only_check = report_unavailable "checkOrUpdate"
 let update_version _id = None
 let plugin_settings_schema _pid : Js.Json.t list = []
 let plugin_settings_json _pid : Js.Json.t = jobj []
-let plugin_set_setting _pid _k _v = ()
-let replace_plugin_settings _pid _j = ()
+let plugin_set_setting _pid _k _v = report_unavailable "setSetting"
+let replace_plugin_settings _pid _j = report_unavailable "replaceSettings"
 let json_pretty (j : Js.Json.t) : string = Js.Json.stringify j
 
 (* cljs plugin-handler/pkg-asset: http(s) urls pass through; relative
@@ -210,9 +216,9 @@ let package_stat stats id =
             | None -> 0
           in
           Some { stars; downloads })
-let install_marketplace _pkg = ()
-let unregister_plugin _pid = ()
-let set_plugin_disabled _pid _on = ()
+let install_marketplace _pkg = report_unavailable "installMarketplace"
+let unregister_plugin _pid = report_unavailable "unregisterPlugin"
+let set_plugin_disabled _pid _on = report_unavailable "setDisabled"
 
 let open_settings_pid : string option ref = ref None
 let pending_dialog_tab : string option ref = ref None
@@ -221,10 +227,11 @@ let fire_theme_mode_changed (_ : string) = ()
 let fire_sidebar_visible_changed (_ : bool) = ()
 let fire_current_graph_changed () = ()
 let simple_commands_of_type (_ : string) : (string * string * string) list = []
-let exec_simple_command ?args:_ ?ctx:_ (_ : string) (_ : string) = ()
+let exec_simple_command ?args:_ ?ctx:_ (_ : string) (_ : string) =
+  report_unavailable "execSimpleCommand"
 let item_slot (_ : ui_item) : string = ""
 let ui_items_of_type (_ : string) : ui_item list = []
 let make_asset_url (_ : Js.Json.t) (_ : Js.Json.t) (_ : Js.Json.t)
-    (_ : Js.Json.t) : Js.Json.t Js.Promise.t = Js.Promise.resolve Js.Json.null
+    (_ : Js.Json.t) : Js.Json.t Js.Promise.t = reject_unavailable "makeAssetUrl"
 let open_pdf_viewer (_ : Js.Json.t) (_ : Js.Json.t) (_ : Js.Json.t)
-    (_ : Js.Json.t) : Js.Json.t Js.Promise.t = Js.Promise.resolve Js.Json.null
+    (_ : Js.Json.t) : Js.Json.t Js.Promise.t = reject_unavailable "openPDFViewer"

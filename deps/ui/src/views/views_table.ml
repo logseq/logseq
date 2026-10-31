@@ -114,7 +114,11 @@ let column_size (c : V.column) =
 
 let column_width (s : V.vstate) (c : V.column) =
   if c.V.c_id = "id" then 48
-  else Option.value (V.Smap.find_opt c.V.c_id s.V.sized) ~default:(column_size c)
+  else
+    match s.V.table_resize with
+    | Some resize when resize.V.resize_view = s.V.view_uuid &&
+        resize.V.resize_column = c.V.c_id -> resize.V.resize_preview
+    | _ -> Option.value (V.Smap.find_opt c.V.c_id s.V.sized) ~default:(column_size c)
 
 let with_column_width inst c elem =
   Ui_parts.int_prop L.WidthValue
@@ -288,21 +292,42 @@ let cell_value blk (c : V.column) : W.t =
 
 (* ---------- cells ---------- *)
 
+let all_row_uuids (s : V.vstate) =
+  let rows = match s.V.data with
+  | Wr.VFlat { rows; _ } -> rows
+  | Wr.VGrouped gs -> List.concat_map (fun g -> g.Wr.grows) gs
+  | Wr.VGroupedList gs ->
+      List.concat_map (fun g -> List.concat_map snd g.Wr.glparts) gs
+  | Wr.VEmpty -> []
+  in
+  let seen = ref V.Sset.empty in
+  List.filter (fun uuid ->
+      if V.Sset.mem uuid !seen then false
+      else (seen := V.Sset.add uuid !seen; true)) rows
+
+let select_row inst ~uuid ~checked ~shift =
+  V.update inst (fun state ->
+      V.table_select_row state ~rows:(all_row_uuids state) ~uuid ~checked ~shift)
+
 (* The selection target is 32 points; its centered 16-point chrome
    appears while hovered or checked. *)
-let checkbox_el inst ~jtrigger ~id ~aria_label ~shown ~on_toggle : t =
+let checkbox_el ?(mixed = fun _ -> false) inst ~jtrigger ~id ~aria_label ~shown ~on_toggle : t =
   Ui_parts.float_prop L.Opacity
-    ~value:(reactive (fun s -> if shown s then 1. else 0.) (sig_of inst))
-    (Ui_components.with_props [Ui_components.Prop.hover_opacity 1.]
-      (Ui_components.checkbox ~accessibility_identifier:id ~label:aria_label
+    ~value:(reactive (fun s -> if shown s || mixed s then 1. else 0.) (sig_of inst))
+    (Ui_components.with_props
+       [Ui_components.Prop.hover_opacity 1.
+       ;Ui_components.Prop.indicator_border_color "var(--lx-checkbox-border)"
+       ;Ui_components.Prop.checked_indicator_border_color "hsl(var(--border))"]
+      (Lui_elements.checkbox ~accessibility_identifier:id ~label:aria_label
         ~width:32 ~height:32 ~main:`center ~cross:`center
         ~border_color:"hsl(var(--primary))"
         ~transition:"opacity 150ms"
         ~style_class:(if jtrigger then "jtrigger" else "")
         ~checked:(reactive shown (sig_of inst))
-        ~on_toggle:(fun ev ->
+        ~indeterminate:(reactive mixed (sig_of inst))
+        ~on_toggle_detail:(fun ev ->
           match ev with
-          | L.ToggleChanged (_, on) -> on_toggle on
+          | L.ToggleChangedDetail (_, on, modifiers) -> on_toggle on (modifiers land 2 <> 0)
           | _ -> ())
         []))
 
@@ -323,14 +348,9 @@ let select_cell inst ~row_uuid ~blk : t =
         ~data_attrs:[ ("data-table-row-select", "true") ]
         [ checkbox_el inst ~jtrigger:true ~id:(dbid ^ "-checkbox")
             ~aria_label:(I.t "view.table/select-row")
-            ~shown:(fun (s : V.vstate) -> V.Sset.mem row_uuid s.V.selected)
-            ~on_toggle:(fun on ->
-              V.update inst (fun s ->
-                  { s with
-                    V.selected =
-                      (if on then V.Sset.add row_uuid s.V.selected
-                       else V.Sset.remove row_uuid s.V.selected)
-                  })) ])
+            ~shown:(fun (s : V.vstate) -> V.table_row_selected s row_uuid)
+            ~on_toggle:(fun checked shift ->
+              select_row inst ~uuid:row_uuid ~checked ~shift) ])
     ]
 
 let open_row_sidebar row_uuid =
@@ -490,10 +510,45 @@ let prop_cell ~blk (c : V.column) : t =
       inner_cell [ Ui_components.checkbox ~checked:b ~disabled:true [] ]
   | v -> inner_cell [ text ~value:(fmt_cell_value c v) [] ]
 
+let cell_id inst row_uuid column =
+  Printf.sprintf "table-%d-cell-%s-%s" inst.V.id row_uuid column
+
+let focus_cell inst row_uuid column =
+  V.update inst (fun s -> { s with V.table_cell_focus = Some (row_uuid, column) });
+  Option.iter (fun (cell : Ui_services.el) -> cell.focus ())
+    (Ui_services.dom_by_id (cell_id inst row_uuid column))
+
+let table_cell_navigation inst ~row_uuid ~column = function
+  | L.NavigationKey (_, key, _) when V.table_row_selected (V.get inst) row_uuid ->
+      (match key with
+       | "ArrowLeft" | "ArrowRight" as arrow ->
+           let cells = List.filter (fun c -> c.V.c_id <> "select")
+               (visible_columns (V.get inst)) in
+           let rec next = function
+             | c :: after :: _ when c.V.c_id = column -> Some after.V.c_id
+             | _ :: rest -> next rest
+             | [] -> None in
+           Option.iter (focus_cell inst row_uuid)
+             (next (if arrow = "ArrowLeft" then List.rev cells else cells))
+       | "Enter" ->
+           open_row_sidebar row_uuid;
+           V.update inst V.table_clear_selection
+       | "Escape" ->
+           V.update inst (fun s -> { s with V.table_cell_focus = None });
+           Option.iter (fun (row : Ui_services.el) -> row.focus ())
+             (Ui_services.dom_by_id ("ls-block-" ^ row_uuid))
+       | _ -> ())
+  | _ -> ()
+
 let cell_el inst ~row_uuid ~blk (c : V.column) : t =
   with_column_width inst c
   (Ui_components.with_props [ Ui_components.Prop.overflow `hidden ]
-  (box ~style_class:"ls-table-cell" ~height:32
+  (Ui_parts.class_signal (sig_of inst)
+     (fun s -> "ls-table-cell" ^
+       if s.V.table_cell_focus = Some (row_uuid, c.V.c_id) then " selected" else "")
+  (box ~height:32 ~accessibility_identifier:(cell_id inst row_uuid c.V.c_id)
+    ~data_attrs:["tabindex", "-1"]
+    ~on_navigation_key:(table_cell_navigation inst ~row_uuid ~column:c.V.c_id)
     [ (match c.V.c_id with
        | "select" -> select_cell inst ~row_uuid ~blk
        | "block/title" -> title_cell inst ~row_uuid ~blk c
@@ -519,38 +574,47 @@ let cell_el inst ~row_uuid ~blk (c : V.column) : t =
                  ; class_schema = false }
                in
                inner_cell [ Properties_value.view ~table_view:true ~hover:None pctx row ]
-           | None -> prop_cell ~blk c)) ]))
+           | None -> prop_cell ~blk c)) ])))
 
 (* ---------- header ---------- *)
 
-let all_row_uuids (s : V.vstate) =
-  match s.V.data with
-  | Wr.VFlat { rows; _ } -> rows
-  | Wr.VGrouped gs -> List.concat_map (fun g -> g.Wr.grows) gs
-  | Wr.VGroupedList gs ->
-      List.concat_map (fun g -> List.concat_map snd g.Wr.glparts) gs
-  | Wr.VEmpty -> []
+let selected_row_uuids (s : V.vstate) =
+  List.filter (V.table_row_selected s) (all_row_uuids s)
+
+let selected_row_count (s : V.vstate) =
+  match s.V.table_select_all, s.V.data with
+  | true, Wr.VFlat { count; _ } ->
+      max 0 (count - List.length (List.filter
+        (fun uuid -> V.Sset.mem uuid s.V.table_excluded) (all_row_uuids s)))
+  | _ -> List.length (selected_row_uuids s)
+
+let selected_uuids inst = selected_row_uuids (V.get inst)
 
 let sortable c =
   not
     (List.mem c.V.c_id
        [ "select"; "id"; "block/page"; "block.temp/refs-count" ])
 
-let header_select_cell inst : t =
-  let shown (s : V.vstate) = not (V.Sset.is_empty s.V.selected) in
+let header_select_cell ?rows inst : t =
+  let row_uuids s = Option.value rows ~default:(all_row_uuids s) in
+  let shown (s : V.vstate) =
+    let uuids = row_uuids s in
+    uuids <> [] && List.for_all (V.table_row_selected s) uuids &&
+      (match rows, s.V.data with
+       | None, Wr.VFlat { count; _ } when count > List.length uuids -> s.V.table_select_all
+       | _ -> true)
+  in
+  let mixed (s : V.vstate) =
+    not (shown s) && List.exists (V.table_row_selected s) (row_uuids s)
+  in
   row ~cross:`center ~main:`center ~width:32 ~height:32
-    [ checkbox_el inst ~jtrigger:false ~id:"header-checkbox" ~shown
+    [ checkbox_el ~mixed inst ~jtrigger:false ~id:"header-checkbox" ~shown
         ~aria_label:(I.t "view.table/select-all")
-        ~on_toggle:(fun on ->
+        ~on_toggle:(fun on _shift ->
           V.update inst (fun s ->
-              { s with
-                V.selected =
-                  (if on then
-                     List.fold_left
-                       (fun acc u -> V.Sset.add u acc)
-                       s.V.selected (all_row_uuids s)
-                   else V.Sset.empty)
-              })) ]
+            match rows with
+            | None -> V.table_select_all_rows s on
+            | Some rows -> V.table_set_rows s ~rows ~checked:on)) ]
 
 (* cljs header-cp: text-variant button holding the title span and a sort
    arrow for the active sort column — the arrow's presence is
@@ -677,7 +741,55 @@ let open_property_menu inst ~anchor (c : V.column) (p : W.t) =
 let header_cell_id inst (c : V.column) =
   "vhc-" ^ string_of_int inst.V.id ^ "-" ^ c.V.c_id
 
-let header_cell inst (c : V.column) : t =
+let resize_handle inst (c : V.column) : t =
+ fun context parent ->
+  let finish owner commit =
+    match (V.get inst).V.table_resize with
+    | Some resize when resize.V.resize_owner = owner ->
+        let commit = commit && resize.V.resize_view = (V.get inst).V.view_uuid in
+        V.update inst (fun s -> V.finish_table_resize s ~owner ~commit);
+        if commit then V.persist_sized inst
+    | _ -> ()
+  in
+  let node =
+    Ui_components.with_props
+      [Ui_components.Prop.position `absolute
+      ;Ui_components.Prop.inset_right 0.; Ui_components.Prop.inset_top 0.
+      ;Ui_components.Prop.cursor `pointer
+      ;Ui_components.Prop.hover_opacity 1.]
+      (box ~style_class:"ls-table-resize-handle" ~width:6 ~height:32
+        ~min_width:6 ~opacity:0.5
+        ~background:"hsl(var(--border))"
+        ~data_attrs:["data-no-dnd", "true"]
+        ~pointer_capture:true
+        ~on_pointer_down:(function
+          | L.PointerDown (owner, detail) when detail.L.button = 0 ->
+              V.update inst (fun s -> V.start_table_resize s ~owner
+                ~column:c.V.c_id ~x:detail.L.x ~width:(column_width s c))
+          | _ -> ())
+        ~on_pointer_move:(function
+          | L.PointerMove (owner, detail) ->
+              V.update inst (fun s -> V.move_table_resize s ~owner ~x:detail.L.x)
+          | _ -> ())
+        ~on_pointer_up:(function
+          | L.PointerUp (owner, detail) ->
+              V.update inst (fun s -> V.move_table_resize s ~owner ~x:detail.L.x);
+              finish owner true
+          | _ -> ())
+        ~on_pointer_cancel:(function
+          | L.PointerCancel (owner, _) -> finish owner false
+          | _ -> ()) []) context parent
+  in
+  Signal.on_dispose context.Lui_ui.ui_scope (fun () ->
+    let s = V.get inst in
+    match s.V.table_resize with
+    | Some resize when resize.V.resize_owner = node ->
+        (* Disposal already runs inside the scheduler flush. *)
+        Signal.set inst.V.st (V.finish_table_resize s ~owner:node ~commit:false)
+    | _ -> ());
+  node
+
+let header_cell ?rows inst (c : V.column) : t =
   with_column_width inst c
   (if Ui_services.env_publishing () then
     box [ text ~value:c.V.c_name [] ]
@@ -691,7 +803,7 @@ let header_cell inst (c : V.column) : t =
         ; Ui_components.Prop.font_weight 500 ]
         (box ~style_class:"ls-table-header-cell"
            ~foreground:fg
-           [ header_select_cell inst ])
+           [ header_select_cell ?rows inst ])
   | _ ->
       let menu () =
         match c.V.c_prop with
@@ -724,37 +836,105 @@ let header_cell inst (c : V.column) : t =
               [ Ui_components.with_props
                   [ Ui_components.Prop.overflow `hidden ]
                   (header_button inst c)
-              ; (* resize-handle stays a hook — the opacity 0/.7/1 state
-                   ladder can't ride props (inline opacity beats :where
-                   hover/pressed) *)
-                box ~style_class:"ls-table-resize-handle" ~transition:"opacity 300ms" [] ])))
+              ; resize_handle inst c ])))
 
 (* ---------- action bar ---------- *)
 
-let page_row_uuids inst =
-  let s = V.get inst in
-  List.filter
-    (fun u ->
-      match Hashtbl.find_opt s.V.blocks u with
-      | Some blk -> is_page_row blk
-      | None -> inst.V.feature = "all-pages")
-    (V.Sset.elements s.V.selected)
+let with_full_selection inst ~scope action =
+  let initial = V.get inst in
+  if initial.V.table_action_pending = None then begin
+    let epoch = initial.V.table_selection_epoch + 1 in
+    let gen = !(inst.V.data_gen) in
+    let revision = (Runtime.model ()).Model.context_revision in
+    let repo = Runtime.repo () and route = Runtime.route () in
+    let view = initial.V.view_uuid and context = V.ctx_of inst in
+    let live = ref true in
+    let current () =
+      let s = V.get inst in
+      !live && (Runtime.model ()).Model.context_revision = revision &&
+      Runtime.repo () = repo && Runtime.route () = route &&
+      V.fetch_fresh inst gen && s.V.view_uuid = view && V.ctx_of inst = context &&
+      s.V.table_selection_epoch = epoch in
+    let finish () =
+      if (V.get inst).V.table_action_pending = Some epoch then
+        V.update inst (fun s -> { s with V.table_action_pending = None }) in
+    let fail () =
+      let notify = current () in
+      finish ();
+      if notify then Toast.error (I.t "view/error") in
+    V.update inst (fun s -> { s with V.table_selection_epoch = epoch
+      ; table_action_pending = Some epoch });
+    Signal.on_dispose scope (fun () ->
+      live := false;
+      let s = V.get inst in
+      if s.V.table_action_pending = Some epoch then
+        Signal.set inst.V.st { s with V.table_action_pending = None });
+    (V.ops ()).V.o_full_action_rows inst (function
+      | Error _ -> fail ()
+      | Ok data when current () ->
+          let state = { initial with V.data } in
+          let uuids = selected_row_uuids state in
+          if uuids = [] then finish ()
+          else Views_db.get_blocks uuids ~metadata:true ~on_error:fail (fun entities ->
+            if current () then begin
+              let blocks = Hashtbl.create (List.length uuids) in
+              List.iter (fun entity ->
+                match Option.bind (W.get entity "block/uuid") W.as_uuid with
+                | Some uuid -> Hashtbl.replace blocks uuid entity
+                | None -> ()) entities;
+              if not (List.for_all (Hashtbl.mem blocks) uuids) then fail ()
+              else begin
+                finish ();
+                if current () then action { state with V.blocks } current
+              end
+            end else finish ())
+      | Ok _ -> finish ())
+  end
 
-let delete_selected inst () =
-  let s = V.get inst in
-  let sel = V.Sset.elements s.V.selected in
-  if sel <> [] then begin
-    let pages = page_row_uuids inst in
-    let blocks = List.filter (fun u -> not (List.mem u pages)) sel in
-    let do_delete () =
-      Views_db.delete_blocks blocks (fun () ->
-          List.iter (fun p -> Views_db.delete_page p (fun () -> ())) pages;
-          V.update inst (fun s -> { s with V.selected = V.Sset.empty });
-          refresh inst)
-    in
+let page_row_uuids (s : V.vstate) =
+  List.filter (fun uuid -> is_page_row (Hashtbl.find s.V.blocks uuid)) (selected_row_uuids s)
+
+let delete_selected inst s current () =
+  let prepare owner =
+  if current () then begin
+    let built_in entity = W.get entity "logseq.property/built-in?" = Some (W.Bool true) in
+    let sel = List.filter (fun uuid -> not (built_in (Hashtbl.find s.V.blocks uuid)))
+        (selected_row_uuids s) in
+    let sel_set = V.Sset.of_list sel in
+    let pages = List.filter (fun uuid -> V.Sset.mem uuid sel_set) (page_row_uuids s) in
+    let page_set = V.Sset.of_list pages in
+    let blocks = List.filter (fun u -> not (V.Sset.mem u page_set)) sel in
+    let owner_ident = Option.bind owner (fun entity -> Option.bind (W.get entity "db/ident") Wr.ident_of_value) in
     let need_confirm =
-      pages <> [] && List.mem inst.V.feature [ "all-pages"; "query-result" ]
-    in
+      pages <> [] && (match inst.V.kind with
+        | V.KAllPages | V.KQuery _ -> true
+        | V.KTagPage _ -> owner_ident <> Some "logseq.class/Page"
+        | _ -> false) in
+    let keep_selection = match inst.V.kind, owner with
+      | V.KPropertyPage _, Some entity -> built_in entity
+      | _ -> false in
+    let do_delete () = if current () then begin
+      let page_operations =
+        if need_confirm then
+          List.map (fun page -> Outliner_ops.op "delete-page" [W.Uuid page; W.Map []]) pages
+        else match inst.V.kind, owner_ident with
+          | V.KPropertyPage _, Some ident when not keep_selection ->
+              List.map (fun page -> Outliner_ops.remove_block_property page ident) pages
+          | _ -> [] in
+      let operations = (if blocks = [] then [] else [Outliner_ops.delete_blocks blocks]) @ page_operations in
+      if operations = [] then begin
+        if not keep_selection then V.update inst V.table_clear_selection
+      end else begin
+        let open Promise_ext in
+        ignore ((let* result = Outliner_ops.apply_result operations in
+          (match result with
+           | Some _ when current () && not keep_selection ->
+               V.update inst V.table_clear_selection;
+               refresh inst
+           | _ -> ());
+          Js.Promise.resolve ()) |> Js.Promise.catch (fun _ -> Js.Promise.resolve ()))
+      end
+    end in
     if need_confirm then
       let names =
         List.filter_map
@@ -783,15 +963,21 @@ let delete_selected inst () =
                  ~value:(I.total (List.length names)) [] ]
            ~confirm_label:(I.t "ui/yes") ~on_confirm:do_delete ())
     else do_delete ()
-  end
-
-let selected_uuids inst =
-  V.Sset.elements (V.get inst).V.selected
+  end in
+  match inst.V.kind with
+  | V.KTagPage uuid | V.KPropertyPage uuid ->
+      let open Promise_ext in
+      ignore ((let* owner = Properties_data.entity_by_uuid uuid in
+        (match Properties_data.untag owner with
+         | W.Map _ as owner -> prepare (Some owner)
+         | _ -> if current () then Toast.error (I.t "view/error"));
+        Js.Promise.resolve ()) |> Js.Promise.catch (fun _ ->
+          if current () then Toast.error (I.t "view/error"); Js.Promise.resolve ()))
+  | _ -> prepare None
 
 (* cljs selection/action-group on-copy: copy-selection-blocks writes the
    selected rows' titles to the system clipboard and clears selection *)
-let copy_selected inst () =
-  let s = V.get inst in
+let copy_selected inst s current () =
   let titles =
     List.filter_map
       (fun u ->
@@ -801,29 +987,43 @@ let copy_selected inst () =
             | "" -> None
             | t -> Some t)
         | None -> None)
-      (selected_uuids inst)
+      (selected_row_uuids s)
   in
   if titles <> [] then begin
-    Ui_services.clipboard_copy (String.concat "\n" titles);
-    V.update inst (fun s -> { s with V.selected = V.Sset.empty })
+    ignore (Ui_task.catch
+      (Ui_task.bind (Ui_services.clipboard_write_text (String.concat "\n" titles)) (fun () ->
+        if current () then V.update inst V.table_clear_selection;
+        Ui_task.resolve ()))
+      (fun _ -> if current () then Toast.error (I.t "view/error"); Ui_task.resolve ()))
   end
 
 (* Selected table rows share one property workflow target. *)
-let property_target inst () =
-  match selected_uuids inst with
+let property_target s =
+  match selected_row_uuids s with
   | [] -> None
   | u :: _ as us ->
       Some { Properties_dialog.uuid = u; uuids = us; db_id = None; is_tag = false; title = "" }
 
-let set_tags_dlg inst =
-  match selected_uuids inst with
+let set_tags_dlg s current =
+  match selected_row_uuids s with
   | [] -> ()
   | u :: _ as us ->
-      Properties_dialog.open_for_block_with_property ~uuids:us u
-        ~ident:"block/tags"
+      let open Promise_ext in
+      ignore ((let* property = Properties_data.entity
+          (W.List [W.Keyword "db/ident"; W.Keyword "block/tags"]) in
+        if current () then
+          (match Properties_data.untag property with
+           | W.Map _ as property ->
+               Properties_dialog.open_dialog ~phase:(Properties_dialog.Value_edit property)
+                 { Properties_dialog.uuid = u; uuids = us; db_id = None; is_tag = false; title = "" }
+           | _ -> Toast.error (I.t "view/error"));
+        Js.Promise.resolve ()) |> Js.Promise.catch (fun _ ->
+          if current () then Toast.error (I.t "view/error"); Js.Promise.resolve ()))
 
 (* Keep the selection column available while bulk actions cover the header. *)
 let action_bar inst : t =
+ fun ctx parent ->
+  let scope = ctx.Lui_ui.ui_scope in
   let isig = sig_of inst in
   let action ?icon ?text ?width ?(margin_left = -1) ?(corner_radius = 0) ~label
       on_press =
@@ -834,11 +1034,25 @@ let action_bar inst : t =
       ]
       (Ui_components.button ~variant:`outline ?icon ?text ?width ~label ~height:32 ~padding_vertical:0
          ~padding_horizontal:8 ~margin_left ~corner_radius
-         ~on_press:(fun _ -> on_press ())
+         ~disabled:(reactive (fun (s : V.vstate) -> s.V.table_action_pending <> None) isig)
+         ~on_press:(fun _ -> if (V.get inst).V.table_action_pending = None then on_press ())
          [])
   in
+  let property_action ~remove key =
+    let label = I.t (if remove then "property/unset-property" else "property/set-property") in
+    Properties_dialog.trigger ~key ~margin_left:(-1) ~remove ~target:(fun () -> None)
+      (fun _ -> action ~margin_left:0 ~label ~text:label (fun () ->
+        match !(Properties_dialog.current) with
+        | Some dialog when dialog.Properties_dialog.d_placement = Properties_dialog.Trigger key ->
+            Properties_dialog.close ()
+        | _ -> with_full_selection inst ~scope (fun state current ->
+            match property_target state with
+            | Some target when current () ->
+                Properties_dialog.open_at ~remove ~phase:Properties_dialog.Prop_select
+                  (Properties_dialog.Trigger key) target
+            | _ -> ()))) in
   if_
-    ~test:(reactive (fun s -> not (V.Sset.is_empty s.V.selected)) isig)
+    ~test:(reactive (fun s -> selected_row_count s > 0) isig)
     (box ~key:"tac" ~margin_left:32 ~margin_top:1
        [
          toolbar ~style_class:"table-action-bar" ~orientation:`horizontal
@@ -851,25 +1065,26 @@ let action_bar inst : t =
                ~value:
                  (reactive
                     (fun (s : V.vstate) ->
-                      I.selected_count (V.Sset.cardinal s.V.selected))
+                      if s.V.table_action_pending <> None then I.t "ui/loading"
+                      else I.selected_count (selected_row_count s))
                     isig)
                [];
              action ~label:(I.t "property/set-tags") ~icon:(`app "hash")
                ~width:31 ~margin_left:0 ~corner_radius:6 (fun () ->
-                 set_tags_dlg inst);
+                 with_full_selection inst ~scope set_tags_dlg);
              action ~label:(I.t "ui/copy") ~text:(I.t "ui/copy")
-               (copy_selected inst);
-             Properties_dialog.trigger ~key:(Printf.sprintf "table-%d-set-property" inst.V.id)
-               ~margin_left:(-1) ~remove:false ~target:(property_target inst)
-               (action ~margin_left:0 ~label:(I.t "property/set-property") ~text:(I.t "property/set-property"));
-             Properties_dialog.trigger ~key:(Printf.sprintf "table-%d-unset-property" inst.V.id)
-               ~margin_left:(-1) ~remove:true ~target:(property_target inst)
-               (action ~margin_left:0 ~label:(I.t "property/unset-property") ~text:(I.t "property/unset-property"));
+               (fun () -> with_full_selection inst ~scope (fun s current -> copy_selected inst s current ()));
+             property_action ~remove:false (Printf.sprintf "table-%d-set-property" inst.V.id);
+             property_action ~remove:true (Printf.sprintf "table-%d-unset-property" inst.V.id);
              action
                ~label:(I.t "ui/delete")
-               ~icon:(`app "trash") ~width:31 ~corner_radius:6 (delete_selected inst);
+               ~icon:(`app "trash") ~width:31 ~corner_radius:6
+               (fun () -> with_full_selection inst ~scope (fun s current -> delete_selected inst s current ()));
+             Ui_components.button ~variant:`outline ~height:32 ~width:31 ~corner_radius:6
+               ~label:(I.t "ui/cancel") ~icon:(`app "x")
+               ~on_press:(fun _ -> V.update inst V.table_clear_selection) [];
            ];
-       ])
+       ]) ctx parent
 
 (* ---------- table ---------- *)
 
@@ -921,50 +1136,21 @@ let flat_items (s : V.vstate) = List.map (row_item_of s) (all_row_uuids s)
 let keyed_row_key (u, blk) =
   u ^ "|" ^ string_of_int (Hashtbl.hash blk)
 
-(* cljs row keydown (views.cljs): only while the row is selected —
-   Enter opens the row in the sidebar and clears the selection,
-   ArrowLeft/Right move the .selected cell marker to the first/last
-   non-checkbox cell, Escape clears only the block selection
-   (state/clear-selection!) — the checkbox row-selection driving the
-   bulk action bar is NOT touched, so selected rows stay selected.
-   Rides the dom-event channel since kinds expose no key events; the
-   stop(e) half is adapter-side and not portable. *)
-let table_row_keydown inst ~row_uuid name payload =
-  if name = "keydown" && V.Sset.mem row_uuid (V.get inst).V.selected then
-    match Json_payload.str payload "key" with
+let table_row_navigation inst ~row_uuid ~columns = function
+  | L.NavigationKey (_, key, _) when V.table_row_selected (V.get inst) row_uuid ->
+    (match key with
     | "Enter" ->
         open_row_sidebar row_uuid;
-        V.update inst (fun s -> { s with V.selected = V.Sset.empty })
+        V.update inst V.table_clear_selection
     | "ArrowLeft" | "ArrowRight" as arrow ->
-        (match Ui_services.dom_by_id ("ls-block-" ^ row_uuid) with
-         | Some row_dom -> (
-             let cells =
-               row_dom.Ui_services.query_all ".ls-table-cell"
-               |> List.filter (fun (cell : Ui_services.el) ->
-                      cell.Ui_services.query ".ui__checkbox" = None)
-             in
-             let pick =
-               if arrow = "ArrowLeft" then List.nth_opt cells 0
-               else
-                 match List.rev cells with
-                 | c :: _ -> Some c
-                 | [] -> None
-             in
-             V.update inst
-               (fun s -> { s with V.selected = V.Sset.empty });
-             if arrow = "ArrowRight" then
-               row_dom.Ui_services.remove_class "selected";
-             match pick with
-             | Some cell ->
-                 cell.Ui_services.add_class "selected";
-                 cell.focus ()
-             | None -> ())
-         | None -> ())
+        let cells = List.filter (fun c -> c.V.c_id <> "select") columns in
+        let pick = List.nth_opt (if arrow = "ArrowLeft" then cells else List.rev cells) 0 in
+        Option.iter (fun c -> focus_cell inst row_uuid c.V.c_id) pick
     | "Escape" ->
-        (* cljs clears the block selection here, not the checkbox
-           row-selection — nothing to clear on our side *)
+        (* Dev clears block selection, not the checkbox row selection. *)
         ()
-    | _ -> ()
+    | _ -> ())
+  | _ -> ()
 
 (* cljs table-row: .ls-table-row.ls-block[blockid][data-id][tabindex=0]
    — the imperative side still reads `blockid`/data-id off .ls-block
@@ -978,19 +1164,13 @@ let row_el inst (cols : V.column list) ~row_uuid ~blk : t =
   let pinned, free =
     List.partition (fun c -> is_pinned (V.get inst) c) cols
   in
-  (* the keydown DOM carrier keeps the raw node; layout + the selected
-     background ride props on the inner row, which still emits the
-     "selected" class for table_row_keydown's add/remove_class *)
   let sel_sig =
     Logseq_el.own ctx
       (Signal.map
-         (fun (s : V.vstate) -> V.Sset.mem row_uuid s.V.selected)
+         (fun (s : V.vstate) -> V.table_row_selected s row_uuid)
          (sig_of inst))
   in
-  Logseq_el.el ~key:("ls-tr-" ^ row_uuid) ~tag:"div"
-    ~events:"keydown"
-    ~on_dom_event:(table_row_keydown inst ~row_uuid)
-    [ Ui_parts.class_signal sel_sig
+  (Ui_parts.class_signal sel_sig
         (fun sel ->
           "ls-table-row ls-block" ^ if sel then " selected" else "")
         (Ui_parts.prop_signal Lui_protocol.BackgroundValue sel_sig
@@ -1000,7 +1180,8 @@ let row_el inst (cols : V.column list) ~row_uuid ~blk : t =
               [ Ui_components.Prop.overflow `hidden
               ; Ui_components.Prop.padding_bottom 1
               ; Ui_components.Prop.shadow "inset 0 -1px 0 hsl(var(--border))" ]
-              (row ~cross:`stretch ~height:33 ~min_height:33
+              (row ~key:("ls-tr-" ^ row_uuid) ~cross:`stretch ~height:33 ~min_height:33
+                 ~on_navigation_key:(table_row_navigation inst ~row_uuid ~columns:(pinned @ free))
                  ~max_height:33 ~transition:"background-color 150ms"
                  ~accessibility_identifier:("ls-block-" ^ row_uuid)
                  ~data_attrs:
@@ -1024,7 +1205,7 @@ let row_el inst (cols : V.column list) ~row_uuid ~blk : t =
                              [ box
                                  [ box ~style_class:"ls-table-cell"
                                      [ row ~cross:`center ~grow:1. [] ] ] ]
-                         | None -> [])) ]))) ]
+                         | None -> [])) ]))))
     ctx parent
 
 (* rows keyed under a parent — Virt_list for >=64 rows, keyed
@@ -1073,9 +1254,9 @@ let row_stream ?(paginate = false) inst cols uuids : t =
 
 (* the header — one static mount per body snapshot; sort arrow is a
    reactive prop off the inst signal *)
-let table_header inst cols : t =
+let table_header ?rows inst cols : t =
   let cell_item c =
-    let cell = header_cell inst c in
+    let cell = header_cell ?rows inst c in
     if c.V.c_id = "select" then
       box ~accessibility_identifier:"Select" [ cell ]
     else box [ cell ]
@@ -1205,7 +1386,7 @@ let grouped_table ?(paginate = false) inst ~rows : t =
             [ Ui_components.Prop.position `relative ]
             (box
             [ overlay
-                [ table_header inst cols
+                [ table_header ~rows inst cols
                 ; align `top_leading (action_bar inst) ]
             ; box ~accessibility_identifier:"virtuoso-item-list"
                 ~data_attrs:[ ("data-testid", "virtuoso-item-list") ]
@@ -1572,21 +1753,126 @@ let render_list inst s : t =
         (List.map (block_line s) (all_row_uuids s))
   | _ -> list_stream ~paginate:more inst (all_row_uuids s)
 
-(* Four cards per virtual row. The body remounts when the window or
-   the block table changes, so the cards are the mount-time snapshot.
-   virt-end grows the reference prefix; data-virt-count is omitted
-   once the index total is on screen, or every short row would cascade. *)
+let gallery_configuration inst (s : V.vstate) =
+  let cover_columns = List.filter
+    (fun c -> List.mem c.V.c_type ["asset"; "url"]) s.V.columns in
+  let cover = Wr.gallery_asset_ident ~asset_class:s.V.asset_class
+    ~infer:(List.mem inst.V.feature ["class-objects"; "query-result"])
+    ~cover_idents:(List.map (fun c -> c.V.c_id) cover_columns) s.V.view_ent in
+  let display = Wr.gallery_display_idents
+    ~column_idents:(List.map (fun c -> c.V.c_id) s.V.columns)
+    ~asset_ident:cover s.V.view_ent in
+  cover, display
+
+let gallery_remote_url value =
+  let values = match value with W.Array values | W.Set values -> values | _ -> [value] in
+  List.find_map (fun value ->
+    let value = match value with
+      | W.Map _ -> Option.value (W.get value "logseq.property/value") ~default:W.Nil
+      | value -> value in
+    match W.as_string value with
+    | Some url ->
+        let url = String.trim url in
+        if Str_util.starts_with "https://" url || Str_util.starts_with "http://" url
+        then Some url else None
+    | None -> None) values
+
+let gallery_asset_cover inst ~width ~height value : t =
+ fun context parent ->
+  let candidates = match value with W.Array xs | W.Set xs -> xs | _ -> [value] in
+  let asset = List.find_opt (fun value -> Wr.ref_uuid value <> None) candidates in
+  match asset with
+  | None -> spacer [] context parent
+  | Some entity when W.get entity "logseq.property.asset/type" <> None ->
+      Asset_dom.gallery_cover ~width ~height entity context parent
+  | Some entity ->
+      let uuid = Option.get (Wr.ref_uuid entity) in
+      let resolved = Signal.state context.Lui_ui.ui_scheduler W.Nil in
+      let generation = !(inst.V.data_gen) in
+      let revision = (Runtime.model ()).Model.context_revision in
+      let repo = Runtime.repo () and view = (V.get inst).V.view_uuid in
+      let live = ref true in
+      Signal.on_dispose context.Lui_ui.ui_scope (fun () -> live := false);
+      Views_db.get_blocks [uuid] ~metadata:true (fun entities ->
+        if !live && Runtime.repo () = repo && V.fetch_fresh inst generation &&
+           (Runtime.model ()).Model.context_revision = revision &&
+           (V.get inst).V.view_uuid = view then
+          match List.find_opt (fun entity -> Wr.ref_uuid entity = Some uuid) entities with
+          | Some entity -> Runtime.signal_set resolved entity
+          | None -> ());
+      (box ~width ~height [reactive (fun entity ->
+        Asset_dom.gallery_cover ~width ~height entity) (Signal.value resolved)]) context parent
+
+let gallery_card inst (row_uuid, blk) : t =
+  let dimensions (s : V.vstate) = Wr.gallery_dimensions s.V.view_ent in
+  let selected (s : V.vstate) = V.table_row_selected s row_uuid in
+  let config_equal (a : V.vstate) (b : V.vstate) =
+    a.V.view_ent = b.V.view_ent && a.V.columns = b.V.columns &&
+    a.V.asset_class = b.V.asset_class in
+  Ui_parts.int_prop L.WidthValue
+    ~value:(reactive (fun s -> fst (dimensions s)) (sig_of inst))
+  (Ui_parts.int_prop L.HeightValue
+    ~value:(reactive (fun s -> snd (dimensions s)) (sig_of inst))
+  (Ui_parts.string_prop L.BorderColorValue
+    ~value:(reactive (fun s -> if selected s then "hsl(var(--primary))"
+      else "hsl(var(--border))") (sig_of inst))
+  (Ui_parts.string_prop L.StyleClass
+    ~value:(reactive (fun s -> "ls-card-item content" ^
+      if selected s then " is-selected" else "") (sig_of inst))
+  (column ~key:row_uuid ~accessibility_identifier:("gallery-card-" ^ row_uuid)
+    ~corner_radius:6 ~border_width:1
+    [ row ~cross:`center ~height:32 [select_cell inst ~row_uuid ~blk]
+    ; reactive ~equal:config_equal (fun s ->
+        let cover, display = gallery_configuration inst s in
+        let width, height = dimensions s in
+        let media = match cover with
+          | Some ident ->
+              (match List.find_opt (fun c -> c.V.c_id = ident && c.V.c_type = "url") s.V.columns with
+               | Some column ->
+                   (match gallery_remote_url (cell_value blk column) with
+                    | Some url -> [image ~url ~alt:"" ~width
+                        ~height:(max 32 (height * 3 / 5))
+                        ~loading:`lazy_ ~referrer_policy:`no_referrer []]
+                    | None -> [])
+               | None ->
+                   let value = if ident = "block/uuid" then blk
+                     else match List.find_opt (fun c -> c.V.c_id = ident) s.V.columns with
+                       | Some column -> cell_value blk column
+                       | None -> W.Nil in
+                   [gallery_asset_cover inst ~width ~height:(max 32 (height * 3 / 5)) value])
+          | None -> [] in
+        column ~grow:1. ~min_height:0
+          (media @ [column ~padding:8 ~gap:4 ~min_width:0
+            (List.filter_map (fun ident ->
+              if ident = "block/title" then
+                let title = Wr.prop_text (cell_value blk (title_column ())) in
+                Some (Ui_parts.pressable
+                  ~on_press:(fun _ -> Runtime.mark_nav ();
+                    Platform.set_location_hash
+                      ("#/page/" ^ Ui_services.uri_encode_component row_uuid))
+                  (text ~style_class:"ls-gallery-card-title" ~value:title []))
+              else match List.find_opt (fun c -> c.V.c_id = ident) s.V.columns with
+                | Some ({ V.c_prop = Some property; _ } as column) ->
+                    let value = cell_value blk column in
+                    if value = W.Nil then None
+                    else
+                      let row = W.Map
+                        [W.Keyword "property", property;
+                         W.Keyword "property-id", W.Keyword ident;
+                         W.Keyword "value", value] in
+                      let pctx : Properties_value.ctx =
+                        { owner_key = "view-" ^ string_of_int inst.V.id
+                        ; block_uuid = row_uuid; block_id = Properties_data.entity_id_of blk
+                        ; refresh = (fun () -> refresh inst); is_page = is_page_row blk
+                        ; class_schema = false } in
+                      Some (box ~style_class:"ls-gallery-card-property"
+                        [Properties_value.view ~table_view:true ~hover:None pctx row])
+                | _ -> None) display)])) (sig_of inst) ]))))
+
+(* Chunking bounds each virtual item while FlexWrap adapts the cards to
+   the available width. The virtualizer measures each chunk's real height. *)
 let render_gallery inst (s : V.vstate) : t =
  fun ctx parent ->
-  let card ((u, blk) : row_item) =
-    box ~key:u ~style_class:"ls-card-item"
-      [ text
-          ~value:
-            (match W.get blk "block/title" with
-             | Some t_ -> Wr.prop_text t_
-             | None -> row_title s u)
-          [] ]
-  in
   let rec rows acc cur k = function
     | [] ->
         let acc = if cur = [] then acc else List.rev cur :: acc in
@@ -1597,25 +1883,27 @@ let render_gallery inst (s : V.vstate) : t =
   let shown = flat_items (windowed inst s) in
   let row_els =
     List.mapi
-      (fun i row ->
-        grid ~key:("gr" ^ string_of_int i) ~gap:8 ~columns:4
-          (List.map card row))
+      (fun i cards ->
+        row ~key:("gr" ^ string_of_int i) ~gap:8 ~flex_wrap:`wrap
+          (List.map (gallery_card inst) cards))
       (rows [] [] 0 shown)
   in
   let paginate = more_ref_rows inst s in
-  let node =
-    virtual_list ~key:"gal-window" ~grow:1. ~gap:8 ~item_extent:148.
+  let body ctx parent =
+    let node = virtual_list ~key:"gal-window" ~grow:1. ~gap:8
+      ~item_extent:(float_of_int (snd (Wr.gallery_dimensions s.V.view_ent) + 8))
       ~overscan:1
       ~data_attrs:
         (if paginate then
            [ ("data-virt-count", string_of_int (List.length row_els)) ]
          else [])
-      row_els ctx parent
-  in
-  if paginate then
-    Platform.register_dom_handler node ~events:"virt-end" (fun _ _ ->
-        (V.ops ()).V.o_load_more inst);
-  node
+      row_els ctx parent in
+    if paginate then
+      Platform.register_dom_handler node ~events:"virt-end" (fun _ _ ->
+          (V.ops ()).V.o_load_more inst);
+    node in
+  column ~gap:8 ~min_width:0 ~min_height:0 ~grow:1.
+    [action_bar inst; body] ctx parent
 
 let render_table inst s : t =
   let more = more_ref_rows inst s in

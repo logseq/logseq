@@ -5,27 +5,29 @@ module W = Wire
 
 let repo = Runtime.repo
 
-let catch_quiet (p : unit Js.Promise.t) =
+let catch_quiet ?(on_error = fun () -> ()) (p : unit Js.Promise.t) =
   Js.Promise.catch
     (fun e ->
       Ui_services.log_error ("views worker call failed", e);
+      on_error ();
       Js.Promise.resolve ())
     p
 
 (* writes bypassing Outliner_ops.apply must still surface failure *)
-let catch_write (p : unit Js.Promise.t) =
+let catch_write ?(current = fun () -> true) ?(on_error = fun () -> ())
+    (p : unit Js.Promise.t) =
   Js.Promise.catch
     (fun e ->
       Ui_services.log_error ("views write failed", e);
-      Toast.error (I18n.t "ui/save-changes-error");
+      if current () then begin
+        Toast.error (I18n.t "ui/save-changes-error");
+        on_error ()
+      end;
       Js.Promise.resolve ())
     p
 
-(* fetch several resources in one get-render-snapshots call; a failed
-   batch still hands the callback a Nil snapshot so views settle into
-   their empty state instead of wedging on Loading (cljs: the resource
-   simply never resolves, leaving an empty container) *)
-let snapshots ?(f = fun _ -> ()) (resources : W.t list) =
+let snapshots ?(on_error = fun () -> ()) ?(f = fun _ -> ())
+    (resources : W.t list) =
   (let* w =
     Runtime.invoke2 "thread-api/get-render-snapshots" (W.String (repo ()))
       (W.Map
@@ -34,12 +36,18 @@ let snapshots ?(f = fun _ -> ()) (resources : W.t list) =
          ; (W.kw "resources", W.Array resources)
          ])
   in
+  Outliner_ops.check_loader_result w;
   f w; Js.Promise.resolve ())
   |> Js.Promise.catch (fun e ->
       Ui_services.log_error ("views worker call failed", e);
-      (try f W.Nil with _ -> ());
+      on_error ();
       Js.Promise.resolve ())
   |> ignore
+
+let snapshot_value snap key =
+  let value = Views_wire.snapshot_slot_value snap key in
+  Option.iter Outliner_ops.check_loader_result value;
+  value
 
 (* inner resource keys — used both as the [:resource k] request spec and as
    the slot key inside get-render-snapshots results *)
@@ -54,6 +62,9 @@ let key_page_identity name = W.Array [ W.kw "page-identity"; W.String name ]
 
 let key_ref_count uuid = W.Array [ W.kw "block-ref-count"; W.Uuid uuid ]
 
+let key_ref_pages_count uuid =
+  W.Array [ W.kw "linked-ref-pages-count"; W.Uuid uuid ]
+
 (* request resources are the bare key vectors; in the response the slot key
    is [:resource <key>] (see snapshot_slot_value) *)
 let res (k : W.t) = k
@@ -66,15 +77,16 @@ let resource_query spec = res (key_query spec)
 
 let resource_ref_count uuid = res (key_ref_count uuid)
 
-let pull_many selector_edn ids f =
+let pull_many ?(on_error = fun () -> ()) selector_edn ids f =
   (let* w =
     Runtime.invoke3 "thread-api/pull-many" (W.String (repo ()))
       (W.String selector_edn)
       (W.Array
          (List.map (fun u -> W.Array [ W.kw "block/uuid"; W.Uuid u ]) ids))
   in
+  Outliner_ops.check_loader_result w;
   f (W.args_list w); Js.Promise.resolve ())
-  |> catch_quiet
+  |> catch_quiet ~on_error
   |> ignore
 
 let get_view_filter_data ?(opts = W.Map []) property f =
@@ -84,17 +96,19 @@ let get_view_filter_data ?(opts = W.Map []) property f =
          ((W.kw "property", property)
           :: (match opts with W.Map kvs -> kvs | _ -> [])))
   in
+  Outliner_ops.check_loader_result w;
   f w; Js.Promise.resolve ())
   |> catch_quiet
   |> ignore
 
-let get_class_properties class_id f =
+let get_class_properties ?(on_error = fun () -> ()) class_id f =
   (let* w =
     Runtime.invoke2 "thread-api/get-class-properties" (W.String (repo ()))
       class_id
   in
+  Outliner_ops.check_loader_result w;
   f (W.args_list w); Js.Promise.resolve ())
-  |> catch_quiet
+  |> catch_quiet ~on_error
   |> ignore
 
 let get_all_classes f =
@@ -109,7 +123,7 @@ let get_all_classes f =
   |> catch_quiet
   |> ignore
 
-let get_all_properties f =
+let get_all_properties ?(on_error = fun () -> ()) f =
   (let* w =
     Runtime.invoke2 "thread-api/get-all-properties" (W.String (repo ()))
       (W.Map
@@ -117,8 +131,9 @@ let get_all_properties f =
          ; (W.kw "remove-non-queryable-built-in-property?", W.Bool true)
          ])
   in
+  Outliner_ops.check_loader_result w;
   f (W.args_list w); Js.Promise.resolve ())
-  |> catch_quiet
+  |> catch_quiet ~on_error
   |> ignore
 
 let get_closed_values ident f =
@@ -178,6 +193,7 @@ let get_blocks uuids ?(metadata = false) ?(children = false)
                 ])
             uuids))
   in
+  Outliner_ops.check_loader_result w;
   f (List.map block_of_result (W.args_list w));
   Js.Promise.resolve ())
   |> Js.Promise.catch (fun e ->
@@ -197,21 +213,92 @@ let q query_edn f =
 
 (* -- write ops -- *)
 
-let apply_ops ops f =
-  (let* () = Outliner_ops.apply ops in
-  f (); Js.Promise.resolve ())
+let apply_ops ?current ops f =
+  (let* result = Outliner_ops.apply_result ?current ops in
+  if result <> None && Option.fold ~none:true ~some:(fun current -> current ()) current
+  then f ();
+  Js.Promise.resolve ())
   |> ignore
 
-let set_view_property view_uuid ident v f =
-  apply_ops
+let set_view_property ?current view_uuid ident v f =
+  apply_ops ?current
     [ Outliner_ops.op "set-block-property"
         [ W.Uuid view_uuid; W.Keyword ident; v ] ]
     f
 
-let remove_view_property view_uuid ident f =
-  apply_ops
+let remove_view_property ?current view_uuid ident f =
+  apply_ops ?current
     [ Outliner_ops.op "remove-block-property" [ W.Uuid view_uuid; W.Keyword ident ] ]
     f
+
+let set_gallery_display_properties ~current view_uuid idents f =
+  let source_repo = repo () in
+  let route = Runtime.route () in
+  let revision = (Runtime.model ()).Model.context_revision in
+  let fresh () = current () && (Runtime.model ()).Model.context_revision = revision
+    && repo () = source_repo && Runtime.route () = route in
+  let rec resolve acc = function
+    | [] -> Js.Promise.resolve (List.rev acc)
+    | ident :: rest ->
+        let* property =
+          Runtime.invoke3 "thread-api/pull" (W.String source_repo)
+            (W.String "[:db/id]") (W.Keyword ident)
+        in
+        Outliner_ops.check_loader_result property;
+        match W.map_get_int property "db/id" with
+        | Some id -> resolve (W.Int id :: acc) rest
+        | None -> failwith "Gallery display property has no db/id"
+  in
+  (let* ids = resolve [] idents in
+   if not (fresh ()) then failwith "Gallery context changed";
+   let* result = Outliner_ops.apply_result ~current:fresh
+     [ Outliner_ops.op "set-block-property"
+         [ W.Uuid view_uuid
+         ; W.Keyword "logseq.property.view/gallery-display-properties"
+         ; W.Array ids ] ]
+   in
+   if result <> None && fresh () then f ();
+   Js.Promise.resolve ())
+  |> catch_write ~current:fresh |> ignore
+
+let set_gallery_asset_property ~current view_uuid ident f =
+  let source_repo = repo () in
+  let route = Runtime.route () in
+  let revision = (Runtime.model ()).Model.context_revision in
+  let fresh () = current () && (Runtime.model ()).Model.context_revision = revision
+    && repo () = source_repo && Runtime.route () = route in
+  (let* property =
+     Runtime.invoke3 "thread-api/pull" (W.String source_repo)
+       (W.String "[:db/id]") (W.Keyword ident)
+   in
+   Outliner_ops.check_loader_result property;
+   let id = match W.map_get_int property "db/id" with
+     | Some id -> id
+     | None -> failwith "Gallery cover property has no db/id" in
+   if not (fresh ()) then failwith "Gallery context changed";
+   let* result = Outliner_ops.apply_result ~current:fresh
+     [ Outliner_ops.op "set-block-property"
+         [ W.Uuid view_uuid
+         ; W.Keyword "logseq.property.view/gallery-asset-property"
+         ; W.Int id ] ]
+   in
+   if result <> None && fresh () then f ();
+   Js.Promise.resolve ())
+  |> catch_write ~current:fresh |> ignore
+
+let set_gallery_card_size view_uuid size f =
+  if not (List.mem size ["default"; "compact"]) then
+    invalid_arg "Invalid gallery card size";
+  set_view_property view_uuid "logseq.property.view/gallery-card-size"
+    (W.Keyword size) f
+
+let set_gallery_dimensions view_uuid width height f =
+  let set ident value = Outliner_ops.op "set-block-property"
+    [W.Uuid view_uuid; W.Keyword ident; value] in
+  apply_ops
+    [ set "logseq.property.view/gallery-card-size" (W.Keyword "custom")
+    ; set "logseq.property.view/gallery-card-width" (W.Int (max 100 (min 1024 width)))
+    ; set "logseq.property.view/gallery-card-height" (W.Int (max 100 (min 1024 height))) ] f
 
 let save_block_title uuid title f =
   let _ =
@@ -236,8 +323,8 @@ let excludes_prop = "logseq.property.linked-references/excludes"
 
 (* pull the owner page's included/excluded ref pages — (block/name,
    block/title) pairs like cljs db-reference/get-filters *)
-let pull_ref_filters owner_uuid f =
-  pull_many
+let pull_ref_filters ?(on_error = fun () -> ()) owner_uuid f =
+  pull_many ~on_error
     ("[:db/id {:" ^ includes_prop
    ^ " [:db/id :block/name :block/title]} {:" ^ excludes_prop
    ^ " [:db/id :block/name :block/title]}]")
@@ -265,8 +352,8 @@ let pull_ref_filters owner_uuid f =
 
 (* page-handler/db-based-save-filter!: add -> set-block-property,
    remove -> delete-property-value *)
-let save_ref_filter owner_uuid ~prop ~ref_eid ~add f =
-  apply_ops
+let save_ref_filter ?current owner_uuid ~prop ~ref_eid ~add f =
+  apply_ops ?current
     [ Outliner_ops.op
         (if add then "set-block-property" else "delete-property-value")
         [ W.Uuid owner_uuid; W.Keyword prop; W.Int ref_eid ] ]
@@ -277,9 +364,12 @@ let save_ref_filter owner_uuid ~prop ~ref_eid ~add f =
    api-insert-new-block! inserts after the last child (sibling insert)
    so new views append at the end — a non-sibling insert would prepend
    and the default view would lose its first position *)
-let insert_view_block ?(after = fun () -> ()) ~title ~uuid ~page_uuid
+let insert_view_block ~current ?(on_error = fun () -> ())
+    ?(after = fun () -> ()) ~title ~uuid ~page_uuid
     ~owner_uuid ~feature_type () =
-  get_blocks [ page_uuid ] ~metadata:true ~children:true (fun ents ->
+  let repo = repo () in
+  get_blocks [ page_uuid ] ~metadata:true ~children:true ~on_error (fun ents ->
+      if current () then begin
       let last_child_uuid =
         match ents with
         | [ e ] -> (
@@ -333,8 +423,8 @@ let insert_view_block ?(after = fun () -> ()) ~title ~uuid ~page_uuid
            ]
           @ refs_props)
       in
-      (let* _ =
-        Runtime.invoke3 "thread-api/apply-outliner-ops" (W.String (repo ()))
+      (let* result =
+        Runtime.invoke3 "thread-api/apply-outliner-ops" (W.String repo)
           (W.Array
              [ Outliner_ops.op "insert-blocks"
                  [ W.List [ block_map ]
@@ -348,9 +438,11 @@ let insert_view_block ?(after = fun () -> ()) ~title ~uuid ~page_uuid
              ])
           (W.Map [])
       in
-      after (); Js.Promise.resolve ())
-      |> catch_write
-      |> ignore)
+      Outliner_ops.check_loader_result result;
+      if current () then after ();
+      Js.Promise.resolve ())
+      |> catch_write ~current ~on_error
+      |> ignore end)
 
 let insert_object_block ~uuid ~page_uuid ~title ~tags ~props f =
   let tags_w =

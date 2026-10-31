@@ -102,8 +102,8 @@ let theme_row ?(density = `regular) ctx =
               (Signal.value mode))
          ())
     ~control:
-      (row ~key:"theme-rc" ~cross:`center ~gap:8 ~min_width:0
-         [ box ~key:"theme-a" [ V.theme_modes_ul ~st:mode ]
+      (row ~key:"theme-rc" ~cross:`center ~gap:8 ~min_width:0 ~flex_wrap:`wrap
+         [ column ~key:"theme-a" ~min_width:0 [ V.theme_modes_ul ~st:mode ]
          ; row ~key:"theme-desc" ~cross:`center
              [ C.kbd_seq ~key:"theme-k" ~binding:"t t" [ "t"; "t" ] ]
          ])
@@ -136,7 +136,7 @@ let editor_font_row ?(density = `regular) () =
   in
   C.it_row ~key:"font" ~density ~label:(T.t "settings.general/editor-font")
     ~min_height:(if density=`compact then 72 else 80)
-    [ row ~key:"font-btns" ~gap:8
+    [ row ~key:"font-btns" ~gap:8 ~min_width:0 ~flex_wrap:`wrap
         [ fb "default" "Default" "var(--ls-font-family, Inter)"
         ; fb "serif" "Serif" "Lyon-Text, Georgia, ui-serif, serif"
         ; fb "mono" "Mono" "iawriter-mono, Nitti, Menlo, Courier, monospace" ]
@@ -242,18 +242,13 @@ let accent_row ~modal =
           ~value:(T.t "settings.general/accent-color-alert") [])
     ]
 
-(* The reference keeps desktop panels at 600 points and scrolls the
-   article when that content exceeds the viewport. *)
 let panel ~key ?(style_class="panel-wrap") ?margin_bottom children : t =
  fun ctx parent ->
-  let viewport=Ui_services.viewport_width_signal ~scheduler:ctx.Lui_ui.ui_scheduler
-    ~scope:ctx.Lui_ui.ui_scope in
   let children=match children with
     | first::rest -> Ui_components.with_props [Ui_components.Prop.padding_top 14] first :: rest
     | [] -> [] in
-  Ui_parts.int_prop Lui_protocol.MinWidth
-    ~value:(reactive (fun viewport -> if viewport>=640. then 600 else 0) viewport)
-    (column ~key ~style_class ~gap:16 ~padding:4 ~max_width:600 ?margin_bottom children) ctx parent
+  (column ~key ~style_class ~gap:16 ~padding:4 ~min_width:0 ~max_width:600
+     ~container_relative_frame:`horizontal ?margin_bottom children) ctx parent
 
 let general_pane ~modal ctx =
   panel ~key:"pane-general"
@@ -443,6 +438,11 @@ type keymap_model = {
   km_revision : int;
 }
 
+let initial_keymap () =
+  { km_query = ""; km_filter = Keymap_data.All; km_collapsed = [];
+    km_keys = []; km_recording = false; km_committed = false;
+    km_revision = Keymap_data.revision () }
+
 (* ":<id>#<handler>" -> the command.<id> dict key *)
 let command_key_of (title : string) : string =
   let s =
@@ -628,11 +628,12 @@ let keymap_recorder st : t =
     ]
     ctx parent
 
-let keymap_key_control st =
+let keymap_key_control ?editing st =
   let open_ _ =
     let model = Runtime.signal_get st in
     if model.km_recording then keymap_close_recorder st
-    else
+    else begin
+      Option.iter (fun state -> Runtime.signal_set state None) editing;
       Runtime.signal_set st
         {
           model with
@@ -640,6 +641,7 @@ let keymap_key_control st =
           km_recording = true;
           km_committed = model.km_keys <> [];
         }
+    end
   in
   row ~key:"key-search" ~cross:`center ~gap:4
     [
@@ -687,7 +689,7 @@ let keymap_key_control st =
         (keymap_recorder st);
     ]
 
-let keymap_controls st =
+let keymap_controls ?editing st =
   let categories =
     List.filter_map
       (function Keymap_data.Category title -> Some title | _ -> None)
@@ -718,7 +720,7 @@ let keymap_controls st =
                     })
                 ();
             ];
-          keymap_key_control st;
+          keymap_key_control ?editing st;
         ];
       row ~key:"km-pills" ~style_class:"shortcut-pills-row" ~cross:`center
         ~main:`space_between ~gap:8 ~flex_wrap:`wrap
@@ -799,18 +801,98 @@ let keymap_th ~key ~collapsed ~on_press label =
       ]
     ]
 
-let keymap_row ~key (r : Keymap_data.row) =
+let keymap_editor st editing (r : Keymap_data.row) : t =
+ fun ctx parent ->
+  let id = Keymap_data.command_id r.title in
+  let draft = Signal.state ctx.Lui_ui.ui_scheduler ([], false) in
+  let close () =
+    Runtime.signal_set editing None
+  in
+  let persist f =
+    match f () with
+    | () -> close ();
+        Runtime.signal_set st { (Runtime.signal_get st) with
+          km_revision = Keymap_data.revision () }
+    | exception _ -> Toast.error (T.t "ui/save-changes-error")
+  in
+  let record ev =
+    let strokes, committed = Runtime.signal_get draft in
+    let change =
+      if ev.Ui_services.composing then Keymap_record.Ignore
+      else if ev.key = Some "Backspace" then
+        match Keymap_record.key ev with
+        | None -> Keymap_record.Ignore
+        | Some key -> Keymap_record.Set ([key], true)
+      else Keymap_record.update ~strokes ~committed ev in
+    match change with
+    | Ignore -> ()
+    | Close -> close ()
+    | Set (keys, committed) -> Runtime.signal_set draft (keys, committed)
+  in
+  Keyboard_capture.acquire ~scope:ctx.ui_scope record;
+  popover ~key:"shortcut-customize" ~anchor:`below ~anchor_alignment:`end_
+    ~width:288 ~min_width:0 ~padding:12 ~corner_radius:8
+    ~background:"hsl(var(--background))" ~border_width:1
+    ~border_color:"hsl(var(--border))"
+    ~on_dismiss:(fun _ -> close ())
+    [ column ~gap:12 ~min_width:0
+        [ text ~font_weight:600 ~value:(keymap_label r) []
+        ; column ~gap:8 ~min_width:0
+            (List.mapi (fun i (binding : Keymap_data.binding) ->
+              row ~key:("binding-" ^ string_of_int i) ~gap:8 ~cross:`center
+                ~min_width:0 ~flex_wrap:`wrap
+                [ keymap_binding ~key:("bound-" ^ string_of_int i) binding
+                ; Ui_components.button ~variant:`ghost ~size:`icon
+                    ~icon:(`app "x") ~label:(T.t "keymap/remove-binding")
+                    ~on_press:(fun _ -> persist (fun () ->
+                        Keymap_data.remove_binding id binding.data)) [] ]) r.bindings)
+        ; text ~value:(T.t "keymap/press-a-shortcut") []
+        ; reactive (fun (strokes, _) -> keymap_recorded_keys ~wrap:true strokes)
+            (Signal.value draft)
+        ; reactive (fun (strokes, _) ->
+            let value = String.concat " " strokes in
+            column ~gap:4 ~min_width:0
+              ((if List.exists (fun (binding : Keymap_data.binding) ->
+                    Keymap_data.same_binding value binding.data) r.bindings then
+                  [text ~value:(T.t "keymap/already-bound") []]
+                else []) @ List.map (fun row ->
+                text ~value:(T.t1 "keymap/also-used-for-action" (keymap_label row)) [])
+                (Keymap_data.conflicting_rows id value))) (Signal.value draft)
+        ; row ~gap:8 ~min_width:0 ~flex_wrap:`wrap
+            [ Ui_components.button ~variant:`primary ~size:`sm ~text:(T.t "ui/save")
+                ~disabled:(reactive (fun (keys, _) -> keys = [] ||
+                    List.exists (fun (binding : Keymap_data.binding) ->
+                      Keymap_data.same_binding (String.concat " " keys) binding.data) r.bindings)
+                    (Signal.value draft))
+                ~on_press:(fun _ ->
+                  let keys, _ = Runtime.signal_get draft in
+                  if keys <> [] then persist (fun () ->
+                      Keymap_data.add_binding id (String.concat " " keys))) []
+            ; Ui_components.button ~variant:`outline ~size:`sm
+                ~text:(T.t "keymap/reset-to-default")
+                ~disabled:(not (Keymap_data.custom r))
+                ~on_press:(fun _ -> persist (fun () -> Keymap_data.save_shortcut id None)) []
+            ; Ui_components.button ~variant:`ghost ~size:`sm ~text:(T.t "ui/cancel")
+                ~on_press:(fun _ -> close ()) []
+            ]
+        ]
+    ] ctx parent
+
+let keymap_row st editing ~key (r : Keymap_data.row) =
   let open Keymap_data in
   (* the title tooltip attr was DOM-only — dropped *)
   list_item ~key ~style_class:"shortcut-row"
     ~min_height:34 ~padding_vertical:7 ~padding_horizontal:8
+    ~on_press:(fun _ -> Runtime.signal_set st
+        { (Runtime.signal_get st) with km_recording = false };
+        Runtime.signal_set editing (Some (command_id r.title)))
     [ row ~key:(key ^ "r") ~cross:`center ~main:`space_between ~grow:1.
-        ~min_width:0 ~gap:12
+        ~min_width:0 ~gap:12 ~flex_wrap:`wrap
         [ box ~key:(key ^ "l") ~grow:1. ~min_width:0
             [ text ~key:(key ^ "lx") ~style_class:"ls-kbd-label"
                 ~value:(I18n.t (command_key_of r.title)) []
             ]
-        ; row ~key:(key ^ "a") ~cross:`center ~gap:6
+        ; row ~key:(key ^ "a") ~cross:`center ~gap:6 ~min_width:0 ~flex_wrap:`wrap
         (if r.unset then
            [ text ~key:(key ^ "u")
                 ~value:(T.t "keymap/unset")
@@ -824,17 +906,22 @@ let keymap_row ~key (r : Keymap_data.row) =
                keymap_binding ~key:(key ^ "b" ^ string_of_int i) b)
              r.bindings)
         ]
+    ; if_ ~test:(reactive (fun selected ->
+        selected = Some (command_id r.title)) (Signal.value editing))
+        (keymap_editor st editing r)
     ]
 
-let keymap_pane ?(embedded=false) () : t =
+let keymap_pane ?state ?(embedded=false) () : t =
  fun context parent ->
   Keymap_data.reload_shortcuts ();
   let st =
-    Signal.state context.Lui_ui.ui_scheduler
-      { km_query = ""; km_filter = Keymap_data.All; km_collapsed = [];
-        km_keys=[]; km_recording=false; km_committed=false;
-        km_revision=Keymap_data.revision () }
+    match state with
+    | Some state -> state
+    | None -> Signal.state context.Lui_ui.ui_scheduler (initial_keymap ())
   in
+  let editing = Signal.state context.Lui_ui.ui_scheduler None in
+  Signal.set st { (Runtime.signal_get st) with km_recording = false;
+    km_revision = Keymap_data.revision () };
   let rows model =
     let items =
       Keymap_data.visible_items ~keystroke:(String.concat " " model.km_keys)
@@ -865,7 +952,7 @@ let keymap_pane ?(embedded=false) () : t =
           | Keymap_data.Shortcut row when visible ->
               ( category,
                 visible,
-                keymap_row ~key:("km-command-" ^ category ^ "-" ^ row.title) row
+                keymap_row st editing ~key:("km-command-" ^ category ^ "-" ^ row.title) row
                 :: elements )
           | _ -> (category, visible, elements))
         ("", true, []) items
@@ -892,7 +979,7 @@ let keymap_pane ?(embedded=false) () : t =
      (column ~key:"pane-keymap" ~style_class:"cp__shortcut-page-x" ~grow:(if embedded then 0. else 1.)
         ~min_height:0
         [
-          keymap_controls st;
+          keymap_controls ~editing st;
           results_container
             [
               reactive
@@ -964,8 +1051,6 @@ let advanced_pane () =
 
 (* ---- features pane ---- *)
 
-(* the cljs input saved on blur AND Enter; the input kind has only
-   ~on_submit (Enter) — blur-save is dropped *)
 let home_page_row ctx =
   let current =
     match S.config_get "default-home" with
@@ -978,12 +1063,17 @@ let home_page_row ctx =
   let home_text =
     Signal.state ctx.Lui_ui.ui_scheduler current
   in
+  let saving = Signal.state ctx.Lui_ui.ui_scheduler false in
+  let saved = ref current in
   C.it_row ~key:"homep" ~label:(T.t "settings.features/home-default-page")
     [ box ~key:"homep-w" ~style_class:"ls-select-wrap" ~grow:1.
         [ Ui_components.input ~key:"homep-in"
             ~accessibility_identifier:"home-default-page" ~width:220
             ~height:26
-            ~style_class:"form-input is-small" ~text:current
+            ~submit_on_blur:true
+            ~style_class:"form-input is-small"
+            ~text:(reactive (fun value -> value) (Signal.value home_text))
+            ~disabled:(reactive (fun value -> value) (Signal.value saving))
             ~on_input:(fun ev ->
               match ev with
               | Lui_protocol.TextChanged (_, q) ->
@@ -991,11 +1081,22 @@ let home_page_row ctx =
               | _ -> ())
             ~on_submit:(fun _ ->
               let value = Runtime.signal_get home_text in
-              S.set_home_page value (fun res ->
-                  match res with
-                  | S.Home_ok -> Toast.success (T.t "settings.features/home-default-page-update-success")
-                  | S.Home_missing ->
-                      Toast.warning (T.page_not_found_msg value)))
+              if value <> !saved && not (Runtime.signal_get saving) then begin
+                Runtime.signal_set saving true;
+                let origin = Runtime.model () in
+                S.set_home_page value (fun res ->
+                  if res = S.Home_ok then saved := value;
+                  if Ui_effect.alive ctx.Lui_ui.ui_scope then begin
+                    Runtime.signal_set saving false;
+                    let current = Runtime.model () in
+                    if current.Model.repo = origin.Model.repo
+                       && current.Model.context_revision = origin.Model.context_revision then
+                      match res with
+                      | S.Home_ok -> Toast.success (T.t "settings.features/home-default-page-update-success")
+                      | S.Home_missing -> Toast.warning (T.page_not_found_msg value)
+                      | S.Home_error -> Toast.error (T.t "ui/save-changes-error")
+                  end)
+              end)
             []
         ]
     ]
@@ -1039,9 +1140,14 @@ let nav_items () =
 
 let nav_gap = 8
 
-let nav_menu_height viewport =
-  let count = List.length (nav_items ()) - (if viewport < 640. then 1 else 0) in
+let nav_menu_height _viewport =
+  let count = List.length (nav_items ()) in
   (count * Ui_components.nav_item_height) + ((count - 1) * nav_gap)
+
+let nav_aside_height viewport =
+  32 + 40 + 16 + nav_menu_height viewport + 8
+
+let article_min_height = 192
 
 let tab_title tab =
   match List.find_opt (fun (id, _, _) -> id = tab) (nav_items ()) with
@@ -1049,72 +1155,86 @@ let tab_title tab =
   | None -> (T.t "settings/general")
 
 let nav_item ~key (id, label, icn) =
-  let content = C.class_signal (S.signal ())
+  C.class_signal (S.signal ())
     (fun (s : S.t) ->
       if s.tab = id then "active settings-menu-item"
       else "settings-menu-item")
     (Ui_components.nav_item ~key ~data_id:id ~icon:icn
        ~text:label
        ~selected:(reactive (fun (s : S.t) -> s.tab = id) (S.signal ()))
-       ~on_press:(fun _ -> S.set_tab id) ()) in
-  if id<>"keymap" then content
-  else fun ctx parent ->
-    let viewport=Ui_services.viewport_width_signal ~scheduler:ctx.Lui_ui.ui_scheduler
-      ~scope:ctx.Lui_ui.ui_scope in
-    Ui_parts.string_prop Lui_protocol.DisplayValue
-      ~value:(reactive (fun viewport -> if viewport>=640. then "inline-flex" else "none") viewport)
-      content ctx parent
+       ~on_press:(fun _ -> S.set_tab id) ())
 
-let pane_of ~modal ctx tab =
+let pane_of ~modal ~keymap ctx tab =
   match tab with
   | "editor" -> editor_pane ctx
-  | "keymap" -> keymap_pane ()
+  | "keymap" -> keymap_pane ~state:keymap ()
   | "advanced" -> advanced_pane ()
   | "features" -> features_pane ctx
   | _ -> general_pane ~modal ctx
 
 let same_config ((s : S.t),(a : Model.t)) ((t : S.t),(b : Model.t)) =
-  s == t && a.graph_config = b.graph_config
+  s == t && a.repo = b.repo && a.context_revision = b.context_revision
+  && a.graph_config = b.graph_config
 
-let article ~modal ms ctx =
+let article ~modal ~keymap ms ctx =
+  let viewport_height = 0.7 in
+  let content (s : S.t) _ =
+    let children =
+      [ row ~key:"art-h" ~style_class:"cp__settings-header"
+          ~cross:`center ~main:`start ~gap:8 ~height:40
+          ~padding_vertical:8
+          [ heading ~key:"art-ht" ~level:1
+              ~style_class:"cp__settings-category-title"
+              ~font_size:"1.25rem" ~font_weight:400 ~line_height:"1.75rem"
+              ~value:
+                (reactive (fun (s : S.t) -> tab_title s.tab)
+                   (S.signal ()))
+              []
+          ]
+      ; pane_of ~modal ~keymap ctx s.tab
+      ]
+    in
+    let body =
+      column ~key:"settings-article-body" ~padding:16 ~min_width:0 ~min_height:0 children
+    in
+    if s.tab = "keymap" then
+      Ui_components.with_props
+        [Ui_components.Prop.height_viewport viewport_height] body
+    else body
+  in
   Ui_components.with_props
-    [Ui_components.Prop.overflow `auto;Ui_components.Prop.height_viewport 0.7]
-    (column ~key:"settings-article" ~style_class:"settings-article"
+    [Ui_components.Prop.height_viewport viewport_height]
+    (scroll ~key:"settings-article" ~style_class:"settings-article" ~orientation:`vertical
     ~data_attrs:["role", "article"]
-    ~padding:16 ~grow:1. ~min_height:192 ~min_width:0
-       [ row ~key:"art-h" ~style_class:"cp__settings-header"
-           ~cross:`center ~main:`start ~gap:8 ~height:40
-           ~padding_vertical:8
-           [ heading ~key:"art-ht" ~level:1
-               ~style_class:"cp__settings-category-title"
-               ~font_size:"1.25rem" ~font_weight:400 ~line_height:"1.75rem"
-               ~value:
-                 (reactive (fun (s : S.t) -> tab_title s.tab)
-                    (S.signal ()))
-               []
-           ]
-       ; reactive ~equal:same_config (fun (s : S.t) _ -> pane_of ~modal ctx s.tab)
-           (S.signal ()) ms
-       ])
+    ~grow:1. ~min_height:article_min_height ~min_width:0
+       [reactive ~equal:same_config content (S.signal ()) ms])
 
 let inner ~modal ms : t =
  fun ctx parent ->
   S.ensure ctx;
   S.activate ();
+  let keymap = Signal.state ctx.Lui_ui.ui_scheduler (initial_keymap ()) in
   let viewport=Ui_services.viewport_width_signal ~scheduler:ctx.Lui_ui.ui_scheduler
     ~scope:ctx.Lui_ui.ui_scope in
+  let max_height_viewport = 0.75 in
   let inner_box children =
-    Ui_parts.string_prop Lui_protocol.Overflow
-      ~value:(reactive (fun viewport -> if viewport>=768. then "hidden" else "auto") viewport)
-      (row ~key:"settings-inner" ~style_class:"cp__settings-inner" ~min_width:0
-        ~orientation:(reactive (fun viewport -> if viewport>=768. then `horizontal else `vertical) viewport)
-        ~cross:`stretch children)
+    scroll ~key:"settings-inner" ~style_class:"cp__settings-inner"
+      ~orientation:`vertical ~min_width:0
+      [ Ui_parts.int_prop Lui_protocol.MinHeight
+          ~value:(reactive (fun viewport ->
+            if viewport>=768. then 0
+            else nav_aside_height viewport + article_min_height) viewport)
+          (Ui_components.with_props
+            [Ui_components.Prop.max_height_viewport max_height_viewport]
+            (row ~key:"settings-columns" ~min_width:0
+              ~orientation:(reactive (fun viewport -> if viewport>=768. then `horizontal else `vertical) viewport)
+              ~cross:`stretch children)) ]
   in
   let node =
     column ~key:"settings" ~accessibility_identifier:"settings"
       [ Ui_components.with_props
           [ Ui_components.Prop.min_height_viewport 0.55
-          ; ( Ui_components.Prop.max_height_viewport 0.75 ) ]
+          ; ( Ui_components.Prop.max_height_viewport max_height_viewport ) ]
           (inner_box
              [ Ui_parts.int_prop Lui_protocol.MinWidth
                  ~value:(reactive (fun viewport -> if viewport>=768. then 256 else 160) viewport)
@@ -1123,7 +1243,7 @@ let inner ~modal ms : t =
                  (Ui_parts.int_prop Lui_protocol.MinHeight
                    ~value:(reactive (fun viewport ->
                      if viewport>=768. then 0
-                     else 32 + 40 + 16 + nav_menu_height viewport + 8) viewport)
+                     else nav_aside_height viewport) viewport)
                  (Ui_components.with_props [Ui_components.Prop.overflow `auto]
                  (column ~key:"settings-aside"
                  ~style_class:"settings-aside"
@@ -1152,7 +1272,7 @@ let inner ~modal ms : t =
                           nav_item ~key:("nav-" ^ string_of_int i) it)
                         (nav_items ())))
                  ]))))
-             ; article ~modal ms ctx
+             ; article ~modal ~keymap ms ctx
              ])
       ]
   in
