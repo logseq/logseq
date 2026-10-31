@@ -25,7 +25,6 @@ type DocumentEvents struct {
 	codeMirrorComposition func(*ui.Context, luimygo.InputNode) codeMirrorComposition
 	backend               *luimygo.Backend
 	dispatch              DocumentDispatch
-	context               *ui.Context
 	services              ui.Services
 	pressed               luimygo.InputNode
 	buttons               int
@@ -46,9 +45,10 @@ func NewDocumentEvents(backend *luimygo.Backend, dispatch DocumentDispatch, code
 // Keep DocumentEvents for the window's lifetime. This overrides the carrier's
 // observational dispatch with the host's synchronous default-prevention ABI.
 func (d *DocumentEvents) Capture(c *ui.Context) {
-	d.context = c
 	d.services = c.Services()
-	c.CaptureInput(d.input)
+	c.CaptureInput(func(ev ui.InputEvent, target ui.InputTarget) bool {
+		return d.input(c, ev, target)
+	})
 }
 
 func (s *platformServices) ObserveDocumentInput(ev ui.InputEvent, target luimygo.InputNode) {
@@ -72,7 +72,7 @@ func (s *platformServices) renderDocumentEvents(c *ui.Context, n luimygo.Node, _
 	d.Capture(c)
 }
 
-func (d *DocumentEvents) send(target luimygo.InputNode, name string, payload map[string]any) bool {
+func (d *DocumentEvents) send(c *ui.Context, target luimygo.InputNode, name string, payload map[string]any) bool {
 	if target.Node.ID != 0 && !target.Current() {
 		return false
 	}
@@ -81,7 +81,7 @@ func (d *DocumentEvents) send(target luimygo.InputNode, name string, payload map
 	}
 	if target.Node.ID != 0 {
 		payload["nodeId"] = target.Node.ID
-		appendInputTextSnapshot(d.backend, d.context, target.Node.ID, payload)
+		appendInputTextSnapshot(d.backend, c, target.Node.ID, payload)
 	}
 	encoded, err := json.Marshal(payload)
 	if err != nil {
@@ -90,12 +90,12 @@ func (d *DocumentEvents) send(target luimygo.InputNode, name string, payload map
 	return d.dispatch(name, string(encoded))
 }
 
-func (d *DocumentEvents) input(ev ui.InputEvent, host ui.InputTarget) bool {
+func (d *DocumentEvents) input(c *ui.Context, ev ui.InputEvent, host ui.InputTarget) bool {
 	target, _ := d.backend.InputNode(host)
 	if d.Observe != nil {
 		d.Observe(ev, target)
 	}
-	prevented := d.event(ev, target)
+	prevented := d.event(c, ev, target)
 	if ev.Kind == ui.InputPointerCancel {
 		return false
 	}
@@ -121,7 +121,7 @@ func (d *DocumentEvents) resetPointer() {
 	d.pressed = luimygo.InputNode{}
 }
 
-func (d *DocumentEvents) cancelPointer(target luimygo.InputNode, payload map[string]any) bool {
+func (d *DocumentEvents) cancelPointer(c *ui.Context, target luimygo.InputNode, payload map[string]any) bool {
 	if d.buttons == 0 {
 		return false
 	}
@@ -129,20 +129,20 @@ func (d *DocumentEvents) cancelPointer(target luimygo.InputNode, payload map[str
 	if target.Node.ID != 0 && !target.Current() {
 		target = luimygo.InputNode{}
 	}
-	return d.send(target, "pointercancel", payload)
+	return d.send(c, target, "pointercancel", payload)
 }
 
 func (d *DocumentEvents) Blur() {
 	if d.buttons != 0 {
-		d.cancelPointer(luimygo.InputNode{}, map[string]any{"buttons": 0})
+		d.cancelPointer(nil, luimygo.InputNode{}, map[string]any{"buttons": 0})
 	} else {
 		d.resetPointer()
 	}
-	d.send(luimygo.InputNode{}, "blur", nil)
+	d.send(nil, luimygo.InputNode{}, "blur", nil)
 }
 
-func (d *DocumentEvents) event(ev ui.InputEvent, target luimygo.InputNode) bool {
-	composition := d.codeMirrorComposition(d.context, target)
+func (d *DocumentEvents) event(c *ui.Context, ev ui.InputEvent, target luimygo.InputNode) bool {
+	composition := d.codeMirrorComposition(c, target)
 	codeMirror := target.Node.Identifier == "logseq-codemirror"
 	if !d.compositionTarget.Current() || d.compositionTarget.Node.ID != target.Node.ID ||
 		codeMirror && (!composition.focused || d.compositionSource != composition.source) {
@@ -163,7 +163,7 @@ func (d *DocumentEvents) event(ev ui.InputEvent, target luimygo.InputNode) bool 
 		if codeMirror {
 			payload["isComposing"] = d.composing || composition.focused && composition.composing
 		}
-		return d.send(target, name, payload)
+		return d.send(c, target, name, payload)
 	case ui.InputPointerDown, ui.InputPointerUp, ui.InputPointerMove, ui.InputPointerCancel, ui.InputClick:
 		if ev.Kind == ui.InputPointerDown {
 			d.buttons |= 1 << ev.Button
@@ -177,44 +177,44 @@ func (d *DocumentEvents) event(ev ui.InputEvent, target luimygo.InputNode) bool 
 			d.pressed = target
 			button := 1 << ev.Button
 			d.preventMouse &^= button
-			prevented := d.send(target, "pointerdown", payload)
+			prevented := d.send(c, target, "pointerdown", payload)
 			if prevented {
 				d.preventMouse |= button
 			}
 			taken := prevented
 			if !prevented {
-				taken = d.send(target, "mousedown", payload)
+				taken = d.send(c, target, "mousedown", payload)
 			}
 			if ev.Button == 1 {
-				taken = d.send(target, "contextmenu", payload) || taken
+				taken = d.send(c, target, "contextmenu", payload) || taken
 			}
 			return taken
 		case ui.InputPointerUp:
 			button := 1 << ev.Button
 			prevented := d.preventMouse&button != 0
-			taken := d.send(target, "pointerup", payload)
+			taken := d.send(c, target, "pointerup", payload)
 			if !prevented {
-				taken = d.send(target, "mouseup", payload) || taken
+				taken = d.send(c, target, "mouseup", payload) || taken
 			}
 			d.preventMouse &^= button
 			return taken
 		case ui.InputPointerMove:
-			taken := d.send(target, "pointermove", payload)
+			taken := d.send(c, target, "pointermove", payload)
 			if d.preventMouse == 0 {
-				taken = d.send(target, "mousemove", payload) || taken
+				taken = d.send(c, target, "mousemove", payload) || taken
 			}
 			return taken
 		case ui.InputPointerCancel:
 			payload["buttons"] = 0
-			return d.cancelPointer(target, payload)
+			return d.cancelPointer(c, target, payload)
 		case ui.InputClick:
 			// Never deliver a press to a replacement of the same retained ID.
 			if d.pressed.Node.ID != 0 && !d.pressed.Current() {
 				return true
 			}
-			taken := d.send(target, "click", payload)
+			taken := d.send(c, target, "click", payload)
 			if ev.Clicks == 2 {
-				taken = d.send(target, "dblclick", payload) || taken
+				taken = d.send(c, target, "dblclick", payload) || taken
 			}
 			return taken
 		}
@@ -222,9 +222,9 @@ func (d *DocumentEvents) event(ev ui.InputEvent, target luimygo.InputNode) bool 
 		payload := documentPointer(ev)
 		payload["buttons"] = d.buttons
 		payload["deltaX"], payload["deltaY"], payload["deltaMode"] = ev.DX, ev.DY, 0
-		return d.send(target, "wheel", payload)
+		return d.send(c, target, "wheel", payload)
 	case ui.InputCommand:
-		return d.command(target, ev)
+		return d.command(c, target, ev)
 	case ui.InputCompose:
 		name := "compositionupdate"
 		if !d.composing && ev.Text != "" {
@@ -239,11 +239,11 @@ func (d *DocumentEvents) event(ev ui.InputEvent, target luimygo.InputNode) bool 
 		} else {
 			d.clearComposition()
 		}
-		d.send(target, name, map[string]any{"data": ev.Text, "isComposing": d.composing})
+		d.send(c, target, name, map[string]any{"data": ev.Text, "isComposing": d.composing})
 	case ui.InputText:
 		wasComposing := d.composing
 		d.clearComposition()
-		return d.send(target, "beforeinput", map[string]any{"data": ev.Text,
+		return d.send(c, target, "beforeinput", map[string]any{"data": ev.Text,
 			"inputType": "insertText", "isComposing": wasComposing})
 	}
 	return false
@@ -261,11 +261,11 @@ func documentPointer(ev ui.InputEvent) map[string]any {
 		"metaKey": ev.Mods&ui.Super != 0, "ctrlKey": ev.Mods&ui.Ctrl != 0}
 }
 
-func (d *DocumentEvents) command(target luimygo.InputNode, ev ui.InputEvent) bool {
+func (d *DocumentEvents) command(c *ui.Context, target luimygo.InputNode, ev ui.InputEvent) bool {
 	payload := map[string]any{"nativeCommand": ev.Text}
 	switch ev.Text {
 	case "copy", "cut":
-		return d.send(target, ev.Text, payload)
+		return d.send(c, target, ev.Text, payload)
 	case "paste", "pasteAndMatchStyle":
 		data := d.services.ReadClipboardData(transfer.Text, transfer.HTML)
 		clipboard := map[string]string{}
@@ -279,7 +279,7 @@ func (d *DocumentEvents) command(target luimygo.InputNode, ev ui.InputEvent) boo
 			}
 		}
 		payload["clipboardData"] = clipboard
-		return d.send(target, "paste", payload)
+		return d.send(c, target, "paste", payload)
 	}
 	// Native text controls and the editor sink own the original command.
 	// Synthesizing keydown here would execute undo/selectAll/delete twice.
