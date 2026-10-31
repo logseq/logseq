@@ -84,6 +84,18 @@
         property-pair-tx-data (when (ldb/property? page)
                                 (->> (d/datoms db :avet (:db/ident page))
                                      (map (fn [d] [:db/retract (:e d) (:a d) (:v d)]))))
+        ;; Text values are blocks that exist only to hold a property's value,
+        ;; children of the block that has it. Retracting the property would
+        ;; otherwise leave them behind as ordinary child blocks, and a value
+        ;; block's own children would be left without a parent.
+        property-value-blocks-tx (when (ldb/property? page)
+                                   (->> (:logseq.property/_created-from-property page)
+                                        (mapcat (fn [value-block]
+                                                  (cons (:db/id value-block)
+                                                        (ldb/get-block-full-children-ids db (:db/id value-block)))))
+                                        distinct
+                                        (map (fn [block-id]
+                                               [:db/retractEntity block-id]))))
         restore-class-parent-tx (when (ldb/class? page)
                                   (->> (filter ldb/class? (:logseq.property.class/_extends page))
                                        (map (fn [p]
@@ -96,6 +108,7 @@
       page-blocks-tx-data
       (concat page-blocks-tx-data
               property-pair-tx-data
+              property-value-blocks-tx
               restore-class-parent-tx
               (db-refs->page page)
               page-tx))))

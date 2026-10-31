@@ -20,6 +20,7 @@
             [logseq.outliner.tree :as otree]
             [logseq.outliner.tx-meta :as outliner-tx-meta]
             [logseq.outliner.validate :as outliner-validate]
+            [logseq.outliner.value-blocks :as value-blocks]
             [malli.core :as m]
             [malli.util :as mu]))
 
@@ -1351,9 +1352,12 @@
             (when (seq tx-data) (swap! txs-state concat tx-data)))
 
           :else
-          (doseq [id block-ids]
-            (let [node (d/entity db id)]
-              (otree/-del node txs-state db))))
+          (do
+            (doseq [id block-ids]
+              (let [node (d/entity db id)]
+                (otree/-del node txs-state db)))
+            ;; a number value belongs to its property, not to the block that has it
+            (swap! txs-state into (value-blocks/deleted-nodes-value-blocks-tx db deleted-block-ids))))
       (let [deleted-ids (into deleted-block-ids (map :db/id) orphaned-comments-areas)]
         (swap! txs-state into
                ;; Never stamp an entity being retracted: the :block/updated-at
