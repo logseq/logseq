@@ -32,7 +32,12 @@
         last-gc-at (:kv/value (d/entity @conn recycle-gc-kv))]
     (when (or (not (number? last-gc-at))
               (> (- now last-gc-at) outliner-recycle/gc-interval-ms))
-      (outliner-recycle/gc! conn {:now-ms now})
+      ;; GC runs while the graph opens: a GC write the db refuses must not keep
+      ;; the graph from opening
+      (try
+        (outliner-recycle/gc! conn {:now-ms now})
+        (catch :default e
+          (log/error ::recycle-gc-failed {:error e})))
       (ldb/transact! conn [{:db/ident recycle-gc-kv
                             :kv/value now}]
                      {:persist-op? false

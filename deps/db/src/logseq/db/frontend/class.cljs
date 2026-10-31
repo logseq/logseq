@@ -198,6 +198,18 @@
              (into result extends))
       (reverse (distinct result)))))
 
+(defn detach-child-classes-tx
+  "Tx data that stops every class extending `parent` (a class about to stop being
+  one, or an entity about to be retracted) from extending it. A class left with no
+  other parent extends :logseq.class/Root, as every class must extend something."
+  [parent]
+  (let [parent-id (:db/id parent)]
+    (mapcat (fn [child]
+              (cond-> [[:db/retract (:db/id child) :logseq.property.class/extends parent-id]]
+                (every? #(= parent-id (:db/id %)) (:logseq.property.class/extends child))
+                (conj [:db/add (:db/id child) :logseq.property.class/extends :logseq.class/Root])))
+            (:logseq.property.class/_extends parent))))
+
 (defn create-user-class-ident-from-name
   "Creates a class :db/ident for a default user namespace.
    NOTE: Only use this when creating a db-ident for a new class."

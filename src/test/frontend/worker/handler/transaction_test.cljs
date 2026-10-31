@@ -4,9 +4,19 @@
             [frontend.common.thread-api :as thread-api]
             [frontend.worker.db-listener :as db-listener]
             [frontend.worker.handler.block :as block-handler]
-            [frontend.worker.handler.transaction]
+            [frontend.worker.handler.transaction :as transaction-handler]
             [frontend.worker.state :as worker-state]
-            [logseq.outliner.op :as outliner-op]))
+            [logseq.outliner.op :as outliner-op]
+            [logseq.outliner.recycle :as outliner-recycle]))
+
+(deftest a-failing-recycle-gc-does-not-stop-the-graph-from-opening
+  (let [conn (d/create-conn)]
+    (with-redefs [outliner-recycle/gc! (fn [_conn _opts]
+                                         (throw (ex-info "DB write failed with invalid data" {})))]
+      (is (some? (transaction-handler/maybe-run-recycle-gc! conn))
+          "the GC error is logged, not thrown into the graph open")
+      (is (number? (:kv/value (d/entity @conn :logseq.kv/recycle-last-gc-at)))
+          "the GC time is still recorded, so it is not retried on every open"))))
 
 (deftest apply-outliner-ops-returns-stored-delta-and-canonical-editor-rows-test
   (let [repo "transaction-handler-test"

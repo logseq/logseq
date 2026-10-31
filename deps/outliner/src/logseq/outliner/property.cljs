@@ -188,12 +188,9 @@
 (defn- build-property-value-tx-data
   [conn block property-id value]
   (when (some? value)
-    (let [old-value (get block property-id)
-          property (d/entity @conn property-id)
+    (let [property (d/entity @conn property-id)
           multiple-values? (= :db.cardinality/many (:db/cardinality property))
           retract-multiple-values? (and multiple-values? (sequential? value))
-          multiple-values-empty? (and (sequential? old-value)
-                                      (contains? (set (map :db/ident old-value)) :logseq.property/empty-placeholder))
           extends? (= property-id :logseq.property.class/extends)
           tx-value (if extends?
                      (let [value' (normalize-extends-value @conn value)]
@@ -207,8 +204,6 @@
                             (= :logseq.property/template-applied-to property-id)
                             (assoc :block/tags :logseq.class/Template))]
       (cond-> []
-        multiple-values-empty?
-        (conj [:db/retract (:db/id update-block-tx) property-id :logseq.property/empty-placeholder])
         retract-multiple-values?
         (conj [:db/retract (:db/id update-block-tx) property-id])
         extends?
@@ -542,8 +537,10 @@
 
       :else
       ;; only value-ref-property types should call this
+      ;; text that isn't a number is refused with the same message as convert-property-input-string, instead of
+      ;; turning into nil and failing as "Property value must be not nil"
       (when-let [v' (if (and number-property? (string? v))
-                      (parse-double v)
+                      (fail-parse-double v)
                       v)]
         (find-or-create-property-value conn property-id v' block-id)))))
 
@@ -685,6 +682,8 @@
 (defn- validate-batch-set-property
   [conn block-eids property-id v]
   (outliner-validate/disallow-editing-private-built-in-nodes (mapv #(d/entity @conn %) block-eids))
+  (when (some? v)
+    (outliner-validate/disallow-task-properties-on-built-in-nodes (mapv #(d/entity @conn %) block-eids) property-id))
   (when (= property-id :block/tags)
     (outliner-validate/validate-tags-property @conn block-eids v))
   (when (= property-id :logseq.property.class/extends)
@@ -908,6 +907,8 @@
                           :property-id property-id
                           :block block
                           :property property})))
+       (when (some? v')
+         (outliner-validate/disallow-task-properties-on-built-in-nodes [block] property-id))
        (if (nil? v')
          (remove-block-property! conn block-eid property-id)
          (do
