@@ -1172,11 +1172,12 @@ let same_config ((s : S.t),(a : Model.t)) ((t : S.t),(b : Model.t)) =
 
 let article ~modal ~keymap ms ctx =
   Ui_components.with_props
-    [Ui_components.Prop.overflow `auto;Ui_components.Prop.height_viewport 0.7]
-    (column ~key:"settings-article" ~style_class:"settings-article"
+    [Ui_components.Prop.height_viewport 0.7]
+    (scroll ~key:"settings-article" ~style_class:"settings-article" ~orientation:`vertical
     ~data_attrs:["role", "article"]
     ~padding:16 ~grow:1. ~min_height:192 ~min_width:0
-       [ row ~key:"art-h" ~style_class:"cp__settings-header"
+       [ column ~key:"settings-article-body" ~min_width:0
+         [ row ~key:"art-h" ~style_class:"cp__settings-header"
            ~cross:`center ~main:`start ~gap:8 ~height:40
            ~padding_vertical:8
            [ heading ~key:"art-ht" ~level:1
@@ -1189,6 +1190,7 @@ let article ~modal ~keymap ms ctx =
            ]
        ; reactive ~equal:same_config (fun (s : S.t) _ -> pane_of ~modal ~keymap ctx s.tab)
            (S.signal ()) ms
+         ]
        ])
 
 let inner ~modal ms : t =
