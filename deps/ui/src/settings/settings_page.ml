@@ -1071,7 +1071,8 @@ let home_page_row ctx =
             ~accessibility_identifier:"home-default-page" ~width:220
             ~height:26
             ~submit_on_blur:true
-            ~style_class:"form-input is-small" ~text:current
+            ~style_class:"form-input is-small"
+            ~text:(reactive (fun value -> value) (Signal.value home_text))
             ~disabled:(reactive (fun value -> value) (Signal.value saving))
             ~on_input:(fun ev ->
               match ev with
