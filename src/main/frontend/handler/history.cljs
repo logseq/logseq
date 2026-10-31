@@ -63,6 +63,16 @@
         (state/set-state! :history/paused? false)
         restore-result))))
 
+(defn- <editor-key-landed
+  "Settles when the Enter or Backspace/Delete join still running, if any, has
+  landed and moved the editor. Before that the editor still names the block
+  the key left, so the undo's buffer save and cursor restore would race the
+  key's own move of the editor, which lands after the undo."
+  []
+  (p/do!
+   (editor/<pending-block-delete)
+   (editor/<pending-new-block)))
+
 (let [*last-request (atom nil)]
   (defn- undo-aux!
     [e]
@@ -73,6 +83,7 @@
        (when-let [repo (state/get-current-repo)]
          (util/stop e)
          (p/do!
+          (<editor-key-landed)
           (state/set-state! [:editor/last-replace-ref-content-tx repo] nil)
           (editor/save-current-block!)
           (state/clear-editor-action!)
@@ -91,6 +102,7 @@
        (when-let [repo (state/get-current-repo)]
          (util/stop e)
          (p/do!
+          (<editor-key-landed)
           (editor/save-current-block!)
           (state/clear-editor-action!)
           (reset! *last-request (state/<invoke-db-worker :thread-api/undo-redo-redo repo))
