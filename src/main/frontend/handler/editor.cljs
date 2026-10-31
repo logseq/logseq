@@ -3121,12 +3121,17 @@
   (util/safe-set-range-text! input "" start end)
   (state/set-edit-content! (state/get-edit-input-id) (.-value input)))
 
-(defn- delete-concat [current-block]
+(defn- delete-concat
+  "Joins the block after `input`'s row into `current-block`. `input` and
+  `editor-state` are the editor's at the keypress: the block lookups wait for
+  the worker, and a click meanwhile moves the editor to another block, whose
+  next block must not be joined into this one."
+  [current-block ^js input editor-state]
   ;; tracked from the start, the block lookups included (see
   ;; delete-block-when-zero-pos!)
   (track-block-delete!
    (p/let [repo (state/get-current-repo)
-          current-block-id (or (some-> (state/get-input)
+          current-block-id (or (some-> input
                                        (util/rec-get-node "ls-block")
                                        (dom/attr "blockid")
                                        uuid)
@@ -3139,7 +3144,7 @@
           collapsed? (util/collapsed? hydrated-current-block)
           next-node (when-not collapsed?
                       (util/get-next-block-non-collapsed
-                       (util/rec-get-node (state/get-input) "ls-block")
+                       (util/rec-get-node input "ls-block")
                        {:exclude-property? true}))
           next-block (when-let [next-block-id (some-> (dom/attr next-node "blockid") uuid)]
                        (p/let [result (db-async/<get-block-with-children
@@ -3154,7 +3159,7 @@
 
       :else
       (let [repo (state/get-current-repo)
-            editor-state (assoc (get-state)
+            editor-state (assoc editor-state
                                 :block-id (:block/uuid next-block)
                                 :value (:block/title next-block)
                                 :block-container next-node
@@ -3181,7 +3186,7 @@
           (let [editor-state (get-state)
                 custom-query? (get-in editor-state [:config :custom-query?])]
             (when-not custom-query?
-              (delete-concat current-block)))
+              (delete-concat current-block input editor-state)))
 
           :else
           (delete-and-update
@@ -3384,7 +3389,9 @@
         (do
           (util/stop e)
           (notification/show! (t :page.validation/name-no-hash) :warning))
-        (pending-new-block?)
+        ;; Control/Meta chords type nothing: Control+z must reach the undo
+        ;; shortcut, not become a "z" in the block the pending Enter makes
+        (and (pending-new-block?) (not (or ctrlKey metaKey)))
         (do
           (when (= 1 (count (str key)))
             (append-pending-new-block-text! key))
