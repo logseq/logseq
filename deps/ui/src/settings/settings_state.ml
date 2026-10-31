@@ -141,8 +141,8 @@ let map_dissoc key kvs =
     kvs
 
 let save_config ?(on_saved = fun () -> ())
-    ?(on_error = fun () -> Toast.error (I18n.t "ui/save-changes-error")) origin cfg =
-  match Sdk_config.write_config origin cfg with
+    ?(on_error = fun () -> Toast.error (I18n.t "ui/save-changes-error")) origin transform =
+  match Sdk_config.mutate_config origin transform with
   | write ->
       ignore
         ((let* () = write in
@@ -152,12 +152,10 @@ let save_config ?(on_saved = fun () -> ())
   | exception _ -> on_error ()
 
 let set_config ?on_saved key v =
-  let cfg' =
-    match (Runtime.model ()).Model.graph_config with
+  save_config ?on_saved (repo ()) (fun cfg ->
+    match cfg with
     | Wire.Map kvs -> Wire.Map (map_assoc key v kvs)
-    | _ -> invalid_arg "Graph configuration must be an EDN map"
-  in
-  save_config ?on_saved (repo ()) cfg'
+    | _ -> invalid_arg "Graph configuration must be an EDN map")
 
 let config_set_bool key b = set_config key (Wire.Bool b)
 
@@ -172,32 +170,23 @@ type home_result =
   | Home_error
 
 let set_home_page name k =
-  let origin = Runtime.model () in
   let r = repo () in
   let write page_opt =
-    let current = Runtime.model () in
-    let cfg =
-      if current.Model.repo = origin.Model.repo
-         && current.Model.context_revision = origin.Model.context_revision
-      then current.Model.graph_config
-      else origin.Model.graph_config
-    in
-    let home =
-      match Wire.get cfg "default-home" with
-      | Some (Wire.Map kvs) -> kvs
-      | _ -> []
-    in
-    let home' =
-      match page_opt with
-      | Some n -> map_assoc "page" (Wire.String n) home
-      | None -> map_dissoc "page" home
-    in
-    let cfg' = match cfg with
-      | Wire.Map kvs -> Wire.Map (map_assoc "default-home" (Wire.Map home') kvs)
-      | _ -> invalid_arg "Graph configuration must be an EDN map"
-    in
     save_config ~on_saved:(fun () -> k Home_ok) ~on_error:(fun () -> k Home_error)
-      r cfg'
+      r (fun cfg ->
+        let home =
+          match Wire.get cfg "default-home" with
+          | Some (Wire.Map kvs) -> kvs
+          | _ -> []
+        in
+        let home' =
+          match page_opt with
+          | Some n -> map_assoc "page" (Wire.String n) home
+          | None -> map_dissoc "page" home
+        in
+        match cfg with
+        | Wire.Map kvs -> Wire.Map (map_assoc "default-home" (Wire.Map home') kvs)
+        | _ -> invalid_arg "Graph configuration must be an EDN map")
   in
   if String.trim name = "" then write None
   else
