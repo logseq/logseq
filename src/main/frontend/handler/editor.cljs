@@ -4107,6 +4107,45 @@
             state/exit-editing-and-set-selected-blocks!)))
    (state/set-state! :selection/selected-all? true)))
 
+(defn- select-parent-page?
+  "True when `parent` is a page. DB worker ref summaries omit the parent's own
+  :block/parent, so page-ness cannot be inferred from a nested parent link."
+  [parent]
+  (boolean
+   (or (:block/name parent)
+       (entity/page? parent))))
+
+(defn- select-parent-target
+  "Next Mod+A expansion from a selected block's worker/file entity.
+   Returns nil to stop, {:select-block uuid}, or {:select-all-page page}."
+  [block current-page]
+  (let [parent (:block/parent block)
+        parent-uuid (or (:block/uuid parent) (:block/parent-uuid block))]
+    (cond
+      (= current-page (str (:block/uuid block)))
+      nil
+
+      (and parent-uuid (not (select-parent-page? parent)))
+      {:select-block parent-uuid}
+
+      (select-parent-page? parent)
+      {:select-all-page (or (:block/name parent)
+                            (some-> (:block/uuid parent) str))})))
+
+(defn- select-parent-block-node
+  "Parent row in the selected child's view. An embed or sidebar copy of the
+   same uuid is ignored; if this view has no parent row, keep the selection."
+  [selected-node parent-uuid]
+  (when (and selected-node parent-uuid)
+    (let [parent-id (str parent-uuid)
+          visual (get-node-parent selected-node)
+          container-id (row-container-id selected-node)
+          rows (util/get-blocks-by-id parent-uuid)]
+      (or (when (= parent-id (dom/attr visual "blockid"))
+            visual)
+          (when container-id
+            (some #(when (= container-id (row-container-id %)) %) rows))))))
+
 (defn select-parent [e]
   (let [edit-input (some-> (state/get-edit-input-id) gdom/getElement)
         edit-block (state/get-edit-block)
@@ -4131,23 +4170,19 @@
       (do
         (util/stop e)
         (when-not (state/get-state :selection/selected-all?)
-          (if-let [block-id (some-> (first (state/get-selection-blocks))
-                                    (dom/attr "blockid")
-                                    uuid)]
-            (p/let [block (db-async/<get-block (state/get-current-repo) block-id)]
-              (when block
-                (let [parent (:block/parent block)]
-                  (cond
-                    (= (state/get-current-page) (str (:block/uuid block)))
-                    nil
+          (if-let [selected (first (state/get-selection-blocks))]
+            (if-let [block-id (some-> selected (dom/attr "blockid") uuid)]
+              (p/let [block (db-async/<get-block (state/get-current-repo) block-id)]
+                (when block
+                  (let [target (select-parent-target block (state/get-current-page))]
+                    (cond
+                      (:select-block target)
+                      (when-let [parent-node (select-parent-block-node selected (:select-block target))]
+                        (state/exit-editing-and-set-selected-blocks! [parent-node]))
 
-                    (and parent (:block/parent parent))
-                    (state/exit-editing-and-set-selected-blocks!
-                     [(util/get-first-block-by-id (:block/uuid parent))])
-
-                    (:block/name parent)
-                    ;; page block
-                    (select-all-blocks! {:page (:block/name parent)})))))
+                      (:select-all-page target)
+                      (select-all-blocks! {:page (:select-all-page target)})))))
+              (select-all-blocks! {}))
             (select-all-blocks! {})))))))
 
 (defn escape-editing
