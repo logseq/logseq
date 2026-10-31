@@ -104,6 +104,28 @@
       (is (string/includes? markup "1"))
       (is (string/includes? markup "2")))))
 
+(deftest function-macro-child-sees-query-result-after-parent-rerender
+  ;; https://github.com/logseq/logseq/issues/12949
+  (let [block {:block/uuid (random-uuid)}
+        rows [(random-uuid) (random-uuid)]
+        build-config #'block/build-config
+        ;; The block container keeps one atom per mounted block (a use-memo) and passes it on
+        *query-result (atom nil)
+        ;; First render of the query block: children capture this config
+        first-render-config (build-config {} block {:*query-result *query-result})
+        ;; The query block re-renders (e.g. while its query is still loading)
+        ;; and the query component publishes its rows to the config it received
+        second-render-config (build-config {} block {:*query-result *query-result})]
+    (reset! (:query-result second-render-config) rows)
+    (testing "{{function (count result)}} child still renders with its first-render config"
+      (let [markup (with-redefs [hooks/use-memo (fn [f _deps] (f))
+                                 hooks/use-atom (fn [a] [@a #(reset! a %)])]
+                     (render-static
+                      (block/macro-function-cp first-render-config
+                                               ["(count result)"])))]
+        (is (string/includes? markup "2"))
+        (is (not (string/includes? markup "warning")))))))
+
 (defn- render-user-macro
   [macro-name arguments]
   (#'block/macro-cp {} {:name macro-name :arguments arguments}))

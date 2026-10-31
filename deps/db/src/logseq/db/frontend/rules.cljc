@@ -103,7 +103,16 @@
     '[[(ref->val ?pv ?val)
        [?pv :block/title ?val]]
       [(ref->val ?pv ?val)
-       [?pv :logseq.property/value ?val]]]
+       [?pv :logseq.property/value ?val]]
+      ;; A node in a text property is a value block titled `[[<node uuid>]]`.
+      ;; Its value is the node's title, as for a :node property.
+      [(ref->val ?pv ?val)
+       [?pv :block/refs ?node]
+       [?node :block/uuid ?node-uuid]
+       [?pv :block/title ?pv-title]
+       [(str "[[" ?node-uuid "]]") ?node-ref]
+       [(= ?pv-title ?node-ref)]
+       [?node :block/title ?val]]]
 
     :property-missing-value
     '[(property-missing-value ?b ?prop-e ?default-p ?default-v)
