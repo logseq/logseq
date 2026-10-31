@@ -506,6 +506,23 @@
           (let [v-uuid (create-property-text-block! conn nil property-id v {})]
             (:db/id (d/entity @conn [:block/uuid v-uuid])))))))
 
+(defn- other-node-text-value
+  "The text value block `v` when it belongs to a node other than `block-id`. A
+  text value block is a child of the node it was created for, so it can't be
+  shared: deleting that node deletes it."
+  [db property-id v block-id]
+  (when (and block-id (pos-int? v))
+    (let [value (d/entity db v)
+          property (d/entity db property-id)
+          parent-id (:db/id (:block/parent value))]
+      (when (and (contains? #{:default :url} (:logseq.property/type property))
+                 (= property-id (:db/ident (:logseq.property/created-from-property value)))
+                 (not (ldb/closed-value? value))
+                 parent-id
+                 (not= parent-id (:db/id property))
+                 (not= parent-id (:db/id (d/entity db block-id))))
+        value))))
+
 (defn- convert-ref-property-value
   "Converts a ref property's value whether it's an integer or a string. Creates
    a property ref value for a string value if necessary"
@@ -514,6 +531,11 @@
     (cond
       (and (qualified-keyword? v) (not= :keyword property-type))
       (db-ident->eid @conn v)
+
+      (other-node-text-value @conn property-id v block-id)
+      (find-or-create-property-value conn property-id
+                                     (db-property/property-value-content (d/entity @conn v))
+                                     block-id)
 
       (and (coll? v)
            (every? integer? v)
@@ -755,6 +777,47 @@
                                :i18n-key :page.validation/alias-batch-multiple-owners
                                :message "Aliases can't be batch-set on multiple pages."}}))))
 
+(defn- retract-value-blocks-tx
+  "Tx data retracting `values` with their children. Not outliner-core/delete-blocks:
+  for a property with a default value, it sets the holders of one deleted value
+  block to the empty placeholder, which would overwrite their new value."
+  [db values]
+  (->> values
+       (mapcat (fn [value] (cons (:db/id value) (ldb/get-block-full-children-ids db (:db/id value)))))
+       distinct
+       (map (fn [id] [:db/retractEntity id]))))
+
+(defn- released-value-blocks-tx
+  "Tx data deleting the text value blocks of `property` among `value-ids` that
+  no node outside `releasing-ids` holds, once those nodes stop holding them.
+  Closed values, pages, the property's default value and values a property
+  history record holds are kept."
+  [db property value-ids releasing-ids]
+  (let [releasing-ids (set releasing-ids)
+        default-value-id (:db/id (:logseq.property/default-value property))
+        released (->> (distinct value-ids)
+                      (keep #(d/entity db %))
+                      (filter (fn [value]
+                                (and (= (:db/id property)
+                                        (:db/id (:logseq.property/created-from-property value)))
+                                     (not (entity-util/page? value))
+                                     (not (ldb/closed-value? value))
+                                     (not= default-value-id (:db/id value))
+                                     (empty? (:logseq.property.history/_ref-value value))
+                                     (every? (fn [holder-id] (contains? releasing-ids holder-id))
+                                             (d/q '[:find [?e ...]
+                                                    :in $ ?property-ident ?value-id
+                                                    :where [?e ?property-ident ?value-id]]
+                                                  db (:db/ident property) (:db/id value)))))))]
+    (retract-value-blocks-tx db released)))
+
+(defn- entity-ids
+  [value]
+  (cond
+    (de/entity? value) [(:db/id value)]
+    (coll? value) (keep #(when (de/entity? %) (:db/id %)) value)
+    :else nil))
+
 (defn ^:large-vars/cleanup-todo batch-set-property!
   "Sets properties for multiple blocks. Automatically handles property value refs.
    Does no validation of property values. For :many properties, passing a collection
@@ -796,27 +859,39 @@
                 v)
            _ (when (nil? v')
                (throw (ex-info "Property value must be not nil" {:v v})))
-           txs (doall
-                (mapcat
-                 (fn [eid]
-                   (if-let [block (d/entity @conn eid)]
-                     (let [v' (if (and default-url-not-closed?
-                                       (not (and (keyword? v) entity-id?)))
-                                (convert-ref-property-values conn property-id v' property-type
-                                                             {:many? many?
-                                                              :block-id (:db/id block)})
-                                v')]
-                       (throw-error-if-self-value block v' ref?)
-                       (throw-error-if-invalid-property-value @conn property v')
-                       (when (= property-id :block/alias)
-                         (doseq [alias-id (if (coll? v') v' [v'])]
-                           (when (number? alias-id)
-                             (throw-error-if-invalid-alias @conn block alias-id))))
-                       (build-property-value-tx-data conn block property-id v'))
-                     (js/console.error "Skipping setting a block's property because the block id could not be found:" eid)))
-                 block-eids))]
+           blocks+values (doall
+                          (keep
+                           (fn [eid]
+                             (if-let [block (d/entity @conn eid)]
+                               (let [v' (if (and default-url-not-closed?
+                                                 (not (and (keyword? v) entity-id?)))
+                                          (convert-ref-property-values conn property-id v' property-type
+                                                                       {:many? many?
+                                                                        :block-id (:db/id block)})
+                                          v')]
+                                 (throw-error-if-self-value block v' ref?)
+                                 (throw-error-if-invalid-property-value @conn property v')
+                                 (when (= property-id :block/alias)
+                                   (doseq [alias-id (if (coll? v') v' [v'])]
+                                     (when (number? alias-id)
+                                       (throw-error-if-invalid-alias @conn block alias-id))))
+                                 [block v'])
+                               (js/console.error "Skipping setting a block's property because the block id could not be found:" eid)))
+                           block-eids))
+           txs (mapcat (fn [[block v']] (build-property-value-tx-data conn block property-id v'))
+                       blocks+values)
+           ;; The blocks whose values build-property-value-tx-data replaces: a :many
+           ;; property's values are replaced by a sequential value, and kept otherwise
+           replacing (when ref?
+                       (filter (fn [[_ v']] (or (not many?) (sequential? v'))) blocks+values))
+           set-ids (set (mapcat (fn [[_ v']] (if (coll? v') v' [v'])) blocks+values))
+           released-tx (released-value-blocks-tx @conn property
+                                                 (remove set-ids
+                                                         (mapcat (fn [[block _]] (entity-ids (get block property-id)))
+                                                                 replacing))
+                                                 (map (comp :db/id first) replacing))]
        (when (seq txs)
-         (ldb/transact! conn txs {:outliner-op :batch-set-property}))))))
+         (ldb/transact! conn (concat txs released-tx) {:outliner-op :batch-set-property}))))))
 
 (defn remove-block-property!
   [conn eid property-id]
@@ -874,6 +949,18 @@
       (ldb/transact! conn tx-data
                      {:outliner-op :save-block}))))
 
+(defn- throw-error-no-matching-choice
+  [value]
+  (let [reason "it isn't one of the property's choices"]
+    (throw (ex-info "Invalid choice"
+                    {:error :value-invalid
+                     :value value
+                     :type :notification
+                     :payload {:message (str "Invalid choice \"" value "\" for this property: " reason ".")
+                               :i18n-key :property.choice/invalid
+                               :i18n-args [value reason]
+                               :type :warning}}))))
+
 (defn ^:large-vars/cleanup-todo set-block-property!
   "Updates a block property's value for an existing property-id and block.  If
   property is a ref type, automatically handles a raw property value i.e. you
@@ -898,7 +985,12 @@
                 (normalize-extends-value @conn v)
 
                 ref?
-                (convert-ref-property-value conn property-id v property-type {:block-id block-eid})
+                (let [v' (convert-ref-property-value conn property-id v property-type {:block-id block-eid})]
+                  ;; nil removes the property, so a value that matches no choice must not become nil
+                  (when (and (some? v) (nil? v')
+                             (seq (entity-plus/lookup-kv-then-entity property :property/closed-values)))
+                    (throw-error-no-matching-choice v))
+                  v')
 
                 :else
                 v)]
@@ -1045,7 +1137,9 @@
                      (remove-block-property! conn (:db/id block) property-id)
                      (when match-id
                        (ldb/transact! conn
-                                      [[:db/retract (:db/id block) property-id match-id]]
+                                      (concat
+                                       [[:db/retract (:db/id block) property-id match-id]]
+                                       (released-value-blocks-tx @conn property [match-id] [(:db/id block)]))
                                       {:outliner-op :save-block})))))))))))))
 
 (defn delete-property-value!
@@ -1212,8 +1306,31 @@
       scoped-class-id
       (conj [:db/add [:block/uuid block-id] :logseq.property/choice-classes scoped-class-id]))))
 
-(defn upsert-closed-value!
-  "id should be a block UUID or nil"
+(declare add-existing-values-to-closed-values!)
+
+(defn- non-choice-value-uuids
+  "The uuids of the value blocks of `property` that nodes hold and that aren't
+  its choices"
+  [db property]
+  (->> (d/q '[:find [?v ...]
+              :in $ ?property-ident
+              :where [_ ?property-ident ?v]]
+            db (:db/ident property))
+       (keep #(d/entity db %))
+       (filter #(= (:db/id property) (:db/id (:logseq.property/created-from-property %))))
+       (remove ldb/closed-value?)
+       (map :block/uuid)))
+
+(defn- non-choice-values-to-choices!
+  "Makes the values nodes hold for the property that aren't its choices choices
+  too, as Add choice offers in the UI: a property with choices can only hold
+  its choices, and validate-db deletes the others."
+  [conn property-id]
+  (when-let [value-uuids (seq (non-choice-value-uuids @conn (d/entity @conn property-id)))]
+    (add-existing-values-to-closed-values! conn property-id value-uuids)))
+
+(defn ^:large-vars/cleanup-todo upsert-closed-value!
+  "id should be a block UUID or nil. The property's other values become choices too."
   [conn property-id {:keys [id value description _scoped-class-id] :as opts}]
   (assert (or (nil? id) (uuid? id)))
   (let [db @conn
@@ -1258,6 +1375,7 @@
              {:outliner-op :upsert-closed-value}
              (fn [conn]
                (ldb/transact! conn tx-data)
+               (non-choice-values-to-choices! conn property-id)
                (when (seq description)
                  (if-let [desc-ent (and id (:logseq.property/description (d/entity db [:block/uuid id])))]
                    (ldb/transact! conn
@@ -1268,15 +1386,58 @@
                                         :logseq.property/description
                                         description)))))))))))
 
+(defn- same-text-values-to-choices-tx
+  "The value blocks of `property` whose content is the content of one of
+  `choices` (:copies), and the tx data making the nodes and history records
+  that hold them hold that choice instead (:repoint-tx), so the copies can be
+  deleted. Otherwise they stay values that aren't choices, which validate-db
+  deletes."
+  [db property choices]
+  (let [property-ident (:db/ident property)
+        choice-ids (set (map :db/id choices))
+        choice-by-content (into {} (map (juxt db-property/property-value-content identity)) choices)
+        default-value-id (:db/id (:logseq.property/default-value property))
+        copies (->> (d/datoms db :avet :logseq.property/created-from-property (:db/id property))
+                    (map #(d/entity db (:e %)))
+                    (remove (fn [value]
+                              (or (contains? choice-ids (:db/id value))
+                                  (ldb/closed-value? value)
+                                  (entity-util/page? value)
+                                  (= default-value-id (:db/id value)))))
+                    (keep (fn [value]
+                            (when-let [choice (choice-by-content (db-property/property-value-content value))]
+                              [value choice]))))]
+    {:copies (map first copies)
+     ;; The property history that records a copy records the choice instead: deleting
+     ;; the copy would delete those history records
+     :repoint-tx (mapcat (fn [[value choice]]
+                           (concat
+                            (mapcat (fn [{holder-id :e}]
+                                      [[:db/retract holder-id property-ident (:db/id value)]
+                                       [:db/add holder-id property-ident (:db/id choice)]])
+                                    (d/datoms db :avet property-ident (:db/id value)))
+                            (map (fn [history]
+                                   [:db/add (:db/id history) :logseq.property.history/ref-value (:db/id choice)])
+                                 (:logseq.property.history/_ref-value value))))
+                         copies)}))
+
 (defn add-existing-values-to-closed-values!
-  "Adds existing values as closed values and returns their new block uuids"
+  "Adds existing values as closed values and returns their new block uuids.
+  A value whose content is already a choice's, or another given value's, isn't
+  added: the nodes that hold it hold that choice instead."
   [conn property-id values]
   (when-let [property (d/entity @conn property-id)]
     (when (seq values)
       (let [values' (remove string/blank? values)]
         (assert (every? uuid? values') "existing values should all be UUIDs")
-        (let [values (keep #(d/entity @conn [:block/uuid %]) values')]
-          (when (seq values)
+        (let [choices (:block/_closed-value-property property)
+              choice-contents (set (map db-property/property-value-content choices))
+              values (->> values'
+                          (keep #(d/entity @conn [:block/uuid %]))
+                          (remove #(contains? choice-contents (db-property/property-value-content %)))
+                          (common-util/distinct-by db-property/property-value-content))
+              {:keys [copies repoint-tx]} (same-text-values-to-choices-tx @conn property (concat choices values))]
+          (when (or (seq values) (seq copies))
             (let [property-db-id (:db/id property)
                   value-property-tx (map (fn [id]
                                            {:db/id id
@@ -1285,8 +1446,12 @@
                                             :block/page property-db-id})
                                          (map :db/id values))
                   property-tx (outliner-core/block-with-updated-at {:db/id property-db-id})]
-              (ldb/transact! conn (cons property-tx value-property-tx)
-                             {:outliner-op :add-existing-values-to-closed-values}))))))))
+              (ldb/transact! conn (concat [property-tx] value-property-tx repoint-tx)
+                             {:outliner-op :add-existing-values-to-closed-values})
+              (when (seq copies)
+                (ldb/transact! conn
+                               (retract-value-blocks-tx @conn copies)
+                               {:outliner-op :add-existing-values-to-closed-values})))))))))
 
 (defn delete-closed-value!
   "Returns true when deleted or if not deleted displays warning and returns false"
