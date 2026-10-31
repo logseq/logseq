@@ -287,6 +287,13 @@
             (string/replace acc escape-char (str "\\" escape-char)))
           old-value escape-chars))
 
+(defn replace-literal
+  "Like `string/replace` but `replacement` is inserted as is. A string
+  replacement given to `string/replace` expands `$$`, `$&`, `` $` `` and `$'`,
+  which mangles text such as page titles."
+  [s match replacement]
+  (string/replace s match (fn [& _] replacement)))
+
 (defn replace-ignore-case
   [s old-value new-value]
   (string/replace s (re-pattern (str "(?i)" (escape-regex-chars old-value))) new-value))
