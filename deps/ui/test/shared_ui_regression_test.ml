@@ -129,22 +129,40 @@ let localization () =
     check "Timestamp choices resolve the initialized locale"
       (List.exists (fun (_,label) -> label="Translated Custom date") (I18n.timestamp_options ())))
 
-let settings_config ~registry ~profile =
+let settings_config ~registry ~profile ~finish =
   let previous_settings = !Settings_state.st and previous_model = !Runtime.read_model
-  and previous_worker = !Runtime.worker and previous_flush = !Runtime.app_flush in
-  Fun.protect ~finally:(fun () ->
+  and previous_worker = !Runtime.worker and previous_flush = !Runtime.app_flush
+  and previous_send = !Runtime.app_send and previous_published = !Sdk_config.published_config in
+  let rec next = function
+  | [] ->
     Settings_state.st:=previous_settings;Runtime.read_model:=previous_model;
-    Runtime.worker:=previous_worker;Runtime.app_flush:=previous_flush) (fun () ->
-    List.iter (fun owner ->
+    Runtime.worker:=previous_worker;Runtime.app_flush:=previous_flush;
+    Runtime.app_send:=previous_send;Sdk_config.published_config:=previous_published;
+    finish ()
+  | owner::rest ->
       Settings_state.st:=None;
+      Sdk_config.published_config:=None;
       let config checked = Wire.Map [Wire.kw "ui/show-brackets?",Wire.Bool checked;
         Wire.kw "start-of-week",Wire.Int 2;Wire.kw "custom-fixture",Wire.String "retained"] in
+      let files=Hashtbl.create 2 in
+      List.iter (fun repo -> Hashtbl.add files repo (config false))
+        ["settings-config-fixture";"second-settings-fixture"];
       let current=ref {Model.initial with repo=Some "settings-config-fixture";
-        graph_config=config false} and requests=ref [] in
+        graph_config=config false} in
       Runtime.read_model:=(fun () -> !current);
       Runtime.worker:=Some {Worker_client.invoke_fn=(fun name args ->
-        requests:=(name,args)::!requests;
-        Js.Promise.make (fun ~resolve:_ ~reject:_ -> ()));
+        match name,args with
+        | "thread-api/get-file-content",[Wire.String repo;Wire.String "logseq/config.edn"] ->
+            Js.Promise.resolve (Wire.String (Edn.to_string (Hashtbl.find files repo)))
+        | "thread-api/pull",[Wire.String repo;Wire.String _;_] ->
+            ignore (Hashtbl.find files repo);
+            Js.Promise.resolve Wire.Nil
+        | "thread-api/transact",Wire.String repo::Wire.Array [file]::_ ->
+            (match Wire.get file "file/content" with
+             | Some (Wire.String content) -> Hashtbl.replace files repo (Edn.parse content)
+             | _ -> failwith "Settings fixture requires config file content");
+            Js.Promise.resolve Wire.Nil
+        | _ -> failwith ("Unexpected Settings config request: " ^ name));
         on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
       let session=S.mount ~registry ~profile ~initial:!current
         ~reducer:(fun model action ->
@@ -154,6 +172,15 @@ let settings_config ~registry ~profile =
           | "page" -> Settings_page.view ms
           | _ -> Settings_page.modal_body ms) () in
       Runtime.app_flush:=(fun () -> S.flush session);
+      let complete=ref (fun () -> ()) in
+      let saved=Js.Promise.make (fun ~resolve ~reject:_ ->
+        complete:=(fun () -> resolve true [@u])) in
+      Runtime.app_send:=(fun action ->
+        let changed=Lui_app.send session.S.app action in
+        (match action with
+         | Action.Graph_config_loaded ("second-settings-fixture",_) -> !complete ()
+         | _ -> ());
+        changed);
       if owner<>"appearance" then (Settings_state.set_tab "editor";S.flush session);
       let switch () =
         let rec descendant node =
@@ -167,6 +194,7 @@ let settings_config ~registry ~profile =
       check (owner ^ " reads persisted config before Settings has loaded")
         (Hashtbl.find_opt (switch ()).M.props "checked"=Some (P.BoolValue false));
       let publish repo cfg =
+        Hashtbl.replace files repo cfg;
         ignore (Lui_app.send session.S.app (Action.Graph_config_loaded (repo,cfg)));
         S.flush session in
       publish "settings-config-fixture" (config true);
@@ -180,15 +208,15 @@ let settings_config ~registry ~profile =
       check (owner ^ " follows the newly opened graph configuration")
         (Hashtbl.find_opt (switch ()).M.props "checked"=Some (P.BoolValue false));
       S.toggle session (switch ()).M.id true;
-      check (owner ^ " preserves other graph preferences when toggled")
-        (List.exists (function
-          | "thread-api/transact",Wire.String repo::Wire.Array [file]::_ ->
-              repo="second-settings-fixture" &&
-              (match Wire.get file "file/content" with
-               | Some (Wire.String content) -> Edn.parse content=config true
-               | _ -> false)
-          | _ -> false) !requests);
-      ignore (Lui_app.dispose session.S.app)) ["appearance";"page";"dialog"])
+      ignore (Js.Promise.then_ (fun _ ->
+        check (owner ^ " preserves other graph preferences when toggled")
+          (Hashtbl.find files "second-settings-fixture"=config true
+           && Hashtbl.find files "settings-config-fixture"=config false
+           && (!current).Model.graph_config=config true);
+        ignore (Lui_app.dispose session.S.app);
+        next rest;Js.Promise.resolve ()) saved)
+  in
+  next ["appearance";"page";"dialog"]
 
 let flashcards_config ~registry ~profile =
   let previous_settings = !Settings_state.st and previous_model = !Runtime.read_model
@@ -352,7 +380,7 @@ let run_views ~registry ~profile ~finish =
   table_resize_transaction ();
   table_range_selection ();
   grouped_table_selection ~registry ~profile;
-  settings_config ~registry ~profile;
+  settings_config ~registry ~profile ~finish:(fun () ->
   flashcards_config ~registry ~profile;
   let previous_flush = !Runtime.app_flush in
   let previous_preset = Ui_services.storage_get "ls-icon-color-preset" in
@@ -2911,7 +2939,7 @@ let run_views ~registry ~profile ~finish =
       Graphs_ops.on_repos_changed := repos_changed_before;
       async_selection_check (fun () -> filter_value_check (fun () ->
         filter_reference_titles_check (fun () -> filter_edit_check (fun () -> filter_operator_check (fun () -> page_name_filter_check (fun () -> filter_input_check ();filter_scope_check ();config_boot_check (fun () -> config_save_check (fun () -> custom_date_check (fun () -> type_choice_check (fun () -> Runtime.app_flush := previous_flush;finish ()))))))))));
-      Js.Promise.resolve ()) (Js.Promise.resolve ()))
+      Js.Promise.resolve ()) (Js.Promise.resolve ())))
 
 let popup_press (ev : Ui_services.ev) =
   let state_before = Editor_state.read () in
