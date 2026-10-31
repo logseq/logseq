@@ -181,6 +181,7 @@ let view ~placeholder ?(compact = false) ?(show_empty_result = true) ?(new_case_
            Ui_components.Prop.foreground "hsl(var(--foreground))";
            Ui_components.Prop.focus_shadow "none"] else [])
        (Ui_components.text_field ~placeholder ~autofocus:true
+         ~text:(reactive (fun state -> state.q) (Signal.value st))
          ?height:(if compact then Some 32 else None)
          ?padding:(if compact then Some 6 else None)
          ?style_class:(if compact then Some "ls-property-select-input" else None)
