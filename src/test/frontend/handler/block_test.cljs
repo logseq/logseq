@@ -99,16 +99,18 @@
           db @conn
           ancestor-id (:block/uuid (db-test/find-block-by-content db "ancestor"))
           leaf-id (:block/uuid (db-test/find-block-by-content db "leaf"))]
-      (p/with-redefs [db-async/<q (fn [_graph _opts query & inputs]
-                                  (p/resolved (apply d/q query db inputs)))
-                     state/get-edit-block (constantly nil)
-                     state/get-input (constantly nil)
-                     state/get-selection-blocks (constantly [])]
-        (-> (p/let [summaries (db-async/<get-block-summaries "graph" [leaf-id ancestor-id])]
-              (is (= [ancestor-id]
-                     (mapv :block/uuid (block-handler/get-top-level-blocks summaries)))))
-            (p/catch #(is false (str %)))
-            (p/finally done))))))
+      ;; done after p/with-redefs settles: it restores the redefs only then, and
+      ;; done may start the next test at once
+      (-> (p/with-redefs [db-async/<q (fn [_graph _opts query & inputs]
+                                      (p/resolved (apply d/q query db inputs)))
+                         state/get-edit-block (constantly nil)
+                         state/get-input (constantly nil)
+                         state/get-selection-blocks (constantly [])]
+            (-> (p/let [summaries (db-async/<get-block-summaries "graph" [leaf-id ancestor-id])]
+                  (is (= [ancestor-id]
+                         (mapv :block/uuid (block-handler/get-top-level-blocks summaries)))))
+                (p/catch #(is false (str %)))))
+          (p/finally done)))))
 
 (deftest edit-block-loads-target-through-worker-test
   (async done
@@ -117,55 +119,57 @@
                         :block/uuid block-id
                         :block/title "worker title"}
           calls (atom [])]
-      (p/with-redefs [state/get-current-repo (constantly "test")
-                      db-async/<get-block
-                      (fn [repo id opts]
-                        (swap! calls conj [:get-block repo id opts])
-                        (p/resolved loaded-block))
-                      state/pub-event!
-                      (fn [event]
-                        (swap! calls conj [:event event]))
-                      state/get-edit-block
-                      (constantly nil)
-                      state/clear-edit!
-                      (fn [& args]
-                        (swap! calls conj (into [:clear-edit] args)))
-                      state/clear-selection!
-                      (fn []
-                        (swap! calls conj [:clear-selection]))
-                      state/get-current-editor-container-id
-                      (constantly :test-container)
-                      state/set-editing!
-                      (fn [& args]
-                        (swap! calls conj (into [:set-editing] args)))
-                      state/set-editor-last-input-time!
-                      (fn [repo _time]
-                        (swap! calls conj [:mark-input repo]))]
-        (-> (block-handler/edit-block! {:block/uuid block-id
-                                         :block/title "stale title"}
-                                        :max)
-            (p/then
-             (fn []
-               (is (= [[:get-block "test" block-id {:children? false}]
-                       [:event [:editor/save-code-editor]]
-                       [:event [:editor/save-current-block]]
-                       [:clear-edit {:clear-editing-block? false}]
-                       [:clear-selection]
-                       [:set-editing
-                        (str "edit-block-" block-id)
-                        "worker title"
-                        loaded-block
-                        "worker title"
-                        {:container-id :test-container
-                         :direction nil
-                         :event nil
-                         :pos :max}]
-                       [:mark-input "test"]]
-                      @calls))))
-            (p/catch
-             (fn [error]
-               (is false (str error))))
-            (p/finally done))))))
+      ;; done after p/with-redefs settles: it restores the redefs only then, and
+      ;; done may start the next test at once
+      (-> (p/with-redefs [state/get-current-repo (constantly "test")
+                          db-async/<get-block
+                          (fn [repo id opts]
+                            (swap! calls conj [:get-block repo id opts])
+                            (p/resolved loaded-block))
+                          state/pub-event!
+                          (fn [event]
+                            (swap! calls conj [:event event]))
+                          state/get-edit-block
+                          (constantly nil)
+                          state/clear-edit!
+                          (fn [& args]
+                            (swap! calls conj (into [:clear-edit] args)))
+                          state/clear-selection!
+                          (fn []
+                            (swap! calls conj [:clear-selection]))
+                          state/get-current-editor-container-id
+                          (constantly :test-container)
+                          state/set-editing!
+                          (fn [& args]
+                            (swap! calls conj (into [:set-editing] args)))
+                          state/set-editor-last-input-time!
+                          (fn [repo _time]
+                            (swap! calls conj [:mark-input repo]))]
+            (-> (block-handler/edit-block! {:block/uuid block-id
+                                             :block/title "stale title"}
+                                            :max)
+                (p/then
+                 (fn []
+                   (is (= [[:get-block "test" block-id {:children? false}]
+                           [:event [:editor/save-code-editor]]
+                           [:event [:editor/save-current-block]]
+                           [:clear-edit {:clear-editing-block? false}]
+                           [:clear-selection]
+                           [:set-editing
+                            (str "edit-block-" block-id)
+                            "worker title"
+                            loaded-block
+                            "worker title"
+                            {:container-id :test-container
+                             :direction nil
+                             :event nil
+                             :pos :max}]
+                           [:mark-input "test"]]
+                          @calls))))
+                (p/catch
+                 (fn [error]
+                   (is false (str error))))))
+          (p/finally done)))))
 
 (deftest edit-block-with-loaded-data-updates-editor-synchronously-test
   (let [block-id #uuid "11111111-1111-1111-1111-111111111111"
@@ -200,16 +204,18 @@
                  :block/uuid block-id
                  :block/title "block"}
           calls (atom [])]
-      (p/with-redefs [block-handler/get-top-level-blocks (fn [_] [block])
-                      state/get-selection-blocks (constantly nil)
-                      state/get-edit-block (constantly block)
-                      state/set-editing-block-id! (fn [value]
-                                                    (swap! calls conj [:set-editing value]))
-                      block-handler/outliner-tx-meta (constantly nil)
-                      outliner-op/indent-outdent-blocks! (fn [& _] nil)]
-        (-> (block-handler/indent-outdent-blocks! [block] true (constantly nil))
-            (p/then (fn []
-                      (is (empty? @calls))))
-            (p/catch (fn [error]
-                       (is false (str error))))
-            (p/finally done))))))
+      ;; done after p/with-redefs settles: it restores the redefs only then, and
+      ;; done may start the next test at once
+      (-> (p/with-redefs [block-handler/get-top-level-blocks (fn [_] [block])
+                          state/get-selection-blocks (constantly nil)
+                          state/get-edit-block (constantly block)
+                          state/set-editing-block-id! (fn [value]
+                                                        (swap! calls conj [:set-editing value]))
+                          block-handler/outliner-tx-meta (constantly nil)
+                          outliner-op/indent-outdent-blocks! (fn [& _] nil)]
+            (-> (block-handler/indent-outdent-blocks! [block] true (constantly nil))
+                (p/then (fn []
+                          (is (empty? @calls))))
+                (p/catch (fn [error]
+                           (is false (str error))))))
+          (p/finally done)))))
