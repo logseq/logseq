@@ -26,6 +26,12 @@ function readJSON(file) {
   try { return JSON.parse(fs.readFileSync(file, 'utf8')); }
   catch (error) { if (error.code === 'ENOENT') return null; throw error; }
 }
+// state.json is replaced atomically, so one that cannot be read or parsed was damaged from outside. Like other
+// invalid lifecycle metadata it is refused with a coded error and left as it is, never rewritten.
+function readState(file) {
+  try { return readJSON(file); }
+  catch (error) { throw Object.assign(new Error(`Invalid lifecycle state: ${error.message}`, { cause: error }), { code: 'server-stop-failed' }); }
+}
 function writeJSON(file, value) {
   const temporary = `${file}.${id()}.tmp`;
   try {
@@ -65,17 +71,22 @@ function resolveStorage(root, graphsDir) {
   fs.mkdirSync(lifecycleDir, { recursive: true });
   return { root, graphsDir, lifecycleDir };
 }
-function context(storage, repo) {
+// `unsignalableIsGone` chooses how every liveness probe made for this context treats a PID this user cannot
+// signal (see pidExists); the default is the strict one.
+function context(storage, repo, unsignalableIsGone = false) {
   const { root, graphsDir, lifecycleDir } = storage;
   if (!root || !graphsDir || !lifecycleDir) fail('Canonical storage context is required');
   repo = graphName(repo);
   const dir = path.join(lifecycleDir, encodeGraph(repo));
   fs.mkdirSync(dir, { recursive: true });
   return { root, graphsDir, lifecycleDir, repo, dir, graphDir: path.join(graphsDir, encodeGraph(repo)),
-    stateFile: path.join(dir, 'state.json') };
+    stateFile: path.join(dir, 'state.json'),
+    pidExists: unsignalableIsGone ? pid => pidExists(pid, { unsignalableIsGone: true }) : pidExists };
 }
+// The liveness probe of a context; runtime objects built by other callers have none and are strict.
+const existsFor = ctx => ctx.pidExists || pidExists;
 function snapshot(storage, repo) {
-  return readJSON(path.join(storage.lifecycleDir, encodeGraph(repo), 'state.json'));
+  return readState(path.join(storage.lifecycleDir, encodeGraph(repo), 'state.json'));
 }
 function sameStorage(ctx, value) {
   return value && value.graphsDir && value.lifecycleDir
@@ -84,10 +95,25 @@ function sameStorage(ctx, value) {
 }
 
 // PID existence deliberately does not establish OS process-instance identity.
-function pidExists(pid) {
+// EPERM means the PID belongs to a process this user cannot signal. Delete and stop treat that as an error,
+// because they must not go on while a process they cannot stop may hold the graph. Startup cleanup, start,
+// create and admit pass `unsignalableIsGone`: a worker is always signalable by the user who started it, so
+// such a PID has been reused by someone else's process and the record is stale; whether a worker really
+// holds the graph is decided by the ownership lock, which they all take or test next.
+function pidExists(pid, { unsignalableIsGone = false } = {}) {
   if (!Number.isSafeInteger(pid) || pid <= 0) fail('Invalid PID');
   try { process.kill(pid, 0); return true; }
-  catch (error) { if (error.code === 'ESRCH') return false; throw error; }
+  catch (error) {
+    if (error.code === 'ESRCH' || (unsignalableIsGone && error.code === 'EPERM')) return false;
+    throw error;
+  }
+}
+// A publication whose PID cannot be signalled may be a worker of this graph that was never registered. It is never
+// taken for gone, whichever probe the caller uses for registered workers: it is probed through its port instead,
+// and neither refused on its PID nor removed from server-list.
+function publishedPidMayRun(pid) {
+  try { return pidExists(pid); }
+  catch (error) { if (error.code === 'EPERM') return true; throw error; }
 }
 function signalProcess(pid, signal) {
   if (pid === process.pid) fail('Cannot stop the calling process');
@@ -122,7 +148,7 @@ async function acquireLease(ctx, operation, checkWaiting) {
       released = true;
       try {
         // The action may have replaced the generation or advanced deletion state.
-        const latest = readJSON(ctx.stateFile);
+        const latest = readState(ctx.stateFile);
         if (latest?.owner?.id !== owner.id) fail('Lifecycle lease ownership changed');
         delete latest.owner;
         writeJSON(ctx.stateFile, latest);
@@ -143,12 +169,13 @@ async function withLease(ctx, operation, action, checkWaiting) {
   try { return await action(); } finally { release(); }
 }
 function state(ctx) {
-  let value = readJSON(ctx.stateFile);
+  let value = readState(ctx.stateFile);
   if (value === null && !fs.existsSync(ctx.stateFile)) {
     value = { generation: id(), phase: fs.existsSync(ctx.graphDir) ? 'available' : 'absent', workers: [] };
     writeJSON(ctx.stateFile, value);
   }
-  if (!value || !Array.isArray(value.workers) || typeof value.generation !== 'string' || typeof value.phase !== 'string')
+  if (!value || !Array.isArray(value.workers) || typeof value.generation !== 'string' || typeof value.phase !== 'string'
+      || value.workers.some(record => !record || typeof record !== 'object' || Array.isArray(record)))
     fail('Invalid lifecycle state');
   return value;
 }
@@ -164,7 +191,7 @@ function ownershipAvailable(ctx) {
   return true;
 }
 async function createGraph(storage, repo) {
-  const ctx = context(storage, repo);
+  const ctx = context(storage, repo, true);
   return withLease(ctx, 'create', async () => {
     const current = state(ctx);
     if (current.phase === 'available' && fs.existsSync(ctx.graphDir)) return current.generation;
@@ -185,7 +212,7 @@ function runtimeFile(ctx, ticket) {
   return path.join(ctx.dir, `runtime-${ticket}.json`);
 }
 async function admit({ storage, repo, ticket, generation, owner }) {
-  const ctx = context(storage, repo);
+  const ctx = context(storage, repo, true);
   if (!owner) fail('Worker owner is required');
   return withLease(ctx, 'admit', async () => {
     const current = state(ctx);
@@ -199,7 +226,7 @@ async function admit({ storage, repo, ticket, generation, owner }) {
       validateRegistration(ctx, current, record);
     }
     const previous = ticket ? [] : (await discover(ctx, current)).targets;
-    if (previous.some(pending)) fail('Graph ownership admission is pending', 'repo-locked');
+    if (previous.some(target => pending(target, existsFor(ctx)))) fail('Graph ownership admission is pending', 'repo-locked');
     const handle = acquireOwnership(ctx);
     try {
       if (!record) {
@@ -215,7 +242,7 @@ async function admit({ storage, repo, ticket, generation, owner }) {
       return runtime;
     } catch (error) { handle.release(); throw error; }
   }, ticket ? () => {
-    const current = readJSON(ctx.stateFile);
+    const current = readState(ctx.stateFile);
     if (current?.generation !== generation || !current.workers.some(record => record.ticket === ticket && record.pid === process.pid))
       fail('Worker admission registration was revoked', 'server-start-failed');
   } : undefined);
@@ -224,8 +251,8 @@ function assertOwnership(runtime) {
   const handle = ownership.get(runtime);
   if (!handle) fail('Graph ownership handle is missing', 'repo-locked');
   handle.assert();
-  const current = readJSON(runtime.stateFile);
-  if (current.generation !== runtime.generation || !registered(current, runtime))
+  const current = readState(runtime.stateFile);
+  if (!current || current.generation !== runtime.generation || !registered(current, runtime))
     fail('Graph ownership admission changed', 'repo-locked');
 }
 function releaseOwnership(runtime) {
@@ -247,12 +274,13 @@ function runtimeRecord(runtime) {
     'ownership-protocol': runtime['ownership-protocol'] };
 }
 function checkAdmission(runtime) {
-  const current = readJSON(runtime.stateFile);
+  const current = readState(runtime.stateFile);
+  if (!current) fail('Worker admission registration changed', 'server-start-failed');
   requireAvailable(runtime, current, runtime.generation);
   if (!registered(current, runtime)) fail('Worker admission registration changed', 'server-start-failed');
 }
-function pending(target) {
-  return !target.phase && target.expires > Date.now() && pidExists(target.parent);
+function pending(target, exists = pidExists) {
+  return !target.phase && target.expires > Date.now() && exists(target.parent);
 }
 function registered(current, runtime) {
   return current.workers.some(record => Object.entries(runtimeRecord(runtime))
@@ -265,12 +293,16 @@ function recordStop(runtime, error) {
     error: error ? String(error.message || error) : null });
 }
 function abortAdmission(runtime, error) {
-  if (registered(readJSON(runtime.stateFile), runtime)) recordStop(runtime, error);
+  const current = readState(runtime.stateFile);
+  if (current && registered(current, runtime)) recordStop(runtime, error);
 }
 function entries(root) {
   let raw;
   try { raw = fs.readFileSync(path.join(root, 'server-list'), 'utf8'); }
-  catch (error) { if (error.code === 'ENOENT') return []; throw error; }
+  catch (error) {
+    if (error.code === 'ENOENT') return [];
+    throw Object.assign(new Error(`Unreadable server publication list: ${error.message}`, { cause: error }), { code: 'server-stop-failed' });
+  }
   return raw.split('\n').filter(line => line.trim()).map(line => {
     const match = line.trim().match(/^(\d+)\s+(\d+)$/);
     if (!match) fail('Invalid server publication');
@@ -298,18 +330,27 @@ function validateRegistration(ctx, current, record) {
       || record.graphsDir !== ctx.graphsDir || record.lifecycleDir !== ctx.lifecycleDir)
     fail('Invalid worker registration');
 }
-function readRuntime(ctx, record) {
+// A registration is stale when its PID is gone, or when nothing holds the graph and no start is pending: the PID
+// was then reused by an unrelated process, which is how a leftover record is handled everywhere else.
+function staleRegistration(ctx, record, exists) {
+  return !exists(record.pid) || (ownershipAvailable(ctx) && !pending(record, exists));
+}
+function readRuntime(ctx, record, exists = pidExists) {
   const file = runtimeFile(ctx, record.ticket);
   // A worker can create or remove its file mid-check (admission, publish,
-  // close, cleanup); confirm an empty read is stable before judging it.
+  // close, cleanup); confirm an unusable read is stable before judging it.
   for (let attempt = 0; ; attempt++) {
-    const runtime = readJSON(file);
-    if (runtime === null && fs.existsSync(file)) {
+    let runtime = null;
+    let unusable = false;
+    try { runtime = readJSON(file); }
+    catch { unusable = true; }
+    if (unusable || (runtime === null && fs.existsSync(file)) || (runtime !== null && (typeof runtime !== 'object' || Array.isArray(runtime)))) {
+      // A worker that is gone, or whose registration is stale, cannot be writing its file, so what it left
+      // unreadable is only stale.
+      if (staleRegistration(ctx, record, exists)) return null;
       if (attempt < 3) continue;
       fail('Invalid worker runtime metadata');
     }
-    if (runtime !== null && (typeof runtime !== 'object' || Array.isArray(runtime)))
-      fail('Invalid worker runtime metadata');
     if (runtime !== null && Object.entries(runtimeRecord(record)).some(([key, value]) => runtime[key] !== value))
       fail('Worker runtime identity differs from registration');
     return runtime;
@@ -334,6 +375,7 @@ function ignorableDiscoveryError(error) {
 // Routing observations live for one upgrade scan only. Shutdown still validates
 // the current registration and endpoint under the graph's lease.
 function publicationScan() {
+  const exists = pid => pidExists(pid, { unsignalableIsGone: true });
   const roots = new Map();
   const probes = new Map();
   const grouped = new Map();
@@ -355,6 +397,7 @@ function publicationScan() {
     return probes.get(key);
   };
   return {
+    pidExists: exists,
     entries: root => read(root).publications,
     matching: (root, pid) => read(root).byPid.get(pid) || [],
     probe,
@@ -362,7 +405,7 @@ function publicationScan() {
       if (!grouped.has(root)) grouped.set(root, (async () => {
         const groups = new Map();
         const results = await Promise.allSettled(read(root).publications.map(async candidate => {
-          if (!pidExists(candidate.pid)) return;
+          if (!publishedPidMayRun(candidate.pid)) return;
           let value;
           try { value = await probe(candidate); }
           catch (error) { if (!ignorableDiscoveryError(error)) throw error; }
@@ -380,12 +423,18 @@ function publicationScan() {
   };
 }
 async function discover(ctx, current, scan, registeredOnly = false) {
+  const exists = scan ? scan.pidExists : existsFor(ctx);
   const targets = new Map();
+  const goneDuplicates = [];
   for (const record of current.workers) {
     validateRegistration(ctx, current, record);
-    if (targets.has(record.pid)) fail('Duplicate worker registration');
-    const target = { ...record, ...readRuntime(ctx, record) };
-    targets.set(record.pid, target);
+    const target = { ...record, ...readRuntime(ctx, record, exists) };
+    if (targets.has(record.pid)) {
+      // Two registrations of one PID cannot be told apart while a worker runs under it; stale ones are only stale.
+      if (!staleRegistration(ctx, record, exists) || !staleRegistration(ctx, targets.get(record.pid), exists))
+        fail('Duplicate worker registration');
+      goneDuplicates.push(target);
+    } else targets.set(record.pid, target);
   }
   const attach = (target, candidate) => {
     if (target.port && target.port !== candidate.port) fail('Worker publication identity mismatch');
@@ -401,16 +450,16 @@ async function discover(ctx, current, scan, registeredOnly = false) {
   for (const root of new Set([ctx.root, ...current.workers.map(record => record.root)])) {
     if (scan) {
       for (const target of targets.values()) {
-        if (pidExists(target.pid)) for (const candidate of scan.matching(root, target.pid)) attach(target, candidate);
+        if (exists(target.pid)) for (const candidate of scan.matching(root, target.pid)) attach(target, candidate);
       }
       if (!registeredOnly) probes.push(async () => {
         for (const { candidate, value } of await scan.forGraph(root, ctx.repo))
-          if (pidExists(candidate.pid) && !targets.has(candidate.pid)) checkUnregistered(value);
+          if (publishedPidMayRun(candidate.pid) && !targets.has(candidate.pid)) checkUnregistered(value);
       });
     } else {
       for (const candidate of entries(root)) {
-        if (!pidExists(candidate.pid)) continue;
         const target = targets.get(candidate.pid);
+        if (!(target ? exists(candidate.pid) : publishedPidMayRun(candidate.pid))) continue;
         if (target) attach(target, candidate);
         else probes.push(async () => {
           let value;
@@ -423,7 +472,50 @@ async function discover(ctx, current, scan, registeredOnly = false) {
   }
   const results = await Promise.allSettled(probes.map(probe => probe()));
   for (const result of results) if (result.status === 'rejected') throw result.reason;
-  return { targets: [...targets.values()] };
+  return { targets: [...targets.values(), ...goneDuplicates] };
+}
+// The lock is created with writeFileSync, so a crash or a full disk can leave it empty or truncated,
+// and a lock without a holder PID has no live owner to wait for.
+// Returns null when the lock is gone, otherwise its raw text and its holder (null when unusable, which
+// includes a lock that cannot be read at all, such as one without permissions or a directory).
+function readServerListLock(lockFile) {
+  let raw;
+  try { raw = fs.readFileSync(lockFile, 'utf8'); }
+  catch (error) {
+    if (error.code === 'ENOENT') return null;
+    return { raw: '', holder: null };
+  }
+  try {
+    const holder = JSON.parse(raw);
+    if (holder && Number.isSafeInteger(holder.pid) && holder.pid > 0) return { raw, holder };
+  } catch (error) { if (!(error instanceof SyntaxError)) throw error; }
+  return { raw, holder: null };
+}
+// A live writer's lock is briefly empty between creating the file and writing the holder, so an
+// unusable lock only counts as stale once it has stayed unusable for this long (milliseconds).
+const UNUSABLE_LOCK_GRACE = 500;
+// The lock only guards server-list rewrites and its holders are this user's lifecycle processes, so a
+// holder PID this user cannot signal has been reused and the lock is stale.
+function serverListLockIsStale(lockFile, lock) {
+  if (lock.holder) return !pidExists(lock.holder.pid, { unsignalableIsGone: true });
+  try { return Date.now() - fs.statSync(lockFile).mtimeMs >= UNUSABLE_LOCK_GRACE; }
+  catch (error) { if (error.code === 'ENOENT') return false; throw error; }
+}
+// Staleness is a property of one lock file, not of its text: between judging a lock and removing it, another
+// reclaimer can delete it and a writer can create a new one (still empty until its holder is written), and
+// removing by path would take that live lock. So the lock is first renamed to a name only this call knows,
+// which fixes the instance, and judged again there. A live lock caught by mistake is put back.
+function reclaimServerListLock(lockFile) {
+  const claim = `${lockFile}.${id()}.reclaim`;
+  try { fs.renameSync(lockFile, claim); }
+  catch { return; } // another reclaimer took it, or it cannot be moved now; the caller retries
+  try {
+    const claimed = readServerListLock(claim);
+    if (claimed && !serverListLockIsStale(claim, claimed)) {
+      try { fs.linkSync(claim, lockFile); }
+      catch { /* taken again meanwhile */ }
+    }
+  } finally { fs.rmSync(claim, { force: true, recursive: true }); }
 }
 async function removeEntries(root, removed) {
   const lockFile = path.join(root, 'server-list.lock');
@@ -433,10 +525,8 @@ async function removeEntries(root, removed) {
     try { fs.writeFileSync(lockFile, JSON.stringify(owner), { flag: 'wx' }); break; }
     catch (error) {
       if (error.code !== 'EEXIST') throw error;
-      const previous = readJSON(lockFile);
-      if (previous && !pidExists(previous.pid)) {
-        if (readJSON(lockFile)?.['lock-id'] === previous['lock-id']) fs.unlinkSync(lockFile);
-      }
+      const previous = readServerListLock(lockFile);
+      if (previous && serverListLockIsStale(lockFile, previous)) reclaimServerListLock(lockFile);
       if (Date.now() >= deadline) fail('Timed out acquiring server-list lock');
       await sleep(25);
     }
@@ -450,7 +540,7 @@ async function removeEntries(root, removed) {
       fs.renameSync(temporary, file);
     } finally { fs.rmSync(temporary, { force: true }); }
   } finally {
-    if (readJSON(lockFile)?.['lock-id'] !== owner['lock-id']) fail('Server-list lock ownership changed');
+    if (readServerListLock(lockFile)?.holder?.['lock-id'] !== owner['lock-id']) fail('Server-list lock ownership changed');
     fs.unlinkSync(lockFile);
   }
 }
@@ -463,7 +553,8 @@ async function waitExit(pid, milliseconds) {
   return !pidExists(pid);
 }
 async function terminate(ctx, target, deleting, verified = false) {
-  if (!pidExists(target.pid)) return;
+  const exists = existsFor(ctx);
+  if (!exists(target.pid)) return;
   if (ownershipAvailable(ctx)) {
     // Free ownership fences abandoned tickets, but a verified endpoint still has
     // to exit before management can complete a stop or filesystem mutation.
@@ -478,7 +569,7 @@ async function terminate(ctx, target, deleting, verified = false) {
         return;
       }
     }
-    const waiting = pending(target);
+    const waiting = pending(target, exists);
     if (waiting) {
       const latest = state(ctx);
       latest.workers = latest.workers.filter(record => record.ticket !== target.ticket);
@@ -507,7 +598,7 @@ async function terminate(ctx, target, deleting, verified = false) {
 }
 async function shutdownAndWait(ctx, target, deleting, responsive) {
   if (target.pid === process.pid) fail('Cannot stop the calling process');
-  if (!pidExists(target.pid)) return;
+  if (!existsFor(ctx)(target.pid)) return;
   if (responsive) {
     try {
       const response = await request(target.port, '/v1/shutdown', 'POST',
@@ -528,12 +619,13 @@ async function shutdownAndWait(ctx, target, deleting, responsive) {
 }
 
 const legacy = require('./legacy-retirement.cjs')({ fail, readJSON, writeJSON, graphName, canonicalRoot,
-  sameStorage, pidExists, entries, request, shutdownAndWait, removeEntries, runtimeFile, state });
+  sameStorage, pidExists, publishedPidMayRun, entries, request, shutdownAndWait, removeEntries, runtimeFile, state });
 
 async function probeUpgradeTarget(ctx, target, operationDeadline) {
+  const exists = existsFor(ctx);
   const deadline = Math.min(operationDeadline, Date.now() + HEALTH_PROBE_BUDGET);
   for (;;) {
-    if (!pidExists(target.pid)) return { target };
+    if (!exists(target.pid)) return { target };
     try {
       return { target, value: await health(ctx, target, target.port, Math.max(1, deadline - Date.now())) };
     } catch (error) {
@@ -564,6 +656,8 @@ async function upgradeGraph(ctx, revision, initialScan, registeredOnly) {
   let publicationDeadline;
   let generation;
   let scan = initialScan;
+  // stopOutdatedWorkers makes the context lenient: startup cleanup takes an unsignalable PID for a reused one.
+  const exists = existsFor(ctx);
   for (;;) {
     checkDeadline();
     const observed = await withLease(ctx, 'upgrade', async () => {
@@ -580,9 +674,18 @@ async function upgradeGraph(ctx, revision, initialScan, registeredOnly) {
         // Free ownership fences expired/abandoned admissions. Preserve the
         // existing unverified termination rules; never signal a recycled PID
         // merely because an earlier endpoint probe succeeded.
-        if (available && !pending(target)) {
+        if (available && !pending(target, exists)) {
           await terminate(ctx, target, false);
           await cleanup(ctx, current, [target]);
+          // A gone worker's publication has no port on the target, so cleanup left it in server-list, where
+          // the strict probes of later start and stop calls would meet its unsignalable PID again. Discovery
+          // looked for it in every root of this graph, so it is removed from every one of them.
+          if (!exists(target.pid)) {
+            for (const root of new Set([ctx.root, ...current.workers.map(record => record.root)])) {
+              const published = scan.matching(root, target.pid);
+              if (published.length) await removeEntries(root, published);
+            }
+          }
           current.workers = current.workers.filter(record => record.ticket !== target.ticket);
           writeJSON(ctx.stateFile, current);
           retired.push(target);
@@ -591,7 +694,7 @@ async function upgradeGraph(ctx, revision, initialScan, registeredOnly) {
       return live;
     }, checkDeadline);
     if (!observed.length) return retired;
-    const unpublished = observed.find(target => pidExists(target.pid) && !target.port);
+    const unpublished = observed.find(target => exists(target.pid) && !target.port);
     if (unpublished) {
       if (waitingTicket !== unpublished.ticket) {
         waitingTicket = unpublished.ticket;
@@ -620,8 +723,8 @@ async function upgradeGraph(ctx, revision, initialScan, registeredOnly) {
       for (let index = 0; index < probes.length; index++) {
         const target = latest[index];
         const { value, error } = probes[index];
-        if (pidExists(target.pid)) {
-          if (available && !pending(target)) {
+        if (exists(target.pid)) {
+          if (available && !pending(target, exists)) {
             await terminate(ctx, target, false);
           } else {
             if (error) throw error;
@@ -652,7 +755,7 @@ async function stopOutdatedWorkers(storage, revision, repo) {
     : [repo];
   const scan = publicationScan();
   const results = await Promise.allSettled(names.map(name =>
-    upgradeGraph(context(storage, name), revision, scan, repo !== undefined)));
+    upgradeGraph(context(storage, name, true), revision, scan, repo !== undefined)));
   const errors = results.filter(result => result.status === 'rejected').map(result => result.reason);
   if (errors.length) throw new AggregateError(errors, `Outdated worker cleanup failed: ${errors.map(error => error.message).join('; ')}`);
   return results.flatMap(result => result.value);
@@ -661,7 +764,9 @@ async function cleanup(ctx, current, targets) {
   for (const root of new Set([ctx.root, ...targets.map(target => target.root)]))
     await removeEntries(root, targets);
   for (const target of targets) {
-    const record = readJSON(runtimeFile(ctx, target.ticket));
+    let record = null;
+    try { record = readJSON(runtimeFile(ctx, target.ticket)); }
+    catch { /* a runtime file the worker left unreadable has no close error to report */ }
     if (record?.error && !current.acknowledgedErrors?.includes(target.ticket)) {
       current.acknowledgedErrors = [...(current.acknowledgedErrors || []), target.ticket];
       writeJSON(ctx.stateFile, current);
@@ -676,7 +781,7 @@ async function stopUnderLease(ctx, current, deleting, owner) {
   const available = ownershipAvailable(ctx);
   if (!deleting) {
     for (const target of targets) {
-      if (!pidExists(target.pid) || (available && !pending(target))) continue;
+      if (!existsFor(ctx)(target.pid) || (available && !pending(target, existsFor(ctx)))) continue;
       const source = target.owner;
       if (source !== owner && !(owner === 'cli' && source === 'unknown'))
         fail('Server is owned by another process', 'server-owned-by-other');
@@ -788,7 +893,7 @@ async function cancelStartup(ctx, record) {
   });
 }
 async function startGraph({ storage, repo, script, owner = 'cli', createEmpty = false, generation, extraArgs = [] }) {
-  const ctx = context(storage, repo);
+  const ctx = context(storage, repo, true);
   // Capture the instance before queuing for exclusion, not after a delete/recreate.
   const observed = snapshot(storage, repo)?.generation;
   let created;
@@ -799,7 +904,7 @@ async function startGraph({ storage, repo, script, owner = 'cli', createEmpty = 
       await legacy.retireGraph(ctx, current);
       const { targets } = await discover(ctx, current);
       const available = ownershipAvailable(ctx);
-      const live = targets.filter(target => pidExists(target.pid) && (!available || pending(target)));
+      const live = targets.filter(target => existsFor(ctx)(target.pid) && (!available || pending(target, existsFor(ctx))));
       if (!available && !live.length) fail('Graph ownership is locked without a registered worker', 'repo-locked');
       if (live.length > 1) fail('Multiple live graph workers', 'server-start-failed');
       if (live.length) return live[0];
@@ -873,7 +978,14 @@ function observe(storage, repo, generation, onChange) {
   let previous;
   const inspect = () => {
     if (closed) return;
-    const current = readJSON(ctx.stateFile);
+    let current;
+    try { current = readState(ctx.stateFile); }
+    catch (error) {
+      // A damaged state.json is no reason to stop watching or to throw out of a timer.
+      const key = `unreadable: ${error.message}`;
+      if (key !== previous) { previous = key; onChange({ phase: 'observation-failed', error: error.message }); }
+      return;
+    }
     if (!current || current.generation !== generation || current.phase !== 'available') {
       const key = JSON.stringify([current?.generation, current?.phase]);
       if (key !== previous) { previous = key; onChange(current); }

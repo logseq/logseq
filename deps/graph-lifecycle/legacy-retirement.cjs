@@ -7,7 +7,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 module.exports = function ({ fail, readJSON, writeJSON, graphName, canonicalRoot, sameStorage,
-  pidExists, entries, request, shutdownAndWait, removeEntries, runtimeFile }) {
+  pidExists, publishedPidMayRun, entries, request, shutdownAndWait, removeEntries, runtimeFile }) {
   function artifact(file) {
     try { return fs.readFileSync(file, 'utf8'); }
     catch (error) { if (error.code === 'ENOENT') return null; throw error; }
@@ -21,15 +21,17 @@ module.exports = function ({ fail, readJSON, writeJSON, graphName, canonicalRoot
   }
   async function retireGraph(ctx, current, scan) {
     const file = path.join(ctx.graphDir, 'db-worker.lock');
+    const exists = scan ? scan.pidExists : ctx.pidExists || pidExists;
     const original = artifact(file);
     const disk = parse(original);
-    const records = current.workers.filter(record => record['ownership-protocol'] === undefined);
+    // A record without a root cannot be correlated with a legacy lock; discover refuses it as an invalid registration.
+    const records = current.workers.filter(record => record['ownership-protocol'] === undefined && typeof record.root === 'string');
     if (original === null && !records.length) return [];
     const recordsBefore = JSON.stringify(current.workers);
     const runtimeBefore = new Map(records.map(record => [record.ticket, artifact(runtimeFile(ctx, record.ticket))]));
     const roots = new Set([ctx.root, ...records.map(record => record.root)]);
     const publications = [...roots].flatMap(root => (scan ? scan.entries(root) : entries(root)).map(entry => ({ ...entry, root })));
-    const dead = publications.filter(entry => !pidExists(entry.pid));
+    const dead = publications.filter(entry => !publishedPidMayRun(entry.pid));
     const candidates = new Map();
     for (const record of records) {
       const raw = runtimeBefore.get(record.ticket);
@@ -78,7 +80,7 @@ module.exports = function ({ fail, readJSON, writeJSON, graphName, canonicalRoot
     if (original !== null && disk && !candidates.size) unresolved(ctx, 'invalid lock');
     const retired = [];
     for (const target of candidates.values()) {
-      if (!pidExists(target.pid)) continue;
+      if (!exists(target.pid)) continue;
       if (!target.port) unresolved(ctx, `unidentified live PID ${target.pid}`);
       const probe = async () => {
         let response;
@@ -130,12 +132,14 @@ module.exports = function ({ fail, readJSON, writeJSON, graphName, canonicalRoot
     }
     if (actual !== null) fs.unlinkSync(file);
     for (const root of roots) {
-      const removed = publications.filter(entry => entry.root === root && (dead.includes(entry) || candidates.has(entry.pid)));
+      // A publication of a PID that cannot be signalled is left in place: it is probed, never refused or trusted.
+      const removed = publications.filter(entry => entry.root === root
+        && (dead.includes(entry) || (candidates.has(entry.pid) && !publishedPidMayRun(entry.pid))));
       if (removed.length) await removeEntries(root, removed);
     }
     for (const record of records) fs.rmSync(runtimeFile(ctx, record.ticket), { force: true });
     if (records.length) {
-      current.workers = current.workers.filter(record => record['ownership-protocol'] !== undefined);
+      current.workers = current.workers.filter(record => !records.includes(record));
       writeJSON(ctx.stateFile, current);
     }
     return retired;
