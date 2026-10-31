@@ -309,6 +309,8 @@ let filter_options inst fields =
 (* Shared value phase for new clauses and indexed edits. The picker owns
    one clause and preserves its current operator and selection. *)
 let filter_value_phase inst ~anchor ?index (c : V.column) =
+  let current = V.current_view inst in
+  let filters = (V.get inst).V.filters in
   let ident = c.V.c_id in
   let timestamp = c.V.c_type = "datetime" in
   let initial=Option.map (fun index -> List.nth (V.get inst).V.filters index) index in
@@ -323,6 +325,7 @@ let filter_value_phase inst ~anchor ?index (c : V.column) =
   in
   let opts = filter_options inst [W.kw "operator",W.Keyword operator] in
   Views_db.get_view_filter_data ~opts prop_w (fun data ->
+    if current () && (V.get inst).V.filters = filters then
       let multiple=match initial with
         | None -> W.get data "value-source"=Some (W.Keyword "property-values")
         | Some _ -> (match W.get data "many?" with Some (W.Bool many) -> many
@@ -517,6 +520,11 @@ let gallery_custom_size inst view : t = fun ctx parent ->
 
 let gallery_menu_items inst =
   let s = V.get inst in
+  let current = V.current_view inst in
+  let request_current request =
+    let ticket = Ui_effect.issue request in
+    fun () -> current () && Ui_effect.is_current request ticket
+  in
   if s.V.display_type <> "gallery" then []
   else
     let cover_columns = List.filter
@@ -529,21 +537,26 @@ let gallery_menu_items inst =
     let display = Wr.gallery_display_idents
       ~column_idents:(List.map (fun c -> c.V.c_id) columns)
       ~asset_ident:cover s.V.view_ent in
-    let after () = if (V.get inst).V.view_uuid = s.V.view_uuid then refresh inst in
+    let display_selection = ref display in
+    let after () = if current () then refresh inst in
     let size = Option.bind s.V.view_ent (fun view -> view.Wr.vgallery_size) in
     [ P.MSub (I.t "view.gallery/display-properties",
         List.map (fun c -> P.MCheck (c.V.c_name, List.mem c.V.c_id display,
           fun checked ->
-            let selected = if checked then c.V.c_id :: display
-              else List.filter ((<>) c.V.c_id) display in
+            if current () then begin
+            let selected = if checked then c.V.c_id :: !display_selection
+              else List.filter ((<>) c.V.c_id) !display_selection in
+            display_selection := selected;
             Views_db.set_gallery_display_properties s.V.view_uuid
+              ~current:(request_current inst.V.gallery_display_request)
               (List.filter_map (fun c ->
-                if List.mem c.V.c_id selected then Some c.V.c_id else None) columns) after)) columns) ]
+                if List.mem c.V.c_id selected then Some c.V.c_id else None) columns) after end)) columns) ]
     @ (if cover_columns = [] then [] else
         [ P.MSub (I.t "view.gallery/cover-property",
             List.map (fun c -> P.MCheck (c.V.c_name, cover = Some c.V.c_id,
-              fun checked -> if checked then
-                Views_db.set_gallery_asset_property s.V.view_uuid c.V.c_id after)) cover_columns) ])
+              fun checked -> if checked && current () then
+                Views_db.set_gallery_asset_property s.V.view_uuid c.V.c_id
+                  ~current:(request_current inst.V.gallery_asset_request) after)) cover_columns) ])
     @ [ P.MSub (I.t "view.gallery/card-size",
         [ P.MCheck (I.t "view.gallery/default-size", size = None || size = Some "default",
             fun checked -> if checked then
@@ -826,6 +839,7 @@ let filter_chip inst (entry : ((string * int) * V.filter_clause) Signal.signal) 
   let (_,idx),f=Signal.get entry in
   let normalization=Ui_effect.request () in
   let change_operator property operator =
+    let current_view = V.current_view inst in
     if Ui_effect.alive context.Lui_ui.ui_scope then begin
       let _,current=Signal.get entry in
       let ticket=Ui_effect.issue normalization in
@@ -835,6 +849,7 @@ let filter_chip inst (entry : ((string * int) * V.filter_clause) Signal.signal) 
       Views_db.get_view_filter_data ~opts property (fun response ->
         let state=V.get inst in
         if Ui_effect.alive context.Lui_ui.ui_scope
+           && current_view ()
            && Ui_effect.is_current normalization ticket
            && (match List.nth_opt state.V.filters idx with
                | Some clause -> clause=current | None -> false) then begin
@@ -887,8 +902,9 @@ let filter_chip inst (entry : ((string * int) * V.filter_clause) Signal.signal) 
                   | Some { V.c_prop = Some m; _ } -> m
                   | _ -> W.Map [ (W.kw "db/ident", W.Keyword f.V.c_prop) ]
                 in
+                let current_view = V.current_view inst in
                 Views_db.get_view_filter_data ~opts:(filter_options inst []) prop (fun data ->
-                    if Ui_effect.alive context.Lui_ui.ui_scope then begin
+                    if Ui_effect.alive context.Lui_ui.ui_scope && current_view () then begin
                     let ops =
                       Wr.W.elems
                         (Option.value (W.get data "operators") ~default:W.Nil)
@@ -997,16 +1013,24 @@ let filters_row ?(margin_bottom=0) inst : t =
    Filter edits opt in. The page-side extras kick requests the count
    after the first get-blocks has returned. *)
 let load_ref_filters ?(on_done = fun () -> ()) ?(count = false) inst =
+  let current = V.current_view inst in
+  let on_error () =
+    if current () then
+      V.update inst (fun s -> { s with V.loading = false; view_error = Some "" })
+  in
   match V.owner_uuid inst with
   | Some uuid ->
-      Views_db.pull_ref_filters uuid (fun (inc, exc) ->
+      Views_db.pull_ref_filters ~on_error uuid (fun (inc, exc) ->
+        if current () then begin
           V.update inst (fun s ->
               { s with V.ref_includes = inc; ref_excludes = exc });
-          on_done ());
+          on_done () end);
       if count then
         Views_db.snapshots
+          ~on_error
           ~f:(fun snap ->
-            match Wr.snapshot_slot_value snap (Views_db.key_ref_count uuid) with
+            if current () then
+            match Views_db.snapshot_value snap (Views_db.key_ref_count uuid) with
             | Some (W.Int n) ->
                 V.update inst (fun s -> { s with V.refs_total = n })
             | _ -> ())
@@ -1016,20 +1040,23 @@ let load_ref_filters ?(on_done = fun () -> ()) ?(count = false) inst =
 (* page-handler/db-based-save-filter! — click toggles include,
    shift-click toggles exclude; clicking an active filter removes it *)
 let save_ref_filter ?(on_done = fun () -> ()) inst ~title ~incl ~add =
+  let current = V.current_view inst in
   match V.owner_uuid inst with
   | None -> ()
   | Some uuid ->
       let lc = String.lowercase_ascii (Str_util.trim title) in
       V.resolve_name_id lc (fun eid ->
+        if current () then
           match eid with
           | Some eid ->
-              Views_db.save_ref_filter uuid
+              Views_db.save_ref_filter ~current uuid
                 ~prop:
                   (if incl then Views_db.includes_prop
                    else Views_db.excludes_prop)
                 ~ref_eid:eid ~add (fun () ->
+                  if current () then begin
                   load_ref_filters ~count:true ~on_done inst;
-                  refresh inst)
+                  refresh inst end)
           | None -> ())
 
 let refs_cog_class (s : V.vstate) =
