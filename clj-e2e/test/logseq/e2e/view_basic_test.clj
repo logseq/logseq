@@ -9,7 +9,8 @@
             [logseq.e2e.page :as page]
             [logseq.e2e.util :as util]
             [wally.main :as w])
-  (:import (com.microsoft.playwright Locator$ClickOptions)))
+  (:import (com.microsoft.playwright Locator$ClickOptions)
+           (com.microsoft.playwright.options KeyboardModifier)))
 
 (use-fixtures :once fixtures/open-page)
 
@@ -110,6 +111,39 @@
       (.click trash click-opts))
     (assert/assert-is-visible ".ui__dialog-content")
     (assert/assert-is-visible "#modal-headline")
+    (w/click (loc/filter ".ui__dialog-content button" :has-text "Cancel"))
+    (assert/assert-is-hidden ".ui__dialog-content")))
+
+(deftest all-pages-shift-click-selects-the-range-past-the-first-window-test
+  (let [page-count 45
+        last-page-number 6
+        page-name #(str "shift window page " %)
+        range-size (inc (- page-count last-page-number))]
+    (doseq [n (range 1 (inc page-count))]
+      (ls-api-call! :editor.createPage (page-name n) {} {:redirect false}))
+    (util/search-and-click "Go to all pages")
+    (assert/assert-is-visible ".ls-all-pages")
+    (assert/assert-is-visible
+     (loc/filter ".ls-view-body .ls-table-row" :has-text (page-name page-count)))
+    (w/click (.locator (loc/filter ".ls-view-body .ls-table-row"
+                                   :has-text (page-name page-count))
+                       "[data-table-row-select]"))
+    (assert/assert-is-visible ".ls-table-actions")
+    (.hover (.first (.locator (w/get-page) ".ls-view-body .ls-table-row")))
+    (.wheel (.mouse (w/get-page)) 0 1000)
+    (let [target (loc/filter ".ls-view-body .ls-table-row"
+                             :has-text (page-name last-page-number))]
+      (assert/assert-is-visible target)
+      (w/click (.locator target "[data-table-row-select]")
+               (doto (Locator$ClickOptions.)
+                 (.setModifiers [KeyboardModifier/SHIFT]))))
+    (-> (.locator (w/get-page) ".ls-table-actions .selection-count")
+        assert/assert-that
+        (.containsText (str range-size)))
+    (.click (.first (.locator (w/get-page)
+                              ".ls-table-actions button:has(.ls-icon-trash)")))
+    (assert/assert-is-visible ".ui__dialog-content")
+    (assert/assert-have-count ".ui__dialog-content ol li" range-size)
     (w/click (loc/filter ".ui__dialog-content button" :has-text "Cancel"))
     (assert/assert-is-hidden ".ui__dialog-content")))
 

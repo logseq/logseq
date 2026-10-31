@@ -210,12 +210,16 @@
 (defn- ^:large-vars/cleanup-todo row-matched?
   [db row filters input]
   (let [or? (:or? filters)
-        check-f (if or? some every?)]
+        check-f (if or? some every?)
+        clauses (:filters filters)]
     (and
      (if (string/blank? input)
        true
        (string/includes? (string/lower-case (:block/title row)) (string/lower-case input)))
-     (check-f
+     ;; No clauses match every row, also with "match any" (`some` of nothing is nil)
+     (or
+      (empty? clauses)
+      (check-f
       (fn [[property-ident operator match]]
         (if (nil? match)
           true
@@ -321,7 +325,7 @@
 
                    true)]
              result))))
-      (:filters filters)))))
+      clauses)))))
 
 (defn- ->filter-match-id
   [db v]
@@ -335,7 +339,10 @@
 
 (defn- build-fast-filter-pred
   "Build a faster matcher for common filter shapes while preserving semantics.
-   Currently optimized for a single ref property filter with :is/:is-not."
+   Currently optimized for a single ref property filter with :is/:is-not.
+   Like `row-matched?`, a value that is not matched as an entity (e.g. the text
+   of a :default property, where every block has its own value block) is
+   compared by its content instead of by its id."
   [db filters input]
   (when (and (string/blank? input)
              (map? filters)
@@ -350,7 +357,10 @@
                      (set? match)
                      (seq match)
                      (not (contains? match :empty)))
-            (let [match-ids (set (keep #(->filter-match-id db %) match))]
+            (let [match-ids (set (keep #(->filter-match-id db %) match))
+                  match-contents (into #{}
+                                       (keep #(some->> % (d/entity db) db-property/property-value-content))
+                                       match-ids)]
               (when (seq match-ids)
                 (fn [row]
                   (let [v (get row property-ident)
@@ -358,7 +368,14 @@
                                     (set? v) v
                                     (nil? v) nil
                                     :else #{v})
-                        hit? (boolean (some match-ids (keep #(->filter-match-id db %) value-col)))]
+                        value-ids (keep #(->filter-match-id db %) value-col)
+                        first-value (some->> (first value-ids) (d/entity db))
+                        hit? (if (and first-value
+                                      (not (match-property-value-as-entity? first-value property)))
+                               (boolean (some match-contents
+                                              (map #(db-property/property-value-content (d/entity db %))
+                                                   value-ids)))
+                               (boolean (some match-ids value-ids)))]
                     (if (= operator :is) hit? (not hit?))))))))))))
 
 (defn- ident-eid
@@ -1325,7 +1342,11 @@
                        (fn [value]
                          (when-not (empty-value? value)
                            (if (de/entity? value)
-                             (if (match-property-value-as-entity? value group-by-property)
+                             ;; A closed value is a shared entity: keep it as the group key so the
+                             ;; group sorts by its :block/order and shows its icon, also when the
+                             ;; user added it (it has no :db/ident).
+                             (if (or group-by-closed-values?
+                                     (match-property-value-as-entity? value group-by-property))
                                value
                                (db-property/property-value-content value))
                              value)))
