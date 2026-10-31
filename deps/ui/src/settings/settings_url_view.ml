@@ -17,6 +17,55 @@ let get_url key =
   | Some v when String.trim v <> "" -> Some (String.trim v)
   | _ -> None
 
+let decimal_in_range limit s =
+  s <> "" && String.for_all (function '0' .. '9' -> true | _ -> false) s
+  && match int_of_string_opt s with Some value -> value <= limit | None -> false
+
+let valid_ipv6 address =
+  let count_groups ~ipv4 s =
+    let rec count = function
+      | [] -> Some 0
+      | [group] when ipv4 && String.contains group '.' ->
+          let octets = String.split_on_char '.' group in
+          if List.length octets = 4
+             && List.for_all (fun octet -> String.length octet <= 3
+                 && decimal_in_range 255 octet) octets
+          then Some 2 else None
+      | group :: rest ->
+          if group = "" || String.length group > 4
+             || not (String.for_all (function
+                 | '0' .. '9' | 'a' .. 'f' | 'A' .. 'F' -> true | _ -> false) group)
+          then None
+          else Option.map ((+) 1) (count rest)
+    in
+    count (if s = "" then [] else String.split_on_char ':' s)
+  in
+  match Str_util.index_of address "::" with
+  | None -> count_groups ~ipv4:true address = Some 8
+  | Some index ->
+      let left = String.sub address 0 index in
+      let right = String.sub address (index + 2) (String.length address - index - 2) in
+      match count_groups ~ipv4:false left, count_groups ~ipv4:true right with
+      | Some left, Some right -> left + right < 8
+      | _ -> false
+
+let valid_authority authority =
+  let port s = String.length s <= 5 && decimal_in_range 65535 s in
+  let host s = s <> "" && not (String.exists (function
+      | '[' | ']' | '%' | '<' | '>' | '"' | '^' | '|' -> true | _ -> false) s) in
+  if Str_util.starts_with authority "[" then
+    match String.index_opt authority ']' with
+    | None -> false
+    | Some close ->
+        let address = String.sub authority 1 (close - 1) in
+        let suffix = String.sub authority (close + 1) (String.length authority - close - 1) in
+        valid_ipv6 address && (suffix = "" ||
+          (Str_util.starts_with suffix ":" && port (String.sub suffix 1 (String.length suffix - 1))))
+  else match String.split_on_char ':' authority with
+    | [name] -> host name
+    | [name; number] -> host name && port number
+    | _ -> false
+
 let valid_url s =
   let offset =
     if Str_util.starts_with s "https://" then Some 8
@@ -27,9 +76,10 @@ let valid_url s =
   | None -> false
   | Some offset ->
       let rest = String.sub s offset (String.length s - offset) in
-      let host = List.hd (String.split_on_char '/' rest) in
-      host <> "" && not (String.contains host '@')
-      && not (String.exists (function ' ' | '\t' | '\n' | '\r' | '?' | '#' -> true | _ -> false) s)
+      let authority = List.hd (String.split_on_char '/' rest) in
+      valid_authority authority && not (String.contains authority '@')
+      && not (String.exists (fun c -> c <= ' ' || c = '\127'
+          || c = '\\' || c = '?' || c = '#') s)
 
 let url_to_ws s =
   let scheme =

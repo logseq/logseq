@@ -140,19 +140,24 @@ let map_dissoc key kvs =
       match k with Wire.Keyword s -> s <> key | _ -> true)
     kvs
 
-let set_config ?(on_saved = fun () -> ()) key v =
+let save_config ?(on_saved = fun () -> ())
+    ?(on_error = fun () -> Toast.error (I18n.t "ui/save-changes-error")) origin cfg =
+  match Sdk_config.write_config origin cfg with
+  | write ->
+      ignore
+        ((let* () = write in
+          on_saved ();
+          Js.Promise.resolve ())
+         |> Js.Promise.catch (fun _ -> on_error (); Js.Promise.resolve ()))
+  | exception _ -> on_error ()
+
+let set_config ?on_saved key v =
   let cfg' =
     match (Runtime.model ()).Model.graph_config with
     | Wire.Map kvs -> Wire.Map (map_assoc key v kvs)
     | _ -> invalid_arg "Graph configuration must be an EDN map"
   in
-  ignore
-    ((let* () = Sdk_config.write_config (repo ()) cfg' in
-      on_saved ();
-      Js.Promise.resolve ())
-     |> Js.Promise.catch (fun _ ->
-          Toast.error (I18n.t "ui/save-changes-error");
-          Js.Promise.resolve ()))
+  save_config ?on_saved (repo ()) cfg'
 
 let config_set_bool key b = set_config key (Wire.Bool b)
 
@@ -164,11 +169,21 @@ let config_toggle key ~default =
 type home_result =
   | Home_ok
   | Home_missing
+  | Home_error
 
 let set_home_page name k =
+  let origin = Runtime.model () in
+  let r = repo () in
   let write page_opt =
+    let current = Runtime.model () in
+    let cfg =
+      if current.Model.repo = origin.Model.repo
+         && current.Model.context_revision = origin.Model.context_revision
+      then current.Model.graph_config
+      else origin.Model.graph_config
+    in
     let home =
-      match config_get "default-home" with
+      match Wire.get cfg "default-home" with
       | Some (Wire.Map kvs) -> kvs
       | _ -> []
     in
@@ -177,20 +192,27 @@ let set_home_page name k =
       | Some n -> map_assoc "page" (Wire.String n) home
       | None -> map_dissoc "page" home
     in
-    set_config ~on_saved:(fun () -> k Home_ok) "default-home" (Wire.Map home')
+    let cfg' = match cfg with
+      | Wire.Map kvs -> Wire.Map (map_assoc "default-home" (Wire.Map home') kvs)
+      | _ -> invalid_arg "Graph configuration must be an EDN map"
+    in
+    save_config ~on_saved:(fun () -> k Home_ok) ~on_error:(fun () -> k Home_error)
+      r cfg'
   in
   if String.trim name = "" then write None
   else
-    ignore
-      (let* w =
-        pull (repo ()) "[:db/id]"
-          (Wire.Array
-             [ Wire.Keyword "block/name"; Wire.String (page_name_lc name) ])
-      in
-      Js.Promise.resolve
-        (match w with
-        | Wire.Map _ -> write (Some name)
-        | _ -> k Home_missing))
+    match pull r "[:db/id]"
+      (Wire.Array [ Wire.Keyword "block/name"; Wire.String (page_name_lc name) ]) with
+    | lookup ->
+        ignore
+          ((let* w = lookup in
+            Js.Promise.resolve
+              (match w with
+               | Wire.Map _ -> write (Some name)
+               | Wire.Nil -> k Home_missing
+               | _ -> k Home_error))
+           |> Js.Promise.catch (fun _ -> k Home_error; Js.Promise.resolve ()))
+    | exception _ -> k Home_error
 
 (* ---- storage-backed prefs ---- *)
 

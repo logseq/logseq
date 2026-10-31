@@ -102,8 +102,8 @@ let theme_row ?(density = `regular) ctx =
               (Signal.value mode))
          ())
     ~control:
-      (row ~key:"theme-rc" ~cross:`center ~gap:8 ~min_width:0
-         [ box ~key:"theme-a" [ V.theme_modes_ul ~st:mode ]
+      (row ~key:"theme-rc" ~cross:`center ~gap:8 ~min_width:0 ~flex_wrap:`wrap
+         [ column ~key:"theme-a" ~min_width:0 [ V.theme_modes_ul ~st:mode ]
          ; row ~key:"theme-desc" ~cross:`center
              [ C.kbd_seq ~key:"theme-k" ~binding:"t t" [ "t"; "t" ] ]
          ])
@@ -136,7 +136,7 @@ let editor_font_row ?(density = `regular) () =
   in
   C.it_row ~key:"font" ~density ~label:(T.t "settings.general/editor-font")
     ~min_height:(if density=`compact then 72 else 80)
-    [ row ~key:"font-btns" ~gap:8
+    [ row ~key:"font-btns" ~gap:8 ~min_width:0 ~flex_wrap:`wrap
         [ fb "default" "Default" "var(--ls-font-family, Inter)"
         ; fb "serif" "Serif" "Lyon-Text, Georgia, ui-serif, serif"
         ; fb "mono" "Mono" "iawriter-mono, Nitti, Menlo, Courier, monospace" ]
@@ -242,18 +242,13 @@ let accent_row ~modal =
           ~value:(T.t "settings.general/accent-color-alert") [])
     ]
 
-(* The reference keeps desktop panels at 600 points and scrolls the
-   article when that content exceeds the viewport. *)
 let panel ~key ?(style_class="panel-wrap") ?margin_bottom children : t =
  fun ctx parent ->
-  let viewport=Ui_services.viewport_width_signal ~scheduler:ctx.Lui_ui.ui_scheduler
-    ~scope:ctx.Lui_ui.ui_scope in
   let children=match children with
     | first::rest -> Ui_components.with_props [Ui_components.Prop.padding_top 14] first :: rest
     | [] -> [] in
-  Ui_parts.int_prop Lui_protocol.MinWidth
-    ~value:(reactive (fun viewport -> if viewport>=640. then 600 else 0) viewport)
-    (column ~key ~style_class ~gap:16 ~padding:4 ~max_width:600 ?margin_bottom children) ctx parent
+  (column ~key ~style_class ~gap:16 ~padding:4 ~min_width:0 ~max_width:600
+     ~container_relative_frame:`horizontal ?margin_bottom children) ctx parent
 
 let general_pane ~modal ctx =
   panel ~key:"pane-general"
@@ -1056,8 +1051,6 @@ let advanced_pane () =
 
 (* ---- features pane ---- *)
 
-(* the cljs input saved on blur AND Enter; the input kind has only
-   ~on_submit (Enter) — blur-save is dropped *)
 let home_page_row ctx =
   let current =
     match S.config_get "default-home" with
@@ -1070,12 +1063,16 @@ let home_page_row ctx =
   let home_text =
     Signal.state ctx.Lui_ui.ui_scheduler current
   in
+  let saving = Signal.state ctx.Lui_ui.ui_scheduler false in
+  let saved = ref current in
   C.it_row ~key:"homep" ~label:(T.t "settings.features/home-default-page")
     [ box ~key:"homep-w" ~style_class:"ls-select-wrap" ~grow:1.
         [ Ui_components.input ~key:"homep-in"
             ~accessibility_identifier:"home-default-page" ~width:220
             ~height:26
+            ~submit_on_blur:true
             ~style_class:"form-input is-small" ~text:current
+            ~disabled:(reactive (fun value -> value) (Signal.value saving))
             ~on_input:(fun ev ->
               match ev with
               | Lui_protocol.TextChanged (_, q) ->
@@ -1083,11 +1080,22 @@ let home_page_row ctx =
               | _ -> ())
             ~on_submit:(fun _ ->
               let value = Runtime.signal_get home_text in
-              S.set_home_page value (fun res ->
-                  match res with
-                  | S.Home_ok -> Toast.success (T.t "settings.features/home-default-page-update-success")
-                  | S.Home_missing ->
-                      Toast.warning (T.page_not_found_msg value)))
+              if value <> !saved && not (Runtime.signal_get saving) then begin
+                Runtime.signal_set saving true;
+                let origin = Runtime.model () in
+                S.set_home_page value (fun res ->
+                  if res = S.Home_ok then saved := value;
+                  if Ui_effect.alive ctx.Lui_ui.ui_scope then begin
+                    Runtime.signal_set saving false;
+                    let current = Runtime.model () in
+                    if current.Model.repo = origin.Model.repo
+                       && current.Model.context_revision = origin.Model.context_revision then
+                      match res with
+                      | S.Home_ok -> Toast.success (T.t "settings.features/home-default-page-update-success")
+                      | S.Home_missing -> Toast.warning (T.page_not_found_msg value)
+                      | S.Home_error -> Toast.error (T.t "ui/save-changes-error")
+                  end)
+              end)
             []
         ]
     ]
@@ -1131,8 +1139,8 @@ let nav_items () =
 
 let nav_gap = 8
 
-let nav_menu_height viewport =
-  let count = List.length (nav_items ()) - (if viewport < 640. then 1 else 0) in
+let nav_menu_height _viewport =
+  let count = List.length (nav_items ()) in
   (count * Ui_components.nav_item_height) + ((count - 1) * nav_gap)
 
 let tab_title tab =
@@ -1141,21 +1149,14 @@ let tab_title tab =
   | None -> (T.t "settings/general")
 
 let nav_item ~key (id, label, icn) =
-  let content = C.class_signal (S.signal ())
+  C.class_signal (S.signal ())
     (fun (s : S.t) ->
       if s.tab = id then "active settings-menu-item"
       else "settings-menu-item")
     (Ui_components.nav_item ~key ~data_id:id ~icon:icn
        ~text:label
        ~selected:(reactive (fun (s : S.t) -> s.tab = id) (S.signal ()))
-       ~on_press:(fun _ -> S.set_tab id) ()) in
-  if id<>"keymap" then content
-  else fun ctx parent ->
-    let viewport=Ui_services.viewport_width_signal ~scheduler:ctx.Lui_ui.ui_scheduler
-      ~scope:ctx.Lui_ui.ui_scope in
-    Ui_parts.string_prop Lui_protocol.DisplayValue
-      ~value:(reactive (fun viewport -> if viewport>=640. then "inline-flex" else "none") viewport)
-      content ctx parent
+       ~on_press:(fun _ -> S.set_tab id) ())
 
 let pane_of ~modal ~keymap ctx tab =
   match tab with
@@ -1166,7 +1167,8 @@ let pane_of ~modal ~keymap ctx tab =
   | _ -> general_pane ~modal ctx
 
 let same_config ((s : S.t),(a : Model.t)) ((t : S.t),(b : Model.t)) =
-  s == t && a.graph_config = b.graph_config
+  s == t && a.repo = b.repo && a.context_revision = b.context_revision
+  && a.graph_config = b.graph_config
 
 let article ~modal ~keymap ms ctx =
   Ui_components.with_props

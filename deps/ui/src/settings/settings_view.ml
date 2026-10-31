@@ -59,15 +59,40 @@ let use_mode mode =
 
 let current_lang () = Ui_services.doc_preferred_lang ()
 
-let set_language code =
+let language_request = ref 0
+let pending_language = ref None
+
+let set_language ?(on_error = fun () -> ()) code =
+  incr language_request;
+  let request = !language_request in
+  let previous = match !pending_language with
+    | Some previous -> previous
+    | None -> current_lang ()
+  in
+  pending_language := Some previous;
+  let failed () =
+    if request = !language_request then begin
+      pending_language := None;
+      Ui_services.doc_set_lang_pref previous;
+      Ui_services.doc_set_lang previous;
+      on_error ();
+      Toast.error (T.t "ui/save-changes-error")
+    end
+  in
   Ui_services.doc_set_lang_pref code;
   Ui_services.doc_set_lang code;
-  (* Load the requested dictionary before refreshing the interface. *)
-  ignore
-    (I18n.load code
-     |> Js.Promise.then_ (fun () ->
-            Ui_services.doc_reload ();
-            Js.Promise.resolve ()))
+  match I18n.load code with
+  | load ->
+      ignore
+        (load
+         |> Js.Promise.then_ (fun () ->
+                if request = !language_request then begin
+                  pending_language := None;
+                  Ui_services.doc_reload ()
+                end;
+                Js.Promise.resolve ())
+         |> Js.Promise.catch (fun _ -> failed (); Js.Promise.resolve ()))
+  | exception _ -> failed ()
 
 let lang_label_for code =
   match List.find_opt (fun (k, _) -> k = code) languages with
@@ -80,7 +105,7 @@ let lang_menu_close mst =
   Signal.set mst false;
   Runtime.flush ()
 
-let lang_menu ~key st mst =
+let lang_menu ~scope ~key st mst =
   Ui_components.menu_card ~key:("lm-" ^ key) ~max_height:288
     ~cls:"ls-select-content"
     ~anchor:`below ~anchor_alignment:`start
@@ -99,8 +124,12 @@ let lang_menu ~key st mst =
               ~corner_radius:4 ~min_height:32
               ~foreground:"hsl(var(--popover-foreground))"
               ~on_press:(fun _ev ->
-                set_language code;
                 Signal.set st label;
+                set_language ~on_error:(fun () ->
+                    if Ui_effect.alive scope then begin
+                      Runtime.signal_set st (lang_label_for (current_lang ()));
+                      Runtime.flush ()
+                    end) code;
                 lang_menu_close mst)
               []))
        languages)
@@ -156,7 +185,7 @@ let lang_trigger ~(ctx : Lui_ui.ui_context) ~key ~(height : int) ~st =
             Runtime.flush ())
           [])
       ; reactive ~equal:( == ) (fun open_ ->
-            if open_ then lang_menu ~key st mst
+            if open_ then lang_menu ~scope:ctx.ui_scope ~key st mst
             else spacer ~key:(key ^ "-lm-x") [])
           (Signal.value mst)
       ]
