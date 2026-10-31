@@ -1143,6 +1143,11 @@ let nav_menu_height _viewport =
   let count = List.length (nav_items ()) in
   (count * Ui_components.nav_item_height) + ((count - 1) * nav_gap)
 
+let nav_aside_height viewport =
+  32 + 40 + 16 + nav_menu_height viewport + 8
+
+let article_min_height = 192
+
 let tab_title tab =
   match List.find_opt (fun (id, _, _) -> id = tab) (nav_items ()) with
   | Some (_, l, _) -> l
@@ -1200,7 +1205,7 @@ let article ~modal ~keymap ms ctx =
     [Ui_components.Prop.height_viewport viewport_height]
     (scroll ~key:"settings-article" ~style_class:"settings-article" ~orientation:`vertical
     ~data_attrs:["role", "article"]
-    ~grow:1. ~min_height:192 ~min_width:0
+    ~grow:1. ~min_height:article_min_height ~min_width:0
        [reactive ~equal:same_config content (S.signal ()) ms])
 
 let inner ~modal ms : t =
@@ -1210,18 +1215,25 @@ let inner ~modal ms : t =
   let keymap = Signal.state ctx.Lui_ui.ui_scheduler (initial_keymap ()) in
   let viewport=Ui_services.viewport_width_signal ~scheduler:ctx.Lui_ui.ui_scheduler
     ~scope:ctx.Lui_ui.ui_scope in
+  let max_height_viewport = 0.75 in
   let inner_box children =
-    Ui_parts.string_prop Lui_protocol.Overflow
-      ~value:(reactive (fun viewport -> if viewport>=768. then "hidden" else "auto") viewport)
-      (row ~key:"settings-inner" ~style_class:"cp__settings-inner" ~min_width:0
-        ~orientation:(reactive (fun viewport -> if viewport>=768. then `horizontal else `vertical) viewport)
-        ~cross:`stretch children)
+    scroll ~key:"settings-inner" ~style_class:"cp__settings-inner"
+      ~orientation:`vertical ~min_width:0
+      [ Ui_parts.int_prop Lui_protocol.MinHeight
+          ~value:(reactive (fun viewport ->
+            if viewport>=768. then 0
+            else nav_aside_height viewport + article_min_height) viewport)
+          (Ui_components.with_props
+            [Ui_components.Prop.max_height_viewport max_height_viewport]
+            (row ~key:"settings-columns" ~min_width:0
+              ~orientation:(reactive (fun viewport -> if viewport>=768. then `horizontal else `vertical) viewport)
+              ~cross:`stretch children)) ]
   in
   let node =
     column ~key:"settings" ~accessibility_identifier:"settings"
       [ Ui_components.with_props
           [ Ui_components.Prop.min_height_viewport 0.55
-          ; ( Ui_components.Prop.max_height_viewport 0.75 ) ]
+          ; ( Ui_components.Prop.max_height_viewport max_height_viewport ) ]
           (inner_box
              [ Ui_parts.int_prop Lui_protocol.MinWidth
                  ~value:(reactive (fun viewport -> if viewport>=768. then 256 else 160) viewport)
@@ -1230,7 +1242,7 @@ let inner ~modal ms : t =
                  (Ui_parts.int_prop Lui_protocol.MinHeight
                    ~value:(reactive (fun viewport ->
                      if viewport>=768. then 0
-                     else 32 + 40 + 16 + nav_menu_height viewport + 8) viewport)
+                     else nav_aside_height viewport) viewport)
                  (Ui_components.with_props [Ui_components.Prop.overflow `auto]
                  (column ~key:"settings-aside"
                  ~style_class:"settings-aside"
