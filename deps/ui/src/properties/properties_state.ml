@@ -24,6 +24,7 @@ type overlay =
   }
 
 let overlays : overlay list ref = ref []
+let overlay_generation = ref 0
 
 (* the services layer offers no element-identity op: two els bound to
    the same host element contain each other, and nothing else does *)
@@ -46,6 +47,7 @@ let install_outside_close =
               match !overlays with
               | [] -> ()
               | os -> (
+                  incr overlay_generation;
                   match
                     List.find_index
                       (fun o -> o.el.Ui_services.contains target)
@@ -61,10 +63,12 @@ let install_outside_close =
                       overlays := []))))
 
 let push_overlay (el : Ui_services.el) ~on_escape =
+  incr overlay_generation;
   install_outside_close ();
   overlays := { el; on_escape } :: !overlays
 
 let remove_overlay_el (el : Ui_services.el) =
+  incr overlay_generation;
   List.iter (fun o -> if same_el o.el el then o.on_escape ()) !overlays;
   overlays := List.filter (fun o -> not (same_el o.el el)) !overlays
 
@@ -113,12 +117,14 @@ let view_overlays_state_of (context : Lui_ui.ui_context) =
 let view_overlays (context : Lui_ui.ui_context) =
   (Signal.value (view_overlays_state_of context))
 let push_view_overlay context ~key ~view ~on_escape =
+  incr overlay_generation;
   let s = view_overlays_state_of context in
   let cur = Runtime.signal_get s in
   let cur = List.filter (fun o -> o.vo_key <> key) cur in
   Signal.set s (cur @ [ { vo_key = key; vo_view = view; vo_on_escape = on_escape } ])
 
 let pop_view_overlay context =
+  incr overlay_generation;
   let s = view_overlays_state_of context in
   match List.rev (Runtime.signal_get s) with
   | top :: rest ->
@@ -127,12 +133,14 @@ let pop_view_overlay context =
   | [] -> ()
 
 let close_view_overlays context =
+  incr overlay_generation;
   let s = view_overlays_state_of context in
   Signal.set s []
 
 (* context-free variant for openers that run before/without a mount
    (the property dialog clears all view overlays on open) *)
 let close_all_view_overlays () =
+  incr overlay_generation;
   match !view_overlays_state with
   | Some s -> Runtime.signal_set s []
   | None -> ()
@@ -146,6 +154,7 @@ let view_overlay_open () =
    no ui_context): the state exists once the .cp__overlays chrome has
    mounted, which always precedes the first user interaction *)
 let push_view_overlay_ctxfree ~key ~view ~on_escape =
+  incr overlay_generation;
   match !view_overlays_state with
   | Some s ->
       let cur = Runtime.signal_get s in
@@ -156,6 +165,7 @@ let push_view_overlay_ctxfree ~key ~view ~on_escape =
   | None -> false
 
 let remove_view_overlay key =
+  incr overlay_generation;
   match !view_overlays_state with
   | Some s ->
       Runtime.signal_set s
@@ -168,6 +178,7 @@ let remove_view_overlay key =
    view-overlay stack, tracked surfaces on the overlay stack — the
    view stack holds the most recently opened surface in practice *)
 let pop_overlay () =
+  incr overlay_generation;
   match !view_overlays_state with
   | Some s when Runtime.signal_get s <> [] -> (
       match List.rev (Runtime.signal_get s) with
@@ -420,4 +431,3 @@ let chain_worker () =
     chained := true;
     ignore (Runtime.on_sync refresh_affected)
   end
-

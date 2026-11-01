@@ -387,7 +387,7 @@ let load_favorites repo st =
   then_keep
     (Runtime.invoke1 "thread-api/get-favorite-pages" (Wire.String repo))
     (fun w ->
-      if gen = !favorites_gen then
+      if gen = !favorites_gen && Runtime.repo () = repo then
         Runtime.signal_set st.favorites (pages_of_wire w))
 
 let recents_gen = ref 0
@@ -401,10 +401,13 @@ let load_recents repo st =
   then_keep
     (Runtime.invoke2 "thread-api/get-recent-pages" (Wire.String repo) ids)
     (fun w ->
-      if gen = !recents_gen then
+      if gen = !recents_gen && Runtime.repo () = repo then
         Runtime.signal_set st.recents (pages_of_wire w))
 
+let nav_titles_req = Ui_effect.request ()
+
 let load_nav_tag_titles repo st =
+  let gen = Ui_effect.issue nav_titles_req in
   let pull_cls cls =
     let* w =
       Runtime.invoke3 "thread-api/pull" (Wire.String repo)
@@ -420,6 +423,7 @@ let load_nav_tag_titles repo st =
     (Js.Promise.all2
        (pull_cls "logseq.class/Asset", pull_cls "logseq.class/Task"))
     (fun (asset, task) ->
+      if Ui_effect.is_current nav_titles_req gen && Runtime.repo () = repo then
       Runtime.signal_set st.nav_tag_titles
         (List.filter_map Fun.id
            [ Option.map (fun t -> ("assets", t)) asset
@@ -724,6 +728,20 @@ let toggle_props st key =
          else i)
        (Runtime.signal_get st.items))
 
+let move_item st key destination =
+  let items = Runtime.signal_get st.items in
+  match List.find_opt (fun (it : item) -> it.key = key) items with
+  | None -> ()
+  | Some item ->
+      let rest = List.filter (fun (it : item) -> it.key <> key) items in
+      let destination = max 0 (min (List.length rest) destination) in
+      let rec insert index = function
+        | items when index = 0 -> item :: items
+        | [] -> [ item ]
+        | first :: tail -> first :: insert (index - 1) tail
+      in
+      Runtime.signal_set st.items (insert destination rest)
+
 let toggle_collapsed st key =
   Runtime.signal_set st.items
     (List.map
@@ -864,7 +882,7 @@ let refresh_item repo (it : item) : item Js.Promise.t =
                   match v with Some it' -> Js.Promise.resolve it'
                 | None -> fallback)
   | "page" -> (
-      match it.page_ref with
+      match (match it.uuid with Some _ as uuid -> uuid | None -> it.page_ref) with
       | Some r ->
           (let* v = page_item_of_ref repo r in
           match v with Some it' -> Js.Promise.resolve it'
@@ -879,12 +897,27 @@ let refresh_item repo (it : item) : item Js.Promise.t =
       | None -> fallback)
   | _ -> fallback
 
+let items_req = Ui_effect.request ()
+
 let refresh_items repo st =
+  let gen = Ui_effect.issue items_req in
   let items = Runtime.signal_get st.items in
   if items <> [] then
     ignore
       ((let* arr = Js.Promise.all (Array.of_list (List.map (refresh_item repo) items)) in
-       Runtime.signal_set st.items (Array.to_list arr);
+       if Ui_effect.is_current items_req gen && Runtime.repo () = repo then (
+         let refreshed = Hashtbl.create (Array.length arr) in
+         Array.iter2 (fun original fresh ->
+             Hashtbl.replace refreshed original.key { fresh with key = original.key })
+           (Array.of_list items) arr;
+         Runtime.signal_set st.items
+           (List.map (fun current ->
+                match Hashtbl.find_opt refreshed current.key with
+                | None -> current
+                | Some fresh ->
+                    { fresh with collapsed = current.collapsed
+                    ; props_collapsed = current.props_collapsed })
+              (Runtime.signal_get st.items)));
        Js.Promise.resolve ())
        |> Js.Promise.catch (fun _ ->
               Ui_services.log_error "sidebar refresh failed";

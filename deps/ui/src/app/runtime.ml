@@ -32,6 +32,38 @@ let current_journals = Subs_state.current_journals
 let reload_current_view : (unit -> unit Js.Promise.t) ref =
   ref (fun () -> Js.Promise.resolve ())
 
+type reload_origin =
+  { reload_repo : string
+  ; reload_route : Model.route
+  ; reload_revision : int
+  ; reload_generation : int
+  }
+
+type reload_publication =
+  { publication_origin : reload_origin
+  ; publication_generation : int
+  ; publication_revision : int
+  }
+
+type reload_result =
+  | Reload_published of reload_publication
+  | Reload_unchanged of reload_origin
+  | Reload_superseded
+  | Reload_failed of
+      { failure_message : string
+      ; failure_cause : Js.Promise.error option
+      }
+
+type publication_receipt = Update.publication
+
+let reload_current_view_owned :
+    (reload_origin -> reload_result Js.Promise.t) ref =
+  ref (fun _ -> invalid_arg "Owned view reload is not installed")
+
+let refresh_after_ops_owned :
+    (reload_origin -> reload_result Js.Promise.t) ref =
+  ref (fun _ -> invalid_arg "Owned operation refresh is not installed")
+
 (* the journals list's scroll-end pagination hook — the router installs
    load_more_journals so page.ml stays below the routing layer *)
 let journals_load_more : (unit -> unit Js.Promise.t) ref =
@@ -58,6 +90,7 @@ let hooks = Subs_state.app_hooks
 let editor_popup_open = ref false
 
 let on_sync = Subs_state.on_sync
+let off_sync = Subs_state.off_sync
 let run_sync_subs = Subs_state.run_sync_subs
 
 let current_graph_uuid = Subs_state.current_graph_uuid
@@ -68,6 +101,50 @@ let mark_nav = Subs_state.mark_nav
 let take_nav_mark = Subs_state.take_nav_mark
 
 let load_gen = Subs_state.load_gen
+
+let capture_reload_origin () =
+  let m = model () in
+  Option.map
+    (fun reload_repo ->
+      { reload_repo; reload_route = m.Model.route
+      ; reload_revision = m.Model.context_revision
+      ; reload_generation = !load_gen })
+    m.Model.repo
+
+let reload_origin_matches origin m generation =
+  m.Model.repo = Some origin.reload_repo
+  && m.Model.route = origin.reload_route
+  && m.Model.context_revision = origin.reload_revision
+  && generation = origin.reload_generation
+
+let reload_origin_current origin =
+  reload_origin_matches origin (model ()) !load_gen
+
+let advance_publication origin (publication : publication_receipt) =
+  if not (reload_origin_matches origin publication.Update.before
+            publication.Update.before_generation)
+     || publication.Update.after.Model.repo <> Some origin.reload_repo
+     || publication.Update.after.Model.route <> origin.reload_route
+  then None
+  else
+    let after = { origin with
+      reload_revision = publication.Update.after.Model.context_revision
+    ; reload_generation = publication.Update.after_generation } in
+    if reload_origin_current after then Some after else None
+
+let publication_current origin publication =
+  Option.is_some (advance_publication origin publication)
+
+let reload_result_current = function
+  | Reload_published publication ->
+      let origin = publication.publication_origin in
+      let m = model () in
+      m.Model.repo = Some origin.reload_repo
+      && m.Model.route = origin.reload_route
+      && m.Model.context_revision = publication.publication_revision
+      && !load_gen = publication.publication_generation
+  | Reload_unchanged origin -> reload_origin_current origin
+  | Reload_superseded | Reload_failed _ -> false
 
 (* set by graphs_ops (avoids a Worker_events -> Graphs_ops -> Boot
    module cycle): remote-graph-gone broadcast refreshes the remote
@@ -172,14 +249,24 @@ let scan_gate_mark g ~gen ~now =
 (* all actions reach the reducer through !app_send (wired to Lui_app.send
    in main.ml); Update.apply runs the per-action effect pass inside the
    dispatch so there is a single dispatch path *)
-let send action =
+let dispatch_action action =
   (match action with
    | Action.Navigate_to _ -> Ui_services.perf_mark "action:navigate"
    | Action.Page_loaded _ -> Ui_services.perf_mark "action:page-loaded"
    | Action.Boot_graph_ready _ -> Ui_services.perf_mark "action:boot-ready"
    | _ -> ());
-  ignore (!app_send action);
+  !app_send action
+
+let send action =
+  ignore (dispatch_action action);
   flush_now ()
+
+let send_with_publication action =
+  let publication =
+    Update.capture_publication action (fun () -> dispatch_action action)
+  in
+  flush_now ();
+  publication
 
 (* Convenience for feature modules: update a signal state and flush so the
    DOM re-renders outside the LUI event loop (async callbacks, timers). *)

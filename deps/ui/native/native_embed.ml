@@ -96,9 +96,8 @@ let ext_shallow_snapshot (rt : Lui_runtime.application) node : Js.Json.t =
           String.sub ident 7 (String.length ident - 7)
         else ident
     | None -> (
-        (* standard kinds present the HTML tag their DOM twin would carry
-           (matching the host's DOM tag naming) — delegated selectors
-           like a[data-ref] / button.x match on it *)
+        (* Standard kinds expose HTML target semantics for delegated selectors.
+           Native controls flatten the Web label/input subtree to its input. *)
         match kind with
         | Some Lui_protocol.Link -> "a"
         | Some
@@ -108,7 +107,9 @@ let ext_shallow_snapshot (rt : Lui_runtime.application) node : Js.Json.t =
         | Some
             ( Lui_protocol.Input | Lui_protocol.TextField
             | Lui_protocol.SearchField | Lui_protocol.SecureField
-            | Lui_protocol.NumberStepper ) ->
+            | Lui_protocol.NumberStepper | Lui_protocol.Checkbox
+            | Lui_protocol.Radio | Lui_protocol.SwitchControl
+            | Lui_protocol.Slider ) ->
             "input"
         | Some Lui_protocol.Textarea -> "textarea"
         | Some (Lui_protocol.Select | Lui_protocol.Combobox) -> "select"
@@ -433,6 +434,11 @@ let initialize_unlocked platform_code host_code (payload : string) =
   current_app := Some app;
   Dom_ext.doc_elements_provider := collect_elements;
   Dom_ext.subtree_elements_provider := collect_subtree;
+  Platform.dom_handler_aliases := (fun id ->
+    match !current_app with
+    | Some app -> Option.value (Hashtbl.find_opt
+        (Lui_app.runtime app).Lui_runtime.runtime_alias_targets id) ~default:[]
+    | None -> []);
   Platform.dom_parent_of :=
     (fun id ->
       match !current_app with
@@ -569,6 +575,16 @@ let pointer_up node x y modifiers button target_class =
     (Lui_protocol.PointerUp
        (node, pointer_detail x y modifiers button target_class))
 
+let pointer_move node x y modifiers button target_class =
+  dispatch_lui
+    (Lui_protocol.PointerMove
+       (node, pointer_detail x y modifiers button target_class))
+
+let pointer_cancel node x y modifiers button target_class =
+  dispatch_lui
+    (Lui_protocol.PointerCancel
+       (node, pointer_detail x y modifiers button target_class))
+
 let pointer_enter node = dispatch_lui (Lui_protocol.PointerEnter node)
 
 let pointer_leave node = dispatch_lui (Lui_protocol.PointerLeave node)
@@ -580,6 +596,9 @@ let context_menu_press node x y modifiers button target_class =
 
 let toggle_changed node checked =
   dispatch_lui (Lui_protocol.ToggleChanged (node, checked))
+
+let toggle_changed_detail node checked modifiers =
+  dispatch_lui (Lui_protocol.ToggleChangedDetail (node, checked, modifiers))
 
 let radio_changed node = dispatch_lui (Lui_protocol.Change node)
 
@@ -679,7 +698,9 @@ let platform_event payload =
       let json =
         try Js.Json.parseExn body with _ -> Js.Json.JObject []
       in
-      if name = "window-close-request" then
+      if name = "clipboard-write-result" then
+        Platform.note_clipboard_write (Yojson.Safe.from_string body)
+      else if name = "window-close-request" then
         Host.enqueue (fun () ->
           let result ok error =
             platform_request ("window-close-result\n" ^ Yojson.Safe.to_string
@@ -782,6 +803,9 @@ let dispose () =
   (* daemons deliberately outlive the app — they keep the repo admitted
      and the graph open so the next launch attaches instantly *)
   with_entry_lock (fun () ->
+    Editor_actions.cancel_clipboard_actions ();
+    Platform.cancel_clipboard_writes ();
+    Host.set_host_op Host.disconnected;
     Queue.clear pending_batches;
     (match !current_app with
      | Some app ->
@@ -832,10 +856,13 @@ module Ffi = struct
   let press_detail node x y modifiers button target_class = encode_batches (press_detail node x y modifiers button target_class)
   let pointer_down node x y modifiers button target_class = encode_batches (pointer_down node x y modifiers button target_class)
   let pointer_up node x y modifiers button target_class = encode_batches (pointer_up node x y modifiers button target_class)
+  let pointer_move node x y modifiers button target_class = encode_batches (pointer_move node x y modifiers button target_class)
+  let pointer_cancel node x y modifiers button target_class = encode_batches (pointer_cancel node x y modifiers button target_class)
   let pointer_enter node = encode_batches (pointer_enter node)
   let pointer_leave node = encode_batches (pointer_leave node)
   let context_menu_press node x y modifiers button target_class = encode_batches (context_menu_press node x y modifiers button target_class)
   let toggle_changed node checked = encode_batches (toggle_changed node checked)
+  let toggle_changed_detail node checked modifiers = encode_batches (toggle_changed_detail node checked modifiers)
   let radio_changed node = encode_batches (radio_changed node)
   let slider_changed node value = encode_batches (slider_changed node value)
   let scroll_completed node token outcome = encode_batches (scroll_completed node token outcome)
@@ -861,7 +888,7 @@ module Ffi = struct
       (match !current_app with
        | Some app -> app_flush_checked app
        | None -> invalid_arg "Document event before application initialization");
-      prevented)
+      prevented, encode_batches (take_patches_dbg "document"))
   let root_node = root_node
   let editor_snapshot block_id =
     with_entry_lock (fun () ->
@@ -890,10 +917,13 @@ let () =
   Callback.register "lui_ocaml_press_detail" Ffi.press_detail;
   Callback.register "lui_ocaml_pointer_down" Ffi.pointer_down;
   Callback.register "lui_ocaml_pointer_up" Ffi.pointer_up;
+  Callback.register "lui_ocaml_pointer_move" Ffi.pointer_move;
+  Callback.register "lui_ocaml_pointer_cancel" Ffi.pointer_cancel;
   Callback.register "lui_ocaml_pointer_enter" Ffi.pointer_enter;
   Callback.register "lui_ocaml_pointer_leave" Ffi.pointer_leave;
   Callback.register "lui_ocaml_context_menu_press" Ffi.context_menu_press;
   Callback.register "lui_ocaml_toggle_changed" Ffi.toggle_changed;
+  Callback.register "lui_ocaml_toggle_changed_detail" Ffi.toggle_changed_detail;
   Callback.register "lui_ocaml_radio_changed" Ffi.radio_changed;
   Callback.register "lui_ocaml_slider_changed" Ffi.slider_changed;
   Callback.register "lui_ocaml_scroll_completed" Ffi.scroll_completed;

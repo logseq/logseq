@@ -490,6 +490,80 @@ or its revision is not newer. For child patches, a mounted slot whose base
 revision cannot be reconciled is marked stale and reloaded instead of being
 merged speculatively.
 
+#### On-demand linked-reference page counts
+
+The DB renderer accepts the two-element resource key
+`[:linked-ref-pages-count #uuid "<owner-uuid>"]`. It returns only
+`{:ref-pages-count [[title count] ...]}`; an empty result is
+`{:ref-pages-count []}`. Titles are strings and counts are positive integers,
+in the existing descending-count order. Missing titles, non-positive counts
+and unexpectedly absent aggregate metadata fail fast; no replacement title
+or empty result is invented. Invalid key arity and invalid UUID values use
+the existing renderer errors. A missing owner follows the existing snapshot
+envelope's watched empty-map behavior, not a fabricated empty count array;
+strict consumers must surface the missing count field as an error.
+
+This resource reuses `Db_view.get_linked_references` and its page-count
+aggregation, retaining the owner's includes/excludes, hidden-page/block,
+class, alias, ancestor and descendant semantics. It is not limited to the
+displayed row window and accepts no additional view filters or search context.
+It returns no rows, blocks or supplementary slots. The snapshot envelope still
+contains the resource's own value slot, watch keys and revision as usual.
+
+Request it only while the references filter popup is open. Consumers refresh
+it on relevant revisions and dispose their subscription with the popup. It
+does not change existing defaults, the first linked-reference row request,
+`linked_window`, or any page-name/namespace resolution rule.
+
+The application constructs the key with `Views_db.key_ref_pages_count` and
+decodes it with `Views_wire.decode_ref_counts_resource`, rather than using
+the permissive decoder for windowed view results. The filter popup starts
+in an explicit loading state and surfaces missing, malformed or rejected
+resources as an error, not an empty candidate list. Its candidate subtree
+reacts to counts, the search query and the current include/exclude state;
+the controlled input remains mounted independently of resource refreshes.
+
+Each popup has a private `Runtime.on_sync` subscription, removed with
+`Runtime.off_sync` on disposal. Sync events immediately retire the previous
+request ticket, then debounce the latest read by 150 ms. Successful filter
+saves also refresh counts. Closing the popup logically cancels pending work:
+no delayed read starts and in-flight results cannot update disposed state.
+The existing RPC is not transport-cancelled. Reopening creates a new request
+owner and subscription. Count updates and the existing 200 ms search debounce
+request a flush explicitly on both Web and MyGo.
+
+`Views_popup.show_custom` accepts an optional application-private
+`owner_scope`; the references picker supplies its launching view's scope.
+Disposing that owner immediately blocks actions/results and schedules closure
+of only that popup id with a zero-delay timer, never `close_all`. This prevents
+an old cleanup from closing a newer popup. Result guards also check the
+captured repo, route and selected view identity. The model's general
+`context_revision` is not a popup lifetime token: same-route page/journal
+publications increment it. Ordinary publications must not permanently retire
+an open picker. A fresh reopen after navigation does not reuse old tickets.
+
+Watch keys cover the owner entity (including saved includes/excludes), owner
+incoming refs, ref-scope (aliases and class hierarchy), and attributes for
+titles, refs, page ownership, parent hierarchy, tags/page identity, idents,
+view ownership, hiding and deletion. An owner with an ident also watches that
+attribute because the existing hidden-reference predicate reads it. Attribute
+watches are deliberately broader than the owner's current candidate set so
+newly eligible pages and descendant/ancestor edits invalidate counts. This
+does not use `watch-all`.
+
+Calculation starts from owner/alias-bounded incoming reference index seeks,
+not a whole-graph index scan. For P result pages, this renderer adds O(P)
+serialization work and payload pairs; existing count sorting is O(P log P).
+It inherits the existing aggregator's full
+eligible-reference, descendant, ancestor and owner-filter traversal costs;
+it is not constant-time or bounded by the visible row count. The value payload
+contains one pair per distinct eligible titled page, not per source row.
+Existing alias deduplication is O(A squared) for A aliases, and filtered
+subtree set/list operations can be superlinear; no overall linear bound is
+implied by the bounded initial seeks.
+Large-graph CPU latency and payload size require measurement; no performance
+claim follows from the small resource shape.
+
 #### Subscription store
 
 frontend.db.subs owns one immutable external store. Important resource
@@ -786,6 +860,56 @@ has real ownership, not to mirror a historical split plan.
 
 The UI stack uses Base UI and Tailwind 4. Read package.json and current component
 usage before changing dependency or styling conventions.
+
+### Native host clipboard requests
+
+The native app sends platform envelopes as `name\npayload`. The MyGo adapter
+handles them in `deps/ui/mygo/platform.go`; the Linux/macOS OCaml SDL host drains
+`Bridge.take_requests` through `Host_requests` on its UI thread. These are distinct
+consumers of the same app-private clipboard task contract.
+
+| Request | Payload | Completion |
+| --- | --- | --- |
+| `clipboard` | Raw text | Legacy unchecked write; no clipboard task ACK |
+| `clipboard-read` | Empty | `clipboard-read` with a `text` string; not write evidence |
+| `clipboard-write` | Exactly string fields `request-id` and `text` | One matching `clipboard-write-result` for an admitted, uncancelled request when Shell returns normally. A fatal Shell exception may terminate without a result. |
+
+For example, request `{"request-id":"1","text":"alpha"}` completes with
+`{"request-id":"1","ok":true}` only after the real native write succeeds. A
+refusal completes with `{"request-id":"1","ok":false,"error":"<reason>"}`.
+Success has no `error` field; failure requires a nonempty string. The application
+rejects unknown fields, duplicate fields, wrong types, noncanonical/zero/future
+identities and malformed or trailing JSON. Exception wording is not a protocol
+contract. The OCaml consumer also rejects repeated or out-of-order request IDs
+before writing, and validates issuance against the in-process app registry.
+
+`Host_requests` uses the checked `Shell.clipboard_write` bool, not SDL status,
+queue insertion, clipboard readback, or a local cache. Linux requires the Shell
+implementation that returns `gtk_clipboard_set_with_data` ownership acceptance
+and retains copied provider data until GTK clears it; the older unchecked Linux
+bool is insufficient. macOS uses the existing `NSPasteboard.setString` BOOL.
+The host must call Shell on its UI thread and continue pumping GTK even while
+idle. This synchronous boundary does not promise later ownership, successful
+target conversion, clipboard-manager persistence, or independent OS qualification.
+
+Negative ACK rejects the task as a real failure; malformed requests and runtime
+exceptions remain fail-fast and do not become success. Clipboard request bodies
+and decoder errors are not logged. Admission, the synchronous write and reply
+enqueue hold the application entry lock, so disposal cannot interleave them.
+A reply is queued onto the app mailbox only after the native call returns.
+Only a matching positive ACK can permit deletion,
+and the shared cut continuation must still revalidate owner, block, buffer,
+selection/revision, mount and route freshness. A stale continuation is Cancelled,
+not success or an OS refusal.
+
+Cancellation removes the app's pending request. The OCaml consumer skips an
+already-cancelled queued request without calling Shell or generating another
+terminal. Disposal cancels all pending tasks, invalidates action continuations,
+and disconnects the app's host operation; it does not reset monotonic IDs.
+A late result for a settled request is ignored and cannot delete a new owner.
+The OCaml consumer refuses writes without an installed host environment. Tests
+using an in-memory host establish protocol/domain behavior, not OS clipboard
+acceptance or external paste success.
 
 ### Engineering workflow
 

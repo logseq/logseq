@@ -4,7 +4,9 @@
 open Lui_elements
 module W = Wire
 
-let on_native_event uuid ~name ~value ~key:_ =
+let composition_active (ev : Ui_services.ev) = ev.composing
+
+let on_native_event uuid ~name ~value ~key =
   if not (Ui_services.env_publishing ()) && uuid <> "" then
     match name, value with
     | "input", Some source ->
@@ -18,6 +20,15 @@ let on_native_event uuid ~name ~value ~key:_ =
         (match Editor_state.editing () with
         | Some editing when editing.uuid = uuid -> Editor_actions.blur_commit ()
         | _ -> ())
+    | "key", Some source ->
+        (match key with
+         | Some "Escape" ->
+             Editor_actions.sync_buffer uuid source;
+             Editor_actions.exit_edit ~select:true
+         | Some "Shift-Enter" ->
+             Editor_actions.sync_buffer uuid source;
+             Editor_actions.insert_sibling_after uuid
+         | _ -> ())
     | _ -> ()
 
 let update_calc (_ : 'a) = ()
@@ -39,8 +50,8 @@ let copy_button uuid =
 
 (* -- language picker (.code-block-actions .select-language) -- *)
 
-(* Common fence languages — native has no CodeMirror mode table to
-   enumerate; picking a lang only stores the property + label text. *)
+(* Stored language names are resolved by the platform editor. Unsupported
+   modes keep their source and use the plain-text fallback. *)
 let languages =
   [ "calc"; "clojure"; "css"; "csv"; "diff"; "go"; "graphql"; "haskell"
   ; "html"; "java"; "javascript"; "json"; "julia"; "kotlin"; "latex"
@@ -78,4 +89,4 @@ let open_lang_picker uuid =
 
 (* file route: no native CodeMirror — the plain textarea stays the editor
    (its on_input already persists via file_view's debounced save) *)
-let attach_file_editor ~on_change:_ () = ()
+let attach_file_editor ~on_change:_ () = fun () -> ()

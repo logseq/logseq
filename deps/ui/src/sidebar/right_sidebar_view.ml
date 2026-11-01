@@ -258,6 +258,17 @@ let item_header st idx (it : Sidebar_state.item) =
            kills the whole mount batch *)
         ~label:(if it.title = "" then t "ui/untitled" else it.title)
         ~accessibility_identifier:("sidebar-panel-header-" ^ n)
+        ~on_navigate:(function
+          | Lui_protocol.NavigationKey (_, key, true) ->
+              let destination = match key with
+                | "ArrowUp" -> Some (idx - 1)
+                | "ArrowDown" -> Some (idx + 1)
+                | "Home" -> Some 0
+                | "End" -> Some (List.length (Runtime.signal_get st.Sidebar_state.items) - 1)
+                | _ -> None
+              in
+              Option.iter (Sidebar_state.move_item st it.key) destination
+          | _ -> ())
         ~on_press:(fun _ -> Sidebar_state.toggle_collapsed st it.key)
         [ row ~key:("arrow-" ^ it.key) ~cross:`center
             (* cljs: .rotating-arrow.(not-)collapsed > FA caret-right *)
@@ -692,34 +703,23 @@ let inner st =
        (Signal.value st.Sidebar_state.right_fraction)
        (Signal.value st.Sidebar_state.viewport_w))
     (column ~key:"rs-inner" ~accessibility_identifier:"right-sidebar-container"
-       ~grow:1.
+       ~grow:1. ~min_height:0
        ~background:"var(--lx-gray-02, var(--ls-secondary-background-color))"
        ~style_class:"cp__right-sidebar-inner"
-       ~data_attrs:[ ("style", "width:100%;height:100%;padding-top:0") ]
-    [ scroll ~key:"rs-scroll" ~orientation:`vertical ~grow:1.
+    [ topbar st
+    ; scroll ~key:"rs-scroll" ~orientation:`vertical ~grow:1. ~min_height:0
         ~style_class:"cp__right-sidebar-scrollable"
-        [ column ~key:"rs-col" ~grow:1.
-            [ topbar st
-            ; reactive
-                (fun items ->
-                  column ~key:"rs-items" ~grow:1. ~padding_horizontal:8
-                    ~margin_left:4 ~margin_top:(-8)
-                    ~style_class:"sidebar-item-list scrollbar-spacing"
-                    ~data_attrs:
-                      [ ( "style"
-                        , "margin-left:4px;margin-top:-8px;\
-                           padding-bottom:150px;height:calc(100vh - 48px)"
-                        )
-                      ]
-                    (box ~key:"rs-drop" ~style_class:"sidebar-drop-indicator"
-                       ~height:8
-                       (* cljs container.css .sidebar-drop-indicator: the
-                          8px lead-in offsets the list's mt-[-8px] so the
-                          first item header lands below the sticky topbar
-                          instead of clipping under it *)
-                       []
-                     :: List.mapi (sidebar_item st) items))
-                (Signal.value st.Sidebar_state.items) ] ]
+        [ Ui_components.with_props [ Ui_components.Prop.padding_bottom 150 ]
+          (column ~key:"rs-items" ~padding_horizontal:8
+            ~margin_left:4 ~style_class:"sidebar-item-list scrollbar-spacing"
+            [ keyed
+                ~source:(reactive (fun items -> List.mapi (fun i it -> (i, it)) items)
+                    (Signal.value st.Sidebar_state.items))
+                ~key:(fun (_, (it : Sidebar_state.item)) -> it.key)
+                ~cmp:String.compare
+                ~mount:(fun entry ->
+                  reactive (fun (idx, it) -> sidebar_item st idx it) entry)
+            ]) ]
     ])
 
 let render (ms : Model.t Signal.signal) : t =

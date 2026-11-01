@@ -34,15 +34,6 @@ let toast_item (t : Model.toast) : t =
     (toast ~key:("toast-" ^ string_of_int t.toast_id)
        ~duration
        ~label:t.toast_text
-       ~on_appear:(fun _ ->
-         (* the web toaster runs the duration countdown itself; the
-            native retained host does not, so the view owns it here —
-            dismissing an already-closed id is a no-op *)
-         if duration > 0 then
-           ignore
-             (Ui_services.timers_timeout
-                (fun () -> Toast.dismiss t.toast_id)
-                duration))
        ~on_dismiss:(fun _ -> Toast.dismiss t.toast_id)
        ~style_class:kind
        [ overlay ~key:"ti-content"

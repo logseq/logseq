@@ -38,7 +38,7 @@ let indent_unit = "\t"
 let repo () =
   match (Runtime.model ()).Model.repo with
   | Some r -> r
-  | None -> "logseq_db_Demo"
+  | None -> failwith "Page export requires an open graph"
 
 let uuids_v st =
   match st.S.block_uuids with
@@ -219,10 +219,15 @@ let set_png_transparent (st : S.t Signal.state) =
   Runtime.flush ();
   export_png st
 
+let generation = ref 0
+
 (* cljs reset-export-content! — refetch when tab/options change *)
 let regen (st : S.t Signal.state) =
   let cur = S.cur st in
-  S.mutate st (fun s -> { s with copied = false });
+  incr generation;
+  let request = !generation and graph = Runtime.repo () in
+  let current () = request = !generation && graph = Runtime.repo () in
+  S.mutate st (fun s -> { s with copied = false; content = None });
   match cur.fmt with
   | S.Png -> export_png st
   | _ ->
@@ -234,13 +239,14 @@ let regen (st : S.t Signal.state) =
         | S.Png -> Js.Promise.resolve ""
       in
       (let* content = p in
-      S.mutate st (fun s -> { s with content = Some content });
-      Runtime.flush ();
+      if current () then (
+        S.mutate st (fun s -> { s with content = Some content });
+        Runtime.flush ());
       Js.Promise.resolve ())
-      |> Js.Promise.catch (fun _ ->
-             S.mutate st (fun s ->
-                 { s with content = Some "<export failed>" });
-             Runtime.flush ();
+      |> Js.Promise.catch (fun error ->
+             if current () then (
+               Ui_services.log_error ("Page export failed", error);
+               Toast.error (I18n.t1 "ui/error-boundary-error" "page-export:failed"));
              Js.Promise.resolve ())
       |> ignore
 

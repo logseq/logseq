@@ -69,6 +69,12 @@ func (s *platformServices) AppliedBatch(batch luimygo.Batch, snapshot bool) {
 		return
 	}
 	for _, op := range batch.Ops {
+		// A mount and retained-scope reset can both apply between viewport sweeps.
+		if op.Op == "set-extension-prop" && op.Property == "height" && op.Value != "auto" {
+			if row := s.viewport.rows[op.ID]; row != nil {
+				row.near, row.unmounted = false, false
+			}
+		}
 		if op.Op == "set-extension-prop" || op.Op == "remove-extension-prop" {
 			delete(s.controls.scrolls, op.ID)
 		}

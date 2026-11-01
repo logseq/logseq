@@ -5,14 +5,15 @@
 
 let install () = ()
 
-let emoji_id_valid (id : string) : bool = id <> ""
-
 (* GENERATED module: Emoji_mart_data.table is produced at build time by
    tools/emoji_gen.exe from resources/js/emoji-data.js (@emoji-mart/data
    native set) — (id, display name, native char, search keywords)
    mirroring the web picker dataset so stored {type:emoji,id} values
    stay mart-compatible. *)
 let table = Emoji_mart_data.table
+
+let emoji_id_valid (id : string) : bool =
+  Array.exists (fun (eid, _, _, _) -> eid = id) table
 
 let emoji_char (id : string) : string option =
   let found = ref None in

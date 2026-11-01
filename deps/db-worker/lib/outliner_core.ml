@@ -212,41 +212,91 @@ let delete_covers_selected_ancestor (block : entity) (ancestor : entity) : bool 
 
 (* ---------- remove-orphaned-page-refs! ---------- *)
 
-let remove_orphaned_page_refs (db : db) (db_id : entity_id) (txs_state : txs_state)
+type orphan_candidate =
+  { orphan_id : entity_id
+  ; orphan_uuid : string }
+
+type orphan_cleanup =
+  | Immediate
+  | Deferred of (orphan_candidate -> unit)
+
+let remove_orphaned_page_refs ?(orphan_cleanup = Immediate)
+    (db : db) (db_id : entity_id) (txs_state : txs_state)
     (old_refs : entity list) (new_refs : value list) : unit =
-  let new_names =
-    List.filter_map
-      (fun r ->
-        match map_key_of r "block/name" with
-        | Some (String s) -> Some s
-        | _ -> (
-            match id_of_value r with
-            | Some id -> (
-                match Ldb.ent_of_id db id with
-                | Some e -> Ldb.string_value e "block/name"
-                | None -> None)
-            | None -> None))
-      new_refs
-  in
-  let old_names =
-    List.filter_map
-      (fun (e : entity) -> Ldb.string_value e "block/name")
-      old_refs
-    |> List.filter (fun n -> not (List.mem n new_names))
-  in
-  if old_names <> [] then begin
-    let orphaned =
-      Ldb.get_orphaned_pages db old_names
-        ~empty_ref_f:(fun (page : entity) ->
-          let refs = Ldb.ref_ids page "block/_refs" in
-          (refs = [] || refs = [ db_id ])
-          && not (Ldb.is_class page)
-          && not (Ldb.is_property page))
-        ~built_in_pages_names:Ldb.built_in_pages_names
-    in
-    txs_push txs_state
-      (List.map (fun (p : entity) -> RetractEntity (Entity_id p.id)) orphaned)
-  end
+  match orphan_cleanup with
+  | Deferred defer ->
+      let new_ids = Hashtbl.create 16 in
+      List.iter
+        (fun v ->
+          match Outliner_pipeline.ref_to_id db v with
+          | Some id -> Hashtbl.replace new_ids id ()
+          | None -> ())
+        new_refs;
+      List.iter
+        (fun (page : entity) ->
+          if not (Hashtbl.mem new_ids page.id) then
+            match Ldb.uuid_value page "block/uuid" with
+            | Some uuid -> defer { orphan_id = page.id; orphan_uuid = uuid }
+            | None -> ())
+        old_refs
+  | Immediate ->
+      let new_names =
+        List.filter_map
+          (fun r ->
+            match map_key_of r "block/name" with
+            | Some (String s) -> Some s
+            | _ -> (
+                match id_of_value r with
+                | Some id -> (
+                    match Ldb.ent_of_id db id with
+                    | Some e -> Ldb.string_value e "block/name"
+                    | None -> None)
+                | None -> None))
+          new_refs
+      in
+      let old_names =
+        List.filter_map
+          (fun (e : entity) -> Ldb.string_value e "block/name")
+          old_refs
+        |> List.filter (fun n -> not (List.mem n new_names))
+      in
+      if old_names <> [] then begin
+        let orphaned =
+          Ldb.get_orphaned_pages db old_names
+            ~empty_ref_f:(fun (page : entity) ->
+              let refs = Ldb.ref_ids page "block/_refs" in
+              (refs = [] || refs = [ db_id ])
+              && not (Ldb.is_class page)
+              && not (Ldb.is_property page))
+            ~built_in_pages_names:Ldb.built_in_pages_names
+        in
+        txs_push txs_state
+          (List.map (fun (p : entity) -> RetractEntity (Entity_id p.id)) orphaned)
+      end
+
+let deferred_orphan_txs (db : db) (candidates : orphan_candidate list)
+    : tx_op list =
+  List.filter_map
+    (fun candidate ->
+      match Ldb.ent_of_id db candidate.orphan_id with
+      | Some page
+        when Ldb.uuid_value page "block/uuid" = Some candidate.orphan_uuid ->
+          (match Ldb.string_value page "block/name" with
+           | Some name ->
+               let orphaned =
+                 Ldb.get_orphaned_pages db [ name ]
+                   ~empty_ref_f:(fun (page : entity) ->
+                     page.id = candidate.orphan_id
+                     && Ldb.ref_ids page "block/_refs" = []
+                     && not (Ldb.is_class page)
+                     && not (Ldb.is_property page))
+                   ~built_in_pages_names:Ldb.built_in_pages_names
+               in
+               if orphaned = [] then None
+               else Some (RetractEntity (Entity_id candidate.orphan_id))
+           | None -> None)
+      | _ -> None)
+    candidates
 
 (* cljs page-updated-at-tx — stamp :block/updated-at on a page eid,
    backfilling :block/created-at when the page lacks one *)
@@ -319,7 +369,8 @@ let update_page_when_save_block (db : db) (txs_state : txs_state)
 
 (* ---------- remove-orphaned-refs-when-save ---------- *)
 
-let remove_orphaned_refs_when_save (db : db) (txs_state : txs_state)
+let remove_orphaned_refs_when_save ?(orphan_cleanup = Immediate)
+    (db : db) (txs_state : txs_state)
     (block_entity : entity) (m : Block_map.t) : unit =
   let self_page_id =
     match Ldb.ref_ent block_entity "block/page" with
@@ -328,10 +379,12 @@ let remove_orphaned_refs_when_save (db : db) (txs_state : txs_state)
   in
   let content_refs =
     Outliner_pipeline.block_content_refs db block_entity
+    |> List.fold_left (fun ids id -> Db_reference.IdSet.add id ids)
+         Db_reference.IdSet.empty
   in
   let old_refs =
     Ldb.ref_ents block_entity "block/refs"
-    |> List.filter (fun r -> List.mem r.id content_refs)
+    |> List.filter (fun r -> Db_reference.IdSet.mem r.id content_refs)
   in
   let new_refs =
     match Block_map.attr_value m "block/refs" with
@@ -344,7 +397,8 @@ let remove_orphaned_refs_when_save (db : db) (txs_state : txs_state)
           vs
     | _ -> []
   in
-  remove_orphaned_page_refs db block_entity.id txs_state old_refs new_refs
+  remove_orphaned_page_refs ~orphan_cleanup db block_entity.id txs_state
+    old_refs new_refs
 
 (* ---------- get-last-child-or-self ---------- *)
 
@@ -1193,7 +1247,8 @@ let default_save_opts =
 
 (* -save — [data] is the incoming block map (entity flattened into a map
    by callers). Returns tx ops accumulated into [txs_state]. *)
-let save_in_txs (db : db) (txs_state : txs_state) (data : Block_map.t)
+let save_in_txs ?(orphan_cleanup = Immediate)
+    (db : db) (txs_state : txs_state) (data : Block_map.t)
     (opts : save_opts) : unit =
   let data' = remove_disallowed_inline_classes db data in
   let data'' =
@@ -1297,7 +1352,7 @@ let save_in_txs (db : db) (txs_state : txs_state) (data : Block_map.t)
               update_page_when_save_block db txs_state e;
             (match mget_str m "block/title" with
              | Some t when Ldb.string_value e "block/title" <> Some t ->
-                 remove_orphaned_refs_when_save db txs_state e m
+                 remove_orphaned_refs_when_save ~orphan_cleanup db txs_state e m
              | _ -> ())
         | None -> ())
    | None -> ());
@@ -1328,7 +1383,8 @@ exception Block_eid_missing
 
 type tx_result = { tx_data : tx_op list; tx_meta : tx_meta }
 
-let save_block (db : db) (block : Block_map.t) (opts : save_opts)
+let save_block ?(orphan_cleanup = Immediate)
+    (db : db) (block : Block_map.t) (opts : save_opts)
     : tx_result option =
   let eid =
     match mget_int block "db/id" with
@@ -1356,7 +1412,7 @@ let save_block (db : db) (block : Block_map.t) (opts : save_opts)
                 ~i18n_args:[]));
       let txs_state = new_txs_state () in
       let block' = Block_map.merge (Block_map.of_entity e) block in
-      save_in_txs db txs_state block' opts;
+      save_in_txs ~orphan_cleanup db txs_state block' opts;
       Some { tx_data = List.rev txs_state.txs; tx_meta = [] }
 
 (* ---------- insert-blocks ---------- *)
@@ -3550,12 +3606,13 @@ let opts_arg (opts : Block_map.t) : value =
   Map (List.map (fun (a, v) -> (Keyword a, v)) opts)
 
 (* save-block! *)
-let save_block_conn (conn : conn) (block : Block_map.t) (opts : save_opts)
+let save_block_conn ?(orphan_cleanup = Immediate)
+    (conn : conn) (block : Block_map.t) (opts : save_opts)
     (opts_entry : Block_map.t) : tx_result option =
   let outliner_op = Option.value opts.outliner_op ~default:"save-block" in
   let opts = { opts with outliner_op = Some outliner_op } in
   op_transact "save-block"
-    (fun () -> save_block (Conn.db conn) block opts)
+    (fun () -> save_block ~orphan_cleanup (Conn.db conn) block opts)
     [ Ref 0 (* conn placeholder — cljs args[0] is conn, unused *)
     ; bmap_arg block; opts_arg opts_entry ]
     conn

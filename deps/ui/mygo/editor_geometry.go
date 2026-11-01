@@ -39,7 +39,7 @@ type editorGeometryHost struct {
 
 type editorGeometryRequest struct {
 	name                string
-	node                int64
+	target              platformTarget
 	block, source, runs string
 	values              map[string]any
 }
@@ -59,14 +59,44 @@ func (s *platformServices) editorHost() *editorGeometryHost {
 // on disposal; no retained Element or OS edit history is owned here.
 func (s *platformServices) CloseEditor() { delete(editorGeometryHosts, s) }
 
+func (s *platformServices) retireEditor(id int64) {
+	// A null OCaml snapshot means this editing session has ended, even if
+	// its sink's removal patch has not arrived. Retire queued DOM retries too.
+	delete(s.controls.epochs, id)
+	h := s.editorHost()
+	if input := h.sinks[id]; input != nil {
+		input.cancelPointer()
+		input.layout = nil
+	}
+	delete(h.sinks, id)
+	for key, request := range h.pending {
+		if request.target.id == id {
+			delete(h.pending, key)
+		}
+	}
+}
+
 // CancelEditorPointer releases this window's drag capture without emitting input.
 // Call on the UI thread from the window's real blur callback.
 func (s *platformServices) CancelEditorPointer() {
 	if h := editorGeometryHosts[s]; h != nil {
 		for _, input := range h.sinks {
-			input.dragging = false
+			input.cancelPointer()
 		}
 	}
+}
+
+func (s *logseqEditorInput) cancelPointer() {
+	s.dragging = false
+	s.pointerMoved = false
+	s.pendingPointer = nil
+	s.pointerOwner = platformTarget{}
+	s.pointerBlock = ""
+}
+
+func (s *platformServices) liveEditorPointer(input *logseqEditorInput) bool {
+	n, ok := s.backend.Node(input.n.ID)
+	return ok && s.liveTarget(input.pointerOwner) && n.String("block-id") == input.pointerBlock
 }
 
 // EditorPointer routes a pre-dispatch window-space pointer to the input sink
@@ -78,6 +108,9 @@ func (s *platformServices) EditorPointer(ev ui.InputEvent, target int64) bool {
 	case ui.InputPointerDown, ui.InputPointerMove, ui.InputPointerUp:
 	default:
 		return false
+	}
+	if ev.Kind == ui.InputPointerDown {
+		s.CancelEditorPointer()
 	}
 	h := s.editorHost()
 	var input *logseqEditorInput
@@ -118,16 +151,41 @@ func (s *platformServices) EditorPointer(ev ui.InputEvent, target int64) bool {
 	if input == nil {
 		return false
 	}
-	l, ok := input.currentLayout()
+	if ev.Kind == ui.InputPointerDown {
+		input.pointerOwner = s.controlTarget(input.n.ID)
+		input.pointerBlock = input.n.String("block-id")
+	}
+	if !s.liveEditorPointer(input) {
+		input.cancelPointer()
+		return false
+	}
+	return input.windowPointer(ev)
+}
+
+func (s *logseqEditorInput) windowPointer(ev ui.InputEvent) bool {
+	if s.pendingPointer != nil && s.pendingPointer.Kind == ui.InputPointerUp && ev.Kind == ui.InputPointerMove {
+		return true
+	}
+	if ev.Kind == ui.InputPointerMove && s.dragging {
+		s.pointerMoved = true
+	}
+	l, ok := s.currentLayout()
 	if !ok {
+		if s.dragging {
+			// Selection patches invalidate geometry before the next frame.
+			// Keep the real drag endpoint, not the expired glyph layout.
+			s.pendingPointer = &ev
+			return true
+		}
 		return false
 	}
 	p, ok := l.space.WindowToLocal(ui.Point{X: ev.X, Y: ev.Y})
 	if !ok {
 		return false
 	}
+	s.pendingPointer = nil
 	ev.X, ev.Y = p.X, p.Y
-	return input.input(ev)
+	return s.input(ev)
 }
 
 func editorClass(n luimygo.Node, class string) bool {
@@ -479,6 +537,21 @@ func (s *platformServices) EditorRequest(name, payload string) (bool, error) {
 	if !ok || block == "" {
 		return true, fmt.Errorf("editor measurement requires block-id")
 	}
+	var fields []string
+	switch name {
+	case "caret-rect":
+		fields = []string{"offset"}
+	case "selection-rects":
+		fields = []string{"first", "last"}
+	case "offset-at":
+		fields = []string{"x", "y"}
+	}
+	for _, field := range fields {
+		value, ok := values[field].(float64)
+		if !ok || value != math.Trunc(value) {
+			return true, fmt.Errorf("%s requires integer %s", name, field)
+		}
+	}
 	id := s.editorNode(block)
 	if id == 0 {
 		return true, fmt.Errorf("editor %s is not mounted", block)
@@ -488,10 +561,11 @@ func (s *platformServices) EditorRequest(name, payload string) (bool, error) {
 	}
 	source, _, _, ok := logseqEditorServices.Snapshot(block)
 	if !ok {
-		return true, fmt.Errorf("editor snapshot absent for %s", block)
+		s.retireEditor(id)
+		return true, nil
 	}
 	n, _ := s.backend.Node(id)
-	s.editorHost().pending[name+"|"+payload] = editorGeometryRequest{name, id, block, source, n.String("runs"), values}
+	s.editorHost().pending[name+"|"+payload] = editorGeometryRequest{name, s.controlTarget(id), block, source, n.String("runs"), values}
 	return true, nil
 }
 
@@ -511,12 +585,24 @@ func (s *platformServices) EditorAfterFrame(c *ui.Context) ([]platformReply, err
 		}
 		input.layout = layout
 	}
+	for _, input := range h.sinks {
+		if input.pendingPointer != nil {
+			if s.liveEditorPointer(input) {
+				input.windowPointer(*input.pendingPointer)
+			} else {
+				input.cancelPointer()
+			}
+		}
+	}
 	requests := h.pending
 	h.pending = map[string]editorGeometryRequest{}
 	var replies []platformReply
 	for _, request := range requests {
-		input := h.sinks[request.node]
-		if input == nil {
+		if !s.liveTarget(request.target) {
+			continue
+		}
+		input := h.sinks[request.target.id]
+		if input == nil || input.n.String("block-id") != request.block {
 			continue
 		}
 		l, ok := input.currentLayout()

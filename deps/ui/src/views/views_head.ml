@@ -35,21 +35,7 @@ let ghost_btn ?(extra = "") ~title_ icon_name ~on_click : t =
     [ icon ~name:(Icons.name_ref icon_name) ~point_size:18 [] ]
 
 let count_of (s : V.vstate) =
-  if s.V.items_count > 0 then s.V.items_count
-  else
-  match s.V.data with
-  | Wr.VFlat { rows; _ } -> List.length rows
-  | Wr.VGrouped gs ->
-      List.fold_left (fun acc g -> acc + List.length g.Wr.grows) 0 gs
-  | Wr.VGroupedList gs ->
-      List.fold_left
-        (fun acc g ->
-          acc
-          + List.fold_left
-              (fun acc2 (_, rows) -> acc2 + List.length rows)
-              0 g.Wr.glparts)
-        0 gs
-  | Wr.VEmpty -> 0
+  max s.V.items_count (Wr.row_count s.V.data)
 
 let set_filters inst fs or_ =
   V.update inst (fun s -> { s with V.filters = fs; filters_or = or_ });
@@ -323,6 +309,8 @@ let filter_options inst fields =
 (* Shared value phase for new clauses and indexed edits. The picker owns
    one clause and preserves its current operator and selection. *)
 let filter_value_phase inst ~anchor ?index (c : V.column) =
+  let current = V.current_view inst in
+  let filters = (V.get inst).V.filters in
   let ident = c.V.c_id in
   let timestamp = c.V.c_type = "datetime" in
   let initial=Option.map (fun index -> List.nth (V.get inst).V.filters index) index in
@@ -337,6 +325,7 @@ let filter_value_phase inst ~anchor ?index (c : V.column) =
   in
   let opts = filter_options inst [W.kw "operator",W.Keyword operator] in
   Views_db.get_view_filter_data ~opts prop_w (fun data ->
+    if current () && (V.get inst).V.filters = filters then
       let multiple=match initial with
         | None -> W.get data "value-source"=Some (W.Keyword "property-values")
         | Some _ -> (match W.get data "many?" with Some (W.Bool many) -> many
@@ -490,12 +479,92 @@ let groupable_columns inst =
         && c.V.c_id <> "block.temp/refs-count"
         && List.mem c.V.c_type
              [ "checkbox"; "class"; "date"; "default"; "node"; "number"
-             ; "string"; "url" ])
+             ; "string"; "url" ]
+        && (not c.V.c_many || List.mem c.V.c_type [ "class"; "default"; "node" ]))
       s.V.columns
   in
   if List.exists (fun c -> c.V.c_id = "block/page") s.V.columns then
     (Views_table.page_column ()) :: cols
   else cols
+
+let gallery_custom_size inst view : t = fun ctx parent ->
+  let width, height = Wr.gallery_dimensions view in
+  let width = Signal.state ctx.Lui_ui.ui_scheduler (string_of_int width) in
+  let height = Signal.state ctx.Lui_ui.ui_scheduler (string_of_int height) in
+  let view_uuid = (V.get inst).V.view_uuid in
+  let commit () =
+    match int_of_string_opt (Signal.get_state width),
+          int_of_string_opt (Signal.get_state height) with
+    | Some width, Some height when (V.get inst).V.view_uuid = view_uuid ->
+        Views_db.set_gallery_dimensions view_uuid width height (fun () -> refresh inst);
+        P.close_all ()
+    | _ -> ()
+  in
+  let field label draft =
+    column ~gap:4
+      [ text ~value:(I.t label) []
+      ; Ui_components.input ~label:(I.t label)
+          ~text:(reactive (fun text -> text) (Signal.value draft))
+          ~on_input:(function L.TextChanged (_, text) -> Signal.set draft text | _ -> ())
+          ~on_submit:(fun _ -> commit ()) [] ]
+  in
+  column ~gap:8 ~width:240 ~max_width:280 ~padding:12
+    [ text ~value:(I.t "view.gallery/custom-size") []
+    ; field "view.gallery/width" width
+    ; field "view.gallery/height" height
+    ; Ui_components.button ~variant:`default ~text:(I.t "ui/save") ~size:`sm
+        ~disabled:(reactive (fun width height ->
+          int_of_string_opt width = None || int_of_string_opt height = None)
+          (Signal.value width) (Signal.value height))
+        ~on_press:(fun _ -> commit ()) [] ] ctx parent
+
+let gallery_menu_items inst =
+  let s = V.get inst in
+  let current = V.current_view inst in
+  let request_current request =
+    let ticket = Ui_effect.issue request in
+    fun () -> current () && Ui_effect.is_current request ticket
+  in
+  if s.V.display_type <> "gallery" then []
+  else
+    let cover_columns = List.filter
+      (fun c -> List.mem c.V.c_type ["asset"; "url"]) s.V.columns in
+    let cover = Wr.gallery_asset_ident ~asset_class:s.V.asset_class
+      ~infer:(List.mem inst.V.feature ["class-objects"; "query-result"])
+      ~cover_idents:(List.map (fun c -> c.V.c_id) cover_columns) s.V.view_ent in
+    let columns = List.filter (fun c -> c.V.c_id <> "select" && c.V.c_id <> "id"
+      && Some c.V.c_id <> cover) s.V.columns in
+    let display = Wr.gallery_display_idents
+      ~column_idents:(List.map (fun c -> c.V.c_id) columns)
+      ~asset_ident:cover s.V.view_ent in
+    let display_selection = ref display in
+    let after () = if current () then refresh inst in
+    let size = Option.bind s.V.view_ent (fun view -> view.Wr.vgallery_size) in
+    [ P.MSub (I.t "view.gallery/display-properties",
+        List.map (fun c -> P.MCheck (c.V.c_name, List.mem c.V.c_id display,
+          fun checked ->
+            if current () then begin
+            let selected = if checked then c.V.c_id :: !display_selection
+              else List.filter ((<>) c.V.c_id) !display_selection in
+            display_selection := selected;
+            Views_db.set_gallery_display_properties s.V.view_uuid
+              ~current:(request_current inst.V.gallery_display_request)
+              (List.filter_map (fun c ->
+                if List.mem c.V.c_id selected then Some c.V.c_id else None) columns) after end)) columns) ]
+    @ (if cover_columns = [] then [] else
+        [ P.MSub (I.t "view.gallery/cover-property",
+            List.map (fun c -> P.MCheck (c.V.c_name, cover = Some c.V.c_id,
+              fun checked -> if checked && current () then
+                Views_db.set_gallery_asset_property s.V.view_uuid c.V.c_id
+                  ~current:(request_current inst.V.gallery_asset_request) after)) cover_columns) ])
+    @ [ P.MSub (I.t "view.gallery/card-size",
+        [ P.MCheck (I.t "view.gallery/default-size", size = None || size = Some "default",
+            fun checked -> if checked then
+              Views_db.set_gallery_card_size s.V.view_uuid "default" after)
+        ; P.MCheck (I.t "view.gallery/compact-size", size = Some "compact",
+            fun checked -> if checked then
+              Views_db.set_gallery_card_size s.V.view_uuid "compact" after)
+        ; P.MCustom (gallery_custom_size inst s.V.view_ent) ]) ]
 
 let rec show_more_menu inst =
   match Ui_services.dom_by_id ("vmore-" ^ string_of_int inst.V.id) with
@@ -565,7 +634,7 @@ let rec show_more_menu inst =
           in
           ignore
             (P.show_menu ~anchor ~align_end:true
-               (subs
+               (gallery_menu_items inst @ subs
                 @ [ P.MItem ((I.t "view/export-edn"), fun () -> (V.ops ()).V.o_export inst)
                   ]))
 
@@ -648,15 +717,20 @@ let search_items inst : t list =
           [ Ui_components.Prop.font_size "0.875rem"
           ; Ui_components.Prop.focus_shadow "none" ]
           (Ui_components.input ~accessibility_identifier:input_id
-             ~placeholder:(I.t "view.filter/type-to-search") ~text:(V.get inst).V.input
+             ~placeholder:(I.t "view.filter/type-to-search")
+             ~text:(reactive (fun (s : V.vstate) -> s.V.input) (sig_of inst))
              ~width:183 ~height:28 ~autofocus:true ~border_width:0
              ~background:"transparent" ~padding_horizontal:12 ~padding_vertical:0
              ~on_input:(fun ev ->
                match ev with
                | L.TextChanged (_, v) ->
+                   let view_uuid = (V.get inst).V.view_uuid in
+                   V.update inst (fun s -> { s with V.input = v });
                    deb (fun () ->
-                       V.update inst (fun s -> { s with V.input = v });
-                       refresh inst)
+                       let s = V.get inst in
+                       if not (Signal.scope_is_disposed ctx.Lui_ui.ui_scope)
+                          && s.V.search_open && s.V.view_uuid = view_uuid
+                          && s.V.input = v then refresh inst)
                | _ -> ())
              []))
        ctx parent)
@@ -766,6 +840,7 @@ let filter_chip inst (entry : ((string * int) * V.filter_clause) Signal.signal) 
   let (_,idx),f=Signal.get entry in
   let normalization=Ui_effect.request () in
   let change_operator property operator =
+    let current_view = V.current_view inst in
     if Ui_effect.alive context.Lui_ui.ui_scope then begin
       let _,current=Signal.get entry in
       let ticket=Ui_effect.issue normalization in
@@ -775,6 +850,7 @@ let filter_chip inst (entry : ((string * int) * V.filter_clause) Signal.signal) 
       Views_db.get_view_filter_data ~opts property (fun response ->
         let state=V.get inst in
         if Ui_effect.alive context.Lui_ui.ui_scope
+           && current_view ()
            && Ui_effect.is_current normalization ticket
            && (match List.nth_opt state.V.filters idx with
                | Some clause -> clause=current | None -> false) then begin
@@ -827,8 +903,9 @@ let filter_chip inst (entry : ((string * int) * V.filter_clause) Signal.signal) 
                   | Some { V.c_prop = Some m; _ } -> m
                   | _ -> W.Map [ (W.kw "db/ident", W.Keyword f.V.c_prop) ]
                 in
+                let current_view = V.current_view inst in
                 Views_db.get_view_filter_data ~opts:(filter_options inst []) prop (fun data ->
-                    if Ui_effect.alive context.Lui_ui.ui_scope then begin
+                    if Ui_effect.alive context.Lui_ui.ui_scope && current_view () then begin
                     let ops =
                       Wr.W.elems
                         (Option.value (W.get data "operators") ~default:W.Nil)
@@ -937,16 +1014,24 @@ let filters_row ?(margin_bottom=0) inst : t =
    Filter edits opt in. The page-side extras kick requests the count
    after the first get-blocks has returned. *)
 let load_ref_filters ?(on_done = fun () -> ()) ?(count = false) inst =
+  let current = V.current_view inst in
+  let on_error () =
+    if current () then
+      V.update inst (fun s -> { s with V.loading = false; view_error = Some "" })
+  in
   match V.owner_uuid inst with
   | Some uuid ->
-      Views_db.pull_ref_filters uuid (fun (inc, exc) ->
+      Views_db.pull_ref_filters ~on_error uuid (fun (inc, exc) ->
+        if current () then begin
           V.update inst (fun s ->
               { s with V.ref_includes = inc; ref_excludes = exc });
-          on_done ());
+          on_done () end);
       if count then
         Views_db.snapshots
+          ~on_error
           ~f:(fun snap ->
-            match Wr.snapshot_slot_value snap (Views_db.key_ref_count uuid) with
+            if current () then
+            match Views_db.snapshot_value snap (Views_db.key_ref_count uuid) with
             | Some (W.Int n) ->
                 V.update inst (fun s -> { s with V.refs_total = n })
             | _ -> ())
@@ -956,20 +1041,23 @@ let load_ref_filters ?(on_done = fun () -> ()) ?(count = false) inst =
 (* page-handler/db-based-save-filter! — click toggles include,
    shift-click toggles exclude; clicking an active filter removes it *)
 let save_ref_filter ?(on_done = fun () -> ()) inst ~title ~incl ~add =
+  let current = V.current_view inst in
   match V.owner_uuid inst with
   | None -> ()
   | Some uuid ->
       let lc = String.lowercase_ascii (Str_util.trim title) in
       V.resolve_name_id lc (fun eid ->
+        if current () then
           match eid with
           | Some eid ->
-              Views_db.save_ref_filter uuid
+              Views_db.save_ref_filter ~current uuid
                 ~prop:
                   (if incl then Views_db.includes_prop
                    else Views_db.excludes_prop)
                 ~ref_eid:eid ~add (fun () ->
+                  if current () then begin
                   load_ref_filters ~count:true ~on_done inst;
-                  refresh inst)
+                  refresh inst end)
           | None -> ())
 
 let refs_cog_class (s : V.vstate) =
@@ -979,22 +1067,65 @@ let refs_cog_class (s : V.vstate) =
   | true, true -> " text-warning"
   | false, false -> ""
 
-let ref_filter_dialog inst anchor =
+let ref_filter_dialog ~owner_scope inst anchor =
   let input_id = "vrfsearch-" ^ string_of_int inst.V.id in
   let lc s = String.lowercase_ascii (Str_util.trim s) in
-  P.show_custom ~anchor ~align_end:true
+  P.show_custom ~anchor ~align_end:true ~owner_scope
     ~cls:"ui__dropdown-menu-content"
     (fun context parent ->
       let sched = context.Lui_ui.ui_scheduler in
+      let draft = Signal.state sched "" in
       let query = Signal.state sched "" in
-      (* bumped whenever include/exclude filters change so the chips
-         and ref rows re-render *)
-      let gen = Signal.state sched 0 in
       let deb = Ui_services.timers_debounce 200 in
-      let combined =
-        Signal.map2 (fun q g -> (q, g)) (Signal.value (query))
-          (Signal.value (gen))
+      let scope = context.Lui_ui.ui_scope in
+      let repo = Runtime.repo () and route = Runtime.route () in
+      let view_uuid = (V.get inst).V.view_uuid in
+      let current () =
+        Ui_effect.alive scope && Ui_effect.alive owner_scope
+        && Runtime.repo () = repo && Runtime.route () = route
+        && (V.get inst).V.view_uuid = view_uuid
       in
+      let counts = Signal.state sched Ui_effect.Loading in
+      let set_counts value =
+        Signal.set counts value;
+        Ui_services.request_flush ()
+      in
+      let key = Views_db.key_ref_pages_count
+        (match V.owner_uuid inst with
+         | Some uuid -> uuid
+         | None -> invalid_arg "Linked-reference filter owner must be a UUID")
+      in
+      let request = Ui_effect.request () in
+      let debounce_counts = Ui_services.timers_debounce 150 in
+      let refresh_counts () =
+        let ticket = Ui_effect.issue request in
+        let fresh () = current () && Ui_effect.is_current request ticket in
+        if current () then begin
+          set_counts Ui_effect.Loading;
+          debounce_counts (fun () ->
+            if fresh () then
+              let fail () =
+                if fresh () then
+                  set_counts
+                    (Ui_effect.Failed (Failure "Linked-reference page counts failed"))
+              in
+              Views_db.snapshots ~on_error:fail
+                ~f:(fun snap ->
+                  if fresh () then
+                    let value = match Views_db.snapshot_value snap key with
+                      | Some value -> value
+                      | None -> invalid_arg "Missing linked-reference page count resource"
+                    in
+                    set_counts
+                      (Ui_effect.Ready (Views_wire.decode_ref_counts_resource value)))
+                [ key ])
+        end
+      in
+      let subscription = Runtime.on_sync (fun _ -> refresh_counts ()) in
+      Signal.on_dispose scope (fun () ->
+        ignore (Ui_effect.issue request);
+        Runtime.off_sync subscription);
+      ignore (Ui_effect.timeout ~scope 0 refresh_counts);
       let ref_button title count_opt =
         Ui_components.with_props
           [ Ui_components.Prop.font_size "0.75rem" ]
@@ -1003,7 +1134,7 @@ let ref_filter_dialog inst anchor =
              [ ( Ui_components.Prop.hover_border
                    "var(--ls-secondary-text-color, \
                     hsl(var(--muted-foreground)))" ) ]
-             (Ui_components.button ~variant:`ghost ~border_width:1 ~corner_radius:6
+             (Ui_components.button ~variant:`ghost ~label:title ~border_width:1 ~corner_radius:6
                 ~padding_vertical:2 ~padding_horizontal:8
                 ~background:"transparent" ~style_class:"ls-ref-btn"
                 ~foreground:"inherit"
@@ -1014,7 +1145,7 @@ let ref_filter_dialog inst anchor =
                   column so delete-property-value targets the right
                   property *)
                match ev with
-               | Lui_protocol.PressDetail (_, d) ->
+               | Lui_protocol.PressDetail (_, d) when current () ->
                  let s = V.get inst in
                  let lcr = lc title in
                  let included =
@@ -1030,8 +1161,7 @@ let ref_filter_dialog inst anchor =
                         not (d.Lui_protocol.modifiers land 2 <> 0)
                       else included)
                    ~add:not_in_filters
-                   ~on_done:(fun () ->
-                     Signal.set gen (Signal.get_state gen + 1))
+                   ~on_done:refresh_counts
                | _ -> ())
              ([ text ~value:title [] ]
               @
@@ -1048,9 +1178,8 @@ let ref_filter_dialog inst anchor =
       in
       let chip_rows =
         reactive
-          (fun (_q, _g) ->
-            let s = V.get inst in
-            D.fragment
+          (fun s ->
+            box ~display:`contents
               ((if s.V.ref_includes <> [] then
                   [ chip_row (I.t "reference.filter/includes")
                       s.V.ref_includes ]
@@ -1060,19 +1189,24 @@ let ref_filter_dialog inst anchor =
                  [ chip_row (I.t "reference.filter/excludes")
                      s.V.ref_excludes ]
                  else []))
-          combined
+          (sig_of inst)
       in
       let ref_rows =
         reactive
-          (fun (q, _g) ->
-            let s = V.get inst in
+          (fun q s loaded ->
+            match loaded with
+            | Ui_effect.Loading ->
+                text ~value:(I.t "ui/loading") ~padding:8 []
+            | Ui_effect.Failed _ ->
+                text ~value:(I.t "view/error") ~padding:8 []
+            | Ui_effect.Ready counts ->
             let in_filters n =
               List.exists
                 (fun (x, _) -> x = lc n)
                 (s.V.ref_includes @ s.V.ref_excludes)
             in
             let refs =
-              s.V.ref_pages_count
+              counts
               |> List.filter (fun (t, _) -> not (in_filters t))
               |> fun xs ->
               if q = "" then xs
@@ -1085,7 +1219,7 @@ let ref_filter_dialog inst anchor =
               row ~cross:`center ~gap:8 ~width:500 ~max_width:500
                 ~data_attrs:[ ("style", "flex-wrap:wrap") ]
                 (List.map (fun (t, n) -> ref_button t (Some n)) refs))
-          combined
+          (Signal.value query) (sig_of inst) (Signal.value counts)
       in
       (column ~style_class:"ls-filters filters" ~padding:16
          ~min_width:320 ~max_width:500
@@ -1123,15 +1257,18 @@ let ref_filter_dialog inst anchor =
                  [ Ui_components.Prop.focus_shadow "none" ]
                  (Ui_components.input ~style_class:"cp__filters-input"
                     ~grow:1. ~background:"transparent" ~border_width:0
-                    ~data_attrs:
-                      [ ("type", "text")
-                      ; ("id", input_id)
-                      ; ( "placeholder"
-                        , I.t "reference.filter/search-placeholder" ) ]
+                    ~text:(reactive Fun.id (Signal.value draft))
+                    ~kind:`text ~accessibility_identifier:input_id
+                    ~placeholder:(I.t "reference.filter/search-placeholder")
                     ~autofocus:true
                     ~on_input:(function
-                      | L.TextChanged (_, v) ->
-                          deb (fun () -> Signal.set query v)
+                      | L.TextChanged (_, v) when current () ->
+                          Signal.set draft v;
+                          deb (fun () ->
+                            if current () then begin
+                              Signal.set query v;
+                              Ui_services.request_flush ()
+                            end)
                       | _ -> ())
                     []) ]
          ; (* ls-filters-refs keeps its class — the :empty rule is a
@@ -1151,7 +1288,7 @@ let refs_filter_btn inst : t =
          match
            Ui_services.dom_by_id ("vrefcog-" ^ string_of_int inst.V.id)
          with
-         | Some a -> ref_filter_dialog inst a
+         | Some a -> ref_filter_dialog ~owner_scope:ctx.Lui_ui.ui_scope inst a
          | None -> ())
        [ icon ~name:(Icons.name_ref "filter-cog") ~point_size:18 [] ])
     ctx parent

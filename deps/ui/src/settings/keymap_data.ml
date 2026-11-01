@@ -147,6 +147,43 @@ let row_with_shortcut ~mac row = function
 
 let custom row = Command_map.mem (command_id row.title) !user_shortcuts
 
+let save_shortcut id binding =
+  let configured =
+    match binding with
+    | None -> Command_map.remove id !user_shortcuts
+    | Some binding -> Command_map.add id binding !user_shortcuts
+  in
+  let entries = Command_map.bindings configured |> List.map (fun (id, binding) ->
+      Wire.Keyword id,
+      match binding with
+      | Unbound -> Wire.Nil
+      | Disabled -> Wire.Bool false
+      | Binds bindings -> Wire.Array (List.map (fun value -> Wire.String value) bindings)) in
+  Ui_services.storage_set "ls-shortcuts" (Edn.to_string (Wire.Map entries));
+  user_shortcuts := configured;
+  incr shortcut_revision
+
+let canonical_binding binding =
+  let mac = Ui_services.env_is_mac () in
+  String.split_on_char ' ' binding
+  |> List.filter ((<>) "")
+  |> List.map (fun stroke ->
+      String.split_on_char '+' stroke
+      |> List.map (function "mod" -> if mac then "meta" else "ctrl" | key -> key)
+      |> String.concat "+" |> Keymap_record.canonical)
+
+let same_binding a b = canonical_binding a = canonical_binding b
+
+let add_binding id value =
+  let bindings = match effective_shortcut id with Binds bindings -> bindings | _ -> [] in
+  if not (List.exists (same_binding value) bindings) then
+    save_shortcut id (Some (Binds (bindings @ [value])))
+
+let remove_binding id value =
+  let bindings = match effective_shortcut id with Binds bindings -> bindings | _ -> [] in
+  let bindings = List.filter (fun binding -> not (same_binding value binding)) bindings in
+  save_shortcut id (Some (if bindings = [] then Disabled else Binds bindings))
+
 let decode_item j =
   let a = jarr j in
   match jstr a.(0) with
@@ -200,6 +237,19 @@ let unique_rows items =
   in
   List.rev rows
 
+let conflicting_rows id binding =
+  let rec prefix a b = match a, b with
+    | [], _ -> true
+    | x :: xs, y :: ys when x = y -> prefix xs ys
+    | _ -> false
+  in
+  let candidate = canonical_binding binding in
+  if candidate = [] then []
+  else current_items () |> unique_rows |> List.filter (fun row ->
+      command_id row.title <> id && List.exists (fun bound ->
+        let sequence = canonical_binding bound.data in
+        prefix candidate sequence || prefix sequence candidate) row.bindings)
+
 let command_name row =
   let title = String.sub row.title 1 (String.length row.title - 1) in
   let id =
@@ -246,10 +296,13 @@ let count ?(query = "") ?(label = fun row -> row.label) filter =
        0
 
 let matches_keystroke row keystroke =
-  let first value =
-    List.hd (String.split_on_char ' ' value) |> Keymap_record.canonical
+  let rec prefix a b = match a, b with
+    | [], _ -> true
+    | x :: xs, y :: ys when x = y -> prefix xs ys
+    | _ -> false
   in
-  List.exists (fun binding -> first binding.data = first keystroke) row.bindings
+  List.exists (fun binding -> prefix (canonical_binding keystroke)
+      (canonical_binding binding.data)) row.bindings
 
 let visible_items ~keystroke ~query ~filter ~label =
   let matched = query_items ~query ~label in

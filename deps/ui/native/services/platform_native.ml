@@ -197,6 +197,58 @@ let perf_mark name =
 
 (* ---------- clipboard ---------- *)
 
+let clipboard_write_id = ref 0
+let clipboard_writes : (string, unit Ui_task.t * (unit -> unit) * (exn -> unit)) Hashtbl.t =
+  Hashtbl.create 8
+
+let clipboard_write_text text =
+  if !clipboard_write_id = max_int then invalid_arg "Clipboard request identity exhausted";
+  incr clipboard_write_id;
+  let id = string_of_int !clipboard_write_id in
+  let complete = ref None in
+  let task = Ui_task.create ~cancel:(fun () -> Hashtbl.remove clipboard_writes id)
+    (fun ~resolve ~reject -> complete := Some (resolve,reject)) in
+  let resolve,reject = Option.get !complete in
+  Hashtbl.add clipboard_writes id (task,resolve,reject);
+  (try Host.clipboard_write_request (Yojson.Safe.to_string
+    (`Assoc ["request-id",`String id;"text",`String text]))
+   with error -> Ui_task.cancel task; raise error);
+  task
+
+let note_clipboard_write json =
+  let invalid () = invalid_arg "Invalid native clipboard write result" in
+  let id,result = match json with
+    | `Assoc fields ->
+        let keys = List.map fst fields |> List.sort String.compare in
+        let id = match List.assoc_opt "request-id" fields with
+          | Some (`String id) ->
+              (match int_of_string_opt id with
+               | Some value when value > 0 && string_of_int value = id
+                                 && value <= !clipboard_write_id -> id
+               | _ -> invalid ())
+          | _ -> invalid () in
+        let result = match keys,List.assoc_opt "ok" fields with
+          | ["ok";"request-id"],Some (`Bool true) -> Ok ()
+          | ["error";"ok";"request-id"],Some (`Bool false) ->
+              (match List.assoc_opt "error" fields with
+               | Some (`String message) when message <> "" ->
+                   Error (Failure ("Clipboard write " ^ id ^ ": " ^ message))
+               | _ -> invalid ())
+          | _ -> invalid () in
+        id,result
+    | _ -> invalid () in
+  Host.enqueue (fun () ->
+    match Hashtbl.find_opt clipboard_writes id with
+    | None -> ()
+    | Some (_,resolve,reject) ->
+        Hashtbl.remove clipboard_writes id;
+        match result with Ok () -> resolve () | Error error -> reject error)
+
+let cancel_clipboard_writes () =
+  let tasks = Hashtbl.fold (fun _ (task,_,_) tasks -> task::tasks) clipboard_writes [] in
+  Hashtbl.clear clipboard_writes;
+  List.iter Ui_task.cancel tasks
+
 (* "clipboard-read" requests are answered by a same-named platform
    event; one resolver per outstanding read, FIFO *)
 let clipboard_read_resolvers : (string -> unit) Queue.t = Queue.create ()
@@ -601,8 +653,7 @@ let install_ui_services ~paints_caret ~assert_owner ~request_flush ~dom ~timers 
         }
     ; clipboard =
         { copy = Host.clipboard_write
-        ; write_text =
-            (fun s -> Host.clipboard_write s; Ui_task.resolve ())
+        ; write_text = clipboard_write_text
         ; read_text = clipboard_read_text
         }
     ; session =

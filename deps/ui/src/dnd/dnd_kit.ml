@@ -117,4 +117,5 @@ external pos_current : Js.Json.t -> Js.Json.t option = "current"
 external pt_x : Js.Json.t -> float = "x" [@@mel.get]
 external pt_y : Js.Json.t -> float = "y" [@@mel.get]
 external client_y : Js.Json.t -> float = "clientY" [@@mel.get]
+external client_x : Js.Json.t -> float = "clientX" [@@mel.get]
 external page_x : Js.Json.t -> float = "pageX" [@@mel.get]

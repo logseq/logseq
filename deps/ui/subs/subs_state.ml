@@ -175,6 +175,9 @@ let on_sync ?(watch = watch_all) run : sync_sub =
   sync_subs := !sync_subs @ [ s ];
   s
 
+let off_sync sub =
+  sync_subs := List.filter (fun candidate -> candidate != sub) !sync_subs
+
 (* watches that follow live data (e.g. sidebar items) re-declare after
    each refresh *)
 let set_watch s w = s.watch <- w

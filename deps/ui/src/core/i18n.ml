@@ -116,6 +116,13 @@ let load loc : unit Js.Promise.t =
             Js.Promise.resolve ()
           in
           Hashtbl.replace locale_loads loc p;
+          (* Observe failure after insertion; callers still receive the original promise. *)
+          ignore
+            (p |> Js.Promise.catch (fun _ ->
+               (match Hashtbl.find_opt locale_loads loc with
+                | Some current when current == p -> Hashtbl.remove locale_loads loc
+                | _ -> ());
+               Js.Promise.resolve ()));
           p)
 
 (* Boot waits for the selected dictionary before constructing views. *)

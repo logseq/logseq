@@ -36,28 +36,56 @@ let note_file_saved repo path content =
     | config -> Runtime.send (Action.Graph_config_loaded (repo,config))
     | exception (Edn.Parse_error _ | Invalid_argument _ as error) -> report_config_error error
 
+let read_repo_config repo =
+  let* content = Runtime.invoke2 "thread-api/get-file-content" (Wire.String repo)
+    (Wire.String config_path) in
+  let config = match content with
+    | Wire.Nil -> Wire.Map []
+    | Wire.String text when String.trim text="" -> Wire.Map []
+    | Wire.String text ->
+        (match parse_config text with
+         | config -> config
+         | exception (Edn.Parse_error _ | Invalid_argument _ as error) ->
+             report_config_error error;raise error)
+    | _ -> invalid_arg "Graph configuration file must be text" in
+  Js.Promise.resolve config
+
 let read_config repo =
   match !published_config with
   | Some config -> Js.Promise.resolve (validate_config config)
-  | None ->
-      let* content = Runtime.invoke2 "thread-api/get-file-content" (Wire.String repo)
-        (Wire.String config_path) in
-      let config = match content with
-        | Wire.Nil -> Wire.Map []
-        | Wire.String text when String.trim text="" -> Wire.Map []
-        | Wire.String text ->
-            (match parse_config text with
-             | config -> config
-             | exception (Edn.Parse_error _ | Invalid_argument _ as error) ->
-                 report_config_error error;raise error)
-        | _ -> invalid_arg "Graph configuration file must be text" in
-      Js.Promise.resolve config
+  | None -> read_repo_config repo
 
+let config_mutations : (string, bool Js.Promise.t) Hashtbl.t = Hashtbl.create 4
 
-let write_config repo (cfg : Wire.t) =
+let serialize_config_mutation repo operation =
+  if Option.is_some !published_config then
+    Js.Promise.reject (Invalid_argument "Published graph configuration is read-only")
+  else
+    let previous = Hashtbl.find_opt config_mutations repo in
+    let release = ref (fun () -> ()) in
+    let tail = Js.Promise.make (fun ~resolve ~reject:_ ->
+      release := (fun () -> resolve true [@u])) in
+    (* Install the tail before starting: native promise callbacks can run inline. *)
+    Hashtbl.replace config_mutations repo tail;
+    let finished () =
+      (match Hashtbl.find_opt config_mutations repo with
+       | Some current when current == tail -> Hashtbl.remove config_mutations repo
+       | _ -> ());
+      !release ()
+    in
+    let result = match previous with
+      | Some pending -> let* _ = pending in operation ()
+      | None -> (try operation () with error -> Js.Promise.reject error)
+    in
+    ignore
+      ((let* () = result in finished ();Js.Promise.resolve ())
+       |> Js.Promise.catch (fun _ -> finished ();Js.Promise.resolve ()));
+    result
+
+let persist_config repo (cfg : Wire.t) =
   let cfg=validate_config cfg in
   let now_ms = Int64.of_float (Js.Date.now ()) in
-  let* _ =
+  let* result =
     Runtime.invoke "thread-api/transact"
       [ Wire.String repo
       ; Wire.Array
@@ -74,8 +102,18 @@ let write_config repo (cfg : Wire.t) =
       ; Wire.Nil
       ]
   in
+  if Rtc_error.is_error result then failwith "Failed to write graph configuration";
   Runtime.send (Action.Graph_config_loaded (repo,cfg));
   Js.Promise.resolve ()
+
+let write_config repo cfg =
+  let cfg = validate_config cfg in
+  serialize_config_mutation repo (fun () -> persist_config repo cfg)
+
+let mutate_config repo transform =
+  serialize_config_mutation repo (fun () ->
+    let* cfg = read_repo_config repo in
+    persist_config repo (transform cfg))
 
 (* :app.getCurrentGraphConfigs [...keys] -> value at key path.
    Variadic: each positional arg is one key, so collect all of them. *)
@@ -105,9 +143,10 @@ let set_configs a _b _c _d =
   let repo = repo () in
   match Sdk_convert.wire_of_json (Sdk_json.of_js a) with
   | Wire.Map entries ->
-      let* cfg = read_config repo in
+      let* () = mutate_config repo (fun cfg ->
       let base =
-        match cfg with Wire.Map kvs -> kvs | _ -> []
+        match cfg with Wire.Map kvs -> kvs
+        | _ -> invalid_arg "Graph configuration must be an EDN map"
       in
       let keys =
         List.map
@@ -129,6 +168,6 @@ let set_configs a _b _c _d =
             , keywordize_keys v ))
           entries
       in
-      let* () = write_config repo (Wire.Map (kept @ added)) in
+      Wire.Map (kept @ added)) in
       resolved_nil
   | _ -> resolved_nil

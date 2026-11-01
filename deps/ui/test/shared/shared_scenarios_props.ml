@@ -141,20 +141,23 @@ let journal_lookups h =
 let rejections h =
   h.clear_logs ();
   (* invalid number input must emit no write *)
-  let s =
-    h.mount_cell ~block_uuid:"b1"
-      ~row:(prop_row ~ident:"user.property/pnx" ~ty:"number"
-              ~value:(W.Int 3) ())
-  in
-  (match open_editor h s with
-   | tf :: _ ->
-       S.text_changed s tf.M.id "abc";
-       S.submit s tf.M.id
-   | [] -> ());
+  List.iter (fun text ->
+    let s =
+      h.mount_cell ~block_uuid:"b1"
+        ~row:(prop_row ~ident:"user.property/pnx" ~ty:"number"
+                ~value:(W.Int 3) ())
+    in
+    match open_editor h s with
+    | tf :: _ ->
+        S.text_changed s tf.M.id text;
+        S.submit s tf.M.id
+    | [] -> h.check "number validation editor is reachable" false)
+    ["abc"; "NaN"; "Infinity"; "-Infinity"; "1e309"];
   (* date text commit: garbage rejected, valid day hits the journal-page
      lookup endpoint — the lookup invoke fires inside commit itself *)
-  h.commit_date ~ident:"user.property/pd" ~is_datetime:false
-    ~text:"not-a-date";
+  List.iter (fun text ->
+    h.commit_date ~ident:"user.property/pd" ~is_datetime:false ~text)
+    ["not-a-date"; "2026-02-29"; "2026-04-31"; "2026-13-01"; "2026-00-01"];
   h.check "invalid date emits no journal lookup"
     (journal_lookups h = 0);
   h.commit_date ~ident:"user.property/pd" ~is_datetime:false

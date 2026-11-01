@@ -21,37 +21,50 @@ type DocumentEvents struct {
 	Observe func(ui.InputEvent, luimygo.InputNode)
 	// Pointer routes editor gestures after unprevented document capture and
 	// before MyGo target delivery. A zero target still allows active drags.
-	Pointer         func(ev ui.InputEvent, target int64) bool
-	backend         *luimygo.Backend
-	dispatch        DocumentDispatch
-	context         *ui.Context
-	services        ui.Services
-	pressed         luimygo.InputNode
-	composing       bool
-	compositionNode int64
+	Pointer               func(ev ui.InputEvent, target int64) bool
+	codeMirrorComposition func(*ui.Context, luimygo.InputNode) codeMirrorComposition
+	backend               *luimygo.Backend
+	dispatch              DocumentDispatch
+	services              ui.Services
+	pressed               luimygo.InputNode
+	buttons               int
+	preventMouse          int
+	composing             bool
+	compositionTarget     luimygo.InputNode
+	compositionSource     codeMirrorCompositionSource
 }
 
-func NewDocumentEvents(backend *luimygo.Backend, dispatch DocumentDispatch) *DocumentEvents {
-	if backend == nil || dispatch == nil {
+func NewDocumentEvents(backend *luimygo.Backend, dispatch DocumentDispatch, codeMirrorComposition func(*ui.Context, luimygo.InputNode) codeMirrorComposition) *DocumentEvents {
+	if backend == nil || dispatch == nil || codeMirrorComposition == nil {
 		panic("document input requires a backend and synchronous OCaml dispatch")
 	}
-	return &DocumentEvents{backend: backend, dispatch: dispatch}
+	return &DocumentEvents{backend: backend, dispatch: dispatch, codeMirrorComposition: codeMirrorComposition}
 }
 
 // Capture installs the window callback AFTER backend.View on every frame.
 // Keep DocumentEvents for the window's lifetime. This overrides the carrier's
 // observational dispatch with the host's synchronous default-prevention ABI.
 func (d *DocumentEvents) Capture(c *ui.Context) {
-	d.context = c
 	d.services = c.Services()
-	c.CaptureInput(d.input)
+	c.CaptureInput(func(ev ui.InputEvent, target ui.InputTarget) bool {
+		return d.input(c, ev, target)
+	})
+}
+
+func (s *platformServices) ObserveDocumentInput(ev ui.InputEvent, target luimygo.InputNode) {
+	if ev.Kind == ui.InputPointerCancel {
+		s.CancelEditorPointer()
+		s.CancelViewportPress()
+	}
+	s.ViewportInput(ev, target)
 }
 
 func (s *platformServices) renderDocumentEvents(c *ui.Context, n luimygo.Node, _ func(), emit func(luimygo.Event)) {
 	e := ui.Box(c).Size(0, 0)
 	d := ui.Local(e, "document-events", func() DocumentEvents { return DocumentEvents{} })
 	d.backend = s.backend
-	d.Observe = s.ViewportInput
+	d.codeMirrorComposition = s.codeMirrorComposition
+	d.Observe = s.ObserveDocumentInput
 	d.dispatch = func(name, payload string) bool {
 		extensionEmit(n, emit, "dom-event", map[string]any{"name": name, "payload": payload})
 		return false // Carrier dispatch has no default-prevention return channel.
@@ -59,7 +72,7 @@ func (s *platformServices) renderDocumentEvents(c *ui.Context, n luimygo.Node, _
 	d.Capture(c)
 }
 
-func (d *DocumentEvents) send(target luimygo.InputNode, name string, payload map[string]any) bool {
+func (d *DocumentEvents) send(c *ui.Context, target luimygo.InputNode, name string, payload map[string]any) bool {
 	if target.Node.ID != 0 && !target.Current() {
 		return false
 	}
@@ -68,7 +81,7 @@ func (d *DocumentEvents) send(target luimygo.InputNode, name string, payload map
 	}
 	if target.Node.ID != 0 {
 		payload["nodeId"] = target.Node.ID
-		appendInputTextSnapshot(d.backend, d.context, target.Node.ID, payload)
+		appendInputTextSnapshot(d.backend, c, target.Node.ID, payload)
 	}
 	encoded, err := json.Marshal(payload)
 	if err != nil {
@@ -77,12 +90,15 @@ func (d *DocumentEvents) send(target luimygo.InputNode, name string, payload map
 	return d.dispatch(name, string(encoded))
 }
 
-func (d *DocumentEvents) input(ev ui.InputEvent, host ui.InputTarget) bool {
+func (d *DocumentEvents) input(c *ui.Context, ev ui.InputEvent, host ui.InputTarget) bool {
 	target, _ := d.backend.InputNode(host)
 	if d.Observe != nil {
 		d.Observe(ev, target)
 	}
-	prevented := d.event(ev, target)
+	prevented := d.event(c, ev, target)
+	if ev.Kind == ui.InputPointerCancel {
+		return false
+	}
 	if !prevented && d.Pointer != nil && (ev.Kind == ui.InputPointerDown || ev.Kind == ui.InputPointerUp || ev.Kind == ui.InputPointerMove) {
 		id := target.Node.ID
 		if id != 0 && !target.Current() {
@@ -93,10 +109,44 @@ func (d *DocumentEvents) input(ev ui.InputEvent, host ui.InputTarget) bool {
 	return prevented
 }
 
-func (d *DocumentEvents) event(ev ui.InputEvent, target luimygo.InputNode) bool {
-	if d.compositionNode != target.Node.ID {
-		d.composing = false
-		d.compositionNode = target.Node.ID
+func (d *DocumentEvents) clearComposition() {
+	d.composing = false
+	d.compositionTarget = luimygo.InputNode{}
+	d.compositionSource = codeMirrorCompositionSource{}
+}
+
+func (d *DocumentEvents) resetPointer() {
+	d.buttons = 0
+	d.preventMouse = 0
+	d.pressed = luimygo.InputNode{}
+}
+
+func (d *DocumentEvents) cancelPointer(c *ui.Context, target luimygo.InputNode, payload map[string]any) bool {
+	if d.buttons == 0 {
+		return false
+	}
+	d.resetPointer()
+	if target.Node.ID != 0 && !target.Current() {
+		target = luimygo.InputNode{}
+	}
+	return d.send(c, target, "pointercancel", payload)
+}
+
+func (d *DocumentEvents) Blur() {
+	if d.buttons != 0 {
+		d.cancelPointer(nil, luimygo.InputNode{}, map[string]any{"buttons": 0})
+	} else {
+		d.resetPointer()
+	}
+	d.send(nil, luimygo.InputNode{}, "blur", nil)
+}
+
+func (d *DocumentEvents) event(c *ui.Context, ev ui.InputEvent, target luimygo.InputNode) bool {
+	composition := d.codeMirrorComposition(c, target)
+	codeMirror := target.Node.Identifier == "logseq-codemirror"
+	if !d.compositionTarget.Current() || d.compositionTarget.Node.ID != target.Node.ID ||
+		codeMirror && (!composition.focused || d.compositionSource != composition.source) {
+		d.clearComposition()
 	}
 	switch ev.Kind {
 	case ui.InputKeyDown, ui.InputKeyUp:
@@ -110,38 +160,71 @@ func (d *DocumentEvents) event(ev ui.InputEvent, target luimygo.InputNode) bool 
 		}
 		payload := extensionDOMKey(ev, key)
 		payload["isComposing"] = d.composing
-		return d.send(target, name, payload)
-	case ui.InputPointerDown, ui.InputPointerUp, ui.InputPointerMove, ui.InputClick:
+		if codeMirror {
+			payload["isComposing"] = d.composing || composition.focused && composition.composing
+		}
+		return d.send(c, target, name, payload)
+	case ui.InputPointerDown, ui.InputPointerUp, ui.InputPointerMove, ui.InputPointerCancel, ui.InputClick:
+		if ev.Kind == ui.InputPointerDown {
+			d.buttons |= 1 << ev.Button
+		} else if ev.Kind == ui.InputPointerUp {
+			d.buttons &^= 1 << ev.Button
+		}
 		payload := documentPointer(ev)
+		payload["buttons"] = d.buttons
 		switch ev.Kind {
 		case ui.InputPointerDown:
 			d.pressed = target
-			taken := d.send(target, "mousedown", payload)
+			button := 1 << ev.Button
+			d.preventMouse &^= button
+			prevented := d.send(c, target, "pointerdown", payload)
+			if prevented {
+				d.preventMouse |= button
+			}
+			taken := prevented
+			if !prevented {
+				taken = d.send(c, target, "mousedown", payload)
+			}
 			if ev.Button == 1 {
-				taken = d.send(target, "contextmenu", payload) || taken
+				taken = d.send(c, target, "contextmenu", payload) || taken
 			}
 			return taken
 		case ui.InputPointerUp:
-			return d.send(target, "mouseup", payload)
+			button := 1 << ev.Button
+			prevented := d.preventMouse&button != 0
+			taken := d.send(c, target, "pointerup", payload)
+			if !prevented {
+				taken = d.send(c, target, "mouseup", payload) || taken
+			}
+			d.preventMouse &^= button
+			return taken
 		case ui.InputPointerMove:
-			return d.send(target, "mousemove", payload)
+			taken := d.send(c, target, "pointermove", payload)
+			if d.preventMouse == 0 {
+				taken = d.send(c, target, "mousemove", payload) || taken
+			}
+			return taken
+		case ui.InputPointerCancel:
+			payload["buttons"] = 0
+			return d.cancelPointer(c, target, payload)
 		case ui.InputClick:
 			// Never deliver a press to a replacement of the same retained ID.
 			if d.pressed.Node.ID != 0 && !d.pressed.Current() {
 				return true
 			}
-			taken := d.send(target, "click", payload)
+			taken := d.send(c, target, "click", payload)
 			if ev.Clicks == 2 {
-				taken = d.send(target, "dblclick", payload) || taken
+				taken = d.send(c, target, "dblclick", payload) || taken
 			}
 			return taken
 		}
 	case ui.InputScroll:
 		payload := documentPointer(ev)
+		payload["buttons"] = d.buttons
 		payload["deltaX"], payload["deltaY"], payload["deltaMode"] = ev.DX, ev.DY, 0
-		return d.send(target, "wheel", payload)
+		return d.send(c, target, "wheel", payload)
 	case ui.InputCommand:
-		return d.command(target, ev)
+		return d.command(c, target, ev)
 	case ui.InputCompose:
 		name := "compositionupdate"
 		if !d.composing && ev.Text != "" {
@@ -149,12 +232,18 @@ func (d *DocumentEvents) event(ev ui.InputEvent, target luimygo.InputNode) bool 
 		} else if ev.Text == "" {
 			name = "compositionend"
 		}
-		d.composing = ev.Text != ""
-		d.send(target, name, map[string]any{"data": ev.Text, "isComposing": d.composing})
+		d.composing = ev.Text != "" && target.Current() && (!codeMirror || composition.focused)
+		if d.composing {
+			d.compositionTarget = target
+			d.compositionSource = composition.source
+		} else {
+			d.clearComposition()
+		}
+		d.send(c, target, name, map[string]any{"data": ev.Text, "isComposing": d.composing})
 	case ui.InputText:
 		wasComposing := d.composing
-		d.composing = false
-		return d.send(target, "beforeinput", map[string]any{"data": ev.Text,
+		d.clearComposition()
+		return d.send(c, target, "beforeinput", map[string]any{"data": ev.Text,
 			"inputType": "insertText", "isComposing": wasComposing})
 	}
 	return false
@@ -172,11 +261,11 @@ func documentPointer(ev ui.InputEvent) map[string]any {
 		"metaKey": ev.Mods&ui.Super != 0, "ctrlKey": ev.Mods&ui.Ctrl != 0}
 }
 
-func (d *DocumentEvents) command(target luimygo.InputNode, ev ui.InputEvent) bool {
+func (d *DocumentEvents) command(c *ui.Context, target luimygo.InputNode, ev ui.InputEvent) bool {
 	payload := map[string]any{"nativeCommand": ev.Text}
 	switch ev.Text {
 	case "copy", "cut":
-		return d.send(target, ev.Text, payload)
+		return d.send(c, target, ev.Text, payload)
 	case "paste", "pasteAndMatchStyle":
 		data := d.services.ReadClipboardData(transfer.Text, transfer.HTML)
 		clipboard := map[string]string{}
@@ -190,7 +279,7 @@ func (d *DocumentEvents) command(target luimygo.InputNode, ev ui.InputEvent) boo
 			}
 		}
 		payload["clipboardData"] = clipboard
-		return d.send(target, "paste", payload)
+		return d.send(c, target, "paste", payload)
 	}
 	// Native text controls and the editor sink own the original command.
 	// Synthesizing keydown here would execute undo/selectAll/delete twice.

@@ -192,11 +192,13 @@ let titlebar_left_signal ~scheduler ~scope =
   Signal.own_signal scope (Signal.value state)
 
 (* set by the native host: perform a dom-op / open-url / clipboard *)
-let host_op : (string -> string -> unit) ref = ref (fun _ _ -> ())
+let disconnected _ _ = invalid_arg "Native host is disconnected"
+let host_op : (string -> string -> unit) ref = ref disconnected
 
 let set_host_op f = host_op := f
 let open_url (u : string) = !host_op "open-url" u
 let clipboard_write (s : string) = !host_op "clipboard" s
+let clipboard_write_request payload = !host_op "clipboard-write" payload
 let clipboard_read () = !host_op "clipboard-read" ""
 let dom_op (name : string) (payload : string) = !host_op "dom-op" (name ^ "\n" ^ payload)
 

@@ -412,7 +412,8 @@ let get_block_ids (w : Wire.t) : Wire.t list =
   | _ -> []
 
 (* apply-op! — returns the op result wire value (or None) *)
-let apply_op (conn : conn) (opts' : Wire.t) (op : string) (args : Wire.t list)
+let apply_op ?(orphan_cleanup = Outliner_core.Immediate)
+    (conn : conn) (opts' : Wire.t) (op : string) (args : Wire.t list)
     : Wire.t option =
   let db () = Conn.db conn in
   match op, args with
@@ -423,7 +424,7 @@ let apply_op (conn : conn) (opts' : Wire.t) (op : string) (args : Wire.t list)
       in
       (try
          ignore
-           (Outliner_core.save_block_conn conn
+           (Outliner_core.save_block_conn ~orphan_cleanup conn
               (attach_title_page_refs conn (block_map_of_wire block))
               (save_opts_of opts_map) (block_map_of_wire opts_map))
        with (Outliner_validate.Notification _ as e) -> raise e);
@@ -660,7 +661,7 @@ let apply_op (conn : conn) (opts' : Wire.t) (op : string) (args : Wire.t list)
            raise (Invalid_outliner_op "Page name shouldn't be blank")
        | Some t ->
            ignore
-             (Outliner_core.save_block_conn conn
+             (Outliner_core.save_block_conn ~orphan_cleanup conn
                 [ ("block/uuid", Uuid page_uuid); ("block/title", String t) ]
                 Outliner_core.default_save_opts []);
            None
@@ -692,13 +693,63 @@ let apply_op (conn : conn) (opts' : Wire.t) (op : string) (args : Wire.t list)
      unspec'd ops) silently return nil *)
   | _ -> None
 
-(* apply-ops! — runs all ops in one batch transaction, returns the last
-   op result. cljs master collects committed semantic op entries from
-   each op result's :tx-meta :outliner-ops (rewritten for
-   insert-blocks/apply-template), then commits once with
-   :transform-tx-meta #(assoc % :outliner-ops @semantic-ops) — the
-   temp-conn batch is inlined here because Db_tx's version takes no
-   transform hook (db_tx.ml is outside this port's ownership). *)
+let finalize_batch_orphans candidates (report : tx_report) =
+  let normalized = Worker_pipeline.normalize_current_refs report in
+  let current = ref normalized.db_after in
+  let reversed_datoms = ref (List.rev normalized.tx_data) in
+  let identities = Hashtbl.create 16 in
+  let candidate_ids = Hashtbl.create 16 in
+  let queued = Hashtbl.create 16 in
+  let deleted = Hashtbl.create 16 in
+  let pending = Queue.create () in
+  let identity (c : Outliner_core.orphan_candidate) = c.orphan_id, c.orphan_uuid in
+  let enqueue candidate =
+    let key = identity candidate in
+    if not (Hashtbl.mem queued key || Hashtbl.mem deleted key) then begin
+      Hashtbl.add queued key ();
+      Queue.add candidate pending
+    end
+  in
+  List.iter
+    (fun (c : Outliner_core.orphan_candidate) ->
+      Hashtbl.replace identities (identity c) c;
+      Hashtbl.replace candidate_ids c.orphan_id ();
+      enqueue c)
+    candidates;
+  let enqueue_current id =
+    if Hashtbl.mem candidate_ids id then
+      match entity !current (Entity_id id) with
+      | Some e ->
+          (match Ldb.uuid_value e "block/uuid" with
+           | Some uuid -> Option.iter enqueue (Hashtbl.find_opt identities (id, uuid))
+           | None -> ())
+      | None -> ()
+  in
+  while not (Queue.is_empty pending) do
+    let candidate = Queue.take pending in
+    let key = identity candidate in
+    Hashtbl.remove queued key;
+    if not (Hashtbl.mem deleted key) then
+      match Outliner_core.deferred_orphan_txs !current [ candidate ] with
+      | [] -> ()
+      | ops ->
+          let round = Worker_pipeline.cleanup_reference_tail !current report.tx_meta ops in
+          Hashtbl.add deleted key ();
+          current := round.db_after;
+          reversed_datoms := List.rev_append round.tx_data !reversed_datoms;
+          let affected = List.fold_left
+              (fun ids (d : datom) ->
+                let ids = Db_reference.IdSet.add d.e ids in
+                match d.v with
+                | Ref id -> Db_reference.IdSet.add id ids
+                | _ -> ids)
+              Db_reference.IdSet.empty round.tx_data in
+          Db_reference.IdSet.iter enqueue_current affected
+  done;
+  List.rev !reversed_datoms, !current
+
+(* apply-ops! — collect temporary semantic ops, then commit once through
+   the registered worker pipeline and batch-owned orphan finalizer. *)
 let apply_ops (conn : conn) (ops : Wire.t) (opts : Wire.t) : Wire.t =
   let raw_entries =
     match ops with
@@ -739,6 +790,7 @@ let apply_ops (conn : conn) (ops : Wire.t) (opts : Wire.t) : Wire.t =
     Cljs_map.dissoc_list opts' [ "additional-tx"; "transact-opts"; "current-block" ]
   in
   let tx_meta = Ds_wire.tx_meta_of_transit tx_meta_wire in
+  let defer_orphans = Db_tx.finalizer_eligible conn (Conn.db conn) tx_meta in
   let result_ref = ref Wire.Nil in
   let semantic_ops : Wire.t list ref = ref [] in
   (* cljs [_ [blocks target-id insert-opts]] destructure of
@@ -756,6 +808,18 @@ let apply_ops (conn : conn) (ops : Wire.t) (opts : Wire.t) : Wire.t =
   fl.batch_tx <- true;
   fl.skip_store <- true;
   fl.skip_validate <- true;
+  let orphan_candidates = ref [] in
+  let seen_orphans = Hashtbl.create 16 in
+  let orphan_cleanup =
+    if not defer_orphans then Outliner_core.Immediate
+    else Outliner_core.Deferred
+      (fun (candidate : Outliner_core.orphan_candidate) ->
+        let key = candidate.orphan_id, candidate.orphan_uuid in
+        if not (Hashtbl.mem seen_orphans key) then begin
+          Hashtbl.add seen_orphans key ();
+          orphan_candidates := candidate :: !orphan_candidates
+        end)
+  in
   let collected : datom list list ref = ref [] in
   let key =
     listen temp "temp-conn-batch-tx" (fun (r : tx_report) ->
@@ -767,7 +831,7 @@ let apply_ops (conn : conn) (ops : Wire.t) (opts : Wire.t) : Wire.t =
           (fun entry ->
             match op_of_entry entry with
             | Some (op, args) -> (
-                let result = apply_op temp opts' op args in
+                let result = apply_op ~orphan_cleanup temp opts' op args in
                 (match result with
                  | Some v -> result_ref := v
                  | None -> ());
@@ -820,7 +884,8 @@ let apply_ops (conn : conn) (ops : Wire.t) (opts : Wire.t) : Wire.t =
              in
              ignore (Db_tx.transact temp tx_ops)
          | _ -> ());
-        List.concat (List.rev !collected))
+        List.rev (List.fold_left (fun acc ds -> List.rev_append ds acc)
+          [] (List.rev !collected)))
   in
   let tx_meta =
     match Cljs_map.get opts' "undo-redo/editor-info-after" with
@@ -837,15 +902,24 @@ let apply_ops (conn : conn) (ops : Wire.t) (opts : Wire.t) : Wire.t =
           (Ds_wire.value_of_transit (Cljs_map.assoc cursor "block-uuid" uuid))
     | _ -> tx_meta
   in
-  if tx_data <> [] then
-    ignore
-      (Db_tx.transact
-         ~tx_meta:
-           (Outliner_tx_meta.tx_meta_put tx_meta "outliner-ops"
-              (Vector
-                 (List.rev_map Ds_wire.value_of_transit !semantic_ops)))
-         conn
-         (List.map (fun d -> Raw_datom d) tx_data));
+  let tx_meta = Outliner_tx_meta.tx_meta_put tx_meta "outliner-ops"
+      (Vector (List.rev_map Ds_wire.value_of_transit !semantic_ops)) in
+  if tx_data <> [] then begin
+    let candidates = List.rev !orphan_candidates in
+    let finalized_db = ref None in
+    let before_validation =
+      if not defer_orphans then None
+      else Some (fun report ->
+        let datoms, db = finalize_batch_orphans candidates report in
+        finalized_db := Some db;
+        datoms)
+    in
+    let report = Db_tx.transact ?before_validation ~tx_meta conn
+        (List.map (fun d -> Raw_datom d) tx_data) in
+    Option.iter
+      (fun db -> Worker_pipeline.inherit_reference_attrs db report.db_after)
+      !finalized_db
+  end;
   !result_ref
 
 (* ---------- Sync_deps hook wiring ----------

@@ -66,8 +66,7 @@ let dispatch kind payload =
   | "notification" -> (
       match Decode.toast_of_wire payload with
       | Some t ->
-          Runtime.send (Action.Toast_push t);
-          Runtime.flush ()
+          Toast.show ?key:t.Model.toast_key ~kind:t.toast_kind t.toast_text
       | None -> ())
   | "sync-db-changes" -> Subs.on_db_changes payload
   | "rtc-sync-state" -> (
@@ -240,14 +239,7 @@ let init () =
       and kind =
         Option.value (ev.Ui_services.detail "cls") ~default:"info"
       and key = ev.Ui_services.detail "key" in
-      Runtime.send
-        (Action.Toast_push
-           { Model.toast_id = 0
-           ; toast_text = text
-           ; toast_kind = kind
-           ; toast_key = key
-           });
-      Runtime.flush ());
+      Toast.show ?key ~kind text);
   Ui_services.dom_on_document_event "ls:toast-close" (fun ev ->
       (* sdk close_msg targets one notification by its show_msg key;
          a missing key clears nothing — Toasts_clear stays internal *)

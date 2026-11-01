@@ -40,6 +40,7 @@ type nativeFunctions struct {
 	text           func(int64, string, int32) int32
 	picked         func(int64, string, int32) int32
 	toggle         func(int64, int32) int32
+	toggleDetail   func(int64, int32, int32) int32
 	value          func(int64, float64) int32
 	extension      func(int64, string, int32, string, int32, string, int32) int32
 	visibleRange   func(int64, int64, int64) int32
@@ -144,8 +145,9 @@ func (r *ocamlRuntime) load(path string) error {
 		"root_node":           &f.rootNode, "register_current_thread": &f.register,
 		"press_ex": &f.pressEx, "text_changed_utf8": &f.text,
 		"picked_utf8": &f.picked, "toggle_changed": &f.toggle,
-		"editor_snapshot_utf8": &f.editorSnapshot,
-		"slider_changed":       &f.value, "extension_event_utf8": &f.extension,
+		"toggle_changed_detail": &f.toggleDetail,
+		"editor_snapshot_utf8":  &f.editorSnapshot,
+		"slider_changed":        &f.value, "extension_event_utf8": &f.extension,
 		"visible_range": &f.visibleRange, "scroll_completed": &f.scrollDone,
 		"scroll_edges": &f.scrollEdges, "navigation_key_utf8": &f.navigationKey,
 		"text_changed": &f.legacyText, "picked": &f.legacyPicked,
@@ -165,6 +167,7 @@ func (r *ocamlRuntime) load(path string) error {
 	pointerNames := map[string]string{
 		"press-detail": "press_detail", "pointer-down": "pointer_down",
 		"pointer-up": "pointer_up", "context-menu-press": "context_menu_press",
+		"pointer-move": "pointer_move", "pointer-cancel": "pointer_cancel",
 	}
 	for _, suffix := range pointerNames {
 		var fn pointerFunction
@@ -396,7 +399,7 @@ func (r *ocamlRuntime) Dispatch(event luimygo.Event) error {
 	}
 	var call func(nativeFunctions) int32
 	switch event.Kind {
-	case "press-detail", "pointer-down", "pointer-up", "context-menu-press":
+	case "press-detail", "pointer-down", "pointer-up", "pointer-move", "pointer-cancel", "context-menu-press":
 		if strings.ContainsRune(event.TargetClass, 0) {
 			return fmt.Errorf("logseq: target class contains NUL, unsupported by the Logseq pointer ABI")
 		}
@@ -417,6 +420,13 @@ func (r *ocamlRuntime) Dispatch(event luimygo.Event) error {
 		call = func(f nativeFunctions) int32 { return f.picked(event.Node, event.Payload, int32(len(event.Payload))) }
 	case "toggle-changed":
 		call = func(f nativeFunctions) int32 { return f.toggle(event.Node, nativeBool(event.Checked)) }
+	case "toggle-changed-detail":
+		if event.Modifiers < 0 || event.Modifiers&^15 != 0 {
+			return fmt.Errorf("logseq: invalid toggle modifiers")
+		}
+		call = func(f nativeFunctions) int32 {
+			return f.toggleDetail(event.Node, nativeBool(event.Checked), event.Modifiers)
+		}
 	case "value-changed":
 		if math.IsNaN(event.Value) || math.IsInf(event.Value, 0) {
 			return fmt.Errorf("logseq: nonfinite control value")
@@ -438,7 +448,7 @@ func (r *ocamlRuntime) Dispatch(event luimygo.Event) error {
 		}
 	case "navigation-key":
 		switch event.Key {
-		case "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown":
+		case "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown", "Enter", " ", "Escape":
 		default:
 			return fmt.Errorf("logseq: unsupported navigation key %q", event.Key)
 		}

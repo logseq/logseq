@@ -884,15 +884,12 @@ let graphs_selector st (ms : Model.t Signal.signal) : t =
 let contents (ms : Model.t Signal.signal) : t =
   let st = Sidebar_state.ensure ms in
   Ui_components.with_props [ Ui_components.Prop.position `relative ]
-    (column ~key:"ls-contents" ~gap:4 ~padding_horizontal:12
-       ~padding_vertical:4
+    (scroll ~key:"ls-contents" ~grow:1. ~min_height:0 ~orientation:`vertical
+       ~accessibility_identifier:"left-sidebar-scroll"
        ~style_class:"sidebar-contents-container"
-       ~data_attrs:
-         [ ( "style"
-           , "padding-top:4px;height:100%;overflow-x:hidden;overflow-y:auto"
-           )
-         ]
-       [ favorites_group st; recents_group st ])
+       [ column ~key:"ls-groups" ~gap:4 ~padding_horizontal:12
+           ~padding_vertical:4
+           [ favorites_group st; recents_group st ] ])
 
 let menus (ms : Model.t Signal.signal) : t =
   let st = Sidebar_state.ensure ms in

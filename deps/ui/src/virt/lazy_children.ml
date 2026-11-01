@@ -12,6 +12,73 @@ open Lui_elements
 module V = Virtualizer
 module D = Logseq_el
 
+(* Mounted is a lifecycle projection, not viewport geometry or document order.
+   Readers borrow the source; row and reader scopes jointly own its lifetime. *)
+module Mounted_uuids = Stdlib.Set.Make (String)
+
+type mounted_projection =
+  { scheduler : Signal.scheduler
+  ; scope : string
+  ; counts : (string, int) Hashtbl.t
+  ; state : Mounted_uuids.t Signal.state
+  ; mutable mounted : Mounted_uuids.t
+  ; mutable users : int
+  }
+
+let mounted_projections : mounted_projection list ref = ref []
+
+let retain_mounted ctx scope =
+  let projection =
+    match List.find_opt (fun p ->
+        p.scheduler == ctx.Lui_ui.ui_scheduler && p.scope = scope)
+        !mounted_projections with
+    | Some p -> p
+    | None ->
+        let p =
+          { scheduler = ctx.Lui_ui.ui_scheduler; scope
+          ; counts = Hashtbl.create 16
+          ; state = Signal.state ctx.Lui_ui.ui_scheduler Mounted_uuids.empty
+          ; mounted = Mounted_uuids.empty; users = 0 }
+        in
+        mounted_projections := p :: !mounted_projections;
+        p
+  in
+  projection.users <- projection.users + 1;
+  projection
+
+let release_mounted projection =
+  projection.users <- projection.users - 1;
+  if projection.users = 0 then begin
+    mounted_projections :=
+      List.filter (fun p -> p != projection) !mounted_projections;
+    Signal.dispose_signal (Signal.value projection.state)
+  end
+
+let mounted_uuids ~scope ctx =
+  let projection = retain_mounted ctx scope in
+  Signal.on_dispose ctx.Lui_ui.ui_scope (fun () -> release_mounted projection);
+  Signal.value projection.state
+
+let track_mounted ~scope ~uuid child : t =
+ fun ctx parent ->
+  let projection = retain_mounted ctx scope in
+  let count = Option.value (Hashtbl.find_opt projection.counts uuid) ~default:0 in
+  Hashtbl.replace projection.counts uuid (count + 1);
+  if count = 0 then begin
+    projection.mounted <- Mounted_uuids.add uuid projection.mounted;
+    Signal.set projection.state projection.mounted
+  end;
+  Signal.on_dispose ctx.Lui_ui.ui_scope (fun () ->
+    let count = Hashtbl.find projection.counts uuid in
+    if count = 1 then begin
+      Hashtbl.remove projection.counts uuid;
+      projection.mounted <- Mounted_uuids.remove uuid projection.mounted;
+      Signal.set projection.state projection.mounted
+    end else Hashtbl.replace projection.counts uuid (count - 1);
+    release_mounted projection);
+  child ctx parent
+
+
 type element = V.element
 
 external get_by_id : string -> element option = "getElementById"
@@ -55,7 +122,23 @@ let lazy_feasible : bool =
 let margin = 1200.
 
 let forced : (string, unit) Hashtbl.t = Hashtbl.create 8
-let force uuid = Hashtbl.replace forced uuid ()
+let waiting : (string, (unit -> unit) list) Hashtbl.t = Hashtbl.create 8
+
+let force uuid =
+  Hashtbl.replace forced uuid ();
+  List.iter (fun mount -> mount ())
+    (Option.value (Hashtbl.find_opt waiting uuid) ~default:[]);
+  Runtime.flush ()
+
+let register_force ctx uuid near =
+  let mount () = Signal.set near true in
+  Hashtbl.replace waiting uuid
+    (mount :: Option.value (Hashtbl.find_opt waiting uuid) ~default:[]);
+  Signal.on_dispose ctx.Lui_ui.ui_scope (fun () ->
+    let rest = List.filter (fun f -> f != mount)
+        (Option.value (Hashtbl.find_opt waiting uuid) ~default:[]) in
+    if rest = [] then Hashtbl.remove waiting uuid
+    else Hashtbl.replace waiting uuid rest)
 
 let near_viewport el =
   let r = bounding_rect el in
@@ -63,9 +146,16 @@ let near_viewport el =
   rect_top r < vh +. margin && rect_bottom r > -. margin
 
 let attach ctx el_id near =
+  let alive = ref true and observer = ref None in
+  Signal.on_dispose ctx.Lui_ui.ui_scope (fun () ->
+    alive := false;
+    Option.iter io_disconnect !observer);
   let mount () =
-    Signal.set near true;
-    Runtime.flush ()
+    if !alive then begin
+      Signal.set near true;
+      Option.iter io_disconnect !observer;
+      Runtime.flush ()
+    end
   in
   match get_by_id el_id with
   (* cljs: (or forced? (nil? ref) (near?)) -> mount — a missing element
@@ -81,8 +171,8 @@ let attach ctx el_id near =
                 mount ())
             (io_opts ~rootMargin:(Printf.sprintf "%.0fpx 0px" margin))
         in
-        io_observe io el;
-        Signal.on_dispose ctx.Lui_ui.ui_scope (fun () -> io_disconnect io)
+        observer := Some io;
+        io_observe io el
       end
 
 let lazy_children ~key ~uuid ~min_height ~render : t =
@@ -92,9 +182,13 @@ let lazy_children ~key ~uuid ~min_height ~render : t =
       (Hashtbl.mem forced uuid || not lazy_feasible)
   in
   let near_sig = (Signal.value (near)) in
+  register_force ctx uuid near;
+  let alive = ref true in
+  Signal.on_dispose ctx.Lui_ui.ui_scope (fun () -> alive := false);
   let el_id = "lazy-" ^ key in
   if lazy_feasible && not (Hashtbl.mem forced uuid) then
-    set_timeout (fun () -> attach ctx el_id near) 0;
+    set_timeout (fun () ->
+      if !alive && not (Signal.get near_sig) then attach ctx el_id near) 0;
   (column ~key ~accessibility_identifier:el_id ~style_class:"block-children"
      ~grow:1.
      [ Lui_elements.if_

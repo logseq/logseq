@@ -538,6 +538,38 @@ let render_block_ref_count db key _runtime =
       (if Ldb.is_property block then 0
        else Db_view.get_block_refs_count db block.id) )
 
+let render_linked_ref_pages_count db key _runtime =
+  let owner_uuid = require_uuid "owner-uuid" (List.nth key 1) in
+  let owner = entity_by_uuid db "owner-uuid" owner_uuid in
+  let linked = Db_view.get_linked_references db owner.id () in
+  let counts =
+    match linked.ref_pages_count with
+    | Some (Some counts) ->
+        List.map
+          (fun (title, count) ->
+             match title with
+             | Some title when count > 0 ->
+                 Wire.Array [ Wire.String title; Wire.Int count ]
+             | _ ->
+                 fail "Invalid linked reference page count"
+                   [ (Wire.keyword "owner-uuid", Wire.Uuid owner_uuid) ])
+          counts
+    | Some None -> []
+    | None ->
+        fail "Missing linked reference page counts"
+          [ (Wire.keyword "owner-uuid", Wire.Uuid owner_uuid) ]
+  in
+  let attrs =
+    [ "block/title"; "block/uuid"; "block/refs"; "block/page"; "block/parent"
+    ; "block/tags"; "db/ident"; "logseq.property/view-for"
+    ; "logseq.property/hide?"; "logseq.property/deleted-at" ]
+    @ (match Ldb.ident_of owner with Some ident -> [ ident ] | None -> [])
+  in
+  ( Watch_keys
+      (watch_entity owner_uuid :: wk1 "refs" (Wire.Uuid owner_uuid)
+       :: wkey [ Wire.keyword "ref-scope" ] :: List.map watch_attr attrs)
+  , Wire.Map [ (Wire.keyword "ref-pages-count", Wire.Array counts) ] )
+
 (* unlinked-reference-exists? — needs full-text search (Render_deps hook). *)
 let unlinked_reference_exists db repo (id : entity_id) : bool =
   match Ldb.ent_of_id db id with
@@ -2607,6 +2639,7 @@ let resource_renderers : (string * renderer) list =
   ; ( "property-choices", rr (Some 2) (fun db k r -> let w, v = render_property_choices db k r in no_slots w v) )
   ; ( "block-reactions", rr (Some 3) (fun db k r -> let w, v = render_block_reactions db k r in no_slots w v) )
   ; ( "block-ref-count", rr (Some 2) (fun db k r -> let w, v = render_block_ref_count db k r in no_slots w v) )
+  ; ( "linked-ref-pages-count", rr (Some 2) (fun db k r -> let w, v = render_linked_ref_pages_count db k r in no_slots w v) )
   ; ( "block-unlinked-ref-exists", rr (Some 2) (fun db k r -> let w, v = render_block_unlinked_ref_exists db k r in no_slots w v) )
   ; ( "block-comment-threads", rr (Some 2) (fun db k r -> let w, v = render_block_comment_threads db k r in no_slots w v) )
   ; ( "block-comment-summary", rr (Some 2) (fun db k r -> let w, v = render_block_comment_summary db k r in no_slots w v) )

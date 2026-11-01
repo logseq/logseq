@@ -19,6 +19,15 @@ type filter_clause =
   ; c_val : W.t option
   }
 
+type table_resize =
+  { resize_owner : int
+  ; resize_view : string
+  ; resize_column : string
+  ; resize_x : float
+  ; resize_width : int
+  ; resize_preview : int
+  }
+
 (* column descriptor — mirrors views.cljs build-columns entries *)
 type column =
   { c_id : string (* kw string: "block/title", property ident, "id", "select" *)
@@ -54,6 +63,13 @@ type vstate =
   ; group_desc : bool option
   ; display_type : string (* ident tail: "table" | "list" | "gallery" *)
   ; selected : Sset.t
+  ; table_select_all : bool
+  ; table_excluded : Sset.t
+  ; table_selection_epoch : int
+  ; table_action_pending : int option
+  ; table_anchor : string option
+  ; table_cell_focus : (string * string) option
+  ; table_resize : table_resize option
   ; hidden : Sset.t
   ; ordered : string list
   ; pinned : Sset.t
@@ -109,6 +125,9 @@ type inst =
         (* bumped at every data fetch issue — a response resolving
            under an older generation is stale (the view already moved
            to a newer context) and must not paint *)
+  ; data_context_revision : int ref
+  ; gallery_display_request : Ui_effect.request
+  ; gallery_asset_request : Ui_effect.request
   }
 
 let empty_vstate () : vstate =
@@ -125,6 +144,13 @@ let empty_vstate () : vstate =
   ; group_desc = None
   ; display_type = "table"
   ; selected = Sset.empty
+  ; table_select_all = false
+  ; table_excluded = Sset.empty
+  ; table_selection_epoch = 0
+  ; table_action_pending = None
+  ; table_anchor = None
+  ; table_cell_focus = None
+  ; table_resize = None
   ; hidden = Sset.empty
   ; ordered = []
   ; pinned = Sset.empty
@@ -166,22 +192,118 @@ let make ~sched ~kind ~feature ~owner : inst =
   ; owner
   ; st = Signal.state sched (empty_vstate ())
   ; data_gen = ref 0
+  ; data_context_revision = ref (Runtime.model ()).Model.context_revision
+  ; gallery_display_request = Ui_effect.request ()
+  ; gallery_asset_request = Ui_effect.request ()
   }
 
 (* issue a new fetch generation — responses resolving under an older
    one are dropped *)
 let new_fetch inst : int =
   incr inst.data_gen;
+  inst.data_context_revision := (Runtime.model ()).Model.context_revision;
   !(inst.data_gen)
 
-let fetch_fresh inst gen = !(inst.data_gen) = gen
+let fetch_fresh inst gen =
+  !(inst.data_gen) = gen
+  && (Runtime.model ()).Model.context_revision = !(inst.data_context_revision)
+
+let current_context () =
+  let revision = (Runtime.model ()).Model.context_revision in
+  let repo = Runtime.repo () and route = Runtime.route () in
+  fun () ->
+    (Runtime.model ()).Model.context_revision = revision
+    && Runtime.repo () = repo && Runtime.route () = route
 
 let get inst : vstate = Runtime.signal_get inst.st
+
+let current_view inst =
+  let current = current_context () in
+  let uuid = (get inst).view_uuid in
+  fun () -> current () && (get inst).view_uuid = uuid
 
 (* publish a new vstate — the only way view state changes *)
 let set inst (s : vstate) = Runtime.signal_set inst.st s
 
 let update inst f = set inst (f (get inst))
+
+let table_row_selected (s : vstate) uuid =
+  if s.table_select_all then not (Sset.mem uuid s.table_excluded)
+  else Sset.mem uuid s.selected
+
+let table_selection_changed (s : vstate) =
+  { s with table_selection_epoch = s.table_selection_epoch + 1
+  ; table_action_pending = None; table_cell_focus = None }
+
+let table_clear_selection (s : vstate) =
+  table_selection_changed { s with selected = Sset.empty
+  ; table_select_all = false; table_excluded = Sset.empty; table_anchor = None }
+
+let table_select_all_rows (s : vstate) checked =
+  { (table_clear_selection s) with table_select_all = checked }
+
+let table_set_rows (s : vstate) ~rows ~checked =
+  let change set add = List.fold_left (fun set uuid ->
+    if add then Sset.add uuid set else Sset.remove uuid set) set rows in
+  table_selection_changed
+    (if s.table_select_all then
+       { s with table_excluded = change s.table_excluded (not checked) }
+     else { s with selected = change s.selected checked })
+
+let table_select_row (s : vstate) ~rows ~uuid ~checked ~shift =
+  if not (List.mem uuid rows) then s
+  else
+    let range =
+      match shift, s.table_anchor with
+      | true, Some anchor when table_row_selected s anchor ->
+          (match List.find_index (( = ) anchor) rows,
+                 List.find_index (( = ) uuid) rows with
+           | Some first, Some last ->
+               let _, range = List.fold_left
+                   (fun (index, range) row ->
+                     (index + 1,
+                      if index >= min first last && index <= max first last
+                      then row :: range else range))
+                   (0, []) rows in
+               range
+           | _ -> [])
+      | _ -> []
+    in
+    let s = table_set_rows s ~rows:range ~checked:true in
+    { (table_set_rows s ~rows:[uuid] ~checked) with
+      table_anchor =
+        if checked then Some uuid
+        else if s.table_anchor = Some uuid then None else s.table_anchor
+    }
+
+let start_table_resize (s : vstate) ~owner ~column ~x ~width =
+  if s.view_uuid = "" || not (Float.is_finite x) then s
+  else
+    { s with table_resize = Some
+        { resize_owner = owner; resize_view = s.view_uuid; resize_column = column
+        ; resize_x = x; resize_width = width; resize_preview = width } }
+
+let move_table_resize (s : vstate) ~owner ~x =
+  match s.table_resize with
+  | Some resize when resize.resize_owner = owner ->
+      if resize.resize_view <> s.view_uuid then { s with table_resize = None }
+      else if not (Float.is_finite x) then s
+      else
+        let width = float_of_int resize.resize_width +. x -. resize.resize_x in
+        let preview = int_of_float (Float.round (Float.max 40. (Float.min 500. width))) in
+        { s with table_resize = Some { resize with resize_preview = preview } }
+  | _ -> s
+
+let finish_table_resize (s : vstate) ~owner ~commit =
+  match s.table_resize with
+  | Some resize when resize.resize_owner = owner ->
+      { s with table_resize = None
+      ; sized =
+          if commit && resize.resize_view = s.view_uuid then
+            Smap.add resize.resize_column resize.resize_preview s.sized
+          else s.sized
+      }
+  | _ -> s
 
 (* -- wire encode/decode of persisted table state -- *)
 
@@ -307,6 +429,8 @@ let ctx_of inst : W.t =
 
 (* apply persisted view-entity state — pure vstate -> vstate *)
 let apply_view_entity s (v : Views_wire.view_ent) : vstate =
+  let s = if s.view_uuid = v.vu then s else
+    { (table_clear_selection s) with table_resize = None } in
   let display_type =
     match v.vtype with
     | "logseq.property.view/type.list" -> "list"
@@ -370,6 +494,7 @@ let resolve_property_id ident f =
      Runtime.invoke3 "thread-api/pull" (W.String (Views_db.repo ()))
        (W.String "[:db/id]") (W.Keyword ident)
    in
+   Outliner_ops.check_loader_result w;
    f (W.map_get_int w "db/id");
    Js.Promise.resolve ())
   |> Views_db.catch_quiet
@@ -383,6 +508,7 @@ let resolve_name_id name_lc f =
        (W.String "[:db/id]")
        (W.Array [ W.kw "block/name"; W.String name_lc ])
    in
+   Outliner_ops.check_loader_result w;
    f (W.map_get_int w "db/id");
    Js.Promise.resolve ())
   |> Views_db.catch_quiet
@@ -393,17 +519,20 @@ let owner_uuid (inst : inst) : string option =
 
 let persist_group_by inst =
   let s = get inst in
+  let view_current = current_view inst in
+  let current () = view_current () && (get inst).group_by = s.group_by in
   match s.group_by with
   | Some g ->
       resolve_property_id g (fun id ->
+        if current () then
           match id with
           | Some id ->
-              Views_db.set_view_property s.view_uuid
+              Views_db.set_view_property ~current s.view_uuid
                 "logseq.property.view/group-by-property" (W.Int id)
                 (fun () -> ())
           | None -> ())
   | None ->
-      Views_db.remove_view_property s.view_uuid
+      Views_db.remove_view_property ~current s.view_uuid
         "logseq.property.view/group-by-property" (fun () -> ())
 
 let persist_hidden inst =
@@ -413,21 +542,29 @@ let persist_hidden inst =
     (W.Array (List.map (fun k -> W.Keyword k) (Sset.elements s.hidden)))
     (fun () -> ())
 
+let persist_sized inst =
+  let s = get inst in
+  Views_db.set_view_property s.view_uuid
+    "logseq.property.table/sized-columns"
+    (W.Map (List.map (fun (column, width) -> W.Keyword column, W.Int width)
+      (Smap.bindings s.sized)))
+    (fun () -> ())
+
 let persist_display_type inst =
   let s = get inst in
   Views_db.set_view_property s.view_uuid "logseq.property.view/type"
     (W.Keyword ("logseq.property.view/type." ^ s.display_type))
     (fun () -> ())
 
-let persist_group_sort_by inst v =
+let persist_group_sort_by ?current inst v =
   let s = get inst in
   match v with
   | Some id ->
-      Views_db.set_view_property s.view_uuid
+      Views_db.set_view_property ?current s.view_uuid
         "logseq.property.view/sort-groups-by-property"
         (W.Int id) (fun () -> ())
   | None ->
-      Views_db.remove_view_property s.view_uuid
+      Views_db.remove_view_property ?current s.view_uuid
         "logseq.property.view/sort-groups-by-property" (fun () -> ())
 
 let persist_group_desc inst d =
@@ -436,10 +573,14 @@ let persist_group_desc inst d =
     "logseq.property.view/sort-groups-desc?" (W.Bool d) (fun () -> ())
 
 let persist_group_sort_by_ident inst ident f =
+  let view_current = current_view inst in
+  let current () = view_current () && (get inst).group_sort_by = Some ident in
   update inst (fun s -> { s with group_sort_by = Some ident });
   resolve_property_id ident (fun id ->
-      persist_group_sort_by inst id;
-      f ())
+      if current () && id <> None then begin
+        persist_group_sort_by ~current inst id;
+        f ()
+      end)
 
 (* operations implemented by views_view.ml, registered at install time to
    keep the module graph acyclic (head/table renderers call back through
@@ -453,6 +594,7 @@ type ops =
   ; o_add_object : inst -> unit
   ; o_title_of_uuid : inst -> string -> string
   ; o_load_more : inst -> unit
+  ; o_full_action_rows : inst -> ((Views_wire.view_data, string) result -> unit) -> unit
   }
 
 let ops_ref : ops option ref = ref None

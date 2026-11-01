@@ -12,7 +12,7 @@ open Lui_elements
 module D = Logseq_el
 
 let enabled_min ~virtualize ~min count =
-  virtualize && count > min
+  virtualize && count >= min
 
 let enabled ~virtualize count = enabled_min ~virtualize ~min:64 count
 
@@ -32,6 +32,7 @@ let lazy_spine ctx =
   | _ -> false
 
 let lazy_row ?node_key ?(style_class="") ?(pinned=fun () -> false)
+    ?(visibility_changed=fun _ -> ())
     ~key ~estimate_size near ns child : t =
  fun ctx parent ->
   let extent = Signal.state ctx.Lui_ui.ui_scheduler (estimate_size 0) in
@@ -44,13 +45,17 @@ let lazy_row ?node_key ?(style_class="") ?(pinned=fun () -> false)
   (Logseq_el.el ?key:node_key ~style_class ~attrs:["data-lazy-mount",key]
     ~ext_prop_signals:["height",height] ~events:"lazy-mount lazy-unmount"
     ~on_dom_event:(fun name payload ->
-      if name="lazy-mount" then Signal.set near true
+      if name="lazy-mount" then begin
+        visibility_changed true;
+        Signal.set near true
+      end
       else if name="lazy-unmount" then begin
         let fields = Option.get (Js.Json.decodeObject (Js.Json.parseExn (Option.get payload))) in
         let height = Option.get (Option.bind (Js.Dict.get fields "height") Js.Json.decodeNumber) in
         if not (Float.is_finite height) || height < 0. then
           invalid_arg "Invalid lazy row measured height";
         Signal.set extent height;
+        visibility_changed false;
         if not (pinned ()) then Signal.set near false
       end)
     [if_ ~test:ns child]) ctx parent
@@ -65,8 +70,6 @@ let list ?(scroll_parent_id = "main-content-container") ?(overscan = 5)
     ~key_of ~render (data : 'a array) : t =
   ignore scroll_parent_id;
   ignore overscan;
-  ignore pin_key;
-  ignore pin_sig;
   fun ctx parent ->
     let sched = ctx.Lui_ui.ui_scheduler in
     let arr_sig =
@@ -137,24 +140,45 @@ let list ?(scroll_parent_id = "main-content-container") ?(overscan = 5)
     let near_states : (string, bool Signal.state) Hashtbl.t =
       Hashtbl.create 8
     in
+    let visible : (string, bool) Hashtbl.t = Hashtbl.create 8 in
     let near_of (k : string) : bool Signal.state =
       match Hashtbl.find_opt near_states k with
       | Some s -> s
       | None ->
-          let s = Signal.state sched (Hashtbl.mem eager k) in
+          let in_view = Hashtbl.mem eager k in
+          Hashtbl.replace visible k in_view;
+          let s = Signal.state sched (in_view || pin_key () = Some k) in
           Hashtbl.replace near_states k s;
           s
     in
+    (* Programmatic edit/insert can select an offscreen row before the
+       viewport sees it. Keep the same pin contract as the web twin. *)
+    Option.iter
+      (fun source ->
+        let last_pin = ref None in
+        ignore (Signal.own ctx.Lui_ui.ui_scope
+          (Signal.subscribe ~emit_initial:true source (fun _ ->
+            let next_pin = pin_key () in
+            if next_pin <> !last_pin then begin
+              Option.iter (fun k ->
+                if Hashtbl.find_opt visible k = Some false then
+                  Signal.set (near_of k) false) !last_pin;
+              last_pin := next_pin;
+              Option.iter (fun k -> Signal.set (near_of k) true) next_pin
+            end))))
+      (pin_sig ());
     let row_mount (it : 'a) : t =
       let k = key_of it in
-      (* hosts without a lazy-mount spine (GenericHost/SDL) emit every
+      (* Hosts without a lazy-mount spine emit every
          row eagerly — the spacer would otherwise latch at 0px forever *)
       if initial_rows < 0 || not (lazy_spine ctx) then
         box  [ render it ]
       else
         let near = near_of k in
         let ns = (Signal.value (near)) in
-        lazy_row ~key:k ~estimate_size near ns (render it)
+        lazy_row ~key:k ~estimate_size ~pinned:(fun () -> pin_key () = Some k)
+          ~visibility_changed:(fun in_view -> Hashtbl.replace visible k in_view)
+          near ns (render it)
     in
     (* TODO(component): data-virt-count could ride ~data_attrs but the
        virt-end dom-event driving pagination has no component

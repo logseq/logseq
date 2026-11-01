@@ -155,7 +155,16 @@ type viewport_cache = {
   mutable viewport_ids : int list;
   viewport_members : (int,unit) Hashtbl.t;
 }
-let viewport_cache () = {viewport_store=None; viewport_revision=(-1); viewport_ids=[];viewport_members=Hashtbl.create 16}
+let viewport_cache () = {viewport_store=None; viewport_revision=(-1); viewport_ids=[];
+  viewport_members=Hashtbl.create 16}
+
+(* A mount and retained-scope reset can both apply between viewport sweeps. *)
+let rearm_viewport_rows lazy_fired batch =
+  List.iter (function
+    | Lui_protocol.SetExtensionProp (id,"height",Lui_protocol.StringValue height) when height<>"auto" ->
+      Hashtbl.remove lazy_fired id
+    | _ -> ()) batch.Lui_protocol.ops
+
 let viewport_candidates cache store =
   let same_store = match cache.viewport_store with
     | Some previous -> previous == store | None -> false in

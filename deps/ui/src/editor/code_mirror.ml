@@ -77,14 +77,27 @@ external from_textarea : cm_module -> D.el -> Js.Json.t -> t
 
 external get_value : t -> string = "getValue" [@@mel.send]
 external set_value : t -> string -> unit = "setValue" [@@mel.send]
+external to_textarea : t -> unit = "toTextArea" [@@mel.send]
 
 external set_option : t -> string -> Js.Json.t -> unit = "setOption"
   [@@mel.send]
+external get_option : t -> string -> Js.Json.t = "getOption" [@@mel.send]
 
 (* CM event handlers are invoked as (cm, event) — a 1-arg OCaml fn
    ignores the extra argument *)
 external on_event : t -> string -> (t -> unit) -> unit = "on"
   [@@mel.send]
+external on_dom_event : t -> string -> (t -> D.ev -> unit) -> unit = "on"
+  [@@mel.send]
+external ignore_cm_event : D.ev -> bool -> unit = "codemirrorIgnore"
+  [@@mel.set]
+external event_composing : D.ev -> bool = "isComposing" [@@mel.get]
+external remove_listener : D.el -> string -> (D.ev -> unit) -> bool -> unit
+  = "removeEventListener" [@@mel.send]
+external get_history : t -> Js.Json.t = "getHistory" [@@mel.send]
+external set_history : t -> Js.Json.t -> unit = "setHistory" [@@mel.send]
+external list_selections : t -> Js.Json.t = "listSelections" [@@mel.send]
+external set_selections : t -> Js.Json.t -> unit = "setSelections" [@@mel.send]
 
 external has_focus : t -> bool = "hasFocus" [@@mel.send]
 external cm_focus : t -> unit = "focus" [@@mel.send]
@@ -187,21 +200,104 @@ let theme_name () =
 
 (* -- instances keyed by block uuid -- *)
 
-let instances : (string, t) Hashtbl.t = Hashtbl.create 8
+type composition =
+  { history : Js.Json.t
+  ; selections : Js.Json.t
+  ; mutable cancelled : bool
+  }
 
-let instance uuid =
+type block_instance =
+  { cm : t
+  ; mutable committed : string
+  ; mutable composition : composition option
+  ; mutable composition_live : bool
+  ; mutable synchronizing : bool
+  ; mutable listeners : (D.el * string * (D.ev -> unit) * bool) list
+  }
+
+let instances : (string, block_instance) Hashtbl.t = Hashtbl.create 8
+
+type file_owner =
+  { mutable file_live : bool
+  ; mutable file_editor : block_instance option
+  }
+
+let file_instance : file_owner option ref = ref None
+
+let composition_sources : (unit -> bool) list ref = ref []
+
+let register_composition_source source =
+  composition_sources := source :: !composition_sources;
+  fun () ->
+    composition_sources :=
+      List.filter (fun current -> current != source) !composition_sources
+
+let focused_client el =
+  D.el_is_connected el
+  && (match D.active_element () with Some active -> active == el | None -> false)
+
+let composition_active (ev : Ui_services.ev) =
+  ev.composing
+  || Hashtbl.fold
+       (fun _ st active ->
+         active || (st.composition_live
+                    && D.el_is_connected (get_wrapper st.cm)
+                    && focused_client (get_input st.cm)))
+       instances false
+  || (match !file_instance with
+      | Some { file_live = true; file_editor = Some st } -> st.composition_live
+                   && D.el_is_connected (get_wrapper st.cm)
+                   && focused_client (get_input st.cm)
+      | _ -> false)
+  || List.exists (fun source -> source ()) !composition_sources
+
+let with_model_update st f =
+  let previous = st.synchronizing in
+  st.synchronizing <- true;
+  Fun.protect ~finally:(fun () -> st.synchronizing <- previous) f
+
+let cancel_composition st =
+  match st.composition with
+  | None -> ()
+  | Some pending ->
+      pending.cancelled <- true;
+      with_model_update st (fun () ->
+          if get_value st.cm <> st.committed then
+            set_value st.cm st.committed;
+          set_history st.cm pending.history;
+          set_selections st.cm pending.selections)
+
+let release_instance uuid =
   match Hashtbl.find_opt instances uuid with
-  | Some c when D.el_is_connected (get_wrapper c) -> Some c
-  | Some _ ->
+  | None -> ()
+  | Some st ->
       Hashtbl.remove instances uuid;
+      List.iter
+        (fun (el, name, f, capture) -> remove_listener el name f capture)
+        st.listeners;
+      st.listeners <- [];
+      cancel_composition st;
+      to_textarea st.cm
+
+let block_instance uuid =
+  match Hashtbl.find_opt instances uuid with
+  | Some st when D.el_is_connected (get_wrapper st.cm) -> Some st
+  | Some _ ->
+      release_instance uuid;
       None
   | None -> None
 
-(* the CodeMirror doc value for a block — installed as the live_buffer
-   provider so blur/exit commits read the CM surface, not the hidden
-   textarea *)
+let current_instance uuid c =
+  match block_instance uuid with
+  | Some st when st.cm == c -> Some st
+  | _ -> None
+
+let instance uuid =
+  Option.map (fun st -> st.cm) (block_instance uuid)
+
+(* Exit paths must not read CM5's mutable, possibly marked document. *)
 let live_value uuid =
-  match instance uuid with Some c -> Some (get_value c) | None -> None
+  Option.map (fun st -> st.committed) (block_instance uuid)
 
 (* caret = char offset over the whole doc -> {line, ch} *)
 let pos_of_offset c off =
@@ -238,13 +334,17 @@ let focus_block ~caret uuid =
    and select the block. cljs additionally re-enters raw-mode editing;
    the OCaml surface has no raw mode for code blocks, so Esc exits. *)
 let on_escape uuid =
-  (match instance uuid with
-   | Some c -> A.sync_buffer uuid (get_value c)
-   | None -> ());
-  A.exit_edit ~select:true
+  match block_instance uuid with
+  | Some st when st.composition = None ->
+      A.sync_buffer uuid st.committed;
+      A.exit_edit ~select:true
+  | _ -> ()
 
 (* Shift-Enter (cljs wrapper keydown): save + insert a sibling block *)
-let on_shift_enter uuid = A.insert_sibling_after uuid
+let on_shift_enter uuid =
+  match block_instance uuid with
+  | Some st when st.composition = None -> A.insert_sibling_after uuid
+  | _ -> ()
 
 let update_calc c =
   match D.el_closest (get_wrapper c) ".extensions__code" with
@@ -264,17 +364,28 @@ let update_calc c =
 (* mirror cljs save-code-editor!: the doc value flows into the block
    buffer + the debounced worker save; calc results recompute live *)
 let on_change uuid c =
-  let v = get_value c in
-  A.sync_buffer uuid v;
-  Ops.schedule_save uuid v;
-  update_calc c
+  match current_instance uuid c with
+  | Some st when not st.synchronizing && st.composition = None ->
+      let v = get_value c in
+      if v <> st.committed then begin
+        st.committed <- v;
+        A.sync_buffer uuid v;
+        Ops.schedule_save uuid v;
+        update_calc c
+      end
+  | _ -> ()
 
 (* cljs blur: save + drop the edit state (skipped after Esc — the escape
    path already committed) *)
-let on_cm_blur uuid =
-  match S.editing () with
-  | Some e when e.S.uuid = uuid -> A.blur_commit ()
-  | _ -> ()
+let on_cm_blur uuid c =
+  match current_instance uuid c with
+  | None -> ()
+  | Some st ->
+      st.composition_live <- false;
+      cancel_composition st;
+      (match S.editing () with
+       | Some e when e.S.uuid = uuid -> A.blur_commit ()
+       | _ -> ())
 
 (* cljs focus: edit-block! runs whenever the focused CM is not the
    current edit block — so clicking a code block enters edit state even
@@ -284,6 +395,19 @@ let on_cm_focus uuid =
   match S.editing () with
   | Some e when e.S.uuid = uuid -> ()
   | _ -> A.enter_edit uuid (String.length (A.model_title uuid))
+
+let composing_key st ev =
+  st.composition <> None || event_composing ev || D.ev_key_code ev = 229
+
+let on_cm_keydown uuid c ev =
+  match current_instance uuid c with
+  | Some st when composing_key st ev ->
+      ignore_cm_event ev true;
+      D.ev_stop_propagation ev
+  | None ->
+      ignore_cm_event ev true;
+      D.ev_stop_propagation ev
+  | _ -> ()
 
 external ev_code : D.ev -> string = "code" [@@mel.get]
 
@@ -305,22 +429,24 @@ let at_end c =
    boundary move to the neighbor block; Cmd/Ctrl+[ and Cmd/Ctrl+] are
    swallowed so they don't trigger browser history navigation *)
 let wrapper_keydown uuid c ev =
-  let key = D.ev_key ev in
-  match
-    (key, D.ev_ctrl ev || D.ev_meta ev, D.ev_shift ev)
-  with
-  | _, true, _ -> (
-      match ev_code ev with
-      | "BracketLeft" | "BracketRight" ->
-          D.ev_stop_propagation ev;
-          D.ev_prevent_default ev
+  match current_instance uuid c with
+  | None -> D.ev_stop_propagation ev
+  | Some st when composing_key st ev -> D.ev_stop_propagation ev
+  | Some _ -> (
+      let key = D.ev_key ev in
+      match (key, D.ev_ctrl ev || D.ev_meta ev, D.ev_shift ev) with
+      | _, true, _ -> (
+          match ev_code ev with
+          | "BracketLeft" | "BracketRight" ->
+              D.ev_stop_propagation ev;
+              D.ev_prevent_default ev
+          | _ -> ())
+      | "ArrowLeft", false, false -> if at_start c then A.arrow_nav uuid true
+      | "ArrowRight", false, false ->
+          if at_end c then A.arrow_nav uuid false
+      | "ArrowUp", false, false -> if at_start c then A.arrow_nav uuid true
+      | "ArrowDown", false, false -> if at_end c then A.arrow_nav uuid false
       | _ -> ())
-  | "ArrowLeft", false, false -> if at_start c then A.arrow_nav uuid true
-  | "ArrowRight", false, false ->
-      if at_end c then A.arrow_nav uuid false
-  | "ArrowUp", false, false -> if at_start c then A.arrow_nav uuid true
-  | "ArrowDown", false, false -> if at_end c then A.arrow_nav uuid false
-  | _ -> ()
 
 (* cljs pointerdown on the wrapper: stop propagation + clear the
    block-range selection *)
@@ -338,8 +464,10 @@ let wrapper_pointerdown _uuid ev =
 let make_options ~uuid ~lang ~mode ~read_only =
   let extra_keys =
     Js.Dict.fromList
-      [ ("Esc", fun _ -> on_escape uuid)
-      ; ("Shift-Enter", fun _ -> on_shift_enter uuid)
+      [ ("Esc", fun c ->
+            if current_instance uuid c <> None then on_escape uuid)
+      ; ("Shift-Enter", fun c ->
+            if current_instance uuid c <> None then on_shift_enter uuid)
       ]
   in
   let opts =
@@ -372,12 +500,42 @@ let mount ?(read_only = false) uuid textarea =
     from_textarea (cm ()) textarea
       (make_options ~uuid ~lang ~mode ~read_only)
   in
-  Hashtbl.replace instances uuid c;
+  release_instance uuid;
+  let st =
+    { cm = c; committed = get_value c; composition = None
+    ; composition_live = false
+    ; synchronizing = false; listeners = [] }
+  in
+  Hashtbl.replace instances uuid st;
   on_event c "change" (fun c -> on_change uuid c);
-  on_event c "blur" (fun _ -> on_cm_blur uuid);
-  on_event c "focus" (fun _ -> on_cm_focus uuid);
-  D.el_on (get_wrapper c) "keydown" (wrapper_keydown uuid c);
-  D.el_on (get_wrapper c) "pointerdown" (wrapper_pointerdown uuid);
+  on_event c "blur" (on_cm_blur uuid);
+  on_event c "focus" (fun c ->
+      if current_instance uuid c <> None then on_cm_focus uuid);
+  on_dom_event c "keydown" (on_cm_keydown uuid);
+  let listen el name capture f =
+    D.el_listen el name f capture;
+    st.listeners <- (el, name, f, capture) :: st.listeners
+  in
+  listen (get_input c) "compositionstart" true (fun _ ->
+      if current_instance uuid c <> None then begin
+        cancel_composition st;
+        st.composition_live <- true;
+        st.composition <- Some
+          { history = get_history c; selections = list_selections c
+          ; cancelled = false }
+      end);
+  (* CM5's textarea listener polls synchronously before this listener. *)
+  listen (get_input c) "compositionend" false (fun _ ->
+      match current_instance uuid c, st.composition with
+      | Some _, Some pending ->
+          if pending.cancelled then cancel_composition st;
+          st.composition_live <- false;
+          st.composition <- None;
+          if not pending.cancelled then on_change uuid c
+      | _ -> ());
+  listen (get_wrapper c) "keydown" false (wrapper_keydown uuid c);
+  listen (get_wrapper c) "pointerdown" false (fun ev ->
+      if current_instance uuid c <> None then wrapper_pointerdown uuid ev);
   (* cljs .save()/.refresh() right after mount: textarea value -> doc
      state, then a layout pass while the container is on screen *)
   save c;
@@ -391,7 +549,7 @@ let mount ?(read_only = false) uuid textarea =
         (ensure_mode file
          |> Js.Promise.then_ (fun () ->
                 (match instance uuid with
-                 | Some c' when c' == c ->
+                 | Some c' when c' == c && Js.Json.decodeString (get_option c "mode") = Some mode ->
                      set_option c "mode" (Js.Json.string mode)
                  | _ -> ());
                 Js.Promise.resolve ()))
@@ -399,9 +557,47 @@ let mount ?(read_only = false) uuid textarea =
 
 (* live read-only toggle for the extension's read-only prop *)
 let set_read_only uuid flag =
-  match instance uuid with
-  | Some c -> set_option c "readOnly" (Js.Json.boolean flag)
+  match block_instance uuid with
+  | Some st ->
+      if flag then cancel_composition st;
+      set_option st.cm "readOnly" (Js.Json.boolean flag)
   | None -> ()
+
+let set_controlled_value uuid value =
+  match block_instance uuid with
+  | Some st when st.committed <> value
+              || (st.composition = None && get_value st.cm <> value) ->
+      cancel_composition st;
+      st.committed <- value;
+      with_model_update st (fun () -> set_value st.cm value);
+      (match st.composition with
+       | Some _ ->
+           st.composition <- Some
+             { history = get_history st.cm; selections = list_selections st.cm
+             ; cancelled = true }
+       | None -> ());
+      update_calc st.cm
+  | _ -> ()
+
+let set_language uuid lang =
+  let lang = normalize_lang lang in
+  match instance uuid with
+  | None -> ()
+  | Some c ->
+      let mode = cm_mode lang in
+      set_option c "mode" (Js.Json.string mode);
+      set_option c "matchBrackets" (Js.Json.boolean (lisp_like mode));
+      (match mode_file lang with
+       | None -> ()
+       | Some file ->
+           ignore
+             (ensure_mode file
+              |> Js.Promise.then_ (fun () ->
+                     (match instance uuid with
+                      | Some current when current == c && Js.Json.decodeString (get_option c "mode") = Some mode ->
+                          set_option c "mode" (Js.Json.string mode)
+                      | _ -> ());
+                     Js.Promise.resolve ())))
 
 (* cljs sync-editor-code!: a title written by another path (undo, db
    refresh, /code conversion) is pushed into an unfocused editor *)
@@ -412,7 +608,7 @@ let sync_titles (_st : S.t) =
       | Some c, Some b ->
           let code = b.Model.block_title in
           if (not (has_focus c)) && get_value c <> code then
-            set_value c code
+            set_controlled_value uuid code
       | _ -> ())
     instances
 
@@ -428,25 +624,30 @@ let ensure_watch () =
         watch := Some (Signal.map sync_titles (S.signal ()))
 
 (* Lazy mounts are deduplicated until the core chunk arrives. *)
-let pending_mounts : (string, unit) Hashtbl.t = Hashtbl.create 4
+let pending_mounts : (string, D.el) Hashtbl.t = Hashtbl.create 4
 
-let mount_async ?(read_only = false) uuid el =
+let mount_async uuid el =
   ensure_watch ();
   if instance uuid = None && not (Hashtbl.mem pending_mounts uuid) then begin
-    Hashtbl.replace pending_mounts uuid ();
+    Hashtbl.replace pending_mounts uuid el;
     ignore
       (ensure_core ()
        |> Js.Promise.then_ (fun () ->
-              Hashtbl.remove pending_mounts uuid;
-              if instance uuid = None && D.el_is_connected el then
-                mount ~read_only uuid el;
+              (match Hashtbl.find_opt pending_mounts uuid with
+               | Some pending when pending == el ->
+                   Hashtbl.remove pending_mounts uuid;
+                   if instance uuid = None && D.el_is_connected el then
+                     mount
+                       ~read_only:(D.el_get_attr el "readonly" <> None)
+                       uuid el
+               | _ -> ());
               Js.Promise.resolve ()))
   end
 
 (* The adapter releases its block-role instance on node removal. *)
 let unmount uuid =
   Hashtbl.remove pending_mounts uuid;
-  Hashtbl.remove instances uuid
+  release_instance uuid
 
 (* -- language picker (.code-block-actions .select-language) -- *)
 (* cljs shows the picker as a menu anchored under the button —
@@ -513,35 +714,53 @@ let copy_button uuid =
          Ui_task.resolve ()))
   | None -> ()
 
-(* -- file-page editor (#/file/<path>) --
+(* File editors share committed-document semantics with code blocks,
+   but publish through the file controller rather than block saves. *)
 
-   Same vendored CM5 as code blocks, mounted without the block wiring:
-   change/blur just report the doc to the caller (file_view saves via
-   the file transact), Esc persists instead of exiting an edit state
-   that does not exist here. *)
-
-external to_textarea : t -> unit = "toTextArea" [@@mel.send]
-
-let file_instance : t option ref = ref None
-
-let unmount_file () =
+let current_file_instance owner c =
   match !file_instance with
-  | Some c ->
-      to_textarea c;
-      file_instance := None
-  | None -> ()
+  | Some current when current == owner && owner.file_live ->
+      (match owner.file_editor with
+       | Some st when st.cm == c && D.el_is_connected (get_wrapper c) -> Some st
+       | _ -> None)
+  | _ -> None
 
-let mount_file ~on_change textarea =
-  (* a previous file editor's wrapper is inert once its route unmounted —
-     but release the doc before rebinding so it can't double-save *)
-  unmount_file ();
+let dispose_file owner =
+  if owner.file_live then begin
+    owner.file_live <- false;
+    (match !file_instance with
+     | Some current when current == owner -> file_instance := None
+     | _ -> ());
+    match owner.file_editor with
+    | Some st ->
+        owner.file_editor <- None;
+        List.iter
+          (fun (el, name, f, capture) -> remove_listener el name f capture)
+          st.listeners;
+        st.listeners <- [];
+        cancel_composition st;
+        to_textarea st.cm
+    | None -> ()
+  end
+
+let mount_file ~owner ~on_change textarea =
   let lang =
     normalize_lang
       (Option.value (D.el_get_attr textarea "data-lang") ~default:"")
   in
   let mode = cm_mode lang in
+  let publish c =
+    match current_file_instance owner c with
+    | Some st when not st.synchronizing && st.composition = None ->
+        let value = get_value c in
+        if value <> st.committed then begin
+          st.committed <- value;
+          on_change value
+        end
+    | _ -> ()
+  in
   let extra_keys =
-    Js.Dict.fromList [ ("Esc", fun c -> on_change (get_value c)) ]
+    Js.Dict.fromList [ ("Esc", publish) ]
   in
   let opts =
     Js.Dict.fromList
@@ -557,9 +776,46 @@ let mount_file ~on_change textarea =
   (* extraKeys values are cm callbacks, not json — set via js_set *)
   Web_dom.js_set opts_json "extraKeys" extra_keys;
   let c = from_textarea (cm ()) textarea opts_json in
-  file_instance := Some c;
-  on_event c "change" (fun c -> on_change (get_value c));
-  on_event c "blur" (fun c -> on_change (get_value c));
+  let st =
+    { cm = c; committed = get_value c; composition = None
+    ; composition_live = false; synchronizing = false; listeners = [] }
+  in
+  owner.file_editor <- Some st;
+  on_event c "change" publish;
+  on_event c "blur" (fun c ->
+      match current_file_instance owner c with
+      | Some st ->
+          st.composition_live <- false;
+          cancel_composition st;
+          publish c
+      | None -> ());
+  on_dom_event c "keydown" (fun c ev ->
+      match current_file_instance owner c with
+      | Some st when composing_key st ev ->
+          ignore_cm_event ev true;
+          D.ev_stop_propagation ev
+      | _ -> ());
+  let listen name capture f =
+    let input = get_input c in
+    D.el_listen input name f capture;
+    st.listeners <- (input, name, f, capture) :: st.listeners
+  in
+  listen "compositionstart" true (fun _ ->
+      if current_file_instance owner c <> None then begin
+        cancel_composition st;
+        st.composition_live <- true;
+        st.composition <- Some
+          { history = get_history c; selections = list_selections c
+          ; cancelled = false }
+      end);
+  listen "compositionend" false (fun _ ->
+      match current_file_instance owner c, st.composition with
+      | Some _, Some pending ->
+          if pending.cancelled then cancel_composition st;
+          st.composition_live <- false;
+          st.composition <- None;
+          if not pending.cancelled then publish c
+      | _ -> ());
   save c;
   refresh c;
   match mode_file lang with
@@ -567,28 +823,31 @@ let mount_file ~on_change textarea =
       ignore
         (ensure_mode file
          |> Js.Promise.then_ (fun () ->
-                (match !file_instance with
-                 | Some c' when c' == c ->
+                (match current_file_instance owner c with
+                 | Some _ ->
                      set_option c "mode" (Js.Json.string mode)
                  | _ -> ());
                 Js.Promise.resolve ()))
   | None -> ()
 
-let mount_file_async ~on_change el =
+let mount_file_async ~owner ~on_change el =
   ignore
     (ensure_core ()
      |> Js.Promise.then_ (fun () ->
-            if D.el_is_connected el then mount_file ~on_change el;
+            if owner.file_live && D.el_is_connected el then
+              mount_file ~owner ~on_change el;
             Js.Promise.resolve ()))
 
 (* file_view calls this after the flush that mounts its textarea;
    native has no CodeMirror so its twin is a no-op *)
 let attach_file_editor ~on_change () =
-  match
-    D.el_query D.document_el ".ls-file-page .code-editor textarea"
-  with
-  | Some el -> mount_file_async ~on_change el
-  | None -> ()
+  Option.iter dispose_file !file_instance;
+  let owner = { file_live = true; file_editor = None } in
+  file_instance := Some owner;
+  (match D.el_query D.document_el ".ls-file-page .code-editor textarea" with
+   | Some el -> mount_file_async ~owner ~on_change el
+   | None -> ());
+  fun () -> dispose_file owner
 
 let installed = ref false
 

@@ -169,10 +169,10 @@ type resolved =
    built-in classes are Tag-tagged too, so a same-named one ("Tag"
    itself, title "Tag") would outrank the written "#tag". Resolve via
    the class-only index, keeping only non-built-in entities *)
-let tag_class_by_name name =
+let tag_class_by_name ~origin_repo name =
   let* w =
     Runtime.invoke "thread-api/get-tags-by-name"
-      [ Wire.String (Sdk_util.repo ()); Wire.String name ]
+      [ Wire.String origin_repo; Wire.String name ]
   in
   let is_builtin t =
     match Wire.get t "db/ident" with
@@ -188,18 +188,18 @@ let tag_class_by_name name =
     |> List.filter (fun t -> not (is_builtin t))
     |> List.filter_map (fun t -> Wire.map_get_uuid t "block/uuid")
   with
-  | uuid :: _ -> Sdk_util.get_by_id (Wire.Uuid uuid)
+  | uuid :: _ -> Sdk_util.get_by_id_for_repo origin_repo (Wire.Uuid uuid)
   | [] -> Js.Promise.resolve Wire.Nil
 
-let resolve_names names tags hash =
+let resolve_names ~origin_repo names tags hash =
   let* a =
     names
     |> List.map (fun name ->
            let is_tag = List.mem name tags in
            let is_hash = is_tag || List.mem name hash in
            let* w =
-             if List.mem name hash then tag_class_by_name name
-             else Sdk_util.get_entity name
+             if List.mem name hash then tag_class_by_name ~origin_repo name
+             else Sdk_util.get_entity_for_repo origin_repo name
            in
            Js.Promise.resolve
              (match Wire.map_get_uuid w "block/uuid" with
@@ -268,24 +268,34 @@ let rewrite_title title resolved =
 
 type parsed = { title : string; refs : Wire.t list; tags : Wire.t list }
 
-let parse title =
+let parse ?(origin_repo = Sdk_util.repo ()) title =
+  let cache_context_revision =
+    let entry_model = Runtime.model () in
+    if entry_model.Model.repo = Some origin_repo then
+      Some entry_model.Model.context_revision
+    else None
+  in
   let names, tags, hash = scan_title title in
-  let* resolved = resolve_names names tags hash in
+  let* resolved = resolve_names ~origin_repo names tags hash in
+  let fresh_model = Runtime.model () in
   (* seed the render pull caches with the resolved metas: a remounted
      [[uuid]] anchor then paints its title immediately instead of
      waiting on a worker pull *)
-  List.iter
-    (fun r ->
-      if r.fresh then Render_inline.prime_ref_metas [ (r.name, r.uuid) ]
-      else
-        match Wire.map_get_string r.entity "block/title" with
-        | Some t ->
-            Render_inline.prime_pull_meta ~name:r.name ~uuid:r.uuid
-              ~title:t
-              ~is_page:(Wire.map_get_string r.entity "block/name" <> None)
-              ~is_math:(Decode.prop_label r.entity "logseq.property.node/display-type" = Some "math")
-        | None -> ())
-    resolved;
+  if fresh_model.Model.repo = Some origin_repo
+     && cache_context_revision = Some fresh_model.Model.context_revision
+  then
+    List.iter
+      (fun r ->
+        if r.fresh then Render_inline.prime_ref_metas [ (r.name, r.uuid) ]
+        else
+          match Wire.map_get_string r.entity "block/title" with
+          | Some t ->
+              Render_inline.prime_pull_meta ~name:r.name ~uuid:r.uuid
+                ~title:t
+                ~is_page:(Wire.map_get_string r.entity "block/name" <> None)
+                ~is_math:(Decode.prop_label r.entity "logseq.property.node/display-type" = Some "math")
+          | None -> ())
+      resolved;
   let ref_of r =
     if r.fresh then
       if r.is_hash then new_tag_map r.name r.uuid

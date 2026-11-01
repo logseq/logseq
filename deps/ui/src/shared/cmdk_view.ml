@@ -20,6 +20,53 @@ let if_ = Lui_elements.if_
 let keyed = Lui_elements.keyed
 
 module S = Cmdk_state
+
+module Find_in_page = struct
+  include Cmdk_state.Find_in_page
+
+  let navigation_button ~key ~icon ~label ~state ~dispatch action =
+    Ui_components.button ~key ~variant:`ghost ~size:`icon ~width:28 ~height:28
+      ~label ~accessibility_identifier:("find-in-page-" ^ key)
+      ~disabled:(reactive (fun s -> s.total = 0 || s.composing) state)
+      ~on_press:(fun _ -> dispatch action)
+      [ Icons.icon ~size:16. icon ]
+
+  (* The shell owns visibility, composition events and focus restoration;
+     the page/ref/search owner supplies and reveals stable entity matches. *)
+  let view ~i18n ~state ~dispatch () =
+    row ~key:"find-in-page" ~gap:4 ~padding:4 ~cross:`center ~min_width:0
+      ~accessibility_identifier:"find-in-page" ~style_class:"cp__find-in-page"
+      ~background:"var(--lx-gray-02)" ~corner_radius:6
+      [ Ui_components.text_field ~key:"query" ~grow:1. ~min_width:0
+          ~accessibility_identifier:"find-in-page-query"
+          ~label:(i18n "search.find-in-page/input-placeholder")
+          ~placeholder:(i18n "search.find-in-page/input-placeholder")
+          ~text:(reactive (fun s -> s.query) state)
+          ~submit_on_enter:true
+          ~on_input:(function
+            | Lui_protocol.TextChanged (_, "") -> dispatch Clear
+            | Lui_protocol.TextChanged (_, query) -> dispatch (Query query)
+            | _ -> ())
+          ~on_submit:(fun _ -> dispatch Next) []
+      ; text ~key:"count" ~accessibility_identifier:"find-in-page-count"
+          ~value:(reactive (fun s -> Printf.sprintf "%d/%d" s.current s.total) state) []
+      ; Ui_components.checkbox ~key:"case"
+          ~accessibility_identifier:"find-in-page-match-case"
+          ~label:(i18n "search.find-in-page/match-case")
+          ~checked:(reactive (fun s -> s.match_case) state)
+          ~on_toggle:(function
+            | Lui_protocol.ToggleChanged (_, value) -> dispatch (Match_case value)
+            | _ -> ()) []
+      ; navigation_button ~key:"previous" ~icon:"chevron-up"
+          ~label:(i18n "search.find-in-page/previous-result") ~state ~dispatch Previous
+      ; navigation_button ~key:"next" ~icon:"chevron-down"
+          ~label:(i18n "search.find-in-page/next-result") ~state ~dispatch Next
+      ; Ui_components.button ~key:"close" ~variant:`ghost ~size:`icon
+          ~label:(i18n "ui/close") ~width:28 ~height:28
+          ~accessibility_identifier:"find-in-page-close"
+          ~on_press:(fun _ -> dispatch Close) [ Icons.icon ~size:16. "x" ]
+      ]
+end
 module Svs = Cmdk_services
 
 let scroller_class = "cp__cmdk-scroller"
@@ -791,6 +838,18 @@ let handle_keydown st (ev : Svs.key_ev) : Svs.key_answer =
     | "Escape" ->
         if S.clear_or_close st then { Svs.prevent = true; stop = true }
         else no
+    | "Home" ->
+        S.jump_hl st false;
+        { Svs.prevent = true; stop = false }
+    | "End" ->
+        S.jump_hl st true;
+        { Svs.prevent = true; stop = false }
+    | "PageDown" ->
+        S.page_hl st 1;
+        { Svs.prevent = true; stop = false }
+    | "PageUp" ->
+        S.page_hl st (-1);
+        { Svs.prevent = true; stop = false }
     | "ArrowDown" ->
         if ev.Svs.meta || ev.Svs.ctrl then
           Option.iter (fun gid -> S.toggle_expand st gid true) (S.hl_group st)

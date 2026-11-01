@@ -123,6 +123,9 @@ let request_prevent () = default_prevented := true
 
 let dom_parent_of : (int -> int option) ref = ref (fun _ -> None)
 
+(* Reconciled nodes retain host IDs while their live scopes use mount-time IDs. *)
+let dom_handler_aliases : (int -> int list) ref = ref (fun _ -> [])
+
 (* runtime-node-id -> element snapshot for the event's "target" prop,
    installed by the embed layer; host payloads only carry nodeId, and
    document listeners resolve ev_target/closest through this *)
@@ -208,7 +211,8 @@ let emit_event name payload =
                let payload_str = lazy (Js.Json.stringify payload) in
                let rec bubble id depth =
                  if depth < 64 && not !propagation_stopped then begin
-                   (match Hashtbl.find_opt dom_handlers id with
+                   List.iter (fun registered ->
+                    match Hashtbl.find_opt dom_handlers registered with
                     | Some dhs ->
                         List.iter
                           (fun dh ->
@@ -222,7 +226,7 @@ let emit_event name payload =
                                   "[emit_event] handler threw id=%d ev=%s: %s\n%!"
                                   id name (Printexc.to_string e))
                           dhs
-                    | None -> ());
+                    | None -> ()) (id :: !dom_handler_aliases id);
                    (* Viewport notifications describe one measured node, not a
                       DOM gesture. A child row must never mount, unmount, or
                       paginate an enclosing virtual list. *)

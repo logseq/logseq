@@ -59,6 +59,9 @@ func (s *platformServices) ApplyTheme(c *ui.Context) error {
 		return nil
 	}
 	tokens := maps.Clone(snapshot.Vars)
+	if err := applyThemeTypography(&next, tokens); err != nil {
+		return err
+	}
 	for _, name := range strings.Fields(`background foreground card card-foreground primary primary-foreground
 secondary secondary-foreground accent accent-foreground muted muted-foreground destructive destructive-foreground
 input ring border success success-foreground warning warning-foreground error error-foreground`) {

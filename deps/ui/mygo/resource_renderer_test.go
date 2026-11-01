@@ -4,6 +4,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"net/url"
 	"testing"
 	"time"
@@ -11,6 +12,35 @@ import (
 	"github.com/egoist/mygo/ui"
 	luimygo "github.com/logseq/lui/platform/mygo"
 )
+
+func TestGraphAssetIdentityOverridesRetainedSource(t *testing.T) {
+	s := newPlatformServices(nil)
+	backend := luimygo.New(luimygo.Config{Extensions: s.extensions()})
+	defer backend.Close()
+	attrs := `{"src":"/old-graph/assets/image.png","data-asset-file":"image.png"}`
+	if err := backend.ApplyBatch(luimygo.Batch{Generation: 1, Ops: []luimygo.Operation{
+		{Op: "create-extension", ID: 1, Identifier: "logseq-img"},
+		{Op: "set-extension-prop", ID: 1, Property: "attrs", Value: attrs},
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	r := newResourceRenderer(backend)
+	defer r.Close()
+	graph := "/new-graph"
+	r.ResolveAsset = func(filename string) (string, error) { return graph + "/assets/" + filename, nil }
+	n, _ := backend.Node(1)
+	for _, dir := range []string{"/new-graph", "/third-graph"} {
+		graph = dir
+		source, err := r.source(n)
+		if err != nil || source.kind != "file" || source.value != dir+"/assets/image.png" {
+			t.Fatalf("graph asset source = %#v, %v; want current graph %s", source, err, dir)
+		}
+	}
+	r.ResolveAsset = func(string) (string, error) { return "", errors.New("graph closed") }
+	if _, err := r.source(n); err == nil {
+		t.Fatal("failed graph resolution fell back to a stale src")
+	}
+}
 
 func TestResourcesBelongToCommittedPresentation(t *testing.T) {
 	s := newPlatformServices(nil)

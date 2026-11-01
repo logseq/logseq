@@ -134,12 +134,15 @@ let () = Native_embed.with_entry_lock (fun () ->
   let failures = ref [] in
   let expect message condition = if not condition then failures := message :: !failures in
   let queries = ref 0 and menu_node = ref None and target = ref None in
+  let focused = ref (-1) and clicked = ref 0 and item_nodes = ref [] in
   let previous_context = !Popups_state.active in
   let scheduler = Signal.scheduler () in
   let context = Popups_state.make scheduler in
   let dom = { Ui_dom_native.ops with by_id = (fun identifier ->
     incr queries;
-    if identifier="block-context-menu" then !menu_node else None) } in
+    if identifier="block-context-menu" then !menu_node
+    else List.assoc_opt identifier !item_nodes);
+    dispatch_json = (fun name _ -> if name="ls:editor-command" then incr clicked) } in
   Platform.install_ui_services ~paints_caret:true ~assert_owner:Native_embed.assert_entry_owner
     ~request_flush:(fun () -> ()) ~dom ~timers:Ui_dom_native.timers ~files:Ui_dom_native.files;
   let event key =
@@ -155,8 +158,9 @@ let () = Native_embed.with_entry_lock (fun () ->
   let base = Ui_dom_native.el_of (Js.Json.JObject []) in
   target:=Some {base with Ui_services.closest=(fun selector ->
     if selector="#block-context-menu, #block-context-submenu" then Some base else None)};
-  let cm : Popups_state.cm = {cx=0.;cy=0.;atop=0.;flip=false;block_id="context-fixture";
-    multi=false;entries=[];sub_open=(-1);sub_xy=(0.,0.);tag=None;native=false;native_acts=[]} in
+  let cm : Popups_state.cm = {epoch=0;cx=0.;cy=0.;atop=0.;flip=false;block_id="context-fixture";
+    multi=false;entries=[Ci_item ("First",None,"fixture-first");Ci_item ("Last",None,"fixture-last")];
+    sub_open=(-1);sub_xy=(0.,0.);highlighted=None;tag=None;native=false;native_acts=[]} in
   Signal.set context.vs {ac=None;cm=Some cm;pv=None};
   Signal.stabilize scheduler;
   List.iter (fun key ->
@@ -164,7 +168,6 @@ let () = Native_embed.with_entry_lock (fun () ->
     expect "A missing menu consumed navigation" (not (Popups_view.menu_keydown context (event (Some key))));
     expect "Supported menu navigation did not resolve its owned menu" (!queries = 1))
     ["ArrowDown"; "ArrowUp"; "Home"; "End"; "Enter"];
-  let focused = ref (-1) and clicked = ref 0 in
   let item index =
     let attrs = Hashtbl.create 4 in
     let base = Ui_dom_native.el_of (Js.Json.JObject []) in
@@ -174,6 +177,7 @@ let () = Native_embed.with_entry_lock (fun () ->
       scroll_into_view_nearest = (fun () -> ());
       click = (fun () -> incr clicked) } in
   let items = [item 0; item 1] in
+  item_nodes := List.mapi (fun index node -> "cm-item-" ^ string_of_int index, node) items;
   let base = Ui_dom_native.el_of (Js.Json.JObject []) in
   let menu = {base with Ui_services.rect = (fun () -> 0.,0.,100.,80.);
     query_all = (fun _ -> items)} in
@@ -188,9 +192,10 @@ let () = Native_embed.with_entry_lock (fun () ->
   expect "A hidden menu consumed navigation"
     (not (Popups_view.menu_keydown context (event (Some "ArrowDown"))));
   menu_node := Some {menu with Ui_services.query_all = (fun _ -> [])};
+  Signal.set context.vs {ac=None;cm=Some {cm with entries=[]};pv=None};
+  Signal.stabilize scheduler;
   expect "An empty menu consumed navigation"
     (not (Popups_view.menu_keydown context (event (Some "ArrowDown"))));
-  Popups_view.cm_hi_el := None;
   let nodes = List.init 2048 (fun _ -> Js.Json.JObject
     ["className",Js.Json.JString "ls-block"]) in
   Dom_ext.doc_elements_provider := (fun () -> nodes);
@@ -291,3 +296,131 @@ let () =
   List.iter prerr_endline (List.rev !failures);
   check "Native window resize delivery and shared sidebar geometry" (!failures = []);
   print_endline "native window resize delivery and shared sidebar geometry: OK"
+
+let () =
+  let previous = !Host.host_op and requests = Queue.create () in
+  let drain () = Native_embed.with_entry_lock Host.drain in
+  Fun.protect ~finally:(fun () -> Host.host_op := previous) (fun () ->
+    Host.set_host_op (fun name payload -> Queue.add (name,payload) requests);
+    let seen = ref [] in
+    let write text = Native_embed.with_entry_lock (fun () ->
+      let task = Ui_services.clipboard_write_text text in
+      ignore (Ui_task.catch
+        (Ui_task.bind task (fun () -> seen := (text,Ok ()) :: !seen; Ui_task.resolve ()))
+        (fun error -> seen := (text,Error error) :: !seen; Ui_task.resolve ()));
+      task) in
+    let first = write "first" and second = write "second" in
+    drain ();
+    check "Native clipboard enqueue must not acknowledge OS ownership" (!seen = []);
+    let request () =
+      let name,payload = Queue.take requests in
+      check "Task writes must use the identity-bearing operation" (name="clipboard-write");
+      Yojson.Safe.Util.(Yojson.Safe.from_string payload |> member "request-id" |> to_string) in
+    let older = request () and newer = request () in
+    let reply id fields =
+      Native_embed.platform_event ("clipboard-write-result\n" ^ Yojson.Safe.to_string
+        (`Assoc (("request-id",`String id)::fields)));
+      drain () in
+    reply newer ["ok",`Bool false;"error",`String "ownership refused"];
+    check "A failed write must reject only its own task"
+      (match !seen with
+       | ["second",Error (Failure _)] -> true
+       | _ -> false);
+    reply older ["ok",`Bool true];
+    check "A successful ACK must complete the matching older write"
+      (match !seen with
+       | ["first",Ok ();"second",Error (Failure _)] -> true
+       | _ -> false);
+    reply older ["ok",`Bool true];
+    check "Duplicate terminals must not redeliver completion" (List.length !seen=2);
+    List.iter (fun body ->
+      let rejected = try Native_embed.platform_event ("clipboard-write-result\n" ^ body); false
+        with Invalid_argument _ | Yojson.Json_error _ -> true in
+      check "Malformed clipboard result must fail fast" rejected)
+      ["{"; "[]"; "{}";
+       Printf.sprintf {|{"request-id":"%s","ok":false}|} older;
+       Printf.sprintf {|{"request-id":"%s","ok":true,"error":"unexpected"}|} older;
+       Printf.sprintf {|{"request-id":"%s","ok":true,"ok":true}|} older;
+       Printf.sprintf {|{"request-id":"0%s","ok":true}|} older;
+       {|{"request-id":"999999999","ok":true}|}];
+    ignore first; ignore second;
+    let cancelled = write "cancelled" in
+    let id = request () in
+    Native_embed.with_entry_lock (fun () -> Ui_task.cancel cancelled); drain ();
+    reply id ["ok",`Bool true];
+    check "A late ACK must not revive cancellation"
+      (match !seen with ("cancelled",Error Ui_task.Cancelled)::_ -> List.length !seen=3 | _ -> false);
+    ignore (write "disposed");
+    let id = request () in
+    ignore (Native_embed.dispose ()); drain ();
+    reply id ["ok",`Bool true];
+    check "Disposal must reject pending writes rather than deliver late success"
+      (match !seen with ("disposed",Error Ui_task.Cancelled)::_ -> List.length !seen=4 | _ -> false));
+  print_endline "native clipboard identity and terminal lifecycle: OK"
+
+let () = Native_embed.with_entry_lock (fun () ->
+  let module S = Editor_state in
+  let module A = Editor_actions in
+  let previous_host = !Host.host_op and previous_state = !S.st
+  and previous_frame = !S.active_frame and previous_generation = !Runtime.load_gen in
+  let requests = Queue.create () in
+  Fun.protect ~finally:(fun () ->
+    Outliner_ops.cancel_pending_save ();
+    Host.host_op := previous_host; S.st := previous_state;
+    S.active_frame := previous_frame; Runtime.load_gen := previous_generation)
+    (fun () ->
+      Host.set_host_op (fun name payload -> Queue.add (name,payload) requests);
+      List.iter (fun scenario ->
+        let scheduler = Signal.scheduler () in
+        let editing () =
+          let e = S.mk_editing ~uuid:"clipboard-block" ~buffer:"alpha"
+              ~scope:"main" ~base:"alpha" () in
+          S.with_model e (Edit_model.select e.S.model ~anchor:1 ~focus:3) in
+        S.st := Some (Signal.state scheduler {S.initial with editing = Some (editing ())});
+        S.active_frame := Some (Signal.state scheduler Edit_input.empty_frame);
+        let outcome = ref None in
+        let task = A.cut_editing_text "clipboard-block" in
+        ignore (Ui_task.catch
+          (Ui_task.bind task (fun () -> outcome := Some (Ok ()); Ui_task.resolve ()))
+          (fun error -> outcome := Some (Error error); Ui_task.resolve ()));
+        Host.drain ();
+        check (scenario ^ ": cut deleted before ownership ACK")
+          (A.live_buffer "clipboard-block" = "alpha" && !outcome = None);
+        let name,payload = Queue.take requests in
+        check "Cut bypassed the shared clipboard task" (name = "clipboard-write");
+        let id = Yojson.Safe.Util.(Yojson.Safe.from_string payload |> member "request-id" |> to_string) in
+        let change f = S.set_silent (fun st ->
+          {st with S.editing = Option.map f st.S.editing}) in
+        (match scenario with
+         | "source-ABA" ->
+             change (fun e -> S.with_model e (Edit_model.set_source e.S.model "other"));
+             change (fun e -> S.with_model e (Edit_model.set_source e.S.model "alpha"))
+         | "selection-ABA" ->
+             change (fun e -> S.with_model e (Edit_model.select e.S.model ~anchor:0 ~focus:0));
+             change (fun e -> S.with_model e (Edit_model.select e.S.model ~anchor:1 ~focus:3))
+         | "owner-ABA" -> S.set_silent (fun st -> {st with S.editing = Some (editing ())})
+         | "mount-ABA" -> S.active_frame := Some (Signal.state scheduler Edit_input.empty_frame)
+         | "route-generation-ABA" -> Runtime.load_gen := !Runtime.load_gen + 2
+         | "dispose" -> A.cancel_clipboard_actions ()
+         | "cancel" -> Ui_task.cancel task
+         | "success" | "failure" -> ()
+         | _ -> assert false);
+        let fields = if scenario = "failure" then
+          ["ok",`Bool false; "error",`String "ownership refused"] else ["ok",`Bool true] in
+        Native_embed.platform_event ("clipboard-write-result\n" ^ Yojson.Safe.to_string
+          (`Assoc (("request-id",`String id)::fields)));
+        Host.drain ();
+        check (scenario ^ ": cut mutated a stale or failed source")
+          (A.live_buffer "clipboard-block" = (if scenario = "success" then "aha" else "alpha"));
+        check (scenario ^ ": cut terminal outcome is incorrect")
+          (match scenario, !outcome with
+           | "success",Some (Ok ()) -> true
+           | "failure",Some (Error (Failure _)) -> true
+           | ("source-ABA" | "selection-ABA" | "owner-ABA" | "mount-ABA"
+             | "route-generation-ABA" | "dispose" | "cancel"),
+             Some (Error Ui_task.Cancelled) -> true
+           | _ -> false);
+        Outliner_ops.cancel_pending_save ())
+        ["success"; "failure"; "source-ABA"; "selection-ABA"; "owner-ABA";
+         "mount-ABA"; "route-generation-ABA"; "dispose"; "cancel"]);
+  print_endline "native deferred cut source and owner freshness: OK")

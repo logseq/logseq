@@ -145,8 +145,11 @@ type cm_native_action =
   | Cna_heading of string
   | Cna_picker of cm_picker
 
+type cm_highlight = Main_item of int | Sub_item of int
+
 type cm =
-  { cx : float
+  { epoch : int
+  ; cx : float
     (* anchor element center-x — cljs popup-show! re-anchors
        pointer-opened dropdowns to the event target's rect and centers
        the content on it *)
@@ -161,6 +164,7 @@ type cm =
   ; entries : cm_item list
   ; sub_open : int (* index into entries, -1 = none *)
   ; sub_xy : float * float
+  ; highlighted : cm_highlight option
   ; tag : (string * int * bool) option
     (* Some (uuid, db/id, private?) => block-tag chip menu, not the
        block context menu *)
@@ -190,6 +194,9 @@ type view =
 type t =
   { vs : view Signal.state
   ; gen : int ref (* stale-response guard *)
+  ; session : int ref
+  ; cm_epoch : int ref
+  ; cache_repo : string option ref
   ; titles : string list ref
   ; page_exact_titles : string list ref (* parentless internal pages/journals *)
   ; tag_titles : (string * string option) list ref
@@ -209,6 +216,9 @@ let make scheduler : t =
   let t =
     { vs = Signal.state scheduler { ac = None; cm = None; pv = None }
   ; gen = ref 0
+  ; session = ref 0
+  ; cm_epoch = ref 0
+  ; cache_repo = ref None
   ; titles = ref []
   ; page_exact_titles = ref []
     ; tag_titles = ref []
@@ -293,8 +303,27 @@ let update t f =
 let set_ac t ac = update t (fun v -> { v with ac })
 let set_cm t cm = update t (fun v -> { v with cm })
 let set_pv t pv = update t (fun v -> { v with pv })
-let close_ac t = set_ac t None
+let invalidate_ac t =
+  incr t.gen;
+  incr t.session
+
+let close_ac t =
+  invalidate_ac t;
+  set_ac t None
 let close_cm t = set_cm t None
+let next_cm_epoch t =
+  incr t.cm_epoch;
+  !(t.cm_epoch)
+
+let highlight_cm t highlighted =
+  match (get t).cm with
+  | Some cm when cm.highlighted <> highlighted ->
+      update t (fun v ->
+        match v.cm with
+        | Some cm -> { v with cm = Some { cm with highlighted } }
+        | None -> v)
+  | _ -> ()
+
 let close_pv t = set_pv t None
 
 let () = Editor_state.on_edit_exit (fun _uuid ->
@@ -751,11 +780,11 @@ let block_item_of_row i w =
 
 let run_block_search t ac =
   incr t.gen;
-  let gen = !(t.gen) in
+  let gen = !(t.gen) and graph = repo () in
   ignore
     ((let* w =
        Runtime.invoke3 "thread-api/search-blocks"
-         (Wire.String (repo ()))
+         (Wire.String graph)
          (Wire.String ac.query)
          (Cmdk_state.search_opts ~dev:false false 20)
      in
@@ -770,7 +799,8 @@ let run_block_search t ac =
      in
      (match (get t).ac with
       | Some a
-        when gen = !(t.gen) && a.kind = Block_ref && a.query = ac.query ->
+        when gen = !(t.gen) && graph = repo ()
+             && a.kind = Block_ref && a.query = ac.query ->
           set_ac t
             (Some
                { a with
@@ -789,11 +819,11 @@ let run_block_search t ac =
    (or second, when the first match starts with the query). *)
 let run_node_search t ac =
   incr t.gen;
-  let gen = !(t.gen) in
+  let gen = !(t.gen) and graph = repo () in
   ignore
     ((let* w =
        Runtime.invoke3 "thread-api/search-blocks"
-         (Wire.String (repo ()))
+         (Wire.String graph)
          (Wire.String ac.query)
          (* cljs <get-matched-blocks passes :enable-snippet? false — the
             page-ref menu renders no snippets and snippet() is the
@@ -818,7 +848,7 @@ let run_node_search t ac =
      in
      (match (get t).ac with
       | Some a
-        when gen = !(t.gen) && a.kind = Page_ref
+        when gen = !(t.gen) && graph = repo () && a.kind = Page_ref
              && a.query = ac.query ->
           let pages, blocks =
             List.partition
@@ -903,32 +933,36 @@ let run_node_search t ac =
 ;;
 
 let load_titles t =
+  let session = !(t.session) and graph = repo () in
   ignore
     ((let* w =
        Runtime.invoke1 "thread-api/get-all-page-titles"
-         (Wire.String (repo ()))
+         (Wire.String graph)
      in
      let rows =
        match w with
        | Wire.Array xs | Wire.List xs -> xs
        | _ -> []
      in
-     t.titles :=
+     let titles =
        List.filter_map
          (fun row ->
            match row with
            | Wire.String s -> Some s
            | _ -> Cmdk_state.str_field row "block/title")
-         rows;
+         rows
+     in
      (* get-all-page-titles intentionally returns strings, so resolve the
         suppression set separately: ordinary names need an internal page
         or journal with no parent. Tags retain their class/alias check. *)
      let* exact =
-       Runtime.invoke2 "thread-api/q" (Wire.String (repo ()))
+       Runtime.invoke2 "thread-api/q" (Wire.String graph)
          (Wire.Array
             [ Wire.String
                 "[:find ?title :where (or [?page :block/tags :logseq.class/Page] [?page :block/tags :logseq.class/Journal]) [?page :block/title ?title] (not [?page :block/parent])]" ])
      in
+     if session = !(t.session) && graph = repo () then (
+     t.titles := titles;
      t.page_exact_titles :=
        (match exact with
         | Wire.Array xs | Wire.List xs ->
@@ -939,9 +973,11 @@ let load_titles t =
               xs
         | _ -> []);
      (match (get t).ac with
+      | Some ({ kind = Page_ref; query; _ } as ac) when String.trim query <> "" ->
+          run_node_search t ac
       | Some ({ kind = Page_ref | Page_embed | Tag_search | Embed_ref; _ } as ac) ->
           set_ac t (Some (refresh_items t ac))
-      | _ -> ());
+      | _ -> ()));
      Js.Promise.resolve ())
      |> Js.Promise.catch (fun e ->
             Ui_services.log_error ("popups titles failed", e);
@@ -981,6 +1017,7 @@ let class_titles_of rows =
     rows
 
 let load_tag_titles t =
+  let session = !(t.session) and graph = repo () in
   let editing_block =
     match Editor_state.editing_uuid () with
     | Some _ -> true
@@ -996,7 +1033,7 @@ let load_tag_titles t =
   ignore
     ((let* w =
        Runtime.invoke2 "thread-api/get-all-classes"
-         (Wire.String (repo ()))
+         (Wire.String graph)
          (wopts [ ("except-private-tags?", Wire.Bool true) ])
      in
      let rows =
@@ -1005,13 +1042,13 @@ let load_tag_titles t =
        | _ -> []
      in
      let* () =
-       t.tag_titles := class_titles_of rows;
+       let titles = class_titles_of rows in
        (* the full class list (private tags included) feeds only
           tag_exact_titles; Page is conjoined to the candidates just
           when editing a non-page block *)
        let* w2 =
          Runtime.invoke2 "thread-api/get-all-classes"
-           (Wire.String (repo ()))
+           (Wire.String graph)
            (wopts [ ("except-private-tags?", Wire.Bool false) ])
        in
        let rows2 =
@@ -1019,6 +1056,8 @@ let load_tag_titles t =
          | Wire.Array xs | Wire.List xs -> xs
          | _ -> []
        in
+       if session = !(t.session) && graph = repo () then (
+       t.tag_titles := titles;
        t.tag_exact_titles :=
          List.map fst (class_titles_of rows2);
        (if editing_block then
@@ -1033,10 +1072,11 @@ let load_tag_titles t =
           in
           t.tag_titles :=
             !(t.tag_titles)
-            @ class_titles_of page_class);
+            @ class_titles_of page_class));
        Js.Promise.resolve ()
      in
      (match (get t).ac with
+      | _ when session <> !(t.session) || graph <> repo () -> ()
       | Some ({ kind = Tag_search; _ } as ac) ->
           set_ac t (Some (refresh_items t ac))
       | _ -> ());
@@ -1048,9 +1088,10 @@ let load_tag_titles t =
 (* template-search: blocks tagged logseq.class/Template (cljs
    search/template-search = get-tag-objects + fuzzy) *)
 let load_templates t =
+  let session = !(t.session) and graph = repo () in
   ignore
     (let* w =
-      Runtime.invoke2 "thread-api/q" (Wire.String (repo ()))
+      Runtime.invoke2 "thread-api/q" (Wire.String graph)
         (Wire.Array
            [ Wire.String
                "[:find ?u ?ti :where [?b :block/tags ?t] \
@@ -1059,6 +1100,7 @@ let load_templates t =
            ])
     in
     let rows = Wire.elems w in
+    if session = !(t.session) && graph = repo () then (
     t.templates :=
       List.filter_map
         (fun row ->
@@ -1073,13 +1115,23 @@ let load_templates t =
     (match (get t).ac with
      | Some ({ kind = Template_search; _ } as ac) ->
          set_ac t (Some (refresh_items t ac))
-     | _ -> ());
+     | _ -> ()));
     Js.Promise.resolve ())
 ;;
 
 (* ---- open / update ---- *)
 
 let open_ac ?tpos ?(autopair = true) t kind =
+  invalidate_ac t;
+  let graph = repo () in
+  if !(t.cache_repo) <> Some graph then (
+    t.cache_repo := Some graph;
+    t.titles := [];
+    t.page_exact_titles := [];
+    t.tag_titles := [];
+    t.tag_exact_titles := [];
+    t.templates := []);
+  let session = !(t.session) in
   let auuid = Option.value (Editor_state.editing_uuid ()) ~default:"" in
   let pos = Editor_sink.popup_pos auuid in
   let x, y, cy = Option.value pos ~default:(0., 0., 0.) in
@@ -1100,7 +1152,7 @@ let open_ac ?tpos ?(autopair = true) t kind =
      its clipped viewport; layout constraints stay in typed view props. *)
   let rec measure tries =
     match (get t).ac with
-    | Some a when a.kind = kind -> (
+    | Some a when session = !(t.session) && a.kind = kind -> (
         (* cljs pins the popup at the caret position captured when it
            opened — typing further must not re-anchor it. While the
            anchor is still pending (async-measurement hosts answer
@@ -1162,7 +1214,7 @@ let open_ac ?tpos ?(autopair = true) t kind =
                   retry tries)
             | _ -> retry tries)
         | None -> retry tries)
-    | None -> retry tries
+    | None when session = !(t.session) -> retry tries
     | _ -> ()
   and retry tries =
     if tries > 0 then
@@ -1195,6 +1247,7 @@ let open_ac ?tpos ?(autopair = true) t kind =
 ;;
 
 let ac_update t ac q =
+  incr t.gen;
   let ac = { ac with query = q; chosen = 0 } in
   set_ac t (Some (refresh_items t ac));
   if ac.kind = Block_ref then run_block_search t ac
@@ -1462,19 +1515,28 @@ let inline_tag_text ac title =
    block/tags (existing class or a new "New tag" class). The "New tag"
    row always takes the class path even when a plain page exists. *)
 let apply_tag t ac ~create ~inline title =
-  match Editor_state.editing_uuid () with
-  | None -> ()
-  | Some buuid ->
+  match Editor_state.editing () with
+  | Some editing when editing.uuid = ac.auuid ->
+      let buuid = editing.uuid in
       let repo_v = repo () in
-      let save_and_tag dbid =
-        (* emit already stripped "#q" from the buffer; persist the new
-           buffer and the tag in one batch *)
-        let rest =
+      let gen = !(t.gen) and session = !(t.session) in
+      let awaiting_lookup () =
+        gen = !(t.gen) && session = !(t.session) && repo_v = repo ()
+        && match Editor_state.editing () with
+           | Some current ->
+               current.epoch == editing.epoch
+               && current.model.version = editing.model.version
+               && current.model.caret = editing.model.caret
+               && current.model.anchor = editing.model.anchor
+               && not (Edit_model.composing current.model)
+           | None -> false
+      in
+      let attach_tag dbid =
+        let ops =
           [ Outliner_ops.set_block_property buuid "block/tags" (Wire.Int dbid) ]
         in
-        ignore
-          (Outliner_ops.apply_parsed_and_refresh ~rest
-             [ (buuid, Editor_actions.live_buffer buuid) ])
+        if repo_v = repo () then
+          ignore (Outliner_ops.apply_and_refresh ops)
       in
       (* cljs tag-in-page-auto-complete?: "#" typed inside a [[ pair
          still erases the query but skips the tag/class attach — the
@@ -1505,12 +1567,14 @@ let apply_tag t ac ~create ~inline title =
                  (Wire.Array [ Outliner_ops.create_class title ])
                  (Wire.Map [])
              in
+             if repo_v <> repo () then Js.Promise.resolve ()
+             else
              let* e =
                Runtime.invoke2 "thread-api/get-case-page"
                  (Wire.String repo_v) (Wire.String title)
              in
              (match Wire.map_get_int e "db/id" with
-              | Some dbid -> save_and_tag dbid
+              | Some dbid -> attach_tag dbid
               | None -> ());
              Js.Promise.resolve ())
       in
@@ -1521,7 +1585,8 @@ let apply_tag t ac ~create ~inline title =
             Runtime.invoke2 "thread-api/get-case-page" (Wire.String repo_v)
               (Wire.String title)
           in
-          match w with
+          if not (awaiting_lookup ()) then Js.Promise.resolve ()
+          else match w with
           | Wire.Map _ -> (
               match Wire.map_get_int w "db/id" with
               | None -> Js.Promise.resolve ()
@@ -1530,7 +1595,7 @@ let apply_tag t ac ~create ~inline title =
                    | Some _ ->
                        insert ();
                        close_ac t;
-                       if not (tag_in_ref ()) then save_and_tag dbid;
+                       if not (tag_in_ref ()) then attach_tag dbid;
                        Js.Promise.resolve ()
                    | None ->
                        (* cljs tag-on-chosen-handler: a plain page
@@ -1545,11 +1610,12 @@ let apply_tag t ac ~create ~inline title =
                              "thread-api/convert-page-to-tag"
                              (Wire.String repo_v) (Wire.Int dbid)
                          in
-                         save_and_tag dbid;
+                         attach_tag dbid;
                          Js.Promise.resolve ()))
           | _ ->
               create_and_tag ();
               Js.Promise.resolve ())
+  | _ -> ()
 
 let apply_template t _ac uuid =
   match Editor_state.editing_uuid () with
@@ -1641,6 +1707,7 @@ let run_query t ac ~advanced =
 let apply_item t ac ~meta it =
   match it.ai_act with
   | Switch kind ->
+      invalidate_ac t;
       erase_trigger_text ac;
       (match kind with
        | Page_ref | Page_embed | Tag_search | Embed_ref -> load_titles t
@@ -1687,10 +1754,16 @@ let apply_item t ac ~meta it =
   | Noop -> close_ac t
 ;;
 
-let chosen_scroll chosen =
+let chosen_scroll t chosen =
+  let session = !(t.session) in
   ignore
     (Ui_services.timers_timeout
        (fun () ->
+         if session = !(t.session)
+            && (match (get t).ac with
+                | Some ac -> ac.chosen = chosen
+                | None -> false)
+         then
          match Ui_services.dom_query "#ui__ac-inner" with
          | Some scroller -> (
              match
@@ -1710,7 +1783,7 @@ let move_chosen t dir =
       if n > 0 then (
         let chosen = (ac.chosen + dir + n) mod n in
         set_ac t (Some { ac with chosen });
-        chosen_scroll chosen)
+        chosen_scroll t chosen)
   | None -> ()
 ;;
 
@@ -1763,8 +1836,11 @@ let ac_position_closed ac =
 
 (* true if the keydown was consumed by the open popup *)
 let ac_keydown t ev =
-  match (get t).ac with
+  if ev.Ui_services.composing then false
+  else match (get t).ac with
   | None -> false
+  | Some ac when Option.fold ~none:false ~some:Edit_model.composing
+      (Editor_actions.edit_model ac.auuid) -> false
   | Some ac ->
       (* the ac outlives its editor sink on remount — Enter/Tab reach
          apply_chosen before the position check could close it, eating
@@ -1865,13 +1941,18 @@ let block_entries () =
 ;;
 
 (* mirrors content.cljs custom-context-menu-content (multi-select) *)
-let multi_entries () =
+let multi_entries ?(allow_cut = true) ?(allow_delete = true) () =
   [ Ci_colors; Ci_headings
   ; Ci_sub (U.t "context-menu/set-icon", Sub_picker Picker_icon)
   ; Ci_sep
-  ; Ci_item (U.t "editor/cut", Some ("meta+x", [ {js|⌘|js}; "X" ]), "cut")
-  ; Ci_item (U.t "editor/delete-selection", Some ("delete", [ "Delete" ]), "delete")
-  ; Ci_item (U.t "ui/copy", Some ("meta+c", [ {js|⌘|js}; "C" ]), "copy")
+  ]
+  @ (if allow_cut then
+       [ Ci_item (U.t "editor/cut", Some ("meta+x", [ {js|⌘|js}; "X" ]), "cut") ]
+     else [])
+  @ (if allow_delete then
+       [ Ci_item (U.t "editor/delete-selection", Some ("delete", [ "Delete" ]), "delete") ]
+     else [])
+  @ [ Ci_item (U.t "ui/copy", Some ("meta+c", [ {js|⌘|js}; "C" ]), "copy")
   ; Ci_item (U.t "export/copy-or-export-as", None, "copy-export-as")
   ; Ci_item (U.t "block/copy-ref", None, "copy-ref")  ; Ci_sep
   ; Ci_item (U.t "context-menu/make-a-flashcard", None, "make-flashcard")
@@ -2099,11 +2180,11 @@ let cm_native_spec (cm : cm) : Json.t * (int * cm_native_action) list =
   , List.rev !acts )
 ;;
 
-let open_cm t ~ax ~atop ~abot ~block_id ~multi =
+let open_cm ?allow_cut ?allow_delete t ~ax ~atop ~abot ~block_id ~multi =
   let entries =
     (* cljs adds Developer tools only to the single-block menu *)
     let base =
-      if multi then multi_entries ()
+      if multi then multi_entries ?allow_cut ?allow_delete ()
       else block_entries () @ dev_entries ()
     in
     if flashcards_enabled () then base
@@ -2118,9 +2199,10 @@ let open_cm t ~ax ~atop ~abot ~block_id ~multi =
   close_ac t;
   let flip = anchor_above atop abot in
   let cm =
-    { cx = ax; cy = (if flip then atop else abot); atop; flip
+    { epoch = next_cm_epoch t
+    ; cx = ax; cy = (if flip then atop else abot); atop; flip
     ; block_id; multi; entries; sub_open = -1; sub_xy = (0., 0.)
-    ; tag = None; native = false; native_acts = [] }
+    ; highlighted = None; tag = None; native = false; native_acts = [] }
   in
   (* native NSMenu experiment: hand the serialized menu to the host;
      when it accepts, the LUI popover stays unmounted while the record
@@ -2137,12 +2219,12 @@ let open_cm t ~ax ~atop ~abot ~block_id ~multi =
 let open_cm_edit t ~ax ~atop ~abot ~block_id =
   close_ac t;
   let flip = anchor_above atop abot in
-  set_cm t
-    (Some
-       { cx = ax; cy = (if flip then atop else abot); atop; flip
-       ; block_id; multi = false; entries = edit_entries ()
-       ; sub_open = -1; sub_xy = (0., 0.); tag = None; native = false
-       ; native_acts = [] })
+  set_cm t (Some
+    { epoch = next_cm_epoch t
+    ; cx = ax; cy = (if flip then atop else abot); atop; flip
+    ; block_id; multi = false; entries = edit_entries ()
+    ; sub_open = -1; sub_xy = (0., 0.); tag = None; native = false
+    ; highlighted = None; native_acts = [] })
 ;;
 
 (* cljs block-tag popup (block.cljs): Go to #tag (mod+click) / Open in
@@ -2167,27 +2249,29 @@ let open_cm_tag t ~ax ~atop ~abot ~block_id ~tag_uuid ~tag_id ~tag_title
     ~priv =
   close_ac t;
   let flip = anchor_above atop abot in
-  set_cm t
-    (Some
-       { cx = ax; cy = (if flip then atop else abot); atop; flip
-       ; block_id; multi = false
-       ; entries = tag_entries ~title:tag_title ~priv
-       ; sub_open = -1; sub_xy = (0., 0.)
-       ; tag = Some (tag_uuid, tag_id, priv); native = false
-       ; native_acts = [] })
+  set_cm t (Some
+    { epoch = next_cm_epoch t
+    ; cx = ax; cy = (if flip then atop else abot); atop; flip
+    ; block_id; multi = false
+    ; entries = tag_entries ~title:tag_title ~priv
+    ; sub_open = -1; sub_xy = (0., 0.)
+    ; tag = Some (tag_uuid, tag_id, priv); native = false
+    ; highlighted = None; native_acts = [] })
 ;;
 
 let open_cm_sub t ~index ~x ~y =
   match (get t).cm with
   | Some cm when cm.sub_open <> index ->
-      set_cm t (Some { cm with sub_open = index; sub_xy = (x, y) })
+      set_cm t (Some { cm with sub_open = index; sub_xy = (x, y)
+                            ; highlighted = Some (Main_item index) })
   | _ -> ()
 ;;
 
 let close_cm_sub t =
   match (get t).cm with
   | Some cm when cm.sub_open <> -1 ->
-      set_cm t (Some { cm with sub_open = -1 })
+      set_cm t (Some { cm with sub_open = -1
+                            ; highlighted = Some (Main_item cm.sub_open) })
   | _ -> ()
 ;;
 

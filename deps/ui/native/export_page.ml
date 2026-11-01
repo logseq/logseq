@@ -1,27 +1,12 @@
-(* Native port of export/export_page.ml — canvas/blob externals are
-   stubbed; clipboard goes through the host; download_blob via dom-op. *)
+(* Native page export uses worker serializers and authorized host downloads. *)
 
 open Promise_ext
 module W = Wire
 module S = Export_state
 module F = Export_formats
 
-(* html2canvas has no native port — png export resolves empty; the
-   container probes below always miss on this host *)
-type canvas = unit
-let qs (_ : string) : canvas option = None
-let html2canvas_ (_ : canvas) (_ : Js.Json.t) : canvas Js.Promise.t =
-  Js.Promise.resolve ()
-let canvas_to_blob (_ : canvas) (_ : 'a -> unit) (_ : string) : unit = ()
-let computed_style (_ : canvas) : Js.Json.t = Js.Json.JObject []
-let css_prop (_ : Js.Json.t) (_ : string) : string = ""
-let el_scroll_height (_ : canvas) : float = 0.
-let body_el : canvas = ()
-let set_attr (_ : canvas) (_ : string) (_ : string) : unit = ()
-let fmt_time (_ : float) : string = ""
-let blob_as_file (b : Webapi.Blob.t) : Webapi.File.t = b
-let clipboard_write_png (_ : Webapi.Blob.t) : unit Js.Promise.t =
-  Js.Promise.resolve ()
+let png_unavailable () =
+  Toast.error (I18n.t1 "file/format-not-supported" "PNG")
 
 (* cljs export-common/get-content-config defaults *)
 let content_config =
@@ -35,7 +20,7 @@ let indent_unit = "\t"
 let repo () =
   match !Runtime.current_repo with
   | Some r -> r
-  | None -> "logseq_db_Demo"
+  | None -> failwith "Page export requires an open graph"
 
 let uuids_v st =
   match st.S.block_uuids with
@@ -136,84 +121,26 @@ let export_edn (st : S.t) =
   in
   Js.Promise.resolve (Edn.to_string w)
 
-(* cljs get-image-blob — page export snapshots #main-content-container;
-   a block export snapshots [blockid='<top-level-id>'] (windowHeight is
-   page-only in cljs). *)
 let export_png (st : S.t Signal.state) =
-  Signal.update st (fun s -> { s with png = None });
+  S.mutate st (fun s -> { s with png = None; png_url = None });
   Runtime.flush ();
-  let cur = Signal.get_state st in
-  let selector =
-    match cur.S.block_uuids with
-    | u :: _ -> "[data-blockid='" ^ u ^ "']"
-    | [] -> "#main-content-container"
-  in
-  match qs selector with
-  | None -> ()
-  | Some container ->
-      let background =
-        if cur.S.png_transparent then "transparent"
-        else
-          match
-            css_prop
-              (computed_style body_el)
-              "--ls-primary-background-color"
-          with
-          | "" -> "transparent"
-          | v -> v
-      in
-      let options =
-        Js.Json.object_list
-          ([ "allowTaint", Js.Json.boolean true
-           ; "useCORS", Js.Json.boolean true
-           ; "backgroundColor", Js.Json.JString background
-           ; "x", Js.Json.number 0.
-           ; "y", Js.Json.number 0.
-           ; "width", Js.Json.null
-           ; "height", Js.Json.null
-           ; "scrollX", Js.Json.number 0.
-           ; "scrollY", Js.Json.number 0.
-           ; "scale", Js.Json.number 1. ]
-          @ (match cur.S.block_uuids with
-             | [] ->
-                 [ ( "windowHeight"
-                   , Js.Json.number (el_scroll_height container) ) ]
-             | _ -> []))
-      in
-      (let* cv = html2canvas_ container options in
-       canvas_to_blob cv
-         (fun blob ->
-           match Js.Nullable.toOption blob with
-           | Some blob ->
-               (match (Signal.get_state st).png_url with
-                | Some old -> Webapi.Url.revokeObjectURL old
-                | None -> ());
-               let url =
-                 Webapi.Url.createObjectURL (blob_as_file blob)
-               in
-               Signal.update st (fun s ->
-                   { s with png = Some blob; png_url = Some url });
-               Runtime.flush ();
-               (* cljs sets img#export-preview .src imperatively *)
-               (match qs "#export-preview" with
-                | Some img -> set_attr img "src" url
-                | None -> ())
-           | None -> ())
-         "image/png";
-       Js.Promise.resolve ())
-      |> Js.Promise.catch (fun _ -> Js.Promise.resolve ())
-      |> ignore
+  png_unavailable ()
 
 let set_png_transparent (st : S.t Signal.state) =
-  Signal.update st (fun s ->
+  S.mutate st (fun s ->
       { s with png_transparent = not s.png_transparent });
   Runtime.flush ();
   export_png st
 
+let generation = ref 0
+
 (* cljs reset-export-content! — refetch when tab/options change *)
 let regen (st : S.t Signal.state) =
-  let cur = Signal.get_state st in
-  Signal.update st (fun s -> { s with copied = false });
+  let cur = S.cur st in
+  incr generation;
+  let request = !generation and graph = Runtime.repo () in
+  let current () = request = !generation && graph = Runtime.repo () in
+  S.mutate st (fun s -> { s with copied = false; content = None });
   match cur.fmt with
   | S.Png -> export_png st
   | _ ->
@@ -225,24 +152,25 @@ let regen (st : S.t Signal.state) =
         | S.Png -> Js.Promise.resolve ""
       in
       (let* content = p in
-      Signal.update st (fun s -> { s with content = Some content });
-      Runtime.flush ();
+      if current () then (
+        S.mutate st (fun s -> { s with content = Some content });
+        Runtime.flush ());
       Js.Promise.resolve ())
-      |> Js.Promise.catch (fun _ ->
-             Signal.update st (fun s ->
-                 { s with content = Some "<export failed>" });
-             Runtime.flush ();
+      |> Js.Promise.catch (fun error ->
+             if current () then (
+               Ui_services.log_error ("Page export failed", error);
+               Toast.error (I18n.t1 "ui/error-boundary-error" "page-export:failed"));
              Js.Promise.resolve ())
       |> ignore
 
 let set_fmt (st : S.t Signal.state) fmt =
-  Signal.update st (fun s -> { s with fmt; copied = false });
+  S.mutate st (fun s -> { s with fmt; copied = false });
   Runtime.flush ();
   regen st
 
 let opt_change (st : S.t Signal.state) f =
-  Signal.update st f;
-  S.persist (Signal.get_state st);
+  S.mutate st f;
+  S.persist (S.cur st);
   Runtime.flush ();
   regen st
 
@@ -251,10 +179,10 @@ let clipboard_write (s : string) : unit Js.Promise.t =
 
 let copied_flash (st : S.t Signal.state) p =
   (let* _ = p in
-  Signal.update st (fun s -> { s with copied = true });
+  S.mutate st (fun s -> { s with copied = true });
   Runtime.flush ();
   ignore (Host.set_timeout (fun () ->
-      Signal.update st (fun s -> { s with copied = false });
+      S.mutate st (fun s -> { s with copied = false });
       Runtime.flush ()) 2000);
   Js.Promise.resolve ())
   |> Js.Promise.catch (fun _ -> Js.Promise.resolve ())
@@ -262,48 +190,29 @@ let copied_flash (st : S.t Signal.state) p =
 
 (* cljs :on-click #(copy-to-clipboard content) — e2e reads the textarea *)
 let copy (st : S.t Signal.state) =
-  match (Signal.get_state st).content with
+  match (S.cur st).content with
   | Some c -> copied_flash st (clipboard_write c)
   | None -> ()
 
 (* cljs ClipboardItem path for the png blob *)
-let copy_png (st : S.t Signal.state) =
-  match (Signal.get_state st).png with
-  | Some b -> copied_flash st (clipboard_write_png b)
-  | None -> ()
+let copy_png (_st : S.t Signal.state) = png_unavailable ()
 
-let download_blob ~filename (_blob : Webapi.Blob.t) =
-  Host.dom_op "save-file" filename
-
-(* cljs filename: "logseq_" + (t/now) + ext — txt for text else format *)
 let save_to_file (st : S.t Signal.state) =
-  let cur = Signal.get_state st in
-  match cur.fmt, cur.content, cur.png with
-  | S.Png, _, Some blob ->
-      download_blob
-        ~filename:
-          (Printf.sprintf "logseq_%s.png" (fmt_time (Js.Date.now ())))
-        blob
-  | S.Png, _, None -> ()
-  | _, Some content, _ ->
-      let ext =
-        match cur.fmt with
-        | S.Text -> "txt"
-        | S.Opml -> "opml"
-        | S.Html -> "html"
-        | S.Edn -> "edn"
-        | S.Png -> "png"
+  let cur = S.cur st in
+  match cur.fmt, cur.content with
+  | S.Png, _ -> png_unavailable ()
+  | _, None -> ()
+  | fmt, Some content ->
+      let ext, mime =
+        match fmt with
+        | S.Text -> "txt", "text/plain"
+        | S.Opml -> "opml", "text/xml"
+        | S.Html -> "html", "text/html"
+        | S.Edn -> "edn", "application/edn"
+        | S.Png -> assert false
       in
-      let mime =
-        match cur.fmt with
-        | S.Text -> "text/plain"
-        | S.Opml -> "text/xml"
-        | S.Html -> "text/html"
-        | S.Edn -> "text/plain"
-        | S.Png -> "image/png"
+      let filename =
+        Printf.sprintf "logseq_%Ld.%s"
+          (Int64.of_float (Ui_services.time_now ())) ext
       in
-      Browser_ui.download_text
-        ~filename:
-          (Printf.sprintf "logseq_%s.%s" (fmt_time (Js.Date.now ())) ext)
-        ~mime content
-  | _, None, _ -> ()
+      Ui_services.files_download_text ~filename ~mime content

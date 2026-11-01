@@ -181,6 +181,11 @@ let db_query_dsl_rules =
 [(page ?b ?page-name)
  [?b :block/page ?bp]
  [?bp :block/name ?page-name]]|} );
+      ( "page-uuid",
+        {|
+[(page-uuid ?b ?page-uuid)
+ [?bp :block/uuid ?page-uuid]
+ [?b :block/page ?bp]]|} );
       ( "between",
         {|
 [(between ?b ?start ?end)
@@ -1364,7 +1369,13 @@ let build_page (e : query_form) : built option =
            | other -> Ds_wire.edn_of_query_form other)
         |> Ldb.page_name_sanity_lc
       in
-      Some { bquery = list_ [ sym "page"; sym "?b"; str name ]; brules = [ "page" ] }
+      if Ldb.is_uuid_string name then
+        Some
+          { bquery =
+              list_ [ sym "page-uuid"; sym "?b"; QueryFormTagged ("uuid", str name) ];
+            brules = [ "page-uuid" ] }
+      else
+        Some { bquery = list_ [ sym "page"; sym "?b"; str name ]; brules = [ "page" ] }
   | _ -> None
 
 let build_page_ref_or_self_ref (db : db) (e : query_form) (self : bool) : built option =
