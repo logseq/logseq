@@ -29,6 +29,7 @@ type viewportRow struct {
 	handle     ui.Handle
 	near       bool
 	unmounted  bool
+	mounted    bool
 	end        float32
 	count      string
 	emit       func(luimygo.Event)
@@ -120,6 +121,12 @@ func (v *viewportRenderer) BeginView(s *platformServices, c *ui.Context) {
 			horizontal := clip.W > 0 && clip.H > 0 && r.X < clip.X+clip.W && r.X+r.W > clip.X
 			near := horizontal && r.Y < clip.Y+clip.H+768 && r.Y+r.H > clip.Y-256
 			if lazy {
+				mounted := n.String("height") == "auto"
+				// Reconciliation can retain the row ID but reset its mount latch.
+				if row.mounted && !mounted {
+					row.near, row.unmounted = false, false
+				}
+				row.mounted = mounted
 				if near && !row.near {
 					entering = append(entering, row)
 				} else if !near && !pinned[id] && !row.handle.FocusWithin(c) && (row.near || n.String("height") == "auto" && !row.unmounted) {

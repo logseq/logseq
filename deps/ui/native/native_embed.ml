@@ -434,6 +434,11 @@ let initialize_unlocked platform_code host_code (payload : string) =
   current_app := Some app;
   Dom_ext.doc_elements_provider := collect_elements;
   Dom_ext.subtree_elements_provider := collect_subtree;
+  Platform.dom_handler_aliases := (fun id ->
+    match !current_app with
+    | Some app -> Option.value (Hashtbl.find_opt
+        (Lui_app.runtime app).Lui_runtime.runtime_alias_targets id) ~default:[]
+    | None -> []);
   Platform.dom_parent_of :=
     (fun id ->
       match !current_app with
