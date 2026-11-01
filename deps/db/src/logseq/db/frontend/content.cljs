@@ -165,6 +165,19 @@
       (assoc item :block/title (id-ref->title-ref content refs)))
     item))
 
+(defn- longest-tags-first
+  "Tags in replacement order: nested page titles first (as sort-refs), then the
+  longest title first. A tag is replaced ignoring case and as plain text, so a
+  tag that is the start of another one (#a in #A/B, #foo in #Foo-bar) must come
+  after it; sort-refs orders titles case-sensitively and put #a before #A/B."
+  [tags]
+  (sort-by (fn [tag]
+             (let [title (str (:block/title tag))]
+               [(boolean (re-find page-ref/page-ref-without-nested-re title))
+                (count title)]))
+           #(compare %2 %1)
+           tags))
+
 (defn replace-tags-with-id-refs
   "Replace tag names in content with page-ref ids e.g. #TAG -> [[UUID]].
    Ignore case because tags in content can have any case and still have a valid ref"
@@ -181,7 +194,7 @@
             ;; #book
             (common-util/replace-ignore-case (str "#" (:block/title tag)) id-ref))))
     content
-    (sort-refs tags))
+    (longest-tags-first tags))
    (string/trim)))
 
 (defn replace-tag-refs-with-page-refs
