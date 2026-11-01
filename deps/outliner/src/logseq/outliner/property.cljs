@@ -995,9 +995,9 @@
            block (d/entity @conn block-eid)
            db-attribute? (some? (db-schema/schema property-id))
            property (d/entity @conn property-id)
-           ;; checked before converting the value: a missing property counts as a
-           ;; :default one, and converting a text value for it ran into
-           ;; create-property-text-block!'s assertion instead of this error
+           ;; checked before converting the value as well: a missing property
+           ;; counts as a :default one, and converting a text value for it ran
+           ;; into create-property-text-block!'s assertion instead of this error
            _ (when-not (and block property)
                (throw (ex-info "Set block property failed: block or property doesn't exist"
                                {:block-eid block-eid
@@ -1021,6 +1021,12 @@
 
                 :else
                 v)]
+       (when-not (and block property)
+         (throw (ex-info "Set block property failed: block or property doesn't exist"
+                         {:block-eid block-eid
+                          :property-id property-id
+                          :block block
+                          :property property})))
        (if (nil? v')
          (remove-block-property! conn block-eid property-id)
          (do
