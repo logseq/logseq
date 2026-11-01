@@ -811,16 +811,23 @@ let () =
           , Float.max 1. clip.Lui_scene.h )
   in
   Lui_host.set_vport host vport_of;
+  let lazy_fired : (int, unit) Hashtbl.t = Hashtbl.create 64 in
+  let apply_batch ?event b =
+    let applied = match event with
+      | Some event -> Host_interaction.apply_event_batch host event b
+      | None -> Lui_host.apply_batch host b in
+    if applied then begin
+      Host_interaction.rearm_viewport_rows lazy_fired b;
+      Host_images.sync_batch images store b
+    end
+  in
   let apply_patches ?event batches =
     if batches <> [] then begin
       let started = perf_s () in
       List.iter
         (fun b ->
            metrics.patch_ops <- metrics.patch_ops + List.length b.Lui_protocol.ops;
-           let applied=match event with
-             | Some event -> Host_interaction.apply_event_batch host event b
-             | None -> Lui_host.apply_batch host b in
-           if applied then Host_images.sync_batch images store b)
+           apply_batch ?event b)
         batches;
       (* a set-input-focus request may have queued waiting on a sink
          that this batch just mounted *)
@@ -989,7 +996,6 @@ let () =
      nears its bottom. Here the layout rects already exist, so emit the
      same dom-events for spacers inside the viewport band (overscan
      margin below the edge) — rows mount in place, pagination works. *)
-  let lazy_fired : (int, unit) Hashtbl.t = Hashtbl.create 64 in
   let virt_end_fired : (int, float) Hashtbl.t = Hashtbl.create 8 in
   let viewport_cache = Host_interaction.viewport_cache () in
   let emit_dom_event name id =
@@ -1824,7 +1830,7 @@ let () =
       measure = (fun id s -> Text_engine.measure_text text_engine id s);
       text_layout = (fun id s -> Text_engine.text_layout text_engine id (shifted_rect id) s);
       text_flow = (fun id -> Text_engine.flow_surface text_engine id (shifted_rect id));
-      apply_batch = (fun b -> if Lui_host.apply_batch host b then Host_images.sync_batch images store b);
+      apply_batch = (fun b -> apply_batch b);
       apply_actions;
       set_ime_rect;
       focused_text_input;

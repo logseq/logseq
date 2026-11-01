@@ -154,10 +154,17 @@ type viewport_cache = {
   mutable viewport_revision : int;
   mutable viewport_ids : int list;
   viewport_members : (int,unit) Hashtbl.t;
-  viewport_mounted : (int,bool) Hashtbl.t;
 }
 let viewport_cache () = {viewport_store=None; viewport_revision=(-1); viewport_ids=[];
-  viewport_members=Hashtbl.create 16;viewport_mounted=Hashtbl.create 16}
+  viewport_members=Hashtbl.create 16}
+
+(* A mount and retained-scope reset can both apply between viewport sweeps. *)
+let rearm_viewport_rows lazy_fired batch =
+  List.iter (function
+    | Lui_protocol.SetExtensionProp (id,"height",Lui_protocol.StringValue height) when height<>"auto" ->
+      Hashtbl.remove lazy_fired id
+    | _ -> ()) batch.Lui_protocol.ops
+
 let viewport_candidates cache store =
   let same_store = match cache.viewport_store with
     | Some previous -> previous == store | None -> false in
@@ -182,7 +189,6 @@ let viewport_events ?(pinned=fun _ -> false) cache ~store ~rect_of ~height ~lazy
   if previous_revision <> cache.viewport_revision || previous_store != cache.viewport_store then begin
     let keep id value = if Hashtbl.mem cache.viewport_members id then Some value else None in
     Hashtbl.filter_map_inplace keep lazy_fired;
-    Hashtbl.filter_map_inplace keep cache.viewport_mounted;
     Hashtbl.filter_map_inplace keep virt_end_fired
   end;
   let edge = height +. 768. in
@@ -191,10 +197,6 @@ let viewport_events ?(pinned=fun _ -> false) cache ~store ~rect_of ~height ~lazy
     let r : Lui_scene.rect = rect_of id in
     if attrs_has id "data-lazy-mount" then begin
       let visible = r.y < edge && r.y +. r.h > -256. in
-      let mounted = Lui_store.string_prop store id "height"=Some "auto" in
-      if Hashtbl.find_opt cache.viewport_mounted id=Some true && not mounted then
-        Hashtbl.remove lazy_fired id;
-      Hashtbl.replace cache.viewport_mounted id mounted;
       (* Warmup content can already be mounted before the first entry
          event. Its automatic height identifies that mounted state. *)
       if not (Hashtbl.mem lazy_fired id) && visible then begin
