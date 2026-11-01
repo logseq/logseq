@@ -322,34 +322,6 @@
            (views/query-heading-summary title nil))
         "A missing summary (still loading) omits the total instead of showing 0.")))
 
-(deftest query-task-time-summary-uses-full-resource-total-when-windowed-test
-  (let [a (random-uuid)
-        b (random-uuid)
-        c (random-uuid)
-        window {:total-seconds 4 :seconds-by-block {a 4}}
-        offset {:total-seconds 7 :seconds-by-block {b 7}}
-        full {:total-seconds 11 :seconds-by-block {a 4 b 7 c 0}}]
-    (testing "a windowed query ignores the partial totals"
-      (is (= {:seconds-by-block {a 4}
-              :total-seconds nil}
-             (views/query-task-time-summary {:windowed? true :window window}))
-          "Before the full resource loads there is no total, not the window's total.")
-      (is (= {:seconds-by-block {a 4 b 7}
-              :total-seconds nil}
-             (views/query-task-time-summary {:windowed? true :window window :offset offset}))
-          "Rows from an offset window get their durations, still without a total.")
-      (is (= {:seconds-by-block {a 4 b 7 c 0}
-              :total-seconds 11}
-             (views/query-task-time-summary {:windowed? true
-                                             :window window
-                                             :offset offset
-                                             :full full}))
-          "Once the full resource loads its total covers every row."))
-    (testing "an unwindowed query uses its only resource"
-      (is (= {:seconds-by-block {a 4 b 7 c 0}
-              :total-seconds 11}
-             (views/query-task-time-summary {:windowed? false :window full}))))))
-
 (deftest all-pages-first-window-preview-uses-worker-display-title-test
   (let [page-uuid (random-uuid)
         entity {:db/id 42 :block/uuid page-uuid}

@@ -3915,17 +3915,6 @@
              (when (pos? seconds)
                (status-history/task-spent-time-value-cp seconds))))})
 
-(defn query-task-time-summary
-  "Combines the task-time summaries of the loaded view resources. Per-row
-  seconds come from every resource. The total is only exact when it comes from
-  a resource that covers every row, so a windowed query has no total until the
-  full resource has loaded."
-  [{:keys [windowed? window offset full]}]
-  {:seconds-by-block (merge (:seconds-by-block window)
-                            (:seconds-by-block offset)
-                            (:seconds-by-block full))
-   :total-seconds (:total-seconds (if windowed? full window))})
-
 (defn- get-query-columns
   [config view-entity properties seconds-by-block]
   (let [advanced-query? (->> (:logseq.property/query view-entity)
@@ -4127,11 +4116,7 @@
         query? (= view-feature-type :query-result)
         properties (:properties view-data)
         task-time-summary (when query?
-                            (query-task-time-summary
-                             {:windowed? (some? (:full-key plan))
-                              :window (:task-time-summary view-data)
-                              :offset (:task-time-summary offset-data)
-                              :full (:task-time-summary full-view-data)}))
+                            (:task-time-summary view-data))
         option (cond-> (assoc option
                               :view-parent (:logseq.property/view-for view-entity))
                  query?
