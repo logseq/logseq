@@ -24,7 +24,9 @@ pnpm ui:mygo
 
 `build.sh` creates the OCaml shared library and Go executable under
 `deps/ui/_build/mygo`, with fonts, icon data, theme images and dictionaries in
-the sibling `deps/ui/_build/Resources` directory. The host resolves this resource
+the sibling `deps/ui/_build/Resources` directory. The Go executable is always
+built with `CGO_ENABLED=0`; the OCaml shared library still uses the native C
+toolchain. The host resolves this resource
 directory relative to its executable by default. `LOGSEQ_NATIVE_ASSET_DIR` may
 override it with another complete resource directory; `deps/ui/assets` alone
 does not contain theme images or dictionaries. `run.sh` builds before launching

@@ -25,5 +25,5 @@ cp "$ui_root/assets/"*.json "$resources/"
 cp "$ui_root/assets/fonts/"*.ttf "$resources/fonts/"
 cp -R "$ui_root/../../resources/img/." "$resources/img/"
 cp "$ui_root/../../resources/dicts/"*.edn "$resources/dicts/"
-go -C "$ui_root/mygo" build -o "$output/logseq-mygo" .
+CGO_ENABLED=0 go -C "$ui_root/mygo" build -o "$output/logseq-mygo" .
 printf '%s\n' "$output/logseq-mygo"
