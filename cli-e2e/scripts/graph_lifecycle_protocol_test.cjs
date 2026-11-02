@@ -152,6 +152,28 @@ test('lease exclusion is serialized and releases after failure', async t => {
   assert.equal(lifecycle.snapshot(storage(root), 'demo').owner, undefined);
 });
 
+test('lease release does not need an exclusive SQLite lock while a schema reader remains open', async t => {
+  const root = fixture(t);
+  const ctx = lifecycle.context(storage(root), 'demo');
+  const file = path.join(ctx.dir, 'lease.sqlite');
+  const { DatabaseSync } = require('node:sqlite');
+  let reader;
+  try {
+    await lifecycle.withLease(ctx, 'reader-regression', () => {
+      reader = new DatabaseSync(file);
+      reader.exec('BEGIN; SELECT name FROM sqlite_schema');
+    });
+    assert.equal(reader.isTransaction, true);
+    const inode = fs.statSync(file).ino;
+    await lifecycle.withLease(ctx, 'next-writer', () => {});
+    assert.equal(fs.statSync(file).ino, inode);
+    assert.equal(reader.isTransaction, true);
+    assert.equal(lifecycle.snapshot(storage(root), 'demo').owner, undefined);
+  } finally {
+    if (reader?.isOpen) reader.close();
+  }
+});
+
 test('lease owner is visible in state and release preserves the latest operation data', async t => {
   const root = fixture(t);
   const store = storage(root);
