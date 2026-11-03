@@ -947,6 +947,21 @@
   [db-before ent]
   (build-inverse-save-block db-before (into {} ent) nil))
 
+(defn- property-value-restore-ops
+  "Ops that put back the value blocks a deleted property took with it, each with
+  its subtree, as property values of the block they were children of."
+  [db-before property]
+  (let [value-blocks (->> (:logseq.property/_created-from-property property)
+                          (remove #(= (:db/id property) (:db/id (:block/parent %))))
+                          (filter :block/parent))
+        {:keys [roots]} (selected-block-roots db-before (map :db/id value-blocks))
+        plans (keep (fn [root]
+                      (some-> (delete-root->restore-plan db-before root)
+                              (assoc :target-id (stable-entity-ref db-before (:db/id (:block/parent root)))
+                                     :sibling? false)))
+                    roots)]
+    (restore-plans->ops db-before plans)))
+
 (defn- build-inverse-delete-page
   [db-before db-after page-uuid]
   (when-let [page (d/entity db-before [:block/uuid page-uuid])]
@@ -981,6 +996,8 @@
             (conj create-op)
             (seq restore-root-ops)
             (into restore-root-ops)
+            (ldb/property? page)
+            (into (property-value-restore-ops db-before page))
             page-save-op
             (conj page-save-op)
             :always

@@ -4,6 +4,8 @@
             [logseq.common.util :as common-util]
             [logseq.common.uuid :as common-uuid]
             [logseq.db :as ldb]
+            [logseq.db.frontend.content :as db-content]
+            [logseq.outliner.value-blocks :as value-blocks]
             [logseq.db.common.delete-blocks :as delete-blocks]
             [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.common.initial-data :as common-initial-data]
@@ -95,6 +97,40 @@
         (recur (concat (rest pages) children)
                (conj result page')))
       result)))
+
+(defn- retracted-pages-refs-title-tx
+  "Turns the [[uuid]] refs to the pages `tx-data` removes for good into those
+  pages' titles, so the blocks that referred to them stay readable instead of
+  holding a link to an id that no longer exists."
+  [db tx-data]
+  (let [retracted (->> tx-data
+                       (keep (fn [[op id]]
+                               (when (= :db/retractEntity op)
+                                 (d/entity db id)))))
+        retracted-ids (set (map :db/id retracted))
+        pages (filter ldb/page? retracted)]
+    (->> pages
+         (mapcat :block/_refs)
+         (common-util/distinct-by :db/id)
+         (remove #(contains? retracted-ids (:db/id %)))
+         (keep (fn [ref]
+                 (let [stored-title (:v (first (d/datoms db :eavt (:db/id ref) :block/title)))
+                       title (when (string? stored-title)
+                               (db-content/content-id-ref->page stored-title pages))]
+                   (when (and title (not= title stored-title))
+                     [:db/add (:db/id ref) :block/title title])))))))
+
+(defn- owned-value-blocks-tx
+  "Tx data deleting the property value blocks held by the nodes `tx-data` removes,
+  unless a node that stays holds them."
+  [db tx-data]
+  (value-blocks/deleted-nodes-value-blocks-tx
+   db
+   (->> tx-data
+        (keep (fn [[op id]]
+                (when (= :db/retractEntity op)
+                  (:db/id (d/entity db id)))))
+        set)))
 
 (defn- page-block-subtree-ids
   [db page]
@@ -287,6 +323,14 @@
       (ldb/transact! conn tx-data {:outliner-op :restore-recycled})
       true)))
 
+(defn- with-permanent-delete-cleanup-tx
+  "`with-delete-cleanup-tx`, and the refs and property value blocks of the nodes
+  `tx-data` removes cleaned up too."
+  [db tx-data]
+  (distinct (concat (with-delete-cleanup-tx db tx-data)
+                    (retracted-pages-refs-title-tx db tx-data)
+                    (owned-value-blocks-tx db tx-data))))
+
 (defn ^:api permanently-delete-tx-data
   [db root]
   (when (and root (recycled? root))
@@ -299,7 +343,7 @@
                     [:db/retractEntity [:block/uuid block-uuid]]))
              distinct
              seq
-             (with-delete-cleanup-tx db)
+             (with-permanent-delete-cleanup-tx db)
              seq)))
 
 (defn ^:api permanently-delete!
@@ -327,7 +371,7 @@
                  (map (fn [node] [:db/retractEntity (:db/id node)]) (block-subtree db entity)))))
      distinct
      seq
-     (with-delete-cleanup-tx db))))
+     (with-permanent-delete-cleanup-tx db))))
 
 (defn ^:api gc!
   [conn opts]

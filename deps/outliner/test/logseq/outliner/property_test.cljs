@@ -62,6 +62,40 @@
       (outliner-property/upsert-property! conn :user.property/empty-prop {:logseq.property/type :number} {})
       (is (= :number (:logseq.property/type (d/entity @conn :user.property/empty-prop)))))))
 
+(deftest upsert-property-type-change-with-closed-values-notification-has-i18n-key
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties {:arm {:logseq.property/type :default
+                                  :build/closed-values [{:uuid (random-uuid) :value "raster"}]}}})
+        err (try
+              (outliner-property/upsert-property! conn :user.property/arm {:logseq.property/type :node} {})
+              nil
+              (catch :default e e))]
+    (is (= :notification (:type (ex-data err))))
+    (is (= :property.validation/type-change-with-closed-values
+           (get-in (ex-data err) [:payload :i18n-key])))))
+
+(deftest upsert-property-rejects-type-change-with-closed-values
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties {:arm {:logseq.property/type :default
+                                  :build/closed-values [{:uuid (random-uuid) :value "raster"}
+                                                        {:uuid (random-uuid) :value "vector"}]}}})]
+    (is (empty? (d/datoms @conn :avet :user.property/arm))
+        "Closed values alone leave no datoms under the property ident")
+
+    (testing "Changing type is rejected while the property has closed values"
+      (is (thrown-with-msg?
+           js/Error #"Disallowed type change with closed values"
+           (outliner-property/upsert-property! conn :user.property/arm {:logseq.property/type :node} {})))
+      (is (= :default (:logseq.property/type (d/entity @conn :user.property/arm))))
+      (is (= 2 (count (:block/_closed-value-property (d/entity @conn :user.property/arm))))))
+
+    (testing "Changing type is allowed once the closed values are deleted"
+      (let [property-id (:db/id (d/entity @conn :user.property/arm))]
+        (doseq [closed-value (:block/_closed-value-property (d/entity @conn :user.property/arm))]
+          (outliner-property/delete-closed-value! conn property-id [:block/uuid (:block/uuid closed-value)])))
+      (outliner-property/upsert-property! conn :user.property/arm {:logseq.property/type :node} {})
+      (is (= :node (:logseq.property/type (d/entity @conn :user.property/arm)))))))
+
 (deftest upsert-property-converts-plain-page
   (let [conn (db-test/create-conn)
         [_ page-uuid] (outliner-page/create! conn "PlainPage" {})
@@ -174,6 +208,76 @@
         [:date test-uuid] test-uuid
         [:any test-uuid] test-uuid
         [nil test-uuid] test-uuid))))
+
+(deftest set-block-property-deletes-the-replaced-text-value-block
+  (testing "Setting a text property to a new value deletes the old value block"
+    (let [conn (db-test/create-conn-with-blocks
+                {:properties {:text {:logseq.property/type :default}}
+                 :pages-and-blocks
+                 [{:page {:block/title "page1"}
+                   :blocks [{:block/title "b1" :build/properties {:text "one"}}]}]})
+          b1 (db-test/find-block-by-content @conn "b1")
+          old-value-id (:db/id (:user.property/text b1))]
+      (is (some? old-value-id))
+      (outliner-property/set-block-property! conn (:block/uuid b1) :user.property/text "beta")
+      (let [b1' (d/entity @conn (:db/id b1))]
+        (is (= "beta" (db-property/property-value-content (:user.property/text b1'))))
+        (is (nil? (:block/title (d/entity @conn old-value-id)))
+            "The old value block is not left behind")
+        (is (empty? (->> (d/q '[:find [?b ...]
+                                :where [?b :block/title "one"]]
+                              @conn)))
+            "No block with the old value remains"))))
+
+  (testing "A value block that another block still holds is kept"
+    (let [conn (db-test/create-conn-with-blocks
+                {:properties {:text {:logseq.property/type :default}}
+                 :pages-and-blocks
+                 [{:page {:block/title "page1"}
+                   :blocks [{:block/title "b1" :build/properties {:text "one"}}
+                            {:block/title "b2"}]}]})
+          b1 (db-test/find-block-by-content @conn "b1")
+          b2 (db-test/find-block-by-content @conn "b2")
+          shared-value-id (:db/id (:user.property/text b1))]
+      (outliner-property/set-block-property! conn (:block/uuid b2) :user.property/text shared-value-id)
+      (outliner-property/set-block-property! conn (:block/uuid b1) :user.property/text "beta")
+      (is (= shared-value-id (:db/id (:user.property/text (d/entity @conn (:db/id b2)))))
+          "The other block still has its value")
+      (is (= "one" (:block/title (d/entity @conn shared-value-id)))
+          "The shared value block is kept"))))
+
+(deftest remove-block-property-deletes-many-text-value-blocks
+  (testing "Removing a many-valued text property deletes its value blocks"
+    (let [conn (db-test/create-conn-with-blocks
+                {:properties {:many {:logseq.property/type :default :db/cardinality :db.cardinality/many}}
+                 :pages-and-blocks
+                 [{:page {:block/title "page1"}
+                   :blocks [{:block/title "b1" :build/properties {:many #{"x" "y"}}}]}]})
+          b1 (db-test/find-block-by-content @conn "b1")
+          value-ids (set (map :db/id (:user.property/many b1)))]
+      (is (= 2 (count value-ids)))
+      (outliner-property/remove-block-property! conn (:block/uuid b1) :user.property/many)
+      (is (nil? (:user.property/many (d/entity @conn (:db/id b1)))))
+      (is (every? #(nil? (:block/title (d/entity @conn %))) value-ids)
+          "No value block is left behind")))
+
+  (testing "A value block that another block still holds is kept"
+    (let [conn (db-test/create-conn-with-blocks
+                {:properties {:many {:logseq.property/type :default :db/cardinality :db.cardinality/many}}
+                 :pages-and-blocks
+                 [{:page {:block/title "page1"}
+                   :blocks [{:block/title "b1" :build/properties {:many #{"x" "y"}}}
+                            {:block/title "b2"}]}]})
+          b1 (db-test/find-block-by-content @conn "b1")
+          b2 (db-test/find-block-by-content @conn "b2")
+          x-id (:db/id (some #(when (= "x" (:block/title %)) %) (:user.property/many b1)))
+          y-id (:db/id (some #(when (= "y" (:block/title %)) %) (:user.property/many b1)))]
+      (outliner-property/set-block-property! conn (:block/uuid b2) :user.property/many x-id)
+      (outliner-property/remove-block-property! conn (:block/uuid b1) :user.property/many)
+      (is (= "x" (:block/title (d/entity @conn x-id)))
+          "The value block b2 still holds is kept")
+      (is (nil? (:block/title (d/entity @conn y-id)))
+          "The other value block is deleted"))))
 
 (deftest create-property-text-block!
   (testing "Create a new :default property value"
@@ -915,3 +1019,86 @@
     (is (= [:logseq.class/Root]
            (:logseq.property.class/extends (db-test/readable-properties (d/entity @conn :user.class/C3))))
         "Extends property is restored back to Root")))
+
+(deftest set-block-property-stores-zero-and-negative-numbers
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties {:num {:logseq.property/type :number}
+                            :nums {:logseq.property/type :number :db/cardinality :many}}
+               :pages-and-blocks [{:page {:block/title "page1"}
+                                   :blocks [{:block/title "b1"}
+                                            {:block/title "b2"}
+                                            {:block/title "b3"}]}]})
+        block-uuid (fn [title] (:block/uuid (db-test/find-block-by-content @conn title)))
+        number-of (fn [title property]
+                    (db-property/property-value-content (get (db-test/find-block-by-content @conn title) property)))]
+    (testing "set-block-property! with 0, also over an existing value, and with a negative number"
+      (outliner-property/set-block-property! conn (block-uuid "b1") :user.property/num 0)
+      (is (= 0 (number-of "b1" :user.property/num)))
+      (outliner-property/set-block-property! conn (block-uuid "b1") :user.property/num 3)
+      (outliner-property/set-block-property! conn (block-uuid "b1") :user.property/num 0)
+      (is (= 0 (number-of "b1" :user.property/num)))
+      (outliner-property/set-block-property! conn (block-uuid "b1") :user.property/num -3)
+      (is (= -3 (number-of "b1" :user.property/num))))
+
+    (testing "batch-set-property! without :entity-id? sets 0"
+      (outliner-property/batch-set-property! conn [(block-uuid "b2")] :user.property/num 0)
+      (is (= 0 (number-of "b2" :user.property/num))))
+
+    (testing "the text typed into a number input, \"0\", sets 0"
+      (outliner-property/set-block-property! conn (block-uuid "b3") :user.property/num "0")
+      (is (= 0 (number-of "b3" :user.property/num))))
+
+    (testing "a many-valued number property accepts 0 among its values"
+      (outliner-property/batch-set-property! conn [(block-uuid "b1")] :user.property/nums [0 2])
+      (is (= #{0 2}
+             (set (map db-property/property-value-content
+                       (:user.property/nums (db-test/find-block-by-content @conn "b1")))))))))
+
+(defn- history-record-values
+  "The ids of the value blocks the history records of `property` point at."
+  [db property]
+  (set (d/q '[:find [?v ...]
+              :in $ ?p
+              :where
+              [?h :logseq.property.history/property ?p]
+              [?h :logseq.property.history/ref-value ?v]]
+            db (:db/id (d/entity db property)))))
+
+(defn- add-history-record!
+  "Records the current value of `property` on the block `block-uuid`, as the worker does for a property that keeps history."
+  [conn block-uuid property]
+  (let [block (d/entity @conn [:block/uuid block-uuid])]
+    (d/transact! conn [{:block/uuid (random-uuid)
+                        :block/created-at 1
+                        :block/updated-at 1
+                        :logseq.property.history/block (:db/id block)
+                        :logseq.property.history/property (:db/id (d/entity @conn property))
+                        :logseq.property.history/ref-value (:db/id (get block property))}])))
+
+(deftest changing-a-number-value-keeps-the-value-its-history-records
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties {:num {:logseq.property/type :number
+                                  :logseq.property/enable-history? true}}
+               :pages-and-blocks [{:page {:block/title "page1"}
+                                   :blocks [{:block/title "b1"}
+                                            {:block/title "b2"}]}]})
+        b1 (:block/uuid (db-test/find-block-by-content @conn "b1"))
+        b2 (:block/uuid (db-test/find-block-by-content @conn "b2"))]
+    (testing "setting the property to another number"
+      (outliner-property/set-block-property! conn b1 :user.property/num 4)
+      (add-history-record! conn b1 :user.property/num)
+      (outliner-property/set-block-property! conn b1 :user.property/num 5)
+      (is (= 1 (count (history-record-values @conn :user.property/num)))
+          "The history record of the old value is kept")
+      (is (= #{4} (set (map db-property/property-value-content
+                            (map #(d/entity @conn %) (history-record-values @conn :user.property/num)))))
+          "with the old value block it points at"))
+
+    (testing "removing the property from the block"
+      (outliner-property/set-block-property! conn b2 :user.property/num 8)
+      (add-history-record! conn b2 :user.property/num)
+      (outliner-property/remove-block-property! conn b2 :user.property/num)
+      (is (contains? (set (map db-property/property-value-content
+                               (map #(d/entity @conn %) (history-record-values @conn :user.property/num))))
+                     8)
+          "The history record of the removed value is kept"))))
