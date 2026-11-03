@@ -220,7 +220,7 @@
      (fn []
        (when (and (mobile-util/native-ios?)
                   login?
-                  (user-handler/rtc-group?))
+                  (user-handler/can-list-remote-graphs?))
          (rtc-handler/<get-remote-graphs))
        nil)
      [login?])
