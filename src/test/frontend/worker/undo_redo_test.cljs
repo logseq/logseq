@@ -1851,3 +1851,63 @@
       (is (some? (d/entity @conn [:block/uuid class-uuid])))
       (is (= #{y-uuid}
              (set (map :block/uuid (get (d/entity @conn [:block/uuid x-uuid]) related))))))))
+
+(deftest redo-ops-replay-keeps-block-refs-test
+  (testing "redo of a semantic-ops tx re-derives :block/refs for titles with refs"
+    (worker-undo-redo/clear-history! test-repo)
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          prev-pipeline @ldb/*transact-pipeline-fn
+          block-uuid (random-uuid)
+          target-uuid (random-uuid)
+          refs (fn [] (:block/refs (d/entity @conn [:block/uuid block-uuid])))]
+      (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+      (try
+        (sqlite-build/create-blocks conn [{:page {:block/title "redo refs target"
+                                                  :block/uuid target-uuid}
+                                           :blocks []}
+                                          {:page {:block/title "redo refs home"}
+                                           :blocks []}])
+        (let [page-id (d/q '[:find ?e . :where [?e :block/title "redo refs home"]]
+                          @conn)]
+          (worker-undo-redo/clear-history! test-repo)
+          (apply-ops! conn
+                      [[:insert-blocks [[{:block/uuid block-uuid
+                                          :block/title (str "uses [[" target-uuid "]]")}]
+                                        page-id
+                                        {:sibling? false
+                                         :keep-uuid? true}]]]
+                      (local-tx-meta {:client-id "test-client"}))
+          (is (seq (refs)))
+          (is (map? (worker-undo-redo/undo test-repo)))
+          (is (map? (worker-undo-redo/redo test-repo)))
+          (is (seq (refs))))
+        (finally
+          (reset! ldb/*transact-pipeline-fn prev-pipeline))))))
+
+(deftest undo-ops-replay-keeps-block-refs-test
+  (testing "undo of a semantic-ops save-block re-derives :block/refs for restored title"
+    (worker-undo-redo/clear-history! test-repo)
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          prev-pipeline @ldb/*transact-pipeline-fn
+          block-uuid (random-uuid)
+          target-uuid (random-uuid)
+          refs (fn [] (:block/refs (d/entity @conn [:block/uuid block-uuid])))]
+      (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+      (try
+        (sqlite-build/create-blocks conn [{:page {:block/title "undo refs target"
+                                                  :block/uuid target-uuid}
+                                           :blocks []}
+                                          {:page {:block/title "undo refs home"}
+                                           :blocks [{:block/title (str "old [[" target-uuid "]]")
+                                                     :block/uuid block-uuid}]}])
+        (is (seq (refs)))
+        (worker-undo-redo/clear-history! test-repo)
+        (apply-ops! conn
+                    [[:save-block [{:block/uuid block-uuid
+                                    :block/title "new title"}]]]
+                    (local-tx-meta {:client-id "test-client"}))
+        (is (empty? (refs)))
+        (is (map? (worker-undo-redo/undo test-repo)))
+        (is (seq (refs)))
+        (finally
+          (reset! ldb/*transact-pipeline-fn prev-pipeline))))))
