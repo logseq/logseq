@@ -245,10 +245,12 @@
 
 (def-thread-api :thread-api/get-class-objects
   [repo class-id]
-  (let [db @(worker-state/get-datascript-conn repo)]
-    (->> (db-class/get-class-objects db class-id)
-         (map #(worker-plain/worker-plain-value db %))
-         worker-plain/with-explicit-ref-fields-recursive)))
+  ;; nil until the worker has opened the graph (the renderer can ask right after a reload)
+  (when-let [conn (worker-state/get-datascript-conn repo)]
+    (let [db @conn]
+      (->> (db-class/get-class-objects db class-id)
+           (map #(worker-plain/worker-plain-value db %))
+           worker-plain/with-explicit-ref-fields-recursive))))
 
 (def-thread-api :thread-api/validate-block-tag
   [repo block-id tag-id]
@@ -270,6 +272,7 @@
 (defn- convert-tag-to-page-tx
   [db class-id]
   (let [objects (db-class/get-class-objects db class-id)
+        child-class-txs (db-class/detach-child-classes-tx (d/entity db class-id))
         page-txs [[:db/retract class-id :db/ident]
                   [:db/retract class-id :block/tags :logseq.class/Tag]
                   [:db/retract class-id :logseq.property.class/extends]
@@ -282,7 +285,7 @@
                                              (:block/tags obj))}
                               [:db/retract (:db/id obj) :block/tags class-id]])
                            objects)]
-    (vec (concat page-txs object-txs))))
+    (vec (concat page-txs child-class-txs object-txs))))
 
 (def-thread-api :thread-api/convert-tag-to-page
   [repo class-id]
@@ -314,12 +317,12 @@
 
 (def-thread-api :thread-api/get-property-values
   [repo {:keys [property-ident] :as option}]
-  (let [conn (worker-state/get-datascript-conn repo)]
+  (when-let [conn (worker-state/get-datascript-conn repo)]
     (db-view/get-property-values @conn property-ident option)))
 
 (def-thread-api :thread-api/get-bidirectional-properties
   [repo {:keys [target-id]}]
-  (let [conn (worker-state/get-datascript-conn repo)]
+  (when-let [conn (worker-state/get-datascript-conn repo)]
     (worker-util/profile "get-bidirectional-properties"
                          (ldb/get-bidirectional-properties @conn target-id))))
 
@@ -378,11 +381,7 @@
                                  (:block/name property))]
                (cond-> display-property
                  raw-title
-                 (assoc :block/raw-title raw-title)
-
-                 (:logseq.property/deleted-at property)
-                 (assoc :logseq.property/deleted-at
-                        (:logseq.property/deleted-at property)))))))))
+                 (assoc :block/raw-title raw-title))))))))
 
 (def-thread-api :thread-api/get-all-properties
   [repo opts]
@@ -416,7 +415,10 @@
                             :block/order new-order}
                            (outliner-core/block-with-updated-at
                             {:db/id block-id}))
-                     {:outliner-op :save-block}))))
+                     {:outliner-op :save-block})
+      ;; the tx report can't be sent back to the renderer ("Cannot write TxReport"): the reorder
+      ;; succeeded, but the call failed
+      nil)))
 
 (def ^:private display-property-keys
   [:db/id
@@ -594,28 +596,30 @@
        (or (contains? value :db/id)
            (contains? value :block/uuid))))
 
+(defn- recycled-entity-value?
+  "A stored block's values are summaries without :logseq.property/deleted-at,
+  so a value with a :db/id is checked on its entity."
+  [db value]
+  (and (entity-ref-value? value)
+       (ldb/recycled? (or (some->> (:db/id value) (d/entity db)) value))))
+
 (defn- contains-recycled-entity-value?
-  [value]
+  [db value]
   (cond
     (entity-ref-value? value)
-    (ldb/recycled? value)
+    (recycled-entity-value? db value)
 
     (and (coll? value) (not (map? value)))
-    (some (fn [item]
-            (and (entity-ref-value? item)
-                 (ldb/recycled? item)))
-          value)
+    (some #(recycled-entity-value? db %) value)
 
     :else
     false))
 
 (defn- filter-recycled-entity-values
-  [value]
-  (let [active-entity-value? (fn [item]
-                               (or (not (entity-ref-value? item))
-                                   (not (ldb/recycled? item))))]
+  [db value]
+  (let [active-entity-value? #(not (recycled-entity-value? db %))]
     (cond
-      (and (entity-ref-value? value) (ldb/recycled? value))
+      (recycled-entity-value? db value)
       nil
 
       (set? value)
@@ -634,12 +638,12 @@
       value)))
 
 (defn- sanitize-property-values-for-display
-  [properties]
+  [db properties]
   (reduce-kv
    (fn [{:keys [properties recycled-only-property-ids] :as result} property-id property-value]
-     (let [property-value' (filter-recycled-entity-values property-value)]
+     (let [property-value' (filter-recycled-entity-values db property-value)]
        (if (and (nil? property-value')
-                (contains-recycled-entity-value? property-value))
+                (contains-recycled-entity-value? db property-value))
          (assoc result
                 :properties (assoc properties property-id nil)
                 :recycled-only-property-ids (conj recycled-only-property-ids property-id))
@@ -680,7 +684,7 @@
                                        (entity-tagged-with? db block-entity :logseq.class/Journal)))
         properties* (display-properties-for-block db block-entity)
         {:keys [properties recycled-only-property-ids]}
-        (sanitize-property-values-for-display properties*)
+        (sanitize-property-values-for-display db properties*)
         remove-built-in-or-other-position-properties
         (fn [property-pairs show-in-hidden-properties?]
           (remove (fn [property]
@@ -819,12 +823,9 @@
 (defn- render-bottom-position-property?
   [db property]
   (let [property-id (:db/ident property)
-        property-type (:logseq.property/type property)
-        node-many? (and (= :node property-type)
-                        (= :db.cardinality/many (:db/cardinality property)))]
+        property-type (:logseq.property/type property)]
     (and (not (contains? #{:url :asset} property-type))
-         (or node-many?
-             (not= :default property-type)
+         (or (not= :default property-type)
              (property-has-closed-values? db property))
          (not (render-schema-or-tag-related-property? property-id)))))
 

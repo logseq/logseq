@@ -34,7 +34,6 @@
 (defonce *transact-fn (atom nil))
 (defonce *transact-invalid-callback (atom nil))
 (defonce *transact-pipeline-fn (atom nil))
-(defonce *debounce-fn (atom nil))
 (def ^:dynamic *batch-tx-report?* false)
 
 (defn register-transact-fn!
@@ -46,9 +45,6 @@
 (defn register-transact-pipeline-fn!
   [f]
   (when f (reset! *transact-pipeline-fn f)))
-(defn register-debounce-fn!
-  [f]
-  (when f (reset! *debounce-fn f)))
 
 (defn- remove-temp-block-data
   [tx-data]
@@ -99,16 +95,6 @@
                                   (not (entity-util/page? (d/entity db (:v d)))))))) tx-data)
     (throw (ex-info "Page can't have block as parent"
                     {:tx-count (count tx-data)}))))
-
-(comment
-  (defn debounced-store-db
-   [conn]
-   (when-some [_storage (storage/storage @conn)]
-     (when-not (:batch-tx? @conn)
-       (let [f (if (exists? js/process)
-                 d/store
-                 (or @*debounce-fn d/store))]
-         (f @conn))))))
 
 (defn- should-run-transact-pipeline?
   [conn db tx-meta]
@@ -211,10 +197,16 @@
                       (remove (fn [m] (or ;; db/id
                                        (integer? m)
                                        (empty? m)))))
-         tx-data (if-not (string? repo-or-conn)
+         ;; An undo or redo that replays a transaction's recorded datoms
+         ;; (local graphs) holds the whole change, in the order DataScript
+         ;; applied it: nothing is added, and `distinct` must not drop an op
+         ;; that repeats after its opposite.
+         expand-deletes? (and (not (string? repo-or-conn))
+                              (not (:undo-redo/replay-tx-datoms? tx-meta)))
+         tx-data (if expand-deletes?
                    (delete-blocks/expand-delete-blocks-tx @repo-or-conn tx-data tx-meta)
                    tx-data)
-         delete-blocks-tx (when-not (string? repo-or-conn)
+         delete-blocks-tx (when expand-deletes?
                             (delete-blocks/update-refs-history @repo-or-conn tx-data tx-meta))
          tx-data (concat tx-data delete-blocks-tx)]
 
@@ -630,7 +622,9 @@
                                  ;; a/b/c might be deleted but a/b/c/d still exists (for backward compatibility)
                                 (not (and (string/includes? name' "/")
                                           (not (journal? page))))
-                                (not (:block/properties page))
+                                ;; every page's properties hold its :block/tags
+                                ;; (Page, Journal): only other properties keep it
+                                (empty? (dissoc (:block/properties page) :block/tags))
                                 page))))
                          pages)
                         (remove false?)

@@ -929,27 +929,24 @@
           ;; (cljs.pprint/pprint (select-keys action [:tx-id :outliner-op :forward-outliner-ops :inverse-outliner-ops]))
           ;; (prn :debug :tx-meta)
           ;; (cljs.pprint/pprint tx-meta)
-        (if (seq ops')
-          (try
-            (when (seq ops)
-              (op-construct/assert-no-numeric-entity-ids! @conn ops :history-action-ops))
-            (ldb/batch-transact-with-temp-conn!
-             conn
-             tx-meta'
-             (fn [conn]
-               (doseq [op ops']
-                 (replay-canonical-outliner-op! conn op nil))))
-            {:applied? true
-             :history-tx-id history-tx-id}
-            (catch :default e
-              (let [reason (history-action-error-reason e)]
-                (when-not (expected-history-action-error-reason? reason)
-                  (log/error ::undo-redo-failed e))
-                {:applied? false
-                 :reason reason
-                 :action action})))
-          {:applied? false :reason :unsupported-history-action
-           :action action})))
+        (try
+          (when (seq ops)
+            (op-construct/assert-no-numeric-entity-ids! @conn ops :history-action-ops))
+          (ldb/batch-transact-with-temp-conn!
+           conn
+           tx-meta'
+           (fn [conn]
+             (doseq [op ops']
+               (replay-canonical-outliner-op! conn op nil))))
+          {:applied? true
+           :history-tx-id history-tx-id}
+          (catch :default e
+            (let [reason (history-action-error-reason e)]
+              (when-not (expected-history-action-error-reason? reason)
+                (log/error ::undo-redo-failed e))
+              {:applied? false
+               :reason reason
+               :action action})))))
       {:applied? false
        :reason :missing-history-action
        :tx-id tx-id})
@@ -1928,21 +1925,30 @@
   [repo client tx-data]
   (apply-remote-txs! repo client [{:tx-data tx-data}]))
 
+(defn- record-local-graph-undo!
+  "A local transaction on a graph that does not sync gets its undo entry and
+  no client-op row. Nothing reads such a row there: undo and redo replay the
+  entry's own tx datoms, and the first upload sends a snapshot of the graph."
+  [repo {:keys [tx-meta] :as tx-report}]
+  (when (client-ops-conn repo)
+    (worker-undo-redo/gen-undo-ops! repo tx-report
+                                    (or (:db-sync/tx-id tx-meta) (random-uuid))
+                                    {:apply-history-action! apply-history-action!})))
+
 (defn- enqueue-local-tx-aux
   [repo {:keys [tx-data db-after db-before] :as tx-report}]
-  (let [normalized (normalize-tx-data db-after db-before tx-data)
-        reversed-datoms (reverse-tx-data db-before db-after tx-data)]
-    ;; (prn :debug :reversed-datoms reversed-datoms)
-    ;; (prn :debug :enqueue-local-tx :tx-data)
-    ;; (cljs.pprint/pprint tx-data)
-    ;; (prn :debug :enqueue-local-tx :normalized)
-    ;; (cljs.pprint/pprint normalized)
-
-    (when (seq normalized)
-      (persist-local-tx! repo tx-report normalized reversed-datoms)
-      (when-let [client @worker-state/*db-sync-client]
-        (when (= repo (:repo client))
-          (enqueue-flush-pending! repo client))))))
+  (if (worker-undo-redo/local-graph? repo db-after)
+    ;; no upload data is built for a graph that does not sync; a transaction
+    ;; of attributes sync ignores gets no undo entry, as on a synced graph
+    (when (seq (remove-ignored-attrs tx-data))
+      (record-local-graph-undo! repo tx-report))
+    (let [normalized (normalize-tx-data db-after db-before tx-data)]
+      (when (seq normalized)
+        (persist-local-tx! repo tx-report normalized
+                           (reverse-tx-data db-before db-after tx-data))
+        (when-let [client @worker-state/*db-sync-client]
+          (when (= repo (:repo client))
+            (enqueue-flush-pending! repo client)))))))
 
 (defn- persistable-local-tx-meta?
   [tx-meta]
@@ -1962,8 +1968,20 @@
                (seq tx-data))
       (enqueue-local-tx-aux repo tx-report))))
 
+(defn- graph-becomes-remote?
+  [db-before db-after]
+  (and db-before db-after
+       (not (worker-undo-redo/graph-remote-flag? db-before))
+       (worker-undo-redo/graph-remote-flag? db-after)))
+
 (defn handle-local-tx!
-  [repo {:keys [tx-data tx-meta db-after] :as tx-report}]
+  [repo {:keys [tx-data tx-meta db-before db-after] :as tx-report}]
+  (when (and (seq tx-data)
+             (graph-becomes-remote? db-before db-after))
+    ;; The graph starts to sync (upload). Its undo entries were recorded
+    ;; without client-op rows, and undo on a synced graph takes an entry's
+    ;; ops from its row, so the history ends here, as it does at a restart.
+    (worker-undo-redo/clear-history! repo))
   (when (and (seq tx-data)
              (persistable-local-tx-meta? tx-meta))
     (enqueue-local-tx! repo tx-report)
