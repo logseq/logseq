@@ -1,12 +1,28 @@
 (ns frontend.components.page-test
   (:require ["react" :as react]
+            ["react-dom/server" :as react-dom-server]
             [cljs.test :refer [async deftest is use-fixtures]]
+            [frontend.components.page :as page]
+            [frontend.components.query :as query]
             [frontend.db.hooks :as db-hooks]
             [frontend.db.subs :as subs]
+            [frontend.rfx :as rfx]
+            [frontend.state :as state]
             [goog.object :as gobj]
             [promesa.core :as p]))
 
 (def ^:private test-graph-id "page-membership-test")
+
+(defn- render-static
+  [element]
+  (let [previous-react (gobj/get js/globalThis "React")]
+    (gobj/set js/globalThis "React" react)
+    (try
+      (.renderToStaticMarkup react-dom-server element)
+      (finally
+        (if (some? previous-react)
+          (gobj/set js/globalThis "React" previous-react)
+          (js-delete js/globalThis "React"))))))
 
 (defn- block
   [block-uuid tx-id title]
@@ -113,6 +129,27 @@
 (use-fixtures :each
   {:before #(subs/reset-graph! test-graph-id)
    :after #(subs/reset-graph! test-graph-id)})
+
+(deftest today-queries-preserve-collapse-configuration-test
+  (let [queries [{:title "Expanded" :query [:find '?b] :collapsed? false}
+                 {:title "Collapsed" :query [:find '?b] :collapsed? true}
+                 {:title "Default" :query [:find '?b]}]
+        expected [(first queries)
+                  (second queries)
+                  (assoc (last queries) :collapsed? true)]
+        rendered-queries (atom [])]
+    (with-redefs [rfx/use-sub (constantly {})
+                  state/config-for-repo
+                  (fn [_config _repo]
+                    {:default-queries {:journals queries}})
+                  query/custom-query
+                  (fn [_config query]
+                    (swap! rendered-queries conj query)
+                    [:span])]
+      (render-static
+       (page/today-queries "test" {:block/title "Today"} true false))
+      (is (= expected @rendered-queries)
+          "Today queries should honor explicit collapse behavior and preserve the collapsed default."))))
 
 (deftest normal-page-loads-one-complete-ordered-membership-test
   (async done
