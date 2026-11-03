@@ -5,11 +5,9 @@
             [logseq.e2e.assert :as assert]
             [logseq.e2e.keyboard :as k]
             [logseq.e2e.locator :as loc]
-            [wally.main :as w]
-            [wally.repl :as repl])
+            [wally.main :as w])
   (:import [com.microsoft.playwright
             Locator$PressSequentiallyOptions
-            Locator$FilterOptions
             Locator$ClickOptions
             Page$GetByTextOptions
             TimeoutError]
