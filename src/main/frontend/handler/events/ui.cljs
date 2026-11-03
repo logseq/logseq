@@ -510,16 +510,12 @@
           (when-let [uid (user-handler/user-uuid)]
             (sentry-event/set-user! uid)
             (ensure-user-rsa-keys-if-possible!))
-          (let [status (if (user-handler/alpha-or-beta-user?) :welcome :unavailable)
-                fetch-graphs? (and (user-handler/logged-in?)
-                                   (or (= status :welcome)
-                                       (user-handler/rtc-group?)))]
-            (when fetch-graphs?
-              (async/<! (p->c (rtc-handler/<get-remote-graphs)))
-              (repo-handler/refresh-repos!)
-              (when-let [current-repo (state/get-current-repo)]
-                (when (some #(= current-repo (:url %)) (state/get-rtc-graphs))
-                  (rtc-flows/trigger-rtc-start current-repo))))))))))
+          (when (user-handler/can-list-remote-graphs?)
+            (async/<! (p->c (rtc-handler/<get-remote-graphs)))
+            (repo-handler/refresh-repos!)
+            (when-let [current-repo (state/get-current-repo)]
+              (when (some #(= current-repo (:url %)) (state/get-rtc-graphs))
+                (rtc-flows/trigger-rtc-start current-repo)))))))))
 
 (defevent! :dialog/show-block [[_ block option]]
   (shui/dialog-open!

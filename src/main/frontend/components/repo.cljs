@@ -52,6 +52,15 @@
        (user-handler/logged-in?)
        (user-handler/rtc-group?)))
 
+(defn fetch-all-graphs-remotes?
+  [login?]
+  (boolean (and login? (user-handler/can-list-remote-graphs?))))
+
+(defn show-all-graphs-remote-section?
+  [login? remote-graphs]
+  (boolean (and (fetch-all-graphs-remotes? login?)
+                (seq remote-graphs))))
+
 (defn <invoke-db-worker
   [op & args]
   (apply state/<invoke-db-worker op args))
@@ -332,7 +341,7 @@
         (group-by (fn [graph] (= "manager" (:graph<->user-user-type graph))) remote-graphs)]
     (hooks/use-effect!
      (fn []
-       (when (and login? (user-handler/rtc-group?))
+       (when (fetch-all-graphs-remotes? login?)
          (rtc-handler/<get-remote-graphs)))
      [login?])
     [:div#graphs
@@ -360,9 +369,7 @@
        (when (seq local-graphs)
          (repos-inner local-graphs))]
 
-      (when (and (user-handler/rtc-group?)
-                 (seq remote-graphs)
-                 login?)
+      (when (show-all-graphs-remote-section? login? remote-graphs)
         [:<>
          (when (seq own-graphs)
            [:div

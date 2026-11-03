@@ -361,6 +361,16 @@
             (some? (config/get-custom-sync-server-url))
             (seq (set/intersection (state/user-groups) #{"team" "rtc_2025_07_10"})))))
 
+(defn can-list-remote-graphs?
+  "True when a logged-in user can fetch and display remote/synced graphs.
+
+  Official/default sync is available without saving Sync Server URL. Distinct
+  from `rtc-group?`, which still gates upload/RTC feature UI."
+  []
+  (boolean (and (logged-in?)
+                (or (config/get-custom-sync-server-url)
+                    config/default-db-sync-http-base))))
+
 (defn alpha-user?
   []
   (or config/dev?
