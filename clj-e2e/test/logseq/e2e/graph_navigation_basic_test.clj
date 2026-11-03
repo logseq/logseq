@@ -232,8 +232,11 @@
         (is (<= (util/count-elements ".graph-node, [data-node-id]")
                 full-count))
         (w/click ".graph-time-travel-reset[title='Now']")
+        ;; "Now" plays the graph forward over 4.5 s (time-travel-animation-ms) before
+        ;; the label says Now; the default 5 s left half a second on a slow runner
         (assert/assert-is-visible
-         (loc/filter ".graph-time-travel-label" :has-text "Now"))
+         (loc/filter ".graph-time-travel-label" :has-text "Now")
+         15000)
         (is (= full-count
                (util/count-elements ".graph-node, [data-node-id]")))))))
 
