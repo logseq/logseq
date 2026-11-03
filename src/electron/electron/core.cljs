@@ -370,6 +370,7 @@
                     (preferred-unix-cli-dir))]
     (cli-install/install-cli-launcher!
      {:windows? utils/win32?
+      :packaged? (.-isPackaged ^js app)
       :cli-path cli-path
       :cli-dir! cli-dir!
       :exe-path (.getPath app "exe")
