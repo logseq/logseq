@@ -950,6 +950,7 @@ let keymap_row st editing ~key (r : Keymap_data.row) =
         ~min_width:0 ~gap:12 ~flex_wrap:`wrap
         [ box ~key:(key ^ "l") ~grow:1. ~min_width:0
             [ text ~key:(key ^ "lx") ~style_class:"ls-kbd-label"
+                ~font_size:"15px" ~line_height:"1.4285714285714286"
                 ~value:(I18n.t (command_key_of r.title)) []
             ]
         ; row ~key:(key ^ "a") ~cross:`center ~gap:6 ~min_width:0 ~flex_wrap:`wrap
