@@ -642,13 +642,13 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key =
       ~abot
   in
   Ui_components.with_props
-    [ Ui_components.Prop.font_weight 500
+    [ Ui_components.Prop.position `relative
+    ; Ui_components.Prop.font_weight 500
     ; Ui_components.Prop.cursor `pointer
     ; Ui_components.Prop.user_select `none ]
     (column ~key ~style_class:li_class
     [ Ui_components.with_props
-        [ Ui_components.Prop.position `relative
-        ; Ui_components.Prop.opacity 0.8
+        [ Ui_components.Prop.opacity 0.8
         ; Ui_components.Prop.hover_opacity 1.
         ; Ui_components.Prop.hover_background
             "var(--lx-gray-04, var(--ls-quaternary-background-color))" ]
