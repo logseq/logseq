@@ -3168,6 +3168,22 @@ let test_properties_data () =
 
 (* ---- sidebar_state ---- *)
 
+let test_sidebar_recents () =
+  let previous = Ui_services.storage_get "recent-pages" in
+  Fun.protect
+    ~finally:(fun () ->
+      match previous with
+      | Some value -> Ui_services.storage_set "recent-pages" value
+      | None -> Ui_services.storage_remove "recent-pages")
+    (fun () ->
+      Ui_services.storage_set "recent-pages" "{}";
+      List.iter (Sidebar_state.push_recent "first") (List.init 16 (fun i -> i + 1));
+      Sidebar_state.push_recent "second" 99;
+      Sidebar_state.push_recent "first" 5;
+      check "recent navigation keeps insertion order, limit and graph isolation"
+        (Sidebar_state.recent_ids_of_storage "first" = List.init 15 (fun i -> 16 - i)
+         && Sidebar_state.recent_ids_of_storage "second" = [99]))
+
 let test_sidebar_state () =
   let p = page [ block "b" "B" ] in
   let it = Sidebar_state.item_of_page p in
@@ -4518,6 +4534,7 @@ let () =
   test_update2 ();
   test_decode_rtc ();
   test_properties_data ();
+  test_sidebar_recents ();
   test_sidebar_state ();
   test_settings_state ();
   test_cards_state ();
