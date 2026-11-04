@@ -73,7 +73,7 @@ type sel_state =
 (* Builds the select as a [t]: text_field over a scrollable list of
    menu_items. Mounted inside the property dialog card or an anchored
    dropdown_menu. *)
-let view ~placeholder ?(compact = false) ?(show_empty_result = true) ?(new_case_sensitive = false) ?new_option ?(on_enter_text = None)
+let view ~placeholder ?(compact = false) ?(show_empty_result = true) ?(new_case_sensitive = false) ?new_option ?selected_keys ?(on_enter_text = None)
     ?(on_search = None) items : t =
  fun context parent ->
   let sched = context.Lui_ui.ui_scheduler in
@@ -166,7 +166,15 @@ let view ~placeholder ?(compact = false) ?(show_empty_result = true) ?(new_case_
                              [ Ui_components.with_props [Ui_components.Prop.margin_right 4]
                                  (Icons.icon ~size:(if it.it_icon = "x" then 14. else 18.) it.it_icon) ])
                           @ [ text ~value:title ~grow:1.0 ~min_width:0 ~white_space:"normal" [] ]
-                          @ if it.it_checked then [ icon ~name:(`app "check") ~point_size:14 [] ] else []) ] else [])))
+                          @ (match selected_keys with
+                             | Some keys ->
+                                 [ if_ ~test:(reactive (fun selected ->
+                                     match it.it_key with
+                                     | Some key -> List.mem key selected
+                                     | None -> false) keys)
+                                     (icon ~name:(`app "check") ~point_size:14 []) ]
+                             | None -> if it.it_checked then
+                                 [icon ~name:(`app "check") ~point_size:14 []] else [])) ] else [])))
               vis) ]
             @ if compact then [box ~height:4 []] else []))
       (Signal.value st)
