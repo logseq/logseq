@@ -3,18 +3,28 @@
 
 open Lui_elements
 
+let font_family () =
+  let font = Settings_state.current_editor_font () in
+  match font.fglobal, font.ftype with
+  | true, "serif" -> "Lyon-Text, Georgia, ui-serif, serif"
+  | true, "mono" -> "iawriter-mono, Nitti, Menlo, Courier, monospace"
+  | _ -> "var(--lx-font-stack)"
+
 let view _context model_source _send : t =
-  Ui_components.with_props
-    [
-      Ui_components.Prop.foreground
-        "var(--lx-gray-12, var(--ls-primary-text-color, \
-         hsl(var(--foreground))))";
-      Ui_components.Prop.background
-        "var(--lx-gray-01, var(--ls-primary-background-color, \
-         hsl(var(--background))))";
-      Ui_components.Prop.font_size "var(--ls-page-text-size)";
-      Ui_components.Prop.font_family "var(--lx-font-stack)";
-      Ui_components.Prop.font_weight Ui_theme.typography.weight_regular;
-      Ui_components.Prop.line_height "var(--lx-line-height)";
-    ]
-    (Chrome.shell model_source)
+ fun ctx parent ->
+  Settings_state.ensure ctx;
+  (Ui_parts.string_prop Lui_protocol.FontFamily
+     ~value:(reactive (fun _ -> font_family ()) (Settings_state.signal ()))
+     (Ui_components.with_props
+        [
+          Ui_components.Prop.foreground
+            "var(--lx-gray-12, var(--ls-primary-text-color, \
+             hsl(var(--foreground))))";
+          Ui_components.Prop.background
+            "var(--lx-gray-01, var(--ls-primary-background-color, \
+             hsl(var(--background))))";
+          Ui_components.Prop.font_size "var(--ls-page-text-size)";
+          Ui_components.Prop.font_weight Ui_theme.typography.weight_regular;
+          Ui_components.Prop.line_height "var(--lx-line-height)";
+        ]
+        (Chrome.shell model_source))) ctx parent
