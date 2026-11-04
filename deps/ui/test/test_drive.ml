@@ -2186,7 +2186,87 @@ let edit_flow_host () : Edit_flow_test.host =
   ; native = false
   }
 
+let test_fsrs_timestamp_roundtrip ~check =
+  List.iter (fun now ->
+    List.iter (fun rating ->
+      let card = Fsrs_sched.next_card ~now (Fsrs_sched.new_card ~now) rating in
+      let state = Fsrs_sched.state_wire ~rating card in
+      let restored = Fsrs_sched.card_of_property_wire state (Some card.due)
+        ~created_at:None ~now in
+      check
+        ("FSRS rating state preserves epoch milliseconds: " ^ Int64.to_string now
+         ^ " " ^ Fsrs_sched.string_of_rating rating)
+        (Wire.get state "due" = Some (Wire.Int64 card.due)
+         && Wire.get state "last-repeat" = Some (Wire.Int64 now)
+         && restored = Some card))
+      Fsrs_sched.[Again; Hard; Good; Easy])
+    [1793824014528L; 2208988800000L]
+
+let test_title_refs_class_identity () =
+  let open Promise_ext in
+  let entity uuid title ident =
+    W.Map
+      ([ W.kw "block/uuid", W.Uuid uuid
+       ; W.kw "block/title", W.String title ]
+       @ Option.to_list (Option.map (fun ident -> W.kw "db/ident", W.Keyword ident) ident))
+  in
+  let entities =
+    [ entity sdk_u1 "card" (Some "user.class/card-existing")
+    ; entity sdk_u2 "Card" (Some "logseq.class/Card")
+    ; entity sdk_page_u "Topic" None
+    ; entity sdk_tag_u "Topic" (Some "user.class/Topic-existing")
+    ; entity sdk_dpage_u "PageOnly" None ]
+  in
+  let previous_worker = !Runtime.worker in
+  ignore (Fake_worker.install (fun method_ args ->
+    match method_ with
+    | "thread-api/get-tags-by-name" ->
+        let name = Option.bind (List.nth_opt args 1) W.as_string in
+        W.Array (List.filter (fun e ->
+          W.get e "db/ident" <> None
+          && Option.map String.lowercase_ascii (W.map_get_string e "block/title")
+             = Option.map String.lowercase_ascii name) entities)
+    | "thread-api/get-blocks" ->
+        let id = Option.bind (List.nth_opt args 1) (fun w ->
+          match W.elems w with
+          | [request] -> W.get request "id"
+          | _ -> None) in
+        let block = List.find_opt (fun e -> W.get e "block/uuid" = id) entities in
+        W.Array [W.Map [W.kw "block", Option.value block ~default:W.Nil]]
+    | _ -> W.Nil));
+  let rec run = function
+    | [] -> Js.Promise.resolve ()
+    | (name, expected) :: rest ->
+        let* parsed = Title_refs.parse ~origin_repo:"logseq_db_test" ("#" ^ name) in
+        (match parsed.refs, parsed.tags with
+         | [reference], [tag] ->
+             let uuid = W.map_get_uuid reference "block/uuid" in
+             let identity = match expected with
+               | Some expected_uuid ->
+                   uuid = Some expected_uuid
+                   && tag = Title_refs.uuid_lookup expected_uuid
+               | None ->
+                   uuid <> None && uuid <> Some sdk_dpage_u
+                   && W.map_get_uuid tag "block/uuid" = uuid
+                   && (match W.get reference "db/ident" with
+                       | Some (W.Keyword ident) ->
+                           String.starts_with ~prefix:("user.class/" ^ name ^ "-") ident
+                       | _ -> false)
+             in
+             check ("hashtag preserves exact class identity: " ^ name)
+               (identity && parsed.title = "#[[" ^ Option.value uuid ~default:"" ^ "]]")
+         | _ -> check ("hashtag preserves exact class identity: " ^ name) false);
+        run rest
+  in
+  let operation = run
+    ["Card", Some sdk_u2; "card", Some sdk_u1; "Topic", Some sdk_tag_u;
+     "PageOnly", None; "Missing", None] in
+  operation
+  |> Js.Promise.then_ (fun () -> Runtime.worker := previous_worker; Js.Promise.resolve ())
+  |> Js.Promise.catch (fun _ -> Runtime.worker := previous_worker; operation)
+
 let run ~finish =
+  test_fsrs_timestamp_roundtrip ~check;
   ignore (Fake_worker.install worker_handler);
   ignore (mount ());
   let install_emoji_fixture : unit -> unit = [%mel.raw
@@ -2272,5 +2352,9 @@ let run ~finish =
                       in
                       ignore
                         (Js.Promise.then_
-                           (fun () -> cleanup (); finish (); Js.Promise.resolve ())
+                           (fun () ->
+                             cleanup ();
+                             Js.Promise.then_
+                               (fun () -> finish (); Js.Promise.resolve ())
+                               (test_title_refs_class_identity ()))
                            settled)))))))

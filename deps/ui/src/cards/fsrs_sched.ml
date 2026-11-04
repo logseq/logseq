@@ -256,7 +256,7 @@ let wire_f f = Wire.Float f
 let state_wire ~rating card =
   let kw k v = (Wire.Keyword k, v) in
   Wire.Map
-    [ kw "due" (wire_num (Int64.to_int card.due))
+    [ kw "due" (Wire.Int64 card.due)
     ; kw "stability" (wire_f card.stability)
     ; kw "difficulty" (wire_f card.difficulty)
     ; kw "elapsed-days" (wire_num card.elapsed_days)
@@ -264,7 +264,7 @@ let state_wire ~rating card =
     ; kw "reps" (wire_num card.reps)
     ; kw "lapses" (wire_num card.lapses)
     ; kw "state" (Wire.Keyword (string_of_state card.cstate))
-    ; kw "last-repeat" (wire_num (Int64.to_int card.last_repeat))
+    ; kw "last-repeat" (Wire.Int64 card.last_repeat)
     ; kw "logseq/last-rating" (Wire.Keyword (string_of_rating rating))
     ]
 

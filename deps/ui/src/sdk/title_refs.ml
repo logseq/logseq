@@ -163,29 +163,19 @@ type resolved =
   { name : string; uuid : string; is_tag : bool; is_hash : bool
   ; fresh : bool; entity : Wire.t }
 
-(* cljs existing-markdown-hashtag-link-refs + tag-page?: a bare
-   hashtag resolves only to a Tag-class instance (its :block/tags
-   include logseq.class/Tag) — and never to a logseq.* built-in:
-   built-in classes are Tag-tagged too, so a same-named one ("Tag"
-   itself, title "Tag") would outrank the written "#tag". Resolve via
-   the class-only index, keeping only non-built-in entities *)
+(* Class titles are case-sensitive; the name index also returns differently
+   cased titles. Reuse exact matches, including built-in classes. *)
 let tag_class_by_name ~origin_repo name =
   let* w =
     Runtime.invoke "thread-api/get-tags-by-name"
       [ Wire.String origin_repo; Wire.String name ]
-  in
-  let is_builtin t =
-    match Wire.get t "db/ident" with
-    | Some (Wire.Keyword s) | Some (Wire.String s) ->
-        String.length s >= 7 && String.sub s 0 7 = "logseq."
-    | _ -> false
   in
   (* get-tags-by-name emits entity_map_wire (stub refs); a hit is
      re-fetched through get-blocks by uuid so the wire carries the sdk
      entity shape, same as get_entity *)
   match
     Wire.elems w
-    |> List.filter (fun t -> not (is_builtin t))
+    |> List.filter (fun t -> Wire.map_get_string t "block/title" = Some name)
     |> List.filter_map (fun t -> Wire.map_get_uuid t "block/uuid")
   with
   | uuid :: _ -> Sdk_util.get_by_id_for_repo origin_repo (Wire.Uuid uuid)

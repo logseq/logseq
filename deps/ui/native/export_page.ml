@@ -211,8 +211,5 @@ let save_to_file (st : S.t Signal.state) =
         | S.Edn -> "edn", "application/edn"
         | S.Png -> assert false
       in
-      let filename =
-        Printf.sprintf "logseq_%Ld.%s"
-          (Int64.of_float (Ui_services.time_now ())) ext
-      in
+      let filename = F.filename (Ui_services.time_now ()) ext in
       Ui_services.files_download_text ~filename ~mime content

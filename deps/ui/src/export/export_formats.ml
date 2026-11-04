@@ -4,6 +4,16 @@
    UI; this walks the exported markdown text instead: each "- " bullet
    is an item and leading indentation gives the nesting level. *)
 
+(* cljs-time's UTC DateTime string has no milliseconds or timezone suffix. *)
+let filename ms ext =
+  let timestamp =
+    String.sub (Js.Date.toISOString (Js.Date.fromFloat ms)) 0 19
+    |> String.to_seq
+    |> Seq.filter (fun c -> c <> '-' && c <> ':')
+    |> String.of_seq
+  in
+  Printf.sprintf "logseq_%s.%s" timestamp ext
+
 type node = {
   text : string;
   kids : node list;
