@@ -26,6 +26,17 @@ end)
 
 let ensure ctx = mount ctx initial
 
+(* Data publications advance the model revision without ending settings. *)
+let lifecycle_revision = ref 0
+
+let capture_context () =
+  let origin = Runtime.model () in
+  let revision = !lifecycle_revision in
+  let cell = state () in
+  fun () ->
+    ready () && state () == cell && !lifecycle_revision = revision
+    && (Runtime.model ()).Model.repo = origin.Model.repo
+
 (* storage-backed toggles bump tick so the pane
    reactive re-renders. Toggles are reachable without the pane mounted (cmdk
    "ui/toggle-wide-mode"), where there is nothing to re-render *)
@@ -87,8 +98,9 @@ let pull_journal repo =
      | _ -> None)
 
 let load () =
+  incr lifecycle_revision;
   let r = repo () in
-  let context_revision = (Runtime.model ()).Model.context_revision in
+  let current = capture_context () in
   let cell = state () in
   Signal.set cell { (value ()) with journal_uuid = None; date_format_saving = false };
   let jour_p = pull_journal r in
@@ -100,8 +112,7 @@ let load () =
           (Some u, Option.value f ~default:"MMM do, yyyy")
       | None -> (None, "MMM do, yyyy")
     in
-    if repo () = r && (Runtime.model ()).Model.context_revision = context_revision
-       && ready () && state () == cell then Runtime.signal_set cell
+    if current () then Runtime.signal_set cell
       { (value ()) with
         journal_uuid = uuid
       ; date_format = fmt
@@ -120,7 +131,9 @@ let activate () =
   (Ui_services.dom_body ()).Ui_services.set_attr "data-settings-tab" tab;
   if ready () then (Signal.set (state ()) { (value ()) with tab }; load ())
 
-let deactivate () = Ui_services.doc_rm_data "settingsTab"
+let deactivate () =
+  incr lifecycle_revision;
+  Ui_services.doc_rm_data "settingsTab"
 
 (* ---- config.edn accessors ---- *)
 
@@ -339,13 +352,7 @@ let set_editor_font_global b =
 (* ---- date format (Journal class title-format property) ---- *)
 
 let set_date_format fmt =
-  let origin = Runtime.model () in
-  let cell = state () in
-  let current () =
-    let model = Runtime.model () in
-    ready () && state () == cell && model.Model.repo = origin.Model.repo
-    && model.Model.context_revision = origin.Model.context_revision
-  in
+  let current = capture_context () in
   match (value ()).journal_uuid with
   | Some uuid ->
       set (fun s -> { s with date_format_saving = true });

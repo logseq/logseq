@@ -299,11 +299,9 @@ let dfmt_menu ~scope ~key mst options current =
            ~text:fmt
            ~selected:(fmt = current)
            ~on_press:(fun _ ->
-             let origin = Runtime.model () in
+             let settings_current = S.capture_context () in
              let active () =
-               let model = Runtime.model () in
-               Ui_effect.alive scope && model.Model.repo = origin.Model.repo
-               && model.Model.context_revision = origin.Model.context_revision
+               Ui_effect.alive scope && settings_current ()
              in
              if String.trim fmt <> "" && not (S.value ()).date_format_saving then
                ignore

@@ -385,7 +385,7 @@ let settings_date_format ~registry ~profile ~finish =
         Runtime.read_model := previous_model;
         Runtime.worker := previous_worker;
         finish ()
-    | (failed, stale) :: rest ->
+    | (failed, transition) :: rest ->
         Settings_state.st := None;
         let current = ref { Model.initial with repo = Some "format-save-fixture" } in
         Runtime.read_model := (fun () -> !current);
@@ -415,11 +415,16 @@ let settings_date_format ~registry ~profile ~finish =
         let saved = Settings_state.set_date_format "yyyy-MM-dd" in
         check "Journal format remains persisted value while its save is pending"
           ((Settings_state.value ()).date_format = original);
-        if stale then begin
-          current := { !current with context_revision = (!current).context_revision + 1 };
-          Settings_state.set (fun _ ->
-            { Settings_state.initial with date_format = "dd-MM-yyyy" })
-        end;
+        let stale = transition = `Navigate in
+        (match transition with
+         | `None -> ()
+         | `Refresh ->
+             current := Update.update !current (Action.Journals_loaded [])
+         | `Navigate ->
+             Settings_state.deactivate ();
+             current := Update.update !current (Action.Navigate_to Model.Home);
+             Settings_state.set (fun _ ->
+               { Settings_state.initial with date_format = "dd-MM-yyyy" }));
         ignore (Js.Promise.then_ (fun () ->
           !acknowledge ();
           Js.Promise.resolve ()) dispatched);
@@ -433,7 +438,7 @@ let settings_date_format ~registry ~profile ~finish =
           next rest;
           Js.Promise.resolve ()) settled)
   in
-  next [false, false; true, false; false, true]
+  next [false, `None; true, `None; false, `Refresh; false, `Navigate]
 
 let run_views ~registry ~profile ~finish =
   table_resize_transaction ();
