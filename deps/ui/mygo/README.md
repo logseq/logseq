@@ -68,6 +68,10 @@ remain environment-owned and are not part of this payload.
 The host routes document input synchronously through OCaml before native default
 handling. Document callbacks publish their flushed patches with the prevention
 result; the UI thread applies them before returning to native default handling.
+An unmodified Escape belongs to a committed, live native menu or popover before
+the enclosing document shortcut. The host leaves that key to MyGo without also
+dispatching it to OCaml; after the popup is removed, the next Escape follows the
+ordinary document route. Other keys and modified Escape keep the existing route.
 Standard text controls and raw extension inputs share the host's imperative
 value/selection queues, node-lifetime checks and committed-frame acknowledgements.
 Editor caret, selection and pointer queries use committed retained text
