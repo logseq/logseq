@@ -821,20 +821,43 @@ let keymap_editor st editing (r : Keymap_data.row) : t =
  fun ctx parent ->
   let id = Keymap_data.command_id r.title in
   let draft = Signal.state ctx.Lui_ui.ui_scheduler ([], false) in
+  let saved = Signal.state ctx.ui_scheduler (Keymap_data.revision (), None, "") in
   let close () =
-    Runtime.signal_set editing None
+    Runtime.signal_set editing None;
+    Runtime.signal_set st { (Runtime.signal_get st) with
+      km_revision = Keymap_data.revision () }
   in
-  let persist f =
+  let current () =
+    Keymap_data.row_with_shortcut ~mac:(Ui_services.env_is_mac ()) r
+      (Keymap_data.effective_shortcut id)
+  in
+  let persist message f =
     match f () with
-    | () -> close ();
-        Runtime.signal_set st { (Runtime.signal_get st) with
-          km_revision = Keymap_data.revision () }
+    | snapshot ->
+        Runtime.signal_set draft ([], false);
+        Runtime.signal_set saved (Keymap_data.revision (), Some snapshot, message)
     | exception _ -> Toast.error (T.t "ui/save-changes-error")
+  in
+  let accept () =
+    let keys, _ = Runtime.signal_get draft in
+    let value = String.concat " " keys in
+    if keys <> [] && not (Keymap_data.already_bound id value) then
+      let peers = (Keymap_data.binding_conflicts id value).exact in
+      let message = if peers = [] then T.t "keymap/shortcut-added"
+        else T.t1 "keymap/reassigned-from"
+          (String.concat ", " (List.map keymap_label peers)) in
+      persist message (fun () -> Keymap_data.reassign_binding id value)
   in
   let record ev =
     let strokes, committed = Runtime.signal_get draft in
     let change =
       if ev.Ui_services.composing then Keymap_record.Ignore
+      else if ev.key = Some "Enter" && (ev.meta || ev.ctrl) && strokes <> [] then
+        (accept (); Keymap_record.Ignore)
+      else if ev.key = Some "Backspace" && strokes <> [] &&
+        (Keymap_data.already_bound id (String.concat " " strokes)
+         || (Keymap_data.binding_conflicts id (String.concat " " strokes)).exact <> [])
+      then Keymap_record.Set ([], false)
       else if ev.key = Some "Backspace" then
         match Keymap_record.key ev with
         | None -> Keymap_record.Ignore
@@ -853,41 +876,62 @@ let keymap_editor st editing (r : Keymap_data.row) : t =
     ~on_dismiss:(fun _ -> close ())
     [ column ~gap:12 ~min_width:0
         [ text ~font_weight:600 ~value:(keymap_label r) []
-        ; column ~gap:8 ~min_width:0
+        ; reactive (fun _ -> column ~gap:8 ~min_width:0
             (List.mapi (fun i (binding : Keymap_data.binding) ->
               row ~key:("binding-" ^ string_of_int i) ~gap:8 ~cross:`center
                 ~min_width:0 ~flex_wrap:`wrap
                 [ keymap_binding ~key:("bound-" ^ string_of_int i) binding
                 ; Ui_components.button ~variant:`ghost ~size:`icon
                     ~icon:(`app "x") ~label:(T.t "keymap/remove-binding")
-                    ~on_press:(fun _ -> persist (fun () ->
-                        Keymap_data.remove_binding id binding.data)) [] ]) r.bindings)
+                    ~on_press:(fun _ -> persist (T.t "keymap/shortcut-removed") (fun () ->
+                        let bindings = Keymap_data.bindings id
+                          |> List.filter (fun value -> not (Keymap_data.same_binding value binding.data)) in
+                        Keymap_data.apply_binding_changes [id, Keymap_data.binding_value bindings])) [] ])
+              (current ()).bindings)) (Signal.value saved)
         ; text ~value:(T.t "keymap/press-a-shortcut") []
         ; reactive (fun (strokes, _) -> keymap_recorded_keys ~wrap:true strokes)
             (Signal.value draft)
         ; reactive (fun (strokes, _) ->
             let value = String.concat " " strokes in
             column ~gap:4 ~min_width:0
-              ((if List.exists (fun (binding : Keymap_data.binding) ->
-                    Keymap_data.same_binding value binding.data) r.bindings then
+              ((if Keymap_data.already_bound id value then
                   [text ~value:(T.t "keymap/already-bound") []]
-                else []) @ List.map (fun row ->
-                text ~value:(T.t1 "keymap/also-used-for-action" (keymap_label row)) [])
-                (Keymap_data.conflicting_rows id value))) (Signal.value draft)
+                else []) @
+               (let conflicts = Keymap_data.binding_conflicts id value in
+                List.map (fun row ->
+                  text ~value:(T.t1 "keymap/used-by-action" (keymap_label row)) []) conflicts.exact
+                @ List.map (fun peer ->
+                  row ~gap:4 ~flex_wrap:`wrap
+                    [text ~value:(T.t "keymap/deactivates-chord") [];
+                     text ~value:(keymap_label peer) []]) conflicts.prefix
+                @ List.map (fun row ->
+                  text ~value:(T.t1 "keymap/also-used-for-action" (keymap_label row)) []) conflicts.cross_context)))
+            (Signal.value draft)
+        ; reactive (fun (_, snapshot, message) ->
+            row ~gap:8 ~min_width:0 ~flex_wrap:`wrap
+              ([text ~value:message []] @ match snapshot with
+               | None -> []
+               | Some snapshot ->
+                   [Ui_components.button ~variant:`ghost ~size:`sm
+                     ~text:(T.t "keymap/undo") ~on_press:(fun _ ->
+                       match Keymap_data.save_shortcuts snapshot with
+                       | () -> Runtime.signal_set draft ([], false);
+                           Runtime.signal_set saved (Keymap_data.revision (), None, "")
+                       | exception _ -> Toast.error (T.t "ui/save-changes-error")) []]))
+            (Signal.value saved)
         ; row ~gap:8 ~min_width:0 ~flex_wrap:`wrap
-            [ Ui_components.button ~variant:`primary ~size:`sm ~text:(T.t "ui/save")
+            [ Ui_components.button ~variant:`primary ~size:`sm
+                ~text:(reactive (fun (keys, _) ->
+                  if (Keymap_data.binding_conflicts id (String.concat " " keys)).exact = []
+                  then T.t "ui/save" else T.t "keymap/reassign") (Signal.value draft))
                 ~disabled:(reactive (fun (keys, _) -> keys = [] ||
-                    List.exists (fun (binding : Keymap_data.binding) ->
-                      Keymap_data.same_binding (String.concat " " keys) binding.data) r.bindings)
+                    Keymap_data.already_bound id (String.concat " " keys))
                     (Signal.value draft))
-                ~on_press:(fun _ ->
-                  let keys, _ = Runtime.signal_get draft in
-                  if keys <> [] then persist (fun () ->
-                      Keymap_data.add_binding id (String.concat " " keys))) []
+                ~on_press:(fun _ -> accept ()) []
             ; Ui_components.button ~variant:`outline ~size:`sm
                 ~text:(T.t "keymap/reset-to-default")
-                ~disabled:(not (Keymap_data.custom r))
-                ~on_press:(fun _ -> persist (fun () -> Keymap_data.save_shortcut id None)) []
+                ~disabled:(reactive (fun _ -> not (Keymap_data.custom r)) (Signal.value saved))
+                ~on_press:(fun _ -> persist (T.t "keymap/reset") (fun () -> Keymap_data.reset_binding id)) []
             ; Ui_components.button ~variant:`ghost ~size:`sm ~text:(T.t "ui/cancel")
                 ~on_press:(fun _ -> close ()) []
             ]

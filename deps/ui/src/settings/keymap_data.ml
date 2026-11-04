@@ -158,23 +158,24 @@ let canonical_binding binding =
 
 let same_binding a b = canonical_binding a = canonical_binding b
 
-let save_shortcut id binding =
+let save_shortcuts changes =
   let binding_set bindings =
     List.map canonical_binding bindings |> List.sort_uniq compare
   in
-  let matches_default = function
-    | Binds bindings ->
-        (match default_shortcut id with
-         | Binds defaults -> binding_set bindings = binding_set defaults
-         | Unbound | Disabled -> false)
-    | Unbound | Disabled -> false
-  in
-  let configured =
+  let configured = List.fold_left (fun configured (id, binding) ->
+    let matches_default = function
+      | Binds bindings ->
+          (match default_shortcut id with
+           | Binds defaults -> binding_set bindings = binding_set defaults
+           | Unbound | Disabled -> false)
+      | Unbound | Disabled -> false
+    in
     match binding with
-    | None -> Command_map.remove id !user_shortcuts
+    | None -> Command_map.remove id configured
     | Some binding when matches_default binding ->
-        Command_map.remove id !user_shortcuts
-    | Some binding -> Command_map.add id binding !user_shortcuts
+        Command_map.remove id configured
+    | Some binding -> Command_map.add id binding configured)
+      !user_shortcuts changes
   in
   let entries = Command_map.bindings configured |> List.map (fun (id, binding) ->
       Wire.Keyword id,
@@ -185,6 +186,8 @@ let save_shortcut id binding =
   Ui_services.storage_set "ls-shortcuts" (Edn.to_string (Wire.Map entries));
   user_shortcuts := configured;
   incr shortcut_revision
+
+let save_shortcut id binding = save_shortcuts [id, binding]
 
 let add_binding id value =
   let bindings = match effective_shortcut id with Binds bindings -> bindings | _ -> [] in
@@ -249,18 +252,96 @@ let unique_rows items =
   in
   List.rev rows
 
-let conflicting_rows id binding =
-  let rec prefix a b = match a, b with
+let rec binding_prefix a b = match a, b with
     | [], _ -> true
-    | x :: xs, y :: ys when x = y -> prefix xs ys
+    | x :: xs, y :: ys when x = y -> binding_prefix xs ys
     | _ -> false
+
+let bindings_overlap a b =
+  let a, b = canonical_binding a, canonical_binding b in
+  a <> [] && b <> [] && (binding_prefix a b || binding_prefix b a)
+
+let handler row =
+  match String.index_opt row.title '#' with
+  | Some index -> String.sub row.title (index + 1) (String.length row.title - index - 1)
+  | None -> invalid_arg "Keymap_data: shortcut has no handler"
+
+let global_handler = function
+  | "editor-global" | "block-editing-only" | "global-non-editing-only"
+  | "global-prevent-default" | "misc" -> true
+  | _ -> false
+
+let coactive a b =
+  let editing = function "editor-global" | "block-editing-only" -> true | _ -> false in
+  not ((editing a && b = "global-non-editing-only")
+       || (editing b && a = "global-non-editing-only"))
+
+type conflicts = { exact : row list; prefix : row list; cross_context : row list }
+
+let binding_conflicts id binding =
+  let rows = current_items () |> unique_rows in
+  let group = handler (List.find (fun row -> command_id row.title = id) rows) in
+  let same_context other =
+    group = other || (group = "pdf" && other = "global-prevent-default")
+    || (global_handler group && global_handler other && coactive group other)
   in
   let candidate = canonical_binding binding in
-  if candidate = [] then []
-  else current_items () |> unique_rows |> List.filter (fun row ->
-      command_id row.title <> id && List.exists (fun bound ->
-        let sequence = canonical_binding bound.data in
-        prefix candidate sequence || prefix sequence candidate) row.bindings)
+  List.fold_right (fun row result ->
+    if candidate = [] || command_id row.title = id then result
+    else
+      let other = handler row in
+      let exact = List.exists (fun bound -> same_binding binding bound.data) row.bindings in
+      if exact && same_context other then { result with exact = row :: result.exact }
+      else if exact && not (global_handler group && global_handler other)
+      then { result with cross_context = row :: result.cross_context }
+      else if group = other && List.exists (fun bound -> bindings_overlap binding bound.data) row.bindings
+      then { result with prefix = row :: result.prefix }
+      else result) rows { exact = []; prefix = []; cross_context = [] }
+
+let conflicting_rows id binding =
+  let conflicts = binding_conflicts id binding in
+  conflicts.exact @ conflicts.prefix
+
+let bindings id = match effective_shortcut id with Binds bindings -> bindings | _ -> []
+
+let already_bound id binding =
+  let candidate = canonical_binding binding in
+  List.exists (fun value ->
+    let sequence = canonical_binding value in
+    sequence = candidate || match sequence, candidate with
+      | [head], first :: _ | first :: _, [head] -> head = first
+      | _ -> false) (bindings id)
+
+let apply_binding_changes changes =
+  let snapshot = List.map (fun (id, _) -> id, Command_map.find_opt id !user_shortcuts) changes in
+  save_shortcuts changes;
+  snapshot
+
+let binding_value values : shortcut option =
+  Some (match values with [] -> Disabled | bindings -> Binds bindings)
+
+let reassign_binding id value =
+  if canonical_binding value = [] || already_bound id value then
+    invalid_arg "Keymap_data: shortcut already bound or empty";
+  let conflicts = (binding_conflicts id value).exact in
+  let changes = List.map (fun row ->
+      let peer = command_id row.title in
+      peer, binding_value (List.filter (fun binding -> not (same_binding value binding)) (bindings peer))) conflicts in
+  apply_binding_changes ((id, Some (Binds (bindings id @ [value]))) :: changes)
+
+let reset_binding id =
+  let defaults = match default_shortcut id with Binds values -> values | _ -> [] in
+  let peers = List.concat_map (fun value -> (binding_conflicts id value).exact) defaults
+    |> List.sort_uniq (fun a b -> String.compare a.title b.title) in
+  let changes = List.filter_map (fun row ->
+      let peer = command_id row.title in
+      let peer_defaults = match default_shortcut peer with Binds values -> values | _ -> [] in
+      let strip value = List.exists (same_binding value) defaults
+        && not (List.exists (same_binding value) peer_defaults) in
+      let before = bindings peer in
+      let after = List.filter (fun value -> not (strip value)) before in
+      if before = after then None else Some (peer, binding_value after)) peers in
+  apply_binding_changes ((id, None) :: changes)
 
 let command_name row =
   let title = String.sub row.title 1 (String.length row.title - 1) in

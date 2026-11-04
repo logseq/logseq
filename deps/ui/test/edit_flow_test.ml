@@ -795,6 +795,46 @@ let test_exit_after_navigation (h : host) =
   reset_editor ();
   Js.Promise.resolve ()
 
+let test_navigation_retires_dirty_editor (h : host) =
+  let* () = settle h 40 in
+  stage_page h [ Test_check.block "b1" "old" ];
+  set_editing ~uuid:"b1" ~buffer:"saved on navigation" ~caret:19 ~base:"old";
+  let hash = Ui_services.nav_hash () in
+  let complete = ref (fun () -> ()) in
+  let saved = ref W.Nil in
+  Runtime.worker := Some
+    { Worker_client.invoke_fn = (fun name args ->
+        if name = "thread-api/apply-outliner-ops" then
+          Js.Promise.make (fun ~resolve ~reject:_ ->
+              complete := (fun () ->
+                  saved := W.Array args;
+                  resolve (W.Map [ W.Keyword "result", W.Nil ]) [@u]))
+        else if name = "thread-api/get-latest-journals" then Js.Promise.resolve (W.List [])
+        else Js.Promise.resolve
+          (if owned_call name then worker_handler h name args else h.base_handler name args))
+    ; on_message = (fun _ _ -> ())
+    ; dead = Js.Promise.make (fun ~resolve:_ ~reject:_ -> ()) };
+  Ui_services.nav_set_hash "#/page/navigation-target";
+  Router.resolve ();
+  check "navigation begins with a legitimately empty destination page store"
+    ((Runtime.model ()).Model.route = Model.Page "navigation-target"
+     && (Runtime.model ()).Model.route_page = None);
+  check "navigation retires the source editor before its save resolves"
+    (S.editing () = None);
+  h.restore { (h.snapshot ()) with Model.repo = Some "navigation-other-graph";
+    route = Model.Page "other-page"; route_page = None };
+  let* () = h.wait_ms 25 in
+  !complete ();
+  let* () = settle h 40 in
+  check "navigation persists the captured source buffer in its original graph"
+    (match !saved with
+     | W.Array [ W.String repo; W.Array [ W.Array [ W.Keyword "save-block"; W.Array (bm :: _) ] ]; _ ] ->
+         repo = h.repo && W.get bm "block/title" = Some (W.String "saved on navigation")
+     | _ -> false);
+  Ui_services.nav_set_hash hash;
+  reset_editor ();
+  Js.Promise.resolve ()
+
 let test_history_after_navigation (h : host) =
   let* () = settle h 40 in
   stage_page h [ Test_check.block "b1" "first"; Test_check.block "b2" "second" ];
@@ -976,6 +1016,7 @@ let async_stage (h : host) : unit Js.Promise.t =
   let* () = test_indent_outdent h in
   let* () = test_exit_waits_for_save h in
   let* () = test_exit_after_navigation h in
+  let* () = test_navigation_retires_dirty_editor h in
   let* () = test_history_after_navigation h in
   let* () = test_queued_history_origin h in
   let* () = test_delete_selection_history h in

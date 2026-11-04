@@ -844,7 +844,7 @@ let resolve () =
   | _ ->
       (* commit and close any in-progress edit before the route swaps
          (cljs exits editing on navigation) *)
-      Editor_actions.exit_edit ~select:false;
+      Editor_actions.flush_edit ();
       (* cljs unmounts its modal stack on route change *)
       if Dialogs_state.ready () then Dialogs_state.close_all ();
       (* Page fetches start before the commit — the

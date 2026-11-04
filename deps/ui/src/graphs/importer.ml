@@ -12,16 +12,15 @@ module T = I18n
    promise-chained — bridge at the call site *)
 let promise_of = Subs_state.promise_of_task
 
-let finish_import repo label =
-  let short = Graphs_ops.short_name repo in
-  Toast.success (T.import_finished label short);
+let finish_import repo =
+  Toast.success (T.t "import/file-finished");
   Ui_services.timers_later ~ms:4000 (fun () ->
       ignore (Graphs_ops.refresh ());
       ignore (Graphs_ops.navigate_journal repo))
 
 (* name prompt -> validate -> run import; `run` resolves true only when
    the import actually landed (it may toast a local error itself) *)
-let ask_name_and_run ?(restored=false) label run =
+let ask_name_and_run ?(restored=false) run =
   Dialogs_state.prompt ~title:(T.t "import/new-graph-name") ~on_submit:(fun name ->
       let name = String.trim name in
       if name = "" then Toast.warning (T.t "import/empty-graph-name")
@@ -42,8 +41,8 @@ let ask_name_and_run ?(restored=false) label run =
                (run repo))
           in
           if ok then
-            if restored then Toast.success (T.import_finished label (Graphs_ops.short_name repo))
-            else finish_import repo label;
+            if restored then Toast.success (T.t "import/file-finished")
+            else finish_import repo;
           Js.Promise.resolve ())))
   ()
 
@@ -319,17 +318,17 @@ let import_debug_transit repo (file : Ui_services.file) =
 let run_files kind files =
   match (kind, files) with
   | "import-sqlite-db", f :: _ ->
-      ask_name_and_run "SQLite DB" (fun repo -> import_sqlite_db repo f)
+      ask_name_and_run (fun repo -> import_sqlite_db repo f)
   | "import-db-edn", f :: _ ->
-      ask_name_and_run "EDN" (fun repo -> import_edn repo f)
+      ask_name_and_run (fun repo -> import_edn repo f)
   | "import-file-graph", _ :: _ ->
-      ask_name_and_run ~restored:true "file graph" (fun repo ->
+      ask_name_and_run ~restored:true (fun repo ->
           import_file_graph repo files)
   | "import-sqlite-zip", f :: _ ->
-      ask_name_and_run "SQLite DB + assets" (fun repo ->
+      ask_name_and_run (fun repo ->
           import_sqlite_zip repo f)
   | "import-debug-transit", f :: _ ->
-      ask_name_and_run "debug transit" (fun repo ->
+      ask_name_and_run (fun repo ->
           import_debug_transit repo f)
   | _ -> ()
 
