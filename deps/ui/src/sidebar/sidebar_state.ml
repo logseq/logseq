@@ -39,6 +39,8 @@ type item =
 
 type t =
   { favorites : Model.page list Signal.state
+  ; home_page : Model.page option Signal.state
+  ; favorite_drop : (string * bool) option Signal.state
   ; recents : Model.page list Signal.state
   ; nav_checked : string list Signal.state
   ; nav_tag_titles : (string * string) list Signal.state
@@ -403,6 +405,34 @@ let load_recents repo st =
     (fun w ->
       if gen = !recents_gen && Runtime.repo () = repo then
         Runtime.signal_set st.recents (pages_of_wire w))
+
+let configured_home (m : Model.t) =
+  Option.bind (Wire.get m.graph_config "default-home") (fun home ->
+    Option.bind (Wire.map_get_string home "page") (fun name ->
+      if String.trim name = "" then None else Some name))
+
+let home_route_active (m : Model.t) home =
+  match m.route, m.route_page, home with
+  | Model.Page _, Some current, Some home ->
+      current.Model.page_uuid <> None && current.page_uuid = home.Model.page_uuid
+  | _ -> false
+
+let home_request = Ui_effect.request ()
+let home_context = ref None
+
+let load_home_page repo st =
+  let name = configured_home (model ()) in
+  home_context := Some (repo, name);
+  let gen = Ui_effect.issue home_request in
+  match name with
+  | None -> Runtime.signal_set st.home_page None
+  | Some name ->
+      then_keep
+        (Runtime.invoke2 "thread-api/get-page-route-info" (Wire.String repo)
+           (Wire.String name))
+        (fun info ->
+          if Ui_effect.is_current home_request gen && Runtime.repo () = repo then
+            Runtime.signal_set st.home_page (Decode.page_of_summary info))
 
 let nav_titles_req = Ui_effect.request ()
 
@@ -831,6 +861,18 @@ let open_uuid ?(edit = false) st uuid =
        | None -> ());
       Js.Promise.resolve ())
 
+let open_today_journal st =
+  let repo = Runtime.repo () in
+  if repo <> "" then
+    then_keep
+      (Runtime.invoke2 "thread-api/get-journal-page-by-day" (Wire.String repo)
+         (Wire.Int (Dates.today_journal_day ())))
+      (fun page ->
+        if Runtime.repo () = repo then
+          match Wire.map_get_uuid page "block/uuid" with
+          | Some uuid -> open_uuid st uuid
+          | None -> ())
+
 let open_sticky_item st kind =
   let repo = Runtime.repo () in
   if repo = "" then ()
@@ -925,6 +967,47 @@ let refresh_items repo st =
 
 (* ---------- favorites ---------- *)
 
+let favorite_order ~source ~target ~before uuids =
+  if source = target || not (List.mem source uuids && List.mem target uuids) then uuids
+  else
+    let rec insert = function
+      | [] -> []
+      | uuid :: rest when uuid = target ->
+          if before then source :: uuid :: rest else uuid :: source :: rest
+      | uuid :: rest -> uuid :: insert rest
+    in
+    insert (List.filter ((<>) source) uuids)
+
+let favorite_drop_at st x y =
+  let target =
+    Option.bind (Ui_services.dom_element_at x y) (fun hit ->
+      Option.bind (hit.Ui_services.closest "#left-sidebar .favorites [data-lp-ref]")
+        (fun row ->
+          Option.map (fun uuid ->
+            let _, top, _, height = row.Ui_services.rect () in
+            (uuid, y < top +. height /. 2.))
+            (row.Ui_services.attr "data-lp-ref")))
+  in
+  Runtime.signal_set st.favorite_drop target
+
+let finish_favorite_drag st ~repo ~source =
+  let target = Runtime.signal_get st.favorite_drop in
+  Runtime.signal_set st.favorite_drop None;
+  if Runtime.repo () = repo then
+    match target with
+    | None -> ()
+    | Some (target, before) ->
+        let uuids = List.filter_map (fun (p : Model.page) -> p.page_uuid)
+            (Runtime.signal_get st.favorites) in
+        let reordered = favorite_order ~source ~target ~before uuids in
+        if reordered <> uuids then begin
+          incr favorites_gen;
+          then_keep
+            (Runtime.invoke2 "thread-api/reorder-favorites" (Wire.String repo)
+               (Wire.Array (List.map (fun uuid -> Wire.Uuid uuid) reordered)))
+            (fun _ -> if Runtime.repo () = repo then load_favorites repo st)
+        end
+
 let toggle_favorite_uuid st u =
   match (model ()).Model.repo with
   | Some repo ->
@@ -1005,6 +1088,9 @@ let on_sync st affected =
         load_favorites repo st;
       if sets_hit || navigation_hits affected (Runtime.signal_get st.recents) then
         load_recents repo st;
+      if sets_hit || navigation_hits affected
+          (Option.to_list (Runtime.signal_get st.home_page)) then
+        load_home_page repo st;
       if sets_hit || item_hits affected st then refresh_items repo st
   | None -> ()
 
@@ -1043,6 +1129,16 @@ let publish_navigation_page st (page : Model.page) =
   publish st.recents
 
 let on_model st (m : Model.t) =
+  (match m.repo with
+   | Some repo when !home_context <> Some (repo, configured_home m) ->
+       Runtime.signal_set st.favorite_drop None;
+       Runtime.signal_set st.home_page None;
+       load_home_page repo st
+   | None ->
+       ignore (Ui_effect.issue home_request);
+       home_context := None;
+       Runtime.signal_set st.home_page None
+   | _ -> ());
   (match m.Model.repo with
    | Some repo when !loaded_repo <> Some repo ->
        loaded_repo := Some repo;
@@ -1215,6 +1311,8 @@ let init (ms : Model.t Signal.signal) : t =
       let owner = (Signal.signal_owner (ms)) in
       let st =
         { favorites = Signal.state owner []
+        ; home_page = Signal.state owner None
+        ; favorite_drop = Signal.state owner None
         ; recents = Signal.state owner []
         ; nav_checked = Signal.state owner (nav_checked_of_storage ())
         ; nav_tag_titles = Signal.state owner []

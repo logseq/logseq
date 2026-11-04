@@ -240,7 +240,7 @@ let flashcards_config ~registry ~profile =
       ~view:(fun ctx ms _ ->
         let state value=Signal.state ctx.Lui_ui.ui_scheduler value in
         let sidebar : Sidebar_state.t =
-          {favorites=state [];recents=state [];nav_checked=state ["flashcards";"all-pages"];
+          {favorites=state [];home_page=state None;favorite_drop=state None;recents=state [];nav_checked=state ["flashcards";"all-pages"];
            nav_tag_titles=state [];items=state [];open_menu=state "";groups_collapsed=state [];
            left_width=state 246.;right_fraction=state 0.3;viewport_w=state 1280.} in
         popup:=Some (Popups_state.make ctx.Lui_ui.ui_scheduler);
@@ -1667,7 +1667,7 @@ let run_views ~registry ~profile ~finish =
     ~reducer:(fun m () -> m) ~view:(fun ctx ms _ ->
       let state value = Signal.state ctx.Lui_ui.ui_scheduler value in
       let st : Sidebar_state.t =
-        {favorites=state [target];recents=state [];nav_checked=state [];
+        {favorites=state [target];home_page=state None;favorite_drop=state None;recents=state [];nav_checked=state [];
          nav_tag_titles=state [];items=state [];
          open_menu=state "";groups_collapsed=state [];
          left_width=state 246.;right_fraction=state 0.3;viewport_w=state 1440.} in

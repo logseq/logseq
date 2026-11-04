@@ -3168,6 +3168,18 @@ let test_properties_data () =
 
 (* ---- sidebar_state ---- *)
 
+let test_sidebar_favorite_order () =
+  let original = ["a"; "b"; "c"] in
+  check "favorite moves preserve every identity and destination side"
+    (List.for_all (fun (source, target, before, expected) ->
+       Sidebar_state.favorite_order ~source ~target ~before original = expected)
+      [ ("a", "c", false, ["b"; "c"; "a"])
+      ; ("c", "a", true, ["c"; "a"; "b"])
+      ; ("a", "b", true, original)
+      ; ("b", "b", false, original)
+      ; ("gone", "b", false, original)
+      ; ("a", "gone", true, original) ])
+
 let test_sidebar_recents () =
   let previous = Ui_services.storage_get "recent-pages" in
   Fun.protect
@@ -4535,6 +4547,7 @@ let () =
   test_decode_rtc ();
   test_properties_data ();
   test_sidebar_recents ();
+  test_sidebar_favorite_order ();
   test_sidebar_state ();
   test_settings_state ();
   test_cards_state ();
