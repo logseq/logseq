@@ -18,7 +18,7 @@ opam option --global 'wrap-remove-commands=[]'
 # would leak into CI builds untested, and Melange can only run datascript
 # code free of native-only externals such as Marshal.*. Bump deliberately
 # when upstream lands wanted changes.
-DATASCRIPT_SHA=7acb4e8c324f9aee81e9feb936da75b49ee4c0ab
+DATASCRIPT_SHA=0dd20de9c2640924dcc261cc20dfc3eeb68b9b33
 opam pin add -y -n datascript_ocaml.dev "git+https://github.com/logseq/datascript-ocaml.git#${DATASCRIPT_SHA}"
 opam pin add -y -n datascript-ocaml-melange.dev "git+https://github.com/logseq/datascript-ocaml.git#${DATASCRIPT_SHA}"
 opam pin add -y -n datascript-ocaml-native.dev "git+https://github.com/logseq/datascript-ocaml.git#${DATASCRIPT_SHA}"
