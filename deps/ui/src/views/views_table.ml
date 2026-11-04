@@ -648,7 +648,15 @@ let header_button inst (c : V.column) : t =
 
 let set_column_sort inst (c : V.column) asc =
   V.update inst (fun s ->
-      { s with V.sorting = [ { V.s_id = c.V.c_id; s_asc = asc } ] });
+      let sorting =
+        if List.exists (fun so -> so.V.s_id = c.V.c_id) s.V.sorting then
+          List.map
+            (fun so ->
+              if so.V.s_id = c.V.c_id then { so with V.s_asc = asc } else so)
+            s.V.sorting
+        else { V.s_id = c.V.c_id; s_asc = asc } :: s.V.sorting
+      in
+      { s with V.sorting = sorting });
   V.persist_sorting inst;
   refresh inst
 
