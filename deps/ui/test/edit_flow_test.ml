@@ -398,6 +398,47 @@ let test_save_debounce (h : host) =
   reset_editor ();
   Js.Promise.resolve ()
 
+let test_embed_persists_erased_buffer (h : host) =
+  let* () = settle h 40 in
+  let rec run = function
+    | [] -> Js.Promise.resolve ()
+    | prefix :: rest ->
+        let query = "Embed destination" in
+        let saved_query = prefix ^ query in
+        stage_page h [ Test_check.block "b1" saved_query ];
+        set_editing ~uuid:"b1" ~buffer:saved_query
+          ~caret:(String.length saved_query) ~base:saved_query;
+        let inserted_title = ref None in
+        let embed_host =
+          { h with base_handler = (fun name args ->
+              match name, args with
+              | "thread-api/get-case-page", _ ->
+                  W.Map [ W.kw "db/id", W.Int 197 ]
+              | "thread-api/apply-outliner-ops", [ _; W.Array os; _ ] ->
+                  if List.exists (fun o -> op_name o = "insert-blocks") os then
+                    inserted_title :=
+                      Option.map (fun p -> titles_of p) !Runtime.current_page;
+                  h.base_handler name args
+              | _ -> h.base_handler name args) }
+        in
+        install_worker ~repo:h.repo embed_host;
+        (* Autocomplete erases the query in the live editor, after the
+           worker has already persisted it. *)
+        A.update_model "b1" (fun m -> EM.set_source m prefix);
+        Editor_embed.insert query;
+        let rec wait remaining =
+          if Option.is_some !inserted_title || remaining = 0 then
+            Js.Promise.resolve ()
+          else let* () = h.wait_ms 25 in wait (remaining - 1)
+        in
+        let* () = wait 40 in
+        check "embed sees the persisted post-erase buffer, preserving its prefix"
+          (!inserted_title = Some [ prefix ]);
+        reset_editor ();
+        run rest
+  in
+  run [ ""; "kept prefix " ]
+
 let test_pending_save_order (h : host) =
   let* () = settle h 40 in
   stage_page h
@@ -922,6 +963,7 @@ let async_stage (h : host) : unit Js.Promise.t =
   let saved = h.snapshot () in
   let* () = test_composition h in
   let* () = test_save_debounce h in
+  let* () = test_embed_persists_erased_buffer h in
   let* () = test_pending_save_order h in
   let* () = test_queued_input h in
   let* () = test_failed_apply_keeps_base h in
