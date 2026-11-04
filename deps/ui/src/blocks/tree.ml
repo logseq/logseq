@@ -95,13 +95,14 @@ let row_class_sig_of (bs : Model.block Signal.signal) =
 let effective_collapsed_cv ~scope uuid default (v : S.collapse_view) =
   S.effective_collapsed_in_view ~scope uuid default v
 
-let row_attrs_of ~scope ~depth uuid (b : Model.block)
+let row_attrs_of ~scope ~depth ~editable uuid (b : Model.block)
     (v : S.collapse_view) =
   let has_children = S.children_of b <> [] in
   let embed = b.Model.block_link <> None in
   (* the row's DOM id is the kind's accessibility-identifier — it stays
      out of data_attrs so the id prop owns it *)
   [ ("data-blockid", uuid)
+  ; ("data-editable", string_of_bool editable)
   ; ("data-containerid", uuid)
   ; ("data-block-title", b.block_title)
   ; ("data-comment-item", string_of_bool b.Model.block_is_comment)
@@ -126,16 +127,16 @@ let row_attrs_of ~scope ~depth uuid (b : Model.block)
   @ (if embed then [ ("data-originalblockid", uuid); ("data-embed", "true") ]
      else [])
 
-let row_attrs_sig ~scope ~depth uuid (b : Model.block) =
+let row_attrs_sig ~scope ~depth ~editable uuid (b : Model.block) =
   Signal.map
-    (fun v -> row_attrs_of ~scope ~depth uuid b v)
+    (fun v -> row_attrs_of ~scope ~depth ~editable uuid b v)
     (S.collapse_sig ())
 
-let row_attrs_sig_of ~scope ~depth (bs : Model.block Signal.signal) =
+let row_attrs_sig_of ~scope ~depth ~editable (bs : Model.block Signal.signal) =
   Signal.map2
     (fun (b : Model.block) (v : S.collapse_view) ->
       let uuid = Option.value b.block_uuid ~default:"" in
-      row_attrs_of ~scope ~depth uuid b v)
+      row_attrs_of ~scope ~depth ~editable uuid b v)
     bs (S.collapse_sig ())
 let collapsed_sig ~scope (b : Model.block) =
   let uuid = Option.value b.block_uuid ~default:"" in
@@ -836,7 +837,7 @@ and row_el ~depth ~editable ~virtualize scope ~(library : bool)
                 "var(--ls-block-highlight-color)"
               else "transparent")
             (S.selected_sig ()))
-       ~data_attrs_signal:(row_attrs_sig ~scope ~depth uuid b)
+       ~data_attrs_signal:(row_attrs_sig ~scope ~depth ~editable uuid b)
     [ row_main ~editable ~library scope b
     ; (* .ls-block-content-indent: block properties area + block-below
          pills, sibling of .block-main-container *)
@@ -899,7 +900,7 @@ and row_sig ~depth ~editable ~library ~virtualize scope
                 "var(--ls-block-highlight-color)"
               else "transparent")
             bs (S.selected_sig ()))
-       ~data_attrs_signal:(row_attrs_sig_of ~scope ~depth bs)
+       ~data_attrs_signal:(row_attrs_sig_of ~scope ~depth ~editable bs)
     [ reactive
         ~equal:
           (fun ((a : Model.block), ga, ia) ((b : Model.block), gb, ib) ->
@@ -1072,7 +1073,7 @@ and block_row_static ?(depth = 0) ?(library = false) (b : Model.block) : t =
     (column ~key:("rfs-" ^ key)
        ~accessibility_identifier:("ls-block-" ^ key)
        ~transition:Ui_components.block_transition
-       ~data_attrs_signal:(row_attrs_sig ~scope:"ref" ~depth uuid b)
+       ~data_attrs_signal:(row_attrs_sig ~scope:"ref" ~depth ~editable:false uuid b)
     [ row ~key:("main-" ^ key)
         ~style_class:"block-main-container" ~gap:4
         ~data_attrs:(heading_attrs b)
