@@ -82,6 +82,7 @@ let installed = State_cell.Once.make ()
 let install () =
   State_cell.Once.run installed (fun () ->
     S.chain_worker ();
+    Ui_services.nav_on_navigate S.close_overlays;
     Ui_services.dom_on_document_event "keydown" on_keydown)
 
 (* install () runs once per app startup from the entry points

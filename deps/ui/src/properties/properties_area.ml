@@ -63,8 +63,8 @@ let property_icon row =
         [ box ~style_class:"bullet" ~width:5 ~height:5 ~corner_radius:3
             ~background:"var(--ls-secondary-text-color)" [] ]
 
-(* the key (name + bullet) opens the property menu — the dropdown_menu
-   anchors to the enclosing stack. cljs property-key-cp skips the
+(* the key (name + bullet) opens a retained overlay so property refreshes
+   do not reset the active pane. cljs property-key-cp skips the
    .property-icon picker for other-position keys (pills) *)
 let key_cell (ctx : V.ctx) ~owner_is_tag ~owner_title ?(icon = true)
     row : t =
@@ -72,8 +72,7 @@ let key_cell (ctx : V.ctx) ~owner_is_tag ~owner_title ?(icon = true)
   if Ui_services.env_publishing () then
     text ~style_class:"property-k" ~value:(D.row_title row) [] context parent
   else
-  let sched = context.Lui_ui.ui_scheduler in
-  let menu_open = Signal.state sched false in
+  let anchor_id = "property-key-" ^ ctx.owner_key ^ "-" ^ Option.get (D.row_ident row) in
   (Lui_elements.row ~gap:4 ~cross:`center ~min_height:28 ~min_width:0 ~grow:1.
      ~style_class:"property-key-inner"
      [ (if icon then property_icon row else Logseq_el.nothing)
@@ -84,13 +83,15 @@ let key_cell (ctx : V.ctx) ~owner_is_tag ~owner_title ?(icon = true)
          ~padding:0 ~min_height:0
          ~label:(D.row_title row)
          ~text:(D.row_title row)
-         ~on_press:(fun _ -> Runtime.signal_set menu_open true)
+         ~accessibility_identifier:anchor_id
+         ~on_press:(fun _ ->
+           match Ui_services.dom_by_id anchor_id with
+           | Some anchor ->
+               Menu.open_menu ~anchor ~owner_uuid:ctx.block_uuid
+                 ~owner_id:ctx.block_id ~owner_is_tag ~owner_title
+                 ~refresh:ctx.refresh ~with_title:false row
+           | None -> ())
          []
-     ; if_ ~test:(Signal.value menu_open)
-         (Menu.menu_view ~owner_uuid:ctx.block_uuid ~owner_id:ctx.block_id
-            ~owner_is_tag ~owner_title ~refresh:ctx.refresh
-            ~close:(fun () -> Runtime.signal_set menu_open false)
-            row)
      ])
     context parent
 
