@@ -736,19 +736,17 @@ let content_group st ~key ~class_ ~label ~items_sig ~li_class ~ul_class
                ~on_press:(fun _ ->
                  Sidebar_state.toggle_group_collapsed st class_)
                (Ui_components.with_props
-                  [ Ui_components.Prop.inset_top (-4.)
+                  [ Ui_components.Prop.position `sticky
+                  ; Ui_components.Prop.inset_top (-4.)
                   ; Ui_components.Prop.z_index 2
+                  ; Ui_components.Prop.background "var(--left-sidebar-bg-color)"
+                  ; Ui_components.Prop.padding_left 8
+                  ; Ui_components.Prop.padding_right 4
                   ; Ui_components.Prop.user_select `none
                   ; Ui_components.Prop.cursor `pointer ]
                   (row ~key:(key ^ "-hd") ~cross:`center
                         ~main:`space_between ~height:32 ~corner_radius:6
-                        ~padding_horizontal:4
                         ~style_class:"hd"
-                     ~data_attrs:
-                       [ ( "style"
-                         , "position:sticky;top:-4px;padding-left:8px;\
-                            padding-right:4px" )
-                       ]
                      [ box ~key:(key ^ "-a") ~style_class:"a" ~margin_left:4
                          [ Ui_components.with_props
                              [ Ui_components.Prop.font_size "0.875rem"
