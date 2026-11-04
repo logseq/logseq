@@ -354,7 +354,7 @@ let shortcut_hint hov binding =
 
 (* cljs sidebar-item: wrapper div gets the nav class (+ `active`), the
    inner `a.item` also gets `active` when the route matches *)
-let nav_link ~sched ~key ~class_ ~active ~title ~icon_name ?shortcut ~on_click
+let nav_link ~sched ~key ~class_ ~active ~title ~icon_name ?shortcut ?on_shift_click ~on_click
     ?(more = Logseq_el.nothing) () =
   let act = if active then " active" else "" in
   let hov = Signal.state sched false in
@@ -362,7 +362,12 @@ let nav_link ~sched ~key ~class_ ~active ~title ~icon_name ?shortcut ~on_click
     match shortcut with Some s -> [ shortcut_hint hov s ] | None -> []
   in
   box ~key ~style_class:(class_ ^ act)
-    [ Ui_parts.pressable ~on_press:(fun _ -> on_click ())
+    [ (match on_shift_click with
+       | None -> Ui_parts.pressable ~on_press:(fun _ -> on_click ())
+       | Some shift_click -> arm_press ~on_press_detail:(function
+           | P.PressDetail (_, d) ->
+               if d.modifiers land 2 <> 0 then shift_click () else on_click ()
+           | _ -> ()))
         (Ui_components.with_props
            [ Ui_components.Prop.cursor `pointer
            ; Ui_components.Prop.font_size "0.875rem"
@@ -518,10 +523,11 @@ let nav_group ms st =
                                  (icon_ ~size:14 "filter-edit") ])) ] ])
         ; box ~key:"nav-bd" ~style_class:"bd"
             [ reactive
-                ~equal:(fun ((a : Model.t),checked_a,tags_a) ((b : Model.t),checked_b,tags_b) ->
+                ~equal:(fun ((a : Model.t),checked_a,tags_a,home_a) ((b : Model.t),checked_b,tags_b,home_b) ->
                   a.route=b.route && a.graph_config=b.graph_config
-                  && checked_a=checked_b && tags_a=tags_b)
-                (fun (model : Model.t) checked tag_titles ->
+                  && checked_a=checked_b && tags_a=tags_b && home_a=home_b
+                  && Sidebar_state.home_route_active a home_a = Sidebar_state.home_route_active b home_b)
+                (fun (model : Model.t) checked tag_titles home ->
                   let route=model.route in
                   column ~key:"navs" ~gap:2 ~margin_top:4
                     ~style_class:"sidebar-navigations"
@@ -529,11 +535,22 @@ let nav_group ms st =
                     (* cljs journals item navigates on click; its anchor
                        carries no href. go-to-journals! targets
                        #/all-journals when a default-home page owns #/ *)
-                    ((nav_link ~sched:ctx.Lui_ui.ui_scheduler ~key:"nl-journals"
+                    ((match home, Sidebar_state.configured_home model with
+                      | Some _, Some name ->
+                          nav_link ~sched:ctx.Lui_ui.ui_scheduler ~key:"nl-home"
+                            ~class_:"home-nav"
+                            ~active:(Sidebar_state.home_route_active model home)
+                            ~title:name
+                            ~icon_name:"home" ~shortcut:"g h"
+                            ~on_click:(fun () ->
+                              Ui_services.nav_set_hash (Runtime.nav_hash "#/");
+                              Ui_services.dom_dispatch "ls:navigate") ()
+                      | _ -> nav_link ~sched:ctx.Lui_ui.ui_scheduler ~key:"nl-journals"
                        ~class_:"journals-nav"
                        ~active:(route = Model.Journals || route = Model.Home)
                        ~title:(t "nav/journals") ~icon_name:"calendar"
                        ~shortcut:"g j"
+                       ~on_shift_click:(fun () -> Sidebar_state.open_today_journal st)
                        ~on_click:(fun () ->
                          ignore
                            (Js.Promise.then_
@@ -549,6 +566,7 @@ let nav_group ms st =
                          (checked, tag_titles)
                   ))
                 ms (Signal.value st.Sidebar_state.nav_checked) (Signal.value st.nav_tag_titles)
+                  (Signal.value st.home_page)
             ]
         ]
     ]
@@ -558,6 +576,45 @@ let nav_group ms st =
 
 
 let page_item_el st (p : Model.page) ~li_class ~recent ~key =
+  let go_page shift =
+    if shift then
+      match p.Model.page_uuid with
+      | Some u -> Sidebar_state.open_uuid st u
+      | None -> ()
+    else
+      Sidebar_state.navigate_to_page
+        (match p.Model.page_title with
+         | "" -> Option.value p.Model.page_uuid ~default:""
+         | title -> title)
+  in
+  let origin = ref None and dragged = ref false in
+  let drag_down = function
+    | P.PointerDown (_, d) when not recent && d.button = 0 ->
+        dragged := false;
+        origin := Some (Runtime.repo (), d.x, d.y)
+    | _ -> () in
+  let drag_move = function
+    | P.PointerMove (_, d) ->
+        (match !origin with
+         | Some (_, x, y) when !dragged || Float.abs (d.x -. x) +. Float.abs (d.y -. y) >= 6. ->
+             dragged := true;
+             Sidebar_state.favorite_drop_at st d.x d.y
+         | _ -> ())
+    | _ -> () in
+  let drag_up = function
+    | P.PointerUp (_, d) when not recent && d.button = 0 ->
+        (match !origin, p.Model.page_uuid with
+         | Some (repo, _, _), Some source when !dragged ->
+             Sidebar_state.favorite_drop_at st d.x d.y;
+             Sidebar_state.finish_favorite_drag st ~repo ~source
+         | Some (repo, _, _), _ when not !dragged && Runtime.repo () = repo ->
+             go_page (d.modifiers land 2 <> 0)
+         | _ -> ());
+        origin := None
+    | _ -> () in
+  let drag_cancel _ =
+    origin := None;
+    Runtime.signal_set st.Sidebar_state.favorite_drop None in
   let lp_ref =
     match p.Model.page_uuid with
     | Some u -> u
@@ -584,23 +641,10 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key =
     Sidebar_state.toggle_lp_menu st ~target:lp_ref ~recent ~ax ~atop
       ~abot
   in
-  let go_page shift =
-    (* navigate by title: #/page/<uuid> hashes hit the
-       Router.page_ref lookup-ref bug (see sidebar_state). *)
-    if shift then
-      match p.Model.page_uuid with
-      | Some u -> Sidebar_state.open_uuid st u
-      | None -> ()
-    else
-      Sidebar_state.navigate_to_page
-        (match p.Model.page_title with
-         | "" -> Option.value p.Model.page_uuid ~default:""
-         | title -> title)
-  in
   Ui_components.with_props
-    ([ Ui_components.Prop.font_weight 500
-     ; Ui_components.Prop.cursor `pointer ]
-     @ if recent then [ Ui_components.Prop.user_select `none ] else [])
+    [ Ui_components.Prop.font_weight 500
+    ; Ui_components.Prop.cursor `pointer
+    ; Ui_components.Prop.user_select `none ]
     (column ~key ~style_class:li_class
     [ Ui_components.with_props
         [ Ui_components.Prop.position `relative
@@ -611,10 +655,18 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key =
         (arm_press ~on_press_detail:(fun ev ->
              match ev with
              | Lui_protocol.PressDetail (_, d) ->
-                 go_page (d.Lui_protocol.modifiers land 2 <> 0)
+                 (* Captured Favorites complete through PointerUp. *)
+                 if recent then go_page (d.Lui_protocol.modifiers land 2 <> 0)
              | _ -> ())
-          (row ~cross:`center ~main:`space_between
+          (box ~pointer_capture:(not recent)
+            ~on_pointer_down:drag_down ~on_pointer_move:drag_move
+            ~on_pointer_up:drag_up ~on_pointer_cancel:drag_cancel
+            [ row ~cross:`center ~main:`space_between
            ~style_class:"link-item group"
+           ~background:(reactive (function
+               | Some (uuid, _) when p.Model.page_uuid = Some uuid ->
+                   "var(--lx-accent-04, var(--ls-tertiary-background-color))"
+               | _ -> "transparent") (Signal.value st.Sidebar_state.favorite_drop))
            ~height:32 ~padding_horizontal:8 ~corner_radius:6
            ~data_attrs:
              [ ("data-lp-ref", lp_ref)
@@ -629,7 +681,7 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key =
                ~white_space:"nowrap" ~text_overflow:"ellipsis" ~grow:1.
                ~line_height:"1.25rem"
                ~data_attrs:[ ("style", "overflow:hidden;padding-right:32px") ]
-               [] ]))
+               [] ] ]))
         (* The menu button is outside the navigation target. *)
         ; Ui_components.with_props
             [ Ui_components.Prop.position `absolute
@@ -883,12 +935,15 @@ let graphs_selector st (ms : Model.t Signal.signal) : t =
 
 let contents (ms : Model.t Signal.signal) : t =
   let st = Sidebar_state.ensure ms in
-  Ui_components.with_props [ Ui_components.Prop.position `relative ]
+  Ui_components.with_props
+    [ Ui_components.Prop.position `relative
+    ; Ui_components.Prop.padding_top 4
+    ; Ui_components.Prop.padding_left 12
+    ; Ui_components.Prop.padding_right 12 ]
     (scroll ~key:"ls-contents" ~grow:1. ~min_height:0 ~orientation:`vertical
        ~accessibility_identifier:"left-sidebar-scroll"
        ~style_class:"sidebar-contents-container"
-       [ column ~key:"ls-groups" ~gap:4 ~padding_horizontal:12
-           ~padding_vertical:4
+       [ column ~key:"ls-groups" ~gap:4
            [ favorites_group st; recents_group st ] ])
 
 let menus (ms : Model.t Signal.signal) : t =

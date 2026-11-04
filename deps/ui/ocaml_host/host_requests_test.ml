@@ -1884,7 +1884,7 @@ let () = Native_embed.with_entry_lock (fun () ->
       (fun context _ _ ->
         let state value = Signal.state context.Lui_ui.ui_scheduler value in
         let st : Sidebar_state.t =
-          {favorites=state []; recents=state []; nav_checked=state [];
+          {favorites=state [];home_page=state None;favorite_drop=state None; recents=state []; nav_checked=state [];
            nav_tag_titles=state []; items=state [];
            open_menu=state ""; groups_collapsed=state [];
            left_width=state 246.; right_fraction=state 0.3; viewport_w=state 1440.} in
@@ -5164,7 +5164,7 @@ let () = Native_embed.with_entry_lock (fun () ->
       (fun context _ _ ->
         let state value = Signal.state context.Lui_ui.ui_scheduler value in
         let st : Sidebar_state.t =
-          {favorites=state []; recents=state []; nav_checked=state [];
+          {favorites=state [];home_page=state None;favorite_drop=state None; recents=state []; nav_checked=state [];
            nav_tag_titles=state []; items=state [];
            open_menu=state ""; groups_collapsed=state [];
            left_width=state 246.; right_fraction=state 0.3; viewport_w=state 240.} in
@@ -5247,7 +5247,7 @@ let () = Native_embed.with_entry_lock (fun () ->
     (fun model (_ : Action.t) -> model) (fun ctx ms _ ->
       let state value = Signal.state ctx.Lui_ui.ui_scheduler value in
       let st : Sidebar_state.t =
-        {favorites=state [target];recents=state [];nav_checked=state [];
+        {favorites=state [target];home_page=state None;favorite_drop=state None;recents=state [];nav_checked=state [];
          nav_tag_titles=state [];items=state [];
          open_menu=state "";groups_collapsed=state [];
          left_width=state 246.;right_fraction=state 0.3;viewport_w=state 1440.} in
@@ -5727,7 +5727,7 @@ let () = Native_embed.with_entry_lock (fun () ->
         registry !model (fun value () -> value) (fun context ms _ ->
           Editor_state.ensure context;
           let state value=Signal.state context.Lui_ui.ui_scheduler value in
-          let st:Sidebar_state.t={favorites=state [];recents=state [];nav_checked=state [];
+          let st:Sidebar_state.t={favorites=state [];home_page=state None;favorite_drop=state None;recents=state [];nav_checked=state [];
             nav_tag_titles=state [];items=state [];open_menu=state "";groups_collapsed=state [];
             left_width=state 246.;right_fraction=state 0.3;viewport_w=state 1000.} in
           sidebar:=Some st;Sidebar_state.st_ref:=Some st;Sidebar_state.model_signal:=Some ms;
@@ -5818,7 +5818,7 @@ let () = Native_embed.with_entry_lock (fun () ->
         (fun model () -> model) (fun context model _ ->
           let state value = Signal.state context.Lui_ui.ui_scheduler value in
           let sidebar : Sidebar_state.t =
-            {favorites=state [];recents=state [];nav_checked=state [];nav_tag_titles=state [];
+            {favorites=state [];home_page=state None;favorite_drop=state None;recents=state [];nav_checked=state [];nav_tag_titles=state [];
              items=state [];open_menu=state "";groups_collapsed=state [];
              left_width=state 246.;right_fraction=state 0.3;viewport_w=state 1140.} in
           Sidebar_state.st_ref:=Some sidebar;Sidebar_state.model_signal:=Some model;
@@ -11030,7 +11030,7 @@ let () = Native_embed.with_entry_lock (fun () ->
           Sidebar_state.model_signal:=Some model_signal;
           let state value = Signal.state ctx.Lui_ui.ui_scheduler value in
           let st : Sidebar_state.t =
-            {favorites=state [];recents=state [];nav_checked=state [];nav_tag_titles=state [];
+            {favorites=state [];home_page=state None;favorite_drop=state None;recents=state [];nav_checked=state [];nav_tag_titles=state [];
              items=state [];open_menu=state "";groups_collapsed=state [];
              left_width=state 246.;right_fraction=state 0.3;viewport_w=state 800.} in
           sidebar:=Some st;

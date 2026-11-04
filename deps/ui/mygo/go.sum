@@ -26,6 +26,8 @@ github.com/go-text/typesetting-utils v0.0.0-20260419141703-4ffe8874dabc h1:8FGo2
 github.com/go-text/typesetting-utils v0.0.0-20260419141703-4ffe8874dabc/go.mod h1:3/62I4La/HBRX9TcTpBj4eipLiwzf+vhI+7whTc9V7o=
 github.com/logseq/lui/platform/mygo v0.0.0-20261104210439-2f2176e8eda8 h1:X0V3Ncg6q+wkyJT7+DACLFT3OSX58NDBqGdBaCkyZYU=
 github.com/logseq/lui/platform/mygo v0.0.0-20261104210439-2f2176e8eda8/go.mod h1:XattIenNnZbkI0eNEK1J4DR4GQNdFT0DSxhy/TKAdik=
+github.com/logseq/lui/platform/mygo v0.0.0-20261104212417-fcff1ec9410b h1:muIDP6fyb55KCMtrcJO5voE0brKilPVD3aQqEmX4XS4=
+github.com/logseq/lui/platform/mygo v0.0.0-20261104212417-fcff1ec9410b/go.mod h1:XattIenNnZbkI0eNEK1J4DR4GQNdFT0DSxhy/TKAdik=
 github.com/logseq/mygo v0.0.0-20261031004139-efb1ecce30b1 h1:FcC2XLk5GFmaOTudpGSFUiEr7ZaB51pqsWz11vO7E3g=
 github.com/logseq/mygo v0.0.0-20261031004139-efb1ecce30b1/go.mod h1:dVav53PwF2xEotjf4oA5lTY2Jp2exgzyjLhbSXhbMwE=
 github.com/sergeymakinen/go-bmp v1.0.0 h1:SdGTzp9WvCV0A1V0mBeaS7kQAwNLdVJbmHlqNWq0R+M=
