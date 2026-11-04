@@ -298,14 +298,23 @@ let download_blob ~filename (blob : Webapi.Blob.t) =
       Web_dom.el_remove a;
       Web_dom.revoke_object_url url)
 
+(* cljs-time's UTC DateTime string has no milliseconds or timezone suffix. *)
+let export_filename ms ext =
+  let timestamp =
+    String.sub (Js.Date.toISOString (Js.Date.fromFloat ms)) 0 19
+    |> String.to_seq
+    |> Seq.filter (fun c -> c <> '-' && c <> ':')
+    |> String.of_seq
+  in
+  Printf.sprintf "logseq_%s.%s" timestamp ext
+
 (* cljs filename: "logseq_" + (t/now) + ext — txt for text else format *)
 let save_to_file (st : S.t Signal.state) =
   let cur = S.cur st in
   match cur.fmt, cur.content, cur.png with
   | S.Png, _, Some blob ->
       download_blob
-        ~filename:
-          (Printf.sprintf "logseq_%s.png" (Ui_services.time_fmt_date (Ui_services.time_now ())))
+        ~filename:(export_filename (Ui_services.time_now ()) "png")
         blob
   | S.Png, _, None -> ()
   | _, Some content, _ ->
@@ -326,7 +335,6 @@ let save_to_file (st : S.t Signal.state) =
         | S.Png -> "image/png"
       in
       Web_dom.download_text
-        ~filename:
-          (Printf.sprintf "logseq_%s.%s" (Ui_services.time_fmt_date (Ui_services.time_now ())) ext)
+        ~filename:(export_filename (Ui_services.time_now ()) ext)
         ~mime content
   | _, None, _ -> ()
