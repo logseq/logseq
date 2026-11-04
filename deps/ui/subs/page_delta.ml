@@ -289,8 +289,8 @@ type env =
   ; mutable failed : bool
   }
 
-(* freshest node for [uuid]: canonical fields merged over the existing
-   children/embeds (canonical wires carry neither), else the live node *)
+(* Keep structural children from the live tree; canonical embed children
+   have already been loaded by fill_embeds and must remain authoritative. *)
 let node_for env uuid : Model.block option =
   match Hashtbl.find_opt env.canon_nodes uuid with
   | Some n -> (
@@ -299,7 +299,6 @@ let node_for env uuid : Model.block option =
           Some
             { n with
               Model.block_children = old.Model.block_children
-            ; block_embed_children = old.Model.block_embed_children
             }
       | None -> Some n)
   | None -> Hashtbl.find_opt env.idx_nodes uuid
@@ -381,7 +380,6 @@ let rec splice_children env parent_key (cur : Model.block list)
                 let merged =
                   { n with
                     Model.block_children = c.Model.block_children
-                  ; block_embed_children = c.Model.block_embed_children
                   ; block_order_index = c.Model.block_order_index
                   }
                 in

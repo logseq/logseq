@@ -4479,7 +4479,33 @@ let test_pure_helpers () =
   check "version app set" (String.length Version.app > 0);
   ()
 
+let test_delta_preserves_embed_children () =
+  let module D = Page_delta in
+  List.iter (fun membership ->
+    let old = block "embed-target" "" in
+    let child = block "linked-child" "Embedded content" in
+    let canonical = {old with Model.block_link=Some 197;
+      block_embed_children=[child]} in
+    let canon_nodes=Hashtbl.create 1 and idx_nodes=Hashtbl.create 1 in
+    Hashtbl.add canon_nodes "embed-target" canonical;
+    Hashtbl.add idx_nodes "embed-target" old;
+    let p : D.parsed = {rev=1;canon=D.SMap.empty;deleted=D.SSet.empty;
+      affected=[];patches=(if membership then D.SMap.singleton "page"
+        {D.base_rev=0;remove=D.SSet.empty;upsert=["embed-target","a1"]}
+        else D.SMap.empty)} in
+    let env : D.env = {p;canon_nodes;idx_nodes;consumed=Hashtbl.create 1;failed=false} in
+    let updated = D.splice_children env (Some "page") [old] 1 in
+    check ("delta preserves loaded children when an existing UUID becomes an embed: "
+      ^ string_of_bool membership)
+      (match updated with
+       | [b] -> b.Model.block_uuid=old.Model.block_uuid
+           && b.Model.block_link=Some 197
+           && List.map (fun c -> c.Model.block_uuid, c.Model.block_title)
+                (Editor_state.children_of b)=[child.Model.block_uuid, child.Model.block_title]
+       | _ -> false)) [false;true]
+
 let () =
+  test_delta_preserves_embed_children ();
   test_pure_helpers ();
   Edit_model_test.run ();
   Edit_view_web_test.run ();
