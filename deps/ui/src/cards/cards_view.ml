@@ -138,7 +138,7 @@ let info_btn st =
          (fun open_ ->
            if not open_ then spacer ~key:"i-closed" []
            else
-             dropdown_menu ~key:"i-opts" ~anchor:`below
+             Ui_components.popover_card ~key:"i-opts" ~anchor:`below
                ~anchor_alignment:`start
                ~on_dismiss:(fun _ -> Cards_state.toggle_info st)
                (List.map
