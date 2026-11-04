@@ -1294,11 +1294,11 @@ let article ~modal ~keymap ms ctx =
     in
     let body =
       column ~key:"settings-article-body" ~padding:(if is_keymap then 0 else 16)
-        ~min_width:0 ~min_height:0 children
+        ~min_width:0 ?min_height:(if is_keymap then None else Some 0) children
     in
     if s.tab = "keymap" then
       Ui_components.with_props
-        [Ui_components.Prop.height_viewport viewport_height] body
+        [Ui_components.Prop.height_auto] body
     else body
   in
   Ui_components.with_props
