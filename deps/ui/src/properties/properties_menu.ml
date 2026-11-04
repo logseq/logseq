@@ -367,6 +367,67 @@ let edit_choice_view m choice ~set_pane ~close : t =
         S.refresh_all ();
         Runtime.signal_set set_pane MChoices))
 
+let node_tags_view m : t =
+ fun context parent ->
+  let sched = context.Lui_ui.ui_scheduler in
+  let scope = context.Lui_ui.ui_scope in
+  let classes = Signal.state sched [] in
+  let selected = Signal.state sched
+    (match D.getf (prop_entity m) "logseq.property/classes" with
+     | Some values -> List.filter_map D.entity_uuid_of (W.elems values)
+     | None -> []) in
+  let saving = Signal.state sched false in
+  let save make_class =
+    if not (Runtime.signal_get saving) then begin
+      Runtime.signal_set saving true;
+      ignore ((let* c = make_class () in
+        let uuid = Option.get (D.entity_uuid_of c) in
+        let chosen = Runtime.signal_get selected in
+        let add = not (List.mem uuid chosen) in
+        let* _ = D.transact
+          [W.List [W.Keyword (if add then "db/add" else "db/retract");
+            D.uuid_ref (Option.get (prop_uuid m));
+            W.Keyword "logseq.property/classes"; D.uuid_ref uuid]] in
+        if Ui_effect.alive scope then begin
+          Runtime.signal_set selected
+            (if add then uuid :: chosen else List.filter ((<>) uuid) chosen);
+          if not (List.exists (fun item -> D.entity_uuid_of item = Some uuid)
+                    (Runtime.signal_get classes)) then
+            Runtime.signal_set classes (Runtime.signal_get classes @ [c]);
+          Runtime.signal_set saving false
+        end;
+        S.refresh_all ();
+        Js.Promise.resolve ())
+        |> Js.Promise.catch (fun _ ->
+          if Ui_effect.alive scope then Runtime.signal_set saving false;
+          Ui_services.log_error_message "[properties] node tag update failed";
+          Js.Promise.resolve ()))
+    end in
+  ignore (let* values = D.all_classes () in
+    if Ui_effect.alive scope then Runtime.signal_set classes (W.elems values);
+    Js.Promise.resolve ());
+  let new_tag title = save (fun () ->
+    let* result = D.create_class title in
+    let uuid = Option.get (D.create_result_uuid result) in
+    Js.Promise.resolve (W.Map
+      [W.Keyword "block/uuid", W.Uuid uuid;
+       W.Keyword "block/title", W.String title])) in
+  (column ~gap:4 ~min_width:240
+    [ reactive (fun values ->
+            let items = List.filter_map (fun c ->
+              Option.map (fun uuid ->
+                Properties_select.item ~key:uuid (D.ref_title c) (fun () ->
+                  save (fun () -> Js.Promise.resolve c))) (D.entity_uuid_of c)) values in
+            Properties_select.view ~placeholder:(I18n.t "property/choose-tags")
+              ~compact:true ~selected_keys:(Signal.value selected)
+              ~new_option:new_tag items) (Signal.value classes) ]) context parent
+
+let supports_default_value m =
+  List.mem (prop_type m) ["default"; "number"; "checkbox"]
+  && not (D.row_many m.row)
+  && closed_values m = []
+  && prop_ident m <> "logseq.property/enable-history?"
+
 let default_value_pane_view m ~close : t =
  fun context parent ->
   let sched = context.Lui_ui.ui_scheduler in
@@ -425,10 +486,23 @@ let main_items context m ~set_pane ~close =
              ~on_press:(fun _ -> Runtime.signal_set set_pane MNodeTags)
                [] ]
        else [])
-    @ [ menu_item ~text:(I18n.t "property/default-value")
-          ~on_press:(fun _ -> Runtime.signal_set set_pane MDefaultValue)
-          []
-      ; menu_item ~text:(I18n.t "property/available-choices")
+    @ (if supports_default_value m then
+       [ menu_item ~text:(I18n.t "property/default-value")
+          ~checked:(prop_type m = "checkbox"
+            && D.getb (prop_entity m) "logseq.property/scalar-default-value")
+          ~on_press:(fun _ ->
+            if prop_type m = "checkbox" then begin
+              ignore (let* _ = D.set_block_property
+                ~block_uuid:(Option.get (prop_uuid m))
+                ~ident:"logseq.property/scalar-default-value"
+                ~value:(W.Bool (not (D.getb (prop_entity m)
+                  "logseq.property/scalar-default-value"))) in
+                S.refresh_all ();
+                Js.Promise.resolve ());
+              close ()
+            end else Runtime.signal_set set_pane MDefaultValue) [] ]
+       else [])
+    @ [ menu_item ~text:(I18n.t "property/available-choices")
           ~on_press:(fun _ -> Runtime.signal_set set_pane MChoices) []
       ; menu_item ~text:(I18n.t "property/multiple-values")
           ~checked:(D.row_many m.row)
@@ -497,7 +571,7 @@ let menu_body_view ~more_options ~with_title m ~close : t =
              | MChoices -> choices_pane_view m ~set_pane:pane ~close
              | MEditChoice c -> edit_choice_view m c ~set_pane:pane ~close
              | MDefaultValue -> default_value_pane_view m ~close
-             | MNodeTags -> column ~gap:0 [])
+             | MNodeTags -> node_tags_view m)
           ])
      (Signal.value pane))
     context parent
