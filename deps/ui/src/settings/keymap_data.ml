@@ -147,10 +147,33 @@ let row_with_shortcut ~mac row = function
 
 let custom row = Command_map.mem (command_id row.title) !user_shortcuts
 
+let canonical_binding binding =
+  let mac = Ui_services.env_is_mac () in
+  String.split_on_char ' ' binding
+  |> List.filter ((<>) "")
+  |> List.map (fun stroke ->
+      String.split_on_char '+' stroke
+      |> List.map (function "mod" -> if mac then "meta" else "ctrl" | key -> key)
+      |> String.concat "+" |> Keymap_record.canonical)
+
+let same_binding a b = canonical_binding a = canonical_binding b
+
 let save_shortcut id binding =
+  let binding_set bindings =
+    List.map canonical_binding bindings |> List.sort_uniq compare
+  in
+  let matches_default = function
+    | Binds bindings ->
+        (match default_shortcut id with
+         | Binds defaults -> binding_set bindings = binding_set defaults
+         | Unbound | Disabled -> false)
+    | Unbound | Disabled -> false
+  in
   let configured =
     match binding with
     | None -> Command_map.remove id !user_shortcuts
+    | Some binding when matches_default binding ->
+        Command_map.remove id !user_shortcuts
     | Some binding -> Command_map.add id binding !user_shortcuts
   in
   let entries = Command_map.bindings configured |> List.map (fun (id, binding) ->
@@ -162,17 +185,6 @@ let save_shortcut id binding =
   Ui_services.storage_set "ls-shortcuts" (Edn.to_string (Wire.Map entries));
   user_shortcuts := configured;
   incr shortcut_revision
-
-let canonical_binding binding =
-  let mac = Ui_services.env_is_mac () in
-  String.split_on_char ' ' binding
-  |> List.filter ((<>) "")
-  |> List.map (fun stroke ->
-      String.split_on_char '+' stroke
-      |> List.map (function "mod" -> if mac then "meta" else "ctrl" | key -> key)
-      |> String.concat "+" |> Keymap_record.canonical)
-
-let same_binding a b = canonical_binding a = canonical_binding b
 
 let add_binding id value =
   let bindings = match effective_shortcut id with Binds bindings -> bindings | _ -> [] in
