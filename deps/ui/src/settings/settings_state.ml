@@ -7,6 +7,7 @@ type t =
   { tab : string
   ; journal_uuid : string option
   ; date_format : string
+  ; date_format_saving : bool
   ; tick : int
   }
 
@@ -14,6 +15,7 @@ let initial =
   { tab = "general"
   ; journal_uuid = None
   ; date_format = "MMM do, yyyy"
+  ; date_format_saving = false
   ; tick = 0
   }
 
@@ -86,6 +88,9 @@ let pull_journal repo =
 
 let load () =
   let r = repo () in
+  let context_revision = (Runtime.model ()).Model.context_revision in
+  let cell = state () in
+  Signal.set cell { (value ()) with journal_uuid = None; date_format_saving = false };
   let jour_p = pull_journal r in
   ignore
     (let* journal = jour_p in
@@ -95,7 +100,8 @@ let load () =
           (Some u, Option.value f ~default:"MMM do, yyyy")
       | None -> (None, "MMM do, yyyy")
     in
-    if repo ()=r then Runtime.signal_set (state ())
+    if repo () = r && (Runtime.model ()).Model.context_revision = context_revision
+       && ready () && state () == cell then Runtime.signal_set cell
       { (value ()) with
         journal_uuid = uuid
       ; date_format = fmt
@@ -333,16 +339,29 @@ let set_editor_font_global b =
 (* ---- date format (Journal class title-format property) ---- *)
 
 let set_date_format fmt =
+  let origin = Runtime.model () in
+  let cell = state () in
+  let current () =
+    let model = Runtime.model () in
+    ready () && state () == cell && model.Model.repo = origin.Model.repo
+    && model.Model.context_revision = origin.Model.context_revision
+  in
   match (value ()).journal_uuid with
   | Some uuid ->
-      set (fun s -> { s with date_format = fmt });
-      ignore
-        (Sdk_util.apply_op "set-block-property"
+      set (fun s -> { s with date_format_saving = true });
+      (let* _ = Sdk_util.apply_op_for_repo (repo ()) "set-block-property"
            [ Wire.Uuid uuid
            ; Wire.Keyword "logseq.property.journal/title-format"
            ; Wire.String fmt
-           ])
-  | None -> ()
+           ] in
+       let saved = current () in
+       if saved then set (fun s -> { s with date_format = fmt; date_format_saving = false });
+       Js.Promise.resolve saved)
+      |> Js.Promise.catch (fun error ->
+          if current () then set (fun s -> { s with date_format_saving = false });
+          Ui_services.log_error ("Journal format save failed", error);
+          Js.Promise.reject (Failure "Journal format save failed"))
+  | None -> Js.Promise.reject (Failure "Journal settings have not loaded")
 
 let focus_keymap_search () =
   match Ui_services.dom_query ".cp__shortcut-page-x input" with

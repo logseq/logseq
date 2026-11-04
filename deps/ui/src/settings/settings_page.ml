@@ -5,6 +5,7 @@
    switches, kbd, buttons) in Settings_controls. *)
 
 open Lui_elements
+open Promise_ext
 
 module T = I18n
 module S = Settings_state
@@ -287,7 +288,7 @@ let dfmt_menu_state ctx =
       dfmt_menu_st := Some s;
       s
 
-let dfmt_menu ~key mst options current =
+let dfmt_menu ~scope ~key mst options current =
   Ui_components.menu_card ~key:("dfmt-m-" ^ key) ~max_height:288
     ~anchor:`below ~anchor_alignment:`start
     ~cls:"ls-select-content"
@@ -298,10 +299,23 @@ let dfmt_menu ~key mst options current =
            ~text:fmt
            ~selected:(fmt = current)
            ~on_press:(fun _ ->
-             if String.trim fmt <> "" then (
-               S.set_date_format fmt;
-               Toast.success (T.t "settings.general/refresh-required-feedback");
-               Dialogs_state.close_all ());
+             let origin = Runtime.model () in
+             let active () =
+               let model = Runtime.model () in
+               Ui_effect.alive scope && model.Model.repo = origin.Model.repo
+               && model.Model.context_revision = origin.Model.context_revision
+             in
+             if String.trim fmt <> "" && not (S.value ()).date_format_saving then
+               ignore
+                 ((let* saved = S.set_date_format fmt in
+                   if saved && active () then begin
+                     Toast.success (T.t "settings.general/refresh-required-feedback");
+                     Dialogs_state.close_all ()
+                   end;
+                   Js.Promise.resolve ())
+                  |> Js.Promise.catch (fun _ ->
+                      if active () then Toast.error (T.t "ui/save-changes-error");
+                      Js.Promise.resolve ()));
              V.lang_menu_close mst)
            [])
        options)
@@ -324,12 +338,14 @@ let date_format_row ctx =
              ~background:"var(--lx-gray-03)"
              ~style_class:"form-select is-small ls-date-format"
              ~text:current
+             ~disabled:(reactive (fun (s : S.t) ->
+               s.journal_uuid = None || s.date_format_saving) (S.signal ()))
              ~on_press:(fun _ ->
                Signal.set mst (not (Runtime.signal_get mst));
                Runtime.flush ())
              []
          ; reactive ~equal:( == ) (fun open_ ->
-             if open_ then dfmt_menu ~key:"dfmt" mst options current
+             if open_ then dfmt_menu ~scope:ctx.ui_scope ~key:"dfmt" mst options current
              else spacer ~key:"dfmt-m-x" [])
              (Signal.value mst)
          ])

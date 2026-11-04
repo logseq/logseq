@@ -376,11 +376,71 @@ let table_resize_transaction () =
   check "A previous view's drag never commits into the current view"
     (stale.V.table_resize = None && stale.V.sized = initial.V.sized)
 
+let settings_date_format ~registry ~profile ~finish =
+  let previous_settings = !Settings_state.st and previous_model = !Runtime.read_model
+  and previous_worker = !Runtime.worker in
+  let rec next = function
+    | [] ->
+        Settings_state.st := previous_settings;
+        Runtime.read_model := previous_model;
+        Runtime.worker := previous_worker;
+        finish ()
+    | (failed, stale) :: rest ->
+        Settings_state.st := None;
+        let current = ref { Model.initial with repo = Some "format-save-fixture" } in
+        Runtime.read_model := (fun () -> !current);
+        let acknowledge = ref (fun () -> ()) in
+        let requested = ref (fun () -> ()) in
+        let dispatched = Js.Promise.make (fun ~resolve ~reject:_ ->
+          requested := (fun () -> let value = () in resolve value [@u])) in
+        Runtime.worker := Some {
+          Worker_client.invoke_fn = (fun name _ ->
+            if name <> "thread-api/apply-outliner-ops" then
+              failwith ("Unexpected date format request: " ^ name);
+            Js.Promise.make (fun ~resolve ~reject ->
+              acknowledge := (fun () ->
+                if failed then reject (Failure "format persistence failed") [@u]
+                else resolve Wire.Nil [@u]);
+              !requested ()));
+          on_message = (fun _ _ -> ());
+          dead = Js.Promise.make (fun ~resolve:_ ~reject:_ -> ()) };
+        let session = S.mount ~registry ~profile ~initial:!current
+          ~reducer:(fun model () -> model)
+          ~view:(fun context _ _ ->
+            Settings_state.ensure context;
+            Lui_elements.column []) () in
+        Settings_state.set (fun state ->
+          { state with journal_uuid = Some "journal-format-fixture" });
+        let original = (Settings_state.value ()).date_format in
+        let saved = Settings_state.set_date_format "yyyy-MM-dd" in
+        check "Journal format remains persisted value while its save is pending"
+          ((Settings_state.value ()).date_format = original);
+        if stale then begin
+          current := { !current with context_revision = (!current).context_revision + 1 };
+          Settings_state.set (fun _ ->
+            { Settings_state.initial with date_format = "dd-MM-yyyy" })
+        end;
+        ignore (Js.Promise.then_ (fun () ->
+          !acknowledge ();
+          Js.Promise.resolve ()) dispatched);
+        let settled = Js.Promise.then_ (fun _ -> Js.Promise.resolve ()) saved
+          |> Js.Promise.catch (fun _ -> Js.Promise.resolve ()) in
+        ignore (Js.Promise.then_ (fun () ->
+          eqs "Only acknowledged saves in the originating graph update its format"
+            (if stale then "dd-MM-yyyy" else if failed then original else "yyyy-MM-dd")
+            (Settings_state.value ()).date_format;
+          ignore (Lui_app.dispose session.S.app);
+          next rest;
+          Js.Promise.resolve ()) settled)
+  in
+  next [false, false; true, false; false, true]
+
 let run_views ~registry ~profile ~finish =
   table_resize_transaction ();
   table_range_selection ();
   grouped_table_selection ~registry ~profile;
   settings_config ~registry ~profile ~finish:(fun () ->
+  settings_date_format ~registry ~profile ~finish:(fun () ->
   flashcards_config ~registry ~profile;
   let previous_flush = !Runtime.app_flush in
   let previous_preset = Ui_services.storage_get "ls-icon-color-preset" in
@@ -1671,9 +1731,9 @@ let run_views ~registry ~profile ~finish =
       [ "settings shortcut", (fun _ -> Settings_controls.kbd_seq
           ~key:"unicode" ~binding:"custom" [value])
       ; "context menu shortcut", (fun _ -> Popups_view.cm_shortcut_el ("custom",[value]))
-      ; "journal format menu", (fun ms ->
+      ; "journal format menu", (fun ms context parent ->
           let state = Signal.state (Signal.signal_owner ms) true in
-          Settings_page.dfmt_menu ~key:"unicode" state [value] value) ])
+          Settings_page.dfmt_menu ~scope:context.Lui_ui.ui_scope ~key:"unicode" state [value] value context parent) ])
     [ {js|中文|js}; {js|café|js}; {js|é|js}; {js|😀|js}; {js|a b|js} ];
   check "The canonical English help link preserves its Unicode arrow"
     (I18n.t "settings.editor/preferred-outdenting-tip-more" = {js|→ Learn more|js});
@@ -2939,7 +2999,7 @@ let run_views ~registry ~profile ~finish =
       Graphs_ops.on_repos_changed := repos_changed_before;
       async_selection_check (fun () -> filter_value_check (fun () ->
         filter_reference_titles_check (fun () -> filter_edit_check (fun () -> filter_operator_check (fun () -> page_name_filter_check (fun () -> filter_input_check ();filter_scope_check ();config_boot_check (fun () -> config_save_check (fun () -> custom_date_check (fun () -> type_choice_check (fun () -> Runtime.app_flush := previous_flush;finish ()))))))))));
-      Js.Promise.resolve ()) (Js.Promise.resolve ())))
+      Js.Promise.resolve ()) (Js.Promise.resolve ()))))
 
 let popup_press (ev : Ui_services.ev) =
   let state_before = Editor_state.read () in
