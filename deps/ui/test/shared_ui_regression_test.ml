@@ -2867,6 +2867,34 @@ let run_views ~registry ~profile ~finish =
      && Keymap_data.count Keymap_data.Unset = 9);
   Ui_services.storage_remove "ls-shortcuts";
   refresh_bindings ();
+  check "shortcut ownership excludes mutually exclusive navigation and popup contexts"
+    (Keymap_data.conflicting_rows "ui/toggle-left-sidebar" "enter" = []);
+  let before_reassign = Ui_services.storage_get "ls-shortcuts" in
+  Keymap_data.save_shortcuts
+    [ "ui/toggle-right-sidebar", Some (Keymap_data.Binds ["ctrl+shift+f10"; "t r"])
+    ; "ui/toggle-help", Some (Keymap_data.Binds ["ctrl+shift+f10 x"])
+    ; "auto-complete/complete", Some (Keymap_data.Binds ["ctrl+shift+f10"]) ];
+  let owned_before = List.map (fun id -> id, Keymap_data.effective_shortcut id)
+    ["ui/toggle-left-sidebar"; "ui/toggle-right-sidebar"; "ui/toggle-help";
+     "auto-complete/complete"] in
+  let snapshot = Keymap_data.reassign_binding "ui/toggle-left-sidebar" "shift+ctrl+f10" in
+  List.iter (fun (id, expected) ->
+    check ("reassign preserves legal bindings for " ^ id)
+      (Keymap_data.effective_shortcut id = Keymap_data.Binds expected))
+    [ "ui/toggle-left-sidebar", ["t l"; "shift+ctrl+f10"]
+    ; "ui/toggle-right-sidebar", ["t r"]
+    ; "ui/toggle-help", ["ctrl+shift+f10 x"]
+    ; "auto-complete/complete", ["ctrl+shift+f10"] ];
+  Keymap_data.reload_shortcuts ();
+  check "reassigned ownership survives storage reload"
+    ((Keymap_data.binding_conflicts "ui/toggle-left-sidebar" "ctrl+shift+f10").exact = []);
+  Keymap_data.save_shortcuts snapshot;
+  Keymap_data.reload_shortcuts ();
+  check "undo restores all affected shortcut owners without touching legal overlaps"
+    (List.for_all (fun (id, binding) -> Keymap_data.effective_shortcut id = binding)
+      owned_before);
+  restore_storage "ls-shortcuts" before_reassign;
+  Keymap_data.reload_shortcuts ();
   let before_reset = !shortcut_actions in
   stroke "t"; stroke "l";
   eqi "removing an override restores the default sequence" (before_reset + 1)
