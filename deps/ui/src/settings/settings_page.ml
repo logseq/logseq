@@ -941,8 +941,10 @@ let keymap_editor st editing (r : Keymap_data.row) : t =
 let keymap_row st editing ~key (r : Keymap_data.row) =
   let open Keymap_data in
   (* the title tooltip attr was DOM-only — dropped *)
-  list_item ~key ~style_class:"shortcut-row"
-    ~min_height:34 ~padding_vertical:7 ~padding_horizontal:8
+  Ui_components.with_props [Ui_components.Prop.width_auto]
+    (list_item ~key ~style_class:"shortcut-row"
+    ~padding_vertical:4 ~padding_horizontal:8
+    ~margin_horizontal:(-4) ~margin_bottom:4
     ~on_press:(fun _ -> Runtime.signal_set st
         { (Runtime.signal_get st) with km_recording = false };
         Runtime.signal_set editing (Some (command_id r.title)))
@@ -970,7 +972,7 @@ let keymap_row st editing ~key (r : Keymap_data.row) =
     ; if_ ~test:(reactive (fun selected ->
         selected = Some (command_id r.title)) (Signal.value editing))
         (keymap_editor st editing r)
-    ]
+    ])
 
 let keymap_pane ?state ?(embedded=false) () : t =
  fun context parent ->
@@ -1025,8 +1027,9 @@ let keymap_pane ?state ?(embedded=false) () : t =
           text ~value:(I18n.t "keymap/no-matching-shortcuts") [];
         ]
     else
-      list ~key:"km-ul" ~style_class:"ls-plain-list" ~list_marker:`none
-        ~margin:0 ~padding:0 (List.rev elements)
+      Ui_components.with_props [Ui_components.Prop.overflow `visible]
+        (column ~key:"km-ul" ~style_class:"ls-plain-list"
+          ~margin:0 ~padding:0 (List.rev elements))
   in
   let results_container children =
     if embedded then column ~key:"km-art" ~min_height:0 children
@@ -1228,7 +1231,7 @@ let nav_item ~key (id, label, icn) =
 let pane_of ~modal ~keymap ctx tab =
   match tab with
   | "editor" -> editor_pane ctx
-  | "keymap" -> keymap_pane ~state:keymap ()
+  | "keymap" -> keymap_pane ~state:keymap ~embedded:true ()
   | "advanced" -> advanced_pane ()
   | "features" -> features_pane ctx
   | _ -> general_pane ~modal ctx
