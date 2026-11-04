@@ -639,19 +639,22 @@ let left_menu_button ?(key = "left-menu-btn") () =
 (* cljs header.cljs: home button hidden on the :home route and on a
    custom home page *)
 let home_button ms =
+  let sidebar = Sidebar_state.ensure ms in
   reactive
-    ~equal:(fun (a : Model.t) (b : Model.t) -> a.route = b.route)
-    (fun (m : Model.t) ->
-      match m.route with
-      | Model.Home -> spacer ~key:"home-none" []
-      | _ ->
+    ~equal:(fun ((a : Model.t), ha) ((b : Model.t), hb) ->
+      a.route = b.route
+      && Sidebar_state.home_route_active a ha = Sidebar_state.home_route_active b hb)
+    (fun (m : Model.t) home ->
+      if m.route = Model.Home || Sidebar_state.home_route_active m home then
+        spacer ~key:"home-none" []
+      else
           icon_btn ~key:"home-btn" ~id:"" ~cls:(ghost_btn_cls ())
             ~icon:"home" ~tip:(I18n.t "nav/home")
             ~on_click:(fun _ ->
               Ui_services.nav_set_hash "#/";
               Web_dom.dispatch_custom "ls:navigate" Js.Json.null)
             ())
-    ms
+    ms (Signal.value sidebar.Sidebar_state.home_page)
 
 (* cljs open-right-sidebar! seeds a "contents" item when the sidebar
    is empty (state/sidebar-add-content-when-open!) *)
