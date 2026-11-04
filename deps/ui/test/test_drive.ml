@@ -2186,6 +2186,22 @@ let edit_flow_host () : Edit_flow_test.host =
   ; native = false
   }
 
+let test_fsrs_timestamp_roundtrip ~check =
+  List.iter (fun now ->
+    List.iter (fun rating ->
+      let card = Fsrs_sched.next_card ~now (Fsrs_sched.new_card ~now) rating in
+      let state = Fsrs_sched.state_wire ~rating card in
+      let restored = Fsrs_sched.card_of_property_wire state (Some card.due)
+        ~created_at:None ~now in
+      check
+        ("FSRS rating state preserves epoch milliseconds: " ^ Int64.to_string now
+         ^ " " ^ Fsrs_sched.string_of_rating rating)
+        (Wire.get state "due" = Some (Wire.Int64 card.due)
+         && Wire.get state "last-repeat" = Some (Wire.Int64 now)
+         && restored = Some card))
+      Fsrs_sched.[Again; Hard; Good; Easy])
+    [1793824014528L; 2208988800000L]
+
 let test_title_refs_class_identity () =
   let open Promise_ext in
   let entity uuid title ident =
@@ -2250,6 +2266,7 @@ let test_title_refs_class_identity () =
   |> Js.Promise.catch (fun _ -> Runtime.worker := previous_worker; operation)
 
 let run ~finish =
+  test_fsrs_timestamp_roundtrip ~check;
   ignore (Fake_worker.install worker_handler);
   ignore (mount ());
   let install_emoji_fixture : unit -> unit = [%mel.raw
