@@ -371,6 +371,8 @@ let node_tags_view m : t =
  fun context parent ->
   let sched = context.Lui_ui.ui_scheduler in
   let scope = context.Lui_ui.ui_scope in
+  let repo = Runtime.repo () in
+  let current () = Ui_effect.alive scope && Runtime.repo () = repo in
   let classes = Signal.state sched [] in
   let selected = Signal.state sched
     (match D.getf (prop_entity m) "logseq.property/classes" with
@@ -378,9 +380,10 @@ let node_tags_view m : t =
      | None -> []) in
   let saving = Signal.state sched false in
   let save make_class =
-    if not (Runtime.signal_get saving) then begin
+    if current () && not (Runtime.signal_get saving) then begin
       Runtime.signal_set saving true;
       ignore ((let* c = make_class () in
+        if not (current ()) then Js.Promise.resolve () else
         let uuid = Option.get (D.entity_uuid_of c) in
         let chosen = Runtime.signal_get selected in
         let add = not (List.mem uuid chosen) in
@@ -388,7 +391,7 @@ let node_tags_view m : t =
           [W.List [W.Keyword (if add then "db/add" else "db/retract");
             D.uuid_ref (Option.get (prop_uuid m));
             W.Keyword "logseq.property/classes"; D.uuid_ref uuid]] in
-        if Ui_effect.alive scope then begin
+        if current () then begin
           Runtime.signal_set selected
             (if add then uuid :: chosen else List.filter ((<>) uuid) chosen);
           if not (List.exists (fun item -> D.entity_uuid_of item = Some uuid)
@@ -399,12 +402,12 @@ let node_tags_view m : t =
         S.refresh_all ();
         Js.Promise.resolve ())
         |> Js.Promise.catch (fun _ ->
-          if Ui_effect.alive scope then Runtime.signal_set saving false;
+          if current () then Runtime.signal_set saving false;
           Ui_services.log_error_message "[properties] node tag update failed";
           Js.Promise.resolve ()))
     end in
   ignore (let* values = D.all_classes () in
-    if Ui_effect.alive scope then Runtime.signal_set classes (W.elems values);
+    if current () then Runtime.signal_set classes (W.elems values);
     Js.Promise.resolve ());
   let new_tag title = save (fun () ->
     let* result = D.create_class title in
