@@ -300,14 +300,13 @@ let download_blob ~filename (blob : Webapi.Blob.t) =
 
 (* cljs-time's UTC DateTime string has no milliseconds or timezone suffix. *)
 let export_filename ms ext =
-  let d = Js.Date.fromFloat ms in
-  Printf.sprintf "logseq_%04d%02d%02dT%02d%02d%02d.%s"
-    (int_of_float (Js.Date.getUTCFullYear d))
-    (int_of_float (Js.Date.getUTCMonth d) + 1)
-    (int_of_float (Js.Date.getUTCDate d))
-    (int_of_float (Js.Date.getUTCHours d))
-    (int_of_float (Js.Date.getUTCMinutes d))
-    (int_of_float (Js.Date.getUTCSeconds d)) ext
+  let timestamp =
+    String.sub (Js.Date.toISOString (Js.Date.fromFloat ms)) 0 19
+    |> String.to_seq
+    |> Seq.filter (fun c -> c <> '-' && c <> ':')
+    |> String.of_seq
+  in
+  Printf.sprintf "logseq_%s.%s" timestamp ext
 
 (* cljs filename: "logseq_" + (t/now) + ext — txt for text else format *)
 let save_to_file (st : S.t Signal.state) =
