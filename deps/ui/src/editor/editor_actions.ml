@@ -631,20 +631,24 @@ let blur_commit () = exit_edit ~select:false
 (* route change: persist the live buffer without refreshing — the
    navigation itself reloads whatever route is current *)
 let flush_edit () =
+  clear_pending_blur ();
   if S.ready () then
     match S.editing () with
     | None -> ()
   | Some e ->
       cancel_pending_focus ();
       let buf = Ops.trim_title e.uuid (live_buffer e.uuid) in
+      let save =
+        if buf <> model_title e.uuid then Some (Ops.accept_save e.uuid buf)
+        else (
+          Option.iter Ops.release_save (Ops.take_pending_save_for e.uuid);
+          None)
+      in
       (if Lazy.force perf_keys then
          Printf.eprintf "PERF editing-clear src=flush uuid=%s\n%!" e.uuid);
       Editor_sink.invalidate e.uuid;
       S.set (fun st -> { st with S.editing = None });
-      if buf <> model_title e.uuid then
-        ignore
-          (let* sop = Ops.save_block_parsed e.uuid buf in
-           Ops.apply [ sop ])
+      Option.iter (fun save -> ignore (Ops.save_pending save)) save
 
 (* property value cells open their own inline editor — entering one
    exits block editing just like a click into another block *)
