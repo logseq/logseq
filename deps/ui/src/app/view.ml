@@ -5,10 +5,8 @@ open Lui_elements
 
 let font_family () =
   let font = Settings_state.current_editor_font () in
-  match font.fglobal, font.ftype with
-  | true, "serif" -> "Lyon-Text, Georgia, ui-serif, serif"
-  | true, "mono" -> "iawriter-mono, Nitti, Menlo, Courier, monospace"
-  | _ -> "var(--lx-font-stack)"
+  Settings_state.editor_font_family
+    (if font.fglobal then font.ftype else "default")
 
 let view _context model_source _send : t =
  fun ctx parent ->
