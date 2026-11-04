@@ -2062,12 +2062,8 @@ html[data-theme=light] {
   flex: 0 1 auto !important;
 }
 
-/* menu_item always mounts icon/check slots even when the
-   item has no icon and is unchecked — cljs dropdown-menu-item renders
-   only label+children, so hide the empty slots or they squeeze the
-   label into ellipsis (e.g. tag menu "Go to #…" items) */
-.lui-menu-item > .lui-menu-item-icon:empty:not([data-name]),
-.lui-menu-item:not([data-selection-placement]) > .lui-menu-item-check:empty {
+/* Menu items always mount the leading icon slot, even without an icon. */
+.lui-menu-item > .lui-menu-item-icon:empty:not([data-name]) {
   display: none;
 }
 
