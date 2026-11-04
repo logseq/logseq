@@ -572,6 +572,24 @@ let reorder_display_property ~block_id ~active_ident ~over_ident ~direction
 let create_page title =
   apply "create-page" [ W.String title; W.Map [] ]
 
+let resolve_journal_day day =
+  let origin_repo = Runtime.repo () in
+  let read () =
+    invoke "get-journal-page-by-day" [ W.String origin_repo; W.Int day ]
+  in
+  let* page = read () in
+  let* page =
+    match page with
+    | W.Nil ->
+        let title = Dates.journal_title_ymd
+          ~y:(day / 10000) ~m:(day mod 10000 / 100) ~d:(day mod 100) in
+        let* _ = Sdk_util.apply_op_for_repo origin_repo "create-page"
+          [ W.String title; W.Map [] ] in
+        read ()
+    | _ -> Js.Promise.resolve page
+  in
+  Js.Promise.resolve (Option.get (entity_id_of page))
+
 let create_class title =
   apply "create-page"
     [ W.String title; W.Map [ (W.Keyword "class?", W.Bool true) ] ]

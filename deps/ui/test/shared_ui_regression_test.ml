@@ -1345,6 +1345,56 @@ let run_views ~registry ~profile ~finish =
             next rest;Js.Promise.resolve ()) (Js.Promise.resolve ()))
     in next [false,false,false;true,false,false;false,true,false;true,true,false;true,false,true]
   in
+  let property_date_check done_ =
+    let previous_worker = !Runtime.worker and previous_model = !Runtime.read_model in
+    Runtime.read_model := (fun () -> {Model.initial with repo=Some "property-date-fixture"});
+    let day = 20261110 in
+    let page = Wire.Map [Wire.kw "db/id",Wire.Int 78;
+      Wire.kw "block/journal-day",Wire.Int day] in
+    let ctx : Properties_value.ctx =
+      {owner_key="property-date-fixture";block_uuid="date-owner";block_id=Some 79;
+       refresh=(fun () -> ());is_page=false;class_schema=false} in
+    let rec next = function
+      | [] -> Runtime.worker:=previous_worker;Runtime.read_model:=previous_model;done_ ()
+      | (calendar,existing)::rest ->
+          let journal = ref (if existing then Some page else None) and written = ref None in
+          ignore (Fake_worker.install (fun name args ->
+            if name="thread-api/get-journal-page-by-day" then
+              Option.value !journal ~default:Wire.Nil
+            else if name="thread-api/apply-outliner-ops" then (
+              (match List.nth_opt args 1 with
+               | Some (Wire.Array ops) -> List.iter (function
+                   | Wire.Array [Wire.Keyword "create-page";Wire.Array [Wire.String title;_]] ->
+                       if Dates.journal_title_parts title=Some (10,11,2026) then journal:=Some page
+                   | Wire.Array [Wire.Keyword "set-block-property";
+                       Wire.Array [Wire.Uuid "date-owner";Wire.Keyword "fixture/date";value]] ->
+                       written:=Some value
+                   | _ -> ()) ops
+               | _ -> ());
+              Wire.Map [Wire.kw "result",Wire.Nil])
+            else Wire.Nil));
+          let selector = if calendar then
+            Some (mount (fun _ -> Properties_value.date_picker_content ctx
+              ~ident:"fixture/date" ~is_datetime:false
+              ~value:(Wire.Map [Wire.kw "block/journal-day",Wire.Int 20261101])
+              ~on_value:(fun value -> Properties_value.set_scalar ctx ~ident:"fixture/date" ~value)
+              ~on_clear:(fun () -> ()) ~on_dismiss:(fun () -> ())))
+            else None in
+          (match selector with
+           | Some selector ->
+               let button = List.find (fun n -> M.string_prop n "accessibility-identifier"
+                 =Some "calendar-day-2026-11-10") (nodes selector) in
+               S.press selector button.M.id
+           | None -> Properties_value.commit_date_text ctx "fixture/date" ~is_datetime:false "2026-11-10");
+          ignore (Js.Global.setTimeout ~f:(fun () ->
+            check (Printf.sprintf "Date %s commits the requested %s journal entity"
+              (if calendar then "picker" else "text") (if existing then "existing" else "new"))
+              (!journal=Some page && !written=Some (Wire.Int 78));
+            Option.iter (fun selector -> ignore (Lui_app.dispose selector.S.app)) selector;
+            next rest) 0)
+    in
+    next [false,false;false,true;true,false;true,true]
+  in
   let custom_date_check done_ =
     let measured_options=Hashtbl.create 3 in
     let previous_worker = !Runtime.worker and previous_model = !Runtime.read_model
@@ -3031,7 +3081,7 @@ let run_views ~registry ~profile ~finish =
       Collaborators.members_sig_ref := members_before;
       Graphs_ops.on_repos_changed := repos_changed_before;
       async_selection_check (fun () -> filter_value_check (fun () ->
-        filter_reference_titles_check (fun () -> filter_edit_check (fun () -> filter_operator_check (fun () -> page_name_filter_check (fun () -> filter_input_check ();filter_scope_check ();config_boot_check (fun () -> config_save_check (fun () -> custom_date_check (fun () -> type_choice_check (fun () -> Runtime.app_flush := previous_flush;finish ()))))))))));
+        filter_reference_titles_check (fun () -> filter_edit_check (fun () -> filter_operator_check (fun () -> page_name_filter_check (fun () -> filter_input_check ();filter_scope_check ();config_boot_check (fun () -> config_save_check (fun () -> custom_date_check (fun () -> property_date_check (fun () -> type_choice_check (fun () -> Runtime.app_flush := previous_flush;finish ())))))))))));
       Js.Promise.resolve ()) (Js.Promise.resolve ()))))
 
 let popup_press (ev : Ui_services.ev) =

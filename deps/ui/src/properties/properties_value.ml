@@ -155,10 +155,8 @@ let today_day () =
   (f.year * 10000) + (f.month * 100) + f.day
 
 let set_date ctx ident day =
-  (let* w = D.journal_page_by_day day in
-  (match D.geti w "db/id" with
-   | Some id -> set_scalar ctx ~ident ~value:(W.Int id)
-   | None -> ());
+  (let* id = D.resolve_journal_day day in
+  set_scalar ctx ~ident ~value:(W.Int id);
   Js.Promise.resolve ())
   |> ignore
 
@@ -833,9 +831,8 @@ let date_picker_content ctx ~ident ~is_datetime ~value ~on_value ~on_clear ~on_d
   in
   let pick ms =
     if is_datetime then on_value (W.Float ms)
-    else ignore (let* page=D.journal_page_by_day (Dates.journal_day_of ms) in
+    else ignore (let* id=D.resolve_journal_day (Dates.journal_day_of ms) in
       if !alive then (
-        let id=Option.get (D.entity_id_of page) in
         on_value (W.Int id);on_dismiss ());
       Js.Promise.resolve ())
   in
