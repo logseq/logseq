@@ -189,7 +189,7 @@ let lp_menu st =
       let items =
         (if recent then []
          else
-           [ item (t "page/unfavorite") "star-off" [ {js|⌘|js}; {js|⇧|js}; "F" ]
+           [ item (t "page/unfavorite") "star-off" (Keymap_record.keycaps "mod+shift+f")
                (fun () ->
                  if Wire.is_uuid_string target then
                    Sidebar_state.unfavorite st target) ])
