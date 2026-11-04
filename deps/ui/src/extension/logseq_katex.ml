@@ -3,8 +3,8 @@
    Web emits a slot carrying the .latex/.latex-inline classes and a
    hidden .opacity-0 tex child (a logseq-span); the render_libs doc-scan
    lazy-loads katex + mhchem and calls katex.render into the slot.
-   Native hosts emit the same generic logseq-<tag> shape as before (the
-   native twin does not register this schema).
+   The native twin emits visible TeX source as retained text, without
+   this schema or a browser rendering request; it does not render TeX.
 
    Props:
      tex     — raw latex source (required)
