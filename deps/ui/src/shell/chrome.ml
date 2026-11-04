@@ -808,6 +808,7 @@ let left_sidebar (ms : Model.t Signal.signal) (st : Sidebar_state.t) =
        ~value:(reactive (fun viewport ->
          if viewport>=640. then Sidebar_state.left_width_max else int_of_float viewport)
          (Signal.value st.Sidebar_state.viewport_w))
+     (Ui_components.with_props [ Ui_components.Prop.height_viewport 1. ]
      (box ~key:"left-sidebar" ~accessibility_identifier:"left-sidebar"
        ~inert:(reactive (fun (m : Model.t) -> not m.left_sidebar_open) ms)
        ~min_height:0 ~style_class:"cp__sidebar-left-layout"
@@ -839,7 +840,7 @@ let left_sidebar (ms : Model.t Signal.signal) (st : Sidebar_state.t) =
            ~background:"var(--lx-gray-03, var(--ls-tertiary-background-color))" [] ]
        ; Ui_parts.pressable
            ~on_press:(fun _ -> Runtime.send Action.Toggle_left_sidebar)
-           (box ~key:"shade" ~style_class:"shade-mask" []) ])))
+           (box ~key:"shade" ~style_class:"shade-mask" []) ]))))
 
 (* The left dock retains pixels while the right dock or window resizes.
    Below 640px it becomes an overlay and releases its split track. *)

@@ -934,12 +934,15 @@ let graphs_selector st (ms : Model.t Signal.signal) : t =
 
 let contents (ms : Model.t Signal.signal) : t =
   let st = Sidebar_state.ensure ms in
-  Ui_components.with_props [ Ui_components.Prop.position `relative ]
+  Ui_components.with_props
+    [ Ui_components.Prop.position `relative
+    ; Ui_components.Prop.padding_top 4
+    ; Ui_components.Prop.padding_left 12
+    ; Ui_components.Prop.padding_right 12 ]
     (scroll ~key:"ls-contents" ~grow:1. ~min_height:0 ~orientation:`vertical
        ~accessibility_identifier:"left-sidebar-scroll"
        ~style_class:"sidebar-contents-container"
-       [ column ~key:"ls-groups" ~gap:4 ~padding_horizontal:12
-           ~padding_vertical:4
+       [ column ~key:"ls-groups" ~gap:4
            [ favorites_group st; recents_group st ] ])
 
 let menus (ms : Model.t Signal.signal) : t =

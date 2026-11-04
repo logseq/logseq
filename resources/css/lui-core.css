@@ -655,18 +655,6 @@ html[data-theme="dark"] #left-sidebar > .shade-mask {
 }
 
 
-.sidebar-contents-container {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  padding: 0.25rem 0.75rem 0;
-  position: relative;
-  height: 100%;
-  overflow-x: hidden;
-  overflow-y: auto;
-}
-
-
 .left-sidebar-inner .item.active {
   border-radius: 6px;
   background-color: var(--lx-gray-04, var(--ls-quaternary-background-color));
