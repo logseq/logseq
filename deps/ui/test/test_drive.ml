@@ -1160,6 +1160,65 @@ let rec after n f =
          if n <= 0 then (f (); Js.Promise.resolve ())
          else (after (n - 1) f; Js.Promise.resolve ()))))
 
+let test_readonly_block_interaction () =
+  let previous_reader = !Runtime.read_model
+  and previous_page = !Runtime.current_page
+  and previous_editor = Editor_state.read ()
+  and previous_click = !Editor_state.click_point
+  and previous_down = !Editor_keys.last_block_mousedown in
+  let b = block "readonly-entry" "Read-only preview" in
+  let model = { Model.initial with repo = Some "readonly-entry-fixture";
+    route = Model.Page "readonly-entry"; route_page = Some (page [b]) } in
+  Runtime.read_model := (fun () -> model);
+  Runtime.current_page := None;
+  let rec settle n =
+    if n = 0 then Js.Promise.resolve ()
+    else Js.Promise.then_ (fun () -> settle (n - 1)) (Js.Promise.resolve ())
+  in
+  let rec run = function
+    | [] ->
+        Runtime.read_model := previous_reader;
+        Runtime.current_page := previous_page;
+        Editor_state.set (fun _ -> previous_editor);
+        Editor_state.click_point := previous_click;
+        Editor_keys.last_block_mousedown := previous_down;
+        Js.Promise.resolve ()
+    | (editable, scope, content) :: rest ->
+        Editor_state.set (fun st -> { st with Editor_state.editing = None });
+        let rows = S.mount ~registry:(Views_drive.registry ())
+          ~profile:Logseq_el.web_profile ~initial:Model.initial
+          ~reducer:(fun m () -> m)
+          ~view:(fun _ctx _ms _send -> Tree.block_row ~scope ~editable b) () in
+        let row = List.find (fun n -> has_tok n "ls-block") (M.all_nodes rows.S.tree) in
+        let host = Web_dom.create_element "div"
+        and target = Web_dom.create_element "div" in
+        Web_dom.el_set_class host "ls-block";
+        Web_dom.el_set_attr host "id" "ls-block-readonly-entry";
+        Web_dom.el_set_attr host "data-cid" scope;
+        Web_dom.el_set_attr host "data-blockid" "readonly-entry";
+        Option.iter (Web_dom.el_set_attr host "data-editable") (attr_val row "data-editable");
+        Web_dom.el_set_class target (if content then "block-content" else "block-main-container");
+        Web_dom.el_set_attr target "data-blockid" "readonly-entry";
+        Web_dom.el_append_child host target;
+        let ev = Ui_dom_web.ev_of (Stub_dom.make_event ~target "click") in
+        Editor_keys.on_mousedown ev;
+        check "only editable block presses arm pointer editing"
+          (Option.is_some !Editor_state.click_point = editable);
+        Editor_keys.on_click ev;
+        Js.Promise.then_ (fun () ->
+          check "block pointer editing respects the rendered owner's capability"
+            (Option.map (fun e -> e.Editor_state.uuid, e.scope) (Editor_state.editing ())
+             = if editable then Some ("readonly-entry", scope) else None);
+          Editor_actions.cancel_pending_focus ();
+          Editor_actions.clear_pending_blur ();
+          Editor_state.set (fun st -> { st with Editor_state.editing = None });
+          ignore (Lui_app.dispose rows.S.app);
+          run rest) (settle 20)
+  in
+  run [false,"preview",true; false,"preview",false;
+       true,"main",true; true,"main",false;
+       true,"sidebar",true; true,"sidebar",false]
+
 let async_checks () =
   (* favorites/recents/contents land through fake-worker invocations *)
   check "worker fav item rendered"
@@ -2356,5 +2415,7 @@ let run ~finish =
                              cleanup ();
                              Js.Promise.then_
                                (fun () -> finish (); Js.Promise.resolve ())
-                               (test_title_refs_class_identity ()))
+                               (Js.Promise.then_
+                                  (fun () -> test_title_refs_class_identity ())
+                                  (test_readonly_block_interaction ())))
                            settled)))))))

@@ -16,6 +16,11 @@ let closest sel t =
 let is_editable_target t =
   match t with Some el -> el.Ui_services.editable () | None -> false
 
+let readonly_block_target target =
+  match closest ".ls-block" target with
+  | Some row -> row.Ui_services.attr "data-editable" = Some "false"
+  | None -> false
+
 let ( let* ) p f = Js.Promise.then_ f p
 
 let mods ev = ev.Ui_services.ctrl || ev.Ui_services.meta
@@ -1634,6 +1639,7 @@ let on_click ev =
                         target
                     with
                     | Some _ -> ()
+                    | None when readonly_block_target target -> ()
                     | None -> (
                         match closest ".ls-comments-label" target with
                         | Some el -> (
@@ -1787,7 +1793,8 @@ let on_mousedown (ev : Ui_services.ev) =
   (* a pointer going down ends any stale drag that missed its release
      click (released outside the document) *)
   drag_reset ();
-  if Ui_services.env_native_drag () then arm_drag ev;
+  let readonly = readonly_block_target ev.Ui_services.target in
+  if Ui_services.env_native_drag () && not readonly then arm_drag ev;
   if S.ready () then begin
     (* record which block's content the pointer went down on — including
        outside any block (clears the record) — and the editing uuid the
@@ -1799,7 +1806,7 @@ let on_mousedown (ev : Ui_services.ev) =
     in
     let now = Ui_services.time_now () in
     last_block_mousedown :=
-      (match
+      (if readonly then ("", now, stale) else match
          closest
            "button, a, input, audio, video, details, summary, \
             sup.fn, [contenteditable=true], .cloze, \
