@@ -825,19 +825,21 @@ let keymap_category = function
   | _ -> "shortcut.category/others"
 
 let keymap_th ~key ~collapsed ~on_press label =
-  list_item ~key ~style_class:"th" ~on_press
-    ~min_height:30 ~margin_bottom:8
-    ~padding_vertical:4 ~padding_horizontal:8 ~corner_radius:6
+  Ui_components.with_props
+    [Ui_components.Prop.font_size "15px"; Ui_components.Prop.line_height "1.5"]
+    (list_item ~key ~style_class:"th" ~on_press
+    ~margin_bottom:8
+    ~padding_vertical:4 ~padding_horizontal:8 ~corner_radius:4
     ~background:"var(--lx-gray-03, hsl(var(--muted)))"
     [ row ~grow:1. ~min_width:0 ~main:`space_between ~cross:`center ~gap:8
       [ text ~key:(key ^ "s") ~style_class:"ls-th-strong"
-        ~font_size:"0.9375rem" ~line_height:"1.25rem" ~font_weight:600
+        ~font_size:"15px" ~line_height:"1.5" ~font_weight:600
         ~grow:1. ~min_width:0
         ~value:(I18n.t (keymap_category label)) []
     ; icon ~key:(key ^ "i") ~style_class:"ls-row" ~size:`sm
         ~name:(if collapsed then `app "chevron-right" else `app "chevron-down") []
       ]
-    ]
+    ])
 
 let keymap_editor st editing (r : Keymap_data.row) : t =
  fun ctx parent ->
@@ -963,7 +965,10 @@ let keymap_editor st editing (r : Keymap_data.row) : t =
 let keymap_row st editing ~key (r : Keymap_data.row) =
   let open Keymap_data in
   (* the title tooltip attr was DOM-only — dropped *)
-  Ui_components.with_props [Ui_components.Prop.width_auto]
+  Ui_components.with_props
+    [ Ui_components.Prop.width_auto;
+      Ui_components.Prop.font_size "15px";
+      Ui_components.Prop.line_height "1.4285714285714286" ]
     (list_item ~key ~style_class:"shortcut-row"
     ~padding_vertical:4 ~padding_horizontal:8
     ~margin_horizontal:(-4) ~margin_bottom:4
