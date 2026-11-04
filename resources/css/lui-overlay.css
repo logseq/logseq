@@ -1007,13 +1007,6 @@
   opacity: 0.8;
 }
 
-.panel-wrap .ls-date-format {
-  font-size: 0.75rem;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='none' stroke='%236b7280' stroke-width='1.5'%3E%3Cpath d='m3 4.5 3 3 3-3'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 10px center;
-}
-
 .panel-wrap [role="checkbox"]:hover {
   opacity: 0.8;
 }

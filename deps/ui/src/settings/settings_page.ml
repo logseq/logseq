@@ -330,18 +330,20 @@ let date_format_row ctx =
          ~text:(T.t "settings.editor/custom-date-format") ())
     ~control:
       (column ~key:"dfmt-w" ~max_width:320 ~cross:`stretch
-         [ select ~key:"dfmt-s"
+         [ Ui_components.with_props
+             [Ui_components.Prop.font_size "0.75rem"]
+             (select ~key:"dfmt-s"
              ~width:200 ~height:29 ~corner_radius:4
-             ~padding_horizontal:8
+             ~padding_horizontal:8 ~padding_vertical:0
+             ~border_width:1 ~border_color:"var(--lx-gray-06)"
              ~background:"var(--lx-gray-03)"
-             ~style_class:"form-select is-small ls-date-format"
              ~text:current
              ~disabled:(reactive (fun (s : S.t) ->
                s.journal_uuid = None || s.date_format_saving) (S.signal ()))
              ~on_press:(fun _ ->
                Signal.set mst (not (Runtime.signal_get mst));
                Runtime.flush ())
-             []
+             [])
          ; reactive ~equal:( == ) (fun open_ ->
              if open_ then dfmt_menu ~scope:ctx.ui_scope ~key:"dfmt" mst options current
              else spacer ~key:"dfmt-m-x" [])
