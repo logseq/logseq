@@ -823,11 +823,13 @@ let date_picker_content ctx ~ident ~is_datetime ~value ~on_value ~on_clear ~on_d
   fetch_repeat ctx ~ident ~is_datetime (fun value ->
     if !alive then Runtime.signal_set rep (Some value));
   let initial =
-    match is_datetime,ms_of_value value,ymd_of_datetime_value value with
-    | true,Some ms,_ -> ms
-    | _,_,Some (year,month,day) -> Dates.make ~year ~month ~day ()
-    | _ -> let now=Dates.fields (Dates.date_now ()) in
+    if D.value_empty_p value then
+      let now=Dates.fields (Dates.date_now ()) in
         Dates.make ~year:now.year ~month:now.month ~day:now.day ()
+    else if is_datetime then Option.get (ms_of_value value)
+    else
+      let day=Option.get (D.geti (D.untag value) "block/journal-day") in
+      Dates.make ~year:(day / 10000) ~month:(day mod 10000 / 100) ~day:(day mod 100) ()
   in
   let pick ms =
     if is_datetime then on_value (W.Float ms)

@@ -1361,6 +1361,10 @@ let run_views ~registry ~profile ~finish =
           ignore (Fake_worker.install (fun name args ->
             if name="thread-api/get-journal-page-by-day" then
               Option.value !journal ~default:Wire.Nil
+            else if name="thread-api/entity" then
+              (match List.nth_opt args 1 with
+               | Some (Wire.Int 78) -> Option.value !journal ~default:Wire.Nil
+               | _ -> Wire.Map [Wire.kw "fixture/date",Option.value !written ~default:Wire.Nil])
             else if name="thread-api/apply-outliner-ops" then (
               (match List.nth_opt args 1 with
                | Some (Wire.Array ops) -> List.iter (function
@@ -1391,7 +1395,20 @@ let run_views ~registry ~profile ~finish =
               (if calendar then "picker" else "text") (if existing then "existing" else "new"))
               (!journal=Some page && !written=Some (Wire.Int 78));
             Option.iter (fun selector -> ignore (Lui_app.dispose selector.S.app)) selector;
-            next rest) 0)
+            let prop=Wire.Map [Wire.kw "db/ident",Wire.kw "fixture/date";
+              Wire.kw "logseq.property/type",Wire.kw "date"] in
+            let d : Properties_dialog.dlg_state =
+              {d_target={uuid="date-owner";uuids=[];db_id=Some 79;is_tag=false;title=""};
+               d_remove=false;d_placement=Properties_dialog.Centered;
+               d_phase=Properties_dialog.Value_edit prop;d_phase_sig=None} in
+            let reopened=mount (fun _ -> Properties_dialog.date_value_view d prop) in
+            ignore (Js.Global.setTimeout ~f:(fun () ->
+              check "Reopening a saved Date selects its journal day rather than an epoch date"
+                (List.exists (fun n -> M.string_prop n "accessibility-identifier"
+                  =Some "calendar-day-2026-11-10" &&
+                  Hashtbl.find_opt n.M.props "autofocus"=Some (P.BoolValue true)) (nodes reopened));
+              ignore (Lui_app.dispose reopened.S.app);
+              next rest) 0)) 0)
     in
     next [false,false;false,true;true,false;true,true]
   in
