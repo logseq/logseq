@@ -576,6 +576,17 @@ let nav_group ms st =
 
 
 let page_item_el st (p : Model.page) ~li_class ~recent ~key =
+  let go_page shift =
+    if shift then
+      match p.Model.page_uuid with
+      | Some u -> Sidebar_state.open_uuid st u
+      | None -> ()
+    else
+      Sidebar_state.navigate_to_page
+        (match p.Model.page_title with
+         | "" -> Option.value p.Model.page_uuid ~default:""
+         | title -> title)
+  in
   let origin = ref None and dragged = ref false in
   let drag_down = function
     | P.PointerDown (_, d) when not recent && d.button = 0 ->
@@ -591,11 +602,13 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key =
          | _ -> ())
     | _ -> () in
   let drag_up = function
-    | P.PointerUp (_, d) ->
+    | P.PointerUp (_, d) when not recent && d.button = 0 ->
         (match !origin, p.Model.page_uuid with
          | Some (repo, _, _), Some source when !dragged ->
              Sidebar_state.favorite_drop_at st d.x d.y;
              Sidebar_state.finish_favorite_drag st ~repo ~source
+         | Some (repo, _, _), _ when not !dragged && Runtime.repo () = repo ->
+             go_page (d.modifiers land 2 <> 0)
          | _ -> ());
         origin := None
     | _ -> () in
@@ -628,19 +641,6 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key =
     Sidebar_state.toggle_lp_menu st ~target:lp_ref ~recent ~ax ~atop
       ~abot
   in
-  let go_page shift =
-    (* navigate by title: #/page/<uuid> hashes hit the
-       Router.page_ref lookup-ref bug (see sidebar_state). *)
-    if shift then
-      match p.Model.page_uuid with
-      | Some u -> Sidebar_state.open_uuid st u
-      | None -> ()
-    else
-      Sidebar_state.navigate_to_page
-        (match p.Model.page_title with
-         | "" -> Option.value p.Model.page_uuid ~default:""
-         | title -> title)
-  in
   Ui_components.with_props
     [ Ui_components.Prop.font_weight 500
     ; Ui_components.Prop.cursor `pointer
@@ -655,7 +655,8 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key =
         (arm_press ~on_press_detail:(fun ev ->
              match ev with
              | Lui_protocol.PressDetail (_, d) ->
-                 if not !dragged then go_page (d.Lui_protocol.modifiers land 2 <> 0)
+                 (* Captured Favorites complete through PointerUp. *)
+                 if recent then go_page (d.Lui_protocol.modifiers land 2 <> 0)
              | _ -> ())
           (box ~pointer_capture:(not recent)
             ~on_pointer_down:drag_down ~on_pointer_move:drag_move
