@@ -332,9 +332,9 @@ let recent_ids_of_storage repo =
   | None -> []
 
 let push_recent repo id =
-  let ids =
-    id :: take 14 (List.filter (fun x -> x <> id) (recent_ids_of_storage repo))
-  in
+  let previous = recent_ids_of_storage repo in
+  if List.mem id previous then () else
+  let ids = id :: take 14 previous in
   (* merge into the stored per-graph map — rewriting the whole value
      would drop every other repo's recents on each visit *)
   let kvs =
@@ -1096,7 +1096,7 @@ let toggle_item_menu st key ~ax ~atop ~abot =
    dropdown at the pointer; right-click on a right-sidebar item header
    opens its actions menu *)
 let on_doc_contextmenu st ev =
-  match click_target "#left-sidebar a.link-item" ev with
+  match click_target "#left-sidebar [data-lp-ref]" ev with
   | Some el -> (
       prevent_default ev;
       match el.Ui_services.attr "data-lp-ref" with
