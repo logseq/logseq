@@ -355,8 +355,12 @@ let rate st rating =
 let toggle_opts st =
   Runtime.signal_set st.opts_open (not (Runtime.signal_get st.opts_open))
 
+let close_opts st = Runtime.signal_set st.opts_open false
+
 let toggle_info st =
   Runtime.signal_set st.info_open (not (Runtime.signal_get st.info_open))
+
+let close_info st = Runtime.signal_set st.info_open false
 
 let select_deck st i =
   Runtime.signal_set st.sel i;
@@ -504,7 +508,7 @@ let advance_phase st =
 (* cljs shortcut.handler/cards: s toggles answers, 1-4 click the
    rating buttons (visible when next-phase = :init) *)
 let on_keydown ev st =
-  if Runtime.signal_get st.open_ then
+  if Runtime.signal_get st.open_ && not ev.Ui_services.default_prevented then
     match ev.Ui_services.key with
     | Some "Escape" -> close st
     | Some "s" -> advance_phase st

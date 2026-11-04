@@ -25,7 +25,7 @@ let opts_box st =
                decks
         in
         dropdown_menu ~key:"opts" ~anchor:`below ~anchor_alignment:`start
-          ~on_dismiss:(fun _ -> Cards_state.toggle_opts st)
+          ~on_dismiss:(fun _ -> Cards_state.close_opts st)
           options)
     (Logseq_el.own ctx
        (Signal.map2 (fun a b -> (a, b))
@@ -140,7 +140,7 @@ let info_btn st =
            else
              Ui_components.popover_card ~key:"i-opts" ~anchor:`below
                ~anchor_alignment:`start
-               ~on_dismiss:(fun _ -> Cards_state.toggle_info st)
+               ~on_dismiss:(fun _ -> Cards_state.close_info st)
                (List.map
                   (fun (_, label_key, _, _, _) ->
                     let desc_key = label_key ^ "-desc" in
