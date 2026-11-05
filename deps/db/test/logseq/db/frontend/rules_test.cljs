@@ -11,7 +11,7 @@
        (rules/extract-rules rules/db-query-dsl-rules)))
 
 (deftest get-full-deps
-  (let [property-value-deps #{:ref->val :class-extends :object-has-class-property :property-missing-value :ref-property-value :ref-property-value-with-default}
+  (let [property-value-deps #{:ref->val :class-extends :class-instance :object-has-class-property :property-missing-value :ref-property-value :ref-property-value-with-default}
         property-deps (conj property-value-deps :ref-property-with-default)
         task-deps (conj property-deps :task)
         priority-deps (conj property-deps :priority)
@@ -270,10 +270,13 @@
               {:pages-and-blocks
                [{:page {:block/title "Page1"}
                  :blocks [{:block/title "doing task"
+                           :build/tags [:logseq.class/Task]
                            :build/properties {:logseq.property/status :logseq.property/status.doing}}
                           {:block/title "review task"
+                           :build/tags [:logseq.class/Task]
                            :build/properties {:logseq.property/status :logseq.property/status.in-review}}
                           {:block/title "waiting task"
+                           :build/tags [:logseq.class/Task]
                            :build/properties {:logseq.property/status [:build/page {:block/title "QA Ready"}]}}
                           {:block/title "urgent task"
                            :build/properties {:logseq.property/priority [:build/page {:block/title "Very High"}]}}]}]})
