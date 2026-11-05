@@ -1,6 +1,7 @@
 (ns electron.db
   "Provides SQLite dbs for electron and manages files of those dbs"
-  (:require ["fs-extra" :as fs]
+  (:require ["node:os" :as os]
+            ["fs-extra" :as fs]
             ["path" :as node-path]
             [electron.db-worker :as db-worker]
             [lambdaisland.glogi :as log]
@@ -159,3 +160,11 @@
     (js/clearInterval interval-id))
   (reset! *auto-backup {:window->repo {}
                         :interval-id nil}))
+
+(defn <read-import-snapshot
+  [source-path]
+  (let [temp-dir (fs/mkdtempSync (node-path/join (os/tmpdir) "logseq-import-"))
+        snapshot-path (node-path/join temp-dir "db.sqlite")]
+    (-> (p/let [_ (sqlite-backup/backup-db-file! source-path snapshot-path)]
+          (fs/readFileSync snapshot-path))
+        (p/finally #(fs/rmSync temp-dir #js {:recursive true :force true})))))

@@ -373,6 +373,7 @@
       (logger/warn :cli/install "Skipping CLI launcher install; development CLI script is not built.")
       (cli-install/install-cli-launcher!
        {:windows? utils/win32?
+        :packaged? (.-isPackaged ^js app)
         :cli-path cli-path
         :cli-dir! cli-dir!
         :exe-path (.getPath app "exe")

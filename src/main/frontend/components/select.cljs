@@ -8,6 +8,7 @@
             [frontend.context.i18n :refer [t]]
             [frontend.handler.common.developer :as dev-common-handler]
             [frontend.handler.repo :as repo-handler]
+            [frontend.handler.route :as route-handler]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.search :as search]
             [frontend.state :as state]
@@ -16,7 +17,6 @@
             [frontend.util.text :as text-util]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
-            [reitit.frontend.easy :as rfe]
             [io.factorhouse.hsx.core :as hsx]))
 
 (hsx/defc render-item
@@ -263,6 +263,20 @@
         (if (fn? input-container) (input-container) input-container)
         (results-container-f)])]))
 
+(defn graph-open-add-graph!
+  "Navigate to All graphs in-app. Electron intercepts bare :href as an OS URL."
+  []
+  (state/close-dialog!)
+  (route-handler/redirect-to-all-graphs))
+
+(defn graph-open-empty-placeholder
+  [t]
+  [:div.px-4.py-2
+   [:div.mb-2 (t :graph.switch/empty-desc)]
+   (ui/button
+    (t :graph.switch/add-graph-action)
+    :on-click graph-open-add-graph!)])
+
 (defn select-config
   "Config that supports multiple types (uses) of this component. To add a new
   type, add a key with the value being a map with the following keys:
@@ -289,13 +303,7 @@
                          :graph url}))))
     :prompt-key :graph.switch/select-prompt
     :on-chosen #(state/pub-event! [:graph/switch (:graph %)])
-    :empty-placeholder (fn [t]
-                         [:div.px-4.py-2
-                          [:div.mb-2 (t :graph.switch/empty-desc)]
-                          (ui/button
-                           (t :graph.switch/add-graph-action)
-                           :href (rfe/href :graphs)
-                           :on-click state/close-dialog!)])}
+    :empty-placeholder graph-open-empty-placeholder}
    :graph-remove
    {:items-fn (fn []
                 (->> (state/get-repos)

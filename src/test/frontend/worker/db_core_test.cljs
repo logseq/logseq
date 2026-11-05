@@ -2762,6 +2762,24 @@
   (is (not (contains? result :staged-assets)))
   (is (not (contains? result :ignored-properties))))
 
+(deftest compact-import-result-preserves-location-without-property-values
+  (let [result (#'db-core/compact-import-result
+                {:files []
+                 :import-state
+                 {:ignored-files (atom [{:path "pages/Skipped.edn" :reason :unsupported-file-format}])
+                  :ignored-assets (atom [{:path "assets/missing.png" :reason "Missing asset"}])
+                  :ignored-properties (atom [{:property :rating
+                                              :value "invalid rating"
+                                              :location {:page "Home"}}])}}
+                [] {:errors []})]
+    (is (= [{:path "pages/Skipped.edn" :reason :unsupported-file-format}]
+           (mapv #(select-keys % [:path :reason]) (:ignored-files-detail result))))
+    (is (= [{:path "assets/missing.png" :reason "Missing asset"}]
+           (mapv #(select-keys % [:path :reason]) (:ignored-assets-detail result))))
+    (is (= [{:property :rating :location {:page "Home"}}]
+           (:ignored-properties-detail result)))
+    (is (= 1 (:ignored-properties-count result)))))
+
 (deftest import-file-graph-imports-documents-into-worker-conn
   (async done
          (->

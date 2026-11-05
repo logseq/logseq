@@ -47,6 +47,32 @@
           (is false (str error))))
        (p/finally done)))))
 
+(deftest property-node-selector-data-extends-options-exclude-root-tag
+  (let [conn (d/create-conn db-schema/schema)]
+    (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+    (d/transact! conn [{:db/id -1
+                        :db/ident :user.class/Topic
+                        :block/title "Topic"
+                        :block/name "topic"
+                        :block/tags :logseq.class/Tag
+                        :logseq.property.class/extends :logseq.class/Root}
+                       {:db/id -2
+                        :db/ident :user.class/Parent
+                        :block/title "Parent"
+                        :block/name "parent"
+                        :block/tags :logseq.class/Tag
+                        :logseq.property.class/extends :logseq.class/Root}])
+    (let [topic (d/entity @conn :user.class/Topic)
+          data (worker-property/property-node-selector-data
+                @conn
+                {:property (select-keys (d/entity @conn :logseq.property.class/extends)
+                                        [:db/id :db/ident :logseq.property/type])
+                 :block {:db/id (:db/id topic)}})]
+      (is (some #(= :user.class/Parent (:db/ident %)) (:extends-class-options data))
+          "Other tags are still offered as parents")
+      (is (not-any? #(= :logseq.class/Root (:db/ident %)) (:extends-class-options data))
+          "Root Tag is the implicit parent and is not a choice in the Extends select"))))
+
 (deftest display-properties-hides-hide-by-default-properties-on-nodes
   (let [conn (db-test/create-conn-with-blocks
               {:properties {:keywords {:logseq.property/type :default
