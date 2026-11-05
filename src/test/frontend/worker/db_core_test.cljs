@@ -2953,12 +2953,15 @@
                   db-sync/handle-local-tx! (fn [& _] nil)
                   shared-service/broadcast-to-clients! (fn [& _] nil)]
                  (->
-                  (p/let [result (import-file-graph! test-repo config-file files {:user-options {}})]
-                    (is (nil? (ldb/get-page @conn "missing"))
-                        "A missing lazy file is not imported as an empty page.")
-                    (is (pos? (:ignored-files-count result))
-                        "Read failure is recorded as an ignored file.")
-                    (is (= :completed-with-errors (:status result))))
+                  (import-file-graph! test-repo config-file files {:user-options {}})
+                  (p/then (fn [_]
+                            (is false "A lazy-read failure must reject so import does not finish as a partial graph.")))
+                  (p/catch (fn [error]
+                             (is (= :file-graph-import/file-failed (:code (ex-data error))))
+                             (is (= "pages/Missing.md" (:path (ex-data error))))
+                             (is (string/includes? (or (ex-message error) "") "ENOENT"))
+                             (is (nil? (ldb/get-page @conn "missing"))
+                                 "A missing lazy file is not imported as an empty page.")))
                   (p/finally (fn []
                                (reset! ldb/*transact-pipeline-fn pipeline-before))))))))
           (p/catch
