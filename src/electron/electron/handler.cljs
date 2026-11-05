@@ -237,21 +237,24 @@
            (clj->js {:repo repo :phase (:phase lifecycle-state)
                      :generation (:generation lifecycle-state)}))))
 
-(defmethod handle :deleteGraph [_window [_ graph]]
+(defmethod handle :deleteGraph [_window [_ graph expected-generation]]
   (when-let [repo (canonical-repo graph)]
     (let [graphs-dir (common-graph/get-db-graphs-dir)
           current (lifecycle/snapshot (cli-server/resolve-storage {}) repo)
           generation (when current (.-generation current))]
+      (when (and expected-generation (not= expected-generation generation))
+        (throw (ex-info "Graph generation changed" {:code :graph-not-exists :repo repo})))
       (db-worker/invalidate-repo! db-worker/manager repo)
       (notify-graph-lifecycle! repo {:phase "deleting" :generation generation})
       (cli-common/<unlink-graph!
        graphs-dir repo
        (fn []
          (notify-graph-lifecycle! repo {:phase "deleted" :generation generation})
-         #js {:ok true})))))
+         #js {:ok true})
+       expected-generation))))
 
-(defmethod handle :createGraph [_window [_ repo]]
-  (lifecycle/createGraph (cli-server/resolve-storage {}) (canonical-repo repo)))
+(defmethod handle :createGraph [_window [_ repo exclusive?]]
+  (lifecycle/createGraph (cli-server/resolve-storage {}) (canonical-repo repo) (true? exclusive?)))
 
 ;; DB related IPCs start
 

@@ -12,10 +12,12 @@
   ([graphs-dir repo]
    (<unlink-graph! graphs-dir repo nil))
   ([graphs-dir repo commit]
+   (<unlink-graph! graphs-dir repo commit nil))
+  ([graphs-dir repo commit generation]
    (p/let [result (lifecycle/deleteGraph
                   (lifecycle/resolveStorage
                    (node-path/dirname (common-graph/expand-home graphs-dir))
-                   (common-graph/expand-home graphs-dir)) repo commit)]
+                   (common-graph/expand-home graphs-dir)) repo commit generation)]
      (when-not (.-existed ^js result)
        (throw (ex-info "Graph does not exist" {:code :graph-not-exists :repo repo})))
      (.-destination ^js result))))
