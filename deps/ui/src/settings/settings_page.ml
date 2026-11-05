@@ -227,7 +227,7 @@ let accent_row ~modal =
   in
   column ~key:"acc"
     [ C.action_row ~key:"acc-r"
-        ~density:(if modal then `compact else `regular)
+        ~density:`compact
         ~label:(T.t "settings.general/accent-color") ~col_gap:16 ~label_lh:"1.25rem"
         ~actions:[ swatches ] ~stretch:modal
         ~desc:
