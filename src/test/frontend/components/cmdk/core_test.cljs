@@ -304,3 +304,97 @@
            (fn [error]
              (is false (str error))))
           (p/finally done)))))
+
+(defn- page-scoped-search-state
+  [results]
+  {::cmdk/input (atom "needle")
+   ::cmdk/results results
+   ::cmdk/filter (atom {:group :current-page})
+   ::cmdk/expanded? true})
+
+(defn- recording-block-search
+  [search-calls page-uuid page-block other-block]
+  (fn [_repo input opts]
+    (swap! search-calls conj {:input input :opts opts})
+    (let [items (if (= (str page-uuid) (:page opts))
+                  [page-block]
+                  [page-block other-block])]
+      (p/resolved {:items items
+                   :matched-count (count items)}))))
+
+(deftest load-results-current-page-scopes-search-to-resolved-page-test
+  (async done
+    (let [page-uuid #uuid "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+          page-block {:block/uuid #uuid "cccccccc-cccc-cccc-cccc-cccccccccccc"
+                       :block/title "shared needle here"
+                       :block/page page-uuid}
+          other-block {:block/uuid #uuid "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+                        :block/title "shared needle elsewhere"}
+          search-calls (atom [])
+          results (atom {})]
+      (-> (p/with-redefs [state/get-current-repo (constantly "repo")
+                          state/get-current-page (constantly "Page A")
+                          page-util/get-current-page-uuid (constantly nil)
+                          state/<invoke-db-worker
+                          (fn [& _]
+                            (p/resolved {:block/uuid page-uuid}))
+                          search/block-search
+                          (recording-block-search search-calls page-uuid page-block other-block)
+                          icon-component/get-node-icon-cp (fn [_ _] "node")
+                          block-breadcrumb/breadcrumb (fn [& _] [:breadcrumb])]
+            (cmdk/load-results :current-page (page-scoped-search-state results)))
+          (p/then
+           (fn []
+             (let [opts (:opts (last @search-calls))
+                   items (get-in @results [:current-page :items])]
+               (is (= "needle" (:input (last @search-calls))))
+               (is (= (str page-uuid) (:page opts))
+                   "Search only: current page must pass the resolved page uuid as :page.")
+               (is (not= "Page A" (:page opts))
+                   "The route page name is not the search index page key.")
+               (is (nil? (:page-uuid opts))
+                   "search-blocks does not read :page-uuid.")
+               (is (= 100 (:limit opts)))
+               (is (true? (:include-matched-count? opts)))
+               (is (= [page-block] (mapv :source-block items))
+                   "A page-scoped search keeps only the current page block.")
+               (is (= :success (get-in @results [:current-page :status]))))))
+          (p/catch
+           (fn [error]
+             (is false (str error))))
+          (p/finally done)))))
+
+(deftest load-results-nodes-stays-graph-wide-on-an-open-page-test
+  (async done
+    (let [page-uuid #uuid "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+          page-block {:block/uuid #uuid "cccccccc-cccc-cccc-cccc-cccccccccccc"
+                       :block/title "shared needle here"
+                       :block/page page-uuid}
+          other-block {:block/uuid #uuid "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+                        :block/title "shared needle elsewhere"}
+          search-calls (atom [])
+          results (atom {})]
+      (-> (p/with-redefs [state/get-current-repo (constantly "repo")
+                          state/get-current-page (constantly "Page A")
+                          page-util/get-current-page-uuid (constantly nil)
+                          state/get-state (constantly nil)
+                          state/<invoke-db-worker
+                          (fn [& _]
+                            (p/resolved {:block/uuid page-uuid}))
+                          search/block-search
+                          (recording-block-search search-calls page-uuid page-block other-block)
+                          icon-component/get-node-icon-cp (fn [_ _] "node")
+                          block-breadcrumb/breadcrumb (fn [& _] [:breadcrumb])]
+            (cmdk/load-results :nodes (page-scoped-search-state results)))
+          (p/then
+           (fn []
+             (let [opts (:opts (last @search-calls))]
+               (is (nil? (:page opts))
+                   "Unfiltered node search stays graph-wide while a page is open.")
+               (is (nil? (:page-only? opts)))
+               (is (= [page-block other-block]
+                      (mapv :source-block (get-in @results [:nodes :items])))))))
+          (p/catch
+           (fn [error]
+             (is false (str error))))
+          (p/finally done)))))
