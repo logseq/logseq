@@ -421,9 +421,8 @@ let new_node ctx row ~close text =
 
 (* ---------- views ---------- *)
 
-(* a picker dropdown anchored under the enclosing stack: fetch-backed
-   item source + "New option" *)
-let picker_dropdown ?selected_keys ~open_ ~placeholder ~new_option ~initial ~on_search
+(* Fetch-backed chooser content mounted in an independent popup scope. *)
+let picker_content ?selected_keys ~placeholder ~new_option ~initial ~on_search
     : t =
  fun context parent ->
   let sched = context.Lui_ui.ui_scheduler in
@@ -434,12 +433,10 @@ let picker_dropdown ?selected_keys ~open_ ~placeholder ~new_option ~initial ~on_
   in
   ignore
     (let* items = initial in
-     Runtime.signal_set items_st (Some (items, on_search));
+     if Ui_effect.alive context.Lui_ui.ui_scope then
+       Runtime.signal_set items_st (Some (items, on_search));
      Js.Promise.resolve ());
-  (popover ~role:`menu ~anchor:`below ~anchor_alignment:`stretch
-     ~anchor_offset:4.0 ~min_width:240
-     ~transition:Ui_components.popover_transition
-     ~on_dismiss:(fun _ -> Runtime.signal_set open_ false)
+  (column ~min_width:240
      [ reactive
          ~equal:(fun a b -> Option.is_some a = Option.is_some b)
          (fun m ->
@@ -451,6 +448,22 @@ let picker_dropdown ?selected_keys ~open_ ~placeholder ~new_option ~initial ~on_
          (Signal.value items_st)
      ])
     context parent
+
+let open_value_picker anchor_id build =
+  let key = ref None in
+  let content context parent =
+    let closed = ref false in
+    let alive () = not !closed && Ui_effect.alive context.Lui_ui.ui_scope in
+    let close () =
+      if alive () then (
+        closed := true;
+        Option.iter S.remove_view_overlay !key)
+    in
+    build ~alive ~close context parent
+  in
+  match Ui_services.dom_by_id anchor_id with
+  | Some anchor -> key := Some (Properties_popup.open_anchored ~padding:0 anchor content)
+  | None -> ()
 
 (* Closed values share a searchable property chooser on both hosts. *)
 let closed_value_popup ~on_dismiss content =
@@ -1125,17 +1138,11 @@ let extends_view ctx row : t =
 
 let closed_value_view ~positioned ~table_view ctx row : t =
  fun context parent ->
-  let sched = context.Lui_ui.ui_scheduler in
-  let open_ = Signal.state sched false in
   let value = D.row_value row in
   let many = D.row_many row in
   let ident = D.row_ident row |> Option.value ~default:"" in
-  let selected = Signal.state sched [] in
-  let items_st : Sel.item list option Signal.state =
-    Signal.state sched None
-  in
-  let close () = Runtime.signal_set open_ false in
   let display = if D.value_empty_p value then "" else D.value_display value in
+  let anchor_id = "property-closed-" ^ ctx.owner_key ^ "-" ^ ident in
   let icon_id =
     match closed_value_icon_id value with
     | Some _ as icon -> icon
@@ -1151,14 +1158,16 @@ let closed_value_view ~positioned ~table_view ctx row : t =
          [ Ui_components.Prop.hover_background "var(--lx-gray-03)"
          ; Ui_components.Prop.hover_foreground "inherit" ]
          (Ui_components.button ~variant:`ghost ~label
+            ~accessibility_identifier:anchor_id
             ?height:(if many then None else Some 24) ~min_height:24
             ~padding_horizontal:0 ~padding_vertical:0 ~main:`start
             ~style_class:"pv-closed-value"
          ~on_press:(fun _ ->
-           if Runtime.signal_get open_ then close ()
-           else (
-             Runtime.signal_set items_st None;
-             Runtime.signal_set open_ true;
+           open_value_picker anchor_id
+             (fun ~alive ~close popup_context popup_parent ->
+             let sched = popup_context.Lui_ui.ui_scheduler in
+             let selected = Signal.state sched [] in
+             let items_st : Sel.item list option Signal.state = Signal.state sched None in
              block_tag_ids ctx (fun tag_ids ->
                gather_exclusions tag_ids (fun exclusions ->
                    ignore (let* block = D.entity_by_uuid ctx.block_uuid in
@@ -1167,7 +1176,7 @@ let closed_value_view ~positioned ~table_view ctx row : t =
                    let selected_keys value = List.filter_map (fun choice ->
                      if choice_selected value choice then Some (choice_key choice) else None)
                      all_choices in
-                   Runtime.signal_set selected (selected_keys current);
+                   if alive () then Runtime.signal_set selected (selected_keys current);
                    let items =
                      List.filter_map
                        (fun c ->
@@ -1191,7 +1200,7 @@ let closed_value_view ~positioned ~table_view ctx row : t =
                                         let key = choice_key c in
                                         let keys = if remove then List.filter ((<>) key) keys
                                           else if many then key :: List.filter ((<>) key) keys else [key] in
-                                        Runtime.signal_set selected keys;
+                                        if alive () then Runtime.signal_set selected keys;
                                         S.refresh_all ();
                                         if not many || keys = [] then close ();
                                         Js.Promise.resolve ())))
@@ -1204,9 +1213,19 @@ let closed_value_view ~positioned ~table_view ctx row : t =
                                   S.refresh_all ();
                                   Js.Promise.resolve ());
                           close ()) ] in
-                   if Runtime.signal_get open_ then
+                   if alive () then
                      Runtime.signal_set items_st (Some items);
-                   Js.Promise.resolve ())))))
+                   Js.Promise.resolve ())));
+             (column ~min_width:226
+               [ reactive
+                   ~equal:(fun a b -> Option.is_some a = Option.is_some b)
+                   (function
+                     | None -> column ~gap:2 []
+                     | Some items ->
+                         Sel.view ~compact:true ~show_empty_result:false
+                           ~selected_keys:(Signal.value selected)
+                           ~placeholder:(I18n.t1 "property/set-placeholder" (D.row_title row)) items)
+                   (Signal.value items_st) ]) popup_context popup_parent))
          [ Lui_elements.row ~gap:4 ~cross:`center ~min_width:0 ~flex_wrap:`wrap
              (if many && not (D.value_empty_p value) then
                 List.concat_map (fun (index, item) ->
@@ -1216,46 +1235,28 @@ let closed_value_view ~positioned ~table_view ctx row : t =
                   (List.mapi (fun index item -> index, item) (D.value_elems value))
               else (match icon_id with None -> [] | Some id -> [ Icons.icon id ])
                 @ if show_text then [ text ~value:display [] ] else []) ])
-     ; if_ ~test:(Signal.value open_)
-         (closed_value_popup ~on_dismiss:(fun _ -> close ())
-            (reactive
-                ~equal:(fun a b -> Option.is_some a = Option.is_some b)
-                (fun m ->
-                   match m with
-               | None -> column ~gap:2 []
-                   | Some items ->
-                       Sel.view ~compact:true ~show_empty_result:false ~selected_keys:(Signal.value selected)
-                         ~placeholder:
-                           (I18n.t1 "property/set-placeholder"
-                              (D.row_title row)) items)
-                (Signal.value items_st)))
      ])
     context parent
 
 (* node/page/class/asset: ref chips + picker button *)
 let node_view ctx row : t =
  fun context parent ->
-  let sched = context.Lui_ui.ui_scheduler in
-  let open_ = Signal.state sched false in
   let ident = D.row_ident row |> Option.value ~default:"" in
   let many = D.row_many row in
-  let selected = Signal.state sched [] in
-  let close () = Runtime.signal_set open_ false in
   let chips = ref_chips row in
+  let anchor_id = "property-node-" ^ ctx.owner_key ^ "-" ^ ident in
   (column ~gap:2 ~grow:1.0 ~min_width:0
      [ Lui_elements.row ~gap:4 ~cross:`center ~min_width:0 ~flex_wrap:`wrap
          ((if many then chips else [])
          @ [ Ui_components.button ~variant:`ghost
+               ~accessibility_identifier:anchor_id
                ?icon:(if many then Some (`app "plus") else None)
                ~label:(I18n.t "property/select-property-placeholder")
                ~main:`start ~min_height:24 ~min_width:24
-               ~on_press:(fun _ -> Runtime.signal_set open_ true)
-               (if many then [] else if chips = [] then
-                 [text ~value:(I18n.t "ui/empty") ~foreground:"var(--lx-gray-09)" []]
-                else chips)
-           ])
-     ; if_ ~test:(Signal.value open_)
-         (fun context' parent' ->
+               ~on_press:(fun _ ->
+         open_value_picker anchor_id
+           (fun ~alive ~close context' parent' ->
+           let selected = Signal.state context'.Lui_ui.ui_scheduler [] in
            let block = D.uuid_ref ctx.block_uuid in
            let prop = D.row_prop row in
            let on_pick id =
@@ -1263,12 +1264,13 @@ let node_view ctx row : t =
                let current = Option.value (D.getf (D.untag block) ident) ~default:W.Nil in
                let* keys = reference_keys current in
                let key = "entity-" ^ string_of_int id in
-      let remove = many && List.mem key keys in
+               let remove = many && List.mem key keys in
                let* _ = if remove then
                  D.delete_property_value ~block_uuid:ctx.block_uuid ~ident ~value:(W.Int id)
                  else D.set_block_property ~block_uuid:ctx.block_uuid ~ident ~value:(W.Int id) in
-               Runtime.signal_set selected (if remove then List.filter ((<>) key) keys
-                 else if many then key :: keys else [key]);
+               if alive () then
+                 Runtime.signal_set selected (if remove then List.filter ((<>) key) keys
+                   else if many then key :: keys else [key]);
                S.refresh_all ();
                if not many then close ();
                Js.Promise.resolve ())
@@ -1279,16 +1281,20 @@ let node_view ctx row : t =
            let initial =
              let* current = D.entity_by_uuid ctx.block_uuid in
              let* keys = reference_keys (Option.value (D.getf (D.untag current) ident) ~default:W.Nil) in
-             Runtime.signal_set selected keys;
+             if alive () then Runtime.signal_set selected keys;
              initial
            in
-           (picker_dropdown ~selected_keys:(Signal.value selected) ~open_
+           (picker_content ~selected_keys:(Signal.value selected)
               ~placeholder:
                 (I18n.t1 "property/set-placeholder" (D.row_title row))
               ~new_option:(if List.mem (D.row_type row) ["node";"class"] then
                 Some (new_node ctx row ~close:(if many then (fun () -> ()) else close)) else None)
               ~initial ~on_search)
-             context' parent')
+             context' parent'))
+               (if many then [] else if chips = [] then
+                 [text ~value:(I18n.t "ui/empty") ~foreground:"var(--lx-gray-09)" []]
+                else chips)
+           ])
      ])
     context parent
 
