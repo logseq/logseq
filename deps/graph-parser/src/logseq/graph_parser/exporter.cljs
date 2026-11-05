@@ -2851,6 +2851,7 @@
    :all-existing-page-uuids (atom {})
    ;; Incremental extract-compatible page name -> uuid index. Updated in save-from-tx.
    :page-names-to-uuids (atom {})
+   :source-path-by-page-id (atom {})
    ;; Map of stable journal file names and canonical page names to their standard journal page uuids.
    :journal-page-name-uuids (atom {})
    ;; Map of property or class names (keyword) to db-ident keywords
@@ -3342,6 +3343,16 @@
           _ (import-progress! options {:phase :transact :file file})
           transact-start (when log-fn (import-profile/now-ms))
           main-tx-report (ldb/transact! conn tx' tx-meta)
+          _ (when-let [source-path (:source-path options)]
+              (let [db @conn
+                    page-uuids @(:page-names-to-uuids per-file-state)]
+                (doseq [{page-name :block/name file-page :block/file} pages
+                        :when file-page
+                        :let [uuid (get page-uuids page-name)
+                              eid (when uuid (:db/id (d/entity db [:block/uuid uuid])))]
+                        :when eid]
+                  (swap! (get-in options [:import-state :source-path-by-page-id])
+                         assoc eid source-path))))
           _ (log-phase-ms! log-fn :transact transact-start {:file file
                                                             :tx-count (count tx')})
           save-start (when log-fn (import-profile/now-ms))
@@ -3410,7 +3421,9 @@
                                         :reason reason}
                                  (and (string? path) (not (string/blank? path))) (assoc :path path)
                                  (some? block) (assoc :block (str block))
-                                 (some? line) (assoc :line line)))]
+                                 (some? line) (assoc :line line)
+                                 (:invalid-properties? data) (assoc :invalid-properties? true))
+                               error)]
      ;; nbb can drop ex-data across promise boundaries; keep a JS flag too.
      (gobj/set import-error "logseqFileImportError" true)
      (when (and (string? path) (not (string/blank? path)))
@@ -3420,8 +3433,20 @@
 (defn- import-file-display-path
   [file options]
   (or (when-let [rk (:rpath-key options)]
-        (get file rk))
+        (some-> (get file rk) path/path-normalize))
       (:path file)))
+
+(defn- finalization-file-error
+  [error import-state]
+  (when-let [source-paths (some-> import-state :source-path-by-page-id deref)]
+    (some (fn [{:keys [entity-map errors]}]
+            (when-let [path (get source-paths (or (:block/page entity-map) (:db/id entity-map)))]
+              (file-import-error path
+                                 (ex-info (error-str error)
+                                          {:block (:block/title entity-map)
+                                           :invalid-properties? (boolean (some :block/properties errors))}
+                                          error))))
+          (:errors (ex-data (unwrap-error error))))))
 
 (defn- export-doc-file
   [{:keys [path idx] :as file} conn <read-file
@@ -3450,7 +3475,8 @@
                              (common-util/timestamp-ms (or (:birthtime stat) (some-> ^js stat .-birthtime)))
                              modified-at)
               m {:file/path path :file/content content}
-              export-options (cond-> (dissoc options :set-ui-state :<export-file)
+              export-options (cond-> (assoc (dissoc options :set-ui-state :<export-file)
+                                             :source-path (import-file-display-path file options))
                                created-at (assoc :file-created-at created-at)
                                modified-at (assoc :file-updated-at modified-at))
               _ (<export-file conn m export-options)]
@@ -3461,7 +3487,6 @@
                        import-error (if (file-import-error? error)
                                       error
                                       (file-import-error display-path error))]
-                   (js/console.error error)
                    (notify-user {:msg (ex-message import-error)
                                  :level :error
                                  :ex-data (assoc (ex-data import-error) :error error)
@@ -3528,7 +3553,8 @@
                                    :ex-data {:error e}}))
                    (throw (if (file-import-error? e)
                             e
-                            (file-import-error nil e)))))))))
+                            (or (finalization-file-error e (:import-state options))
+                                (file-import-error nil e))))))))))
 
 (defn- default-save-file [conn path content]
   (ldb/transact! conn [{:file/path path
@@ -3915,7 +3941,6 @@
                      (reset! gp-block/*export-to-db-graph? false)))
         (p/catch (fn [e]
                    (reset! gp-block/*export-to-db-graph? false)
-                   (js/console.error e)
                    (when-not (file-import-error? e)
                      (when-let [notify (:notify-user options)]
                        (notify {:msg (str "Import has unexpected error:\n" (error-str e))

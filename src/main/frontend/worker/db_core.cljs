@@ -453,6 +453,7 @@
                                           :path (:path (ex-data import-error))
                                           :reason (:reason (ex-data import-error))
                                           :error (gp-exporter/error-str error)
+                                          :cause (ex-cause error)
                                           :ex-data data})
     (throw import-error)))
 
