@@ -92,14 +92,21 @@ let picker ~block_uuids ~property ~refresh ~on_close : t =
   in
   let ident = property_ident property in
   let many = D.row_many (W.Map [ (W.String "property", property) ]) in
-  let repo = Runtime.repo () in
-  let revision = (Runtime.model ()).Model.context_revision in
-  let alive = ref true in
-  Signal.on_dispose context.Lui_ui.ui_scope (fun () -> alive := false);
+  let origin =
+    match Runtime.capture_reload_origin () with
+    | Some origin -> origin
+    | None -> invalid_arg "Asset picker requires a graph"
+  in
+  let repo = origin.Runtime.reload_repo in
+  let cursor = ref (Some origin) in
+  let alive () = Ui_effect.alive context.Lui_ui.ui_scope in
+  Signal.on_dispose context.Lui_ui.ui_scope (fun () -> cursor := None);
   let current () =
-    !alive
-    && Runtime.repo () = repo
-    && (Runtime.model ()).Model.context_revision = revision
+    alive ()
+    &&
+    match !cursor with
+    | Some cursor -> Runtime.reload_origin_current cursor
+    | None -> false
   in
   let scheduler = context.Lui_ui.ui_scheduler in
   let viewport =
@@ -115,46 +122,117 @@ let picker ~block_uuids ~property ~refresh ~on_close : t =
   let selected = Signal.state scheduler Keys.empty in
   let saving = Signal.state scheduler false in
   let ready = Signal.state scheduler false in
-  let finish () = if current () then Signal.set saving false in
+  let finish () =
+    if alive () then (
+      Signal.set saving false;
+      if not (current ()) then Signal.set ready false)
+  in
+  let retire () =
+    cursor := None;
+    if alive () then Signal.set ready false;
+    finish ()
+  in
+  let await_current action =
+    if not (current ()) then (
+      retire ();
+      Js.Promise.resolve None)
+    else
+      let* value = action () in
+      if current () then Js.Promise.resolve (Some value)
+      else (
+        retire ();
+        Js.Promise.resolve None)
+  in
+  let apply_owned name args =
+    match !cursor with
+    | Some entry when current () -> (
+        let* ops =
+          await_current (fun () ->
+              Sdk_util.resolve_title_refs_for_repo repo
+                [ W.Array [ W.Keyword name; W.Array args ] ])
+        in
+        match ops with
+        | None -> Js.Promise.resolve false
+        | Some ops -> (
+            let* response =
+              await_current (fun () ->
+                  Runtime.invoke3 "thread-api/apply-outliner-ops"
+                    (W.String repo) (W.Array ops) (W.Map []))
+            in
+            match response with
+            | None -> Js.Promise.resolve false
+            | Some _ -> (
+                let* refreshed =
+                  await_current (fun () ->
+                      Subs_state.promise_of_task
+                        (Runtime.hooks.refresh_property_areas ()))
+                in
+                match refreshed with
+                | None -> Js.Promise.resolve false
+                | Some () -> (
+                    let* result = !Runtime.refresh_after_ops_owned entry in
+                    if (not (alive ())) || !cursor <> Some entry then (
+                      retire ();
+                      Js.Promise.resolve false)
+                    else
+                      match result with
+                      | Runtime.Reload_failed _ ->
+                          report_error result;
+                          retire ();
+                          Js.Promise.resolve false
+                      | _ -> (
+                          match
+                            Outliner_ops.owned_refresh_cursor entry result
+                          with
+                          | Some next ->
+                              cursor := Some next;
+                              Js.Promise.resolve true
+                          | None ->
+                              retire ();
+                              Js.Promise.resolve false)))))
+    | _ ->
+        retire ();
+        Js.Promise.resolve false
+  in
   let run action =
-    if current () && Signal.get_state ready && not (Signal.get_state saving)
-    then (
-      Signal.set saving true;
-      ignore
-        (Js.Promise.catch
-           (fun error ->
-             if current () then (
+    if alive () && Signal.get_state ready && not (Signal.get_state saving) then
+      if not (current ()) then retire ()
+      else (
+        Signal.set saving true;
+        ignore
+          (Js.Promise.catch
+             (fun error ->
                finish ();
-               report_error error);
-             Js.Promise.resolve ())
-           (let* () = action () in
-            finish ();
-            Js.Promise.resolve ())))
+               if current () then report_error error else retire ();
+               Js.Promise.resolve ())
+             (let* () = action () in
+              finish ();
+              Js.Promise.resolve ())))
   in
   let rec write owners value remove =
     match owners with
-    | [] -> Js.Promise.resolve ()
+    | [] -> Js.Promise.resolve true
     | uuid :: rest ->
-        if not (current ()) then Js.Promise.resolve ()
-        else
-          let* _ =
-            if remove && many then
-              D.delete_property_value ~block_uuid:uuid ~ident ~value
-            else if remove then D.remove_block_property ~block_uuid:uuid ~ident
-            else D.set_block_property ~block_uuid:uuid ~ident ~value
-          in
-          write rest value remove
+        let name, args =
+          if remove && many then
+            ("delete-property-value", [ W.Uuid uuid; W.Keyword ident; value ])
+          else if remove then
+            ("remove-block-property", [ W.Uuid uuid; W.Keyword ident ])
+          else ("set-block-property", [ W.Uuid uuid; W.Keyword ident; value ])
+        in
+        let* applied = apply_owned name args in
+        if applied then write rest value remove else Js.Promise.resolve false
   in
   let choose asset remove =
-    let* () = write block_uuids (asset_ref asset) remove in
-    (if current () then
+    let* applied = write block_uuids (asset_ref asset) remove in
+    (if applied && current () then
        let key = asset_key asset in
        let previous = Signal.get_state selected in
        Signal.set selected
          (if remove then Keys.remove key previous
           else if many then Keys.add key previous
           else Keys.singleton key));
-    Js.Promise.resolve ()
+    Js.Promise.resolve applied
   in
   let after_write ~close =
     if current () then (
@@ -164,121 +242,162 @@ let picker ~block_uuids ~property ~refresh ~on_close : t =
   let toggle asset =
     run (fun () ->
         let remove = Keys.mem (asset_key asset) (Signal.get_state selected) in
-        let* () = choose asset remove in
-        after_write ~close:((not many) && not remove);
+        let* applied = choose asset remove in
+        if applied then after_write ~close:((not many) && not remove);
         Js.Promise.resolve ())
   in
   let upload files =
     run (fun () ->
         let* asset_class =
-          Runtime.invoke3 "thread-api/pull" (W.String repo)
-            (W.Array [ W.Keyword "block/uuid" ])
-            (W.Keyword "logseq.class/Asset")
+          await_current (fun () ->
+              Runtime.invoke3 "thread-api/pull" (W.String repo)
+                (W.Array [ W.Keyword "block/uuid" ])
+                (W.Keyword "logseq.class/Asset"))
         in
-        let target =
-          match D.entity_uuid_of asset_class with
-          | Some uuid -> uuid
-          | None -> failwith "Asset class has no UUID"
-        in
-        let rec save acc = function
-          | [] -> Js.Promise.resolve (List.rev acc)
-          | file :: rest ->
-              if not (current ()) then Js.Promise.resolve (List.rev acc)
-              else
-                let name = file.Ui_services.file_name in
-                let ext =
-                  match String.rindex_opt name '.' with
-                  | Some i when i + 1 < String.length name ->
-                      String.sub name (i + 1) (String.length name - i - 1)
-                      |> String.lowercase_ascii
-                  | _ -> ""
-                in
-                if ext = "" then (
-                  Toast.error (I18n.t1 "asset/invalid-ext-error" name);
-                  save acc rest)
-                else
-                  let* binary =
-                    Subs_state.promise_of_task (file.Ui_services.file_binary ())
-                  in
-                  let u8 = Str_util.binary_to_u8 binary in
-                  let* checksum = Asset_store.sha256_hex u8 in
-                  let uuid = Ui_services.env_random_uuid () in
-                  if not (current ()) then Js.Promise.resolve (List.rev acc)
+        match asset_class with
+        | None -> Js.Promise.resolve ()
+        | Some asset_class -> (
+            let target =
+              match D.entity_uuid_of asset_class with
+              | Some uuid -> uuid
+              | None -> failwith "Asset class has no UUID"
+            in
+            let rec save acc = function
+              | [] -> Js.Promise.resolve (Some (List.rev acc))
+              | file :: rest -> (
+                  if not (current ()) then (
+                    retire ();
+                    Js.Promise.resolve None)
                   else
-                    let* () =
-                      Asset_store.write_asset ~repo ~name:(uuid ^ "." ^ ext) ~u8
+                    let name = file.Ui_services.file_name in
+                    let ext =
+                      match String.rindex_opt name '.' with
+                      | Some i when i + 1 < String.length name ->
+                          String.sub name (i + 1) (String.length name - i - 1)
+                          |> String.lowercase_ascii
+                      | _ -> ""
                     in
-                    let asset =
-                      W.Map
-                        [
-                          (W.String "block/uuid", W.Uuid uuid);
-                          ( W.String "block/title",
-                            W.String
-                              (String.sub name 0
-                                 (String.length name - String.length ext - 1))
-                          );
-                          (W.String "logseq.property.asset/type", W.String ext);
-                          ( W.String "logseq.property.asset/size",
-                            W.Int64 (Int64.of_float file.Ui_services.file_size)
-                          );
-                          ( W.String "logseq.property.asset/checksum",
-                            W.String checksum );
-                          ( W.String "block/tags",
-                            W.Set [ W.Keyword "logseq.class/Asset" ] );
-                        ]
-                    in
-                    if not (current ()) then Js.Promise.resolve (List.rev acc)
+                    if ext = "" then (
+                      Toast.error (I18n.t1 "asset/invalid-ext-error" name);
+                      save acc rest)
                     else
-                      let* _ =
-                        Sdk_util.apply_op_for_repo repo "insert-blocks"
-                          [
-                            W.List [ asset ];
-                            W.Uuid target;
-                            W.Map
-                              [
-                                (W.Keyword "keep-uuid?", W.Bool true);
-                                (W.Keyword "bottom?", W.Bool true);
-                                (W.Keyword "sibling?", W.Bool false);
-                              ];
-                          ]
+                      let* binary =
+                        await_current (fun () ->
+                            Subs_state.promise_of_task
+                              (file.Ui_services.file_binary ()))
                       in
-                      let* saved = entity repo uuid in
-                      save (saved :: acc) rest
-        in
-        let* saved = save [] files in
-        (if current () then
-           let previous = Option.value (Signal.get_state assets) ~default:[] in
-           Signal.set assets (Some (List.rev_append (List.rev previous) saved)));
-        let rec select = function
-          | [] -> Js.Promise.resolve ()
-          | asset :: rest ->
-              let* () = choose asset false in
-              select rest
-        in
-        let chosen =
-          if many then saved
-          else match saved with [] -> [] | asset :: _ -> [ asset ]
-        in
-        let* () = select chosen in
-        if chosen <> [] then after_write ~close:(not many);
-        Js.Promise.resolve ())
+                      match binary with
+                      | None -> Js.Promise.resolve None
+                      | Some binary -> (
+                          let u8 = Str_util.binary_to_u8 binary in
+                          let* checksum =
+                            await_current (fun () -> Asset_store.sha256_hex u8)
+                          in
+                          match checksum with
+                          | None -> Js.Promise.resolve None
+                          | Some checksum -> (
+                              let uuid = Ui_services.env_random_uuid () in
+                              let* stored =
+                                await_current (fun () ->
+                                    Asset_store.write_asset ~repo
+                                      ~name:(uuid ^ "." ^ ext)
+                                      ~u8)
+                              in
+                              match stored with
+                              | None -> Js.Promise.resolve None
+                              | Some () -> (
+                                  let asset =
+                                    W.Map
+                                      [
+                                        (W.String "block/uuid", W.Uuid uuid);
+                                        ( W.String "block/title",
+                                          W.String
+                                            (String.sub name 0
+                                               (String.length name
+                                              - String.length ext - 1)) );
+                                        ( W.String "logseq.property.asset/type",
+                                          W.String ext );
+                                        ( W.String "logseq.property.asset/size",
+                                          W.Int64
+                                            (Int64.of_float
+                                               file.Ui_services.file_size) );
+                                        ( W.String
+                                            "logseq.property.asset/checksum",
+                                          W.String checksum );
+                                        ( W.String "block/tags",
+                                          W.Set
+                                            [ W.Keyword "logseq.class/Asset" ]
+                                        );
+                                      ]
+                                  in
+                                  let* applied =
+                                    apply_owned "insert-blocks"
+                                      [
+                                        W.List [ asset ];
+                                        W.Uuid target;
+                                        W.Map
+                                          [
+                                            (W.Keyword "keep-uuid?", W.Bool true);
+                                            (W.Keyword "bottom?", W.Bool true);
+                                            (W.Keyword "sibling?", W.Bool false);
+                                          ];
+                                      ]
+                                  in
+                                  if not applied then Js.Promise.resolve None
+                                  else
+                                    let* saved =
+                                      await_current (fun () -> entity repo uuid)
+                                    in
+                                    match saved with
+                                    | None -> Js.Promise.resolve None
+                                    | Some saved -> save (saved :: acc) rest))))
+            in
+            let* saved = save [] files in
+            match saved with
+            | None -> Js.Promise.resolve ()
+            | Some saved ->
+                (if current () then
+                   let previous =
+                     Option.value (Signal.get_state assets) ~default:[]
+                   in
+                   Signal.set assets
+                     (Some (List.rev_append (List.rev previous) saved)));
+                let rec select = function
+                  | [] -> Js.Promise.resolve true
+                  | asset :: rest ->
+                      let* applied = choose asset false in
+                      if applied then select rest else Js.Promise.resolve false
+                in
+                let chosen =
+                  if many then saved
+                  else match saved with [] -> [] | asset :: _ -> [ asset ]
+                in
+                let* applied = select chosen in
+                if applied && chosen <> [] then after_write ~close:(not many);
+                Js.Promise.resolve ()))
   in
   ignore
     (Js.Promise.catch
        (fun error ->
-         if current () then report_error error;
+         if current () then report_error error else retire ();
          Js.Promise.resolve ())
-       (let* all = load_assets repo in
-        let* owner = entity repo first_owner in
-        if current () then (
-          let all = W.elems all in
-          let owned =
-            Option.value (W.get (D.untag owner) ident) ~default:W.Nil |> values
-          in
-          Signal.set selected (Keys.of_list (List.map asset_key owned));
-          Signal.set assets (Some all);
-          Signal.set ready true);
-        Js.Promise.resolve ()));
+       (let* all = await_current (fun () -> load_assets repo) in
+        match all with
+        | None -> Js.Promise.resolve ()
+        | Some all ->
+            let* owner = await_current (fun () -> entity repo first_owner) in
+            (match owner with
+            | None -> ()
+            | Some owner ->
+                let all = W.elems all in
+                let owned =
+                  Option.value (W.get (D.untag owner) ident) ~default:W.Nil
+                  |> values
+                in
+                Signal.set selected (Keys.of_list (List.map asset_key owned));
+                Signal.set assets (Some all);
+                Signal.set ready true);
+            Js.Promise.resolve ()));
   (Ui_parts.int_prop Lui_protocol.WidthValue
      ~value:(reactive picker_width viewport)
      (column ~gap:8 ~padding:12 ~max_width:640 ~min_width:0
@@ -339,7 +458,10 @@ let picker ~block_uuids ~property ~refresh ~on_close : t =
                                               (Keys.mem (asset_key asset))
                                               (Signal.value selected))
                                          ~disabled:
-                                           (reactive Fun.id
+                                           (reactive
+                                              (fun ready saving ->
+                                                (not ready) || saving)
+                                              (Signal.value ready)
                                               (Signal.value saving))
                                          ~on_press:(fun _ -> toggle asset)
                                          [
