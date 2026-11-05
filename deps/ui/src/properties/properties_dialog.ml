@@ -517,8 +517,8 @@ let date_value_view d prop : t =
     | Some value -> V.date_picker_content ctx ~ident ~is_datetime ~value
         ~on_value:write ~on_dismiss:dismiss
         ~on_clear:(fun () ->
-          finish_write d (for_owners d (fun block_uuid ->
-            D.remove_block_property ~block_uuid ~ident)))) (Signal.value loaded)) context parent
+          write (W.Keyword "logseq.property/empty-placeholder");
+          dismiss ())) (Signal.value loaded)) context parent
 
 let value_edit_view d prop : t =
  fun context parent ->
