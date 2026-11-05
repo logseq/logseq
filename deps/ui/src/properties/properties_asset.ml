@@ -439,16 +439,30 @@ let view ~block_uuid ~refresh property_row : t =
         close := fun () -> S.remove_view_overlay key
   in
   let preview_key = Properties_popup.next_key () in
-  let close key () = S.remove_view_overlay key in
-  Signal.on_dispose context.Lui_ui.ui_scope (close preview_key);
+  let alive = ref true in
+  let preview_open = ref false in
+  let close_preview () =
+    if !preview_open then (
+      preview_open := false;
+      match !S.view_overlays_state with
+      | Some overlays
+        when List.exists
+               (fun overlay -> overlay.S.vo_key = preview_key)
+               (Runtime.signal_get overlays) ->
+          S.remove_view_overlay preview_key
+      | _ -> ())
+  in
+  Signal.on_dispose context.Lui_ui.ui_scope (fun () ->
+      alive := false;
+      close_preview ());
   let preview asset =
-    let on_close = close preview_key in
-    ignore
-      (S.push_view_overlay context ~key:preview_key ~on_escape:on_close
-         ~view:
-           (Ui_components.dialog ~key:preview_key ~text:(title asset)
-              ~on_dismiss:(fun _ -> on_close ())
-              [ Asset_dom.gallery_cover ~width:600 ~height:400 (D.untag asset) ]))
+    if !alive then (
+      preview_open := true;
+      S.push_view_overlay context ~key:preview_key ~on_escape:close_preview
+        ~view:
+          (Ui_components.dialog ~key:preview_key ~text:(title asset)
+             ~on_dismiss:(fun _ -> close_preview ())
+             [ Asset_dom.gallery_cover ~width:600 ~height:400 (D.untag asset) ]))
   in
   (column ~min_width:0 ~grow:1.
      [
