@@ -91,6 +91,13 @@ let row_supports_many row =
 let row_supports_choices row =
   List.mem (row_type row) ["default"; "number"; "url"]
 
+let row_with_value row value =
+  match row with
+  | W.Map fields ->
+      W.Map ((W.String "value", value) :: List.filter (fun (key, _) ->
+        key <> W.String "value" && key <> W.Keyword "value") fields)
+  | _ -> invalid_arg "Properties_data.row_with_value"
+
 let row_closed_values row =
   match getf (row_prop row) "property/closed-values" with
   | Some w -> W.elems w
