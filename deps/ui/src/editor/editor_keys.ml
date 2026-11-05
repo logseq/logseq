@@ -1385,8 +1385,8 @@ let on_keydown ev =
              (properties_value.ml) — the block-editor dispatch below must
              leave their keys alone *)
           match closest ".property-value-container" target with
-          | Some _ -> ()
-          | None -> (
+          | Some _ when closest ".ed-input" target = None -> ()
+          | _ -> (
           match (S.editing (), !S.pending_focus) with
           | Some e, Some (uuid, _, _)
             when e.S.uuid = uuid
