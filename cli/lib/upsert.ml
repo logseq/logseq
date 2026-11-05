@@ -1301,7 +1301,7 @@ let list_tags config repo =
   Transport.thread_api_cli_list_tags config ~repo
     ~options:(Edn_util.map_t_vec Vec.empty)
 
-let page_name_matches name entity =
+let tag_name_matches name entity =
   let expected = normalized_lookup_name name in
   let matches value = String.equal (normalized_lookup_name value) expected in
   match
@@ -1316,7 +1316,7 @@ let find_tag_by_name config repo name =
   let open Cli_effect in
   bind (list_tags config repo) (fun value ->
       match Edn_util.as_seq value with
-      | Some tags -> pure (Vec.find_opt (page_name_matches name) tags)
+      | Some tags -> pure (Vec.find_opt (tag_name_matches name) tags)
       | None -> pure None)
 
 let pull_property_by_name config repo name selector =
@@ -3184,31 +3184,11 @@ let execute_update_page ?rename mode invoke_config repo id restore plan =
 let execute_rename_page_by_name mode invoke_config repo name rename restore plan
     =
   let open Cli_effect in
-  let query =
-    Cli_primitive.make_datascript_query
-      ~find:
-        (Vec.singleton
-           (vector_vec
-              (Vec.of_array
-                 [|
-                   list_vec
-                     (Vec.of_array [| sym "pull"; sym "?e"; page_selector |]);
-                   sym "...";
-                 |])))
-      ~where:
-        (Vec.singleton
-           (Cli_primitive.V
-              (Edn_util.vector_t_vec
-                 (Vec.of_array [| sym "?e"; kw "block/name" |]))))
-      ()
-  in
-  bind
-    (Transport.thread_api_q invoke_config ~repo
-       ~query:(Edn_util.vector_t_vec (Vec.singleton (query_value query))))
+  bind (pull_pages_by_name invoke_config repo name page_selector)
     (fun pages ->
       let matches =
         match Edn_util.as_seq pages with
-        | Some pages -> Vec.filter (page_name_matches name) pages
+        | Some pages -> pages
         | None -> invalid_arg "page query must return a sequence"
       in
       match Vec.length matches with
