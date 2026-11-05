@@ -3259,6 +3259,32 @@
      :per-file-state per-file-state
      :existing-pages existing-pages}))
 
+(defn- index-file-page-sources!
+  [db pages {:keys [page-names-to-uuids]} {:keys [source-path import-state]}]
+  (when source-path
+    (let [page-uuids @page-names-to-uuids]
+      (doseq [{page-name :block/name file-page :block/file} pages
+              :when file-page
+              :let [page-uuid (get page-uuids page-name)
+                    eid (when page-uuid (:db/id (d/entity db [:block/uuid page-uuid])))]
+              :when eid]
+        (swap! (:source-path-by-page-id import-state) assoc eid source-path)))))
+
+(defn- <prepare-file-import
+  [conn file content options log-fn]
+  (p/let [_ (import-progress! options {:phase :parse :file file})
+          parse-start (when log-fn (import-profile/now-ms))
+          {:keys [pages blocks]} (extract-pages-and-blocks @conn file content options)
+          _ (log-phase-ms! log-fn :parse parse-start {:file file})
+          prep-start (when log-fn (import-profile/now-ms))
+          {:keys [blocks preserve-empty-properties-uuids]} (handle-template-blocks blocks)
+          walked-by-uuid (index-walked-ast-blocks (import-user-config options) blocks)
+          tx-options (file-graph-tx-options options pages file preserve-empty-properties-uuids)
+          old-properties (keys @(get-in options [:import-state :property-schemas]))
+          _ (log-phase-ms! log-fn :prep prep-start {:file file})]
+    {:pages pages :blocks blocks :walked-by-uuid walked-by-uuid
+     :tx-options tx-options :old-properties old-properties}))
+
 (defn <add-file-to-db-graph
   "Parse file and save parsed data to the given db graph.
 
@@ -3270,16 +3296,8 @@
                       :as *options}]
   (p/let [file-start (when log-fn (import-profile/now-ms))
           options (assoc *options :notify-user notify-user :log-fn (or log-fn (constantly nil)) :file file)
-          _ (import-progress! options {:phase :parse :file file})
-          parse-start (when log-fn (import-profile/now-ms))
-          {:keys [pages blocks]} (extract-pages-and-blocks @conn file content options)
-          _ (log-phase-ms! log-fn :parse parse-start {:file file})
-          prep-start (when log-fn (import-profile/now-ms))
-          {:keys [blocks preserve-empty-properties-uuids]} (handle-template-blocks blocks)
-          walked-by-uuid (index-walked-ast-blocks (import-user-config options) blocks)
-          tx-options (file-graph-tx-options options pages file preserve-empty-properties-uuids)
-          old-properties (keys @(get-in options [:import-state :property-schemas]))
-          _ (log-phase-ms! log-fn :prep prep-start {:file file})
+          {:keys [pages blocks walked-by-uuid tx-options old-properties]}
+          (<prepare-file-import conn file content options log-fn)
           _ (import-progress! options {:phase :pages-tx :file file})
           pages-start (when log-fn (import-profile/now-ms))
           {:keys [pages-tx page-properties-tx per-file-state existing-pages]}
@@ -3316,16 +3334,7 @@
           _ (import-progress! options {:phase :transact :file file})
           transact-start (when log-fn (import-profile/now-ms))
           main-tx-report (ldb/transact! conn tx' tx-meta)
-          _ (when-let [source-path (:source-path options)]
-              (let [db @conn
-                    page-uuids @(:page-names-to-uuids per-file-state)]
-                (doseq [{page-name :block/name file-page :block/file} pages
-                        :when file-page
-                        :let [uuid (get page-uuids page-name)
-                              eid (when uuid (:db/id (d/entity db [:block/uuid uuid])))]
-                        :when eid]
-                  (swap! (get-in options [:import-state :source-path-by-page-id])
-                         assoc eid source-path))))
+          _ (index-file-page-sources! @conn pages per-file-state options)
           _ (log-phase-ms! log-fn :transact transact-start {:file file
                                                             :tx-count (count tx')})
           save-start (when log-fn (import-profile/now-ms))
