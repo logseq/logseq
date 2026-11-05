@@ -134,9 +134,22 @@ let commit_or_cancel ctx row value =
   let ident = D.row_ident row |> Option.value ~default:"" in
   match D.row_type row with
   | "number" -> (
-      match D.number_of_text value with
-      | Some n -> set_scalar ctx ~ident ~value:(W.Float n)
-      | None -> ())
+      if String.trim value = "" then
+        ignore (let* _ = D.remove_block_property ~block_uuid:ctx.block_uuid ~ident in
+          S.refresh_all ();
+          Js.Promise.resolve ())
+      else
+        match D.number_of_text value with
+        | Some n -> set_scalar ctx ~ident ~value:(W.Float n)
+        | None -> ())
+  | "string" ->
+      ignore (let* _ =
+        if String.trim value = "" then
+          D.remove_block_property ~block_uuid:ctx.block_uuid ~ident
+        else D.set_block_property ~block_uuid:ctx.block_uuid ~ident ~value:(W.String value)
+        in
+        S.refresh_all ();
+        Js.Promise.resolve ())
   | _ -> save_text_value ctx row value;
   ctx.refresh ()
 
@@ -451,9 +464,10 @@ let scalar_edit_cell ctx row : t =
   let ident = D.row_ident row |> Option.value ~default:"" in
   let row' = D.row_with_effective_value row in
   let value = D.row_value row' in
-  let is_number = D.row_type row' = "number" in
+  let scalar = List.mem (D.row_type row') ["number"; "string"] in
   let initial =
-    if is_number then D.value_display value else D.ref_title value
+    if scalar then (if D.value_empty_p value then "" else D.value_display value)
+    else D.ref_title value
   in
   let editing =
     Signal.state sched
@@ -486,7 +500,7 @@ let scalar_edit_cell ctx row : t =
          (value_button ~text:initial ~on_press:(fun _ ->
               open_editor ~steal:true ()))
      ; if_ ~test:(Signal.value editing)
-         (Ui_components.text_field ~autofocus:true
+         (Ui_components.text_field ~autofocus:true ~submit_on_blur:true
             ~text:(reactive Fun.id (Signal.value buffer))
             ~on_input:(fun ev ->
               match ev with
@@ -857,8 +871,11 @@ let date_picker_pop ~anchor_target ctx ~ident ~is_datetime ~value ~on_dismiss : 
     [date_picker_content ctx ~ident ~is_datetime ~value
        ~on_value:(fun value -> set_scalar ctx ~ident ~value)
        ~on_clear:(fun () ->
-         D.remove_block_property ~block_uuid:ctx.block_uuid ~ident |> ignore;
-         on_dismiss ();S.refresh_all ()) ~on_dismiss])
+         ignore (let* _ = D.set_block_property ~block_uuid:ctx.block_uuid ~ident
+           ~value:(W.Keyword "logseq.property/empty-placeholder") in
+           S.refresh_all ();
+           on_dismiss ();
+           Js.Promise.resolve ())) ~on_dismiss])
 
 let date_view ~(hover : bool Signal.state option) ctx row : t =
  fun context parent ->
