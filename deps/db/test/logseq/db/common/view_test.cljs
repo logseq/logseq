@@ -1458,3 +1458,63 @@
     (is (= [10 2 1] desc-groups))
     ;; Explicit ascending order must reverse the default descending order.
     (is (= [1 2 10] asc-groups))))
+
+(defn- raw-number-filter
+  [property-ident operator match]
+  {:or? false
+   :filters [[property-ident operator match]]})
+
+(deftest get-view-data-class-objects-raw-number-is-filter-includes-zero-test
+  (let [conn (topic-conn
+              [{:page {:block/title "zero" :build/tags [:Topic]
+                       :build/properties {:user.property/size 0}}}
+               {:page {:block/title "five" :build/tags [:Topic]
+                       :build/properties {:user.property/size 5}}}]
+              :properties {:user.property/size {:logseq.property/type :raw-number}})
+        class-id (:db/id (d/entity @conn :user.class/Topic))
+        view-id (create-view-id conn :class-objects :view-for-id class-id)
+        option {:view-feature-type :class-objects
+                :view-for-id class-id
+                :sorting [{:id :block/title :asc? true}]}
+        is-zero (db-view/get-view-data @conn view-id (assoc option :filters (raw-number-filter :user.property/size :is #{0})))
+        is-five (db-view/get-view-data @conn view-id (assoc option :filters (raw-number-filter :user.property/size :is #{5})))
+        is-not-zero (db-view/get-view-data @conn view-id (assoc option :filters (raw-number-filter :user.property/size :is-not #{0})))
+        is-not-five (db-view/get-view-data @conn view-id (assoc option :filters (raw-number-filter :user.property/size :is-not #{5})))]
+    (is (= ["zero"] (result-titles conn is-zero)))
+    (is (= ["five"] (result-titles conn is-five)))
+    (is (= ["five"] (result-titles conn is-not-zero)))
+    (is (= ["zero"] (result-titles conn is-not-five)))))
+
+(deftest get-view-data-asset-size-zero-filter-from-persisted-view-test
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks
+               [{:page {:block/title "assets"}
+                 :blocks [{:block/title "zero.pdf"
+                           :build/tags #{:logseq.class/Asset}
+                           :build/properties {:logseq.property.asset/type "pdf"
+                                              :logseq.property.asset/checksum "zero-checksum"
+                                              :logseq.property.asset/size 0}}
+                          {:block/title "five.txt"
+                           :build/tags #{:logseq.class/Asset}
+                           :build/properties {:logseq.property.asset/type "txt"
+                                              :logseq.property.asset/checksum "five-checksum"
+                                              :logseq.property.asset/size 5}}]}]})
+        class-id (:db/id (d/entity @conn :logseq.class/Asset))
+        view-id (create-view-id conn :class-objects :view-for-id class-id)
+        option {:view-feature-type :class-objects
+                :view-for-id class-id
+                :sorting [{:id :block/title :asc? true}]}
+        is-five (db-view/get-view-data
+                 @conn view-id
+                 (assoc option :filters (raw-number-filter :logseq.property.asset/size :is #{5})))
+        is-not-zero (db-view/get-view-data
+                     @conn view-id
+                     (assoc option :filters (raw-number-filter :logseq.property.asset/size :is-not #{0})))
+        _ (d/transact! conn [{:db/id view-id
+                              :logseq.property.table/filters
+                              (raw-number-filter :logseq.property.asset/size :is #{0})}])
+        persisted (db-view/get-view-data @conn view-id option)]
+    (is (= ["five.txt"] (result-titles conn is-five)))
+    (is (= ["five.txt"] (result-titles conn is-not-zero)))
+    (is (= ["zero.pdf"] (result-titles conn persisted))
+        "A persisted File Size is 0 filter must return the size-0 asset, not throw.")))

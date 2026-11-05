@@ -6,10 +6,13 @@
             [logseq.e2e.fixtures :as fixtures]
             [logseq.e2e.keyboard :as k]
             [logseq.e2e.locator :as loc]
+            [logseq.e2e.block :as b]
             [logseq.e2e.page :as page]
             [logseq.e2e.util :as util]
             [wally.main :as w])
-  (:import (com.microsoft.playwright Locator$ClickOptions)))
+  (:import (com.microsoft.playwright Locator$ClickOptions)
+           (java.nio.file Files Paths)
+           (java.util.function Consumer)))
 
 (use-fixtures :once fixtures/open-page)
 
@@ -276,3 +279,74 @@
    (loc/filter ".ls-view-body .ls-table-row" :has-text "Alpha table object"))
   (assert/assert-is-visible
    (loc/filter ".ls-view-body .ls-table-row" :has-text "Beta table object")))
+
+(defn- temp-asset-path
+  [filename content]
+  (let [path (Paths/get (System/getProperty "java.io.tmpdir")
+                        (into-array String [filename]))]
+    (Files/write path
+                 (.getBytes ^String content "UTF-8")
+                 (into-array java.nio.file.OpenOption []))
+    path))
+
+(defn- upload-assets!
+  [paths]
+  (let [page (w/get-page)
+        pending (atom paths)
+        chooser-handler (reify Consumer
+                          (accept [_ chooser]
+                            (let [file (first @pending)]
+                              (swap! pending rest)
+                              (.setFiles chooser
+                                         (into-array java.nio.file.Path [file])))))]
+    (.onFileChooser page chooser-handler)
+    (try
+      (b/new-block "raw-number filter assets")
+      (doseq [_ paths]
+        (util/input-command "Upload an asset")
+        (util/wait-timeout 1500))
+      (finally
+        (.offFileChooser page chooser-handler)))))
+
+(defn- goto-asset-tag-page!
+  []
+  (let [asset-tag (ls-api-call! :editor.getTag "logseq.class/Asset")]
+    (ls-api-call! :app.pushState
+                  "page"
+                  {"name" (get asset-tag "uuid")}
+                  nil)))
+
+(deftest table-view-raw-number-zero-filter-does-not-crash-test
+  (let [zero-name "zero-bytes-1508.pdf"
+        five-name "five-bytes-1508.txt"]
+    (upload-assets! [(temp-asset-path zero-name "")
+                     (temp-asset-path five-name "hello")])
+    (util/double-esc)
+    (goto-asset-tag-page!)
+    (assert/assert-is-visible ".ls-view-body .ls-table-header-cell")
+    (assert/assert-is-visible
+     (loc/filter ".ls-view-body .ls-table-row" :has-text "zero-bytes-1508"))
+    (assert/assert-is-visible
+     (loc/filter ".ls-view-body .ls-table-row" :has-text "five-bytes-1508"))
+
+    (w/click (view-action-button "filter"))
+    (w/click (loc/filter ".cp__select-results a" :has-text "File Size"))
+    (assert/assert-is-visible (util/get-by-text "0" true))
+    (w/click (.last (util/get-by-text "0" true)))
+    (util/double-esc)
+
+    (assert/assert-is-hidden (util/get-by-text "Something went wrong" false))
+    (assert/assert-is-visible ".ls-view-body .ls-table-row")
+    (assert/assert-is-visible
+     (loc/filter ".ls-view-body .ls-table-row" :has-text "zero-bytes-1508"))
+    (assert/assert-have-count
+     (loc/filter ".ls-view-body .ls-table-row" :has-text "five-bytes-1508")
+     0)
+
+    (util/refresh-until-graph-loaded)
+    (assert/assert-is-hidden (util/get-by-text "Something went wrong" false))
+    (assert/assert-is-visible
+     (loc/filter ".ls-view-body .ls-table-row" :has-text "zero-bytes-1508"))
+    (assert/assert-have-count
+     (loc/filter ".ls-view-body .ls-table-row" :has-text "five-bytes-1508")
+     0)))
