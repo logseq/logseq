@@ -885,7 +885,12 @@ let date_picker_content ctx ~ident ~is_datetime ~value ~on_value ~on_clear ~on_d
        repeat_column ctx ~ident ~is_datetime ~rep ]) context parent
 
 let date_picker_pop ~anchor_target ctx ~ident ~is_datetime ~value ~on_dismiss : t =
-  Ui_components.with_props [Ui_components.Prop.overflow `auto;Ui_components.card_shadow]
+ fun context parent ->
+  let alive = ref true in
+  Signal.on_dispose context.Lui_ui.ui_scope (fun () -> alive := false);
+  let dismiss = on_dismiss in
+  let on_dismiss () = if !alive then (alive := false; dismiss ()) in
+  (Ui_components.with_props [Ui_components.Prop.overflow `auto;Ui_components.card_shadow]
   (popover ~anchor:`below ~anchor_target ~anchor_alignment:`start ~anchor_offset:4.
     ~max_height:(max 0 (int_of_float (Ui_services.dom_viewport_height ())-16))
     ~background:"hsl(var(--popover))"
@@ -900,7 +905,7 @@ let date_picker_pop ~anchor_target ctx ~ident ~is_datetime ~value ~on_dismiss : 
            ~value:(W.Keyword "logseq.property/empty-placeholder") in
            S.refresh_all ();
            on_dismiss ();
-           Js.Promise.resolve ())) ~on_dismiss])
+           Js.Promise.resolve ())) ~on_dismiss])) context parent
 
 let date_view ~(hover : bool Signal.state option) ctx row : t =
  fun context parent ->
