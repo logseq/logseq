@@ -1142,7 +1142,7 @@ let closed_value_view ~positioned ~table_view ctx row : t =
   let many = D.row_many row in
   let ident = D.row_ident row |> Option.value ~default:"" in
   let display = if D.value_empty_p value then "" else D.value_display value in
-  let anchor_id = "property-closed-" ^ ctx.owner_key ^ "-" ^ ident in
+  let anchor_id = "property-closed-" ^ ctx.owner_key ^ "-" ^ ctx.block_uuid ^ "-" ^ ident in
   let icon_id =
     match closed_value_icon_id value with
     | Some _ as icon -> icon
@@ -1244,7 +1244,7 @@ let node_view ctx row : t =
   let ident = D.row_ident row |> Option.value ~default:"" in
   let many = D.row_many row in
   let chips = ref_chips row in
-  let anchor_id = "property-node-" ^ ctx.owner_key ^ "-" ^ ident in
+  let anchor_id = "property-node-" ^ ctx.owner_key ^ "-" ^ ctx.block_uuid ^ "-" ^ ident in
   (column ~gap:2 ~grow:1.0 ~min_width:0
      [ Lui_elements.row ~gap:4 ~cross:`center ~min_width:0 ~flex_wrap:`wrap
          ((if many then chips else [])
