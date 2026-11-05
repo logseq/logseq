@@ -434,6 +434,12 @@
      :list ["--fields" "--limit" "--sort" "--order"]}},
    :tags [:upsert :list],
    :extends :non-sync/graph-json-env}
+  {:id "page-rename",
+   :extends :non-sync/graph-json-env,
+   :cmds ["python3 '{{repo-root}}/cli-e2e/scripts/page_rename.py' --cli '{{repo-root}}/static/logseq-cli.js' --root-dir {{root-dir-arg}} --config {{config-path-arg}} --graph {{graph-arg}}"],
+   :expect {:exit 0},
+   :covers {:commands ["upsert page"], :options {:upsert ["--id" "--page" "--rename" "--update-properties"]}},
+   :tags [:upsert :page]}
   {:id "created-entity-result-metadata",
    :extends :non-sync/graph-json-env,
    :cmds ["python3 '{{repo-root}}/cli-e2e/scripts/created_entity_results.py' --cli '{{repo-root}}/static/logseq-cli.js' --root-dir {{root-dir-arg}} --config {{config-path-arg}} --graph {{graph-arg}} --case metadata"],
