@@ -954,8 +954,11 @@ let date_view ~(hover : bool Signal.state option) ctx row : t =
      [ (if D.value_empty_p value then
           (* empty date has no journal link — keep the ghost button so
              a click opens the picker *)
-          value_button ~text:""
-            ~on_press:(fun _ -> open_picker ())
+          if D.row_many row then
+            Ui_components.button ~variant:`ghost ~size:`icon
+             ~icon:(`app "calendar-plus") ~label:(I18n.t "property/set-value")
+              ~on_press:(fun _ -> open_picker ()) []
+          else value_button ~text:"" ~on_press:(fun _ -> open_picker ())
         else
           (match ymd_of_datetime_value value with
            | Some (y, m, d) ->
@@ -989,6 +992,20 @@ let date_view ~(hover : bool Signal.state option) ctx row : t =
 
      ])
     context parent
+
+let many_dates_view ~hover ctx row : t =
+  let ty = D.row_type row in
+  let values = List.filter (fun value -> not (D.value_empty_p value))
+    (D.value_elems (D.row_value row)) in
+  Lui_elements.row ~gap:4 ~cross:`center ~flex_wrap:`wrap ~min_width:0
+    (List.concat_map (fun (index, value) ->
+      let label = date_display ty value in
+      (if index = 0 then [] else [text ~value:"," ~foreground:"var(--lx-gray-09)" []])
+      @ [match D.ref_uuid value with
+         | Some uuid -> link ~url:("#/page/" ^ uuid) ~target:`self_ ~text:label []
+         | None -> text ~value:label []])
+      (List.mapi (fun index value -> index, value) values)
+      @ [date_view ~hover ctx (D.row_with_value row W.Nil)])
 
 (* chips of the current refs — click navigates to the page *)
 let ref_chips row : t list =
@@ -1322,6 +1339,7 @@ let rec view ?(positioned = false) ?(table_view = false) ~(hover : bool Signal.s
     in
     display (D.row_effective_value row')
   else if ident = "logseq.property/icon" then icon_view ctx row'
+  else if D.row_many row' && List.mem ty ["date"; "datetime"] then many_dates_view ~hover ctx row'
   else if D.row_closed_values row' <> [] then closed_value_view ~positioned ~table_view ctx row'
   else
     match ty with
