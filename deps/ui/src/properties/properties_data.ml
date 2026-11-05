@@ -206,7 +206,11 @@ let rec value_display w =
       else string_of_float f
   | W.String s -> s
   | W.Keyword s -> s
-  | W.Map _ -> ref_title w
+  | W.Map _ ->
+      (match getf w "block/title", getf w "logseq.property/value" with
+       | Some title, _ -> value_display title
+       | None, Some value -> value_display value
+       | None, None -> ref_title w)
   | W.Set l | W.List l | W.Array l ->
       List.map value_display l |> String.concat ", "
   | W.Tagged (_, inner) -> value_display inner

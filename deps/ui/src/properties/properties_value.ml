@@ -1346,6 +1346,77 @@ let closed_value_view ~positioned ~table_view ctx row : t =
      ])
     context parent
 
+let number_values_view ctx row : t =
+  let ident = Option.get (D.row_ident row) in
+  let display = D.value_elems (D.row_value row)
+    |> List.filter (fun value -> not (D.value_empty_p value))
+    |> List.map D.value_display |> String.concat ", " in
+  let anchor_id = "property-numbers-" ^ ctx.owner_key ^ "-" ^ ctx.block_uuid ^ "-" ^ ident in
+  Ui_components.button ~variant:`ghost ~main:`start ~min_height:24
+    ~accessibility_identifier:anchor_id
+    ~text:(if display = "" then I18n.t "ui/empty" else display)
+    ~on_press:(fun _ ->
+      open_value_picker anchor_id (fun ~alive ~close context parent ->
+        let selected = Signal.state context.Lui_ui.ui_scheduler [] in
+        let options = Signal.state context.Lui_ui.ui_scheduler None in
+        let available = ref [] in
+        let current block = Option.value (D.getf (D.untag block) ident) ~default:W.Nil in
+        let load () =
+          let* values = D.property_values ~property_ident:ident ~block:(D.uuid_ref ctx.block_uuid) in
+          if not (alive ()) then Js.Promise.resolve () else
+          let* block = D.entity_by_uuid ctx.block_uuid in
+          let* keys = reference_keys (current block) in
+          if alive () then (
+            available := W.elems values;
+            Signal.set selected keys;
+            Signal.set options (Some !available));
+          Js.Promise.resolve ()
+        in
+        let choose ~toggle value key =
+          ignore (let* block = D.entity_by_uuid ctx.block_uuid in
+            let* keys = reference_keys (current block) in
+            if not (alive ()) then Js.Promise.resolve () else
+            let remove = toggle && Option.fold ~none:false
+              ~some:(fun key -> List.mem key keys) key in
+            let* _ = if remove then
+              D.delete_property_value ~block_uuid:ctx.block_uuid ~ident ~value
+              else D.set_block_property ~block_uuid:ctx.block_uuid ~ident ~value in
+            if remove && List.length keys = 1 then (
+              close ();
+              Js.Promise.resolve ())
+            else if alive () then load () else Js.Promise.resolve ())
+        in
+        let on_new text =
+          match D.number_of_text text with
+          | None -> ()
+          | Some number ->
+              let existing = List.find_opt (fun option ->
+                match D.getf option "label" with
+                | Some label -> D.number_of_text (D.value_display label) = Some number
+                | None -> false) !available in
+              let value, key = match existing with
+                | Some option ->
+                    let entity = Option.get (D.getf option "value") in
+                    W.Int (Option.get (D.entity_id_of entity)), Some (choice_key entity)
+                | None -> W.Float number, None in
+              choose ~toggle:false value key
+        in
+        ignore (load ());
+        (reactive (function
+          | None -> column []
+          | Some values ->
+              let items = List.filter_map (fun option ->
+                match D.getf option "value", D.getf option "label" with
+                | Some value, Some label when D.entity_id_of value <> None
+                    && D.number_of_text (D.value_display label) <> None ->
+                    let key = choice_key value in
+                    Some (Sel.item ~key (D.value_display label) (fun () ->
+                      choose ~toggle:true (W.Int (Option.get (D.entity_id_of value))) (Some key)))
+                | _ -> None) values in
+              Sel.view ~placeholder:(I18n.t "property/set-value")
+                ~selected_keys:(Signal.value selected) ~new_option:on_new items)
+          (Signal.value options)) context parent)) []
+
 (* node/page/class/asset: ref chips + picker button *)
 let node_view ctx row : t =
  fun context parent ->
@@ -1434,6 +1505,7 @@ let rec view ?(positioned = false) ?(table_view = false) ~(hover : bool Signal.s
           && D.row_closed_values row' = [] then normal_blocks_view ctx row'
   else if D.row_many row' && List.mem ty ["date"; "datetime"] then many_dates_view ~hover ctx row'
   else if D.row_closed_values row' <> [] then closed_value_view ~positioned ~table_view ctx row'
+  else if D.row_many row' && ty = "number" then number_values_view ctx row'
   else
     match ty with
     | "checkbox" -> checkbox_view ctx row'
