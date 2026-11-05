@@ -201,9 +201,7 @@ let rec value_display w =
   | W.Bool b -> if b then "true" else "false"
   | W.Int n -> string_of_int n
   | W.Int64 n -> Int64.to_string n
-  | W.Float f ->
-      if Float.is_integer f then string_of_int (int_of_float f)
-      else string_of_float f
+  | W.Float f -> Json.stringify (Json.Number f)
   | W.String s -> s
   | W.Keyword s -> s
   | W.Map _ ->
