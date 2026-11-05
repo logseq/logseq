@@ -203,7 +203,8 @@
                                           page-name)
                                         string/trimr))
       (throw (ex-info (str "No uuid found for page name " (pr-str page-name))
-                      (merge ex-data' {:page-name page-name
+                      (merge ex-data' {:reason-code :page-name-not-found
+                                       :page-name page-name
                                        :page-names (sort (keys @page-names-to-uuids))})))))
 
 (defn- replace-namespace-with-parent [block page-names-to-uuids parent-k]
@@ -746,11 +747,14 @@
   (if (and (qualified-keyword? kw) (db-property/logseq-property? kw))
     kw
     (or (get all-idents kw)
-        (throw (ex-info (str "No ident found for " (pr-str kw)) {})))))
+        (throw (ex-info (str "No ident found for " (pr-str kw))
+                        {:reason-code :unknown-property
+                         :property (if (keyword? kw) (subs (str kw) 1) (str kw))})))))
 
 (defn- get-property-schema [property-schemas kw]
   (or (get property-schemas kw)
-      (throw (ex-info (str "No property schema found for " (pr-str kw)) {}))))
+      (throw (ex-info (str "No property schema found for " (pr-str kw))
+                      (cond-> {} (nil? kw) (assoc :reason-code :unsupported-property))))))
 
 (defn- infer-property-schema-and-get-property-change
   "Infers a property's schema from the given _user_ property value and adds new ones to
@@ -1213,12 +1217,16 @@
 (defn- migrate-advanced-query-string [query-str]
   (try
     (pretty-print-dissoc query-str [:title :group-by-page? :collapsed?])
-    (catch :default _e
-      ;; rewrite/parse-string can fail on some queries in Advanced Queries in docs graph
-      (js/console.error "Failed to parse advanced query string. Falling back to full query string: " (pr-str query-str))
-      (if-let [query-map (not-empty (common-util/safe-read-map-string query-str))]
-        (pr-str (dissoc query-map :title :group-by-page? :collapsed?))
-        query-str))))
+    (catch :default _
+      ;; Preserve the fallback for queries the rewrite parser cannot read.
+      (try
+        (if-let [query-map (not-empty (common-util/safe-read-map-string query-str))]
+          (pr-str (dissoc query-map :title :group-by-page? :collapsed?))
+          query-str)
+        (catch :default error
+          (throw (ex-info (or (ex-message error) "Could not parse advanced query")
+                          {:reason-code :malformed-query}
+                          error)))))))
 
 (declare extract-block-list ast->text)
 (defn- extract-block-list-item
@@ -3360,9 +3368,20 @@
           _ (log-phase-ms! log-fn :save-tx save-start {:file file})
           _ (import-progress! options {:phase :upstream-properties :file file})
           upstream-start (when log-fn (import-profile/now-ms))
+          upstream-properties @(:upstream-properties tx-options)
           upstream-properties-tx
-          (build-upstream-properties-tx @conn @(:upstream-properties tx-options) (:import-state options) log-fn)
-          upstream-tx-report (transact-imported-data! conn upstream-properties-tx tx-meta options)
+          (build-upstream-properties-tx @conn upstream-properties (:import-state options) log-fn)
+          upstream-tx-report
+          (try
+            (transact-imported-data! conn upstream-properties-tx tx-meta options)
+            (catch :default error
+              (let [{:keys [entity-id] kind :error} (ex-data error)]
+                (throw (if (and (= :entity-id/syntax kind) (nil? entity-id)
+                                (some (comp #{:checkbox} :from-type val) upstream-properties))
+                         (ex-info (ex-message error)
+                                  (assoc (ex-data error) :reason-code :invalid-property-value)
+                                  error)
+                         error)))))
           _ (log-phase-ms! log-fn :upstream upstream-start {:file file})
           _ (log-phase-ms! log-fn :file file-start {:file file})]
     [main-tx-report upstream-tx-report]))
@@ -3404,6 +3423,8 @@
          reason (if (file-import-error? error)
                   (or (:reason data) (error-str error))
                   (error-str error))
+         reason-code (or (:reason-code data)
+                         (when (= :entity-id/missing (:error data)) :missing-reference))
          path (or path (:path data) (gobj/get error "logseqImportPath"))
          block (or block (:block data) (:block/title data))
          block-title (if (map? block) (:block/title block) block)
@@ -3424,7 +3445,8 @@
                                  (and (string? path) (not (string/blank? path))) (assoc :path path)
                                  display-block? (assoc :block block-title)
                                  (some? line) (assoc :line line)
-                                 (:invalid-properties? data) (assoc :invalid-properties? true))
+                                 reason-code (assoc :reason-code reason-code)
+                                 (string? (:property data)) (assoc :property (:property data)))
                                error)]
      ;; nbb can drop ex-data across promise boundaries; keep a JS flag too.
      (gobj/set import-error "logseqFileImportError" true)
@@ -3446,7 +3468,8 @@
               (file-import-error path
                                  (ex-info (error-str error)
                                           {:block (:block/title entity-map)
-                                           :invalid-properties? (boolean (some :block/properties errors))}
+                                           :reason-code (when (some :block/properties errors)
+                                                          :invalid-properties)}
                                           error))))
           (:errors (ex-data (unwrap-error error))))))
 
@@ -3466,7 +3489,11 @@
               _ (set-ui-state [:graph/importing-state :label] :import/loading)
               _ (set-ui-state [:graph/importing-state :current-idx] (inc idx))
               _ (set-ui-state [:graph/importing-state :current-page] path)
-              content (<read-file file)
+              content (-> (p/do! (<read-file file))
+                          (p/catch (fn [error]
+                                     (throw (ex-info (error-str error)
+                                                     {:reason-code :file-unreadable}
+                                                     error)))))
               stat (when (fn? <get-file-stat)
                      (<get-file-stat (or (:fs-path file) path)))
               ;; Prefer birthtime when it is a real time. Fall back to mtime when

@@ -399,14 +399,16 @@
 (deftest import-error-notification-shows-cause-not-wrapper
   (let [detail (some-> (resolve 'frontend.components.imports/import-error-detail) deref)
         heading (some-> (resolve 'frontend.components.imports/import-error-heading) deref)
-        file-failed (ex-info "pages/T.md: No property schema found for nil"
+        file-failed (ex-info "pages/T.md: internal error"
                              {:code :file-graph-import/file-failed
                               :path "pages/T.md"
-                              :reason "No property schema found for nil"})
+                              :reason-code :unsupported-property
+                              :reason "internal error"})
         wrapped (ex-info "Scanning the folder failed"
                          {:code :import-scan/failed
                           :path "pages/T.md"
-                          :reason "No property schema found for nil"}
+                          :reason-code :unsupported-property
+                          :reason "internal error"}
                          file-failed)]
     (is (fn? detail))
     (is (fn? heading))

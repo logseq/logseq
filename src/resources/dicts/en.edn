@@ -939,6 +939,7 @@
  :import/default-db-graph-behavior "Default behavior for DB graphs"
  :import/empty-graph-name "Empty graph name."
  :import/error-block-location "{1} (block: {2})"
+ :import/error-file-unreadable "This file could not be read. Check that it still exists and can be opened, then try the import again."
  :import/error-invalid-properties "The properties on this block are invalid. Check for property names that conflict with page names and values of the wrong type."
  :import/error-invalid-property-value "A property value could not be imported. Check that this file uses the same value types as other files, such as true or false for boolean properties."
  :import/error-malformed-query "This query could not be read. Check that its brackets and parentheses are balanced."
