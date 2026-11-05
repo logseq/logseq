@@ -265,7 +265,7 @@ let rec apply_focus () =
              stale — keep where the model put it *)
           if !S.last_edit_input_ms <= armed_ms then
             (match S.editing () with
-             | Some e when e.S.model.Edit_model.anchor <> None -> ()
+             | Some e when Edit_model.selection_range e.S.model <> None -> ()
              | _ -> apply_click_offset uuid caret armed_ms 30);
           (* the sink's runs prop and first layout can lag the landing —
              a split/merge's remount by far more than a patch or two —
