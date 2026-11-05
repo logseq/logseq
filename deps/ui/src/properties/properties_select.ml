@@ -174,7 +174,16 @@ let view ~placeholder ?(compact = false) ?(show_empty_result = true) ?(new_case_
                                      | None -> false) keys)
                                      (icon ~name:(`app "check") ~point_size:14 []) ]
                              | None -> if it.it_checked then
-                                 [icon ~name:(`app "check") ~point_size:14 []] else [])) ] else [])))
+                                 [icon ~name:(`app "check") ~point_size:14 []] else [])) ]
+                      else match selected_keys with
+                        | Some keys ->
+                            [ if_ ~test:(reactive (fun selected ->
+                                match it.it_key with
+                                | Some key -> List.mem key selected
+                                | None -> false) keys)
+                                (icon ~name:(`app "check") ~point_size:14 []) ]
+                        | None -> if it.it_checked then
+                            [icon ~name:(`app "check") ~point_size:14 []] else [])))
               vis) ]
             @ if compact then [box ~height:4 []] else []))
       (Signal.value st)
