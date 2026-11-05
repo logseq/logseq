@@ -885,9 +885,9 @@ let date_view ~(hover : bool Signal.state option) ctx row : t =
   let is_datetime = D.row_type row = "datetime" in
   let ident = D.row_ident row |> Option.value ~default:"" in
   let anchor_id = "property-date-" ^ ctx.owner_key ^ "-" ^ ctx.block_uuid ^ "-" ^ ident in
-  let key = "date-picker-" ^ anchor_id in
-  let dismiss () = S.remove_view_overlay key in
   let open_picker () =
+    let key = "date-picker-" ^ anchor_id ^ "-" ^ Properties_popup.next_key () in
+    let dismiss () = S.remove_view_overlay key in
     S.push_view_overlay context ~key
       ~view:(date_picker_pop ~anchor_target:anchor_id ctx ~ident ~is_datetime ~value
         ~on_dismiss:dismiss) ~on_escape:(fun () -> ());
