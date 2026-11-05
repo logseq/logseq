@@ -1279,3 +1279,6 @@ let () = Render_state.page_embed := page_embed
 let () =
   Render_state.block_row_static :=
     (fun b -> block_row_static b)
+
+let () =
+  Properties_value.normal_block_renderer := (fun ~scope b -> block_row ~scope b)

@@ -41,6 +41,9 @@ type ctx =
   ; class_schema : bool
   }
 
+let normal_block_renderer : (scope:string -> Model.block -> t) ref =
+  ref (fun ~scope:_ _ -> invalid_arg "Property block renderer is not installed")
+
 (* When the "add property" dialog creates a text/url value block it also
    marks the row for immediate editing — the next render shows the
    editor already open (cljs enters block editing right away). *)
@@ -579,6 +582,65 @@ let scalar_edit_cell ctx row : t =
             []) edit_context edit_parent)
      ])
     context parent
+
+let normal_blocks_view ctx row : t =
+ fun context parent ->
+  let ident = Option.get (D.row_ident row) in
+  let uuids = D.value_elems (D.row_value row)
+    |> List.filter_map (function
+      | W.Uuid uuid -> Some uuid
+      | value -> D.ref_uuid value)
+    |> List.sort_uniq String.compare in
+  if uuids = [] then scalar_edit_cell ctx (D.row_with_value row W.Nil) context parent
+  else
+    let repo = Runtime.repo () in
+    let scope = "property-values-" ^ ctx.owner_key ^ "-" ^ ctx.block_uuid ^ "-"
+      ^ ident ^ "-" ^ Properties_popup.next_key () in
+    let blocks = Signal.state context.Lui_ui.ui_scheduler [] in
+    let ticket = ref 0 in
+    Editor_state.add_block_source ~scope (fun () -> Runtime.signal_get blocks);
+    let sub = ref None in
+    let watch roots =
+      let rec keys (b : Model.block) =
+        let own = match b.block_uuid with
+          | Some uuid -> [Subs_state.watch_key_uuid "entity" uuid;
+              Subs_state.watch_key_uuid "children" uuid]
+          | None -> [] in
+        own @ List.concat_map keys b.block_children
+      in
+      { Subs_state.w_all = false; w_tags = [];
+        w_keys = Subs_state.watch_key_uuid "entity" ctx.block_uuid
+          :: List.concat_map keys roots }
+    in
+    let load () =
+      incr ticket;
+      let request = !ticket in
+      ignore (let* response = D.invoke "get-blocks"
+        [W.String repo; W.Array (List.map (fun uuid -> W.Map
+          [W.Keyword "id", W.Uuid uuid;
+           W.Keyword "opts", W.Map
+             [W.Keyword "children?", W.Bool true;
+              W.Keyword "all?", W.Bool true;
+              W.Keyword "render-data?", W.Bool true]]) uuids)] in
+        if Ui_effect.alive context.Lui_ui.ui_scope && request = !ticket
+           && Runtime.repo () = repo then (
+          let loaded = W.elems response
+            |> List.filter_map Decode.nest_get_blocks
+            |> List.map Decode.block_of_wire
+            |> List.sort (fun (a : Model.block) b -> compare a.block_order b.block_order) in
+          Option.iter (fun s -> Subs_state.set_watch s (watch loaded)) !sub;
+          Signal.set blocks loaded);
+        Js.Promise.resolve ())
+    in
+    sub := Some (Runtime.on_sync ~watch:(watch []) (fun _ -> load ()));
+    Signal.on_dispose context.Lui_ui.ui_scope (fun () ->
+      Option.iter Runtime.off_sync !sub;
+      Editor_state.remove_block_source ~scope);
+    load ();
+    (column ~grow:1.0 ~min_width:0 ~style_class:"property-block-container"
+      [reactive (fun values ->
+        Logseq_el.fragment (List.map (fun block -> !normal_block_renderer ~scope block) values))
+        (Signal.value blocks)]) context parent
 
 let checkbox_view ctx row : t =
   let value = D.row_value row in
@@ -1368,6 +1430,8 @@ let rec view ?(positioned = false) ?(table_view = false) ~(hover : bool Signal.s
     in
     display (D.row_effective_value row')
   else if ident = "logseq.property/icon" then icon_view ctx row'
+  else if D.row_many row' && List.mem ty ["default"; "url"]
+          && D.row_closed_values row' = [] then normal_blocks_view ctx row'
   else if D.row_many row' && List.mem ty ["date"; "datetime"] then many_dates_view ~hover ctx row'
   else if D.row_closed_values row' <> [] then closed_value_view ~positioned ~table_view ctx row'
   else
