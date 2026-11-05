@@ -95,6 +95,10 @@ func (d *DocumentEvents) input(c *ui.Context, ev ui.InputEvent, host ui.InputTar
 	if d.Observe != nil {
 		d.Observe(ev, target)
 	}
+	// Native popups dismiss before the enclosing document's Escape shortcut.
+	if ev.Kind == ui.InputKeyDown && ev.Key == ui.KeyEscape && ev.Mods == 0 && len(d.backend.OpenMenuOwners(c)) != 0 {
+		return false
+	}
 	prevented := d.event(c, ev, target)
 	if ev.Kind == ui.InputPointerCancel {
 		return false

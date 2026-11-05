@@ -135,7 +135,7 @@ let editor_font_row ?(density = `regular) () =
     font_button ~key:("font-" ^ t) ~label ~font_family ~active:(font.S.ftype = t)
       ~on_click:(fun () -> S.set_editor_font_type t)
   in
-  C.it_row ~key:"font" ~density ~label:(T.t "settings.general/editor-font")
+  C.it_row ~key:"font" ~density ~cross:`center ~label:(T.t "settings.general/editor-font")
     ~min_height:(if density=`compact then 72 else 80)
     [ row ~key:"font-btns" ~gap:8 ~min_width:0 ~flex_wrap:`wrap
         [ fb "default" "Default" "var(--ls-font-family, Inter)"
@@ -227,14 +227,15 @@ let accent_row ~modal =
   in
   column ~key:"acc"
     [ C.action_row ~key:"acc-r"
-        ~density:(if modal then `compact else `regular)
+        ~density:`compact
         ~label:(T.t "settings.general/accent-color") ~col_gap:16 ~label_lh:"1.25rem"
         ~actions:[ swatches ] ~stretch:modal
         ~desc:
           (if modal then []
            else
-             [ row ~key:"acc-sp" 
-                 [ C.kbd_seq ~key:"acc-k" ~binding:"c c" [ "c"; "c" ] ]
+             [ Ui_components.with_props [Ui_components.Prop.padding_left 24]
+                 (row ~key:"acc-sp"
+                    [ C.kbd_seq ~key:"acc-k" ~binding:"c c" [ "c"; "c" ] ])
              ])
         ()
     ; Ui_components.with_props [Ui_components.Prop.opacity 0.5]
@@ -475,26 +476,40 @@ let keymap_label row = I18n.t (command_key_of row.Keymap_data.title)
 
 let keymap_pill st ~key ~title filter =
   let active s = s.km_filter = filter in
-  Ui_components.chip_toggle ~key ~radius:9999 ~pad_v:2 ~pad_h:8
-    ~font_size:"0.75rem"
-    ~text:
-      (reactive
-         (fun s ->
-           title
-           ^ {js| · |js}
-           ^ string_of_int
-               (Keymap_data.count ~query:s.km_query ~label:keymap_label filter))
-         (Signal.value st))
-    ~checked:(reactive active (Signal.value st))
-    ~on_toggle:(fun _ ->
-      let model = Runtime.signal_get st in
-      Runtime.signal_set st
-        {
-          model with
-          km_filter =
-            (if model.km_filter = filter then Keymap_data.All else filter);
-        })
-    ()
+  reactive ~equal:(fun before after -> active before = active after)
+    (fun model ->
+      let checked = active model in
+      Ui_components.with_props
+        [ Ui_components.Prop.height_auto
+        ; Ui_components.Prop.font_size "0.75rem"
+        ; Ui_components.Prop.line_height "1rem"
+        ; Ui_components.Prop.cursor `pointer
+        ; Ui_components.Prop.opacity (if checked then 1. else 0.7)
+        ; Ui_components.Prop.hover_opacity 1.
+        ]
+        (toggle_button ~key ~variant:`ghost ~foreground:"inherit"
+           ~text:
+             (reactive
+                (fun model ->
+                  title ^ {js| · |js}
+                  ^ string_of_int
+                      (Keymap_data.count ~query:model.km_query ~label:keymap_label filter))
+                (Signal.value st))
+           ~checked ~min_height:0 ~padding_vertical:2 ~padding_horizontal:8
+           ~corner_radius:9999 ~border_width:1
+           ~border_color:"var(--lx-gray-06, var(--ls-border-color, hsl(var(--border))))"
+           ~background:
+             (if checked then
+                "var(--lx-gray-04, var(--ls-tertiary-background-color, hsl(var(--muted))))"
+              else "transparent")
+           ~on_toggle:(fun _ ->
+             let model = Runtime.signal_get st in
+             Runtime.signal_set st
+               { model with
+                 km_filter =
+                   (if model.km_filter = filter then Keymap_data.All else filter) })
+           []))
+    (Signal.value st)
 
 let keymap_recorded_keys ?(pending = false) ?(wrap = false) ?(trailing = [])
     strokes =
@@ -711,8 +726,16 @@ let keymap_controls ?editing st =
       (function Keymap_data.Category title -> Some title | _ -> None)
       Keymap_data.items
   in
-  column ~key:"km-ctl" ~style_class:"cp__shortcut-page-x-pane-controls" ~gap:8
-    ~margin_top:22 ~margin_bottom:8
+  Ui_components.with_props
+    [ Ui_components.Prop.position `sticky
+    ; Ui_components.Prop.inset_top 0.
+    ; Ui_components.Prop.z_index 10
+    ; Ui_components.Prop.padding_top 20
+    ; Ui_components.Prop.padding_bottom 5
+    ]
+  (column ~key:"km-ctl" ~style_class:"cp__shortcut-page-x-pane-controls" ~gap:8
+    ~padding_horizontal:16
+    ~background:"hsl(var(--background))"
     [
       row ~key:"km-tb" ~style_class:"shortcut-toolbar-row" ~cross:`center
         ~main:`space_between ~flex_wrap:`wrap ~gap:8
@@ -787,7 +810,7 @@ let keymap_controls ?editing st =
                    [];
                ]);
         ];
-    ]
+    ])
 
 (* Category literals in keymap_data.ml map to shortcut.category/* keys *)
 let keymap_category = function
@@ -803,19 +826,21 @@ let keymap_category = function
   | _ -> "shortcut.category/others"
 
 let keymap_th ~key ~collapsed ~on_press label =
-  list_item ~key ~style_class:"th" ~on_press
-    ~min_height:30 ~margin_bottom:8
-    ~padding_vertical:4 ~padding_horizontal:8 ~corner_radius:6
+  Ui_components.with_props
+    [Ui_components.Prop.font_size "15px"; Ui_components.Prop.line_height "1.5"]
+    (list_item ~key ~style_class:"th" ~on_press
+    ~margin_bottom:8
+    ~padding_vertical:4 ~padding_horizontal:8 ~corner_radius:4
     ~background:"var(--lx-gray-03, hsl(var(--muted)))"
     [ row ~grow:1. ~min_width:0 ~main:`space_between ~cross:`center ~gap:8
       [ text ~key:(key ^ "s") ~style_class:"ls-th-strong"
-        ~font_size:"0.9375rem" ~line_height:"1.25rem" ~font_weight:600
+        ~font_size:"15px" ~line_height:"1.5" ~font_weight:600
         ~grow:1. ~min_width:0
         ~value:(I18n.t (keymap_category label)) []
     ; icon ~key:(key ^ "i") ~style_class:"ls-row" ~size:`sm
         ~name:(if collapsed then `app "chevron-right" else `app "chevron-down") []
       ]
-    ]
+    ])
 
 let keymap_editor st editing (r : Keymap_data.row) : t =
  fun ctx parent ->
@@ -941,8 +966,13 @@ let keymap_editor st editing (r : Keymap_data.row) : t =
 let keymap_row st editing ~key (r : Keymap_data.row) =
   let open Keymap_data in
   (* the title tooltip attr was DOM-only — dropped *)
-  list_item ~key ~style_class:"shortcut-row"
-    ~min_height:34 ~padding_vertical:7 ~padding_horizontal:8
+  Ui_components.with_props
+    [ Ui_components.Prop.width_auto;
+      Ui_components.Prop.font_size "15px";
+      Ui_components.Prop.line_height "1.4285714285714286" ]
+    (list_item ~key ~style_class:"shortcut-row"
+    ~padding_vertical:4 ~padding_horizontal:8
+    ~margin_horizontal:(-4) ~margin_bottom:4
     ~on_press:(fun _ -> Runtime.signal_set st
         { (Runtime.signal_get st) with km_recording = false };
         Runtime.signal_set editing (Some (command_id r.title)))
@@ -950,6 +980,7 @@ let keymap_row st editing ~key (r : Keymap_data.row) =
         ~min_width:0 ~gap:12 ~flex_wrap:`wrap
         [ box ~key:(key ^ "l") ~grow:1. ~min_width:0
             [ text ~key:(key ^ "lx") ~style_class:"ls-kbd-label"
+                ~font_size:"15px" ~line_height:"1.4285714285714286"
                 ~value:(I18n.t (command_key_of r.title)) []
             ]
         ; row ~key:(key ^ "a") ~cross:`center ~gap:6 ~min_width:0 ~flex_wrap:`wrap
@@ -969,7 +1000,7 @@ let keymap_row st editing ~key (r : Keymap_data.row) =
     ; if_ ~test:(reactive (fun selected ->
         selected = Some (command_id r.title)) (Signal.value editing))
         (keymap_editor st editing r)
-    ]
+    ])
 
 let keymap_pane ?state ?(embedded=false) () : t =
  fun context parent ->
@@ -1024,12 +1055,18 @@ let keymap_pane ?state ?(embedded=false) () : t =
           text ~value:(I18n.t "keymap/no-matching-shortcuts") [];
         ]
     else
-      list ~key:"km-ul" ~style_class:"ls-plain-list" ~list_marker:`none
-        ~margin:0 ~padding:0 (List.rev elements)
+      Ui_components.with_props [Ui_components.Prop.overflow `visible]
+        (column ~key:"km-ul" ~style_class:"ls-plain-list"
+          ~margin:0 ~padding_horizontal:16 ~padding_vertical:0 (List.rev elements))
   in
+  (* The first li margin collapses through the master ul and article. *)
   let results_container children =
-    if embedded then column ~key:"km-art" ~min_height:0 children
-    else scroll ~key:"km-art" ~orientation:`vertical ~grow:1. ~min_height:0 children in
+    Ui_components.with_props [Ui_components.Prop.padding_bottom 16]
+      (if embedded then
+         column ~key:"km-art" ~min_height:0 ~margin_top:4 children
+       else
+         scroll ~key:"km-art" ~orientation:`vertical ~grow:1. ~min_height:0
+           ~margin_top:4 children) in
   (Ui_components.with_props
      [
        Ui_components.Prop.font_size "0.875rem";
@@ -1227,7 +1264,9 @@ let nav_item ~key (id, label, icn) =
 let pane_of ~modal ~keymap ctx tab =
   match tab with
   | "editor" -> editor_pane ctx
-  | "keymap" -> keymap_pane ~state:keymap ()
+  | "keymap" ->
+      Ui_components.with_props [Ui_components.Prop.padding_top 0]
+        (keymap_pane ~state:keymap ~embedded:true ())
   | "advanced" -> advanced_pane ()
   | "features" -> features_pane ctx
   | _ -> general_pane ~modal ctx
@@ -1239,10 +1278,15 @@ let same_config ((s : S.t),(a : Model.t)) ((t : S.t),(b : Model.t)) =
 let article ~modal ~keymap ms ctx =
   let viewport_height = 0.7 in
   let content (s : S.t) _ =
+    let is_keymap = s.tab = "keymap" in
     let children =
-      [ row ~key:"art-h" ~style_class:"cp__settings-header"
-          ~cross:`center ~main:`start ~gap:8 ~height:40
-          ~padding_vertical:8
+      [ Ui_components.with_props
+          [ Ui_components.Prop.padding_top (if is_keymap then 22 else 8)
+          ; Ui_components.Prop.padding_bottom 8 ]
+        (row ~key:"art-h" ~style_class:"cp__settings-header"
+          ~cross:`center ~main:`start ~gap:8
+          ?height:(if is_keymap then None else Some 40)
+          ~padding_horizontal:(if is_keymap then 16 else 0)
           [ heading ~key:"art-ht" ~level:1
               ~style_class:"cp__settings-category-title"
               ~font_size:"1.25rem" ~font_weight:400 ~line_height:"1.75rem"
@@ -1250,16 +1294,17 @@ let article ~modal ~keymap ms ctx =
                 (reactive (fun (s : S.t) -> tab_title s.tab)
                    (S.signal ()))
               []
-          ]
+          ])
       ; pane_of ~modal ~keymap ctx s.tab
       ]
     in
     let body =
-      column ~key:"settings-article-body" ~padding:16 ~min_width:0 ~min_height:0 children
+      column ~key:"settings-article-body" ~padding:(if is_keymap then 0 else 16)
+        ~min_width:0 ?min_height:(if is_keymap then None else Some 0) children
     in
     if s.tab = "keymap" then
       Ui_components.with_props
-        [Ui_components.Prop.height_viewport viewport_height] body
+        [Ui_components.Prop.height_auto] body
     else body
   in
   Ui_components.with_props

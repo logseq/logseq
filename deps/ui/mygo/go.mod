@@ -5,7 +5,7 @@ go 1.27.3
 require (
 	github.com/ebitengine/purego v0.11.1
 	github.com/egoist/mygo v0.6.4
-	github.com/logseq/lui/platform/mygo v0.0.0-20261104210439-2f2176e8eda8
+	github.com/logseq/lui/platform/mygo v0.0.0-20261105011639-0ca7c020a5d8
 )
 
 require (
@@ -29,4 +29,4 @@ require (
 	golang.org/x/text v0.43.0 // indirect
 )
 
-replace github.com/egoist/mygo => github.com/logseq/mygo v0.0.0-20261031004139-efb1ecce30b1
+replace github.com/egoist/mygo => github.com/logseq/mygo v0.0.0-20261104233121-982f5a6791f0

@@ -52,12 +52,12 @@ let property_icon row =
       | "asset" -> Some "letter-a"
       | _ -> None
   in
-  match name with
-  | Some n ->
-      Lui_elements.row ~key:"pk-i" ~cross:`center ~margin_right:4
-        ~style_class:"property-icon" ~opacity:0.5
+  match Node_icon.own (D.row_prop row), name with
+  | Some icon, _ -> Icon_picker.icon_el ~size:15. icon
+  | None, Some n ->
+      Lui_elements.row ~key:"pk-i" ~cross:`center ~opacity:0.5
         [ Icons.icon ~size:15. n ]
-  | None ->
+  | None, None ->
       Lui_elements.row ~key:"pk-b" ~width:18 ~height:24 ~main:`center ~cross:`center
         ~style_class:"bullet-container"
         [ box ~style_class:"bullet" ~width:5 ~height:5 ~corner_radius:3
@@ -73,9 +73,42 @@ let key_cell (ctx : V.ctx) ~owner_is_tag ~owner_title ?(icon = true)
     text ~style_class:"property-k" ~value:(D.row_title row) [] context parent
   else
   let anchor_id = "property-key-" ^ ctx.owner_key ^ "-" ^ Option.get (D.row_ident row) in
+  let icon_anchor_id = anchor_id ^ "-icon" in
+  let prop = D.row_prop row in
+  let choose_icon choice =
+    let uuid = Option.get (D.entity_uuid_of prop) in
+    ignore (let* _ =
+      match choice with
+      | Icon_picker.Remove ->
+          D.remove_block_property ~block_uuid:uuid ~ident:"logseq.property/icon"
+      | Icon_picker.Emoji id ->
+          D.set_block_property ~block_uuid:uuid ~ident:"logseq.property/icon"
+            ~value:(W.Map [W.Keyword "type", W.Keyword "emoji"; W.Keyword "id", W.String id])
+      | Icon_picker.Tabler (id, color) ->
+          D.set_block_property ~block_uuid:uuid ~ident:"logseq.property/icon"
+            ~value:(W.Map
+              ([W.Keyword "type", W.Keyword "tabler-icon"; W.Keyword "id", W.String id]
+               @ Option.fold ~none:[] ~some:(fun color -> [W.Keyword "color", W.String color]) color))
+      in
+      S.refresh_all ();
+      Js.Promise.resolve ())
+  in
   (Lui_elements.row ~gap:4 ~cross:`center ~min_height:28 ~min_width:0 ~grow:1.
      ~style_class:"property-key-inner"
-     [ (if icon then property_icon row else Logseq_el.nothing)
+     [ (if icon then
+          Ui_components.button ~variant:`ghost ~width:18 ~min_width:18
+            ~height:28 ~padding:0 ~main:`center ~cross:`center
+            ~style_class:"property-icon property-m"
+            ~accessibility_identifier:icon_anchor_id
+            ~label:(I18n.t "property/set-icon")
+            ~on_press:(fun _ ->
+              match Ui_services.dom_by_id icon_anchor_id with
+              | Some anchor ->
+                  Icon_picker.open_picker ~anchor ~del:(Node_icon.own prop <> None)
+                    ~on_chosen:choose_icon
+              | None -> ())
+            [ property_icon row ]
+        else Logseq_el.nothing)
      ; Ui_components.button ~variant:`ghost ~size:`sm ~text_alignment:`start ~grow:1.0
          ~min_width:0
          ~style_class:"property-k jtrigger"

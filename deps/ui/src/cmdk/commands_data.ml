@@ -6,7 +6,7 @@
    installers, and dev/* — so this table omits them too, except dev/*
    entries that stay gated on developer-mode at query time like cljs.
 
-   Kept as an embedded JSON literal decoded once at init — same
+   Kept as an embedded JSON literal decoded once after services install — same
    cons-skeleton reason as keymap_data. Wire shape:
      [ ["k", id] | ["d", id, "(Dev) label"] ]
 
@@ -57,13 +57,14 @@ let decode_cmd j =
       | _ -> failwith "commands_data: cmd")
   | _ -> failwith "commands_data: cmd"
 
-let table : cmd list =
-  Array.to_list
-    (Array.map decode_cmd (jarr (Js.Json.parseExn table_json)))
+let table : cmd list Lazy.t =
+  lazy
+    (Array.to_list
+       (Array.map decode_cmd (jarr (Js.Json.parseExn table_json))))
 
 let current_table () =
   List.map (fun command ->
-      { command with sc = Keymap_data.effective_shortcut command.id }) table
+      { command with sc = Keymap_data.effective_shortcut command.id }) (Lazy.force table)
 
 (* cljs shortcut-utils/decorate-binding (literal replace order matters:
    "shift+/" -> "?" before "shift" -> shift glyph). *)
@@ -95,4 +96,4 @@ let display = function
   | Binds bs -> String.concat " | " (List.map decorate_binding bs)
 
 let command_by_id cid =
-  List.find_opt (fun c -> c.id = cid) table
+  List.find_opt (fun c -> c.id = cid) (Lazy.force table)

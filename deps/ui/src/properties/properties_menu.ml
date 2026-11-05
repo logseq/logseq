@@ -431,6 +431,34 @@ let supports_default_value m =
   && closed_values m = []
   && prop_ident m <> "logseq.property/enable-history?"
 
+let multiple_values_item m ~close : t =
+ fun context parent ->
+  let many = D.row_many m.row in
+  let used = Signal.state context.Lui_ui.ui_scheduler None in
+  ignore (let* values = D.property_values ~property_ident:(prop_ident m)
+    ~block:(D.uuid_ref m.owner_uuid) in
+    if Ui_effect.alive context.Lui_ui.ui_scope then
+      Runtime.signal_set used (Some (W.elems values <> []));
+    Js.Promise.resolve ());
+  let save () =
+    ignore (let* _ = D.upsert_property_no_name ~ident:(prop_ident m)
+      ~schema:(W.Map [(W.Keyword "db/cardinality", W.Keyword (if many then "one" else "many"))]) () in
+      S.refresh_all ();
+      Js.Promise.resolve ())
+  in
+  (menu_item ~text:(I18n.t "property/multiple-values") ~checked:many
+     ~disabled:(reactive (function None -> true | Some used -> many && used) (Signal.value used))
+     ~on_press:(fun _ ->
+       match Runtime.signal_get used with
+       | None | Some true when many -> ()
+       | None -> ()
+       | Some used ->
+           close ();
+           if used then
+             Dialogs_state.ask ~title:(I18n.t "property/multiple-values")
+               ~desc:(I18n.t "property/multiple-values-confirm") ~on_confirm:save ()
+           else save ()) []) context parent
+
 let default_value_pane_view m ~close : t =
  fun context parent ->
   let sched = context.Lui_ui.ui_scheduler in
@@ -505,24 +533,13 @@ let main_items context m ~set_pane ~close =
               close ()
             end else Runtime.signal_set set_pane MDefaultValue) [] ]
        else [])
-    @ [ menu_item ~text:(I18n.t "property/available-choices")
+    @ (if D.row_supports_choices m.row then
+      [ menu_item ~text:(I18n.t "property/available-choices")
           ~on_press:(fun _ -> Runtime.signal_set set_pane MChoices) []
-      ; menu_item ~text:(I18n.t "property/multiple-values")
-          ~checked:(D.row_many m.row)
-          ~on_press:(fun _ ->
-            let many = D.row_many m.row in
-            ignore
-              (D.upsert_property_no_name ~ident:(prop_ident m)
-                 ~schema:
-                   (W.Map
-                      [ ( W.Keyword "db/cardinality"
-                        , W.Keyword (if many then "one" else "many") )
-                      ])
-                 ());
-            S.refresh_all ();
-            close ())
-          []
-      ; position_submenu m ~close
+      ] else [])
+    @ (if D.row_supports_many m.row then
+      [ multiple_values_item m ~close ] else [])
+    @ [ position_submenu m ~close
       ; toggle_view (I18n.t "property/hide-by-default")
           "logseq.property/hide?"
       ; toggle_view (I18n.t "property/hide-empty-value")
@@ -609,6 +626,6 @@ let open_menu ~(anchor : Ui_services.el) ~owner_uuid ~owner_id
       ~close:(fun () -> !close ())
   in
   let key =
-    Properties_popup.open_anchored ~cls:menu_root_class anchor content
+    Properties_popup.open_anchored ~role:`menu ~cls:menu_root_class anchor content
   in
   close := (fun () -> S.remove_view_overlay key)

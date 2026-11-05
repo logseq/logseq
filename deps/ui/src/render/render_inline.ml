@@ -131,9 +131,58 @@ let page_link ~(tag : bool) ?label ?uuid_sig name =
    (worker_events.invalidate_pull_caches). Misses are not cached — a
    just-created entity resolves on the next broadcast+remount. *)
 
+type ref_meta =
+  { title : string
+  ; is_page : bool
+  ; is_math : bool
+  ; asset : Model.block option
+  }
+
+let ref_meta_fields =
+  [ "block/uuid"; "block/title"; "block/name"
+  ; "logseq.property.node/display-type"
+  ; "logseq.property.asset/type"; "logseq.property.asset/external-url"
+  ; "logseq.property.asset/width"; "logseq.property.asset/height"
+  ; "logseq.property.asset/resize-metadata"; "logseq.property.asset/align" ]
+
+let ref_meta_properties = List.map (fun k -> Wire.Keyword k) ref_meta_fields
+
+let ref_meta_pattern =
+  Wire.String
+    ("[" ^ String.concat " " (List.map (fun k -> ":" ^ k) ref_meta_fields) ^ "]")
+
+let plain_ref_meta title is_page is_math =
+  { title; is_page; is_math; asset = None }
+
+let ref_meta_of_wire w =
+  Option.map
+    (fun title ->
+      { title
+      ; is_page =
+          (match Wire.map_get_string w "block/name" with
+           | Some n -> String.trim n <> ""
+           | None -> false)
+      ; is_math =
+          Decode.prop_label w "logseq.property.node/display-type" = Some "math"
+      ; asset =
+          Option.map (fun _ -> Decode.block_of_wire w)
+            (Wire.map_get_string w "logseq.property.asset/type")
+      })
+    (Wire.map_get_string w "block/title")
+
+let is_inline_media = function
+  | "gif" | "svg" | "jpeg" | "ico" | "png" | "jpg" | "bmp" | "webp"
+  | "avif" | "cr2" | "jxl" | "heic"
+  | "mp3" | "ogg" | "mpeg" | "wav" | "m4a" | "flac" | "wma" | "aac"
+  | "mp4" | "webm" | "mov" | "flv" | "avi" | "mkv" -> true
+  | _ -> false
+
+(* Installed by the platform asset view, which depends on the editor. *)
+let inline_asset_renderer : (string -> Model.block -> t) option ref = ref None
+
 type pull_cache =
   { c_name_uuid : (string, string) Hashtbl.t
-  ; c_uuid_meta : (string, string * bool * bool) Hashtbl.t (* title, is-page, is-math *)
+  ; c_uuid_meta : (string, ref_meta) Hashtbl.t
   ; c_macros : (string * string) list option ref (* config.edn :macros *)
   }
 
@@ -204,11 +253,12 @@ let invalidate_pull_uuids (uuids : string list) =
    the save's own broadcast invalidates c_uuid_meta before the anchor's
    pull resolves, so the just-committed title is kept here — the pull
    still runs and replaces it with the committed form *)
-let minted_meta : (string, string * bool * bool) Hashtbl.t = Hashtbl.create 32
+let minted_meta : (string, ref_meta) Hashtbl.t = Hashtbl.create 32
 
 let prime_ref_metas (metas : (string * string) list) =
   List.iter
-    (fun (name, u) -> Hashtbl.replace minted_meta u (name, true, false))
+    (fun (name, u) ->
+      Hashtbl.replace minted_meta u (plain_ref_meta name true false))
     metas;
   match (Runtime.model ()).Model.repo with
   | None -> ()
@@ -216,20 +266,21 @@ let prime_ref_metas (metas : (string * string) list) =
       let cache = repo_cache repo in
       List.iter
         (fun (name, u) ->
-          Hashtbl.replace cache.c_uuid_meta u (name, true, false);
+          Hashtbl.replace cache.c_uuid_meta u (plain_ref_meta name true false);
           Hashtbl.replace cache.c_name_uuid
             (String.lowercase_ascii name) u)
         metas
 
 (* same priming for an entity already pulled elsewhere (a resolved
    [[name]] -> uuid lookup) — caches only, no minted entry *)
-let prime_pull_meta ~name ~uuid ~title ~is_page ~is_math =
+let prime_pull_meta ~name ~uuid ~entity =
   match (Runtime.model ()).Model.repo with
   | None -> ()
   | Some repo ->
       let cache = repo_cache repo in
       Hashtbl.replace cache.c_name_uuid (String.lowercase_ascii name) uuid;
-      Hashtbl.replace cache.c_uuid_meta uuid (title, is_page, is_math)
+      Option.iter (Hashtbl.replace cache.c_uuid_meta uuid)
+        (ref_meta_of_wire entity)
 
 (* batch-fill both caches from a get-blocks response — a page's [[ref]]
    anchors then mount on hits instead of paying a thread-api/pull each *)
@@ -242,18 +293,8 @@ let prime_pull_caches repo (w : Wire.t) =
         | Some blk -> (
             match Wire.map_get_uuid blk "block/uuid" with
             | Some uuid ->
-                let title =
-                  Option.value
-                    (Wire.map_get_string blk "block/title")
-                    ~default:""
-                in
-                let is_page =
-                  match Wire.map_get_string blk "block/name" with
-                  | Some n -> String.trim n <> ""
-                  | None -> false
-                in
-                let is_math = Decode.prop_label blk "logseq.property.node/display-type" = Some "math" in
-                Hashtbl.replace cache.c_uuid_meta uuid (title, is_page, is_math);
+                Option.iter (Hashtbl.replace cache.c_uuid_meta uuid)
+                  (ref_meta_of_wire blk);
                 Some uuid
             | None -> None)
         | None -> None
@@ -272,24 +313,18 @@ let prime_pull_caches repo (w : Wire.t) =
 (* Editing uses the same metadata cache as rendered references. *)
 let ref_meta_for_edit repo uuid =
   let cache = repo_cache repo in
+  let for_edit meta = (meta.title, meta.is_page, meta.is_math) in
   match Hashtbl.find_opt cache.c_uuid_meta uuid with
-  | Some meta -> Js.Promise.resolve (Some meta)
+  | Some meta -> Js.Promise.resolve (Some (for_edit meta))
   | None ->
       let* w =
         Runtime.invoke3 "thread-api/pull" (Wire.String repo)
-          (Wire.String "[:block/title :block/name :logseq.property.node/display-type]")
+          ref_meta_pattern
           (Wire.Array [ Wire.Keyword "block/uuid"; Wire.Uuid uuid ])
       in
-      let meta =
-        Option.map
-          (fun title ->
-            let is_page = Option.is_some (Wire.map_get_string w "block/name") in
-            let is_math = Decode.prop_label w "logseq.property.node/display-type" = Some "math" in
-            Hashtbl.replace cache.c_uuid_meta uuid (title, is_page, is_math);
-            (title, is_page, is_math))
-          (Wire.map_get_string w "block/title")
-      in
-      Js.Promise.resolve meta
+      let meta = ref_meta_of_wire w in
+      Option.iter (Hashtbl.replace cache.c_uuid_meta uuid) meta;
+      Js.Promise.resolve (Option.map for_edit meta)
 
 let first_line title =
   match String.index_opt title '\n' with
@@ -317,18 +352,11 @@ let uuid_meta_state context uuid ~fallback ?(miss = None) () =
            | None -> ());
           (let* w =
             Runtime.invoke3 "thread-api/pull" (Wire.String repo)
-              (Wire.String "[:block/title :block/name :logseq.property.node/display-type]")
+              ref_meta_pattern
               (Wire.Array [ Wire.Keyword "block/uuid"; Wire.Uuid uuid ])
           in
-          (match Wire.map_get_string w "block/title" with
-           | Some t when String.trim t <> "" ->
-               let is_page =
-                 match Wire.map_get_string w "block/name" with
-                 | Some n -> String.trim n <> ""
-                 | None -> false
-               in
-               let is_math = Decode.prop_label w "logseq.property.node/display-type" = Some "math" in
-               let meta = (t, is_page, is_math) in
+          (match ref_meta_of_wire w with
+           | Some meta when String.trim meta.title <> "" ->
                Hashtbl.replace cache.c_uuid_meta uuid meta;
                Hashtbl.remove minted_meta uuid;
                Runtime.signal_set st meta
@@ -367,7 +395,7 @@ let name_uuid_state context name =
                    seeded := true;
                    Hashtbl.replace cache.c_name_uuid key u;
                    Hashtbl.replace cache.c_uuid_meta u
-                     (p.Model.page_title, true, false);
+                     (plain_ref_meta p.Model.page_title true false);
                    if !sync then Signal.set st u else Runtime.signal_set st u
                | None -> ())
            | _ -> ());
@@ -399,14 +427,15 @@ let external_link href label_els =
    pull returns *)
 let block_ref_anchor uuid : t =
  fun context parent ->
-  let st = uuid_meta_state context uuid ~fallback:(uuid, false, false) () in
-  let title_sig = Signal.map (fun (title, _, _) -> title) (Signal.value st) in
+  let st =
+    uuid_meta_state context uuid ~fallback:(plain_ref_meta uuid false false) ()
+  in
   Ui_components.with_props
     [ Ui_components.Prop.position `relative ]
     (link ~url:"#" ~target:`self_ ~style_class:"page-ref"
        ~foreground:"var(--lx-accent-11, var(--ls-link-text-color))"
        ~data_attrs:[ ("data-ref", uuid); ("tabindex", "0") ]
-       ~text_signal:title_sig
+       ~text:(reactive (fun meta -> meta.title) (Signal.value st))
        [] )
     context parent
 
@@ -1457,14 +1486,21 @@ and page_ref ?(tag = false) ~refs ~self name =
 and resolved_ref ~refs ~self uuid : t =
  fun context parent ->
   let st =
-    uuid_meta_state context uuid ~fallback:("", true, false)
-      ~miss:(Some (uuid, true, false)) ()
+    uuid_meta_state context uuid ~fallback:(plain_ref_meta "" true false)
+      ~miss:(Some (plain_ref_meta uuid true false)) ()
   in
   let child_refs =
     self :: (match refs with [] -> [] | _ -> uuid :: refs)
   in
   (reactive
-    (fun (title, is_page, is_math) ->
+    (fun { title; is_page; is_math; asset } ->
+      match asset with
+      | Some b
+        when Option.fold ~none:false ~some:is_inline_media b.Model.block_asset_type ->
+          (match !inline_asset_renderer with
+           | Some render -> render uuid b
+           | None -> invalid_arg "Inline asset renderer is not installed")
+      | _ ->
       (* data-ref/data-uuid/tabindex/draggable are delegated-event +
          dnd hooks (a.page-ref) *)
       if title = "" then
@@ -1514,18 +1550,20 @@ and resolved_ref ~refs ~self uuid : t =
 and resolved_tag_ref ~refs ~self uuid : t =
  fun context parent ->
   ignore (refs, self);
-  let st = uuid_meta_state context uuid ~fallback:(uuid, false, false) () in
+  let st =
+    uuid_meta_state context uuid ~fallback:(plain_ref_meta uuid false false) ()
+  in
   let title_sig = (Signal.value st) in
   (Ui_components.with_props
      [ Ui_components.Prop.position `relative ]
      (link ~url:"#" ~target:`self_ ~style_class:"tag"
     ~data_attrs:
       (reactive
-         (fun (n, _, _) ->
+         (fun { title = n; _ } ->
            [ ("data-uuid", uuid); ("tabindex", "0")
            ; ("data-ref", String.lowercase_ascii n) ])
          title_sig)
-    [ text ~value:(reactive (fun (n, _, _) -> "#" ^ n) title_sig) [] ]))
+    [ text ~value:(reactive (fun meta -> "#" ^ meta.title) title_sig) [] ]))
     context parent
 
 and macro_el ~refs ~self body =

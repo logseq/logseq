@@ -63,7 +63,34 @@ let default_shortcuts =
       | _ -> invalid_arg "Keymap_data: invalid default shortcut")
     Command_map.empty (jarr (Js.Json.parseExn defaults_json))
 
-let default_shortcut id = Command_map.find id default_shortcuts
+let non_mac_default_shortcuts =
+  List.fold_left
+    (fun result (id, bindings) -> Command_map.add id (Binds bindings) result)
+    default_shortcuts
+    [ "editor/clear-block", ["alt+l"]
+    ; "editor/kill-line-before", ["alt+u"]
+    ; "editor/kill-line-after", ["alt+k"]
+    ; "editor/beginning-of-block", ["alt+a"]
+    ; "editor/end-of-block", ["alt+e"]
+    ; "editor/forward-word", ["alt+f"]
+    ; "editor/backward-word", ["alt+b"]
+    ; "editor/forward-kill-word", ["alt+d"]
+    ; "editor/backward-kill-word", ["alt+w"]
+    ; "editor/move-block-up", ["alt+shift+up"]
+    ; "editor/move-block-down", ["alt+shift+down"]
+    ; "editor/zoom-in", ["alt+right"]
+    ; "editor/zoom-out", ["alt+left"]
+    ; "editor/add-property", ["ctrl+alt+p"]
+    ; "go/search-themes", ["alt+shift+i"]
+    ; "sidebar/open-today-page", ["alt+shift+j"]
+    ; "ui/toggle-settings", ["t s"]
+    ; "editor/quick-add", ["mod+alt+e"]
+    ]
+
+let default_shortcut id =
+  Command_map.find id
+    (if Ui_services.env_is_mac () then default_shortcuts
+     else non_mac_default_shortcuts)
 let user_shortcuts = ref Command_map.empty
 let shortcut_revision = ref 0
 let revision () = !shortcut_revision

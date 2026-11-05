@@ -56,15 +56,29 @@ let tags =
 
 let identifier tag = "logseq-" ^ tag
 
-(* phrasing-level tags — their children flow along the inline axis like
-   the web's inline boxes. Block-level tags keep the host's column
-   default. The hints ride as the [orientation]/[flex-wrap] extension
-   props declared in [schema_of]; the native layout reads them from the
-   store and the web twin ignores them. *)
-let inline_tags =
+(* Text phrasing tags and their style carriers stay in the surrounding
+   text flow; outside a paragraph they can still contain layout. *)
+let inline_text_tags =
   [ "span"; "a"; "b"; "i"; "em"; "strong"; "code"; "small"; "kbd"; "u"
-  ; "mark"; "del"; "ins"; "sub"; "sup"; "tspan"; "label"; "img"
+  ; "mark"; "del"; "ins"; "sub"; "sup"; "tspan"; "label"
   ; "em-emoji" ]
+
+let inline_tags = inline_text_tags @ [ "img" ]
+
+let rec in_text_flow context node =
+  let application = context.Lui_ui.ui_application in
+  match Lui_runtime.extension_identifier application node with
+  | Some extension when
+      List.exists (fun tag -> identifier tag = extension) inline_text_tags ->
+    (match Lui_runtime.recorded_parent application node with
+     | Some parent -> in_text_flow context parent
+     | None -> false)
+  | Some _ -> false
+  | None ->
+    (match Lui_ui.node_kind context node with
+     | Text | Paragraph | Heading | Label | Kbd | Link | TableCell
+     | StatusBar | Step | ListSectionHeader | ListSectionFooter -> true
+     | _ -> false)
 
 (* dedicated widget extensions (logseq-codemirror) nest inside
    logseq-<tag> parents the same way tags nest in each other *)
@@ -83,10 +97,8 @@ let schema_of tag =
         None
     ; Lui_extension.property "accessibility-identifier"
         Lui_extension.StringScalar false None
-    ; (* layout hints for the native host — phrasing tags lay their
-         children out along the inline axis (row + wrap), matching the
-         web's inline boxes; block-level tags omit both and stay on the
-         column default *)
+    ; (* Inline-axis hints for native hosts. Text phrasing tags still
+         require text hosts, not layout rows, inside a paragraph. *)
       Lui_extension.property "orientation" Lui_extension.StringScalar false
         None
     ; Lui_extension.property "flex-wrap" Lui_extension.StringScalar false
@@ -303,8 +315,8 @@ let px_of (s : string) =
    parse-ignore; decode the declarations the typed props cover into
    property setters. Extension nodes admit no typed props themselves
    (common_property_supported whitelists standard kinds only), so [el]
-   mounts the declared style on a [row] wrapping the element's
-   children: text styling inherits through it to the run. *)
+   mounts the declared style on a text carrier within inline text flow
+   or a row for layout: styling inherits through it to the children. *)
 let style_setters attrs =
   match List.assoc_opt "style" attrs with
   | None -> []
@@ -417,9 +429,15 @@ let el ?key ?(tag = "div") ?(attrs = []) ?(events = "")
     | [] -> children
     | setters ->
       [ (fun context parent ->
-           let n =
-             (Lui_elements.row ~cross:`center children) context parent
+           let styled =
+             if List.mem tag inline_text_tags
+                && (match parent with
+                    | Some node -> in_text_flow context node
+                    | None -> false)
+             then Lui_elements.text children
+             else Lui_elements.row ~cross:`center children
            in
+           let n = styled context parent in
            List.iter (fun set -> set context n) setters;
            n) ]
   in

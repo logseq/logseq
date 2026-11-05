@@ -1,5 +1,24 @@
 let check message condition = if not condition then failwith message
 
+let () = Native_embed.with_entry_lock (fun () ->
+  let previous_host = !Host.host_op in
+  Fun.protect ~finally:(fun () -> Host.host_op := previous_host) (fun () ->
+    Host.set_host_op (fun name payload ->
+      failwith ("Native math requested a browser renderer: " ^ name ^ " " ^ payload));
+    List.iter (fun (block, display) ->
+      let tex = "\\frac{a}{b} + x^2" in
+      let store = Lui_store.create () in
+      let backend = Lui_protocol.{backend_profile=generic_profile ();
+        apply_batch=(fun batch -> Lui_store.apply_batch store batch; true)} in
+      let app = Lui_app.create backend Model.initial (fun model _ -> model)
+        (fun _ _ _ -> Logseq_katex.el ~block ~display ~tex ()) in
+      Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app)) (fun () ->
+        ignore (Lui_app.start app); ignore (Lui_app.flush app);
+        check "Native math must retain its readable TeX source"
+          (List.exists (fun id -> Lui_store.string_prop store id "text" = Some tex)
+            (Lui_store.preorder store)))) [true,true; false,false]);
+  print_endline "native math source without a browser renderer: OK")
+
 let () =
   let disposed = ref 0 in
   let backend = Lui_protocol.{backend_profile=generic_profile (); apply_batch=(fun _ -> true)} in

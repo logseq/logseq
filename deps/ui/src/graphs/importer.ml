@@ -62,11 +62,14 @@ let import_edn repo (file : Ui_services.file) =
       Toast.warning (T.t "import/invalid-edn-file");
       Js.Promise.resolve false
   | Some w ->
-      let* _ =
+      let* _ = Graph.create_graph (Graphs_ops.short_name repo) in
+      let* result =
         (Runtime.invoke2 "thread-api/import-edn"
            (Wire.String repo) w)
       in
-      Js.Promise.resolve true
+      if Wire.get result "error" <> None then
+        Js.Promise.reject (Failure "EDN import failed")
+      else Js.Promise.resolve true
 
 let import_error message =
   Ui_services.log_error_message ("directory import: " ^ message);

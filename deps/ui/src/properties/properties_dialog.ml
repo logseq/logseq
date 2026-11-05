@@ -489,8 +489,11 @@ let date_value_view d prop : t =
   let owners=match d.d_target.uuids with [] -> [d.d_target.uuid] | owners -> owners in
   ignore (let* block=D.entity_by_uuid d.d_target.uuid in
     let value=Option.value (D.getf (D.untag block) ident) ~default:W.Nil in
-    let* value=match is_datetime,D.entity_id_of value with
-      | false,Some id -> D.entity (W.Int id)
+    let* value=match is_datetime,D.untag value,D.entity_id_of value with
+      | false,W.Int id,_ | false,_,Some id ->
+          let* entity=D.entity (W.Int id) in
+          ignore (Option.get (D.entity_id_of entity));
+          Js.Promise.resolve entity
       | _ -> Js.Promise.resolve value in
     if !alive then Runtime.signal_set loaded (Some (D.untag value));
     Js.Promise.resolve ());
@@ -514,8 +517,8 @@ let date_value_view d prop : t =
     | Some value -> V.date_picker_content ctx ~ident ~is_datetime ~value
         ~on_value:write ~on_dismiss:dismiss
         ~on_clear:(fun () ->
-          finish_write d (for_owners d (fun block_uuid ->
-            D.remove_block_property ~block_uuid ~ident)))) (Signal.value loaded)) context parent
+          write (W.Keyword "logseq.property/empty-placeholder");
+          dismiss ())) (Signal.value loaded)) context parent
 
 let value_edit_view d prop : t =
  fun context parent ->

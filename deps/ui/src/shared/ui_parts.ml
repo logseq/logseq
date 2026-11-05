@@ -220,6 +220,7 @@ module Prop : sig
   val margin_left : int -> t
   val width : int -> t
   val s_width : int Signal.signal -> s
+  val width_auto : t
   val height : int -> t
   val height_auto : t
   val min_width : int -> t
@@ -341,6 +342,7 @@ end = struct
   let margin_left v = int MarginLeft v
   let width v = int WidthValue v
   let s_width v = sint WidthValue v
+  let width_auto = str WidthValue "auto"
   let height v = int HeightValue v
   let height_auto = str HeightValue "auto"
   let min_width v = int MinWidth v

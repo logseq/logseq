@@ -119,6 +119,33 @@ func (s *extensionTextState) reconcile(value string) {
 	s.value, s.model, s.initialized = value, value, true
 }
 
+func rawInlineTextTag(tag string) bool {
+	switch tag {
+	case "span", "a", "b", "i", "em", "strong", "code", "small", "kbd", "u", "mark", "del", "ins", "sub", "sup", "tspan", "label", "em-emoji":
+		return true
+	}
+	return false
+}
+
+func (services *platformServices) rawInlineTextFlow(n luimygo.Node) bool {
+	for parent := n.Parent; parent != 0; {
+		ancestor, ok := services.backend.Node(parent)
+		if !ok {
+			panic(fmt.Errorf("raw inline node %d has missing ancestor %d", n.ID, parent))
+		}
+		if ancestor.Kind == "extension" && strings.HasPrefix(ancestor.Identifier, "logseq-") && rawInlineTextTag(strings.TrimPrefix(ancestor.Identifier, "logseq-")) {
+			parent = ancestor.Parent
+			continue
+		}
+		switch ancestor.Kind {
+		case "text", "paragraph", "heading", "label", "kbd", "link", "table-cell", "status-bar", "step", "list-section-header", "list-section-footer":
+			return true
+		}
+		return false
+	}
+	return false
+}
+
 func (services *platformServices) renderLogseqElement(tag string) luimygo.Renderer {
 	return func(c *ui.Context, n luimygo.Node, children func(), emit func(luimygo.Event)) {
 		if services.mutations != nil {
@@ -199,11 +226,18 @@ func (services *platformServices) renderLogseqElement(tag string) luimygo.Render
 				extensionDOMEvent(n, emit, "change", payload)
 			})
 		} else {
-			if attrs["data-scroll-container"] != "" {
+			if rawInlineTextTag(tag) && services.rawInlineTextFlow(n) {
+				if tag == "a" {
+					// The OCaml document dispatcher owns href navigation and prevention.
+					e = ui.Link(c, "", "")
+				} else {
+					e = ui.Text(c, "")
+				}
+			} else if attrs["data-scroll-container"] != "" {
 				e = ui.Scroll(c)
 				state := ui.Local(e, "raw-scroll", func() ui.ScrollState { return ui.ScrollState{} })
 				services.BindScrollControl(n, e, state)
-			} else if n.String("orientation") == "horizontal" || n.String("orientation") == "row" || strings.Contains(" span a b i em strong code small kbd u mark del ins sub sup tspan label img em-emoji tr ", " "+tag+" ") {
+			} else if n.String("orientation") == "horizontal" || n.String("orientation") == "row" || rawInlineTextTag(tag) || tag == "tr" || tag == "img" {
 				e = ui.Row(c)
 			} else {
 				e = ui.Column(c)

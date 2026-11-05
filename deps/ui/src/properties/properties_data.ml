@@ -85,6 +85,19 @@ let row_many row =
   | Some "db.cardinality/many" | Some "many" -> true
   | _ -> false
 
+let row_supports_many row =
+  List.mem (row_type row) ["default"; "number"; "url"; "date"; "node"; "asset"]
+
+let row_supports_choices row =
+  List.mem (row_type row) ["default"; "number"; "url"]
+
+let row_with_value row value =
+  match row with
+  | W.Map fields ->
+      W.Map ((W.String "value", value) :: List.filter (fun (key, _) ->
+        key <> W.String "value" && key <> W.Keyword "value") fields)
+  | _ -> invalid_arg "Properties_data.row_with_value"
+
 let row_closed_values row =
   match getf (row_prop row) "property/closed-values" with
   | Some w -> W.elems w
@@ -571,6 +584,24 @@ let reorder_display_property ~block_id ~active_ident ~over_ident ~direction
 
 let create_page title =
   apply "create-page" [ W.String title; W.Map [] ]
+
+let resolve_journal_day day =
+  let origin_repo = Runtime.repo () in
+  let read () =
+    invoke "get-journal-page-by-day" [ W.String origin_repo; W.Int day ]
+  in
+  let* page = read () in
+  let* page =
+    match page with
+    | W.Nil ->
+        let title = Dates.journal_title_ymd
+          ~y:(day / 10000) ~m:(day mod 10000 / 100) ~d:(day mod 100) in
+        let* _ = Sdk_util.apply_op_for_repo origin_repo "create-page"
+          [ W.String title; W.Map [] ] in
+        read ()
+    | _ -> Js.Promise.resolve page
+  in
+  Js.Promise.resolve (Option.get (entity_id_of page))
 
 let create_class title =
   apply "create-page"

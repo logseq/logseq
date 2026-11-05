@@ -756,7 +756,10 @@ let gallery_cover ~width ~height (value : W.t) : t =
 
 (* ---------- command hookup ---------- *)
 
-(* "upload" is dispatched by the shared editor command dispatcher —
-   Editor_cmds calls pick_files through the installed host, so this
-   hookup registers nothing on web. *)
-let install () = ()
+(* Inline references reuse the asset renderers through a boot-time hook. *)
+let install () =
+  Render_inline.inline_asset_renderer :=
+    Some (fun uuid b ->
+        match b.Model.block_asset_type with
+        | Some ext when is_image ext -> image_block uuid b
+        | _ -> file_block uuid b)

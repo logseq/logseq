@@ -273,6 +273,7 @@ let block_view uuid (b : Model.block) : Lui_elements.t =
            ~max_height:800 []) ]
 
 let install () =
+  Render_inline.inline_asset_renderer := Some block_view;
   (* "upload" is dispatched by the shared editor command dispatcher —
      Editor_cmds calls pick_files through the installed host *)
   (* window-level file drop — the native host posts

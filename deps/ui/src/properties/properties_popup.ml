@@ -21,7 +21,7 @@ let next_key () =
    is the extra root class the e2e contract requires (e.g.
    "ui__popover-content", "ls-property-dropdown"). Returns the
    view-overlay key. *)
-let open_at_key ~key ?(cls = "") ?padding ?anchor_target ?(right = false) ~x ~y (content : t) =
+let open_at_key ~key ?(role = `dialog) ?(cls = "") ?padding ?anchor_target ?(right = false) ~x ~y (content : t) =
   (* cap at the space left below the anchor so long menus scroll instead
      of overflowing the viewport (radix's available-height behaviour) *)
   let avail = Ui_services.dom_viewport_height () -. y -. 8. in
@@ -35,13 +35,12 @@ let open_at_key ~key ?(cls = "") ?padding ?anchor_target ?(right = false) ~x ~y 
       [ Ui_components.card_shadow
       ; Ui_components.Prop.font_size "1rem"
       ; Ui_components.Prop.line_height "1.5" ]
-    (popover ~key ?at ?anchor_target ~anchor:(if right then `right else `below)
+    (popover ~key ~role ?at ?anchor_target ~anchor:(if right then `right else `below)
       ~anchor_alignment:`start ~anchor_offset ~anchor_alignment_offset ~style_class:cls
       ?padding ~background:"hsl(var(--popover))"
       ~foreground:"hsl(var(--popover-foreground))"
       ~border_color:"hsl(var(--border))" ~border_width:1 ~corner_radius:6
       ~available_height:(Float.max avail 120.)
-      ~data_attrs:[ ("role", "dialog") ]
       ~transition:Ui_components.popover_transition
       ~on_dismiss:(fun _ -> S.remove_view_overlay key)
       [ content ])
@@ -51,9 +50,9 @@ let open_at_key ~key ?(cls = "") ?padding ?anchor_target ?(right = false) ~x ~y 
     Ui_services.log_error
       "properties_popup: .cp__overlays host not mounted yet"
 
-let open_at ?(cls = "") ~x ~y content =
+let open_at ?role ?(cls = "") ~x ~y content =
   let key = next_key () in
-  open_at_key ~key ~cls ~x ~y content;
+  open_at_key ~key ?role ~cls ~x ~y content;
   key
 
 (* On backends with async measurement (the native host) the anchor's
@@ -73,7 +72,7 @@ let measure_anchor ~is_current (anchor : Ui_services.el) f =
   in
   go 4
 
-let open_from_anchor ?(cls = "") ?padding ~right (anchor : Ui_services.el) content =
+let open_from_anchor ?role ?(cls = "") ?padding ~right (anchor : Ui_services.el) content =
   let key = next_key () in
   incr S.overlay_generation;
   let generation = !S.overlay_generation in
@@ -86,13 +85,13 @@ let open_from_anchor ?(cls = "") ?padding ~right (anchor : Ui_services.el) conte
   measure_anchor ~is_current:(fun () -> !S.overlay_generation = generation)
     anchor (fun x y w h ->
       let x, y = if right then x +. w -. 4., y -. 4. else x, y +. h +. 4. in
-      open_at_key ~key ~cls ?padding ?anchor_target ~right ~x ~y content);
+      open_at_key ~key ?role ~cls ?padding ?anchor_target ~right ~x ~y content);
   key
 
-let open_anchored ?cls ?padding anchor content =
-  open_from_anchor ?cls ?padding ~right:false anchor content
+let open_anchored ?role ?cls ?padding anchor content =
+  open_from_anchor ?role ?cls ?padding ~right:false anchor content
 
 (* submenu positioning: at the anchor's right edge, top-aligned
    (base-ui dropdown-menu-sub-content placement inline-end) *)
-let open_anchored_right ?cls ?padding anchor content =
-  open_from_anchor ?cls ?padding ~right:true anchor content
+let open_anchored_right ?role ?cls ?padding anchor content =
+  open_from_anchor ?role ?cls ?padding ~right:true anchor content

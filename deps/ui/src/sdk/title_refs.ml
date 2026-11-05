@@ -279,11 +279,9 @@ let parse ?(origin_repo = Sdk_util.repo ()) title =
         if r.fresh then Render_inline.prime_ref_metas [ (r.name, r.uuid) ]
         else
           match Wire.map_get_string r.entity "block/title" with
-          | Some t ->
+          | Some _ ->
               Render_inline.prime_pull_meta ~name:r.name ~uuid:r.uuid
-                ~title:t
-                ~is_page:(Wire.map_get_string r.entity "block/name" <> None)
-                ~is_math:(Decode.prop_label r.entity "logseq.property.node/display-type" = Some "math")
+                ~entity:r.entity
           | None -> ())
       resolved;
   let ref_of r =
