@@ -85,6 +85,12 @@ let row_many row =
   | Some "db.cardinality/many" | Some "many" -> true
   | _ -> false
 
+let row_supports_many row =
+  List.mem (row_type row) ["default"; "number"; "url"; "date"; "node"; "asset"]
+
+let row_supports_choices row =
+  List.mem (row_type row) ["default"; "number"; "url"]
+
 let row_closed_values row =
   match getf (row_prop row) "property/closed-values" with
   | Some w -> W.elems w
