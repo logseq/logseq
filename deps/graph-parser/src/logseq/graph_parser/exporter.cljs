@@ -3429,7 +3429,8 @@
                    (js/console.error error)
                    (notify-user {:msg (ex-message import-error)
                                  :level :error
-                                 :ex-data (assoc (ex-data import-error) :error error)})
+                                 :ex-data (assoc (ex-data import-error) :error error)
+                                 :source-path path})
                    (when-let [ignored-files (get-in options [:import-state :ignored-files])]
                      (swap! ignored-files conj {:path display-path :reason :export-failed}))
                    (if (false? (:fail-fast? options))
