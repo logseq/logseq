@@ -31,10 +31,13 @@
                                     js/Error (transit/write-handler (constantly "js/Error")
                                                                     (fn [e] {:message (ex-message e)})))
                              (merge write-handlers))
-        writer (transit/writer :json {:handlers write-handlers*})]
+        new-writer #(transit/writer :json {:handlers write-handlers*})
+        writer* (volatile! (new-writer))]
     (fn write-transit-str* [o]
-      (try (transit/write writer o)
+      (try (transit/write @writer* o)
            (catch :default e
+             ;; Transit retains partially written cache entries after a failed write.
+             (vreset! writer* (new-writer))
              (prn ::write-transit-str (type o) o)
              (js/console.trace)
              (throw e))))))
