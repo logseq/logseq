@@ -704,18 +704,26 @@
 
 (defn- import-error-detail
   [error]
-  (let [path (import-error-path error)
-        reason (import-error-reason error)]
-    (cond
-      (and (string? path) (not (string/blank? path))
-           (string? reason) (not (string/includes? reason path)))
-      (t :import/file-error path reason)
-
-      (string? reason)
-      reason
-
-      :else
-      (str error))))
+  (let [{:keys [block line invalid-properties?]} (ex-data error)
+        path (import-error-path error)
+        reason (import-error-reason error)
+        sort-key (second (re-matches #"No ident found for :([^ ]+)" reason))
+        detail (cond
+                 invalid-properties? (t :import/error-invalid-properties)
+                 sort-key (t :import/error-unknown-property sort-key)
+                 (= reason "No property schema found for nil") (t :import/error-unsupported-property)
+                 (= reason ":query is not ISeqable") (t :import/error-malformed-query)
+                 (= reason "Expected number or lookup ref for entity id, got nil") (t :import/error-invalid-property-value)
+                 (string/starts-with? reason "No uuid found for page name ") (t :import/error-page-name)
+                 (string/starts-with? reason "Nothing found for entity id ") (t :import/error-missing-reference)
+                 :else reason)
+        location (when (seq path)
+                   (cond-> path
+                     (some? line) (str ":" line)
+                     (seq block) (as-> location (t :import/error-block-location location block))))]
+    (if (and location (not (string/includes? detail location)))
+      (t :import/file-error location detail)
+      detail)))
 
 (defn- import-error-heading
   [error]
@@ -725,9 +733,9 @@
 
 (defn- import-error-notification
   [error]
-  [:div.flex.flex-col.gap-1
-   [:div.font-medium (import-error-heading error)]
-   [:div.text-sm.whitespace-pre-wrap (import-error-detail error)]])
+  [:span.flex.flex-col.gap-1
+   [:span.font-medium (import-error-heading error)]
+   [:span.text-sm.whitespace-pre-wrap (import-error-detail error)]])
 
 (defn- import-files-finished?
   "Keep-graph is safe only after export-file-graph returns (sqlite store +
@@ -786,7 +794,7 @@
                                                                (t :import/scan-failed))
                                                            (merge {:code :import-scan/failed}
                                                                   (select-keys (or (ex-data error) {})
-                                                                               [:path :reason :block :line]))
+                                                                               [:path :reason :block :line :invalid-properties?]))
                                                            error)))))
                 _ (close-scan-dialog!)
                 proceed? (<confirm-import-scan!

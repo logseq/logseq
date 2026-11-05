@@ -412,7 +412,7 @@
     (is (fn? heading))
     (when (and (fn? detail) (fn? heading))
       (is (string/includes? (detail wrapped) "pages/T.md"))
-      (is (string/includes? (detail wrapped) "No property schema found for nil"))
+      (is (string/includes? (detail wrapped) "page-level template"))
       (is (string/includes? (heading wrapped) "Scanning the folder failed"))
       (is (string/includes? (heading file-failed) "Import failed"))
       (is (not (string/includes? (detail wrapped) "Unexpected error"))))))
