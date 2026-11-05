@@ -222,6 +222,7 @@ jobs:
             static
             deps/graph-lifecycle
             sidecar
+            scripts/electron-builder-unsigned.mjs
           include-hidden-files: true
 
   build-linux-x64:
