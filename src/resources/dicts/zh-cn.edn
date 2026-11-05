@@ -933,6 +933,7 @@
  :import/default-db-graph-behavior "数据库图谱的默认行为"
  :import/empty-graph-name "图谱名称不能为空。"
  :import/error-block-location "{1}（块：{2}）"
+ :import/error-file-unreadable "无法读取此文件。请确认文件仍存在且可以打开，然后重新导入。"
  :import/error-invalid-properties "此块的属性无效。请检查属性名是否与页面名冲突，以及属性值的类型是否正确。"
  :import/error-invalid-property-value "某个属性值无法导入。请检查此文件是否与其他文件使用相同的值类型，例如布尔属性应使用 true 或 false。"
  :import/error-malformed-query "无法读取此查询。请检查方括号和圆括号是否成对。"
