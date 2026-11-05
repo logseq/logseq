@@ -83,11 +83,14 @@
    (defn- write-error-transit-str
      [error qualified-kw-str]
      (try
-       (ldb/write-transit-str (error->transit-safe error))
+       (ldb/write-transit-str (if (instance? js/Error error) error (error->transit-safe error)))
        (catch :default _
-         (log/error :thread-api-write-transit-failed qualified-kw-str)
-         (ldb/write-transit-str (ex-info "Unknown error"
-                                         {:code :thread-api/unserializable-error}))))))
+         (try
+           (ldb/write-transit-str (error->transit-safe error))
+           (catch :default _
+             (log/error :thread-api-write-transit-failed qualified-kw-str)
+             (ldb/write-transit-str (ex-info "Unknown error"
+                                             {:code :thread-api/unserializable-error}))))))))
 
 #?(:cljs
    (defn remote-function
