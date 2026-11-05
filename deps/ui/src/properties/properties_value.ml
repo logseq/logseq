@@ -62,7 +62,8 @@ let take_pending_edit ~block_uuid ~ident =
 let active_editor : (string * string * string) option ref = ref None
 
 let row_key ctx row =
-  (ctx.block_uuid, D.row_ident row |> Option.value ~default:"")
+  let ident = D.row_ident row |> Option.value ~default:"" in
+  (ctx.block_uuid, ident)
 
 let add_active_edit ctx row =
   let block_uuid, ident = row_key ctx row in
@@ -538,7 +539,35 @@ let scalar_edit_cell ctx row : t =
          (value_button ~text:initial ~on_press:(fun _ ->
               open_editor ~steal:true ()))
      ; if_ ~test:(Signal.value editing)
-         (Ui_components.text_field ~autofocus:true ~submit_on_blur:true
+         (fun edit_context edit_parent ->
+          let live = ref true in
+          let field_id = "property-scalar-" ^ ctx.owner_key ^ "-" ^ ctx.block_uuid
+            ^ "-" ^ ident ^ "-" ^ Properties_popup.next_key () in
+          let on_key (ev : Ui_services.ev) =
+            if !live && Runtime.signal_get editing && has_active_edit ctx row
+               && ev.key = Some "Escape"
+               && not (ev.composing || ev.repeat || ev.default_prevented
+                 || ev.shift || ev.ctrl || ev.meta || ev.alt)
+               && not (S.overlay_open ()) then
+              match ev.target, Ui_services.dom_active_element () with
+              | Some target, Some focused when target.connected () && target.editable ()
+                  && target.attr "id" = Some field_id
+                  && target.contains focused && focused.contains target ->
+                  ev.prevent_default ();
+                  ev.stop_immediate ();
+                  if D.row_type row = "number" then (
+                    let value = target.value () in
+                    Signal.set buffer value;
+                    set_edit_buffer ctx row value;
+                    commit true)
+                  else (Signal.set buffer initial; commit false)
+              | _ -> ()
+          in
+          let off = (Ui_services.get ()).dom.subscribe_window_event "keydown" on_key in
+          Signal.on_unmount edit_context.Lui_ui.ui_scope (fun () -> live := false);
+          Signal.on_dispose edit_context.Lui_ui.ui_scope off;
+          (Ui_components.text_field ~autofocus:true ~submit_on_blur:true
+            ~accessibility_identifier:field_id
             ~text:(reactive Fun.id (Signal.value buffer))
             ~on_input:(fun ev ->
               match ev with
@@ -547,7 +576,7 @@ let scalar_edit_cell ctx row : t =
                   set_edit_buffer ctx row t
               | _ -> ())
             ~on_submit:(fun _ -> commit true)
-            [])
+            []) edit_context edit_parent)
      ])
     context parent
 
