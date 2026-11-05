@@ -46,8 +46,8 @@
                       :ref-uuid (:block/uuid ref-entity)})))))))
 
 (defn- cleanup-missing-block-refs-tx
-  ([db] (cleanup-missing-block-refs-tx db nil))
-  ([db candidate-ref-uuids]
+  ([db] (cleanup-missing-block-refs-tx db nil nil))
+  ([db candidate-ref-uuids embed-child-uuids]
    (let [missing-ref-datoms (missing-placeholder-ref-datoms db :block/refs candidate-ref-uuids)
          missing-link-datoms (missing-placeholder-ref-datoms db :block/link candidate-ref-uuids)
          refs-by-source-id (group-by :source-id missing-ref-datoms)
@@ -59,7 +59,9 @@
                  refs-by-source-id)
          retract-link-tx
          (map (fn [{:keys [source-id ref-id]}]
-                [:db/retract source-id :block/link ref-id])
+                (if (contains? embed-child-uuids (:block/uuid (d/entity db source-id)))
+                  [:db/retractEntity source-id]
+                  [:db/retract source-id :block/link ref-id]))
               missing-link-datoms)
          update-title-tx
          (keep (fn [[source-id refs]]
@@ -123,7 +125,8 @@
   ([conn] (cleanup-missing-block-refs! conn nil))
   ([conn import-state]
    (let [candidate-ref-uuids (when import-state @(:placeholder-ref-uuids import-state))
-         tx (cleanup-missing-block-refs-tx @conn candidate-ref-uuids)]
+         embed-child-uuids (some-> import-state :embed-child-uuids deref)
+         tx (cleanup-missing-block-refs-tx @conn candidate-ref-uuids embed-child-uuids)]
      (when (seq tx)
        (ldb/transact! conn tx {:logseq.graph-parser.exporter/imported-data? true})))))
 

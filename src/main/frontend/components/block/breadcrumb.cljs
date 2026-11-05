@@ -259,5 +259,7 @@
   [config _repo block-id {:keys [block] :as opts}]
   (if (contains? block :block.temp/breadcrumb)
     (when-let [breadcrumb-ancestors (seq (:block.temp/breadcrumb block))]
-      (breadcrumb-aux config block-id opts breadcrumb-ancestors))
+      (breadcrumb-aux config block-id
+                      (assoc opts :ref-titles (:block.temp/breadcrumb-ref-titles block))
+                      breadcrumb-ancestors))
     (subscribed-breadcrumb config block-id opts)))

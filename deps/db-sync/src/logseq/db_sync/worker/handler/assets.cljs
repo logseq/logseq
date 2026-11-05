@@ -86,6 +86,59 @@
       (p/catch pipe-promise (fn [_] nil)))
     stream-body))
 
+(defn- encrypted-asset-body
+  "Validates the canonical Transit `[iv ciphertext]` stream without buffering the asset."
+  [body size]
+  (let [prefix (atom "")
+        prefix-ready? (atom false)
+        cipher-length (atom 0)
+        max-cipher-length (* 4 (js/Math.ceil (/ (+ size 16) 3)))
+        padding (atom 0)
+        suffix (atom nil)
+        decoder (js/TextDecoder.)
+        invalid! (fn [] (throw (js/Error. "invalid encrypted asset body")))
+        consume! (fn [text]
+                   (if (some? @suffix)
+                     (do (swap! suffix str text)
+                         (when-not (contains? #{"\"" "\"]"} @suffix) (invalid!)))
+                     (let [end (string/index-of text "\"")
+                           data (if end (subs text 0 end) text)
+                           pad (or (string/index-of data "=") (count data))]
+                       (when-not (and (re-matches #"[A-Za-z0-9+/]*={0,2}" data)
+                                      (or (zero? @padding) (re-matches #"={0,2}" data)))
+                         (invalid!))
+                       (swap! cipher-length + (count data))
+                       (swap! padding + (- (count data) pad))
+                       (when (or (> @padding 2) (> @cipher-length max-cipher-length))
+                         (invalid!))
+                       (when end
+                         (reset! suffix (subs text end))
+                         (when-not (contains? #{"\"" "\"]"} @suffix) (invalid!))))))
+        transform (js/TransformStream.
+                   #js {:transform
+                        (fn [chunk controller]
+                          (let [text (.decode decoder chunk)]
+                            (if @prefix-ready?
+                              (do (consume! text) (.enqueue controller chunk))
+                              (let [text (str @prefix text)]
+                                (if (< (count text) 25)
+                                  (reset! prefix text)
+                                  (do
+                                    (when-not (re-matches #"\[\"~b[A-Za-z0-9+/]{16}\",\"~b" (subs text 0 25))
+                                      (invalid!))
+                                    (reset! prefix-ready? true)
+                                    (reset! prefix nil)
+                                    (consume! (subs text 25))
+                                    (.enqueue controller (.encode (js/TextEncoder.) text))))))))
+                        :flush
+                        (fn [_controller]
+                          (when-not (and @prefix-ready? (= "\"]" @suffix)
+                                         (zero? (mod @cipher-length 4))
+                                         (= (+ size 16) (- (* 3 (quot @cipher-length 4)) @padding)))
+                            (invalid!)))})]
+    {:body (.-readable transform)
+     :pipe-promise (.pipeTo body (.-writable transform))}))
+
 (defn <put-stream!
   "Streams `body` with a declared byte length to the R2 `bucket` without buffering it in Worker memory.
 
@@ -93,12 +146,13 @@
 
   | key             | description |
   |-----------------|-------------|
-  | `:size`         | Exact payload size in bytes |
+  | `:size`         | Plaintext file size in bytes |
   | `:content-type` | HTTP content type stored in R2 metadata |
   | `:checksum`     | Client-computed SHA-256 checksum |
   | `:asset-type`   | File extension stored in custom metadata |
-  | `:encoding`     | Optional `base64` streaming transfer encoding |"
-  [^js bucket key body {:keys [size content-type checksum asset-type encoding]}]
+  | `:encoding`     | Optional `base64` streaming transfer encoding |
+  | `:e2ee?`        | Require a canonical encrypted file package |"
+  [^js bucket key body {:keys [size content-type checksum asset-type encoding e2ee?]}]
   (cond
     (or (not (number? size)) (neg? size))
     (p/resolved (http/error-response "invalid asset size" 400))
@@ -112,20 +166,29 @@
     :else
     (let [{decoded-body :body decode-promise :pipe-promise}
           (when (= "base64" encoding) (base64-decoded-body body))
-          source-body (or decoded-body body)
-          {stream-body :body fixed-length-promise :pipe-promise} (fixed-length-body source-body size)
+          decoded-body (or decoded-body body)
+          {encrypted-body :body encrypted-promise :pipe-promise}
+          (when e2ee? (encrypted-asset-body decoded-body size))
+          source-body (or encrypted-body decoded-body)
+          upload-size (if e2ee? (+ 27 (* 4 (js/Math.ceil (/ (+ size 16) 3)))) size)
+          {stream-body :body fixed-length-promise :pipe-promise} (fixed-length-body source-body upload-size)
           put-promise (.put bucket key (or stream-body source-body)
                             #js {:httpMetadata #js {:contentType (or content-type "application/octet-stream")}
                                  :customMetadata #js {:checksum checksum :type asset-type}})]
-      (-> (p/all (cond-> [put-promise]
-                   decode-promise (conj decode-promise)
-                   fixed-length-promise (conj fixed-length-promise)))
-          (p/then (fn [_]
-                    (http/json-response :assets/put {:ok true} 200)))
+      (-> (js/Promise.allSettled
+           (to-array (cond-> [put-promise]
+                       decode-promise (conj decode-promise)
+                       encrypted-promise (conj encrypted-promise)
+                       fixed-length-promise (conj fixed-length-promise))))
+          (p/then (fn [results]
+                    (if-let [failure (some #(when (= "rejected" (.-status %)) %) (array-seq results))]
+                      (throw (.-reason failure))
+                      (http/json-response :assets/put {:ok true} 200))))
           (p/catch (fn [error]
-                     (if (= "invalid base64 asset body" (.-message error))
-                       (http/error-response (.-message error) 400)
-                       (throw error))))))))
+                     (p/let [_ (when e2ee? (.delete bucket key))]
+                       (if (contains? #{"invalid base64 asset body" "invalid encrypted asset body"} (.-message error))
+                         (http/error-response (.-message error) 400)
+                         (throw error)))))))))
 
 (defn- <body-with-known-length
   [body size]

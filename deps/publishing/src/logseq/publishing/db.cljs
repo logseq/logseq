@@ -42,6 +42,16 @@
        (map first)
        set))
 
+(defn- with-page-blocks
+  "The given page ids and the ids of every block on those pages"
+  [db page-ids]
+  (into page-ids
+        (map first)
+        (d/q '[:find ?b
+               :in $ [?p ...]
+               :where [?b :block/page ?p]]
+             db page-ids)))
+
 (defn- get-aliases-for-page-ids
   [db page-ids]
   (->> (d/q '[:find ?e
@@ -89,7 +99,10 @@
   "Prepares a database assuming all pages are public unless a page has a publishing-public? property set to false"
   [db]
   (let [remove? #(contains? #{"file"} %)
-        non-public-datom-ids (get-db-public-false-pages db)
+        ;; a private page's blocks are entities of their own: without them,
+        ;; their text (and its asset links) would be exported, only unlinked
+        ;; from the page
+        non-public-datom-ids (with-page-blocks db (get-db-public-false-pages db))
         filtered-db (d/filter db
                               (fn [_db datom]
                                 (let [ns' (namespace (:a datom))]

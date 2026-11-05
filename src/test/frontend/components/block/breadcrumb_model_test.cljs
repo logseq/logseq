@@ -187,6 +187,33 @@
     (is (= "See [[Referenced title]] and #[[Referenced title]]"
            (:text segment)))))
 
+(deftest breadcrumb-nested-uuid-refs-resolve-test
+  (testing "[[uuid]] targets missing from :block/refs still resolve"
+    (let [ref-uuid #uuid "00000000-0000-0000-0000-000000000002"
+          entity {:db/id 1
+                  :block/uuid #uuid "00000000-0000-0000-0000-000000000001"
+                  :block/raw-title (str "[[[[" ref-uuid "]] bar]] nested")
+                  :block/refs []}
+          enriched (model/with-breadcrumb-ref-titles
+                    entity
+                    {ref-uuid "foo"})
+          segment (model/block->breadcrumb-segment enriched)]
+      (is (= "[[[[foo]] bar]] nested" (:text segment)))))
+
+  (testing "page segment titles resolve [[uuid]] refs"
+    (let [ref-uuid #uuid "00000000-0000-0000-0000-000000000002"
+          entity {:db/id 1
+                  :block/uuid #uuid "00000000-0000-0000-0000-000000000001"
+                  :block/name "nested page"
+                  :block/title (str "[[" ref-uuid "]] bar")
+                  :block/refs []}
+          enriched (model/with-breadcrumb-ref-titles
+                    entity
+                    {ref-uuid "foo"})
+          segment (model/block->breadcrumb-segment enriched)]
+      (is (= "[[foo]] bar" (:text segment)))
+      (is (= "[[foo]] bar" (:full-text segment))))))
+
 (deftest block->breadcrumb-segment-title-ref-ids-test
   (testing "returns uuid refs from the breadcrumb label line"
     (let [visible-uuid #uuid "00000000-0000-0000-0000-000000000002"

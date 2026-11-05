@@ -12,7 +12,7 @@
    [logseq.e2e.util :as util]
    [wally.main :as w])
   (:import
-   (com.microsoft.playwright Locator$DragToOptions)))
+   (com.microsoft.playwright Locator$DragToOptions Page)))
 
 (use-fixtures :once fixtures/open-page)
 (use-fixtures :each
@@ -77,13 +77,20 @@
 
 (defn move-up-down []
   (b/new-blocks ["b1" "b2" "b3" "b4"])
-  (util/repeat-keyboard 2 "Shift+ArrowUp")
+  (k/shift+arrow-up)
+  (assert/assert-non-editor-mode)
+  (k/shift+arrow-up)
+  (assert/assert-selected-block-text "b3")
   (let [contents (util/get-page-blocks-contents)]
     (is (= contents ["b1" "b2" "b3" "b4"])))
   (util/repeat-keyboard 2 (str (if util/mac? "Meta" "Alt") "+Shift+ArrowUp"))
+  (.waitForCondition ^Page (w/get-page)
+                     #(= ["b3" "b4" "b1" "b2"] (util/get-page-blocks-contents)))
   (let [contents (util/get-page-blocks-contents)]
     (is (= contents ["b3" "b4" "b1" "b2"])))
   (util/repeat-keyboard 2 (str (if util/mac? "Meta" "Alt") "+Shift+ArrowDown"))
+  (.waitForCondition ^Page (w/get-page)
+                     #(= ["b1" "b2" "b3" "b4"] (util/get-page-blocks-contents)))
   (let [contents (util/get-page-blocks-contents)]
     (is (= contents ["b1" "b2" "b3" "b4"]))))
 
@@ -242,6 +249,25 @@
 
 (deftest move-up-down-test
   (move-up-down))
+
+(deftest move-across-parents-keeps-selection-test
+  (let [page-uuid (get (ls-api-call! :editor.getCurrentPage) "uuid")
+        blocks (ls-api-call! :editor.insertBatchBlock
+                            page-uuid
+                            [{:content "parent-a" :children [{:content "item"}]}
+                             {:content "parent-b"}
+                             {:content "parent-c"}
+                             {:content "parent-d" :children [{:content "tail"}]}])
+        item-uuid (get (some #(when (= "item" (get % "content")) %) blocks) "uuid")
+        parent-uuid (get (some #(when (= "parent-d" (get % "content")) %) blocks) "uuid")]
+    (b/jump-to-block "item")
+    (util/exit-edit)
+    (dotimes [_ 3]
+      (k/meta+shift+arrow-down))
+    (w/wait-for (str ".ls-block[blockid='" parent-uuid "'] .ls-block[blockid='" item-uuid "']"))
+    (k/shift+arrow-down)
+    (is (= ["item" "tail"]
+           (mapv #(get % "content") (ls-api-call! :editor.getSelectedBlocks))))))
 
 (deftest delete-test
   (delete))

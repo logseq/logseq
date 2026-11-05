@@ -3,6 +3,7 @@
             [frontend.components.imports :as imports]
             [frontend.config :as config]
             [frontend.handler.file-graph-import :as file-graph-import]
+            [frontend.handler.graph :as graph-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.route :as route-handler]
@@ -21,8 +22,8 @@
         checked (atom [])
         notifications (atom [])]
     (with-redefs [shui/dialog-open! (fn [render & _] (render))
-                  imports/import-file-graph-dialog (fn [_ on-submit]
-                                                    (reset! submit on-submit))
+                  imports/import-file-graph-dialog (fn [_ on-submit _opts]
+                                                     (reset! submit on-submit))
                   repo-handler/graph-already-exists? (fn [name]
                                                       (swap! checked conj name)
                                                       (= name existing-graph-name))
@@ -68,7 +69,9 @@
         (is (= #{"Project" "Area"} (get-in options [:user-options :tag-classes])))
         (is (not (contains? options :notify-user)))))))
 
-(deftest compact-import-result-notifies-counts-not-file-lists-test
+(deftest validate-imported-data-notifies-org-files-only-test
+  ;; Ignored items and validation errors are surfaced by the import report
+  ;; dialog instead of count-only toasts.
   (let [validate-imported-data (some-> (resolve 'frontend.components.imports/validate-imported-data)
                                        deref)
         shown (atom [])]
@@ -82,8 +85,8 @@
                                  :ignored-properties-count 4
                                  :validation-error-count 3
                                  :notifications []})
-        (is (= 4 (count @shown)))
-        (is (= #{:info :warning} (set (map second @shown))))))))
+        (is (= 1 (count @shown)))
+        (is (= :info (second (first @shown))))))))
 
 (deftest file-graph-import-initial-ui-state-is-importing-test
   (let [initial-ui-state (some-> (resolve 'frontend.components.imports/file-graph-import-initial-ui-state)
@@ -162,7 +165,7 @@
     (p/rejected (js/Error. "Failed to fetch"))))
 
 (defn- run-file-graph-import!
-  [{:keys [ui calls files options config-file invoke-import electron?]}]
+  [{:keys [ui calls files options config-file invoke-import electron? invoke-scan preview-action client-ignored-files]}]
   (let [import-file-graph (file-graph-import-fn)]
     (is (fn? import-file-graph))
     (p/with-redefs [util/electron? (constantly (not (false? electron?)))
@@ -187,16 +190,25 @@
                     state/<invoke-db-worker
                     (fn [api & args]
                       (swap! calls conj (into [api] args))
-                      (if (= api :thread-api/import-file-graph)
-                        (invoke-import)
+                      (case api
+                        :thread-api/import-file-graph (invoke-import)
+                        :thread-api/scan-file-graph (if invoke-scan (invoke-scan) (p/resolved {}))
                         (p/resolved nil)))
+                    graph-handler/<upsert-current-graph-registry! (fn [] (p/resolved nil))
+                    graph-handler/remember-current-graph-id-in-tab! (fn [] (p/resolved nil))
                     repo-handler/restore-and-setup-repo!
                     (fn [repo opts]
                       (swap! calls conj [:restore repo opts :importing (:graph/importing @ui)])
                       (p/resolved nil))
                     notification/show! (fn [content status & _]
                                          (swap! calls conj [:notify status content]))
-                    shui/dialog-open! (fn [& _] nil)
+                    imports/import-scan-preview-dialog
+                    (fn [result on-import on-cancel]
+                      (swap! calls conj [:preview result])
+                      (if (= :cancel preview-action) (on-cancel) (on-import)))
+                    shui/dialog-open! (fn [render & [opts]]
+                                        (swap! calls conj [:dialog-open (:id opts)])
+                                        (when (= :import-scan-preview (:id opts)) (render)))
                     shui/dialog-close! (fn [id]
                                          (swap! calls conj [:dialog-close id]))
                     shui-dialog/get-dialog (fn [_] nil)
@@ -206,7 +218,8 @@
                                                  (swap! calls conj [:rerender]))]
       (import-file-graph (or files default-file-graph-files)
                          options
-                         (or config-file default-file-graph-config)))))
+                         (or config-file default-file-graph-config)
+                         client-ignored-files))))
 
 (defn- assert-file-graph-happy-path
   [calls ui expected-repo]
@@ -224,8 +237,8 @@
             "File-graph import sends filesystem paths without file contents.")
     (is (notify-status? calls :error)
         "Worker error notifications from the terminal result are shown.")
-    (is (notify-status? calls :info)
-        "Ignored-file counts from the terminal result are shown.")
+    (is (some #{[:dialog-open :import-report]} calls)
+        "Import report dialog opens when the terminal result has issues.")
     (is (notify-status? calls :success)
         "Import finished is still shown after a partial import.")
     (is (= :file-graph (last (first (filter #(= :restore (first %)) calls))))
@@ -375,3 +388,38 @@
                                            (is (= :missing-import-session
                                                   (:code (ex-data error))))))
                                 (p/finally done))))))))
+
+(deftest file-graph-preview-controls-import-and-cleans-session
+  (async done
+    (-> (p/loop [scenarios [:confirm :cancel :scan-failure]]
+          (when-let [scenario (first scenarios)]
+            (let [previous-repo "logseq_db_source"
+                  ui (atom {:git/current-repo previous-repo})
+                  calls (atom [])]
+              (p/let [_ (run-file-graph-import!
+                         {:ui ui :calls calls
+                          :options {:graph-name "Preview"}
+                          :client-ignored-files [{:path "data.txt"}]
+                          :preview-action scenario
+                          :invoke-scan #(if (= :scan-failure scenario)
+                                          (p/rejected (js/Error. "Scan failed"))
+                                          (p/resolved {:page-count 1 :block-count 2}))
+                          :invoke-import #(p/resolved (completed-file-graph-result))})]
+                (is (nil? @(deref #'file-graph-import/*file-graph-import-session)))
+                (if (= :confirm scenario)
+                  (is (= "logseq_db_Preview" (:git/current-repo @ui)))
+                  (do
+                    (is (= previous-repo (:git/current-repo @ui)))
+                    (is (not-any? #(contains? #{:new-db :thread-api/import-file-graph} (first %))
+                                  @calls))))
+                (if (= :scan-failure scenario)
+                  (do
+                    (is (not-any? #(= :preview (first %)) @calls))
+                    (is (notify-status? @calls :error)))
+                  (let [preview (second (first (filter #(= :preview (first %)) @calls)))]
+                    (is (= 1 (:page-count preview)))
+                    (is (= [{:path "data.txt" :reason :skipped-by-file-picker}]
+                           (:ignored-files-detail preview)))))
+                (p/recur (next scenarios))))))
+        (p/catch (fn [error] (is false (str error))))
+        (p/finally done))))

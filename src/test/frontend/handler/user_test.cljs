@@ -134,7 +134,8 @@
 (deftest logout-clears-e2ee-password-when-db-worker-ready-test
   (testing "logout should request db-worker to clear persisted e2ee password"
     (let [ops* (atom [])
-          old-worker @state/*db-worker]
+          old-worker @state/*db-worker
+          old-login-user (:auth/current-login-user (state/get-state))]
       (reset! state/*db-worker :worker)
       (try
         (with-mocked-local-storage
@@ -149,12 +150,14 @@
               (is (= :thread-api/clear-e2ee-password
                      (first @ops*))))))
         (finally
+          (state/set-state! :auth/current-login-user old-login-user)
           (reset! state/*db-worker old-worker))))))
 
 (deftest logout-skips-e2ee-password-clear-when-db-worker-missing-test
   (testing "logout should not call db-worker API when db-worker is unavailable"
     (let [invoke-calls* (atom 0)
-          old-worker @state/*db-worker]
+          old-worker @state/*db-worker
+          old-login-user (:auth/current-login-user (state/get-state))]
       (reset! state/*db-worker nil)
       (try
         (with-mocked-local-storage
@@ -168,4 +171,5 @@
               (user-handler/logout)
               (is (zero? @invoke-calls*)))))
         (finally
+          (state/set-state! :auth/current-login-user old-login-user)
           (reset! state/*db-worker old-worker))))))

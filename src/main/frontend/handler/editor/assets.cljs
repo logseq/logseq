@@ -102,11 +102,8 @@
                         last-edit-block (string/blank? (:block/title last-edit-block))
                         :else false)]
     (p/let [[repo-dir asset-dir-rpath] (assets-handler/ensure-assets-dir! repo)
-            today-page-name (db-async/<get-today-journal-title repo)
-            today-page-e (db-async/<get-journal-page-by-day repo (date/today-journal-day))
-            today-page (if (nil? today-page-e)
-                         (state/pub-event! [:page/create today-page-name])
-                         today-page-e)
+            asset-page (db-async/<invoke-db-worker :thread-api/pull repo
+                                                  [:block/uuid] :logseq.class/Asset)
             _ (when has-unsaved-edit?
                 (editor/save-block-aux! state-edit-block edit-content nil))
             blocks* (p/all
@@ -129,10 +126,10 @@
                      save-to-page
 
                      :else
-                     today-page)]
+                     asset-page)]
       (when-not target
         (throw (ex-info "invalid target" {:files files
-                                          :today-page today-page
+                                          :asset-page asset-page
                                           :edit-block edit-block})))
       (when (seq blocks)
         (p/do!

@@ -101,14 +101,33 @@
                   ;; (js/alert "Current file can't be saved! Please copy its content to your local file system and click the refresh button.")
                   (throw error)))))))
 
+(defn stat
+  ([fpath]
+   (protocol/stat (get-fs fpath) fpath))
+  ([dir path]
+   (let [fpath (path/path-join dir path)]
+     (protocol/stat (get-fs dir) fpath))))
+
+(defn mkdir-if-not-exists
+  [dir]
+  (when dir
+    (util/p-handle
+     (stat dir)
+     (fn [_stat])
+     (fn [_error]
+       (mkdir-recur! dir)))))
+
 (defn write-file!
   "A node only version of write-plain-text-file! to avoid using the fs-protocol
-   which has file graph assumptions"
+   which has file graph assumptions. Creates the parent directory when missing
+   so first-save of sidecar files such as export.css does not fail with ENOENT."
   [path content]
   (when (util/electron?)
     (let [file-fpath (common-util/path-normalize path)]
       ;; repo is nil because we don't want a backup file written
-      (-> (ipc/ipc "writeFile" nil file-fpath content)
+      (-> (p/do!
+           (mkdir-if-not-exists (path/parent file-fpath))
+           (ipc/ipc "writeFile" nil file-fpath content))
           (p/catch (fn [error]
                      (state/pub-event! [:capture-error {:error error
                                                         :payload {:type :write-file/failed
@@ -143,22 +162,6 @@
   [dir path & {:as options}]
   (let [fs (get-fs dir)]
     (protocol/read-file-raw fs dir path options)))
-
-(defn stat
-  ([fpath]
-   (protocol/stat (get-fs fpath) fpath))
-  ([dir path]
-   (let [fpath (path/path-join dir path)]
-     (protocol/stat (get-fs dir) fpath))))
-
-(defn mkdir-if-not-exists
-  [dir]
-  (when dir
-    (util/p-handle
-     (stat dir)
-     (fn [_stat])
-     (fn [_error]
-       (mkdir-recur! dir)))))
 
 ;; FIXME: counterintuitive return value
 (defn create-if-not-exists

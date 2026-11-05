@@ -108,13 +108,17 @@
 
 (defn update-user-presence!
   [broadcast-f client user-id* editing-block-uuid]
-  (when (and user-id* editing-block-uuid)
+  ;; a null editing-block-uuid means the user stopped editing (the server
+  ;; clears it the same way): drop their editing block
+  (when user-id*
     (when-let [*online-users (:online-users client)]
       (swap! *online-users
              (fn [users]
                (mapv (fn [user]
                        (if (= user-id* (:user/uuid user))
-                         (assoc user :user/editing-block-uuid editing-block-uuid)
+                         (if editing-block-uuid
+                           (assoc user :user/editing-block-uuid editing-block-uuid)
+                           (dissoc user :user/editing-block-uuid))
                          user))
                      users)))
       (broadcast-f client))))

@@ -96,6 +96,37 @@
   (and (exists? js/Element)
        (instance? js/Element target)))
 
+(defn- element-anchor-position
+  "Anchor a popup to a live trigger rect. Re-measured after open so first
+  paint is not stuck at (0, 0) when the trigger layout was not ready."
+  [^js target align as-mask?]
+  (let [rect (.getBoundingClientRect target)
+        left (.-left rect)
+        width (.-width rect)
+        height (.-height rect)
+        bottom (.-bottom rect)]
+    [(+ left (case (keyword align)
+               :start 0
+               :end width
+               (/ width 2)))
+     (- (- bottom height)
+        (if as-mask? 6 0))
+     width (if as-mask? 1 height)]))
+
+(defn- refresh-anchor-position!
+  [id target align as-mask?]
+  (when (and (get-popup id) (element? target) (.-isConnected target))
+    (update-popup! id :position (element-anchor-position target align as-mask?))))
+
+(defn- schedule-anchor-position-refresh!
+  [id target align as-mask?]
+  (when (element? target)
+    (js/requestAnimationFrame
+     (fn []
+       (refresh-anchor-position! id target align as-mask?)
+       (js/requestAnimationFrame
+        #(refresh-anchor-position! id target align as-mask?))))))
+
 (defn- native-event [^js event]
   (or (some-> event (.-nativeEvent)) event))
 
@@ -232,20 +263,9 @@
 
                    (and (exists? js/Element)
                         (instance? js/Element event))
-                   (let [^js rect (.getBoundingClientRect event)
-                         left (.-left rect)
-                         width (.-width rect)
-                         height (.-height rect)
-                         bottom (.-bottom rect)]
+                   (do
                      (vreset! *target event)
-                     [(+ left (case (keyword align)
-                                :start 0
-                                :end width
-                                (/ width 2)))
-                      (- (- bottom height)
-                        ;; minus default offset
-                         (if as-mask? 6 0))
-                      width (if as-mask? 1 height)])
+                     (element-anchor-position event align as-mask?))
                    (and (vector event) (= (count event) 2) (every? integer? event))
                    event
                    :else [0 0])
@@ -290,6 +310,7 @@
                  :content-props (cond-> content-props
                                   (not (nil? align))
                                   (assoc :align (name align)))}))
+        (schedule-anchor-position-refresh! id target align as-mask?)
         id))))
 
 (defn hide!

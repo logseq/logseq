@@ -58,16 +58,13 @@
                    (js/Promise.resolve #js {:ok true})))
            (-> (p/with-redefs [sync-download/fetch-json (fn [_url _opts schema]
                                                           (case schema
-                                                            :sync/pull
-                                                            (p/resolved {:t 42})
-
                                                             :sync/snapshot-download
-                                                            (p/resolved {:url "https://sync.example.test/snapshot"})
+                                                            (p/resolved {:t 42 :url "https://sync.example.test/snapshot"})
 
                                                             (p/rejected (ex-info "unexpected schema" {:schema schema}))))
                                sync-crypt/<fetch-graph-aes-key-for-download (fn [_graph-id]
-                                                                               (swap! calls conj :e2ee-preflight)
-                                                                               (p/resolved :aes-key))
+                                                                              (swap! calls conj :e2ee-preflight)
+                                                                              (p/resolved :aes-key))
                                sync-download/<stream-snapshot-row-batches! (fn [_resp _batch-size _on-batch]
                                                                              (p/resolved {:chunk-count 0}))]
                  (sync-download/download-graph-by-id! "repo" "graph-1" true))
@@ -87,15 +84,12 @@
            (reset! worker-state/*db-sync-config {:http-base "https://sync.example.test"})
            (-> (p/with-redefs [sync-download/fetch-json (fn [_url _opts schema]
                                                           (case schema
-                                                            :sync/pull
-                                                            (p/resolved {:t 42})
-
                                                             :sync/snapshot-download
-                                                            (p/resolved {:url "https://sync.example.test/snapshot"})
+                                                            (p/resolved {:t 42 :url "https://sync.example.test/snapshot"})
 
                                                             (p/rejected (ex-info "unexpected schema" {:schema schema}))))
                                sync-crypt/<fetch-graph-aes-key-for-download (fn [_graph-id]
-                                                                               (p/rejected (ex-info "decrypt-private-key" {})))
+                                                                              (p/rejected (ex-info "decrypt-private-key" {})))
                                rtc-log-and-state/rtc-log (fn [type payload]
                                                            (swap! log-events conj (assoc payload :type type))
                                                            nil)]
@@ -108,4 +102,77 @@
                                  (mapv :sub-type @log-events)))))
                (p/finally (fn []
                             (reset! worker-state/*db-sync-config config-prev)
+                            (done)))))))
+
+(deftest download-uses-snapshot-position-without-pulling-test
+  (async done
+         (let [config-prev @worker-state/*db-sync-config
+               state-prev @worker-state/*state
+               fetch-prev js/fetch
+               calls (atom [])
+               imported (atom [])
+               finalized (atom [])
+               rows [[1 "snapshot-row" nil]]
+               snapshot-t (atom 0)]
+           (reset! worker-state/*db-sync-config {:http-base "https://sync.example.test"})
+           (swap! worker-state/*state assoc :auth/id-token "snapshot-test-token")
+           (set! js/fetch
+                 (fn [url _opts]
+                   (swap! calls conj url)
+                   (js/Promise.resolve
+                    (case url
+                      "https://sync.example.test/sync/graph-1/snapshot/download"
+                      (js/Response. (js/JSON.stringify (clj->js {:ok true :key "stream/graph-1.snapshot"
+                                                               :url "https://sync.example.test/snapshot" :t @snapshot-t})))
+                      "https://sync.example.test/snapshot"
+                      (js/Response. (stream-from-payload (frame-bytes (snapshot/encode-rows rows))))
+                      (throw (ex-info "Unexpected download request" {:url url}))))))
+           (-> (p/with-redefs [sync-download/prepare-import! (fn [& _] (p/resolved {:import-id "snapshot-import"}))
+                               sync-download/import-rows-chunk! (fn [batch _graph-id _import-id]
+                                                                  (swap! imported conj batch)
+                                                                  (p/resolved true))
+                               sync-download/finalize-import! (fn [_repo _graph-id t _import-id]
+                                                                (swap! finalized conj t)
+                                                                (p/resolved true))]
+                 (p/loop [positions [0 42]]
+                   (when-let [t (first positions)]
+                     (reset! snapshot-t t)
+                     (p/let [result (sync-download/download-graph-by-id! "repo" "graph-1" false)]
+                       (is (= t (:remote-tx result)))
+                       (p/recur (next positions))))))
+               (p/then (fn []
+                         (is (= [0 42] @finalized))
+                         (is (= [rows rows] @imported))
+                         (is (= (vec (repeat 2 ["https://sync.example.test/sync/graph-1/snapshot/download" "https://sync.example.test/snapshot"]))
+                                (mapv vec (partition 2 @calls))))))
+               (p/catch (fn [error] (is false (str error))))
+               (p/finally (fn []
+                            (set! js/fetch fetch-prev)
+                            (reset! worker-state/*db-sync-config config-prev)
+                            (reset! worker-state/*state state-prev)
+                            (done)))))))
+
+(deftest download-rejects-snapshot-without-a-journal-position-test
+  (async done
+         (let [config-prev @worker-state/*db-sync-config
+               state-prev @worker-state/*state
+               fetch-prev js/fetch
+               calls (atom [])]
+           (reset! worker-state/*db-sync-config {:http-base "https://sync.example.test"})
+           (swap! worker-state/*state assoc :auth/id-token "snapshot-test-token")
+           (set! js/fetch
+                 (fn [url _opts]
+                   (swap! calls conj url)
+                   (js/Promise.resolve
+                    (js/Response. (js/JSON.stringify (clj->js {:ok true :key "stream/graph-1.snapshot"
+                                                             :url "https://sync.example.test/snapshot"}))))))
+           (-> (sync-download/download-graph-by-id! "repo" "graph-1" false)
+               (p/then (fn [_] (is false "Missing snapshot t must reject before downloading data")))
+               (p/catch (fn [error]
+                          (is (= "db-sync download failed" (ex-message error)))
+                          (is (= ["https://sync.example.test/sync/graph-1/snapshot/download"] @calls))))
+               (p/finally (fn []
+                            (set! js/fetch fetch-prev)
+                            (reset! worker-state/*db-sync-config config-prev)
+                            (reset! worker-state/*state state-prev)
                             (done)))))))

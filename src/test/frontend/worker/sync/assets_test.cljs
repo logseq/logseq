@@ -334,13 +334,58 @@
                (p/then (fn [result]
                          (is (= {:total 2
                                  :downloaded 1
-                                 :skipped-existing 1}
+                                 :skipped-existing 1
+                                 :failed 0}
                                 result))
                          (is (= #{[repo (str existing-uuid ".pdf")]
                                   [repo (str missing-uuid ".png")]}
                                 (set @stat-calls)))
                          (is (= [[repo graph-id missing-uuid "png"]]
                                 @download-calls))))
+               (p/catch (fn [error]
+                          (is false (str "unexpected error: " error))))
+               (p/finally done)))))
+
+(deftest download-remote-assets-if-missing-continues-past-failures-test
+  (async done
+         (let [repo "asset-prefetch-repo"
+               graph-id "graph-1"
+               failed-uuid (random-uuid)
+               ok-uuid (random-uuid)
+               candidates [{:asset-uuid failed-uuid
+                            :asset-type "png"}
+                           {:asset-uuid ok-uuid
+                            :asset-type "png"}]
+               download-calls (atom [])
+               log-calls (atom [])]
+           (-> (p/with-redefs [platform/current (fn [] {})
+                               platform/asset-stat
+                               (fn [& _args]
+                                 (p/resolved nil))
+                               sync-assets/log-request-asset-download-failed!
+                               (fn [repo' asset-uuid' error']
+                                 (swap! log-calls conj [repo' asset-uuid' error']))
+                               sync-assets/download-remote-asset!
+                               (fn [_repo _graph-id asset-uuid _asset-type]
+                                 (swap! download-calls conj asset-uuid)
+                                 (if (= failed-uuid asset-uuid)
+                                   (p/rejected (ex-info "download asset failed"
+                                                        {:type :rtc.exception/download-asset-failed
+                                                         :data {:status 404}}))
+                                   (p/resolved nil)))]
+                 (sync-assets/download-remote-assets-if-missing!
+                  repo graph-id candidates))
+               (p/then (fn [result]
+                         (is (= #{failed-uuid ok-uuid} (set @download-calls))
+                             "a failed download must not stop the remaining assets")
+                         (is (= {:total 2
+                                 :downloaded 1
+                                 :skipped-existing 0
+                                 :failed 1}
+                                result))
+                         (is (= 1 (count @log-calls)))
+                         (is (= repo (first (first @log-calls))))
+                         (is (= failed-uuid (second (first @log-calls))))))
                (p/catch (fn [error]
                           (is false (str "unexpected error: " error))))
                (p/finally done)))))
@@ -373,7 +418,8 @@
                (p/then (fn [result]
                          (is (= {:total 12
                                  :downloaded 12
-                                 :skipped-existing 0}
+                                 :skipped-existing 0
+                                 :failed 0}
                                 result))
                          (is (= 12 (count @download-calls)))
                          (is (= 10 @max-active-downloads))))

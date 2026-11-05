@@ -64,6 +64,16 @@ test("Code Mode derives decoded asset size instead of trusting the agent", () =>
   assert.equal(url.searchParams.get("size"), "4");
 });
 
+test("Code Mode preserves the plaintext size of encrypted asset packages", () => {
+  const encrypted = '["~bAAAAAAAAAAAAAAAA","~b' + btoa("a".repeat(28)) + '"]';
+  const url = semanticRequestUrl({
+    path: "/api/v1/graphs/graph-1/assets",
+    query: { encoding: "base64", size: 12, title: encrypted, checksum: "a".repeat(64) },
+    body: btoa(encrypted),
+  }, "https://api.logseq.io/mcp");
+  assert.equal(url.searchParams.get("size"), "12");
+});
+
 test("Code Mode rejects invalid base64 before forwarding", () => {
   assert.throws(() => semanticRequestUrl({
     path: "/api/v1/graphs/graph-1/assets",
@@ -189,6 +199,9 @@ test("ChatGPT asset upload preserves the original bytes and derives metadata", a
       headers: { "content-length": String(original.byteLength), "content-type": "image/jpeg" },
     }),
     workerFetch: async (request) => {
+      if (new URL(request.url).pathname === "/api/v1/graphs") {
+        return Response.json({ graphs: [{ "graph-id": "graph-1", "graph-e2ee?": false }] });
+      }
       semanticRequest = request;
       const uploaded = new Uint8Array(await request.arrayBuffer());
       assert.deepEqual(uploaded, original);
@@ -220,6 +233,7 @@ test("ChatGPT asset upload rejects missing length without buffering the file", a
   }, {
     origin: "https://api.logseq.io",
     env: { LOGSEQ_SYNC_ASSETS: {} },
+    workerFetch: async () => Response.json({ graphs: [{ "graph-id": "graph-1", "graph-e2ee?": false }] }),
     fetchFile: async () => new Response(new Uint8Array([1, 2, 3])),
   }), /content-length/);
 });
@@ -308,4 +322,35 @@ test("MCP requests that already support streamable HTTP are preserved", () => {
   });
 
   assert.equal(ensureMcpAcceptHeader(request), request);
+});
+
+
+test("ChatGPT rejects encrypted graphs before downloading or storing plaintext attachments", async () => {
+  let downloads = 0;
+  let uploads = 0;
+  await assert.rejects(() => uploadChatGptAsset({
+    graphId: "graph-1",
+    file: { download_url: "https://files.openai.example/logo.jpg", file_id: "file-1" },
+  }, {
+    origin: "https://api.logseq.io",
+    authorization: "Bearer token",
+    env: { LOGSEQ_SYNC_ASSETS: {
+      put: async (_key, body) => { uploads += 1; await new Response(body).arrayBuffer(); },
+      get: async () => ({ body: new Response(new Uint8Array([1, 2, 3])).body }),
+      delete: async () => {},
+    } },
+    workerFetch: async (request) => {
+      if (new URL(request.url).pathname !== "/api/v1/graphs") {
+        return Response.json({ uuid: "asset-1" }, { status: 201 });
+      }
+      assert.equal(request.headers.get("authorization"), "Bearer token");
+      return Response.json({ graphs: [{ "graph-id": "graph-1", "graph-e2ee?": true }] });
+    },
+    fetchFile: async () => {
+      downloads += 1;
+      return new Response(new Uint8Array([1, 2, 3]), { headers: { "content-length": "3" } });
+    },
+  }), /encrypted graphs/);
+  assert.equal(downloads, 0);
+  assert.equal(uploads, 0);
 });

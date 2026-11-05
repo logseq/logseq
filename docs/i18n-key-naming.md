@@ -372,6 +372,7 @@ Use only when the text exists because one runtime has a unique implementation.
 |---|---|
 | `mobile` | Mobile-only runtime behavior |
 | `electron` | Electron-only runtime behavior |
+| `web` | Web-only runtime behavior, including public web deployment notices |
 
 Use this class when:
 
@@ -385,6 +386,8 @@ Examples:
 :mobile.settings/version
 :electron/new-window
 :electron/add-to-dictionary
+:web.test-site/warning
+:web.test-site/open-app
 ```
 
 ## Step 2: Apply the Decision Tree
@@ -400,7 +403,7 @@ Choose the first matching branch and stop.
    conflict rules` and then stop.
 4. Is the text owned by a shell surface? Use `header`, `sidebar.left`,
    `sidebar.right`, `context-menu`, or `window`.
-5. Is the text runtime-exclusive? Use `mobile` or `electron`.
+5. Is the text runtime-exclusive? Use `mobile`, `electron`, or `web`.
 
 If none fits, define a new product domain only when the feature has a clear,
 long-lived product boundary. Otherwise, keep the nearest existing product domain

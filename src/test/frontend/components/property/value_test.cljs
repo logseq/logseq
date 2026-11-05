@@ -209,6 +209,21 @@
         (is (string/includes? html "ls-empty-text-property")
             "Backspace leftovers render as the empty slot, not catch-error.")))))
 
+(deftest single-value-select-with-no-type-shows-the-select-test
+  ;; db-test #1363: a property with closed values comes to this popup whatever
+  ;; its type, and a nil type threw "No matching clause" while rendering
+  (let [property {:db/id 5
+                  :db/ident :user.property/size
+                  :property/closed-values [{:db/id 6 :block/title "S"}]}
+        block {:db/id 1
+               :block/uuid #uuid "11111111-1111-1111-1111-111111111111"}]
+    (with-redefs [property-value/select (fn [& _] [:div.stub-select "select"])
+                  property-value/property-value-select-node (fn [& _] [:div.stub-node "node"])]
+      (let [html (render-static
+                  (property-value/single-value-select block property nil {} {:editing? true}))]
+        (is (string/includes? html "stub-select")
+            "the closed values are offered in the plain select")))))
+
 (deftest filled-multi-value-url-slot-still-mounts-blocks-test
   (let [value-uuid (random-uuid)
         value-block {:db/id 11

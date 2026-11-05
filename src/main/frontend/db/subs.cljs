@@ -2,6 +2,7 @@
   "Immutable renderer snapshots loaded from the worker-owned graph database."
   (:require [cljs.cache :as cache]
             [clojure.set :as set]
+            [frontend.common.cache :as common-cache]
             [frontend.db.subs-loader :as loader]
             [frontend.state :as state]
             [promesa.core :as p]))
@@ -26,6 +27,10 @@
   (not= (require-revision! :block/tx-id (:block/tx-id old-block))
         (require-revision! :block/tx-id (:block/tx-id new-block))))
 
+(defn- empty-warm-cache
+  []
+  (common-cache/empty-lru warm-cache-size))
+
 (defn- empty-store
   [graph-id generation]
   {:graph-id graph-id
@@ -34,7 +39,7 @@
    :slots {}
    :resource-slot-keys #{}
    :watch-index {}
-   :warm (cache/lru-cache-factory {} :threshold warm-cache-size)})
+   :warm (empty-warm-cache)})
 
 (defonce ^:private *store (atom (empty-store (state/get-current-repo) 0)))
 (defonce ^:private *listeners (atom {}))

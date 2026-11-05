@@ -343,7 +343,8 @@
         or-close-menu-sub! (fn [event-details]
                              (if (or (shui-popup/get-popup :ls-icon-picker)
                                      (shui-popup/get-popup :ls-base-edit-form)
-                                     (shui-popup/get-popup :ls-node-tags-sub-pane))
+                                     (shui-popup/get-popup :ls-node-tags-sub-pane)
+                                     (shui-popup/get-popup :ls-choice-more-settings))
                                (some-> event-details (.cancel))
                                (do
                                  (set-sub-open! false)
@@ -362,8 +363,8 @@
                              (submenu-content {:set-sub-open! set-sub-open! :id id1}) submenu-content)))
                         #(shui/dropdown-menu-item
                           (merge {:on-select (fn []
-                                               (when toggle?
-                                                 (some-> (gdom/getElement id2) (.click))))
+                                               (when (and toggle? on-toggle-checked-change)
+                                                 (on-toggle-checked-change (not toggle-checked?))))
                                   :id id1}
                                  item-props') %))]
     (wrap-menuitem
@@ -378,10 +379,13 @@
         (desc)
         (boolean? toggle-checked?)
         [:span.flex.items-center
+         ;; keep the toggle's dispatched input click from re-selecting
+         ;; the item, which would toggle it a second time
+         {:on-click #(util/stop-propagation %)}
          (let [f (if checkbox? shui/checkbox shui/switch)]
            (f {:id id2 :size "sm" :checked toggle-checked?
                :disabled disabled? :on-click #(util/stop-propagation %)
-               :on-checked-change (or on-toggle-checked-change identity)}))]
+               :on-checked-change (fn [checked?] ((or on-toggle-checked-change identity) checked?))}))]
         :else
         [:label [:span desc]
          (when disabled? (shui/tabler-icon "forbid-2" {:size 15}))])])))
@@ -522,31 +526,36 @@
                                               :align "start"}))
                :title value}
       value]
-     (shui/dropdown-menu
-      (shui/dropdown-menu-trigger
-       {:as-child true
-        :disabled disabled?}
-       (shui/button
-         {:size :sm :variant :ghost
-          :title (t :property/more-settings)}
-         (shui/tabler-icon "dots" {:size 16})))
-      (shui/dropdown-menu-content
-       (choice-default-menu-item property block scoped-choice-from-other-tags?)
-       (choice-exclude-for-tag-menu-item owner-class? owner-block owner-block' block global-choice? excluded-ids)
-
-       (when scoped-choice-in-current-tag?
-         (shui/dropdown-menu-item
-          {:key "remove scope for tag"
-           :on-click remove-scope-for-current-tag!}
-          (t :property/remove-scope-for-tag (:block/title owner-block'))))
-
-       (when scoped-choice-from-other-tags?
-         (shui/dropdown-menu-item
-          {:key "use in current tag"
-           :on-click use-in-current-tag!}
-          (t :property/use-choice-in-tag (:block/title owner-block'))))
-
-       (choice-delete-menu-item owner-class? global-choice? scoped-choice-from-other-tags? block delete-choice!)))]))
+     (shui/button
+       {:size :sm :variant :ghost
+        :disabled disabled?
+        :title (t :property/more-settings)
+        :on-click (fn [^js e]
+                    (when-not disabled?
+                      (shui/popup-show! (.-currentTarget e)
+                                        (fn []
+                                          [:<>
+                                           (choice-default-menu-item property block scoped-choice-from-other-tags?)
+                                           (choice-exclude-for-tag-menu-item owner-class? owner-block owner-block' block global-choice? excluded-ids)
+                                           (when scoped-choice-in-current-tag?
+                                             (shui/dropdown-menu-item
+                                              {:key "remove scope for tag"
+                                               :on-click remove-scope-for-current-tag!}
+                                              (t :property/remove-scope-for-tag (:block/title owner-block'))))
+                                           (when scoped-choice-from-other-tags?
+                                             (shui/dropdown-menu-item
+                                              {:key "use in current tag"
+                                               :on-click use-in-current-tag!}
+                                              (t :property/use-choice-in-tag (:block/title owner-block'))))
+                                           (choice-delete-menu-item owner-class? global-choice? scoped-choice-from-other-tags? block delete-choice!)])
+                                        {:id :ls-choice-more-settings
+                                         :as-dropdown? true
+                                         :align "end"
+                                         :root-props {:modal false}
+                                         :content-props {:class "ls-choice-more-settings"
+                                                         :on-click (fn []
+                                                                     (shui/popup-hide! :ls-choice-more-settings))}})))}
+       (shui/tabler-icon "dots" {:size 16}))]))
 
 (hsx/defc add-existing-values
   [property values {:keys [toggle-fn]}]
@@ -843,8 +852,8 @@
                     :title (t :property/default-value)
                     :toggle-checked? (boolean default-value)
                     :checkbox? true
-                    :on-toggle-checked-change (fn []
-                                                (db-property-handler/set-block-property! (:block/uuid property) :logseq.property/scalar-default-value (not default-value)))})
+                    :on-toggle-checked-change (fn [checked?]
+                                                (db-property-handler/set-block-property! (:block/uuid property) :logseq.property/scalar-default-value checked?))})
                  (let [default-value (:logseq.property/default-value property)]
                    {:icon :settings-2 :title (t :property/default-value)
                     :desc (if default-value (db-property/property-value-content default-value) (t :property/set-value))
@@ -929,9 +938,9 @@
           (dropdown-editor-menuitem {:icon :checks :title (t :property/multiple-values)
                                      :toggle-checked? many?
                                      :on-toggle-checked-change
-                                     (fn []
+                                     (fn [checked?]
                                        (let [update-cardinality-fn #(db-property-handler/upsert-property! (:db/ident property)
-                                                                                                          {:db/cardinality (if many? :one :many)}
+                                                                                                          {:db/cardinality (if checked? :many :one)}
                                                                                                           {})]
                                       ;; Only show dialog for existing values as it can be reversed for unused properties
                                          (if (and (seq values) (not many?))
@@ -968,10 +977,10 @@
                               {:icon :eye-off :title (t :property/hide-empty-value)
                                :toggle-checked? (boolean (:logseq.property/hide-empty-value property))
                                :disabled? config/publishing?
-                               :on-toggle-checked-change (fn []
+                               :on-toggle-checked-change (fn [checked?]
                                                            (db-property-handler/set-block-property! (:block/uuid property)
                                                                                                     :logseq.property/hide-empty-value
-                                                                                                    (not (:logseq.property/hide-empty-value property))))}))]
+                                                                                                    checked?))}))]
                           (remove nil?))]
           (when (> (count group') 0)
             (cons (shui/dropdown-menu-separator) group'))))

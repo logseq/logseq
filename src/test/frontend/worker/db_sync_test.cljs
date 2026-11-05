@@ -36,7 +36,9 @@
    [logseq.common.util.page-ref :as page-ref]
    [logseq.db :as ldb]
    [logseq.db-sync.checksum :as sync-checksum]
+   [logseq.db-sync.node.storage :as sync-node-storage]
    [logseq.db-sync.storage :as sync-storage]
+   [logseq.db-sync.tx-sanitize :as tx-sanitize]
    [logseq.db-sync.worker.handler.sync :as sync-handler]
    [logseq.db-sync.worker.ws :as ws]
    [logseq.db.common.delete-blocks :as delete-blocks]
@@ -103,105 +105,18 @@
 (use-fixtures :once (test-noise/mute-console-fixture ::db-sync-test))
 (use-fixtures :each reset-logseq-db-hooks-fixture)
 
-(defn- js-row
-  [m]
-  (let [row (js-obj)]
-    (doseq [[k v] m]
-      (aset row (name k) v))
-    row))
-
-(defn- js-rows
-  [rows]
-  (into-array (map js-row rows)))
-
 (defn- make-storage-sql
   []
-  (let [state (atom {:kvs {}
-                     :tx-log {}
-                     :meta {}})
-        sql (doto (js-obj)
-              (aset "exec"
-                    (fn [sql & args]
-                      (cond
-                        (or (string/includes? sql "create table")
-                            (string/includes? sql "alter table")
-                            (string/includes? sql "select 1 from"))
-                        #js []
-
-                        (string/includes? sql "delete from kvs")
-                        (do
-                          (swap! state assoc :kvs {})
-                          nil)
-
-                        (string/includes? sql "delete from tx_log")
-                        (do
-                          (swap! state assoc :tx-log {})
-                          nil)
-
-                        (string/includes? sql "delete from sync_meta")
-                        (do
-                          (swap! state assoc :meta {})
-                          nil)
-
-                        (or (string/includes? sql "insert into kvs")
-                            (string/includes? sql "insert or replace into kvs"))
-                        (do
-                          (doseq [[addr content addresses] (partition 3 args)]
-                            (swap! state assoc-in [:kvs addr]
-                                   {:addr addr
-                                    :content content
-                                    :addresses addresses}))
-                          nil)
-
-                        (string/includes? sql "select content, addresses from kvs where addr = ?")
-                        (if-let [{:keys [content addresses]} (get-in @state [:kvs (first args)])]
-                          (js-rows [{:content content
-                                     :addresses addresses}])
-                          (js-rows []))
-
-                        (string/includes? sql "insert into tx_log")
-                        (let [[t tx created-at outliner-op] args]
-                          (swap! state assoc-in [:tx-log t]
-                                 {:t t
-                                  :tx tx
-                                  :created-at created-at
-                                  :outliner-op outliner-op})
-                          nil)
-
-                        (string/includes? sql "select t, tx, outliner_op from tx_log")
-                        (let [since (first args)
-                              rows (->> (:tx-log @state)
-                                        vals
-                                        (filter (fn [row] (> (:t row) since)))
-                                        (sort-by :t)
-                                        (map (fn [row]
-                                               {:t (:t row)
-                                                :tx (:tx row)
-                                                :outliner_op (:outliner-op row)})))]
-                          (js-rows rows))
-
-                        (string/includes? sql "insert into sync_meta")
-                        (let [[k v] args]
-                          (swap! state assoc-in [:meta k] v)
-                          nil)
-
-                        (string/includes? sql "select value from sync_meta")
-                        (if-let [value (get-in @state [:meta (first args)])]
-                          (js-rows [{:value value}])
-                          (js-rows []))
-
-                        :else
-                        #js []))))]
-    {:state state
-     :sql sql}))
+  (let [Database (js/require "better-sqlite3")
+        sql (#'sync-node-storage/wrap-db (new Database ":memory:"))]
+    (sync-storage/init-schema! sql)
+    sql))
 
 (defn- kvs-rows
-  [storage-state]
-  (->> (:kvs @storage-state)
-       vals
-       (sort-by :addr)
-       (mapv (fn [{:keys [addr content addresses]}]
-               [addr content addresses]))))
+  [sql]
+  (mapv (fn [row]
+          [(aget row "addr") (aget row "content") (aget row "addresses")])
+        (.exec sql "select addr, content, addresses from kvs order by addr")))
 
 (defn- non-recycle-validation-entities
   [validation]
@@ -778,6 +693,65 @@
                       server-conn {:tx (sqlite-util/write-transit-str tx-data) :outliner-op outliner-op}))))
         (is (= (sync-checksum/recompute-checksum @conn)
                (sync-checksum/recompute-checksum @server-conn)))))))
+
+(deftest bookkeeping-timestamps-do-not-revalidate-entities-test
+  (testing "an entity that is already invalid on the server must not fail txs
+            that only stamp it with :block/updated-at/:block/created-at"
+    (let [{:keys [conn client-ops-conn child1 child2]} (setup-parent-child)
+          server-conn (d/conn-from-db @conn)
+          new-uuid (random-uuid)
+          server-page (db-test/find-page-by-title @server-conn "page 1")]
+      ;; Corrupt the shared page on the server: strip a required attr
+      ;; bypassing validation (simulating drift accumulated by old versions).
+      (d/transact! server-conn [[:db/retract (:db/id server-page) :block/title]])
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (apply-ops! conn
+                      [[:insert-blocks [[{:block/uuid new-uuid :block/title "rapid insert"}]
+                                        (:db/id child1)
+                                        {:sibling? true :keep-uuid? true}]]
+                       [:delete-blocks [[(:block/uuid child2)] {}]]]
+                      local-tx-meta)
+          (let [prepared (sync-apply/prepare-upload-tx-entries
+                          conn (sync-apply/pending-txs test-repo))]
+            (is (seq (:tx-entries prepared)))
+            (doseq [{:keys [tx-data outliner-op]} (:tx-entries prepared)]
+              (is (true? (try (#'sync-handler/apply-tx-entry!
+                               server-conn {:tx (sqlite-util/write-transit-str tx-data)
+                                            :outliner-op outliner-op})
+                              (catch :default e (ex-message e))))))
+            ;; the page itself stays divergent (server missing :block/title),
+            ;; everything else converges
+            (let [local-datoms (set (d/datoms @conn :eavt))
+                  server-datoms (set (d/datoms @server-conn :eavt))]
+              (is (= #{} (set/difference server-datoms local-datoms)))
+              (is (= #{[(:db/id server-page) :block/title "page 1"]}
+                     (set (map (juxt :e :a :v)
+                               (set/difference local-datoms server-datoms))))))))))))
+
+(deftest stamps-on-missing-entities-are-dropped-test
+  (testing "sanitize-tx drops raw-eid stamp ops on entities the server doesn't
+            have, so they can't resurrect invalid ghost entities"
+    (let [{:keys [conn child1]} (setup-parent-child)
+          live-eid (:db/id child1)
+          dead-eid (inc (apply max (map :e (d/datoms @conn :eavt))))
+          missing-uuid (random-uuid)]
+      (is (= [[:db/add live-eid :block/updated-at 1]
+              [:db/add [:block/uuid (:block/uuid child1)] :block/title "x"]
+              [:db/add [:block/uuid missing-uuid] :block/updated-at 1]
+              {:db/id live-eid :block/updated-at 1}
+              {:db/id dead-eid :block/title "kept — not a pure stamp"}]
+             (#'tx-sanitize/sanitize-tx
+              @conn
+              [[:db/add dead-eid :block/updated-at 1]
+               [:db/add live-eid :block/updated-at 1]
+               [:db/add [:block/uuid (:block/uuid child1)] :block/title "x"]
+               ;; lookup-refs pass through unresolved; the tx fails on them later
+               [:db/add [:block/uuid missing-uuid] :block/updated-at 1]
+               {:db/id dead-eid :block/updated-at 1}
+               {:db/id live-eid :block/updated-at 1}
+               {:db/id dead-eid :block/updated-at 1 :block/order "a0"}
+               {:db/id dead-eid :block/title "kept — not a pure stamp"}]))))))
 
 (deftest resolve-ws-token-refreshes-when-token-expired-test
   (async done
@@ -3188,43 +3162,44 @@
 
 (deftest snapshot-roundtrip-first-page-and-block-after-upload-keeps-server-checksum-in-sync-test
   (testing "freshly uploaded graph storage roundtrip keeps the first page/block tx in sync"
-    (let [base-conn (db-test/create-conn)
-          local-storage (make-storage-sql)
-          server-storage (make-storage-sql)
-          local-conn (d/conn-from-datoms (d/datoms @base-conn :eavt)
-                                         (d/schema @base-conn)
-                                         {:storage (sync-storage/new-sqlite-storage (:sql local-storage))})
-          client-ops-conn (new-client-ops-db)
-          _ (#'sync-handler/import-snapshot-rows! (:sql server-storage) "kvs" (kvs-rows (:state local-storage)))
-          server-conn (sync-storage/open-conn (:sql server-storage))
-          page-uuid (random-uuid)
-          block-uuid (random-uuid)
-          server-self #js {:sql (:sql server-storage)
-                           :conn server-conn
-                           :schema-ready true}]
-      (with-datascript-conns local-conn client-ops-conn
-        (fn []
-          (worker-page/create! local-conn "Fresh Sync Page" :uuid page-uuid)
-          (outliner-core/insert-blocks! local-conn
-                                        [{:block/title "Fresh graph block"
-                                          :block/uuid block-uuid}]
-                                        (d/entity @local-conn [:block/uuid page-uuid])
-                                        {:sibling? false
-                                         :keep-uuid? true})
-          (let [sanitize-tx (fn [tx]
-                              (->> tx
-                                   (db-normalize/remove-retract-entity-ref @local-conn)
-                                   distinct
-                                   vec))
-                tx-entries (mapv (fn [{:keys [tx outliner-op]}]
-                                   {:tx (sqlite-util/write-transit-str (sanitize-tx tx))
-                                    :outliner-op outliner-op})
-                                 (#'sync-apply/pending-txs test-repo))
-                response (with-redefs [ws/broadcast! (fn [& _] nil)]
-                           (sync-handler/handle-tx-batch! server-self nil tx-entries 0))]
-            (is (= "tx/batch/ok" (:type response)))
-            (is (= (sync-checksum/recompute-checksum @local-conn)
-                   (sync-checksum/recompute-checksum @server-conn)))))))))
+    (let [local-sql (make-storage-sql)
+          server-sql (make-storage-sql)]
+      (try
+        (let [base-conn (db-test/create-conn)
+              local-conn (d/conn-from-datoms (d/datoms @base-conn :eavt)
+                                            (d/schema @base-conn)
+                                            {:storage (sync-storage/new-sqlite-storage local-sql)})
+              client-ops-conn (new-client-ops-db)
+              _ (#'sync-handler/import-snapshot-rows! server-sql "kvs" (kvs-rows local-sql))
+              server-conn (sync-storage/open-conn server-sql)
+              page-uuid (random-uuid)
+              block-uuid (random-uuid)
+              server-self #js {:sql server-sql :conn server-conn :schema-ready true}]
+          (with-datascript-conns local-conn client-ops-conn
+            (fn []
+              (worker-page/create! local-conn "Fresh Sync Page" :uuid page-uuid)
+              (outliner-core/insert-blocks! local-conn
+                                            [{:block/title "Fresh graph block"
+                                              :block/uuid block-uuid}]
+                                            (d/entity @local-conn [:block/uuid page-uuid])
+                                            {:sibling? false :keep-uuid? true})
+              (let [sanitize-tx (fn [tx]
+                                  (->> tx
+                                       (db-normalize/remove-retract-entity-ref @local-conn)
+                                       distinct
+                                       vec))
+                    tx-entries (mapv (fn [{:keys [tx outliner-op]}]
+                                       {:tx (sqlite-util/write-transit-str (sanitize-tx tx))
+                                        :outliner-op outliner-op})
+                                     (#'sync-apply/pending-txs test-repo))
+                    response (with-redefs [ws/broadcast! (fn [& _] nil)]
+                               (sync-handler/handle-tx-batch! server-self nil tx-entries 0))]
+                (is (= "tx/batch/ok" (:type response)))
+                (is (= (sync-checksum/recompute-checksum @local-conn)
+                       (sync-checksum/recompute-checksum @server-conn)))))))
+        (finally
+          (.close local-sql)
+          (.close server-sql))))))
 
 (deftest reaction-add-enqueues-pending-sync-tx-test
   (testing "adding a reaction should enqueue tx for db-sync"

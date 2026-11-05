@@ -64,6 +64,19 @@ The `-i`/`--include` flag is a [cognitect test-runner](https://github.com/cognit
 
 ## RTC Tests
 
+RTC tests sync against a **local db-sync server** (the deps/db-sync node
+adapter), not api.logseq.io. The test JVM starts the server itself through
+`cli-e2e/scripts/db_sync_server.py` on a free port and injects a local test
+account — no Cognito login, no network access to production sync. The server
+runs with `DB_SYNC_ALLOW_UNVERIFIED_JWT_CLAIMS=true` and a dead JWKS URL, so
+it accepts the test JWT's unverified claims.
+
+Prerequisite: build the node adapter once (also rebuild when deps/db-sync
+changes):
+
+    $ pnpm --dir deps/db-sync install --frozen-lockfile --ignore-workspace
+    $ pnpm --dir deps/db-sync build:node-adapter
+
 Run RTC extra tests (served + tested in parallel):
 
     $ bb run-rtc-extra-test

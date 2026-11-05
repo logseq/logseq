@@ -1,10 +1,17 @@
 (ns frontend.handler.code-test
-  (:require [cljs.test :refer [async deftest is]]
+  (:require ["fs" :as fs-node]
+            ["fs/promises" :as fsp]
+            ["path" :as node-path]
+            [cljs.test :refer [async deftest is]]
+            [electron.ipc :as ipc]
             [frontend.db.async :as db-async]
             [frontend.handler.code :as code-handler]
             [frontend.handler.db-based.editor :as db-editor-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.state :as state]
+            [frontend.test.node-fixtures :as node-fixtures]
+            [frontend.test.node-helper :as test-node-helper]
+            [frontend.util :as util]
             [promesa.core :as p]))
 
 (deftest save-code-editor-saves-graph-file-after-worker-file-lookup-test
@@ -94,4 +101,49 @@
           (p/finally
            (fn []
              (state/replace-state! previous-state)
+             (done)))))))
+
+(deftest save-code-editor-creates-missing-export-css-test
+  (async done
+    (node-fixtures/setup-get-fs!)
+    (let [repo "logseq_db_export_css"
+          repo-dir (node-path/resolve (test-node-helper/create-tmp-dir))
+          export-css-path (node-path/join repo-dir "logseq" "export.css")
+          textarea #js {:dataset #js {:v ""}
+                        :defaultValue ""
+                        :value ".export { color: blue; }"}
+          editor #js {:save (fn [])
+                      :getTextArea (fn [] textarea)}
+          previous-state (state/get-state)]
+      (is (not (fs-node/existsSync (node-path/join repo-dir "logseq")))
+          "precondition: logseq/export.css and parent dir are missing")
+      (state/swap-state! assoc
+                         :git/current-repo repo
+                         :editor/code-block-context {:config {:file-path export-css-path}
+                                                     :state nil
+                                                     :editor editor})
+      (-> (p/with-redefs [util/electron? (constantly true)
+                          state/<invoke-db-worker (fn [& _] (p/resolved nil))
+                          ipc/ipc (fn [op _repo path content]
+                                    (is (= "writeFile" op))
+                                    (fsp/writeFile path content))]
+            (code-handler/save-code-editor!))
+          (p/then
+           (fn [_]
+             (is (fs-node/existsSync (node-path/join repo-dir "logseq"))
+                 "first save creates missing logseq/ parent dir")
+             (is (fs-node/existsSync export-css-path)
+                 "first save creates missing export.css")
+             (is (= ".export { color: blue; }"
+                    (str (fs-node/readFileSync export-css-path))))
+             (is (= ".export { color: blue; }" (.-v ^js (.-dataset textarea))))))
+          (p/catch
+           (fn [error]
+             (is false (str error))))
+          (p/finally
+           (fn []
+             (state/replace-state! previous-state)
+             (node-fixtures/restore-get-fs!)
+             (when (fs-node/existsSync repo-dir)
+               (fs-node/rmSync repo-dir #js {:recursive true :force true}))
              (done)))))))

@@ -225,13 +225,11 @@
   [repo graph-id]
   (when-not (seq graph-id)
     (fail-fast :db-sync/missing-field {:repo repo :field :graph-id}))
-  (try
-    (uuid graph-id)
-    (catch :default e
+  ;; cljs `uuid` accepts any string; `parse-uuid` returns nil for a non-uuid
+  (or (parse-uuid graph-id)
       (fail-fast :db-sync/invalid-field {:repo repo
                                          :field :graph-id
-                                         :value graph-id
-                                         :error e}))))
+                                         :value graph-id})))
 
 (defn- set-graph-sync-metadata!
   [repo graph-id graph-e2ee?]

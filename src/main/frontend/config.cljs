@@ -363,11 +363,13 @@
        (path/path-join repo-dir app-name custom-css-file)))))
 
 (defn get-export-css-path
+  "Absolute disk path for Electron local HTML export.
+  Kept on disk (not in the DB) because publishing reads repo-dir/logseq/export.css."
   ([]
    (get-export-css-path (state/get-current-repo)))
   ([repo]
    (when-let [repo-dir (get-repo-dir repo)]
-     (path/path-join repo-dir app-name  export-css-file))))
+     (path/path-join repo-dir app-name export-css-file))))
 
 (defn get-repo-assets-root
   [repo]

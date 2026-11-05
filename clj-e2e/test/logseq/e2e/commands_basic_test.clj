@@ -221,6 +221,20 @@
     (k/shift+enter)
     (assert/assert-is-hidden ".ls-page-blocks .block-tags")))
 
+(deftest typed-block-command-preserves-source-test
+  (doseq [command ["code block" "calculator"]]
+    (testing command
+      (fixtures/create-page)
+      (b/new-block "alpha beta")
+      (let [source-uuid (get (ls-api-call! :editor.getCurrentBlock) "uuid")]
+        (util/input-command command)
+        (w/wait-for "div[data-node-type='code']")
+        (let [source (ls-api-call! :editor.getBlock source-uuid)
+              inserted (ls-api-call! :editor.getNextSiblingBlock source-uuid)]
+          (is (= "alpha beta" (get source "content")))
+          (is (= "" (get inserted "content")))
+          (is (= (get source "parentId") (get inserted "parentId"))))))))
+
 (deftest math-block-test
   (testing "/math block"
     (b/new-block "")

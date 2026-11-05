@@ -234,6 +234,11 @@
             path (if (string/starts-with? path "///")
                    (subs path 2)
                    path)
+            ;; assets:// URLs protect a Windows drive colon as
+            ;; /logseq__colon/ (see electron.utils/
+            ;; decode-protected-assets-schema-path); restore it before the
+            ;; drive-letter rule below so it resolves to a native C:/ path
+            path (string/replace path "/logseq__colon/" ":/")
             path (if (re-find #"(?i)^/[a-zA-Z]:" path) ;; Win path fix
                    (subs path 1)
                    path)]

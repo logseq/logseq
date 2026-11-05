@@ -371,6 +371,8 @@
                                          :session-id session-id
                                          :epoch epoch})
         (p/let [_ (when @remote-db
+                    ;; Stop queued snapshots for the old graph before replacing its worker.
+                    (db-subs/reset-graph! nil)
                     (remote/stop! @remote-db))]
           (if (and only-if-current? (not (current-for-repo?)))
             (do

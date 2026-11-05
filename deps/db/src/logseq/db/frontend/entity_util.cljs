@@ -55,36 +55,37 @@
   ;; Can't use :block/tags because this is used in some perf sensitive fns like ldb/transact!
   (some? (:logseq.property.asset/type entity)))
 
+(defn some-parent
+  "First truthy result of `(f parent)` while walking `entity`'s :block/parent
+  chain, closest parent first. Stops on a parent without :db/id or a cycle."
+  [entity f]
+  (loop [parent (:block/parent entity)
+         seen #{}]
+    (when-let [parent-id (:db/id parent)]
+      (when-not (contains? seen parent-id)
+        (or (f parent)
+            (recur (:block/parent parent) (conj seen parent-id)))))))
+
 (defn hidden?
   [page]
-  (letfn [(hidden-parent? [entity seen]
-            (when (and entity
-                       (:db/id entity)
-                       (not (contains? seen (:db/id entity))))
-              (or (:logseq.property/hide? entity)
-                  (:logseq.property/deleted-at entity)
-                  (hidden-parent? (:block/parent entity) (conj seen (:db/id entity))))))]
-    (boolean
-     (when page
-       (if (string? page)
-         (string/starts-with? page "$$$")
-         (when (or (map? page) (de/entity? page))
-           (or (:logseq.property/hide? page)
-               (:logseq.property/deleted-at page)
-               (hidden-parent? (:block/parent page) #{}))))))))
+  (boolean
+   (when page
+     (if (string? page)
+       (string/starts-with? page "$$$")
+       (when (or (map? page) (de/entity? page))
+         (or (:logseq.property/hide? page)
+             (:logseq.property/deleted-at page)
+             (some-parent page
+                          (fn [parent]
+                            (or (:logseq.property/hide? parent)
+                                (:logseq.property/deleted-at parent))))))))))
 
 (defn recycled?
   [entity]
-  (letfn [(recycled-parent? [parent seen]
-            (when (and parent
-                       (:db/id parent)
-                       (not (contains? seen (:db/id parent))))
-              (or (:logseq.property/deleted-at parent)
-                  (recycled-parent? (:block/parent parent) (conj seen (:db/id parent))))))]
-    (boolean
-     (when (or (map? entity) (de/entity? entity))
-       (or (:logseq.property/deleted-at entity)
-           (recycled-parent? (:block/parent entity) #{}))))))
+  (boolean
+   (when (or (map? entity) (de/entity? entity))
+     (or (:logseq.property/deleted-at entity)
+         (some-parent entity :logseq.property/deleted-at)))))
 
 (defn object?
   [node]

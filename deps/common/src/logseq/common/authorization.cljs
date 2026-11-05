@@ -111,40 +111,41 @@
 
 (defn verify-jwt [token env]
   (let [parts (string/split token #"\.")]
-    (when (not= 3 (count parts)) (throw (ex-info "invalid" {})))
-    (let [header-part (nth parts 0)
-          payload-part (nth parts 1)
-          signature-part (nth parts 2)
-          now-ms (get-now-ms)
-          now-s (js/Math.floor (/ now-ms 1000))]
-      (if-let [cached (cached-token token now-s now-ms)]
-        (p/resolved cached)
-        (p/let [header (decode-jwt-part header-part)
-                payload (decode-jwt-part payload-part)
-                issuer (aget env "COGNITO_ISSUER")
-                client-id-claim (or (aget payload "aud")
-                                    (aget payload "client_id"))
-                _ (when (not= (aget payload "iss") issuer) (throw (ex-info "iss not found" {})))
-                _ (when-not (client-id-allowed? env client-id-claim) (throw (ex-info "aud not found" {})))
-                _ (when (and (aget payload "exp") (< (aget payload "exp") now-s))
-                    (throw (ex-info "exp" {})))
-                jwks-url (aget env "COGNITO_JWKS_URL")
-                jwks-keys (get-jwks-keys jwks-url)
-                matching-key (.find jwks-keys (fn [k] (= (aget k "kid") (aget header "kid"))))
-                matching-key (if matching-key
-                               matching-key
-                               (p/let [jwks-keys (get-jwks-keys jwks-url :force? true)
-                                       matching-key (.find jwks-keys (fn [k] (= (aget k "kid") (aget header "kid"))))]
-                                 matching-key))
-                _ (when-not matching-key (throw (ex-info "kid" {})))
-                crypto-key (import-rsa-key matching-key)
-                data (.encode text-encoder (str header-part "." payload-part))
-                signature (base64url->uint8array signature-part)
-                ok (.verify js/crypto.subtle
-                            "RSASSA-PKCS1-v1_5"
-                            crypto-key
-                            signature
-                            data)]
-          (when ok
-            (cache-token! token payload)
-            payload))))))
+    (if (not= 3 (count parts))
+      (p/rejected (ex-info "invalid" {}))
+      (let [header-part (nth parts 0)
+            payload-part (nth parts 1)
+            signature-part (nth parts 2)
+            now-ms (get-now-ms)
+            now-s (js/Math.floor (/ now-ms 1000))]
+        (if-let [cached (cached-token token now-s now-ms)]
+          (p/resolved cached)
+          (p/let [header (decode-jwt-part header-part)
+                  payload (decode-jwt-part payload-part)
+                  issuer (aget env "COGNITO_ISSUER")
+                  client-id-claim (or (aget payload "aud")
+                                      (aget payload "client_id"))
+                  _ (when (not= (aget payload "iss") issuer) (throw (ex-info "iss not found" {})))
+                  _ (when-not (client-id-allowed? env client-id-claim) (throw (ex-info "aud not found" {})))
+                  _ (when (and (aget payload "exp") (< (aget payload "exp") now-s))
+                      (throw (ex-info "exp" {})))
+                  jwks-url (aget env "COGNITO_JWKS_URL")
+                  jwks-keys (get-jwks-keys jwks-url)
+                  matching-key (.find jwks-keys (fn [k] (= (aget k "kid") (aget header "kid"))))
+                  matching-key (if matching-key
+                                 matching-key
+                                 (p/let [jwks-keys (get-jwks-keys jwks-url :force? true)
+                                         matching-key (.find jwks-keys (fn [k] (= (aget k "kid") (aget header "kid"))))]
+                                   matching-key))
+                  _ (when-not matching-key (throw (ex-info "kid" {})))
+                  crypto-key (import-rsa-key matching-key)
+                  data (.encode text-encoder (str header-part "." payload-part))
+                  signature (base64url->uint8array signature-part)
+                  ok (.verify js/crypto.subtle
+                              "RSASSA-PKCS1-v1_5"
+                              crypto-key
+                              signature
+                              data)]
+            (when ok
+              (cache-token! token payload)
+              payload)))))))

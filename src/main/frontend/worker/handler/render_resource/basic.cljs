@@ -115,21 +115,6 @@
        [:attr :block/alias]}
      (common/entity-uuid! db (:db/id source))]))
 
-(defn- breadcrumb-ref-titles
-  [entities]
-  (into {}
-        (comp
-         (mapcat :block/refs)
-         (keep (fn [ref]
-                 (when-let [ref-uuid (:block/uuid ref)]
-                   (let [title (:block/title ref)]
-                     (when-not (string? title)
-                       (common/fail! "Invalid breadcrumb reference title"
-                              {:ref-uuid ref-uuid
-                               :title title}))
-                     [ref-uuid title])))))
-        entities))
-
 (defn- empty-block-breadcrumb
   [block-uuid]
   {:target-uuid block-uuid
@@ -146,7 +131,8 @@
     (if-let [block (d/entity db [:block/uuid block-uuid])]
       (let [breadcrumb-ancestors (block-breadcrumb-handler/block-breadcrumb db block load-depth)
             ancestor-uuids (mapv :block/uuid breadcrumb-ancestors)
-            ref-titles (breadcrumb-ref-titles (into [block] breadcrumb-ancestors))
+            ref-titles (block-breadcrumb-handler/breadcrumb-ref-titles
+                        db (into [block] breadcrumb-ancestors))
             watch-uuids (into (conj (set ancestor-uuids) block-uuid)
                               (keys ref-titles))
             watch-keys (into #{}
@@ -198,19 +184,23 @@
 
 (defn- block-reactions
   [db resource-key _runtime]
-  (let [[_ target-uuid current-user-uuid] resource-key
-        target (common/entity-by-uuid! db :target-uuid target-uuid)]
+  (let [[_ target-uuid current-user-uuid] resource-key]
+    (common/require-uuid! :target-uuid target-uuid)
     (when-not (or (nil? current-user-uuid) (uuid? current-user-uuid))
       (common/fail! "Invalid reaction user UUID" {:current-user-uuid current-user-uuid}))
-    (let [reactions (block-handler/block-reactions db (:db/id target))
-          watch-keys (into #{[:reactions target-uuid]}
-                           (keep (fn [item]
-                                   (when-let [creator-uuid
-                                              (get-in item [:logseq.property/created-by-ref
-                                                            :block/uuid])]
-                                     [:entity creator-uuid])))
-                           reactions)]
-      [watch-keys (reaction/summarize reactions current-user-uuid)])))
+    (if-let [target (d/entity db [:block/uuid target-uuid])]
+      (let [reactions (block-handler/block-reactions db (:db/id target))
+            watch-keys (into #{[:reactions target-uuid]}
+                             (keep (fn [item]
+                                     (when-let [creator-uuid
+                                                (get-in item [:logseq.property/created-by-ref
+                                                              :block/uuid])]
+                                       [:entity creator-uuid])))
+                             reactions)]
+        [watch-keys (reaction/summarize reactions current-user-uuid)])
+      ;; A queued snapshot can outlive its target. Watch recreation as well
+      ;; as reactions so restoring the block refreshes this empty summary.
+      [#{[:entity target-uuid] [:reactions target-uuid]} []])))
 
 (defn- block-ref-count
   [db resource-key _runtime]

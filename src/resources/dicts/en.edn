@@ -133,6 +133,7 @@
  :block/open-block-references "Open block references"
  :block/practice "Practice"
  :block/practice-cards "Practice cards"
+ :block/ref-not-exist "This block doesn't exist."
  :block/remove-tag "Remove tag"
  :block/remove-this-tag "Remove this tag"
  :block/render-error "Block Render Error:"
@@ -552,7 +553,6 @@
  :editor.slash/node-embed-desc "Embed a node here"
  :editor.slash/node-reference "Node reference"
  :editor.slash/node-reference-desc "Create a backlink to a node (a page or a block)"
- :editor.slash/normal-text "Normal text"
  :editor.slash/normal-text-desc "Clear heading and set to normal text"
  :editor.slash/number-children "Number children"
  :editor.slash/number-list "Number list"
@@ -600,6 +600,7 @@
  :electron/wrong-release-warning-title "You are using the Intel (x64) release on Apple Silicon."
 
  :encryption/cloud-password-rich (fn [] ["If you lose your password, all of your data in the cloud can't be decrypted. " [:span "You will still be able to access the local version of your graph."]])
+ :encryption/copy-key "Copy"
  :encryption/current-password "Current password"
  :encryption/enter-password "Enter password"
  :encryption/enter-password-again "Enter password again"
@@ -615,12 +616,16 @@
  :encryption/forgot-password-warning "If you forget your password, you can force a reset of your encryption password. However, this will make all currently encrypted graph data stored on the server permanently unreadable. After resetting, you'll need to re-upload your graphs from the client."
  :encryption/init-key-pair "Init E2EE encrypt-key-pair"
  :encryption/init-key-pair-error "Init key-pair err: {1}"
+ :encryption/key-unavailable "Key unavailable"
  :encryption/password-not-matched "Password not matched"
  :encryption/password-updated-successfully "Password updated successfully!"
+ :encryption/private-key "Private key (base64)"
+ :encryption/public-key "Public key (base64)"
  :encryption/remember-password-rich (fn [] [[:span "Please make sure you "] "remember the password you have set, as we are unable to reset or retrieve it if you forget it, " [:span "and we recommend you "] "keep a secure backup of the password."])
  :encryption/reset-password "Reset password"
  :encryption/set-new-password "Set new password"
  :encryption/set-password-title "Set password for remote graphs"
+ :encryption/show-private-key "Show private key"
  :encryption/updating-password "Updating password ..."
  :encryption/wrong-password "Wrong password"
 
@@ -914,6 +919,7 @@
  :icon/tab-icons "Icons"
 
  :import/all-tags "Import all tags"
+ :import/all-tags-desc "Converts every inline #tag into a tag in the new graph. Leave off to keep tags as plain page references."
  :import/asset-too-large-warning "Skipped copying asset {1} because it exceeds the 100 MB limit."
  :import/assets-import-partial "Imported {1} of {2} assets. See console for details."
  :import/assets-imported "Imported {1} assets."
@@ -927,29 +933,38 @@
  :import/default-db-graph-behavior "Default behavior for DB graphs"
  :import/empty-graph-name "Empty graph name."
  :import/extract-inline-code-snippets "Extract inline code snippets as child blocks"
+ :import/extract-inline-code-snippets-desc "Moves inline `code` spans into separate child code blocks."
  :import/file-finished "Import finished!"
- :import/file-to-db-desc "Import a file-based Logseq graph folder into a new DB graph"
+ :import/file-to-db-desc "Import a file-based Logseq graph or a plain Markdown folder into a new DB graph"
  :import/file-to-db-title "File to DB graph"
  :import/finishing "Finishing graph import"
  :import/graph-name-conflict "Please specify another name as another graph with this name already exists!"
  :import/graph-name-placeholder "Graph name"
- :import/ignored-assets (fn [count] (str "Import ignored " count " " (if (= 1 count) "asset" "assets") ". See the javascript console for more details."))
- :import/ignored-files (fn [count] (str "Import ignored " count " " (if (= 1 count) "file" "files") ". See the javascript console for more details."))
- :import/ignored-properties (fn [count] (str "Import ignored " count " " (if (= 1 count) "property" "properties")))
- :import/ignored-properties-fix "To fix a property type, change the property value to the correct type and reimport the graph"
- :import/invalid-blocks-detected "Import detected {1} invalid block(s). These blocks may be buggy when you interact with them. See the javascript console for more."
  :import/invalid-edn-file "The given EDN file is not valid EDN. Please fix and try again."
  :import/loading "Importing"
- :import/logseq-config-missing "Import failed as the file 'logseq/config.edn' was not found for a Logseq graph."
  :import/new-graph-name "New graph name"
  :import/notes "Import existing notes"
  :import/org-files-imported "Imported {1} org file(s) as markdown. Support for org files will be added later."
+ :import/plain-markdown-notice "No logseq/config.edn found — importing this folder as plain Markdown with the default Logseq config."
  :import/properties-case-insensitive-commas "Properties are case insensitive and separated by commas"
  :import/property-classes-placeholder "e.g. type"
  :import/property-parent-classes-placeholder "e.g. parent"
  :import/property-value-tag-parents "Import tag parents from property values"
  :import/property-value-tags "Import additional tags from property values"
  :import/remove-inline-tags "Remove inline tags"
+ :import/report-download "Download report"
+ :import/report-errors "Errors"
+ :import/report-ignored-assets "Ignored assets"
+ :import/report-ignored-files "Ignored files"
+ :import/report-ignored-properties "Ignored properties"
+ :import/report-title "Import report"
+ :import/report-truncated (fn [shown total] (str "Showing the first " shown " of " total ". Download the report for the full list."))
+ :import/report-validation-errors "Invalid blocks"
+ :import/scan-empty "Nothing needs attention — the folder looks fully importable."
+ :import/scan-org-notice (fn [count] (str count " Org file(s) will be imported as Markdown"))
+ :import/scan-summary (fn [pages blocks journals] (str "Found " pages " pages, " blocks " blocks and " journals " journals"))
+ :import/scan-title "Import preview"
+ :import/scanning "Analyzing folder"
  :import/select-edn-or-json "Please choose an EDN or a JSON file."
  :import/specific-tags "Import specific tags"
  :import/sqlite-and-assets-desc "Import a zip containing db.sqlite and an assets folder"
@@ -963,6 +978,15 @@
  :import/validating-graph "Validating graph"
  :import/zip-import-error "Zip import failed: {1}"
  :import/zip-missing-db-sqlite "Zip missing db.sqlite. Please check the archive structure."
+
+ :import.reason/alias-conflict "Alias conflicts with another alias"
+ :import.reason/asset-links-not-updated "Some asset links were not updated to block references"
+ :import.reason/export-failed "Failed to convert file"
+ :import.reason/hidden "Excluded by :hidden in config.edn"
+ :import.reason/missing-asset-data "No asset data found for this asset path"
+ :import.reason/skipped-by-file-picker "Skipped by the file picker (unsupported type or internal file)"
+ :import.reason/unsupported-file-format "Unsupported file format"
+ :import.reason/whiteboard-not-supported "Whiteboard files are not supported yet"
 
  :journal/add-blocks-to-today-success "Blocks added to today!"
  :journal/page-cant-convert-warning "This page can't be changed to a journal page."
@@ -1348,6 +1372,8 @@
  :plugin.themes/group "{1} themes"
  :plugin.themes/light-and-dark "light & dark themes"
 
+ :profiler/fn-not-found-error "Function not found: {1}"
+ :profiler/fn-unqualified-error "Use a qualified function name, such as cljs.core/map."
  :profiler/input-fn-placeholder "input fn name here"
  :profiler/unregister "Unregister"
 
@@ -1700,6 +1726,7 @@
  :settings/features "Features"
  :settings/general "General"
  :settings/keymap "Keymap"
+ :settings/personal-access-tokens "Personal access tokens"
  :settings/plugins "Plugins"
 
  :settings.account/storage-usage "{1}GB of {2}GB total storage ({3})"
@@ -1861,6 +1888,29 @@
  :sync/uploading "Uploading..."
  :sync/user-doesnt-exist-yet "User doesn't exist yet."
 
+ :sync.personal-access-token/api-docs "API documentation"
+ :sync.personal-access-token/copied "Personal access token copied."
+ :sync.personal-access-token/create "Create token"
+ :sync.personal-access-token/create-title "Create a personal access token"
+ :sync.personal-access-token/created-title "Your new personal access token"
+ :sync.personal-access-token/created-warning "Copy this token now. It cannot be shown again."
+ :sync.personal-access-token/date-summary "Created {1}; expires {2}"
+ :sync.personal-access-token/deleted-graph "Deleted graph"
+ :sync.personal-access-token/description "Create graph-specific credentials for the Logseq REST API."
+ :sync.personal-access-token/empty "No personal access tokens."
+ :sync.personal-access-token/existing-title "Existing tokens"
+ :sync.personal-access-token/expiration "Expiration"
+ :sync.personal-access-token/graph "Graph"
+ :sync.personal-access-token/no-graphs "No synced graphs are available."
+ :sync.personal-access-token/permission "Permission"
+ :sync.personal-access-token/request-error "The personal access token request failed. Please try again."
+ :sync.personal-access-token/revoke "Revoke"
+ :sync.personal-access-token/revoke-confirm "Revoke this personal access token? This cannot be undone."
+
+ :sync.personal-access-token.permission/both "Read and write"
+ :sync.personal-access-token.permission/read "Read"
+ :sync.personal-access-token.permission/write "Write"
+
  :theme/logseq-default "Logseq Default theme"
  :theme/switch-to "Switch to {1} theme"
 
@@ -1925,6 +1975,7 @@
 
  :view/add-new-view "Add new view"
  :view/all "All"
+ :view/error "View error:"
  :view/export-edn "Export EDN"
  :view/linked-references "Linked references"
  :view/new "New"
@@ -2000,6 +2051,10 @@
  :view.table/sort-groups-order "Sort groups order"
  :view.table/total-refs-count "Total refs count"
  :view.table/unpin "Unpin"
+
+ :web.test-site/help-test "I want to help test"
+ :web.test-site/open-app "Open app.logseq.com"
+ :web.test-site/warning "test.logseq.com is for testing new features and may be unstable. If you're using Logseq for real work, please switch to app.logseq.com."
 
  :window/close "Close"
  :window/exit-fullscreen "Exit full screen"

@@ -1,0 +1,91 @@
+name: Deploy web app to Cloud
+
+on:
+  workflow_dispatch:
+
+env:
+  CLOJURE_VERSION: "1.12.4.1618"
+  NODE_VERSION: '24'
+  JAVA_VERSION: "21"
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+      deployments: write
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: e2e-success
+          path: .
+        continue-on-error: true
+
+      # FIXME: download not found for successful e2e
+      # - name: Check E2E success
+      #   run: |
+      #     if [ ! -f e2e-success.txt ]; then
+      #       echo "❌ E2E tests did not succeed — aborting release."
+      #       exit 1
+      #     fi
+
+      - uses: actions/checkout@v6
+
+      - name: Setup Java JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: "zulu"
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - name: Setup clojure
+        uses: DeLaGuardo/setup-clojure@13.5
+        with:
+          cli: ${{ env.CLOJURE_VERSION }}
+
+      - name: Fetch pnpm deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Set Build Environment Variables
+        run: |
+          echo "ENABLE_FILE_SYNC_PRODUCTION=true" >> $GITHUB_ENV
+          echo "ENABLE_RTC_SYNC_PRODUCTION=true" >> $GITHUB_ENV
+
+      - name: Build Released-Web
+        run: |
+          pnpm gulp:build && clojure -M:cljs release app db-worker --config-merge '{:compiler-options {:source-map true :source-map-include-sources-content true :source-map-detail-level :symbols}}' && pnpm webpack-app-build
+          rsync -avz --exclude node_modules --exclude android --exclude ios --exclude mobile ./static/ ./public/
+          ls -lR ./public && mkdir r2 && mv ./public/js/main.js.map ./r2/db-test.main.js.map
+          sed -i 's/=main.js.map/=https:\/\/assets.logseq.io\/db-test.main.js.map/g' ./public/js/main.js
+        env:
+          LOGSEQ_SENTRY_DSN: ${{ secrets.LOGSEQ_SENTRY_DSN }}
+          LOGSEQ_POSTHOG_TOKEN: ${{ secrets.LOGSEQ_POSTHOG_TOKEN }}
+
+      - name: Upload to R2
+        uses: ryand56/r2-upload-action@latest
+        with:
+          r2-account-id: 2553ea8236c11ea0f88de28fce1cbfee
+          r2-access-key-id: ${{ secrets.R2_ACCESS_KEY_ID }}
+          r2-secret-access-key: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          r2-bucket: ${{ secrets.R2_ASSETS_BUCKET }}
+          source-dir: r2
+          destination-dir: ./
+
+      - name: Publish to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: 2553ea8236c11ea0f88de28fce1cbfee
+          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
+          command: pages deploy public --project-name logseq-app --branch main

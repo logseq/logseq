@@ -37,7 +37,6 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.instrumentation.posthog :as posthog]
             [frontend.modules.outliner.pipeline :as pipeline]
-            [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.modules.shortcut.core :as st]
             [frontend.persist-db :as persist-db]
             [frontend.quick-capture :as quick-capture]
@@ -410,13 +409,13 @@
                                     (editor-handler/save-block! (state/get-current-repo) % requested-title))]
       (p/let [converted-block (if (or (not (nil? block-type))
                                       (and (not update-current-block?) (not (string/blank? block-title))))
-                                (p/let [result (ui-outliner-tx/transact!
-                                                {:outliner-op :insert-blocks}
-                                                ;; insert a new block
-                                                (let [[_p _ block'] (editor-handler/insert-new-block-aux! {} db-block "")]
-                                                  (turn-type! block')))]
-                                  (when-let [id (:block/uuid (first (:blocks result)))]
-                                    (<get-upsert-type-block repo id)))
+                                ;; Await the insert itself before converting the new block.
+                                (p/let [[insert-promise _ block'] (editor-handler/insert-new-block-aux!
+                                                                   {:preserve-current-block? true} db-block "")
+                                        _ insert-promise]
+                                  (when-let [id (:block/uuid block')]
+                                    (p/let [_ (turn-type! block')]
+                                      (<get-upsert-type-block repo id))))
                                 (p/let [_ (apply-requested-title! db-block)
                                         _ (turn-type! db-block)]
                                   (<get-upsert-type-block repo (:block/uuid db-block))))]

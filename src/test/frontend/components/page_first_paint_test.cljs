@@ -113,7 +113,8 @@
       (is (= [identity-key breadcrumb-key] resource-keys)))
     (is (= {:status :ready
             :page (assoc (dissoc zoomed-block :block/tx-id)
-                         :block.temp/breadcrumb breadcrumb-ancestors)}
+                         :block.temp/breadcrumb breadcrumb-ancestors
+                         :block.temp/breadcrumb-ref-titles {})}
            (:paint (page-paint route-option
                                {:resources {identity-key {:status :ready :value page-uuid}
                                             breadcrumb-key {:status :ready

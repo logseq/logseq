@@ -3,6 +3,7 @@
             [clojure.string :as string]
             [frontend.handler.config :as config-handler]
             [frontend.handler.db-based.editor :as db-editor-handler]
+            [frontend.handler.notification :as notification]
             [frontend.handler.repo-config :as repo-config-handler]
             [frontend.state :as state]
             [promesa.core :as p]))
@@ -72,5 +73,46 @@
            (fn []
              (reset! state/*db-worker previous-worker)
              (set! state/pub-event! previous-pub-event)
+             (state/replace-state! previous-state)
+             (done)))))))
+
+(deftest set-config-repairs-invalid-config-edn-test
+  ;; An unparsable logseq/config.edn must not lock settings writes either;
+  ;; the write repairs the file using the default config as its base
+  (async done
+    (let [repo "logseq_db_config_invalid_file"
+          previous-state (state/get-state)
+          previous-worker @state/*db-worker
+          previous-pub-event state/pub-event!
+          previous-notification notification/show!
+          file-content (atom "{:ui/show-brackets?")]
+      (reset! state/*db-worker
+              (fn [method-k _repo & [arg1]]
+                (case method-k
+                  :thread-api/get-file-content (p/resolved @file-content)
+                  :thread-api/pull (p/resolved (when @file-content {:db/id 1}))
+                  :thread-api/transact (p/resolved (reset! file-content (:file/content (first arg1))))
+                  (p/resolved nil))))
+      ;; [:shortcut/refresh] publishing touches DOM listeners unavailable in node
+      (set! state/pub-event! (fn [& _] nil))
+      ;; Mocks are restored synchronously in p/finally: p/with-redefs restores
+      ;; in a microtask that can run after the next test has started
+      (set! notification/show! (fn [& _args] nil))
+      (state/swap-state! assoc :git/current-repo repo)
+      (-> (p/let [_ (config-handler/set-config! :ui/show-brackets? false)
+                  content @file-content]
+            (is (some? content))
+            (is (string/includes? content ":ui/show-brackets? false"))
+            (is (string/includes? content ":meta/version 1"))
+            ;; restore-repo-config! re-reads the file so [:config repo] updates
+            (is (false? (:ui/show-brackets? (state/get-graph-config repo)))))
+          (p/catch
+           (fn [error]
+             (is false (str error))))
+          (p/finally
+           (fn []
+             (reset! state/*db-worker previous-worker)
+             (set! state/pub-event! previous-pub-event)
+             (set! notification/show! previous-notification)
              (state/replace-state! previous-state)
              (done)))))))

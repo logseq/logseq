@@ -362,6 +362,7 @@
 (def journal? entity-util/journal?)
 (def hidden? entity-util/hidden?)
 (def recycled? entity-util/recycled?)
+(def some-parent entity-util/some-parent)
 (def object? entity-util/object?)
 (def asset? entity-util/asset?)
 (def public-built-in-property? db-property/public-built-in-property?)
@@ -415,7 +416,7 @@
         closed-property (:block/closed-value-property block)]
     (sort-by-order (cond
                      closed-property
-                     (:block/_closed-value-property closed-property)
+                     (mapcat :block/_closed-value-property closed-property)
 
                      from-property
                      (filter (fn [e]

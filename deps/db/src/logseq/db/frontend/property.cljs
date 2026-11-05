@@ -598,6 +598,7 @@
                                               :public? false}
                                              :properties
                                              {:logseq.property/description "Metadata of asset in remote storage"}}
+     ;; Works for external assets too
      :logseq.property.asset/resize-metadata {:title "Asset resize metadata"
                                              :schema {:type :map
                                                       :hide? true

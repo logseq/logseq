@@ -67,10 +67,16 @@ jobs:
           bb: ${{ env.BABASHKA_VERSION }}
 
       - name: Fetch pnpm deps
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --ignore-workspace --frozen-lockfile
 
       - name: Run unit tests
         run: pnpm test:node-adapter
+
+      - name: Run MCP helper tests
+        run: pnpm test:chatgpt-app
+
+      - name: Test MCP in the Workers runtime
+        run: pnpm test:mcp
 
   lint:
     runs-on: ubuntu-latest

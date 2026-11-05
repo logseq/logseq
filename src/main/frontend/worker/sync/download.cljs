@@ -487,19 +487,15 @@
         (-> (p/let [_ (log-f {:sub-type :download-progress
                               :graph-uuid graph-id
                               :message "Preparing graph snapshot download"})
-                    _ (reset! stage* :fetch-pull)
-                    pull-resp (fetch-json (str base "/sync/" graph-id "/pull")
-                                          {:method "GET"}
-                                          :sync/pull)
-                    remote-tx (:t pull-resp)
-                    _ (when-not (integer? remote-tx)
-                        (throw (ex-info "non-integer remote-tx when downloading graph"
-                                        {:repo repo
-                                         :remote-tx remote-tx})))
                     _ (reset! stage* :fetch-snapshot-download)
                     snapshot-resp (fetch-json (str base "/sync/" graph-id "/snapshot/download")
                                               {:method "GET"}
                                               :sync/snapshot-download)
+                    remote-tx (:t snapshot-resp)
+                    _ (when-not (integer? remote-tx)
+                        (throw (ex-info "non-integer remote-tx when downloading graph"
+                                        {:repo repo
+                                         :remote-tx remote-tx})))
                     _ (when graph-e2ee?
                         (reset! stage* :prepare-e2ee)
                         (sync-crypt/<fetch-graph-aes-key-for-download graph-id))

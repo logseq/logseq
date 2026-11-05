@@ -11,6 +11,8 @@
             [frontend.fs :as fs]
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.export :as export]
+            [frontend.handler.export.html :as export-html]
+            [frontend.handler.export.opml :as export-opml]
             [frontend.handler.export.text :as export-text]
             [frontend.handler.notification :as notification]
             [frontend.persist-db :as persist-db]
@@ -19,6 +21,7 @@
             [frontend.util :as util]
             [frontend.worker.export :as worker-export]
             [logseq.db.sqlite.build :as sqlite-build]
+            [logseq.db.test.helper :as db-test]
             [promesa.core :as p]))
 
 (def test-files
@@ -94,7 +97,15 @@
          :block/uuid uuid-10
          :build/tags [:logseq.class/Code-block]
          :build/properties {:logseq.property.node/display-type :code
-                            :logseq.property.code/lang "clojure"}}]}]))
+                            :logseq.property.code/lang "clojure"}}]}
+     {:page {:block/title "page6"}
+      :blocks
+      [{:block/title "((00000000-0000-4000-8000-0000000009ff))"
+        :build/keep-uuid? true
+        :block/uuid #uuid "00000000-0000-4000-8000-000000000601"}
+       {:block/title "see ((00000000-0000-4000-8000-0000000009ff)) here"
+        :build/keep-uuid? true
+        :block/uuid #uuid "00000000-0000-4000-8000-000000000602"}]}]))
 
 (defn- load-export-test-files!
   []
@@ -462,6 +473,19 @@
              (string/trim without-properties)))
       (done))))
 
+(deftest export-blocks-as-markdown-keeps-ref-to-missing-block
+  (async done
+    (p/let [only-ref (<export-blocks-as-markdown
+                      [#uuid "00000000-0000-4000-8000-000000000601"]
+                      {:remove-options #{}})
+            in-text (<export-blocks-as-markdown
+                     [#uuid "00000000-0000-4000-8000-000000000602"]
+                     {:remove-options #{}})]
+      (is (= "- ((00000000-0000-4000-8000-0000000009ff))" (string/trim only-ref))
+          "a block that is only a ref to a missing block keeps the ref")
+      (is (= "- see ((00000000-0000-4000-8000-0000000009ff)) here" (string/trim in-text)))
+      (done))))
+
 (deftest export-page-as-markdown-preserves-semantic-block-formatting
   (async done
     (p/let [content (<export-blocks-as-markdown
@@ -477,6 +501,90 @@
   ```")
              (string/trim content)))
       (done))))
+
+(defn- global-get
+  [k]
+  (aget js/globalThis k))
+
+(defn- global-set!
+  [k v]
+  (aset js/globalThis k v))
+
+(defn- install-node-xml-prettify-stub!
+  "Node has no DOMParser. prettifyXml falls back to the original markup when
+   the stub serializer reports a parser error."
+  []
+  (global-set! "DOMParser"
+               (js* "class { parseFromString(source) { return {source: source}; } }"))
+  (global-set! "XSLTProcessor"
+               (js* "class { importStylesheet() {} transformToDocument(doc) { return doc; } }"))
+  (global-set! "XMLSerializer"
+               (js* "class { serializeToString(doc) { return '<parsererror>' + ((doc && doc.source) || ''); } }")))
+
+(defn- with-node-xml-prettify-stub
+  [f]
+  (let [parser (global-get "DOMParser")
+        xslt (global-get "XSLTProcessor")
+        serializer (global-get "XMLSerializer")]
+    (install-node-xml-prettify-stub!)
+    (try
+      (f)
+      (finally
+        (global-set! "DOMParser" parser)
+        (global-set! "XSLTProcessor" xslt)
+        (global-set! "XMLSerializer" serializer)))))
+
+(deftest export-image-asset-block-keeps-asset-reference
+  (testing "a nested image block keeps an asset reference in markdown, html, and opml"
+    (with-node-xml-prettify-stub
+      (fn []
+        (let [image-uuid #uuid "14630000-0000-4000-8000-000000000146"
+              parent-uuid #uuid "14630000-0000-4000-8000-000000000001"
+              db @(db-test/create-conn-with-blocks
+                   {:pages-and-blocks
+                    [{:page {:block/title "Image export"}
+                      :blocks
+                      [{:block/title "Notes"
+                        :block/uuid parent-uuid
+                        :build/keep-uuid? true
+                        :build/children
+                        [{:block/title "Nested text"}
+                         {:block/title "Sunset caption"
+                          :block/uuid image-uuid
+                          :build/keep-uuid? true
+                          :build/tags #{:logseq.class/Asset}
+                          :build/properties {:logseq.property.asset/type "png"
+                                             :logseq.property.asset/checksum "img-checksum"
+                                             :logseq.property.asset/size 128}}
+                         {:block/title "More text"}]}]}]})
+              content-config {:export-bullet-indentation "\t"
+                              :encode-highlight-as-mark? true}
+              options {:remove-options #{:property}}
+              asset-ref (str "../assets/" image-uuid ".png")
+              image-md (str "![Sunset caption](" asset-ref ")")
+              markdown (worker-export/export-blocks-as-format
+                        db parent-uuid :markdown options content-config)
+              image-only (worker-export/export-blocks-as-format
+                          db image-uuid :markdown options content-config)
+              {:keys [content format]} (worker-export/get-blocks-export-data
+                                        db parent-uuid
+                                        {:include-properties? false}
+                                        content-config)
+              html (export-html/export-helper content format options)
+              opml (export-opml/export-helper content format options)]
+          (is (= (string/trim (str "\n- Notes\n"
+                                   "\t- Nested text\n"
+                                   "\t- " image-md "\n"
+                                   "\t- More text"))
+                 (string/trim markdown))
+              "markdown copy/export keeps the image markup")
+          (is (= (str "- " image-md)
+                 (string/trim image-only))
+              "exporting the image block alone keeps the asset reference")
+          (is (string/includes? html "<img") html)
+          (is (string/includes? html asset-ref) html)
+          (is (string/includes? html "alt=\"Sunset caption\"") html)
+          (is (string/includes? opml image-md) opml))))))
 
 (deftest export-blocks-as-markdown-level<N
   (async done
@@ -534,6 +642,16 @@
              (string/trim second-content)))
       (done))))
 
+(deftest export-tag-followed-by-a-macro
+  (testing "the parser takes a macro right after a tag into the tag: the export keeps it, and does not fail"
+    (let [block-uuid #uuid "6b000000-0000-4000-8000-0000000000d1"
+          db @(db-test/create-conn-with-blocks
+               {:pages-and-blocks
+                [{:page {:block/title "Page A"}
+                  :blocks [{:block/title "a #x^^h^^{{x}}" :block/uuid block-uuid :build/keep-uuid? true}]}]})]
+      (is (= "- a #x^^h^^{{x}}\n"
+             (worker-export/export-blocks-as-format db block-uuid :markdown {} {}))))))
+
 (deftest export-blocks-as-markdown-open-blocks-only
   (async done
     (testing "collapsed descendants are excluded when :open-blocks-only is enabled"
@@ -553,6 +671,29 @@
 	- hidden-child")
                (string/trim all-content)))
         (done)))))
+
+(deftest export-block-embed-open-blocks-only
+  (testing "an embedded block's collapsed descendants are excluded when :open-blocks-only is enabled"
+    (let [parent-id #uuid "6b000000-0000-4000-8000-000000000001"
+          holder-id #uuid "6b000000-0000-4000-8000-000000000003"
+          db @(db-test/create-conn-with-blocks
+               {:pages-and-blocks
+                [{:page {:block/title "Page A"}
+                  :blocks
+                  [{:block/title "Parent block" :block/uuid parent-id :build/keep-uuid? true
+                    :build/children
+                    [{:block/title "Collapsed child" :block/collapsed? true
+                      :build/children [{:block/title "Hidden grandchild"}]}]}
+                   {:block/title (str "{{embed ((" parent-id "))}}")
+                    :block/uuid holder-id :build/keep-uuid? true}]}]})
+          export! (fn [open-only?]
+                    (worker-export/export-blocks-as-format
+                     db holder-id :markdown
+                     {:remove-options [:property] :other-options {:open-blocks-only open-only?}}
+                     {}))]
+      (is (string/includes? (export! true) "Collapsed child"))
+      (is (not (string/includes? (export! true) "Hidden grandchild")))
+      (is (string/includes? (export! false) "Hidden grandchild")))))
 
 (deftest export-page-as-markdown-open-blocks-only
   (async done

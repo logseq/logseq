@@ -358,7 +358,14 @@
     (:thread-api/update-thread-atom
      :thread-api/undo-redo-set-pending-editor-info
      :thread-api/undo-redo-record-editor-info
-     :thread-api/undo-redo-record-ui-state)
+     :thread-api/undo-redo-record-ui-state
+     ;; Incidental calls from background flows (rtc start/stop, presence)
+     ;; that can fire while this stub is installed.
+     :thread-api/db-sync-start
+     :thread-api/db-sync-stop
+     :thread-api/db-sync-update-presence
+     :thread-api/get-rtc-graph-uuid
+     :thread-api/sync-app-state)
     nil
     ::unhandled))
 

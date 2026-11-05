@@ -33,7 +33,7 @@
        {:size :sm
         :on-click (fn []
                     (when-let [fn-sym (some-> register-fn-name symbol)]
-                      (profiler-handler/register-fn! fn-sym)))}
+                      (profiler-handler/register-fn-from-ui! fn-sym)))}
        "Register fn")
       [:input.form-input.flex-1.h-8.leading-8.py-0.box-border
        {:on-change (fn [e] (set-register-fn-name! (util/evalue e)))

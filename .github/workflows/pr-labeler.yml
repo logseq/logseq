@@ -6,10 +6,13 @@ on:
 jobs:
   pr-labeler:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
-      - uses: TimonVS/pr-labeler-action@v3.1.0
+      # actions/labeler reads the configuration from this repository (the base) and matches the head branch's name, so it
+      # also labels pull requests from forks; TimonVS/pr-labeler-action read it at the head branch's name in this
+      # repository, which a fork's branch does not have ("No commit found for the ref").
+      - uses: actions/labeler@v6
         with:
-          # optional, .github/pr-labeler.yml is the default value
           configuration-path: .github/pr-labeler.yml
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

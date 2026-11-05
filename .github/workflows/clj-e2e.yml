@@ -172,6 +172,28 @@ jobs:
           name: static-build
           path: static
 
+      - name: Set up Node
+        if: matrix.shard == 'outliner-rtc'
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Set up pnpm
+        if: matrix.shard == 'outliner-rtc'
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - name: Install db-sync deps
+        if: matrix.shard == 'outliner-rtc'
+        run: pnpm --dir deps/db-sync install --frozen-lockfile --ignore-workspace
+
+      # RTC tests sync against a local db-sync server (the node adapter)
+      # instead of api.logseq.io. Build it only in the shard that uses it.
+      - name: Build db-sync node adapter for RTC tests
+        if: matrix.shard == 'outliner-rtc'
+        run: pnpm --dir deps/db-sync build:node-adapter
+
       - name: Run e2e tests
         env:
           E2E_NAMESPACES: ${{ matrix.namespaces }}

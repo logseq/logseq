@@ -344,7 +344,13 @@
                              (set/union base-eids dependent-eids)
                              base-eids)
             touched-uuids (touched-checksum-uuids db-before db-after effective-eids)]
-        (if (duplicate-block-uuid? db-before db-after touched-uuids)
+        ;; The full recompute counts an entity once per :block/uuid datom, so the
+        ;; counting path is needed whenever a uuid sits on 2 entities or an
+        ;; entity holds 2 uuids (stored datoms can hold either).
+        (if (or (duplicate-block-uuid? db-before db-after touched-uuids)
+                (some #(or (> (block-uuid-datom-count db-before %) 1)
+                           (> (block-uuid-datom-count db-after %) 1))
+                      effective-eids))
           (let [peer-eids (->> touched-uuids
                                (mapcat (fn [uuid]
                                          (concat (eids-by-block-uuid db-before uuid)

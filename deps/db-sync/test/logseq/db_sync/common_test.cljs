@@ -3,6 +3,24 @@
             [logseq.db-sync.common :as common]
             [promesa.core :as p]))
 
+(deftest json-response-serializes-uuids-as-strings-test
+  (async done
+         (let [tx-id (random-uuid)
+               resp (common/json-response {:tx-id tx-id
+                                           :success-tx-ids [tx-id]
+                                           :failed-tx-id tx-id})]
+           (-> (p/let [text (.text resp)
+                       parsed (js/JSON.parse text)]
+                 (is (string? (aget parsed "tx-id"))
+                     (str "JSON tx-id must be a string, got " (js/JSON.stringify (aget parsed "tx-id"))))
+                 (is (= (str tx-id) (aget parsed "tx-id")))
+                 (is (= (str tx-id) (aget (aget parsed "success-tx-ids") 0)))
+                 (is (= (str tx-id) (aget parsed "failed-tx-id"))))
+               (p/then (fn [] (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
 (defn- make-stmt [calls result]
   (let [stmt (js-obj)]
     (aset stmt

@@ -343,6 +343,76 @@
              @tx-calls)
           "Content that differs from the persisted block must still be saved"))))
 
+(defn- save-current-block-while-editor-action
+  [{:keys [saved-title input-value editor-action flush-input?]}]
+  (let [block-uuid #uuid "33333333-3333-3333-3333-333333333333"
+        block {:db/id 1
+               :block/uuid block-uuid
+               :block/title saved-title}
+        input #js {:value input-value}
+        save-calls (atom [])
+        tx-calls (atom [])]
+    (with-redefs [state/editor-in-composition? (constantly false)
+                  state/get-editor-action (constantly editor-action)
+                  state/get-current-repo (constantly "flush-input-repo")
+                  state/get-edit-input-id (constantly "editor")
+                  state/get-edit-block (constantly block)
+                  gdom/getElement (constantly input)
+                  db-subs/block-snapshot
+                  (constantly {:status :ready :value block})
+                  conn/get-db (constantly nil)
+                  editor/wrap-parse-block identity
+                  frontend-outliner-op/save-block! (fn [block' opts]
+                                                     (swap! save-calls conj [block' opts]))
+                  db-transact/apply-outliner-ops
+                  (fn [db ops opts]
+                    (swap! tx-calls conj [db ops opts])
+                    :tx)]
+      (if flush-input?
+        (editor/save-current-block! {:flush-input? true})
+        (editor/save-current-block!)))
+    {:save-calls @save-calls
+     :tx-calls @tx-calls}))
+
+(deftest save-current-block-flushes-input-while-editor-action-is-active-test
+  (testing "new unsaved block title"
+    (is (= {:save-calls []
+            :tx-calls []}
+           (save-current-block-while-editor-action
+            {:saved-title ""
+             :input-value "plain draft text"
+             :editor-action :commands}))
+        "The editor-action guard must still skip a regular save")
+    (is (= {:save-calls [[{:block/uuid #uuid "33333333-3333-3333-3333-333333333333"
+                           :block/title "plain draft text"}
+                          nil]]
+            :tx-calls [[nil [] {:outliner-op :save-block}]]}
+           (save-current-block-while-editor-action
+            {:saved-title ""
+             :input-value "plain draft text"
+             :editor-action :commands
+             :flush-input? true}))
+        "Flushing the input persists a new block's unsaved title while a slash action is active"))
+
+  (testing "existing title with unsaved suffix"
+    (is (= {:save-calls []
+            :tx-calls []}
+           (save-current-block-while-editor-action
+            {:saved-title "baseline"
+             :input-value "baseline draft suffix"
+             :editor-action :property-input}))
+        "The editor-action guard must still skip a regular save")
+    (is (= {:save-calls [[{:block/uuid #uuid "33333333-3333-3333-3333-333333333333"
+                           :block/title "baseline draft suffix"}
+                          nil]]
+            :tx-calls [[nil [] {:outliner-op :save-block}]]}
+           (save-current-block-while-editor-action
+            {:saved-title "baseline"
+             :input-value "baseline draft suffix"
+             :editor-action :property-input
+             :flush-input? true}))
+        "Flushing the input persists an unsaved suffix while the property/date picker is active")))
+
 (deftest save-block-does-not-drop-a-revert-while-the-previous-save-is-pending-test
   (let [block-uuid #uuid "22222222-2222-2222-2222-222222222222"
         block {:db/id 1
@@ -1652,6 +1722,48 @@
                @calls)
             "Insert metadata and operations must use one transaction."))))
 
+(deftest create-view-insert-skips-pending-editor-save-test
+  (let [current-id #uuid "11111111-1111-1111-1111-111111111111"
+        next-id #uuid "22222222-2222-2222-2222-222222222222"
+        page-block {:db/id 1
+                    :block/uuid current-id
+                    :block/title "Slash Test"
+                    :block/page {:db/id 10}}
+        view-block {:block/uuid next-id
+                    :block/title "Unlinked references"}
+        calls (atom [])]
+    (with-redefs [state/editor-in-composition? (constantly false)
+                  state/get-editor-action (constantly nil)
+                  state/get-current-repo (constantly "test")
+                  state/get-editor-args (constantly [nil nil {}])
+                  state/get-edit-block (constantly (assoc page-block :block/title "Slash Test/x"))
+                  state/get-edit-input-id (constantly "edit-block-test")
+                  gdom/getElement (constantly #js {:value "Slash Test/x"})
+                  editor/wrap-parse-block identity
+                  frontend-outliner-op/save-block! (fn [& _]
+                                                     (swap! calls conj :save-block))
+                  frontend-outliner-op/insert-blocks! (fn [& _]
+                                                        (swap! calls conj :insert-blocks))
+                  db-transact/apply-outliner-ops (fn [_ ops opts]
+                                                   (swap! calls conj [:apply ops opts])
+                                                   :tx)]
+      (editor/outliner-insert-block!
+       {:edit-block? false}
+       page-block
+       view-block
+       {:sibling? true
+        :keep-uuid? true
+        :outliner-op :create-view
+        :skip-save-current-block? true})
+      (is (= [:insert-blocks
+              [:apply
+               []
+               {:outliner-op :insert-blocks
+                :source-outliner-op :create-view
+                :ui/page-id 10}]]
+             @calls)
+          "Auto view inserts must not carry a refused page-title save."))))
+
 (deftest split-current-block-keeps-rendered-title-in-sync-test
   (let [block {:block/title "Performance row 2"
                :block/raw-title "Performance row 2"}]
@@ -2706,6 +2818,7 @@
           original-exceed-limit-size? assets-handler/exceed-limit-size?
           original-<get-today-journal-title db-async/<get-today-journal-title
           original-<get-journal-page-by-day db-async/<get-journal-page-by-day
+          original-<invoke-db-worker db-async/<invoke-db-worker
           original-db-based-write-asset! editor-assets/db-based-write-asset!
           original-insert-blocks! frontend-outliner-op/insert-blocks!
           original-<get-blocks db-async/<get-blocks
@@ -2720,6 +2833,7 @@
                                                 (p/resolved "Today")))
       (set! db-async/<get-journal-page-by-day (fn [_repo _journal-day]
                                                 (p/resolved {:block/uuid #uuid "f43caf78-18c4-4724-99d2-b2f61f697a0e"})))
+      (set! db-async/<invoke-db-worker (fn [& _] (p/resolved nil)))
       (set! editor-assets/db-based-write-asset! (fn [& _args]
                                            (p/resolved nil)))
       (set! frontend-outliner-op/insert-blocks! (fn [blocks target opts]
@@ -2752,6 +2866,7 @@
                        (set! assets-handler/exceed-limit-size? original-exceed-limit-size?)
                        (set! db-async/<get-today-journal-title original-<get-today-journal-title)
                        (set! db-async/<get-journal-page-by-day original-<get-journal-page-by-day)
+                       (set! db-async/<invoke-db-worker original-<invoke-db-worker)
                        (set! editor-assets/db-based-write-asset! original-db-based-write-asset!)
                        (set! frontend-outliner-op/insert-blocks! original-insert-blocks!)
                        (set! db-async/<get-blocks original-<get-blocks)
@@ -2772,6 +2887,7 @@
           original-exceed-limit-size? assets-handler/exceed-limit-size?
           original-<get-today-journal-title db-async/<get-today-journal-title
           original-<get-journal-page-by-day db-async/<get-journal-page-by-day
+          original-<invoke-db-worker db-async/<invoke-db-worker
           original-db-based-write-asset! editor-assets/db-based-write-asset!
           original-insert-blocks! frontend-outliner-op/insert-blocks!
           original-<get-blocks db-async/<get-blocks
@@ -2786,6 +2902,7 @@
                                                 (p/resolved "Today")))
       (set! db-async/<get-journal-page-by-day (fn [_repo _journal-day]
                                                 (p/resolved {:block/uuid #uuid "f43caf78-18c4-4724-99d2-b2f61f697a0e"})))
+      (set! db-async/<invoke-db-worker (fn [& _] (p/resolved nil)))
       (set! editor-assets/db-based-write-asset! (fn [& _args]
                                            (p/resolved nil)))
       (set! frontend-outliner-op/insert-blocks! (fn [blocks target opts]
@@ -2816,6 +2933,7 @@
                        (set! assets-handler/exceed-limit-size? original-exceed-limit-size?)
                        (set! db-async/<get-today-journal-title original-<get-today-journal-title)
                        (set! db-async/<get-journal-page-by-day original-<get-journal-page-by-day)
+                       (set! db-async/<invoke-db-worker original-<invoke-db-worker)
                        (set! editor-assets/db-based-write-asset! original-db-based-write-asset!)
                        (set! frontend-outliner-op/insert-blocks! original-insert-blocks!)
                        (set! db-async/<get-blocks original-<get-blocks)
@@ -3120,21 +3238,33 @@
     (is (= comments-node (#'editor/navigable-sibling-block current-node sibling-f {:up-down? true}))
         "Up/down navigation should enter comments instead of skipping the comments area")))
 
+(defn- this-sensitive-contains
+  "Mirrors Node.contains: throws Illegal invocation when called without its receiver."
+  [owner contained]
+  (fn [node]
+    (this-as this
+      (when-not (identical? this owner)
+        (throw (js/TypeError. "Illegal invocation")))
+      (= node contained))))
+
 (deftest navigable-sibling-block-skips-open-comments-subtree-for-left-right-test
   (let [current-node (js-obj "id" "current")
         comment-node (js-obj "id" "comment" "nodeType" 1)
         comments-node (js-obj "id" "comments"
                               "data-comments-area" "true"
-                              "nodeType" 1
-                              "contains" (fn [node] (= node comment-node)))
-        target-node (js-obj "id" "target")
+                              "nodeType" 1)
+        target-node (js-obj "id" "target" "nodeType" 1)
         sibling-f (fn [node _opts]
                     (cond
                       (= node current-node) comments-node
                       (= node comments-node) comment-node))]
+    (aset comments-node "contains" (this-sensitive-contains comments-node comment-node))
     (with-redefs [util/get-blocks-noncollapse (fn [] [current-node comments-node comment-node target-node])]
       (is (= target-node (#'editor/navigable-sibling-block current-node sibling-f {:direction :right}))
-          "Left/right navigation should skip the whole open comments subtree"))))
+          "Right navigation should skip the whole open comments subtree without throwing"))
+    (with-redefs [util/get-blocks-noncollapse (fn [] [target-node comments-node comment-node current-node])]
+      (is (= target-node (#'editor/navigable-sibling-block current-node sibling-f {:direction :left}))
+          "Left navigation should skip the whole open comments subtree without throwing"))))
 
 (deftest navigable-sibling-block-skips-comment-item-before-block-below-comments-test
   (let [target-node (js-obj "id" "target")
@@ -3264,3 +3394,27 @@
     (is (not (editor/db-collapsable?
               {:block/title "hello"
                :logseq.property/created-from-property {:db/ident :user.property/p1}})))))
+
+(deftest moved-rows-are-found-in-the-view-they-were-selected-in-test
+  ;; a block can be drawn twice (an embed above it, the sidebar): the moved
+  ;; row is the one in the container the block was selected in
+  (let [container-of {"embed-row" 7 "page-row" 3 "old-row" 3}]
+    (with-redefs [util/rec-get-node (fn [node _class] node)
+                  editor/get-node-container-id (fn [node] (container-of node))
+                  dom/attr (fn [node _attr] (when (= node "old-row") "b"))]
+      (let [container-ids (#'editor/row-container-ids ["old-row"])]
+        (is (= {"b" 3} container-ids))
+        (is (= "page-row" (#'editor/row-in-container "b" ["embed-row" "page-row"] container-ids))
+            "not the embed's copy drawn first")
+        (is (= "embed-row" (#'editor/row-in-container "c" ["embed-row" "page-row"] container-ids))
+            "a block with no known container takes its first row")))))
+
+(deftest moved-rows-are-reselected-only-if-the-selection-is-unchanged-test
+  (let [before [:b-row :c-row]]
+    (is (true? (#'editor/reselect-moved-rows? ["b" "c"] [:b2 :c2] before before)))
+    (is (false? (#'editor/reselect-moved-rows? ["b" "c"] [:b2 :c2] before [:d-row]))
+        "a click on d during the move keeps d selected")
+    (is (false? (#'editor/reselect-moved-rows? ["b" "c"] [:b2 :c2] before nil))
+        "Escape during the move keeps nothing selected")
+    (is (false? (#'editor/reselect-moved-rows? ["b" "c"] [:b2] before before))
+        "a row not drawn yet: no partial selection")))

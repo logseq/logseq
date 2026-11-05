@@ -11,6 +11,7 @@
             [frontend.components.left-sidebar :as app-left-sidebar]
             [frontend.components.plugins :as plugins]
             [frontend.components.right-sidebar :as right-sidebar]
+            [frontend.components.test-site-banner :as test-site-banner]
             [frontend.components.theme :as theme]
             [frontend.components.window-controls :as window-controls]
             [frontend.config :as config]
@@ -570,6 +571,7 @@
                         :route-match route-match
                         :default-home default-home
                         :new-block-mode new-block-mode})
+        (test-site-banner/banner)
         (when (util/electron?)
           (find-in-page/search))
 

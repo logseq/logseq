@@ -27,6 +27,18 @@
                                    (resolve timeout-sentinel)
                                    (reject error))))))))}))
 
+(deftest node-server-env-passes-the-admin-token-test
+  (let [penv (.-env js/process)
+        before (aget penv "DB_SYNC_ADMIN_TOKEN")]
+    (try
+      (aset penv "DB_SYNC_ADMIN_TOKEN" "test-admin-token")
+      (is (= "test-admin-token"
+             (aget (#'node-server/make-env {} nil nil) "DB_SYNC_ADMIN_TOKEN")))
+      (finally
+        (if (some? before)
+          (aset penv "DB_SYNC_ADMIN_TOKEN" before)
+          (js-delete penv "DB_SYNC_ADMIN_TOKEN"))))))
+
 (deftest node-server-returns-500-when-auth-claims-rejects-test
   (async done
          (let [stop-server! (atom nil)

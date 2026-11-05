@@ -259,7 +259,8 @@
 
 (defn outliner-insert-block!
   [config current-block new-block {:keys [sibling? keep-uuid? ordered-list?
-                                          replace-empty-target? outliner-op]}]
+                                          replace-empty-target? outliner-op
+                                          skip-save-current-block?]}]
   (let [library? (:library? config)
         sibling? (insert-as-sibling? config current-block sibling?)
         new-block' (if library?
@@ -281,7 +282,10 @@
 
        (:editor/edit-block-fn config)
        (assoc :editor/edit-block-fn (:editor/edit-block-fn config)))
-     (save-current-block! {:current-block current-block})
+     ;; Auto view inserts must not ride a pending editor save. A refused
+     ;; page-title (e.g. "/") would fail the whole create-view transaction.
+     (when-not skip-save-current-block?
+       (save-current-block! {:current-block current-block}))
      (outliner-op/insert-blocks! [new-block'] current-block insert-opts))))
 
 (defn- block-self-alone-when-insert?
@@ -432,6 +436,8 @@
   (assoc block :block/title title :block/raw-title title))
 
 (defn insert-new-block-aux!
+  "Split the edited block at the selection and insert the remainder.
+  With `:preserve-current-block?`, keep its title and insert `value` unchanged."
   [config
    {:block/keys [uuid]
     :as block}
@@ -446,7 +452,9 @@
                                 (db-async/<get-block-with-children
                                  repo block-id {:children? true}))]
           (let [block (block-with-worker-children block worker-result)
-                [fst-block-text snd-block-text] (compute-fst-snd-block-text value selection-start selection-end)
+                [fst-block-text snd-block-text] (if (:preserve-current-block? config)
+                                                 [(:block/title block) value]
+                                                 (compute-fst-snd-block-text value selection-start selection-end))
                 current-block (current-block-with-title block fst-block-text)
                 current-block (apply dissoc current-block retract-attributes)
                 new-m {:block/uuid (ldb/new-block-id)
@@ -619,7 +627,7 @@
                    sibling? before? start? end?
                    properties
                    custom-uuid replace-empty-target? edit-block? ordered-list? other-attrs
-                   outliner-op]
+                   outliner-op skip-save-current-block?]
             :or {sibling? false
                  before? false
                  edit-block? true}
@@ -692,7 +700,8 @@
                                               :keep-uuid? true
                                               :ordered-list? ordered-list?
                                               :replace-empty-target? replace-empty-target?
-                                              :outliner-op outliner-op}))
+                                              :outliner-op outliner-op
+                                              :skip-save-current-block? skip-save-current-block?}))
                    (when edit-existing-block?
                      (edit-block! last-block :max))
                    (when-let [id (:block/uuid new-block)]
@@ -1552,6 +1561,13 @@
       (let [timeout (js/setTimeout #(state/pub-event! [:editor/show-action-bar]) delay)]
         (reset! *action-bar-timeout timeout)))))
 
+(defn- still-editing?
+  "Whether the editor open now is `input-id`, the one an exit started from.
+  An exit saves the block first, and the save waits for the worker: a click
+  meanwhile opens another block's editor, which the exit must leave open."
+  [input-id]
+  (or (nil? input-id) (= input-id (state/get-edit-input-id))))
+
 (defn- select-block-up-down
   [direction]
   (cond
@@ -1559,10 +1575,12 @@
     (state/editing?)
     (when-let [element (state/get-editor-block-container)]
       (when element
-        (p/do!
-         (save-current-block!)
-         (util/scroll-to-block element)
-         (state/exit-editing-and-set-selected-blocks! [element]))))
+        (let [input-id (state/get-edit-input-id)]
+          (p/do!
+           (save-current-block!)
+           (when (still-editing? input-id)
+             (util/scroll-to-block element)
+             (state/exit-editing-and-set-selected-blocks! [element]))))))
 
     ;; when selection and one block selected, select next block
     (and (state/selection?) (== 1 (count (state/get-selection-blocks))))
@@ -1644,28 +1662,35 @@
   (when @*auto-save-timeout
     (js/clearTimeout @*auto-save-timeout)))
 
+(defn- editor-input-value
+  [input-id]
+  (when-let [elem (and input-id (gdom/getElement input-id))]
+    (gobj/get elem "value")))
+
 (defn- current-editor-value
   [input-id current-block edit-block]
   (if (= (:block/uuid current-block) (:block/uuid edit-block))
     (:block/title current-block)
-    (when-let [elem (and input-id (gdom/getElement input-id))]
-      (gobj/get elem "value"))))
+    (editor-input-value input-id)))
 
 (defn save-current-block!
   ([]
    (save-current-block! {}))
-  ([{:keys [current-block] :as opts}]
+  ([{:keys [current-block flush-input?] :as opts}]
    (clear-block-auto-save-timeout!)
    ;; non English input method
    (when-not (or (state/editor-in-composition?)
-                 (state/get-editor-action))
+                 (and (not flush-input?)
+                      (state/get-editor-action)))
      (when (state/get-current-repo)
        (try
          (let [input-id (state/get-edit-input-id)
                block (state/get-edit-block)
-               value (current-editor-value input-id current-block block)]
+               value (if flush-input?
+                       (editor-input-value input-id)
+                       (current-editor-value input-id current-block block))]
            (when value
-             (save-block-aux! block value opts)))
+             (save-block-aux! block value (dissoc opts :flush-input?))))
          (catch :default error
            (js/console.error error)
            (log/error :save-block-failed error)))))))
@@ -1799,43 +1824,101 @@
        (not (comments-model/protected-comment-block? block))
        (not (focused-root-block? block root-block))))
 
+(defn- row-container-id
+  [node]
+  (some-> (util/rec-get-node node "blocks-container") get-node-container-id))
+
+(defn- row-container-ids
+  "block id -> the container its selected row is drawn in (a block can also
+  be drawn in an embed or the sidebar)."
+  [rows]
+  (into {} (keep (fn [node]
+                   (when-let [id (dom/attr node "blockid")]
+                     [id (row-container-id node)])))
+        rows))
+
+(defn- row-in-container
+  "Of `rows` (the rows drawn for block `id`), the one in the container the
+  block was selected in, else the first."
+  [id rows container-ids]
+  (let [container-id (get container-ids id)]
+    (or (when container-id
+          (some #(when (= container-id (row-container-id %)) %) rows))
+        (first rows))))
+
+(defn- reselect-moved-rows?
+  "Select the moved rows only when each was found and the selection is still
+  the one that was moved: a click or Escape during the move wins."
+  [ids nodes selected-before selected-now]
+  (and (= (count nodes) (count ids))
+       (identical? selected-before selected-now)))
+
+(defn- <move-up-down!
+  [up?]
+  (let [repo (state/get-current-repo)
+        edit-block-id (:block/uuid (state/get-edit-block))
+        move-nodes (fn [blocks]
+                     (let [blocks' (block-handler/get-top-level-blocks blocks)
+                           result (ui-outliner-tx/transact!
+                                   (merge {:outliner-op :move-blocks}
+                                          (block-handler/outliner-tx-meta (first blocks')))
+                                   (outliner-op/move-blocks-up-down! blocks' up?))]
+                       (when-let [block-node (util/get-first-block-by-id (:block/uuid (first blocks)))]
+                         (.scrollIntoView block-node #js {:behavior "smooth" :block "nearest"}))
+                       result))]
+    (p/let [root-block (get-focused-root-block)]
+      (if edit-block-id
+        (p/let [block (db-async/<get-block repo edit-block-id {:children? false})]
+          (let [blocks [(assoc block :block/title (state/get-edit-content))]
+                blocks (filter #(block-eligible-for-move-up-down? % root-block) blocks)
+                container-id (get-new-container-id (if up? :move-up :move-down) {})]
+            (when (seq blocks)
+              (p/do!
+               (save-current-block!)
+               (move-nodes blocks)
+               (if container-id
+                 (state/set-editing-block-id! [container-id edit-block-id])
+                 (when-let [input (some-> (state/get-edit-input-id) gdom/getElement)]
+                   (.focus input)
+                   (util/scroll-editor-cursor input)))))))
+        (let [ids (state/get-selection-block-ids)
+              direction (state/get-selection-direction)
+              selected-before (state/get-unsorted-selection-blocks)
+              container-ids (row-container-ids selected-before)
+              new-row #(row-in-container (str %) (util/get-blocks-by-id %) container-ids)]
+          (when (seq ids)
+            (p/let [results (db-async/<get-blocks repo ids {:children? false})
+                    loaded-blocks (unwrap-block-results results)
+                    blocks (filter #(block-eligible-for-move-up-down? % root-block) loaded-blocks)]
+              (when (seq blocks)
+                (p/do!
+                 (move-nodes blocks)
+                 ;; The transaction flushes its delta before settling, so moved
+                 ;; rows can be resolved in their original view.
+                 (let [nodes (keep new-row ids)
+                       nodes (if (= direction :up) (reverse nodes) nodes)]
+                   (when (reselect-moved-rows? ids nodes selected-before
+                                             (state/get-unsorted-selection-blocks))
+                     (state/set-selection-blocks! nodes direction))))))))))))
+
+(defonce ^:private *move-up-down-tail (atom nil))
+
 (defn move-up-down
   [up?]
   (fn [event]
     (util/stop event)
     (state/pub-event! [:editor/hide-action-bar])
-    (let [edit-block-id (:block/uuid (state/get-edit-block))
-          move-nodes (fn [blocks]
-                       (let [blocks' (block-handler/get-top-level-blocks blocks)
-                             result (ui-outliner-tx/transact!
-                                     (merge {:outliner-op :move-blocks}
-                                            (block-handler/outliner-tx-meta (first blocks')))
-                                     (outliner-op/move-blocks-up-down! blocks' up?))]
-                         (when-let [block-node (util/get-first-block-by-id (:block/uuid (first blocks)))]
-                           (.scrollIntoView block-node #js {:behavior "smooth" :block "nearest"}))
-                         result))]
-      (p/let [root-block (get-focused-root-block)]
-        (if edit-block-id
-          (p/let [block (db-async/<get-block (state/get-current-repo) edit-block-id {:children? false})]
-            (let [blocks [(assoc block :block/title (state/get-edit-content))]
-                  blocks (filter #(block-eligible-for-move-up-down? % root-block) blocks)
-                  container-id (get-new-container-id (if up? :move-up :move-down) {})]
-              (when (seq blocks)
-                (p/do!
-                 (save-current-block!)
-                 (move-nodes blocks)
-                 (if container-id
-                   (state/set-editing-block-id! [container-id edit-block-id])
-                   (when-let [input (some-> (state/get-edit-input-id) gdom/getElement)]
-                     (.focus input)
-                     (util/scroll-editor-cursor input)))))))
-          (let [ids (state/get-selection-block-ids)]
-            (when (seq ids)
-              (p/let [results (db-async/<get-blocks (state/get-current-repo) ids {:children? false})
-                      loaded-blocks (unwrap-block-results results)
-                      blocks (filter #(block-eligible-for-move-up-down? % root-block) loaded-blocks)]
-                (when (seq blocks)
-                  (move-nodes blocks))))))))))
+    (let [previous (or @*move-up-down-tail (p/resolved nil))
+          result (p/then previous (fn [_] (<move-up-down! up?)))
+          tail (p/catch result (constantly nil))]
+      ;; Register the whole task before its first async read. Later shortcuts
+      ;; wait for both the transaction and the selection update.
+      (reset! *move-up-down-tail tail)
+      (p/finally tail
+                 (fn []
+                   (when (identical? @*move-up-down-tail tail)
+                     (reset! *move-up-down-tail nil))))
+      result)))
 
 (defn get-selected-ordered-blocks
   []
@@ -2487,11 +2570,7 @@
 
 (defn- node-contains?
   [parent child]
-  (boolean
-   (or (and (gobj/get parent "nodeType")
-            (gdom/contains parent child))
-       (when-let [contains-fn (gobj/get parent "contains")]
-         (contains-fn child)))))
+  (boolean (gdom/contains parent child)))
 
 (defn- block-node-outside-comments-area
   [comments-node direction]
@@ -4074,13 +4153,16 @@
 (defn escape-editing
   [& {:keys [select? save-block? editing-another-block?]
       :or {save-block? true}}]
-  (p/do!
-   (when save-block? (save-current-block!))
-   (if select?
-     (when-let [node (some-> (state/get-input) (util/rec-get-node "ls-block"))]
-       (state/exit-editing-and-set-selected-blocks! [node]))
-     (when-not editing-another-block?
-       (state/clear-edit!)))))
+  (let [input-id (state/get-edit-input-id)]
+    (p/do!
+     (when save-block? (save-current-block!))
+     ;; a click during the save opened another editor: it stays open
+     (when (still-editing? input-id)
+       (if select?
+         (when-let [node (some-> (state/get-input) (util/rec-get-node "ls-block"))]
+           (state/exit-editing-and-set-selected-blocks! [node]))
+         (when-not editing-another-block?
+           (state/clear-edit!)))))))
 
 (defn copy-current-ref
   [block-id]

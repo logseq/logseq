@@ -100,6 +100,20 @@ jobs:
           path: static/
           retention-days: 1
 
+      # RTC tests sync against a local db-sync server (the node adapter)
+      # instead of api.logseq.io.
+      - name: Build db-sync node adapter for RTC tests
+        run: |
+          pnpm --dir deps/db-sync install --frozen-lockfile --ignore-workspace
+          pnpm --dir deps/db-sync build:node-adapter
+
+      - name: Upload db-sync node adapter
+        uses: actions/upload-artifact@v4
+        with:
+          name: db-sync-node-adapter
+          path: deps/db-sync/worker/dist/node-adapter.js
+          retention-days: 1
+
   test:
     name: Test ${{ matrix.test-task }}
     needs: build
@@ -149,6 +163,15 @@ jobs:
         with:
           name: static-build
           path: static
+
+      - name: Download db-sync node adapter
+        uses: actions/download-artifact@v4
+        with:
+          name: db-sync-node-adapter
+          path: deps/db-sync/worker/dist
+
+      - name: Install db-sync deps
+        run: pnpm --dir deps/db-sync install --frozen-lockfile --ignore-workspace
 
       - name: Prepare public dir
         run: |

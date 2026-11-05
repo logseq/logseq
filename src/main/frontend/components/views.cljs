@@ -34,6 +34,7 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.entity :as entity]
+            [lambdaisland.glogi :as log]
             [logseq.common.config :as common-config]
             [logseq.common.uuid :as common-uuid]
             [logseq.db :as ldb]
@@ -470,8 +471,13 @@
      (editor-handler/save-current-block!)
      (when hide-popup?
        (shui/popup-hide!))
-     (state/exit-editing-and-set-selected-blocks! [cell])
-     (set-focus-timeout! (js/setTimeout #(.focus cell) 100)))))
+     ;; The popup can hide after the cell unmounted (the table re-rendered
+     ;; or the page changed): then there is no cell to select or focus
+     (if cell
+       (do
+         (state/exit-editing-and-set-selected-blocks! [cell])
+         (set-focus-timeout! (js/setTimeout #(when (.-isConnected cell) (.focus cell)) 100)))
+       (state/clear-edit!)))))
 
 (defn- mobile-btn-class
   "The sole purpose of this function is to avoid false positives in hardcoded UI detection."
@@ -3413,7 +3419,9 @@
                                                           {:page (:block/uuid page)
                                                            :properties properties
                                                            :edit-block? false
-                                                           :outliner-op :create-view}
+                                                           :outliner-op :create-view
+                                                           ;; Keep a refused page-title save out of this tx.
+                                                           :skip-save-current-block? true}
                                                            auto-triggered?
                                                            (assoc :custom-uuid view-block-id)))]
         (db-async/<get-block repo (:block/uuid result) {:children? false})))))
@@ -4090,10 +4098,16 @@
            (set-stale-offset-window! nil)))
        js/undefined)
      [display-type group-by-property-ident])
-    (if-not (:ready? paint)
+    (cond
+      (:error view-data)
+      (ui/block-error (t :view/error) {:content (:message (:error view-data))})
+
+      (not (:ready? paint))
       [:div.flex.flex-col.space-2.gap-2.my-2
        (for [idx (range 3)]
          (shui/skeleton {:key idx :class "h-6 w-full"}))]
+
+      :else
       (let [data (:rows paint)
             notify-windowed-paint! (fn []
                                      (when (:full-key plan)
@@ -4209,10 +4223,18 @@
                (when-let [notify! (:on-first-table-paint! option)]
                  (notify!))))]]))
 
+(defn- handle-default-view-creation-error!
+  "Log a failed default-view insert without throwing during render
+   and re-arm *started? so a later effect run can retry.
+   The page has no error boundary around this view."
+  [*started? error]
+  (set! (.-current *started?) false)
+  (log/warn :default-view-creation-failed error)
+  nil)
+
 (hsx/defc missing-view
   [view-parent-uuid view-feature-type]
   (let [view-parent (db-hooks/use-block view-parent-uuid)
-        [error set-error!] (hooks/use-state nil)
         *started? (hooks/use-ref false)]
     (hooks/use-effect!
      (fn []
@@ -4221,16 +4243,18 @@
          (-> (create-view! view-parent view-feature-type {:auto-triggered? true})
              (p/then (fn [view]
                        (when-not view
-                         (throw (ex-info "Default view creation returned no view"
-                                         {:view-parent-uuid view-parent-uuid
-                                          :view-feature-type view-feature-type})))))
-             (p/catch set-error!)))
+                         (handle-default-view-creation-error!
+                          *started?
+                          (ex-info "Default view creation returned no view"
+                                   {:view-parent-uuid view-parent-uuid
+                                    :view-feature-type view-feature-type})))))
+             (p/catch (fn [error]
+                        (handle-default-view-creation-error! *started? error)))))
        js/undefined)
      [view-parent view-parent-uuid view-feature-type])
-    (when error
-      (throw error))))
+    nil))
 
-(hsx/defc view
+(hsx/defc view-root
   [{:keys [view-parent-uuid view-feature-type view-uuid] :as option}]
   (let [query-result? (= :query-result view-feature-type)
         view-uuids (when-not query-result?
@@ -4243,3 +4267,9 @@
 
       (and (not query-result?) (some? view-uuids))
       (missing-view view-parent-uuid view-feature-type))))
+
+(hsx/defc view
+  [option]
+  (ui/catch-error
+   (ui/block-error (t :view/error) {})
+   (view-root option)))

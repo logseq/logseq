@@ -9,18 +9,77 @@
 
 (def <q db-async-util/<q)
 
+(defn- parent-chains
+  [id->parent-id parent-ids]
+  ;; Build each ancestor once and share its map across overlapping chains.
+  (reduce
+   (fn [chains parent-id]
+     (let [path (loop [pid parent-id
+                       path []
+                       seen #{}]
+                  (if (or (not (integer? pid))
+                          (contains? chains pid)
+                          (contains? seen pid))
+                    path
+                    (recur (get id->parent-id pid)
+                           (conj path pid)
+                           (conj seen pid))))]
+       (reduce (fn [result pid]
+                 (let [parent (get result (get id->parent-id pid))]
+                   (assoc result pid
+                          (cond-> {:db/id pid}
+                            parent (assoc :block/parent parent)))))
+               chains
+               (rseq path))))
+   {}
+   parent-ids))
+
+(defn- row-parent-index
+  [rows]
+  (into {}
+        (keep (fn [[db-id _ _ parent-id]]
+                (when (integer? parent-id)
+                  [db-id parent-id])))
+        rows))
+
 (defn- order-block-summaries
-  [ids rows]
-  (let [blocks-by-uuid (into {}
+  [ids rows id->parent-id]
+  (let [chains (parent-chains id->parent-id (map #(nth % 3) rows))
+        blocks-by-uuid (into {}
                              (map (fn [[db-id block-uuid title parent-id]]
                                     [block-uuid
                                      (cond-> {:db/id db-id
                                               :block/uuid block-uuid
                                               :block/title title}
                                        (integer? parent-id)
-                                       (assoc :block/parent {:db/id parent-id}))]))
+                                       (assoc :block/parent (get chains parent-id)))]))
                              rows)]
     (vec (keep blocks-by-uuid ids))))
+
+(defn- <parent-index
+  [graph eids]
+  (letfn [(step [pending index]
+            (if (empty? pending)
+              (p/resolved index)
+              (p/let [rows (<q graph
+                               {}
+                               '[:find ?e ?parent
+                                 :in $ [?e ...]
+                                 :where [(get-else $ ?e :block/parent :none) ?parent]]
+                               (vec pending))
+                      index' (into index
+                                   (keep (fn [[eid parent-id]]
+                                           (when (integer? parent-id)
+                                             [eid parent-id])))
+                                   rows)
+                      next-ids (->> rows
+                                    (keep (fn [[_ parent-id]]
+                                            (when (and (integer? parent-id)
+                                                       (not (contains? index' parent-id)))
+                                              parent-id)))
+                                    set)]
+                (step next-ids index'))))]
+    (step (set (filter integer? eids)) {})))
 
 (defn <get-block-summaries
   [graph ids]
@@ -33,8 +92,13 @@
                        [?e :block/uuid ?uuid]
                        [?e :block/title ?title]
                        [(get-else $ ?e :block/parent :none) ?parent]]
-                     ids)]
-      (order-block-summaries ids rows))))
+                     ids)
+            seed-index (row-parent-index rows)
+            missing-parents (remove seed-index (vals seed-index))
+            extra-index (if (seq missing-parents)
+                          (<parent-index graph missing-parents)
+                          {})]
+      (order-block-summaries ids rows (merge seed-index extra-index)))))
 
 (defn <invoke-db-worker
   [api & args]

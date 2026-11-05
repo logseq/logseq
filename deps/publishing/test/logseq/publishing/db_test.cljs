@@ -12,7 +12,8 @@
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "page1"
                        :build/properties {:logseq.property/publishing-public? false}}
-                :blocks [{:block/title "b11"}
+                :blocks [{:block/title "b11"
+                          :build/children [{:block/title "b11 child"}]}
                          {:block/title "b12"}
                          {:block/title "![awesome.png](../assets/awesome_1648822509908_0.png"}]}
                {:page {:block/title "page2"}
@@ -21,6 +22,7 @@
                {:page {:block/title "page3"}
                 :blocks [{:block/title "b31"}]}])
         [filtered-db _assets] (publish-db/clean-export! @conn)
+        exported-titles (set (map :v (d/datoms filtered-db :avet :block/title)))
         exported-pages (->> (d/q '[:find (pull ?b [*])
                                    :where [?b :block/name]]
                                  filtered-db)
@@ -40,6 +42,9 @@
         "Doesn't contain private page")
     (is (= #{"page2" "page3"} exported-blocks)
         "Only exports blocks from public pages")
+    (is (contains? exported-titles "b21"))
+    (is (empty? (set/intersection #{"b11" "b11 child" "b12"} exported-titles))
+        "Doesn't export the text of a private page's blocks, children included")
     ;; TODO: Create assets to test this
     #_(is (= ["thumb-on-fire_1648822523866_0.PNG"] assets)
           "Only exports assets from public pages")))
