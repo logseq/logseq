@@ -1599,6 +1599,17 @@
   [db ops stage]
   (assert-no-stale-numeric-ids! db (some-> ops seq vec) stage))
 
+(defn- expand-create-page-history-ops
+  [db-before db-after forward-outliner-ops]
+  (when (seq forward-outliner-ops)
+    (let [{:keys [ops snapshots]}
+          (reduce #(expand-create-page-history db-before db-after %1 %2)
+                  {:titles {} :ops [] :snapshots []}
+                  forward-outliner-ops)]
+      ;; Final-state snapshots can reference entities created by later ops.
+      ;; Append them after creation and keep them out of inverse derivation.
+      (into ops snapshots))))
+
 (defn derive-history-outliner-ops
   [db-before db-after tx-data tx-meta]
   (let [canonical-forward-outliner-op-groups
@@ -1652,12 +1663,5 @@
         _ (assert-no-stale-numeric-ids! db-before inverse-outliner-ops :inverse-outliner-ops)]
     {:forward-outliner-ops (if (seq (:db-sync/forward-outliner-ops tx-meta))
                             forward-outliner-ops
-                            (when (seq forward-outliner-ops)
-                              (let [{:keys [ops snapshots]}
-                                    (reduce #(expand-create-page-history db-before db-after %1 %2)
-                                            {:titles {} :ops [] :snapshots []}
-                                            forward-outliner-ops)]
-                                ;; Final-state snapshots can reference entities created by later ops.
-                                ;; Append them after creation and keep them out of inverse derivation.
-                                (into ops snapshots))))
+                            (expand-create-page-history-ops db-before db-after forward-outliner-ops))
      :inverse-outliner-ops inverse-outliner-ops}))
