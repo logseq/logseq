@@ -1360,20 +1360,32 @@ let number_values_view ctx row : t =
         let selected = Signal.state context.Lui_ui.ui_scheduler [] in
         let options = Signal.state context.Lui_ui.ui_scheduler None in
         let available = ref [] in
+        let pending = ref false in
+        let run action =
+          if not !pending && alive () then (
+            pending := true;
+            let result = try action () with exn -> pending := false; raise exn in
+            ignore (let* () = Js.Promise.catch (fun error ->
+              pending := false;
+              Ui_services.log_error ("Number property picker failed", error);
+              Js.Promise.resolve ()) result in
+              pending := false;
+              Js.Promise.resolve ()))
+        in
         let current block = Option.value (D.getf (D.untag block) ident) ~default:W.Nil in
-        let load () =
+        let load ?(close_if_empty = false) () =
           let* values = D.property_values ~property_ident:ident ~block:(D.uuid_ref ctx.block_uuid) in
           if not (alive ()) then Js.Promise.resolve () else
           let* block = D.entity_by_uuid ctx.block_uuid in
           let* keys = reference_keys (current block) in
-          if alive () then (
+          if alive () then (if close_if_empty && keys = [] then close () else (
             available := W.elems values;
             Signal.set selected keys;
-            Signal.set options (Some !available));
+            Signal.set options (Some !available)));
           Js.Promise.resolve ()
         in
         let choose ~toggle value key =
-          ignore (let* block = D.entity_by_uuid ctx.block_uuid in
+          run (fun () -> let* block = D.entity_by_uuid ctx.block_uuid in
             let* keys = reference_keys (current block) in
             if not (alive ()) then Js.Promise.resolve () else
             let remove = toggle && Option.fold ~none:false
@@ -1381,10 +1393,7 @@ let number_values_view ctx row : t =
             let* _ = if remove then
               D.delete_property_value ~block_uuid:ctx.block_uuid ~ident ~value
               else D.set_block_property ~block_uuid:ctx.block_uuid ~ident ~value in
-            if remove && List.length keys = 1 then (
-              close ();
-              Js.Promise.resolve ())
-            else if alive () then load () else Js.Promise.resolve ())
+            if alive () then load ~close_if_empty:remove () else Js.Promise.resolve ())
         in
         let on_new text =
           match D.number_of_text text with
@@ -1401,7 +1410,7 @@ let number_values_view ctx row : t =
                 | None -> W.Float number, None in
               choose ~toggle:false value key
         in
-        ignore (load ());
+        run (fun () -> load ());
         (reactive (function
           | None -> column []
           | Some values ->
