@@ -381,6 +381,7 @@ jobs:
         working-directory: ./static
 
       - name: Build/Release Electron app
+        if: ${{ github.repository == 'logseq/logseq' }}
         shell: pwsh
         run: |
           $signCfg = @'
@@ -404,6 +405,11 @@ jobs:
           AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
           AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
           AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+
+      - name: Build unsigned Electron app
+        if: ${{ github.repository != 'logseq/logseq' }}
+        run: pnpm electron:make-unsigned
+        working-directory: ./static
 
       - name: Verify packaged embedding sidecar
         run: |
@@ -459,6 +465,7 @@ jobs:
         working-directory: ./static
 
       - name: Build/Release Electron app
+        if: ${{ github.repository == 'logseq/logseq' }}
         shell: pwsh
         run: |
           $signCfg = @'
@@ -482,6 +489,11 @@ jobs:
           AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
           AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
           AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+
+      - name: Build unsigned Electron app for arm64
+        if: ${{ github.repository != 'logseq/logseq' }}
+        run: node ../scripts/electron-builder-unsigned.mjs --win nsis zip --arm64
+        working-directory: ./static
 
       - name: Verify packaged embedding sidecar
         run: |
