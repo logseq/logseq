@@ -135,7 +135,7 @@ let editor_font_row ?(density = `regular) () =
     font_button ~key:("font-" ^ t) ~label ~font_family ~active:(font.S.ftype = t)
       ~on_click:(fun () -> S.set_editor_font_type t)
   in
-  C.it_row ~key:"font" ~density ~label:(T.t "settings.general/editor-font")
+  C.it_row ~key:"font" ~density ~cross:`center ~label:(T.t "settings.general/editor-font")
     ~min_height:(if density=`compact then 72 else 80)
     [ row ~key:"font-btns" ~gap:8 ~min_width:0 ~flex_wrap:`wrap
         [ fb "default" "Default" "var(--ls-font-family, Inter)"
