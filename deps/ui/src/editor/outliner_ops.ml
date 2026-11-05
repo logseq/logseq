@@ -758,10 +758,7 @@ let prefetch_anchor_refs_for ~current repo (blocks : Model.block list) :
   let props =
     Wire.Map
       [ ( Wire.Keyword "properties"
-        , Wire.Array
-            [ Wire.Keyword "block/uuid"; Wire.Keyword "block/title"
-            ; Wire.Keyword "block/name"
-            ; Wire.Keyword "logseq.property.node/display-type" ]) ]
+        , Wire.Array Render_inline.ref_meta_properties) ]
   in
   let reqs =
     List.map
