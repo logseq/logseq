@@ -233,8 +233,9 @@ let accent_row ~modal =
         ~desc:
           (if modal then []
            else
-             [ row ~key:"acc-sp" 
-                 [ C.kbd_seq ~key:"acc-k" ~binding:"c c" [ "c"; "c" ] ]
+             [ Ui_components.with_props [Ui_components.Prop.padding_left 24]
+                 (row ~key:"acc-sp"
+                    [ C.kbd_seq ~key:"acc-k" ~binding:"c c" [ "c"; "c" ] ])
              ])
         ()
     ; Ui_components.with_props [Ui_components.Prop.opacity 0.5]

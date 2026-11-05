@@ -168,17 +168,20 @@ let it_row ~key ~label ?(density = `regular) ?min_height ?(cross = `start) child
 let edit_link_row ~key ~label ~button ~href ?(min_height = 28) () =
   action_row ~key ~label ~min_height
     ~actions:
-      [ Ui_components.with_props
-          [ Ui_components.Prop.font_size "0.875rem"
-          ; Ui_components.Prop.line_height "1.25rem" ]
-          (link ~key:(key ^ "-a")
-             ~style_class:( btn_cls ~variant:`Solid ~size:`Sm ())
-             ~url:href ~target:`self_ ~text:button
-             ~background:"hsl(var(--primary) / 0.9)"
-             ~foreground:"hsl(var(--primary-foreground))"
-             ~height:28 ~padding_horizontal:12 ~padding_vertical:4
-             ~corner_radius:4
-             ~data_attrs:[ "style", "text-decoration:none" ]
-             [])
+      [ row ~key:(key ^ "-link-wrap") ~cross:`center
+          [ Ui_components.with_props
+              [ Ui_components.Prop.font_size "0.875rem"
+              ; Ui_components.Prop.font_weight 500
+              ; Ui_components.Prop.line_height "1.25rem" ]
+              (link ~key:(key ^ "-a")
+                 ~style_class:( btn_cls ~variant:`Solid ~size:`Sm ())
+                 ~url:href ~target:`self_ ~text:button
+                 ~background:"hsl(var(--primary) / 0.9)"
+                 ~foreground:"hsl(var(--primary-foreground))"
+                 ~height:28 ~padding_horizontal:12 ~padding_vertical:4
+                 ~corner_radius:4
+                 ~data_attrs:[ "style", "text-decoration:none" ]
+                 [])
+          ]
       ]
     ()
