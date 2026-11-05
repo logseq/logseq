@@ -189,8 +189,13 @@
                    (drop-while simplified-property? lines)
 
                    :else
-                   (cons (first lines)
-                         (drop-while simplified-property? (rest lines))))]
+                   (let [;; A table spans several lines and has its properties after them
+                         table-line? #(string/starts-with? (string/triml %) "|")
+                         head-count (if (table-line? (first lines))
+                                      (inc (count (take-while table-line? (rest lines))))
+                                      1)]
+                     (concat (take head-count lines)
+                             (drop-while simplified-property? (drop head-count lines)))))]
        (string/join "\n" lines))
 
      :else

@@ -457,6 +457,200 @@
     (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
         "Imported graph validates")))
 
+(deftest-async import-table-in-block
+  (p/let [file (write-temp-graph-file
+                 "pages/table.md"
+                 (str "- #+BEGIN_QUOTE\n"
+                      "  Event handlers were renamed:\n"
+                      "  \n"
+                      "  |Old event handler|New event handler|Note|\n"
+                      "  |:-:|:-:|:-:|\n"
+                      "  |OnBoot|OnStart||\n"
+                      "  |PreWrite|-|**Deprecated**|\n"
+                      "  #+END_QUOTE\n"))
+          conn (db-test/create-conn)
+          _ (db-pipeline/add-listener conn)
+          _ (import-files-to-db [file] conn {})
+          title (:block/title (db-test/find-block-by-content @conn #"Event handlers were renamed"))]
+    (is (some? title) "Quote with a table is imported")
+    (is (= ["Event handlers were renamed:"
+            "| Old event handler | New event handler | Note |"
+            "| --- | --- | --- |"
+            "| OnBoot | OnStart |  |"
+            "| PreWrite | - | **Deprecated** |"]
+           (remove string/blank? (string/split-lines title)))
+        "Table is imported as a markdown table with one row per line")
+    (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+        "Imported graph validates")))
+
+(deftest-async import-properties-after-planning-line-are-not-in-title
+  (p/let [file (write-temp-graph-file
+                "pages/planned.md"
+                (str "- planned block\n"
+                     "  SCHEDULED: <2026-01-05 Mon>\n"
+                     "  DEADLINE: <2026-01-09 Fri>\n"
+                     "  kind:: v1\n"
+                     "- plain block\n"
+                     "  kind:: v2\n"))
+          conn (db-test/create-conn)
+          _ (db-pipeline/add-listener conn)
+          _ (import-files-to-db [file] conn {})
+          planned (db-test/find-block-by-content @conn #"planned block")
+          plain (db-test/find-block-by-content @conn #"plain block")]
+    (is (= "planned block" (:block/title planned))
+        "Properties after planning lines are not part of the title")
+    (is (= "v1" (some-> (:user.property/kind planned) db-property/property-value-content))
+        "The property after the planning lines is imported")
+    (is (= "plain block" (:block/title plain)))
+    (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+        "Imported graph validates")))
+
+(deftest-async import-property-changing-from-boolean-to-text
+  (p/let [dir (write-temp-file-graph
+               {"logseq/config.edn" "{:meta/version 1 :file/name-format :triple-lowbar}\n"
+                "pages/a.md" "- block a\n  rating:: true\n"
+                "pages/b.md" "- block b\n  rating:: text1\n"
+                "pages/ns___c.md" "rating:: false\n\n- block c\n"})
+          conn (db-test/create-conn)
+          _ (import-file-graph-to-db dir conn {})
+          value-of (fn [block-title]
+                     (some->> (db-test/find-block-by-content @conn block-title)
+                              :user.property/rating
+                              (d/entity @conn)
+                              db-property/property-value-content))]
+    (is (some? (db-test/find-block-by-content @conn #"block b"))
+        "The file that uses the property as text is imported")
+    (is (= "text1" (value-of "block b")))
+    (is (= "true" (value-of "block a"))
+        "The earlier boolean value becomes text")
+    (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+        "Imported graph validates")))
+
+(deftest-async import-page-property-changing-from-boolean-to-text
+  (p/let [dir (write-temp-file-graph
+               {"logseq/config.edn" "{:meta/version 1 :file/name-format :triple-lowbar}\n"
+                "pages/ns___c.md" "rating:: true\n\n- block c\n"
+                "pages/z.md" "- block z\n  rating:: text1\n"})
+          conn (db-test/create-conn)
+          _ (import-file-graph-to-db dir conn {})]
+    (is (some? (db-test/find-block-by-content @conn #"block z"))
+        "The file that uses the property as text is imported")
+    (is (= "true"
+           (some->> (db-test/find-page-by-title @conn "c")
+                    :user.property/rating
+                    (d/entity @conn)
+                    db-property/property-value-content))
+        "The earlier boolean page property becomes text")
+    (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+        "Imported graph validates")))
+
+(deftest-async import-block-ref-in-property-value
+  (let [target-uuid #uuid "30000000-0000-4000-8000-000000000001"]
+    (p/let [dir (write-temp-file-graph
+                 {"logseq/config.edn" "{:meta/version 1 :file/name-format :triple-lowbar}\n"
+                  "pages/y.md" (str "- target block\n  id:: " target-uuid "\n")
+                  "pages/z.md" (str "- source block\n  rating:: ((" target-uuid "))\n"
+                                   "- missing target block\n  note:: ((30000000-0000-4000-8000-0000000000ff))\n")})
+            conn (db-test/create-conn)
+            _ (import-file-graph-to-db dir conn {})
+            source-block (db-test/find-block-by-content @conn "source block")
+            value (some->> source-block :user.property/rating :db/id (d/entity @conn))]
+      (is (some? value) "The property value is imported")
+      (is (= (page-ref/->page-ref target-uuid) (:block/title value))
+          "A block ref in a property value is a ref like in a title")
+      (is (contains? (set (map :block/uuid (:block/refs value))) target-uuid)
+          "The property value refs the block")
+      (is (some? (db-test/find-block-by-content @conn "missing target block"))
+          "A block ref to a block that doesn't exist doesn't fail the import")
+      (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+          "Imported graph validates"))))
+
+(deftest-async import-title-property-of-a-block-does-not-rename-the-page
+  (p/let [dir (write-temp-file-graph
+               {"logseq/config.edn" "{:meta/version 1 :file/name-format :triple-lowbar}\n"
+                "pages/Pg.md" "- block one\n- block two\n  title:: block title\n"
+                "pages/Titled.md" "title:: Real Title\n\n- block three\n  title:: other title\n"
+                "journals/2026_01_06.md" "- journal one\n- journal two\n  title:: journal block title\n"})
+          conn (db-test/create-conn)
+          _ (import-file-graph-to-db dir conn {})]
+    (is (some? (db-test/find-page-by-title @conn "Pg"))
+        "A title property on a block doesn't rename the page")
+    (is (nil? (db-test/find-page-by-title @conn "block title")))
+    (is (some? (db-test/find-page-by-title @conn "Real Title"))
+        "A title property of the page still renames it")
+    (is (some? (db-test/find-page-by-title @conn "Jan 6th, 2026"))
+        "A title property on a block doesn't rename a journal")
+    (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+        "Imported graph validates")))
+
+(deftest-async import-namespaced-tag-of-a-namespace-page-convert-all-tags
+  (p/let [dir (write-temp-file-graph
+               {"logseq/config.edn" "{:meta/version 1 :file/name-format :triple-lowbar}\n"
+                "pages/ns___a___b.md" "- x1\n"
+                "pages/other.md" "- o1 #ns/a\n"})
+          conn (db-test/create-conn)
+          _ (import-file-graph-to-db dir conn {:convert-all-tags? true})
+          db @conn
+          pages-named-a (d/q '[:find [?e ...] :where [?e :block/name "a"]] db)
+          b-page (db-test/find-page-by-title db "b")
+          tagged-block (db-test/find-block-by-content db #"^o1")]
+    (is (= 1 (count pages-named-a))
+        "The namespace page and the tag are the same node")
+    (is (= (set pages-named-a) #{(:db/id (:block/parent (d/entity db (:db/id b-page))))})
+        "The child of the namespace page has the tag as its parent")
+    (is (= (set pages-named-a) (set (map :db/id (:block/tags (d/entity db (:db/id tagged-block))))))
+        "The block is tagged with that node")
+    (is (empty? (map :entity (:errors (db-validate/validate-local-db! db))))
+        "Imported graph validates")))
+
+(deftest-async import-page-template-property
+  (p/let [file (write-temp-graph-file "pages/t.md" "template:: tt\n\n- first block\n")
+          conn (db-test/create-conn)
+          _ (db-pipeline/add-listener conn)
+          _ (import-files-to-db [file] conn {})]
+    (is (some? (db-test/find-block-by-content @conn #"first block"))
+        "A page with a template property is imported")
+    (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+        "Imported graph validates")))
+
+(deftest-async import-tag-and-property-of-same-name-when-the-page-has-a-file-convert-all-tags
+  ;; "scheduled" is the name of a built-in property, "topic" isn't
+  (p/all
+   (for [name' ["scheduled" "topic"]
+         files [{(str "pages/" name' ".md") (str "- own page block\n  tags:: [[" name' "]]\n- property block\n  " name' ":: true\n")}
+                {"pages/mixed.md" (str "- tagged block #" name' "\n- property block\n  " name' ":: true\n")}]]
+     (p/let [dir (write-temp-file-graph
+                  (assoc files "logseq/config.edn" "{:meta/version 1 :file/name-format :triple-lowbar}\n"))
+             conn (db-test/create-conn)
+             _ (import-file-graph-to-db dir conn {:convert-all-tags? true})
+             db @conn]
+       (is (some? (db-test/find-block-by-content db #"property block"))
+           (str "Block with property " name' " is imported"))
+       (is (empty? (map :entity (:errors (db-validate/validate-local-db! db))))
+           (str "Imported graph validates with a tag and property named " name'))
+       (is (not-any? #(and (ldb/class? %) (ldb/property? %))
+                     (map #(d/entity db %) (d/q '[:find [?e ...] :where [?e :block/name]] db)))
+           (str "No entity is both a class and a property for " name'))))))
+
+(deftest-async import-tag-and-property-of-same-name-when-an-earlier-file-created-the-page-convert-all-tags
+  (p/all
+   (for [name' ["scheduled"]]
+     (p/let [dir (write-temp-file-graph
+                  {"logseq/config.edn" "{:meta/version 1 :file/name-format :triple-lowbar}\n"
+                   ;; The first file creates the page of the name by referencing it
+                   "pages/a_first.md" (str "- first block\n  rating:: [[" name' "]]\n")
+                   (str "pages/" name' ".md") (str "kind:: a\n\n- own page block\n  tags:: [[" name' "]]\n- property block\n  " name' ":: true\n")})
+             conn (db-test/create-conn)
+             _ (import-file-graph-to-db dir conn {:convert-all-tags? true})
+             db @conn]
+       (is (some? (db-test/find-block-by-content db #"property block"))
+           (str "Block with property " name' " is imported"))
+       (is (empty? (map :entity (:errors (db-validate/validate-local-db! db))))
+           (str "Imported graph validates with a tag and property named " name'))
+       (is (not-any? #(and (ldb/class? %) (ldb/property? %))
+                     (map #(d/entity db %) (d/q '[:find [?e ...] :where [?e :block/name]] db)))
+           (str "No entity is both a class and a property for " name'))))))
+
 (deftest-async import-page-with-property-and-tag-of-same-name-convert-all-tags
   (p/let [file (write-temp-graph-file
                  "pages/source.md"
@@ -1479,6 +1673,80 @@ abc
               "Imported graph validates"))
         (p/finally (fn [_]
                      (set! (.-write (.-stderr js/process)) original-stderr-write))))))
+
+(deftest-async import-zotero-linked-file-with-absolute-path
+  (let [dir (fs/mkdtempSync (node-path/join (os/tmpdir) "logseq-zotero-linked-"))
+        base-dir (node-path/join dir "base")
+        zotero-dir (node-path/join dir "zotero")
+        linked-pdf (node-path/join dir "elsewhere" "Foo.pdf")
+        graph-dir (node-path/join dir "graph")
+        config (pr-str {:meta/version 1
+                        :file/name-format :triple-lowbar
+                        :zotero/settings-v2 {"default" {:zotero-data-directory zotero-dir
+                                                        :zotero-linked-attachment-base-directory base-dir}}})]
+    (fs/mkdirSync base-dir #js {:recursive true})
+    (fs/mkdirSync (node-path/dirname linked-pdf) #js {:recursive true})
+    (fs/writeFileSync linked-pdf "%PDF-1.1\n%%EOF\n")
+    (fs/mkdirSync (node-path/join graph-dir "logseq") #js {:recursive true})
+    (fs/mkdirSync (node-path/join graph-dir "pages") #js {:recursive true})
+    (fs/writeFileSync (node-path/join graph-dir "logseq/config.edn") config)
+    (fs/writeFileSync (node-path/join graph-dir "pages/Foo.md")
+                      (str "- [Foo.pdf](zotero://select/library/items/ABCD1234) {{zotero-linked-file " (pr-str linked-pdf) "}}\n"))
+    (p/let [conn (db-test/create-conn)
+            _ (import-file-graph-to-db graph-dir conn {})
+            asset (db-test/find-block-by-content @conn "Foo")]
+      (is (some? asset)
+          "A linked file given as an absolute path is imported as an Asset")
+      (is (= {:logseq.property.asset/external-url "zotero://select/library/items/ABCD1234"
+              :logseq.property.asset/external-file-name (str "zotero-link://" linked-pdf)}
+             (select-keys (db-test/readable-properties asset)
+                          [:logseq.property.asset/external-url :logseq.property.asset/external-file-name]))
+          "The Asset points at the absolute path, not at the base directory joined with it")
+      (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+          "Imported graph validates"))))
+
+(deftest-async import-zotero-pdf-annotations-when-the-pdf-is-missing
+  (let [annotation-id #uuid "cccccccc-cccc-cccc-cccc-cccccccccccc"
+        dir (fs/mkdtempSync (node-path/join (os/tmpdir) "logseq-zotero-missing-"))
+        graph-dir (node-path/join dir "graph")
+        config (pr-str {:meta/version 1
+                        :file/name-format :triple-lowbar
+                        :zotero/settings-v2 {"default" {:zotero-data-directory (node-path/join dir "zotero")
+                                                        :zotero-linked-attachment-base-directory (node-path/join dir "base")}}})]
+    (doseq [[relative-path content]
+            {"logseq/config.edn" config
+             "pages/Paper.md" "- [Paper.pdf](zotero://select/library/items/KEY12345) {{zotero-linked-file \"attachments:Paper.pdf\"}}\n"
+             "pages/Notes.md" (str "- see ((" annotation-id "))\n")
+             "pages/hls__Paper.md" (str "file:: [Paper.pdf](zotero://select/library/items/KEY12345)\n\n"
+                                      "- Highlighted text\n"
+                                      "  ls-type:: annotation\n"
+                                      "  hl-page:: 3\n"
+                                      "  hl-color:: yellow\n"
+                                      "  id:: " annotation-id "\n")
+             "assets/Paper.edn" (str "{:highlights [{:id #uuid \"" annotation-id "\","
+                                     " :page 3,"
+                                     " :position {:bounding {:x1 1 :y1 2 :x2 3 :y2 4 :width 10 :height 20},"
+                                     "            :rects (),"
+                                     "            :page 3},"
+                                     " :content {:text \"Highlighted text\"},"
+                                     " :properties {:color \"yellow\"}}]}")}]
+      (let [file-path (node-path/join graph-dir relative-path)]
+        (fs/mkdirSync (node-path/dirname file-path) #js {:recursive true})
+        (fs/writeFileSync file-path content)))
+    (p/let [conn (db-test/create-conn)
+            _ (import-file-graph-to-db graph-dir conn {})
+            asset (db-test/find-block-by-content @conn "Paper")
+            annotation (d/entity @conn [:block/uuid annotation-id])
+            notes-block (db-test/find-block-by-content @conn #"^see ")]
+      (is (some? asset)
+          "A Zotero PDF that is not on disk is still imported as an external Asset")
+      (is (= "Highlighted text" (:block/title annotation))
+          "The annotation of the missing PDF is imported")
+      (is (= (str "see " (page-ref/->page-ref annotation-id))
+             (:block/title notes-block))
+          "A block reference to the annotation still resolves")
+      (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+          "Imported graph validates"))))
 
 (deftest-async import-asset-links-in-page-and-block-property-values
   (let [pdf-bytes "%PDF-1.1\n%%EOF\n"
