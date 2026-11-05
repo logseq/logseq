@@ -3406,9 +3406,11 @@
                   (error-str error))
          path (or path (:path data) (gobj/get error "logseqImportPath"))
          block (or block (:block data) (:block/title data))
+         block-title (if (map? block) (:block/title block) block)
+         display-block? (and (string? block-title) (not (string/blank? block-title)))
          location (cond-> (or path "")
-                    (and (string? block) (not (string/blank? block)))
-                    (str " (block " (pr-str block) ")")
+                    display-block?
+                    (str " (block " (pr-str block-title) ")")
                     line
                     (str ":" line))
          message (if (string/blank? location)
@@ -3420,7 +3422,7 @@
                                (cond-> {:code :file-graph-import/file-failed
                                         :reason reason}
                                  (and (string? path) (not (string/blank? path))) (assoc :path path)
-                                 (some? block) (assoc :block (str block))
+                                 display-block? (assoc :block block-title)
                                  (some? line) (assoc :line line)
                                  (:invalid-properties? data) (assoc :invalid-properties? true))
                                error)]
