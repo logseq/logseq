@@ -281,6 +281,31 @@ let closed_values_for_owner ~block_uuid values =
   let* exclusions = exclusions_for_tags tag_ids in
   Js.Promise.resolve (List.filter (fun choice -> choice_visible choice tag_ids exclusions) values)
 
+let choice_selected value choice =
+  List.exists (fun current ->
+    match D.untag current with
+    | W.Int id -> D.entity_id_of choice = Some id
+    | W.Keyword ident -> D.getk (D.untag choice) "db/ident" = Some ident
+    | current ->
+        (match D.entity_id_of current, D.entity_id_of choice with
+         | Some a, Some b -> a = b
+         | _ -> current = choice)) (D.value_elems value)
+
+let choice_key choice =
+  "entity-" ^ string_of_int (Option.get (D.entity_id_of choice))
+
+let reference_keys value =
+  let* ids = Js.Promise.all (Array.of_list (List.filter_map (fun value ->
+    if D.empty_placeholder_p value then None
+    else Some (match D.untag value with
+      | W.Int id -> Js.Promise.resolve id
+      | W.Keyword ident ->
+          let* entity = D.entity (W.List [W.Keyword "db/ident"; W.Keyword ident]) in
+          Js.Promise.resolve (Option.get (D.entity_id_of entity))
+      | entity -> Js.Promise.resolve (Option.get (D.entity_id_of entity))))
+    (D.value_elems value))) in
+  Js.Promise.resolve (Array.to_list (Array.map (fun id -> "entity-" ^ string_of_int id) ids))
+
 (* node-type value pickers: initial items come from
    get-property-node-selector-data, filtering re-queries the worker via
    search-blocks (cljs property-value-select-node). on_pick gets the
@@ -398,7 +423,7 @@ let new_node ctx row ~close text =
 
 (* a picker dropdown anchored under the enclosing stack: fetch-backed
    item source + "New option" *)
-let picker_dropdown ~open_ ~placeholder ~new_option ~initial ~on_search
+let picker_dropdown ?selected_keys ~open_ ~placeholder ~new_option ~initial ~on_search
     : t =
  fun context parent ->
   let sched = context.Lui_ui.ui_scheduler in
@@ -421,7 +446,7 @@ let picker_dropdown ~open_ ~placeholder ~new_option ~initial ~on_search
             match m with
         | None -> column ~gap:2 []
             | Some (items, on_search) ->
-                Sel.view ~placeholder ?new_option
+                Sel.view ~placeholder ?new_option ?selected_keys
                   ~on_search:(Some on_search) items)
          (Signal.value items_st)
      ])
@@ -1098,7 +1123,9 @@ let closed_value_view ~positioned ~table_view ctx row : t =
   let sched = context.Lui_ui.ui_scheduler in
   let open_ = Signal.state sched false in
   let value = D.row_value row in
+  let many = D.row_many row in
   let ident = D.row_ident row |> Option.value ~default:"" in
+  let selected = Signal.state sched [] in
   let items_st : Sel.item list option Signal.state =
     Signal.state sched None
   in
@@ -1118,7 +1145,8 @@ let closed_value_view ~positioned ~table_view ctx row : t =
      [ Ui_components.with_props
          [ Ui_components.Prop.hover_background "var(--lx-gray-03)"
          ; Ui_components.Prop.hover_foreground "inherit" ]
-         (Ui_components.button ~variant:`ghost ~label ~height:24 ~min_height:24
+         (Ui_components.button ~variant:`ghost ~label
+            ?height:(if many then None else Some 24) ~min_height:24
             ~padding_horizontal:0 ~padding_vertical:0 ~main:`start
             ~style_class:"pv-closed-value"
          ~on_press:(fun _ ->
@@ -1128,6 +1156,13 @@ let closed_value_view ~positioned ~table_view ctx row : t =
              Runtime.signal_set open_ true;
              block_tag_ids ctx (fun tag_ids ->
                gather_exclusions tag_ids (fun exclusions ->
+                   ignore (let* block = D.entity_by_uuid ctx.block_uuid in
+                   let current = Option.value (D.getf (D.untag block) ident) ~default:W.Nil in
+                   let all_choices = D.row_closed_values row in
+                   let selected_keys value = List.filter_map (fun choice ->
+                     if choice_selected value choice then Some (choice_key choice) else None)
+                     all_choices in
+                   Runtime.signal_set selected (selected_keys current);
                    let items =
                      List.filter_map
                        (fun c ->
@@ -1138,24 +1173,44 @@ let closed_value_view ~positioned ~table_view ctx row : t =
                              match D.entity_id_of c with
                              | Some id ->
                                  Some
-                                   (Sel.item ~key:("entity-" ^ string_of_int id) ?icon:(closed_value_icon_id c) ~checked:(D.entity_id_of value = Some id) title (fun () ->
-                                        set_scalar ctx ~ident
-                                          ~value:(W.Int id);
-                                        close ()))
+                                   (Sel.item ~key:(choice_key c) ?icon:(closed_value_icon_id c) title (fun () ->
+                                      ignore (let* block = D.entity_by_uuid ctx.block_uuid in
+                                        let current = Option.value (D.getf (D.untag block) ident) ~default:W.Nil in
+                                        let remove = many && choice_selected current c in
+                                        let* _ =
+                                          if remove then D.delete_property_value
+                                            ~block_uuid:ctx.block_uuid ~ident ~value:(W.Int id)
+                                          else D.set_block_property ~block_uuid:ctx.block_uuid
+                                            ~ident ~value:(W.Int id) in
+                                        let keys = selected_keys current in
+                                        let key = choice_key c in
+                                        let keys = if remove then List.filter ((<>) key) keys
+                                          else if many then key :: List.filter ((<>) key) keys else [key] in
+                                        Runtime.signal_set selected keys;
+                                        S.refresh_all ();
+                                        if not many || keys = [] then close ();
+                                        Js.Promise.resolve ())))
                              | None -> None))
                        (D.row_closed_values row)
                    in
-                   let items = if D.value_empty_p value then items else items @ [ Sel.item ~icon:"x" (I18n.t "property/clear-value")
+                   let items = if many || D.value_empty_p current then items else items @ [ Sel.item ~icon:"x" (I18n.t "property/clear-value")
                        (fun () ->
                           ignore (let* _ = D.remove_block_property ~block_uuid:ctx.block_uuid ~ident in
                                   S.refresh_all ();
                                   Js.Promise.resolve ());
                           close ()) ] in
                    if Runtime.signal_get open_ then
-                     Runtime.signal_set items_st (Some items)))))
-         [ Lui_elements.row ~gap:4 ~cross:`center
-             ((match icon_id with None -> [] | Some id -> [ Icons.icon id ])
-              @ if show_text then [ text ~value:display [] ] else []) ])
+                     Runtime.signal_set items_st (Some items);
+                   Js.Promise.resolve ())))))
+         [ Lui_elements.row ~gap:4 ~cross:`center ~min_width:0 ~flex_wrap:`wrap
+             (if many && not (D.value_empty_p value) then
+                List.concat_map (fun (index, item) ->
+                  (if index = 0 then [] else [text ~value:"," ~foreground:"var(--lx-gray-09)" []])
+                  @ (match closed_value_icon_id item with None -> [] | Some id -> [Icons.icon id])
+                  @ [text ~value:(D.value_display item) []])
+                  (List.mapi (fun index item -> index, item) (D.value_elems value))
+              else (match icon_id with None -> [] | Some id -> [ Icons.icon id ])
+                @ if show_text then [ text ~value:display [] ] else []) ])
      ; if_ ~test:(Signal.value open_)
          (closed_value_popup ~on_dismiss:(fun _ -> close ())
             (reactive
@@ -1164,7 +1219,7 @@ let closed_value_view ~positioned ~table_view ctx row : t =
                    match m with
                | None -> column ~gap:2 []
                    | Some items ->
-                       Sel.view ~compact:true ~show_empty_result:false
+                       Sel.view ~compact:true ~show_empty_result:false ~selected_keys:(Signal.value selected)
                          ~placeholder:
                            (I18n.t1 "property/set-placeholder"
                               (D.row_title row)) items)
@@ -1178,41 +1233,55 @@ let node_view ctx row : t =
   let sched = context.Lui_ui.ui_scheduler in
   let open_ = Signal.state sched false in
   let ident = D.row_ident row |> Option.value ~default:"" in
+  let many = D.row_many row in
+  let selected = Signal.state sched [] in
   let close () = Runtime.signal_set open_ false in
   let chips = ref_chips row in
   (column ~gap:2 ~grow:1.0 ~min_width:0
      [ Lui_elements.row ~gap:4 ~cross:`center ~min_width:0 ~flex_wrap:`wrap
-         (chips
-         @ [ Ui_components.button ~variant:`ghost ~icon:(`app "plus") ~text:""
+         ((if many then chips else [])
+         @ [ Ui_components.button ~variant:`ghost
+               ?icon:(if many then Some (`app "plus") else None)
                ~label:(I18n.t "property/select-property-placeholder")
+               ~main:`start ~min_height:24 ~min_width:24
                ~on_press:(fun _ -> Runtime.signal_set open_ true)
-               []
+               (if many then [] else if chips = [] then
+                 [text ~value:(I18n.t "ui/empty") ~foreground:"var(--lx-gray-09)" []]
+                else chips)
            ])
      ; if_ ~test:(Signal.value open_)
          (fun context' parent' ->
            let block = D.uuid_ref ctx.block_uuid in
            let prop = D.row_prop row in
            let on_pick id =
-             let existing =
-               List.filter_map D.entity_id_of
-                 (D.value_elems (D.row_value row))
-             in
-             if List.mem id existing then (
-               D.delete_property_value ~block_uuid:ctx.block_uuid ~ident
-                 ~value:(W.Int id)
-               |> ignore;
-               S.refresh_all ())
-             else set_scalar ctx ~ident ~value:(W.Int id);
-             close ()
+             ignore (let* block = D.entity_by_uuid ctx.block_uuid in
+               let current = Option.value (D.getf (D.untag block) ident) ~default:W.Nil in
+               let* keys = reference_keys current in
+               let key = "entity-" ^ string_of_int id in
+      let remove = many && List.mem key keys in
+               let* _ = if remove then
+                 D.delete_property_value ~block_uuid:ctx.block_uuid ~ident ~value:(W.Int id)
+                 else D.set_block_property ~block_uuid:ctx.block_uuid ~ident ~value:(W.Int id) in
+               Runtime.signal_set selected (if remove then List.filter ((<>) key) keys
+                 else if many then key :: keys else [key]);
+               S.refresh_all ();
+               if not many then close ();
+               Js.Promise.resolve ())
            in
            let initial, on_search =
              node_items_source ~block ~prop ~on_pick
            in
-           (picker_dropdown ~open_
+           let initial =
+             let* current = D.entity_by_uuid ctx.block_uuid in
+             let* keys = reference_keys (Option.value (D.getf (D.untag current) ident) ~default:W.Nil) in
+             Runtime.signal_set selected keys;
+             initial
+           in
+           (picker_dropdown ~selected_keys:(Signal.value selected) ~open_
               ~placeholder:
                 (I18n.t1 "property/set-placeholder" (D.row_title row))
               ~new_option:(if List.mem (D.row_type row) ["node";"class"] then
-                Some (new_node ctx row ~close) else None)
+                Some (new_node ctx row ~close:(if many then (fun () -> ()) else close)) else None)
               ~initial ~on_search)
              context' parent')
      ])
