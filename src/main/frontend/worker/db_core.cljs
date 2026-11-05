@@ -883,7 +883,7 @@
 
             (db-listener/listen-db-changes! repo conn)
 
-            nil))))))
+            (boolean initial-tx-report)))))))
 
 
 (defn- <list-all-dbs
@@ -956,23 +956,31 @@
    (when close-other-db?
      (close-other-dbs! repo))
    (when @shared-service/*master-client?
-     (<create-or-open-db! repo (dissoc opts :close-other-db?)))
-   nil))
+     (<create-or-open-db! repo (dissoc opts :close-other-db?)))))
 
 (def-thread-api :thread-api/create-or-open-db
   [repo opts]
   (when-not (graph-dir/same-repo? repo (worker-state/get-current-repo)) ; graph switched
     (reset! worker-state/*deleted-block-uuid->db-id {}))
-  (p/let [_ (start-db! repo opts)
+  (p/let [created? (start-db! repo opts)
+          _ (when (and (:create-only? opts) (not created?))
+              (throw (ex-info "Graph already exists" {:code :graph-already-exists :repo repo})))
           conn (or (worker-state/get-datascript-conn repo)
                    (throw (ex-info "Missing worker graph connection"
                                    {:type :db/missing-connection
                                     :repo repo})))]
-    {:schema (:schema @conn)}))
+    (cond-> {:schema (:schema @conn)}
+      (:create-only? opts)
+      (assoc :graph-uuid (:kv/value (d/entity @conn :logseq.kv/local-graph-uuid))))))
 
 (def-thread-api :thread-api/unsafe-unlink-db
-  [repo]
+  [repo & [expected-graph-uuid]]
   (p/let [pool (<get-opfs-pool repo)
+          _ (when expected-graph-uuid
+              (let [conn (worker-state/get-datascript-conn repo)
+                    actual-uuid (some-> conn deref (d/entity :logseq.kv/local-graph-uuid) :kv/value)]
+                (when-not (= expected-graph-uuid actual-uuid)
+                  (throw (ex-info "Graph identity changed" {:code :graph-not-exists :repo repo})))))
           _ (sync-crypt/cancel-ui-requests! {:reason :unsafe-unlink-db
                                              :repo repo})
           _ (close-db! repo)

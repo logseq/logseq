@@ -40,9 +40,13 @@
                   {:name (common-config/canonicalize-db-version-repo repo-name)})))))))
 
 (defn delete-graph!
-  [graph]
-  (if (util/electron?)
-    (p/do
-      (persist-db/<invalidate-remote-repo! graph "deleting")
-      (ipc/ipc "deleteGraph" graph))
-    (persist-db/<unsafe-delete graph)))
+  ([graph] (delete-graph! graph nil))
+  ([graph {:keys [generation graph-uuid] :as ownership}]
+   (cond
+     generation (ipc/ipc "deleteGraph" graph generation)
+     graph-uuid (persist-db/<delete-created-browser-graph! graph graph-uuid)
+     ownership (p/rejected (ex-info "Cannot verify ownership of the graph" {:repo graph}))
+     (util/electron?) (p/do
+                       (persist-db/<invalidate-remote-repo! graph "deleting")
+                       (ipc/ipc "deleteGraph" graph))
+     :else (persist-db/<unsafe-delete graph))))

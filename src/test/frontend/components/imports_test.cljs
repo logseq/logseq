@@ -186,8 +186,13 @@
                     (fn [name opts]
                       (swap! calls conj [:new-db name opts])
                       (let [repo (str config/db-version-prefix name)]
+                        (when-let [on-created (:on-created opts)] (on-created {:url repo}))
                         (swap! ui assoc :git/current-repo repo)
                         (p/resolved repo)))
+                    repo-handler/remove-repo!
+                    (fn [{:keys [url]} & _]
+                      (swap! calls conj [:remove-repo url])
+                      (p/resolved nil))
                     state/<invoke-db-worker
                     (fn [api & args]
                       (swap! calls conj (into [api] args))
@@ -288,6 +293,7 @@
                (p/then (fn [_]
                          (is (not-any? #(= :restore (first %)) @calls)
                              "Failed import does not restore the incomplete graph.")
+                         (is (some #{[:remove-repo "logseq_db_Broken"]} @calls))
                          (is (some #{[:event [:graph/switch previous-repo {:persist? false}]]} @calls)
                              "Failed import switches back to the previous graph.")
                          (is (some #{[:dialog-close :import-indicator]} @calls))
