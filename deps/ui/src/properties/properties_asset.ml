@@ -419,7 +419,25 @@ let picker ~block_uuids ~property ~refresh ~on_close : t =
 
 let view ~block_uuid ~refresh property_row : t =
  fun context parent ->
-  let opened = Signal.state context.Lui_ui.ui_scheduler false in
+  let anchor_id =
+    Printf.sprintf "asset-property-%s-%s-%s"
+      (match parent with Some id -> string_of_int id | None -> "root")
+      block_uuid
+      (property_ident (D.row_prop property_row))
+  in
+  let open_picker () =
+    match Ui_services.dom_by_id anchor_id with
+    | None -> Ui_services.log_error "Asset property picker trigger is missing"
+    | Some anchor ->
+        let close = ref (fun () -> ()) in
+        let key =
+          Properties_popup.open_anchored ~padding:0 anchor
+            (picker ~block_uuids:[ block_uuid ]
+               ~property:(D.row_prop property_row) ~refresh ~on_close:(fun () ->
+                 !close ()))
+        in
+        close := fun () -> S.remove_view_overlay key
+  in
   let preview_key = Properties_popup.next_key () in
   let close key () = S.remove_view_overlay key in
   Signal.on_dispose context.Lui_ui.ui_scope (close preview_key);
@@ -452,20 +470,11 @@ let view ~block_uuid ~refresh property_row : t =
             (values (D.row_value property_row))
          @ [
              Ui_components.button ~variant:`ghost ~size:`icon
+               ~accessibility_identifier:anchor_id
                ~label:(I18n.t "asset/picker-open")
                ~icon:`plus
-               ~on_press:(fun _ -> Signal.set opened true)
+               ~on_press:(fun _ -> open_picker ())
                [];
            ]);
-       if_ ~test:(Signal.value opened)
-         (popover ~anchor:`below ~anchor_alignment:`start ~anchor_offset:4.
-            ~padding:0 ~corner_radius:6 ~border_width:1
-            ~background:"hsl(var(--popover))" ~border_color:"hsl(var(--border))"
-            ~on_dismiss:(fun _ -> Signal.set opened false)
-            [
-              picker ~block_uuids:[ block_uuid ]
-                ~property:(D.row_prop property_row) ~refresh
-                ~on_close:(fun () -> Signal.set opened false);
-            ]);
      ])
     context parent
