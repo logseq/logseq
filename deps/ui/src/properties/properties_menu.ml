@@ -609,6 +609,6 @@ let open_menu ~(anchor : Ui_services.el) ~owner_uuid ~owner_id
       ~close:(fun () -> !close ())
   in
   let key =
-    Properties_popup.open_anchored ~cls:menu_root_class anchor content
+    Properties_popup.open_anchored ~role:`menu ~cls:menu_root_class anchor content
   in
   close := (fun () -> S.remove_view_overlay key)
