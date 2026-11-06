@@ -127,12 +127,12 @@
          (if (util/mobile?)
            {:on-pointer-down util/stop-propagation
             :on-pointer-up (fn [_e]
-                             (route-handler/redirect-to-page! (:block/uuid page) {:click-from-recent? recent?}))}
+                             (route-handler/redirect-to-page! (:block/uuid page)))}
            {:on-click
             (fn [e]
               (if (gobj/get e "shiftKey")
                 (open-in-sidebar)
-                (route-handler/redirect-to-page! (:block/uuid page) {:click-from-recent? recent?})))
+                (route-handler/redirect-to-page! (:block/uuid page))))
             :on-context-menu (fn [^js e]
                                (shui/popup-show! e (x-menu-content)
                                                  {:as-dropdown? true

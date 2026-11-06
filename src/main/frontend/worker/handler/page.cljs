@@ -48,6 +48,14 @@
   [conn page-uuid & {:as options}]
   (outliner-page/delete! conn page-uuid options))
 
+(defn eligible-for-recent?
+  "Whether `entity` is eligible for Recent"
+  [entity]
+  (boolean
+   (and (ldb/page? entity)
+        (not (ldb/hidden? entity))
+        (not (string/blank? (:block/title entity))))))
+
 (defn- page-route-info
   [db page-id-name-or-uuid]
   (when-let [page (ldb/get-page db page-id-name-or-uuid)]
@@ -55,6 +63,7 @@
       (cond-> {:page-id (:db/id page)
                :page-uuid (:block/uuid page)
                :page-title (:block/title page)
+               :eligible-for-recent? (eligible-for-recent? page)
                :hidden? (boolean (ldb/hidden? page))
                :property? (boolean (ldb/property? page))
                :built-in? (boolean (ldb/built-in? page))

@@ -74,12 +74,7 @@
                      distinct
                      (take 20)
                      (keep #(d/entity db %))
-                     (filter ldb/page?)
-                     (remove ldb/hidden?)
-                     (remove (fn [page]
-                               (or (and (ldb/property? page)
-                                        (true? (:logseq.property/hide? page)))
-                                   (string/blank? (:block/title page)))))
+                     (filter worker-page/eligible-for-recent?)
                      vec)]
       [(into #{} (map (fn [page] [:entity (:block/uuid page)])) pages)
        (mapv sidebar-page-summary pages)])))

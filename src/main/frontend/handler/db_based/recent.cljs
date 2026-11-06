@@ -2,14 +2,18 @@
   "Fns related to recent pages feature"
   (:require [frontend.state :as state]))
 
+(def max-recent-pages
+  "The maximum number of pages in Recent"
+  15)
+
 (defn add-page-to-recent!
-  [db-id _click-from-recent?]
+  "Moves `db-id` to the front of the recent pages. Callers pass only pages
+   that are eligible for recent pages."
+  [db-id]
   (assert db-id (number? db-id))
   (when-not (:db/restoring? (state/get-state))
-    (let [pages (state/get-recent-pages)]
-      (when-not ((set pages) db-id)
-        (let [new-pages (vec (take 15 (distinct (cons db-id pages))))]
-          (state/set-recent-pages! new-pages))))))
+    (let [new-pages (vec (take max-recent-pages (distinct (cons db-id (state/get-recent-pages)))))]
+      (state/set-recent-pages! new-pages))))
 
 (defn get-recent-pages
   []
