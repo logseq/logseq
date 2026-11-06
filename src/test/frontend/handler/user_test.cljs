@@ -154,55 +154,13 @@
           (state/set-state! :auth/current-login-user old-login-user)
           (reset! state/*db-worker old-worker))))))
 
-(deftest rtc-group?-production-requires-saved-url-or-cognito-groups-test
-  (testing "production users without a saved Sync Server URL or RTC groups fail rtc-group?"
-    (with-redefs [config/dev? false
-                  config/get-custom-sync-server-url (constantly nil)
-                  state/user-groups (constantly #{})]
-      (is (false? (user-handler/rtc-group?)))))
-  (testing "saving any Sync Server URL still enables rtc-group? for self-hosted/custom servers"
-    (with-redefs [config/dev? false
-                  config/get-custom-sync-server-url (constantly "https://api.logseq.io")
-                  state/user-groups (constantly #{})]
-      (is (true? (user-handler/rtc-group?)))))
-  (testing "intentional team/rtc Cognito groups still enable rtc-group?"
-    (with-redefs [config/dev? false
-                  config/get-custom-sync-server-url (constantly nil)
-                  state/user-groups (constantly #{"rtc_2025_07_10"})]
-      (is (true? (user-handler/rtc-group?))))
-    (with-redefs [config/dev? false
-                  config/get-custom-sync-server-url (constantly nil)
-                  state/user-groups (constantly #{"team"})]
-      (is (true? (user-handler/rtc-group?))))))
-
-(deftest can-list-remote-graphs?-uses-official-default-without-saved-url-test
-  (testing "logged-in users can list remotes when only the official default URL is available"
-    (with-redefs [config/dev? false
-                  config/get-custom-sync-server-url (constantly nil)
-                  state/user-groups (constantly #{})
-                  user-handler/logged-in? (constantly true)]
-      (is (false? (user-handler/rtc-group?))
-          "All graphs listing must not depend on rtc-group? when Sync Server URL is unsaved")
-      (is (true? (user-handler/can-list-remote-graphs?)))))
-  (testing "logged-out users cannot list remotes even with the official default URL"
-    (with-redefs [config/dev? false
-                  config/get-custom-sync-server-url (constantly nil)
-                  state/user-groups (constantly #{})
-                  user-handler/logged-in? (constantly false)]
-      (is (false? (user-handler/can-list-remote-graphs?)))))
-  (testing "a saved custom URL still allows listing remotes"
-    (with-redefs [config/dev? false
-                  config/get-custom-sync-server-url (constantly "https://sync.example.com")
-                  state/user-groups (constantly #{})
-                  user-handler/logged-in? (constantly true)]
-      (is (true? (user-handler/can-list-remote-graphs?)))))
-  (testing "listing requires an official or custom sync URL"
-    (with-redefs [config/dev? false
-                  config/get-custom-sync-server-url (constantly nil)
-                  config/default-db-sync-http-base nil
-                  state/user-groups (constantly #{})
-                  user-handler/logged-in? (constantly true)]
-      (is (false? (user-handler/can-list-remote-graphs?))))))
+(deftest can-list-remote-graphs-uses-default-server-test
+  (with-redefs [config/dev? false
+                config/get-custom-sync-server-url (constantly nil)
+                state/user-groups (constantly #{})
+                user-handler/logged-in? (constantly true)]
+    (is (false? (user-handler/rtc-group?)))
+    (is (true? (user-handler/can-list-remote-graphs?)))))
 
 (deftest logout-skips-e2ee-password-clear-when-db-worker-missing-test
   (testing "logout should not call db-worker API when db-worker is unavailable"

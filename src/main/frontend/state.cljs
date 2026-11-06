@@ -322,6 +322,7 @@
       :auth/refresh-token                    (some-> (storage/get "refresh-token") str)
       :auth/access-token                     nil
       :auth/id-token                         nil
+      :auth/graph-session                    nil
       :auth/oauth-token-url                  nil
       :auth/oauth-domain                     nil
       :auth/oauth-client-id                  nil
@@ -2021,8 +2022,28 @@ should be done through this fn in order to get global config and config defaults
   (shui-dialog/get-last-dialog-id))
 
 (defn set-auth-id-token
-  [id-token]
-  (set-state! :auth/id-token id-token))
+  ([id-token]
+   (set-auth-id-token id-token id-token))
+  ([id-token user-id]
+   (let [session (get-state :auth/graph-session)
+         user-id (when id-token (or user-id id-token))]
+     (if (= user-id (first session))
+       (set-state! :auth/id-token id-token)
+       (swap-state!
+        (fn [db]
+          (-> db
+              (assoc :auth/id-token id-token
+                     :auth/graph-session (when user-id [user-id (js-obj)])
+                     :rtc/graphs []
+                     :rtc/loading-graphs? false)
+              (update-in [:me :repos]
+                         (fn [repos]
+                           (into [] (keep (fn [repo]
+                                            (cond
+                                              (not (:remote? repo)) repo
+                                              ;; Keep the local copy of a merged repo.
+                                              (:root repo) (select-keys repo [:url :root :metadata :nfs?]))))
+                                 repos))))))))))
 
 (defn set-auth-refresh-token
   [refresh-token]

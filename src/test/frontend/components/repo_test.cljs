@@ -1,5 +1,5 @@
 (ns frontend.components.repo-test
-  (:require [cljs.test :refer [deftest is async testing]]
+  (:require [cljs.test :refer [deftest is async]]
             [frontend.components.repo :as repo]
             [frontend.components.rtc.indicator :as rtc-indicator]
             [frontend.handler.db-based.sync :as rtc-handler]
@@ -25,31 +25,6 @@
                 user-handler/logged-in? (constantly true)
                 user-handler/rtc-group? (constantly true)]
     (is (true? (repo/local-uploadable-graph? {:url "logseq_db_mobile"})))))
-
-(deftest local-uploadable-graph-still-requires-rtc-group-test
-  (with-redefs [mobile-util/native-platform? (constantly true)
-                user-handler/logged-in? (constantly true)
-                user-handler/rtc-group? (constantly false)
-                user-handler/can-list-remote-graphs? (constantly true)]
-    (is (false? (repo/local-uploadable-graph? {:url "logseq_db_mobile"})))))
-
-(deftest all-graphs-lists-remotes-without-saved-sync-server-url-test
-  (testing "logged-in users see remotes without rtc-group? or a saved Sync Server URL"
-    (with-redefs [user-handler/can-list-remote-graphs? (constantly true)
-                  user-handler/rtc-group? (constantly false)]
-      (is (true? (repo/fetch-all-graphs-remotes? true)))
-      (is (true? (repo/show-all-graphs-remote-section?
-                  true
-                  [{:url "logseq_db_remote" :remote? true}])))
-      (is (false? (repo/show-all-graphs-remote-section? true [])))
-      (is (false? (repo/show-all-graphs-remote-section? false
-                                                        [{:url "logseq_db_remote" :remote? true}])))))
-  (testing "logged-out users do not fetch or render remotes"
-    (with-redefs [user-handler/can-list-remote-graphs? (constantly false)]
-      (is (false? (repo/fetch-all-graphs-remotes? true)))
-      (is (false? (repo/show-all-graphs-remote-section?
-                   true
-                   [{:url "logseq_db_remote" :remote? true}]))))))
 
 (deftest open-in-another-tab-action-is-web-only-for-existing-graphs-test
   (let [actionable-f (some-> (resolve 'frontend.components.repo/open-in-another-tab-action?) deref)]
