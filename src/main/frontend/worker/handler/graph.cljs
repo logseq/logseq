@@ -45,8 +45,9 @@
 
 (def-thread-api :thread-api/favorited-page?
   [repo page-block-uuid]
-  (let [db @(worker-state/get-datascript-conn repo)]
-    (boolean (favorite-block db page-block-uuid))))
+  (boolean
+   (when-let [conn (worker-state/get-datascript-conn repo)]
+     (favorite-block @conn page-block-uuid))))
 
 (def-thread-api :thread-api/get-recent-pages
   [repo page-ids]
@@ -140,7 +141,8 @@
 
 (def-thread-api :thread-api/get-all-page-titles
   [repo]
-  (get-all-page-titles-with-cache repo))
+  (when (worker-state/get-datascript-conn repo)
+    (get-all-page-titles-with-cache repo)))
 
 (def-thread-api :thread-api/mobile-logs
   []
