@@ -118,6 +118,9 @@ let default_entries =
         |];
       entry [| "upsert"; "page" |]
         [|
+          "logseq upsert page --graph my-graph --page Home --rename \"New \
+           Home\"";
+          "logseq upsert page --graph my-graph --id 999 --rename \"New Home\"";
           "logseq upsert page --graph my-graph --page Home --update-tags \
            '[\"project\"]'";
           "logseq upsert page --graph my-graph --id 999 --update-properties \

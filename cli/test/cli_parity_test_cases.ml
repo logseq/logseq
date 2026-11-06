@@ -3028,6 +3028,7 @@ let () =
                  {
                    id = Some 1L;
                    page = Some "Home";
+                   rename = None;
                    restore = false;
                    update_tags_edn = None;
                    update_properties_edn = None;
@@ -3122,6 +3123,7 @@ let () =
                 mode = Upsert.Create;
                 id = None;
                 page = Some "Home";
+                rename = None;
                 restore = false;
                 plan = Property.empty_update_plan;
               }
@@ -3171,6 +3173,7 @@ let () =
                 mode = Upsert.Update;
                 id = Some 50L;
                 page = None;
+                rename = None;
                 restore = false;
                 plan = Property.empty_update_plan;
               }
@@ -3235,6 +3238,7 @@ let () =
                 mode = Upsert.Create;
                 id = None;
                 page = Some "Home";
+                rename = None;
                 restore = true;
                 plan;
               }
@@ -3283,6 +3287,7 @@ let () =
                 mode = Upsert.Create;
                 id = None;
                 page = Some "Home";
+                rename = None;
                 restore = true;
                 plan = Property.empty_update_plan;
               }
@@ -3334,6 +3339,7 @@ let () =
                 mode = Upsert.Update;
                 id = Some 50L;
                 page = None;
+                rename = None;
                 restore = true;
                 plan = Property.empty_update_plan;
               }
