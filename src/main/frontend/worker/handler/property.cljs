@@ -58,7 +58,14 @@
       (remove #(= :logseq.class/Root (:db/ident %)))
 
       true
-      (map entity-util/entity->map))))
+      (map (fn [class]
+             ;; A nested alias entity is serialized with only its :db/id, so
+             ;; send the fields tag completion matches on.
+             (cond-> (entity-util/entity->map class)
+               (seq (:block/alias class))
+               (assoc :block/alias
+                      (set (map #(select-keys % [:db/id :block/uuid :block/title])
+                                (:block/alias class))))))))))
 
 (defn class-extends-children-tree
   ([db class-id]

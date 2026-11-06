@@ -25,6 +25,10 @@
   "Like get-current-repo."
   (sub-atom [:git/current-repo]))
 
+(def db-restoring?
+  "Like `:db/restoring?`: true while the graph is being restored."
+  (sub-atom [:db/restoring?]))
+
 (def current-login-user
   (sub-atom [:auth/current-login-user]))
 
