@@ -126,37 +126,37 @@
   (let [{:keys [status value]} (db-subs/block-snapshot (:block/uuid block))]
     (if (= :ready status) value block)))
 
-(defonce ^:private *pending-block-save-titles (atom {}))
+(defonce ^:private *pending-block-saves (atom {}))
 
-(defn- clear-pending-block-save-title!
-  [block-uuid value]
-  (swap! *pending-block-save-titles
-         (fn [pending-titles]
-           (if (= value (get pending-titles block-uuid))
-             (dissoc pending-titles block-uuid)
-             pending-titles))))
+(defn- clear-pending-block-save!
+  [key save-id]
+  (swap! *pending-block-saves
+         (fn [saves]
+           (if (= save-id (get-in saves [key :save-id]))
+             (dissoc saves key)
+             saves))))
 
 (defn- save-block-with-pending-title!
   [block value opts]
   (let [block-uuid (:block/uuid block)
-        repo (state/get-current-repo)]
-    (swap! *pending-block-save-titles assoc block-uuid value)
-    (pending-save/persist! repo block-uuid value)
+        repo (state/get-current-repo)
+        key [repo block-uuid]
+        save-id (pending-save/persist! repo block-uuid value)
+        complete! (fn []
+                    (clear-pending-block-save! key save-id)
+                    (pending-save/clear-if-match! repo block-uuid save-id))]
+    (swap! *pending-block-saves assoc key {:save-id save-id :title value})
     (try
       (let [result (save-block-inner! block value opts)]
         (if (p/promise? result)
           (-> result
-              (p/then (fn [_]
-                        (clear-pending-block-save-title! block-uuid value)
-                        (pending-save/clear-if-match! repo block-uuid value)))
+              (p/then (fn [_] (complete!)))
               (p/catch (fn [_]
-                         (clear-pending-block-save-title! block-uuid value))))
-          (do
-            (clear-pending-block-save-title! block-uuid value)
-            (pending-save/clear-if-match! repo block-uuid value)))
+                         (clear-pending-block-save! key save-id))))
+          (complete!))
         result)
       (catch :default error
-        (clear-pending-block-save-title! block-uuid value)
+        (clear-pending-block-save! key save-id)
         (throw error)))))
 
 (defn save-block-if-changed!
@@ -166,9 +166,8 @@
     {:keys [force?]
      :as opts}]
    (let [block (latest-renderer-block block)
-         content (get @*pending-block-save-titles
-                      (:block/uuid block)
-                      (:block/title block))]
+         key [(state/get-current-repo) (:block/uuid block)]
+         content (get-in @*pending-block-saves [key :title] (:block/title block))]
      (cond
        force?
        (save-block-with-pending-title! block value opts)
@@ -1720,7 +1719,8 @@
     (when (and repo block (string? value))
       (pending-save/persist! repo (:block/uuid block) (string/trim value)))
     (when repo
-      (doseq [[block-uuid title] @*pending-block-save-titles]
+      (doseq [[[save-repo block-uuid] {:keys [title]}] @*pending-block-saves
+              :when (= repo save-repo)]
         (pending-save/persist! repo block-uuid title)))
     (save-current-block! {:flush-input? true})))
 
@@ -1739,11 +1739,13 @@
   [repo]
   (when repo
     (p/all
-     (map (fn [{:keys [block-uuid title]}]
-            (-> (save-block! repo block-uuid title)
-                (p/then (fn [result]
-                          (when (nil? result)
-                            (pending-save/clear! repo block-uuid))))
+     (map (fn [{:keys [block-uuid save-id title]}]
+            (-> (p/let [block (db-async/<get-block repo block-uuid {:children? false})]
+                  (when (and (= repo (state/get-current-repo))
+                             (pending-save/current? repo block-uuid save-id))
+                    (let [result (save-block-aux! block title {})]
+                      (pending-save/clear-if-match! repo block-uuid save-id)
+                      result)))
                 (p/catch (fn [error]
                            (log/error :restore-pending-block-save-failed
                                       {:repo repo

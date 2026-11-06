@@ -457,7 +457,7 @@
         (editor/save-block-if-changed! block "kept-across-reload")
         (is (= [{:block-uuid block-uuid
                  :title "kept-across-reload"}]
-               (pending-save/entries repo))
+               (mapv #(dissoc % :save-id) (pending-save/entries repo)))
             "Escape starts an async worker write; the title must survive a reload before ack")
         (p/resolve! first-save nil))
       (-> first-save
@@ -495,7 +495,7 @@
                           db-transact/apply-outliner-ops
                           (fn [db ops opts]
                             (swap! tx-calls conj [db ops opts])
-                            :tx)]
+                            (p/resolved nil))]
             (editor/restore-pending-block-saves! repo))
           (p/then
            (fn [_]
@@ -571,7 +571,7 @@
            (fn [_]
              (is (= [{:block-uuid block-uuid
                       :title "retry-after-reload"}]
-                    (pending-save/entries repo))
+                    (mapv #(dissoc % :save-id) (pending-save/entries repo)))
                  "A failed in-flight save must stay persisted so the next load can retry")))
           (p/finally done)))))
 
@@ -599,7 +599,7 @@
       (editor/flush-editor-on-unload!)
       (is (= [{:block-uuid block-uuid
                :title "draft-before-reload"}]
-             (pending-save/entries repo))
+             (mapv #(dissoc % :save-id) (pending-save/entries repo)))
           "pagehide must persist the textarea before the page is torn down"))
     (p/resolve! first-save nil)))
 

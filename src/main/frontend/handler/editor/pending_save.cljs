@@ -2,7 +2,7 @@
   "Tab-local persistence for in-flight block saves.
 
   Escape / save builds outliner ops and posts them asynchronously. A reload
-  before the worker acknowledges the tx drops the edit. Session storage
+  before the worker commits the transaction can drop the edit. Session storage
   survives same-tab reload so the title can be replayed after restore."
   (:require [clojure.string :as string]
             [goog.object :as gobj]
@@ -63,31 +63,26 @@
       block-uuid)))
 
 (defn persist!
-  "Remember an in-flight block title so a reload can replay it."
+  "Remember an in-flight block title and return its unique save identifier."
   [repo block-uuid title]
-  (when (and (string? repo)
-             (not (string/blank? repo))
-             (string? title))
-    (when-let [key (uuid-key block-uuid)]
-      (persist-saves!
-       (assoc-in (loaded-saves) [repo key] title)))))
+  (let [save-id (str (random-uuid))]
+    (when (and (string? repo)
+               (not (string/blank? repo))
+               (string? title))
+      (when-let [key (uuid-key block-uuid)]
+        (persist-saves!
+         (assoc-in (loaded-saves) [repo key] {"save-id" save-id "title" title}))))
+    save-id))
+
+(defn current?
+  [repo block-uuid save-id]
+  (when-let [entry (get-in (loaded-saves) [repo (uuid-key block-uuid)])]
+    (= save-id (get entry "save-id"))))
 
 (defn clear-if-match!
-  "Drop a persisted title only when it still matches `title`."
-  [repo block-uuid title]
-  (when (and (string? repo) (some? block-uuid))
-    (let [saves (loaded-saves)
-          path [repo (uuid-key block-uuid)]]
-      (when (= title (get-in saves path))
-        (let [next-saves (update saves repo dissoc (uuid-key block-uuid))
-              next-saves (if (seq (get next-saves repo))
-                           next-saves
-                           (dissoc next-saves repo))]
-          (persist-saves! next-saves))))))
-
-(defn clear!
-  [repo block-uuid]
-  (when (and (string? repo) (some? block-uuid))
+  "Drop the persisted title only when it belongs to `save-id`."
+  [repo block-uuid save-id]
+  (when (current? repo block-uuid save-id)
     (let [next-saves (update (loaded-saves) repo dissoc (uuid-key block-uuid))
           next-saves (if (seq (get next-saves repo))
                        next-saves
@@ -99,12 +94,14 @@
   [repo]
   (when (string? repo)
     (into []
-          (keep (fn [[uuid-s title]]
-                  (when-let [block-uuid (and (string? uuid-s)
-                                             (string? title)
-                                             (parse-uuid uuid-s))]
-                    {:block-uuid block-uuid
-                     :title title})))
+          (keep (fn [[uuid-s entry]]
+                  (let [title (if (string? entry) entry (get entry "title"))]
+                    (when-let [block-uuid (and (string? uuid-s)
+                                               (string? title)
+                                               (parse-uuid uuid-s))]
+                      {:block-uuid block-uuid
+                       :save-id (get entry "save-id")
+                       :title title}))))
           (get (loaded-saves) repo))))
 
 (defn snapshot

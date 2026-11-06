@@ -9,10 +9,11 @@
 (deftest persist-and-entries-round-trip-test
   (let [repo "logseq_db_pending"
         block-uuid #uuid "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"]
-    (pending-save/persist! repo block-uuid "draft title")
-    (is (= [{:block-uuid block-uuid
-             :title "draft title"}]
-           (pending-save/entries repo)))
+    (let [save-id (pending-save/persist! repo block-uuid "draft title")]
+      (is (= [{:block-uuid block-uuid
+               :save-id save-id
+               :title "draft title"}]
+             (pending-save/entries repo))))
     (is (empty? (pending-save/entries "other-repo"))
         "Saves are scoped to the repo that created them")))
 
@@ -20,21 +21,24 @@
   (let [repo "logseq_db_pending"
         block-uuid #uuid "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"]
     (pending-save/persist! repo block-uuid "first")
-    (pending-save/persist! repo block-uuid "second")
-    (is (= [{:block-uuid block-uuid
-             :title "second"}]
-           (pending-save/entries repo)))))
+    (let [save-id (pending-save/persist! repo block-uuid "second")]
+      (is (= [{:block-uuid block-uuid
+               :save-id save-id
+               :title "second"}]
+             (pending-save/entries repo))))))
 
-(deftest clear-if-match-only-drops-the-same-title-test
+(deftest clear-if-match-only-drops-the-same-save-test
   (let [repo "logseq_db_pending"
-        block-uuid #uuid "cccccccc-cccc-cccc-cccc-cccccccccccc"]
-    (pending-save/persist! repo block-uuid "current")
-    (pending-save/clear-if-match! repo block-uuid "stale")
+        block-uuid #uuid "cccccccc-cccc-cccc-cccc-cccccccccccc"
+        previous-id (pending-save/persist! repo block-uuid "title")
+        current-id (pending-save/persist! repo block-uuid "title")]
+    (pending-save/clear-if-match! repo block-uuid previous-id)
     (is (= [{:block-uuid block-uuid
-             :title "current"}]
+             :save-id current-id
+             :title "title"}]
            (pending-save/entries repo))
         "A later edit must not be cleared by an older save's ack")
-    (pending-save/clear-if-match! repo block-uuid "current")
+    (pending-save/clear-if-match! repo block-uuid current-id)
     (is (empty? (pending-save/entries repo)))))
 
 (deftest persist-rejects-invalid-input-test
@@ -78,12 +82,13 @@
   (with-mocked-session-storage
     (fn [items]
       (let [repo "logseq_db_pending"
-            block-uuid #uuid "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"]
-        (pending-save/persist! repo block-uuid "kept-across-reload")
+            block-uuid #uuid "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"
+            save-id (pending-save/persist! repo block-uuid "kept-across-reload")]
         (is (some? (get @items pending-save/storage-key))
             "The title is written to sessionStorage before the worker ack")
         (pending-save/reload-memory!)
         (is (= [{:block-uuid block-uuid
+                 :save-id save-id
                  :title "kept-across-reload"}]
                (pending-save/entries repo))
             "A new page hydrates the in-flight title from sessionStorage")))))
