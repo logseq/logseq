@@ -1,5 +1,6 @@
 (ns logseq.shui.popup.core
-  (:require [dommy.core :as d]
+  (:require ["react-dom" :as react-dom]
+            [dommy.core :as d]
             [io.factorhouse.hsx.core :as hsx]
             [logseq.shui.util :as util :refer [use-atom]]
             [medley.core :as medley]))
@@ -419,9 +420,18 @@
                                               focus-transition?)
                                         (some-> e (.cancel))
                                         (when-not (close-canceled? handler e)
-                                          (hide! id 1 {:event native-event
-                                                       :skip-focus? (= reason "outside-press")
-                                                       :suppress-next-show? (= reason "outside-press")})))))))]
+                                          (if (= reason "focus-out")
+                                            ;; close before Base UI's focus guards run again: while the
+                                            ;; controlled open prop is still true they hand focus back and
+                                            ;; forth (popup guard -> trigger guard -> popup) until the stack
+                                            ;; overflows, e.g. Tab out of a table column menu
+                                            ;; focus already went where Tab sent it: don't pull it back to the
+                                            ;; popup's target
+                                            (react-dom/flushSync
+                                             #(hide! id 0 {:event native-event :skip-focus? true}))
+                                            (hide! id 1 {:event native-event
+                                                         :skip-focus? (= reason "outside-press")
+                                                         :suppress-next-show? (= reason "outside-press")}))))))))]
       (let [disable-menu-handlers? (and use-menu? (not as-dropdown?))
             content-props (cond-> (merge content-props
                                          (anchor-props content-props target position))

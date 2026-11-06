@@ -265,6 +265,29 @@
   (assert/assert-is-visible
    (loc/filter ".ls-view-body .ls-table-row" :has-text "Alpha table object")))
 
+(deftest table-view-column-menu-closes-on-tab-without-stack-overflow-test
+  (seed-table-view! "table-column-menu-tab")
+  (let [page-errors (atom [])]
+    (.onPageError (w/get-page) (fn [error] (swap! page-errors conj (str error))))
+    (doseq [column-name ["Name" "Priority"]]
+      (w/click (loc/filter ".ls-view-body .ls-table-header-cell" :has-text column-name))
+      (assert/assert-is-visible (loc/filter "[role='menuitem']" :has-text "Sort ascending"))
+      ;; the menu's own focusable controls each take a Tab step: press Tab until focus leaves the menu
+      (loop [n 40]
+        (k/tab)
+        (.waitForTimeout (w/get-page) 150)
+        (when (and (pos? n)
+                   (empty? @page-errors)
+                   (pos? (.count (loc/filter "[role='menuitem']" :has-text "Sort ascending"))))
+          (recur (dec n))))
+      (is (empty? (filter #(string/includes? % "Maximum call stack") @page-errors))
+          (str "Tab out of the " column-name " column menu: " (pr-str @page-errors)))
+      (assert/assert-have-count (loc/filter "[role='menuitem']" :has-text "Sort ascending") 0)
+      (.waitForTimeout (w/get-page) 100)
+      (is (false? (w/eval-js "() => !!document.activeElement?.closest('.ui__dropdown-menu-content, .ls-table-header-cell')"))
+          (str "Tab moved focus past the " column-name " column menu instead of back to its header"))
+      (k/esc))))
+
 (deftest table-view-column-sort-does-not-crash-test
   (seed-table-view! "table-column-sort")
   (sort-table-column! "Name" "Sort ascending")
