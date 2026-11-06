@@ -534,6 +534,25 @@
         (global-set! "XSLTProcessor" xslt)
         (global-set! "XMLSerializer" serializer)))))
 
+(deftest prettify-xml-falls-back-when-xslt-import-fails
+  (let [parser (global-get "DOMParser")
+        xslt (global-get "XSLTProcessor")
+        serializer (global-get "XMLSerializer")
+        source "<div><ul><li>a</li><li>b</li></ul></div>"]
+    (global-set! "DOMParser"
+                 (js* "class { parseFromString(source) { return {source: source}; } }"))
+    (global-set! "XSLTProcessor"
+                 (js* "class { importStylesheet() { throw Object.assign(new Error('NS_ERROR_FAILURE'), {result: 0x80600001}); } transformToDocument() { throw new Error('unused'); } }"))
+    (global-set! "XMLSerializer"
+                 (js* "class { serializeToString() { return '<should-not-use/>'; } }"))
+    (try
+      (is (= source (browser-utils/prettifyXml source))
+          "Optional HTML prettify must return the original markup when XSLTProcessor.importStylesheet throws.")
+      (finally
+        (global-set! "DOMParser" parser)
+        (global-set! "XSLTProcessor" xslt)
+        (global-set! "XMLSerializer" serializer)))))
+
 (deftest export-image-asset-block-keeps-asset-reference
   (testing "a nested image block keeps an asset reference in markdown, html, and opml"
     (with-node-xml-prettify-stub
