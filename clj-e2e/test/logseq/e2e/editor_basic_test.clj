@@ -15,9 +15,10 @@
    [logseq.e2e.util :as util]
    [wally.main :as w])
   (:import
-   (com.microsoft.playwright Locator$ClickOptions)
+   (com.google.gson JsonParser)
+   (com.microsoft.playwright CDPSession Locator$ClickOptions)
    (com.microsoft.playwright.options KeyboardModifier)
-   (java.util.function Consumer)))
+   (java.util.function BooleanSupplier Consumer)))
 
 (use-fixtures :once fixtures/open-page)
 
@@ -1390,6 +1391,70 @@
         (is (seq frames))
         (is (every? #(= title (:text %)) frames)
             frames)))))
+
+(defn- with-db-worker-paused
+  [f]
+  (let [page (w/get-page)
+        ^CDPSession cdp (.newCDPSession (.context page) page)
+        send! (fn [method params]
+                (.send cdp method (.getAsJsonObject (JsonParser/parseString (json/write-value-as-string params)))))]
+    (try
+      (let [targets (get (json/read-value (str (.send cdp "Target.getTargets"))) "targetInfos")
+            worker (some #(when (and (= "worker" (get % "type"))
+                                     (string/includes? (get % "url") "/db-worker.js"))
+                            %)
+                         targets)
+            _ (when-not worker
+                (throw (ex-info "Database worker is unavailable" {})))
+            session-id (get (json/read-value
+                             (str (send! "Target.attachToTarget"
+                                         {:targetId (get worker "targetId") :flatten false})))
+                            "sessionId")
+            send-to-worker! (fn [message]
+                              (send! "Target.sendMessageToTarget"
+                                     {:sessionId session-id
+                                      :message (json/write-value-as-string message)}))
+            paused? (atom false)]
+        (.on cdp "Target.receivedMessageFromTarget"
+             (reify Consumer
+               (accept [_ event]
+                 (let [{target-session "sessionId" message "message"} (json/read-value (str event))]
+                   (when (and (= session-id target-session)
+                              (= "Debugger.paused" (get (json/read-value message) "method")))
+                     (reset! paused? true))))))
+        (send-to-worker! {:id 1 :method "Debugger.enable"})
+        (send-to-worker! {:id 2 :method "Debugger.pause"})
+        ;; Enter the idle worker so the requested pause takes effect.
+        (send-to-worker! {:id 3 :method "Runtime.evaluate" :params {:expression "0"}})
+        (.waitForCondition page (reify BooleanSupplier (getAsBoolean [_] @paused?)))
+        (f))
+      (finally
+        (.detach cdp)))))
+
+(deftest escape-then-immediate-reload-keeps-the-edit-test
+  (testing "Reload recovers an edit that the database worker could not commit"
+    (let [title (str "escape-reload-" (random-uuid))
+          page-name (p/get-page-name)
+          worker-titles #(map (fn [block] (get block "content"))
+                              (ls-api-call! :editor.getPageBlocksTree page-name))]
+      (b/new-block "")
+      (with-db-worker-paused
+        (fn []
+          (w/fill util/editor-q title)
+          (k/esc)
+          (w/refresh)))
+      (assert/assert-graph-loaded?)
+      (assert/assert-is-visible
+       (loc/filter ".block-title-wrap" :has-text title))
+      (let [contents (loop [remaining 20]
+                       (let [titles (worker-titles)]
+                         (if (or (some #{title} titles) (zero? remaining))
+                           titles
+                           (do
+                             (util/wait-timeout 100)
+                             (recur (dec remaining))))))]
+        (is (some #{title} contents)
+            (str "the worker DB must contain the escaped title after reload: " contents))))))
 
 (deftest new-page-reference-renders-on-the-first-frame-after-save-test
   (testing "a newly created page reference is never blank after Escape"
