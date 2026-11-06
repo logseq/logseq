@@ -549,7 +549,8 @@
                                            {:style {:width width :max-width width}
                                             :on-click util/stop-propagation}
                                            (block-container
-                                            {:popup? true
+                                            {:container-id :ls-table-block-editor
+                                             :popup? true
                                              :view? true
                                              :table-block-title? true
                                              :table? true
@@ -568,7 +569,7 @@
                              :as-mask? true
                              :on-after-hide (fn []
                                               (save-block-and-focus *ref set-focus-timeout! false))})
-                           (editor-handler/edit-block! block :max {:container-id :unknown-container})))))))}
+                           (editor-handler/edit-block! block :max {:container-id :ls-table-block-editor})))))))}
      (if block
        [:div.flex.flex-row
         (let [render (fn [block]
