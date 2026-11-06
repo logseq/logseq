@@ -1,10 +1,10 @@
 (ns electron.mcp-compat-test
-  (:require [clojure.string :as string]
-            ["@modelcontextprotocol/sdk/client/index.js" :refer [Client]]
+  (:require ["@modelcontextprotocol/sdk/client/index.js" :refer [Client]]
             ["@modelcontextprotocol/sdk/inMemory.js" :refer [InMemoryTransport]]
             ["@modelcontextprotocol/sdk/types.js" :refer [ElicitRequestSchema]]
             [cljs.reader :as reader]
             [cljs.test :refer [async deftest is]]
+            [clojure.string :as string]
             [datascript.core :as d]
             [electron.logger :as logger]
             [electron.mcp-compat :as mcp-compat]
@@ -13,6 +13,7 @@
             [frontend.db.async :as db-async]
             [frontend.state :as state]
             [logseq.api.app :as api-app]
+            [logseq.api.db-based :as db-based-api]
             [logseq.api.editor :as api-editor]
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.schema :as db-schema]
@@ -322,32 +323,12 @@
   (is (= "db@check_current_is_db_graph"
          (mcp-server/resolve-real-api-method "logseq.DB.checkCurrentIsDbGraph"))))
 
-(defn- fixture-block-tree
+(defn- <fixture-block-tree
   [conn block-uuid max-depth max-nodes]
-  (let [db @conn
-        root-id (:db/id (d/entity db [:block/uuid (uuid block-uuid)]))
-        root-entity (when root-id (d/pull db '[*] root-id))
-        root (when root-entity
-               (js->clj (clj->js (sdk-utils/normalize-keyword-for-json root-entity true))
-                        :keywordize-keys true))]
-    (letfn [(descendants [parent-id]
-              (mapcat (fn [child-id]
-                        (let [child (d/pull db '[*] child-id)
-                              parent-uuid (:block/uuid (d/entity db parent-id))
-                              child-map (-> (js->clj (clj->js (sdk-utils/normalize-keyword-for-json child true))
-                                                     :keywordize-keys true)
-                                            (assoc :parent_uuid (str parent-uuid)))]
-                          (cons child-map (descendants child-id))))
-                      (d/q '[:find [?child ...]
-                             :in $ ?parent
-                             :where [?child :block/parent ?parent]]
-                           db parent-id)))]
-      (mcp-compat/block-tree-result
-       block-uuid
-       root
-       (if root-id (vec (descendants root-id)) [])
-       max-depth
-       max-nodes))))
+  (p/with-redefs [state/get-current-repo (constantly "fixture")
+                  db-async/<q (fn [_repo _opts query & inputs]
+                                (p/resolved (apply d/q query @conn inputs)))]
+    (db-based-api/get-block-tree block-uuid max-depth max-nodes)))
 
 (defn- page-fixture
   []
@@ -411,7 +392,7 @@
                                                                          @conn tag-uuid)]
                                                           (clj->js (sdk-utils/normalize-keyword-for-json users false)))
                                                         "logseq.DB.getBlockTree"
-                                                        (clj->js (fixture-block-tree conn (first args) (second args) (nth args 2)))
+                                                        (<fixture-block-tree conn (first args) (second args) (nth args 2))
                                                         "logseq.DB.getBacklinks"
                                                         (let [target-uuid (uuid (first args))
                                                               target-id (d/q '[:find ?target . :in $ ?uuid
@@ -663,14 +644,22 @@
                           (is false (str "Nested tree regression failed: " (.-message error)))
                           (js/queueMicrotask done)))))))
 
-(deftest block-tree-result-sorts-and-truncates-without-null-children
-  (let [rows [{:uuid "late" :title "Late" :order "z" :parent_uuid "root"}
-              {:uuid "early" :title "Early" :order "a" :parent_uuid "root"}]
-        result (mcp-compat/block-tree-result "root" {:uuid "root" :title "Root"} rows 2 2)]
-    (is (= 2 (:node_count result)))
-    (is (true? (:truncated result)))
-    (is (= ["early"] (mapv :uuid (get-in result [:block :children]))))
-    (is (every? map? (get-in result [:block :children])))))
+(deftest get-block-tree-sorts-and-truncates-without-null-children
+  (let [{:keys [block-uuid conn api calls]} (page-fixture)
+        early-uuid "00000000-0000-4000-8000-000000000163"]
+    (d/transact! conn [{:db/id 162 :block/uuid (uuid "00000000-0000-4000-8000-000000000162")
+                        :block/title "Late" :block/order "z" :block/parent 161 :block/page 160}
+                       {:db/id 163 :block/uuid (uuid early-uuid)
+                        :block/title "Early" :block/order "a" :block/parent 161 :block/page 160}])
+    (async done
+           (-> (p/let [result (mcp-compat/get-block-tree api #js {:block_uuid block-uuid :max_depth 2 :max_nodes 2})]
+                 (is (= 2 (:node_count result)))
+                 (is (true? (:truncated result)))
+                 (is (= [early-uuid] (mapv :uuid (get-in result [:block :children]))))
+                 (is (every? map? (get-in result [:block :children])))
+                 (is (= [["logseq.DB.getBlockTree" [block-uuid 2 2]]] @calls)))
+               (p/catch (fn [error] (is false (str error))))
+               (p/finally done)))))
 
 (deftest rename-page-resolves-and-verifies-a-native-uuid
   (let [{:keys [page-uuid api conn]} (page-fixture)]
@@ -938,6 +927,13 @@
                           (mcp-compat/get-block (recording-api calls nil) #js {"block_uuid" "invalid"})))
     (is (empty? @calls))))
 
+(deftest uuid-validation-preserves-case-and-rejects-non-string-values
+  (let [value "00000000-0000-4000-8000-ABCDEF012345"]
+    (is (= value (mcp-compat/validated-uuid value)))
+    (doseq [invalid [nil 42 (uuid value) "" (str value "x") (str value "\n") (subs value 1)]]
+      (is (thrown-with-msg? js/Error #"Entity query requires a UUID"
+                            (mcp-compat/validated-uuid invalid))))))
+
 (deftest block-read-is-registered-with-the-other-adapters
   (is (= mcp-compat/get-block (get-in mcp-server/data-tools [:getBlock :fn])))
   (is (= mcp-compat/get-page-uuid (get-in mcp-server/data-tools [:getPageUUID :fn])))
@@ -970,6 +966,33 @@
              (p/catch (fn [error]
                         (is false (str error))
                         (js/queueMicrotask done))))))
+
+(deftest mcp-tool-response-handling-is-consistent
+  (async done
+         (let [callers [(fn [api]
+                          (mcp-server/call-api-tool mcp-compat/list-pages api #js {}))
+                        (fn [api]
+                          (mcp-server/call-data-tool api mcp-compat/list-pages #js {}))]]
+           (-> (p/all
+                (for [call callers]
+                  (let [calls (atom [])
+                        payload #js {:found false :value nil :rows #js []}]
+                    (p/let [success (call (recording-api calls payload))
+                            empty-result (call (recording-api calls nil))
+                            api-error (call (recording-api calls #js {:error "read denied"}))
+                            rejected (call (fn [& _] (p/rejected (js/Error. "IPC failed"))))]
+                      (is (not (aget success "isError")))
+                      (is (= {:found false :value nil :rows []}
+                             (js->clj (js/JSON.parse (aget success "content" 0 "text")) :keywordize-keys true)))
+                      (is (= "null" (aget empty-result "content" 0 "text")))
+                      (is (true? (aget api-error "isError")))
+                      (is (= "API Error: read denied" (aget api-error "content" 0 "text")))
+                      (is (true? (aget rejected "isError")))
+                      (is (= "Unexpected API error: IPC failed" (aget rejected "content" 0 "text")))
+                      (is (= 3 (count @calls)))
+                      (is (every? #(= "logseq.DB.listPages" (first %)) @calls))))))
+               (p/catch (fn [error] (is false (str error))))
+               (p/finally done)))))
 
 (deftest mcp-server-starts-with-default-settings
   (let [server (mcp-server/create-mcp-api-server (fn [& _] nil))]
@@ -1330,7 +1353,7 @@
         tag-uuid "00000000-0000-4000-8000-000000000167"
         tag-title "Multi Word Ref Tag"]
     (d/transact! conn [{:db/id 167 :block/uuid (uuid tag-uuid) :block/title tag-title :block/tags [159]}
-                       {:db/id 161 :block/title (str "{{tag:" tag-title "}}") }])
+                       {:db/id 161 :block/title (str "{{tag:" tag-title "}}")}])
     (async done
            (-> (p/let [result (mcp-compat/repair-links api #js {"page_uuid" page-uuid "include_tags" true "create_missing" false})
                        tag-count (d/q '[:find (count ?tag) . :where [?tag :block/tags 159]] @conn)
@@ -2097,17 +2120,6 @@
                     {:title "Presuade" :uuid "two"}]]
     (is (= [] (#'mcp-compat/group-title-candidates candidates "loose")))
     (is (= 1 (count (#'mcp-compat/group-title-candidates candidates "fuzzy"))))))
-
-(deftest block-tree-result-applies-bounds
-  (let [result (mcp-compat/block-tree-result
-                "root"
-                {:uuid "root" :title "Root"}
-                [{:uuid "child" :title "Child" :parent_uuid "root"}]
-                0 10)]
-    (is (= true (:found result)))
-    (is (= 1 (:node_count result)))
-    (is (= true (:truncated result)))
-    (is (= [] (get-in result [:block :children])))))
 
 (deftest title-availability-result-classifies-holders
   (is (= {:title "Inbox" :available true :held_by []}
@@ -3802,4 +3814,3 @@
                (p/catch (fn [error]
                           (is false (str "removeBlock failed: " (.-message error)))
                           (done)))))))
-

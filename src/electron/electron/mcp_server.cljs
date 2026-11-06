@@ -108,18 +108,9 @@
        #js [#js {:type "text"
                  :text (str "Unexpected API error: " (.-message error))}]})
 
-(defn- api-tool
-  "Calls API method w/ args and returns a MCP response"
-  [api-fn api-method method-args]
-  (-> (p/let [body (api-fn api-method method-args)]
-        (if-let [error (and body (aget body "error"))]
-          (mcp-error-response (str "API Error: " error))
-          (mcp-success-response body)))
-      (p/catch unexpected-api-error)))
-
-(defn- api-data-tool
-  [api-fn data-fn args]
-  (-> (p/let [body (data-fn api-fn args)]
+(defn- <call-tool
+  [tool-fn & args]
+  (-> (p/let [body (apply tool-fn args)]
         (if-let [error (and body (aget body "error"))]
           (mcp-error-response (str "API Error: " error))
           (mcp-success-response body)))
@@ -127,7 +118,7 @@
 
 (defn call-data-tool
   [api-fn data-fn args]
-  (api-data-tool api-fn data-fn args))
+  (<call-tool data-fn api-fn args))
 
 (def ^:private query-max-rows 1000)
 (def ^:private query-max-bytes 65536)
@@ -584,7 +575,7 @@
                  :inputSchema #js {}}}})
 
 (defn call-api-tool [tool-fn api-fn args]
-  (tool-fn (partial api-tool api-fn) args))
+  (tool-fn (partial <call-tool api-fn) args))
 
 ;; Server fns
 ;; ==========

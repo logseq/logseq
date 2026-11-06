@@ -1,6 +1,7 @@
 (ns electron.mcp-compat
   (:require [clojure.string :as string]
             [logseq.api.db-based.util :as api-util]
+            [logseq.common.util :as common-util]
             [promesa.core :as p]))
 
 (declare property-entity-value property-type)
@@ -36,7 +37,7 @@
     [?page :block/title ?title]
     [?page :block/tags ?class]
     [?class :db/ident :logseq.class/Page]
-    (not [?page :logseq.property/deleted-at _])]" )
+    (not [?page :logseq.property/deleted-at _])]")
 
 (def ^:private page-name-query
   "[:find [(pull ?page [:block/uuid :block/title :block/name]) ...]
@@ -45,7 +46,7 @@
     [?page :block/name ?name]
     [?page :block/tags ?class]
     [?class :db/ident :logseq.class/Page]
-    (not [?page :logseq.property/deleted-at _])]" )
+    (not [?page :logseq.property/deleted-at _])]")
 
 (defn page-uuid-result
   [title pages]
@@ -141,7 +142,7 @@
                                   value (min (inc (nth previous (inc j)))
                                              (inc (peek row))
                                              (+ (nth previous j) cost))]
-                              (recur (inc j) (conj row value))))) ]
+                              (recur (inc j) (conj row value)))))]
             (if (> (apply min current) allowed)
               false
               (recur (inc i) current))))))))
@@ -194,14 +195,13 @@
 (def ^:private page-details
   #{"page" "blocks" "tags" "properties" "declared" "all"})
 
-(declare page-stats-uuid-pattern page-stats-field
-         structural-property-value? query-result-rows get-block-uuids uuid-query-input)
+(declare page-stats-field query-result-rows get-block-uuids uuid-query-input)
 (defn inspect-page
   [api-fn args]
   (let [page-uuid (aget args "page_uuid")
         detail (or (aget args "detail") "page")]
     (when-not (and (string? page-uuid)
-                   (re-matches page-stats-uuid-pattern page-uuid))
+                   (re-matches common-util/exactly-uuid-pattern page-uuid))
       (throw (js/Error. "page_uuid must be a UUID")))
     (when-not (contains? page-details detail)
       (throw (js/Error. "detail must be one of: page, blocks, tags, properties, declared, all")))
@@ -209,11 +209,8 @@
       (js->clj result :keywordize-keys true))))
 (defn- query-pages
   [api-fn query value]
-  (p/let [result (api-fn "logseq.DB.datascriptQuery" [query value])
-          rows (js->clj result :keywordize-keys true)]
-    (if (and (= 1 (count rows)) (vector? (first rows)))
-      (first rows)
-      rows)))
+  (p/let [result (api-fn "logseq.DB.datascriptQuery" [query value])]
+    (query-result-rows result)))
 
 (defn get-page-uuid
   [api-fn args]
@@ -249,49 +246,6 @@
   (let [page-uuid (aget args "page_uuid")]
     (p/let [result (api-fn "logseq.DB.getPageBlockUUIDs" [page-uuid])]
       (js->clj result :keywordize-keys true))))
-
-(defn block-tree-result
-  [block-uuid root rows max-depth max-nodes]
-  (cond
-    (nil? root)
-    {:found false :block_uuid block-uuid :block nil :node_count 0 :truncated false}
-
-    (or (:name root) (:block/name root))
-    {:found false
-     :block_uuid block-uuid
-     :block nil
-     :node_count 0
-     :truncated false
-     :reason "target is a page, not a block"}
-
-    :else
-    (let [children (group-by :parent_uuid rows)
-          count* (atom 0)
-          truncated* (atom false)
-          visited* (atom #{})]
-      (letfn [(build [node depth]
-                (when (contains? @visited* (:uuid node))
-                  (throw (js/Error. "Block hierarchy contains a cycle")))
-                (swap! visited* conj (:uuid node))
-                (swap! count* inc)
-                (let [node' (dissoc node :parent_uuid)
-                      child-rows (sort-by #(str (:order %)) (get children (:uuid node)))]
-                  (if (or (>= depth max-depth)
-                          (>= @count* max-nodes))
-                    (do
-                      (when (seq child-rows) (reset! truncated* true))
-                      (assoc node' :children []))
-                    (assoc node' :children
-                           (reduce (fn [built child]
-                                     (if (< @count* max-nodes)
-                                       (conj built (build child (inc depth)))
-                                       (do (reset! truncated* true) (reduced built))))
-                                   [] child-rows))))) ]
-        {:found true
-         :block_uuid block-uuid
-         :block (build root 0)
-         :node_count @count*
-         :truncated @truncated*}))))
 
 (defn get-block-tree
   [api-fn args]
@@ -330,15 +284,6 @@
                      "These blocks render through parent ancestry; this tool reports them without repairing them."
                      "No blocks have a page/parent mismatch.")})))
 
-(def ^:private page-stats-uuid-pattern
-  #"(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
-
-(def ^:private structural-property-idents
-  #{"parent" "page" "order" "title" "name" "uuid" "ident"
-    "content" "full-title" "raw-title" "refs" "path-refs"
-    "tx-id" "created-at" "updated-at" "format" "collapsed?"
-    "journal-day" "journal?" "left"})
-
 (defn- page-stats-field
   [entity field]
   (or (get entity field)
@@ -351,21 +296,11 @@
         :_parent (:block/_parent entity)
         nil)))
 
-(defn- structural-property-value?
-  [property]
-  (let [ident (or (:ident property) (:db/ident property))
-        bare (some-> ident (string/replace-first #"^:" ""))]
-    (or (and bare (or (string/starts-with? bare "block/")
-                      (string/starts-with? bare "db/")))
-        (and bare
-             (not (string/includes? bare "/"))
-             (contains? structural-property-idents bare)))))
-
 (defn page-stats
   [api-fn args]
   (let [page-uuid (aget args "page_uuid")]
     (when-not (and (string? page-uuid)
-                   (re-matches page-stats-uuid-pattern page-uuid))
+                   (re-matches common-util/exactly-uuid-pattern page-uuid))
       (throw (js/Error. "page_uuid must be a UUID")))
     (p/let [result (api-fn "logseq.DB.getPageStats" [page-uuid])]
       (js->clj result :keywordize-keys true))))
@@ -491,7 +426,7 @@
             (throw (js/Error. "Property creation did not return a namespaced ident")))
           (p/let [property-result (api-fn "logseq.DB.datascriptQuery"
                                           [(str "[:find (pull ?property [*]) . :where "
-                                                "[?property :db/ident " ident "]]" )])
+                                                "[?property :db/ident " ident "]]")])
                   property (js->clj property-result :keywordize-keys true)]
             (when-not property
               (throw (js/Error. "Property creation reported success but the property is absent")))
@@ -706,7 +641,7 @@
 
 (defn validated-uuid
   [value]
-  (when-not (and (string? value) (re-matches page-stats-uuid-pattern value))
+  (when-not (and (string? value) (re-matches common-util/exactly-uuid-pattern value))
     (throw (js/Error. "Entity query requires a UUID")))
   value)
 
@@ -805,7 +740,7 @@
         dry-run? (true? (aget args "dry_run"))
         verbose? (not (false? (aget args "verbose")))]
     (when-not (and (string? parent-uuid)
-                   (re-matches page-stats-uuid-pattern parent-uuid))
+                   (re-matches common-util/exactly-uuid-pattern parent-uuid))
       (throw (js/Error. "parent_uuid must be a UUID")))
     (when-not (and (string? title) (not (string/blank? title)))
       (throw (js/Error. "Expected a non-empty title")))
@@ -899,7 +834,7 @@
         dry-run? (true? (aget args "dry_run"))
         verbose? (not (false? (aget args "verbose")))]
     (when-not (and (string? block-uuid)
-                   (re-matches page-stats-uuid-pattern block-uuid))
+                   (re-matches common-util/exactly-uuid-pattern block-uuid))
       (throw (js/Error. "block_uuid must be a UUID")))
     (when-not (and (string? title) (not (string/blank? title)))
       (throw (js/Error. "Expected a non-empty title")))
@@ -981,7 +916,7 @@
         verbose? (not (false? (aget args "verbose")))
         entity-query "[:find (pull ?entity [:db/id :block/uuid :block/title :block/name :block/order {:block/parent [:db/id]} {:block/page [:db/id]}]) . :in $ ?uuid :where [?entity :block/uuid ?uuid]]"]
     (doseq [[field value] [["block_uuid" block-uuid] ["target_uuid" target-uuid]]]
-      (when-not (and (string? value) (re-matches page-stats-uuid-pattern value))
+      (when-not (and (string? value) (re-matches common-util/exactly-uuid-pattern value))
         (throw (js/Error. (str field " must be a UUID")))))
     (when-not (contains? #{"child" "last-child" "before" "after"} placement)
       (throw (js/Error. "placement must be child, last-child, before, or after")))
@@ -1099,7 +1034,7 @@
         entity-query "[:find (pull ?entity [* {:block/parent [:db/id :block/uuid]} {:block/page [:db/id :block/uuid]}]) . :in $ ?uuid :where [?entity :block/uuid ?uuid]]"
         children-query "[:find [(pull ?child [*]) ...] :in $ ?parent-id :where [?child :block/parent ?parent-id]]"]
     (when-not (and (string? block-uuid)
-                   (re-matches page-stats-uuid-pattern block-uuid))
+                   (re-matches common-util/exactly-uuid-pattern block-uuid))
       (throw (js/Error. "block_uuid must be a UUID")))
     (p/let [root-result (api-fn "logseq.DB.datascriptQuery" [entity-query (uuid-query-input block-uuid)])
             root (js->clj root-result :keywordize-keys true)]
@@ -1553,7 +1488,7 @@
                         uuids (mapv #(or (:uuid %) (:block/uuid %)) returned)]
                   (if-not (and (= (count items) (count uuids))
                                (= (count uuids) (count (set uuids)))
-                               (every? #(and (string? %) (re-matches page-stats-uuid-pattern %)) uuids))
+                               (every? #(and (string? %) (re-matches common-util/exactly-uuid-pattern %)) uuids))
                     {:verified false :created created :calls (inc calls) :response returned
                      :diagnostic "Batch returned an unexpected inventory; outline may be partially built."}
                     (p/let [verification (verify-created uuids items (:id parent) page-id [])
@@ -1714,11 +1649,11 @@
     (if (true? (aget args "dry_run"))
       (assoc base :verified false :created_page false :calls (count (set (map #(pop (:path %)) entries)))
              :diagnostic "Dry run: nothing was written; references will be escaped as placeholders.")
-      (p/let [pages (if (re-matches page-stats-uuid-pattern target) [] (query-pages api-fn page-title-query target))
+      (p/let [pages (if (re-matches common-util/exactly-uuid-pattern target) [] (query-pages api-fn page-title-query target))
               _ (when (> (count pages) 1) (throw (js/Error. "Multiple pages share target title; supply an exact UUID")))
-              creation (when (and (not (re-matches page-stats-uuid-pattern target)) (empty? pages))
+              creation (when (and (not (re-matches common-util/exactly-uuid-pattern target)) (empty? pages))
                          (create-page api-fn #js {"title" target "verbose" true}))
-              page-uuid (cond (re-matches page-stats-uuid-pattern target) target
+              page-uuid (cond (re-matches common-util/exactly-uuid-pattern target) target
                               (seq pages) (:uuid (first pages))
                               :else (get-in creation [:verified_entities 0 :uuid]))
               base (assoc base :page_uuid page-uuid :created_page (boolean creation))]
@@ -1750,7 +1685,7 @@
         new-title (aget args "new_title")
         verbose? (not (false? (aget args "verbose")))]
     (when-not (and (string? page-uuid)
-                   (re-matches page-stats-uuid-pattern page-uuid))
+                   (re-matches common-util/exactly-uuid-pattern page-uuid))
       (throw (js/Error. "page_uuid must be a UUID")))
     (when-not (and (string? new-title) (not (string/blank? new-title)))
       (throw (js/Error. "Expected a non-empty title")))
@@ -1876,7 +1811,7 @@
         options (or (aget args "options") #js {})
         verbose? (not (false? (aget args "verbose")))]
     (when-not (and (string? target-uuid)
-                   (re-matches page-stats-uuid-pattern target-uuid))
+                   (re-matches common-util/exactly-uuid-pattern target-uuid))
       (throw (js/Error. "target_uuid must be a UUID")))
     (when-not ident
       (throw (js/Error. "Expected an exact namespaced property ident")))
@@ -1885,7 +1820,7 @@
     (let [target-query (str "[:find (pull ?target [*]) . :where "
                             "[?target :block/uuid #uuid \"" target-uuid "\"]]")
           property-query (str "[:find (pull ?property [*]) . :where "
-                              "[?property :db/ident " ident "]]" )]
+                              "[?property :db/ident " ident "]]")]
       (p/let [target-result (api-fn "logseq.DB.datascriptQuery" [target-query])
               target (js->clj target-result :keywordize-keys true)
               property-result (api-fn "logseq.DB.datascriptQuery" [property-query])
@@ -1940,7 +1875,7 @@
         ident (query-ident (aget args "property_ident"))
         verbose? (not (false? (aget args "verbose")))]
     (when-not (and (string? target-uuid)
-                   (re-matches page-stats-uuid-pattern target-uuid))
+                   (re-matches common-util/exactly-uuid-pattern target-uuid))
       (throw (js/Error. "target_uuid must be a UUID")))
     (when-not ident
       (throw (js/Error. "Expected an exact namespaced property ident")))
@@ -1949,7 +1884,7 @@
     (let [target-query (str "[:find (pull ?target [*]) . :where "
                             "[?target :block/uuid #uuid \"" target-uuid "\"]]")
           property-query (str "[:find (pull ?property [*]) . :where "
-                              "[?property :db/ident " ident "]]" )]
+                              "[?property :db/ident " ident "]]")]
       (p/let [target-result (api-fn "logseq.DB.datascriptQuery" [target-query])
               target (js->clj target-result :keywordize-keys true)
               property-result (api-fn "logseq.DB.datascriptQuery" [property-query])
@@ -2078,7 +2013,7 @@
         acknowledge-detach? (true? (aget args "acknowledge_detach"))
         verbose? (not (false? (aget args "verbose")))]
     (when-not (and (string? tag-uuid)
-                   (re-matches page-stats-uuid-pattern tag-uuid))
+                   (re-matches common-util/exactly-uuid-pattern tag-uuid))
       (throw (js/Error. "tag_uuid must be a UUID")))
     (let [tag-query "[:find (pull ?tag [*]) . :in $ ?uuid :where [?tag :block/uuid ?uuid] [?tag :block/tags ?class] [?class :db/ident :logseq.class/Tag]]"]
       (p/let [tag-result (api-fn "logseq.DB.datascriptQuery" [tag-query (uuid-query-input tag-uuid)])
@@ -2144,22 +2079,16 @@
                            :page nil
                            :diagnostic diagnostic})))))))))))))
 
-(defn- entity-reference-id
-  [value]
-  (if (map? value)
-    (or (:id value) (:db/id value))
-    value))
-
 (defn add-tag
   [api-fn args]
   (let [target-uuid (aget args "target_uuid")
         tag-uuid (aget args "tag_uuid")
         verbose? (not (false? (aget args "verbose")))]
     (when-not (and (string? target-uuid)
-                   (re-matches page-stats-uuid-pattern target-uuid))
+                   (re-matches common-util/exactly-uuid-pattern target-uuid))
       (throw (js/Error. "target_uuid must be a UUID")))
     (when-not (and (string? tag-uuid)
-                   (re-matches page-stats-uuid-pattern tag-uuid))
+                   (re-matches common-util/exactly-uuid-pattern tag-uuid))
       (throw (js/Error. "tag_uuid must be a UUID")))
     (let [target-query (str "[:find (pull ?target [*]) . :where "
                             "[?target :block/uuid #uuid \"" target-uuid "\"]]")
@@ -2185,7 +2114,7 @@
               (when-not current
                 (throw (js/Error. (str "Target " target-uuid " disappeared during tag addition"))))
               (let [tags (or (:tags current) (:block/tags current) [])
-                    tag-present? (contains? (set (keep entity-reference-id tags)) tag-id)]
+                    tag-present? (contains? (set (keep entity-ref-id tags)) tag-id)]
                 (when-not tag-present?
                   (throw (js/Error. "Tag addition was not observed on the target")))
                 (when (and previous-page?
@@ -2208,10 +2137,10 @@
         tag-uuid (aget args "tag_uuid")
         verbose? (not (false? (aget args "verbose")))]
     (when-not (and (string? target-uuid)
-                   (re-matches page-stats-uuid-pattern target-uuid))
+                   (re-matches common-util/exactly-uuid-pattern target-uuid))
       (throw (js/Error. "target_uuid must be a UUID")))
     (when-not (and (string? tag-uuid)
-                   (re-matches page-stats-uuid-pattern tag-uuid))
+                   (re-matches common-util/exactly-uuid-pattern tag-uuid))
       (throw (js/Error. "tag_uuid must be a UUID")))
     (let [target-query (str "[:find (pull ?target [*]) . :where "
                             "[?target :block/uuid #uuid \"" target-uuid "\"]]")
@@ -2229,7 +2158,7 @@
           (throw (js/Error. (str "UUID " tag-uuid " does not identify a tag"))))
         (let [tag-id (or (:id tag) (:db/id tag))
               previous-page? (boolean (or (:name target) (:block/name target)))
-              previous-tag-ids (set (keep entity-reference-id
+              previous-tag-ids (set (keep entity-ref-id
                                           (or (:tags target) (:block/tags target))))]
           (p/let [response (api-fn "logseq.DB.removeBlockTag" [target-uuid tag-uuid])]
             (when-let [error (and response (aget response "error"))]
@@ -2239,7 +2168,7 @@
               (when-not current
                 (throw (js/Error. (str "Target " target-uuid " disappeared during tag removal"))))
               (let [current-tags (or (:tags current) (:block/tags current) [])
-                    current-tag-ids (set (keep entity-reference-id current-tags))]
+                    current-tag-ids (set (keep entity-ref-id current-tags))]
                 (when (contains? current-tag-ids tag-id)
                   (throw (js/Error. "Tag removal was not observed on the target")))
                 (when (and previous-page?
