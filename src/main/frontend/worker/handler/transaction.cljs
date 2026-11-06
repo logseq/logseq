@@ -59,9 +59,9 @@
             _ (when context (worker-state/set-context! context))
             tx-meta' (dissoc tx-meta :insert-blocks?)]
         (when-not (and (:create-today-journal? tx-meta)
-                       (:today-journal-name tx-meta)
+                       (:today-journal-day tx-meta)
                        (seq tx-data')
-                       (ldb/get-page @conn (:today-journal-name tx-meta)))
+                       (ldb/get-journal-page-by-day @conn (:today-journal-day tx-meta)))
           (worker-util/profile "Worker db transact"
                                (ldb/transact! conn tx-data' tx-meta')))
         (maybe-run-recycle-gc! conn)
