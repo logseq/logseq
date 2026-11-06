@@ -18,9 +18,9 @@
        :headers #js {:get (constantly nil)}
        :arrayBuffer (fn [] (p/resolved #js {:byteLength size}))})
 
-(deftest encrypted-assets-allow-upload-at-larger-limit-test
+(deftest encrypted-assets-use-the-same-upload-body-limit-test
   (async done
-         (let [request (put-request-with-size (* 200 1024 1024))
+         (let [request (put-request-with-size assets/max-encrypted-asset-size)
                put-calls (atom 0)
                env #js {:DB #js {}
                         :LOGSEQ_SYNC_ASSETS
@@ -54,9 +54,9 @@
                           (is false (str error))
                           (done)))))))
 
-(deftest encrypted-assets-still-reject-uploads-above-larger-limit-test
+(deftest encrypted-assets-still-reject-uploads-above-body-limit-test
   (async done
-         (let [request (put-request-with-size (inc (* 200 1024 1024)))
+         (let [request (put-request-with-size (inc assets/max-encrypted-asset-size))
                put-calls (atom 0)
                env #js {:DB #js {}
                         :LOGSEQ_SYNC_ASSETS
@@ -67,6 +67,28 @@
                  (p/let [resp (assets/handle request env)]
                    (is (= 413 (.-status resp)))
                    (is (zero? @put-calls))))
+               (p/then (fn [] (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
+(deftest put-stream-rejects-e2ee-plaintext-whose-transit-body-exceeds-limit-test
+  (async done
+         (let [put-calls (atom 0)
+               bucket #js {:put (fn [& _]
+                                  (swap! put-calls inc)
+                                  (p/resolved nil))}]
+           (-> (p/let [resp (assets/<put-stream!
+                             bucket
+                             "graph-1/asset-1.pdf"
+                             (js/Uint8Array. 0)
+                             {:size (* 80 1024 1024)
+                              :content-type "application/pdf"
+                              :checksum "abc"
+                              :asset-type "pdf"
+                              :e2ee? true})]
+                 (is (= 413 (.-status resp)))
+                 (is (zero? @put-calls)))
                (p/then (fn [] (done)))
                (p/catch (fn [error]
                           (is false (str error))
