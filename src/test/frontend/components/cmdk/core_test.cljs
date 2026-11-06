@@ -304,3 +304,35 @@
            (fn [error]
              (is false (str error))))
           (p/finally done)))))
+
+(deftest load-results-current-page-scopes-search-to-owning-page-test
+  (async done
+    (let [page-uuid #uuid "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+          block-uuid #uuid "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+          search-pages (atom [])
+          results (atom {})
+          search-state {::cmdk/input (atom "needle")
+                        ::cmdk/results results
+                        ::cmdk/filter (atom {:group :current-page})}]
+      (-> (p/with-redefs [state/get-current-repo (constantly "repo")
+                          state/get-current-page (constantly "Page A")
+                          state/<invoke-db-worker
+                          (fn [_ _ _ lookup-ref]
+                            (p/resolved
+                             (get {[:block/name "page a"] {:block/uuid page-uuid}
+                                   [:block/uuid block-uuid] {:block/uuid block-uuid
+                                                            :block/page {:block/uuid page-uuid}}}
+                                  lookup-ref)))
+                          search/block-search
+                          (fn [_ _ opts]
+                            (swap! search-pages conj (:page opts))
+                            (p/resolved {:items [] :matched-count 0}))]
+            (p/do!
+             (cmdk/load-results :current-page search-state)
+             (p/with-redefs [state/get-current-page (constantly (str block-uuid))]
+               (cmdk/load-results :current-page search-state))))
+          (p/then
+           (fn []
+             (is (= [(str page-uuid) (str page-uuid)] @search-pages))))
+          (p/catch (fn [error] (is false (str error))))
+          (p/finally done)))))
