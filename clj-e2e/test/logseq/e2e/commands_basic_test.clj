@@ -481,6 +481,9 @@
   (testing "calculator"
     (b/new-block "")
     (util/input-command "calculator")
+    ;; util/input fills the focused element: wait until CodeMirror has the focus,
+    ;; or the text goes to the block's textarea the calculator replaces
+    (w/wait-for ".CodeMirror-focused")
     (util/input "1 + 2")
     (w/wait-for "div.extensions__code-calc-output-line")
     (is (= "3" (util/get-text "div.extensions__code-calc-output-line")))

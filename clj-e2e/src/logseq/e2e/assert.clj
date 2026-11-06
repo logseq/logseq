@@ -1,5 +1,5 @@
 (ns logseq.e2e.assert
-  (:import [com.microsoft.playwright.assertions PlaywrightAssertions])
+  (:import [com.microsoft.playwright.assertions LocatorAssertions$IsVisibleOptions PlaywrightAssertions])
   (:require [clojure.test :as t]
             [logseq.e2e.locator :as loc]
             [wally.main :as w]))
@@ -7,9 +7,13 @@
 (def assert-that PlaywrightAssertions/assertThat)
 
 (defn assert-is-visible
-  [q]
-  (-> (w/-query q) .first assert-that .isVisible)
-  true)
+  ([q]
+   (-> (w/-query q) .first assert-that .isVisible)
+   true)
+  ([q timeout-ms]
+   (-> (w/-query q) .first assert-that
+       (.isVisible (-> (LocatorAssertions$IsVisibleOptions.) (.setTimeout (double timeout-ms)))))
+   true))
 
 (defn assert-is-hidden
   [q]
