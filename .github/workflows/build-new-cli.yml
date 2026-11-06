@@ -1,0 +1,85 @@
+name: Build Logseq CLI
+
+on:
+  workflow_dispatch:
+
+env:
+  CLOJURE_VERSION: '1.12.4.1618'
+  JAVA_VERSION: '21'
+  NODE_VERSION: '24'
+  OCAML_VERSION: '5.1.1'
+  BABASHKA_VERSION: '1.12.215'
+
+jobs:
+  build-cli:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+          cache-dependency-path: |
+            pnpm-lock.yaml
+            cli/pnpm-lock.yaml
+            deps/db-sync/pnpm-lock.yaml
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Set up Clojure
+        uses: DeLaGuardo/setup-clojure@13.5
+        with:
+          cli: ${{ env.CLOJURE_VERSION }}
+          bb: ${{ env.BABASHKA_VERSION }}
+
+      - name: Set up OCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: ${{ env.OCAML_VERSION }}
+
+      - name: Install CLI runtime deps
+        run: sudo apt-get update && sudo apt-get install -y libsecret-1-0
+
+      - name: Fetch OCaml deps
+        working-directory: cli
+        run: opam install . --deps-only --with-test --yes
+
+      - name: Fetch pnpm deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Fetch CLI pnpm deps
+        run: pnpm --dir cli install --frozen-lockfile --ignore-workspace
+
+      - name: Fetch db-sync pnpm deps
+        run: pnpm --dir deps/db-sync install --frozen-lockfile --ignore-workspace
+
+      - name: Build CLI
+        run: |
+          opam exec -- pnpm cli:release
+          pnpm db-worker-node:release:bundle
+
+      - name: Smoke test
+        run: node static/logseq-cli.js --version
+
+      - name: Upload CLI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: logseq-cli
+          path: |
+            static/logseq-cli.js
+            dist/db-worker-node.js
+            dist/db-worker-node-assets.json
+            dist/logseq.js
