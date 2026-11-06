@@ -285,7 +285,7 @@
   (rtc-flows/trigger-rtc-start graph)
   (fsrs/update-due-cards-count)
   (when graph
-    (editor-handler/restore-pending-block-saves! graph))
+    (editor-handler/<restore-pending-block-saves! graph))
   nil)
 
 (defevent! :graph/save-db-to-disk [[_ _opts]]

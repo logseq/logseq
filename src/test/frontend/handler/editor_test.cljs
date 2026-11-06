@@ -496,7 +496,7 @@
                           (fn [db ops opts]
                             (swap! tx-calls conj [db ops opts])
                             (p/resolved nil))]
-            (editor/restore-pending-block-saves! repo))
+            (editor/<restore-pending-block-saves! repo))
           (p/then
            (fn [_]
              (is (= [[{:block/uuid block-uuid
@@ -536,7 +536,7 @@
                           db-transact/apply-outliner-ops
                           (fn [_ _ _]
                             (throw (js/Error. "must not save an unchanged title")))]
-            (editor/restore-pending-block-saves! repo))
+            (editor/<restore-pending-block-saves! repo))
           (p/then
            (fn [_]
              (is (empty? @save-calls)

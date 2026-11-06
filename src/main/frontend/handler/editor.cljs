@@ -1733,9 +1733,9 @@
              (compare-and-set! *unload-flush-installed? false true))
     (.addEventListener js/window "pagehide" flush-editor-on-unload!)))
 
-(defn restore-pending-block-saves!
-  "Replay titles persisted before a reload. A no-op when the worker already
-  has the same title. Missing blocks are dropped from the store."
+(defn <restore-pending-block-saves!
+  "Replay pending titles for `repo` after a reload.
+  Clears the recovery entry when the block is missing or its title already matches."
   [repo]
   (when repo
     (p/all
