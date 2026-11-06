@@ -13,6 +13,7 @@
             [logseq.db.common.initial-data :as common-initial-data]
             [logseq.db.frontend.datalog :as datalog-util]
             [logseq.db.frontend.inputs :as db-inputs]
+            [logseq.db.frontend.query :as db-query]
             [logseq.db.frontend.rules :as rules]))
 
 (def-thread-api :thread-api/q
@@ -257,8 +258,9 @@
         resolved-query (resolve-page-ref-equality query-form)
         resolved-inputs (mapv #(resolve-custom-query-input db % context) inputs)
         query-args (cond-> resolved-inputs
-                     rules-required? (conj rules-input))]
-    (apply d/q resolved-query db query-args)))
+                     rules-required? (conj rules-input))
+        query-db (db-query/without-recycled db)]
+    (apply d/q resolved-query query-db query-args)))
 
 (defn- require-query-context!
   [context]
