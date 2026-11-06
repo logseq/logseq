@@ -11,6 +11,16 @@ completed implementation work.
 
 ## Contract rules
 
+### 2.0.2 regression revision (2026-11-06)
+
+The [current tool-map contracts](mcp-native-tool-map.md#current-202-regression-contracts)
+and [remote retest cases](mcp-native-e2e-test.md#202-regression-retest) supersede
+historical behavior below for literal search, heading imports, repeated-title
+creation, MCP deletion/archive titles, capability discovery and stale sessions.
+The deployment marker is `capabilities.graph.contract_revision = 2026-11-06.1`,
+with `compatibility_target = 2.0.2`. These identify implementation, not live
+verification. New installed-app verification is still required.
+
 ### Post-migration getContentCapabilities (2026-10-09)
 
 The current native inventory is 55 tools. `getContentCapabilities()` is an

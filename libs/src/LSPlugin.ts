@@ -958,6 +958,7 @@ export interface IEditorProxy extends Record<string, any> {
  */
 export interface IDBProxy {
   getAppInfo: () => Promise<{ version: string; supportDb: boolean }>
+  getMcpApiMethods: () => Promise<string[]>
   getContentCapabilities: () => Promise<{
     app: { version: string; pluginsEnabled: boolean }
     formats: Array<{

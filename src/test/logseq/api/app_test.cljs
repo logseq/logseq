@@ -26,6 +26,20 @@
     (is (true? (:supportDb info)))
     (is (= "logseq_db_test-db" (:currentGraph configs)))))
 
+(deftest mcp-api-registry-lists-only-callable-methods-without-invoking-them
+  (let [previous js/window.logseq
+        calls (atom 0)]
+    (try
+      (aset js/window "logseq" #js {:api #js {:get_block (fn [] (swap! calls inc))
+                                              :get_page_data (fn [] (swap! calls inc))
+                                              :metadata "not a method"}})
+      (is (= ["get_block" "get_page_data"] (js->clj (api/get_mcp_api_methods))))
+      (is (zero? @calls))
+      (aset js/window "logseq" #js {})
+      (is (thrown-with-msg? js/Error #"API registry is unavailable" (api/get_mcp_api_methods)))
+      (finally
+        (aset js/window "logseq" previous)))))
+
 (deftest store-state-get-and-set
   (state/set-state! :ui/theme "light")
   (is (= "light" (api-app/get_state_from_store "ui/theme")))

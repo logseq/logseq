@@ -51,6 +51,16 @@
         :supportDb true})
       (bean/->js)))
 
+(defn get_mcp_api_methods
+  []
+  (let [api (some-> js/window.logseq (aget "api"))]
+    (when-not api
+      (throw (js/Error. "Logseq API registry is unavailable")))
+    (->> (js/Object.keys api)
+         (filter #(fn? (aget api %)))
+         sort
+         clj->js)))
+
 (defn- capability-text [value]
   (when (string? value)
     (subs value 0 (min 1000 (count value)))))

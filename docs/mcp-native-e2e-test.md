@@ -1,6 +1,6 @@
 # Native Logseq MCP End-to-End Test
 
-Updated 2026-10-09. Attach this document to Claude Desktop to test the native
+Updated 2026-11-06. Attach this document to Claude Desktop to test the native
 Logseq MCP server at `http://127.0.0.1:12315/mcp` from setup through cleanup.
 This is a test specification, not a results log. Keep results in a separate report.
 
@@ -8,6 +8,41 @@ The expected inventory is **55 tools**. Native Logseq source, SDK, tests and
 advertised schemas define the contracts. Use native DB skills whose search,
 asset, timeout and output assumptions match the connected server.
 Use this guide alone rather than combining it with older testing checklists.
+
+## 2.0.2 Regression Retest
+
+These are new implementation contracts, not recorded live passes. First check
+`capabilities.graph.compatibility_target` is `2.0.2` and `contract_revision` is
+`2026-11-06.1`; the app version alone cannot distinguish builds.
+
+On fresh, approved run-owned fixtures:
+
+- Import `- # Heading\n  - ## Nested heading\n    - Leaf`. Require
+  `verified: true`, then independently check the hierarchy, stripped heading
+  titles, heading levels 1/2, and all returned UUIDs. Do not reimport on failure.
+- Search for a fresh literal marker, a different-case marker, and a misspelling.
+  Every returned block title must contain the exact, case-sensitive search term.
+  Fuzzy-only matches must be absent. This filters one bounded native response,
+  so absence is not an exhaustive graph-wide proof and pagination remains native.
+- Repeat `createPage` on a run-owned title. Expect `status: "conflict"`,
+  `created: false`, `verified: false`, and `held_by`, without MCP `isError` or
+  graph changes. Also check a title held by a run-owned tag or recycled page.
+- Delete a run-owned page. Its UUID/content remain recoverable under
+  `<original title> (recycled <page UUID>)`; require `title_released: true`,
+  and independently check the original title with `isTitleAvailable`.
+  Existing recycled pages are not retroactively renamed. Keep the successful
+  built-in-view-block deletion case covered without weakening reference gates.
+- In read-only capabilities, `findOrphans`, `getBlock`, `getBlockUUID`, `getPage`,
+  `pageStats`, and `getTag` must not be unknown merely because dummy entities
+  return null. Diagnostics distinguish registered methods from probe evidence;
+  write probes remain disabled and registration does not verify real writes.
+- Confirm `createProperty` advertises normalization; use its returned ident.
+- After an idle pause or app restart, reconnect/reinitialize the client if its
+  old session receives HTTP 404. Missing session IDs still receive HTTP 400.
+  Never automatically retry a write after losing its response.
+
+Any separately installed client skill must adopt these contracts. Its source is
+not part of this repository; attaching this guide does not update that skill.
 
 ## Start Prompt
 
@@ -62,14 +97,15 @@ coverage for cases that were blocked, manually skipped, or not actually called.
    server. Keep credentials in secure client settings; never request, display,
    or put bearer tokens in this document, arguments, or the report.
 4. Call `capabilities` with `probe_writes: false`, `include_diagnostics: true`.
-   Record version and DB-graph status. `unknown`/`not-probed` for write-dependent
+   Record version, compatibility target, contract revision and DB-graph status. `unknown`/`not-probed` for write-dependent
    tools is expected; an inconclusive read probe is not proof a tool is absent.
    Never enable `probe_writes: true` for this run.
 5. Ask the user to confirm the exact graph is disposable, preferably a dedicated
    fresh graph or clone. A graph named `test` is not sufficient confirmation.
 6. Present and obtain approval for the scope: fresh pages/blocks/tags/plugin
    properties, their normal edits and moves, embed creation/removal, clear/recycle
-   tests, and run-owned cleanup. Page recycling retains UUIDs and titles and
+   tests, and run-owned cleanup. MCP page recycling retains UUIDs/content under
+   unique archived titles, releasing the original titles, and
    cannot be purged through MCP. Obtain separate approval for destructive cases
    with reference detach/loss acknowledgements or manual UI asset/alias setup.
    Agree whether populated/external/recycled asset cases are required for this
@@ -93,6 +129,7 @@ coverage for cases that were blocked, manually skipped, or not actually called.
 - Do not clear reused fixture pages at startup. Create fresh, unique titles after
   `isTitleAvailable`; never rename/recycle a collision to make room.
 - Parse structured MCP results. Record `isError` separately from `verified`.
+  A repeated-title `createPage` returns a structured conflict, not an MCP error.
   A requested dry run returning `verified: false`, `response: null`, and no writes
   is PASS, not a failed write. Do not require identical envelopes across tools.
 - A positive write needs independent state evidence, not just `verified: true`.
@@ -177,7 +214,7 @@ Keep the intentionally unusual spellings, including `creatTag`,
 | `findDuplicateTitles` | A, C: exact/loose/fuzzy read-only reports; no repair |
 | `pageStats` | B, E, F, K: blocks/content/refs/aliases and embed-aware counts |
 | `inspectPage` | B, D, E, F: page/blocks/tags/properties/declared/all details |
-| `createPage` | B: no-write dry run, positive creation, held-title refusal |
+| `createPage` | B: no-write dry run, positive creation, structured held-title conflict |
 | `renamePage` | C: same UUID, new title/name, collision refusal, rename back |
 | `createBlock` | B: page parent, nested block parent, no-write dry run |
 | `updateBlock` | C: same UUID and placement, no-write dry run, title change |
@@ -186,7 +223,7 @@ Keep the intentionally unusual spellings, including `creatTag`,
 | `splitBlock` | C: delimiter and offset, ordered siblings, validation refusals |
 | `moveBlocks` | C: supplied-order last-child run and invalid-selection guards |
 | `migratePage` | G: dry-run selection, positive move, source remainder |
-| `deletePage` | K: approved recycling, live-list absence, retained UUID/title |
+| `deletePage` | K: approved recycling, live-list absence, retained UUID/content, archived title and released original title |
 | `clearPage` | K: only run-owned content, metadata preserved, absence verified |
 | `retitleOverDuplicate` | C: chosen source renamed, empty holder parked, UUIDs stable |
 | `createPageofBlocks` | G: indented outline dry run and nested insertion |
@@ -490,8 +527,10 @@ Use this dependency order:
    false unless the user explicitly approved the inspected run-owned relations.
    Unexpected view/property/alias refs mean preserve the page and report why.
 6. Verify generated recycled pages leave listPages, appear in listRecycled, and
-   retain their UUID/title. isTitleAvailable may still report held while
-   getPageUUID cannot resolve the recycled title. No purge is available.
+   retain their UUID/content under the returned archived title. Check that the
+   original title is available unless another independently identified holder
+   owns it. A failed archive is a partial failure, not successful cleanup.
+   Previously recycled pages retain their old titles. No purge is available.
 7. Reconcile final live page/tag/property sets against baseline and the ledger.
    Recycled totals may grow by the known generated pages. Inventory every retained
    entity and UI-prepared asset; exact baseline totals are not mandatory when the

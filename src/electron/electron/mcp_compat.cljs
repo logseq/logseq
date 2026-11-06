@@ -1,10 +1,24 @@
 (ns electron.mcp-compat
-  (:require [clojure.string :as string]
+  (:require [camel-snake-kebab.core :as csk]
+            [clojure.string :as string]
             [logseq.api.db-based.util :as api-util]
             [logseq.common.util :as common-util]
             [promesa.core :as p]))
 
 (declare property-entity-value property-type)
+
+(defn type-proxy-api? [method]
+  (when (string? method)
+    (string/starts-with? method "logseq.")))
+
+(defn resolve-real-api-method [method]
+  (when-not (string/blank? method)
+    (if (type-proxy-api? method)
+      (let [parts (string/split (string/trim method) ".")
+            api-namespace (some-> (second parts) string/lower-case)
+            function (string/replace (last parts) "UUIDs" "Uuids")]
+        (csk/->snake_case (str api-namespace "@" function)))
+      (string/trim method))))
 
 (defn get-page
   [call-api-fn args]
@@ -307,8 +321,10 @@
 
 (defn title-holder-kind
   [entity]
-  (let [idents (set (keep #(or (:ident %) (:db/ident %))
-                          (or (:tags entity) (:block/tags entity) [])))]
+  (let [idents (->> (or (:tags entity) (:block/tags entity) [])
+                    (keep #(or (:ident %) (:db/ident %)))
+                    (map #(if (string? %) (keyword (string/replace % #"^:" "")) %))
+                    set)]
     (cond
       (contains? idents :logseq.class/Property) "property"
       (contains? idents :logseq.class/Tag) "tag"
@@ -336,6 +352,8 @@
   [api-fn args]
   (let [title (aget args "title")]
     (p/let [result (api-fn "logseq.DB.getTitleHolders" [title])
+            _ (when-let [error (and result (aget result "error"))]
+                (throw (js/Error. (str error))))
             entities (js->clj result :keywordize-keys true)]
       (title-availability-result title entities))))
 
@@ -1337,6 +1355,37 @@
        :aliases (js->clj aliases-result :keywordize-keys true)
        :inbound (js->clj inbound-result :keywordize-keys true)})))
 
+(defn- <archive-deleted-page
+  [api-fn page current]
+  (if (nil? current)
+    (p/resolved {:title-released? true :current nil})
+    (let [page-uuid (:uuid page)
+          archived-title (str (:title page) " (recycled " page-uuid ")")]
+      (p/let [availability (is-title-available api-fn #js {:title archived-title})]
+        (if-not (:available availability)
+          {:title-released? false :current current
+           :diagnostic "Page was recycled, but its archive title is already occupied; the original title was not released."}
+          (p/let [response (api-fn "logseq.DB.renamePage" [page-uuid archived-title])
+                  result (api-fn "logseq.DB.datascriptQuery"
+                                 ["[:find (pull ?page [*]) . :in $ ?uuid :where [?page :block/uuid ?uuid]]"
+                                  (uuid-query-input page-uuid)])
+                  _ (when-let [error (and result (aget result "error"))]
+                      (throw (js/Error. (str "Archive read-back failed: " error))))
+                  observed (js->clj result :keywordize-keys true)
+                  original (is-title-available api-fn #js {:title (:title page)})
+                  released? (and (not (and response (aget response "error")))
+                                 (= page-uuid (:uuid observed))
+                                 (recycled-entity? observed)
+                                 (= archived-title (:title observed))
+                                 (not-any? #(= page-uuid (:uuid %)) (:held_by original)))]
+            {:title-released? released? :current observed
+             :archived-title archived-title :title-available? (:available original)
+             :response (js->clj response :keywordize-keys true)
+             :diagnostic (when-not released?
+                           (str "Page was recycled, but releasing its title did not verify. "
+                                (when-let [error (and response (aget response "error"))]
+                                  (str "API error: " error))))}))))))
+
 (defn delete-page
   [api-fn args]
   (let [page-uuid (aget args "page_uuid")
@@ -1360,13 +1409,23 @@
                                        ["[:find (pull ?page [*]) . :in $ ?uuid :where [?page :block/uuid ?uuid]]"
                                         (uuid-query-input page-uuid)])
                 current (js->clj current-result :keywordize-keys true)
-                deleted? (or (nil? current) (recycled-entity? current))]
+                deleted? (or (nil? current) (recycled-entity? current))
+                archive (when (and deleted? (not (and response (aget response "error"))))
+                          (<archive-deleted-page api-fn page current))
+                verified? (and deleted? (true? (:title-released? archive)))
+                observed (if archive (:current archive) current)]
           (cond-> {:response (js->clj response :keywordize-keys true)
-                   :verified deleted? :verified_entities (if deleted? (cond-> [] current (conj current)) [])
+                   :verified verified? :verified_entities (if verified? (cond-> [] observed (conj observed)) [])
+                   :original_title (:title page) :title_released (true? (:title-released? archive))
                    :previous_count (count previous) :observed_entities (:inbound context)
-                   :diagnostic (if deleted? "Page is absent or recycled; inbound references were not rewritten."
-                                   "Deletion was not observed; the page is still live.")}
-            (or verbose? (not deleted?)) (assoc :previous_entities previous)))))))
+                   :diagnostic (cond
+                                 verified? "Page is absent or recycled under a unique archive title; inbound references were not rewritten."
+                                 deleted? (or (:diagnostic archive) "Page was recycled, but its title was not released; inspect the API response.")
+                                 :else "Deletion was not observed; the page is still live.")}
+            archive (assoc :archived_title (:archived-title archive)
+                           :archive_response (:response archive))
+            (contains? archive :title-available?) (assoc :title_available (:title-available? archive))
+            (or verbose? (not verified?)) (assoc :previous_entities previous)))))))
 
 (defn clear-page
   [api-fn args]
@@ -1482,7 +1541,13 @@
                 (p/let [parent-uuid (get parents parent-path)
                         parent (read-entity parent-uuid)
                         response (api-fn "logseq.DB.insertBatchBlock"
-                                         [parent-uuid (clj->js (mapv #(hash-map :content (:title %)) items))
+                                         [parent-uuid (clj->js
+                                                       (mapv (fn [{:keys [title]}]
+                                                               (let [heading (re-find #"^(#{1,6})\s+" title)]
+                                                                 (cond-> {:content title}
+                                                                   heading
+                                                                   (assoc :properties {"logseq.property/heading" (count (second heading))}))))
+                                                             items))
                                           #js {:sibling false}])
                         returned (js->clj response :keywordize-keys true)
                         uuids (mapv #(or (:uuid %) (:block/uuid %)) returned)]
@@ -1592,11 +1657,15 @@
     (when-not (and (string? title) (not (string/blank? title)))
       (throw (js/Error. "Expected a non-empty title")))
     (p/let [availability (is-title-available api-fn #js {"title" title})]
-      (when-not (:available availability)
+      (cond
+        (not (:available availability))
         (let [kinds (->> (:held_by availability) (map :kind) distinct (string/join ", "))]
-          (throw (js/Error. (str "An entity titled " (pr-str title)
-                                 " already exists (" kinds "). Pages, tags and blocks share a title space.")))))
-      (if dry-run?
+          {:status "conflict" :verified false :created false :title title
+           :held_by (:held_by availability)
+           :diagnostic (str "An entity titled " (pr-str title)
+                            " already exists (" kinds "). Nothing was created or modified.")})
+
+        dry-run?
         {:validation {:title title :checked "locally"}
          :response nil
          :verified_entities []
@@ -1604,6 +1673,7 @@
          :verified false
          :diagnostic (str "Dry run: nothing was written, so verified is false by design. "
                           "This checks the title locally; createPage has no server-side dry run.")}
+        :else
         (p/let [response (api-fn "logseq.DB.createPage" [title])
                 response-map (js->clj response :keywordize-keys true)]
           (when-let [error (and response (aget response "error"))]
@@ -1656,9 +1726,11 @@
               page-uuid (cond (re-matches common-util/exactly-uuid-pattern target) target
                               (seq pages) (:uuid (first pages))
                               :else (get-in creation [:verified_entities 0 :uuid]))
-              base (assoc base :page_uuid page-uuid :created_page (boolean creation))]
+              base (assoc base :page_uuid page-uuid :created_page (boolean (and creation (not= "conflict" (:status creation)))))]
         (if (and creation (not (:verified creation)))
-          (assoc base :verified false :diagnostic (:diagnostic creation))
+          (cond-> (assoc base :verified false :diagnostic (:diagnostic creation))
+            (= "conflict" (:status creation))
+            (assoc :status "conflict" :held_by (:held_by creation)))
           (p/let [before (page-mutation-context api-fn page-uuid)
                   _ (when (recycled-entity? (:page before)) (throw (js/Error. "Cannot import into a recycled page")))
                   cleared (when (true? (aget args "replace"))
@@ -2356,9 +2428,18 @@
   (call-api-fn "logseq.DB.listProperties" [#js {:expand (aget args "expand")}]))
 
 (defn search-blocks
-  [call-api-fn args]
-  (call-api-fn "logseq.DB.search"
-               [(aget args "searchTerm") #js {:enable-snippet? false}]))
+  [api-fn args]
+  (let [term (aget args "searchTerm")]
+    (when-not (and (string? term) (not (string/blank? term)))
+      (throw (js/Error. "searchTerm must be a non-empty string")))
+    (p/let [result (api-fn "logseq.DB.search" [term #js {:enable-snippet? false}])]
+      (when-let [error (and result (aget result "error"))]
+        (throw (js/Error. (str error))))
+      (let [data (js->clj result :keywordize-keys true)
+            blocks (:blocks data)]
+        (when-not (and (vector? blocks) (every? #(string? (:title %)) blocks))
+          (throw (js/Error. "search returned an invalid block inventory")))
+        (assoc data :blocks (filterv #(string/includes? (:title %) term) blocks))))))
 
 (defn repair-links
   [api-fn args]
@@ -2497,7 +2578,7 @@
    :deleteTag ["logseq.DB.deletePage" "logseq.DB.datascriptQuery"]
    :addTag ["logseq.DB.addBlockTag" "logseq.DB.datascriptQuery"]
    :removeTag ["logseq.DB.removeBlockTag" "logseq.DB.datascriptQuery"]
-   :createPage ["logseq.DB.datascriptQuery" "logseq.DB.createPage"]
+   :createPage ["logseq.DB.getTitleHolders" "logseq.DB.datascriptQuery" "logseq.DB.createPage"]
    :renamePage ["logseq.DB.datascriptQuery" "logseq.DB.renamePage"]
    :createBlock ["logseq.DB.insertBlock" "logseq.DB.datascriptQuery"]
    :createEmbed ["logseq.DB.createEmbed" "logseq.DB.datascriptQuery"]
@@ -2507,11 +2588,11 @@
    :splitBlock ["logseq.DB.datascriptQuery" "logseq.DB.insertBlock" "logseq.DB.moveBlock" "logseq.DB.updateBlock"]
    :moveBlocks ["logseq.DB.datascriptQuery" "logseq.DB.moveBlock"]
    :migratePage ["logseq.DB.datascriptQuery" "logseq.DB.moveBlock"]
-   :deletePage ["logseq.DB.datascriptQuery" "logseq.DB.deletePage"]
+   :deletePage ["logseq.DB.datascriptQuery" "logseq.DB.deletePage" "logseq.DB.renamePage" "logseq.DB.getTitleHolders"]
    :clearPage ["logseq.DB.datascriptQuery" "logseq.DB.removeBlock"]
    :retitleOverDuplicate ["logseq.DB.datascriptQuery" "logseq.DB.renamePage"]
    :createPageofBlocks ["logseq.DB.datascriptQuery" "logseq.DB.insertBatchBlock"]
-   :importPage ["logseq.DB.datascriptQuery" "logseq.DB.createPage" "logseq.DB.insertBatchBlock" "logseq.DB.removeBlock"]
+   :importPage ["logseq.DB.getTitleHolders" "logseq.DB.datascriptQuery" "logseq.DB.createPage" "logseq.DB.insertBatchBlock" "logseq.DB.removeBlock"]
    :repairLinks ["logseq.DB.datascriptQuery" "logseq.DB.createPage" "logseq.DB.createTag" "logseq.DB.updateBlock"]
    :getTag ["logseq.DB.getTag"]
    :getTagUsers ["logseq.DB.getTagUsers"]
@@ -2621,15 +2702,19 @@
                     (subs (str error-message) 0 (min 200 (count (str error-message)))))}
 
       (nil? result)
-      {:method method :state "unknown" :basis "probed"
-       :detail "returned null for probe arguments; cannot distinguish a missing method from a silent no-op"}
+      {:method method :state "available" :basis "registered"
+       :detail "Method is registered; the probe returned null for a missing entity."}
 
       :else
       {:method method :state "available" :basis "probed" :detail "returned a result"})))
 
 (defn- probe-capability-method
-  [api-fn method probe-writes?]
+  [api-fn method probe-writes? registered-methods]
   (cond
+    (not (contains? registered-methods (last (string/split (resolve-real-api-method method) #"@"))))
+    (p/resolved {:method method :state "unavailable" :basis "registered"
+                 :detail "Method is absent from the renderer API registry."})
+
     (= method "logseq.DB.createPage")
     (p/resolved {:method method
                  :state "unknown"
@@ -2676,8 +2761,15 @@
         (p/rejected (js/Error. "The current Logseq graph is not a DB graph"))
 
         :else
-        (p/let [probe-methods (->> capability-tool-routes vals (apply concat) distinct sort)
-                findings (p/all (map #(probe-capability-method api-fn % probe-writes?) probe-methods))
+        (p/let [registered-result (api-fn "logseq.DB.getMcpApiMethods" [])
+                registered-methods (js->clj registered-result)
+                _ (when-not (and (vector? registered-methods) (every? string? registered-methods))
+                    (throw (js/Error. (str "Unable to read the renderer API registry: "
+                                           (if-let [error (and registered-result (aget registered-result "error"))]
+                                             error
+                                             "expected an array of method names")))))
+                probe-methods (->> capability-tool-routes vals (apply concat) distinct sort)
+                findings (p/all (map #(probe-capability-method api-fn % probe-writes? (set registered-methods)) probe-methods))
                 findings-by-method (into {} (map (juxt :method identity) findings))
                 tools (into (sorted-map)
                             (map (fn [[tool _routes]]
@@ -2689,20 +2781,21 @@
                                            (when (= "unknown" (:state status)) (name tool)))) sort vec)
                 version (:version info)
                 body {:graph {:version version
-                              :verified_against "2.0.1"
-                              :version_matches (= version "2.0.1")
+                              :compatibility_target "2.0.2"
+                              :contract_revision "2026-11-06.1"
+                              :version_matches (= version "2.0.2")
                               :checked_at (/ (.now js/Date) 1000)}
                       :tools tools
-                      :what_available_means (str "The route exists and responds. Probes send deliberately invalid arguments, so `available` establishes reachability, not that the route accepts a real payload."
+                      :what_available_means (str "The method is registered in the renderer API. Read probes use dummy arguments; null for a missing entity does not mean the method is missing. Registration is not verification of real payloads; inspect diagnostics for probe errors."
                                                  (when-not probe-writes?
                                                    " Mutation routes are skipped by default and reported as unknown/not-probed."))}
                 body (cond-> body
                        (seq unavailable) (assoc :unavailable unavailable)
                        (seq unknown) (assoc :unknown unknown
                                             :note "`unknown` means the probe was inconclusive, not that the tool is unavailable. Try it and check the result.")
-                       (not= version "2.0.1")
+                       (not= version "2.0.2")
                        (assoc-in [:graph :caveat]
-                                 "This graph is not the version these tools were verified against; behaviour may differ.")
+                                 "This app differs from the MCP compatibility target; behaviour may differ.")
                        (true? (aget args "include_diagnostics"))
                        (assoc :diagnostics {:routes (into (sorted-map)
                                                           (map (fn [[tool routes]]

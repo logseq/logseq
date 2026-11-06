@@ -26,6 +26,31 @@
     (swap! calls conj [method args])
     result))
 
+(defn- mcp-api-registry
+  []
+  (clj->js (->> @#'mcp-compat/capability-tool-routes
+                vals
+                (apply concat)
+                distinct
+                (map #(last (string/split (mcp-server/resolve-real-api-method %) #"@"))))))
+
+(deftest expired-mcp-sessions-require-reinitialization
+  (doseq [[session-id expected-status] [[nil 400] ["expired-session" 404]]
+          handler [mcp-server/handle-get-request mcp-server/handle-delete-request
+                   (partial mcp-server/handle-post-request (fn [& _] (throw (js/Error. "Unexpected API call")))
+                            {:host "localhost" :port 12315})]]
+    (let [status (atom nil)
+          body (atom nil)
+          response #js {}
+          request #js {:headers (if session-id #js {"mcp-session-id" session-id} #js {})
+                       :body #js {:jsonrpc "2.0" :id 1 :method "tools/list"}}]
+      (aset response "code" (fn [value] (reset! status value) response))
+      (aset response "send" (fn [value] (reset! body value) response))
+      (handler request response)
+      (is (= expected-status @status))
+      (when session-id
+        (is (string/includes? (js/JSON.stringify @body) "initialize a new MCP session"))))))
+
 (deftest datascript-query-output-limits
   (let [query "[:find ?x :where [?e :block/title ?x]]"
         capped (mcp-server/bounded-query-result query (clj->js (mapv vector (range 1001))))
@@ -512,11 +537,13 @@
                                                               page-id (if (:block/name parent) parent-id (:db/id (:block/page parent)))
                                                               created (mapv (fn [item]
                                                                               (let [id (swap! counter inc)
-                                                                                    uuid-text (str "00000000-0000-4000-8000-000000000" id)]
-                                                                                (d/transact! conn [{:db/id id :block/uuid (uuid uuid-text)
-                                                                                                    :block/title (aget item "content") :block/order (str id)
-                                                                                                    :block/parent parent-id :block/page page-id
-                                                                                                    :block/parent+ (conj (mapv :db/id (:block/parent+ parent)) parent-id)}])
+                                                                                    uuid-text (str "00000000-0000-4000-8000-000000000" id)
+                                                                                    heading (some-> (aget item "properties") (aget "logseq.property/heading"))]
+                                                                                (d/transact! conn [(cond-> {:db/id id :block/uuid (uuid uuid-text)
+                                                                                                            :block/title (string/replace (aget item "content") #"^#{1,6}\s+" "") :block/order (str id)
+                                                                                                            :block/parent parent-id :block/page page-id
+                                                                                                            :block/parent+ (conj (mapv :db/id (:block/parent+ parent)) parent-id)}
+                                                                                                     heading (assoc :logseq.property/heading heading))])
                                                                                 {:uuid uuid-text})) (array-seq (second args)))]
                                                           (clj->js created))
                                                         nil))))]
@@ -1009,7 +1036,48 @@
                          (is (true? (:verified result)))
                          (is (= page-uuid (get-in result [:verified_entities 0 :uuid])))
                          (is (= 2 (count (:previous_entities result))))
+                         (is (true? (:title_released result)))
+                         (is (true? (:title_available result)))
+                         (is (= (str "Fixture (recycled " page-uuid ")")
+                                (:block/title (d/entity @conn 160))))
+                         (is (= 1 (:logseq.property/deleted-at (d/entity @conn 160))))
+                         (is (= "Content" (:block/title (d/entity @conn 161))))
                          (is (some? (d/entity @conn [:block/uuid (uuid block-uuid)])))
+                         (done)))
+               (p/catch (fn [error] (is false (.-message error)) (done)))))))
+
+(deftest delete-page-reports-archive-errors-with-recoverable-content
+  (let [{:keys [page-uuid conn api]} (page-fixture)
+        wrapped-api (fn [method args]
+                      (if (= method "logseq.DB.renamePage")
+                        #js {:error "archive rename denied"}
+                        (api method args)))]
+    (async done
+           (-> (p/then (mcp-compat/delete-page wrapped-api #js {:page_uuid page-uuid})
+                       (fn [result]
+                         (is (false? (:verified result)))
+                         (is (false? (:title_released result)))
+                         (is (= "archive rename denied" (get-in result [:archive_response :error])))
+                         (is (string/includes? (:diagnostic result) "archive rename denied"))
+                         (is (= "Fixture" (:block/title (d/entity @conn 160))))
+                         (is (= 1 (:logseq.property/deleted-at (d/entity @conn 160))))
+                         (is (= "Content" (:block/title (d/entity @conn 161))))
+                         (done)))
+               (p/catch (fn [error] (is false (.-message error)) (done)))))))
+
+(deftest delete-page-does-not-overwrite-an-occupied-archive-title
+  (let [{:keys [page-uuid conn api calls]} (page-fixture)
+        archived-title (str "Fixture (recycled " page-uuid ")")]
+    (d/transact! conn [{:db/id 162 :block/uuid (uuid "00000000-0000-4000-8000-000000000162")
+                        :block/title archived-title}])
+    (async done
+           (-> (p/then (mcp-compat/delete-page api #js {:page_uuid page-uuid})
+                       (fn [result]
+                         (is (false? (:verified result)))
+                         (is (false? (:title_released result)))
+                         (is (string/includes? (:diagnostic result) "already occupied"))
+                         (is (= "Fixture" (:block/title (d/entity @conn 160))))
+                         (is (not-any? #(= "logseq.DB.renamePage" (first %)) @calls))
                          (done)))
                (p/catch (fn [error] (is false (.-message error)) (done)))))))
 
@@ -1265,6 +1333,38 @@
                          (is (= ["Future Page"] (:escaped_links result)))
                          (is (= "  Text\n\n{{link:Future Page}}" (:block/title (d/entity @conn 201))))
                          (is (some? (d/entity @conn 161)))
+                         (done)))
+               (p/catch (fn [error] (is false (.-message error)) (done)))))))
+
+(deftest import-page-preserves-heading-properties-through-nested-batches
+  (let [{:keys [page-uuid api conn]} (page-fixture)]
+    (async done
+           (-> (p/then (mcp-compat/import-page api #js {:target page-uuid
+                                                        :markdown "- # Heading\n  - ## Nested heading\n    - Leaf"})
+                       (fn [result]
+                         (is (true? (:verified result)) (:diagnostic result))
+                         (is (= 3 (count (:created_uuids result))))
+                         (is (= "Heading" (:block/title (d/entity @conn 201))))
+                         (is (= 1 (:logseq.property/heading (d/entity @conn 201))))
+                         (is (= "Nested heading" (:block/title (d/entity @conn 202))))
+                         (is (= 2 (:logseq.property/heading (d/entity @conn 202))))
+                         (is (= 201 (:db/id (:block/parent (d/entity @conn 202)))))
+                         (is (= 202 (:db/id (:block/parent (d/entity @conn 203)))))
+                         (done)))
+               (p/catch (fn [error] (is false (.-message error)) (done)))))))
+
+(deftest import-page-propagates-title-conflicts-without-creating-content
+  (let [{:keys [api conn calls]} (page-fixture)]
+    (d/transact! conn [{:db/id 162 :block/uuid (uuid "00000000-0000-4000-8000-000000000162")
+                        :block/title "Tag title" :block/tags [159]}])
+    (async done
+           (-> (p/then (mcp-compat/import-page api #js {:target "Tag title" :markdown "- Must not insert"})
+                       (fn [result]
+                         (is (= "conflict" (:status result)))
+                         (is (false? (:verified result)))
+                         (is (false? (:created_page result)))
+                         (is (= "tag" (get-in result [:held_by 0 :kind])))
+                         (is (every? #(contains? #{"logseq.DB.datascriptQuery" "logseq.DB.getTitleHolders"} (first %)) @calls))
                          (done)))
                (p/catch (fn [error] (is false (.-message error)) (done)))))))
 
@@ -1814,7 +1914,6 @@
     (is (= :ok (mcp-compat/list-pages api #js {"expand" true})))
     (is (= :ok (mcp-compat/list-tags api #js {"expand" false})))
     (is (= :ok (mcp-compat/list-properties api #js {"expand" true})))
-    (is (= :ok (mcp-compat/search-blocks api #js {"searchTerm" "needle"})))
     (is (= ["logseq.DB.getPageData" ["Inbox"]]
            (first @calls)))
     (is (= "logseq.DB.listPages" (first (second @calls))))
@@ -1822,26 +1921,92 @@
     (is (= "logseq.DB.listTags" (first (nth @calls 2))))
     (is (= false (aget (first (second (nth @calls 2))) "expand")))
     (is (= "logseq.DB.listProperties" (first (nth @calls 3))))
-    (is (= true (aget (first (second (nth @calls 3))) "expand")))
-    (is (= ["logseq.DB.search" "needle"]
-           [(first (nth @calls 4)) (first (second (nth @calls 4)))]))))
+    (is (= true (aget (first (second (nth @calls 3))) "expand")))))
+
+(deftest search-blocks-excludes-fuzzy-only-and-different-case-results
+  (let [calls (atom [])
+        api (recording-api calls #js {:blocks #js [#js {:uuid "literal" :title "Found teh here"}
+                                                   #js {:uuid "fuzzy" :title "Nested child"}
+                                                   #js {:uuid "case" :title "Found Teh here"}]
+                                      :files #js ["file"] :hasMore true})]
+    (async done
+           (-> (p/then (mcp-compat/search-blocks api #js {:searchTerm "teh"})
+                       (fn [result]
+                         (is (= ["literal"] (mapv :uuid (:blocks result))))
+                         (is (= ["file"] (:files result)))
+                         (is (true? (:hasMore result)))
+                         (is (= "logseq.DB.search" (ffirst @calls)))
+                         (is (false? (aget (second (second (first @calls))) "enable-snippet?")))
+                         (done)))
+               (p/catch (fn [error] (is false (.-message error)) (done)))))))
+
+(deftest search-blocks-surfaces-api-errors
+  (async done
+         (-> (p/then (mcp-compat/search-blocks (fn [& _] (p/resolved #js {:error "search failed"}))
+                                               #js {:searchTerm "teh"})
+                     (fn [_] (is false "Search errors must not become empty success results") (done)))
+             (p/catch (fn [error]
+                        (is (= "search failed" (.-message error)))
+                        (done))))))
+
+(deftest mcp-search-and-conflict-results-survive-sdk-transport
+  (let [calls (atom [])
+        api (fn [method args]
+              (swap! calls conj [method args])
+              (p/resolved
+               (case method
+                 "logseq.DB.search" #js {:blocks #js [#js {:uuid "literal" :title "Found teh here"}
+                                                      #js {:uuid "fuzzy" :title "Nested child"}]}
+                 "logseq.DB.getTitleHolders" #js [#js {:uuid "existing-page" :title "Taken" :name "taken"}]
+                 (throw (js/Error. (str "Unexpected API call: " method))))))
+        server (mcp-server/create-mcp-api-server api)
+        client (Client. #js {:name "MCP regression test" :version "1"})
+        transports (.createLinkedPair InMemoryTransport)]
+    (async done
+           (-> (p/let [_ (.connect server (aget transports 0))
+                       _ (.connect client (aget transports 1))
+                       search (.callTool client #js {:name "searchBlocks" :arguments #js {:searchTerm "teh"}})
+                       search-data (js->clj (js/JSON.parse (aget search "content" 0 "text")) :keywordize-keys true)
+                       conflict (.callTool client #js {:name "createPage" :arguments #js {:title "Taken"}})
+                       conflict-data (js->clj (js/JSON.parse (aget conflict "content" 0 "text")) :keywordize-keys true)]
+                 (is (not (true? (aget search "isError"))))
+                 (is (= ["literal"] (mapv :uuid (:blocks search-data))))
+                 (is (not (true? (aget conflict "isError"))))
+                 (is (= "conflict" (:status conflict-data)))
+                 (is (false? (:created conflict-data)))
+                 (is (false? (:verified conflict-data)))
+                 (is (not-any? #(= "logseq.DB.createPage" (first %)) @calls)))
+               (p/catch (fn [error] (is false (str error))))
+               (p/finally (fn []
+                            (p/let [_ (.close client)
+                                    _ (.close server)]
+                              (js/queueMicrotask done))))))))
 
 (deftest capabilities-reports-only-the-registered-reference-routes
   (let [calls (atom [])
         api (fn [method args]
               (swap! calls conj [method args])
               (case method
-                "logseq.DB.getAppInfo" #js {"version" "2.0.1" "supportDb" true}
+                "logseq.DB.getAppInfo" #js {"version" "2.0.2" "supportDb" true}
                 "logseq.DB.checkCurrentIsDbGraph" true
+                "logseq.DB.getMcpApiMethods" (mcp-api-registry)
                 "logseq.DB.getTagsByName" nil
+                "logseq.DB.getPageData" nil
+                "logseq.DB.getPageStats" nil
+                "logseq.DB.getTag" nil
+                "logseq.DB.getBlock" nil
+                "logseq.DB.getPageBlockUUIDs" nil
                 #js []))]
     (async done
            (-> (p/then (mcp-compat/capabilities api #js {"include_diagnostics" true})
                        (fn [result]
-                         (is (= "2.0.1" (get-in result [:graph :version])))
+                         (is (= "2.0.2" (get-in result [:graph :version])))
                          (is (true? (get-in result [:graph :version_matches])))
-                         (is (= "unknown" (get-in result [:tools :getTagUUID :state])))
-                         (is (some #{"getTagUUID"} (:unknown result)))
+                         (doseq [tool [:getTagUUID :getPage :pageStats :getTag :getBlock :getBlockUUID :findOrphans]]
+                           (is (= "available" (get-in result [:tools tool :state]))))
+                         (is (some #(and (= "logseq.DB.getPageBlockUUIDs" (:method %))
+                                         (= "registered" (:basis %)))
+                                   (get-in result [:diagnostics :method_findings])))
                          (is (some #(= "logseq.DB.getTag" (first %)) @calls))
                          (is (some #(= "logseq.DB.getBlock" (first %)) @calls))
                          (is (some #(= "logseq.DB.listPages" (first %)) @calls))
@@ -1906,6 +2071,7 @@
               (case method
                 "logseq.DB.getAppInfo" #js {"version" "2.0.1" "supportDb" true}
                 "logseq.DB.checkCurrentIsDbGraph" true
+                "logseq.DB.getMcpApiMethods" (mcp-api-registry)
                 "logseq.DB.upsertProperty" #js {"error" "invalid probe title"}
                 #js []))]
     (async done
@@ -1920,6 +2086,37 @@
                (p/catch (fn [error]
                           (is false (str error))
                           (js/queueMicrotask done)))))))
+
+(deftest capabilities-does-not-probe-an-unregistered-read
+  (let [calls (atom [])
+        api (fn [method args]
+              (swap! calls conj [method args])
+              (case method
+                "logseq.DB.getAppInfo" #js {:version "2.0.2" :supportDb true}
+                "logseq.DB.checkCurrentIsDbGraph" true
+                "logseq.DB.getMcpApiMethods" (clj->js (remove #{"get_tag"} (js->clj (mcp-api-registry))))
+                #js []))]
+    (async done
+           (-> (p/then (mcp-compat/capabilities api #js {})
+                       (fn [result]
+                         (is (= "unavailable" (get-in result [:tools :getTag :state])))
+                         (is (not-any? #(= "logseq.DB.getTag" (first %)) @calls))
+                         (done)))
+               (p/catch (fn [error] (is false (.-message error)) (done)))))))
+
+(deftest capabilities-fails-explicitly-if-the-registry-cannot-be-read
+  (let [api (fn [method _args]
+              (case method
+                "logseq.DB.getAppInfo" #js {:version "2.0.2" :supportDb true}
+                "logseq.DB.checkCurrentIsDbGraph" true
+                "logseq.DB.getMcpApiMethods" #js {:error "No method found"}
+                (throw (js/Error. "Unexpected probe without registry"))))]
+    (async done
+           (-> (p/then (mcp-compat/capabilities api #js {})
+                       (fn [_] (is false "Missing registry must not look like a capability report") (done)))
+               (p/catch (fn [error]
+                          (is (string/includes? (.-message error) "Unable to read the renderer API registry"))
+                          (done)))))))
 
 (deftest capabilities-refuses-non-db-graphs
   (let [api (fn [method _args]
@@ -1957,7 +2154,7 @@
                  (js/queueMicrotask done))
                (p/catch (fn [error] (is false (.-message error)) (js/queueMicrotask done)))))))
 
-(deftest create-page-refuses-title-collisions-before-writing
+(deftest create-page-returns-a-non-error-conflict-without-writing
   (let [calls (atom [])
         api (fn [method args]
               (swap! calls conj [method args])
@@ -1966,13 +2163,17 @@
                   :tags [{:ident :logseq.class/Page}]}]
                 nil))]
     (async done
-           (-> (p/then (mcp-compat/create-page api #js {"title" "Taken"})
-                       (fn [_]
-                         (is false "createPage should reject a held title")
-                         (done)))
+           (-> (p/let [result (mcp-compat/create-page api #js {"title" "Taken"})
+                       wrapped (mcp-server/call-data-tool api mcp-compat/create-page #js {:title "Taken"})]
+                 (is (= "conflict" (:status result)))
+                 (is (false? (:verified result)))
+                 (is (false? (:created result)))
+                 (is (= "existing-page" (get-in result [:held_by 0 :uuid])))
+                 (is (not (true? (aget wrapped "isError"))))
+                 (is (not-any? #(= "logseq.DB.createPage" (first %)) @calls))
+                 (done))
                (p/catch (fn [error]
-                          (is (string/includes? (.-message error) "already exists"))
-                          (is (not-any? #(= "logseq.DB.createPage" (first %)) @calls))
+                          (is false (.-message error))
                           (done)))))))
 
 (deftest create-page-verifies-its-uuid-and-dry-run-does-not-write
@@ -2011,10 +2212,10 @@
   (let [calls (atom [])
         api (fn [method args]
               (swap! calls conj [method args])
-              (case method
-                "logseq.DB.getTitleHolders" []
-                "logseq.DB.createPage" #js {"error" "page creation denied"}
-                nil))]
+              (p/resolved (case method
+                            "logseq.DB.getTitleHolders" []
+                            "logseq.DB.createPage" #js {"error" "page creation denied"}
+                            nil)))]
     (async done
            (-> (p/then (mcp-compat/create-page api #js {"title" "Denied Page"})
                        (fn [_]

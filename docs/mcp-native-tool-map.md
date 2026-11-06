@@ -13,6 +13,35 @@ Desktop or an explicitly authorized direct MCP client.
 Candidate implementation, local validation, live validation, and production
 switching are separate statuses; getBlock evidence does not validate other rows.
 
+## Current 2.0.2 regression contracts
+
+Revision `2026-11-06.1` requires fresh installed-app verification; historical
+passes below do not verify these changes:
+
+- `capabilities` uses `logseq.DB.getMcpApiMethods` to read callable renderer API
+  registrations. Missing-entity null results are not missing-method evidence.
+  Default write probing remains disabled. `graph.compatibility_target` replaces
+  the misleading `verified_against` field; neither the target nor registration
+  claims successful real-payload or remote validation.
+- `searchBlocks` preserves the native result envelope but filters its blocks to
+  literal, case-sensitive title substrings. Snippets remain disabled. The native
+  candidate limit and pagination are unchanged; this is not exhaustive search.
+- Repeated-title `createPage` returns a no-write structured conflict with
+  `status`, `created: false`, `verified: false`, and `held_by`, not MCP `isError`.
+  `importPage` propagates creation conflicts without inserting content.
+- Heading batches explicitly pass the existing `logseq.property/heading`
+  property through `insertBatchBlock`; verification still checks heading,
+  title, UUID, parent, page and inventory.
+- `deletePage` calls the existing recycle API, verifies recycling, then uses
+  `renamePage` to archive the same UUID as
+  `<original title> (recycled <UUID>)`. It verifies retained recycled state and
+  title release. Archive collisions/errors remain explicit partial failures;
+  reference/alias gates remain intact. Existing recycled entities are untouched.
+- `createProperty` describes native title/ident normalization; callers must use
+  its returned canonical ident.
+- Unknown supplied MCP sessions return HTTP 404 to request reinitialization;
+  missing invalid sessions remain HTTP 400. Mutations are never retried.
+
 ## Meta and reads
 
 | Tool | Inputs / key contract | Behavior | Current Logseq API route | Status / next step |
@@ -28,7 +57,7 @@ switching are separate statuses; getBlock evidence does not validate other rows.
 | `pageStats` | page UUID | fixed counts, subtree/alias/reference/property analysis | dedicated `logseq.DB.getPageStats` API owns the read-only DB aggregation and preserves the response/diagnostic contract | production route switched; local tests pass; same-graph live read passed (9 own blocks, 8 with content, no refs/orphans) |
 | `getBlockUUID` | page UUID | flat descendant list with order, parent/page references, and cross-page ancestry | dedicated `logseq.DB.getPageBlockUUIDs` API preserves the parent traversal and output fields | production route switched; acronym dispatch fixed (`UUIDs` now resolves to `uuids`); local tests and same-graph 9-descendant read passed |
 | `getBlock` | block UUID | exact entity query | single MCP adapter calls `logseq.DB.getBlock` using the existing Editor implementation and standard dispatch | production route switched; local tests pass; all eight same-graph cases pass, including collapsed and property-bearing blocks |
-| `searchBlocks` | `searchTerm` | existing Logseq search API with snippets disabled | same exported `search` function through `logseq.DB.search` standard dispatch; preserve native result shape and do not add unsupported filters | production route switched; local tests pass; same-graph marker search passed |
+| `searchBlocks` | `searchTerm` | literal, case-sensitive title filter over bounded native candidates | same exported `search` function through `logseq.DB.search`, snippets disabled; retain envelope/pagination | historical native marker search passed; new literal filtering requires remote retest |
 | `getBlockTree` | block UUID, depth/node caps | expanded tree with bounded depth/node count, page/missing distinction, cycle guard | dedicated `logseq.DB.getBlockTree` owns traversal and bounds while preserving the response envelope | production route switched; local tests pass; same-graph bounded marker read passed |
 | `findBacklinks` | target UUID | separate refs, tag-holder, and property-value groups; counts overlap | dedicated `logseq.DB.getBacklinks` owns the three relation queries and preserves the grouped response/diagnostic | API implemented; local tests pass; same-graph reads returned 0 for fixture page and `testtag`, consistent with inspected graph |
 | `findOrphans` | page UUID | parent ancestry with mismatching stored page; preserves orphan rows | reuses `logseq.DB.getPageBlockUUIDs`; MCP filters by owning page UUID and preserves diagnostic | production route switched; local tests pass; same-graph read and pageStats/getBlockUUID cross-checks found 0 true orphans |
@@ -93,9 +122,10 @@ the full/terse response behavior. Batch writes remain non-atomic.
   queries must remain distinct.
 - Properties are keyed by `:db/ident`, not UUID, and writes are restricted to
   the plugin namespace.
-- `searchBlocks` accepts `searchTerm` and preserves Logseq's native search
-  response. Do not assume additional filters, count fields or case semantics;
-  do not automatically repeat a timed-out search.
+- `searchBlocks` accepts `searchTerm` and preserves Logseq's native envelope,
+  filtering blocks to case-sensitive literal title matches. Do not assume
+  exhaustive results, extra filters or count fields; do not automatically
+  repeat a timed-out search.
 - `moveBlock` placement distinguishes `child` from `last-child`; order is
   verified because `:block/order` is not a normal direct write.
 - `deletePage`, `deleteTag`, `deleteProperty`, `clearPage`, and `removeBlock`

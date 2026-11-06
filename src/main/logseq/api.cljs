@@ -67,6 +67,7 @@
 (def ^:export get_state_from_store api-app/get_state_from_store)
 (def ^:export set_state_from_store api-app/set_state_from_store)
 (def ^:export get_app_info api-app/get_app_info)
+(def ^:export get_mcp_api_methods api-app/get_mcp_api_methods)
 (def ^:export get_content_capabilities api-app/get_content_capabilities)
 (def ^:export get_user_configs api-app/get_user_configs)
 (def ^:export get_current_graph_configs api-app/get_current_graph_configs)
