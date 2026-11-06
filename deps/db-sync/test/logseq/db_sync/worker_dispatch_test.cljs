@@ -121,6 +121,10 @@
                      body (json-body response)]
                (is (= 200 (.-status response)))
                (is (= "3.1.0" (:openapi body)))
+               (is (= "http://localhost/oauth/authorize"
+                      (get-in body [:components :securitySchemes :oauth :flows :authorizationCode :authorizationUrl])))
+               (is (= "http://localhost/oauth/token"
+                      (get-in body [:components :securitySchemes :oauth :flows :authorizationCode :tokenUrl])))
                (is (= ["logseq/read"]
                       (get-in body [:paths (keyword "/api/v1/graphs") :get :security 0 :oauth])))
                (is (= ["logseq/read"]

@@ -400,6 +400,31 @@
                 {:method "DELETE"}
                 {})))
 
+(def ^:private oauth-apps-path "/api/v1/oauth/apps")
+
+(defn <oauth-apps
+  []
+  (p/let [_ (user-handler/<ensure-id&access-token!)]
+    (fetch-json (str (http-base) oauth-apps-path)
+                {:method "GET"}
+                {})))
+
+(defn <create-oauth-app!
+  [request]
+  (p/let [_ (user-handler/<ensure-id&access-token!)]
+    (fetch-json (str (http-base) oauth-apps-path)
+                {:method "POST"
+                 :headers {"content-type" "application/json"}
+                 :body (js/JSON.stringify (clj->js request))}
+                {})))
+
+(defn <delete-oauth-app!
+  [app-id]
+  (p/let [_ (user-handler/<ensure-id&access-token!)]
+    (fetch-json (str (http-base) oauth-apps-path "/" app-id)
+                {:method "DELETE"}
+                {})))
+
 (defn <rtc-invite-email
   [graph-uuid email]
   (let [base (http-base)

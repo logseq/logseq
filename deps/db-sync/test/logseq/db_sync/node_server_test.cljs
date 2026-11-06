@@ -124,6 +124,45 @@
                       (is false (str error))
                       (done)))))))))
 
+(deftest node-server-serves-sign-in-with-logseq-test
+  (async done
+         (let [stop-server! (atom nil)]
+           (-> (p/let [{:keys [base-url stop!]} (node-server/start! {:port 0
+                                                                     :data-dir (str "tmp/db-sync-node-oauth-test/" (random-uuid))})
+                       _ (reset! stop-server! stop!)
+                       discovery (js/fetch (str base-url "/.well-known/oauth-authorization-server"))
+                       discovery-body (.json discovery)
+                       review (js/fetch (str base-url "/admin/oauth/apps?status=pending"))]
+                 (is (= 200 (.-status discovery)))
+                 (is (= (str base-url "/oauth/authorize")
+                        (aget discovery-body "authorization_endpoint")))
+                 (is (= (str base-url "/oauth/token")
+                        (aget discovery-body "token_endpoint")))
+                 (is (= 401 (.-status review))))
+               (p/then
+                (fn []
+                  (if-let [stop! @stop-server!]
+                    (-> (stop!)
+                        (p/then (fn [] (done)))
+                        (p/catch (fn [error]
+                                   (is false (str error))
+                                   (done))))
+                    (done))))
+               (p/catch
+                (fn [error]
+                  (if-let [stop! @stop-server!]
+                    (-> (stop!)
+                        (p/then (fn []
+                                  (is false (str error))
+                                  (done)))
+                        (p/catch (fn [stop-error]
+                                   (is false (str error))
+                                   (is false (str stop-error))
+                                   (done))))
+                    (do
+                      (is false (str error))
+                      (done)))))))))
+
 (deftest node-server-logs-request-failed-marker-when-auth-claims-rejects-test
   (async done
          (let [stop-server! (atom nil)

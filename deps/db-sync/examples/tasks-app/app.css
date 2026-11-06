@@ -1,0 +1,105 @@
+:root {
+  color: #17211b;
+  background: #f4f7f2;
+  font-family: "Iowan Old Style", Palatino, "Palatino Linotype", serif;
+}
+
+body {
+  margin: 0;
+}
+
+main {
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: 3rem 1.5rem 4rem;
+}
+
+.mark {
+  margin: 0;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-family: "Segoe UI", sans-serif;
+  font-size: 0.75rem;
+  color: #3f6b4e;
+}
+
+h1 {
+  margin: 0.25rem 0 1.5rem;
+  font-size: 3rem;
+  font-weight: 500;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button {
+  border: 0;
+  border-radius: 999px;
+  background: #1f6b45;
+  color: white;
+  padding: 0.75rem 1.2rem;
+  cursor: pointer;
+}
+
+input {
+  flex: 1;
+  border: 1px solid #c9d5cc;
+  border-radius: 999px;
+  padding: 0.75rem 1rem;
+  background: white;
+}
+
+.toolbar,
+#create-form {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.toolbar {
+  justify-content: space-between;
+}
+
+#create-form {
+  margin: 1rem 0;
+}
+
+#graph-name {
+  margin: 0;
+  font-family: "Segoe UI", sans-serif;
+}
+
+#tasks {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+#tasks li {
+  background: white;
+  border-radius: 1rem;
+  padding: 0.9rem 1rem;
+  margin-bottom: 0.6rem;
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+#tasks .meta {
+  color: #5d6b62;
+  font-family: "Segoe UI", sans-serif;
+  font-size: 0.85rem;
+}
+
+.status {
+  min-height: 1.5rem;
+  color: #8a3b32;
+  font-family: "Segoe UI", sans-serif;
+}
+
+#refresh {
+  background: #e7eee8;
+  color: #1f6b45;
+}
