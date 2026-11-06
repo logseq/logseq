@@ -419,8 +419,8 @@
              :flows {:authorizationCode
                      {:authorizationUrl (str issuer "/oauth2/authorize")
                       :tokenUrl (str issuer "/oauth2/token")
-                      :scopes {:logseq/read "Read pages and blocks"
-                               :logseq/write "Create and edit pages and blocks"}}}}}}
+                      :scopes {"logseq/read" "Read pages and blocks"
+                               "logseq/write" "Create and edit pages and blocks"}}}}}}
    :paths
    (reduce (fn [paths {:keys [method path operation-id scope] :as operation}]
              (let [[summary description] (get operation-docs operation-id)]

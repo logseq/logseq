@@ -1627,6 +1627,14 @@
           :on-click reveal-private-key!}
          (t :encryption/show-private-key)))]]))
 
+(defn- <fetch-user-rsa-key-pair
+  "The db worker refreshes an expired id token with the refresh token it holds,
+  so hand it the current auth first, as the other db worker sync calls do.
+  A local graph does not start sync, the usual point where it gets the auth."
+  [token user-uuid]
+  (p/let [_ (rtc-handler/<sync-auth-state-to-db-worker!)]
+    (state/<invoke-db-worker :thread-api/get-user-rsa-key-pair token user-uuid)))
+
 (hsx/defc encryption
   []
   (let [user-uuid (user-handler/user-uuid)
@@ -1643,7 +1651,7 @@
      (hooks/use-effect!
       (fn []
         (when (and user-uuid token)
-          (-> (p/let [r (state/<invoke-db-worker :thread-api/get-user-rsa-key-pair token user-uuid)]
+          (-> (p/let [r (<fetch-user-rsa-key-pair token user-uuid)]
                 (set-rsa-key-pair! r))
               (p/catch set-get-key-err!))
           (-> (p/let [{:keys [password]} (state/<invoke-db-worker :thread-api/get-e2ee-password refresh-token)]
@@ -1667,7 +1675,7 @@
                                                        token
                                                        refresh-token
                                                        user-uuid)
-                              (p/let [r (state/<invoke-db-worker :thread-api/get-user-rsa-key-pair token user-uuid)]
+                              (p/let [r (<fetch-user-rsa-key-pair token user-uuid)]
                                 (set-rsa-key-pair! r)))
                              (p/catch set-init-key-err!)))}
             (t :encryption/init-key-pair))]
