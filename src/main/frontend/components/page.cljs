@@ -140,7 +140,8 @@
   [page option document-mode?]
   (merge {:id (str (:block/uuid page))
           :db/id (:db/id page)
-          :current-page-title (:block/title page)
+          ;; Zoomed into a block, the current page is the page holding the block
+          :current-page-title (:block/title (or (:block/page page) page))
           :block? (not (entity/page? page))
           :editor-box editor/box
           :document/mode? document-mode?
