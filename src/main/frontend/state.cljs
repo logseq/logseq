@@ -690,6 +690,43 @@ should be done through this fn in order to get global config and config defaults
   ([repo]
    (not (false? (:feature/enable-flashcards? (get-config repo))))))
 
+(def flashcard-class-idents
+  "Built-in classes that implement the Flashcards feature."
+  #{:logseq.class/Card :logseq.class/Cards})
+
+(defn flashcard-class?
+  "True when `class` is the built-in Card or Cards class."
+  [class]
+  (contains? flashcard-class-idents
+             (if (keyword? class)
+               class
+               (:db/ident class))))
+
+(defn- class-lookup-keys
+  [class]
+  (cond-> #{}
+    (keyword? class) (conj class)
+    (:db/ident class) (conj (:db/ident class))
+    (:block/uuid class) (conj (:block/uuid class))
+    (:db/id class) (conj (:db/id class))))
+
+(defn classes-for-tag-completion
+  "Return `classes` with unselected built-in flashcard classes removed when Flashcards is off for `repo`.
+  `selected` keeps already chosen Card/Cards so they can be deselected.
+  Use at UI class/tag pickers. Leave shared fetches unfiltered."
+  ([repo classes]
+   (classes-for-tag-completion repo classes nil))
+  ([repo classes selected]
+   (if (enable-flashcards? repo)
+     classes
+     (when classes
+       (let [selected-keys (into #{} (mapcat class-lookup-keys) selected)]
+         (into []
+               (remove (fn [class]
+                         (and (flashcard-class? class)
+                              (not (some selected-keys (class-lookup-keys class))))))
+               classes))))))
+
 ;; Enable by default
 (defn show-brackets?
   []
