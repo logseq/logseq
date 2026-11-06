@@ -2892,15 +2892,15 @@ abc
 (deftest-async import-favorites-from-og-config-edn
   (p/let [dir (write-temp-file-graph
                {"logseq/config.edn"
-                (str "{:favorites [\"Projects\" \"[[Projects]]\" \"foo/bar\"]\n"
+                (str "{:favorites [\"Projects\" \"[[Projects]]\" \"projects\" \"foo/bar\"]\n"
                      " :file/name-format :triple-lowbar}\n")
                 "pages/Projects.md" "- project work\n- [[foo/bar]]\n"})
           conn (db-test/create-conn)
           _ (db-pipeline/add-listener conn)
           _ (import-file-graph-to-db dir conn {})
           favorite-titles (imported-favorite-titles @conn)]
-    (is (= 3 (count favorite-titles))
-        "Bare names, bracketed page refs, and namespaced pages each become a favorite link")
+    (is (= 2 (count favorite-titles))
+        "Bare names, bracketed page refs, and namespaced pages become favorite links, each page only once (#8596)")
     (is (= #{"Projects" "foo/bar"}
            (set favorite-titles))
         "Imported favorites resolve to the original pages including flattened namespaces")))

@@ -3644,10 +3644,13 @@
   (when-let [favorites (seq (:favorites config))]
     (p/do!
      (if-let [favorited-ids
-              (seq (keep (fn [page-name]
-                           (some-> (get-imported-favorite-page @conn page-name)
-                                   :block/uuid))
-                         favorites))]
+              ;; OG renames could leave the same page in :favorites under
+              ;; several names (e.g. `foo` and `Foo`), so favorite each page once
+              (seq (distinct
+                    (keep (fn [page-name]
+                            (some-> (get-imported-favorite-page @conn page-name)
+                                    :block/uuid))
+                          favorites)))]
        (let [page-entity (ldb/get-page @conn common-config/favorites-page-name)]
          (insert-favorites repo favorited-ids (:db/id page-entity)))
        (log-fn :no-favorites-found {:favorites favorites})))))
