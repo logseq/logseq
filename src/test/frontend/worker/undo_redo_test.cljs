@@ -1627,7 +1627,7 @@
                   [[:upsert-property [property-id
                                       {:logseq.property/type :default
                                        :db/cardinality :one}
-                                      {:property-name "status"}]]]
+                                      {:property-name "Workflow state"}]]]
                   (local-tx-meta {:client-id "test-client"}))
       (apply-ops! conn
                   [[:upsert-closed-value [property-id {:value "active"}]]]

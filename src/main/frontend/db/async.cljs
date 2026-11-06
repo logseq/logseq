@@ -158,9 +158,9 @@
   [graph page-name tags]
   (<invoke-db-worker :thread-api/page-exists? graph page-name tags))
 
-(defn <get-case-page
-  [graph page-name-or-uuid]
-  (<invoke-db-worker :thread-api/get-case-page graph page-name-or-uuid))
+(defn <get-page-by-name
+  [graph page-name-or-uuid & [tags]]
+  (<invoke-db-worker :thread-api/get-page-by-name graph page-name-or-uuid tags))
 
 (defn <get-tags-by-name
   [graph name]

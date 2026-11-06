@@ -82,7 +82,7 @@
     (if (util/uuid-string? id)
       (d/entity db [:block/uuid (uuid id)])
       (or (ldb/get-page db id)
-          (ldb/get-case-page db id)))
+          (ldb/get-page-by-name db id)))
 
     :else
     nil))
@@ -248,10 +248,9 @@
            (filter ldb/class?)
            (mapv #(entity->api-map db %))))
 
-    :thread-api/get-case-page
-    (let [[_repo page-name-or-uuid] args]
-      (entity->api-map db (or (resolve-block-entity db page-name-or-uuid)
-                              (ldb/get-case-page db page-name-or-uuid))))
+    :thread-api/get-page-by-name
+    (let [[_repo page-name-or-uuid tags] args]
+      (entity->api-map db (ldb/get-page-by-name db page-name-or-uuid tags)))
 
     :thread-api/get-all-classes
     (let [[_repo opts] args

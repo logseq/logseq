@@ -17,14 +17,22 @@
 
 (deftest create-class
   (let [conn (db-test/create-conn)
-        _ (outliner-page/create! conn "movie" {:class? true})
-        _ (outliner-page/create! conn "Movie" {:class? true})
-        movie-class (ldb/get-case-page @conn "movie")
-        Movie-class (ldb/get-case-page @conn "Movie")]
+        [_ first-uuid] (outliner-page/create! conn "movie" {:class? true})
+        [_ second-uuid] (outliner-page/create! conn "Movie" {:class? true})
+        [_ page-uuid] (outliner-page/create! conn "MOVIE" {})]
+    (is (= first-uuid second-uuid) "Class creation reuses a case-insensitive name")
+    (is (not= first-uuid page-uuid) "Pages and classes have separate names")
+    (is (= "movie" (:block/title (d/entity @conn [:block/uuid first-uuid]))))))
 
-    (is (ldb/class? movie-class) "Creates a class")
-    (is (ldb/class? Movie-class) "Creates another class with a different case sensitive name")
-    (is (not= movie-class Movie-class) "The two classes are not the same")))
+(deftest create-class-namespace-reuses-case-variants
+  (let [conn (db-test/create-conn)
+        [_ class-uuid] (outliner-page/create! conn "Cedar/cedar"
+                                             {:class? true :split-namespace? true})
+        class (d/entity @conn [:block/uuid class-uuid])]
+    (is (= 1 (count (ldb/page-exists? @conn "CEDAR" #{:logseq.class/Tag}))))
+    (is (= "Cedar" (:block/title class)))
+    (is (= #{:logseq.class/Root}
+           (set (map :db/ident (:logseq.property.class/extends class)))))))
 
 (deftest create-namespace-pages
   (let [conn (db-test/create-conn-with-blocks
@@ -66,30 +74,23 @@
             "Using an existing class page in a multi-parent namespace doesn't allow a page to have a class parent and instead creates a new page")))
 
     (testing "Child pages with same name and different parents"
-      (let [_ (outliner-page/create! conn "vim/keys" {:split-namespace? true})
-            _ (outliner-page/create! conn "emacs/keys" {:split-namespace? true})]
+      (let [_ (outliner-page/create! conn "vim/shared/keys" {:split-namespace? true})
+            _ (outliner-page/create! conn "emacs/shared/keys" {:split-namespace? true})]
         (is (= #{"vim" "emacs"}
-               (->> (d/q '[:find [(pull ?b [{:block/parent [:block/title]}]) ...] :where [?b :block/title "keys"]] @conn)
-                    (map #(get-in % [:block/parent :block/title]))
+               (->> (d/q '[:find [(pull ?b [{:block/parent [{:block/parent [:block/title]}]}]) ...] :where [?b :block/title "keys"]] @conn)
+                    (map #(get-in % [:block/parent :block/parent :block/title]))
                     set))
             "Two child pages with same name exist and have different parents")))
 
-    (testing "Invalid workflows"
-      (is (thrown-with-msg?
-           js/Error
-           #"Cannot create"
-           (outliner-page/create! conn "class1/page" {:split-namespace? true}))
-          "Page can't have a class parent")
-      (is (thrown-with-msg?
-           js/Error
-           #"Cannot create"
-           (outliner-page/create! conn "property1/page" {:split-namespace? true}))
-          "Page can't have a property parent")
-      (is (thrown-with-msg?
-           js/Error
-           #"Cannot create"
-           (outliner-page/create! conn "property1/class" {:split-namespace? true :class? true}))
-          "Class can't have a property parent"))))
+    (testing "Namespace parents are resolved within the requested type"
+      (doseq [[title class?] [["class1/page" false]
+                              ["property1/page" false]
+                              ["property1/class" true]]]
+        (let [[_ child-uuid] (outliner-page/create! conn title {:split-namespace? true :class? class?})
+              child (d/entity @conn [:block/uuid child-uuid])]
+          (is (if class?
+                (every? ldb/class? (:logseq.property.class/extends child))
+                (ldb/internal-page? (:block/parent child)))))))))
 
 (deftest create-page
   (let [conn (db-test/create-conn)
@@ -326,7 +327,43 @@
     (is (= "2024-12-16 Monday" (:block/title page))
         "Journal title follows configured formatter")
     (is (= default-name (:block/name page))
-        "Journal block/name remains the default formatter, independent of title format")))
+        "Journal block/name remains the default formatter, independent of title format")
+    (doseq [title ["2024-12-16 Monday" "2024-12-16 monday" "Dec 16th, 2024"]]
+      (is (= page-uuid (:block/uuid (ldb/get-page-by-name @conn title #{:logseq.class/Journal})))))
+    (is (nil? (ldb/get-page-by-name @conn "2024-12-16 Monday" #{:logseq.class/Tag})))))
+
+(deftest date-named-classes-have-independent-identities
+  (doseq [class-first? [false true]]
+    (let [conn (db-test/create-conn)
+          title "Apr 10th, 2026"
+          [_ first-uuid] (outliner-page/create! conn title {:class? class-first?})
+          [_ second-uuid] (outliner-page/create! conn title {:class? (not class-first?)})
+          class (d/entity @conn [:block/uuid (if class-first? first-uuid second-uuid)])
+          journal (d/entity @conn [:block/uuid (if class-first? second-uuid first-uuid)])]
+      (is (not= first-uuid second-uuid))
+      (is (ldb/class? class))
+      (is (nil? (:block/journal-day class)))
+      (is (ldb/journal? journal))
+      (is (= 20260410 (:block/journal-day journal))))))
+
+(deftest create-slash-date-class-does-not-create-namespaces
+  (doseq [title ["2026/05/18" "05/18/2026"]
+          existing-year? [false true]]
+    (let [conn (db-test/create-conn)
+          year-uuid (when existing-year?
+                      (second (outliner-page/create! conn "2026" {})))
+          entity-count (count (d/datoms @conn :avet :block/uuid))
+          [_ class-uuid] (outliner-page/create! conn title {:class? true :split-namespace? true})
+          class (d/entity @conn [:block/uuid class-uuid])]
+      (is (= title (:block/title class)))
+      (is (ldb/class? class))
+      (is (nil? (:block/journal-day class)))
+      (is (= (inc entity-count) (count (d/datoms @conn :avet :block/uuid)))
+          "Only the date class is created")
+      (is (= [:logseq.class/Root]
+             (mapv :db/ident (:logseq.property.class/extends class))))
+      (when year-uuid
+        (is (ldb/internal-page? (d/entity @conn [:block/uuid year-uuid])))))))
 
 (deftest create-slash-formatted-journal-does-not-create-namespace-pages
   (let [conn (db-test/create-conn)

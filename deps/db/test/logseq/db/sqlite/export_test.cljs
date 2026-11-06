@@ -1404,6 +1404,42 @@
                                {:logseq.property/description "first description"
                                 :logseq.property/exclude-from-graph-view true})))
 
+(deftest import-reuses-class-identities-before-matching-pages
+  (let [conn (db-test/create-conn-with-blocks
+              {:classes {:user.class/local {:block/title "Company"}}
+               :pages-and-blocks [{:page {:block/title "Apple" :build/tags [:user.class/local]}}]})
+        page (db-test/find-page-by-title @conn "Apple")
+        imported {:classes {:user.class/remote {:block/title "company"}}
+                  :pages-and-blocks [{:page {:block/title "apple" :build/tags [:user.class/remote]}
+                                     :blocks [{:block/title "A note"}]}]}
+        {:keys [init-tx block-props-tx]} (sqlite-export/build-import imported @conn {})]
+    (d/transact! conn (concat init-tx block-props-tx))
+    (is (= 1 (count (ldb/page-exists? @conn "Company" #{:logseq.class/Tag}))))
+    (is (= (:block/uuid page)
+           (:block/uuid (:block/page (db-test/find-block-by-content @conn "A note")))))))
+
+(deftest import-reuses-library-root-pages
+  (let [conn (db-test/create-conn-with-blocks {:pages-and-blocks [{:page {:block/title "Projects"}}]})
+        page (db-test/find-page-by-title @conn "Projects")
+        _ (d/transact! conn [[:db/add (:db/id page) :block/parent (:db/id (ldb/get-library-page @conn))]])
+        {:keys [init-tx block-props-tx]}
+        (sqlite-export/build-import {:pages-and-blocks [{:page {:block/title "projects"}
+                                                        :blocks [{:block/title "A note"}]}]} @conn {})]
+    (d/transact! conn (concat init-tx block-props-tx))
+    (is (= (:block/uuid page)
+           (:block/uuid (:block/page (db-test/find-block-by-content @conn "A note")))))))
+
+(deftest import-prefers-exact-historical-page-title
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks (mapv #(hash-map :page {:block/title %}) ["ALPHA" "Alpha" "alpha"])})
+        page (db-test/find-page-by-title @conn "alpha")
+        {:keys [init-tx block-props-tx]}
+        (sqlite-export/build-import {:pages-and-blocks [{:page {:block/title "alpha"}
+                                                        :blocks [{:block/title "A note"}]}]} @conn {})]
+    (d/transact! conn (concat init-tx block-props-tx))
+    (is (= (:block/uuid page)
+           (:block/uuid (:block/page (db-test/find-block-by-content @conn "A note")))))))
+
 (deftest build-export-omits-empty-build-properties
   (let [conn (db-test/create-conn-with-blocks
               {:properties {:user.property/p1 {:logseq.property/type :default}}

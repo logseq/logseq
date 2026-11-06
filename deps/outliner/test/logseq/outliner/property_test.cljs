@@ -32,21 +32,13 @@
         (is (= nil (:db/valueType (d/entity @conn :user.property/num))))
         (is (not (db-property/many? (d/entity @conn :user.property/num)))))))
 
-  (testing "Multiple properties that generate the same initial :db/ident"
-    (let [conn (db-test/create-conn-with-blocks [])]
-      (outliner-property/upsert-property! conn nil {:logseq.property/type :default} {:property-name "p1"})
-      (outliner-property/upsert-property! conn nil {} {:property-name "p1"})
-      (outliner-property/upsert-property! conn nil {} {:property-name "p1"})
-
-      (is (= {:block/name "p1" :block/title "p1" :logseq.property/type :default}
-             (select-keys (d/entity @conn :user.property/p1) [:block/name :block/title :logseq.property/type]))
-          "Existing db/ident does not get modified")
-      (is (= "p1"
-             (:block/title (d/entity @conn :user.property/p1-1)))
-          "2nd property gets unique ident")
-      (is (= "p1"
-             (:block/title (d/entity @conn :user.property/p1-2)))
-          "3rd property gets unique ident"))))
+  (testing "Creation reuses a case-insensitive property name without changing its schema"
+    (let [conn (db-test/create-conn)
+          first-property (outliner-property/upsert-property! conn nil {:logseq.property/type :number} {:property-name "Metric"})
+          second-property (outliner-property/upsert-property! conn nil {:logseq.property/type :default} {:property-name "mETRIC"})]
+      (is (= (:db/id first-property) (:db/id second-property)))
+      (is (= :number (:logseq.property/type second-property)))
+      (is (= "Metric" (:block/title second-property))))))
 
 (deftest upsert-property-rejects-type-change-with-existing-data
   (testing "Changing type is rejected when property has values"

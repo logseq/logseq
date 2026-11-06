@@ -341,17 +341,12 @@
           v')))
 
 (defn- ->db-keyword-property
-  "Returns property db-ident given case sensitive property names for db graphs"
+  "Returns a property ident using a case-insensitive property name"
   [property-name]
   (if (qualified-keyword? property-name)
     property-name
-    (or (some->> (name property-name)
-                 (d/q '[:find [(pull ?b [:db/ident]) ...]
-                        :in $ ?title
-                        :where [?b :block/tags :logseq.class/Property] [?b :block/title ?title]]
-                      *current-db*)
-                 first
-                 :db/ident)
+    (or (some-> (ldb/get-page-by-name *current-db* (name property-name) #{:logseq.class/Property})
+                :db/ident)
         ;; Don't return nil as that incorrectly matches all properties
         ::no-property-found)))
 

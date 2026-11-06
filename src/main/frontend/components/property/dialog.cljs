@@ -34,7 +34,7 @@
                  initial-property (when (keyword? k) (built-in-property k))
                  property (if (keyword? k)
                             (state/<invoke-db-worker :thread-api/pull repo '[*] k)
-                            (db-async/<get-case-page repo k))]
+                            (db-async/<get-page-by-name repo k #{:logseq.class/Property}))]
            (when property
              (reset! *property (merge initial-property property))))))
      [k])
