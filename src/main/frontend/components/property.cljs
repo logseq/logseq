@@ -835,8 +835,30 @@
         sortable-opts (when-not inherited? sortable-opts)]
     (when (and (keyword? k) property)
       (let [type (get property :logseq.property/type :default)
-            empty-value? (empty-panel-property-value? v)
-            show-panel-bullet? (show-property-panel-bullet? property v)
+            ;; In the Tag properties tab the value column does not show this
+            ;; property's value on this block — it shows the property's own
+            ;; DESCRIPTION (see the `:class-schema?` branch further down). So
+            ;; the panel's bullet and its empty styling have to be decided from
+            ;; the description too. Deciding them from the block's value instead
+            ;; meant the bullet was always drawn, and once a description existed
+            ;; it arrived with a bullet of its own — two bullets side by side.
+            schema-row? (:class-schema? opts)
+            [panel-property panel-value] (if schema-row?
+                                           [(db/entity :logseq.property/description)
+                                            (:logseq.property/description property)]
+                                           ;; When the block carries no value of
+                                           ;; its own, the value column falls back
+                                           ;; to the property's default and renders
+                                           ;; it as a block — bullet included. The
+                                           ;; bullet decision has to follow that
+                                           ;; fallback, or a defaulted row is judged
+                                           ;; empty, draws a placeholder bullet, and
+                                           ;; ends up with two.
+                                           [property (if (empty-panel-property-value? v)
+                                                       (:logseq.property/default-value property)
+                                                       v)])
+            empty-value? (empty-panel-property-value? panel-value)
+            show-panel-bullet? (show-property-panel-bullet? panel-property panel-value)
             property-key-cp' (property-key-cp block property (select-keys opts [:class-schema?]))]
         [:div {:key (str "property-pair-" (:db/id block) "-" (:db/id property))
                :class (util/classnames ["property-pair property-panel-row"
@@ -856,7 +878,10 @@
            [:div.ls-block.property-value-container.property-value-panel
             (when show-panel-bullet?
               [:div.property-panel-bullet {:aria-hidden true}
-               (property-value-bullet {:type type})])
+               ;; Same subject as the bullet decision above, so the placeholder's
+               ;; bullet is the shape the description's own bullet will be.
+               (property-value-bullet
+                {:type (get panel-property :logseq.property/type :default)})])
             [:div.property-value.property-value-panel-inner.flex.flex-1
              (if (:class-schema? opts)
                (pv/property-value property (db/entity :logseq.property/description) opts)
