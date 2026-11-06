@@ -52,15 +52,6 @@
        (user-handler/logged-in?)
        (user-handler/rtc-group?)))
 
-(defn fetch-all-graphs-remotes?
-  [login?]
-  (boolean (and login? (user-handler/can-list-remote-graphs?))))
-
-(defn show-all-graphs-remote-section?
-  [login? remote-graphs]
-  (boolean (and (fetch-all-graphs-remotes? login?)
-                (seq remote-graphs))))
-
 (defn <invoke-db-worker
   [op & args]
   (apply state/<invoke-db-worker op args))
@@ -321,7 +312,9 @@
 
 (hsx/defc repos-cp
   []
-  (let [login? (boolean (rfx/use-sub [:auth/id-token]))
+  (let [session (rfx/use-sub [:auth/graph-session])
+        login? (boolean (rfx/use-sub [:auth/id-token]))
+        list-remotes? (and login? (user-handler/can-list-remote-graphs?))
         repos (rfx/use-sub [:me :repos])
         repos (util/distinct-by :url repos)
         remotes (rfx/use-sub [:rtc/graphs])
@@ -341,9 +334,9 @@
         (group-by (fn [graph] (= "manager" (:graph<->user-user-type graph))) remote-graphs)]
     (hooks/use-effect!
      (fn []
-       (when (fetch-all-graphs-remotes? login?)
+       (when list-remotes?
          (rtc-handler/<get-remote-graphs)))
-     [login?])
+     [session])
     [:div#graphs
      (when-not (util/capacitor?)
        [:h1.title (t :graph/all-graphs)])
@@ -369,7 +362,7 @@
        (when (seq local-graphs)
          (repos-inner local-graphs))]
 
-      (when (show-all-graphs-remote-section? login? remote-graphs)
+      (when (and list-remotes? (seq remote-graphs))
         [:<>
          (when (seq own-graphs)
            [:div

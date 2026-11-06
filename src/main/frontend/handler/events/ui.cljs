@@ -33,7 +33,6 @@
             [frontend.handler.page :as page-handler]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.reaction :as reaction-handler]
-            [frontend.handler.repo :as repo-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.user :as user-handler]
             [frontend.mobile.util :as mobile-util]
@@ -500,19 +499,16 @@
 (defevent! :user/fetch-info-and-graphs [[_]]
   (state/set-state! [:ui/loading? :login] false)
   (async/go
-    (let [result (async/<! (user-handler/<user-info user-handler/remoteapi))]
-      (cond
-        (instance? ExceptionInfo result)
-        nil
-        (map? result)
-        (do
-          (state/set-user-info! result)
-          (when-let [uid (user-handler/user-uuid)]
-            (sentry-event/set-user! uid)
-            (ensure-user-rsa-keys-if-possible!))
-          (when (user-handler/can-list-remote-graphs?)
-            (async/<! (p->c (rtc-handler/<get-remote-graphs)))
-            (repo-handler/refresh-repos!)
+    (let [session (state/get-state :auth/graph-session)
+          result (async/<! (user-handler/<user-info user-handler/remoteapi))]
+      (when (and session (= session (state/get-state :auth/graph-session)) (map? result))
+        (state/set-user-info! result)
+        (when-let [uid (user-handler/user-uuid)]
+          (sentry-event/set-user! uid)
+          (ensure-user-rsa-keys-if-possible!))
+        (when (user-handler/can-list-remote-graphs?)
+          (async/<! (p->c (rtc-handler/<get-remote-graphs)))
+          (when (= session (state/get-state :auth/graph-session))
             (when-let [current-repo (state/get-current-repo)]
               (when (some #(= current-repo (:url %)) (state/get-rtc-graphs))
                 (rtc-flows/trigger-rtc-start current-repo)))))))))

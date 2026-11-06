@@ -166,20 +166,20 @@
 
 (defn- set-tokens!
   ([id-token access-token]
-   (state/set-auth-id-token id-token)
-   (state/set-auth-access-token access-token)
-   (set-token-to-localstorage! id-token access-token)
-   (persist-auth-file!)
-   (some->> (parse-jwt (state/get-auth-id-token))
-            (state/set-state! :auth/current-login-user)))
+   (let [user (parse-jwt id-token)]
+     (state/set-auth-id-token id-token (:sub user))
+     (state/set-auth-access-token access-token)
+     (set-token-to-localstorage! id-token access-token)
+     (persist-auth-file!)
+     (state/set-state! :auth/current-login-user user)))
   ([id-token access-token refresh-token]
-   (state/set-auth-id-token id-token)
-   (state/set-auth-access-token access-token)
-   (state/set-auth-refresh-token refresh-token)
-   (set-token-to-localstorage! id-token access-token refresh-token)
-   (persist-auth-file!)
-   (some->> (parse-jwt (state/get-auth-id-token))
-            (state/set-state! :auth/current-login-user))))
+   (let [user (parse-jwt id-token)]
+     (state/set-auth-id-token id-token (:sub user))
+     (state/set-auth-access-token access-token)
+     (state/set-auth-refresh-token refresh-token)
+     (set-token-to-localstorage! id-token access-token refresh-token)
+     (persist-auth-file!)
+     (state/set-state! :auth/current-login-user user))))
 
 (defn- <refresh-tokens
   "return refreshed id-token, access-token"
@@ -194,8 +194,13 @@
   []
   (go
     (when-let [refresh-token (state/get-auth-refresh-token)]
-      (let [resp (<! (<refresh-tokens refresh-token))]
+      (let [session (state/get-state :auth/graph-session)
+            resp (<! (<refresh-tokens refresh-token))]
         (cond
+          (or (not= refresh-token (state/get-auth-refresh-token))
+              (not= session (state/get-state :auth/graph-session)))
+          nil
+
           (and (<= 400 (:status resp))
                (> 500 (:status resp)))
           ;; invalid refresh-token
