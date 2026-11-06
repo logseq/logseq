@@ -1715,13 +1715,13 @@
   []
   (let [repo (state/get-current-repo)
         block (state/get-edit-block)
-        value (editor-input-value (state/get-edit-input-id))]
+        value (editor-input-value (state/get-edit-input-id))
+        block-uuid (:block/uuid block)
+        pending-title (get-in @*pending-block-saves [[repo block-uuid] :title])]
     (when (and repo block (string? value))
-      (pending-save/persist! repo (:block/uuid block) (string/trim value)))
-    (when repo
-      (doseq [[[save-repo block-uuid] {:keys [title]}] @*pending-block-saves
-              :when (= repo save-repo)]
-        (pending-save/persist! repo block-uuid title)))
+      (let [title (string/trim value)]
+        (when (not= title pending-title)
+          (pending-save/persist! repo block-uuid title))))
     (save-current-block! {:flush-input? true})))
 
 (defonce ^:private *unload-flush-installed? (atom false))
