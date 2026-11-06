@@ -938,8 +938,19 @@
  :import/debug-transit-title "调试 Transit"
  :import/default-db-graph-behavior "数据库图谱的默认行为"
  :import/empty-graph-name "图谱名称不能为空。"
+ :import/error-block-location "{1}（块：{2}）"
+ :import/error-file-unreadable "无法读取此文件。请确认文件仍存在且可以打开，然后重新导入。"
+ :import/error-invalid-properties "此块的属性无效。请检查属性名是否与页面名冲突，以及属性值的类型是否正确。"
+ :import/error-invalid-property-value "某个属性值无法导入。请检查此文件是否与其他文件使用相同的值类型，例如布尔属性应使用 true 或 false。"
+ :import/error-malformed-query "无法读取此查询。请检查方括号和圆括号是否成对。"
+ :import/error-missing-reference "无法解析一处引用。请检查被引用页面是否存在，以及此文件是否位于 pages/ 或 journals/ 目录。"
+ :import/error-page-name "无法匹配页面名。请检查文件名是否包含前导空格或 Markdown 格式。"
+ :import/error-unknown-property "导入器找不到属性「{1}」。请检查属性名。如果查询按此属性排序，请将其从排序设置中移除。"
+ :import/error-unsupported-property "此页面包含不受支持的属性。请检查是否使用了页级模板等旧版属性。"
  :import/extract-inline-code-snippets "将行内代码片段提取为子块"
  :import/extract-inline-code-snippets-desc "将行内 `code` 代码段拆分为独立的子代码块。"
+ :import/failed "导入失败"
+ :import/file-error "{1}：{2}"
  :import/file-finished "导入完成！"
  :import/file-to-db-desc "将基于文件的 Logseq 知识库或纯 Markdown 文件夹导入到新的 DB 知识库"
  :import/file-to-db-title "文件到 DB 知识库"
@@ -967,6 +978,7 @@
  :import/report-truncated (fn [shown total] (str "仅显示前 " shown " / " total " 条。下载报告可查看完整列表。"))
  :import/report-validation-errors "无效块"
  :import/scan-empty "没有发现需要跳过的内容，可以全部导入。"
+ :import/scan-failed "扫描文件夹失败"
  :import/scan-org-notice (fn [count] (str count " 个 Org 文件将按 Markdown 导入"))
  :import/scan-summary (fn [pages blocks journals] (str "将导入 " pages " 个页面、" blocks " 个块、" journals " 条日志"))
  :import/scan-title "导入预览"

@@ -435,9 +435,9 @@
                  (reverse stack))))
       (println (some-> (get-in m [:ex-data :error]) .-stack)))
     (when debug
-      (when-let [matching-tx (seq (filter #(and (get-in m [:ex-data :path])
-                                                (= (get-in % [:tx-meta ::gp-exporter/path]) (get-in m [:ex-data :path])))
-                                          @tx-queue))]
+      (when-let [matching-tx (when-let [source-path (:source-path m)]
+                               (seq (filter #(= source-path (get-in % [:tx-meta ::gp-exporter/path]))
+                                            @tx-queue)))]
         (println (str "\n" (count matching-tx)) "Tx Maps for failing path:")
         (pprint/pprint matching-tx))))
   (when (and (= :error (:level m)) (not continue))
@@ -582,7 +582,8 @@
                        true
                        (set/rename-keys {:all-tags :convert-all-tags? :remove-inline-tags :remove-inline-tags?}))
         _ (when (:verbose options) (prn :options user-options))
-        options' (merge {:user-options user-options}
+        options' (merge {:user-options user-options
+                         :fail-fast? (not (:continue options))}
                         (select-keys options [:files :verbose :continue :debug :validate :profile :profile-out]))
         profile-started (when (:profile options) (now-ms))]
     (p/let [{:keys [import-state]}

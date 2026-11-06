@@ -9,6 +9,7 @@
             [frontend.components.svg :as svg]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t t-en]]
+            [frontend.db.subs :as db-subs]
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.db-based.import :as db-import-handler]
             [frontend.handler.file-graph-import :as file-graph-import]
@@ -684,6 +685,57 @@
         (and (string? message)
              (string/includes? message "Failed to fetch")))))
 
+(defn- import-error-path
+  [error]
+  (or (:path (ex-data error))
+      (some-> (ex-cause error) ex-data :path)))
+
+(defn- import-error-reason
+  [error]
+  (or (:reason (ex-data error))
+      (some-> (ex-cause error) ex-data :reason)
+      (ex-message (ex-cause error))
+      (some-> (ex-cause error) .-message)
+      (let [msg (or (ex-message error) (.-message error))]
+        (when (and (string? msg)
+                   (not= msg (t :import/scan-failed)))
+          msg))
+      (str error)))
+
+(defn- import-error-detail
+  [error]
+  (let [{:keys [block line reason-code property]} (ex-data error)
+        path (import-error-path error)
+        detail (case reason-code
+                 :invalid-properties (t :import/error-invalid-properties)
+                 :unknown-property (t :import/error-unknown-property property)
+                 :unsupported-property (t :import/error-unsupported-property)
+                 :malformed-query (t :import/error-malformed-query)
+                 :invalid-property-value (t :import/error-invalid-property-value)
+                 :page-name-not-found (t :import/error-page-name)
+                 :missing-reference (t :import/error-missing-reference)
+                 :file-unreadable (t :import/error-file-unreadable)
+                 (import-error-reason error))
+        location (when (seq path)
+                   (cond-> path
+                     (some? line) (str ":" line)
+                     (seq block) (as-> location (t :import/error-block-location location block))))]
+    (if (and location (not (string/includes? detail location)))
+      (t :import/file-error location detail)
+      detail)))
+
+(defn- import-error-heading
+  [error]
+  (if (= :import-scan/failed (:code (ex-data error)))
+    (t :import/scan-failed)
+    (t :import/failed)))
+
+(defn- import-error-notification
+  [error]
+  [:span.flex.flex-col.gap-1
+   [:span.font-medium (import-error-heading error)]
+   [:span.text-sm.whitespace-pre-wrap (import-error-detail error)]])
+
 (defn- import-files-finished?
   "Keep-graph is safe only after export-file-graph returns (sqlite store +
   finalize). :finishing is set before those steps; current-idx reaches total
@@ -692,36 +744,40 @@
   (= :validating (:step (state/get-state :graph/importing-state))))
 
 (defn- abort-file-graph-import!
-  [error previous-repo]
-  (log/error :import-file-graph-failed {:error error})
-  (let [current-repo (state/get-current-repo)
-        created-new-graph? (and previous-repo
-                                (not= previous-repo current-repo))
-        keep-imported-graph? (and created-new-graph?
-                                  (transport-error? error)
-                                  (import-files-finished?))]
-    (if keep-imported-graph?
-      (p/let [_ (repo-handler/restore-and-setup-repo! current-repo {:file-graph-import? true})]
-        (<finish-file-graph-import! current-repo {} nil))
+  [error previous-repo created-repo]
+  (log/error :import-file-graph-failed {:error error
+                                        :message (or (ex-message error) (.-message error))
+                                        :ex-data (ex-data error)
+                                        :cause (ex-cause error)
+                                        :cause-data (ex-data (ex-cause error))})
+  (let [{:keys [url]} created-repo
+        active? (and url (= url (state/get-current-repo)))]
+    (if (and url (transport-error? error) (import-files-finished?))
+      (p/let [_ (repo-handler/restore-and-setup-repo! url {:file-graph-import? true})]
+        (<finish-file-graph-import! url {} nil))
       (do
         (clear-file-graph-importing-ui!)
-        (when created-new-graph?
-          (notification/show! (t :import/unexpected-error
-                                 (or (.-message error) (str error)))
-                              :error)
-          (state/pub-event! [:graph/switch previous-repo {:persist? false}]))
-        (when (and (not created-new-graph?)
-                   (contains? #{:file-graph-import/graph-not-created :import-scan/failed}
-                              (:code (ex-data error))))
-          (notification/show! (t :import/unexpected-error
-                                 (or (.-message error) (str error)))
-                              :error))
-        nil))))
+        (notification/show! (import-error-notification error) :error)
+        (when url
+          (-> (repo-handler/remove-repo! {:url url} :switch-graph? false :ownership created-repo)
+              (p/catch (fn [cleanup-error]
+                         (log/error :file-graph-import-cleanup-failed
+                                    {:repo url :error cleanup-error})))
+              (p/finally
+               (fn []
+                 (when (and active? (contains? #{nil url} (state/get-current-repo)))
+                   (if previous-repo
+                     (state/pub-event! [:graph/switch previous-repo {:persist? false}])
+                     (do
+                       (state/set-current-repo! nil)
+                       (db-subs/reset-graph! nil)
+                       (route-handler/redirect-to-all-graphs))))))))))))
 
 (defn- import-file-graph
   [*files {:keys [graph-name] :as user-options} config-file client-ignored-files]
   (let [previous-repo (state/get-current-repo)
-        expected-repo (str config/db-version-prefix graph-name)]
+        expected-repo (str config/db-version-prefix graph-name)
+        created-repo* (volatile! nil)]
     (start-file-graph-import-session! *files)
     (-> (p/let [file-metas (mapv import-file-descriptor *files)
                 serialized-config-file (first (filter #(= (:path %) (:path config-file)) file-metas))
@@ -732,8 +788,12 @@
                 scan-result (-> (state/<invoke-db-worker :thread-api/scan-file-graph
                                                          serialized-config-file file-metas options)
                                 (p/catch (fn [error]
-                                           (throw (ex-info "Scanning the folder failed"
-                                                           {:code :import-scan/failed}
+                                           (throw (ex-info (or (ex-message error)
+                                                               (.-message error)
+                                                               (t :import/scan-failed))
+                                                           (merge {:code :import-scan/failed}
+                                                                  (select-keys (or (ex-data error) {})
+                                                                               [:path :reason :block :line :reason-code :property]))
                                                            error)))))
                 _ (close-scan-dialog!)
                 proceed? (<confirm-import-scan!
@@ -743,14 +803,15 @@
             (state/set-state! :graph/importing-state file-graph-import-initial-ui-state)
             (open-import-indicator!)
             (p/let [start-time (t/now)
-                    created-repo (repo-handler/new-db! graph-name {:file-graph-import? true})
-                    repo (or created-repo (state/get-current-repo))]
+                    repo (repo-handler/new-db! graph-name {:file-graph-import? true
+                                                           :on-created #(vreset! created-repo* %)})]
               (when-not (= repo expected-repo)
                 (throw (ex-info "File-graph import did not create a new graph"
                                 {:code :file-graph-import/graph-not-created
                                  :expected expected-repo
                                  :repo repo})))
               (p/let [import-result (state/<invoke-db-worker :thread-api/import-file-graph repo serialized-config-file file-metas options)
+                      _ (vreset! created-repo* nil)
                       ;; Import txs do not broadcast renderer deltas. Restore after
                       ;; import so this client sees pages and refs. Keep importing
                       ;; set so :graph/restored does not start a second search build.
@@ -758,7 +819,7 @@
                 (log/info :import-file-graph {:msg (str "Import finished in " (/ (t/in-millis (t/interval start-time (t/now))) 1000) " seconds")})
                 (<finish-file-graph-import! repo import-result client-ignored-files)))))
         (p/catch (fn [error]
-                   (abort-file-graph-import! error previous-repo)))
+                   (abort-file-graph-import! error previous-repo @created-repo*)))
         (p/finally (fn []
                      (file-graph-import/clear-file-graph-import-session!))))))
 

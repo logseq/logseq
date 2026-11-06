@@ -443,6 +443,20 @@
     (-> (worker-state/<invoke-main-thread :thread-api/set-ui-state path value)
         (p/catch (fn [_error] nil)))))
 
+(defn- rethrow-as-import-error!
+  [error]
+  (let [data (ex-data error)
+        import-error (if (gp-exporter/file-import-error? error)
+                       error
+                       (gp-exporter/file-import-error (:path data) error))]
+    (log/error :file-graph-import-failed {:message (ex-message import-error)
+                                          :path (:path (ex-data import-error))
+                                          :reason (:reason (ex-data import-error))
+                                          :error (gp-exporter/error-str error)
+                                          :cause (ex-cause error)
+                                          :ex-data data})
+    (throw import-error)))
+
 (defn- <import-file-graph!
   [repo config-file files opts]
   (when-let [conn (worker-state/get-datascript-conn repo)]
@@ -455,12 +469,13 @@
                              :<get-file-stat <import-file-stat
                              :<read-and-copy-asset (fn [file assets buffer-handler]
                                                      (<read-and-copy-import-asset repo file assets buffer-handler false))))]
-      (p/let [result (gp-exporter/export-file-graph conn conn config-file files options)
-              _ (set-import-ui-state! [:graph/importing-state :step] :validating)
-              _ (set-import-ui-state! [:graph/importing-state :label] :import/validating-graph)
-              _ (set-import-ui-state! [:graph/importing-state :current-page] nil)
-              validation (worker-db-validate/validate-db conn :fix false)]
-        (terminal-import-result run-id (compact-import-result result @notifications validation))))))
+      (-> (p/let [result (gp-exporter/export-file-graph conn conn config-file files options)
+                  _ (set-import-ui-state! [:graph/importing-state :step] :validating)
+                  _ (set-import-ui-state! [:graph/importing-state :label] :import/validating-graph)
+                  _ (set-import-ui-state! [:graph/importing-state :current-page] nil)
+                  validation (worker-db-validate/validate-db conn :fix false)]
+            (terminal-import-result run-id (compact-import-result result @notifications validation)))
+          (p/catch rethrow-as-import-error!)))))
 
 (defn- <scan-file-graph!
   "Runs the file-graph export into a throwaway in-memory conn so the renderer
@@ -476,18 +491,19 @@
                            :<get-file-stat <import-file-stat
                            :<read-and-copy-asset (fn [file assets buffer-handler]
                                                    (<read-and-copy-import-asset nil file assets buffer-handler true))))]
-    (p/let [result (gp-exporter/export-file-graph conn conn config-file files options)
-            validation (worker-db-validate/validate-db conn :fix false :silent? true)
-            db @conn
-            imported-count (fn [attr]
-                             (transduce (remove #(contains? initial-entity-ids (:e %)))
-                                        (completing (fn [total _] (inc total)))
-                                        0
-                                        (d/datoms db :avet attr)))]
-      (assoc (compact-import-result result @notifications validation)
-             :page-count (imported-count :block/name)
-             :journal-count (imported-count :block/journal-day)
-             :block-count (imported-count :block/page)))))
+    (-> (p/let [result (gp-exporter/export-file-graph conn conn config-file files options)
+                validation (worker-db-validate/validate-db conn :fix false :silent? true)
+                db @conn
+                imported-count (fn [attr]
+                                 (transduce (remove #(contains? initial-entity-ids (:e %)))
+                                            (completing (fn [total _] (inc total)))
+                                            0
+                                            (d/datoms db :avet attr)))]
+          (assoc (compact-import-result result @notifications validation)
+                 :page-count (imported-count :block/name)
+                 :journal-count (imported-count :block/journal-day)
+                 :block-count (imported-count :block/page)))
+        (p/catch rethrow-as-import-error!))))
 
 
 (defn upsert-addr-content!
@@ -868,7 +884,7 @@
 
             (db-listener/listen-db-changes! repo conn)
 
-            nil))))))
+            (boolean initial-tx-report)))))))
 
 
 (defn- <list-all-dbs
@@ -941,23 +957,31 @@
    (when close-other-db?
      (close-other-dbs! repo))
    (when @shared-service/*master-client?
-     (<create-or-open-db! repo (dissoc opts :close-other-db?)))
-   nil))
+     (<create-or-open-db! repo (dissoc opts :close-other-db?)))))
 
 (def-thread-api :thread-api/create-or-open-db
   [repo opts]
   (when-not (graph-dir/same-repo? repo (worker-state/get-current-repo)) ; graph switched
     (reset! worker-state/*deleted-block-uuid->db-id {}))
-  (p/let [_ (start-db! repo opts)
+  (p/let [created? (start-db! repo opts)
+          _ (when (and (:create-only? opts) (not created?))
+              (throw (ex-info "Graph already exists" {:code :graph-already-exists :repo repo})))
           conn (or (worker-state/get-datascript-conn repo)
                    (throw (ex-info "Missing worker graph connection"
                                    {:type :db/missing-connection
                                     :repo repo})))]
-    {:schema (:schema @conn)}))
+    (cond-> {:schema (:schema @conn)}
+      (:create-only? opts)
+      (assoc :graph-uuid (:kv/value (d/entity @conn :logseq.kv/local-graph-uuid))))))
 
 (def-thread-api :thread-api/unsafe-unlink-db
-  [repo]
+  [repo & [expected-graph-uuid]]
   (p/let [pool (<get-opfs-pool repo)
+          _ (when expected-graph-uuid
+              (let [conn (worker-state/get-datascript-conn repo)
+                    actual-uuid (some-> conn deref (d/entity :logseq.kv/local-graph-uuid) :kv/value)]
+                (when-not (= expected-graph-uuid actual-uuid)
+                  (throw (ex-info "Graph identity changed" {:code :graph-not-exists :repo repo})))))
           _ (sync-crypt/cancel-ui-requests! {:reason :unsafe-unlink-db
                                              :repo repo})
           _ (close-db! repo)
@@ -1135,9 +1159,11 @@
 
 (defn- notify-invalid-data
   [{:keys [tx-meta]} errors]
-  ;; don't notify on production when undo/redo failed
-  (when-not (and (or (:undo? tx-meta) (:redo? tx-meta))
-                 (not worker-util/dev?))
+  ;; File-graph import reports the failing file itself. Skip the generic toast.
+  (when-not (or (get tx-meta :logseq.graph-parser.exporter/imported-data?)
+                (get tx-meta :logseq.graph-parser.exporter/new-graph?)
+                (and (or (:undo? tx-meta) (:redo? tx-meta))
+                     (not worker-util/dev?)))
     (shared-service/broadcast-to-clients! :notification
                                           [nil :error nil nil nil
                                            {:i18n-key :storage/invalid-data-writing}])

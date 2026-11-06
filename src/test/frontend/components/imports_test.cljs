@@ -1,5 +1,6 @@
 (ns frontend.components.imports-test
   (:require [cljs.test :refer [async deftest is testing]]
+            [clojure.string :as string]
             [frontend.components.imports :as imports]
             [frontend.config :as config]
             [frontend.handler.file-graph-import :as file-graph-import]
@@ -185,8 +186,13 @@
                     (fn [name opts]
                       (swap! calls conj [:new-db name opts])
                       (let [repo (str config/db-version-prefix name)]
+                        (when-let [on-created (:on-created opts)] (on-created {:url repo}))
                         (swap! ui assoc :git/current-repo repo)
                         (p/resolved repo)))
+                    repo-handler/remove-repo!
+                    (fn [{:keys [url]} & _]
+                      (swap! calls conj [:remove-repo url])
+                      (p/resolved nil))
                     state/<invoke-db-worker
                     (fn [api & args]
                       (swap! calls conj (into [api] args))
@@ -287,6 +293,7 @@
                (p/then (fn [_]
                          (is (not-any? #(= :restore (first %)) @calls)
                              "Failed import does not restore the incomplete graph.")
+                         (is (some #{[:remove-repo "logseq_db_Broken"]} @calls))
                          (is (some #{[:event [:graph/switch previous-repo {:persist? false}]]} @calls)
                              "Failed import switches back to the previous graph.")
                          (is (some #{[:dialog-close :import-indicator]} @calls))
@@ -388,6 +395,63 @@
                                            (is (= :missing-import-session
                                                   (:code (ex-data error))))))
                                 (p/finally done))))))))
+
+(deftest import-error-notification-shows-cause-not-wrapper
+  (let [detail (some-> (resolve 'frontend.components.imports/import-error-detail) deref)
+        heading (some-> (resolve 'frontend.components.imports/import-error-heading) deref)
+        file-failed (ex-info "pages/T.md: internal error"
+                             {:code :file-graph-import/file-failed
+                              :path "pages/T.md"
+                              :reason-code :unsupported-property
+                              :reason "internal error"})
+        wrapped (ex-info "Scanning the folder failed"
+                         {:code :import-scan/failed
+                          :path "pages/T.md"
+                          :reason-code :unsupported-property
+                          :reason "internal error"}
+                         file-failed)]
+    (is (fn? detail))
+    (is (fn? heading))
+    (when (and (fn? detail) (fn? heading))
+      (is (string/includes? (detail wrapped) "pages/T.md"))
+      (is (string/includes? (detail wrapped) "page-level template"))
+      (is (string/includes? (heading wrapped) "Scanning the folder failed"))
+      (is (string/includes? (heading file-failed) "Import failed"))
+      (is (not (string/includes? (detail wrapped) "Unexpected error"))))))
+
+(defn- assert-scan-failure-shows-file-and-reason
+  [previous-repo]
+  (let [ui (atom {:git/current-repo previous-repo})
+        calls (atom [])
+        scan-error (ex-info "journals/2022_03_27.md: No ident found for :clock-time"
+                            {:code :file-graph-import/file-failed
+                             :path "journals/2022_03_27.md"
+                             :reason "No ident found for :clock-time"})]
+    (p/let [_ (run-file-graph-import!
+               {:ui ui
+                :calls calls
+                :options {:graph-name "Broken"}
+                :invoke-scan #(p/rejected scan-error)
+                :invoke-import #(p/resolved (completed-file-graph-result))})
+            notify (first (filter #(= :notify (first %)) @calls))
+            content (when notify (pr-str (nth notify 2)))]
+      (is (not-any? #(contains? #{:new-db :thread-api/import-file-graph} (first %))
+                    @calls)
+          "A failed scan must not create a graph.")
+      (is (= previous-repo (:git/current-repo @ui)))
+      (is (some? notify) "Scan failure must notify even when no previous graph is open.")
+      (is (string/includes? (str content) "journals/2022_03_27.md"))
+      (is (string/includes? (str content) "clock-time"))
+      (is (not (string/includes? (str content) "Unexpected error: Scanning the folder failed"))))))
+
+(deftest file-graph-scan-failure-shows-file-and-reason
+  (async done
+         (-> (p/do!
+              (assert-scan-failure-shows-file-and-reason "logseq_db_old")
+              (assert-scan-failure-shows-file-and-reason nil))
+             (p/catch (fn [error]
+                        (is false (str error))))
+             (p/finally done))))
 
 (deftest file-graph-preview-controls-import-and-cleans-session
   (async done
