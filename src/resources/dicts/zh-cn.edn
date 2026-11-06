@@ -2016,7 +2016,6 @@
  :view.filter/relative-1-year-ago "1 年前"
  :view.filter/relative-3-days-ago "3 天前"
  :view.filter/relative-3-months-ago "3 个月前"
- :view.filter/reset "重置筛选"
  :view.filter/to "到"
  :view.filter/type-to-search "输入以搜索"
 

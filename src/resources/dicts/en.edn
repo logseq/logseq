@@ -2016,7 +2016,6 @@
  :view.filter/relative-1-year-ago "1 year ago"
  :view.filter/relative-3-days-ago "3 days ago"
  :view.filter/relative-3-months-ago "3 months ago"
- :view.filter/reset "Reset filters"
  :view.filter/to "to"
  :view.filter/type-to-search "Type to search"
 

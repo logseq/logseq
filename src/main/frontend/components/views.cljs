@@ -3976,24 +3976,6 @@
      :partition (:partition view-data)
      :view-data view-data}))
 
-(defn- reset-view-filters!
-  [view-entity]
-  (db-property-handler/remove-block-property!
-   (:db/id view-entity)
-   :logseq.property.table/filters))
-
-(hsx/defc view-error
-  [view-entity filters error]
-  [:div.flex.flex-col.gap-2
-   (ui/block-error (t :view/error) {:content (:message error)})
-   (when (seq (:filters filters))
-     (shui/button
-      {:variant :outline
-       :size :sm
-       :class "self-start"
-       :on-click #(reset-view-filters! view-entity)}
-      (t :view.filter/reset)))])
-
 (defn- view-paint-source
   [view-data previous-view-data]
   (or view-data previous-view-data))
@@ -4118,7 +4100,7 @@
      [display-type group-by-property-ident])
     (cond
       (:error view-data)
-      (view-error view-entity filters (:error view-data))
+      (ui/block-error (t :view/error) {:content (:message (:error view-data))})
 
       (not (:ready? paint))
       [:div.flex.flex-col.space-2.gap-2.my-2

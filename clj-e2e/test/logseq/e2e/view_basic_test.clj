@@ -3,16 +3,16 @@
             [clojure.test :refer [deftest is use-fixtures]]
             [logseq.e2e.api :refer [ls-api-call!]]
             [logseq.e2e.assert :as assert]
+            [logseq.e2e.block :as b]
             [logseq.e2e.fixtures :as fixtures]
             [logseq.e2e.keyboard :as k]
             [logseq.e2e.locator :as loc]
-            [logseq.e2e.block :as b]
             [logseq.e2e.page :as page]
             [logseq.e2e.util :as util]
             [wally.main :as w])
   (:import (com.microsoft.playwright Locator$ClickOptions)
-           (java.nio.file Files Paths)
-           (java.util.function Consumer)))
+           (com.microsoft.playwright.options FilePayload)
+           (java.nio.charset StandardCharsets)))
 
 (use-fixtures :once fixtures/open-page)
 
@@ -280,33 +280,13 @@
   (assert/assert-is-visible
    (loc/filter ".ls-view-body .ls-table-row" :has-text "Beta table object")))
 
-(defn- temp-asset-path
-  [filename content]
-  (let [path (Paths/get (System/getProperty "java.io.tmpdir")
-                        (into-array String [filename]))]
-    (Files/write path
-                 (.getBytes ^String content "UTF-8")
-                 (into-array java.nio.file.OpenOption []))
-    path))
-
-(defn- upload-assets!
-  [paths]
-  (let [page (w/get-page)
-        pending (atom paths)
-        chooser-handler (reify Consumer
-                          (accept [_ chooser]
-                            (let [file (first @pending)]
-                              (swap! pending rest)
-                              (.setFiles chooser
-                                         (into-array java.nio.file.Path [file])))))]
-    (.onFileChooser page chooser-handler)
-    (try
-      (b/new-block "raw-number filter assets")
-      (doseq [_ paths]
-        (util/input-command "Upload an asset")
-        (util/wait-timeout 1500))
-      (finally
-        (.offFileChooser page chooser-handler)))))
+(defn- upload-asset!
+  [title extension mime-type content]
+  (let [chooser (.waitForFileChooser (w/get-page)
+                                    #(util/input-command "Upload an asset"))]
+    (.setFiles chooser (FilePayload. (str title "." extension) mime-type content))
+    (assert/assert-is-visible
+     (loc/filter ".ls-page-blocks .ls-block .block-content" :has-text title))))
 
 (defn- goto-asset-tag-page!
   []
@@ -317,17 +297,18 @@
                   nil)))
 
 (deftest table-view-raw-number-zero-filter-does-not-crash-test
-  (let [zero-name "zero-bytes-1508.pdf"
-        five-name "five-bytes-1508.txt"]
-    (upload-assets! [(temp-asset-path zero-name "")
-                     (temp-asset-path five-name "hello")])
+  (let [zero-name "Empty document"
+        five-name "Sample document"]
+    (b/new-block "Assets")
+    (upload-asset! zero-name "pdf" "application/pdf" (byte-array 0))
+    (upload-asset! five-name "txt" "text/plain" (.getBytes "hello" StandardCharsets/UTF_8))
     (util/double-esc)
     (goto-asset-tag-page!)
     (assert/assert-is-visible ".ls-view-body .ls-table-header-cell")
     (assert/assert-is-visible
-     (loc/filter ".ls-view-body .ls-table-row" :has-text "zero-bytes-1508"))
+     (loc/filter ".ls-view-body .ls-table-row" :has-text zero-name))
     (assert/assert-is-visible
-     (loc/filter ".ls-view-body .ls-table-row" :has-text "five-bytes-1508"))
+     (loc/filter ".ls-view-body .ls-table-row" :has-text five-name))
 
     (w/click (view-action-button "filter"))
     (w/click (loc/filter ".cp__select-results a" :has-text "File Size"))
@@ -338,15 +319,14 @@
     (assert/assert-is-hidden (util/get-by-text "Something went wrong" false))
     (assert/assert-is-visible ".ls-view-body .ls-table-row")
     (assert/assert-is-visible
-     (loc/filter ".ls-view-body .ls-table-row" :has-text "zero-bytes-1508"))
+     (loc/filter ".ls-view-body .ls-table-row" :has-text zero-name))
     (assert/assert-have-count
-     (loc/filter ".ls-view-body .ls-table-row" :has-text "five-bytes-1508")
+     (loc/filter ".ls-view-body .ls-table-row" :has-text five-name)
      0)
 
-    (util/refresh-until-graph-loaded)
-    (assert/assert-is-hidden (util/get-by-text "Something went wrong" false))
-    (assert/assert-is-visible
-     (loc/filter ".ls-view-body .ls-table-row" :has-text "zero-bytes-1508"))
+    (w/refresh)
+    (w/wait-for (loc/filter ".ls-view-body .ls-table-row" :has-text zero-name)
+                {:timeout 15000})
     (assert/assert-have-count
-     (loc/filter ".ls-view-body .ls-table-row" :has-text "five-bytes-1508")
+     (loc/filter ".ls-view-body .ls-table-row" :has-text five-name)
      0)))
