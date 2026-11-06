@@ -1206,24 +1206,44 @@
       (seq selected-ids)
       (seq (state/get-selection-block-ids))))
 
+(defn- <clipboard-written?
+  "Resolves to true when the clipboard write succeeded and to false when the
+  browser refused it."
+  [write-promise]
+  (-> (p/promise write-promise)
+      (p/then (constantly true))
+      (p/catch (fn [error]
+                 (log/warn :msg "Clipboard write failed" :exception error)
+                 false))))
+
 (defn copy-selection-blocks
+  "Copies the selected blocks. The returned promise rejects when the browser
+  refused every clipboard write, so a caller that goes on to delete the blocks
+  (cut) does not lose them."
   [html? & {:keys [selected-blocks selected-ids op] :as opts}]
   (let [repo (state/get-current-repo)
         ids (selection-copy-ids selected-blocks selected-ids)
-        block-op (or op :copy)]
-    (when (seq ids)
-      (copy-cached-selection-text! ids))
+        block-op (or op :copy)
+        ;; Written within the user gesture, before the later writes that a
+        ;; browser needing a gesture may refuse, so it counts as a copy too.
+        <early-text-written? (when (seq ids)
+                               (some-> (copy-cached-selection-text! ids) <clipboard-written?))]
     (p/let [[top-level-block-uuids content blocks]
             (compose-copied-blocks-contents
              repo ids (assoc (dissoc opts :selected-blocks :selected-ids :op)
                              :quick-copy? true))]
       (when (seq blocks)
-        (util/copy-to-clipboard! content)
-        (p/let [copied-source-blocks (<get-all-blocks-by-ids repo top-level-block-uuids)
-                html (export-html/export-blocks-as-html repo top-level-block-uuids nil)]
-          (common-handler/copy-to-clipboard-without-id-property!
-           repo content (when html? html) (blocks-for-clipboard copied-source-blocks) :op block-op)
-          (state/set-block-op-type! block-op))
+        (let [<text-written? (<clipboard-written? (util/copy-to-clipboard! content))]
+          (p/let [copied-source-blocks (<get-all-blocks-by-ids repo top-level-block-uuids)
+                  html (export-html/export-blocks-as-html repo top-level-block-uuids nil)
+                  blocks-written? (<clipboard-written?
+                                   (common-handler/copy-to-clipboard-without-id-property!
+                                    repo content (when html? html) (blocks-for-clipboard copied-source-blocks) :op block-op))
+                  text-written? <text-written?
+                  early-text-written? <early-text-written?]
+            (when-not (or blocks-written? text-written? early-text-written?)
+              (throw (ex-info "The clipboard refused the copied blocks" {:block-uuids top-level-block-uuids})))
+            (state/set-block-op-type! block-op)))
         ;; (notification/show! "Copied!" :success)
         ))))
 
@@ -1448,10 +1468,15 @@
         (p/let [[_top-level-block-uuids md-content] (compose-copied-blocks-contents repo [block-id])
                 html (export-html/export-blocks-as-html repo [block-id] nil)
                 copied-source-blocks (<get-all-blocks-by-ids repo [block-id])]
-          (common-handler/copy-to-clipboard-without-id-property!
-           repo md-content html (blocks-for-clipboard copied-source-blocks) :op :cut)
-          (state/set-block-op-type! :cut)
-          (delete-block-aux! block))))))
+          (p/let [copied? (<clipboard-written?
+                           (common-handler/copy-to-clipboard-without-id-property!
+                            repo md-content html (blocks-for-clipboard copied-source-blocks) :op :cut))]
+            (if copied?
+              (do
+                (state/set-block-op-type! :cut)
+                (delete-block-aux! block))
+              (log/error :msg "Cut cancelled, the clipboard refused the block"
+                         :block-id block-id))))))))
 
 (defn- selection-node-block-id
   [node]
