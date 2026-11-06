@@ -43,6 +43,12 @@
     env))
 
 (defn- request-origin-opts
+  "Origin embedded in URLs returned to clients.
+
+  `DB_SYNC_BASE_URL` wins when it is set. Otherwise leave scheme and host unset
+  so the request keeps the Host header and `X-Forwarded-Proto`. Forcing `http`
+  here makes snapshot download return an http URL, which the secure desktop
+  context cannot fetch."
   [cfg]
   (if-let [base-url (:base-url cfg)]
     (let [url (js/URL. base-url)
@@ -52,7 +58,7 @@
                    protocol)]
       {:scheme scheme
        :host (.-host url)})
-    {:scheme "http"}))
+    {}))
 
 (defn- access-allowed?
   [env graph-id request]
