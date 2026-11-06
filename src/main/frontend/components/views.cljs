@@ -534,9 +534,6 @@
                         (or (util/meta-key? e) (util/mobile?))
                         (redirect!)
 
-                        (.-shiftKey e)
-                        (add-to-sidebar!)
-
                         :else
                         (let [popup (fn []
                                       (let [width (-> (max 160 width) (- 18))]
