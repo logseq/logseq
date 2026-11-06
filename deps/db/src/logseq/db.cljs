@@ -88,6 +88,17 @@
        f))
    tx-data))
 
+(defn- throw-if-block-is-own-parent!
+  [tx-data]
+  (when-let [d (some (fn [d] (when (and (:added d)
+                                        (= :block/parent (:a d))
+                                        (= (:e d) (:v d)))
+                               d))
+                     tx-data)]
+    (throw (ex-info "Block can't be its own parent"
+                    {:db/id (:e d)
+                     :tx-count (count tx-data)}))))
+
 (defn- throw-if-page-has-block-parent!
   [db tx-data]
   (when (some (fn [d] (and (:added d)
@@ -162,6 +173,7 @@
                 pipeline-f @*transact-pipeline-fn
                 tx-report (if pipeline-f (pipeline-f tx-report*) tx-report*)
                 _ (throw-if-page-has-block-parent! (:db-after tx-report) (:tx-data tx-report))
+                _ (throw-if-block-is-own-parent! (:tx-data tx-report))
                 [validate-result errors] (if (should-validate-pipeline-result? tx-meta)
                                            (db-validate/validate-tx-report tx-report nil)
                                            [true nil])]
