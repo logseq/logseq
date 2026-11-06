@@ -1,11 +1,13 @@
 (ns frontend.worker.markdown-mirror-test
   (:require [cljs.test :refer [async deftest is testing]]
+            [clojure.string :as string]
             [datascript.core :as d]
             [frontend.worker.db-listener :as db-listener]
             [frontend.worker.markdown-mirror :as markdown-mirror]
             [frontend.worker.platform :as worker-platform]
             [logseq.db :as ldb]
             [logseq.db.test.helper :as db-test]
+            [logseq.graph-parser.exporter :as gp-exporter]
             [promesa.core :as p]))
 
 (def test-repo "logseq_db_graph-xxx")
@@ -370,11 +372,12 @@
     (let [{:keys [platform files]} (fake-platform)
           page-uuid #uuid "33333333-3333-4333-8333-333333333337"
           conn (db-test/create-conn-with-blocks
-                {:properties {:user.property/notes {:logseq.property/type :default}}
+                {:properties {:user.property/notes {:logseq.property/type :default
+                                                    :db/cardinality :db.cardinality/many}}
                  :pages-and-blocks [{:page {:block/title "Properties"
                                              :block/uuid page-uuid}
                                      :blocks [{:block/title "body"
-                                               :build/properties {:user.property/notes "property value bullet"}}
+                                               :build/properties {:user.property/notes #{"property value bullet"}}}
                                               {:block/title "after"}]}]})
           page (db-test/find-page-by-title @conn "Properties")]
       (-> (markdown-mirror/<mirror-page! test-repo @conn (:db/id page) {:platform platform})
@@ -468,11 +471,9 @@
           (p/then (fn [_]
                     (let [content (get @files (page-path "pages/Issue.md"))]
                       (is (= (str (page-marker (:block/uuid page)) "\n"
-                                  "* reproducible-steps::\n"
-                                  "  - Open settings\n\n"
+                                  "* reproducible-steps:: Open settings\n\n"
                                   "- TODO ## TODO body\n"
-                                  "  * reproducible-steps::\n"
-                                  "    - Click mirror\n"
+                                  "  * reproducible-steps:: Click mirror\n"
                                   "  * rating:: 5")
                              content)))))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
@@ -632,7 +633,180 @@
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
 
-(deftest page-mirror-renders-embedded-node-content-and-tags-test
+(defn- <import-mirror-files
+  "Imports the mirror files as a file graph, the way a reader of the files sees them."
+  [files]
+  (let [conn (db-test/create-conn)
+        prefix (str (markdown-mirror/repo-mirror-dir test-repo) "/")
+        files (-> (into {}
+                        (keep (fn [[path content]]
+                                (when (and (string/starts-with? path prefix)
+                                           (string/ends-with? path ".md"))
+                                  [(subs path (count prefix)) content])))
+                        files)
+                  (assoc "logseq/config.edn" "{:file/name-format :triple-lowbar}"))]
+    (p/let [_ (gp-exporter/export-file-graph
+               conn conn {:path "logseq/config.edn"} (mapv #(hash-map :path %) (sort (keys files)))
+               {:<read-file (fn [file] (p/resolved (get files (:path file))))
+                :rpath-key :path
+                :notify-user (fn [m] (when (= :error (:level m)) (throw (ex-info (str (:msg m)) {}))))
+                :user-options {:convert-all-tags? true}
+                :<read-and-copy-asset (fn [& _] (p/resolved nil))})]
+      conn)))
+
+(deftest page-mirror-writes-block-refs-embeds-and-node-values-by-block-id-test
+  (async done
+    (let [{:keys [platform files]} (fake-platform)
+          target-uuid #uuid "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1"
+          ref-uuid #uuid "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1"
+          embed-uuid #uuid "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2"
+          conn (db-test/create-conn-with-blocks
+                {:properties {:user.property/source {:logseq.property/type :node}}
+                 :pages-and-blocks
+                 [{:page {:block/title "Target Page"}
+                   :blocks [{:block/title "Target"
+                             :block/uuid target-uuid
+                             :build/keep-uuid? true
+                             :build/children [{:block/title "Target child"}]}
+                            {:block/title "not referenced"}]}
+                  {:page {:block/title "Source"}
+                   :blocks [{:block/title (str "see [[" target-uuid "]]")
+                             :block/uuid ref-uuid
+                             :build/keep-uuid? true}
+                            {:block/title ""
+                             :block/uuid embed-uuid
+                             :build/keep-uuid? true}
+                            {:block/title "quoted"
+                             :build/properties {:user.property/source [:block/uuid target-uuid]}}]}]})
+          target-eid (:db/id (d/entity @conn [:block/uuid target-uuid]))
+          _ (d/transact! conn [{:db/id (:db/id (d/entity @conn [:block/uuid ref-uuid])) :block/refs target-eid}
+                               {:db/id (:db/id (d/entity @conn [:block/uuid embed-uuid])) :block/link target-eid}])
+          target-page (db-test/find-page-by-title @conn "Target Page")
+          source-page (db-test/find-page-by-title @conn "Source")]
+      (markdown-mirror/set-enabled! test-repo true)
+      (-> (p/let [_ (<mirror-repo! test-repo @conn {:platform platform})
+                  target-content (get @files (page-path "pages/Target Page.md"))
+                  source-content (get @files (page-path "pages/Source.md"))
+                  _ (is (= (str (page-marker (:block/uuid target-page)) "\n\n"
+                                "- Target\n"
+                                "  id:: " target-uuid "\n"
+                                "  - Target child\n"
+                                "- not referenced")
+                           target-content)
+                        "a block something points at carries its id; other blocks do not")
+                  _ (is (= (str (page-marker (:block/uuid source-page)) "\n\n"
+                                "- see ((" target-uuid "))\n"
+                                "- {{embed ((" target-uuid "))}}\n"
+                                "- quoted\n"
+                                "  * source:: ((" target-uuid "))")
+                           source-content)
+                        "a block ref, an embed and a node value that is a block point at the block id")
+                  imported (<import-mirror-files @files)
+                  target' (d/entity @imported [:block/uuid target-uuid])
+                  source-blocks (->> (:block/_page (db-test/find-page-by-title @imported "Source"))
+                                     (sort-by :block/order))
+                  ref' (first source-blocks)
+                  embed' (second source-blocks)]
+            (is (= "Target" (:block/title target'))
+                "the imported target keeps its uuid")
+            (is (contains? (set (map :block/uuid (:block/refs ref'))) target-uuid)
+                "the imported block ref points at the target")
+            (is (= target-uuid (:block/uuid (:block/link embed')))
+                "the imported embed links the target"))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest page-mirror-writes-an-embed-block-heading-test
+  (async done
+    (let [{:keys [platform files]} (fake-platform)
+          target-uuid #uuid "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3"
+          embed-uuid #uuid "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb4"
+          conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "Heading Embed"}
+                   :blocks [{:block/title "Target" :block/uuid target-uuid :build/keep-uuid? true}
+                            {:block/title "" :block/uuid embed-uuid :build/keep-uuid? true
+                             :build/properties {:logseq.property/heading 2}}]}]})
+          _ (d/transact! conn [{:db/id (:db/id (d/entity @conn [:block/uuid embed-uuid]))
+                                :block/link (:db/id (d/entity @conn [:block/uuid target-uuid]))}])
+          page (db-test/find-page-by-title @conn "Heading Embed")]
+      (-> (markdown-mirror/<mirror-page! test-repo @conn (:db/id page) {:platform platform})
+          (p/then (fn [_]
+                    (is (= (str (page-marker (:block/uuid page)) "\n\n"
+                                "- Target\n"
+                                "  id:: " target-uuid "\n"
+                                "- ## {{embed ((" target-uuid "))}}")
+                           (get @files (page-path "pages/Heading Embed.md")))
+                        "an embed block keeps its heading")))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest page-mirror-writes-a-code-block-id-after-its-fence-test
+  (async done
+    (let [{:keys [platform files]} (fake-platform)
+          code-uuid #uuid "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2"
+          embed-uuid #uuid "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb3"
+          conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "Code Page"}
+                   :blocks [{:block/title "(x 1)"
+                             :block/uuid code-uuid
+                             :build/keep-uuid? true
+                             :build/tags [:logseq.class/Code-block]
+                             :build/properties {:logseq.property.node/display-type :code
+                                                :logseq.property.code/lang "clojure"}}
+                            {:block/title ""
+                             :block/uuid embed-uuid
+                             :build/keep-uuid? true}]}]})
+          _ (d/transact! conn [{:db/id (:db/id (d/entity @conn [:block/uuid embed-uuid]))
+                                :block/link (:db/id (d/entity @conn [:block/uuid code-uuid]))}])
+          page (db-test/find-page-by-title @conn "Code Page")]
+      (-> (markdown-mirror/<mirror-page! test-repo @conn (:db/id page) {:platform platform})
+          (p/then (fn [_]
+                    (is (= (str (page-marker (:block/uuid page)) "\n\n"
+                                "- ```clojure\n"
+                                "  (x 1)\n"
+                                "  ```\n"
+                                "  id:: " code-uuid "\n"
+                                "- {{embed ((" code-uuid "))}}")
+                           (get @files (page-path "pages/Code Page.md")))
+                        "a code block that is embedded carries its id after its closing fence, as file graphs write it")))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest page-mirror-writes-a-code-block-id-after-a-longer-fence-test
+  (async done
+    (let [{:keys [platform files]} (fake-platform)
+          code-uuid #uuid "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa4"
+          embed-uuid #uuid "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb5"
+          conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "Fence Page"}
+                   :blocks [{:block/title "a\n```\nb"
+                             :block/uuid code-uuid
+                             :build/keep-uuid? true
+                             :build/tags [:logseq.class/Code-block]
+                             :build/properties {:logseq.property.node/display-type :code
+                                                :logseq.property.code/lang "markdown"}}
+                            {:block/title ""
+                             :block/uuid embed-uuid
+                             :build/keep-uuid? true}]}]})
+          _ (d/transact! conn [{:db/id (:db/id (d/entity @conn [:block/uuid embed-uuid]))
+                                :block/link (:db/id (d/entity @conn [:block/uuid code-uuid]))}])
+          page (db-test/find-page-by-title @conn "Fence Page")]
+      (-> (markdown-mirror/<mirror-page! test-repo @conn (:db/id page) {:platform platform})
+          (p/then (fn [_]
+                    (let [content (get @files (page-path "pages/Fence Page.md"))
+                          lines (string/split-lines content)
+                          id-at (.indexOf lines (str "  id:: " code-uuid))
+                          closing-at (.lastIndexOf lines "  ````")]
+                      (is (pos? closing-at) (str "the code holds ``` so its fence is longer: " content))
+                      (is (= (inc closing-at) id-at)
+                          (str "the id follows the closing fence, not the ``` line inside the code: " content)))))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest page-mirror-writes-embedded-node-as-embed-macro-test
   (async done
     (let [{:keys [platform files]} (fake-platform)
           target-uuid #uuid "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
@@ -656,9 +830,9 @@
           (p/then (fn [_]
                     (let [content (get @files (page-path "pages/Source.md"))]
                       (is (= (str (page-marker (:block/uuid page)) "\n\n"
-                                  "- Target #Project\n"
-                                  "  - Target child")
-                             content)))))
+                                  "- {{embed ((" target-uuid "))}}")
+                             content)
+                          "the embed points at the block, whose own file has its content and id"))))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
 
@@ -746,13 +920,57 @@
           (p/then (fn [_]
                     (let [content (get @files (page-path "pages/Page Props.md"))]
                       (is (= (str (page-marker (:block/uuid page)) "\n"
-                                  "* p1::\n"
-                                  "  - hello\n"
+                                  "* p1:: hello\n"
                                   "* p2:: 1\n"
-                                  "* p3::\n"
-                                  "  - Author 1\n\n"
+                                  "* p3:: Author 1\n\n"
                                   "- body")
                              content)))))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest page-mirror-exports-single-value-text-property-on-one-line-test
+  (async done
+    (let [{:keys [platform files]} (fake-platform)
+          conn (db-test/create-conn-with-blocks
+                {:properties {:user.property/single {:logseq.property/type :default}
+                              :user.property/multiple {:logseq.property/type :default
+                                                       :db/cardinality :db.cardinality/many}}
+                 :pages-and-blocks [{:page {:block/title "Cardinality"}
+                                     :blocks [{:block/title "body"
+                                               :build/properties {:user.property/single "some value"
+                                                                  :user.property/multiple #{"listed value"}}}]}]})
+          page (db-test/find-page-by-title @conn "Cardinality")]
+      (-> (markdown-mirror/<mirror-page! test-repo @conn (:db/id page) {:platform platform})
+          (p/then (fn [_]
+                    (let [content (get @files (page-path "pages/Cardinality.md"))]
+                      (is (string/includes? content "* single:: some value")
+                          "a property without Multiple values is one property line")
+                      (is (string/includes? content "* multiple::\n    - listed value")
+                          "a property with Multiple values is a list of value blocks"))))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest page-mirror-exports-properties-of-single-text-property-value-test
+  (async done
+    (let [{:keys [platform files]} (fake-platform)
+          conn (db-test/create-conn-with-blocks
+                {:properties {:user.property/notes {:logseq.property/type :default}
+                              :user.property/rating {:logseq.property/type :number}}
+                 :pages-and-blocks [{:page {:block/title "Value Properties"}
+                                     :blocks [{:block/title "body"
+                                               :build/properties
+                                               {:user.property/notes
+                                                {:build/property-value :block
+                                                 :block/title "Draft"
+                                                 :build/properties {:user.property/rating 5}}}}]}]})
+          page (db-test/find-page-by-title @conn "Value Properties")]
+      (-> (markdown-mirror/<mirror-page! test-repo @conn (:db/id page) {:platform platform})
+          (p/then (fn [_]
+                    (let [content (get @files (page-path "pages/Value Properties.md"))]
+                      (is (string/includes? content "- Draft")
+                          "the value of a single-value property is a value block")
+                      (is (string/includes? content "rating:: 5")
+                          "the properties of the value are exported"))))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
 
@@ -797,14 +1015,11 @@
           (p/then (fn [_]
                     (let [content (get @files (page-path "journals/2026_05_05.md"))]
                       (is (= (str (page-marker (:block/uuid journal)) "\n"
-                                  "* p1::\n"
-                                  "  - hey\n\n"
+                                  "* p1:: hey\n\n"
                                   "- TODO hello great test\n"
-                                  "  * p1::\n"
-                                  "    - hello\n"
+                                  "  * p1:: hello\n"
                                   "  * p2:: 1\n"
-                                  "  * p3::\n"
-                                  "    - Author 1")
+                                  "  * p3:: Author 1")
                              content)))))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))

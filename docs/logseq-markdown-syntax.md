@@ -86,8 +86,20 @@ Page and node references use Logseq page reference syntax:
   * owner:: [[Alice]]
 ```
 
-Node property values are exported as `[[Node title]]`. Mirror export does not
-use `((uuid))` for node property values.
+Node property values that are pages are exported as `[[Node title]]`.
+
+Block references, block embeds and node property values that are blocks point at the block id, and the block they point at carries an `id::` line right after its first line:
+
+```markdown
+- Ship the draft
+  id:: 22222222-2222-4222-8222-222222222222
+- See ((22222222-2222-4222-8222-222222222222))
+- {{embed ((22222222-2222-4222-8222-222222222222))}}
+- Follow-up
+  * blocked-by:: ((22222222-2222-4222-8222-222222222222))
+```
+
+The `id::` line is written only for blocks that something points at. It is the file-graph syntax for block identity, so the files resolve in Logseq's own Markdown importer and in other tools that read it.
 
 ## Tags
 Tags are exported on block lines when they are normal user tags:
