@@ -540,6 +540,18 @@
       (-> (fs/rm full-path #js {:force true})
           (p/catch (constantly nil))))))
 
+(defn- read-dir!
+  "File names in directory `path`; empty when the directory does not exist."
+  [data-dir path]
+  (-> (p/let [entries (fs/readdir (path-under-data-dir data-dir path) #js {:withFileTypes true})]
+        (->> (array-seq entries)
+             (filter #(.isFile ^js %))
+             (mapv #(.-name ^js %))))
+      (p/catch (fn [error]
+                 (if (= "ENOENT" (.-code error))
+                   []
+                   (p/rejected error))))))
+
 (defn- asset-file-path
   [data-dir repo file-name]
   (node-path/join (repo-dir data-dir repo)
@@ -770,6 +782,7 @@
                  :write-text! (fn [path text] (write-text! write-guard-fn data-dir path text))
                  :write-text-atomic! (fn [path text] (write-text-atomic! write-guard-fn data-dir path text))
                  :delete-file! (fn [path] (delete-file! write-guard-fn data-dir path))
+                 :read-dir! (fn [path] (read-dir! data-dir path))
                  :asset-read-bytes! (fn [repo file-name]
                                       (asset-read-bytes! data-dir repo file-name))
                  :asset-write-bytes! (fn [repo file-name payload]
