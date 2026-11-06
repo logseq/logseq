@@ -33,7 +33,7 @@
                                  [:quick-capture-options :redirect-page?]
                                  false)
           prettify-url? (get-in (state/get-config)
-                                [:quick-capture-option :prettify-url?]
+                                [:quick-capture-options :prettify-url?]
                                 true)
           today-page (string/lower-case today-page-title)
           current-page (state/get-current-page) ;; empty when in journals page
