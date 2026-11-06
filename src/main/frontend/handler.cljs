@@ -10,7 +10,6 @@
             [frontend.components.editor :as editor]
             [frontend.components.page :as page]
             [frontend.components.reference :as reference]
-            [frontend.components.user.login :as user.login]
             [frontend.config :as config]
             [frontend.context.i18n :as i18n]
             [frontend.db.restore :as db-restore]
@@ -65,8 +64,6 @@
 
            (->
             (p/do!
-             (when (config/global-config-enabled?)
-               (global-config-handler/start {:repo repo}))
              (when (config/plugin-config-enabled?)
                (plugin-config-handler/start)))
             (p/finally
@@ -111,7 +108,7 @@
   (state/set-component! :block/asset-cp block/asset-cp)
   (state/set-component! :editor/box editor/box)
   (state/set-component! :selection/context-menu cp-content/custom-context-menu-content)
-  (command-palette/register-global-shortcut-commands))
+  (command-palette/schedule-global-shortcut-commands!))
 
 (defn- get-system-info
   []
@@ -139,21 +136,33 @@
 
       nil)))
 
+(defn- startup-ready
+  [ui-ready runtime-ready]
+  (p/all [ui-ready
+          (-> runtime-ready
+              (p/catch
+               (fn [error]
+                 ;; Runtime failure must not publish readiness before UI settles.
+                 (-> ui-ready
+                     (p/catch (fn [_] nil))
+                     (p/then (fn [_] (p/rejected error)))))))]))
+
 (defn start!
   [render]
   (state/set-db-restoring! true)
   (let [t1 (util/time-ms)
         ui-ready (p/do!
                   (idb/start)
-                  (get-system-info)
-                  (plugin-handler/setup!)
+                  (p/all [(get-system-info)
+                          (plugin-handler/setup!)
+                          (when (config/global-config-enabled?)
+                            (global-config-handler/start {}))])
                   (render))]
 
       (set-global-error-notification!)
 
       (register-components-fns!)
       (user-handler/restore-tokens-from-localstorage)
-      (user.login/setup-configure!)
       (when (util/electron?)
         (el/listen!))
 
@@ -164,13 +173,10 @@
 
       (log/info ::start-web-worker {})
 
-      (-> ui-ready
+      (-> (startup-ready ui-ready (persist-db/<start-runtime!))
           (p/then
-           (fn []
-             (p/let [t2 (util/time-ms)
-                     _ (persist-db/<start-runtime!)
-                     _ (log/info ::db-worker-spent-time (- (util/time-ms) t2))
-                     repos (repo-handler/get-repos)
+           (fn [_]
+             (p/let [repos (repo-handler/get-repos)
                      _ (state/set-repos! repos)
                      _ (mobile-util/hide-splash) ;; hide splash as early as ui is stable
                      url-target (current-url-target)
