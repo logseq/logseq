@@ -79,6 +79,79 @@
      {})
     (is (false? (:block/collapsed? (d/entity @conn [:block/uuid block-id]))))))
 
+(deftest insert-blocks-op-skips-a-view-for-a-node-that-is-gone
+  (testing "a references view created for a node an undo already removed is not inserted"
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "Test"} :blocks [{:block/title "Target"}]}
+                 {:page {:block/title "Gone"} :blocks []}])
+          target (db-test/find-block-by-content @conn "Target")
+          gone-id (:db/id (ldb/get-page @conn "gone"))
+          page-id (:db/id (ldb/get-page @conn "test"))
+          view (fn [view-for] {:block/uuid (random-uuid)
+                               :block/title "Unlinked references"
+                               :logseq.property/view-for view-for
+                               :logseq.property.view/feature-type :unlinked-references})
+          gone-view (view gone-id)
+          kept-view (view page-id)]
+      (d/transact! conn [[:db/retractEntity gone-id]])
+      (outliner-op/apply-ops!
+       conn
+       [[:insert-blocks [[gone-view] (:block/uuid target) {:sibling? true :keep-uuid? true}]]]
+       {:outliner-op :create-view})
+      (is (nil? (d/entity @conn [:block/uuid (:block/uuid gone-view)]))
+          "no view for a node that is gone")
+      (outliner-op/apply-ops!
+       conn
+       [[:insert-blocks [[kept-view] (:block/uuid target) {:sibling? true :keep-uuid? true}]]]
+       {:outliner-op :create-view})
+      (is (some? (d/entity @conn [:block/uuid (:block/uuid kept-view)]))
+          "a view for a node that exists is inserted"))))
+
+(deftest property-ops-skip-a-gone-block-only-when-asked
+  (testing "the editor's writes (:skip-missing-targets?) to a block that is gone are dropped; other callers keep the error"
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "Test"} :blocks [{:block/title "kept"} {:block/title "gone"}]}])
+          kept (db-test/find-block-by-content @conn "kept")
+          gone (db-test/find-block-by-content @conn "gone")
+          gone-uuid (:block/uuid gone)
+          todo (:db/id (d/entity @conn :logseq.property/status.todo))]
+      (d/transact! conn [[:db/retractEntity (:db/id gone)]])
+      (is (thrown-with-msg? js/Error #"doesn't exist"
+                            (outliner-op/apply-ops!
+                             conn [[:set-block-property [gone-uuid :logseq.property/status todo]]] {}))
+          "without the option the write fails as before")
+      (outliner-op/apply-ops!
+       conn [[:set-block-property [gone-uuid :logseq.property/status todo]]]
+       {:skip-missing-targets? true})
+      (is (nil? (d/entity @conn [:block/uuid gone-uuid])) "the gone block is not recreated")
+      (outliner-op/apply-ops!
+       conn [[:batch-set-property [[(:block/uuid kept) gone-uuid] :logseq.property/status todo {}]]]
+       {:skip-missing-targets? true})
+      (is (= :logseq.property/status.todo
+             (:db/ident (:logseq.property/status (d/entity @conn (:db/id kept)))))
+          "the live block in the batch still gets the value"))))
+
+(deftest collapse-expand-blocks-op-skips-missing-blocks
+  (testing "a block that isn't in the db (deleted, or its insert hasn't landed) is not created"
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "Test"}
+                  :blocks [{:block/title "Parent"}]}])
+          block-id (:block/uuid (db-test/find-block-by-content @conn "Parent"))
+          missing-id (random-uuid)]
+      (outliner-op/apply-ops!
+       conn
+       [[:collapse-expand-blocks [[{:block/uuid missing-id :block/collapsed? true}
+                                   {:block/uuid block-id :block/collapsed? true}]
+                                  {}]]]
+       {})
+      (is (nil? (d/entity @conn [:block/uuid missing-id])))
+      (is (true? (:block/collapsed? (d/entity @conn [:block/uuid block-id]))))
+      (outliner-op/apply-ops!
+       conn
+       [[:collapse-expand-blocks [[{:block/uuid missing-id :block/collapsed? false}] {}]]]
+       {})
+      (is (nil? (d/entity @conn [:block/uuid missing-id]))))))
+
 (deftest resolve-indent-outdent-parent-original-test
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "Test"}
@@ -265,3 +338,121 @@
                       conn
                       [[:set-block-property [block-uuid property-id true]]]
                       {})))))))
+
+(defn- apply-ops-recording!
+  "Applies `ops` and returns the outliner ops the committed transactions record."
+  [conn ops opts]
+  (let [recorded (atom [])]
+    (d/listen! conn ::recorded-ops
+               (fn [{:keys [tx-meta]}]
+                 (swap! recorded into (:outliner-ops tx-meta))))
+    (try
+      (outliner-op/apply-ops! conn ops opts)
+      @recorded
+      (finally
+        (d/unlisten! conn ::recorded-ops)))))
+
+(defn- block-uuid-by-content
+  [db content]
+  (:block/uuid (db-test/find-block-by-content db content)))
+
+(deftest selection-delete-keeps-top-level-blocks-in-selection-order-test
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "Test"}
+                :blocks [{:block/title "a"
+                          :build/children [{:block/title "a1"
+                                            :build/children [{:block/title "a11"}]}]}
+                         {:block/title "b"}
+                         {:block/title "c"}]}])
+        [a a1 a11 b] (map #(block-uuid-by-content @conn %) ["a" "a1" "a11" "b"])
+        ;; a1 follows its parent a; a11 comes before its parent a1, but its
+        ;; ancestors a1 and a are selected, so it goes with them as the
+        ;; window's get-top-level-blocks drops it
+        recorded (apply-ops-recording! conn
+                                       [[:delete-blocks [[a11 a a1 b] {:selection {}}]]]
+                                       {:outliner-op :delete-blocks})]
+    (is (= [[:delete-blocks [[a b] {}]]] recorded)
+        "The worker records the op the window used to send after its read")
+    (is (every? nil? (map #(d/entity @conn [:block/uuid %]) [a a1 a11 b])))
+    (is (some? (db-test/find-block-by-content @conn "c")))))
+
+(deftest selection-delete-drops-a-block-under-a-selected-ancestor-test
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "Test"}
+                :blocks [{:block/title "a"
+                          :build/children [{:block/title "a1"
+                                            :build/children [{:block/title "a11"}]}]}
+                         {:block/title "b"}]}])
+        [a a1 a11 b] (map #(block-uuid-by-content @conn %) ["a" "a1" "a11" "b"])
+        ;; a11's parent a1 is not selected, its grandparent a is: the delete
+        ;; of a covers it, as in the window since #13482
+        recorded (apply-ops-recording! conn
+                                       [[:delete-blocks [[a11 a] {:selection {}}]]]
+                                       {:outliner-op :delete-blocks})]
+    (is (= [[:delete-blocks [[a] {}]]] recorded))
+    (is (every? nil? (map #(d/entity @conn [:block/uuid %]) [a a1 a11])))
+    (is (some? (d/entity @conn [:block/uuid b])))))
+
+(deftest selection-delete-skips-a-selection-of-recycle-roots-test
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "Test"}
+                :blocks [{:block/title "recycled"
+                          :build/children [{:block/title "inside"}]}
+                         {:block/title "live"}]}])
+        recycled (db-test/find-block-by-content @conn "recycled")
+        [inside live] (map #(block-uuid-by-content @conn %) ["inside" "live"])]
+    (d/transact! conn [{:db/id (:db/id recycled)
+                        :logseq.property/deleted-at 1}])
+    (testing "every top-level block is a recycle root: no op, no change"
+      (is (= [] (apply-ops-recording! conn
+                                      [[:delete-blocks [[(:block/uuid recycled)] {:selection {}}]]]
+                                      {:outliner-op :delete-blocks})))
+      (is (some? (d/entity @conn [:block/uuid (:block/uuid recycled)]))))
+    (testing "a block under a recycle root is not a root itself, as in the window's check"
+      (apply-ops-recording! conn
+                            [[:delete-blocks [[inside] {:selection {}}]]]
+                            {:outliner-op :delete-blocks})
+      (is (nil? (d/entity @conn [:block/uuid inside]))))
+    (testing "a recycle root beside a live block is deleted with it"
+      (apply-ops-recording! conn
+                            [[:delete-blocks [[(:block/uuid recycled) live] {:selection {}}]]]
+                            {:outliner-op :delete-blocks})
+      (is (nil? (d/entity @conn [:block/uuid (:block/uuid recycled)])))
+      (is (nil? (d/entity @conn [:block/uuid live]))))))
+
+(deftest selection-delete-deletes-the-linking-block-of-a-rendered-link-test
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "Test"}
+                :blocks [{:block/title "target"}
+                         {:block/title "linking"}]}])
+        target (db-test/find-block-by-content @conn "target")
+        linking (db-test/find-block-by-content @conn "linking")]
+    (d/transact! conn [{:db/id (:db/id linking) :block/link (:db/id target)}])
+    (is (= [[:delete-blocks [[(:block/uuid linking)] {}]]]
+           (apply-ops-recording! conn
+                                 [[:delete-blocks [[(:block/uuid target)]
+                                                   {:selection {:original-ids {(:block/uuid target)
+                                                                               (:block/uuid linking)}}}]]]
+                                 {:outliner-op :delete-blocks})))
+    (is (nil? (d/entity @conn [:block/uuid (:block/uuid linking)])))
+    (is (some? (d/entity @conn [:block/uuid (:block/uuid target)]))
+        "The row renders the target for the linking block; the target stays")))
+
+(deftest selection-delete-deletes-journal-pages-as-pages-on-request-test
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:build/journal 20260101}
+                :blocks [{:block/title "journal content"}]}
+               {:page {:block/title "Test"}
+                :blocks [{:block/title "block"}]}])
+        journal (db-test/find-journal-by-journal-day @conn 20260101)
+        block (block-uuid-by-content @conn "block")
+        user-opts {:deleted-by-uuid (random-uuid)}]
+    (is (= [[:delete-blocks [[block] user-opts]]
+            [:delete-page [(:block/uuid journal) user-opts]]]
+           (apply-ops-recording! conn
+                                 [[:delete-blocks [[(:block/uuid journal) block]
+                                                   (assoc user-opts :selection {:delete-journals? true})]]]
+                                 {:outliner-op :delete-blocks})))
+    (is (nil? (d/entity @conn [:block/uuid block])))
+    (is (some? (:logseq.property/deleted-at (d/entity @conn [:block/uuid (:block/uuid journal)])))
+        "The journal page goes to the recycle bin, as a page delete does")))

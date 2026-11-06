@@ -315,9 +315,33 @@
     (escape-editing)
     (p/resolved [nil nil nil])))
 
+(defonce ^:private *pending-new-block-done
+  ;; Resolves when the pending Enter (insert-new-block!) has moved the editor
+  ;; to the new block, or failed
+  (atom nil))
+
+(defonce ^:private *pending-new-block-carry
+  ;; What a queued Enter brings to the block it makes: the keys typed after it
+  ;; (and a Tab queued after it) while the previous insert was running
+  (atom nil))
+
 (defn- start-pending-new-block!
+  "Marks an Enter as running; returns its token for settle-pending-new-block!."
   []
-  (state/set-state! :editor/pending-new-block {:typed-text ""}))
+  (let [resolve! (atom nil)
+        done (p/create (fn [resolve _reject] (reset! resolve! resolve)))
+        token {:promise done :resolve! @resolve! :callback-started? (atom false)}
+        carry @*pending-new-block-carry]
+    (reset! *pending-new-block-carry nil)
+    (reset! *pending-new-block-done token)
+    (state/set-state! :editor/pending-new-block (merge {:typed-text ""} carry))
+    token))
+
+(defn <pending-new-block
+  "Settles when the pending Enter, if any, has moved the editor to the new
+  block."
+  []
+  (or (:promise @*pending-new-block-done) (p/resolved nil)))
 
 (defn- pending-new-block
   []
@@ -337,34 +361,69 @@
   [indent?]
   (when (pending-new-block?)
     (state/update-state! :editor/pending-new-block
-                         #(assoc % :tab-indent? indent?))))
+                         #(if (:enter-at %)
+                            (assoc % :next-tab-indent? indent?)
+                            (assoc % :tab-indent? indent?)))))
+
+(defn- queue-pending-new-block-enter!
+  "An Enter pressed while the previous Enter's insert is running: remembers
+  where it fell in the typed text, so the text after it goes to the block this
+  Enter makes once the previous insert lands. A second queued Enter is dropped."
+  []
+  (when (pending-new-block?)
+    (state/update-state! :editor/pending-new-block
+                         (fn [{:keys [typed-text enter-at delete?] :as pending}]
+                           (if (or enter-at delete?)
+                             pending
+                             (assoc pending :enter-at (count typed-text)))))))
 
 (defn- backspace-pending-new-block!
   [delete-block?]
   (when (pending-new-block?)
     (state/update-state!
      :editor/pending-new-block
-     (fn [{:keys [typed-text] :as pending}]
-       (if (and (seq typed-text) (not delete-block?))
+     (fn [{:keys [typed-text enter-at] :as pending}]
+       (cond
+         ;; Backspace right after a queued Enter takes the Enter back
+         (and enter-at (= enter-at (count typed-text)) (not delete-block?))
+         (dissoc pending :enter-at :next-tab-indent?)
+
+         (and (seq typed-text) (not delete-block?))
          (assoc pending :typed-text (subs typed-text 0 (dec (count typed-text))))
+
+         :else
          (assoc pending :delete? true))))))
 
 (defn- clear-pending-new-block!
   []
-  (state/set-state! :editor/pending-new-block nil))
+  (state/set-state! :editor/pending-new-block nil)
+  (when-let [{:keys [resolve!]} @*pending-new-block-done]
+    (reset! *pending-new-block-done nil)
+    (resolve! nil)))
+
+(defn- settle-pending-new-block!
+  "Ends the Enter of `token` if it is still the running one. The insertion's
+  transaction can succeed without its editor callback (the route or graph
+  changed meanwhile), which would leave Enter blocked and moves waiting."
+  [token]
+  (when (identical? token @*pending-new-block-done)
+    (clear-pending-new-block!)))
 
 (declare get-new-container-id)
 (declare delete-block-aux!)
 (declare expand-collapsed-indent-target!)
+(declare replay-queued-enter!)
 
 (defn- inserted-block-edit-fn
   [source-block block container-id]
   (fn [rows]
+    (some-> @*pending-new-block-done :callback-started? (reset! true))
     (let [block' (or (some #(when (= (:block/uuid block) (:block/uuid %)) %) rows)
                      block)
           source-block' (or (some #(when (= (:block/uuid source-block) (:block/uuid %)) %) rows)
                             source-block)
-          {:keys [typed-text tab-indent? delete?]} (pending-new-block)]
+          {:keys [typed-text tab-indent? delete? enter-at]} (pending-new-block)
+          typed-text (cond-> typed-text enter-at (subs 0 enter-at))]
       (if delete?
         (let [source-title (:block/title source-block')
               block-title (:block/title block')]
@@ -372,6 +431,7 @@
            (edit-block! source-block' (+ (count source-title) (count typed-text))
                         {:container-id container-id
                          :custom-content (str source-title typed-text block-title)
+                         :keep-whitespace? true
                          :tail-len (count block-title)
                          :save-code-editor? false
                          :save-current-block? false
@@ -381,6 +441,7 @@
              (edit-block! source-block' (+ (count source-title) (count latest-text))
                           {:container-id container-id
                            :custom-content (str source-title latest-text block-title)
+                           :keep-whitespace? true
                            :tail-len (count block-title)
                            :save-code-editor? false
                            :save-current-block? false
@@ -397,8 +458,13 @@
                                :save-current-block? false
                                :skip-load? true}
                         (seq typed-text)
-                        (assoc :custom-content (str typed-text (:block/title block')))))
-         (clear-pending-new-block!))))))
+                        (assoc :custom-content (str typed-text (:block/title block'))
+                               :keep-whitespace? true)))
+         (let [{:keys [enter-at next-tab-indent?] :as latest} (pending-new-block)
+               after-enter (when enter-at (subs (:typed-text latest) enter-at))]
+           (clear-pending-new-block!)
+           (when enter-at
+             (replay-queued-enter! block' after-enter next-tab-indent?))))))))
 
 (defn insert-new-block-before-block-aux!
   [config block value]
@@ -584,9 +650,8 @@
      (when state
        (if (leaf-property-value-insert-blocked? (:config state) (:block state))
          (escape-editing)
-         (do
-           (start-pending-new-block!)
-           (let [{:keys [block value config]} state
+         (let [pending-token (start-pending-new-block!)
+               {:keys [block value config]} state
                  value (if (string? block-value) block-value value)
                  block-id (:block/uuid block)
                  block-self? (block-self-alone-when-insert? config block-id)
@@ -619,8 +684,14 @@
                          _ (first insert-result)]
                    (clear-when-saved!))
                  (p/catch (fn [error]
-                            (clear-pending-new-block!)
-                            (throw error)))))))))))
+                            (settle-pending-new-block! pending-token)
+                            (throw error)))
+                 (p/finally (fn []
+                              ;; the transaction is done: when its editor
+                              ;; callback did not run (the route or graph
+                              ;; changed), nothing else will end this Enter
+                              (when-not @(:callback-started? pending-token)
+                                (settle-pending-new-block! pending-token)))))))))))
 
 (defn api-insert-new-block!
   [content {:keys [page block-uuid
@@ -967,7 +1038,39 @@
       :else
       (delete-block-aux! block edit-block-f))))
 
+(defonce ^:private *pending-block-delete
+  ;; The running delete-block-inner! (Backspace at the start of a block,
+  ;; Delete at its end), until it has moved the editor to the joined block.
+  ;; Until then the edit state names the deleted block.
+  (atom nil))
+
+(defn <pending-block-delete
+  "Settles when the running Backspace or Delete join, if any, has moved the
+  editor."
+  []
+  (or @*pending-block-delete (p/resolved nil)))
+
+(declare delete-block-inner-aux!)
+
+(defn- track-block-delete!
+  "Registers the join that `p` (a promise or value) finishes as running, so
+  moves wait for it; returns `p`. A join tracked from its keydown registers
+  again in delete-block-inner!; a move then waits for whichever is newest,
+  and the outer one settles last."
+  [p]
+  (let [;; settles when the join is done or failed, never rejects
+        settled (-> (p/resolved p) (p/catch (constantly nil)))]
+    (reset! *pending-block-delete settled)
+    (p/then settled (fn [_]
+                      (when (identical? @*pending-block-delete settled)
+                        (reset! *pending-block-delete nil))))
+    p))
+
 (defn delete-block-inner!
+  [repo editor-state]
+  (track-block-delete! (delete-block-inner-aux! repo editor-state)))
+
+(defn- delete-block-inner-aux!
   [repo {:keys [block block-id value config block-container current-block next-block delete-concat?]}]
   (when (and block-id
              (not (comments-model/protected-comment-block? (or current-block block)))
@@ -1050,31 +1153,29 @@
   (delete-block-inner! repo (get-state)))
 
 (defn delete-blocks!
-  [_repo block-uuids blocks dom-blocks mobile-action-bar?]
+  "Deletes the selected rows `dom-blocks`, whose block uuids are `block-uuids`
+  in selection order. The worker resolves the selection in the op (top-level
+  blocks, recycle roots, journal pages on mobile), so nothing is read first.
+  The editor moves to the row above the first selected row when the op is
+  sent; the rows themselves leave when the worker's delta arrives."
+  [_repo block-uuids dom-blocks mobile-action-bar?]
   (when (seq block-uuids)
-    (let [uuid->dom-block (zipmap block-uuids dom-blocks)
-          block (first blocks)
-          block-parent (get uuid->dom-block (:block/uuid block))
+    (let [block-parent (first dom-blocks)
           sibling-block (when block-parent
                           (util/get-prev-block-non-collapsed-non-embed block-parent))
-          blocks' (block-handler/get-top-level-blocks blocks)
           mobile? (util/capacitor?)
           edit-block-fn (when (and sibling-block (not mobile?))
                           (edit-previous-window-block-fn sibling-block))
-          journals (and mobile? (filter entity/journal? blocks'))
-          blocks (remove (fn [b] (contains? (set (map :db/id journals)) (:db/id b))) blocks)]
-      (when (or (seq journals) (seq blocks))
-        (ui-outliner-tx/transact!
-         (cond-> (merge {:outliner-op :delete-blocks
-                         :mobile-action-bar? mobile-action-bar?}
-                        (block-handler/outliner-tx-meta (first blocks)))
-           edit-block-fn
-           (assoc :editor/edit-block-fn edit-block-fn))
-         (when (seq blocks)
-           (outliner-op/delete-blocks! blocks nil))
-         (when (seq journals)
-           (doseq [journal journals]
-             (outliner-op/delete-page! (:block/uuid journal)))))))))
+          selection (cond-> {:original-ids (block-handler/dom-original-block-ids block-uuids)}
+                      mobile?
+                      (assoc :delete-journals? true))]
+      (ui-outliner-tx/transact!
+       (cond-> {:outliner-op :delete-blocks
+                :mobile-action-bar? mobile-action-bar?}
+         edit-block-fn
+         (assoc :editor/edit-block-fn edit-block-fn
+                :editor/edit-block-on-send? true))
+       (outliner-op/delete-blocks! block-uuids {:selection selection})))))
 
 (defn copy-block-ref!
   ([block-id]
@@ -1123,8 +1224,17 @@
     (p/let [result (db-async/<get-block-with-children repo block-uuid opts)]
       (let [root (:block result)
             children (:children result)]
-        (if (entity/page? root)
+        (cond
+          ;; Deleted after the selection was read (Backspace or a cut right
+          ;; after Control+c): a nil root would reach the clipboard as an
+          ;; untitled block without a uuid.
+          (nil? root)
+          nil
+
+          (entity/page? root)
           children
+
+          :else
           (cons root children))))))
 
 (defn- <get-all-blocks-by-ids
@@ -1293,16 +1403,16 @@
          (when (seq dom-blocks)
            (let [repo (state/get-current-repo)
                  block-uuids (distinct (keep util/selection-node-block-id dom-blocks))]
-             (p/let [results (db-async/<get-blocks repo block-uuids {:children? false})]
-               (let [blocks (unwrap-block-results results)
-                     top-level-blocks (block-handler/get-top-level-blocks blocks)]
-                 (when-not (every? ldb/recycled? top-level-blocks)
-                   (when (seq top-level-blocks)
-                     ;; Delete the selected nodes only. Page nodes unlink their
-                     ;; namespace parent in INode/-del; expanding a page to its
-                     ;; content would wipe the child page (db-test#1242).
-                     ;; Regular blocks still retract their subtree there.
-                     (delete-blocks! repo (map :block/uuid top-level-blocks) top-level-blocks dom-blocks mobile-action-bar?))))))))))))
+             ;; Delete the selected nodes only. Page nodes unlink their
+             ;; namespace parent in INode/-del; expanding a page to its
+             ;; content would wipe the child page (db-test#1242).
+             ;; Regular blocks still retract their subtree there.
+             ;; Not awaited: the selection ends when the op is sent, and
+             ;; the next key belongs to the editor that moved with it.
+             (p/catch (p/do! (delete-blocks! repo block-uuids dom-blocks mobile-action-bar?))
+                      (fn [error]
+                        (log/error :editor/delete-selection-failed {:error error})))
+             nil)))))))
 
 (def url-regex
   "Didn't use link/plain-link as it is incorrectly detects words as urls."
@@ -1846,6 +1956,29 @@
           (some #(when (= container-id (row-container-id %)) %) rows))
         (first rows))))
 
+(defn- edit-row-container-id
+  "The container of the row being edited (the editor's own row, not a copy of
+  the block drawn first elsewhere)."
+  []
+  (some-> (state/get-edit-input-id) gdom/getElement row-container-id))
+
+(defn- selection-container-id
+  "The container the first of `blocks` was selected in."
+  [container-ids blocks]
+  (get container-ids (str (:block/uuid (first blocks)))))
+
+(defn- move-scroll-context
+  []
+  [(state/get-current-repo) (state/get-route-match)])
+
+(defn- moved-row
+  "The row of block `block-id` in container `container-id`, else its first."
+  [block-id container-id]
+  (let [rows (util/get-blocks-by-id block-id)]
+    (or (when container-id
+          (some #(when (= container-id (row-container-id %)) %) rows))
+        (first rows))))
+
 (defn- reselect-moved-rows?
   "Select the moved rows only when each was found and the selection is still
   the one that was moved: a click or Escape during the move wins."
@@ -1857,25 +1990,37 @@
   [up?]
   (let [repo (state/get-current-repo)
         edit-block-id (:block/uuid (state/get-edit-block))
-        move-nodes (fn [blocks]
+        start-context (move-scroll-context)
+        ;; `container-id`: the view the block is moved in (it can also be
+        ;; drawn in an embed, a query or the sidebar), from the row being
+        ;; edited or selected
+        move-nodes (fn [blocks container-id]
                      (let [blocks' (block-handler/get-top-level-blocks blocks)
-                           result (ui-outliner-tx/transact!
-                                   (merge {:outliner-op :move-blocks}
-                                          (block-handler/outliner-tx-meta (first blocks')))
-                                   (outliner-op/move-blocks-up-down! blocks' up?))]
-                       (when-let [block-node (util/get-first-block-by-id (:block/uuid (first blocks)))]
-                         (.scrollIntoView block-node #js {:behavior "smooth" :block "nearest"}))
-                       result))]
+                           block-id (str (:block/uuid (first blocks)))]
+                       (p/let [result (ui-outliner-tx/transact!
+                                       (merge {:outliner-op :move-blocks}
+                                              (block-handler/outliner-tx-meta (first blocks')))
+                                       (outliner-op/move-blocks-up-down! blocks' up?))]
+                         ;; the moved row is drawn in its new place on the
+                         ;; next frame; scroll that place into view, if the
+                         ;; page and graph are still the ones moved in
+                         (js/requestAnimationFrame
+                          (fn []
+                            (when (= start-context (move-scroll-context))
+                              (when-let [block-node (moved-row block-id container-id)]
+                                (.scrollIntoView block-node #js {:behavior "smooth" :block "nearest"})))))
+                         result)))]
     (p/let [root-block (get-focused-root-block)]
       (if edit-block-id
         (p/let [block (db-async/<get-block repo edit-block-id {:children? false})]
           (let [blocks [(assoc block :block/title (state/get-edit-content))]
                 blocks (filter #(block-eligible-for-move-up-down? % root-block) blocks)
-                container-id (get-new-container-id (if up? :move-up :move-down) {})]
+                container-id (get-new-container-id (if up? :move-up :move-down) {})
+                edit-container-id (edit-row-container-id)]
             (when (seq blocks)
               (p/do!
                (save-current-block!)
-               (move-nodes blocks)
+               (move-nodes blocks edit-container-id)
                (if container-id
                  (state/set-editing-block-id! [container-id edit-block-id])
                  (when-let [input (some-> (state/get-edit-input-id) gdom/getElement)]
@@ -1892,7 +2037,7 @@
                     blocks (filter #(block-eligible-for-move-up-down? % root-block) loaded-blocks)]
               (when (seq blocks)
                 (p/do!
-                 (move-nodes blocks)
+                 (move-nodes blocks (selection-container-id container-ids blocks))
                  ;; The transaction flushes its delta before settling, so moved
                  ;; rows can be resolved in their original view.
                  (let [nodes (keep new-row ids)
@@ -1908,8 +2053,14 @@
   (fn [event]
     (util/stop event)
     (state/pub-event! [:editor/hide-action-bar])
+    ;; An Enter, Backspace join or Delete join still running names the
+    ;; block it split or deleted as the edited one; the move waits for it
+    ;; and moves the block the editor lands in
     (let [previous (or @*move-up-down-tail (p/resolved nil))
-          result (p/then previous (fn [_] (<move-up-down! up?)))
+          result (p/then previous (fn [_]
+                                    (p/do (<pending-block-delete)
+                                          (<pending-new-block)
+                                          (<move-up-down! up?))))
           tail (p/catch result (constantly nil))]
       ;; Register the whole task before its first async read. Later shortcuts
       ;; wait for both the transaction and the selection update.
@@ -2422,6 +2573,49 @@
                   (insert-new-block! state content right-sibling)
                   (indent-outdent false))))))))))
 
+(defn- <editor-on-block
+  "Settles with true once the mounted editor is the one of `block-uuid` (its box
+  sets the editor args in a layout effect), with false after `frames` frames."
+  [block-uuid frames]
+  (p/create
+   (fn [resolve _reject]
+     (letfn [(check [n]
+               (let [[{:keys [block]} id] (state/get-editor-args)]
+                 (cond
+                   (and (= block-uuid (:block/uuid block)) (gdom/getElement id))
+                   (resolve true)
+
+                   (zero? n)
+                   (resolve false)
+
+                   :else
+                   (js/requestAnimationFrame #(check (dec n))))))]
+       (check frames)))))
+
+(defn replay-queued-enter!
+  "Presses the Enter queued while the previous Enter's insert ran, once the
+  editor is on the block that insert made. The keys typed after the queued
+  Enter (and a Tab queued after it) go to the block it makes."
+  [block after-enter next-tab-indent?]
+  (p/let [ready? (<editor-on-block (:block/uuid block) 60)]
+    (if-not ready?
+      (when-let [input (state/get-input)]
+        (when (seq after-enter)
+          (state/set-edit-content! (.-id input) (str (.-value input) after-enter))))
+      (do
+        (reset! *pending-new-block-carry
+                (cond-> {:typed-text (or after-enter "")}
+                  (some? next-tab-indent?) (assoc :tab-indent? next-tab-indent?)))
+        (p/do!
+         (keydown-new-block (get-state))
+         ;; the Enter made no block (an empty block outdents instead): the
+         ;; keys typed after it stay in this block
+         (when-let [{:keys [typed-text]} @*pending-new-block-carry]
+           (reset! *pending-new-block-carry nil)
+           (when-let [input (state/get-input)]
+             (when (seq typed-text)
+               (state/set-edit-content! (.-id input) (str (.-value input) typed-text))))))))))
+
 (defn- inside-of-single-block
   "When we are in a single block wrapper, we should always insert a new line instead of new block"
   [el]
@@ -2442,7 +2636,12 @@
                (or (nil? target)
                    (inside-of-editor-block target)))
       (if (pending-new-block?)
-        (when e (.preventDefault e))
+        (do
+          (when e (.preventDefault e))
+          (if (or (state/doc-mode-enter-for-new-line?)
+                  (inside-of-single-block (:node state)))
+            (append-pending-new-block-text! "\n")
+            (queue-pending-new-block-enter!)))
         (let [new-line? (or (state/doc-mode-enter-for-new-line?)
                             (inside-of-single-block (:node state)))]
           (cond
@@ -2750,6 +2949,10 @@
                     uuid
                     (not (state/block-component-editing?))
                     (not= title (string/trim value)))
+               ;; This save replaces the auto-save the last keystroke scheduled.
+               ;; Left pending, that timer saves the same text again when this
+               ;; save is refused (e.g. a duplicate page title) and the editor stays.
+               (clear-block-auto-save-timeout!)
                (save-block! repo uuid value))
 
              (cond
@@ -2786,13 +2989,22 @@
                (when-let [sibling-block-id (node-attr sibling-block "blockid")]
                  (let [container-id (some-> (node-attr sibling-block "containerid") js/parseInt)
                        new-uuid (cljs.core/uuid sibling-block-id)
-                       block {:block/uuid new-uuid}]
-                   (edit-block! block
-                                (or (:pos move-opts)
-                                    (when input [direction (util/get-line-pos (.-value input) (util/get-selection-start input))])
-                                    0)
-                                {:container-id container-id
-                                 :direction direction}))))))
+                       block {:block/uuid new-uuid}
+                       edit! #(edit-block! block
+                                           (or (:pos move-opts)
+                                               (when input [direction (util/get-line-pos (.-value input) (util/get-selection-start input))])
+                                               0)
+                                           {:container-id container-id
+                                            :direction direction})]
+                   (if (util/rec-get-node sibling-block "ls-page-title")
+                     ;; Journal titles are read-only (date-derived), as on click and on
+                     ;; Backspace into them: select the title instead of editing it, or
+                     ;; the edit is refused by the worker.
+                     (p/let [page (db-async/<get-block repo new-uuid {:children? false})]
+                       (if (entity/journal? page)
+                         (state/exit-editing-and-set-selected-blocks! [sibling-block])
+                         (edit!)))
+                     (edit!)))))))
           (case direction
             :up (if input
                   (cursor/move-cursor-to input 0)
@@ -2909,9 +3121,17 @@
   (util/safe-set-range-text! input "" start end)
   (state/set-edit-content! (state/get-edit-input-id) (.-value input)))
 
-(defn- delete-concat [current-block]
-  (p/let [repo (state/get-current-repo)
-          current-block-id (or (some-> (state/get-input)
+(defn- delete-concat
+  "Joins the block after `input`'s row into `current-block`. `input` and
+  `editor-state` are the editor's at the keypress: the block lookups wait for
+  the worker, and a click meanwhile moves the editor to another block, whose
+  next block must not be joined into this one."
+  [current-block ^js input editor-state]
+  ;; tracked from the start, the block lookups included (see
+  ;; delete-block-when-zero-pos!)
+  (track-block-delete!
+   (p/let [repo (state/get-current-repo)
+          current-block-id (or (some-> input
                                        (util/rec-get-node "ls-block")
                                        (dom/attr "blockid")
                                        uuid)
@@ -2924,7 +3144,7 @@
           collapsed? (util/collapsed? hydrated-current-block)
           next-node (when-not collapsed?
                       (util/get-next-block-non-collapsed
-                       (util/rec-get-node (state/get-input) "ls-block")
+                       (util/rec-get-node input "ls-block")
                        {:exclude-property? true}))
           next-block (when-let [next-block-id (some-> (dom/attr next-node "blockid") uuid)]
                        (p/let [result (db-async/<get-block-with-children
@@ -2939,14 +3159,14 @@
 
       :else
       (let [repo (state/get-current-repo)
-            editor-state (assoc (get-state)
+            editor-state (assoc editor-state
                                 :block-id (:block/uuid next-block)
                                 :value (:block/title next-block)
                                 :block-container next-node
                                 :current-block hydrated-current-block
                                 :next-block next-block
                                 :delete-concat? true)]
-        (delete-block-inner! repo editor-state)))))
+        (delete-block-inner! repo editor-state))))))
 
 (defn keydown-delete-handler
   [_e]
@@ -2966,7 +3186,7 @@
           (let [editor-state (get-state)
                 custom-query? (get-in editor-state [:config :custom-query?])]
             (when-not custom-query?
-              (delete-concat current-block)))
+              (delete-concat current-block input editor-state)))
 
           :else
           (delete-and-update
@@ -2987,7 +3207,10 @@
                                                         editor-config)
                                    mounted-block)
             custom-query? (:custom-query? editor-config)]
-        (p/let [left-or-parent (<left-sibling-or-parent repo block previous-block)]
+        ;; tracked from here: a move during the sibling lookup would still
+        ;; see the block being joined as the edited block
+        (track-block-delete!
+         (p/let [left-or-parent (<left-sibling-or-parent repo block previous-block)]
           (let [top-block? (= (:db/id left-or-parent) (block-page-id block))
                 single-block? (if e (inside-of-single-block (.-target e)) false)
                 root-block? (= (:block.temp/container block) (str (:block/uuid block)))]
@@ -3002,7 +3225,7 @@
                 (p/do!
                  (save-current-block!)
                  (remove-block-own-order-list-type! block))
-                (delete-block-inner! repo editor-state)))))))))
+                (delete-block-inner! repo editor-state))))))))))
 
 (defn keydown-backspace-handler
   [cut? e]
@@ -3166,7 +3389,9 @@
         (do
           (util/stop e)
           (notification/show! (t :page.validation/name-no-hash) :warning))
-        (pending-new-block?)
+        ;; Control/Meta chords type nothing: Control+z must reach the undo
+        ;; shortcut, not become a "z" in the block the pending Enter makes
+        (and (pending-new-block?) (not (or ctrlKey metaKey)))
         (do
           (when (= 1 (count (str key)))
             (append-pending-new-block-text! key))
@@ -3346,7 +3571,7 @@
       (let [current-pos (cursor/pos input)
             value (gobj/get input "value")
             c (util/nth-safe value (dec current-pos))
-            [key-code k code is-processed?]
+            [_key-code k code is-processed?]
             (if (and c
                      (mobile-util/native-android?)
                      (or (= key-code 229)
@@ -3409,11 +3634,6 @@
 
         (close-autocomplete-if-outside input)
 
-        (when-not (or (= k "Shift") is-processed?)
-          (state/set-last-key-code! {:key-code key-code
-                                     :code code
-                                     :key k
-                                     :shift? (.-shiftKey e)}))
         (when-not (state/get-editor-action)
           (state/set-editor-last-pos! (cursor/pos input)))))))
 

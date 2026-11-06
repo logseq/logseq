@@ -209,6 +209,107 @@
       (is (= [:prevent-default :escape-editing] @calls)
           "Enter on a page title must save and exit without splitting the page entity."))))
 
+(defn- fake-dom-node
+  [attrs]
+  #js {:classList #js {:contains (constantly false)}
+       :closest (constantly nil)
+       :querySelector (constantly nil)
+       :getAttribute (fn [k] (get attrs k))})
+
+(deftest arrow-down-out-of-a-refused-title-saves-it-once-test
+  (async done
+    (let [page-uuid #uuid "11111111-1111-1111-1111-111111111111"
+          page {:db/id 1
+                :block/uuid page-uuid
+                :block/title "page 2"}
+          input #js {:value "page"}
+          current-block (fake-dom-node {})
+          next-block (fake-dom-node {"blockid" "22222222-2222-2222-2222-222222222222"})
+          previous-document (aget js/globalThis "document")
+          saves (atom [])]
+      (aset js/globalThis "document" #js {:activeElement input})
+      (-> (p/with-redefs [state/get-edit-block (constantly page)
+                          state/get-edit-content (constantly "page")
+                          state/block-component-editing? (constantly false)
+                          state/input-idle? (constantly true)
+                          editor/handle-last-input (fn [])
+                          util/rec-get-node (fn [_node class]
+                                              (when (= "ls-block" class)
+                                                current-block))
+                          util/get-next-block-non-collapsed (constantly next-block)
+                          editor/save-block! (fn [_repo block-uuid value]
+                                               (swap! saves conj [:arrow-down block-uuid value])
+                                               (p/rejected (ex-info "Duplicate page" {:type :notification})))
+                          editor/save-current-block! (fn [_opts]
+                                                       (swap! saves conj [:auto-save]))]
+            ;; the last Backspace, "page 2" -> "page", schedules the 450 ms auto-save
+            (editor/edit-box-on-change! #js {:target input} page "edit-block-page-title")
+            (-> (editor/move-cross-boundary-up-down :down {:input input})
+                (p/catch (fn [_error] nil)))
+            (p/delay 600))
+          (p/then (fn []
+                    (is (= [[:arrow-down page-uuid "page"]] @saves)
+                        "ArrowDown's save replaces the pending auto-save: a refused title is sent once, not twice.")))
+          (p/catch (fn [error]
+                     (is false (str error))))
+          (p/finally (fn []
+                       (if (some? previous-document)
+                         (aset js/globalThis "document" previous-document)
+                         (js-delete js/globalThis "document"))
+                       (done)))))))
+
+(defn- arrow-up-into-page-title!
+  "Runs ArrowUp from a page's first block into the page's title block, whose page is `page`;
+  returns what happened: [:edit uuid] or [:select node]."
+  [page]
+  (let [block {:db/id 2
+               :block/uuid #uuid "33333333-3333-3333-3333-333333333333"
+               :block/title "first"}
+        input #js {:value "first"}
+        current-block (fake-dom-node {})
+        title-block (fake-dom-node {"blockid" (str (:block/uuid page))})
+        previous-document (aget js/globalThis "document")
+        calls (atom [])]
+    (aset js/globalThis "document" #js {:activeElement input})
+    (-> (p/with-redefs [state/get-edit-block (constantly block)
+                        state/get-edit-content (constantly "first")
+                        state/block-component-editing? (constantly false)
+                        util/rec-get-node (fn [node class]
+                                            (cond
+                                              (= "ls-block" class) current-block
+                                              (and (= "ls-page-title" class) (identical? node title-block)) title-block))
+                        util/get-prev-block-non-collapsed (constantly title-block)
+                        db-async/<get-block (fn [_repo id & _opts]
+                                              (p/resolved (when (= id (:block/uuid page)) page)))
+                        editor/edit-block! (fn [b & _args] (swap! calls conj [:edit (:block/uuid b)]))
+                        state/exit-editing-and-set-selected-blocks! (fn [nodes & _args]
+                                                                       (swap! calls conj [:select (first nodes)]))]
+          (p/let [_ (editor/move-cross-boundary-up-down :up {:input input})]
+            (mapv (fn [[k v]] [k (if (identical? v title-block) :title-node v)]) @calls)))
+        (p/finally (fn []
+                     (if (some? previous-document)
+                       (aset js/globalThis "document" previous-document)
+                       (js-delete js/globalThis "document")))))))
+
+(deftest arrow-up-into-a-journal-title-selects-it-test
+  (async done
+    (let [journal {:db/id 1
+                   :block/uuid #uuid "00000001-2026-1025-0000-000000000000"
+                   :block/title "Oct 25th, 2026"
+                   :block/tags [{:db/ident :logseq.class/Journal}]}
+          page {:db/id 4
+                :block/uuid #uuid "44444444-4444-4444-4444-444444444444"
+                :block/title "page 1"
+                :block/tags [{:db/ident :logseq.class/Page}]}]
+      (-> (p/let [journal-calls (arrow-up-into-page-title! journal)
+                  page-calls (arrow-up-into-page-title! page)]
+            (is (= [[:select :title-node]] journal-calls)
+                "a journal's title is read-only: ArrowUp selects it instead of editing it")
+            (is (= [[:edit (:block/uuid page)]] page-calls)
+                "an ordinary page's title is still edited"))
+          (p/catch (fn [e] (is false (str e))))
+          (p/finally done)))))
+
 (deftest keydown-new-block-keeps-the-keydown-editor-state-test
   (let [block {:db/id 1
                :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
@@ -260,6 +361,75 @@
            (fn []
              (set! editor/edit-block! original-edit-block!)
              (done)))))))
+
+(deftest enter-during-a-pending-insert-is-queued-where-it-fell-test
+  (with-redefs [editor/auto-complete? (constantly false)
+                editor/get-state (constantly {:node nil})
+                editor/inside-of-single-block (constantly false)
+                state/doc-mode-enter-for-new-line? (constantly false)]
+    (#'editor/start-pending-new-block!)
+    (#'editor/append-pending-new-block-text! "abc")
+    (editor/keydown-new-block-handler nil)
+    (#'editor/append-pending-new-block-text! "de")
+    (is (= {:typed-text "abcde" :enter-at 3}
+           (select-keys (state/get-state :editor/pending-new-block) [:typed-text :enter-at]))
+        "the Enter is kept at its place in the typed text, not dropped")
+    (editor/keydown-new-block-handler nil)
+    (is (= 3 (:enter-at (state/get-state :editor/pending-new-block)))
+        "a second queued Enter does not move the first")
+    (#'editor/backspace-pending-new-block! false)
+    (#'editor/backspace-pending-new-block! false)
+    (is (= 3 (:enter-at (state/get-state :editor/pending-new-block))))
+    (#'editor/backspace-pending-new-block! false)
+    (is (= {:typed-text "abc"}
+           (select-keys (state/get-state :editor/pending-new-block) [:typed-text :enter-at]))
+        "Backspace right after the queued Enter takes the Enter back, not a letter")
+    (#'editor/clear-pending-new-block!)))
+
+(deftest pending-insert-landing-replays-the-queued-enter-test
+  (async done
+    (let [block-id #uuid "22222222-2222-2222-2222-222222222222"
+          pending-block {:block/uuid block-id :block/title ""}
+          edits (atom [])
+          replays (atom [])
+          original-edit-block! editor/edit-block!
+          original-replay! editor/replay-queued-enter!]
+      (set! editor/edit-block! (fn [block pos opts]
+                                 (swap! edits conj [block pos (:custom-content opts) (:keep-whitespace? opts)])))
+      (set! editor/replay-queued-enter! (fn [& args] (swap! replays conj (vec args))))
+      (#'editor/start-pending-new-block!)
+      (#'editor/append-pending-new-block-text! "rapid enter alpha")
+      (#'editor/queue-pending-new-block-enter!)
+      (#'editor/queue-pending-new-block-tab! true)
+      (#'editor/append-pending-new-block-text! "rap")
+      (-> ((#'editor/inserted-block-edit-fn pending-block pending-block 7) [pending-block])
+          (p/then
+           (fn []
+             (is (= [[pending-block 17 "rapid enter alpha" true]] @edits)
+                 "the new block gets the keys typed before the queued Enter")
+             (is (= [[pending-block "rap" true]] @replays)
+                 "the queued Enter is pressed with the keys and the Tab that came after it")
+             (is (nil? (state/get-state :editor/pending-new-block)))))
+          (p/catch
+           (fn [error]
+             (is false (str error))))
+          (p/finally
+           (fn []
+             (set! editor/edit-block! original-edit-block!)
+             (set! editor/replay-queued-enter! original-replay!)
+             (#'editor/clear-pending-new-block!)
+             (done)))))))
+
+(deftest a-replayed-enter-starts-its-insert-with-what-it-carries-test
+  (reset! @#'editor/*pending-new-block-carry {:typed-text "rap" :tab-indent? true})
+  (#'editor/start-pending-new-block!)
+  (is (= {:typed-text "rap" :tab-indent? true}
+         (state/get-state :editor/pending-new-block)))
+  (is (nil? @@#'editor/*pending-new-block-carry) "the carry is used once")
+  (#'editor/clear-pending-new-block!)
+  (#'editor/start-pending-new-block!)
+  (is (= {:typed-text ""} (state/get-state :editor/pending-new-block)))
+  (#'editor/clear-pending-new-block!))
 
 (deftest save-block-if-changed-uses-passed-block-content-test
   (let [block-uuid #uuid "11111111-1111-1111-1111-111111111111"
@@ -1573,6 +1743,60 @@
                         "Delete must use the editor state captured by its keydown.")))
           (p/finally done)))))
 
+(def ^:private real-get-edit-block
+  ;; taken at load, before any test stubs it
+  state/get-edit-block)
+
+(deftest backspace-join-is-pending-during-its-sibling-lookup-test
+  ;; A move pressed while Backspace looks up the previous block must wait:
+  ;; the edit state still names the block about to be joined
+  (async done
+    (let [block {:db/id 1
+                 :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+                 :block/title ""
+                 :block/page {:db/id 10}}
+          *resolve-sibling (atom nil)
+          sibling-promise (js/Promise. #(reset! *resolve-sibling %))
+          *move-waited (atom :not-settled)
+          originals [state/get-input cursor/pos util/stop state/get-current-repo
+                     state/get-edit-block db-async/<get-block-sibling
+                     editor/get-state editor/delete-block-inner!
+                     util/get-prev-block-non-collapsed-non-embed]
+          restore! (fn []
+                     (set! state/get-input (nth originals 0))
+                     (set! cursor/pos (nth originals 1))
+                     (set! util/stop (nth originals 2))
+                     (set! state/get-current-repo (nth originals 3))
+                     ;; an earlier async test may not have put it back yet
+                     (set! state/get-edit-block real-get-edit-block)
+                     (set! db-async/<get-block-sibling (nth originals 5))
+                     (set! editor/get-state (nth originals 6))
+                     (set! editor/delete-block-inner! (nth originals 7))
+                     (set! util/get-prev-block-non-collapsed-non-embed (nth originals 8)))]
+      (set! state/get-input (constantly #js {:value ""}))
+      (set! cursor/pos (constantly 0))
+      (set! util/stop (constantly nil))
+      (set! state/get-current-repo (constantly test-helper/test-db))
+      (set! state/get-edit-block (constantly block))
+      (set! db-async/<get-block-sibling (fn [& _] sibling-promise))
+      (set! editor/get-state (constantly {:config {}}))
+      (set! editor/delete-block-inner! (fn [_repo _state] nil))
+      (set! util/get-prev-block-non-collapsed-non-embed (constantly nil))
+      (let [result (#'editor/delete-block-when-zero-pos! nil)]
+        (p/then (editor/<pending-block-delete) (fn [_] (reset! *move-waited :settled)))
+        (-> (p/do!
+             ;; let every ready callback run: the lookup alone holds it back
+             (p/resolved nil)
+             (p/resolved nil)
+             (is (= :not-settled @*move-waited)
+                 "the join counts as running while its lookup is running")
+             (@*resolve-sibling nil)
+             result
+             (p/delay 0)
+             (is (= :settled @*move-waited) "and ends with it"))
+            (p/catch (fn [e] (is false (str e))))
+            (p/finally (fn [] (restore!) (done))))))))
+
 (deftest editor-delete-guards-nil-input-test
   (testing "stale editing state without a textarea is a no-op"
     (let [deleted (atom [])]
@@ -1863,6 +2087,35 @@
           (p/catch (fn [error]
                      (is false (str error))
                      (done)))))))
+
+(deftest enter-ends-when-its-insert-succeeds-without-the-editor-callback-test
+  ;; The insert's transaction skips the editor callback when the route or
+  ;; graph changed meanwhile; the Enter must still end, or Enter stays
+  ;; blocked and moves wait for good
+  (async done
+    (let [block {:db/id 1
+                 :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+                 :block/title "abc"}
+          prev-block (state/get-edit-block)
+          prev-action (state/get-editor-action)]
+      (-> (p/with-redefs [editor/insert-new-block-aux! (fn [& _] (p/resolved [nil nil nil]))
+                          editor/clear-when-saved! (constantly nil)
+                          util/get-selection-start (constantly 3)
+                          util/get-selection-end (constantly 3)]
+            (p/do!
+             (editor/insert-new-block! {:block block :value "abc" :config {} :node #js {}}
+                                       "abc" nil)
+             (p/delay 0)
+             (is (nil? (state/get-state :editor/pending-new-block))
+                 "the Enter is no longer pending")
+             (p/race [(p/then (editor/<pending-new-block) (constantly :settled))
+                      (p/delay 200 :still-waiting)])))
+          (p/then (fn [r] (is (= :settled r) "a move waiting on it goes ahead")))
+          (p/catch (fn [e] (is false (str e))))
+          (p/finally (fn []
+                       (state/set-state! :editor/block prev-block)
+                       (state/set-editor-action! prev-action)
+                       (done)))))))
 
 (deftest insert-new-block-skips-url-property-value-test
   (let [url-block {:db/id 1
@@ -2286,14 +2539,14 @@
                           (fn [_repo _id _opts]
                             (p/resolved {:block value-block :children []}))
                           editor/delete-blocks!
-                          (fn [_repo uuids _blocks _dom-blocks _mobile?]
-                            (reset! deleted-uuids uuids))]
+                          (fn [_repo uuids dom-blocks _mobile?]
+                            (reset! deleted-uuids [uuids dom-blocks]))]
             (editor/cut-selection-blocks true))
           (p/then (fn [_]
-                    (is (= [value-uuid] @requested-ids)
-                        "Cut must load the inner text property-value block, not drop the wrapper.")
-                    (is (= [value-uuid] @deleted-uuids)
-                        "Cut must delete the inner text property-value block.")))
+                    (is (nil? @requested-ids)
+                        "Cut sends the selection to the worker without reading it first.")
+                    (is (= [[value-uuid] [inner]] @deleted-uuids)
+                        "Cut must delete the inner text property-value block, not drop the wrapper.")))
           (p/catch (fn [error]
                      (is false (str error))))
           (p/finally done)))))
@@ -3418,3 +3671,32 @@
         "Escape during the move keeps nothing selected")
     (is (false? (#'editor/reselect-moved-rows? ["b" "c"] [:b2] before before))
         "a row not drawn yet: no partial selection")))
+
+(deftest moved-row-is-taken-in-the-view-it-moved-in-test
+  ;; the scroll after a move goes to the row in the view the block was moved
+  ;; in, not to a copy of it drawn first (an embed, the sidebar)
+  (let [container-of {"sidebar-row" 9 "page-row" 3}]
+    (with-redefs [util/get-blocks-by-id (fn [_id] ["sidebar-row" "page-row"])
+                  util/rec-get-node (fn [node _class] node)
+                  editor/get-node-container-id (fn [node] (container-of node))]
+      (is (= "page-row" (#'editor/moved-row "b" 3)))
+      (is (= "sidebar-row" (#'editor/moved-row "b" nil)) "no known view: the first row"))))
+
+(deftest move-scrolls-in-the-view-of-the-edited-or-selected-row-test
+  ;; the block is also drawn earlier in an embed (container 7); it is edited
+  ;; or selected in the page (container 3), so the scroll goes there
+  (let [container-of {"editor-input" 3 "selected-row" 3}]
+    (with-redefs [state/get-edit-input-id (constantly "edit-input-id")
+                  gdom/getElement (fn [id] (when (= id "edit-input-id") "editor-input"))
+                  util/rec-get-node (fn [node _class] node)
+                  editor/get-node-container-id (fn [node] (container-of node))
+                  dom/attr (fn [node _attr] (when (= node "selected-row") "b"))]
+      (is (= 3 (#'editor/edit-row-container-id)))
+      (is (= 3 (#'editor/selection-container-id (#'editor/row-container-ids ["selected-row"])
+                                                [{:block/uuid "b"}]))))))
+
+(deftest move-scroll-context-is-the-graph-and-route-test
+  ;; a scroll after a move runs only when these are unchanged
+  (with-redefs [state/get-current-repo (constantly "graph-a")
+                state/get-route-match (constantly {:path "/page/a"})]
+    (is (= ["graph-a" {:path "/page/a"}] (#'editor/move-scroll-context)))))

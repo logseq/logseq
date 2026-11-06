@@ -233,11 +233,24 @@
           (js/console.error "Unexpected Import EDN error:" e)
           (reset! *result {:error (str "Unexpected Import EDN error: " (pr-str (ex-message e)))}))))))
 
+(defn- view-for-gone?
+  "A view block whose :logseq.property/view-for node no longer exists, e.g. a references view created by a
+  page's section after an undo removed the page; the write would fail validation."
+  [db block]
+  (when-let [view-for (:logseq.property/view-for block)]
+    (let [eid (cond
+                (map? view-for) (:db/id view-for)
+                (integer? view-for) view-for
+                :else (:db/id (d/entity db view-for)))]
+      (not (and eid (seq (d/datoms db :eavt eid)))))))
+
 (defn- apply-insert-blocks-op!
   [conn *result [blocks target-block-id opts]]
   (when-let [target-block (d/entity @conn [:block/uuid target-block-id])]
-    (let [result (outliner-core/insert-blocks! conn blocks target-block opts)]
-      (reset! *result result))))
+    (let [blocks (remove #(view-for-gone? @conn %) blocks)]
+      (when (seq blocks)
+        (let [result (outliner-core/insert-blocks! conn blocks target-block opts)]
+          (reset! *result result))))))
 
 (defn- template-children-blocks
   [db template-id]
@@ -300,6 +313,30 @@
       (assoc opts :parent-original parent-original))
     opts))
 
+(defn- live-block?
+  [db id]
+  (some? (d/entity db (if (uuid? id) [:block/uuid id] id))))
+
+(defn- live-property-target-args
+  "With :skip-missing-targets? (set by the app's editor, never by the CLI or API, which keep their
+  'block or property doesn't exist' errors), a property write whose block or property was removed
+  after the editor sent it (an undo, a delete or a cut landing first) is dropped instead of
+  failing the whole batch. Returns the args to apply, or nil to skip the op."
+  [db opts' op args]
+  (if-not (:skip-missing-targets? opts')
+    args
+    (case op
+      :set-block-property
+      (let [[block-id property-id] args]
+        (when (and (live-block? db block-id) (d/entity db property-id))
+          args))
+      :batch-set-property
+      (let [[block-ids property-id & more] args
+            block-ids' (filterv #(live-block? db %) block-ids)]
+        (when (and (seq block-ids') (d/entity db property-id))
+          (into [block-ids' property-id] more)))
+      args)))
+
 (defn- ^:large-vars/cleanup-todo apply-op!
   [conn opts' *result [op args]]
   (case op
@@ -339,15 +376,21 @@
         (outliner-core/indent-outdent-blocks! conn blocks indent? opts)))
 
     :collapse-expand-blocks
-    (let [[blocks opts] args]
-      (ldb/transact! conn blocks opts))
+    ;; A block that is gone (deleted, or a new block whose insert hasn't landed when
+    ;; Ctrl+Up/Down follows Enter) would be created as a bare {:block/uuid :block/collapsed?}
+    ;; entity, which fails validation and the whole transaction.
+    (let [[blocks opts] args
+          blocks (filterv #(d/entity @conn [:block/uuid (:block/uuid %)]) blocks)]
+      (when (seq blocks)
+        (ldb/transact! conn blocks opts)))
 
     ;; properties
     :upsert-property
     (reset! *result (apply outliner-property/upsert-property! conn args))
 
     :set-block-property
-    (apply outliner-property/set-block-property! conn args)
+    (when-let [args (live-property-target-args @conn opts' op args)]
+      (apply outliner-property/set-block-property! conn args))
 
     :remove-block-property
     (apply outliner-property/remove-block-property! conn args)
@@ -361,7 +404,8 @@
       (outliner-property/create-property-text-block! conn block-id' property-id v opts))
 
     :batch-set-property
-    (apply outliner-property/batch-set-property! conn args)
+    (when-let [args (live-property-target-args @conn opts' op args)]
+      (apply outliner-property/batch-set-property! conn args))
 
     :batch-remove-property
     (apply outliner-property/batch-remove-property! conn args)
@@ -422,6 +466,62 @@
     (reset! *result (apply toggle-reaction! conn args))
     nil))
 
+(defn- selection-delete-ops
+  "Resolves a selection delete, a `:delete-blocks` op whose options carry
+  `:selection`, into the ops to apply. `block-ids` are the block uuids of the
+  selected rows in selection order.
+  - A block under another selected block is dropped: one whose parent comes
+    earlier in the selection by `outliner-core/blocks-with-level`, and one
+    with any selected ancestor, as `handler.block/get-top-level-blocks` does.
+  - `:original-ids` maps the uuid of a rendered linked block to its linking
+    block, which is deleted in its place.
+  - A selection whose remaining blocks are all recycle roots (each carries
+    `:logseq.property/deleted-at`) resolves to no op.
+  - With `:delete-journals?` (mobile), journal pages are deleted as pages."
+  [db [block-ids {:keys [selection] :as opts}]]
+  (let [{:keys [original-ids delete-journals?]} selection
+        opts' (dissoc opts :selection)
+        blocks (keep #(d/entity db [:block/uuid %]) block-ids)
+        selected-ids (set (map :db/id blocks))
+        selected-ancestor? (fn [entity]
+                             (ldb/some-parent entity #(contains? selected-ids (:db/id %))))
+        top-level (when (seq blocks)
+                    (->> blocks
+                         (mapv (fn [block]
+                                 (cond-> {:db/id (:db/id block)
+                                          :block/uuid (:block/uuid block)}
+                                   (:block/parent block)
+                                   (assoc :block/parent {:db/id (:db/id (:block/parent block))}))))
+                         outliner-core/blocks-with-level
+                         (keep (fn [block]
+                                 (when (= 1 (:block/level block))
+                                   (let [entity (d/entity db (:db/id block))]
+                                     (when-not (selected-ancestor? entity)
+                                       (if-let [original-id (get original-ids (:block/uuid block))]
+                                         {:block/uuid original-id}
+                                         {:block/uuid (:block/uuid block)
+                                          :entity entity}))))))
+                         vec))]
+    (when-not (every? #(some? (:logseq.property/deleted-at (:entity %))) top-level)
+      (let [journals (when delete-journals?
+                       (filter #(some-> (:entity %) ldb/journal?) top-level))
+            journal-ids (set (map :block/uuid journals))
+            blocks (remove #(contains? journal-ids (:block/uuid %)) top-level)]
+        (cond-> []
+          (seq blocks)
+          (conj [:delete-blocks [(mapv :block/uuid blocks) opts']])
+          (seq journals)
+          (into (map (fn [journal] [:delete-page [(:block/uuid journal) opts']]))
+                journals))))))
+
+(defn- resolve-op
+  "The ops to apply for `op-entry`: itself, except for a selection delete."
+  [db [op args :as op-entry]]
+  (if (and (= :delete-blocks op)
+           (:selection (second args)))
+    (selection-delete-ops db args)
+    [op-entry]))
+
 (defn- import-edn-op?
   [[op _args]]
   (= :batch-import-edn op))
@@ -447,7 +547,8 @@
     (ldb/batch-transact-with-temp-conn!
      conn (dissoc opts' :additional-tx :transact-opts :current-block)
      (fn [temp-conn _tx-data]
-       (doseq [[op args :as op-entry] ops]
+       (doseq [sent-op-entry ops
+               [op args :as op-entry] (resolve-op @temp-conn sent-op-entry)]
          (let [result (apply-op! temp-conn opts' *result op-entry)
                [_ [blocks target-id insert-opts]] (first (get-in result [:tx-meta :outliner-ops]))
                op-entry (case op
