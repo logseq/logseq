@@ -1,11 +1,16 @@
 (ns logseq.outliner.pipeline
   "Core fns for use with frontend worker and node"
-  (:require [datascript.core :as d]
+  (:require [clojure.string :as string]
+            [datascript.core :as d]
             [datascript.impl.entity :as de]
+            [logseq.common.util :as common-util]
             [logseq.common.util.date-time :as date-time-util]
+            [logseq.common.util.namespace :as ns-util]
+            [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
             [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.frontend.content :as db-content]
+            [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.property :as db-property]
             [logseq.outliner.datascript-report :as ds-report]
             [clojure.set :as set]))
@@ -49,6 +54,37 @@
            (map (fn [id]
                   (when-let [e (d/entity db [:block/uuid id])]
                     (:db/id e))))))))
+
+(defn- name-page
+  "The existing page a `[[Page]]` link names: looked up by name like
+  `resolve-page-ref` does when a block is saved, and for a namespace link
+  (`[[parent/child]]`, where the page's own name is only `child`) by its full
+  name."
+  [db page-name]
+  (let [page (ldb/get-page db page-name)
+        full-name (common-util/page-name-sanity-lc page-name)]
+    (when-let [page (or page
+                        (when (ns-util/namespace-page? page-name)
+                          (->> (entity-util/get-pages-by-name db (ns-util/get-last-part page-name))
+                               (map #(d/entity db (:e %)))
+                               (filter #(= full-name (common-util/page-name-sanity-lc (ldb/get-title-with-parents %))))
+                               (sort-by :db/id)
+                               first)))]
+      (when (entity-util/page? page)
+        page))))
+
+(defn- block-title-name-refs
+  "Ids of the existing pages a title links by name (`[[Page]]`), as the CLI
+  stores a title. A `[[Page]]` that names no page is not a ref."
+  [db block]
+  (let [content (or (:block/raw-title block)
+                    (:block/title block))]
+    (when (and (string? content) (string/includes? content "[["))
+      (->> (re-seq page-ref/page-ref-re content)
+           (map second)
+           distinct
+           (remove common-util/uuid-string?)
+           (keep #(:db/id (name-page db %)))))))
 
 (defn ^:api get-journal-day-from-long
   [db v]
@@ -117,7 +153,8 @@
                                              :else
                                              (build-journal-refs-for-datetime-properties db (property-entity property) v)))))
         property-refs (concat property-key-refs property-value-refs)
-        content-refs (block-content-refs db block)]
+        content-refs (concat (block-content-refs db block)
+                             (block-title-name-refs db block))]
     (->> (concat (map ref->eid (:block/tags block))
                  (when-let [id (:db/id (:block/link block))]
                    [id])

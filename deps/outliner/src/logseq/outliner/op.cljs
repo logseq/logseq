@@ -440,6 +440,12 @@
                      (nil? (:outliner-op opts)))
                 (assoc :outliner-op single-op-outliner-op)
 
+                ;; A batch of several ops has no single :outliner-op, which
+                ;; the worker pipeline needs to rebuild the refs of the blocks
+                ;; the batch changed.
+                (< 1 (count ops))
+                (assoc :rebuild-block-refs? true)
+
                 (some import-edn-op? ops)
                 (assoc ::sqlite-export/imported-data? true))
         *result (atom nil)]
