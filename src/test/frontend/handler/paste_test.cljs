@@ -83,7 +83,7 @@
           expected-paste "{{video https://www.youtube.com/watch?v=xu9p5ynlhZk}}"]
       (p/with-redefs
        [state/get-edit-input-id (constantly "edit-block-test")
-        state/get-input (constantly nil)
+        state/get-input (constantly #js {:value ""})
         ;; paste-copied-blocks-or-text mocks below
         commands/delete-selection! (constantly nil)
         commands/simple-insert! (fn [_input text] (p/resolved text))
@@ -100,7 +100,7 @@
           expected-paste "{{twitter https://x.com/chiefnoah13/status/1792677792506843462}}"]
       (p/with-redefs
        [state/get-edit-input-id (constantly "edit-block-test")
-        state/get-input (constantly nil)
+        state/get-input (constantly #js {:value ""})
         commands/delete-selection! (constantly nil)
         commands/simple-insert! (fn [_input text] (p/resolved text))
         util/stop (constantly nil)
@@ -119,7 +119,7 @@
           expected-paste "[logseq](https://logseq.com) is awesome"]
       (p/with-redefs
        [state/get-edit-input-id (constantly "edit-block-test")
-        state/get-input (constantly nil)
+        state/get-input (constantly #js {:value ""})
         ;; paste-copied-blocks-or-text mocks below
         util/stop (constantly nil)
         util/get-selected-text (constantly selected-text)
@@ -141,7 +141,7 @@
           expected-paste "[great song](https://www.youtube.com/watch?v=xu9p5ynlhZk) - Obaluaê!"]
       (p/with-redefs
        [state/get-edit-input-id (constantly "edit-block-test")
-        state/get-input (constantly nil)
+        state/get-input (constantly #js {:value ""})
         ;; paste-copied-blocks-or-text mocks below
         util/stop (constantly nil)
         util/get-selected-text (constantly selected-text)
@@ -445,11 +445,10 @@
         (is (= expected-paste result))))))
 
 (defn- <paste-text-while-edit-input-changes
-  "Pastes plain text into `edit-block-pasted`; before the clipboard read resolves,
-  the edit input id becomes `edit-input-id-after-read`. Resolves to the
-  simple-insert! calls and capture-error events."
-  [edit-input-id-after-read]
-  (let [*edit-input-id (atom "edit-block-pasted")
+  "Pastes plain text, applying `change-input` to the original input before the
+  clipboard read resolves. Resolves to the insert calls and captured events."
+  [change-input]
+  (let [*input (atom #js {:id "edit-block-pasted" :value ""})
         clipboard-read (p/deferred)
         inserted (atom [])
         errors (atom [])]
@@ -459,31 +458,38 @@
       html-parser/convert (constantly nil)
       utils/getCopiedBlocksFromMemory (constantly nil)
       paste-handler/get-copied-blocks (constantly clipboard-read)
-      state/get-edit-input-id (fn [] @*edit-input-id)
-      state/get-input (constantly nil)
+      state/get-edit-input-id (fn [] (some-> @*input .-id))
+      state/get-input (fn [] @*input)
       state/pub-event! (fn [event] (swap! errors conj event))
       commands/delete-selection! (constantly nil)
       commands/simple-insert! (fn [id text _] (swap! inserted conj [id text]))]
       (let [paste ((paste-handler/editor-on-paste! "edit-block-pasted")
                    #js {:clipboardData #js {:getData (constantly "pasted text")}})]
-        (reset! *edit-input-id edit-input-id-after-read)
+        (swap! *input change-input)
         (p/resolve! clipboard-read nil)
         (p/let [_ paste]
           {:inserted @inserted
            :errors @errors})))))
 
 (deftest-async editor-on-paste-drops-text-when-editor-exits-before-clipboard-resolves
-  (p/let [{:keys [inserted errors]} (<paste-text-while-edit-input-changes nil)]
+  (p/let [{:keys [inserted errors]} (<paste-text-while-edit-input-changes (constantly nil))]
     (is (= [] inserted))
     (is (= [] errors))))
 
 (deftest-async editor-on-paste-drops-text-when-another-editor-opens-before-clipboard-resolves
-  (p/let [{:keys [inserted errors]} (<paste-text-while-edit-input-changes "edit-block-other")]
+  (p/let [{:keys [inserted errors]} (<paste-text-while-edit-input-changes
+                                    (constantly #js {:id "edit-block-other" :value ""}))]
+    (is (= [] inserted))
+    (is (= [] errors))))
+
+(deftest-async editor-on-paste-drops-text-when-the-same-block-editor-reopens
+  (p/let [{:keys [inserted errors]} (<paste-text-while-edit-input-changes
+                                    (fn [input] #js {:id (.-id input) :value ""}))]
     (is (= [] inserted))
     (is (= [] errors))))
 
 (deftest-async editor-on-paste-inserts-text-when-editor-stays-open-until-clipboard-resolves
-  (p/let [{:keys [inserted errors]} (<paste-text-while-edit-input-changes "edit-block-pasted")]
+  (p/let [{:keys [inserted errors]} (<paste-text-while-edit-input-changes identity)]
     (is (= [["edit-block-pasted" "pasted text"]] inserted))
     (is (= [] errors))))
 
@@ -509,7 +515,7 @@
           expected-paste "Delegated access management means you can select a subset of roles for a given project and allow the granted organization to self-manage those roles for their users."]
       (p/with-redefs
        [state/get-edit-input-id (constantly "edit-block-test")
-        state/get-input (constantly nil)
+        state/get-input (constantly #js {:value ""})
         commands/delete-selection! (constantly nil)
         commands/simple-insert! (fn [_input text] (p/resolved text))
         util/stop (constantly nil)
