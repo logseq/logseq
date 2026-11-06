@@ -2606,17 +2606,33 @@
   (is (false? (editor/org-directive-hashtag-query? "#foo")))
   (is (false? (editor/org-directive-hashtag-query? nil))))
 
-(deftest editor-on-hide-clears-slash-commands-when-editing-another-block-test
-  (let [prev-action (state/get-editor-action)
-        event #js {:preventDefault (fn [])
-                   :stopPropagation (fn [])}]
-    (try
-      (state/set-editor-action! :commands)
-      (#'editor-component/editor-on-hide {:config {}} :click event true)
-      (is (nil? (state/get-editor-action))
-          "Slash commands should close when leaving the original block to edit another")
-      (finally
-        (state/set-editor-action! prev-action)))))
+(deftest pending-exit-cleans-up-only-its-editing-target-test
+  (async done
+    (let [source {["main" #uuid "11111111-1111-1111-1111-111111111111"] true}
+          replacement {["main" #uuid "22222222-2222-2222-2222-222222222222"] true}
+          previous-editing (state/get-state :editor/editing?)]
+      (-> (p/loop [cases [[false false] [false true] [true false] [true true]]]
+            (when-let [[replace? select?] (first cases)]
+              (p/let [_ (let [save (p/deferred)
+                             input-id (atom "edit-block-11111111-1111-1111-1111-111111111111")]
+                         (state/set-state! :editor/editing? source)
+                         (p/with-redefs [editor/save-current-block! (constantly save)
+                                        state/get-edit-input-id #(deref input-id)
+                                        state/get-input (constantly nil)]
+                           (let [exit (editor/escape-editing {:select? select?})]
+                             (reset! input-id nil)
+                             (when replace?
+                               (state/set-state! :editor/editing? replacement))
+                             (p/resolve! save nil)
+                             (p/let [_ exit]
+                               (is (= (when replace? replacement)
+                                      (state/get-state :editor/editing?))
+                                   (str "Exit preserves ownership after unmount: " [replace? select?]))))))]
+                (p/recur (rest cases)))))
+          (p/catch (fn [error] (is false (str error))))
+          (p/finally (fn []
+                       (state/set-state! :editor/editing? previous-editing)
+                       (done)))))))
 
 (deftest set-editing-clears-slash-commands-when-switching-blocks-test
   ;; Click-to-edit goes through set-editing! on pointerdown, not editor-on-hide.
