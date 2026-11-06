@@ -114,7 +114,17 @@
 
 (defn fetch-json
   [url opts {:keys [response-schema error-schema] :or {error-schema :error}}]
-  (p/let [resp (js/fetch url (clj->js (with-auth-headers opts)))
+  (p/let [resp (-> (js/fetch url (clj->js (with-auth-headers opts)))
+                  (p/catch (fn [error]
+                             (if-let [cause (.-cause error)]
+                               (let [code (.-code cause)
+                                     message (.-message cause)]
+                                 (throw (ex-info (str (.-message error) ": "
+                                                      (when code (str code ": ")) message)
+                                                 (cond-> {:url url}
+                                                   code (assoc :code code))
+                                                 error)))
+                               (throw error)))))
           text (.text resp)
           data (when (seq text) (js/JSON.parse text))]
     (if (.-ok resp)
