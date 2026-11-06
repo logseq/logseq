@@ -2866,6 +2866,7 @@
    (dom/closest target "a")
    (dom/closest target ".cloze")
    (dom/closest target ".cloze-revealed")
+   (dom/closest target ".time-spent")
    (dom/closest target ".query-table")))
 
 (defn- comments-area-target?
