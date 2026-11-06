@@ -173,6 +173,16 @@
            (when content-changed?
              (save-block-with-pending-title! block value opts))))))))
 
+(defn- last-saved-title
+  "The block's last saved title: a save still in flight, else the renderer
+  snapshot. `:editor/block` keeps the title from when editing started, so an
+  edit undone back to it would look saved."
+  [block]
+  (let [block (latest-renderer-block block)]
+    (get @*pending-block-save-titles
+         (:block/uuid block)
+         (:block/title block))))
+
 (defn- compute-fst-snd-block-text
   [value selection-start selection-end]
   (when (string? value)
@@ -1695,6 +1705,15 @@
            (js/console.error error)
            (log/error :save-block-failed error)))))))
 
+(defn save-current-block-when-hidden!
+  "Saves the text being edited when the page is hidden: the window is
+  minimized or reloaded, the tab switched, the app sent to the background (on
+  mobile the OS may then kill it). The auto-save timer never fires there."
+  [visibility-state]
+  (when (and (= "hidden" visibility-state)
+             (state/get-edit-block))
+    (save-current-block! {:flush-input? true})))
+
 (defn save-current-block-before-navigate!
   "Closes any open editor popup so the raw textarea value is persisted,
    then exits editing."
@@ -2017,10 +2036,20 @@
 
 (declare handle-last-input)
 
+(defn- typing-tag-at-cursor?
+  "True while the text before the cursor ends in a tag being typed (`#ta`,
+  `#[[my ta`): saving it would create a tag for the half-typed name. A tag
+  elsewhere in the block is complete and does not hold back the save. A `#`
+  inside a word (a URL fragment like `example.com/#anchor`) is not a tag."
+  [value cursor-pos]
+  (let [before-cursor (subs value 0 (min (count value) (or cursor-pos (count value))))]
+    (boolean (re-find #"(?:^|\s)#(?:\[\[[^\]]*|\S+)$" before-cursor))))
+
 (defn edit-box-on-change!
   [e block id]
   (when (current-edit-block? block)
     (let [value (util/evalue e)
+          cursor-pos (some-> e .-target util/get-selection-start)
           repo (state/get-current-repo)]
       (state/set-edit-content! id value false)
       (clear-block-auto-save-timeout!)
@@ -2029,8 +2058,7 @@
               (js/setTimeout
                (fn []
                  (when (and (state/input-idle? repo :diff 450)
-                          ;; don't auto-save block if it has tags
-                            (not (re-find #"#\S+" value)))
+                            (not (typing-tag-at-cursor? value cursor-pos)))
                    ; don't auto-save for page's properties block
                    (save-current-block! {:skip-properties? true})))
                450))
@@ -2193,7 +2221,7 @@
   (let [editing-block (when-let [editing-block (state/get-edit-block)]
                         (assoc editing-block :block/title (state/get-edit-content)))
         has-unsaved-edits (and editing-block
-                               (not= (:block/title (state/get-edit-block))
+                               (not= (last-saved-title (state/get-edit-block))
                                      (state/get-edit-content)))
         target-block (or target-block editing-block)
         block target-block
@@ -2733,7 +2761,8 @@
                                                             :direction direction}
                                                      (:exclude-property? move-opts)
                                                      (assoc :exclude-property? true)))
-            {:block/keys [uuid title]} (state/get-edit-block)
+            {:block/keys [uuid]} (state/get-edit-block)
+            title (some-> (state/get-edit-block) last-saved-title)
             property-value-container (when (property-value-node? sibling-block)
                                        sibling-block)
             sibling-block (or (property-value-inner-block property-value-container)
