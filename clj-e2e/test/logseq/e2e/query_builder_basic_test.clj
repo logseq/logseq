@@ -1,11 +1,15 @@
 (ns logseq.e2e.query-builder-basic-test
   (:require [clojure.string :as string]
             [clojure.test :refer [deftest is testing use-fixtures]]
+            [logseq.e2e.api :refer [ls-api-call!]]
+            [logseq.e2e.assert :as assert]
             [logseq.e2e.block :as b]
             [logseq.e2e.fixtures :as fixtures]
+            [logseq.e2e.keyboard :as k]
             [logseq.e2e.locator :as loc]
             [logseq.e2e.util :as util]
-            [wally.main :as w]))
+            [wally.main :as w])
+  (:import (com.microsoft.playwright Page$ScreenshotOptions)))
 
 (use-fixtures :once fixtures/open-page)
 
@@ -84,3 +88,49 @@
           (str "query clause should show Task title, got " (pr-str clause)))
       (is (not (re-find #"(?i)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}" clause))
           (str "query clause should not show a uuid, got " (pr-str clause))))))
+
+(defn- screenshot-artifact!
+  [filename]
+  (when-let [dir (System/getenv "E2E_SCREENSHOT_DIR")]
+    (.screenshot (w/get-page)
+                 (.setPath (Page$ScreenshotOptions.)
+                           (java.nio.file.Paths/get dir (into-array [filename]))))))
+
+(defn- query-block-uuid
+  []
+  (.getAttribute
+   (w/-query ".ls-page-blocks .ls-block:has(.cp__query-builder)")
+   "blockid"))
+
+(deftest titled-query-keeps-builder-test
+  (testing "naming a simple query keeps the builder visible and editable"
+    (b/new-block "a task")
+    (util/set-tag "Task")
+    (start-query-filter!)
+    (choose-select-item! "Tags")
+    (choose-select-item! "Task")
+    (w/wait-for ".cp__query-builder .query-clause")
+    (let [query-uuid (query-block-uuid)]
+      (is (some? query-uuid))
+      (ls-api-call! :editor.updateBlock query-uuid "My tasks")
+      (w/wait-for ".ls-block[data-block-title='My tasks']")
+      (screenshot-artifact! (or (System/getenv "E2E_SCREENSHOT_NAME")
+                                 "titled-query-builder.png"))
+      (assert/assert-is-visible
+       (loc/filter ".ls-block[data-block-title='My tasks']" :has ".cp__query-builder"))
+      (assert/assert-is-visible
+       (loc/filter ".cp__query-builder .query-clause" :has-text "Task"))
+      (w/click (util/-query-last "button:text('filter')"))
+      (w/wait-for ".query-builder-picker .cp__select-input")
+      (k/esc)
+      (w/wait-for-not-visible ".query-builder-picker")
+      (w/click ".ls-query-setting")
+      (assert/assert-is-visible
+       (loc/filter ".ls-block[data-block-title='My tasks']" :has ".cp__query-builder"))
+      (assert/assert-is-visible
+       (loc/filter ".cp__query-builder .query-clause" :has-text "Task"))
+      (w/click ".ls-query-setting")
+      (w/click ".ls-query-setting")
+      (assert/assert-is-visible
+       (loc/filter ".cp__query-builder .query-clause" :has-text "Task"))
+      (assert/assert-is-visible "#search-button"))))
