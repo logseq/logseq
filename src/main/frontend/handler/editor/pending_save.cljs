@@ -5,7 +5,8 @@
   before the worker acknowledges the tx drops the edit. Session storage
   survives same-tab reload so the title can be replayed after restore."
   (:require [clojure.string :as string]
-            [goog.object :as gobj]))
+            [goog.object :as gobj]
+            [lambdaisland.glogi :as log]))
 
 (def storage-key
   "ls-pending-block-saves")
@@ -31,10 +32,13 @@
 
 (defn- write-storage!
   [saves]
-  (when-let [storage (session-storage)]
-    (if (seq saves)
-      (.setItem storage storage-key (.stringify js/JSON (clj->js saves)))
-      (.removeItem storage storage-key))))
+  (try
+    (when-let [storage (session-storage)]
+      (if (seq saves)
+        (.setItem storage storage-key (.stringify js/JSON (clj->js saves)))
+        (.removeItem storage storage-key)))
+    (catch :default error
+      (log/warn :pending-block-save-storage-failed error))))
 
 (defn- loaded-saves
   []
