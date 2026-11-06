@@ -77,7 +77,7 @@ input::-webkit-inner-spin-button {
       > .r {
         a.button {
           @apply select-none flex items-center mx-2 py-1 px-0.5 bg-transparent
-          transition-none break-normal hover:opacity-80;
+          transition-none break-normal whitespace-nowrap hover:opacity-80;
 
           &.is-active {
             @apply opacity-100 rounded-none;
