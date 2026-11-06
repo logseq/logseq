@@ -55,6 +55,32 @@
                                          [{:block/title "another test" :block/uuid (random-uuid)}]
                                          {:replace-tag? false})))))
 
+(deftest id-ref->title-ref-test
+  (let [page-uuid #uuid "11111111-1111-1111-1111-111111111111"
+        id-ref (page-ref/->page-ref page-uuid)]
+    (testing "keeps $ replacement patterns in page titles literal"
+      (doseq [title ["cost$$" "a$&b" "a$`b" "a$'b"]]
+        (is (= (str "see " (page-ref/->page-ref title))
+               (db-content/id-ref->title-ref
+                (str "see " id-ref)
+                [{:block/title title :block/uuid page-uuid :block/tags [:logseq.class/Page]}]))
+            title)
+        (is (= (str "see #" title)
+               (db-content/id-ref->title-ref
+                (str "see #" id-ref)
+                [{:block/title title :block/uuid page-uuid :block/tags [:logseq.class/Page]}]))
+            title)))))
+
+(deftest content-id-ref->page-test
+  (let [page-uuid #uuid "11111111-1111-1111-1111-111111111111"]
+    (testing "keeps $ replacement patterns in page titles literal"
+      (doseq [title ["cost$$" "a$&b" "a$`b" "a$'b"]]
+        (is (= (str "see " title)
+               (db-content/content-id-ref->page
+                (str "see " (page-ref/->page-ref page-uuid))
+                [{:block/title title :block/uuid page-uuid}]))
+            title)))))
+
 (deftest recur-replace-uuid-in-block-title-test
   (let [uuid-a #uuid "11111111-1111-1111-1111-111111111111"
         uuid-b #uuid "22222222-2222-2222-2222-222222222222"
