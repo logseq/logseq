@@ -999,3 +999,15 @@ html.is-resizing-buf .property-row-resizer.is-active.at-limit::before {
 html:not(.is-mobile) .ls-bidirectional-block-container {
   margin-left: var(--ls-bidirectional-block-outdent, -22px);
 }
+
+/* The "Add property" button reads as another row in the property list, so its
+   LABEL belongs on the page spine and its "+" in the gutter, level with the
+   property bullets above it — the same arrangement every other row uses.
+
+   The button's own box puts its label 32px in (12px padding + a 16px icon + a
+   4px gap), and the box starts at the properties area's left edge, which is the
+   gutter. Pulling it back by the padding lands the icon on the bullet column and
+   the label on the spine, without flattening the button's padding to do it. */
+.ls-page-properties .ls-new-property {
+  margin-left: var(--ls-new-property-gutter-pull, -12px);
+}
