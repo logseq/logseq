@@ -8,8 +8,8 @@
         target-uuid (or (:block/uuid target) (:uuid target))]
     (if target-uuid
       (cond-> (assoc block :embed {:target_uuid (str target-uuid)
-                                  :target_type (if (or (:block/name target) (:name target)) "page" "block")
-                                  :target_title (or (:block/title target) (:title target))})
+                                   :target_type (if (or (:block/name target) (:name target)) "page" "block")
+                                   :target_title (or (:block/title target) (:title target))})
         (:block/link block)
         (assoc :block/link (select-keys target [:db/id :block/uuid :block/title :block/name])))
       block)))

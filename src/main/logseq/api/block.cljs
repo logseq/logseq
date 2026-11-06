@@ -260,4 +260,4 @@
                                  (immediate-children block children))))]
           (bean/->js (compact-normalized-refs
                       (sdk-utils/normalize-keyword-for-json block
-                                                           (not (false? (some-> opts (.-camelCase))))))))))))
+                                                            (not (false? (some-> opts (.-camelCase))))))))))))

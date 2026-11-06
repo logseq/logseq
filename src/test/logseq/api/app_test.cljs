@@ -75,7 +75,7 @@
         snapshot {:plugin/enabled true :plugin/installed-plugins {:diagram {:name "Diagram"}}
                   :plugin/installed-resources
                   {:diagram {:fenced-code-renderers {:mermaid {:title "Mermaid" :render (fn [& _] (swap! invocations inc))
-                                                              :subs {:api-token "private-renderer-settings"}}}
+                                                               :subs {:api-token "private-renderer-settings"}}}
                              :block-renderers (into {} (map (fn [index] [(keyword (str "block-" index)) {:render (fn [& _] (swap! invocations inc))}]) (range 21)))}}}]
     (with-redefs [state/get-state (constantly snapshot) config/lsp-enabled? true]
       (let [response (api-app/get_content_capabilities)
@@ -106,8 +106,8 @@
                     (get-in result [:plugins :entries])))
         (is (<= (alength (.encode (js/TextEncoder.) (js/JSON.stringify (clj->js (get-in result [:plugins :entries]))))) 32768))))
     (with-redefs [state/get-state (constantly {:plugin/enabled true
-                                              :plugin/installed-plugins {:large {:name "Large" :repository "https://private-user:secret@example.com/repo"}}
-                                              :plugin/simple-commands {:large commands}})
+                                               :plugin/installed-plugins {:large {:name "Large" :repository "https://private-user:secret@example.com/repo"}}
+                                               :plugin/simple-commands {:large commands}})
                   config/lsp-enabled? true]
       (let [result (api-test/js->clj-kw (api-app/get_content_capabilities))
             plugin (first (get-in result [:plugins :entries]))]

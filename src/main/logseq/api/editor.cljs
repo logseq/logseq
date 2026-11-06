@@ -329,9 +329,9 @@
           (p/let [previous (db-async/<get-block-sibling (state/get-current-repo) (:db/id target-block) :left)]
             (when-not (= (:block/uuid previous) (:block/uuid src-block))
               (editor-dnd-handler/move-blocks nil [src-block] (or previous target-block) nil
-                                             (when-not previous :top))))
+                                              (when-not previous :top))))
           (editor-dnd-handler/move-blocks nil [src-block] target-block nil
-                                         (when children :nested)))))))
+                                          (when children :nested)))))))
 
 (def get_block
   (fn [id ^js opts]

@@ -169,14 +169,14 @@
 (defn get-properties-by-title [title]
   (let [repo (state/get-current-repo)]
     (p/let [properties (db-async/<q repo
-                                   {:transact-db? false}
-                                   '[:find [(pull ?property [:db/ident :block/title :logseq.property/type]) ...]
-                                     :in $ ?title
-                                     :where
-                                     [?property :block/title ?title]
-                                     [?property :block/tags ?class]
-                                     [?class :db/ident :logseq.class/Property]]
-                                   title)]
+                                    {:transact-db? false}
+                                    '[:find [(pull ?property [:db/ident :block/title :logseq.property/type]) ...]
+                                      :in $ ?title
+                                      :where
+                                      [?property :block/title ?title]
+                                      [?property :block/tags ?class]
+                                      [?class :db/ident :logseq.class/Property]]
+                                    title)]
       (sdk-utils/result->js properties))))
 
 (defn ->cardinality
@@ -397,14 +397,14 @@
         tag-uuid (sdk-utils/uuid-or-throw-error tag-uuid)]
     (p/let [users (db-async/<q repo {}
                                '[:find [(pull ?holder [:block/uuid :block/title :block/name
-                                                      :block/page {:block/link [:db/id :block/uuid :block/title :block/name]}]) ...]
+                                                       :block/page {:block/link [:db/id :block/uuid :block/title :block/name]}]) ...]
                                  :in $ ?tag-uuid
                                  :where [?tag :block/uuid ?tag-uuid]
-                                        [?holder :block/tags ?tag]]
+                                 [?holder :block/tags ?tag]]
                                tag-uuid)]
       (sdk-utils/result->js (api-util/with-embed-info-tree users)))))
 
-    (declare <inspect-page-query inspect-page-structural-property?)
+(declare <inspect-page-query inspect-page-structural-property?)
 
 (defn get-backlinks [target-uuid]
   (when-not (util/uuid-string? target-uuid)
@@ -437,9 +437,9 @@
                           target-id property-class)
                          [])]
       (let [property-values (->> value-rows
-                                (remove #(inspect-page-structural-property? (second %)))
-                                (mapv (fn [[holder property]]
-                                        {:holder holder :property property})))
+                                 (remove #(inspect-page-structural-property? (second %)))
+                                 (mapv (fn [[holder property]]
+                                         {:holder holder :property property})))
             total (+ (count refs) (count tagged) (count property-values))]
         (bean/->js
          (sdk-utils/normalize-keyword-for-json
@@ -488,10 +488,10 @@
 (defn get-journal-candidates []
   (let [repo (state/get-current-repo)]
     (p/let [journals (db-async/<q
-                     repo
-                     {:transact-db? false}
-                     '[:find [(pull ?page [:db/id :block/uuid :block/name :block/title :block/journal-day]) ...]
-                       :where [?page :block/journal-day _]])]
+                      repo
+                      {:transact-db? false}
+                      '[:find [(pull ?page [:db/id :block/uuid :block/name :block/title :block/journal-day]) ...]
+                        :where [?page :block/journal-day _]])]
       (bean/->js (sdk-utils/normalize-keyword-for-json journals false)))))
 
 (defn list-recycled []
@@ -500,7 +500,7 @@
                       repo
                       {:transact-db? false}
                       '[:find [(pull ?entity [:block/uuid :block/name :block/title
-                                                  :logseq.property/deleted-at {:block/link [:db/id :block/uuid :block/title :block/name]}]) ...]
+                                              :logseq.property/deleted-at {:block/link [:db/id :block/uuid :block/title :block/name]}]) ...]
                         :where [?entity :logseq.property/deleted-at _]])]
       (bean/->js (sdk-utils/normalize-keyword-for-json (api-util/with-embed-info-tree entities) false)))))
 
@@ -510,7 +510,7 @@
                   repo
                   {:transact-db? false}
                   '[:find (pull ?entity [:block/uuid :block/title :block/name :block/page {:block/link [:db/id :block/uuid :block/title :block/name]}])
-                         (pull ?value [:db/ident :block/title])
+                    (pull ?value [:db/ident :block/title])
                     :where [?entity :logseq.property/status ?value]])]
       (bean/->js (sdk-utils/normalize-keyword-for-json (api-util/with-embed-info-tree rows) false)))))
 
@@ -520,15 +520,15 @@
                   repo
                   {:transact-db? false}
                   '[:find (pull ?property [:db/ident :block/title])
-                         (pull ?value [:db/ident :block/title :block/order])
+                    (pull ?value [:db/ident :block/title :block/order])
                     :where [?value :block/closed-value-property ?property]])]
       (bean/->js (sdk-utils/normalize-keyword-for-json rows false)))))
 
 (defn get-orphan-tags []
   (let [repo (state/get-current-repo)]
     (p/let [tag-class (db-async/<q repo {}
-                                 '[:find ?class .
-                                   :where [?class :db/ident :logseq.class/Tag]])
+                                   '[:find ?class .
+                                     :where [?class :db/ident :logseq.class/Tag]])
             tags (db-async/<q
                   repo
                   {:transact-db? false}
@@ -537,7 +537,7 @@
                     :where
                     [?tag :block/tags ?class]
                     (not-join [?tag]
-                      [?holder :block/tags ?tag])]
+                              [?holder :block/tags ?tag])]
                   [tag-class])]
       (bean/->js (sdk-utils/normalize-keyword-for-json tags false)))))
 
@@ -563,7 +563,7 @@
                                       {:ident (str ident)
                                        :title (:block/title property)
                                        :type (if (keyword? type) (name type) type)})))
-                          properties))]
+                                properties))]
       (bean/->js (sdk-utils/normalize-keyword-for-json orphans false)))))
 
 (defn list-assets []
@@ -574,9 +574,9 @@
                     repo
                     {:transact-db? false}
                     '[:find [(pull ?asset [:block/uuid :block/title
-                                          :logseq.property.asset/type :logseq.property.asset/size
-                                          :logseq.property.asset/checksum :logseq.property.asset/external-url
-                                          :logseq.property.asset/external-file-name]) ...]
+                                           :logseq.property.asset/type :logseq.property.asset/size
+                                           :logseq.property.asset/checksum :logseq.property.asset/external-url
+                                           :logseq.property.asset/external-file-name]) ...]
                       :where
                       [?class :db/ident :logseq.class/Asset]
                       [?asset :block/tags ?class]
@@ -602,9 +602,9 @@
       (throw (js/Error. "Expected an exact namespaced property ident such as :plugin.property.my_plugin/Effort, not a title or a UUID")))
     (let [repo (state/get-current-repo)
           query (str "[:find (pull ?holder [:db/id :block/uuid :block/title "
-                      ":block/name {:block/page [:db/id :block/uuid :block/title]} "
-                      "{:block/link [:db/id :block/uuid :block/title :block/name]}]) "
-                      "?value :where [?holder " ident " ?value]]")]
+                     ":block/name {:block/page [:db/id :block/uuid :block/title]} "
+                     "{:block/link [:db/id :block/uuid :block/title :block/name]}]) "
+                     "?value :where [?holder " ident " ?value]]")]
       (p/let [rows (db-async/<q
                     repo
                     {:transact-db? false}
@@ -858,7 +858,7 @@
                 refs (if (number? refs) refs 0)
                 tag-holders (if (number? tag-holders) tag-holders 0)
                 property-values (count (remove #(inspect-page-structural-property? (first %))
-                                                property-rows))
+                                               property-rows))
                 counts-note (str (- by-page empty-count) " block(s) with content, "
                                  by-page " own block(s) including " empty-count " empty, "
                                  nested " nested page(s), "
@@ -917,8 +917,8 @@
       (p/let [rows (apply <inspect-page-query repo query inputs)
               embeds (sort-by :uuid rows)]
         (bean/->js {:embeds (vec (take limit embeds))
-                   :count (min limit (count embeds))
-                   :truncated (> (count embeds) limit)})))))
+                    :count (min limit (count embeds))
+                    :truncated (> (count embeds) limit)})))))
 
 (defn get-page-block-uuids [page-uuid]
   (when-not (util/uuid-string? page-uuid)

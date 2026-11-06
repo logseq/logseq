@@ -27,7 +27,7 @@
                                       :instructions "Use exact parent and target UUIDs; do not insert Markdown to simulate a native embed."}}
             formats (mapv #(assoc % :creation (get creation (:id %) {:status "unknown" :tools []})) (:formats data))]
         (clj->js (assoc data :formats formats
-                       :creationPolicy "Rendering support does not grant write permission. Use the listed verified tools with their normal safeguards. Plugin command labels do not establish content syntax or command argument schemas."))))))
+                        :creationPolicy "Rendering support does not grant write permission. Use the listed verified tools with their normal safeguards. Plugin command labels do not establish content syntax or command argument schemas."))))))
 
 (def ^:private page-title-query
   "[:find [(pull ?page [:block/uuid :block/title :block/name]) ...]
@@ -104,11 +104,11 @@
   (if (= mode "exact")
     title
     (let [words (-> title
-        string/lower-case
-        (string/replace #"[^\w\s]+" " ")
-        (string/replace #"\s+" " ")
-        string/trim
-        (string/split #" "))]
+                    string/lower-case
+                    (string/replace #"[^\w\s]+" " ")
+                    (string/replace #"\s+" " ")
+                    string/trim
+                    (string/split #" "))]
       (string/join " "
                    (map (fn [word]
                           (cond
@@ -218,11 +218,11 @@
 (defn get-page-uuid
   [api-fn args]
   (let [title (aget args "title")]
-(p/let [by-title (query-pages api-fn page-title-query title)
-        pages (if (seq by-title)
-                by-title
-                (query-pages api-fn page-name-query (string/lower-case title)))]
-  (page-uuid-result title pages))))
+    (p/let [by-title (query-pages api-fn page-title-query title)
+            pages (if (seq by-title)
+                    by-title
+                    (query-pages api-fn page-name-query (string/lower-case title)))]
+      (page-uuid-result title pages))))
 
 (defn get-tag-uuid
   [api-fn args]
@@ -238,78 +238,78 @@
             tag (js->clj result :keywordize-keys true)]
       (tag-result tag-uuid (if tag [tag] [])))))
 
-    (defn get-tag-users
-      [api-fn args]
-      (let [tag-uuid (aget args "tag_uuid")]
-        (p/let [result (api-fn "logseq.DB.getTagUsers" [tag-uuid])]
-          (js->clj result :keywordize-keys true))))
+(defn get-tag-users
+  [api-fn args]
+  (let [tag-uuid (aget args "tag_uuid")]
+    (p/let [result (api-fn "logseq.DB.getTagUsers" [tag-uuid])]
+      (js->clj result :keywordize-keys true))))
 
-    (defn get-block-uuids
+(defn get-block-uuids
   [api-fn args]
   (let [page-uuid (aget args "page_uuid")]
     (p/let [result (api-fn "logseq.DB.getPageBlockUUIDs" [page-uuid])]
       (js->clj result :keywordize-keys true))))
 
-    (defn block-tree-result
-      [block-uuid root rows max-depth max-nodes]
-      (cond
-        (nil? root)
-        {:found false :block_uuid block-uuid :block nil :node_count 0 :truncated false}
+(defn block-tree-result
+  [block-uuid root rows max-depth max-nodes]
+  (cond
+    (nil? root)
+    {:found false :block_uuid block-uuid :block nil :node_count 0 :truncated false}
 
-        (or (:name root) (:block/name root))
-        {:found false
+    (or (:name root) (:block/name root))
+    {:found false
+     :block_uuid block-uuid
+     :block nil
+     :node_count 0
+     :truncated false
+     :reason "target is a page, not a block"}
+
+    :else
+    (let [children (group-by :parent_uuid rows)
+          count* (atom 0)
+          truncated* (atom false)
+          visited* (atom #{})]
+      (letfn [(build [node depth]
+                (when (contains? @visited* (:uuid node))
+                  (throw (js/Error. "Block hierarchy contains a cycle")))
+                (swap! visited* conj (:uuid node))
+                (swap! count* inc)
+                (let [node' (dissoc node :parent_uuid)
+                      child-rows (sort-by #(str (:order %)) (get children (:uuid node)))]
+                  (if (or (>= depth max-depth)
+                          (>= @count* max-nodes))
+                    (do
+                      (when (seq child-rows) (reset! truncated* true))
+                      (assoc node' :children []))
+                    (assoc node' :children
+                           (reduce (fn [built child]
+                                     (if (< @count* max-nodes)
+                                       (conj built (build child (inc depth)))
+                                       (do (reset! truncated* true) (reduced built))))
+                                   [] child-rows))))) ]
+        {:found true
          :block_uuid block-uuid
-         :block nil
-         :node_count 0
-         :truncated false
-         :reason "target is a page, not a block"}
+         :block (build root 0)
+         :node_count @count*
+         :truncated @truncated*}))))
 
-        :else
-        (let [children (group-by :parent_uuid rows)
-              count* (atom 0)
-            truncated* (atom false)
-            visited* (atom #{})]
-          (letfn [(build [node depth]
-              (when (contains? @visited* (:uuid node))
-                (throw (js/Error. "Block hierarchy contains a cycle")))
-              (swap! visited* conj (:uuid node))
-                    (swap! count* inc)
-                    (let [node' (dissoc node :parent_uuid)
-                child-rows (sort-by #(str (:order %)) (get children (:uuid node)))]
-                      (if (or (>= depth max-depth)
-                              (>= @count* max-nodes))
-                        (do
-                          (when (seq child-rows) (reset! truncated* true))
-                          (assoc node' :children []))
-                        (assoc node' :children
-                               (reduce (fn [built child]
-                                         (if (< @count* max-nodes)
-                                           (conj built (build child (inc depth)))
-                                           (do (reset! truncated* true) (reduced built))))
-                                       [] child-rows))))) ]
-            {:found true
-             :block_uuid block-uuid
-             :block (build root 0)
-             :node_count @count*
-             :truncated @truncated*}))))
+(defn get-block-tree
+  [api-fn args]
+  (let [block-uuid (aget args "block_uuid")
+        max-depth (or (aget args "max_depth") 20)
+        max-nodes (or (aget args "max_nodes") 1000)]
+    (when-not (and (number? max-depth) (js/Number.isInteger max-depth) (<= 0 max-depth 100))
+      (throw (js/Error. "max_depth must be an integer between 0 and 100")))
+    (when-not (and (number? max-nodes) (js/Number.isInteger max-nodes) (<= 1 max-nodes 1000))
+      (throw (js/Error. "max_nodes must be an integer between 1 and 1000")))
+    (p/let [result (api-fn "logseq.DB.getBlockTree" [block-uuid max-depth max-nodes])]
+      (js->clj result :keywordize-keys true))))
 
-    (defn get-block-tree
-      [api-fn args]
-      (let [block-uuid (aget args "block_uuid")
-            max-depth (or (aget args "max_depth") 20)
-            max-nodes (or (aget args "max_nodes") 1000)]
-        (when-not (and (number? max-depth) (js/Number.isInteger max-depth) (<= 0 max-depth 100))
-          (throw (js/Error. "max_depth must be an integer between 0 and 100")))
-        (when-not (and (number? max-nodes) (js/Number.isInteger max-nodes) (<= 1 max-nodes 1000))
-          (throw (js/Error. "max_nodes must be an integer between 1 and 1000")))
-        (p/let [result (api-fn "logseq.DB.getBlockTree" [block-uuid max-depth max-nodes])]
-          (js->clj result :keywordize-keys true))))
-
-        (defn find-backlinks
-          [api-fn args]
-          (let [target-uuid (aget args "target_uuid")]
-            (p/let [result (api-fn "logseq.DB.getBacklinks" [target-uuid])]
-              (js->clj result :keywordize-keys true))))
+(defn find-backlinks
+  [api-fn args]
+  (let [target-uuid (aget args "target_uuid")]
+    (p/let [result (api-fn "logseq.DB.getBacklinks" [target-uuid])]
+      (js->clj result :keywordize-keys true))))
 
 (defn find-orphans
   [api-fn args]
@@ -401,7 +401,7 @@
   [api-fn args]
   (let [title (aget args "title")]
     (p/let [result (api-fn "logseq.DB.getTitleHolders" [title])
-      entities (js->clj result :keywordize-keys true)]
+            entities (js->clj result :keywordize-keys true)]
       (title-availability-result title entities))))
 
 (defn list-recycled
@@ -450,12 +450,12 @@
       (throw (js/Error. (str error))))
     (js->clj result :keywordize-keys true)))
 
-    (defn get-property-ident
-      [api-fn args]
-      (let [title (aget args "title")]
-        (p/let [result (api-fn "logseq.DB.getPropertiesByTitle" [title])
-                properties (js->clj result :keywordize-keys true)]
-          (property-ident-result title properties))))
+(defn get-property-ident
+  [api-fn args]
+  (let [title (aget args "title")]
+    (p/let [result (api-fn "logseq.DB.getPropertiesByTitle" [title])
+            properties (js->clj result :keywordize-keys true)]
+      (property-ident-result title properties))))
 
 (defn get-property-users
   [api-fn args]
@@ -496,9 +496,9 @@
             (when-not property
               (throw (js/Error. "Property creation reported success but the property is absent")))
             (let [requested-type (when schema (aget schema "type"))
-              actual-type (property-type property)
-              cardinality (or (property-entity-value property ":db/cardinality") (:cardinality property))
-              value-type (or (property-entity-value property ":db/valueType") (:valueType property))]
+                  actual-type (property-type property)
+                  cardinality (or (property-entity-value property ":db/cardinality") (:cardinality property))
+                  value-type (or (property-entity-value property ":db/valueType") (:valueType property))]
               (when (and requested-type (not= requested-type actual-type))
                 (throw (js/Error. (str "Property " ident " was created with type "
                                        (pr-str actual-type) ", not the requested "
@@ -529,9 +529,9 @@
                    :observed_state nil}
                   (merge {:verified true
                           :ident ident
-                      :title (:title property)
+                          :title (:title property)
                           :diagnostic diagnostic}
-                     (property-digest property)))))))))))
+                         (property-digest property)))))))))))
 
 (defn- sweep-property-value-blocks
   [api-fn block-uuids]
@@ -541,8 +541,8 @@
                                      entity (api-fn "logseq.DB.datascriptQuery"
                                                     ["[:find ?e . :in $ ?uuid :where [?e :block/uuid ?uuid]]"
                                                      (uuid-query-input block-uuid)])]
-                            (when (some? entity) block-uuid))
-                          (p/catch (fn [_error] block-uuid)))]
+                               (when (some? entity) block-uuid))
+                             (p/catch (fn [_error] block-uuid)))]
               (cond-> remaining left (conj left))))
           (p/resolved [])
           block-uuids))
@@ -636,7 +636,7 @@
   (let [value-id (property-value-id value)]
     (and (number? value-id)
          (js/Number.isInteger value-id)
-          (not (boolean? value-id)))))
+         (not (boolean? value-id)))))
 
 (defn- held-property-values
   [value]
@@ -680,9 +680,9 @@
   [entity ident]
   (let [bare-ident (subs ident 1)]
     (first (some (fn [[key value]]
-            (when (= bare-ident (string/replace-first (str key) #"^:+" ""))
-          [value]))
-        entity))))
+                   (when (= bare-ident (string/replace-first (str key) #"^:+" ""))
+                     [value]))
+                 entity))))
 
 (defn- property-type
   [property]
@@ -745,8 +745,8 @@
             target-result (api-fn "logseq.DB.datascriptQuery" [entity-query (uuid-query-input target-uuid)])
             parent (js->clj parent-result :keywordize-keys true)
             target (js->clj target-result :keywordize-keys true)]
-          (when-let [error (or (:error parent) (:error target))]
-            (throw (js/Error. (str error))))
+      (when-let [error (or (:error parent) (:error target))]
+        (throw (js/Error. (str error))))
       (when-not parent
         (throw (js/Error. (str "No entity exists with exact UUID " parent-uuid))))
       (when-not target
@@ -757,8 +757,8 @@
                       parent-id
                       (entity-ref-id (or (:page parent) (:block/page parent))))
             ancestors (take 1000 (take-while some?
-                                           (iterate #(or (:parent %) (:block/parent %))
-                                                    (or (:parent parent) (:block/parent parent)))))]
+                                             (iterate #(or (:parent %) (:block/parent %))
+                                                      (or (:parent parent) (:block/parent parent)))))]
         (when-not (and (integer? parent-id) (integer? target-id))
           (throw (js/Error. "Embed entity lookup did not return valid parent and target IDs")))
         (when (>= (count ancestors) 1000)
@@ -796,7 +796,7 @@
                        :diagnostic (when-not verified? "The embed UUID, link, reference, parent, or owning page was not observed as requested")}))
                   (p/catch (fn [error]
                              (p/rejected (js/Error. (str "Embed " embed-uuid " may have been created; verification failed: "
-                                                        (.-message error) ". Inspect listEmbeds before retrying.")))))))))))))
+                                                         (.-message error) ". Inspect listEmbeds before retrying.")))))))))))))
 
 (defn create-block
   [api-fn args]
@@ -848,7 +848,7 @@
                         created (or (some #(when (= created-uuid (or (:uuid %) (:block/uuid %))) %) after-children)
                                     (first (filter #(and (not (contains? before-ids (or (:id %) (:db/id %))))
                                                          (= title (or (:title %) (:block/title %))))
-                                           after-children)))]
+                                                   after-children)))]
                   (if-not created
                     {:validation nil
                      :response response-map
@@ -960,8 +960,8 @@
 (defn- move-descendants
   [api-fn block-uuid]
   (p/let [result (api-fn "logseq.DB.datascriptQuery"
-                        ["[:find (pull ?entity [:block/uuid {:block/page [:db/id]} {:block/_parent ...}]) . :in $ ?uuid :where [?entity :block/uuid ?uuid]]"
-                         (uuid-query-input block-uuid)])
+                         ["[:find (pull ?entity [:block/uuid {:block/page [:db/id]} {:block/_parent ...}]) . :in $ ?uuid :where [?entity :block/uuid ?uuid]]"
+                          (uuid-query-input block-uuid)])
           root (js->clj result :keywordize-keys true)]
     (when-let [error (:error root)] (throw (js/Error. (str error))))
     (when-not (= block-uuid (or (:uuid root) (:block/uuid root)))
@@ -1001,95 +1001,95 @@
                    (or (:name target) (:block/name target)))
           (throw (js/Error. "A page has no siblings; use child or last-child")))
         (p/let [descendants (move-descendants api-fn block-uuid)]
-            (when (contains? (set (map #(or (:uuid %) (:block/uuid %)) descendants)) target-uuid)
-              (throw (js/Error. "The target is inside the block's own subtree")))
-            (let [target-id (or (:id target) (:db/id target))
-                  expected-parent (if (contains? #{"child" "last-child"} placement)
-                                    target-id
-                                    (entity-ref-id (or (:parent target) (:block/parent target))))
-                  expected-page (if (or (:name target) (:block/name target))
+          (when (contains? (set (map #(or (:uuid %) (:block/uuid %)) descendants)) target-uuid)
+            (throw (js/Error. "The target is inside the block's own subtree")))
+          (let [target-id (or (:id target) (:db/id target))
+                expected-parent (if (contains? #{"child" "last-child"} placement)
                                   target-id
-                                  (entity-ref-id (or (:page target) (:block/page target))))
-                  children-query "[:find [(pull ?child [:db/id :block/uuid :block/order]) ...] :in $ ?parent-id :where [?child :block/parent ?parent-id]]"]
-              (when-not (and expected-parent expected-page)
-                (throw (js/Error. "The target is missing the parent or page needed for placement")))
-              (p/let [before-result (if (= placement "last-child")
-                                      (api-fn "logseq.DB.datascriptQuery" [children-query expected-parent])
-                                      [])
-                      before-children (js->clj before-result :keywordize-keys true)
-                      before-children (sort-by #(str (or (:order %) (:block/order %))) before-children)
-                      source-already-last? (and (= placement "last-child")
-                                                (= block-uuid
-                                                   (or (:uuid (last before-children))
-                                                       (:block/uuid (last before-children)))))
-                      other-children (remove #(= block-uuid (or (:uuid %) (:block/uuid %)))
-                                             before-children)
-                      anchor-uuid (if (and (= placement "last-child") (seq other-children))
-                                    (or (:uuid (last other-children)) (:block/uuid (last other-children)))
-                                    target-uuid)
-                      options (cond
-                                (and (= placement "last-child") (seq other-children)) #js {:before false}
-                                (contains? #{"child" "last-child"} placement) #js {:children true}
-                                :else #js {:before (= placement "before")})]
-                (p/let [response (if source-already-last?
-                                  nil
-                                  (api-fn "logseq.DB.moveBlock" [block-uuid anchor-uuid options]))
-                          current-result (api-fn "logseq.DB.datascriptQuery" [entity-query (uuid-query-input block-uuid)])
-                          current (js->clj current-result :keywordize-keys true)
-                            descendants-after (move-descendants api-fn block-uuid)
-                          stranded? (some #(not= expected-page
-                                                 (entity-ref-id (or (:page %) (:block/page %))))
-                                          descendants-after)
-                            descendant-uuids-after (set (map #(or (:uuid %) (:block/uuid %)) descendants-after))
-                            missing-descendants? (some #(not (contains? descendant-uuids-after (or (:uuid %) (:block/uuid %)))) descendants)
-                            after-result (api-fn "logseq.DB.datascriptQuery" [children-query expected-parent])
-                          after-children (sort-by #(str (or (:order %) (:block/order %)))
-                                                  (js->clj after-result :keywordize-keys true))
-                            sibling-uuids (mapv #(or (:uuid %) (:block/uuid %)) after-children)
-                            block-index (.indexOf (to-array sibling-uuids) block-uuid)
-                            target-index (.indexOf (to-array sibling-uuids) target-uuid)
-                            order-valid? (and (every? #(string? (or (:order %) (:block/order %))) after-children)
+                                  (entity-ref-id (or (:parent target) (:block/parent target))))
+                expected-page (if (or (:name target) (:block/name target))
+                                target-id
+                                (entity-ref-id (or (:page target) (:block/page target))))
+                children-query "[:find [(pull ?child [:db/id :block/uuid :block/order]) ...] :in $ ?parent-id :where [?child :block/parent ?parent-id]]"]
+            (when-not (and expected-parent expected-page)
+              (throw (js/Error. "The target is missing the parent or page needed for placement")))
+            (p/let [before-result (if (= placement "last-child")
+                                    (api-fn "logseq.DB.datascriptQuery" [children-query expected-parent])
+                                    [])
+                    before-children (js->clj before-result :keywordize-keys true)
+                    before-children (sort-by #(str (or (:order %) (:block/order %))) before-children)
+                    source-already-last? (and (= placement "last-child")
+                                              (= block-uuid
+                                                 (or (:uuid (last before-children))
+                                                     (:block/uuid (last before-children)))))
+                    other-children (remove #(= block-uuid (or (:uuid %) (:block/uuid %)))
+                                           before-children)
+                    anchor-uuid (if (and (= placement "last-child") (seq other-children))
+                                  (or (:uuid (last other-children)) (:block/uuid (last other-children)))
+                                  target-uuid)
+                    options (cond
+                              (and (= placement "last-child") (seq other-children)) #js {:before false}
+                              (contains? #{"child" "last-child"} placement) #js {:children true}
+                              :else #js {:before (= placement "before")})]
+              (p/let [response (if source-already-last?
+                                 nil
+                                 (api-fn "logseq.DB.moveBlock" [block-uuid anchor-uuid options]))
+                      current-result (api-fn "logseq.DB.datascriptQuery" [entity-query (uuid-query-input block-uuid)])
+                      current (js->clj current-result :keywordize-keys true)
+                      descendants-after (move-descendants api-fn block-uuid)
+                      stranded? (some #(not= expected-page
+                                             (entity-ref-id (or (:page %) (:block/page %))))
+                                      descendants-after)
+                      descendant-uuids-after (set (map #(or (:uuid %) (:block/uuid %)) descendants-after))
+                      missing-descendants? (some #(not (contains? descendant-uuids-after (or (:uuid %) (:block/uuid %)))) descendants)
+                      after-result (api-fn "logseq.DB.datascriptQuery" [children-query expected-parent])
+                      after-children (sort-by #(str (or (:order %) (:block/order %)))
+                                              (js->clj after-result :keywordize-keys true))
+                      sibling-uuids (mapv #(or (:uuid %) (:block/uuid %)) after-children)
+                      block-index (.indexOf (to-array sibling-uuids) block-uuid)
+                      target-index (.indexOf (to-array sibling-uuids) target-uuid)
+                      order-valid? (and (every? #(string? (or (:order %) (:block/order %))) after-children)
                                         (= (count after-children)
-                                          (count (set (map #(or (:order %) (:block/order %)) after-children))))
+                                           (count (set (map #(or (:order %) (:block/order %)) after-children))))
                                         (case placement
-                                         "child" (= block-uuid (first sibling-uuids))
-                                         "last-child" (= block-uuid (last sibling-uuids))
-                                         "before" (and (not (neg? block-index)) (= (inc block-index) target-index))
-                                         "after" (and (not (neg? target-index)) (= (inc target-index) block-index))))
-                          actual-parent (entity-ref-id (or (:parent current) (:block/parent current)))
-                          actual-page (entity-ref-id (or (:page current) (:block/page current)))
-                          response (js->clj response :keywordize-keys true)]
-                    (cond
-                      (nil? current)
-                      {:response response :verified false :verified_entities []
-                       :previous_entities [source] :diagnostic "The block disappeared during the move"}
+                                          "child" (= block-uuid (first sibling-uuids))
+                                          "last-child" (= block-uuid (last sibling-uuids))
+                                          "before" (and (not (neg? block-index)) (= (inc block-index) target-index))
+                                          "after" (and (not (neg? target-index)) (= (inc target-index) block-index))))
+                      actual-parent (entity-ref-id (or (:parent current) (:block/parent current)))
+                      actual-page (entity-ref-id (or (:page current) (:block/page current)))
+                      response (js->clj response :keywordize-keys true)]
+                (cond
+                  (nil? current)
+                  {:response response :verified false :verified_entities []
+                   :previous_entities [source] :diagnostic "The block disappeared during the move"}
 
-                      (not= expected-parent actual-parent)
-                      {:response response :verified false :verified_entities [current]
-                       :previous_entities [source] :observed_entities [current]
-                       :diagnostic "The move was not observed; the block still has its original parent"}
+                  (not= expected-parent actual-parent)
+                  {:response response :verified false :verified_entities [current]
+                   :previous_entities [source] :observed_entities [current]
+                   :diagnostic "The move was not observed; the block still has its original parent"}
 
-                      (not= expected-page actual-page)
-                      {:response response :verified false :verified_entities [current]
-                       :previous_entities [source] :observed_entities [current]
-                       :diagnostic "The block moved but its owning page did not follow; run findOrphans"}
+                  (not= expected-page actual-page)
+                  {:response response :verified false :verified_entities [current]
+                   :previous_entities [source] :observed_entities [current]
+                   :diagnostic "The block moved but its owning page did not follow; run findOrphans"}
 
-                      (or stranded? missing-descendants?)
-                      {:response response :verified false :verified_entities [current]
-                       :previous_entities [source] :observed_entities descendants-after
-                       :diagnostic "The block moved but one or more descendants are missing or belong to the old page"}
+                  (or stranded? missing-descendants?)
+                  {:response response :verified false :verified_entities [current]
+                   :previous_entities [source] :observed_entities descendants-after
+                   :diagnostic "The block moved but one or more descendants are missing or belong to the old page"}
 
-                        (not order-valid?)
-                      {:response response :verified false :verified_entities [current]
-                       :previous_entities [source]
-                       :diagnostic "The block is under the requested parent but its requested sibling placement was not verified"}
+                  (not order-valid?)
+                  {:response response :verified false :verified_entities [current]
+                   :previous_entities [source]
+                   :diagnostic "The block is under the requested parent but its requested sibling placement was not verified"}
 
-                      verbose?
-                      {:response response :verified true :verified_entities [current]
-                       :previous_entities [source] :diagnostic nil}
+                  verbose?
+                  {:response response :verified true :verified_entities [current]
+                   :previous_entities [source] :diagnostic nil}
 
-                      :else
-                      (merge {:response response :verified true :diagnostic nil :previous_count 1}
+                  :else
+                  (merge {:response response :verified true :diagnostic nil :previous_count 1}
                          (entity-write-digest current)))))))))))
 
 (defn remove-block
@@ -1130,8 +1130,8 @@
                     (find-remaining (rest entities) (cond-> found current (conj current))))
                   (p/resolved found)))]
         (p/let [subtree (collect-subtree [root] [root])
-            _ (doseq [entity subtree]
-              (uuid-query-input (or (:uuid entity) (:block/uuid entity))))
+                _ (doseq [entity subtree]
+                    (uuid-query-input (or (:uuid entity) (:block/uuid entity))))
                 response (api-fn "logseq.DB.removeBlock" [block-uuid])
                 remaining (find-remaining subtree [])
                 response (js->clj response :keywordize-keys true)]
@@ -1217,9 +1217,9 @@
             (move-run [remaining anchor mode moved]
               (if-let [uuid (first remaining)]
                 (p/let [outcome (-> (p/then (p/resolved nil)
-                                           (fn [_] (move-block api-fn #js {"block_uuid" uuid "target_uuid" anchor
-                                                                          "placement" mode "verbose" false})))
-                                   (p/catch (fn [error] {:verified false :diagnostic (.-message error)})))
+                                            (fn [_] (move-block api-fn #js {"block_uuid" uuid "target_uuid" anchor
+                                                                            "placement" mode "verbose" false})))
+                                    (p/catch (fn [error] {:verified false :diagnostic (.-message error)})))
                         moved (conj moved {:uuid uuid :verified (:verified outcome)
                                            :diagnostic (:diagnostic outcome)})]
                   (if (:verified outcome)
@@ -1230,9 +1230,9 @@
               (if-let [uuid (first remaining)]
                 (let [parent-uuid (get-in sources [uuid :parent :uuid])]
                   (p/let [outcome (-> (p/then (p/resolved nil)
-                                             (fn [_] (move-block api-fn #js {"block_uuid" uuid "target_uuid" parent-uuid
-                                                                            "placement" "last-child" "verbose" false})))
-                                     (p/catch (fn [error] {:verified false :diagnostic (.-message error)})))]
+                                              (fn [_] (move-block api-fn #js {"block_uuid" uuid "target_uuid" parent-uuid
+                                                                              "placement" "last-child" "verbose" false})))
+                                      (p/catch (fn [error] {:verified false :diagnostic (.-message error)})))]
                     (rollback-run (rest remaining) sources
                                   (conj restored {:uuid uuid :verified (:verified outcome)
                                                   :diagnostic (:diagnostic outcome)}))))
@@ -1291,12 +1291,12 @@
                 (place-tails [remaining anchor placed]
                   (if-let [tail (first remaining)]
                     (p/let [outcome (move-block api-fn #js {"block_uuid" (:uuid tail)
-                                                           "target_uuid" anchor "placement" "after" "verbose" true})]
+                                                            "target_uuid" anchor "placement" "after" "verbose" true})]
                       (if (:verified outcome)
                         (place-tails (rest remaining) (:uuid tail)
-                               (conj placed (first (:verified_entities outcome))))
+                                     (conj placed (first (:verified_entities outcome))))
                         {:failure (:diagnostic outcome) :placed placed}))
-                      (p/resolved {:placed placed})))
+                    (p/resolved {:placed placed})))
                 (report [created verified diagnostic]
                   {:block_uuid block-uuid :parts (count parts)
                    :created (mapv entity-write-digest created)
@@ -1305,7 +1305,7 @@
                   created (:created creation)]
             (if (:failure creation)
               (report created false (str "Tail creation failed; original text is unchanged. " (:failure creation)))
-                    (p/let [placement (place-tails created block-uuid [])
+              (p/let [placement (place-tails created block-uuid [])
                       created (into (:placed placement) (drop (count (:placed placement)) created))]
                 (if (:failure placement)
                   (report created false (str "Tail placement failed; original text is unchanged. " (:failure placement)))
@@ -1348,16 +1348,16 @@
       (p/let [children-result (api-fn "logseq.DB.datascriptQuery" [children-query (:id source)])
               children (sort-by :order (js->clj children-result :keywordize-keys true))
               selected (filterv #(or (nil? contains-text)
-                                    (string/includes? (or (:title %) "") contains-text)) children)
+                                     (string/includes? (or (:title %) "") contains-text)) children)
               planned (mapv (fn [block] {:uuid (:uuid block) :order (:order block)
                                          :preview (subs (or (:title block) "") 0 (min 80 (count (or (:title block) ""))))})
                             selected)
               base {:source_uuid source-uuid :target_uuid target-uuid :planned planned}]
         (cond
           (empty? selected)
-             (assoc base :verified (not dry-run?) :moved [] :remaining (count children)
-               :diagnostic (if dry-run? "Dry run: nothing matched the selection; nothing moved."
-                     "Nothing matched the selection."))
+          (assoc base :verified (not dry-run?) :moved [] :remaining (count children)
+                 :diagnostic (if dry-run? "Dry run: nothing matched the selection; nothing moved."
+                                 "Nothing matched the selection."))
 
           dry-run?
           (assoc base :verified false :moved [] :remaining (count children)
@@ -1365,7 +1365,7 @@
 
           :else
           (p/let [outcome (move-blocks api-fn #js {"block_uuids" (clj->js (mapv :uuid selected))
-                                                  "target_uuid" target-uuid "placement" placement})
+                                                   "target_uuid" target-uuid "placement" placement})
                   left-result (api-fn "logseq.DB.datascriptQuery" [children-query (:id source)])
                   left (js->clj left-result :keywordize-keys true)
                   expected-left (set (map :uuid (remove (set selected) children)))
@@ -1381,20 +1381,20 @@
 (defn- page-mutation-context
   [api-fn page-uuid]
   (p/let [page-result (api-fn "logseq.DB.datascriptQuery"
-                             ["[:find (pull ?page [*]) . :in $ ?uuid :where [?page :block/uuid ?uuid]]"
-                              (uuid-query-input page-uuid)])
+                              ["[:find (pull ?page [*]) . :in $ ?uuid :where [?page :block/uuid ?uuid]]"
+                               (uuid-query-input page-uuid)])
           page (js->clj page-result :keywordize-keys true)]
     (when-not (and page (:name page))
       (throw (js/Error. "UUID must identify an existing page")))
     (p/let [blocks-result (api-fn "logseq.DB.datascriptQuery"
-                                 ["[:find [(pull ?block [* {:block/parent [:db/id :block/uuid]}]) ...] :in $ ?page :where (or-join [?block ?page] [?block :block/parent+ ?page] [?block :block/page ?page])]"
-                                  (:id page)])
+                                  ["[:find [(pull ?block [* {:block/parent [:db/id :block/uuid]}]) ...] :in $ ?page :where (or-join [?block ?page] [?block :block/parent+ ?page] [?block :block/page ?page])]"
+                                   (:id page)])
             aliases-result (api-fn "logseq.DB.datascriptQuery"
-                                  ["[:find [(pull ?related [:db/id :block/uuid :block/title :block/name]) ...] :in $ ?page :where (or-join [?related ?page] [?page :logseq.property/alias ?related] [?related :logseq.property/alias ?page] [?page :block/alias ?related] [?related :block/alias ?page])]"
-                                   (:id page)])
+                                   ["[:find [(pull ?related [:db/id :block/uuid :block/title :block/name]) ...] :in $ ?page :where (or-join [?related ?page] [?page :logseq.property/alias ?related] [?related :logseq.property/alias ?page] [?page :block/alias ?related] [?related :block/alias ?page])]"
+                                    (:id page)])
             inbound-result (api-fn "logseq.DB.datascriptQuery"
-                                  ["[:find [(pull ?holder [:db/id :block/uuid :block/title :block/name]) ...] :in $ ?page :where [?holder ?attribute ?page] [(not= ?attribute :block/parent)] [(not= ?attribute :block/parent+)] [(not= ?attribute :block/page)]]"
-                                   (:id page)])
+                                   ["[:find [(pull ?holder [:db/id :block/uuid :block/title :block/name]) ...] :in $ ?page :where [?holder ?attribute ?page] [(not= ?attribute :block/parent)] [(not= ?attribute :block/parent+)] [(not= ?attribute :block/page)]]"
+                                    (:id page)])
             blocks (js->clj blocks-result :keywordize-keys true)]
       (when (> (count blocks) 1000)
         (throw (js/Error. "Page inventory exceeds the 1000-block safety limit")))
@@ -1445,47 +1445,47 @@
         {:verified false :previous_entities (into [page] blocks)
          :diagnostic "The page contains nested pages; migrate them before clearing it"}
         (let [by-id (into {} (map (juxt :id identity) blocks))
-            value-ids (set (keep (fn [block]
-                                  (when (or (:logseq.property/created-from-property block)
-                                            (get block (keyword ":logseq.property/created-from-property")))
-                                    (:id block))) blocks))
-            protected? (fn [block]
-                         (loop [current block, seen #{}]
-                           (let [id (:id current)
-                                 parent-id (entity-ref-id (:parent current))]
-                             (cond
-                               (contains? value-ids id) true
-                               (= parent-id (:id page)) false
-                               (or (contains? seen id) (nil? (get by-id parent-id)))
-                               (throw (js/Error. "The page parent inventory is incomplete or cyclic; nothing was cleared"))
-                               :else (recur (get by-id parent-id) (conj seen id))))))
-            protected (filterv protected? blocks)
-            content (filterv #(not (protected? %)) blocks)
-            roots (filterv #(= (:id page) (entity-ref-id (:parent %))) content)
-            metadata (fn [entity]
-                       (dissoc entity :updated-at :block/updated-at :tx-id
-                               :logseq.property/updated-at (keyword ":logseq.property/updated-at")))]
-        (doseq [block blocks] (uuid-query-input (:uuid block)))
-        (letfn [(clear-roots [remaining outcomes]
-                  (if-let [root (first remaining)]
-                    (p/let [result (remove-block api-fn #js {"block_uuid" (:uuid root) "verbose" true})]
-                      (if (:verified result)
-                        (clear-roots (rest remaining) (conj outcomes result))
-                        {:outcomes (conj outcomes result) :failure (:diagnostic result)}))
-                    (p/resolved {:outcomes outcomes})))]
-          (p/let [outcome (clear-roots roots [])
-                  after (page-mutation-context api-fn page-uuid)
-                  expected-ids (set (map :uuid protected))
-                  actual-ids (set (map :uuid (:blocks after)))
-                  verified? (and (nil? (:failure outcome)) (= expected-ids actual-ids)
-                                 (= (metadata page) (metadata (:page after))))]
-            (cond-> {:verified verified? :verified_entities [(:page after)]
-                     :previous_count (count content) :preserved_property_blocks (count protected)
-                     :observed_entities (:blocks after)
-                     :diagnostic (or (:failure outcome)
-                                     (if verified? "Content cleared; page metadata and property-value subtrees are preserved."
-                                         "Clear did not verify; inspect the remaining blocks and page metadata."))}
-              (or verbose? (not verified?)) (assoc :previous_entities (into [page] content))))))))))
+              value-ids (set (keep (fn [block]
+                                     (when (or (:logseq.property/created-from-property block)
+                                               (get block (keyword ":logseq.property/created-from-property")))
+                                       (:id block))) blocks))
+              protected? (fn [block]
+                           (loop [current block, seen #{}]
+                             (let [id (:id current)
+                                   parent-id (entity-ref-id (:parent current))]
+                               (cond
+                                 (contains? value-ids id) true
+                                 (= parent-id (:id page)) false
+                                 (or (contains? seen id) (nil? (get by-id parent-id)))
+                                 (throw (js/Error. "The page parent inventory is incomplete or cyclic; nothing was cleared"))
+                                 :else (recur (get by-id parent-id) (conj seen id))))))
+              protected (filterv protected? blocks)
+              content (filterv #(not (protected? %)) blocks)
+              roots (filterv #(= (:id page) (entity-ref-id (:parent %))) content)
+              metadata (fn [entity]
+                         (dissoc entity :updated-at :block/updated-at :tx-id
+                                 :logseq.property/updated-at (keyword ":logseq.property/updated-at")))]
+          (doseq [block blocks] (uuid-query-input (:uuid block)))
+          (letfn [(clear-roots [remaining outcomes]
+                    (if-let [root (first remaining)]
+                      (p/let [result (remove-block api-fn #js {"block_uuid" (:uuid root) "verbose" true})]
+                        (if (:verified result)
+                          (clear-roots (rest remaining) (conj outcomes result))
+                          {:outcomes (conj outcomes result) :failure (:diagnostic result)}))
+                      (p/resolved {:outcomes outcomes})))]
+            (p/let [outcome (clear-roots roots [])
+                    after (page-mutation-context api-fn page-uuid)
+                    expected-ids (set (map :uuid protected))
+                    actual-ids (set (map :uuid (:blocks after)))
+                    verified? (and (nil? (:failure outcome)) (= expected-ids actual-ids)
+                                   (= (metadata page) (metadata (:page after))))]
+              (cond-> {:verified verified? :verified_entities [(:page after)]
+                       :previous_count (count content) :preserved_property_blocks (count protected)
+                       :observed_entities (:blocks after)
+                       :diagnostic (or (:failure outcome)
+                                       (if verified? "Content cleared; page metadata and property-value subtrees are preserved."
+                                           "Clear did not verify; inspect the remaining blocks and page metadata."))}
+                (or verbose? (not verified?)) (assoc :previous_entities (into [page] content))))))))))
 
 (defn parse-outline
   [text]
@@ -1528,17 +1528,17 @@
                   (if (and (= uuid (:uuid entity))
                            (= parent-id (entity-ref-id (:parent entity)))
                            (= page-id (entity-ref-id (:page entity)))
-                             (let [sent (:title (first items))
-                               heading (re-find #"^(#{1,6})\s+" sent)
-                               expected (if heading (subs sent (count (first heading))) sent)
-                               stored (or (:title entity) "")]
+                           (let [sent (:title (first items))
+                                 heading (re-find #"^(#{1,6})\s+" sent)
+                                 expected (if heading (subs sent (count (first heading))) sent)
+                                 stored (or (:title entity) "")]
                              (and (if (:verbatim (first items))
-                                (= (string/replace expected #"\s+$" "") stored)
-                                (nil? (content-loss expected stored)))
-                                (or (nil? heading)
-                                  (= (count (second heading))
-                                   (or (:logseq.property/heading entity)
-                                     (get entity (keyword ":logseq.property/heading"))))))))
+                                    (= (string/replace expected #"\s+$" "") stored)
+                                    (nil? (content-loss expected stored)))
+                                  (or (nil? heading)
+                                      (= (count (second heading))
+                                         (or (:logseq.property/heading entity)
+                                             (get entity (keyword ":logseq.property/heading"))))))))
                     (verify-created (rest remaining) (rest items) parent-id page-id (conj found entity))
                     {:created found :failure (str "Created block " uuid " did not verify parent, page, or content.")}))
                 (p/resolved {:created found})))
@@ -1677,11 +1677,11 @@
                 by-uuid-query "[:find (pull ?page [:db/id :block/uuid :block/name :block/title]) . :in $ ?uuid :where [?page :block/uuid ?uuid] [?page :block/tags ?class] [?class :db/ident :logseq.class/Page]]"]
             (p/let [page-result (if created-uuid
                                   (api-fn "logseq.DB.datascriptQuery"
-                      [by-uuid-query (uuid-query-input created-uuid)])
+                                          [by-uuid-query (uuid-query-input created-uuid)])
                                   nil)
                     page-from-uuid (js->clj page-result :keywordize-keys true)
-                  pages-by-title (when-not page-from-uuid (query-pages api-fn page-title-query title))
-                  page (or page-from-uuid (first pages-by-title))]
+                    pages-by-title (when-not page-from-uuid (query-pages api-fn page-title-query title))
+                    page (or page-from-uuid (first pages-by-title))]
               (if-not (and page (or (:name page) (:block/name page)))
                 {:validation nil
                  :response response-map
@@ -1708,7 +1708,7 @@
         base {:blocks (count entries) :escaped_links (:escaped_links parsed) :escaped_tags (:escaped_tags parsed)
               :page_properties (:page_properties parsed)
               :warnings (cond-> (:warnings parsed) (seq (:page_properties parsed))
-                          (conj "Page properties were parsed but not applied; they are outside the writable namespace."))}]
+                                (conj "Page properties were parsed but not applied; they are outside the writable namespace."))}]
     (when-not (and (string? target) (not (string/blank? target)))
       (throw (js/Error. "target must be a page UUID or non-empty title")))
     (if (true? (aget args "dry_run"))
@@ -1741,7 +1741,7 @@
                 (cond-> (assoc base :page_title (:title (:page after)) :verified verified?
                                :calls (:calls outcome) :created_uuids (mapv :uuid (:created outcome))
                                :diagnostic (when-not verified? (or (:diagnostic outcome)
-                                                                  "Import inventory did not verify; inspect the page before retrying.")))
+                                                                   "Import inventory did not verify; inspect the page before retrying.")))
                   cleared (assoc :replaced_entities (:previous_entities cleared)))))))))))
 
 (defn rename-page
@@ -1769,7 +1769,7 @@
 
           (seq clashes)
           (p/rejected (js/Error. (str "An entity titled " (pr-str new-title)
-                                    " already exists; renaming onto it would make the two indistinguishable")))
+                                      " already exists; renaming onto it would make the two indistinguishable")))
 
           :else
           (p/let [response (api-fn "logseq.DB.renamePage" [page-uuid new-title])]
@@ -1894,13 +1894,13 @@
           (throw (js/Error. (str "No entity exists with exact UUID " target-uuid))))
         (when-not property
           (throw (js/Error. (str "No property exists with exact ident " ident))))
-          (let [type (property-type property)
+        (let [type (property-type property)
               value-id (property-value-id value)]
           (when (and (contains? reference-property-types type)
                      (not (valid-reference-property-value? value)))
             (throw (js/Error. (str ident " is a " (pr-str type)
                                    " property, so its value must be an entity id"))))
-              (let [cardinality (or (property-entity-value property ":db/cardinality") (:cardinality property))
+          (let [cardinality (or (property-entity-value property ":db/cardinality") (:cardinality property))
                 many? (= "many" (last (string/split (string/replace-first (str cardinality) #"^:" "") #"/")))
                 previous-value (property-entity-value target ident)]
             (p/let [previous-values (resolve-property-values api-fn previous-value)]
@@ -1913,7 +1913,7 @@
                     (merge {:verified true :diagnostic diagnostic}
                            (entity-write-digest target))))
                 (p/let [response (api-fn "logseq.DB.upsertBlockProperty"
-                                          [target-uuid ident value-js options])]
+                                         [target-uuid ident value-js options])]
                   (when-let [error (and response (aget response "error"))]
                     (throw (js/Error. (str error))))
                   (p/let [current-result (api-fn "logseq.DB.datascriptQuery" [target-query])
@@ -1932,7 +1932,7 @@
                        :previous_state target :diagnostic nil :verified true
                        :observed_state current}
                       (merge {:verified true :diagnostic nil}
-                         (entity-write-digest current)))))))))))))
+                             (entity-write-digest current)))))))))))))
 
 (defn remove-property
   [api-fn args]
@@ -1977,7 +1977,7 @@
                  :verified true
                  :observed_state nil}
                 (merge {:verified true :diagnostic nil}
-                  (entity-write-digest current))))))))))
+                       (entity-write-digest current))))))))))
 
 (defn list-embeds
   [api-fn args]
@@ -1995,7 +1995,7 @@
   [api-fn args]
   (let [block-uuid (validated-uuid (aget args "block_uuid"))]
     (p/let [response (api-fn "logseq.DB.getBlock"
-                            [block-uuid #js {:includeChildren false :includePage true}])
+                             [block-uuid #js {:includeChildren false :includePage true}])
             block (js->clj response :keywordize-keys true)]
       (cond
         (and response (aget response "error"))
@@ -2006,17 +2006,17 @@
 
         (:link block)
         (let [link (:link block)
-            target-id (entity-ref-id link)]
+              target-id (entity-ref-id link)]
           (p/let [target-result (api-fn "logseq.DB.datascriptQuery"
-                        ["[:find (pull ?target [:db/id :block/uuid :block/title :block/name]) . :in $ ?target :where [?target :block/uuid _]]"
-                         target-id])
-              target (js->clj target-result :keywordize-keys true)
-              embed (if target
-                  (:embed (api-util/with-embed-info {:link target}))
-                  {:target_uuid nil :target_type "missing" :target_title nil})]
+                                        ["[:find (pull ?target [:db/id :block/uuid :block/title :block/name]) . :in $ ?target :where [?target :block/uuid _]]"
+                                         target-id])
+                  target (js->clj target-result :keywordize-keys true)
+                  embed (if target
+                          (:embed (api-util/with-embed-info {:link target}))
+                          {:target_uuid nil :target_type "missing" :target_title nil})]
             (when-let [error (:error target)]
               (throw (js/Error. (str error))))
-          (block-result block-uuid [(assoc block :embed embed)])))
+            (block-result block-uuid [(assoc block :embed embed)])))
 
         :else
         (block-result block-uuid (if block [block] []))))))
@@ -2200,7 +2200,7 @@
                    :verified true
                    :observed_state current}
                   (merge {:verified true :diagnostic nil}
-                        (entity-write-digest current)))))))))))
+                         (entity-write-digest current)))))))))))
 
 (defn remove-tag
   [api-fn args]
@@ -2230,7 +2230,7 @@
         (let [tag-id (or (:id tag) (:db/id tag))
               previous-page? (boolean (or (:name target) (:block/name target)))
               previous-tag-ids (set (keep entity-reference-id
-                                           (or (:tags target) (:block/tags target))))]
+                                          (or (:tags target) (:block/tags target))))]
           (p/let [response (api-fn "logseq.DB.removeBlockTag" [target-uuid tag-uuid])]
             (when-let [error (and response (aget response "error"))]
               (throw (js/Error. (str error))))
@@ -2295,8 +2295,8 @@
                          (js/Number.isInteger limit)
                          (pos? limit))))
       (throw (js/Error. "limit must be a positive integer")))
-        (p/let [result (api-fn "logseq.DB.getJournalCandidates" [])
-          journals (->> (js->clj result :keywordize-keys true)
+    (p/let [result (api-fn "logseq.DB.getJournalCandidates" [])
+            journals (->> (js->clj result :keywordize-keys true)
                           (sort-by #(or (:journal-day %) (:block/journal-day %) 0) >)
                           vec)
             total (count journals)
@@ -2384,15 +2384,15 @@
         include-recycled? (not (false? (aget args "include_recycled")))]
     (when-not (contains? #{"exact" "loose" "fuzzy"} normalize)
       (throw (js/Error. "normalize must be exact, loose, or fuzzy")))
-        (p/let [inventory-result (api-fn "logseq.DB.getTitleInventory" [])
-          inventory (js->clj inventory-result :keywordize-keys true)
+    (p/let [inventory-result (api-fn "logseq.DB.getTitleInventory" [])
+            inventory (js->clj inventory-result :keywordize-keys true)
             candidates (->> inventory
                             (keep (fn [entity]
-                (when (and (map? entity)
-                     (seq (:title entity))
-                     (:id entity)
-                     (or include-recycled? (not (:recycled entity))))
-                  entity)))
+                                    (when (and (map? entity)
+                                               (seq (:title entity))
+                                               (:id entity)
+                                               (or include-recycled? (not (:recycled entity))))
+                                      entity)))
                             vec)
             groups (group-title-candidates candidates normalize)]
       (if (empty? groups)
@@ -2462,10 +2462,10 @@
             (create-targets [remaining kind resolved created failures]
               (if-let [name (first remaining)]
                 (p/let [outcome (-> (p/then (p/resolved nil)
-                                           (fn [_] (if (= kind "link")
-                                                     (create-page api-fn #js {"title" name})
-                                                     (create-tag api-fn #js {"title" name}))))
-                                   (p/catch (fn [error] {:verified false :diagnostic (.-message error)})))
+                                            (fn [_] (if (= kind "link")
+                                                      (create-page api-fn #js {"title" name})
+                                                      (create-tag api-fn #js {"title" name}))))
+                                    (p/catch (fn [error] {:verified false :diagnostic (.-message error)})))
                         refreshed (resolve-names [name] kind {} [] [])
                         uuid (get (:resolved refreshed) name)]
                   (if (and (:verified outcome) uuid)
@@ -2489,8 +2489,8 @@
                   (if (= original text)
                     (rewrite (rest remaining) links tags updated unverified)
                     (p/let [outcome (-> (p/then (p/resolved nil)
-                                               (fn [_] (update-block api-fn #js {"block_uuid" (:uuid block) "title" text})))
-                                       (p/catch (fn [error] {:verified false :diagnostic (.-message error)})))
+                                                (fn [_] (update-block api-fn #js {"block_uuid" (:uuid block) "title" text})))
+                                        (p/catch (fn [error] {:verified false :diagnostic (.-message error)})))
                             result (api-fn "logseq.DB.datascriptQuery" [entity-query (uuid-query-input (:uuid block))])
                             current (js->clj result :keywordize-keys true)
                             verified? (and (:verified outcome)
@@ -2499,7 +2499,7 @@
                                                      (some #(= uuid (:uuid %)) (get current (if (= kind "link") :refs :tags)))) resolved))]
                       (rewrite (rest remaining) links tags (if verified? (inc updated) updated)
                                (cond-> unverified (not verified?) (conj {:uuid (:uuid block)
-                                                                       :reason "Text and reference relations did not both verify."}))))))
+                                                                         :reason "Text and reference relations did not both verify."}))))))
                 (p/resolved {:blocks_updated updated :unverified unverified})))]
       (p/let [context (when page-uuid (page-mutation-context api-fn page-uuid))
               scan-result (if context (clj->js (:blocks context))
@@ -2539,8 +2539,8 @@
                   outcome (if (seq failures) {:blocks_updated 0 :unverified failures}
                               (rewrite blocks (:resolved new-links) (:resolved new-tags) 0 []))
                   unresolved? (some seq [(remove #(contains? (:resolved new-links) %) (:missing links))
-                                        (remove #(contains? (:resolved new-tags) %) (:missing tags))
-                                        (:ambiguous links) (:ambiguous tags)])]
+                                         (remove #(contains? (:resolved new-tags) %) (:missing tags))
+                                         (:ambiguous links) (:ambiguous tags)])]
             (merge base outcome {:verified (empty? (:unverified outcome))
                                  :resolved (vec (sort (keys (:resolved new-links))))
                                  :tags_resolved (vec (sort (keys (:resolved new-tags))))
@@ -2555,8 +2555,8 @@
 (def ^:private capability-tool-routes
   {:getContentCapabilities ["logseq.DB.getContentCapabilities"]
    :listPages ["logseq.DB.listPages"]
-  :listJournals ["logseq.DB.getJournalCandidates" "logseq.DB.datascriptQuery"]
-  :getPage ["logseq.DB.getPageData"]
+   :listJournals ["logseq.DB.getJournalCandidates" "logseq.DB.datascriptQuery"]
+   :getPage ["logseq.DB.getPageData"]
    :searchBlocks ["logseq.DB.search"]
    :listTags ["logseq.DB.listTags"]
    :listProperties ["logseq.DB.listProperties"]
@@ -2571,7 +2571,7 @@
    :createPage ["logseq.DB.datascriptQuery" "logseq.DB.createPage"]
    :renamePage ["logseq.DB.datascriptQuery" "logseq.DB.renamePage"]
    :createBlock ["logseq.DB.insertBlock" "logseq.DB.datascriptQuery"]
-  :createEmbed ["logseq.DB.createEmbed" "logseq.DB.datascriptQuery"]
+   :createEmbed ["logseq.DB.createEmbed" "logseq.DB.datascriptQuery"]
    :updateBlock ["logseq.DB.updateBlock" "logseq.DB.datascriptQuery"]
    :moveBlock ["logseq.DB.moveBlock" "logseq.DB.datascriptQuery"]
    :removeBlock ["logseq.DB.removeBlock" "logseq.DB.datascriptQuery"]
@@ -2587,34 +2587,34 @@
    :getTag ["logseq.DB.getTag"]
    :getTagUsers ["logseq.DB.getTagUsers"]
    :getPropertyIndent ["logseq.DB.getPropertiesByTitle"]
-  :getBlock ["logseq.DB.getBlock" "logseq.DB.datascriptQuery"]
-  :listEmbeds ["logseq.DB.listEmbeds"]
+   :getBlock ["logseq.DB.getBlock" "logseq.DB.datascriptQuery"]
+   :listEmbeds ["logseq.DB.listEmbeds"]
    :getBlockUUID ["logseq.DB.getPageBlockUUIDs"]
    :getBlockTree ["logseq.DB.getBlockTree"]
    :findBacklinks ["logseq.DB.getBacklinks"]
    :findOrphans ["logseq.DB.getPageBlockUUIDs"]
    :isTitleAvailable ["logseq.DB.getTitleHolders"]
    :findDuplicateTitles ["logseq.DB.getTitleInventory" "logseq.DB.datascriptQuery"]
-  :getProperyUsers ["logseq.DB.getPropertyUsers"]
+   :getProperyUsers ["logseq.DB.getPropertyUsers"]
    :createProperty ["logseq.DB.upsertProperty"]
    :removeProperty ["logseq.DB.datascriptQuery" "logseq.DB.removeBlockProperty"]
    :addProperty ["logseq.DB.datascriptQuery" "logseq.DB.upsertBlockProperty"]
-  :deleteProperty ["logseq.DB.datascriptQuery"
-          "logseq.DB.getPropertyUsers"
-              "logseq.DB.removeProperty"
-              "logseq.DB.removeBlock"]
-  :listRecycled ["logseq.DB.listRecycled"]
-  :listStatus ["logseq.DB.getStatusRows"]
-  :listClosedValues ["logseq.DB.getClosedValues"]
-  :listOrphanTags ["logseq.DB.getOrphanTags"]
-  :listOrphanProperties ["logseq.DB.getOrphanProperties"]
-  :listAssets ["logseq.DB.listAssets"]})
+   :deleteProperty ["logseq.DB.datascriptQuery"
+                    "logseq.DB.getPropertyUsers"
+                    "logseq.DB.removeProperty"
+                    "logseq.DB.removeBlock"]
+   :listRecycled ["logseq.DB.listRecycled"]
+   :listStatus ["logseq.DB.getStatusRows"]
+   :listClosedValues ["logseq.DB.getClosedValues"]
+   :listOrphanTags ["logseq.DB.getOrphanTags"]
+   :listOrphanProperties ["logseq.DB.getOrphanProperties"]
+   :listAssets ["logseq.DB.listAssets"]})
 
 (def ^:private capability-probe-args
   {"logseq.DB.getContentCapabilities" []
    "logseq.DB.datascriptQuery" ["[:find ?e . :where [?e :block/uuid]]"]
    "logseq.DB.getBlock" ["__mcp_capability_probe__" #js {:includeChildren false :includePage true}]
-  "logseq.DB.listEmbeds" [#js {:limit 1}]
+   "logseq.DB.listEmbeds" [#js {:limit 1}]
    "logseq.DB.getTag" ["__mcp_capability_probe__"]
    "logseq.DB.getTagUsers" ["00000000-0000-4000-8000-000000000999"]
    "logseq.DB.inspectPage" ["00000000-0000-4000-8000-000000000999" "page"]
@@ -2630,7 +2630,7 @@
    "logseq.DB.getOrphanTags" []
    "logseq.DB.getOrphanProperties" []
    "logseq.DB.getPropertyUsers" [":logseq.property/status"]
-  "logseq.DB.listAssets" []
+   "logseq.DB.listAssets" []
    "logseq.DB.getPageData" ["__mcp_capability_probe__"]
    "logseq.DB.getPropertiesByTitle" ["__mcp_capability_probe__"]
    "logseq.DB.getTagsByName" ["__mcp_capability_probe__"]
@@ -2641,7 +2641,7 @@
    "logseq.DB.upsertProperty" ["__mcp_capability_probe__/invalid" #js {}]
    "logseq.DB.createTag" ["__mcp_capability_probe__/invalid"]
    "logseq.DB.insertBlock" ["__mcp_capability_probe__" "__mcp_capability_probe__" #js {:sibling false}]
-  "logseq.DB.createEmbed" ["__mcp_capability_probe__" "__mcp_capability_probe__"]
+   "logseq.DB.createEmbed" ["__mcp_capability_probe__" "__mcp_capability_probe__"]
    "logseq.DB.insertBatchBlock" ["__mcp_capability_probe__" #js [] #js {}]
    "logseq.DB.renamePage" ["__mcp_capability_probe__" "__mcp_capability_probe__"]
    "logseq.DB.updateBlock" ["__mcp_capability_probe__" "__mcp_capability_probe__"]
@@ -2655,7 +2655,7 @@
    "logseq.DB.removeBlockProperty" ["__mcp_capability_probe__" "__mcp_capability_probe__"]
    "logseq.DB.removeProperty" ["__mcp_capability_probe__"]
    "logseq.DB.removeBlock" ["__mcp_capability_probe__"]
-  "logseq.DB.search" ["__mcp_capability_probe__" #js {:enable-snippet? false}]})
+   "logseq.DB.search" ["__mcp_capability_probe__" #js {:enable-snippet? false}]})
 
 (def ^:private capability-write-methods
   #{"logseq.DB.upsertProperty" "logseq.DB.createTag" "logseq.DB.createPage"
@@ -2671,8 +2671,8 @@
 
 (def ^:private capability-present-markers
   ["invalid" "missing required" "should be either" "disallowed"
-  "expected" "required" "forward slash"
-  "plugins can only upsert its own properties"])
+   "expected" "required" "forward slash"
+   "plugins can only upsert its own properties"])
 
 (defn- capability-finding
   [method error-message result]
@@ -2736,48 +2736,48 @@
 (defn capabilities
   [api-fn args]
   (let [probe-writes? (true? (aget args "probe_writes"))]
-     (p/let [info-result (api-fn "logseq.DB.getAppInfo" [])
-       graph-result (api-fn "logseq.DB.checkCurrentIsDbGraph" [])
-          info (js->clj info-result :keywordize-keys true)]
-    (cond
-      (not (true? (:supportDb info)))
-      (p/rejected (js/Error. "Connected Logseq instance does not report DB support"))
+    (p/let [info-result (api-fn "logseq.DB.getAppInfo" [])
+            graph-result (api-fn "logseq.DB.checkCurrentIsDbGraph" [])
+            info (js->clj info-result :keywordize-keys true)]
+      (cond
+        (not (true? (:supportDb info)))
+        (p/rejected (js/Error. "Connected Logseq instance does not report DB support"))
 
-      (not (true? graph-result))
-      (p/rejected (js/Error. "The current Logseq graph is not a DB graph"))
+        (not (true? graph-result))
+        (p/rejected (js/Error. "The current Logseq graph is not a DB graph"))
 
-      :else
-    (p/let [probe-methods (->> capability-tool-routes vals (apply concat) distinct sort)
-      findings (p/all (map #(probe-capability-method api-fn % probe-writes?) probe-methods))
-            findings-by-method (into {} (map (juxt :method identity) findings))
-                 tools (into (sorted-map)
-                   (map (fn [[tool _routes]]
-                     (capability-tool-status tool findings-by-method)))
-                   (sort-by key capability-tool-routes))
-            unavailable (->> tools (keep (fn [[tool status]]
-                                           (when (= "unavailable" (:state status)) (name tool)))) sort vec)
-            unknown (->> tools (keep (fn [[tool status]]
-                                      (when (= "unknown" (:state status)) (name tool)))) sort vec)
-            version (:version info)
-            body {:graph {:version version
-                          :verified_against "2.0.1"
-                          :version_matches (= version "2.0.1")
-                          :checked_at (/ (.now js/Date) 1000)}
-                  :tools tools
-                  :what_available_means (str "The route exists and responds. Probes send deliberately invalid arguments, so `available` establishes reachability, not that the route accepts a real payload."
-                                             (when-not probe-writes?
-                                               " Mutation routes are skipped by default and reported as unknown/not-probed."))}
-            body (cond-> body
-                   (seq unavailable) (assoc :unavailable unavailable)
-                   (seq unknown) (assoc :unknown unknown
-                                        :note "`unknown` means the probe was inconclusive, not that the tool is unavailable. Try it and check the result.")
-                   (not= version "2.0.1")
-                   (assoc-in [:graph :caveat]
-                             "This graph is not the version these tools were verified against; behaviour may differ.")
-                   (true? (aget args "include_diagnostics"))
-                   (assoc :diagnostics {:routes (into (sorted-map)
-                                                      (map (fn [[tool routes]]
-                                                             [(name tool) routes]))
-                                                      capability-tool-routes)
-                                        :method_findings (vec (sort-by :method findings))}))]
-      body)))))
+        :else
+        (p/let [probe-methods (->> capability-tool-routes vals (apply concat) distinct sort)
+                findings (p/all (map #(probe-capability-method api-fn % probe-writes?) probe-methods))
+                findings-by-method (into {} (map (juxt :method identity) findings))
+                tools (into (sorted-map)
+                            (map (fn [[tool _routes]]
+                                   (capability-tool-status tool findings-by-method)))
+                            (sort-by key capability-tool-routes))
+                unavailable (->> tools (keep (fn [[tool status]]
+                                               (when (= "unavailable" (:state status)) (name tool)))) sort vec)
+                unknown (->> tools (keep (fn [[tool status]]
+                                           (when (= "unknown" (:state status)) (name tool)))) sort vec)
+                version (:version info)
+                body {:graph {:version version
+                              :verified_against "2.0.1"
+                              :version_matches (= version "2.0.1")
+                              :checked_at (/ (.now js/Date) 1000)}
+                      :tools tools
+                      :what_available_means (str "The route exists and responds. Probes send deliberately invalid arguments, so `available` establishes reachability, not that the route accepts a real payload."
+                                                 (when-not probe-writes?
+                                                   " Mutation routes are skipped by default and reported as unknown/not-probed."))}
+                body (cond-> body
+                       (seq unavailable) (assoc :unavailable unavailable)
+                       (seq unknown) (assoc :unknown unknown
+                                            :note "`unknown` means the probe was inconclusive, not that the tool is unavailable. Try it and check the result.")
+                       (not= version "2.0.1")
+                       (assoc-in [:graph :caveat]
+                                 "This graph is not the version these tools were verified against; behaviour may differ.")
+                       (true? (aget args "include_diagnostics"))
+                       (assoc :diagnostics {:routes (into (sorted-map)
+                                                          (map (fn [[tool routes]]
+                                                                 [(name tool) routes]))
+                                                          capability-tool-routes)
+                                            :method_findings (vec (sort-by :method findings))}))]
+          body)))))
