@@ -250,8 +250,7 @@ let query_content inst (s : V.vstate) : t =
       [ Views_table.foldable inst ~key:"qr"
           ~title:(Views_head.render_head inst)
           ~body:(body_el inst) ]
-  | `Loading ->
-    text ~value:(I.t "ui/loading") ~padding:8 ~foreground:"muted-foreground" []
+  | `Loading -> spacer ~key:"query-loading" []
 
 let query_view_el inst : t =
   Logseq_el.fragment

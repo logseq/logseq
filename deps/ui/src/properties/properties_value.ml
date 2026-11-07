@@ -117,6 +117,7 @@ let save_text_value ctx row new_title =
         D.delete_property_value ~block_uuid:ctx.block_uuid ~ident
           ~value:(W.Uuid uuid)
         |> ignore
+    | None when D.row_many row -> ()
     | None ->
         D.remove_block_property ~block_uuid:ctx.block_uuid ~ident
         |> ignore;

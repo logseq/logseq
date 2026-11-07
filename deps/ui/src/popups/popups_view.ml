@@ -400,6 +400,14 @@ let ac_popover (st : S.t) : t =
      throw "cannot observe a disposed signal" on the next mount *)
  fun context parent ->
   let vs = (Signal.value (st.S.vs)) in
+  let viewport_height = Signal.state context.Lui_ui.ui_scheduler
+    (Ui_services.dom_viewport_height ()) in
+  let stop_resize = (Ui_services.get ()).dom.subscribe_window_event "resize" (fun _ ->
+    Runtime.signal_set viewport_height (Ui_services.dom_viewport_height ());
+    match (S.get st).S.ac with
+    | Some a -> S.measure_ac ~retries:0 st a.S.kind
+    | None -> ()) in
+  Signal.on_dispose context.Lui_ui.ui_scope stop_resize;
   (* cljs PopoverContent: ui__popover-content + card + transition
      classes. #ui__ac (imperative queries) sits on the positioner via
      ~accessibility_identifier; the .ui__popover-content content node is
@@ -419,18 +427,13 @@ let ac_popover (st : S.t) : t =
                       | None -> a.S.y +. popup_anchor_dy) )
                | None -> (0., 0.))
              vs))
-     ~available_height_signal:
-       (Logseq_el.own context
-          (Signal.map
-             (fun (v : S.view) ->
-               match v.S.ac with
-               | Some a -> (
-                   match a.S.flip with
-                   | Some (_, avail') -> avail'
-                   | None ->
-                       Ui_services.dom_viewport_height () -. a.S.y -. 5.)
-               | None -> 0.)
-             vs))
+     ~available_height:(reactive
+       (fun (v : S.view) height ->
+         match v.S.ac with
+         | Some {S.flip=Some (_, available); _} -> available
+         | Some a -> height -. a.S.y -. 5.
+         | None -> 0.)
+       vs (Signal.value viewport_height))
      ~on_dismiss:(fun _ -> S.close_ac st)
      [ Ui_parts.class_signal vs
          (fun (v : S.view) ->
@@ -438,15 +441,18 @@ let ac_popover (st : S.t) : t =
            ^ (match v.S.ac with
               | Some a -> S.ac_class_of_kind a.S.kind
               | None -> ""))
-         (box ~key:"ac-c"
+         (Ui_parts.int_prop P.WidthValue
             (* cljs page-search/commands cards are fixed-width
                (width:288px / width:512px + vw clamp) — the style
                data_attr reaches web only, so carry the same width as
                a typed prop for hosts that lay the box out themselves *)
-            ~width:
-              (match (Signal.get vs).S.ac with
-               | Some a -> (match a.S.kind with S.Slash -> 288 | _ -> 512)
-               | None -> 512)
+            ~value:(reactive
+              (fun (v : S.view) ->
+                match v.S.ac with
+                | Some { S.kind = S.Slash; _ } -> 288
+                | _ -> 512)
+              vs)
+          (box ~key:"ac-c"
             ~data_attrs_signal:
               (Logseq_el.own context
                  (Signal.map
@@ -509,14 +515,15 @@ let ac_popover (st : S.t) : t =
                        [ Ui_components.shortcut_combo ~key:"sc" ~glow:true
                            [ Ui_components.keycap ~key:"k0" ~boxed:false
                                ~glow:true ~min_slot:20
-                               ~value:{js|⌘|js}
+                               ~value:(Settings_controls.print_key
+                                 (if Ui_services.env_is_mac () then "mod" else "ctrl"))
                            ; Ui_components.keycap_separator ~key:"sep1"
                            ; Ui_components.keycap ~key:"k1" ~boxed:false
                                ~glow:true ~min_slot:20
                                ~value:{js|⏎|js} ] ]
                    ; text ~key:"ht"
                        ~value:(U.t "editor/display-tag-inline-hint") [] ]))
-            ])
+            ]))
      ])
     context parent
 ;;

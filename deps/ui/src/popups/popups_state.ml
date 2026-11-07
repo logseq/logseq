@@ -1121,28 +1121,8 @@ let load_templates t =
 
 (* ---- open / update ---- *)
 
-let open_ac ?tpos ?(autopair = true) t kind =
-  invalidate_ac t;
-  let graph = repo () in
-  if !(t.cache_repo) <> Some graph then (
-    t.cache_repo := Some graph;
-    t.titles := [];
-    t.page_exact_titles := [];
-    t.tag_titles := [];
-    t.tag_exact_titles := [];
-    t.templates := []);
+let measure_ac ?(retries = 120) t kind =
   let session = !(t.session) in
-  let auuid = Option.value (Editor_state.editing_uuid ()) ~default:"" in
-  let pos = Editor_sink.popup_pos auuid in
-  let x, y, cy = Option.value pos ~default:(0., 0., 0.) in
-  let tlen = trigger_len_of_kind kind in
-  let tpos = Option.value tpos ~default:(fst (Editor_actions.sel_span auuid) - tlen) in
-  let ac =
-    { kind; x; y; cy; pos_pending = Option.is_none pos
-    ; flip = None; flipx = None; query = ""
-    ; tpos; tlen
-    ; items = []; chosen = 0; auuid }
-  in
   (* base-ui avoidCollisions: the popup mounts below the caret, then
      flips above when it overflows the viewport and there is more room
      above — measure once mounted and record (top, avail). Items can
@@ -1220,7 +1200,30 @@ let open_ac ?tpos ?(autopair = true) t kind =
     if tries > 0 then
       ignore (Ui_services.timers_timeout (fun () -> measure (tries - 1)) 16)
   in
-  measure 120;
+  measure retries
+;;
+
+let open_ac ?tpos ?(autopair = true) t kind =
+  invalidate_ac t;
+  let graph = repo () in
+  if !(t.cache_repo) <> Some graph then (
+    t.cache_repo := Some graph;
+    t.titles := [];
+    t.page_exact_titles := [];
+    t.tag_titles := [];
+    t.tag_exact_titles := [];
+    t.templates := []);
+  let auuid = Option.value (Editor_state.editing_uuid ()) ~default:"" in
+  let pos = Editor_sink.popup_pos auuid in
+  let x, y, cy = Option.value pos ~default:(0., 0., 0.) in
+  let tlen = trigger_len_of_kind kind in
+  let tpos = Option.value tpos ~default:(fst (Editor_actions.sel_span auuid) - tlen) in
+  let ac =
+    { kind; x; y; cy; pos_pending = Option.is_none pos
+    ; flip = None; flipx = None; query = ""
+    ; tpos; tlen
+    ; items = []; chosen = 0; auuid }
+  in
   (* cljs autopair: typing [[ inputs ]] immediately with the caret kept
      inside the brackets; insert_text consumes the ghost pair on choice *)
   (match kind with
@@ -1243,7 +1246,8 @@ let open_ac ?tpos ?(autopair = true) t kind =
    | Template_search -> load_templates t   | Block_ref -> ()
    | Slash -> ());
   set_cm t None;
-  set_ac t (Some (refresh_items t ac))
+  set_ac t (Some (refresh_items t ac));
+  measure_ac t kind
 ;;
 
 let ac_update t ac q =
@@ -1716,7 +1720,9 @@ let apply_item t ac ~meta it =
       set_ac t
         (Some
            (refresh_items t
-              { ac with kind; query = ""; tlen = 0; items = []; chosen = 0 }))
+              { ac with kind; flip = None; flipx = None; query = ""; tlen = 0
+              ; items = []; chosen = 0 }));
+      measure_ac t kind
   | Embed title ->
       erase_trigger_text ac;
       close_ac t;
@@ -1864,8 +1870,12 @@ let ac_keydown t ev =
            on-shift-chosen. Tab is NOT an ac binding on master
            (:editor/indent) — it falls through to the editor keymap *)
         | Some "Enter" -> (
+            let inline =
+              if Ui_services.env_is_mac () then ev.Ui_services.meta
+              else ev.Ui_services.ctrl
+            in
             (match List.nth_opt ac.items ac.chosen with
-             | Some it -> apply_item t ac ~meta:ev.Ui_services.meta it
+             | Some it -> apply_item t ac ~meta:inline it
              | None -> ac_on_enter t ac);
             true)
         | Some "Escape" ->

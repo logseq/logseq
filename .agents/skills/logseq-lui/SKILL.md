@@ -115,10 +115,10 @@ per change:
    `pnpm gulp:build` (wipes `static/` — must run first), `npm run css:build`,
    `pnpm --dir deps/db-worker build`, then the initial
    `pnpm ui:build` (or `dune build js_app` inside deps/ui). All
-   OCaml-flavored builds run under `opam exec --switch=5.5.0 --`
-   (the 5.5.0 switch carries the melange pins).
+   OCaml-flavored builds run under `opam exec --switch=5.5.1 --`
+   (the 5.5.1 switch carries every OCaml dep, web + native).
 2. Watch the UI bundle:
-   `cd deps/ui && opam exec --switch=5.5.0 -- dune build js_app --watch`
+   `cd deps/ui && opam exec --switch=5.5.1 -- dune build js_app --watch`
    — re-emits the bundle on every .ml save.
 3. Serve the built app:
    `node scripts/serve-static.mjs` from the REPO ROOT (port 3010), open

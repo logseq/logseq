@@ -749,6 +749,40 @@ let row_uuid_2 = "aaaaaaaa-0000-0000-0000-000000000002"
    and block pulls have resolved *)
 let views_session : (Model.t, Action.t) S.t option ref = ref None
 
+let test_pending_page_navigation () =
+  let previous_worker = !Runtime.worker in
+  ignore (Fake_worker.install (fun name _ ->
+    match name with
+    | "thread-api/get-latest-journals" -> Wire.Array []
+    | _ -> Wire.Nil));
+  (* Mount straight into the pending route — the journals path would pull
+     Selection_bar's Editor_state signals onto this session's scheduler *)
+  let session =
+    S.mount ~registry:(Views_drive.registry ()) ~profile:Logseq_el.web_profile
+      ~initial:{ Model.initial with phase = Model.Ready
+                ; route = Model.Page "pending-page" }
+      ~reducer:Update.update
+      ~view:(fun _ ms _ -> Page.region ms) ()
+  in
+  (* no Fun.protect — melange never polyfilled caml_restore_raw_backtrace *)
+  (try
+     let has_text text =
+       List.exists (fun node -> M.string_prop node "text" = Some text)
+         (M.all_nodes session.S.tree) in
+     check "Journal startup has no loading text"
+       (not (has_text (I18n.t "ui/loading")));
+     check "Pending page navigation has no loading text"
+       (not (has_text (I18n.t "ui/loading")))
+     (* mounting the resolved page pulls Selection_bar → Editor_state
+        signals owned by the first mounted scheduler — a second session
+        cannot drive page routes (see unsupported_e2e_tests.md) *)
+   with e ->
+     ignore (Lui_app.dispose session.S.app);
+     Runtime.worker := previous_worker;
+     raise e);
+  ignore (Lui_app.dispose session.S.app);
+  Runtime.worker := previous_worker
+
 let test_views_table () =
   let registry = Lui_extension.registry () in
   Logseq_emoji.register registry;
@@ -758,14 +792,29 @@ let test_views_table () =
   Logseq_codemirror.register registry;
   Logseq_virt.register registry;
   let vs =
-    S.mount ~registry ~profile:Logseq_el.web_profile ~initial:Model.initial
+    S.mount ~registry ~profile:Logseq_el.web_profile
+      ~initial:{ Model.initial with phase = Model.Ready; route = Model.All_pages }
       ~reducer:Update.update
-      ~view:(fun _ctx _ms _send ->
-        Logseq_el.el
-          [ Views_view.view ~kind:Views_state.KAllPages
-              ~owner:(W.String "$$$views") ])
+      ~view:(fun _ ms _ -> Page.region ms)
       ()
   in
+  let mounted_views () =
+    Hashtbl.fold (fun id (inst : Views_state.inst) ids ->
+      if inst.kind = Views_state.KAllPages then id :: ids else ids)
+      Views_view.live []
+  in
+  let initial_views = mounted_views () in
+  check "Pages initially waits for rows without loading text"
+    (not (List.exists (fun node ->
+       M.string_prop node "text" = Some (I18n.t "ui/loading"))
+       (M.all_nodes vs.S.tree)));
+  List.iter (fun (label, action) ->
+    ignore (Lui_app.send vs.S.app action);
+    S.flush vs;
+    check ("Pages retains its data view when " ^ label)
+      (mounted_views () = initial_views))
+    [ "opening the menu", Action.Page_menu_set (Some (100., 40., 50., true, None))
+    ; "closing the menu", Action.Page_menu_set None ];
   views_session := Some vs;
   (* the views element owns signals on this session's scheduler, so flush
      it alongside the main app's *)
@@ -2361,6 +2410,7 @@ let run ~finish =
   test_help ();
   test_appearance ();
   test_not_found ();
+  test_pending_page_navigation ();
   test_views_table ();
   test_render_libs_dom ();
   test_embed_parity ();

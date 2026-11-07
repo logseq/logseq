@@ -4614,7 +4614,10 @@ let () =
   test_props_value2 ();
   test_scan_gate ();
   (* Drive view tests run their worker-fed assertions on a promise tick;
-     the summary + exit must wait for that stage *)
+     the summary + exit must wait for that stage. The parity suite runs
+     first: it mounts its own app session and cleans up on its own drain
+     stage, so it does not depend on the shared drive mount. *)
+  Parity_drive_test.run ~finish:(fun () ->
   Test_drive.run ~finish:(fun () ->
       Handbook_scenarios.run ~check;
       Test_drive_sidebar.run ();
@@ -4624,4 +4627,4 @@ let () =
           (* after the drive mount + deferred assertions — Editor_state's
              cell and Platform_web services exist by then; the summary
              runs at the end of the scenario's own drain stage *)
-          test_editor_cmds ()))))
+          test_editor_cmds ())))))

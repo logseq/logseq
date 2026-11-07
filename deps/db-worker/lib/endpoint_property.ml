@@ -446,7 +446,7 @@ let property_node_selector_data db (option : Wire.t) : Wire.t =
           ~except_extends_hidden_tags:false
       in
       let extends_class_options =
-        get_all_classes_maps db ~except_root_class:false
+        get_all_classes_maps db ~except_root_class:true
           ~except_private_tags:true ~except_extends_hidden_tags:true
       in
       let classes = property.pv_classes in

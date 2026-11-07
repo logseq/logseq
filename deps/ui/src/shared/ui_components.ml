@@ -790,8 +790,8 @@ let form_label ~key ?(density : form_density = `regular) ?line_height ?text_sign
     ; Prop.opacity 0.7
     ]
     (match text_signal with
-     | Some s -> label ~key ~value_signal:s []
-     | None -> label ~key ~value:text [])
+     | Some s -> label ~key ~grow:1. ~min_width:0 ~value_signal:s []
+     | None -> label ~key ~grow:1. ~min_width:0 ~value:text [])
 
 (* `.it-desc`/`.ls-it-desc` — 12px muted line under a label or next to a
    control. *)

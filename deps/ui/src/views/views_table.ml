@@ -1965,19 +1965,12 @@ let error_el ~title ~content : t =
     ; text ~value:content [] ]
 
 let result_el inst (s : V.vstate) : t =
-  let refs =
-    match inst.V.kind with
-    | V.KLinkedRefs | V.KUnlinkedRefs -> true
-    | _ -> false
-  in
   (* A refetch keeps existing rows on screen. References never show the
      placeholder: their head and count already identify the pending section. *)
   let has_data = s.V.data <> Wr.VEmpty in
   if s.V.view_error <> None then
     error_el ~title:(I.t "view/error") ~content:(Option.get s.V.view_error)
-  else if s.V.loading && refs && not has_data then box ~key:"ls-view-pending" []
-  else if s.V.loading && not has_data then
-    text ~value:(I.t "ui/loading") ~padding:8 ~foreground:"muted-foreground" []
+  else if s.V.loading && not has_data then box ~key:"ls-view-pending" []
   else
     (* master renders no empty-state copy under an empty table *)
     match s.V.display_type with

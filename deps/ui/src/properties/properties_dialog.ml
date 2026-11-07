@@ -484,10 +484,12 @@ let date_value_view d prop : t =
  fun context parent ->
   let alive=ref true in
   Signal.on_dispose context.Lui_ui.ui_scope (fun () -> alive:=false);
-  let loaded=Signal.state context.Lui_ui.ui_scheduler None in
+  let many = is_many prop in
+  let loaded=Signal.state context.Lui_ui.ui_scheduler
+    (if many then Some W.Nil else None) in
   let ident=ident_of prop and is_datetime=type_of prop="datetime" in
   let owners=match d.d_target.uuids with [] -> [d.d_target.uuid] | owners -> owners in
-  ignore (let* block=D.entity_by_uuid d.d_target.uuid in
+  if not many then ignore (let* block=D.entity_by_uuid d.d_target.uuid in
     let value=Option.value (D.getf (D.untag block) ident) ~default:W.Nil in
     let* value=match is_datetime,D.untag value,D.entity_id_of value with
       | false,W.Int id,_ | false,_,Some id ->

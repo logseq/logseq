@@ -783,6 +783,15 @@ let platform_event payload =
       else Host.enqueue (fun () -> Platform.emit_event name json)
   | None -> ()
 
+let document_event name payload =
+  with_entry_lock (fun () ->
+    Platform.emit_event name (Js.Json.parseExn payload);
+    let prevented = !Platform.default_prevented in
+    (match !current_app with
+     | Some app -> app_flush_checked app
+     | None -> invalid_arg "Document event before application initialization");
+    prevented, take_patches_dbg "document")
+
 let keyboard_event node payload values =
   with_entry_lock (fun () ->
     (* Document and conduit dispatch form one input transaction. Async
@@ -878,17 +887,12 @@ module Ffi = struct
   let resync target = encode_batches (resync target)
   let platform_event = platform_event
   let document_event payload =
-    with_entry_lock (fun () ->
-      let separator = String.index payload '\n' in
-      let name = String.sub payload 0 separator in
-      let json = String.sub payload (separator + 1)
-          (String.length payload - separator - 1) in
-      Platform.emit_event name (Js.Json.parseExn json);
-      let prevented = !Platform.default_prevented in
-      (match !current_app with
-       | Some app -> app_flush_checked app
-       | None -> invalid_arg "Document event before application initialization");
-      prevented, encode_batches (take_patches_dbg "document"))
+    let separator = String.index payload '\n' in
+    let name = String.sub payload 0 separator in
+    let json = String.sub payload (separator + 1)
+        (String.length payload - separator - 1) in
+    let prevented, batches = document_event name json in
+    prevented, encode_batches batches
   let root_node = root_node
   let editor_snapshot block_id =
     with_entry_lock (fun () ->

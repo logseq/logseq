@@ -1345,6 +1345,52 @@ let run_views ~registry ~profile ~finish =
             next rest;Js.Promise.resolve ()) (Js.Promise.resolve ()))
     in next [false,false,false;true,false,false;false,true,false;true,true,false;true,false,true]
   in
+  let property_text_many_check done_ =
+    let previous_worker = !Runtime.worker and previous_model = !Runtime.read_model in
+    let operations = ref [] in
+    Runtime.read_model := (fun () -> {Model.initial with repo=Some "property-text-fixture"});
+    ignore (Fake_worker.install (fun name args ->
+      if name = "thread-api/apply-outliner-ops" then
+        operations := List.nth args 1 :: !operations;
+      Wire.Map [Wire.kw "result", Wire.Nil]));
+    let value uuid title =
+      Wire.Map [Wire.kw "block/uuid", Wire.Uuid uuid; Wire.kw "block/title", Wire.String title]
+    in
+    let row = Wire.Map [
+      Wire.kw "property-id", Wire.kw "fixture/text";
+      Wire.kw "property", Wire.Map [Wire.kw "db/cardinality", Wire.kw "db.cardinality/many"];
+      Wire.kw "value", Wire.Set [
+        value "11111111-1111-4111-8111-111111111111" "alpha";
+        value "22222222-2222-4222-8222-222222222222" "beta"]
+    ] in
+    let ctx : Properties_value.ctx =
+      {owner_key="property-text-fixture";block_uuid="33333333-3333-4333-8333-333333333333";
+       block_id=Some 79;refresh=(fun () -> ());is_page=false;class_schema=false} in
+    let editor = mount (fun _ -> Properties_value.view ~hover:None ctx row) in
+    let open_editor () =
+      let button = List.find (fun n -> n.M.kind = "button") (nodes editor) in
+      S.press editor button.M.id;
+      List.find (fun n -> n.M.kind = "text-field") (nodes editor)
+    in
+    let input = open_editor () in
+    S.submit editor input.M.id;
+    ignore (Js.Global.setTimeout ~f:(fun () ->
+      check "Leaving a blank multi-value Text editor preserves existing values" (!operations = []);
+      operations := [];
+      let input = open_editor () in
+      S.text_changed editor input.M.id "gamma";
+      S.submit editor input.M.id;
+      ignore (Js.Global.setTimeout ~f:(fun () ->
+        check "Submitting Text in a populated multi-value editor appends one value"
+          (match !operations with
+           | [Wire.Array [Wire.Array [Wire.Keyword "create-property-text-block";
+               Wire.Array [_; Wire.Keyword "fixture/text"; Wire.String "gamma"; _]]]] -> true
+           | _ -> false);
+        ignore (Lui_app.dispose editor.S.app);
+        Runtime.worker := previous_worker;
+        Runtime.read_model := previous_model;
+        done_ ()) 0)) 0)
+  in
   let property_date_check done_ =
     let previous_worker = !Runtime.worker and previous_model = !Runtime.read_model in
     Runtime.read_model := (fun () -> {Model.initial with repo=Some "property-date-fixture"});
@@ -1354,8 +1400,45 @@ let run_views ~registry ~profile ~finish =
     let ctx : Properties_value.ctx =
       {owner_key="property-date-fixture";block_uuid="date-owner";block_id=Some 79;
        refresh=(fun () -> ());is_page=false;class_schema=false} in
+    let many_date_check () =
+      let ident = "fixture/date" in
+      let selected = ref None in
+      ignore (Fake_worker.install (fun name args ->
+        match name with
+        | "thread-api/entity" ->
+            Wire.Map [Wire.kw ident, Wire.Set [Wire.Int 80; Wire.Int 81]]
+        | "thread-api/get-journal-page-by-day" -> page
+        | "thread-api/apply-outliner-ops" ->
+            selected := List.nth_opt args 1;
+            Wire.Map [Wire.kw "result", Wire.Nil]
+        | _ -> Wire.Nil));
+      let prop = Wire.Map [Wire.kw "db/ident", Wire.kw ident;
+        Wire.kw "logseq.property/type", Wire.kw "date";
+        Wire.kw "db/cardinality", Wire.kw "db.cardinality/many"] in
+      let d : Properties_dialog.dlg_state =
+        {d_target={uuid="date-owner";uuids=[];db_id=Some 79;is_tag=false;title=""};
+         d_remove=false;d_placement=Properties_dialog.Centered;
+         d_phase=Properties_dialog.Value_edit prop;d_phase_sig=None} in
+      let picker = mount (fun _ -> Properties_dialog.date_value_view d prop) in
+      ignore (Js.Global.setTimeout ~f:(fun () ->
+        let find id = List.find_opt (fun n ->
+          M.string_prop n "accessibility-identifier" = Some id) (nodes picker) in
+        check "A populated multi-value Date opens the calendar without a clear-all action"
+          (Option.is_some (find "date-time-picker") && Option.is_none (find "calendar-clear"));
+        Option.iter (fun n ->
+          S.text_changed picker n.M.id "2026-11-10";
+          S.submit picker n.M.id) (find "calendar-date-input");
+        ignore (Js.Global.setTimeout ~f:(fun () ->
+          check "The multi-value Date calendar writes the selected journal ID"
+            (match !selected with
+             | Some (Wire.Array [Wire.Array [Wire.Keyword "batch-set-property";
+                 Wire.Array [_; Wire.Keyword "fixture/date"; Wire.Int 78; _]]]) -> true
+             | _ -> false);
+          ignore (Lui_app.dispose picker.S.app);
+          Runtime.worker:=previous_worker;Runtime.read_model:=previous_model;done_ ()) 0)) 0)
+    in
     let rec next = function
-      | [] -> Runtime.worker:=previous_worker;Runtime.read_model:=previous_model;done_ ()
+      | [] -> many_date_check ()
       | (calendar,existing)::rest ->
           let journal = ref (if existing then Some page else None) and written = ref None in
           ignore (Fake_worker.install (fun name args ->
@@ -1410,7 +1493,7 @@ let run_views ~registry ~profile ~finish =
               ignore (Lui_app.dispose reopened.S.app);
               next rest) 0)) 0)
     in
-    next [false,false;false,true;true,false;true,true]
+    property_text_many_check (fun () -> next [false,false;false,true;true,false;true,true])
   in
   let custom_date_check done_ =
     let measured_options=Hashtbl.create 3 in

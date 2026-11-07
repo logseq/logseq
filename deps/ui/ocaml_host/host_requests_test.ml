@@ -4387,10 +4387,13 @@ let () =
             List.filter (fun id -> has_class id "shortcut-row") keymap_nodes
           in
           let command_label = keymap_find "ls-kbd-label" in
+          (* embedded keymap pane: the settings-article scroll owns the
+             viewport — its bound keeps the shortcut list inside the dialog *)
           let list_scroller =
             List.find
-              (fun id -> Lui_store.kind store id = "scroll")
-              (Lui_store.preorder ~root:(keymap_find "cp__shortcut-page-x") store)
+              (fun id ->
+                Lui_store.kind store id = "scroll" && has_class id "settings-article")
+              (Lui_store.preorder ~root:inner store)
           in
           expect "Keymap search button must use fourteen-point text"
             (Lui_text.size (Text_engine.font_of store key_button) = 14.);

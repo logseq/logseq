@@ -941,7 +941,8 @@ and apply_input ?frame uuid ev =
            && Ui_services.env_is_mac () ->
         let navigation = match String.lowercase_ascii key.key with
           | "a" -> Some "Home" | "e" -> Some "End"
-          | "b" -> Some "ArrowLeft" | "f" -> Some "ArrowRight"
+          | "b" when not key.shift -> Some "ArrowLeft"
+          | "f" when not key.shift -> Some "ArrowRight"
           | "p" -> Some "ArrowUp" | "n" -> Some "ArrowDown"
           | _ -> None in
         (match navigation with

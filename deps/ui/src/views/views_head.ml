@@ -1195,8 +1195,7 @@ let ref_filter_dialog ~owner_scope inst anchor =
         reactive
           (fun q s loaded ->
             match loaded with
-            | Ui_effect.Loading ->
-                text ~value:(I.t "ui/loading") ~padding:8 []
+            | Ui_effect.Loading -> D.nothing
             | Ui_effect.Failed _ ->
                 text ~value:(I.t "view/error") ~padding:8 []
             | Ui_effect.Ready counts ->

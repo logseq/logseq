@@ -3612,6 +3612,14 @@ let test_get_property_node_selector_data_prepares_worker_owned_db_data_test () =
                     (fun m -> Wire.get "db/ident" m = Some (kw "logseq.class/Root"))
                     classes))
         | _ -> check "node-selector class-options excludes Root" false);
+       (match Wire.get "extends-class-options" (Wire.Map data) with
+        | Some (Wire.Array classes) ->
+            let has ident =
+              List.exists (fun m -> Wire.get "db/ident" m = Some (kw ident)) classes
+            in
+            check "Extends options keep Topic and exclude Root"
+              (has "user.class/Topic" && not (has "logseq.class/Root"))
+        | _ -> check "Extends options keep Topic and exclude Root" false);
        (match Wire.get "structured-children-by-class-id" (Wire.Map data) with
         | Some (Wire.Map kvs) ->
             check "node-selector structured-children contains topic id"

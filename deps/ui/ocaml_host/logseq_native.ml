@@ -1526,7 +1526,7 @@ let () =
         | None -> None)
     | _ -> None
   in
-  let on_dom_key ~down ~scancode ~keymod ~repeat =
+  let on_dom_key ?(before_default = false) ~down ~scancode ~keymod ~repeat () =
     let recording = Keyboard_capture.active () in
     let mods = mods_of_keymod keymod in
     let target =
@@ -1557,7 +1557,15 @@ let () =
           ; ",\"ctrl\":"; jbool (mods.Input.ctrl)
           ; ",\"repeat\":"; jbool repeat; "}" ] in
         apply_patches
-          (Native_embed.keyboard_event target (dom_payload target fields) values)
+          (Native_embed.keyboard_event target (dom_payload target fields) values);
+        if before_default then on_component_input ()
+      end
+      else if before_default then begin
+        let prevented, patches =
+          Native_embed.document_event "keydown" (dom_payload target fields)
+        in
+        apply_patches patches;
+        if prevented then on_component_input ()
       end
       else emit_dom (if down then "keydown" else "keyup") target fields;
       (* browsers dispatch copy/cut/paste as their own dom events on
@@ -1612,12 +1620,12 @@ let () =
       on_dom_key ~down:true
         ~scancode:(Sdl.Event.get e Sdl.Event.keyboard_scancode)
         ~keymod:(Sdl.Event.get e Sdl.Event.keyboard_keymod)
-        ~repeat:(Sdl.Event.get e Sdl.Event.keyboard_repeat <> 0)
+        ~repeat:(Sdl.Event.get e Sdl.Event.keyboard_repeat <> 0) ()
     | `Key_up ->
       on_dom_key ~down:false
         ~scancode:(Sdl.Event.get e Sdl.Event.keyboard_scancode)
         ~keymod:(Sdl.Event.get e Sdl.Event.keyboard_keymod)
-        ~repeat:false
+        ~repeat:false ()
     | _ -> ()
   in
   (* ---- macOS main menu commands -----------------------------------
@@ -1721,7 +1729,12 @@ let () =
         let input = Native_window.input_of_event input_state e in
         (if Sdl.Event.enum (Sdl.Event.get e Sdl.Event.typ)=`Window_event
             && Sdl.Event.get e Sdl.Event.window_event_id=Sdl.Event.window_event_focus_lost
-         then Host_requests.reset_editor_pointer editor_pointer);
+         then begin
+           Host_requests.reset_editor_pointer editor_pointer;
+           (* A button-up outside the window never reaches us — release
+              the text-input hold or wanted stays ignored forever. *)
+           Native_window.hold_pointer text_input false
+         end);
         (match input with
          | Some (Input.Key_down _) ->
            Host_metrics.note_key metrics
@@ -1735,6 +1748,20 @@ let () =
         (match input with
          | Some (Input.Key_down _ | Input.Text_input _) when not (Keyboard_capture.active ()) -> Host_requests.ensure_ed_focus ()
          | _ -> ());
+        (* Outliner Tab shortcuts can prevent focus traversal. Let overlays
+           keep their own focus order and dispatch other Tab keydowns once. *)
+        let tab_dispatched =
+          match input with
+          | Some (Input.Key_down (Input.Tab, mods, repeat))
+            when not (mods.Input.ctrl || mods.Input.meta || mods.Input.alt
+                      || Keyboard_capture.active ())
+                 && Ui.overlay_top ui = 0 ->
+              on_dom_key ~before_default:true ~down:true
+                ~scancode:(Sdl.Event.get e Sdl.Event.keyboard_scancode)
+                ~keymod:(Sdl.Event.get e Sdl.Event.keyboard_keymod) ~repeat ();
+              true
+          | _ -> false
+        in
         (match input with
          | Some (Input.Button_down _ | Input.Button_up _ | Input.Key_down _
                 | Input.Text_input _ | Input.Wheel _ | Input.Wheel_mods _) ->
@@ -1749,6 +1776,7 @@ let () =
            apply_actions
              (handle_input (Input.Resize (w, h)))
          | Some (Input.Resize _) -> ()
+         | Some _ when !component_input -> ()
          | Some input ->
            let page_dir =
              match input with
@@ -1796,7 +1824,7 @@ let () =
                      (Printf.sprintf {|{"text":%s}|} (jstr s)))
             | _ -> ())
          | None -> ());
-        if not !component_input then emit_dom_event e
+        if not !component_input && not tab_dispatched then emit_dom_event e
       end
       else go := false
     done;

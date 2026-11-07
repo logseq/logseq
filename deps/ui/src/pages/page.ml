@@ -1191,9 +1191,7 @@ let library_add_pages_button : t =
 
 let empty_state () : t =
   column ~key:"empty" ~style_class:"page"
-    [ column ~key:"empty-inner" ~cross:`center
-        [ text ~key:"empty-t" ~value:(I18n.t "ui/loading") [] ]
-    ]
+    [ column ~key:"empty-inner" ~cross:`center [] ]
 
 (* --- stable page region --------------------------------------------
 
@@ -1597,8 +1595,6 @@ let region (ms : Model.t Signal.signal) : t =
           shell
           && a.data_gen = b.data_gen
           && a.editing_title = b.editing_title
-          && a.page_menu = b.page_menu
-          && a.confirm = b.confirm
           && a.unlinked_open = b.unlinked_open
       in
       (* journals keep repaint-on-publish semantics only for the
