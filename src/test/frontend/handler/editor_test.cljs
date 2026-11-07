@@ -1,5 +1,6 @@
 (ns frontend.handler.editor-test
-  (:require [clojure.test :refer [async deftest is testing use-fixtures]]
+  (:require [clojure.string :as string]
+            [clojure.test :refer [async deftest is testing use-fixtures]]
             [datascript.core :as d]
             [dommy.core :as dom]
             [frontend.commands :as commands]
@@ -1139,9 +1140,15 @@
                      :block/title "Project Tag"}]
                    (map #(select-keys % [:db/id :db/ident :block/uuid :block/title]) title-matches))
                 "Existing class choices keep their identity so they are not recreated")
-            (is (= ["Alias Only"]
-                   (map :block/title alias-matches))
-                "Tag aliases stay available as tag completion choices"))
+            (is (= [{:db/id 1
+                     :db/ident :user.class/project-tag
+                     :block/uuid class-uuid
+                     :block/title "Project Tag"
+                     :alias {:db/id 2
+                             :block/uuid alias-uuid
+                             :block/title "Alias Only"}}]
+                   (map #(select-keys % [:db/id :db/ident :block/uuid :block/title :alias]) alias-matches))
+                "Matching a tag alias chooses the source tag, not the alias page"))
           (p/catch (fn [error]
                      (is false (str error))))
           (p/finally (fn []
@@ -1228,8 +1235,12 @@
       (-> (#'editor-component/search-pages "Alias Only" true #(reset! matched-pages %) (fn [_]))
           (p/then
            (fn []
-             (is (some #(= "Alias Only" (:block/title %)) @matched-pages)
+             (is (some #(or (= "Alias Only" (:block/title %))
+                            (= "Alias Only" (get-in % [:alias :block/title])))
+                       @matched-pages)
                  "The alias is still selectable from tag completion")
+             (is (some #(= "Project Tag" (:block/title %)) @matched-pages)
+                 "Choosing the alias completes to the source tag")
              (is (not-any? :convert-page-to-tag? @matched-pages)
                  "A class alias must not show a redundant Convert action")))
           (p/catch
@@ -1241,6 +1252,73 @@
                        (set! state/<invoke-db-worker original-<invoke-db-worker)
 	                       (reset! state/*db-worker previous-worker)
 	                       (done)))))))
+
+(deftest tag-search-skips-convert-when-titled-class-alias-matches
+  (async done
+    (let [matched-pages (atom nil)
+          alias {:db/id 2
+                 :block/uuid #uuid "22222222-2222-2222-2222-222222222222"
+                 :block/title "Alias Only"
+                 :block/tags [{:db/ident :logseq.class/Page}]}
+          class {:db/id 1
+                 :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+                 :block/title "Project Tag"
+                 :db/ident :user.class/project-tag
+                 :block/alias [alias]}
+          original-<get-block db-async/<get-block
+          original-<get-all-classes db-async/<get-all-classes]
+      (set! db-async/<get-block (fn [& _args] (p/resolved alias)))
+      (set! db-async/<get-all-classes (fn [& _args] (p/resolved [class])))
+      (-> (#'editor-component/search-pages "Alias Only" true #(reset! matched-pages %) (fn [_]))
+          (p/then
+           (fn []
+             (is (some #(or (= "Alias Only" (:block/title %))
+                            (= "Alias Only" (get-in % [:alias :block/title])))
+                       @matched-pages)
+                 "The alias stays selectable from tag completion")
+             (is (some #(= {:db/id 1 :block/title "Project Tag"}
+                           (select-keys % [:db/id :block/title]))
+                       @matched-pages)
+                 "The alias match keeps the source tag identity")
+             (is (not-any? :convert-page-to-tag? @matched-pages)
+                 "A titled class alias must not show Convert even without the derived flag")))
+          (p/catch
+           (fn [error]
+             (is false (str error))))
+          (p/finally
+           (fn []
+             (set! db-async/<get-block original-<get-block)
+             (set! db-async/<get-all-classes original-<get-all-classes)
+             (done)))))))
+
+(deftest get-matched-classes-ignores-untitled-aliases
+  (async done
+    (let [class-uuid #uuid "11111111-1111-1111-1111-111111111111"
+          alias-uuid #uuid "22222222-2222-2222-2222-222222222222"
+          untitled-alias {:db/id 2}
+          titled-class {:db/id 2
+                        :block/uuid alias-uuid
+                        :block/title "ET"
+                        :db/ident :user.class/ET}
+          source-class {:db/id 1
+                        :block/uuid class-uuid
+                        :block/title "Example Tag"
+                        :db/ident :user.class/ExampleTag
+                        :block/alias [untitled-alias]}
+          original-<get-all-classes db-async/<get-all-classes]
+      (set! db-async/<get-all-classes
+            (fn [_repo _opts]
+              (p/resolved [source-class titled-class])))
+      (-> (p/let [alias-matches (editor/get-matched-classes "ET")]
+            (is (some #(= {:db/id 2 :block/title "ET"}
+                          (select-keys % [:db/id :block/title]))
+                      alias-matches)
+                "Untitled nested aliases must not hide a titled class with the same id"))
+          (p/catch (fn [error]
+                     (is false (str error))))
+          (p/finally (fn []
+                       (set! db-async/<get-all-classes original-<get-all-classes)
+                       (done)))))))
 
 (deftest tag-search-does-not-prepend-new-tag-for-matched-page-class
   (async done
@@ -1281,6 +1359,22 @@
       "Pending tag search should not show a create-new result before existing classes load.")
   (is (seq (#'editor-component/matched-pages-with-new-page [] true "Missing tag" nil))
       "Resolved empty tag search can still offer a create-new result."))
+
+(deftest tag-search-does-not-offer-new-tag-for-class-alias
+  (let [alias-page {:db/id 2
+                    :block/uuid #uuid "22222222-2222-2222-2222-222222222222"
+                    :block/title "Alias Only"
+                    :block/tags [{:db/ident :logseq.class/Page}]}
+        class-match {:db/id 1
+                     :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+                     :block/title "Project Tag"
+                     :alias {:db/id 2
+                             :block/uuid #uuid "22222222-2222-2222-2222-222222222222"
+                             :block/title "Alias Only"}}
+        result (#'editor-component/matched-pages-with-new-page [class-match] true "Alias Only" alias-page)]
+    (is (= [class-match] result)
+        "A page that is only an alias of a tag must not offer New tag")
+    (is (not-any? #(string/starts-with? (str (:block/title %)) "New tag") result))))
 
 (defn- default-keyup-result
   [{:keys [value cursor-pos key code action is-processed?]
