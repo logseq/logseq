@@ -22,6 +22,15 @@ The extension is written to `logseq-native.mcpb` beside the workspace's `plan.md
 
 The extension accepts loopback URLs only. It does not expose Logseq or its API token to the public internet.
 
+## Tool contracts
+
+See the [native tool map](../../docs/mcp-native-tool-map.md) for current behavior
+and the [end-to-end test guide](../../docs/mcp-native-e2e-test.md) for validation.
+`findEntities` offers structured read-only page/block searches and exact counts
+without raw query text or per-query approval. It retains normal authentication;
+its limits bound output, not database execution time. Tool changes live in the
+Logseq API/MCP server, not this transport extension.
+
 ## Query approval
 
 The extension relays Logseq's `datascriptQuery` approval form to Claude and

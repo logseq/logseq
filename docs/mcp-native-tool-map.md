@@ -15,7 +15,7 @@ switching are separate statuses; getBlock evidence does not validate other rows.
 
 ## Current 2.0.2 regression contracts
 
-Revision `2026-11-07.1` requires fresh installed-app verification; historical
+Revision `2026-11-07.2` requires fresh installed-app verification; historical
 passes below do not verify these changes:
 
 - `capabilities` uses `logseq.DB.getMcpApiMethods` to read callable renderer API
@@ -28,6 +28,12 @@ passes below do not verify these changes:
 - `searchBlocks` preserves the native result envelope but filters its blocks to
   literal, case-sensitive title substrings. Snippets remain disabled. The native
   candidate limit and pagination are unchanged; this is not exhaustive search.
+- `findEntities` adds structured read-only searches through the existing API
+  query path, without raw query text or per-query approval. It supports
+  Page-class pages, ordinary blocks, inherited recycling, page scope, literal
+  text/structural filters, selected fields, cursor pagination and exact counts.
+  Limits cap output and filter complexity, not DB execution time or scan work.
+  See [examples and limits](#structured-entity-search).
 - A title held by a live or non-page entity makes `createPage` return a no-write structured conflict with
   `status`, `created: false`, `verified: false`, and `held_by`, not MCP `isError`.
   `importPage` propagates creation conflicts without inserting content.
@@ -88,6 +94,7 @@ passes below do not verify these changes:
 | `getBlockUUID` | page UUID | flat descendant list with order, parent/page references, and cross-page ancestry | dedicated `logseq.DB.getPageBlockUUIDs` API preserves the parent traversal and output fields | production route switched; acronym dispatch fixed (`UUIDs` now resolves to `uuids`); local tests and same-graph 9-descendant read passed |
 | `getBlock` | block UUID | exact entity query | single MCP adapter calls `logseq.DB.getBlock` using the existing Editor implementation and standard dispatch | production route switched; local tests pass; all eight same-graph cases pass, including collapsed and property-bearing blocks |
 | `searchBlocks` | `searchTerm` | literal, case-sensitive title filter over bounded native candidates | same exported `search` function through `logseq.DB.search`, snippets disabled; retain envelope/pagination | historical native marker search passed; new literal filtering requires remote retest |
+| `findEntities` | `kind`, `state?`, `page_uuid?`, `where?`, `select?`, `output?`, `limit?`, `cursor?` | structured literal/structural search, projected rows or exact count | `logseq.DB.findEntities`; fixed query forms and typed literal inputs through existing API `<q`, with no worker infrastructure changes | local API/SDK protocol coverage; installed-app verification pending |
 | `getBlockTree` | block UUID, depth/node caps | expanded tree with bounded depth/node count, page/missing distinction, cycle guard | dedicated `logseq.DB.getBlockTree` owns traversal and bounds while preserving the response envelope | production route switched; local tests pass; same-graph bounded marker read passed |
 | `findBacklinks` | target UUID | separate refs, tag-holder, and property-value groups; counts overlap | dedicated `logseq.DB.getBacklinks` owns the three relation queries and preserves the grouped response/diagnostic | API implemented; local tests pass; same-graph reads returned 0 for fixture page and `testtag`, consistent with inspected graph |
 | `findOrphans` | page UUID | parent ancestry with mismatching stored page; preserves orphan rows | reuses `logseq.DB.getPageBlockUUIDs`; MCP filters by owning page UUID and preserves diagnostic | production route switched; local tests pass; same-graph read and pageStats/getBlockUUID cross-checks found 0 true orphans |
@@ -96,6 +103,78 @@ passes below do not verify these changes:
 | `getTagUsers` | tag UUID | direct `:block/tags` holder query; returns UUID/title/name/page | dedicated `logseq.DB.getTagUsers` API; excludes inherited-only holders to preserve contract | production route switched; local tests pass; same-graph checks confirmed `testtag` has no holders and `MCP Smoke RefTag` has one |
 | `getPropertyIndent` | property title | exact-title property query; ambiguity candidates retained | dedicated `logseq.DB.getPropertiesByTitle` returns all matching property definitions; MCP preserves the existing ident/type/ambiguity envelope | API implemented; local tests pass; same-graph test property resolved to the expected exact ident and type |
 | `getProperyUsers` | exact property ident | literal values and resolved value entities | `logseq.DB.getPropertyUsers` owns holder lookup and entity resolution; public tool name and response stay unchanged | production route switched; local tests pass; same-graph existing property holder/value read passed |
+
+## Structured entity search
+
+`findEntities` never accepts raw Datalog, scripts, regex, custom functions or
+arbitrary attributes. Existing MCP authentication remains required;
+`datascriptQuery` still requires fresh explicit approval on every invocation.
+
+Find empty first outline blocks across live pages, excluding child-bearing
+blocks and linked embeds:
+
+```json
+{
+  "kind": "block",
+  "where": {
+    "all": [
+      {"field": "position", "op": "eq", "value": "first_outline_child"},
+      {"field": "title", "op": "empty"},
+      {"field": "has_children", "op": "eq", "value": false},
+      {"field": "has_link", "op": "eq", "value": false}
+    ]
+  },
+  "select": ["uuid", "page_uuid"]
+}
+```
+
+`first_outline_child` means the earliest ordered direct child of the owning
+page, with internal entity ID breaking equal-order ties. Property-value children,
+built-in view children and nested Page/Journal/Tag/Property entities do not compete
+for that position. `has_children` tests any direct child, not just visible outline
+children; `has_link` tests `:block/link` (linked blocks/embeds), not general refs.
+Empty means exactly `""`, not whitespace.
+
+For targeted content, use `kind: "block"`, `page_uuid`, and a title filter such
+as `{"field":"title","op":"contains","value":"\u2014"}`, selecting `uuid` and
+`title`. Text comparisons are literal and case-sensitive; query-looking text is
+still just a literal. Supported title operators are `equals`, `contains`,
+`starts_with`, and `empty`. Combine predicates using nonempty `all`/`any` arrays.
+
+For a live-plus-recycled page-title prefix inventory, use `kind: "page"`,
+`state: "all"`, a `starts_with` title filter, and `select: ["uuid","title","recycled"]`.
+For an exact page count use `{"kind":"page","state":"all","output":"count"}`.
+Pages mean Page-class entities, not every named entity or separate Tag/Property
+definitions. Blocks exclude Page/Journal/Tag/Property entities. Recycling is
+inherited through parent ancestry and the owning page.
+
+Defaults are `state: "live"`, `output: "rows"`, `limit: 50`, and
+`select: ["uuid","title","page_uuid"]`. Additional selectable fields are
+`page_title`, `parent_uuid`, and `recycled`; unrelated data is not pulled.
+An unknown/non-Page `page_uuid` is an error and scope is valid only for blocks.
+
+The response is `{output,matches,count,count_is_exact,truncated,next_cursor,limits}`:
+
+- Rows are ordered by internal entity ID. `count` is the returned row count,
+  not a graph-wide total; `count_is_exact` is false for row output.
+- `truncated: true` includes `next_cursor`. Supply it unchanged with the same
+  graph/search parameters to continue; changing only `limit` is allowed.
+  Graph changes invalidate cursors, and changes during a lookup fail explicitly.
+  After any repair/write, restart the search rather than continuing an old cursor.
+- `output: "count"` returns the exact total with no rows, no cursor,
+  `count_is_exact: true`, and `truncated: false`. It does not accept a cursor;
+  `limit` and `select` apply only to row output.
+- Row output is capped at 1000 rows and 65536 UTF-8 bytes of the serialized
+  response. An individually oversized selected row is an error: select fewer
+  fields. Filters have at most 32 nodes and depth 4 (root depth zero);
+  nonempty text literals have at most 1024 characters, with empty `equals`
+  also allowed.
+- The API selects bounded IDs before pulling rows. These are **output limits,
+  not a hard database execution-time or scan-work budget**. Exact counts and
+  broad/structural searches may still scan substantial graph data internally.
+- Orphan audits, deleted-target references and duplicate-title predicates are
+  not part of this vocabulary. Use existing dedicated tools or separately
+  approved `datascriptQuery` for unsupported questions.
 
 ## Lists
 

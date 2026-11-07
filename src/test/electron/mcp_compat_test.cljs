@@ -263,7 +263,7 @@
                        second-response (.callTool client #js {:name "datascriptQuery" :arguments args})
                        _ (reset! decision #js {:action "decline"})
                        refused (.callTool client #js {:name "datascriptQuery" :arguments args})]
-                 (is (= 55 (alength (aget inventory "tools"))))
+                 (is (= 56 (alength (aget inventory "tools"))))
                  (is (= 1 (count (filter #(= "datascriptQuery" (aget % "name")) (array-seq (aget inventory "tools"))))))
                  (is (not (aget first-response "isError")))
                  (is (not (aget second-response "isError")))
@@ -295,7 +295,7 @@
                          tool (first (filter #(= "getContentCapabilities" (aget % "name")) (array-seq (aget inventory "tools"))))
                          response (.callTool client #js {:name "getContentCapabilities" :arguments #js {}})
                          body (js->clj (js/JSON.parse (aget response "content" 0 "text")) :keywordize-keys true)]
-                   (is (= 55 (alength (aget inventory "tools"))))
+                   (is (= 56 (alength (aget inventory "tools"))))
                    (is (zero? (alength (js/Object.keys (aget tool "inputSchema" "properties")))))
                    (is (true? (aget tool "annotations" "readOnlyHint")))
                    (is (not (aget response "isError")))
@@ -585,6 +585,207 @@
                (p/catch (fn [error] (is false (str error))))
                (p/finally done)))))
 
+(defn- find-entities-fixture
+  []
+  (let [{:keys [conn] :as fixture} (page-fixture)]
+    (d/transact!
+     conn
+     [{:db/id 161 :block/title "" :block/order "a"}
+      {:db/id 162 :block/uuid (uuid "00000000-0000-4000-8000-000000000162")
+       :block/title "" :block/parent 160 :block/page 160 :block/order "0"
+       :logseq.property/created-from-property 157}
+      {:db/id 163 :block/uuid (uuid "00000000-0000-4000-8000-000000000163")
+       :block/title "" :block/parent 160 :block/page 160 :block/order "1"
+       :logseq.property.view/feature-type :linked-references}
+      {:db/id 164 :block/uuid (uuid "00000000-0000-4000-8000-000000000164")
+       :block/title "Nested" :block/name "nested" :block/tags [158]
+       :block/parent 160 :block/page 160 :block/order "2"}
+      {:db/id 165 :block/uuid (uuid "00000000-0000-4000-8000-000000000165")
+       :block/title "" :block/parent 160 :block/page 160 :block/order "b"}
+      {:db/id 166 :block/uuid (uuid "00000000-0000-4000-8000-000000000166")
+       :block/title "Child" :block/parent 165 :block/page 160 :block/order "a"}
+      {:db/id 167 :block/uuid (uuid "00000000-0000-4000-8000-000000000167")
+       :block/title "" :block/parent 160 :block/page 160 :block/order "c" :block/link 160}
+      {:db/id 168 :block/uuid (uuid "00000000-0000-4000-8000-000000000168")
+       :block/title "MCP Other" :block/name "mcp other" :block/tags [158]}
+      {:db/id 169 :block/uuid (uuid "00000000-0000-4000-8000-000000000169")
+       :block/title "left\u2014right" :block/parent 168 :block/page 168 :block/order "a"}
+      {:db/id 170 :block/uuid (uuid "00000000-0000-4000-8000-000000000170")
+       :block/title "MCP Gone" :block/name "mcp gone" :block/tags [158] :logseq.property/deleted-at 1}
+      {:db/id 171 :block/uuid (uuid "00000000-0000-4000-8000-000000000171")
+       :block/title "old\u2014text" :block/parent 170 :block/page 170 :block/order "a"}
+      {:db/id 172 :block/uuid (uuid "00000000-0000-4000-8000-000000000172")
+       :block/title "MCP Tag" :block/name "mcp tag" :block/tags [159]}])
+    fixture))
+
+(defn- <find-fixture-entities
+  ([db options] (<find-fixture-entities db options "fixture"))
+  ([db options repo]
+   (p/with-redefs [state/get-current-repo (constantly repo)
+                   db-async/<q (fn [_ query-options query & inputs]
+                                 (is (= {:transact-db? false} query-options))
+                                 (js/Promise.resolve (apply d/q query db inputs)))]
+     (-> (p/let [result (db-based-api/find-entities (clj->js options))]
+           (js->clj result :keywordize-keys true))
+         (p/catch #(hash-map :error %))))))
+
+(deftest find-entities-structure-text-and-counts
+  (let [{:keys [conn]} (find-entities-fixture)
+        before @conn
+        query #(<find-fixture-entities before %)]
+    (async done
+      (-> (p/let [empty-first (query {:kind "block" :where {:all [{:field "position" :op "eq" :value "first_outline_child"}
+                                                                 {:field "title" :op "empty"}
+                                                                 {:field "has_children" :op "eq" :value false}
+                                                                 {:field "has_link" :op "eq" :value false}]}
+                                      :select ["uuid" "page_uuid"]})
+                  text (query {:kind "block" :page_uuid "00000000-0000-4000-8000-000000000168"
+                               :where {:field "title" :op "contains" :value "\u2014"} :select ["uuid" "title"]})
+                  titles (query {:kind "page" :state "all" :where {:field "title" :op "starts_with" :value "MCP"}
+                                 :select ["uuid" "title" "recycled"]})
+                  live (query {:kind "page" :output "count"})
+                  recycled (query {:kind "page" :output "count" :state "recycled"})
+                  total (query {:kind "page" :output "count" :state "all"})
+                  old-blocks (query {:kind "block" :output "count" :state "recycled"})
+                  wrong-case (query {:kind "block" :where {:field "title" :op "contains" :value "LEFT"}})
+                  union (query {:kind "page" :where {:any [{:field "title" :op "equals" :value "MCP Other"}
+                                                          {:field "title" :op "equals" :value "Not here"}]}})
+                  empty-count (query {:kind "page" :output "count"
+                                      :where {:field "title" :op "equals" :value "Not here"}})
+                  links (query {:kind "block" :where {:field "has_link" :op "eq" :value true}})
+                  parents (query {:kind "block" :where {:field "has_children" :op "eq" :value true}})
+                  literal (query {:kind "block" :where {:field "title" :op "contains" :value "[:find ?e]"}})]
+            (is (= ["00000000-0000-4000-8000-000000000161"] (mapv :uuid (:matches empty-first))))
+            (is (= [{:uuid "00000000-0000-4000-8000-000000000169" :title "left\u2014right"}] (:matches text)))
+            (is (= ["MCP Other" "MCP Gone"] (mapv :title (:matches titles))))
+            (is (= [false true] (mapv :recycled (:matches titles))))
+            (is (= [3 1 4 1] (mapv :count [live recycled total old-blocks])))
+            (is (every? :count_is_exact [live recycled total old-blocks empty-count]))
+            (is (= 0 (:count empty-count)))
+            (is (empty? (:matches wrong-case)))
+            (is (= 1 (:count union)))
+            (is (= ["00000000-0000-4000-8000-000000000167"] (mapv :uuid (:matches links))))
+            (is (= ["00000000-0000-4000-8000-000000000165"] (mapv :uuid (:matches parents))))
+            (is (empty? (:matches literal)))
+            (is (= before @conn)))
+          (p/catch (fn [error] (is false (str error))))
+          (p/finally done)))))
+
+(deftest find-entities-pagination-and-stale-cursors
+  (let [{:keys [conn]} (find-entities-fixture)
+        options {:kind "page" :state "all" :limit 2}]
+    (async done
+      (-> (p/let [first-page (<find-fixture-entities @conn options)
+                  cursor (:next_cursor first-page)
+                  final-page (<find-fixture-entities @conn (assoc options :cursor cursor))
+                  wrong-graph (<find-fixture-entities @conn (assoc options :cursor cursor) "different")
+                  wrong-search (<find-fixture-entities @conn (assoc options :cursor cursor :state "live"))
+                  _ (d/transact! conn [{:db/id 160 :block/title "Changed"}])
+                  stale (<find-fixture-entities @conn (assoc options :cursor cursor))]
+            (is (= 2 (:count first-page)))
+            (is (true? (:truncated first-page)))
+            (is (false? (:count_is_exact first-page)))
+            (is (= 4 (+ (:count first-page) (:count final-page))))
+            (is (false? (:truncated final-page)))
+            (is (nil? (:next_cursor final-page)))
+            (is (= 4 (count (distinct (map :uuid (concat (:matches first-page) (:matches final-page)))))))
+            (is (every? #(instance? js/Error (:error %)) [wrong-graph wrong-search stale])))
+          (p/catch (fn [error] (is false (.-stack error))))
+          (p/finally done)))))
+
+(deftest find-entities-enforces-utf8-response-limit
+  (let [{:keys [conn]} (find-entities-fixture)
+        page-uuid "00000000-0000-4000-8000-000000000168"
+        options {:kind "block" :page_uuid page-uuid :select ["uuid" "title"]}
+        long-title (.repeat "x" 30000)]
+    (d/transact! conn [{:db/id 169 :block/title long-title}
+                       {:db/id 173 :block/uuid (uuid "00000000-0000-4000-8000-000000000173")
+                        :block/title long-title :block/parent 168 :block/page 168 :block/order "b"}
+                       {:db/id 174 :block/uuid (uuid "00000000-0000-4000-8000-000000000174")
+                        :block/title long-title :block/parent 168 :block/page 168 :block/order "c"}])
+    (async done
+      (-> (p/let [first-page (<find-fixture-entities @conn options)
+                  next-page (<find-fixture-entities @conn (assoc options :cursor (:next_cursor first-page)))
+                  _ (d/transact! conn [{:db/id 169 :block/title (.repeat "\u00e9" 40000)}])
+                  oversize (<find-fixture-entities @conn options)
+                  uuid-only (<find-fixture-entities @conn (assoc options :select ["uuid"]))]
+            (is (= 2 (:count first-page)))
+            (is (<= (js/Buffer.byteLength (js/JSON.stringify (clj->js first-page)) "utf8") 65536))
+            (is (= 1 (:count next-page)))
+            (is (false? (:truncated next-page)))
+            (is (instance? js/Error (:error oversize)))
+            (is (= 3 (:count uuid-only))))
+          (p/catch (fn [error] (is false (.-stack error))))
+          (p/finally done)))))
+
+(deftest find-entities-rejects-unframed-and-invalid-searches
+  (let [deep (nth (iterate #(hash-map :all [%]) {:field "title" :op "empty"}) 5)]
+    (doseq [options [{:kind "page" :query "[:find ?e :where [?e :block/uuid]]"}
+                     {:kind "block" :where {:field "title" :op "regex" :value ".*"}}
+                     {:kind "block" :where {:field "title" :op "contains" :value true}}
+                     {:kind "page" :where {:field "position" :op "eq" :value "first_outline_child"}}
+                     {:kind "block" :where {:all []}}
+                     {:kind "block" :where deep}
+                     {:kind "block" :where {:all (vec (repeat 33 {:field "title" :op "empty"}))}}
+                     {:kind "block" :page_uuid "not-a-uuid"}
+                     {:kind "page" :select ["uuid" "password"]}
+                     {:kind "page" :limit 1001}]]
+      (is (thrown? js/Error (db-based-api/find-entities (clj->js options)))))))
+
+(deftest find-entities-rejects-missing-page-and-concurrent-writes
+  (let [{:keys [conn]} (find-entities-fixture)
+        calls (atom 0)]
+    (async done
+      (-> (p/let [missing (<find-fixture-entities @conn
+                                                 {:kind "block" :page_uuid "00000000-0000-4000-8000-000000000999"})
+                  changed (p/with-redefs [state/get-current-repo (constantly "fixture")
+                                          db-async/<q (fn [_ _ query & inputs]
+                                                        (let [result (apply d/q query @conn inputs)]
+                                                          (when (= 2 (swap! calls inc))
+                                                            (d/transact! conn [{:db/id 160 :block/title "Concurrent"}]))
+                                                          (js/Promise.resolve result)))]
+                            (p/catch (db-based-api/find-entities #js {:kind "page" :output "count"})
+                                     #(hash-map :error %)))]
+            (is (instance? js/Error (:error missing)))
+            (is (instance? js/Error (:error changed)))
+            (is (string/includes? (.-message (:error changed)) "changed during")))
+          (p/catch (fn [error] (is false (.-stack error))))
+          (p/finally done)))))
+
+(deftest find-entities-native-api-and-mcp-protocol
+  (let [{:keys [conn]} (find-entities-fixture)
+        calls (atom [])
+        api (fn [method args]
+              (swap! calls conj [method args])
+              (when-not (= "logseq.DB.findEntities" method)
+                (throw (js/Error. "Structured lookup invoked an unexpected API")))
+              (p/with-redefs [state/get-current-repo (constantly "fixture")
+                              db-async/<q (fn [_ _ query & inputs]
+                                            (js/Promise.resolve (apply d/q query @conn inputs)))]
+                (db-based-api/find-entities (first args))))
+        server (mcp-server/create-mcp-api-server api)
+        client (Client. #js {:name "structured-find-test" :version "1"} #js {:capabilities #js {}})
+        transports (.createLinkedPair InMemoryTransport)
+        options #js {:kind "page" :state "all" :output "count"}]
+    (async done
+      (-> (p/let [_ (.connect server (aget transports 0))
+                  _ (.connect client (aget transports 1))
+                  response (.callTool ^js client #js {:name "findEntities" :arguments options})
+                  body (js->clj (js/JSON.parse (aget response "content" 0 "text")) :keywordize-keys true)
+                  refused (.callTool ^js client #js {:name "findEntities"
+                                                 :arguments #js {:kind "page" :query "[:find ?e]"}})
+                  tools (.listTools ^js client)]
+            (is (not (true? (aget response "isError"))))
+            (is (= 4 (:count body)))
+            (is (true? (:count_is_exact body)))
+            (is (true? (aget refused "isError")))
+            (is (= 1 (count @calls)))
+            (is (some #(and (= "findEntities" (aget % "name"))
+                            (true? (aget % "annotations" "readOnlyHint")))
+                      (array-seq (aget tools "tools")))))
+          (p/catch (fn [error] (is false (.-message error))))
+          (p/finally (fn [] (p/let [_ (.close client) _ (.close server)] (js/queueMicrotask done))))))))
+
 (deftest list-embeds-routes-filters-and-validates-inputs
   (let [calls (atom [])
         result #js {:embeds #js [] :count 0 :truncated false}
@@ -598,7 +799,7 @@
                  (is (= {:embeds [] :count 0 :truncated false} response))
                  (is (= [["logseq.DB.listEmbeds" [args]]] @calls))
                  (is (= mcp-compat/list-embeds (get-in mcp-server/data-tools [:listEmbeds :fn])))
-                 (is (= 54 (+ (count mcp-server/api-tools) (count mcp-server/data-tools))))
+                 (is (= 55 (+ (count mcp-server/api-tools) (count mcp-server/data-tools))))
                  (is (string/includes? (aget (get-in mcp-server/data-tools [:createEmbed :config]) "description") "before retrying"))
                  (is (string? (aget (aget (aget (get-in mcp-server/data-tools [:createEmbed :config]) "inputSchema") "target_uuid") "description"))))
                (p/catch (fn [error] (is false (str error))))

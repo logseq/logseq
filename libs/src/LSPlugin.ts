@@ -956,6 +956,63 @@ export interface IEditorProxy extends Record<string, any> {
 /**
  * Datascript related APIs
  */
+export type EntitySearchField =
+  | 'uuid'
+  | 'title'
+  | 'page_uuid'
+  | 'page_title'
+  | 'parent_uuid'
+  | 'recycled'
+
+export type EntitySearchFilter =
+  | { all: EntitySearchFilter[] }
+  | { any: EntitySearchFilter[] }
+  | { field: 'title'; op: 'empty' }
+  | { field: 'title'; op: 'equals' | 'contains' | 'starts_with'; value: string }
+  | { field: 'position'; op: 'eq'; value: 'first_outline_child' }
+  | { field: 'has_children' | 'has_link'; op: 'eq'; value: boolean }
+
+export interface EntitySearchCursor {
+  after_id: number
+  basis_rev: number
+  fingerprint: number
+}
+
+export interface EntitySearchOptions {
+  kind: 'page' | 'block'
+  state?: 'live' | 'recycled' | 'all'
+  page_uuid?: BlockUUID
+  where?: EntitySearchFilter
+  select?: EntitySearchField[]
+  output?: 'rows' | 'count'
+  limit?: number
+  cursor?: EntitySearchCursor
+}
+
+export interface EntitySearchResult {
+  output: 'rows' | 'count'
+  matches: Array<
+    Partial<{
+      uuid: BlockUUID
+      title: string
+      page_uuid: BlockUUID | null
+      page_title: string | null
+      parent_uuid: BlockUUID | null
+      recycled: boolean
+    }>
+  >
+  count: number
+  count_is_exact: boolean
+  truncated: boolean
+  next_cursor: EntitySearchCursor | null
+  limits: {
+    max_rows: number
+    max_bytes: number
+    max_filter_nodes: number
+    max_filter_depth: number
+  }
+}
+
 export interface IDBProxy {
   getAppInfo: () => Promise<{ version: string; supportDb: boolean }>
   getMcpApiMethods: () => Promise<string[]>
@@ -1034,6 +1091,7 @@ export interface IDBProxy {
    */
   datascriptQuery: <T = any>(query: string, ...inputs: Array<any>) => Promise<T>
   search: <T = any>(query: string, options?: Record<string, any>) => Promise<T>
+  findEntities: (options: EntitySearchOptions) => Promise<EntitySearchResult>
 
   getBlock: IEditorProxy['getBlock']
   createEmbed: (parentUuid: BlockUUID, targetUuid: BlockUUID) => Promise<BlockEntity | null>

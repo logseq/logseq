@@ -228,6 +228,7 @@
 (def ^:export list_assets db-based-api/list-assets)
 (def ^:export create_embed db-based-api/create-embed)
 (def ^:export list_embeds db-based-api/list-embeds)
+(def ^:export find_entities db-based-api/find-entities)
 (def ^:export inspect_page db-based-api/inspect-page)
 (def ^:export get_page_stats db-based-api/get-page-stats)
 (def ^:export get_page_block_uuids db-based-api/get-page-block-uuids)

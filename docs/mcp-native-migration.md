@@ -17,13 +17,33 @@ The [current tool-map contracts](mcp-native-tool-map.md#current-202-regression-c
 and [remote retest cases](mcp-native-e2e-test.md#202-regression-retest) supersede
 historical behavior below for literal search, heading imports, repeated-title
 creation, MCP deletion/archive titles, capability discovery and stale sessions.
-The deployment marker is `capabilities.graph.contract_revision = 2026-11-07.1`,
+The deployment marker is `capabilities.graph.contract_revision = 2026-11-07.2`,
 with `compatibility_target = 2.0.2`. These identify implementation, not live
 verification. New installed-app verification is still required.
 
+### Structured findEntities (2026-11-07)
+
+The current native inventory is 56 tools. `findEntities` adds framed, read-only
+page/block searches for empty first outline blocks, page-scoped literal text,
+live/recycled inventories and exact counts. It calls `logseq.DB.findEntities`
+in the existing API structure, using fixed query forms and typed inputs through
+the existing DB query API. No new worker, worker route or DB schema is introduced.
+
+See the [tool-map examples and limits](mcp-native-tool-map.md#structured-entity-search)
+for the filter vocabulary, selected fields and cursor/count contracts.
+Output is bounded to 1000 rows and 65536 UTF-8 response bytes, with explicit
+truncation/continuation; filter complexity is bounded. These limits do not bound
+database execution time or internal scans. Count output is an exact aggregate,
+not a partially scanned count.
+
+Structured lookups require normal authentication but no per-query approval.
+They accept no raw query text, regex, functions or arbitrary attributes, and
+do not change `datascriptQuery` approval, audit or no-retry behavior.
+Installed-app/client verification is pending.
+
 ### Post-migration getContentCapabilities (2026-10-09)
 
-The current native inventory is 55 tools. `getContentCapabilities()` is an
+At this addition the native inventory grew to 55 tools. `getContentCapabilities()` is an
 argument-free, read-only discovery tool for Logseq DB only. It does not ask
 for a graph type and refuses a missing/non-DB graph internally. MCP calls
 `logseq.DB.getContentCapabilities`; the new API aggregates existing application

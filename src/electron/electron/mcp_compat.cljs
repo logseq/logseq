@@ -2533,6 +2533,16 @@
   [call-api-fn args]
   (call-api-fn "logseq.DB.listProperties" [#js {:expand (aget args "expand")}]))
 
+(defn find-entities
+  [api-fn args]
+  (p/let [result (api-fn "logseq.DB.findEntities" [args])]
+    (when-let [error (and result (aget result "error"))]
+      (throw (js/Error. (str error))))
+    (when-not (and result (array? (aget result "matches"))
+                   (number? (aget result "count")) (boolean? (aget result "truncated")))
+      (throw (js/Error. "findEntities returned an invalid result envelope")))
+    (js->clj result :keywordize-keys true)))
+
 (defn search-blocks
   [api-fn args]
   (let [term (aget args "searchTerm")]
@@ -2674,6 +2684,7 @@
    :listJournals ["logseq.DB.getJournalCandidates" "logseq.DB.datascriptQuery"]
    :getPage ["logseq.DB.getPageData"]
    :searchBlocks ["logseq.DB.search"]
+   :findEntities ["logseq.DB.findEntities"]
    :listTags ["logseq.DB.listTags"]
    :listProperties ["logseq.DB.listProperties"]
    :getPageUUID ["logseq.DB.datascriptQuery"]
@@ -2728,6 +2739,7 @@
 
 (def ^:private capability-probe-args
   {"logseq.DB.getContentCapabilities" []
+   "logseq.DB.findEntities" [#js {:kind "page" :limit 1}]
    "logseq.DB.datascriptQuery" ["[:find ?e . :where [?e :block/uuid]]"]
    "logseq.DB.getBlock" ["__mcp_capability_probe__" #js {:includeChildren false :includePage true}]
    "logseq.DB.listEmbeds" [#js {:limit 1}]
@@ -2894,7 +2906,7 @@
                 version (:version info)
                 body {:graph {:version version
                               :compatibility_target "2.0.2"
-                              :contract_revision "2026-11-07.1"
+                              :contract_revision "2026-11-07.2"
                               :version_matches (= version "2.0.2")
                               :checked_at (/ (.now js/Date) 1000)}
                       :tools tools

@@ -1,10 +1,10 @@
 # Native Logseq MCP End-to-End Test
 
-Updated 2026-11-06. Attach this document to Claude Desktop to test the native
+Updated 2026-11-07. Attach this document to Claude Desktop to test the native
 Logseq MCP server at `http://127.0.0.1:12315/mcp` from setup through cleanup.
 This is a test specification, not a results log. Keep results in a separate report.
 
-The expected inventory is **55 tools**. Native Logseq source, SDK, tests and
+The expected inventory is **56 tools**. Native Logseq source, SDK, tests and
 advertised schemas define the contracts. Use native DB skills whose search,
 asset, timeout and output assumptions match the connected server.
 Use this guide alone rather than combining it with older testing checklists.
@@ -13,7 +13,7 @@ Use this guide alone rather than combining it with older testing checklists.
 
 These are new implementation contracts, not recorded live passes. First check
 `capabilities.graph.compatibility_target` is `2.0.2` and `contract_revision` is
-`2026-11-07.1`; the app version alone cannot distinguish builds.
+`2026-11-07.2`; the app version alone cannot distinguish builds.
 
 On fresh, approved run-owned fixtures:
 
@@ -24,6 +24,15 @@ On fresh, approved run-owned fixtures:
   Every returned block title must contain the exact, case-sensitive search term.
   Fuzzy-only matches must be absent. This filters one bounded native response,
   so absence is not an exhaustive graph-wide proof and pagination remains native.
+- Call `findEntities` on run-owned fixtures without a query approval form:
+  verify empty first-outline blocks excluding children/links, page-scoped literal
+  text with only selected UUID/title fields, and a prefix inventory including
+  live/recycled pages. Cross-check exact `output: "count"` results. With a small
+  row limit, follow cursors without writes and require no duplicates/omissions;
+  after a fixture write the old cursor must fail. Reject raw `query` and regex
+  inputs. Count output has no rows/cursor; row `count` is only the returned count.
+  Test an empty result. See [structured examples](mcp-native-tool-map.md#structured-entity-search);
+  output limits do not promise bounded DB execution time.
 - Repeat `createPage` on a run-owned title. Expect `status: "conflict"`,
   `created: false`, `verified: false`, and `held_by`, without MCP `isError` or
   graph changes. Also check a title held by a run-owned tag.
@@ -72,7 +81,7 @@ Send this with the attached document:
 
 ```text
 Run the attached Native Logseq MCP End-to-End Test against my connected native
-Logseq MCP server. First verify its exact 55-tool inventory and live schemas.
+Logseq MCP server. First verify its exact 56-tool inventory and live schemas.
 Confirm the desktop is using a stable, watcher-free build and no edits/builds
 will run during the test. Do not start writes if source watching is active.
 Ask me to confirm the graph is disposable and approve the fixture creation,
@@ -96,7 +105,7 @@ EVERY invocation, including probes and retries. The host also requires a user
 approval form. Broad test or cleanup approval does not cover queries. Never
 silently retry or use raw API access instead.
 
-Finish with all 55 tools accounted for, detailed case results, cleanup evidence,
+Finish with all 56 tools accounted for, detailed case results, cleanup evidence,
 remaining fixtures, limitations, and a readiness verdict. Do not claim full
 coverage for cases that were blocked, manually skipped, or not actually called.
 ```
@@ -200,7 +209,7 @@ Maintain these ledgers after every phase:
 | Run | date, run ID, server/build identification if available, graph/user approval, advertised schemas, baseline counts |
 | Fixtures | role, kind, UUID/ident, original/current title, parent/page, origin (this run or user-prepared), cleanup action/status |
 | Cases | ID, tool, sanitized arguments, response summary, independent read, expected/actual state, duration, verdict |
-| Coverage | each of the 55 names, called/not called, supporting case IDs, positive/negative/manual coverage |
+| Coverage | each of the 56 names, called/not called, supporting case IDs, positive/negative/manual coverage |
 
 Assign case IDs such as B-01 and F-03 to every actual call/assertion sequence.
 Checkpoint the ledgers after each phase. On resumption, reread ledger targets,
@@ -221,6 +230,7 @@ Keep the intentionally unusual spellings, including `creatTag`,
 | `listPages` | A, B, K: baseline, created pages, final live pages; expand false/true |
 | `getPage` | B, F: page content and nested structural/embed nodes |
 | `searchBlocks` | I: unique marker and absent marker using searchTerm only |
+| `findEntities` | I and regression retest: structured empty-first/text searches, selected fields, live/recycled counts, cursor continuation/invalidation, malformed-input refusal, no per-query approval |
 | `listTags` | A, D, K: baseline, run tags, removal; expand false/true |
 | `listProperties` | A, E, K: baseline, canonical definitions, removal; expand false/true |
 | `getPageUUID` | B, C, K: title resolution, rename, recycled-title behavior |
@@ -600,7 +610,7 @@ Return a self-contained report with:
    run ID, baseline and final inventories, and whether the build was development
    or packaged (unknown if not supplied by the user).
 2. One row per case with arguments, verdict, observed state and independent read.
-3. One row for every one of the 55 tools, with actual call evidence and uncovered
+3. One row for every one of the 56 tools, with actual call evidence and uncovered
    positive/negative/manual variants. A capabilities probe is not tool-call coverage.
 4. Page/block embed creation, discovery, backlink/count checks, removal and
    preserved-target evidence; asset empty vs populated coverage separately.

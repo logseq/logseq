@@ -253,12 +253,47 @@
                  :inputSchema
                  #js {:expand (-> (z/boolean) .optional (.describe "Provide additional detail on each property e.g. property type, cardinality"))}}}})
 
+(defn- entity-filter-schema
+  [depth]
+  (let [predicate (-> (z/object #js {:field (z/enum #js ["title" "position" "has_children" "has_link"])
+                                    :op (z/enum #js ["equals" "contains" "starts_with" "empty" "eq"])
+                                    :value (-> (z/union #js [(-> (z/string) (.max 1024)) (z/boolean)]) .optional)})
+                      .strict)]
+    (if (zero? depth)
+      predicate
+      (let [children (-> (z/array (entity-filter-schema (dec depth))) (.min 1) (.max 32))]
+        (z/union #js [predicate
+                      (-> (z/object #js {:all children}) .strict)
+                      (-> (z/object #js {:any children}) .strict)])))))
+
+(def ^:private find-entities-schema
+  (-> (z/object
+       #js {:kind (z/enum #js ["page" "block"])
+            :state (-> (z/enum #js ["live" "recycled" "all"]) .optional)
+            :page_uuid (-> (z/string) .uuid .optional)
+            :where (-> (entity-filter-schema 4) .optional)
+            :select (-> (z/array (z/enum #js ["uuid" "title" "page_uuid" "page_title" "parent_uuid" "recycled"]))
+                        (.min 1) (.max 6) .optional)
+            :output (-> (z/enum #js ["rows" "count"]) .optional)
+            :limit (-> (z/number) .int (.min 1) (.max 1000) .optional)
+            :cursor (-> (z/object #js {:after_id (-> (z/number) .int .positive)
+                                      :basis_rev (-> (z/number) .int)
+                                      :fingerprint (-> (z/number) .int)})
+                        .strict .optional)})
+      .strict))
+
 (def ^:large-vars/data-var data-tools
   {:searchBlocks
    {:fn mcp-compat/search-blocks
     :config #js {:title "Search Blocks"
                  :description "Return only blocks whose title contains the literal, case-sensitive searchTerm. Filters one bounded native search response; fuzzy-only matches are excluded. Results are not an exhaustive graph scan."
                  :inputSchema #js {:searchTerm (z/string)}}}
+   :findEntities
+   {:fn mcp-compat/find-entities
+    :config #js {:title "Find Entities"
+                 :description "Structured read-only page/block lookup without arbitrary query text or per-query elicitation. Supports live/recycled/all state, optional page_uuid for blocks, bounded all/any filters and selected fields. Title operators are literal and case-sensitive: equals, contains, starts_with or empty (exactly empty, not whitespace). Position eq first_outline_child excludes property-value/view/nested-page children; has_children and has_link use eq with booleans. Pages mean Page-class entities, not every named entity. Recycling is inherited through parents and the owning page. Defaults: state=live, output=rows, limit=50, select=[uuid,title,page_uuid]. Rows are ordered by internal entity ID; count is the number returned, not a graph-wide total, and count_is_exact is false. Follow next_cursor with unchanged search parameters; graph changes invalidate cursors. output=count returns an exact total without rows or a cursor. At most 1000 rows and 65536 UTF-8 response bytes; filters have at most 32 nodes and depth 4, literals at most 1024 characters. Existing API queries bound returned data, NOT database execution time or scan work. No writes, raw Datalog, scripts, regex, custom functions or arbitrary attributes. Use the separately approved datascriptQuery only for unsupported lookups."
+                 :annotations #js {:readOnlyHint true :destructiveHint false :openWorldHint false}
+                 :inputSchema find-entities-schema}}
    :getContentCapabilities
    {:fn mcp-compat/get-content-capabilities
     :config #js {:title "Get Content Capabilities"
