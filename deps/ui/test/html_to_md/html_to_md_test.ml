@@ -21,5 +21,7 @@ let () =
     ; ("<p><strong>Bold</strong> <em>italic</em> <code>x</code></p>",
        Some "**Bold** *italic* `x`")
     ; ("<pre><code>a\n  b</code></pre>", Some "```\na\n  b\n```")
+    ; ("<pre><code>```md\n````\ntext</code></pre>",
+       Some "`````\n```md\n````\ntext\n`````")
     ; ("<p>A<p>B", Some "A\n\nB")
     ]
