@@ -413,6 +413,12 @@ let () =
   let renderer_cell = ref renderer and gl_live_cell = ref gl_live in
   let blit_cell = ref blit and gctx_cell = ref gctx in
   let cached_overlay = ref None in
+  (* Caret blink — the idle loop toggles [caret_blink_on] at the shared
+     overlay's 500 ms cadence; a changed caret key (move/input) resets
+     the phase to visible and re-arms the deadline. *)
+  let caret_blink_on = ref true
+  and caret_blink_deadline = ref 0.
+  and caret_last_key = ref (None : (string * int) option) in
   let overlay_viewport = ref (fun () -> (0, 0, 1.)) in
   let overlay_generation () =
     if metrics.panel_open then Host_metrics.panel_generation ~now:(perf_s ()) else 0 in
@@ -423,6 +429,8 @@ let () =
            let retained_ops = s.Lui_scene.ops and retained_glyphs = s.Lui_scene.glyphs in
            let retained_width = s.Lui_scene.width in
            let render_started = perf_s () in
+           (* Caret blink state — see the idle-loop block that toggles it.
+              Key change (move/input) resets the phase to visible. *)
            Fun.protect ~finally:(fun () ->
              s.Lui_scene.ops <- retained_ops;
              s.Lui_scene.glyphs <- retained_glyphs;
@@ -435,7 +443,14 @@ let () =
                       Option.get (Theme_vars.color_of
                         "var(--ls-caret-color, var(--ls-primary-text-color, foreground))")
                     in
-                    let caret = Host_requests.editor_caret_ops ~color in
+                    (* Caret blink — the shared overlay's 500 ms cadence
+                       applies here too so the native painter matches the
+                       web host: hide the bar while the phase is off. *)
+                    let caret =
+                      if !caret_blink_on then
+                        Host_requests.editor_caret_ops ~color
+                      else []
+                    in
                     let key =
                       (s.Lui_scene.width, s.Lui_scene.height, !overlay_viewport (),
                        metrics.panel_open, overlay_generation (),
@@ -2432,6 +2447,19 @@ let () =
     (match input_change with
      | Some id -> Lui_host.note_paint host id; host_req_repaint := true
      | None -> ());
+    (let now = perf_s () in
+     let caret_key = Host_requests.editor_caret_key () in
+     if caret_key <> !caret_last_key then begin
+       caret_last_key := caret_key;
+       caret_blink_on := true;
+       if Option.is_some caret_key then host_req_repaint := true;
+       caret_blink_deadline := now +. 0.5
+     end
+     else if Option.is_some caret_key && now >= !caret_blink_deadline then begin
+       caret_blink_on := not !caret_blink_on;
+       host_req_repaint := true;
+       caret_blink_deadline := now +. 0.5
+     end);
     let can_present = Native_window.presentable (Sdl.get_window_id !win) in
     (* Exercise the real embedded app, its layout, and every viewport pixel
        while occluded. Visibility exports remain truthful; this diagnostic
@@ -2536,6 +2564,11 @@ let () =
           | None -> timeout
           | Some deadline -> min timeout
               (max 1 (int_of_float (ceil ((deadline -. now) *. 1000.)))) in
+        (* A live caret must wake the loop at the next blink deadline. *)
+        let timeout = match Host_requests.editor_caret_key () with
+          | None -> timeout
+          | Some _ -> min timeout
+              (max 1 (int_of_float (ceil ((!caret_blink_deadline -. now) *. 1000.)))) in
         ignore (Sdl.wait_event_timeout None timeout)
     | None when not vsync ->
         frame_deadline := Host_metrics.next_deadline ~previous:!frame_deadline ~now;

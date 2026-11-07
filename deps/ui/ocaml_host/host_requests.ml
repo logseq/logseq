@@ -732,6 +732,18 @@ let ensure_ed_focus_ (e : env) =
     | Some bid -> ignore (try_set_input_focus e bid true)
     | None -> ()
 
+(* The (block-id, offset) identifying the currently painted caret —
+   blink resets to visible whenever it changes or appears. *)
+let editor_caret_key () =
+  match !env with
+  | None -> None
+  | Some e ->
+    let sink = Ui.focused e.ui in
+    (match Lui_store.string_prop e.store sink "block-id",
+           Lui_store.int_prop e.store sink "caret" with
+     | Some bid, Some off when off >= 0 -> Some (bid, off)
+     | _ -> None)
+
 (* Draw the model caret using the same current glyph geometry used by
    caret-rect replies. The input sink itself has no visible bounds. *)
 let editor_caret_ops ~color =
