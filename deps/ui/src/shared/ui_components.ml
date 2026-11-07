@@ -250,8 +250,9 @@ let dialog ?key ?(gap=16) ?(padding=24) ?padding_horizontal ?padding_vertical
     ?text ?description ?on_dismiss children : t =
  fun ctx parent ->
   let element = with_props
-    (Prop.transition dialog_transition
-     :: List.filter_map Fun.id
+    ((* transition is a stylesheet prop; the native dialog kind rejects it *)
+      (if Ui_services.env_css_animations () then [ Prop.transition dialog_transition ] else [])
+     @ List.filter_map Fun.id
           [ Option.map Prop.padding_top padding_top
           ; Option.map Prop.padding_bottom padding_bottom ])
     (Lui_elements.dialog ?key ~gap ~padding ?padding_horizontal ?padding_vertical
