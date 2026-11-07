@@ -40,7 +40,28 @@
 (defonce ^:private *repo->enabled? (atom {}))
 (defonce ^:private *repo->queued-page-jobs (atom {}))
 (defonce ^:private *repo->flush-timeout (atom {}))
+(defonce ^:private *repo->block-render-cache (atom {}))
+(defonce ^:private *repo->warm-pages (atom {}))
+(defonce ^:private *render-stats (atom {:own-block-renders 0 :cache-hits 0}))
 (defonce ^:private stem-index-cache (js/WeakMap.))
+
+(def ^:private render-yield-every 64)
+
+(defn reset-render-stats!
+  []
+  (reset! *render-stats {:own-block-renders 0 :cache-hits 0}))
+
+(defn render-stats
+  []
+  @*render-stats)
+
+(defn clear-block-render-cache!
+  ([]
+   (reset! *repo->block-render-cache {})
+   (reset! *repo->warm-pages {}))
+  ([repo]
+   (swap! *repo->block-render-cache dissoc repo)
+   (swap! *repo->warm-pages dissoc repo)))
 
 (defn- normalize-unicode
   [s]
@@ -192,7 +213,8 @@
         (js/clearTimeout timeout-id))
       (swap! *repo->enabled? dissoc repo)
       (swap! *repo->queued-page-jobs dissoc repo)
-      (swap! *repo->flush-timeout dissoc repo)))
+      (swap! *repo->flush-timeout dissoc repo)
+      (clear-block-render-cache! repo)))
   nil)
 
 (defn enabled?
@@ -492,19 +514,23 @@
 (defn- decorate-block-line
   [db block-info line options]
   (if-let [[_ spaces title] (re-matches markdown-block-line-re line)]
-    (if-let [target (:embed-target block-info)]
-      (string/split-lines
-       (decorate-rendered-content
-        db
-        (block-content db (:block/uuid target) {:init-level (line-level spaces options)} options)
-        (block-line-infos db [target])
-        options
-        {:initial-lines []}))
-      (let [content (decorate-block-content block-info title)
-            marker (or (:marker block-info) "-")]
-        [(str spaces marker
-              (when-not (string/blank? content) " ")
-              content)]))
+    (let [target (when-not (false? (:expand-embeds? options))
+                   (:embed-target block-info))
+          seen (or (:embed-seen options) #{})
+          target-uuid (:block/uuid target)]
+      (if (and target (not (contains? seen target-uuid)))
+        (string/split-lines
+         (decorate-rendered-content
+          db
+          (block-content db target-uuid {:init-level (line-level spaces options)} options)
+          (block-line-infos db [target])
+          (assoc options :embed-seen (conj seen target-uuid))
+          {:initial-lines []}))
+        (let [content (decorate-block-content block-info title)
+              marker (or (:marker block-info) "-")]
+          [(str spaces marker
+                (when-not (string/blank? content) " ")
+                content)])))
     [line]))
 
 (defn- decorate-rendered-content
@@ -573,13 +599,206 @@
    {:initial-lines [(id-property-line (:block/uuid page))]
     :insert-blank-before-first-block? true}))
 
-(defn- render-page-content
+(defn render-page-content-full
+  "Synchronous full-page render used as the byte-identity baseline."
   [db page options]
-  (add-page-id-to-rendered-content
-   db
-   page
-   (block-content db (:block/uuid page) {:include-page-properties? true} options)
-   options))
+  (let [page (d/entity db (:db/id page))]
+    (add-page-id-to-rendered-content
+     db
+     page
+     (block-content db (:block/uuid page) {:include-page-properties? true} options)
+     options)))
+
+(defn- lookup-own-content
+  [repo uuid level]
+  (get-in @*repo->block-render-cache [repo [uuid level] :content]))
+
+(defn- cached-own-content
+  [repo db block level options]
+  (let [uuid (:block/uuid block)
+        cache-key [uuid level]
+        entry (get-in @*repo->block-render-cache [repo cache-key])]
+    (if entry
+      (do
+        (swap! *render-stats update :cache-hits inc)
+        (:content entry))
+      (let [block (d/entity db (:db/id block))
+            raw (common-file/own-block-content db uuid {:init-level level} (block->content-context options))
+            line-info (assoc (block-line-info db block "-") :embed-target nil)
+            content (decorate-rendered-content
+                     db
+                     (or raw "")
+                     [line-info]
+                     (assoc options :expand-embeds? false)
+                     {:initial-lines []})]
+        (swap! *render-stats update :own-block-renders inc)
+        (swap! *repo->block-render-cache assoc-in [repo cache-key]
+               {:content content})
+        content))))
+
+(defn- cached-page-properties
+  [repo db page options]
+  (let [uuid (:block/uuid page)
+        cache-key [:page-props uuid]
+        entry (get-in @*repo->block-render-cache [repo cache-key])]
+    (if entry
+      (do
+        (swap! *render-stats update :cache-hits inc)
+        (:content entry))
+      (let [raw (common-file/own-block-content db uuid {:include-page-properties? true}
+                                               (block->content-context options))
+            content (when-not (string/blank? raw) raw)]
+        (swap! *render-stats update :own-block-renders inc)
+        (swap! *repo->block-render-cache assoc-in [repo cache-key]
+               {:content content})
+        content))))
+
+(defn- apply-list-marker
+  [content marker]
+  (if (or (nil? marker) (= "-" marker))
+    content
+    (let [lines (string/split-lines (or content ""))
+          first-line (first lines)]
+      (if-let [[_ spaces title] (re-matches markdown-block-line-re first-line)]
+        (string/join "\n"
+                     (cons (str spaces marker
+                                (when-not (string/blank? title) " ")
+                                title)
+                           (rest lines)))
+        content))))
+
+(defn- sibling-markers
+  [nodes]
+  (loop [[block & more] nodes
+         number 1
+         acc []]
+    (if-not block
+      acc
+      (let [ordered? (order-list-number? block)
+            marker (if ordered? (str number ".") "-")]
+        (recur more
+               (cond-> number ordered? inc)
+               (conj acc marker))))))
+
+(declare assemble-block assemble-nodes)
+
+(defn- collect-page-jobs
+  [page]
+  (loop [stack (mapv #(vector % 1) (rseq (vec (page-root-blocks page))))
+         seen #{}
+         jobs (transient [])]
+    (if-let [[block level] (peek stack)]
+      (let [uuid (:block/uuid block)]
+        (if (or (nil? uuid) (contains? seen uuid))
+          (recur (pop stack) seen jobs)
+          (let [seen' (conj seen uuid)
+                target (embed-target block)
+                target-uuid (:block/uuid target)
+                expand? (and target (not (contains? seen' target-uuid)))
+                children (outline-children block)
+                stack' (cond-> (pop stack)
+                         (seq children)
+                         (into (mapv #(vector % (inc level)) (rseq (vec children))))
+                         expand?
+                         (conj [target level]))
+                jobs' (if expand?
+                        jobs
+                        (conj! jobs {:block block :level level}))]
+            (recur stack' seen' jobs'))))
+      (persistent! jobs))))
+
+(defn- lookup-assembled
+  [repo uuid level marker]
+  (get-in @*repo->block-render-cache [repo [:assembled uuid level marker] :content]))
+
+(defn- store-assembled!
+  [repo uuid level marker content]
+  (swap! *repo->block-render-cache assoc-in [repo [:assembled uuid level marker]]
+         {:content content})
+  content)
+
+(defn- assemble-nodes
+  [repo db nodes level options seen]
+  (map (fn [block marker]
+         (assemble-block repo db block level marker options seen))
+       nodes
+       (sibling-markers nodes)))
+
+(defn- assemble-block
+  [repo db block level marker options seen]
+  (let [uuid (:block/uuid block)]
+    (if-let [cached (and uuid (lookup-assembled repo uuid level marker))]
+      (do
+        (swap! *render-stats update :cache-hits inc)
+        cached)
+      (let [target (embed-target block)
+            target-uuid (:block/uuid target)
+            expand? (and target (not (contains? seen target-uuid)))
+            content (if expand?
+                      (let [target-marker (if (order-list-number? target) "1." "-")
+                            seen' (conj seen target-uuid uuid)
+                            target-content (assemble-block repo db target level target-marker options seen')
+                            children (outline-children block)]
+                        (if (seq children)
+                          (string/join "\n" (cons target-content (assemble-nodes repo db children (inc level) options seen')))
+                          target-content))
+                      (let [own (apply-list-marker
+                                 (or (lookup-own-content repo uuid level)
+                                     (cached-own-content repo db block level options))
+                                 marker)
+                            children (outline-children block)]
+                        (if (seq children)
+                          (string/join "\n" (cons own (assemble-nodes repo db children (inc level) options (conj seen uuid))))
+                          own)))]
+        (if uuid
+          (store-assembled! repo uuid level marker content)
+          content)))))
+
+(defn- <yield
+  []
+  (js/Promise. (fn [resolve] (js/setTimeout resolve 0))))
+
+(defn- <ensure-jobs-cached!
+  [repo db jobs options]
+  (let [yield-every (if (contains? options :yield-every)
+                      (:yield-every options)
+                      render-yield-every)]
+    (p/loop [remaining (seq jobs)]
+      (if (empty? remaining)
+        (p/resolved nil)
+        (let [batch (if yield-every
+                      (take yield-every remaining)
+                      remaining)
+              more (when yield-every (seq (drop yield-every remaining)))]
+          (doseq [{:keys [block level]} batch]
+            (cached-own-content repo db block level options))
+          (if more
+            (p/let [_ (<yield)]
+              (p/recur more))
+            (p/resolved nil)))))))
+
+(defn- <render-page-content-incremental
+  [repo db page options]
+  (let [page (d/entity db (:db/id page))
+        page-uuid (:block/uuid page)
+        warmed? (contains? (get @*repo->warm-pages repo #{}) page-uuid)]
+    (p/let [_ (if warmed?
+                (p/resolved nil)
+                (<ensure-jobs-cached! repo db (collect-page-jobs page) options))
+            props (cached-page-properties repo db page options)
+            body (assemble-nodes repo db (page-root-blocks page) 1 options #{})
+            content (string/join "\n"
+                                 (concat [(id-property-line page-uuid)]
+                                         (when props [props])
+                                         (when (seq body) ["" (string/join "\n" body)])))]
+      (swap! *repo->warm-pages update repo (fnil conj #{}) page-uuid)
+      content)))
+
+(defn <render-page-content
+  [repo db page options]
+  (if (:full-render? options)
+    (p/resolved (render-page-content-full db page options))
+    (<render-page-content-incremental repo db page options)))
 
 (defn- contents-page?
   "The Contents page is created as built-in but holds ordinary user blocks."
@@ -652,9 +871,9 @@
 
           :else
           (if-let [relative-path (page-relative-path db page opts)]
-            (let [path (mirror-path repo relative-path)
-                  content (render-page-content db page opts)]
-              (<write-if-changed! platform* path content))
+            (let [path (mirror-path repo relative-path)]
+              (p/let [content (<render-page-content repo db page opts)]
+                (<write-if-changed! platform* path content)))
             (p/resolved (invalid-file-name-result repo page))))
         (p/resolved {:status :skipped
                      :reason :missing-page
@@ -732,14 +951,87 @@
                 (<delete-file! platform* old-path))]
       result)))
 
+(defn- ancestor-uuids-in-db
+  [db uuid]
+  (loop [entity (when db (d/entity db [:block/uuid uuid]))
+         acc []]
+    (cond
+      (nil? entity) acc
+      (ldb/page? entity) (conj acc (:block/uuid entity))
+      :else (recur (:block/parent entity) (conj acc (:block/uuid entity))))))
+
+(defn- ancestor-uuids
+  [db-after db-before uuid]
+  (into (ancestor-uuids-in-db db-after uuid)
+        (ancestor-uuids-in-db db-before uuid)))
+
+(defn- cache-key-uuid
+  [k]
+  (let [id (first k)]
+    (cond
+      (= :assembled id) (second k)
+      (= :page-props id) (second k)
+      :else id)))
+
+(defn evict-block-render-cache!
+  ([repo db tx-data]
+   (evict-block-render-cache! repo db nil tx-data))
+  ([repo db-after db-before tx-data]
+   (let [changed-eids (into #{} (map :e) tx-data)
+         changed-uuids (into #{}
+                             (keep (fn [{:keys [e a v added]}]
+                                     (or (when (and (= a :block/uuid) (not added)) v)
+                                         (:block/uuid (d/entity db-after e))
+                                         (when db-before
+                                           (:block/uuid (d/entity db-before e))))))
+                             tx-data)
+         referring-uuids (into #{}
+                               (mapcat (fn [eid]
+                                         (let [after (d/entity db-after eid)
+                                               before (when db-before (d/entity db-before eid))]
+                                           (concat
+                                            (keep :block/uuid (:block/_refs after))
+                                            (keep :block/uuid (:block/_refs before))
+                                            (keep :block/uuid (:block/_link after))
+                                            (keep :block/uuid (:block/_link before)))))
+                                       changed-eids))
+         seed-uuids (into changed-uuids referring-uuids)
+         with-ancestors (into seed-uuids
+                              (mapcat #(ancestor-uuids db-after db-before %)
+                                      seed-uuids))
+         embedder-uuids (into #{}
+                              (mapcat (fn [uuid]
+                                        (let [after (d/entity db-after [:block/uuid uuid])
+                                              before (when db-before
+                                                       (d/entity db-before [:block/uuid uuid]))]
+                                          (concat (keep :block/uuid (:block/_link after))
+                                                  (keep :block/uuid (:block/_link before)))))
+                                      with-ancestors))
+         evict-uuids (into with-ancestors
+                           (mapcat #(ancestor-uuids db-after db-before %)
+                                   embedder-uuids))]
+    (when (seq evict-uuids)
+      (swap! *repo->block-render-cache update repo
+             (fn [entries]
+               (reduce-kv (fn [m k v]
+                            (let [uuid (cache-key-uuid k)]
+                              (if (and (contains? evict-uuids uuid)
+                                       (or (not= :page-props (first k))
+                                           (contains? changed-uuids uuid)))
+                                m
+                                (assoc m k v))))
+                          {}
+                          (or entries {}))))))))
+
 (defn <handle-tx-report!
-  [repo _conn {:keys [db-before db-after] :as tx-report} {:keys [platform defer?] :as opts}]
+  [repo _conn {:keys [db-before db-after tx-data] :as tx-report} {:keys [platform defer?] :as opts}]
   (let [platform* (or platform (platform/current))]
     (if (and (enabled? repo)
              (supported-runtime? platform*))
       (let [affected-ids (affected-page-ids tx-report)
             index-before (stem-index db-before)
             index-after (update-stem-index index-before db-before db-after affected-ids)]
+        (evict-block-render-cache! repo db-after db-before tx-data)
         (.set stem-index-cache db-after index-after)
         (if (get-in tx-report [:tx-meta :from-disk?])
           (p/resolved {:status :skipped
@@ -769,9 +1061,11 @@
     (if-not (supported-runtime? platform*)
       (p/resolved {:status :skipped
                    :reason :unsupported-runtime})
-      (p/let [results (p/all
-                       (map #(<mirror-page! repo db (:db/id %) (assoc opts :platform platform*))
-                            (mirrorable-pages db)))]
-        {:status :completed
-         :count (count results)
-         :results results}))))
+      (do
+        (clear-block-render-cache! repo)
+        (p/let [results (p/all
+                         (map #(<mirror-page! repo db (:db/id %) (assoc opts :platform platform*))
+                              (mirrorable-pages db)))]
+          {:status :completed
+           :count (count results)
+           :results results})))))

@@ -425,6 +425,25 @@
          node)))
    tree))
 
+(defn own-block-content
+  "Converts one block to file content without outline children.
+
+  Page entities render only page properties when `:include-page-properties?`
+  is set. Regular blocks render the same list item `tree->file-content` would
+  emit for that node at `:init-level`."
+  [db block-uuid tree->file-opts context]
+  (assert (uuid? block-uuid))
+  (when-let [entity (d/entity db [:block/uuid block-uuid])]
+    (when-let [eid (:db/id entity)]
+      (let [pulled (db-content/update-block-content db (d/pull db '[*] eid) eid)
+            init-level (or (:init-level tree->file-opts)
+                           (if (ldb/page? entity) 0 1))]
+        (tree->file-content db [pulled]
+                            (-> tree->file-opts
+                                (dissoc :open-blocks-only?)
+                                (assoc :init-level init-level))
+                            context)))))
+
 (defn block->content
   "Converts a block including its children (recursively) to plain-text."
   [db root-block-uuid tree->file-opts context]

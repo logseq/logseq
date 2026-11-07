@@ -1,14 +1,21 @@
 (ns frontend.worker.markdown-mirror-test
-  (:require [cljs.test :refer [async deftest is testing]]
+  (:require [cljs.test :refer [async deftest is testing use-fixtures]]
+            [clojure.string :as string]
             [datascript.core :as d]
             [frontend.worker.db-listener :as db-listener]
             [frontend.worker.markdown-mirror :as markdown-mirror]
             [frontend.worker.platform :as worker-platform]
             [logseq.db :as ldb]
+            [logseq.db.frontend.content :as db-content]
             [logseq.db.test.helper :as db-test]
             [promesa.core :as p]))
 
 (def test-repo "logseq_db_graph-xxx")
+
+(use-fixtures :each
+  {:before (fn []
+             (markdown-mirror/clear-block-render-cache!)
+             (markdown-mirror/reset-render-stats!))})
 
 (defn- fake-platform
   ([] (fake-platform {:runtime :node}))
@@ -1272,3 +1279,229 @@
                     (is (= contents-content (get @files contents-path)))))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))
+
+(defn- count-update-block-content-calls
+  [f]
+  (let [calls (atom 0)
+        orig db-content/update-block-content]
+    (with-redefs [db-content/update-block-content
+                  (fn [& args]
+                    (swap! calls inc)
+                    (apply orig args))]
+      (let [ret (f)]
+        {:result ret
+         :calls @calls}))))
+
+(defn- evict-tx!
+  [repo _conn tx-report]
+  (markdown-mirror/evict-block-render-cache!
+   repo
+   (:db-after tx-report)
+   (:db-before tx-report)
+   (:tx-data tx-report)))
+
+(defn- <assert-incremental-matches-full
+  [repo conn page message]
+  (p/let [incremental (markdown-mirror/<render-page-content
+                       repo @conn page {:yield-every nil})
+          full (markdown-mirror/render-page-content-full @conn page {})]
+    (is (= full incremental) message)
+    incremental))
+
+(deftest incremental-page-render-matches-full-across-edits-test
+  (async done
+    (let [target-uuid #uuid "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa01"
+          embed-uuid #uuid "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbb01"
+          nested-uuid #uuid "cccccccc-cccc-4ccc-8ccc-cccccccccc01"
+          conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "TargetOld"}
+                   :blocks [{:block/title "Target"
+                             :block/uuid target-uuid
+                             :build/keep-uuid? true
+                             :build/children [{:block/title "Target child"}]}]}
+                  {:page {:block/title "Source"}
+                   :blocks [{:block/title "See [[TargetOld]]"}
+                            {:block/title "parent"
+                             :block/uuid nested-uuid
+                             :build/keep-uuid? true
+                             :build/children [{:block/title "child a"}
+                                              {:block/title "child b"}]}
+                            {:block/title ""
+                             :block/uuid embed-uuid
+                             :build/keep-uuid? true}
+                            {:block/title "tail"}]}]})
+          _ (d/transact! conn [{:db/id (:db/id (d/entity @conn [:block/uuid embed-uuid]))
+                                :block/link (:db/id (d/entity @conn [:block/uuid target-uuid]))}])
+          page (db-test/find-page-by-title @conn "Source")
+          target-page (db-test/find-page-by-title @conn "TargetOld")
+          child-a (db-test/find-block-by-content @conn "child a")
+          tail (db-test/find-block-by-content @conn "tail")
+          parent (d/entity @conn [:block/uuid nested-uuid])]
+      (markdown-mirror/clear-block-render-cache! test-repo)
+      (markdown-mirror/reset-render-stats!)
+      (-> (p/let [_ (<assert-incremental-matches-full
+                     test-repo conn page "initial incremental render matches full")
+                  ;; Edit a nested child
+                  _ (evict-tx! test-repo conn
+                               (d/transact! conn [{:db/id (:db/id child-a) :block/title "child a edited"}]))
+                  _ (<assert-incremental-matches-full
+                     test-repo conn page "edit of nested child matches full")
+                  ;; Edit the referenced page title
+                  _ (evict-tx! test-repo conn
+                               (d/transact! conn [{:db/id (:db/id target-page)
+                                                   :block/title "TargetNew"
+                                                   :block/name "targetnew"}]))
+                  _ (<assert-incremental-matches-full
+                     test-repo conn page "referenced page rename matches full")
+                  ;; Edit the embedded block
+                  _ (evict-tx! test-repo conn
+                               (d/transact! conn [{:db/id (:db/id (d/entity @conn [:block/uuid target-uuid]))
+                                                   :block/title "Target edited"}]))
+                  _ (<assert-incremental-matches-full
+                     test-repo conn page "embedded block edit matches full")
+                  ;; Move tail under parent
+                  _ (evict-tx! test-repo conn
+                               (d/transact! conn [{:db/id (:db/id tail)
+                                                   :block/parent (:db/id parent)
+                                                   :block/order "a9"}]))
+                  _ (<assert-incremental-matches-full
+                     test-repo conn page "block move matches full")
+                  ;; Move nested child b to a different parent so the old
+                  ;; parent's assembled cache is evicted from db-before.
+                  child-b (db-test/find-block-by-content @conn "child b")
+                  _ (evict-tx! test-repo conn
+                               (d/transact! conn [{:db/id (:db/id child-b)
+                                                   :block/parent (:db/id tail)
+                                                   :block/order "a0"}]))
+                  _ (<assert-incremental-matches-full
+                     test-repo conn page "move between parents matches full")
+                  ;; Collapse does not change mirrored markdown
+                  _ (evict-tx! test-repo conn
+                               (d/transact! conn [{:db/id (:db/id parent)
+                                                   :block/collapsed? true}]))
+                  _ (<assert-incremental-matches-full
+                     test-repo conn page "collapse matches full")
+                  ;; Delete a child
+                  _ (evict-tx! test-repo conn
+                               (d/transact! conn [[:db/retractEntity (:db/id child-a)]]))
+                  _ (<assert-incremental-matches-full
+                     test-repo conn page "delete matches full")
+                  ;; Rename the source page itself
+                  _ (evict-tx! test-repo conn
+                               (d/transact! conn [{:db/id (:db/id page)
+                                                   :block/title "Source Renamed"
+                                                   :block/name "source renamed"}]))
+                  renamed (d/entity @conn (:db/id page))
+                  _ (<assert-incremental-matches-full
+                     test-repo conn renamed "page rename matches full")]
+            (is (string/includes?
+                 (markdown-mirror/render-page-content-full @conn renamed {})
+                 "See [[TargetNew]]"))
+            (is (string/includes?
+                 (markdown-mirror/render-page-content-full @conn renamed {})
+                 "Target edited")))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally (fn []
+                       (markdown-mirror/clear-block-render-cache! test-repo)
+                       (done)))))))
+
+(deftest large-page-single-block-edit-is-incremental-test
+  (async done
+    (let [nested-n 200
+          top-n 800
+          target-uuid #uuid "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa02"
+          embed-uuid #uuid "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbb02"
+          conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "RefTarget"}
+                   :blocks [{:block/title "embedded target"
+                             :block/uuid target-uuid
+                             :build/keep-uuid? true
+                             :build/children [{:block/title "embedded child"}]}]}
+                  {:page {:block/title "Large Page"}
+                   :blocks (into [{:block/title ""
+                                   :block/uuid embed-uuid
+                                   :build/keep-uuid? true}
+                                  {:block/title "parent"
+                                   :build/children
+                                   (mapv (fn [i] {:block/title (str "nested " i)})
+                                         (range nested-n))}]
+                                 (mapv (fn [i]
+                                         {:block/title (if (zero? (mod i 11))
+                                                         (str "see [[RefTarget]] " i)
+                                                         (str "block " i))})
+                                       (range top-n)))}]})
+          _ (d/transact! conn [{:db/id (:db/id (d/entity @conn [:block/uuid embed-uuid]))
+                                :block/link (:db/id (d/entity @conn [:block/uuid target-uuid]))}])
+          page (db-test/find-page-by-title @conn "Large Page")
+          edit-block (db-test/find-block-by-content @conn "block 3")
+          block-count (+ top-n nested-n 3)
+          incremental-opts {:yield-every nil}]
+      (markdown-mirror/set-enabled! test-repo true)
+      (markdown-mirror/clear-block-render-cache! test-repo)
+      (markdown-mirror/reset-render-stats!)
+      (-> (p/let [full-first (count-update-block-content-calls
+                              (fn []
+                                (let [t0 (js/performance.now)
+                                      content (markdown-mirror/render-page-content-full @conn page {})]
+                                  {:ms (- (js/performance.now) t0)
+                                   :content content})))
+                  _ (markdown-mirror/reset-render-stats!)
+                  t0 (js/performance.now)
+                  incremental-first (markdown-mirror/<render-page-content
+                                     test-repo @conn page incremental-opts)
+                  incremental-first-ms (- (js/performance.now) t0)
+                  first-stats (markdown-mirror/render-stats)
+                  _ (is (= (:content (:result full-first)) incremental-first)
+                        "first incremental render is byte-identical to full render")
+                  tx-report (d/with @conn [{:db/id (:db/id edit-block)
+                                            :block/title "block 3 edited"}])
+                  _ (d/reset-conn! conn (:db-after tx-report))
+                  _ (markdown-mirror/evict-block-render-cache!
+                     test-repo
+                     (:db-after tx-report)
+                     (:db-before tx-report)
+                     (:tx-data tx-report))
+                  edited-page (d/entity @conn (:db/id page))
+                  full-edit (count-update-block-content-calls
+                             (fn []
+                               (let [t0 (js/performance.now)
+                                     content (markdown-mirror/render-page-content-full @conn edited-page {})]
+                                 {:ms (- (js/performance.now) t0)
+                                  :content content})))
+                  _ (markdown-mirror/reset-render-stats!)
+                  t1 (js/performance.now)
+                  incremental-edit (markdown-mirror/<render-page-content
+                                    test-repo @conn edited-page incremental-opts)
+                  incremental-edit-ms (- (js/performance.now) t1)
+                  edit-stats (markdown-mirror/render-stats)
+                  benchmark {:block-count block-count
+                             :full-first-ms (js/Math.round (:ms (:result full-first)))
+                             :full-first-update-block-content-calls (:calls full-first)
+                             :incremental-first-ms (js/Math.round incremental-first-ms)
+                             :incremental-first-own-renders (:own-block-renders first-stats)
+                             :full-edit-ms (js/Math.round (:ms (:result full-edit)))
+                             :full-edit-update-block-content-calls (:calls full-edit)
+                             :incremental-edit-ms (js/Math.round incremental-edit-ms)
+                             :incremental-edit-own-renders (:own-block-renders edit-stats)
+                             :incremental-edit-cache-hits (:cache-hits edit-stats)}]
+            (js/console.log "markdown-mirror large-page benchmark" (pr-str benchmark))
+            (is (> (:calls full-first) block-count)
+                "full render resolves titles for every block on the page")
+            (is (> (:own-block-renders first-stats) nested-n)
+                "first incremental render walks the large tree")
+            (is (> (:calls full-edit) block-count)
+                "full re-render after a one-block edit still scales with the page")
+            (is (<= (:own-block-renders edit-stats) 8)
+                "single-block edit re-renders only the changed block (and maybe page properties)")
+            (is (> (:cache-hits edit-stats) nested-n)
+                "unchanged blocks are served from the per-block cache")
+            (is (= (:content (:result full-edit)) incremental-edit)
+                "incremental edit output is byte-identical to a full regeneration")
+            (is (string/includes? incremental-edit "block 3 edited")))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally (fn []
+                       (markdown-mirror/set-enabled! test-repo false)
+                       (markdown-mirror/clear-block-render-cache! test-repo)
+                       (done)))))))
