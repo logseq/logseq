@@ -39,6 +39,7 @@ let take_patches () =
   List.rev batches
 
 let enqueue_batch batch =
+  Asset_store.publish_resource_context ~repo:(Runtime.repo ());
   Queue.add batch pending_batches;
   true
 
@@ -487,6 +488,7 @@ let initialize_unlocked platform_code host_code (payload : string) =
   Host.set_wakeup (fun () -> wakeup ());
   Host.set_host_op (fun name payload ->
       platform_request (name ^ "\n" ^ payload));
+  Resource_native.reset ();
   if host_kind = Lui_protocol.GenericHost then
     platform_request
       ("app-icons\n"
