@@ -836,6 +836,7 @@ let claim_autofocus (b : Lui_protocol.patch_batch) =
             not (Hashtbl.mem autofocus_claimed id)
             && Lui_store.mem e.store id
             && Lui_store.bool_prop e.store id "autofocus"
+            && not (Lui_scene.rect_empty (Rects.get e.rects id))
           then begin
             Hashtbl.replace autofocus_claimed id ();
             Ui.set_focused e.ui e.store id;

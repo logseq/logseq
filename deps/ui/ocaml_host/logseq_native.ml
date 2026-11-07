@@ -25,6 +25,8 @@ external native_activate : unit -> unit = "logseq_native_activate"
 external native_titlebar_blend : unit -> unit
   = "logseq_native_titlebar_blend"
 
+external native_metal_noanim : int -> unit = "logseq_native_metal_noanim"
+
 (* ocaml_host_stubs.c: Electron-parity trafficLightPosition {16,16} plus
    the leading inset (height, left, right) the header must reserve. *)
 external native_titlebar_insets : int -> float * float * float
@@ -287,6 +289,8 @@ let () =
   Sdl.raise_window !win;
   native_activate ();
   native_titlebar_blend ();
+  if Host_platform.is_macos then
+    native_metal_noanim (Sdl.get_window_id !win);
   (* Bundle the Inter family before the first Lui_text.create — the
      app emits font-family:"Inter" (web parity) and the named lookup
      falls back to the system font when the family is unregistered.
