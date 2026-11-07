@@ -241,6 +241,7 @@ CAMLprim value loadIconNames(value arg) {
 #include <ImageIO/ImageIO.h>
 #include <IOSurface/IOSurface.h>
 #include <libproc.h>
+#include <math.h>
 #include <sys/resource.h>
 #include <unistd.h>
 
@@ -691,14 +692,24 @@ CAMLprim value logseq_native_titlebar_insets(value id_v) {
             window, sel_registerName("frame"));
         tb_rect container = ((tb_rect (*)(id, SEL))objc_msgSend)(
             title_bar_container, sel_registerName("frame"));
-        container.h = header_h;
-        container.y = window_frame.h - header_h;
-        ((void (*)(id, SEL, tb_rect))objc_msgSend)(
-            title_bar_container, sel_registerName("setFrame:"), container);
-        if (title_bar_view != nil) {
-          tb_rect fill = {0, 0, container.w, header_h};
+        double want_y = window_frame.h - header_h;
+        /* Only stomp the frame when it actually drifted — during
+           live-resize AppKit re-lays the bar out each tracking step and
+           a redundant setFrame makes the header chrome visibly jump. */
+        if (fabs(container.h - header_h) > 0.5 || fabs(container.y - want_y) > 0.5) {
+          container.h = header_h;
+          container.y = want_y;
           ((void (*)(id, SEL, tb_rect))objc_msgSend)(
-              title_bar_view, sel_registerName("setFrame:"), fill);
+              title_bar_container, sel_registerName("setFrame:"), container);
+        }
+        if (title_bar_view != nil) {
+          tb_rect have = ((tb_rect (*)(id, SEL))objc_msgSend)(
+              title_bar_view, sel_registerName("frame"));
+          if (fabs(have.h - header_h) > 0.5 || fabs(have.w - container.w) > 0.5) {
+            tb_rect fill = {0, 0, container.w, header_h};
+            ((void (*)(id, SEL, tb_rect))objc_msgSend)(
+                title_bar_view, sel_registerName("setFrame:"), fill);
+          }
         }
       }
       /* Frame-only placement: Auto Layout on standardWindowButton views
@@ -725,8 +736,10 @@ CAMLprim value logseq_native_titlebar_insets(value id_v) {
           next.y = view_flipped ? top : (header_h - top - bh);
           next.w = bw;
           next.h = bh;
-          ((void (*)(id, SEL, tb_rect))objc_msgSend)(
-              buttons[i], sel_registerName("setFrame:"), next);
+          if (fabs(frame.x - next.x) > 0.5 || fabs(frame.y - next.y) > 0.5 ||
+              fabs(frame.w - next.w) > 0.5 || fabs(frame.h - next.h) > 0.5)
+            ((void (*)(id, SEL, tb_rect))objc_msgSend)(
+                buttons[i], sel_registerName("setFrame:"), next);
         }
       }
       left = traffic_x + 2.0 * (button_size + button_gap) + button_size
