@@ -33,6 +33,7 @@
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.build :as db-property-build]
             [logseq.db.frontend.property.type :as db-property-type]
+            [logseq.db.frontend.query-dsl :as query-dsl]
             [logseq.db.frontend.rules :as rules]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.sqlite.util :as sqlite-util]
@@ -1442,6 +1443,12 @@
        (:logseq.property/created-from-property pvalue)
        (maybe-asset-link-text? (:block/title pvalue))))
 
+(defn- query-refs->id-refs
+  [query page-names-to-uuids]
+  (query-dsl/resolve-page-refs
+   query #(or (get @page-names-to-uuids %)
+              (get @page-names-to-uuids (common-util/page-name-sanity-lc %)))))
+
 (defn- handle-queries
   "If a block contains a simple or advanced queries, converts block to a #Query node. If a block
    contains a cards query converts to a #Cards node"
@@ -1449,7 +1456,7 @@
   (if-let [query (some-> (first (:simple-queries walked-ast-blocks))
                          (ast->text (select-keys options [:log-fn]))
                          string/trim)]
-    (let [props {:logseq.property/query query}
+    (let [props {:logseq.property/query (query-refs->id-refs query page-names-to-uuids)}
           {:keys [block-properties pvalues-tx]}
           (build-properties-and-values props db page-names-to-uuids
                                        (select-keys block [:block/properties-text-values :block/name :block/title :block/uuid])
@@ -1463,7 +1470,9 @@
     (if-let [advanced-query (some-> (first (filter #(= ["Custom" "query"] (take 2 %)) (:block.temp/ast-blocks block)))
                                     (ast->text (select-keys options [:log-fn]))
                                     string/trim)]
-      (let [props {:logseq.property/query (migrate-advanced-query-string advanced-query)}
+      (let [props {:logseq.property/query
+                   (query-refs->id-refs (migrate-advanced-query-string advanced-query)
+                                        page-names-to-uuids)}
             {:keys [block-properties pvalues-tx]}
             (build-properties-and-values props db page-names-to-uuids
                                          (select-keys block [:block/properties-text-values :block/name :block/title :block/uuid])
@@ -1489,7 +1498,7 @@
          :pvalues-tx pvalues-tx'})
       (if-let [cards-macro (first (:cards walked-ast-blocks))]
         (if-let [query (some-> cards-macro second :arguments first string/trim not-empty)]
-          (let [props {:logseq.property/query query}
+          (let [props {:logseq.property/query (query-refs->id-refs query page-names-to-uuids)}
                 {:keys [block-properties pvalues-tx]}
                 (build-properties-and-values props db page-names-to-uuids
                                              (select-keys block [:block/properties-text-values :block/name :block/title :block/uuid])
