@@ -16,6 +16,7 @@
             [frontend.util :as util]
             [frontend.worker.handler.block :as worker-block]
             [frontend.worker.handler.render-resource.view :as worker-view]
+            [frontend.worker.handler.view :as worker-handler-view]
             [goog.object :as gobj]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]))
@@ -223,6 +224,47 @@
   (is (nil? (#'views/selected-groups-sort-desc true false))
       "Unchecking the previous menu item must not overwrite the newly selected group order.")
   (is (nil? (#'views/selected-groups-sort-desc false false))))
+
+(deftest text-operator-change-keeps-a-valid-filter-clause
+  "db-test#1392: switching is -> text contains used to drop the value and
+  persist a 2-element clause that valid-filters? rejects."
+  (let [normalize #'worker-handler-view/view-filter-value-after-operator-change
+        filter-clause #'views/filter-clause
+        persist #'views/table-filters->persist-state
+        valid-filters? #'worker-view/valid-filters?
+        require-view-context! #'worker-view/require-view-context!
+        property :user.property/qa-minimal-note
+        value' (normalize :text-contains #{"Apple"})
+        clause (filter-clause property :text-contains value')
+        filters {:or? false :filters (vec (persist [clause]))}
+        context {:feature-type :class-objects
+                 :sorting [{:id :block/title :asc? true}]
+                 :input ""
+                 :filters filters}]
+    (is (= "" value'))
+    (is (= [property :text-contains ""] clause))
+    (is (= 3 (count clause)))
+    (is (true? (valid-filters? filters))
+        "An in-progress contains clause must be a valid view resource filter.")
+    (is (= context (require-view-context! context))
+        "The same clause must pass the view resource context check that crashed the app.")
+    (is (= [[property :text-contains ""]]
+           (persist [[property :text-contains]]))
+        "Persisting a 2-element text clause pads the empty search string.")
+    (is (true? (valid-filters? {:or? false
+                               :filters (vec (persist [[property :text-not-contains]]))}))
+        "text not contains is padded the same way.")
+    (is (false? (valid-filters? {:or? false
+                                :filters [[property :text-contains]]}))
+        "A 2-element clause is still invalid if it is not normalized.")
+    (is (thrown-with-msg?
+         js/Error
+         #"Invalid view resource context"
+         (require-view-context!
+          (assoc context :filters {:or? false
+                                   :filters [[property :text-contains]]}))))
+    (is (= [property :text-contains "App"]
+           (filter-clause property :text-contains (normalize :text-contains "App"))))))
 
 (deftest filters-include-properties-and-supported-db-attributes-test
   (let [property-column {:id :user.property/status
