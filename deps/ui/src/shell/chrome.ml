@@ -656,6 +656,24 @@ let home_button ms =
             ())
     ms (Signal.value sidebar.Sidebar_state.home_page)
 
+(* cljs header.cljs back-and-forward — Electron-only there; desktop LUI
+   (web Electron + native) always mounts the pair so history matches. *)
+let back_and_forward () =
+  let back_keys = Keymap_data.tooltip_keys "go/backward" in
+  let fwd_keys = Keymap_data.tooltip_keys "go/forward" in
+  row ~key:"nav-hist" ~cross:`center
+    [ icon_btn ~key:"nav-back" ~id:""
+        ~cls:(ghost_btn_cls ~tail:"navigation nav-left" ())
+        ~icon:"arrow-left" ~tip:(I18n.t "header/go-back")
+        ?keys:(if back_keys = "" then None else Some back_keys)
+        ~on_click:(fun _ -> Ui_services.nav_back ()) ()
+    ; icon_btn ~key:"nav-fwd" ~id:""
+        ~cls:(ghost_btn_cls ~tail:"navigation nav-right" ())
+        ~icon:"arrow-right" ~tip:(I18n.t "header/go-forward")
+        ?keys:(if fwd_keys = "" then None else Some fwd_keys)
+        ~on_click:(fun _ -> Ui_services.nav_forward ()) ()
+    ]
+
 (* cljs open-right-sidebar! seeds a "contents" item when the sidebar
    is empty (state/sidebar-add-content-when-open!) *)
 let right_toggle_button ms =
@@ -759,6 +777,8 @@ let header (ms : Model.t Signal.signal) =
                  .ui-items-container only when a plugin actually
                  contributes a toolbar item *)
               Left_sidebar_view.plugins_toolbar ms
+            ; (* cljs: (when (util/electron?) (back-and-forward)) *)
+              back_and_forward ()
             ; dots_button; right_toggle_button ms ]
         ]
     ]

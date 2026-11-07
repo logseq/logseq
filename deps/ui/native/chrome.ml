@@ -24,12 +24,13 @@ open Lui_elements
 
 (* ---- native topbar (web .cp__header parity) ----
 
-   Single ~48px row matching the web shell: leading group [sidebar
-   toggle, search], trailing group [rtc status, home, page-menu dots,
-   right-sidebar toggle]. The native `toolbar` kind renders in-canvas —
-   two stacked placement toolbars produced doubled bars/borders — so
-   one plain row is the parity form. rtc/plugin toolbar items keep
-   hidden DOM mounts below so their emitters stay live. *)
+   Single ~48px row: leading group [sidebar toggle, back/forward,
+   search] (history sits left like desktop Electron/Cursor chrome);
+   trailing group [rtc, home, page-menu dots, right-sidebar toggle].
+   The native `toolbar` kind renders in-canvas — two stacked placement
+   toolbars produced doubled bars/borders — so one plain row is the
+   parity form. rtc/plugin toolbar items keep hidden DOM mounts below
+   so their emitters stay live. *)
 
 let icon_btn ~key ?(acc = "") ~icon_name ~label ?keys ?disabled_signal
     ?foreground_signal ?style_class on_press =
@@ -44,7 +45,7 @@ let icon_btn ~key ?(acc = "") ~icon_name ~label ?keys ?disabled_signal
 
 (* The shared leading toolbar mounts the sidebar toggle in its active owner. *)
 let left_menu_btn ?(key = "left-menu-btn") () =
-  icon_btn ~key ~acc:"left-menu" ~icon_name:"menu-2"
+  icon_btn ~key ~acc:"left-menu" ~icon_name:"layout-sidebar"
     ~label:(I18n.t "header/toggle-left-sidebar")
     (fun () -> Runtime.send Action.Toggle_left_sidebar)
 
@@ -94,6 +95,23 @@ let home_item (ms : Model.t Signal.signal) : t =
       | _ -> home_btn ms)
     ms
 
+(* cljs header.cljs back-and-forward (Electron); native desktop always
+   mounts the pair so history matches the packaged Electron chrome. *)
+let back_and_forward () =
+  let back_keys = Keymap_data.tooltip_keys "go/backward" in
+  let fwd_keys = Keymap_data.tooltip_keys "go/forward" in
+  row ~key:"nav-hist" ~cross:`center
+    [ icon_btn ~key:"nav-back" ~acc:"nav-back" ~icon_name:"arrow-left"
+        ~style_class:"navigation nav-left"
+        ?keys:(if back_keys = "" then None else Some back_keys)
+        ~label:(I18n.t "header/go-back")
+        (fun () -> Ui_services.nav_back ())
+    ; icon_btn ~key:"nav-fwd" ~acc:"nav-fwd" ~icon_name:"arrow-right"
+        ~style_class:"navigation nav-right"
+        ?keys:(if fwd_keys = "" then None else Some fwd_keys)
+        ~label:(I18n.t "header/go-forward")
+        (fun () -> Ui_services.nav_forward ())
+    ]
 
 (* cljs open-right-sidebar! seeds a "contents" item when the sidebar
    is empty (state/sidebar-add-content-when-open!) *)
@@ -145,27 +163,41 @@ let rtc_item (ms : Model.t Signal.signal) : t =
       | Some _ -> rtc_item_btn ms)
     ms
 
-let leading_toolbar ~key ~in_sidebar ~state ~controls : t =
+(* Window-level titlebar owns the leading controls for the whole
+   session. They must not remount into the left dock — that dock's
+   width animates, and moving the buttons with it is the Devin-style
+   regression (controls slide during toggle). is_open is constantly
+   false so the shared leading_toolbar stays on the header owner. *)
+let leading_toolbar ~key ~state ~controls : t =
  fun context parent ->
   let inset = Host.titlebar_left_signal
     ~scheduler:context.Lui_ui.ui_scheduler ~scope:context.Lui_ui.ui_scope in
-  Ui_components.leading_toolbar ~key ~in_sidebar ~safe_area:0
-    ~safe_area_signal:inset ~state ~is_open:(fun (m : Model.t) -> m.left_sidebar_open)
-    ~controls context parent
+  (* Host left inset already clears traffic lights + gap; no extra pad. *)
+  Ui_components.leading_toolbar ~key ~in_sidebar:false ~safe_area:0
+    ~safe_area_signal:inset ~padding_horizontal:0 ~state
+    ~is_open:(fun _ -> false) ~controls context parent
 
-(* cljs container.cljs: single .cp__header row — .l [sidebar-toggle,
-   search], .r [rtc, home, dots, right-toggle]. *)
-let topbar (ms : Model.t Signal.signal) : t list =
-  [ row ~key:"head" ~accessibility_identifier:"head"
+(* Left cluster: sidebar toggle, back/forward, search. Right cluster:
+   rtc, home, dots, right-toggle — history stays on the left. *)
+let leading_controls () =
+  [ left_menu_btn (); back_and_forward (); search_btn () ]
+
+let topbar (ms : Model.t Signal.signal) : t =
+  row ~key:"head" ~accessibility_identifier:"head"
       ~style_class:"cp__header" ~cross:`center ~main:`space_between
-      ~height:48 ~data_attrs:[ ("data-window-titlebar", "true") ]
-      [ leading_toolbar ~key:"head-leading" ~in_sidebar:false ~state:ms
-          ~controls:(fun () -> [left_menu_btn (); search_btn ()])
+      ~height:48 ~min_height:48
+      (* left-sidebar-bg-color stays on the dock only — the window header
+         spans content too and must not carry that strip. *)
+      ~data_attrs:[ ("data-window-titlebar", "true") ]
+      [ leading_toolbar ~key:"head-leading" ~state:ms
+          ~controls:leading_controls
       ; Ui_components.with_props [Ui_components.Prop.overflow `hidden;Ui_components.Prop.padding_right 6]
           (row ~key:"head-acts" ~cross:`center ~grow:1. ~min_width:0 ~main:`end_
             ~style_class:"cp__header-r"
-            [rtc_item ms;home_item ms;dots_btn;right_toggle_btn ms]) ]
-  ]
+            [ rtc_item ms
+            ; home_item ms
+            ; dots_btn
+            ; right_toggle_btn ms ]) ]
 
 let performance_bar_height = 29
 
@@ -256,16 +288,14 @@ let right_sidebar (ms : Model.t Signal.signal) =
 let left_sidebar (ms : Model.t Signal.signal) =
   let st=Sidebar_state.ensure ms in
   let viewport=Signal.value st.Sidebar_state.viewport_w in
+  (* No titlebar row here — the window-level topbar owns nav controls so
+     they stay put while this pane's width animates. *)
   let panel = row ~key:"ls-dock" ~grow:1. ~min_height:0 ~cross:`stretch
     [column ~key:"ls-inner" ~grow:1. ~min_height:0
        ~min_width:(reactive Sidebar_state.left_inner_width (Signal.value st.Sidebar_state.left_width) viewport)
        ~max_width:(reactive Sidebar_state.left_inner_width (Signal.value st.Sidebar_state.left_width) viewport)
        ~background:"var(--left-sidebar-bg-color)" ~style_class:"left-sidebar-inner as-container"
-       [row ~key:"ls-top" ~height:48 ~min_height:48 ~cross:`center ~style_class:"left-sidebar-top"
-          ~data_attrs:["data-window-titlebar","true"]
-          [leading_toolbar ~key:"sidebar-leading" ~in_sidebar:true ~state:ms
-             ~controls:(fun () -> [left_menu_btn ();search_btn ()])];
-        column ~key:"ls-wrap" ~grow:1. ~min_height:0 ~margin_top:4
+       [column ~key:"ls-wrap" ~grow:1. ~min_height:0 ~margin_top:4
           [column ~key:"ls-head" ~gap:4 ~margin_bottom:4 ~style_class:"sidebar-header-container"
              [Left_sidebar_view.graphs_selector st ms;Left_sidebar_view.nav_group ms st];
            Left_sidebar_view.contents ms]];
@@ -354,8 +384,8 @@ let main_scroll (ms : Model.t Signal.signal) : t =
                       | _ -> spacer ~key:"content-end" ~height:120 []) ms ] ] ] ]
 
 (* NavigationSplitView detail column — the left dock split's second
-   pane: titlebar row over the page scroll, sized by the persisted
-   sidebar fraction. *)
+   pane is page scroll only. The window-level topbar sits above the
+   split so header controls do not travel with the dock animation. *)
 let detail_column (ms : Model.t Signal.signal) : t =
   Ui_parts.class_signal ms
     (fun (m : Model.t) ->
@@ -363,11 +393,11 @@ let detail_column (ms : Model.t Signal.signal) : t =
     (column ~key:"left-container"
        ~accessibility_identifier:"left-container" ~grow:1.
        ~min_height:0
-       ([ (* invisible logseq-dom carrier: hosts forward
-             document events through this extension node *)
-          Logseq_el.carrier ]
-        @ topbar ms
-        @ [ hidden_chrome ms; main_scroll ms ]))
+       [ (* invisible logseq-dom carrier: hosts forward
+            document events through this extension node *)
+         Logseq_el.carrier
+       ; hidden_chrome ms
+       ; main_scroll ms ])
 
 (* Overlay layer — cmdk palette, popups (autocomplete/slash/context
    menus), dialogs and toasts mount here (single shared container;
@@ -471,15 +501,15 @@ let not_found_page : t =
 let shell_contents (ms : Model.t Signal.signal) : t =
   let st = Sidebar_state.ensure ms in
   stack ~key:"shell-content"
-    [ (* horizontal shell: the docked splits own both side docks'
-         tracks — the left split's second pane is the detail column
-         (titlebar + page scroll), so the sidebar column spans the
-         full window height like NavigationSplitView *)
+    [ (* Devin-style chrome: fixed window titlebar above the dock
+         splits. Sidebar/content panes animate width underneath; the
+         leading controls never remount or translate with the dock. *)
       column ~key:"app" ~accessibility_identifier:"app-container" ~grow:1. ~min_height:0 ~gap:0
-        [row ~key:"panes" ~grow:1. ~min_height:0 ~cross:`stretch
-           [right_split ms st (left_split ms st (detail_column ms)) (right_sidebar ms);
-            Pdf.container_el ~key:"asc" ~id:"app-single-container"];
-         performance_bar ()]
+        [ topbar ms
+        ; row ~key:"panes" ~grow:1. ~min_height:0 ~cross:`stretch
+            [right_split ms st (left_split ms st (detail_column ms)) (right_sidebar ms);
+             Pdf.container_el ~key:"asc" ~id:"app-single-container"]
+        ; performance_bar () ]
     ; overlays ms
     ; help_area ms
     ; reactive ~equal:(fun (a : Model.t) (b : Model.t) ->

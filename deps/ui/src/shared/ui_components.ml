@@ -26,6 +26,11 @@ let bv v = P.BoolValue v
 let popover_transition =
   "opacity 150ms ease, transform 150ms ease"
 
+(* Match .lui-dialog CSS: fade + zoom-in-95 over 200ms. Native dialog
+   surfaces read this Transition prop for present_surfaces motion. *)
+let dialog_transition =
+  "opacity 200ms ease-out, transform 200ms ease-out"
+
 (* cljs .ls-block motion: transform 0.3s on the base rule plus the
    background-color 0.2s cubic-bezier of .block-highlight /
    .ls-block.selected — merged into one shorthand on the selectable row
@@ -188,15 +193,18 @@ let header_right_sidebar_toggle element : t =
     (box ~key:"header-right-sidebar-toggle" [element]) ctx parent
 
 (* Exactly one leading toolbar is interactive: the open sidebar owns it,
-   otherwise the detail header does. Only the native host reserves traffic lights. *)
-let leading_toolbar ?safe_area_signal ~key ~in_sidebar ~safe_area ~state ~is_open ~controls : t =
+   otherwise the detail header does. Only the native host reserves traffic lights.
+   Native titlebar insets already include the post-light gap, so callers pass
+   ~padding_horizontal:0 there; web keeps the default 8. *)
+let leading_toolbar ?safe_area_signal ?(padding_horizontal = 8) ~key ~in_sidebar
+    ~safe_area ~state ~is_open ~controls : t =
   reactive
     ~equal:(fun a b -> is_open a = is_open b)
     (fun value ->
       if is_open value = in_sidebar then
         Ui_parts.int_prop P.MarginLeft ?value_signal:safe_area_signal
           (row ~key ~height:48 ~min_height:48 ~cross:`center
-             ~margin_left:safe_area ~padding_horizontal:8 (controls ()))
+             ~margin_left:safe_area ~padding_horizontal (controls ()))
       else spacer ~key:(key ^ "-empty") []) state
 
 let native_performance ~label ~unavailable ~format_fps () : t =
@@ -242,8 +250,10 @@ let dialog ?key ?(gap=16) ?(padding=24) ?padding_horizontal ?padding_vertical
     ?text ?description ?on_dismiss children : t =
  fun ctx parent ->
   let element = with_props
-    (List.filter_map Fun.id
-      [Option.map Prop.padding_top padding_top;Option.map Prop.padding_bottom padding_bottom])
+    (Prop.transition dialog_transition
+     :: List.filter_map Fun.id
+          [ Option.map Prop.padding_top padding_top
+          ; Option.map Prop.padding_bottom padding_bottom ])
     (Lui_elements.dialog ?key ~gap ~padding ?padding_horizontal ?padding_vertical
     ~corner_radius:8 ~background:"hsl(var(--background))" ~foreground:"inherit"
     ~border_width:1 ~border_color:"hsl(var(--border))"
