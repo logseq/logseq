@@ -179,8 +179,12 @@ let () =
          (Sys.Signal_handle (fun _ -> Atomic.set dump_tree_flag true))
    with _ -> ());
   if !debug then begin
-    match open_out_gen [Open_creat; Open_append] 0o644
-            "/tmp/logseq_native_host.log" with
+    let log_path =
+      match Sys.getenv_opt "LOGSEQ_NATIVE_DEBUG_LOG" with
+      | Some p when p <> "" -> p
+      | _ -> "/tmp/logseq_native_host.log"
+    in
+    match open_out_gen [Open_creat; Open_append] 0o644 log_path with
     | oc -> log_oc := Some oc
     | exception _ -> ()
   end;
@@ -1739,6 +1743,135 @@ let () =
         0
   in
   let e = Sdl.Event.create () in
+  (* Scripted-input channel: LOGSEQ_NATIVE_INPUT_FIFO=<path> reads one
+     command per line and replays it as synthetic SDL events so test
+     drivers exercise the exact OS input path without touching the
+     user's cursor, focus, or keyboard. Mouse coords are window-local
+     points; keys carry SDL scancode/keycode/keymod.
+     Lines: key|keydown|keyup <sc> <kc> <mod> · text <utf8> ·
+            move|click|rclick|ldown|lup|rdown|rup|dbl <x> <y> · wheel <dx> <dy> *)
+  let input_fifo_queue = Queue.create ()
+  and input_fifo_lock = Mutex.create () in
+  (* Parse one fifo line into dispatch steps. Each step mirrors the real
+     SDL path order: hold_pointer/ensure_ed_focus → handle_input (LUI
+     Input) → on_dom_* (DOM mousedown/keydown/etc that editor handlers
+     listen to). Keys take SDL scancode/keymod; mouse coords are
+     window-local points. *)
+  let dispatch_input_line line =
+    let nomods = Native_window.mods_of_keymod 0 in
+    let btn_of_name = function "r" -> Input.Right | _ -> Input.Left in
+    let step = function
+      | `key (down, sc, km) ->
+          if down then begin
+            if not (Keyboard_capture.active ()) then
+              Host_requests.ensure_ed_focus ();
+            apply_actions
+              (handle_input
+                 (Input.Key_down
+                    ( Input.key_of_sdl_scancode sc
+                    , Native_window.mods_of_keymod km, false )))
+          end;
+          on_dom_key ~down ~scancode:sc ~keymod:km ~repeat:false ()
+      | `text s ->
+          if not (Keyboard_capture.active ()) then
+            Host_requests.ensure_ed_focus ();
+          apply_actions (handle_input (Input.Text_input s));
+          (* same insert emit as the SDL path — the logseq-editor
+             extension reads commits as "insert" events *)
+          (if not !component_input then
+             let tgt = Ui.focused ui in
+             if tgt <> 0
+                && Lui_store.kind store tgt = "extension:logseq-editor"
+             then
+               apply_patches
+                 (Native_embed.extension_event tgt "logseq-editor" "insert"
+                    (Printf.sprintf {|{"text":%s}|} (jstr s))))
+      | `move (x, y) ->
+          apply_actions (handle_input (Input.Move (x, y)));
+          on_dom_motion ~x:(int_of_float x) ~y:(int_of_float y) ~rx:0
+            ~ry:0 ~mods:(Native_window.current_modifiers input_state)
+      | `bdown (x, y, b, clicks) ->
+          if b = Input.Left then Native_window.hold_pointer text_input true;
+          apply_actions
+            (handle_input (Input.Button_down (x, y, b, clicks, nomods)));
+          on_dom_button_down ~x:(int_of_float x) ~y:(int_of_float y) ~btn:b
+            ~clicks ~mods:(Native_window.current_modifiers input_state)
+      | `bup (x, y, b) ->
+          if b = Input.Left then Native_window.hold_pointer text_input false;
+          apply_actions (handle_input (Input.Button_up (x, y, b, nomods)));
+          on_dom_button_up ~x:(int_of_float x) ~y:(int_of_float y) ~btn:b
+            ~mods:(Native_window.current_modifiers input_state)
+      | `wheel (dx, dy) ->
+          apply_actions (handle_input (Input.Wheel (dx, dy)))
+    in
+    component_input := false;
+    match String.split_on_char ' ' (String.trim line) with
+    | "key" :: [s; m] ->
+        let s, m = int_of_string s, int_of_string m in
+        step (`key (true, s, m)); step (`key (false, s, m))
+    | ("keydown" | "keyup") :: [s; m] ->
+        let s, m = int_of_string s, int_of_string m in
+        step (`key (true, s, m));
+        if String.sub line 0 5 = "keyup" then step (`key (false, s, m))
+    | "text" :: rest -> step (`text (String.concat " " rest))
+    | "move" :: [x; y] -> step (`move (float_of_string x, float_of_string y))
+    | ("click" | "rclick" | "dbl") :: [x; y] ->
+        let x, y = float_of_string x, float_of_string y in
+        let b = btn_of_name (String.sub line 0 1) in
+        step (`bdown (x, y, b, 1)); step (`bup (x, y, b));
+        if String.sub line 0 1 = "d" then begin
+          step (`bdown (x, y, b, 2)); step (`bup (x, y, b))
+        end
+    | ("ldown" | "rdown" | "lup" | "rup") :: [x; y] ->
+        let x, y = float_of_string x, float_of_string y in
+        let b = btn_of_name (String.sub line 0 1) in
+        if String.get line 1 = 'u' then step (`bup (x, y, b))
+        else step (`bdown (x, y, b, 1))
+    | "wheel" :: [dx; dy] -> step (`wheel (float_of_string dx, float_of_string dy))
+    | _ -> ()
+  in
+  (* The reader domain only enqueues parsed lines — OCaml strings and
+     SDL event structs must be built on the main domain, where the
+     event loop drains this queue before polling SDL. *)
+  (match Sys.getenv_opt "LOGSEQ_NATIVE_INPUT_FIFO" with
+   | Some fifo_path ->
+     dbg "[fifo] spawn reader for %s" fifo_path;
+     ignore
+       (Domain.spawn (fun () ->
+          let rec serve () =
+            dbg "[fifo] open %s" fifo_path;
+            let ic =
+              try Some (open_in_bin fifo_path)
+              with Sys_error _ -> None
+            in
+            (match ic with
+             | Some ic ->
+                 (try
+                    while true do
+                      let line = input_line ic in
+                      dbg "[fifo] got: %s" line;
+                      Mutex.lock input_fifo_lock;
+                      Queue.add line input_fifo_queue;
+                      Mutex.unlock input_fifo_lock;
+                      (* promote the queued string to the shared heap *)
+                      Gc.minor ()
+                    done
+                  with End_of_file -> ());
+                 close_in_noerr ic
+             | None -> Unix.sleepf 0.2);
+            serve ()
+          in
+          serve ()))
+   | None -> ());
+  let drain_fifo_lines () =
+    Mutex.lock input_fifo_lock;
+    while not (Queue.is_empty input_fifo_queue) do
+      let line = Queue.pop input_fifo_queue in
+      dbg "[fifo] dispatch: %s" line;
+      dispatch_input_line line
+    done;
+    Mutex.unlock input_fifo_lock
+  in
   let drain_events () =
     let n = ref 0 in
     let go = ref true in
@@ -1853,8 +1986,13 @@ let () =
     !n
   in
   (* ---- boot the embedded app ---- *)
-  Lui_shell.set_app_name "Logseq";
-  ignore (Lui_shell.set_window_title "Logseq");
+  let app_name =
+    match Sys.getenv_opt "LOGSEQ_NATIVE_APP_NAME" with
+    | Some n when n <> "" -> n
+    | _ -> "Logseq"
+  in
+  Lui_shell.set_app_name app_name;
+  ignore (Lui_shell.set_window_title app_name);
   (* The selected platform and generic host profile drive the app's
      shortcuts, app-icons push and host-gated views. *)
   let init_patches = Domain.join init_d in
@@ -2126,6 +2264,7 @@ let () =
       ~reduced_motion:(Native_window.reduced_motion ());
     let events_before = metrics.event_count in
     let events_started = perf_s () in
+    drain_fifo_lines ();
     if drain_events () > 0 then last_busy := t0;
     metrics.event_ms <- (perf_s () -. events_started) *. 1000.;
     let had_events = metrics.event_count > events_before in
