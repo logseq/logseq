@@ -473,7 +473,8 @@ let test_left_sidebar () =
 
 let test_right_sidebar () =
   let st = sidebar_st () in
-  Sidebar_state.push_item st (sidebar_item "pg-x" "page" "Right Page");
+  Sidebar_state.push_item st
+    { (sidebar_item "pg-x" "page" "Right Page") with uuid = Some "uuid-x" };
   send Action.Toggle_right_sidebar;
   let items =
     find_where (fun n ->
@@ -489,7 +490,21 @@ let test_right_sidebar () =
               match M.string_prop c "text" with
               | Some t -> t = "Right Page"
               | None -> false))
-   | [] -> check "right sidebar item" false)
+   | [] -> check "right sidebar item" false);
+  let original = List.find (fun (item : Sidebar_state.item) -> item.key = "pg-x")
+      (Runtime.signal_get st.items) in
+  Sidebar_state.toggle_collapsed st original.key;
+  Sidebar_state.push_item st (sidebar_item "pg-after" "page" "Other Page");
+  Sidebar_state.push_item st { original with title = "Replacement" };
+  check "reopening a sidebar UUID promotes and expands its retained pane without duplicates"
+    (match Runtime.signal_get st.items with
+     | reopened :: next :: rest ->
+         reopened.key = original.key && not reopened.collapsed
+         && { reopened with collapsed = original.collapsed } = original
+         && next.key = "pg-after"
+         && not (List.exists (fun (item : Sidebar_state.item) -> item.key = original.key) rest)
+     | _ -> false);
+  Sidebar_state.remove_item st "pg-after"
 
 (* ---------------- context menu (popups layer) ---------------- *)
 

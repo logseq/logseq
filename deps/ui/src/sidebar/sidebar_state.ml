@@ -701,8 +701,12 @@ let has_item st key =
 
 let push_item st it =
   let items = Runtime.signal_get st.items in
-  if has_item st it.key then ()
-  else begin
+  match List.find_opt (fun (current : item) -> current.key = it.key) items with
+  | Some current ->
+      Runtime.signal_set st.items
+        ({ current with collapsed = false } ::
+         List.filter (fun (other : item) -> other.key <> it.key) items)
+  | None -> begin
     (* a sidebar block is its container's root — cljs mounts it with
        set-collapsed-block! false so its children show regardless of the
        db collapsed datom. Once per mount: refresh_items re-adds via
@@ -878,9 +882,7 @@ let open_sticky_item st kind =
   if repo = "" then ()
   else begin
     (match List.find_opt (fun (it : item) -> it.key=kind) (Runtime.signal_get st.items) with
-    | Some it ->
-        Runtime.signal_set st.items ({it with collapsed=false} ::
-          List.filter (fun (other : item) -> other.key<>kind) (Runtime.signal_get st.items))
+    | Some it -> push_item st it
     | None -> match kind with
     | "contents" ->
         add_promise st (contents_item repo)
