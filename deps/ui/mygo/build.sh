@@ -23,7 +23,7 @@ fi
 mkdir -p "$output"
 cc -o "$library" "$ui_root/_build/default/native/native_embed.exe.o" "${link_flags[@]}"
 mkdir -p "$resources/fonts" "$resources/img" "$resources/dicts"
-cp "$repo_root/deps/db-worker/_build/default/bin/main.exe" "$resources/logseq-db-worker"
+install -m 755 "$repo_root/deps/db-worker/_build/default/bin/main.exe" "$resources/logseq-db-worker"
 cp "$ui_root/assets/"*.json "$resources/"
 cp "$ui_root/assets/fonts/"*.ttf "$resources/fonts/"
 cp -R "$ui_root/../../resources/img/." "$resources/img/"
