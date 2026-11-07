@@ -1440,6 +1440,8 @@
  :property/map-checked-to "将已勾选映射到"
  :property/map-unchecked-to "将未勾选映射到"
  :property/more-settings "更多设置"
+ :property/move-down "下移"
+ :property/move-up "上移"
  :property/multiple-values "多值"
  :property/multiple-values-confirm "此操作不可撤销，确认要更改此属性为多值吗？"
  :property/name "属性名称"
