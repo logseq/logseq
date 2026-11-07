@@ -3,11 +3,55 @@
 package main
 
 import (
+	"strconv"
 	"testing"
 
 	"github.com/egoist/mygo/ui"
 	luimygo "github.com/logseq/lui/platform/mygo"
 )
+
+func TestExtensionKeyboardMetadata(t *testing.T) {
+	tests := []struct {
+		name      string
+		event     ui.InputEvent
+		key, code string
+		character string
+	}{
+		{"shifted letter", ui.InputEvent{Key: ui.KeyA, PhysicalKey: ui.KeyA, Mods: ui.Shift, Text: "A"}, "a", "KeyA", "A"},
+		{"shifted punctuation", ui.InputEvent{Key: ui.KeyUnknown, PhysicalKey: ui.Key1, Mods: ui.Shift, Text: "!"}, "1", "Digit1", "!"},
+		{"different layout", ui.InputEvent{Key: ui.KeyQ, PhysicalKey: ui.KeyA, Text: "q"}, "q", "KeyA", "q"},
+		{"non-Latin layout", ui.InputEvent{Key: ui.KeyUnknown, PhysicalKey: ui.KeyS, Text: "ы"}, "s", "KeyS", "ы"},
+		{"physical punctuation", ui.InputEvent{Key: ui.KeyQuote, PhysicalKey: ui.KeyQuote, Text: "'"}, "'", "Quote", "'"},
+		{"missing glyph", ui.InputEvent{Key: ui.KeyA, PhysicalKey: ui.KeyA, Mods: ui.Shift}, "a", "KeyA", ""},
+		{"unknown position", ui.InputEvent{Key: ui.KeyA}, "a", "", ""},
+	}
+	for key := ui.KeyF1; key <= ui.KeyF12; key++ {
+		name := "F" + strconv.Itoa(int(key-ui.KeyF1)+1)
+		tests = append(tests, struct {
+			name      string
+			event     ui.InputEvent
+			key, code string
+			character string
+		}{name, ui.InputEvent{Key: key, PhysicalKey: key}, name, name, ""})
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			key := extensionKey(tt.event.Key)
+			if key == "" {
+				t.Fatal("keyboard event would be discarded")
+			}
+			for _, payload := range []map[string]any{extensionDOMKey(tt.event, key), extensionKeyValues(tt.event, key)} {
+				if payload["key"] != tt.key || payload["code"] != tt.code {
+					t.Fatalf("key/code = %v/%v; want %s/%s", payload["key"], payload["code"], tt.key, tt.code)
+				}
+				character, exists := payload["keyChar"]
+				if tt.character == "" && exists || tt.character != "" && character != tt.character {
+					t.Fatalf("keyChar = %v; want OS glyph %q (empty means absent)", character, tt.character)
+				}
+			}
+		})
+	}
+}
 
 func TestRawInlineTextPreservesContentAndHostIdentity(t *testing.T) {
 	s := newPlatformServices(nil)
