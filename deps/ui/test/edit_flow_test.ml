@@ -563,6 +563,18 @@ let test_resync_clean_dirty (h : host) =
   let* () = Ops.resync_open_editor () in
   eqs "override survives resync" "committed" (editing_now ()).S.buffer;
   S.clear_overrides ();
+  stage_page h [ Test_check.block "b1" "HXello" ];
+  set_editing ~uuid:"b1" ~buffer:"HXello" ~caret:2 ~base:"HXello";
+  let accepted = editing_now () in
+  S.override_title "b1" "Hello";
+  let* () = Ops.resync_open_editor () in
+  let current = editing_now () in
+  check "caught-up canonical title keeps accepted source, base and session"
+    (current.S.model.EM.source = accepted.S.model.EM.source
+     && current.S.buffer = accepted.S.buffer
+     && current.S.base = accepted.S.base
+     && current.S.epoch == accepted.S.epoch);
+  S.clear_overrides ();
   reset_editor ();
   Js.Promise.resolve ()
 
