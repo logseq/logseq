@@ -1216,6 +1216,7 @@ type snapshot =
   ; editor_pending_focus : (string * int * float) option
   ; editor_focused : string option
   ; editor_pending_actions : (unit -> unit) list
+  ; editor_display_overrides : (string, string) Hashtbl.t
   ; sidebar : Sidebar_state.t option
   ; cards : Cards_state.t option
   ; due : int Signal.state option
@@ -1230,7 +1231,8 @@ type snapshot =
   ; popups : Popups_state.t option
   ; views_stack : Views_popup.popup list Signal.state option
   ; overlays : Properties_state.view_overlay list Signal.state option
-  ; editor_cmds : Editor_commands.popup option }
+  ; editor_cmds : Editor_commands.popup option
+  ; editor_popup_vs : Editor_commands.popup option Signal.state option }
 
 let snapshot () =
   { editor_st = !Editor_state.st
@@ -1238,6 +1240,7 @@ let snapshot () =
   ; editor_pending_focus = !Editor_state.pending_focus
   ; editor_focused = !Editor_state.focused_block
   ; editor_pending_actions = !Editor_state.pending_focus_actions
+  ; editor_display_overrides = Hashtbl.copy Editor_state.display_overrides
   ; sidebar = !Sidebar_state.st_ref
   ; cards = !Cards_state.st_ref
   ; due = !Cards_state.Due_count.st
@@ -1252,7 +1255,8 @@ let snapshot () =
   ; popups = !P.active
   ; views_stack = !Views_popup.stack_st
   ; overlays = !Properties_state.view_overlays_state
-  ; editor_cmds = !Editor_commands.active }
+  ; editor_cmds = !Editor_commands.active
+  ; editor_popup_vs = !Editor_commands.popup_vs }
 
 let restore snap =
   Editor_state.st := snap.editor_st;
@@ -1260,6 +1264,9 @@ let restore snap =
   Editor_state.pending_focus := snap.editor_pending_focus;
   Editor_state.focused_block := snap.editor_focused;
   Editor_state.pending_focus_actions := snap.editor_pending_actions;
+  Hashtbl.clear Editor_state.display_overrides;
+  Hashtbl.iter (Hashtbl.replace Editor_state.display_overrides)
+    snap.editor_display_overrides;
   Editor_state.structure_pending := false;
   Editor_state.optimistic_split_ready := false;
   Editor_state.optimistic_input_replay := [];
@@ -1278,7 +1285,8 @@ let restore snap =
   P.active := snap.popups;
   Views_popup.stack_st := snap.views_stack;
   Properties_state.view_overlays_state := snap.overlays;
-  Editor_commands.active := snap.editor_cmds
+  Editor_commands.active := snap.editor_cmds;
+  Editor_commands.popup_vs := snap.editor_popup_vs
 
 let run ~finish =
   ignore (Fake_worker.install worker_handler);
