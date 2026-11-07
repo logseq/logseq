@@ -140,7 +140,7 @@
 (defn- db-based-persist-hl-area-image
   [repo png]
   (let [file (js/File. #js [png] "pdf area highlight.png")]
-    (editor-assets/db-based-save-assets! repo [file] {:pdf-area? true})))
+    (editor-assets/db-based-save-assets! repo [file] {:save-only? true})))
 
 (defn- persist-hl-area-image
   [repo-url _repo-dir _current _new-hl _old-hl png]

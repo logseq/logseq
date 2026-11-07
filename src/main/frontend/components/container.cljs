@@ -71,10 +71,13 @@
            (dnd/subscribe!
             element
             :upload-files
-            {:drop (fn [_e files]
-                     (when-let [id (state/get-edit-input-id)]
-                       (let [format (get (state/get-edit-block) :block/format :markdown)]
-                         (editor-assets/upload-asset! id files format editor-handler/*asset-uploading? true))))})
+            {:drop (fn [event files]
+                     ;; Block drops belong to their React handler. This native listener
+                     ;; runs before React's delegated handler can stop propagation.
+                     (when-not (some-> (.-target event) (.closest "[data-block-drop-target]"))
+                       (when-let [id (state/get-edit-input-id)]
+                         (let [format (get (state/get-edit-block) :block/format :markdown)]
+                           (editor-assets/upload-asset! id files format editor-handler/*asset-uploading? true)))))})
            (common-handler/listen-to-scroll! element)
            (when margin-less-pages? ;; makes sure full screen pages displaying without scrollbar
              (set! (.. element -scrollTop) 0)))
