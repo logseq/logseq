@@ -3,8 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 
@@ -54,6 +52,7 @@ type resourceRenderer struct {
 	closed       bool
 	epoch        uint64
 	viewServices ui.Services
+	graph        resourceGraphContext
 
 	// ResolveAsset must use the current OCaml-owned graph mapping, not cwd.
 	// ResolveSource may resolve graph-relative src values through that same owner.
@@ -64,12 +63,15 @@ type resourceRenderer struct {
 }
 
 func newResourceRenderer(backend *luimygo.Backend) *resourceRenderer {
-	return &resourceRenderer{
+	r := &resourceRenderer{
 		backend: backend,
 		owners:  make(map[int64]resourceOwner),
 		cache:   make(map[resourceSource]*resourceEntry),
 		workers: make(chan struct{}, 8),
 	}
+	r.ResolveAsset = r.resolveGraphAsset
+	r.ResolveSource = r.resolveGraphSource
+	return r
 }
 
 func (r *resourceRenderer) source(n luimygo.Node) (resourceSource, error) {
@@ -83,7 +85,7 @@ func (r *resourceRenderer) source(n luimygo.Node) (resourceSource, error) {
 	attrs := extensionAttrs(n)
 	source := attrs["src"]
 	if filename := attrs["data-asset-file"]; filename != "" {
-		if filename != filepath.Base(filename) || strings.ContainsAny(filename, `/\`) || filename == "." || filename == ".." {
+		if !resourceAssetFilename(filename) {
 			return resourceSource{}, errors.New("invalid graph asset filename")
 		}
 		if r.ResolveAsset == nil {

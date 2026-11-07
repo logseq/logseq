@@ -212,7 +212,7 @@ let on_asset_write_finish ~repo':_ ~asset_id:_ = ()
 let retry_pending () = ()
 
 let asset_source file =
-  Filename.concat (Asset_store.asset_dir (Runtime.repo ())) file
+  Asset_store.asset_path (Runtime.repo ()) file
 
 let file_cell_el (w : Wire.t) : Lui_elements.t =
   let uuid = Option.value (Wire.map_get_uuid w "block/uuid") ~default:"" in
