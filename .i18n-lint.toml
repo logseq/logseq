@@ -358,6 +358,7 @@ always_used_key_patterns = [
   "^:page.delete/title$",
   "^:profiler\\.native/(fps-label|fps-unavailable-label|metrics-dialog-label)$",
   "^:property/invalid-name-error$",
+  "^:property/move-(up|down)$",
   "^:publish/page-not-found-error$",
   "^:export/level-all$",
   # LUI publishing feedback is consumed by the OCaml UI, outside this scan.
