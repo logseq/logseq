@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
@@ -64,15 +65,30 @@ func run() (result error) {
 	defer func() { result = errors.Join(result, host.close(), host.err) }()
 	mygo.App.SetName("Logseq")
 	mygo.App.WhenReady(func() {
+		if err := installApplicationMenu(func(reply platformReply) error {
+			if host.closing || host.closed {
+				return nil
+			}
+			err := r.PlatformEvent(reply)
+			if err == nil {
+				err = host.drain()
+			}
+			host.fail(err)
+			return err
+		}); err != nil {
+			host.fail(err)
+			return
+		}
 		if err := installApplicationFonts(os.Getenv("LOGSEQ_NATIVE_ASSET_DIR")); err != nil {
 			host.fail(err)
 			return
 		}
 		host.services = newPlatformServices(nil)
 		host.backend = luimygo.New(luimygo.Config{
-			Extensions: host.services.extensions(),
-			Dispatch:   host.dispatch,
-			InputValue: host.services.BindInputValue,
+			RetainedMenus: os.Getenv("LOGSEQ_NATIVE_MENUS") == "0",
+			Extensions:    host.services.extensions(),
+			Dispatch:      host.dispatch,
+			InputValue:    host.services.BindInputValue,
 			InputControl: func(n luimygo.Node, e ui.Element, text string) {
 				host.services.BindInputControl(n, e, text)
 			},
@@ -196,17 +212,18 @@ func run() (result error) {
 }
 
 type windowHost struct {
-	runtime    *ocamlRuntime
-	backend    *luimygo.Backend
-	services   *platformServices
-	document   *DocumentEvents
-	window     *mygo.Window
-	done       chan struct{}
-	closed     bool
-	closing    bool
-	closeReady bool
-	quitting   bool
-	err        error
+	runtime     *ocamlRuntime
+	backend     *luimygo.Backend
+	services    *platformServices
+	document    *DocumentEvents
+	window      *mygo.Window
+	done        chan struct{}
+	closed      bool
+	closing     bool
+	closeReady  bool
+	quitting    bool
+	err         error
+	performance platformPerformance
 
 	sizeKnown       bool
 	width, height   float32
@@ -363,10 +380,26 @@ func (h *windowHost) pump() error {
 }
 
 func (h *windowHost) watchWakeups() {
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
 	for {
 		select {
 		case <-h.done:
 			return
+		case <-ticker.C:
+			mygo.RunOnMain(func() {
+				if h.closed || h.closing || h.err != nil {
+					return
+				}
+				reply, err := h.performance.sample()
+				if err == nil {
+					err = h.runtime.PlatformEvent(reply)
+				}
+				if err == nil {
+					err = h.pump()
+				}
+				h.fail(err)
+			})
 		case <-h.runtime.wakeup:
 			select {
 			case <-h.done:
@@ -393,6 +426,7 @@ func (h *windowHost) view(c *ui.Context) {
 	if h.closed || h.err != nil {
 		return
 	}
+	defer h.performance.noteBuild(time.Now())
 	width, height := c.Size()
 	if !h.sizeKnown || width != h.width || height != h.height {
 		h.sizeKnown, h.width, h.height = true, width, height
@@ -512,6 +546,9 @@ func installApplicationFonts(assetDir string) error {
 }
 
 func prepareNativeEnvironment() error {
+	if value, set := os.LookupEnv("LOGSEQ_NATIVE_MENUS"); set && value != "0" && value != "1" {
+		return fmt.Errorf("LOGSEQ_NATIVE_MENUS must be 0 or 1")
+	}
 	// These names/defaults come from native/services/platform_native.ml and
 	// native/daemon_client.ml. caml_startup's synthetic argv[0] cannot locate
 	// resources relative to the real Go executable, so resolve assets here.
