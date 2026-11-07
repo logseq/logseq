@@ -700,21 +700,16 @@ let header (ms : Model.t Signal.signal) =
   row ~key:"head" ~accessibility_identifier:"head"
     ~style_class:"cp__header"
     ~main:`space_between ~cross:`center
-    ~data_attrs:
-      [ ( "style"
-        , "flex-shrink:0;line-height:1;white-space:nowrap;\
-           padding-top:var(--ls-headbar-inner-top-padding);\
-           margin-top:var(--ls-win32-title-bar-height);\
-           height:calc(var(--ls-headbar-height) + \
-           var(--ls-headbar-inner-top-padding))" )
-      ]
+    ~height:48 ~min_height:48
+    ~data_attrs:[ ("style", "line-height:1;white-space:nowrap") ]
     [ Ui_components.leading_toolbar ~key:"head-leading" ~in_sidebar:false
         ~safe_area:0 ~state:ms ~is_open:(fun (m : Model.t) -> m.left_sidebar_open)
         ~controls:(fun () -> [left_menu_button (); search_button ()])
-    ; row ~key:"head-r" ~grow:1. ~main:`space_between ~cross:`center
+    ; Ui_components.with_props [ Ui_components.Prop.padding_right 6 ]
+      (row ~key:"head-r" ~grow:1. ~min_width:0 ~main:`space_between ~cross:`center
         ~gap:8 ~style_class:"r"
-        ~data_attrs:[ ("style", "padding-right:6px; overflow-x:hidden") ]
-        [ row ~key:"head-crumb" ~grow:1.
+        [ Ui_components.with_props [ Ui_components.Prop.overflow `hidden ]
+          (row ~key:"head-crumb" ~grow:1. ~min_width:0
             [ reactive
                 ~equal:(fun (a : Model.t) (b : Model.t) ->
                   (* only the zoomed-block trail renders here *)
@@ -744,7 +739,7 @@ let header (ms : Model.t Signal.signal) =
                         link ~key ~style_class:"breadcrumb-item"
                           ~url:href ~target:`self_ ~text []
                       in
-                      box ~key:"head-bc" ~style_class:"breadcrumb"
+                      row ~key:"head-bc" ~style_class:"breadcrumb" ~cross:`center ~min_width:0
                         (List.mapi
                            (fun i (pb : Model.block) ->
                              item
@@ -762,7 +757,7 @@ let header (ms : Model.t Signal.signal) =
                                     ~default:"")
                               ~text:p.Model.page_title ])
                   | _ -> spacer ~key:"head-bc-empty" [])
-                ms ]
+                ms ])
         ; row ~key:"head-acts" ~cross:`center
             [ (* cljs header.cljs: inside the same rtc-indicator-visible?
                  gate — collaborators then the cloud indicator *)
@@ -780,7 +775,7 @@ let header (ms : Model.t Signal.signal) =
             ; (* cljs: (when (util/electron?) (back-and-forward)) *)
               back_and_forward ()
             ; dots_button; right_toggle_button ms ]
-        ]
+        ])
     ]
 
 (* cljs right_sidebar.cljs: #right-sidebar.cp__right-sidebar.h-screen
