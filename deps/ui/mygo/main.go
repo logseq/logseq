@@ -65,25 +65,24 @@ func run() (result error) {
 	defer func() { result = errors.Join(result, host.close(), host.err) }()
 	mygo.App.SetName("Logseq")
 	mygo.App.WhenReady(func() {
-		if err := installApplicationMenu(func(reply platformReply) error {
-			if host.closing || host.closed {
-				return nil
-			}
-			err := r.PlatformEvent(reply)
-			if err == nil {
-				err = host.drain()
-			}
-			host.fail(err)
-			return err
-		}); err != nil {
-			host.fail(err)
-			return
+		host.services = newPlatformServices(nil)
+		host.services.ApplicationMenu = func(labels applicationMenuLabels) error {
+			return installApplicationMenu(labels, func(reply platformReply) error {
+				if host.closing || host.closed {
+					return nil
+				}
+				err := r.PlatformEvent(reply)
+				if err == nil {
+					err = host.drain()
+				}
+				host.fail(err)
+				return err
+			})
 		}
 		if err := installApplicationFonts(os.Getenv("LOGSEQ_NATIVE_ASSET_DIR")); err != nil {
 			host.fail(err)
 			return
 		}
-		host.services = newPlatformServices(nil)
 		host.backend = luimygo.New(luimygo.Config{
 			RetainedMenus: os.Getenv("LOGSEQ_NATIVE_MENUS") == "0",
 			Extensions:    host.services.extensions(),
