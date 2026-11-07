@@ -287,7 +287,7 @@
    uri
    unix
    threads.posix
-   digestif str)
+   digestif str markup)
  (preprocess
   (pps lui.ppx)))
 

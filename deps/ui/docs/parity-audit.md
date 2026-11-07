@@ -1,5 +1,19 @@
 # LUI ↔ cljs interaction parity audit
 
+## Desktop migration evidence boundary
+
+This is a historical **Web** audit, not MyGo desktop acceptance evidence.
+Desktop now uses `mygo/` with the OCaml application library in `native/` and
+the native database worker. The old `ocaml_host/` SDL renderer and its
+renderer-specific tests were removed; passing those old tests cannot establish
+MyGo parity. Native/Web compilation, Go contract tests and package inspection
+are build evidence only, not proof of visual, IME, clipboard or OS-menu parity.
+Graph View and Page Graph View are excluded from this migration; ordinary
+graph creation, selection and management remain supported application scope.
+Platform-specific acceptance must be recorded separately on each target OS.
+
+## Historical Web audit
+
 Full functional/UX audit of the LUI web UI (`deps/ui`, Melange) against the
 cljs master UI (`/Users/devin/repos/logseq-base`, served on :3003 during the
 audit). LUI was driven in Chrome via Playwright against

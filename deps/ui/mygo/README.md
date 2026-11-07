@@ -8,15 +8,15 @@ not launch the SDL renderer or a web view.
 ## Build and run
 
 Use the OCaml dependencies installed by `deps/ui/scripts/install-opam-deps.sh`
-and the Go version in `go.mod`. Linux also needs the GTK 3, fontconfig and graphics
-development libraries used by the `mygo-host` CI job.
+and the Go version in `go.mod`. Follow `../README.md` for initial setup, including
+the root `pnpm install` required by the OCaml theme generators. Linux also needs
+the GTK 3, fontconfig and graphics development libraries used by the `mygo-host`
+CI job. Neither platform uses SDL, tsdl or tgls. Builds enable CGO explicitly.
 
 From the repository root:
 
 ```sh
-opam exec -- dune build --root deps/db-worker bin/main.exe
 pnpm ui:mygo:build
-LOGSEQ_DB_WORKER_BIN="$PWD/deps/db-worker/_build/default/bin/main.exe" \
 LOGSEQ_ROOT_DIR="/path/to/isolated/graphs" \
 LOGSEQ_UI_STATE_DIR="/path/to/isolated/ui-state" \
 pnpm ui:mygo
@@ -25,10 +25,45 @@ pnpm ui:mygo
 `build.sh` creates the OCaml shared library and Go executable under
 `deps/ui/_build/mygo`, with fonts, icon data, theme images and dictionaries in
 the sibling `deps/ui/_build/Resources` directory. The host resolves this resource
-directory relative to its executable by default. `LOGSEQ_NATIVE_ASSET_DIR` may
+directory relative to its executable by default. The build also creates the
+native worker and copies it to `Resources/logseq-db-worker`; the development
+launcher sets `LOGSEQ_DB_WORKER_BIN` to that copy unless explicitly overridden.
+`LOGSEQ_NATIVE_ASSET_DIR` may
 override it with another complete resource directory; `deps/ui/assets` alone
 does not contain theme images or dictionaries. `run.sh` builds before launching
 and accepts the host's `-width`, `-height` and `-title` flags.
+
+## Package
+
+```sh
+pnpm ui:mygo:package
+```
+
+Packages are written to `deps/ui/_build/packages/Logseq-MyGo-*`. macOS produces
+a ZIP containing `Logseq MyGo.app`; Linux produces a tarball containing
+`Logseq-MyGo/`. Both include the real Go executable, OCaml shared library,
+native worker and complete resources. The launcher computes paths from its own
+location, not the current directory or an OCaml synthetic executable name:
+
+| Item | macOS bundle | Linux directory |
+| --- | --- | --- |
+| Launcher | `Contents/MacOS/Logseq` | `bin/logseq` |
+| Go executable | `Contents/MacOS/logseq-mygo` | `bin/logseq-mygo` |
+| OCaml library | `Contents/Resources/liblogseq_ui.dylib` | `Resources/liblogseq_ui.so` |
+| Worker | `Contents/Resources/logseq-db-worker` | `Resources/logseq-db-worker` |
+| Assets | `Contents/Resources/` | `Resources/` |
+
+The launcher passes the absolute library path and sets resource/worker paths
+unless overridden. Do not invoke the Go binary without `-library`.
+macOS packaging requires `dylibbundler`, bundles non-system dynamic dependencies
+in `Contents/Frameworks`, and ad-hoc signs the result. These artifacts are not
+Developer-ID signed or notarized. Linux packages use the host's GTK/graphics,
+libffi/GMP and C runtime libraries; they are not self-contained AppImages.
+Build on the target OS/architecture. Windows packaging is not implemented.
+
+The desktop release workflow's explicit MyGo target only uploads non-release
+artifacts. Existing Electron releases, signing and updater metadata remain
+separate; no Electron executable is packaged under the MyGo name.
 
 The host registers every bundled Inter face before creating the window. Missing
 or invalid fonts fail startup instead of depending on a system installation.
@@ -58,8 +93,7 @@ Native initialization requires exactly `{"paintsCaret":boolean}` as its JSON
 payload, independent of the platform and host profile codes. MyGo sends
 `{"paintsCaret":false}` before view construction: the shared OCaml editor owns
 the caret overlay and uses measurements from committed retained glyph layout.
-The 1-DIP input sink does not paint a caret. The SDL host sends
-`{"paintsCaret":true}` because it already owns a glyph-layout caret painter.
+The 1-DIP input sink does not paint a caret.
 Empty, missing, non-boolean, duplicate or additional capability fields fail
 initialization rather than selecting an implicit painter. Native hosts and the
 OCaml library must be rebuilt together; assets and persistence configuration
