@@ -623,13 +623,21 @@ CAMLprim void logseq_native_metal_noanim(value id_v) {
    ~28pt); a full 48pt accessory overshoots and centers the lights below
    the header icons. `left` is zoom-right + gap so the leading toolbar
    can use zero horizontal padding. */
+/* NSWindow delegate hook added onto SDL's delegate class: hide the
+   (empty) toolbar when entering fullscreen so the hiddenInset chrome
+   does not leak an empty bar at the top of the screen.
+   NSApplicationPresentationAutoHideToolbar = 1<<11. */
+static unsigned long lui_fullscreen_opts(id self, SEL _cmd, id w,
+                                         unsigned long opts) {
+  (void)self; (void)_cmd; (void)w;
+  return opts | 2048UL;
+}
+
 CAMLprim value logseq_native_titlebar_insets(value id_v) {
   CAMLparam1(id_v);
   CAMLlocal1(out);
   const double traffic_x = 16.0;
   const double header_h = 48.0;
-  /* NSTitlebarAccessoryViewController adds this to the default bar. */
-  const double accessory_h = 20.0;
   const double button_size = 14.0;
   const double button_gap = 6.0;
   const double after_gap = 8.0;
@@ -641,110 +649,58 @@ CAMLprim value logseq_native_titlebar_insets(value id_v) {
   SDL_Window *sdl = SDL_GetWindowFromID(Int_val(id_v));
   if (sdl && SDL_GetWindowWMInfo(sdl, &info)) {
     id window = (id)info.info.cocoa.window;
-    id close = ((id (*)(id, SEL, long))objc_msgSend)(
-        window, sel_registerName("standardWindowButton:"), 0L);
-    id miniaturize = ((id (*)(id, SEL, long))objc_msgSend)(
-        window, sel_registerName("standardWindowButton:"), 1L);
+    typedef struct { double x, y, w, h; } tb_rect;
+    /* Electron hiddenInset parity: an empty NSToolbar is what grows the
+       titlebar natively, so AppKit positions the traffic lights itself —
+       no container/button frame surgery that can ping-pong during
+       live-resize. The measured chrome feeds the header inset. */
+    static int toolbar_ready = 0;
+    if (!toolbar_ready) {
+      Class tb_cls = objc_getClass("NSToolbar");
+      id ident = ((id (*)(id, SEL, const char *))objc_msgSend)(
+          (id)objc_getClass("NSString"), sel_registerName("stringWithUTF8String:"),
+          "lui.titlebar");
+      if (tb_cls != Nil && ident != nil) {
+        id tb = ((id (*)(id, SEL, id))objc_msgSend)(
+            ((id (*)(Class, SEL))objc_msgSend)(tb_cls,
+                                               sel_registerName("alloc")),
+            sel_registerName("initWithIdentifier:"), ident);
+        ((void (*)(id, SEL, int))objc_msgSend)(
+            tb, sel_registerName("setShowsBaselineSeparator:"), 0);
+        ((void (*)(id, SEL, id))objc_msgSend)(
+            window, sel_registerName("setToolbar:"), tb);
+        /* NSWindowTitleHidden. */
+        ((void (*)(id, SEL, long))objc_msgSend)(
+            window, sel_registerName("setTitleVisibility:"), 1L);
+        id del = ((id (*)(id, SEL))objc_msgSend)(
+            window, sel_registerName("delegate"));
+        if (del != nil) {
+          SEL fs = sel_registerName(
+              "window:willUseFullScreenPresentationOptions:");
+          class_addMethod(object_getClass(del), fs,
+                          (IMP)lui_fullscreen_opts, "Q@:@Q");
+        }
+      }
+      toolbar_ready = 1;
+    }
+    id content = ((id (*)(id, SEL))objc_msgSend)(
+        window, sel_registerName("contentView"));
+    if (content != nil) {
+      tb_rect window_frame = ((tb_rect (*)(id, SEL))objc_msgSend)(
+          window, sel_registerName("frame"));
+      /* SDL3View lacks -[NSView contentLayoutRect]; the window-level
+         accessor answers the same rect. */
+      tb_rect layout = ((tb_rect (*)(id, SEL))objc_msgSend)(
+          window, sel_registerName("contentLayoutRect"));
+      double chrome = window_frame.h - layout.h - layout.y;
+      if (chrome > 20.0) height = chrome;
+    }
     id zoom = ((id (*)(id, SEL, long))objc_msgSend)(
         window, sel_registerName("standardWindowButton:"), 2L);
-    if (close != nil && miniaturize != nil && zoom != nil) {
-      typedef struct { double x, y, w, h; } tb_rect;
-      id title_bar_view =
-          ((id (*)(id, SEL))objc_msgSend)(close, sel_registerName("superview"));
-      id title_bar_container =
-          title_bar_view == nil
-              ? nil
-              : ((id (*)(id, SEL))objc_msgSend)(title_bar_view,
-                                                sel_registerName("superview"));
-      static int accessory_ready = 0;
-      if (!accessory_ready) {
-        Class acc_cls = objc_getClass("NSTitlebarAccessoryViewController");
-        Class view_cls = objc_getClass("NSView");
-        if (acc_cls != Nil && view_cls != Nil) {
-          tb_rect acc_frame = {0, 0, 1, accessory_h};
-          id acc_view = ((id (*)(id, SEL))objc_msgSend)(
-              ((id (*)(Class, SEL))objc_msgSend)(view_cls,
-                                                 sel_registerName("alloc")),
-              sel_registerName("init"));
-          ((void (*)(id, SEL, tb_rect))objc_msgSend)(
-              acc_view, sel_registerName("setFrame:"), acc_frame);
-          ((void (*)(id, SEL, int))objc_msgSend)(
-              acc_view, sel_registerName("setHidden:"), 1);
-          id acc = ((id (*)(id, SEL))objc_msgSend)(
-              ((id (*)(Class, SEL))objc_msgSend)(acc_cls,
-                                                 sel_registerName("alloc")),
-              sel_registerName("init"));
-          ((void (*)(id, SEL, id))objc_msgSend)(
-              acc, sel_registerName("setView:"), acc_view);
-          ((void (*)(id, SEL, double))objc_msgSend)(
-              acc, sel_registerName("setFullScreenMinHeight:"), header_h);
-          /* NSLayoutAttributeBottom grows the chrome to fit. */
-          ((void (*)(id, SEL, long))objc_msgSend)(
-              acc, sel_registerName("setLayoutAttribute:"), 4L);
-          ((void (*)(id, SEL, id))objc_msgSend)(
-              window, sel_registerName("addTitlebarAccessoryViewController:"),
-              acc);
-        }
-        accessory_ready = 1;
-      }
-      if (title_bar_container != nil) {
-        tb_rect window_frame = ((tb_rect (*)(id, SEL))objc_msgSend)(
-            window, sel_registerName("frame"));
-        tb_rect container = ((tb_rect (*)(id, SEL))objc_msgSend)(
-            title_bar_container, sel_registerName("frame"));
-        double want_y = window_frame.h - header_h;
-        /* Only stomp the frame when it actually drifted — during
-           live-resize AppKit re-lays the bar out each tracking step and
-           a redundant setFrame makes the header chrome visibly jump. */
-        if (fabs(container.h - header_h) > 0.5 || fabs(container.y - want_y) > 0.5) {
-          container.h = header_h;
-          container.y = want_y;
-          ((void (*)(id, SEL, tb_rect))objc_msgSend)(
-              title_bar_container, sel_registerName("setFrame:"), container);
-        }
-        if (title_bar_view != nil) {
-          tb_rect have = ((tb_rect (*)(id, SEL))objc_msgSend)(
-              title_bar_view, sel_registerName("frame"));
-          if (fabs(have.h - header_h) > 0.5 || fabs(have.w - container.w) > 0.5) {
-            tb_rect fill = {0, 0, container.w, header_h};
-            ((void (*)(id, SEL, tb_rect))objc_msgSend)(
-                title_bar_view, sel_registerName("setFrame:"), fill);
-          }
-        }
-      }
-      /* Frame-only placement: Auto Layout on standardWindowButton views
-         wins at the end of the run loop and undoes setFrameOrigin, which
-         left the lights centered in the short default bar. */
-      if (title_bar_view != nil) {
-        int view_flipped = ((int (*)(id, SEL))objc_msgSend)(
-            title_bar_view, sel_registerName("isFlipped"));
-        id buttons[3] = {close, miniaturize, zoom};
-        for (int i = 0; i < 3; i++) {
-          ((void (*)(id, SEL, int))objc_msgSend)(
-              buttons[i],
-              sel_registerName("setTranslatesAutoresizingMaskIntoConstraints:"),
-              1);
-          ((void (*)(id, SEL, unsigned long))objc_msgSend)(
-              buttons[i], sel_registerName("setAutoresizingMask:"), 0UL);
-          tb_rect frame = ((tb_rect (*)(id, SEL))objc_msgSend)(
-              buttons[i], sel_registerName("frame"));
-          double bh = frame.h > 1.0 ? frame.h : button_size;
-          double bw = frame.w > 1.0 ? frame.w : button_size;
-          double top = (header_h - bh) / 2.0;
-          tb_rect next;
-          next.x = traffic_x + (double)i * (button_size + button_gap);
-          next.y = view_flipped ? top : (header_h - top - bh);
-          next.w = bw;
-          next.h = bh;
-          if (fabs(frame.x - next.x) > 0.5 || fabs(frame.y - next.y) > 0.5 ||
-              fabs(frame.w - next.w) > 0.5 || fabs(frame.h - next.h) > 0.5)
-            ((void (*)(id, SEL, tb_rect))objc_msgSend)(
-                buttons[i], sel_registerName("setFrame:"), next);
-        }
-      }
-      left = traffic_x + 2.0 * (button_size + button_gap) + button_size
-             + after_gap;
-      height = header_h;
+    if (zoom != nil) {
+      tb_rect zf = ((tb_rect (*)(id, SEL))objc_msgSend)(
+          zoom, sel_registerName("frame"));
+      if (zf.w > 1.0) left = zf.x + zf.w + after_gap;
     }
   }
   out = caml_alloc_tuple(3);
