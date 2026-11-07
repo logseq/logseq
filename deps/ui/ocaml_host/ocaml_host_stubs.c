@@ -689,18 +689,23 @@ CAMLprim value logseq_native_titlebar_insets(value id_v) {
       tb_rect window_frame = ((tb_rect (*)(id, SEL))objc_msgSend)(
           window, sel_registerName("frame"));
       /* SDL3View lacks -[NSView contentLayoutRect]; the window-level
-         accessor answers the same rect. */
+         accessor answers the same rect. Values read mid-layout are
+         transient — clamp and quantize so the emitted inset never
+         oscillates during live-resize. */
       tb_rect layout = ((tb_rect (*)(id, SEL))objc_msgSend)(
           window, sel_registerName("contentLayoutRect"));
       double chrome = window_frame.h - layout.h - layout.y;
-      if (chrome > 20.0) height = chrome;
+      if (chrome > 20.0 && chrome < 200.0)
+        height = floor(chrome + 0.5);
     }
     id zoom = ((id (*)(id, SEL, long))objc_msgSend)(
         window, sel_registerName("standardWindowButton:"), 2L);
     if (zoom != nil) {
       tb_rect zf = ((tb_rect (*)(id, SEL))objc_msgSend)(
           zoom, sel_registerName("frame"));
-      if (zf.w > 1.0) left = zf.x + zf.w + after_gap;
+      double edge = zf.x + zf.w + after_gap;
+      if (zf.w > 1.0 && edge > 20.0 && edge < 200.0)
+        left = floor(edge + 0.5);
     }
   }
   out = caml_alloc_tuple(3);
