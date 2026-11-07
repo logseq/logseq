@@ -212,7 +212,7 @@ let ev_of (e : Js.Json.t) : Ui_services.ev =
   ; key = jstr "key" e
   ; key_char =
       (match jstr "keyChar" e with
-       | Some s when String.length s = 1 -> Some s
+       | Some s when s <> "" -> Some s
        | _ -> None)
   ; buttons = int_of_float (jnum "buttons" e)
   ; button = int_of_float (jnum "button" e)
