@@ -1236,108 +1236,111 @@ let queue_racing_key ev uuid =
   in
   S.pending_focus_actions := action :: !S.pending_focus_actions
 
-(* -- native block drag (native host) --
-   The web path runs dnd-kit pointer sensors over HTML5 drag (Block_dnd);
-   the native surface has no HTML5 drag, so the same drop contract is
-   driven by document mousedown/mousemove/click on .bullet-container —
-   armed on pointer down, activated past the 4px distance constraint the
-   sensors use, committed on the release click. Ui_services.env_native_drag
-   gates every hook so the web keeps the sensor path alone. *)
+(* Native gestures use the host's hit-tested document targets, not DOM
+   sensors. Web keeps Block_dnd's dnd-kit owner. A release commits once;
+   its follow-up click is consumed without replaying the bullet action. *)
+module Drag = Block_drag
 
-type drag_phase =
-  | Drag_armed of string * float * float (* uuid, downX, downY *)
-  | Drag_active of string
+let drag_state = ref Drag.empty
+let drag_scope = ref "main"
 
-let drag_phase : drag_phase option ref = ref None
-let drag_tgt : (string * string) option ref = ref None (* uuid, move_to *)
+let drag_context () = Runtime.repo (), Runtime.route ()
 
-let drag_active () =
-  match !drag_phase with Some (Drag_active _) -> true | _ -> false
+let publish_drag () =
+  if S.ready () then begin
+    let next = Option.map (fun (source, target) ->
+      match target with
+      | Some (target, zone) -> source, target, Drag.zone_name zone
+      | None -> source, "", "") (Drag.preview !drag_state) in
+    if next <> S.drag () then S.set_drag next
+  end
+
+let drag_cancel () =
+  drag_state := Drag.cancel !drag_state;
+  publish_drag ()
 
 let drag_reset () =
-  (if drag_active () && S.ready () then S.set_drag None);
-  drag_phase := None;
-  drag_tgt := None
+  drag_state := Drag.empty;
+  publish_drag ()
 
 let arm_drag (ev : Ui_services.ev) =
   match closest ".bullet-container" ev.Ui_services.target with
   | Some el -> (
       match el.Ui_services.attr "data-blockid" with
-      | Some u ->
-          drag_phase :=
-            Some (Drag_armed (u, ev.Ui_services.x, ev.Ui_services.y))
-      | None -> ())
+      | Some u when S.find u <> None ->
+          drag_scope := A.scope_of_el el;
+          drag_state := Drag.arm ~context:(drag_context ()) ~source:u
+            ~x:ev.Ui_services.x ~y:ev.Ui_services.y
+      | _ -> ())
   | None -> ()
 
-(* mirrors dnd-kit's collision pass: the innermost .ls-block under the
-   pointer wins, then the zone math of Block_dnd.update_drop_target.
-   el_bounding_rect is the fire-and-poll cache on native — a still-uncached
-   rect reads 0×0 and falls back to "sibling" until the measure reply
-   lands a frame later *)
-let update_drag_target ev src =
-  let tgt =
+let native_drag_target ev src =
+  if readonly_block_target ev.Ui_services.target then None
+  else
     match closest ".ls-block" (ev.Ui_services.target) with
     | Some el -> (
         match el.Ui_services.attr "data-blockid" with
-        | Some t when t <> src && not (A.is_descendant t src) ->
-            let left, top, w, _h = el.Ui_services.rect () in
-            let move_to =
-              if w <= 0.0 then "sibling"
-              else
-                let first =
-                  match S.find_parent t with
-                  | Some (_, idx) -> idx = 0
-                  | None -> false
-                in
-                let near_top =
-                  Float.abs (ev.Ui_services.y -. top) <= 16.0
-                in
-                let x_off = ev.Ui_services.x -. left in
-                if first && near_top then "top"
-                else if x_off > 50.0 then "nested"
-                else "sibling"
-            in
-            Some (t, move_to)
+        | Some t when t <> src && S.find t <> None
+                      && not (A.is_descendant t src) ->
+            let left, top, width, height = el.Ui_services.rect () in
+            if el.Ui_services.rect_pending () || width <= 0. || height <= 0.
+            then None
+            else
+              let first =
+                match S.find_parent t with
+                | Some (_, idx) -> idx = 0
+                | None -> false
+              in
+              Some (t, Drag.zone ~first ~left ~top
+                ~x:ev.Ui_services.x ~y:ev.Ui_services.y)
         | _ -> None)
     | None -> None
-  in
-  (* over nothing/invalid, keep the last candidate like the web listener *)
-  let tgt = match tgt with Some _ -> tgt | None -> !drag_tgt in
-  drag_tgt := tgt;
-  let next =
-    match tgt with
-    | Some (t, m) -> Some (src, t, m)
-    | None -> Some (src, "", "")
-  in
-  if next <> S.drag () then S.set_drag next
 
-let on_native_mousemove ev =
-  if S.ready () then
-    match !drag_phase with
-    | Some (Drag_armed (u, x0, y0)) ->
-        let dx = Float.abs (ev.Ui_services.x -. x0) in
-        let dy = Float.abs (ev.Ui_services.y -. y0) in
-        if dx +. dy >= 4.0 then begin
-          drag_phase := Some (Drag_active u);
-          update_drag_target ev u
-        end
-    | Some (Drag_active u) -> update_drag_target ev u
-    | _ -> ()
+let native_drag_ready () =
+  S.ready () && not (Ui_services.env_publishing ())
+  && Option.fold ~none:false ~some:(fun uuid -> S.find uuid <> None)
+       (Drag.source !drag_state)
 
-(* true when the release click commits an in-flight drag — the click
-   itself is swallowed (a drag release is not a bullet click) *)
-let drop_active_drag () =
-  if drag_active () then begin
-    (match !drag_phase, !drag_tgt with
-     | Some (Drag_active src), Some (t, m) ->
-         A.drop_dragged_block src t m
-     | _ -> ());
-    drag_reset ();
-    true
-  end
-  else false
+let on_native_pointermove ev =
+  if not (native_drag_ready ()) || ev.Ui_services.buttons land 1 = 0 then
+    drag_cancel ()
+  else
+    match Drag.source !drag_state with
+    | None -> ()
+    | Some source ->
+        let was_active = Drag.preview !drag_state <> None in
+        drag_state := Drag.move ~context:(drag_context ())
+          ~x:ev.Ui_services.x ~y:ev.Ui_services.y
+          ~target:(native_drag_target ev source) !drag_state;
+        if not was_active && Drag.preview !drag_state <> None then
+          S.set (fun st -> { st with
+            S.selected = S.String_set.singleton source;
+            selection_scope = !drag_scope; anchor = Some source;
+            action_bar = false });
+        publish_drag ()
+
+let on_native_pointerup ev =
+  if ev.Ui_services.button = 0 then
+    if not (native_drag_ready ()) then drag_cancel ()
+    else
+      match Drag.source !drag_state with
+      | None -> ()
+      | Some source ->
+          let next, drop = Drag.release ~context:(drag_context ())
+            ~target:(native_drag_target ev source) !drag_state in
+          drag_state := next;
+          publish_drag ();
+          Option.iter (fun (source, target, zone) ->
+            A.drop_dragged_block source target (Drag.zone_name zone)) drop
+
+let consume_drag_click () =
+  let next, suppress = Drag.consume_click !drag_state in
+  drag_state := next;
+  publish_drag ();
+  suppress
 
 let on_keydown ev =
+  if Ui_services.env_native_drag () && ev_key ev = "Escape" then drag_cancel ();
   let palette_shortcut =
     mods ev && not ev.Ui_services.alt
     && (match String.lowercase_ascii (ev_key ev) with
@@ -1357,11 +1360,6 @@ let on_keydown ev =
        (match S.editing () with Some e -> e.S.uuid | None -> "-")
        (ac_popup_open ()));
   if S.ready () then begin
-    (match !drag_phase with
-     | Some (Drag_active _)
-       when String.lowercase_ascii (ev_key ev) = "escape" ->
-         drag_reset ()
-     | _ -> ());
     (* During a focus handoff, the pending-editor route would stop
        propagation before autocomplete's document listener sees Enter. *)
     if ac_popup_open () && ac_owned_key (ev_key ev) then ()
@@ -1567,10 +1565,10 @@ let on_cut ev =
   end
 
 let on_click ev =
-  if drop_active_drag () then
-    (* the release click is the drop — keep it from other document
-       listeners (page-ref navigation, outside-edit commit) *)
+  if consume_drag_click () then begin
+    ev.Ui_services.prevent_default ();
     ev.Ui_services.stop_immediate ()
+  end
   else begin
     drag_reset ();
     (* armed-but-unmoved pointer down = a plain click *)
@@ -1791,11 +1789,12 @@ let on_editor_insert ev =
    refocuses the sink input (cljs keeps the block in edit mode) *)
 let on_mousedown (ev : Ui_services.ev) =
   if Ui_services.env_publishing () then () else begin
-  (* a pointer going down ends any stale drag that missed its release
-     click (released outside the document) *)
+  (* A new press also clears an unconsumed click from a canceled drag. *)
   drag_reset ();
   let readonly = readonly_block_target ev.Ui_services.target in
-  if Ui_services.env_native_drag () && not readonly then arm_drag ev;
+  if Ui_services.env_native_drag () && S.ready () && not readonly
+     && ev.Ui_services.button = 0 && ev.Ui_services.buttons land 1 <> 0
+  then arm_drag ev;
   if S.ready () then begin
     (* record which block's content the pointer went down on — including
        outside any block (clears the record) — and the editing uuid the
@@ -1903,9 +1902,17 @@ let install_once () =
     Ui_services.dom_on_document_event ~capture:true "click" on_click;
     Ui_services.dom_on_document_event ~capture:true "mousedown"
       on_mousedown;
-    if Ui_services.env_native_drag () then
-      Ui_services.dom_on_document_event ~capture:true "mousemove"
-        on_native_mousemove;
+    if Ui_services.env_native_drag () then begin
+      Ui_services.dom_on_document_event ~capture:true "pointermove"
+        on_native_pointermove;
+      Ui_services.dom_on_document_event ~capture:true "pointerup"
+        on_native_pointerup;
+      Ui_services.dom_on_document_event ~capture:true "pointercancel"
+        (fun _ -> drag_cancel ());
+      Ui_services.dom_on_document_event ~capture:true "blur"
+        (fun _ -> drag_cancel ());
+      Ui_services.dom_on_window_event "blur" (fun _ -> drag_cancel ())
+    end;
     Ui_services.dom_on_document_event ~capture:true "ls:editor-insert"
       on_editor_insert;
     Ui_services.dom_on_document_event ~capture:true "dragstart" on_dragstart;
