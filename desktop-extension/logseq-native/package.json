@@ -1,0 +1,11 @@
+{
+  "name": "logseq-native-desktop-extension",
+  "version": "0.1.6",
+  "private": true,
+  "type": "commonjs",
+  "description": "Local Claude Desktop transport adapter for Logseq's native MCP endpoint.",
+  "dependencies": {
+    "@modelcontextprotocol/client": "2.0.0",
+    "@modelcontextprotocol/server": "2.0.0"
+  }
+}
