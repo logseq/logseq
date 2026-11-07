@@ -330,10 +330,21 @@
      (when shortcut
        [:span.ml-1 (render-keyboard-shortcut shortcut)])]))
 
+(defn- checkbox-root-checked?
+  "Base UI Checkbox uses aria-checked and data-checked. The inputless span
+  also sets data-state. Clicks can land on the inner indicator, so callers
+  must pass the checkbox root (currentTarget)."
+  [^js el]
+  (or (= "true" (.getAttribute el "aria-checked"))
+      (.hasAttribute el "data-checked")
+      (= "checked" (.-state (.-dataset el)))))
+
 (defn checkbox
   [option]
   (let [on-change' (:on-change option)
         on-click' (:on-click option)
+        controlled-checked (when (contains? option :checked)
+                             (true? (:checked option)))
         option (cond-> (dissoc option :on-change :on-click)
                  (and on-click' (nil? on-change'))
                  (assoc :data-inputless true)
@@ -342,9 +353,15 @@
                  (assoc :on-click
                         (fn [^js e]
                           (some-> on-click' (apply [e]))
-                          (let [checked? (= (.-state (.-dataset (.-target e))) "checked")]
-                            (set! (. (.-target e) -checked) (not checked?))
-                            (some-> on-change' (apply [e]))))))]
+                          (when-let [el (.-currentTarget e)]
+                            (let [checked? (if (some? controlled-checked)
+                                             controlled-checked
+                                             (checkbox-root-checked? el))
+                                  next-checked? (not checked?)]
+                              (set! (.-checked el) next-checked?)
+                              (when-let [target (.-target e)]
+                                (set! (.-checked target) next-checked?))
+                              (some-> on-change' (apply [e])))))))]
     (shui/checkbox
      (merge option
             {:disabled (or (:disabled option) config/publishing?)}))))
