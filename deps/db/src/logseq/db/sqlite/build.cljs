@@ -199,6 +199,36 @@
     []
     (map second (re-seq page-ref/page-ref-re s))))
 
+(defn dedupe-blocks-by-uuid
+  "Keeps the first position and attributes of each `:block/uuid` in `blocks`.
+   Merges unique descendants from later copies into the first occurrence,
+   including duplicates nested under `:build/children`. Blocks without UUIDs
+   remain distinct."
+  [blocks]
+  (let [*nodes (atom [{:children []}])
+        *uuid->index (atom {})]
+    (letfn [(collect-block [parent-index block]
+              (let [index (or (get @*uuid->index (:block/uuid block))
+                              (let [new-index (count @*nodes)]
+                                (swap! *nodes
+                                       (fn [nodes]
+                                         (-> nodes
+                                             (conj {:block block :children []})
+                                             (update-in [parent-index :children] conj new-index))))
+                                (when-let [id (:block/uuid block)]
+                                  (swap! *uuid->index assoc id new-index))
+                                new-index))]
+                (doseq [child (:build/children block)]
+                  (collect-block index child))))
+            (build-block [index]
+              (let [{:keys [block children]} (get @*nodes index)]
+                (cond-> block
+                  (or (contains? block :build/children) (seq children))
+                  (assoc :build/children (mapv build-block children)))))]
+      (doseq [block blocks]
+        (collect-block 0 block))
+      (mapv build-block (:children (first @*nodes))))))
+
 (defn- expand-build-children
   "Expands any blocks with :build/children to return a flattened vec with
   children having correct :block/parent. Also ensures all blocks have a :block/uuid"
@@ -814,7 +844,7 @@
                                   (update :page #(with-meta % {::new-page? true})))))
         expand-block-children (fn [m]
                                 (if (:blocks m)
-                                  (update m :blocks expand-build-children)
+                                  (update m :blocks (comp expand-build-children dedupe-blocks-by-uuid))
                                   m))
         expand-journal (fn [m]
                          (if-let [date-int (get-in m [:page :build/journal])]
