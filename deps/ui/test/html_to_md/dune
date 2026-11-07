@@ -1,0 +1,7 @@
+(rule
+ (copy ../../native/html_to_md.ml html_to_md.ml))
+
+(test
+ (name html_to_md_test)
+ (modules html_to_md_test html_to_md)
+ (libraries markup))
