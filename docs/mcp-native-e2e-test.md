@@ -37,6 +37,11 @@ On fresh, approved run-owned fixtures:
 - Repeat `createPage` on a run-owned title. Expect `status: "conflict"`,
   `created: false`, `verified: false`, and `held_by`, without MCP `isError` or
   graph changes. Also check a title held by a run-owned tag.
+- Repeat the title checks with a case-variant of a live title. The required
+  behavior is consistent unavailability and no-write conflict, not successful
+  creation of the existing page. Current exact-title preflight can report the
+  variant available and `createPage` can return the existing UUID as verified.
+  Preserve the original page and retain this failing case for regression testing.
 - Delete a run-owned page. Its title, UUID and content remain intact; require
   `blocks_preserved: true`. `isTitleAvailable` reports `available: true`,
   `recycled: true`, and `planned_archives` when only recycled pages hold the title;
@@ -60,18 +65,28 @@ On fresh, approved run-owned fixtures:
 - Confirm `createProperty` advertises normalization; use its returned ident.
   A normalized title must expose `normalized_from` in both verbose and terse
   results. It is post-write metadata, not a pre-write preview.
+- For native code blocks, create/update the text and attach the built-in Code
+  tag with `addTag`. Verify code display type without assuming a stored language;
+  select a language in the UI and read it back separately. Do not write the
+  built-in language property through the MCP property sandbox or rely on nested
+  import fences. Visually check bold/italic, inline LaTeX, code and linked embeds
+  separately from the discovery tool's static `renderVerified` field.
 - Require `createEmbed` with `verbose: false` to return only `uuid`, `verified`,
   and `diagnostic`. A dry run returns no created UUID and must leave inventory
   unchanged, including when invoked through the MCP protocol.
 - On an approved UI-prepared template-tag fixture, check that only the first
-  inserted child has `used-template`; do not expect every child to be stamped.
+  resulting child has `used-template`, pointing at the original template.
+  An empty destination block can be reused as that first child; do not assume
+  every resulting child has a new UUID. Verify order and source-template
+  preservation; do not expect every child to be stamped.
   Do not use MCP property writes to bypass built-in namespace restrictions.
 - Remove an embed by its own UUID. Removing its target leaves an empty block
   that `listEmbeds` can no longer find; orphan tracking is not part of this
   contract. Do not perform target removal merely to create this fixture.
 - After an idle pause or app restart, reconnect/reinitialize the client if its
   old session receives HTTP 404. Missing session IDs still receive HTTP 400.
-  Never automatically retry a write after losing its response.
+  Test idle expiry separately from restart/reconnect. Never automatically retry
+  a write after losing its response.
 
 Any separately installed client skill must adopt these contracts. Its source is
 not part of this repository; attaching this guide does not update that skill.
@@ -103,7 +118,8 @@ Check dedicated tools first; explain why they cannot answer or why a targeted
 query significantly reduces scan cost. Show its exact query AND inputs, read
 scope/no changes and expected size, then obtain fresh explicit approval before
 EVERY invocation, including probes and retries. The host also requires a user
-approval form. Broad test or cleanup approval does not cover queries. Never
+approval form or Logseq Desktop approval dialog. Broad test or cleanup approval
+does not cover queries. Never
 silently retry or use raw API access instead.
 
 Finish with all 56 tools accounted for, detailed case results, cleanup evidence,
@@ -190,9 +206,9 @@ coverage for cases that were blocked, manually skipped, or not actually called.
    only as a general read-only last resort when no dedicated tool can answer, or
    a targeted query significantly reduces scan cost. Show the exact query and
    inputs, tools checked/rationale, reads/no changes, expected size, and get fresh
-   explicit approval EVERY time. Host form approval is mandatory, not an argument
-   supplied by the assistant. No silent retries, automatic pagination or blanket
-   session approval. Do not bypass MCP with raw HTTP, direct DB mutations, or
+   explicit approval EVERY time. Host form/dialog approval is mandatory, not an
+   argument supplied by the assistant. No silent retries, automatic pagination
+   or blanket session approval. Do not bypass MCP with raw HTTP, direct DB mutations, or
    shell access. Queries never authorize their matches to be changed.
 
 Choose a run ID such as `20261006-1430-a7c2`, a unique marker, and titles
@@ -292,15 +308,29 @@ estimates), and wait for explicit approval of that invocation. A schema probe
 is another query and requires its own approval. Use Logseq's existing language
 freely; this feature is not limited to empty-block searches.
 
-After a supported client displays the approval form, verify a declined or
-unchecked form executes nothing. A separate approved invocation must return
+Verify that the form or Desktop dialog displays the exact query/inputs, limits
+and scope-of-approval warning. In the Desktop dialog, Cancel and X dismissal
+must both return `Query not approved or request cancelled; nothing was run.`
+and execute nothing. This dialog has no checkbox; an unchecked-checkbox case
+does not apply. Test unconfirmed form refusal separately with a form-capable
+client. A separate approved invocation must resolve its inputs and return
 `result`, `row_count`, `truncated`, and `limits` (1000 rows/65536 UTF-8 bytes).
 Scalars/tuples keep their shape; a single oversized value is omitted whole.
 Review the query/inputs and approval/outcome audit in Logseq's Electron log.
+Correlate requested, approval and accepted-query completed/failed events by
+invocation ID; Cancel and X dismissal are both declines. A client/device
+timeout must not cause a silent retry or query execution without approval.
 Do not intentionally generate huge results or expensive worker queries live
 to exercise caps; local tests cover those limits. Do not silently retry or
-paginate a truncated result. Approval-form absence is BLOCKED, not permission
-to bypass the tool. Record any untested gate variants honestly.
+paginate a truncated result. A client without forms uses the Desktop dialog;
+absence of both approval paths is BLOCKED, not permission to bypass the tool.
+Record form-specific, unavailable-UI and audit checks as untested when the
+required client/host fixture or host log is unavailable.
+Check positional input resolution separately from approval. Plain UUID strings
+are not automatically coerced to UUID values; a typed comparison can return
+an empty result without error. Custom-rule inputs can fail during native
+parsing after approval; do not count local rules tests as live wire-format
+coverage or silently retry another representation.
 
 ## 4. Run Phases
 
@@ -388,8 +418,14 @@ acknowledgement, use only a second run tag and run-owned holder.
 Reattach that tag to the run holder if needed, request deletion without
 acknowledgement, verify refusal, then ask for explicit approval
 before `acknowledge_detach: true`. Do not acknowledge child reparenting unless
-known run-created child tags actually exist; that fixture cannot be created by
-this toolset alone. Inventory and preserve any unexpected holders.
+known run-owned child tags actually exist. The MCP toolset has no parent-tag
+setter, and the current tag UI has no Extends or parent control; child reparenting
+requires a separately prepared, approved fixture. Leave
+`acknowledge_child_reparent` untested when that fixture is unavailable.
+Compare holder titles, parents, Status values and other tags before and after
+deletion. Confirm deleted UUIDs no longer resolve through `getTag` and compare
+`listTags` and Status inventories to the baseline after cleanup.
+Inventory and preserve any unexpected holders.
 
 ### E. Properties
 
@@ -497,7 +533,11 @@ never create a tag titled as a UUID to work around it. After confirmed success,
 one idempotency call may verify zero further updates; it is not an error retry.
 
 Missing-target creation is an optional separately approved case with explicit
-creation acknowledgements and small caps. Never perform global repair. Preserve
+creation acknowledgements and small caps. For both a missing page and tag,
+verify no-acknowledgement and page-only-acknowledgement refusals write nothing,
+then approve both kinds and verify the created targets, rewritten link and tag
+holder independently. Test insufficient-cap refusal separately; successful
+creation within caps does not cover it. Never perform global repair. Preserve
 failed/rewritten blocks and stray tags as evidence; do not erase them to rerun.
 
 ### I. Search
@@ -519,21 +559,29 @@ On timeout, stop and inspect connection health; never blindly repeat the search.
 Call `listAssets` with no arguments. It returns asset records, not attribute-name
 strings: `uuid`, `title`, `type`, `size`, `checksum`, `external_url`,
 `external_file_name`. Size is bytes; null metadata is unknown. The inventory
-contains non-recycled Asset-class entities, not unregistered files on disk.
-It does not verify local file existence, download remote content, or scan folders.
+contains registered Asset-class entities and excludes their direct deleted-at
+flags. It currently does not exclude inherited parent/page recycling.
+It does not verify local file existence, download remote content, scan folders,
+or discover unregistered files.
 
 If populated inventory is required and none exists, pause and ask the user to
 upload two small disposable files (for example PNG/PDF) through the Logseq UI.
 Record their identities and user-approved cleanup separately from MCP-created
-fixtures. For external-URL/recycled cases, request explicit UI preparation if no
-known safe fixture exists. No upload/download/recycle-asset tool is advertised;
-do not simulate one with graph properties or raw APIs.
+fixtures. External-URL cases require a suitable registered fixture; no
+asset-creation tool is advertised. Do not simulate one with graph properties or
+raw APIs. For inherited recycling, use an approved disposable owning page and
+`deletePage`, preserving the asset block. UI "Delete selected blocks" permanently
+removes an asset block and cannot produce this fixture.
 
-Compare returned metadata to the user-prepared fixtures. Recycled assets should
-be absent, and a plugin property merely containing "asset" in its name is not an
-asset. Record stable UUID ordering and read-only behavior. An empty array can
-PASS the empty case, but populated/external/recycled cases remain BLOCKED until
-their prerequisites exist. Never delete an asset file through removeBlock.
+Compare returned metadata to independent `getBlock` reads. Confirm that moving
+an asset preserves its UUID/type/size/checksum. After recycling its owning page,
+cross-check inherited state with `findEntities` and metadata with `getBlock`.
+The required exclusion check is that recycled assets are absent from
+`listAssets`; the current direct-only query fails owning-page exclusion.
+Retain the fixture for retesting this defect. A plugin property merely containing
+"asset" in its name is not an asset. Record stable UUID ordering and read-only
+behavior. An empty array covers only the empty case; other cases require their
+fixtures. Never delete an asset file through removeBlock.
 
 ### K. Safety Cases And Cleanup
 

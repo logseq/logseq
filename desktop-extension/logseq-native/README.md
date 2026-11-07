@@ -33,15 +33,16 @@ Logseq API/MCP server, not this transport extension.
 
 ## Query approval
 
-The extension relays Logseq's `datascriptQuery` approval form to Claude and
-returns the user's decision unchanged. Claude must support MCP form elicitation;
-otherwise queries are blocked. Every invocation requires approval of its exact
-query and inputs, with the last-resort rationale and expected size. There is no
+The extension does not advertise MCP form elicitation. Logseq therefore shows
+its Desktop Approve once/Cancel dialog for `datascriptQuery`, with Cancel as the
+default. Cancel and X dismissal both refuse without running the query.
+Every invocation requires approval of its exact query and inputs, with the
+last-resort rationale and expected size. There is no
 automatic approval or retry. Query requests and decisions are recorded in
 Logseq's Electron log. Output is capped at 1000 rows and 65536 UTF-8 bytes;
 the query language is not restricted to any example.
 
-Rebuild and reinstall this extension after updating its approval forwarding,
+Rebuild and reinstall this extension after changing the bridge,
 then reconnect Claude to the rebuilt Logseq server. Local bridge validation:
 
 ```powershell

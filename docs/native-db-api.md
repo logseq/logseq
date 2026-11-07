@@ -11,7 +11,7 @@ they do not require a separate CLI process or plugin SDK client.
 
 This is a source-backed catalog, not a claim that every command has been tested
 through HTTP against an installed Desktop build. See the
-[MCP tool map](./mcp-native-tool-map.md) for MCP contracts and validation evidence.
+[MCP tool map](./mcp-native-tool-map.md) for MCP contracts and remaining checks.
 
 ## Contents
 
@@ -218,7 +218,7 @@ not automatically write verification.
 | `logseq.DB.getPageStats` | `pageUuid` | Structural, empty-block, reference, tag/property-holder, and alias statistics. Throws when the target cannot be inspected as a page. | R |
 | `logseq.DB.getPageProperties` | `pageNameOrUuid` | Read the page's property values. | R |
 | `logseq.DB.getJournalCandidates` | none | Entities with journal-day metadata. Does not create journals. | R |
-| `logseq.DB.createPage` | `name: string`, `properties?: object`, `options?: object` | Create/reuse a page using native behavior. MCP instead reports live-title conflicts and orchestrates recycled-title reuse. See [write options](#page-and-block-write-options). | W/U |
+| `logseq.DB.createPage` | `name: string`, `properties?: object`, `options?: object` | Create/reuse a page using native behavior. MCP preflights exact-title conflicts and orchestrates recycled-title reuse; case-variant preflight can disagree with native resolution. See [write options](#page-and-block-write-options). | W/U |
 | `logseq.DB.createJournalPage` | `date: string or timestamp` | Create a journal without redirecting. `YYYY-MM-DD` means that exact local calendar day; timestamps/date-time strings use the parsed instant's local day. Invalid dates do not create a page. | W |
 | `logseq.DB.renamePage` | `pageUuid: string`, `newName: string` | Rename the exact page UUID; returns `true` on completion. Do not pass its title in place of the UUID. | W |
 | `logseq.DB.deletePage` | `pageName: string` | Recycle a page through the native handler, preserving its title. Does not perform MCP's reference acknowledgements or preservation read-back. | W |
@@ -267,7 +267,7 @@ an options object for a page, explicitly include `includePage:true`.
 | `logseq.DB.getPageLinkedReferences` | `pageNameOrUuid` | Linked references grouped by containing page. | R |
 | `logseq.DB.getTagUsers` | `tagUuid` | Entities holding the tag. | R |
 | `logseq.DB.getPropertyUsers` | `qualifiedIdent: string` | Holders, stored values, and optional resolved value entities for an exact identifier such as `:user.property/Effort`. Not a title/UUID lookup. | R |
-| `logseq.DB.getTitleHolders` | `title: string` | Exact-title holders, including deletion metadata. Not an availability boolean. | R |
+| `logseq.DB.getTitleHolders` | `title: string` | Exact-title holders, including deletion metadata. No case folding or canonical page-name resolution; not an availability boolean. | R |
 | `logseq.DB.getTitleInventory` | none | Page/tag rows with `id`, `uuid`, `title`, `kind`, and `recycled`. Useful for cross-state title audits. | R |
 | `logseq.DB.getOrphanTags` | none | Tags with no tag holders; not a universal no-inbound-reference audit. | R |
 | `logseq.DB.getOrphanProperties` | none | Unused namespaced property attributes with `ident`, `title`, and `type`; not arbitrary orphan blocks. | R |
@@ -330,7 +330,7 @@ orchestrates existing native operations; do not send a nonexistent
 
 | Command | Arguments, in order | Purpose / result | Effect |
 | --- | --- | --- | --- |
-| `logseq.DB.listAssets` | none | Live Asset-class metadata: UUID, title, type, size, checksum, external URL/name. Not asset bytes. | R |
+| `logseq.DB.listAssets` | none | Asset-class metadata in UUID order: UUID, title, type, size, checksum, external URL/name. Excludes only directly deleted assets; inherited parent/page recycling is not filtered. Not asset bytes. | R |
 | `logseq.DB.makeAssetUrl` | `path: string` | Resolve an asset path to an environment-specific accessible URL. Absolute URLs are returned directly. Not a downloadable HTTP asset endpoint. | R |
 | `logseq.DB.getFileContent` | `path: string` | Read a stored file record from the current graph. Not a page-Markdown export. | R |
 | `logseq.DB.setFileContent` | `path: string`, `content: string` | Write a permitted DB-stored resource: `logseq/custom.js`, `logseq/custom.css`, `logseq/publish.js`, or `logseq/publish.css`. Other paths are rejected. | W |

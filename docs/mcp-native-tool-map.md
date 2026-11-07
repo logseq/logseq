@@ -4,35 +4,26 @@ For Desktop HTTP connection, authentication, native command arguments, and
 DB-compatible aliases, see the [Desktop DB Graph HTTP API Reference](./native-db-api.md).
 
 This map describes the current 56-tool MCP implementation, its Logseq API routes,
-validation evidence, and outstanding verification. MCP graph operations call
+inputs, behavior, and remaining verification. MCP graph operations call
 `logseq.DB.*` API functions; those APIs may delegate internally to shared
-Editor/App/CLI implementations. Read routing and write safeguards are implemented,
-not a pending migration roadmap. MCP does not directly mutate workers or the DB.
+Editor/App/CLI implementations. MCP does not directly mutate workers or the DB.
 
-Local contract coverage and installed-app validation are separate evidence.
-Read-only same-graph parity checks and approved disposable-graph write checks
-must use the connected revision; one getter's evidence does not validate others.
-
-All tables separate API routing, validation evidence, and outstanding verification.
-Live results are historical unless explicitly tied to the current revision.
-Dates and versions are retained where recorded; missing metadata is not inferred.
-`None recorded` means no additional per-tool gap is listed, not that the current
-revision has passed live verification. The revision-wide retest requirement below
-still applies. Monitoring follow-ups remain listed; keeping existing API routes is
-a shared implementation constraint, not an outstanding verification task.
+Remaining verification lists only open checks. Full schema comparison,
+formal per-tool certification and independent packaged/watcher-free build
+verification remain open.
+Idle-timeout session expiry remains untested.
 
 ## Current 2.0.2 contracts
 
-Revision `2026-11-07.2` requires fresh installed-app verification; historical
-passes below do not verify these changes:
+The server exposes 56 tools with compatibility target `2.0.2` and contract
+revision `2026-11-07.2`.
 
 - `capabilities` uses `logseq.DB.getMcpApiMethods` to read callable renderer API
   registrations. Missing-entity null results and explicit `Page "..." not found`
   or `No entity exists with exact UUID ...` errors establish route reachability.
   Unrelated session/database errors remain inconclusive, not available.
   Default write probing remains disabled. `graph.compatibility_target` identifies
-  the intended compatibility target; neither the target nor registration
-  claims successful real-payload or remote validation.
+  the intended compatibility target.
 - `searchBlocks` preserves the native result envelope but filters its blocks to
   literal, case-sensitive title substrings. Snippets remain disabled. The native
   candidate limit and pagination are unchanged; this is not exhaustive search.
@@ -42,7 +33,7 @@ passes below do not verify these changes:
   text/structural filters, selected fields, cursor pagination and exact counts.
   Limits cap output and filter complexity, not DB execution time or scan work.
   See [examples and limits](#structured-entity-search).
-- A title held by a live or non-page entity makes `createPage` return a no-write structured conflict with
+- An exact title held by a live or non-page entity makes `createPage` return a no-write structured conflict with
   `status`, `created: false`, `verified: false`, and `held_by`, not MCP `isError`.
   `importPage` propagates creation conflicts without inserting content.
   When only recycled pages hold the requested title, `createPage` renames each
@@ -52,65 +43,100 @@ passes below do not verify these changes:
   of a conflict. This previews title reuse, not archive-collision or preservation
   verification. `isTitleAvailable` reports `available: true`, `recycled: true`
   and `planned_archives` for recycled-page-only holders, while preserving
-  `held_by`. Live or non-page holders remain unavailable. This is a reuse plan,
+  `held_by`. Exact live or non-page title matches remain unavailable. This is a reuse plan,
   not write-time verification; internal rename/archive guards still require
   actual title vacancy. Occupied archive
   titles or failed verification stop creation; successful prior renames are
   reported in `archived_pages` and must not be blindly repeated.
+- Title preflight uses exact stored-title matching, not canonical page-name
+  resolution. A case-variant of a live title can be reported available by
+  `isTitleAvailable`, then resolve to the existing page in `createPage` with
+  `verified: true` and no write. This is a collision-reporting discrepancy;
+  the existing page must not be mistaken for a newly created page.
 - Heading batches explicitly pass the existing `logseq.property/heading`
   property through `insertBatchBlock`; verification still checks heading,
   title, UUID, parent, page and inventory. Import verification allows at most
   one late empty top-level seed when the baseline page inventory was empty,
   and reports expected/observed imported-block counts. Other inventory changes
-  remain unverified.
+  remain unverified. Nested code fences can lose fences/indentation and omit
+  later blocks, returning `verified: false`. Use native Code-tagged blocks
+  instead, and inspect the actual page before retrying an import.
 - `deletePage` calls the existing recycle API without renaming the page,
   verifying its title, UUID and block inventory. Built-in linked/unlinked
   reference views and related alias pages are reported separately in
   `references.built_in_views` and `references.aliases`; alias attributes do not
   contribute to `references.real`. Content links on an alias holder still count.
+  Either side of an alias relation requires `acknowledge_alias_loss`.
+  Real content links additionally require `acknowledge_reference_rewrite`;
+  alias-only deletion needs only the alias-loss acknowledgement.
   Missing approvals return `status: "refused"`, `refused: true`, and all
   `required_acknowledgements`, without `verified` or a write.
   The recycled page keeps its title until explicitly reused through `createPage`.
+  Content links on recycled referrer pages still count as real references.
+  UI restoration of an alias-holder page retains the alias and its backlinks;
+  the alias-loss gate does not mean the relation is always erased.
+- `inspectPage` exposes resolved alias properties. `findBacklinks` shows
+  genuine content links and alias property holders in their respective relation
+  groups. `retitleOverDuplicate` refuses holders in an alias relation without
+  renaming either page.
+- `retitleOverDuplicate` does not refuse an otherwise eligible holder merely
+  because it has inbound content links. Parking preserves that holder's UUID,
+  so those links stay with the parked page, not the source receiving its old title.
 - `createProperty` describes native title/ident normalization; callers must use
   its returned canonical ident. When the stored title differs, both result
-  modes include `normalized_from` with the requested title. This reports the
-  completed write, not a pre-write preview.
+  modes include `normalized_from` with the requested title. Property titles
+  must satisfy Logseq's page-name rules; titles containing `#` are rejected.
+  Normalization metadata describes the completed write, not a pre-write preview.
 - `createEmbed` with `verbose: false` returns only `uuid`, `verified`, and
-  `diagnostic`; dry runs have a null UUID and never insert a block. Removing
-  an embed's target leaves an empty block that `listEmbeds` can no longer find.
-  Remove the embed by its own UUID, not its target's UUID.
-- Template application intentionally stamps `logseq.property/used-template`
-  only on the first inserted child. Other inserted children are not stamped;
-  the property is not a complete per-child provenance inventory. This matches
-  tag application, manual application, and history replay.
+  `diagnostic`; dry runs have a null UUID and never insert a block. Self and
+  ancestor targets are refused. Page and block embeds are discoverable through
+  `listEmbeds`, including its target filter; block embeds appear in backlinks.
+  Removing an embed by its own UUID removes its reference without deleting the
+  target. Removing the target instead leaves an empty block that `listEmbeds`
+  can no longer find.
+- Template application produces children in source order and can reuse an
+  empty destination block as the first child. Count newly created entities
+  separately from resulting children. `logseq.property/used-template` is
+  stamped only on the first resulting child and references the original
+  template block, not a copy. Other resulting children are not stamped;
+  the original template's timestamp, tags and children remain unchanged,
+  and it does not receive `used-template`.
+  The property is not a complete per-child provenance inventory. First-child
+  stamping applies to tag application, manual application and history replay.
+- The DB block-to-page plugin workflow creates a page and moves the source
+  block's children under it, preserving UUIDs, creation times and order.
+  The source block retains its UUID and placement, becomes a `[[page title]]`
+  link and has no children left; it appears in the new page's backlinks.
+  Children are not copied or recycled, and other source-page blocks are unchanged.
 - Unknown supplied MCP sessions return HTTP 404 to request reinitialization;
-  missing invalid sessions remain HTTP 400. Mutations are never retried.
+  missing invalid sessions remain HTTP 400. After a Desktop restart, initialize
+  a new session and reconnect. Mutations are never retried.
 
 ## Meta and reads
 
-| Tool | Inputs / key contract | Behavior | Current Logseq API route | Validation evidence | Outstanding verification |
-|---|---|---|---|---|---|
-| `capabilities` | `include_diagnostics?`, `probe_writes?` | registration and route-reachability discovery; read-only by default, write probing disabled unless explicitly requested | `logseq.DB.getAppInfo`, `checkCurrentIsDbGraph`, and `getMcpApiMethods`, plus safe route probes | local registration/missing-entity classification coverage; an older 2.0.1 run reported 21 reads available, 6 reads unknown but independently live-passed, and no write probes; those totals are not the current inventory | fresh installed-app registration/classification retest required; safe-mode discovery does not verify writes |
-| `datascriptQuery` | `query`, optional `inputs`; required `question`, `checked_tools`, `reason`, `reads`, `expected_size` for approval | gated read-only last resort; clients without form support fail closed; 1000-row/65536-byte output envelope with `truncated` | unchanged `logseq.DB.datascriptQuery` query and positional inputs, after fresh MCP form approval; Logseq's own read-only behavior | local approval/refusal/no-retry/audit, result-shape/UTF-8 limits, general DataScript and bridge tests pass | live approval and deployment verification pending |
-| `getContentCapabilities` | none; DB-only, no graph-type argument | known built-in formats plus bounded plugin descriptions, status, repository hints, command labels and renderer keys; MCP adds supported/partial/unknown creation guidance | `logseq.DB.getContentCapabilities` uses the application's existing plugin metadata, command and renderer registries; shared API export/standard DB dispatch, not direct App calls from MCP | local API privacy/bounds/no-callback, parser syntax, MCP route/error and actual SDK protocol tests pass; SDK typecheck passes | no visual verification; live deployment verification pending |
-| `getPage` | page name | full page with child blocks | existing `get_page_data` export via `logseq.DB.getPageData`; no duplicate getter | production route switched; local route/capability checks pass; historical same-graph DB-route recheck passed with the recorded UUID/title and four blocks | None recorded |
-| `getPageUUID` | title | title-to-UUID lookup | fixed read-only queries through `logseq.DB.datascriptQuery` | historical same-graph live read passed for both recorded fixture titles | None recorded |
-| `isTitleAvailable` | title | free or reusable title; recycled-page-only holders include an archive plan | dedicated `logseq.DB.getTitleHolders`; MCP preserves `held_by`, returning `available: true` and `recycled: true` only for recycled-page-only collisions | local reuse/mixed-holder tests | fresh installed-app contract verification required |
-| `findDuplicateTitles` | `normalize`, `include_recycled` | Page/Tag title inventory plus usage/alias queries and grouping | `logseq.DB.getTitleInventory` supplies the complete Page/Tag candidate set; MCP retains normalization, grouping, ranking, and downstream queries | production route switched for inventory; local tests pass; historical same-graph exact-mode read passed (39 titles, no collisions) | None recorded |
-| `inspectPage` | page UUID, `detail` | page plus selected blocks, tags, properties, or declarations | dedicated `logseq.DB.inspectPage` API; retains the detail envelope and query-shaped entity keys | API implemented; local tests pass; historical same-graph live reads passed for all six details | None recorded |
-| `pageStats` | page UUID | fixed counts, subtree/alias/reference/property analysis | dedicated `logseq.DB.getPageStats` API owns the read-only DB aggregation and preserves the response/diagnostic contract | production route switched; local tests pass; historical same-graph live read passed (9 own blocks, 8 with content, no refs/orphans) | None recorded |
-| `getBlockUUID` | page UUID | flat descendant list with order, parent/page references, and cross-page ancestry | dedicated `logseq.DB.getPageBlockUUIDs` API preserves the parent traversal and output fields | production route switched; acronym dispatch fixed (`UUIDs` now resolves to `uuids`); local tests and historical same-graph 9-descendant read passed | None recorded |
-| `getBlock` | block UUID | exact entity query | single MCP adapter calls `logseq.DB.getBlock` using the existing Editor implementation and standard dispatch | production route switched; local tests pass; all eight historical same-graph cases pass, including collapsed and property-bearing blocks | None recorded |
-| `searchBlocks` | `searchTerm` | literal, case-sensitive title filter over bounded native candidates | same exported `search` function through `logseq.DB.search`, snippets disabled; retain envelope/pagination | local literal-filter and MCP protocol coverage; historical native marker search passed | current literal-filter contract requires installed-app retest |
-| `findEntities` | `kind`, `state?`, `page_uuid?`, `where?`, `select?`, `output?`, `limit?`, `cursor?` | structured literal/structural search, projected rows or exact count | `logseq.DB.findEntities`; fixed query forms and typed literal inputs through existing API `<q`, with no worker infrastructure changes | local API/SDK protocol coverage | installed-app verification pending |
-| `getBlockTree` | block UUID, depth/node caps | expanded tree with bounded depth/node count, page/missing distinction, cycle guard | dedicated `logseq.DB.getBlockTree` owns traversal and bounds while preserving the response envelope | production route switched; local tests pass; historical same-graph bounded marker read passed | None recorded |
-| `findBacklinks` | target UUID | separate refs, tag-holder, and property-value groups; counts overlap | dedicated `logseq.DB.getBacklinks` owns the three relation queries and preserves the grouped response/diagnostic | API implemented; local tests pass; historical same-graph reads returned 0 for fixture page and `testtag`, consistent with inspected graph | None recorded |
-| `findOrphans` | page UUID | parent ancestry with mismatching stored page; preserves orphan rows | reuses `logseq.DB.getPageBlockUUIDs`; MCP filters by owning page UUID and preserves diagnostic | production route switched; local tests pass; historical same-graph read and pageStats/getBlockUUID cross-checks found 0 true orphans | None recorded |
-| `getTagUUID` | title | `getTagsByName` | existing `logseq.DB.getTagsByName`; MCP preserves all ambiguous UUID candidates | production route switched; local tests pass; historical same-graph `testtag` lookup passed | None recorded |
-| `getTag` | tag UUID | UUID/title/name projection query | existing `logseq.DB.getTag` API; MCP preserves its full PageEntity fields, including UUID/title/name and richer id/ident metadata | production route switched; local tests pass; historical same-graph `testtag` read passed | None recorded |
-| `getTagUsers` | tag UUID | direct `:block/tags` holder query; returns UUID/title/name/page | dedicated `logseq.DB.getTagUsers` API; excludes inherited-only holders to preserve contract | production route switched; local tests pass; historical same-graph checks confirmed `testtag` has no holders and `MCP Smoke RefTag` has one | None recorded |
-| `getPropertyIndent` | property title | exact-title property query; ambiguity candidates retained | dedicated `logseq.DB.getPropertiesByTitle` returns all matching property definitions; MCP preserves the existing ident/type/ambiguity envelope | API implemented; local tests pass; historical same-graph test property resolved to the expected exact ident and type | None recorded |
-| `getProperyUsers` | exact property ident | literal values and resolved value entities | `logseq.DB.getPropertyUsers` owns holder lookup and entity resolution; public tool name and response stay unchanged | production route switched; local tests pass; historical same-graph existing property holder/value read passed | None recorded |
+| Tool | Inputs / key contract | Behavior | Current Logseq API route | Remaining verification |
+|---|---|---|---|---|
+| `capabilities` | `include_diagnostics?`, `probe_writes?` | discovers registered API routes and reachability; missing probe entities establish route availability; read-only by default, write probing disabled unless explicitly requested | `logseq.DB.getAppInfo`, `checkCurrentIsDbGraph`, and `getMcpApiMethods`, plus safe route probes | None |
+| `datascriptQuery` | `query`, optional `inputs`; required `question`, `checked_tools`, `reason`, `reads`, `expected_size` for approval | read-only last resort with exact query/inputs shown; fresh MCP form or Desktop dialog approval; Desktop Cancel/X refuse identically without execution/retry; invocation-correlated audit; 1000-row/65536-byte output envelope with `truncated` | `logseq.DB.datascriptQuery` query and positional inputs, after fresh form/dialog approval | form-specific confirmation, unavailable approval UI and custom-rule input format |
+| `getContentCapabilities` | none; DB-only, no graph-type argument | known built-in formats plus bounded plugin descriptions, status, repository hints, command labels and renderer keys; MCP adds supported/partial/unknown creation guidance, separate from rendering; discovery does not run visual probes | `logseq.DB.getContentCapabilities` uses the application's existing plugin metadata, command and renderer registries | other enabled plugin features |
+| `getPage` | page name | full page with child blocks | `logseq.DB.getPageData` | None |
+| `getPageUUID` | title | title-to-UUID lookup | fixed read-only queries through `logseq.DB.datascriptQuery` | None |
+| `isTitleAvailable` | title | exact live page/tag matches are unavailable; recycled-page-only matches are reusable; case variants can incorrectly appear available because lookup is exact-title-only | `logseq.DB.getTitleHolders`; preserves `held_by`, returning `available: true` and `recycled: true` for recycled-page-only collisions | None |
+| `findDuplicateTitles` | `normalize`, `include_recycled` | Page/Tag title inventory, normalization, grouping, usage/alias queries and ranking | `logseq.DB.getTitleInventory` plus `datascriptQuery` | same-case duplicate-title fixture |
+| `inspectPage` | page UUID, `detail` | page plus selected blocks, tags, properties, or declarations; retains the detail envelope and query-shaped entity keys | `logseq.DB.inspectPage` | None |
+| `pageStats` | page UUID | fixed counts and subtree/alias/reference/property analysis | `logseq.DB.getPageStats` | None |
+| `getBlockUUID` | page UUID | flat descendant list with order, parent/page references, and cross-page ancestry | `logseq.DB.getPageBlockUUIDs` | None |
+| `getBlock` | block UUID | exact block read, including collapsed/property-bearing entities | `logseq.DB.getBlock` | None |
+| `searchBlocks` | `searchTerm` | literal, case-sensitive title filter over bounded native candidates; handles quoted text; preserves native envelope/pagination without snippets | `logseq.DB.search` | None |
+| `findEntities` | `kind`, `state?`, `page_uuid?`, `where?`, `select?`, `output?`, `limit?`, `cursor?` | read-only literal/structural search without per-query approval; selected fields, exact counts, live/recycled/all inventories, empty results and revision-bound cursors; has_link matches embeds, not ordinary page references | `logseq.DB.findEntities`; fixed query forms and typed literal inputs through existing API `<q` | None |
+| `getBlockTree` | block UUID, depth/node caps | expanded tree with bounded depth/node count, page/missing distinction and cycle guard | `logseq.DB.getBlockTree` | None |
+| `findBacklinks` | target UUID | separate refs, tag-holder and property-value groups; counts may overlap | `logseq.DB.getBacklinks` | None |
+| `findOrphans` | page UUID | finds blocks whose parent ancestry disagrees with their stored owning page | `logseq.DB.getPageBlockUUIDs`; MCP filters by owning page UUID | None |
+| `getTagUUID` | title | resolves tags by name, preserving ambiguous UUID candidates | `logseq.DB.getTagsByName` | None |
+| `getTag` | tag UUID | full tag entity with UUID/title/name and id/ident metadata | `logseq.DB.getTag` | None |
+| `getTagUsers` | tag UUID | direct tag holders with UUID/title/name/page; excludes inherited-only holders | `logseq.DB.getTagUsers` | None |
+| `getPropertyIndent` | property title | exact-title property definitions with ident/type and ambiguity candidates | `logseq.DB.getPropertiesByTitle` | None |
+| `getProperyUsers` | exact property ident | holders, literal values and resolved value entities | `logseq.DB.getPropertyUsers` | None |
 
 ## Structured entity search
 
@@ -140,8 +166,12 @@ blocks and linked embeds:
 page, with internal entity ID breaking equal-order ties. Property-value children,
 built-in view children and nested Page/Journal/Tag/Property entities do not compete
 for that position. `has_children` tests any direct child, not just visible outline
-children; `has_link` tests `:block/link` (linked blocks/embeds), not general refs.
+children; `has_link` tests `:block/link` (linked blocks/embeds).
+An ordinary `[[page reference]]` does not satisfy `has_link` equality with `true`; use backlink
+tools for those references.
 Empty means exactly `""`, not whitespace.
+Rows follow internal entity ID, not sibling order; use `getPage` order keys
+for placement checks.
 
 For targeted content, use `kind: "block"`, `page_uuid`, and a title filter such
 as `{"field":"title","op":"contains","value":"\u2014"}`, selecting `uuid` and
@@ -186,18 +216,18 @@ The response is `{output,matches,count,count_is_exact,truncated,next_cursor,limi
 
 ## Lists
 
-| Tool | Inputs / key contract | Behavior | Current Logseq API route | Validation evidence | Outstanding verification |
-|---|---|---|---|---|---|
-| `listPages` | `expand?` | existing DB list API | same exported `list_pages` API via `logseq.DB.listPages`; options and payload unchanged | production route switched; historical same-graph reads passed; 68 pages before and after | None recorded |
-| `listJournals` | `with_counts?`, `limit?` | journal-day candidates, descending sort, limit; optional count indexes | `logseq.DB.getJournalCandidates` supplies the same candidate fields; MCP retains sort/limit/count behavior | production route switched for candidates; local tests pass; historical same-graph Oct 3-5 reads and zero counts passed | None recorded |
-| `listTags` | `expand?` | existing `list_tags` wrapper | same exported list API via `logseq.DB.listTags`; preserve expand option and namespaced payload | production route switched; local tests pass; historical same-graph result of 21 tags unchanged | None recorded |
-| `listProperties` | `expand?` | existing `list_properties` wrapper | same exported list API via `logseq.DB.listProperties`; preserve expand option and namespaced payload | production route switched; local tests pass; historical same-graph property listing passed | None recorded |
-| `listClosedValues` | none | property/value pairs from `:block/closed-value-property` | dedicated `logseq.DB.getClosedValues` preserves the two-entity row shape | production route switched; local tests pass; historical same-graph built-in value sets returned | None recorded |
-| `listOrphanTags` | none | exact Tag entities with no direct reverse tag holders | dedicated `logseq.DB.getOrphanTags` preserves the entity fields and unused-tag semantics | production route switched; local tests pass; historical same-graph orphan results cross-checked against holders and backlinks | None recorded |
-| `listOrphanProperties` | none | qualified property idents with no data holders | dedicated `logseq.DB.getOrphanProperties` combines property inventory and used attribute idents; preserves `{ident, title, type}` | production route switched; local tests pass; historical same-graph results cross-checked against `getProperyUsers` | None recorded |
-| `listAssets` | none | registered asset metadata records; database inventory, not filesystem existence or unregistered-file discovery | `logseq.DB.listAssets` queries entities tagged with `:logseq.class/Asset`, excludes recycled assets, and returns UUID/title/type/size/checksum/external URL/file name in stable UUID order | local API/MCP metadata, filtering, empty-graph and error tests; historical live empty inventory and updated schema passed on 2026-10-06; populated inventory verified locally only | populated inventory not verified live |
-| `listStatus` | none | entity/status-value pairs | dedicated `logseq.DB.getStatusRows` returns the query rows; MCP tool name and tuple shape stay unchanged | production route switched; local tests pass; historical same-graph empty result accepted | None recorded |
-| `listRecycled` | none | all entities with `:logseq.property/deleted-at` | dedicated `logseq.DB.listRecycled` preserves deleted page and block records | production route switched; local tests pass; historical live check found one recycled outline page unchanged before/after | None recorded |
+| Tool | Inputs / key contract | Behavior | Current Logseq API route | Remaining verification |
+|---|---|---|---|---|
+| `listPages` | `expand?` | page inventory with optional expanded metadata | `logseq.DB.listPages` | None |
+| `listJournals` | `with_counts?`, `limit?` | journal-day candidates, descending sort and limit, with optional block counts | `logseq.DB.getJournalCandidates` plus count queries | None |
+| `listTags` | `expand?` | tag inventory with optional expanded class metadata | `logseq.DB.listTags` | None |
+| `listProperties` | `expand?` | property inventory with optional expanded schema metadata | `logseq.DB.listProperties` | None |
+| `listClosedValues` | none | property/value pairs from `:block/closed-value-property`, including existing built-in choices | `logseq.DB.getClosedValues` | None |
+| `listOrphanTags` | none | Tag-class entities with no direct reverse tag holders, including unused built-in and user-created tags | `logseq.DB.getOrphanTags` | None |
+| `listOrphanProperties` | none | unused qualified property attributes as `{ident, title, type}` | `logseq.DB.getOrphanProperties` | None |
+| `listAssets` | none | registered Asset-class metadata in stable UUID order; excludes only assets directly marked deleted, not assets whose parent/page is recycled; UUID/title/type/size in bytes/checksum/external URL/file name; not filesystem availability | `logseq.DB.listAssets` | external-URL asset fixture |
+| `listStatus` | none | entity/status-value pairs | `logseq.DB.getStatusRows` | None |
+| `listRecycled` | none | deleted page and block records carrying `:logseq.property/deleted-at` | `logseq.DB.listRecycled` | None |
 
 ## Writes and verification
 
@@ -205,36 +235,46 @@ Every row below means: validate identifiers, snapshot affected state where
 needed, perform the existing API operation, read back, compare, and preserve
 the full/terse response behavior. Batch writes remain non-atomic.
 
-| Tool | Inputs / key contract | Behavior | Current Logseq API route | Validation evidence | Outstanding verification |
-|---|---|---|---|---|---|
-| `importPage` | target, markdown/list, replace, dry-run | batch insert + queries | `logseq.DB.createPage` + `insertBatchBlock` (and `removeBlock` for replace) | verbatim inventory/read-back, dry-run-no-call, API-error-unverified, and historical live nested-content/read-back tests pass | current heading/count verification retest required |
-| `repairLinks` | optional page, creation acknowledgements/caps | update blocks + page/tag creation; generated missing-page target remains active by user decision to preserve existing view references | `logseq.DB.updateBlock` + `createPage`/`createTag` | relation read-back, ambiguity, idempotency, explicit-creation, dry-run/cap, global-scan, API-error-unverified, historical live existing/missing-page/tag rewrites pass | None recorded |
-| `createPage` | title, dry-run, verbose | create; archive only recycled title holders | `logseq.DB.getTitleHolders` + `renamePage` + `createPage` | live/non-page collision refusal, UUID archive/title-reuse, block preservation, dry-run and failure diagnostics covered locally | fresh installed-app title-reuse verification required |
-| `renamePage` | page UUID, title, verbose | `renamePage` | `logseq.DB.renamePage` | same-UUID read-back, collision-no-write, API-error-before-readback, and historical live rename/read tests pass | recycled-page behavior not separately live-tested |
-| `retitleOverDuplicate` | source UUID, title, suffix | two renames | two `logseq.DB.renamePage` calls | recycled-holder identity, partial-rename recovery, API-error undo-guidance, and historical live two-page identity/parking tests pass | other holder guards not separately live-tested |
-| `deletePage` | UUID, reference/alias acknowledgements | recycle without rename | `logseq.DB.deletePage` | real-reference/alias gates, built-in-view exclusion, title/UUID/block preservation covered locally | fresh installed-app safeguard verification required |
-| `clearPage` | page UUID, verbose | remove top-level blocks | DB queries + `logseq.DB.removeBlock` | metadata/property-subtree preservation, nested-page refusal, API-error-keeps-content, historical minimal live clear and three-block live clear pass | initial multi-block clear returned unverified once but did not reproduce; monitor |
-| `createBlock` | parent UUID, title, dry-run, verbose | `insertBlock` | `logseq.DB.insertBlock` | parent/page/content, dry-run-no-write, API-error, and historical live disposable-graph create/read tests pass | None recorded |
-| `createEmbed` | parent UUID, target UUID, dry-run, verbose | normal editor/outliner linked-block insertion with derived refs | `logseq.DB.createEmbed` | page/block target, ancestor refusal, live-schema dry-run, MCP error propagation, persisted-target verification, and no-retry read-back failure tests; historical user-confirmed Claude Desktop embed workflow on 2026-10-06; assistant independently verified live dry run only | current terse/dry-run contract retest required |
-| `listEmbeds` | optional owning-page UUID, target UUID, limit (1-1000, default 100) | read-only active-embed discovery with explicit target UUID/type/title, combined filters, returned count and truncation | `logseq.DB.listEmbeds` | local API/MCP tests pass; historical user-confirmed Claude Desktop embed workflow; assistant did not perform live writes | None recorded |
-| `createPageofBlocks` | page UUID, outline, dry-run, verbose | batch insert per parent | `logseq.DB.insertBatchBlock` | indentation prevalidation, nested parent/page verification, dry-run-no-insert, API-error-unverified, and historical live three-block/two-batch/read tests pass | None recorded |
-| `updateBlock` | block UUID, title, dry-run, verbose | `updateBlock` | `logseq.DB.updateBlock` | success/read-back, dry-run-no-write, API-error, and historical live same-UUID update/read-back tests pass | None recorded |
-| `splitBlock` | UUID, exactly one offset/delimiter | create parts then update original | `logseq.DB.insertBlock` + `moveBlock` + `updateBlock` | delimiter/offset, verify-before-truncate, API-error-preserves-original, and historical live three-part order/read tests pass | None recorded |
-| `moveBlock` | UUIDs, target, placement, verbose | `moveBlock` | `logseq.DB.moveBlock` | child/last-child placement, page ownership, descendant refusal, API-error-unverified, and historical live `before`/`after`/`child`/`last-child` tests pass | `before` once returned unverified but passed on diagnostic rerun; monitor |
-| `moveBlocks` | UUID list, target, placement, rollback flag | repeated move + order verification | repeated `logseq.DB.moveBlock` | preflight, supplied order, API-error partial-progress, local best-effort all-or-nothing rollback, and historical live order-preserving move tests pass | Live rollback requires fault injection; do not induce a real mutation failure on the graph. Other placement variants remain untested live |
-| `migratePage` | source/target, substring, placement, dry-run | selected `moveBlocks` | `logseq.DB.moveBlock` via `moveBlocks` | literal top-level dry-run, source-remainder, and API-error-stays-at-source tests pass; historical live `last-child` migration passed twice | one initial unverified placement result did not reproduce; monitor |
-| `removeBlock` | block UUID, verbose | `removeBlock` | `logseq.DB.removeBlock` | incomplete-inventory refusal, subtree absence, API-error recovery-inventory, and historical live temporary-block removal/absence tests pass | live-write evidence for other removeBlock targets not separately validated |
-| `creatTag` | title, options, verbose | `createTag` | `logseq.DB.createTag` | generated identity, title-collision-no-write, API-error-before-readback, and historical live tag-create/read tests pass | None recorded |
-| `deleteTag` | UUID, detach/reparent acknowledgements | `deletePage` + reference checks | `logseq.DB.deletePage` | detach/child acknowledgements, deletion/reference cleanup, API-error-before-cleanup, and historical live deletion/title-no-longer-resolves tests pass | None recorded |
-| `addTag` | target UUID, tag UUID, verbose | `addBlockTag` | `logseq.DB.addBlockTag` | invalid-input, relation, page-identity, API-error-before-readback, and historical live sole-holder tests pass | None recorded |
-| `removeTag` | target UUID, tag UUID, verbose | `removeBlockTag` | `logseq.DB.removeBlockTag` | invalid-input, relation, other-tag, page-identity, API-error-before-readback, and historical live zero-holder-after-detach tests pass | None recorded |
-| `createProperty` | title, schema, options, verbose | `upsertProperty` | `logseq.DB.upsertProperty` | assigned ident/type read-back, invalid-title, returned-error envelope, and historical live unique-definition tests pass | current normalization metadata retest required |
-| `deleteProperty` | ident, value-loss acknowledgement | `removeProperty` + value cleanup | `logseq.DB.removeProperty` + `removeBlock` | acknowledgement, cleanup, invalid-ident, API-error-before-cleanup, and historical live zero-holder deletion tests pass | None recorded |
-| `addProperty` | target UUID, ident, value, options, verbose | `upsertBlockProperty` | `logseq.DB.upsertBlockProperty` | false/literal values, materialization, duplicate-many, API-error-before-readback, and historical live literal/node-reference value read-back tests pass | None recorded |
-| `removeProperty` | target UUID, ident, verbose | `removeBlockProperty` | `logseq.DB.removeBlockProperty` | target-only removal, no-op detection, invalid-ident, API-error-before-readback, and historical live zero-holder removal tests pass | None recorded |
+| Tool | Inputs / key contract | Behavior | Current Logseq API route | Remaining verification |
+|---|---|---|---|---|
+| `importPage` | target, markdown/list, replace, dry-run | inserts nested outlines with preserved heading levels, stripped titles, parent chains and UUIDs; verifies expected/observed imported-block counts separately from the allowed empty seed | `logseq.DB.createPage` + `insertBatchBlock` (and `removeBlock` for replace), plus read-back queries | None |
+| `repairLinks` | optional page, creation acknowledgements/caps | dry runs do not write; rewrites existing targets; each missing-target kind requires its creation acknowledgement and sufficient caps; unresolved/ambiguous placeholders remain unchanged | `logseq.DB.updateBlock` + `createPage`/`createTag` | refusal when a creation cap is too low |
+| `createPage` | title, dry-run, verbose | exact live/non-page title collisions return a no-write conflict; recycled-only holders are archived with identity/content preserved; case variants can return an existing page as verified without creating one; dry runs do not write | `logseq.DB.getTitleHolders` + `renamePage` + `createPage` | None |
+| `renamePage` | page UUID, title, verbose | renames the same UUID with read-back; title collisions and recycled pages are refused without changes | `logseq.DB.renamePage` | None |
+| `retitleOverDuplicate` | source UUID, title, suffix | parks an eligible empty page and renames the source by UUID; content-bearing/non-page/alias holders are refused without renaming; inbound links do not block parking and stay with the parked holder UUID; reports partial progress | two `logseq.DB.renamePage` calls | same-case multi-holder fixture |
+| `deletePage` | UUID, reference/alias acknowledgements | built-in views do not block deletion; alias relations require alias-loss acknowledgement, real links separately require reference-rewrite acknowledgement; refusals write nothing; recycling preserves title/UUID/blocks | `logseq.DB.deletePage` plus reference/inventory queries | None |
+| `clearPage` | page UUID, verbose | removes outline content while preserving the page entity and metadata/property subtrees; refuses nested pages and verifies absence | DB queries + `logseq.DB.removeBlock` | None |
+| `createBlock` | parent UUID, title, dry-run, verbose | inserts a block and verifies parent, owning page and stored content | `logseq.DB.insertBlock` | None |
+| `createEmbed` | parent UUID, target UUID, dry-run, verbose | inserts page/block linked views with derived refs; rejects self/ancestor targets; verifies UUID/link/parent/page; terse dry runs return a null UUID without inserting | `logseq.DB.createEmbed` | None |
+| `listEmbeds` | optional owning-page UUID, target UUID, limit (1-1000, default 100) | active embeds with target UUID/type/title, combined filters, returned count and truncation | `logseq.DB.listEmbeds` | None |
+| `createPageofBlocks` | page UUID, outline, dry-run, verbose | validates indentation, inserts per parent and verifies nested hierarchy/page ownership | `logseq.DB.insertBatchBlock` | None |
+| `updateBlock` | block UUID, title, dry-run, verbose | updates text on the same UUID and verifies placement/content | `logseq.DB.updateBlock` | None |
+| `splitBlock` | UUID, exactly one offset/delimiter | inserts ordered parts, verifies them, then truncates the original block | `logseq.DB.insertBlock` + `moveBlock` + `updateBlock` | None |
+| `moveBlock` | UUIDs, target, placement, verbose | moves before/after siblings, as first child or as last-child, including cross-parent moves; descendant targets are refused without mutation; verifies ownership/order | `logseq.DB.moveBlock` | None |
+| `moveBlocks` | UUID list, target, placement, rollback flag | duplicate UUIDs and parent/child overlap are refused without mutation; placement variants preserve input order; reports partial progress; rollback is best-effort, not atomic | repeated `logseq.DB.moveBlock` | rollback requires controlled fault injection, not live graph failures |
+| `migratePage` | source/target, substring, placement, dry-run | previews literal top-level matches without writing; moves preserve UUIDs/order and leave unselected source content in place; verifies both pages | `logseq.DB.moveBlock` via `moveBlocks` | None |
+| `removeBlock` | block UUID, verbose | removes a childless block or entire subtree, verifies all removed UUIDs are absent and preserves siblings; removing an embed UUID preserves its target; provides recovery inventory on errors | `logseq.DB.removeBlock` | None |
+| `creatTag` | title, options, verbose | creates a unique tag and verifies its generated identity and title | `logseq.DB.createTag` | None |
+| `deleteTag` | UUID, detach/reparent acknowledgements | holders require acknowledge_detach; refusal lists holders without writing; deletion preserves holder titles/parents/Status/other tags; an unused childless tag needs no acknowledgement; verifies absence/reference cleanup | `logseq.DB.deletePage` plus reference queries | child-tag reparenting requires a parent/child fixture unavailable through current MCP tools and tag UI |
+| `addTag` | target UUID, tag UUID, verbose | attaches a tag and verifies the relation without changing page identity | `logseq.DB.addBlockTag` | None |
+| `removeTag` | target UUID, tag UUID, verbose | removes one tag relation while preserving other tags and page identity | `logseq.DB.removeBlockTag` | None |
+| `createProperty` | title, schema, options, verbose | creates a plugin property with a canonical ident; terse and verbose results include normalized_from when the stored title differs; native page-name rules apply | `logseq.DB.upsertProperty` | None |
+| `deleteProperty` | ident, value-loss acknowledgement | removes a definition and its value blocks after acknowledged value-loss checks | `logseq.DB.removeProperty` + `removeBlock` | None |
+| `addProperty` | target UUID, ident, value, options, verbose | assigns literal/reference values, preserves false values and verifies materialized values and many-value membership | `logseq.DB.upsertBlockProperty` | None |
+| `removeProperty` | target UUID, ident, verbose | removes only the target's value while preserving the definition | `logseq.DB.removeBlockProperty` | None |
 
 ## Explicit compatibility notes
 
+- Duplicate-title exact mode compares stored titles literally. Loose mode
+  normalizes case/punctuation/whitespace with simple suffix heuristics, not
+  complete plural normalization; fuzzy mode adds edit-distance matching.
+  Empty unreferenced members beside content can be `dead_stub` (rank 1 for
+  differing titles); multiple content-bearing members are `genuine_split`.
+  Classifications are read-only guidance, not authorization to merge or delete.
+- Ordinary text renders bold/italic, inline LaTeX renders typeset math, and
+  native code blocks and linked embeds render their content. Adding the Code
+  tag sets code display type, not a stored language; select the language in the
+  UI. The built-in language property remains outside MCP's writable namespace.
 - A page is a block for target operations, but page identity and page-scoped
   queries must remain distinct.
 - Properties are keyed by `:db/ident`, not UUID, and writes are restricted to
@@ -248,7 +288,13 @@ the full/terse response behavior. Batch writes remain non-atomic.
 - `deletePage`, `deleteTag`, `deleteProperty`, `clearPage`, and `removeBlock`
   retain acknowledgement and evidence requirements.
 - `listAssets` returns asset metadata records.
-  It inventories non-recycled Asset-class entities, not files on disk; remote
-  or missing local files and null metadata must not be interpreted as verified files.
+  It excludes Asset-class entities with their own deleted-at flag but does not
+  apply inherited recycling from a parent or owning page. An asset on a recycled
+  page can still be listed even when `findEntities` reports `recycled: true`;
+  this is a filtering defect, not an untested asset case.
+  The inventory is not a filesystem check; remote or missing local files and
+  null metadata must not be interpreted as verified files.
+  Use `getBlock` with the asset UUID to inspect its owning page and additional
+  properties such as image dimensions; dimensions are not `listAssets` fields.
 - The registered MCP tool names include `creatTag` and `getProperyUsers`.
   Preserve these public spellings unless a contract change is explicitly agreed.
