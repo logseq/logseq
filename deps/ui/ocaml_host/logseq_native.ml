@@ -1990,7 +1990,14 @@ let () =
       win_w := w; win_h := h;
       apply_actions (handle_input (Input.Resize (w,h)))
     end;
-    if memory_replay || Native_window.presentable (Sdl.get_window_id !win) then paint_frame ()
+    if memory_replay || Native_window.presentable (Sdl.get_window_id !win) then begin
+      paint_frame ();
+      (* Live-resize runs inside AppKit's tracking loop: drain the
+         present queue so this frame lands before the next size change —
+         the async path otherwise lags a beat and composites the stale
+         frame stretched under the new one. *)
+      Option.iter Lui_metal.present metal
+    end
     else host_req_repaint := true;
     Host_metrics.record_phase metrics Active_frame ((perf_s () -. started) *. 1000.));
   if Option.is_some census_path then allocation_census := Some (fun () ->
