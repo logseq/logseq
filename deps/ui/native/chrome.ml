@@ -24,9 +24,8 @@ open Lui_elements
 
 (* ---- native topbar (web .cp__header parity) ----
 
-   Single ~48px row: leading group [sidebar toggle, back/forward,
-   search] (history sits left like desktop Electron/Cursor chrome);
-   trailing group [rtc, home, page-menu dots, right-sidebar toggle].
+   Single ~48px row: leading group [sidebar toggle, search]; trailing
+   group [rtc, home, back/forward, page-menu dots, right-sidebar toggle].
    The native `toolbar` kind renders in-canvas — two stacked placement
    toolbars produced doubled bars/borders — so one plain row is the
    parity form. rtc/plugin toolbar items keep hidden DOM mounts below
@@ -84,16 +83,18 @@ let home_btn ms =
           Platform.set_location_hash "#/";
           Platform.dispatch "ls:navigate" Js.Json.null)
 
-(* cljs header.cljs mounts the home button only off the :home route *)
+(* cljs header.cljs hides home on the :home route and custom home page. *)
 let home_item (ms : Model.t Signal.signal) : t =
+  let sidebar = Sidebar_state.ensure ms in
   reactive
-    ~equal:(fun (a : Model.t) (b : Model.t) ->
-      (a.route = Model.Home) = (b.route = Model.Home))
-    (fun (m : Model.t) ->
-      match m.Model.route with
-      | Model.Home -> box ~key:"home-off" []
-      | _ -> home_btn ms)
-    ms
+    ~equal:(fun ((a : Model.t), ha) ((b : Model.t), hb) ->
+      a.route = b.route
+      && Sidebar_state.home_route_active a ha = Sidebar_state.home_route_active b hb)
+    (fun (m : Model.t) home ->
+      if m.route = Model.Home || Sidebar_state.home_route_active m home then
+        box ~key:"home-off" []
+      else home_btn ms)
+    ms (Signal.value sidebar.Sidebar_state.home_page)
 
 (* cljs header.cljs back-and-forward (Electron); native desktop always
    mounts the pair so history matches the packaged Electron chrome. *)
@@ -177,10 +178,10 @@ let leading_toolbar ~key ~state ~controls : t =
     ~safe_area_signal:inset ~padding_horizontal:0 ~state
     ~is_open:(fun _ -> false) ~controls context parent
 
-(* Left cluster: sidebar toggle, back/forward, search. Right cluster:
-   rtc, home, dots, right-toggle — history stays on the left. *)
+(* Left cluster: sidebar toggle and search. Right cluster:
+   rtc, home, history, dots and right-toggle. *)
 let leading_controls () =
-  [ left_menu_btn (); back_and_forward (); search_btn () ]
+  [ left_menu_btn (); search_btn () ]
 
 let topbar (ms : Model.t Signal.signal) : t =
   row ~key:"head" ~accessibility_identifier:"head"
@@ -196,6 +197,7 @@ let topbar (ms : Model.t Signal.signal) : t =
             ~style_class:"cp__header-r"
             [ rtc_item ms
             ; home_item ms
+            ; back_and_forward ()
             ; dots_btn
             ; right_toggle_btn ms ]) ]
 
