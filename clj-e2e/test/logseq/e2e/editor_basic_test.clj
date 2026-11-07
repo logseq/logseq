@@ -1054,6 +1054,42 @@
     (is (nil? (ls-api-call! :editor.getBlock block-uuid)))
     (assert/assert-have-count (str "#ls-block-" block-uuid) 0)))
 
+(defn- wait-for-order-list!
+  [block-uuid present?]
+  (let [selector (str "#ls-block-" block-uuid " .as-order-list")]
+    (if present?
+      (w/wait-for selector)
+      (w/wait-for-not-visible selector))))
+
+(deftest backspace-deletes-empty-block-after-removing-ordered-list-test
+  (testing "after Backspace removes an ordered-list marker, the next Backspace deletes the empty block"
+    (let [journal (ls-api-call! :editor.createJournalPage
+                                (str (java.time.Instant/now)))]
+      (ls-api-call! :app.pushState "page" {:name (get journal "uuid")} nil))
+    (util/wait-editor-visible)
+    (when-not (util/get-editor)
+      (b/open-last-block))
+    (when-not (string/blank? (or (util/get-edit-content) ""))
+      (b/new-block ""))
+    (util/press-seq "1. ")
+    (util/wait-edit-content "")
+    (let [first-uuid (.getAttribute (util/get-edit-block-container) "blockid")]
+      (wait-for-order-list! first-uuid true)
+      (util/press-seq "first")
+      (b/new-block "second")
+      (let [second-uuid (.getAttribute (util/get-edit-block-container) "blockid")]
+        (wait-for-order-list! second-uuid true)
+        (dotimes [_ (count "second")]
+          (k/backspace))
+        (util/wait-edit-content "")
+        (k/backspace)
+        (wait-for-order-list! second-uuid false)
+        (k/backspace)
+        (is (nil? (ls-api-call! :editor.getBlock second-uuid)))
+        (assert/assert-have-count (str "#ls-block-" second-uuid) 0)
+        (util/wait-edit-content "first")
+        (is (= first-uuid (.getAttribute (util/get-edit-block-container) "blockid")))))))
+
 (deftest today-queries-render-without-resource-errors
   (let [page (ls-api-call! :editor.createJournalPage
                            (str (java.time.Instant/now)))]
