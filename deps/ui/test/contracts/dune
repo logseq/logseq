@@ -11,6 +11,11 @@
  (modules task_native_test)
  (libraries ui_task_scenarios threads.posix))
 
+(test
+ (name block_drag_test)
+ (modules block_drag_test)
+ (libraries logseq_ui_shared))
+
 (melange.emit
  (target task_web_test)
  (modules task_web_test)
