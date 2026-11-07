@@ -1443,6 +1443,8 @@
  :property/map-checked-to "Map checked to"
  :property/map-unchecked-to "Map unchecked to"
  :property/more-settings "More settings"
+ :property/move-down "Move down"
+ :property/move-up "Move up"
  :property/multiple-values "Multiple values"
  :property/multiple-values-confirm "This action cannot be undone. Do you want to change this property to have multiple values?"
  :property/name "Property name"

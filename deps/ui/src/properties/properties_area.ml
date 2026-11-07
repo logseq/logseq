@@ -29,6 +29,50 @@ module W = Wire
 
 (* ---------- row views ---------- *)
 
+let reorder_options (ctx : V.ctx) rows property_row =
+  let property_idents = List.filter_map D.row_ident rows in
+  let active_ident = Option.get (D.row_ident property_row) in
+  let rec neighbors previous = function
+    | [] -> invalid_arg "Properties_area.reorder_options: property not in panel"
+    | ident :: rest when ident = active_ident -> previous, List.nth_opt rest 0
+    | ident :: rest -> neighbors (Some ident) rest
+  in
+  if Ui_services.env_publishing () || List.length property_idents < 2 then []
+  else
+    let previous, next = neighbors None property_idents in
+    let moving = ref false in
+    let move direction over_ident =
+      match over_ident with
+      | None -> ()
+      | Some over_ident when not !moving && not (Ui_services.env_publishing ()) ->
+          moving := true;
+          S.pop_overlay ();
+          let origin_repo = Runtime.repo () in
+          ignore (let* block_id =
+            match ctx.block_id with
+            | Some id -> Js.Promise.resolve id
+            | None ->
+                let* owner = D.entity_by_uuid ctx.block_uuid in
+                Js.Promise.resolve (Option.get (D.entity_id_of owner))
+          in
+          if Runtime.repo () <> origin_repo || Ui_services.env_publishing () then
+            Js.Promise.resolve ()
+          else
+            let* _ = D.reorder_display_property ~block_id ~active_ident
+              ~over_ident ~direction ~property_idents in
+            if Runtime.repo () = origin_repo then S.refresh_all ();
+            Js.Promise.resolve ())
+      | Some _ -> ()
+    in
+    [ menu_item ~key:"property-move-up" ~text:(I18n.t "property/move-up")
+        ~icon:(Icons.name_ref "arrow-up") ~disabled:(previous = None)
+        ~on_press:(fun _ -> move "up" previous) []
+    ; menu_item ~key:"property-move-down" ~text:(I18n.t "property/move-down")
+        ~icon:(Icons.name_ref "arrow-down") ~disabled:(next = None)
+        ~on_press:(fun _ -> move "down" next) []
+    ; Menu_item.separator ~key:"property-reorder-separator"
+    ]
+
 (* cljs property-icon: a type/ident glyph beside .property-k; falls
    back to the bullet dot when nothing applies *)
 let property_icon row =
@@ -67,6 +111,7 @@ let property_icon row =
    do not reset the active pane. cljs property-key-cp skips the
    .property-icon picker for other-position keys (pills) *)
 let key_cell (ctx : V.ctx) ~owner_is_tag ~owner_title ?(icon = true)
+    ?(reorder_rows = [])
     row : t =
  fun context parent ->
   if Ui_services.env_publishing () then
@@ -122,7 +167,8 @@ let key_cell (ctx : V.ctx) ~owner_is_tag ~owner_title ?(icon = true)
            | Some anchor ->
                Menu.open_menu ~anchor ~owner_uuid:ctx.block_uuid
                  ~owner_id:ctx.block_id ~owner_is_tag ~owner_title
-                 ~refresh:ctx.refresh ~with_title:false row
+                 ~refresh:ctx.refresh ~with_title:false
+                 ~more_options:(reorder_options ctx reorder_rows row) row
            | None -> ())
          []
      ])
@@ -164,7 +210,7 @@ let value_cell ~(hover : bool Signal.state option) ctx row : t =
       else [])
     @ [ V.view ~hover ctx row ])
 
-let panel_row (ctx : V.ctx) ~owner_is_tag ~owner_title row : t =
+let panel_row (ctx : V.ctx) ~owner_is_tag ~owner_title ?(reorder_rows = []) row : t =
  fun context parent ->
   let sched = context.Lui_ui.ui_scheduler in
   (* cljs .property-panel-edit-btn reveals while the pointer is over
@@ -190,7 +236,7 @@ let panel_row (ctx : V.ctx) ~owner_is_tag ~owner_title row : t =
         ~main:`center ~min_height:28
         ~foreground:"var(--ls-primary-text-color)"
         ~style_class:"property-key-panel"
-        [ key_cell ctx ~owner_is_tag ~owner_title row ]
+        [ key_cell ctx ~owner_is_tag ~owner_title ~reorder_rows row ]
     ; value_cell ~hover:(Some hover) ctx row
     ])
     context parent
@@ -271,11 +317,11 @@ let panel_children (ctx : V.ctx) ~owner_is_tag ~owner_title ~can_toggle
          (fun r -> D.row_hidden r || D.row_hide_empty r)
          d.rows
   in
-  List.map (panel_row ctx ~owner_is_tag ~owner_title) d.rows
+  List.map (panel_row ctx ~owner_is_tag ~owner_title ~reorder_rows:d.rows) d.rows
   @ (if owner_is_tag then []
      else
        (if !S.show_hidden && d.hidden <> [] then
-          List.map (panel_row ctx ~owner_is_tag ~owner_title) d.hidden
+          List.map (panel_row ctx ~owner_is_tag ~owner_title ~reorder_rows:d.hidden) d.hidden
         else [])
        @ (if can_toggle && has_hidden then [ toggle_row () ] else []))
 
@@ -669,7 +715,7 @@ let class_section (ctx : V.ctx) ~owner_title (class_rows : W.t list) : t =
             ~data_attrs:[ ("style", "margin-left:20px") ] []
         ])
     ; column ~gap:4 
-        (List.map (panel_row ctx ~owner_is_tag:true ~owner_title)
+        (List.map (panel_row ctx ~owner_is_tag:true ~owner_title ~reorder_rows:class_rows)
            class_rows
         @ [ column ~margin_left:20
               [ new_property_btn ctx ~for_class:true ~owner_title ]
