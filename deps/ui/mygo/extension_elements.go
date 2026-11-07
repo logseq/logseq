@@ -42,7 +42,12 @@ func extensionKey(key ui.Key) string {
 	if key >= ui.Key0 && key <= ui.Key9 {
 		return string(rune('0' + key - ui.Key0))
 	}
+	if key >= ui.KeyF1 && key <= ui.KeyF12 {
+		return "F" + strconv.Itoa(int(key-ui.KeyF1)+1)
+	}
 	switch key {
+	case ui.KeyUnknown:
+		return "Unidentified"
 	case ui.KeyEnter:
 		return "Enter"
 	case ui.KeyEscape:
@@ -98,13 +103,67 @@ func extensionKey(key ui.Key) string {
 }
 
 func extensionKeyValues(ev ui.InputEvent, key string) map[string]any {
-	return map[string]any{"key": key, "shift": ev.Mods&ui.Shift != 0, "alt": ev.Mods&ui.Alt != 0,
-		"meta": ev.Mods&ui.Super != 0, "ctrl": ev.Mods&ui.Ctrl != 0, "repeat": ev.Repeat}
+	values := extensionKeyMetadata(ev, key)
+	values["shift"], values["alt"] = ev.Mods&ui.Shift != 0, ev.Mods&ui.Alt != 0
+	values["meta"], values["ctrl"] = ev.Mods&ui.Super != 0, ev.Mods&ui.Ctrl != 0
+	return values
 }
 
 func extensionDOMKey(ev ui.InputEvent, key string) map[string]any {
-	return map[string]any{"key": key, "shiftKey": ev.Mods&ui.Shift != 0, "altKey": ev.Mods&ui.Alt != 0,
-		"metaKey": ev.Mods&ui.Super != 0, "ctrlKey": ev.Mods&ui.Ctrl != 0, "repeat": ev.Repeat}
+	values := extensionKeyMetadata(ev, key)
+	values["shiftKey"], values["altKey"] = ev.Mods&ui.Shift != 0, ev.Mods&ui.Alt != 0
+	values["metaKey"], values["ctrlKey"] = ev.Mods&ui.Super != 0, ev.Mods&ui.Ctrl != 0
+	return values
+}
+
+func extensionKeyMetadata(ev ui.InputEvent, key string) map[string]any {
+	if key == "Unidentified" && ev.PhysicalKey != ui.KeyUnknown {
+		key = extensionKey(ev.PhysicalKey)
+	}
+	values := map[string]any{"key": key, "code": extensionKeyCode(ev.PhysicalKey), "repeat": ev.Repeat}
+	// Text is supplied by the keyboard layout, not derived from a US shift map.
+	if ev.Text != "" {
+		values["keyChar"] = ev.Text
+	}
+	return values
+}
+
+func extensionKeyCode(key ui.Key) string {
+	if key >= ui.KeyA && key <= ui.KeyZ {
+		return "Key" + string(rune('A'+key-ui.KeyA))
+	}
+	if key >= ui.Key0 && key <= ui.Key9 {
+		return "Digit" + string(rune('0'+key-ui.Key0))
+	}
+	switch key {
+	case ui.KeyUnknown:
+		return ""
+	case ui.KeySpace:
+		return "Space"
+	case ui.KeyMinus:
+		return "Minus"
+	case ui.KeyEqual:
+		return "Equal"
+	case ui.KeyComma:
+		return "Comma"
+	case ui.KeyPeriod:
+		return "Period"
+	case ui.KeySlash:
+		return "Slash"
+	case ui.KeySemicolon:
+		return "Semicolon"
+	case ui.KeyQuote:
+		return "Quote"
+	case ui.KeyBracketLeft:
+		return "BracketLeft"
+	case ui.KeyBracketRight:
+		return "BracketRight"
+	case ui.KeyBackslash:
+		return "Backslash"
+	case ui.KeyBackquote:
+		return "Backquote"
+	}
+	return extensionKey(key)
 }
 
 type extensionTextState struct {
