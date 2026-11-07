@@ -575,6 +575,47 @@ CAMLprim void logseq_native_titlebar_blend(void) {
   }
 }
 
+/* Live-resize paints swap the metal layer's drawable every frame;
+   Core Animation's implicit crossfade/geometry animations then blend
+   consecutive sizes into a doubled ghost. Disable implicit actions on
+   every CAMetalLayer under the content view so frames swap atomically. */
+CAMLprim void logseq_native_metal_noanim(value id_v) {
+  SDL_SysWMinfo info;
+  SDL_VERSION(&info.version);
+  if (!SDL_GetWindowWMInfo(SDL_GetWindowFromID(Int_val(id_v)), &info)) return;
+  id window = (id)info.info.cocoa.window;
+  id content = ((id (*)(id, SEL))objc_msgSend)(window, sel_registerName("contentView"));
+  if (content == nil) return;
+  Class metal = objc_getClass("CAMetalLayer");
+  Class dict_cls = objc_getClass("NSDictionary");
+  Class null_cls = objc_getClass("NSNull");
+  if (metal == Nil || dict_cls == Nil || null_cls == Nil) return;
+  id nul = ((id (*)(Class, SEL))objc_msgSend)(null_cls, sel_registerName("null"));
+  id keys[5] = {NULL}, vals[5] = {NULL};
+  const char *names[5] = {"contents", "drawableSize", "frame", "bounds", "position"};
+  for (int i = 0; i < 5; i++) {
+    keys[i] = ((id (*)(id, SEL, const char *))objc_msgSend)(
+        (id)objc_getClass("NSString"), sel_registerName("stringWithUTF8String:"), names[i]);
+    vals[i] = nul;
+  }
+  typedef struct { id *isa; } *objs;
+  id actions = ((id (*)(Class, SEL, objs, objs, unsigned long))objc_msgSend)(
+      dict_cls, sel_registerName("dictionaryWithObjects:forKeys:count:"),
+      (objs)vals, (objs)keys, 5UL);
+  id subviews = ((id (*)(id, SEL))objc_msgSend)(content, sel_registerName("subviews"));
+  unsigned long n = ((unsigned long (*)(id, SEL))objc_msgSend)(subviews, sel_registerName("count"));
+  for (unsigned long i = 0; i < n; i++) {
+    id v = ((id (*)(id, SEL, unsigned long))objc_msgSend)(
+        subviews, sel_registerName("objectAtIndex:"), i);
+    id layer = ((id (*)(id, SEL))objc_msgSend)(v, sel_registerName("layer"));
+    if (layer == nil) continue;
+    int is_metal = ((int (*)(id, SEL, Class))objc_msgSend)(
+        layer, sel_registerName("isKindOfClass:"), metal);
+    if (is_metal)
+      ((void (*)(id, SEL, id))objc_msgSend)(layer, sel_registerName("setActions:"), actions);
+  }
+}
+
 /* Grow the transparent titlebar to the 48pt app header and pin traffic
    lights at Electron trafficLightPosition {x:16}, vertically centered.
    Accessory height is only the *extra* chrome (default titled bar is
@@ -2617,6 +2658,10 @@ CAMLprim value logseq_native_titlebar_insets(value id_v) {
   Store_field(out, 1, caml_copy_double(0.));
   Store_field(out, 2, caml_copy_double(0.));
   CAMLreturn(out);
+}
+
+CAMLprim void logseq_native_metal_noanim(value id_v) {
+  (void)id_v;
 }
 
 CAMLprim value logseq_native_register_fonts(value directory) {
