@@ -25,6 +25,11 @@ external native_activate : unit -> unit = "logseq_native_activate"
 external native_titlebar_blend : unit -> unit
   = "logseq_native_titlebar_blend"
 
+(* ocaml_host_stubs.c: Electron-parity trafficLightPosition {16,16} plus
+   the leading inset (height, left, right) the header must reserve. *)
+external native_titlebar_insets : int -> float * float * float
+  = "logseq_native_titlebar_insets"
+
 (* ocaml_host_stubs.c: registers every .ttf/.otf/.ttc in a directory
    with CoreText so named families (Inter, bundled under assets/fonts)
    resolve in Lui_text.create. *)
@@ -1188,6 +1193,22 @@ let () =
     | Ime_rect r -> set_ime_rect r
     | Quit -> quit := true
   and apply_actions acts = List.iter apply_action acts
+  and last_titlebar_insets = ref None
+  and push_titlebar_insets () =
+    (* Re-apply every call: AppKit resets traffic lights on layout.
+       Only emit window-titlebar when the measured inset changes. *)
+    if Host_platform.is_macos then
+      let height, left, right =
+        native_titlebar_insets (Sdl.get_window_id !win)
+      in
+      let next = (height, left, right) in
+      if !last_titlebar_insets <> Some next then begin
+        last_titlebar_insets := Some next;
+        Native_embed.platform_event
+          (Printf.sprintf
+             "window-titlebar\n{\"height\":%.0f,\"left\":%.0f,\"right\":%.0f}"
+             height left right)
+      end
   and push_window_size () =
     (* Logical viewport size — Web_dom.win_inner_* drives the
        virtualizer and window-edge popup anchoring. *)
@@ -1195,7 +1216,8 @@ let () =
       Printf.sprintf "{\"width\":%d,\"height\":%d}"
         (int_of_float (content_width ())) !win_h
     in
-    Native_embed.platform_event ("window-size\n" ^ body)
+    Native_embed.platform_event ("window-size\n" ^ body);
+    push_titlebar_insets ()
   in
   (* ---- DOM document events ------------------------------------------
 
@@ -1923,6 +1945,8 @@ let () =
   let allocation_started = perf_s () in
   let paint_frame () =
     host_req_repaint := false;
+    (* Traffic lights: AppKit re-lays out the titlebar each frame. *)
+    push_titlebar_insets ();
     let paint_started = perf_s () in
     let layout_before = metrics.layout_count in
     Host_interaction.prepare_paint ui host;
@@ -1941,6 +1965,8 @@ let () =
     ignore (Lui_a11y.sync a11y);
     Host_metrics.record_phase metrics Accessibility ((perf_s () -. a11y_started) *. 1000.);
     if !gl_live_cell then Sdl.gl_swap_window !win;
+    (* Re-assert after AppKit's end-of-frame titlebar layout. *)
+    push_titlebar_insets ();
     Ui.frame_done ui;
     Host_requests.flush_pending_focus ();
     incr frame;

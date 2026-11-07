@@ -575,6 +575,131 @@ CAMLprim void logseq_native_titlebar_blend(void) {
   }
 }
 
+/* Grow the transparent titlebar to the 48pt app header and pin traffic
+   lights at Electron trafficLightPosition {x:16}, vertically centered.
+   Accessory height is only the *extra* chrome (default titled bar is
+   ~28pt); a full 48pt accessory overshoots and centers the lights below
+   the header icons. `left` is zoom-right + gap so the leading toolbar
+   can use zero horizontal padding. */
+CAMLprim value logseq_native_titlebar_insets(value id_v) {
+  CAMLparam1(id_v);
+  CAMLlocal1(out);
+  const double traffic_x = 16.0;
+  const double header_h = 48.0;
+  /* NSTitlebarAccessoryViewController adds this to the default bar. */
+  const double accessory_h = 20.0;
+  const double button_size = 14.0;
+  const double button_gap = 6.0;
+  const double after_gap = 8.0;
+  double height = header_h, left = traffic_x + 2.0 * (button_size + button_gap)
+                                   + button_size + after_gap,
+         right = 0.0;
+  SDL_SysWMinfo info;
+  SDL_VERSION(&info.version);
+  SDL_Window *sdl = SDL_GetWindowFromID(Int_val(id_v));
+  if (sdl && SDL_GetWindowWMInfo(sdl, &info)) {
+    id window = (id)info.info.cocoa.window;
+    id close = ((id (*)(id, SEL, long))objc_msgSend)(
+        window, sel_registerName("standardWindowButton:"), 0L);
+    id miniaturize = ((id (*)(id, SEL, long))objc_msgSend)(
+        window, sel_registerName("standardWindowButton:"), 1L);
+    id zoom = ((id (*)(id, SEL, long))objc_msgSend)(
+        window, sel_registerName("standardWindowButton:"), 2L);
+    if (close != nil && miniaturize != nil && zoom != nil) {
+      typedef struct { double x, y, w, h; } tb_rect;
+      id title_bar_view =
+          ((id (*)(id, SEL))objc_msgSend)(close, sel_registerName("superview"));
+      id title_bar_container =
+          title_bar_view == nil
+              ? nil
+              : ((id (*)(id, SEL))objc_msgSend)(title_bar_view,
+                                                sel_registerName("superview"));
+      static int accessory_ready = 0;
+      if (!accessory_ready) {
+        Class acc_cls = objc_getClass("NSTitlebarAccessoryViewController");
+        Class view_cls = objc_getClass("NSView");
+        if (acc_cls != Nil && view_cls != Nil) {
+          tb_rect acc_frame = {0, 0, 1, accessory_h};
+          id acc_view = ((id (*)(id, SEL))objc_msgSend)(
+              ((id (*)(Class, SEL))objc_msgSend)(view_cls,
+                                                 sel_registerName("alloc")),
+              sel_registerName("init"));
+          ((void (*)(id, SEL, tb_rect))objc_msgSend)(
+              acc_view, sel_registerName("setFrame:"), acc_frame);
+          ((void (*)(id, SEL, int))objc_msgSend)(
+              acc_view, sel_registerName("setHidden:"), 1);
+          id acc = ((id (*)(id, SEL))objc_msgSend)(
+              ((id (*)(Class, SEL))objc_msgSend)(acc_cls,
+                                                 sel_registerName("alloc")),
+              sel_registerName("init"));
+          ((void (*)(id, SEL, id))objc_msgSend)(
+              acc, sel_registerName("setView:"), acc_view);
+          ((void (*)(id, SEL, double))objc_msgSend)(
+              acc, sel_registerName("setFullScreenMinHeight:"), header_h);
+          /* NSLayoutAttributeBottom grows the chrome to fit. */
+          ((void (*)(id, SEL, long))objc_msgSend)(
+              acc, sel_registerName("setLayoutAttribute:"), 4L);
+          ((void (*)(id, SEL, id))objc_msgSend)(
+              window, sel_registerName("addTitlebarAccessoryViewController:"),
+              acc);
+        }
+        accessory_ready = 1;
+      }
+      if (title_bar_container != nil) {
+        tb_rect window_frame = ((tb_rect (*)(id, SEL))objc_msgSend)(
+            window, sel_registerName("frame"));
+        tb_rect container = ((tb_rect (*)(id, SEL))objc_msgSend)(
+            title_bar_container, sel_registerName("frame"));
+        container.h = header_h;
+        container.y = window_frame.h - header_h;
+        ((void (*)(id, SEL, tb_rect))objc_msgSend)(
+            title_bar_container, sel_registerName("setFrame:"), container);
+        if (title_bar_view != nil) {
+          tb_rect fill = {0, 0, container.w, header_h};
+          ((void (*)(id, SEL, tb_rect))objc_msgSend)(
+              title_bar_view, sel_registerName("setFrame:"), fill);
+        }
+      }
+      /* Frame-only placement: Auto Layout on standardWindowButton views
+         wins at the end of the run loop and undoes setFrameOrigin, which
+         left the lights centered in the short default bar. */
+      if (title_bar_view != nil) {
+        int view_flipped = ((int (*)(id, SEL))objc_msgSend)(
+            title_bar_view, sel_registerName("isFlipped"));
+        id buttons[3] = {close, miniaturize, zoom};
+        for (int i = 0; i < 3; i++) {
+          ((void (*)(id, SEL, int))objc_msgSend)(
+              buttons[i],
+              sel_registerName("setTranslatesAutoresizingMaskIntoConstraints:"),
+              1);
+          ((void (*)(id, SEL, unsigned long))objc_msgSend)(
+              buttons[i], sel_registerName("setAutoresizingMask:"), 0UL);
+          tb_rect frame = ((tb_rect (*)(id, SEL))objc_msgSend)(
+              buttons[i], sel_registerName("frame"));
+          double bh = frame.h > 1.0 ? frame.h : button_size;
+          double bw = frame.w > 1.0 ? frame.w : button_size;
+          double top = (header_h - bh) / 2.0;
+          tb_rect next;
+          next.x = traffic_x + (double)i * (button_size + button_gap);
+          next.y = view_flipped ? top : (header_h - top - bh);
+          next.w = bw;
+          next.h = bh;
+          ((void (*)(id, SEL, tb_rect))objc_msgSend)(
+              buttons[i], sel_registerName("setFrame:"), next);
+        }
+      }
+      left = traffic_x + 2.0 * (button_size + button_gap) + button_size
+             + after_gap;
+      height = header_h;
+    }
+  }
+  out = caml_alloc_tuple(3);
+  Store_field(out, 0, caml_copy_double(height));
+  Store_field(out, 1, caml_copy_double(left));
+  Store_field(out, 2, caml_copy_double(right));
+  CAMLreturn(out);
+}
+
 CAMLprim value logseq_native_input_chain(value id_v) {
   SDL_SysWMinfo info;
   SDL_VERSION(&info.version);
@@ -2481,6 +2606,17 @@ CAMLprim value logseq_native_activate(value unit) {
 CAMLprim value logseq_native_titlebar_blend(value unit) {
   (void)unit;
   return Val_unit;
+}
+
+CAMLprim value logseq_native_titlebar_insets(value id_v) {
+  CAMLparam1(id_v);
+  CAMLlocal1(out);
+  (void)id_v;
+  out = caml_alloc_tuple(3);
+  Store_field(out, 0, caml_copy_double(0.));
+  Store_field(out, 1, caml_copy_double(0.));
+  Store_field(out, 2, caml_copy_double(0.));
+  CAMLreturn(out);
 }
 
 CAMLprim value logseq_native_register_fonts(value directory) {
