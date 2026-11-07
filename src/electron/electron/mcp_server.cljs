@@ -279,7 +279,7 @@
    :createPage
    {:fn mcp-compat/create-page
     :config #js {:title "Create Page"
-                 :description "Create one uniquely titled page and verify it by UUID. An occupied title returns status=conflict, verified=false and held_by without an MCP error or any write."
+                 :description "Create one uniquely titled page and verify it by UUID. If only recycled pages hold the title, rename them to '<original title> (<page UUID>)' while preserving their UUIDs, recycled state and block inventory, then create the new page. Live or non-page holders return a no-write conflict. Dry runs never rename; they return planned_archives for recycled-only holders, with archive collisions and block preservation checked at write time. Archive failures stop creation and report inspection guidance; successful renames appear in archived_pages."
                  :inputSchema #js {:title (z/string)
                                    :dry_run (-> (z/boolean) .optional)
                                    :verbose (-> (z/boolean) .optional)}}}
@@ -301,7 +301,7 @@
    :createEmbed
    {:fn mcp-compat/create-embed
     :config #js {:title "Create Embed"
-                 :description "Create a new linked embed block as a child of an existing page/block. This displays the target, not a copy or text reference. Use exact UUIDs, not titles; resolve them with getPageUUID/getBlockUUID. Self/ancestor targets are refused. verified=false after a write can mean an embed was created but verification failed: inspect listEmbeds before retrying to avoid duplicates. Remove an embed with removeBlock using the embed's UUID, never its target UUID."
+                 :description "Create a new linked embed block as a child of an existing page/block. This displays the target, not a copy or text reference. Use exact UUIDs, not titles; resolve them with getPageUUID/getBlockUUID. Self/ancestor targets are refused. verbose=false returns only uuid, verified and diagnostic (uuid is null for a dry run). verified=false after a write can mean an embed was created but verification failed: inspect listEmbeds before retrying to avoid duplicates. Remove an embed with removeBlock using the embed's UUID, never its target UUID. Removing an embed's target leaves an empty block that listEmbeds can no longer find."
                  :inputSchema #js {:parent_uuid (-> (z/string) (.describe "UUID of the existing destination page or block that will contain the new embed."))
                                    :target_uuid (-> (z/string) (.describe "UUID of the existing page or block to display inside the embed."))
                                    :dry_run (-> (z/boolean) .optional (.describe "Default false. True performs identifier/ancestry reads only and writes nothing; it does not perform all write-time graph/type/recycled validation."))
@@ -332,7 +332,7 @@
    :removeBlock
    {:fn mcp-compat/remove-block
     :config #js {:title "Remove Block"
-                 :description "Delete a block and its structural subtree after inventorying it, then verify every UUID is absent. For an embed, use the embed block's UUID: its linked target is not deleted."
+                 :description "Delete a block and its structural subtree after inventorying it, then verify every UUID is absent. For an embed, use the embed block's UUID: its linked target is not deleted. Removing an embed's target leaves an empty block that listEmbeds can no longer find."
                  :inputSchema #js {:block_uuid (z/string)
                                    :verbose (-> (z/boolean) .optional)}}}
    :splitBlock
@@ -360,7 +360,7 @@
    :deletePage
    {:fn mcp-compat/delete-page
     :config #js {:title "Delete Page"
-                 :description "Recycle a page, then preserve its UUID/content under '<original title> (recycled <page UUID>)' to release the original title. Reports partial archive failures explicitly. Requires separate acknowledgements for inbound references and irreparable alias loss."
+                 :description "Recycle a page without renaming it; verify its title, UUID and block inventory remain intact. Report non-alias inbound references, related alias pages and built-in linked/unlinked reference views separately in references.real, references.aliases and references.built_in_views. Built-in views do not block deletion. Missing acknowledgements return refused=true, required_acknowledgements and no verified field; no write occurs. Recycled titles are reusable through createPage."
                  :inputSchema #js {:page_uuid (z/string)
                                    :acknowledge_reference_rewrite (-> (z/boolean) .optional)
                                    :acknowledge_alias_loss (-> (z/boolean) .optional)
@@ -385,7 +385,7 @@
    :importPage
    {:fn mcp-compat/import-page
     :config #js {:title "Import Page"
-                 :description "Import Logseq bullet markdown or explicit-depth block lists; preserve heading levels, escape references and verify batches. Replace preserves the deleted inventory. A title held by a non-page entity returns a no-write creation conflict."
+                 :description "Import Logseq bullet markdown or explicit-depth block lists; preserve heading levels, escape references and verify batches. Report expected_blocks and observed_blocks, allowing one late empty seed on an initially empty page. Replace preserves the deleted inventory. A title held by a non-page entity returns a no-write creation conflict."
                  :inputSchema #js {:target (z/string) :markdown (z/union #js [(z/string) (z/array (z/any))])
                                    :replace (-> (z/boolean) .optional) :dry_run (-> (z/boolean) .optional)}}}
    :repairLinks
@@ -462,7 +462,7 @@
    :createProperty
    {:fn mcp-compat/create-property
     :config #js {:title "Create Property"
-                 :description "Create a property definition, verify its assigned ident and stored type, and return that ident for later operations. Logseq may normalize spaces or punctuation in the title/ident; use the returned canonical ident and reported normalized title, not a guessed ident."
+                 :description "Create a property definition, verify its assigned ident and stored type, and return that ident for later operations. Logseq may normalize spaces or punctuation in the title/ident; use the returned canonical ident and reported normalized title, not a guessed ident. When the stored title differs, normalized_from contains the requested title in both verbose and terse results; this is post-write metadata, not a dry-run preview."
                  :inputSchema #js {:title (z/string)
                                    :schema (-> (z/object #js {}) .passthrough)
                                    :options (-> (z/object #js {}) .passthrough .optional)
@@ -525,7 +525,7 @@
    :isTitleAvailable
    {:fn mcp-compat/is-title-available
     :config #js {:title "Is Title Available"
-                 :description "Check whether a title is held by any graph entity."
+                 :description "Check whether a title is free or reusable by createPage. Titles held only by recycled pages return available=true, recycled=true and planned_archives, while held_by preserves their identities. Live or non-page holders remain unavailable. This tool writes nothing; archive collisions and block preservation are checked at write time."
                  :inputSchema #js {:title (z/string)}}}
    :findDuplicateTitles
    {:fn mcp-compat/find-duplicate-titles

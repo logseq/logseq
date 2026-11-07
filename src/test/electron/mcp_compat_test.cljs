@@ -368,6 +368,7 @@
                                                      :block/parent+ {:db/valueType :db.type/ref :db/cardinality :db.cardinality/many}
                                                      :block/refs {:db/valueType :db.type/ref :db.cardinality :db.cardinality/many}
                                                      :block/alias {:db/valueType :db.type/ref :db/cardinality :db.cardinality/many}
+                                                     :logseq.property/view-for {:db/valueType :db.type/ref}
                                                      :plugin.property/smoke-link {:db/valueType :db.type/ref}
                                                      :logseq.property/alias {:db/valueType :db.type/ref :db/cardinality :db.cardinality/many}}))
         api (fn [method args]
@@ -760,11 +761,22 @@
                  (is (true? (:verified result)))
                  (is (= "MCPSmokeProp" (get-in result [:verified_state :title])))
                  (is (= ":plugin.property._test_plugin/MCPSmokeProp" (:ident result)))
+                 (is (= "MCP Smoke Prop" (:normalized_from result)))
                  (is (string/includes? (:diagnostic result) "normalized the title"))
                  (is (true? (:found lookup)))
                  (is (= ":plugin.property._test_plugin/MCPSmokeProp" (:ident lookup)))
                  (is (= "default" (:type lookup)))
                  (is (some #(= "logseq.DB.getPropertiesByTitle" (first %)) @calls))
+                 (p/let [terse (mcp-compat/create-property api #js {:title "MCP Terse Prop"
+                                                                  :schema #js {:type "default"}
+                                                                  :verbose false})]
+                   (is (= "MCP Terse Prop" (:normalized_from terse)))
+                   (is (= "MCPTerseProp" (:title terse))))
+                 (p/let [unchanged (mcp-compat/create-property api #js {:title "Plain"
+                                                                      :schema #js {:type "default"}
+                                                                      :verbose false})]
+                   (is (= "Plain" (:title unchanged)))
+                   (is (not (contains? unchanged :normalized_from))))
                  (js/queueMicrotask done))
                (p/catch (fn [error] (is false (.-message error)) (js/queueMicrotask done)))))))
 
@@ -1029,35 +1041,33 @@
                (p/catch (fn [error] (is false (.-message error)) (js/queueMicrotask done)))))))
 
 (deftest delete-page-verifies-recycling-with-uuid-and-content-preserved
-  (let [{:keys [page-uuid block-uuid conn api]} (page-fixture)]
+  (let [{:keys [page-uuid block-uuid conn api calls]} (page-fixture)]
     (async done
            (-> (p/then (mcp-compat/delete-page api #js {"page_uuid" page-uuid})
                        (fn [result]
                          (is (true? (:verified result)))
                          (is (= page-uuid (get-in result [:verified_entities 0 :uuid])))
                          (is (= 2 (count (:previous_entities result))))
-                         (is (true? (:title_released result)))
-                         (is (true? (:title_available result)))
-                         (is (= (str "Fixture (recycled " page-uuid ")")
-                                (:block/title (d/entity @conn 160))))
+                         (is (= "Fixture" (:block/title (d/entity @conn 160))))
+                         (is (true? (:blocks_preserved result)))
+                         (is (not-any? #(= "logseq.DB.renamePage" (first %)) @calls))
                          (is (= 1 (:logseq.property/deleted-at (d/entity @conn 160))))
                          (is (= "Content" (:block/title (d/entity @conn 161))))
                          (is (some? (d/entity @conn [:block/uuid (uuid block-uuid)])))
                          (done)))
                (p/catch (fn [error] (is false (.-message error)) (done)))))))
 
-(deftest delete-page-reports-archive-errors-with-recoverable-content
-  (let [{:keys [page-uuid conn api]} (page-fixture)
+(deftest create-page-reports-archive-errors-with-recoverable-content
+  (let [{:keys [conn api]} (page-fixture)
         wrapped-api (fn [method args]
                       (if (= method "logseq.DB.renamePage")
                         #js {:error "archive rename denied"}
                         (api method args)))]
+    (d/transact! conn [{:db/id 160 :logseq.property/deleted-at 1}])
     (async done
-           (-> (p/then (mcp-compat/delete-page wrapped-api #js {:page_uuid page-uuid})
+           (-> (p/then (mcp-compat/create-page wrapped-api #js {:title "Fixture"})
                        (fn [result]
                          (is (false? (:verified result)))
-                         (is (false? (:title_released result)))
-                         (is (= "archive rename denied" (get-in result [:archive_response :error])))
                          (is (string/includes? (:diagnostic result) "archive rename denied"))
                          (is (= "Fixture" (:block/title (d/entity @conn 160))))
                          (is (= 1 (:logseq.property/deleted-at (d/entity @conn 160))))
@@ -1065,21 +1075,152 @@
                          (done)))
                (p/catch (fn [error] (is false (.-message error)) (done)))))))
 
-(deftest delete-page-does-not-overwrite-an-occupied-archive-title
+(deftest create-page-does-not-overwrite-an-occupied-archive-title
   (let [{:keys [page-uuid conn api calls]} (page-fixture)
-        archived-title (str "Fixture (recycled " page-uuid ")")]
-    (d/transact! conn [{:db/id 162 :block/uuid (uuid "00000000-0000-4000-8000-000000000162")
+        archived-title (str "Fixture (" page-uuid ")")]
+    (d/transact! conn [{:db/id 160 :logseq.property/deleted-at 1}
+                       {:db/id 162 :block/uuid (uuid "00000000-0000-4000-8000-000000000162")
                         :block/title archived-title}])
     (async done
-           (-> (p/then (mcp-compat/delete-page api #js {:page_uuid page-uuid})
+           (-> (p/then (mcp-compat/create-page api #js {:title "Fixture"})
                        (fn [result]
                          (is (false? (:verified result)))
-                         (is (false? (:title_released result)))
                          (is (string/includes? (:diagnostic result) "already occupied"))
                          (is (= "Fixture" (:block/title (d/entity @conn 160))))
                          (is (not-any? #(= "logseq.DB.renamePage" (first %)) @calls))
                          (done)))
                (p/catch (fn [error] (is false (.-message error)) (done)))))))
+
+(deftest delete-page-ignores-reference-views-but-not-real-links
+  (let [{:keys [page-uuid conn api calls]} (page-fixture)]
+    (d/transact! conn [{:db/id 162 :block/uuid (uuid "00000000-0000-4000-8000-000000000162")
+                       :logseq.property/view-for 160
+                       :logseq.property.view/feature-type :linked-references}
+                      {:db/id 163 :block/uuid (uuid "00000000-0000-4000-8000-000000000163")
+                       :logseq.property/view-for 160
+                       :logseq.property.view/feature-type :unlinked-references}
+                      {:db/id 164 :block/uuid (uuid "00000000-0000-4000-8000-000000000164")
+                       :block/refs [160]}])
+    (async done
+      (-> (p/let [blocked (mcp-compat/delete-page api #js {:page_uuid page-uuid})]
+            (is (true? (:refused blocked)))
+            (is (not (contains? blocked :verified)))
+            (is (= {:real 1 :aliases 0 :built_in_views 2} (:references blocked)))
+            (is (not-any? #(= "logseq.DB.deletePage" (first %)) @calls))
+            (d/transact! conn [[:db/retractEntity 164]])
+            (p/let [deleted (mcp-compat/delete-page api #js {:page_uuid page-uuid})]
+              (is (true? (:verified deleted)))
+              (is (= {:real 0 :aliases 0 :built_in_views 2} (:references deleted)))
+              (is (= 2 (count (:built_in_views deleted))))
+              (js/queueMicrotask done)))
+          (p/catch (fn [error] (is false (.-message error)) (js/queueMicrotask done)))))))
+
+(deftest create-page-renames-recycled-holders-only-on-title-reuse
+  (let [{:keys [page-uuid conn api calls]} (page-fixture)]
+    (async done
+      (-> (p/let [_ (mcp-compat/delete-page api #js {:page_uuid page-uuid})
+                  dry-run (mcp-compat/create-page api #js {:title "Fixture" :dry_run true})]
+            (is (false? (:verified dry-run)))
+            (is (= "dry_run" (:status dry-run)))
+            (is (= [{:uuid page-uuid :original_title "Fixture"
+                     :archived_title (str "Fixture (" page-uuid ")")}]
+                   (:planned_archives dry-run)))
+            (is (= "Fixture" (:block/title (d/entity @conn 160))))
+            (is (not-any? #(contains? #{"logseq.DB.renamePage" "logseq.DB.createPage"} (first %)) @calls))
+            (p/let [occupancy (mcp-compat/is-title-available api #js {:title "Fixture"})]
+              (is (true? (:available occupancy)))
+              (is (true? (:recycled occupancy)))
+              (is (= (:planned_archives dry-run) (:planned_archives occupancy))))
+            (p/let [created (mcp-compat/create-page api #js {:title "Fixture"})]
+              (is (true? (:verified created)))
+              (is (= (str "Fixture (" page-uuid ")") (:block/title (d/entity @conn 160))))
+              (is (= 1 (:logseq.property/deleted-at (d/entity @conn 160))))
+              (is (= "Content" (:block/title (d/entity @conn 161))))
+              (is (not= page-uuid (get-in created [:verified_entities 0 :uuid])))
+              (is (= page-uuid (get-in created [:archived_pages 0 :uuid])))
+              (js/queueMicrotask done)))
+          (p/catch (fn [error] (is false (.-message error)) (js/queueMicrotask done)))))))
+
+(deftest create-page-reports-renamed-holders-when-creation-fails
+  (let [{:keys [page-uuid conn api]} (page-fixture)
+        wrapped-api (fn [method args]
+                      (if (= method "logseq.DB.createPage")
+                        (p/rejected (js/Error. "creation denied"))
+                        (api method args)))]
+    (d/transact! conn [{:db/id 160 :logseq.property/deleted-at 1}])
+    (async done
+      (-> (mcp-compat/create-page wrapped-api #js {:title "Fixture"})
+          (p/then (fn [_] (is false "Expected the creation error") (js/queueMicrotask done)))
+          (p/catch (fn [error]
+                     (is (string/includes? (.-message error) "creation denied"))
+                     (is (string/includes? (.-message error) page-uuid))
+                     (is (string/includes? (.-message error) "before retrying"))
+                     (is (= (str "Fixture (" page-uuid ")") (:block/title (d/entity @conn 160))))
+                     (is (= "Content" (:block/title (d/entity @conn 161))))
+                     (js/queueMicrotask done)))))))
+
+(deftest create-page-refuses-mixed-live-and-recycled-title-holders
+  (let [{:keys [conn api calls]} (page-fixture)]
+    (d/transact! conn [{:db/id 160 :logseq.property/deleted-at 1}
+                      {:db/id 162 :block/uuid (uuid "00000000-0000-4000-8000-000000000162")
+                       :block/title "Fixture" :block/name "fixture" :block/tags [158]}])
+    (async done
+      (-> (p/let [results (p/all [(mcp-compat/create-page api #js {:title "Fixture"})
+                                  (mcp-compat/create-page api #js {:title "Fixture" :dry_run true})])]
+            (doseq [result results]
+              (is (= "conflict" (:status result)))
+              (is (false? (:verified result))))
+            (is (= "Fixture" (:block/title (d/entity @conn 160))))
+            (is (not-any? #(contains? #{"logseq.DB.renamePage" "logseq.DB.createPage"} (first %)) @calls))
+            (js/queueMicrotask done))
+          (p/catch (fn [error] (is false (.-message error)) (js/queueMicrotask done)))))))
+
+(deftest page-recycling-and-archiving-reject-block-loss
+  (async done
+    (-> (p/let [_ (p/all
+                   (mapv (fn [operation]
+                           (let [{:keys [page-uuid conn api calls]} (page-fixture)
+                                 mutation (if (= operation :delete) "logseq.DB.deletePage" "logseq.DB.renamePage")
+                                 wrapped-api (fn [method args]
+                                               (p/let [response (api method args)]
+                                                 (when (= method mutation)
+                                                   (d/transact! conn [[:db/retractEntity 161]]))
+                                                 response))]
+                             (when (= operation :create)
+                               (d/transact! conn [{:db/id 160 :logseq.property/deleted-at 1}]))
+                             (p/let [result (if (= operation :delete)
+                                             (mcp-compat/delete-page wrapped-api #js {:page_uuid page-uuid})
+                                             (mcp-compat/create-page wrapped-api #js {:title "Fixture"}))]
+                               (is (false? (:verified result)))
+                               (is (false? (if (= operation :delete)
+                                             (:blocks_preserved result)
+                                             (:created result))))
+                               (is (not-any? #(= "logseq.DB.createPage" (first %)) @calls)))))
+                         [:delete :create]))]
+          (js/queueMicrotask done))
+        (p/catch (fn [error] (is false (.-message error)) (js/queueMicrotask done))))))
+
+(deftest import-page-accounts-for-a-late-empty-seed-without-hiding-other-writes
+  (async done
+    (-> (p/let [_ (p/all
+                   (for [extra-title ["" "Unexpected content"]]
+                     (let [{:keys [page-uuid conn api]} (page-fixture)
+                           wrapped-api (fn [method args]
+                                         (when (= method "logseq.DB.insertBatchBlock")
+                                           (d/transact! conn [{:db/id 190
+                                                               :block/uuid (uuid "00000000-0000-4000-8000-000000000190")
+                                                               :block/title extra-title :block/order "a1"
+                                                               :block/parent 160 :block/parent+ [160] :block/page 160}]))
+                                         (api method args))]
+                       (d/transact! conn [[:db/retractEntity 161]])
+                       (p/let [result (mcp-compat/import-page wrapped-api
+                                                            #js {:target page-uuid
+                                                                 :markdown "- Parent\n  - Child\n- ## Heading [[Future]]"})]
+                         (is (= (empty? extra-title) (:verified result)))
+                         (is (= 3 (:expected_blocks result)))
+                         (is (= (if (empty? extra-title) 3 4) (:observed_blocks result)))))))]
+          (js/queueMicrotask done))
+        (p/catch (fn [error] (is false (.-message error)) (js/queueMicrotask done))))))
 
 (deftest delete-page-api-error-keeps-page-live-and-unverified
   (let [{:keys [page-uuid conn api]} (page-fixture)
@@ -1108,10 +1249,16 @@
     (async done
            (-> (p/then (mcp-compat/delete-page api #js {"page_uuid" page-uuid "acknowledge_reference_rewrite" true})
                        (fn [result]
-                         (is (false? (:verified result)))
+                         (is (true? (:refused result)))
+                         (is (not (contains? result :verified)))
+                         (is (= ["acknowledge_alias_loss"] (:required_acknowledgements result)))
+                         (is (= {:real 0 :aliases 1 :built_in_views 0} (:references result)))
                          (is (string/includes? (:diagnostic result) "acknowledge_alias_loss"))
                          (is (not-any? #(= "logseq.DB.deletePage" (first %)) @calls))
-                         (done)))
+                         (p/then (mcp-compat/delete-page api #js {:page_uuid page-uuid :acknowledge_alias_loss true})
+                                 (fn [deleted]
+                                   (is (true? (:verified deleted)))
+                                   (done)))))
                (p/catch (fn [error] (is false (.-message error)) (done)))))))
 
 (deftest delete-page-refuses-inbound-reference-loss-without-writing
@@ -1121,12 +1268,30 @@
     (async done
            (-> (p/then (mcp-compat/delete-page api #js {"page_uuid" page-uuid})
                        (fn [result]
-                         (is (false? (:verified result)))
+                         (is (true? (:refused result)))
+                         (is (not (contains? result :verified)))
+                         (is (= ["acknowledge_reference_rewrite"] (:required_acknowledgements result)))
                          (is (string/includes? (:diagnostic result) "acknowledge_reference_rewrite"))
                          (is (= 1 (count (:observed_entities result))))
                          (is (not-any? #(= "logseq.DB.deletePage" (first %)) @calls))
                          (done)))
                (p/catch (fn [error] (is false (.-message error)) (done)))))))
+
+(deftest delete-page-reports-all-missing-acknowledgements
+  (let [{:keys [page-uuid conn api calls]} (page-fixture)]
+    (d/transact! conn [{:db/id 162 :block/uuid (uuid "00000000-0000-4000-8000-000000000162")
+                       :block/title "Alias and link" :block/name "alias-and-link"
+                       :logseq.property/alias [160] :block/refs [160]}])
+    (async done
+      (-> (p/let [result (mcp-compat/delete-page api #js {:page_uuid page-uuid})]
+            (is (true? (:refused result)))
+            (is (not (contains? result :verified)))
+            (is (= {:real 1 :aliases 1 :built_in_views 0} (:references result)))
+            (is (= ["acknowledge_alias_loss" "acknowledge_reference_rewrite"]
+                   (:required_acknowledgements result)))
+            (is (not-any? #(= "logseq.DB.deletePage" (first %)) @calls))
+            (js/queueMicrotask done))
+          (p/catch (fn [error] (is false (.-message error)) (js/queueMicrotask done)))))))
 
 (deftest clear-page-preserves-metadata-and-property-value-subtrees
   (let [{:keys [page-uuid conn api]} (page-fixture)
@@ -2064,6 +2229,35 @@
                           (is false (str error))
                           (done)))))))
 
+(deftest capabilities-recognizes-missing-entity-errors-without-hiding-other-failures
+  (let [api (fn [method _args]
+              (case method
+                "logseq.DB.getAppInfo" #js {:version "2.0.2" :supportDb true}
+                "logseq.DB.checkCurrentIsDbGraph" true
+                "logseq.DB.getMcpApiMethods" (mcp-api-registry)
+                "logseq.DB.getPageData" #js {:error "Page \"__mcp_capability_probe__\" not found"}
+                "logseq.DB.getPageStats"
+                (p/rejected (js/Error. "No entity exists with exact UUID 00000000-0000-4000-8000-000000000999"))
+                "logseq.DB.getPageBlockUUIDs"
+                #js {:error "No entity exists with exact UUID 00000000-0000-4000-8000-000000000999"}
+                "logseq.DB.getTag" #js {:error "Session not found"}
+                "logseq.DB.getBlock" #js {:error "Database not found"}
+                "logseq.DB.getBlockTree" #js {:error "Unknown method: entity not found"}
+                #js []))]
+    (async done
+      (-> (p/let [result (mcp-compat/capabilities api #js {:include_diagnostics true})]
+            (doseq [tool [:getPage :pageStats :getBlockUUID :findOrphans]]
+              (is (= "available" (get-in result [:tools tool :state]))))
+            (doseq [method ["logseq.DB.getPageData" "logseq.DB.getPageStats" "logseq.DB.getPageBlockUUIDs"]]
+              (let [finding (first (filter #(= method (:method %))
+                                          (get-in result [:diagnostics :method_findings])))]
+                (is (= "probed" (:basis finding)))))
+            (is (= "unknown" (get-in result [:tools :getTag :state])))
+            (is (= "unknown" (get-in result [:tools :getBlock :state])))
+            (is (= "unavailable" (get-in result [:tools :getBlockTree :state])))
+            (js/queueMicrotask done))
+          (p/catch (fn [error] (is false (.-message error)) (js/queueMicrotask done)))))))
+
 (deftest capabilities-probes-write-routes-only-with-explicit-opt-in
   (let [calls (atom [])
         api (fn [method args]
@@ -2346,6 +2540,20 @@
                (p/catch (fn [error]
                           (is false (str error))
                           (js/queueMicrotask done)))))))
+
+(deftest is-title-available-does-not-release-mixed-or-recycled-non-page-holders
+  (async done
+    (-> (p/let [_ (p/all
+                   (mapv (fn [holders]
+                           (p/let [result (mcp-compat/is-title-available
+                                           (fn [_ _] (clj->js holders)) #js {:title "Held"})]
+                             (is (false? (:available result)))
+                             (is (not (contains? result :planned_archives)))))
+                         [[{:uuid "page" :title "Held" :name "held" :deleted-at 1}
+                           {:uuid "live" :title "Held" :name "held"}]
+                          [{:uuid "tag" :title "Held" :tags [{:ident :logseq.class/Tag}] :deleted-at 1}]]))]
+          (js/queueMicrotask done))
+        (p/catch (fn [error] (is false (.-message error)) (js/queueMicrotask done))))))
 
 (deftest list-recycled-uses-db-api
   (let [calls (atom [])
@@ -3593,12 +3801,18 @@
                 nil))]
     (async done
            (-> (p/let [result (mcp-compat/create-embed api #js {:parent_uuid parent-uuid :target_uuid target-uuid})
-                       dry-run (mcp-compat/create-embed api #js {:parent_uuid parent-uuid :target_uuid target-uuid :dry_run true})]
+                       dry-run (mcp-compat/create-embed api #js {:parent_uuid parent-uuid :target_uuid target-uuid :dry_run true})
+                       terse-dry-run (mcp-compat/create-embed api #js {:parent_uuid parent-uuid :target_uuid target-uuid
+                                                                      :dry_run true :verbose false})
+                       terse (mcp-compat/create-embed api #js {:parent_uuid parent-uuid :target_uuid target-uuid :verbose false})]
                  (is (true? (:verified result)))
                  (is (= 93 (get-in result [:verified_entities 0 :block/link :db/id])))
+                 (is (= {:uuid embed-uuid :verified true :diagnostic nil} terse))
                  (is (false? (:verified dry-run)))
                  (is (nil? (:response dry-run)))
-                 (is (= [["logseq.DB.createEmbed" [parent-uuid target-uuid]]]
+                 (is (= {:uuid nil :verified false :diagnostic (:diagnostic dry-run)} terse-dry-run))
+                 (is (= [["logseq.DB.createEmbed" [parent-uuid target-uuid]]
+                         ["logseq.DB.createEmbed" [parent-uuid target-uuid]]]
                         (filter #(= "logseq.DB.createEmbed" (first %)) @calls))))
                (p/catch (fn [error] (is false (str error))))
                (p/finally done)))))

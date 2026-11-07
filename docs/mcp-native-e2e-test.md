@@ -13,7 +13,7 @@ Use this guide alone rather than combining it with older testing checklists.
 
 These are new implementation contracts, not recorded live passes. First check
 `capabilities.graph.compatibility_target` is `2.0.2` and `contract_revision` is
-`2026-11-06.1`; the app version alone cannot distinguish builds.
+`2026-11-07.1`; the app version alone cannot distinguish builds.
 
 On fresh, approved run-owned fixtures:
 
@@ -26,17 +26,39 @@ On fresh, approved run-owned fixtures:
   so absence is not an exhaustive graph-wide proof and pagination remains native.
 - Repeat `createPage` on a run-owned title. Expect `status: "conflict"`,
   `created: false`, `verified: false`, and `held_by`, without MCP `isError` or
-  graph changes. Also check a title held by a run-owned tag or recycled page.
-- Delete a run-owned page. Its UUID/content remain recoverable under
-  `<original title> (recycled <page UUID>)`; require `title_released: true`,
-  and independently check the original title with `isTitleAvailable`.
-  Existing recycled pages are not retroactively renamed. Keep the successful
-  built-in-view-block deletion case covered without weakening reference gates.
+  graph changes. Also check a title held by a run-owned tag.
+- Delete a run-owned page. Its title, UUID and content remain intact; require
+  `blocks_preserved: true`. `isTitleAvailable` reports `available: true`,
+  `recycled: true`, and `planned_archives` when only recycled pages hold the title;
+  `held_by` still lists those holders and the check makes no changes.
+  A dry-run `createPage` on that title must not rename anything: require
+  `status: "dry_run"` with its UUID/archive title in `planned_archives`, not
+  a collision refusal. The preview does not verify write-time archive safety.
+  Then reuse it
+  with `createPage`: the recycled page becomes `<original title> (<page UUID>)`,
+  appears in `archived_pages`, and retains its UUID/content/recycled state;
+  the new page holds the original title with a different UUID.
+  Keep the built-in-view-block deletion case covered without weakening real
+  reference gates. A missing acknowledgement must return `refused: true` and
+  `required_acknowledgements`, without `verified` or any write. On UI-prepared,
+  run-owned alias fixtures, alias-only references must have `references.real: 0`
+  and their own `references.aliases` count; genuine content links still count.
 - In read-only capabilities, `findOrphans`, `getBlock`, `getBlockUUID`, `getPage`,
   `pageStats`, and `getTag` must not be unknown merely because dummy entities
   return null. Diagnostics distinguish registered methods from probe evidence;
   write probes remain disabled and registration does not verify real writes.
 - Confirm `createProperty` advertises normalization; use its returned ident.
+  A normalized title must expose `normalized_from` in both verbose and terse
+  results. It is post-write metadata, not a pre-write preview.
+- Require `createEmbed` with `verbose: false` to return only `uuid`, `verified`,
+  and `diagnostic`. A dry run returns no created UUID and must leave inventory
+  unchanged, including when invoked through the MCP protocol.
+- On an approved UI-prepared template-tag fixture, check that only the first
+  inserted child has `used-template`; do not expect every child to be stamped.
+  Do not use MCP property writes to bypass built-in namespace restrictions.
+- Remove an embed by its own UUID. Removing its target leaves an empty block
+  that `listEmbeds` can no longer find; orphan tracking is not part of this
+  contract. Do not perform target removal merely to create this fixture.
 - After an idle pause or app restart, reconnect/reinitialize the client if its
   old session receives HTTP 404. Missing session IDs still receive HTTP 400.
   Never automatically retry a write after losing its response.
@@ -104,9 +126,10 @@ coverage for cases that were blocked, manually skipped, or not actually called.
    fresh graph or clone. A graph named `test` is not sufficient confirmation.
 6. Present and obtain approval for the scope: fresh pages/blocks/tags/plugin
    properties, their normal edits and moves, embed creation/removal, clear/recycle
-   tests, and run-owned cleanup. MCP page recycling retains UUIDs/content under
-   unique archived titles, releasing the original titles, and
-   cannot be purged through MCP. Obtain separate approval for destructive cases
+   tests, and run-owned cleanup. MCP page recycling retains titles/UUIDs/content
+   and cannot be purged through MCP. Reusing a recycled title with `createPage`
+   renames its recycled holder to `<original title> (<UUID>)`.
+   Obtain separate approval for destructive cases
    with reference detach/loss acknowledgements or manual UI asset/alias setup.
    Agree whether populated/external/recycled asset cases are required for this
    run's PASS verdict or may be reported as uncovered manual variants.
@@ -127,7 +150,8 @@ coverage for cases that were blocked, manually skipped, or not actually called.
 - Before a mutation, identify its run-owned targets, intended effect, verification
   read, and cleanup. UUID ownership comes from the ledger, not a title prefix.
 - Do not clear reused fixture pages at startup. Create fresh, unique titles after
-  `isTitleAvailable`; never rename/recycle a collision to make room.
+  `isTitleAvailable`; never rename/recycle a collision to make room except
+  for the explicitly approved, run-owned recycled-title-reuse regression case.
 - Parse structured MCP results. Record `isError` separately from `verified`.
   A repeated-title `createPage` returns a structured conflict, not an MCP error.
   A requested dry run returning `verified: false`, `response: null`, and no writes
@@ -223,7 +247,7 @@ Keep the intentionally unusual spellings, including `creatTag`,
 | `splitBlock` | C: delimiter and offset, ordered siblings, validation refusals |
 | `moveBlocks` | C: supplied-order last-child run and invalid-selection guards |
 | `migratePage` | G: dry-run selection, positive move, source remainder |
-| `deletePage` | K: approved recycling, live-list absence, retained UUID/content, archived title and released original title |
+| `deletePage` | K: approved recycling, live-list absence, retained title/UUID/content, separate built-in-view and real-reference counts |
 | `clearPage` | K: only run-owned content, metadata preserved, absence verified |
 | `retitleOverDuplicate` | C: chosen source renamed, empty holder parked, UUIDs stable |
 | `createPageofBlocks` | G: indented outline dry run and nested insertion |
@@ -525,12 +549,13 @@ Use this dependency order:
 5. Check pageStats aliases and findBacklinks for every run page to recycle.
    Use `deletePage` only on approved, cleared run pages. Keep acknowledgements
    false unless the user explicitly approved the inspected run-owned relations.
-   Unexpected view/property/alias refs mean preserve the page and report why.
+   Unexpected real property/alias refs mean preserve the page and report why.
 6. Verify generated recycled pages leave listPages, appear in listRecycled, and
-   retain their UUID/content under the returned archived title. Check that the
-   original title is available unless another independently identified holder
-   owns it. A failed archive is a partial failure, not successful cleanup.
-   Previously recycled pages retain their old titles. No purge is available.
+   retain their titles, UUIDs and content. Their titles remain held but are
+   reported as reusable by `isTitleAvailable` when all holders are recycled pages.
+   Only the explicit title-reuse test through `createPage` renames a recycled
+   holder; archive failures stop new-page creation and require inspection.
+   Previously recycled pages otherwise retain their old titles. No purge is available.
 7. Reconcile final live page/tag/property sets against baseline and the ledger.
    Recycled totals may grow by the known generated pages. Inventory every retained
    entity and UI-prepared asset; exact baseline totals are not mandatory when the

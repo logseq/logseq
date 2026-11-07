@@ -348,7 +348,16 @@
      :available (empty? holders)
      :held_by holders}))
 
-(defn is-title-available
+(defn- recycled-title-holders?
+  [holders]
+  (and (seq holders) (every? #(and (:recycled %) (= "page" (:kind %))) holders)))
+
+(defn- recycled-page-archive
+  [holder]
+  {:uuid (:uuid holder) :original_title (:title holder)
+   :archived_title (str (:title holder) " (" (:uuid holder) ")")})
+
+(defn- <title-occupancy
   [api-fn args]
   (let [title (aget args "title")]
     (p/let [result (api-fn "logseq.DB.getTitleHolders" [title])
@@ -356,6 +365,14 @@
                 (throw (js/Error. (str error))))
             entities (js->clj result :keywordize-keys true)]
       (title-availability-result title entities))))
+
+(defn is-title-available
+  [api-fn args]
+  (p/let [occupancy (<title-occupancy api-fn args)]
+    (cond-> occupancy
+      (recycled-title-holders? (:held_by occupancy))
+      (assoc :available true :recycled true
+             :planned_archives (mapv recycled-page-archive (:held_by occupancy))))))
 
 (defn list-recycled
   [api-fn _args]
@@ -470,7 +487,7 @@
                             (conj (str "values are stored as " value-type
                                        " -- a write supplies a literal and Logseq mints the value entity")))
                     diagnostic (when (seq notes) (string/join "; " notes))]
-                (if verbose?
+                (cond-> (if verbose?
                   {:response response-map
                    :ident ident
                    :title (:title property)
@@ -484,7 +501,9 @@
                           :ident ident
                           :title (:title property)
                           :diagnostic diagnostic}
-                         (property-digest property)))))))))))
+                         (property-digest property)))
+                  (and (string? (:title property)) (not= title (:title property)))
+                  (assoc :normalized_from title))))))))))
 
 (defn- sweep-property-value-blocks
   [api-fn block-uuids]
@@ -720,10 +739,13 @@
                   (some #(= target-id (entity-ref-id %)) ancestors))
           (throw (js/Error. "Cannot embed the parent or its ancestor; this would create a render cycle")))
         (if dry-run?
-          {:validation {:parent parent :target target}
-           :response nil :verified_entities [] :verified false
-           :recovered_after_timeout false
-           :diagnostic "Dry run: nothing was written. The UUIDs resolve and no parent ancestry cycle was found."}
+          (let [summary {:verified false
+                         :diagnostic "Dry run: nothing was written. The UUIDs resolve and no parent ancestry cycle was found."}]
+            (if verbose?
+              (merge summary {:validation {:parent parent :target target}
+                              :response nil :verified_entities []
+                              :recovered_after_timeout false})
+              (assoc summary :uuid nil)))
           (p/let [response (api-fn "logseq.DB.createEmbed" [parent-uuid target-uuid])
                   response-map (js->clj response :keywordize-keys true)]
             (when-let [error (:error response-map)]
@@ -740,13 +762,14 @@
                                          (some #(= target-id (entity-ref-id %)) (or (:refs stored) (:block/refs stored))))]
                     (if-let [error (:error stored)]
                       (p/rejected (js/Error. (str error)))
-                      {:validation nil
-                       :response response-map
-                       :verified_entities (if verbose? (if stored [stored] [])
-                                              (if stored [(entity-write-digest stored)] []))
-                       :recovered_after_timeout false
-                       :verified (boolean verified?)
-                       :diagnostic (when-not verified? "The embed UUID, link, reference, parent, or owning page was not observed as requested")}))
+                      (let [summary {:verified (boolean verified?)
+                                     :diagnostic (when-not verified? "The embed UUID, link, reference, parent, or owning page was not observed as requested")}]
+                        (if verbose?
+                          (merge summary
+                                 {:validation nil :response response-map
+                                  :verified_entities (if stored [stored] [])
+                                  :recovered_after_timeout false})
+                          (assoc summary :uuid embed-uuid)))))
                   (p/catch (fn [error]
                              (p/rejected (js/Error. (str "Embed " embed-uuid " may have been created; verification failed: "
                                                          (.-message error) ". Inspect listEmbeds before retrying.")))))))))))))
@@ -1331,6 +1354,21 @@
   (some? (or (:logseq.property/deleted-at entity)
              (get entity (keyword ":logseq.property/deleted-at")))))
 
+(defn- reference-view-feature
+  [entity]
+  (some-> (or (:logseq.property.view/feature-type entity)
+              (get entity (keyword ":logseq.property.view/feature-type")))
+          str
+          (string/replace-first #"^:" "")))
+
+(defn- built-in-reference-view?
+  [entity]
+  (contains? #{"linked-references" "unlinked-references"} (reference-view-feature entity)))
+
+(defn- block-inventory
+  [blocks]
+  (set (map #(select-keys % [:uuid :title :parent :page :order]) blocks)))
+
 (defn- page-mutation-context
   [api-fn page-uuid]
   (p/let [page-result (api-fn "logseq.DB.datascriptQuery"
@@ -1346,45 +1384,43 @@
                                    ["[:find [(pull ?related [:db/id :block/uuid :block/title :block/name]) ...] :in $ ?page :where (or-join [?related ?page] [?page :logseq.property/alias ?related] [?related :logseq.property/alias ?page] [?page :block/alias ?related] [?related :block/alias ?page])]"
                                     (:id page)])
             inbound-result (api-fn "logseq.DB.datascriptQuery"
-                                   ["[:find [(pull ?holder [:db/id :block/uuid :block/title :block/name]) ...] :in $ ?page :where [?holder ?attribute ?page] [(not= ?attribute :block/parent)] [(not= ?attribute :block/parent+)] [(not= ?attribute :block/page)]]"
+                                   ["[:find [(pull ?holder [:db/id :block/uuid :block/title :block/name :logseq.property.view/feature-type]) ...] :in $ ?page :where [?holder ?attribute ?page] [(not= ?attribute :block/parent)] [(not= ?attribute :block/parent+)] [(not= ?attribute :block/page)] [(not= ?attribute :logseq.property/alias)] [(not= ?attribute :block/alias)]]"
                                     (:id page)])
-            blocks (js->clj blocks-result :keywordize-keys true)]
+            blocks (js->clj blocks-result :keywordize-keys true)
+            inbound (js->clj inbound-result :keywordize-keys true)]
       (when (> (count blocks) 1000)
         (throw (js/Error. "Page inventory exceeds the 1000-block safety limit")))
       {:page page :blocks blocks
        :aliases (js->clj aliases-result :keywordize-keys true)
-       :inbound (js->clj inbound-result :keywordize-keys true)})))
+       :inbound (filterv (complement built-in-reference-view?) inbound)
+       :built-in-views (filterv built-in-reference-view? inbound)})))
 
 (defn- <archive-deleted-page
-  [api-fn page current]
-  (if (nil? current)
-    (p/resolved {:title-released? true :current nil})
-    (let [page-uuid (:uuid page)
-          archived-title (str (:title page) " (recycled " page-uuid ")")]
-      (p/let [availability (is-title-available api-fn #js {:title archived-title})]
-        (if-not (:available availability)
-          {:title-released? false :current current
-           :diagnostic "Page was recycled, but its archive title is already occupied; the original title was not released."}
-          (p/let [response (api-fn "logseq.DB.renamePage" [page-uuid archived-title])
-                  result (api-fn "logseq.DB.datascriptQuery"
-                                 ["[:find (pull ?page [*]) . :in $ ?uuid :where [?page :block/uuid ?uuid]]"
-                                  (uuid-query-input page-uuid)])
-                  _ (when-let [error (and result (aget result "error"))]
-                      (throw (js/Error. (str "Archive read-back failed: " error))))
-                  observed (js->clj result :keywordize-keys true)
-                  original (is-title-available api-fn #js {:title (:title page)})
-                  released? (and (not (and response (aget response "error")))
-                                 (= page-uuid (:uuid observed))
-                                 (recycled-entity? observed)
-                                 (= archived-title (:title observed))
-                                 (not-any? #(= page-uuid (:uuid %)) (:held_by original)))]
-            {:title-released? released? :current observed
-             :archived-title archived-title :title-available? (:available original)
-             :response (js->clj response :keywordize-keys true)
-             :diagnostic (when-not released?
-                           (str "Page was recycled, but releasing its title did not verify. "
-                                (when-let [error (and response (aget response "error"))]
-                                  (str "API error: " error))))}))))))
+  [api-fn holder]
+  (let [page-uuid (:uuid holder)
+        archive (recycled-page-archive holder)
+        archived-title (:archived_title archive)]
+    (p/let [before (page-mutation-context api-fn page-uuid)
+            availability (<title-occupancy api-fn #js {:title archived-title})]
+      (when-not (and (recycled-entity? (:page before))
+                    (= (:title holder) (:title (:page before))))
+        (throw (js/Error. (str "Recycled title holder " page-uuid " changed; nothing was renamed."))))
+      (when-not (:available availability)
+        (throw (js/Error. (str "Archive title " (pr-str archived-title) " is already occupied; nothing was renamed."))))
+      (p/let [response (api-fn "logseq.DB.renamePage" [page-uuid archived-title])
+              _ (when-let [error (and response (aget response "error"))]
+                  (throw (js/Error. (str error))))
+              after (page-mutation-context api-fn page-uuid)
+              observed (:page after)
+              original (<title-occupancy api-fn #js {:title (:title holder)})]
+        (when-not (and (= page-uuid (:uuid observed))
+                       (= archived-title (:title observed))
+                       (recycled-entity? observed)
+                       (= (block-inventory (:blocks before)) (block-inventory (:blocks after)))
+                       (not-any? #(= page-uuid (:uuid %)) (:held_by original)))
+          (throw (js/Error. (str "Archiving recycled page " page-uuid
+                                " did not verify its title, recycled state, or block inventory."))))
+        archive))))
 
 (defn delete-page
   [api-fn args]
@@ -1392,39 +1428,44 @@
         verbose? (not (false? (aget args "verbose")))]
     (p/let [context (page-mutation-context api-fn page-uuid)
             page (:page context)
-            previous (into [page] (:blocks context))]
+            previous (into [page] (:blocks context))
+            reference-details {:references {:real (count (:inbound context))
+                                            :aliases (count (:aliases context))
+                                            :built_in_views (count (:built-in-views context))}
+                               :aliases (:aliases context)
+                               :built_in_views (:built-in-views context)}
+            required-acknowledgements (cond-> []
+                                        (and (seq (:aliases context)) (not (true? (aget args "acknowledge_alias_loss"))))
+                                        (conj "acknowledge_alias_loss")
+                                        (and (seq (:inbound context)) (not (true? (aget args "acknowledge_reference_rewrite"))))
+                                        (conj "acknowledge_reference_rewrite"))]
       (when (recycled-entity? page) (throw (js/Error. "Page is already recycled")))
-      (cond
-        (and (seq (:aliases context)) (not (true? (aget args "acknowledge_alias_loss"))))
-        {:verified false :previous_entities previous :observed_entities (:aliases context)
-         :diagnostic "Alias relations cannot be restored through this API; acknowledge_alias_loss is required."}
+      (if (seq required-acknowledgements)
+        (merge reference-details
+               {:status "refused" :refused true :required_acknowledgements required-acknowledgements
+                :previous_entities previous
+                :observed_entities (vec (distinct (concat (:aliases context) (:inbound context))))
+                :diagnostic (str "Deletion refused; nothing was written. Required acknowledgement flags: "
+                                 (string/join ", " required-acknowledgements)
+                                 ". Alias loss cannot be repaired through this API; inbound references are not rewritten.")})
 
-        (and (seq (:inbound context)) (not (true? (aget args "acknowledge_reference_rewrite"))))
-        {:verified false :previous_entities previous :observed_entities (:inbound context)
-         :diagnostic "Inbound references are not rewritten; acknowledge_reference_rewrite is required."}
-
-        :else
         (p/let [response (api-fn "logseq.DB.deletePage" [page-uuid])
-                current-result (api-fn "logseq.DB.datascriptQuery"
-                                       ["[:find (pull ?page [*]) . :in $ ?uuid :where [?page :block/uuid ?uuid]]"
-                                        (uuid-query-input page-uuid)])
-                current (js->clj current-result :keywordize-keys true)
-                deleted? (or (nil? current) (recycled-entity? current))
-                archive (when (and deleted? (not (and response (aget response "error"))))
-                          (<archive-deleted-page api-fn page current))
-                verified? (and deleted? (true? (:title-released? archive)))
-                observed (if archive (:current archive) current)]
-          (cond-> {:response (js->clj response :keywordize-keys true)
-                   :verified verified? :verified_entities (if verified? (cond-> [] observed (conj observed)) [])
-                   :original_title (:title page) :title_released (true? (:title-released? archive))
-                   :previous_count (count previous) :observed_entities (:inbound context)
-                   :diagnostic (cond
-                                 verified? "Page is absent or recycled under a unique archive title; inbound references were not rewritten."
-                                 deleted? (or (:diagnostic archive) "Page was recycled, but its title was not released; inspect the API response.")
-                                 :else "Deletion was not observed; the page is still live.")}
-            archive (assoc :archived_title (:archived-title archive)
-                           :archive_response (:response archive))
-            (contains? archive :title-available?) (assoc :title_available (:title-available? archive))
+                after (page-mutation-context api-fn page-uuid)
+                current (:page after)
+                preserved? (= (block-inventory (:blocks context)) (block-inventory (:blocks after)))
+                verified? (and (not (and response (aget response "error")))
+                               (= page-uuid (:uuid current))
+                               (= (:title page) (:title current))
+                               (recycled-entity? current) preserved?)]
+          (cond-> (merge reference-details
+                         {:response (js->clj response :keywordize-keys true)
+                          :verified verified? :verified_entities (if verified? [current] [])
+                          :original_title (:title page) :blocks_preserved preserved?
+                          :previous_count (count previous) :observed_entities (:inbound context)
+                          :diagnostic (cond
+                                        verified? "Page was recycled with its title, UUID and block inventory preserved; inbound references were not rewritten."
+                                        (not (recycled-entity? current)) "Deletion was not observed; the page is still live."
+                                        :else "Recycling did not verify; inspect the API response and retained page inventory before retrying.")})
             (or verbose? (not verified?)) (assoc :previous_entities previous)))))))
 
 (defn clear-page
@@ -1649,6 +1690,26 @@
                :escaped_links (vec (sort (set (map second (mapcat #(re-seq #"\{\{link:([^}]+)\}\}" (:title %)) entries)))))
                :escaped_tags (vec (sort (set (map second (mapcat #(re-seq #"\{\{tag:([^}]+)\}\}" (:title %)) entries))))))))))
 
+(defn- <release-recycled-title
+  [api-fn availability]
+  (letfn [(archive-holders [remaining archived]
+            (if-let [holder (first remaining)]
+              (p/let [outcome (-> (<archive-deleted-page api-fn holder)
+                                 (p/catch (fn [error]
+                                            {:failure (str "Could not release title from recycled page "
+                                                           (:uuid holder) ": " (.-message error)
+                                                           " Inspect that page before retrying.")})))]
+                (if (:failure outcome)
+                  {:availability availability :archived-pages archived :failure (:failure outcome)}
+                  (archive-holders (rest remaining) (conj archived outcome))))
+              (-> (p/let [current (<title-occupancy api-fn #js {:title (:title availability)})]
+                    {:availability current :archived-pages archived})
+                  (p/catch (fn [error]
+                             {:availability availability :archived-pages archived
+                              :failure (str "Could not verify title availability after archiving recycled pages: "
+                                            (.-message error) ". Inspect archived_pages before retrying.")})))))]
+    (archive-holders (:held_by availability) [])))
+
 (defn create-page
   [api-fn args]
   (let [title (aget args "title")
@@ -1656,9 +1717,17 @@
         verbose? (not (false? (aget args "verbose")))]
     (when-not (and (string? title) (not (string/blank? title)))
       (throw (js/Error. "Expected a non-empty title")))
-    (p/let [availability (is-title-available api-fn #js {"title" title})]
-      (cond
-        (not (:available availability))
+    (p/let [initial (<title-occupancy api-fn #js {"title" title})
+            recycled-only? (recycled-title-holders? (:held_by initial))
+            release (when (and (not dry-run?) recycled-only?)
+                      (<release-recycled-title api-fn initial))
+            availability (if release (:availability release) initial)
+            result (cond
+        (:failure release)
+        {:status "conflict" :verified false :created false :title title
+         :held_by (:held_by availability) :diagnostic (:failure release)}
+
+        (and (not (:available availability)) (not (and dry-run? recycled-only?)))
         (let [kinds (->> (:held_by availability) (map :kind) distinct (string/join ", "))]
           {:status "conflict" :verified false :created false :title title
            :held_by (:held_by availability)
@@ -1666,15 +1735,21 @@
                             " already exists (" kinds "). Nothing was created or modified.")})
 
         dry-run?
-        {:validation {:title title :checked "locally"}
+        {:status "dry_run" :created false
+         :validation {:title title :checked "locally"}
          :response nil
          :verified_entities []
          :recovered_after_timeout false
          :verified false
+         :planned_archives (if recycled-only?
+                             (mapv recycled-page-archive (:held_by initial))
+                             [])
          :diagnostic (str "Dry run: nothing was written, so verified is false by design. "
-                          "This checks the title locally; createPage has no server-side dry run.")}
+                          (when recycled-only?
+                            "A real createPage would archive the recycled title holders listed in planned_archives before creating the new page. ")
+                          "This checks title occupancy only; archive-title collisions and block preservation are checked at write time.")}
         :else
-        (p/let [response (api-fn "logseq.DB.createPage" [title])
+        (-> (p/let [response (api-fn "logseq.DB.createPage" [title])
                 response-map (js->clj response :keywordize-keys true)]
           (when-let [error (and response (aget response "error"))]
             (throw (js/Error. (str error))))
@@ -1703,14 +1778,27 @@
                    :diagnostic "createPage creates the page with one empty block; later block counts include it."}
                   (merge {:verified true
                           :diagnostic "createPage creates the page with one empty block; later block counts include it."}
-                         (entity-write-digest page)))))))))))
+                         (entity-write-digest page)))))))
+            (p/catch (fn [error]
+                       (if (seq (:archived-pages release))
+                         (throw (js/Error.
+                                 (str "createPage failed after recycled pages were renamed: "
+                                      (pr-str (:archived-pages release)) ". "
+                                      (.-message error)
+                                      " Inspect those pages and the requested title before retrying.")))
+                         (throw error))))))]
+      (cond-> result
+        (seq (:archived-pages release)) (assoc :archived_pages (:archived-pages release))
+        (and (seq (:archived-pages release)) (not (:verified result)))
+        (update :diagnostic str " Recycled holders were renamed; inspect archived_pages before retrying.")))))
 
 (defn import-page
   [api-fn args]
   (let [target (aget args "target")
         parsed (parse-import (aget args "markdown"))
         entries (:entries parsed)
-        base {:blocks (count entries) :escaped_links (:escaped_links parsed) :escaped_tags (:escaped_tags parsed)
+        base {:blocks (count entries) :expected_blocks (count entries)
+              :escaped_links (:escaped_links parsed) :escaped_tags (:escaped_tags parsed)
               :page_properties (:page_properties parsed)
               :warnings (cond-> (:warnings parsed) (seq (:page_properties parsed))
                                 (conj "Page properties were parsed but not applied; they are outside the writable namespace."))}]
@@ -1741,14 +1829,32 @@
               (p/let [baseline (if cleared (page-mutation-context api-fn page-uuid) before)
                       outcome (create-outline-entries api-fn page-uuid entries false true)
                       after (page-mutation-context api-fn page-uuid)
-                      expected-ids (into (set (map :uuid (:blocks baseline))) (map :uuid (:created outcome)))
+                      baseline-ids (set (map :uuid (:blocks baseline)))
+                      expected-ids (into baseline-ids (map :uuid (:created outcome)))
                       actual-ids (set (map :uuid (:blocks after)))
+                      added (filterv #(not (contains? baseline-ids (:uuid %))) (:blocks after))
+                      empty-seeds (if (empty? baseline-ids)
+                                    (filterv #(and (= "" (:title %))
+                                                   (= (:id (:page after)) (entity-ref-id (:parent %)))
+                                                   (= (:id (:page after)) (entity-ref-id (:page %)))
+                                                   (not (:link %))
+                                                   (empty? (:tags %))
+                                                   (empty? (:refs %)))
+                                             added)
+                                    [])
+                      observed-count (- (count added) (count empty-seeds))
                       verified? (and (:verified outcome) (= (count entries) (count (:created outcome)))
-                                     (= expected-ids actual-ids))]
+                                     (<= (count empty-seeds) 1)
+                                     (= (into expected-ids (map :uuid empty-seeds)) actual-ids))]
                 (cond-> (assoc base :page_title (:title (:page after)) :verified verified?
                                :calls (:calls outcome) :created_uuids (mapv :uuid (:created outcome))
-                               :diagnostic (when-not verified? (or (:diagnostic outcome)
-                                                                   "Import inventory did not verify; inspect the page before retrying.")))
+                               :observed_blocks observed-count
+                               :observed_empty_seed_blocks (count empty-seeds)
+                               :diagnostic (when-not verified?
+                                             (str "Expected " (count entries) " imported blocks, observed "
+                                                  observed-count ". "
+                                                  (or (:diagnostic outcome)
+                                                      "Import inventory did not verify; inspect the page before retrying."))))
                   cleared (assoc :replaced_entities (:previous_entities cleared)))))))))))
 
 (defn rename-page
@@ -1764,7 +1870,7 @@
     (let [page-query "[:find (pull ?page [:db/id :block/uuid :block/name :block/title :logseq.property/deleted-at]) . :in $ ?uuid :where [?page :block/uuid ?uuid] [?page :block/tags ?class] [?class :db/ident :logseq.class/Page]]"]
       (p/let [page-result (api-fn "logseq.DB.datascriptQuery" [page-query (uuid-query-input page-uuid)])
               page (js->clj page-result :keywordize-keys true)
-              availability (is-title-available api-fn #js {"title" new-title})
+              availability (<title-occupancy api-fn #js {"title" new-title})
               clashes (remove #(= page-uuid (or (:uuid %) (:block/uuid %)))
                               (:held_by availability))]
         (cond
@@ -1830,7 +1936,7 @@
                      :entity current :response (js->clj response :keywordize-keys true)})
                   (p/catch (fn [error] {:verified false :diagnostic (.-message error)}))))]
       (p/let [source (page-mutation-context api-fn from-uuid)
-              availability (is-title-available api-fn #js {"title" to-title})
+              availability (<title-occupancy api-fn #js {"title" to-title})
               holders (vec (remove #(= from-uuid (:uuid %)) (:held_by availability)))
               base {:from_uuid from-uuid :to_title to-title :renamed nil :parked nil
                     :references {:from (count (:inbound source))}}]
@@ -1859,7 +1965,7 @@
               (assoc base :verified false :diagnostic "The holder has content; merging is a caller decision.")
 
               :else
-              (p/let [parking (is-title-available api-fn #js {"title" parked-title})]
+              (p/let [parking (<title-occupancy api-fn #js {"title" parked-title})]
                 (if-not (:available parking)
                   (assoc base :verified false :diagnostic "The parking title is occupied; choose another suffix.")
                   (p/let [park (rename-read (:page holder) parked-title)]
@@ -2578,7 +2684,7 @@
    :deleteTag ["logseq.DB.deletePage" "logseq.DB.datascriptQuery"]
    :addTag ["logseq.DB.addBlockTag" "logseq.DB.datascriptQuery"]
    :removeTag ["logseq.DB.removeBlockTag" "logseq.DB.datascriptQuery"]
-   :createPage ["logseq.DB.getTitleHolders" "logseq.DB.datascriptQuery" "logseq.DB.createPage"]
+   :createPage ["logseq.DB.getTitleHolders" "logseq.DB.datascriptQuery" "logseq.DB.renamePage" "logseq.DB.createPage"]
    :renamePage ["logseq.DB.datascriptQuery" "logseq.DB.renamePage"]
    :createBlock ["logseq.DB.insertBlock" "logseq.DB.datascriptQuery"]
    :createEmbed ["logseq.DB.createEmbed" "logseq.DB.datascriptQuery"]
@@ -2588,7 +2694,7 @@
    :splitBlock ["logseq.DB.datascriptQuery" "logseq.DB.insertBlock" "logseq.DB.moveBlock" "logseq.DB.updateBlock"]
    :moveBlocks ["logseq.DB.datascriptQuery" "logseq.DB.moveBlock"]
    :migratePage ["logseq.DB.datascriptQuery" "logseq.DB.moveBlock"]
-   :deletePage ["logseq.DB.datascriptQuery" "logseq.DB.deletePage" "logseq.DB.renamePage" "logseq.DB.getTitleHolders"]
+   :deletePage ["logseq.DB.datascriptQuery" "logseq.DB.deletePage"]
    :clearPage ["logseq.DB.datascriptQuery" "logseq.DB.removeBlock"]
    :retitleOverDuplicate ["logseq.DB.datascriptQuery" "logseq.DB.renamePage"]
    :createPageofBlocks ["logseq.DB.datascriptQuery" "logseq.DB.insertBatchBlock"]
@@ -2692,6 +2798,12 @@
       {:method method :state "unavailable" :basis "probed"
        :detail (subs (str error-message) 0 (min 200 (count (str error-message))))}
 
+      (and message
+           (or (re-matches #"page \".*\" not found" message)
+               (re-matches #"no entity exists with exact uuid [0-9a-f-]{36}" message)))
+      {:method method :state "available" :basis "probed"
+       :detail "The method rejected a missing entity, so the route exists."}
+
       (and message (some #(string/includes? message %) capability-present-markers))
       {:method method :state "available" :basis "probed"
        :detail "rejected probe arguments, so the method exists"}
@@ -2782,7 +2894,7 @@
                 version (:version info)
                 body {:graph {:version version
                               :compatibility_target "2.0.2"
-                              :contract_revision "2026-11-06.1"
+                              :contract_revision "2026-11-07.1"
                               :version_matches (= version "2.0.2")
                               :checked_at (/ (.now js/Date) 1000)}
                       :tools tools
