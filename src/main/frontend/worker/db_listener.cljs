@@ -172,10 +172,13 @@
   (markdown-mirror/<handle-tx-report! repo nil tx-report {:defer? true}))
 
 (defn- skip-search-sync?
+  "Skip incremental search for disk restores and file-graph imports.
+  File-graph import rebuilds the index once after restore. Partial/in-graph
+  EDN import uses :logseq.db.sqlite.export/imported-data? and has no later
+  rebuild, so those transactions must sync incrementally."
   [tx-meta]
   (or (:from-disk? tx-meta)
-      (:logseq.graph-parser.exporter/imported-data? tx-meta)
-      (:logseq.db.sqlite.export/imported-data? tx-meta)))
+      (:logseq.graph-parser.exporter/imported-data? tx-meta)))
 
 (defmethod listen-db-changes :search
   [_ {:keys [repo]} {:keys [tx-meta] :as tx-report}]
