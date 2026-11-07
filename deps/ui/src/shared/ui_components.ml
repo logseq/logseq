@@ -26,8 +26,7 @@ let bv v = P.BoolValue v
 let popover_transition =
   "opacity 150ms ease, transform 150ms ease"
 
-(* Match .lui-dialog CSS: fade + zoom-in-95 over 200ms. Native dialog
-   surfaces read this Transition prop for present_surfaces motion. *)
+(* Match .lui-dialog CSS: fade + zoom-in-95 over 200ms. *)
 let dialog_transition =
   "opacity 200ms ease-out, transform 200ms ease-out"
 
@@ -250,12 +249,10 @@ let dialog ?key ?(gap=16) ?(padding=24) ?padding_horizontal ?padding_vertical
     ?text ?description ?on_dismiss children : t =
  fun ctx parent ->
   let element = with_props
-    ((* transition is a stylesheet prop; the native dialog kind rejects it *)
-      (if Ui_services.env_css_animations () then [ Prop.transition dialog_transition ] else [])
-     @ List.filter_map Fun.id
+    (List.filter_map Fun.id
           [ Option.map Prop.padding_top padding_top
           ; Option.map Prop.padding_bottom padding_bottom ])
-    (Lui_elements.dialog ?key ~gap ~padding ?padding_horizontal ?padding_vertical
+    (Lui_elements.dialog ?key ~transition:dialog_transition ~gap ~padding ?padding_horizontal ?padding_vertical
     ~corner_radius:8 ~background:"hsl(var(--background))" ~foreground:"inherit"
     ~border_width:1 ~border_color:"hsl(var(--border))"
     ?style_class ?data_attrs ?text ?description ?on_dismiss children) in
