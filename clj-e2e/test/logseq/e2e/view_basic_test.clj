@@ -163,6 +163,26 @@
     (assert/assert-is-visible
      (loc/filter ".views > button" :has-text "All"))))
 
+(deftest table-search-keeps-focus-through-debounced-refresh-test
+  (seed-table-view! "table-search-focus")
+  (w/click (view-action-button "search"))
+  (let [input (.locator (w/get-page) ".view-action-search input")
+        original-input (.elementHandle input)]
+    (try
+      (w/fill input "Alpha")
+      ;; Result changes wait for both the debounce and the worker response.
+      (assert/assert-have-count
+       (loc/filter ".ls-view-body .ls-table-row" :has-text "Beta table object")
+       0)
+      (assert/assert-is-visible
+       (loc/filter ".ls-view-body .ls-table-row" :has-text "Alpha table object"))
+      (is (.evaluate original-input "input => input === document.activeElement")
+          "The original input still has focus after the search results refresh")
+      (util/press-seq " table")
+      (-> input assert/assert-that (.hasValue "Alpha table"))
+      (finally
+        (.dispose original-input)))))
+
 (deftest table-view-search-filter-and-new-record-actions-test
   (seed-table-view! "table-search-filter-actions")
 
