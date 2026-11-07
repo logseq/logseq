@@ -11,7 +11,7 @@ Use this guide alone rather than combining it with older testing checklists.
 
 ## 2.0.2 Regression Retest
 
-These are new implementation contracts, not recorded live passes. First check
+These are current implementation contracts; this specification records no live passes. First check
 `capabilities.graph.compatibility_target` is `2.0.2` and `contract_revision` is
 `2026-11-07.2`; the app version alone cannot distinguish builds.
 
@@ -30,7 +30,8 @@ On fresh, approved run-owned fixtures:
   live/recycled pages. Cross-check exact `output: "count"` results. With a small
   row limit, follow cursors without writes and require no duplicates/omissions;
   after a fixture write the old cursor must fail. Reject raw `query` and regex
-  inputs. Count output has no rows/cursor; row `count` is only the returned count.
+  inputs. Count output has `matches: []` and `next_cursor: null`; projected rows
+  use `matches`, and row `count` is only the returned count.
   Test an empty result. See [structured examples](mcp-native-tool-map.md#structured-entity-search);
   output limits do not promise bounded DB execution time.
 - Repeat `createPage` on a run-owned title. Expect `status: "conflict"`,
@@ -229,7 +230,7 @@ Keep the intentionally unusual spellings, including `creatTag`,
 | `datascriptQuery` | Separate optional query-gate phase below: last-resort rationale, exact query/inputs, fresh form approval/refusal, bounded output, audit; mark BLOCKED/not called when approval or a qualifying need is absent |
 | `listPages` | A, B, K: baseline, created pages, final live pages; expand false/true |
 | `getPage` | B, F: page content and nested structural/embed nodes |
-| `searchBlocks` | I: unique marker and absent marker using searchTerm only |
+| `searchBlocks` | I: exact case-sensitive marker, different-case/absent marker, and misspelling using searchTerm only |
 | `findEntities` | I and regression retest: structured empty-first/text searches, selected fields, live/recycled counts, cursor continuation/invalidation, malformed-input refusal, no per-query approval |
 | `listTags` | A, D, K: baseline, run tags, removal; expand false/true |
 | `listProperties` | A, E, K: baseline, canonical definitions, removal; expand false/true |
@@ -279,7 +280,7 @@ Keep the intentionally unusual spellings, including `creatTag`,
 | `listOrphanTags` | A, D: unused run tag appears, attached tag does not |
 | `listOrphanProperties` | A, E: definitions before/after value attachment |
 | `listRecycled` | A, K: baseline and generated recycled-page delta |
-| `listAssets` | J: corrected asset records, empty/populated/manual boundaries |
+| `listAssets` | J: asset metadata records, empty/populated/manual boundaries |
 
 ### Separate Query-Gate Check
 
@@ -421,8 +422,10 @@ Use Host as destination, Target as the page target, and the recorded Target
 block as the block target. Snapshot Host statistics and bounded structure.
 
 1. Call `listEmbeds` with both UUID filters; record any existing matches.
-   Dry-run `createEmbed` for the two distinct pages. Expect no error,
-   `verified: false`, `response: null`; compare inventory before/after.
+   Dry-run `createEmbed` for the two distinct pages with `verbose: false`.
+   Expect only `uuid: null`, `verified: false`, and `diagnostic`, without an error;
+   compare inventory before/after. A separate verbose dry run includes
+   `response: null` and validation detail instead of the terse UUID envelope.
 2. Create one page embed under Host and one block embed under a nested Host
    block. Record the newly created embed UUIDs separately from target UUIDs.
    Verify `getBlock`, `getPage`, `getBlockUUID`, `getBlockTree`, and
@@ -499,11 +502,16 @@ failed/rewritten blocks and stray tags as evidence; do not erase them to rerun.
 
 ### I. Search
 
-Use only `searchBlocks({"searchTerm":"<unique-run-marker>"})`. Confirm a returned
-match's UUID and owning page with `getBlock`. Try a unique absent marker and a
-marker containing a quote. Treat the response as the native search API shape;
-do not require unadvertised matches/returned/regex fields or hardcode
-case sensitivity. Avoid one-character/common-word/global stress searches.
+Use `searchBlocks({"searchTerm":"<unique-run-marker>"})`. Confirm a returned
+match's UUID and owning page with `getBlock`. Also test a different-case marker,
+a misspelling, a unique absent marker, and a marker containing a quote.
+Every returned title must contain the exact case-sensitive term; fuzzy-only
+candidates must be absent. Preserve the native response envelope rather than
+requiring extra matches/returned/regex fields. Native candidates remain bounded,
+so an empty result is not proof of graph-wide absence.
+Exercise `findEntities` for page-scoped literal searches, selected `matches`
+fields, exact counts, and cursor behavior as specified in the regression retest.
+Avoid one-character/common-word/global stress searches.
 On timeout, stop and inspect connection health; never blindly repeat the search.
 
 ### J. Asset Inventory
@@ -565,7 +573,8 @@ Use this dependency order:
    reported as reusable by `isTitleAvailable` when all holders are recycled pages.
    Only the explicit title-reuse test through `createPage` renames a recycled
    holder; archive failures stop new-page creation and require inspection.
-   Previously recycled pages otherwise retain their old titles. No purge is available.
+   Previously recycled pages otherwise retain their old titles. No MCP purge tool is available;
+   this does not mean the native HTTP API lacks permanent recycled-page deletion.
 7. Reconcile final live page/tag/property sets against baseline and the ledger.
    Recycled totals may grow by the known generated pages. Inventory every retained
    entity and UI-prepared asset; exact baseline totals are not mandatory when the
@@ -582,8 +591,11 @@ Label these cases BLOCKED or NOT RUN with reasons, not PASS by inference:
 - Mid-batch failure/rollback, read-back transport rejection, worker poisoning,
   write-circuit behavior and timeout recovery are not safe live fault-injection
    targets. Require actual native API evidence before asserting circuit behavior.
-- Closed-value/status positive cases may need user-prepared fixtures; empty rows
-  do not prove populated behavior. Do not hardcode built-in value counts.
+- Positive Status-holder cases may need user-prepared fixtures; empty holder rows
+  do not prove populated behavior. `listClosedValues` can read existing built-in
+  Status/Priority choices on a fresh DB graph without creating custom choices.
+  Record the actual enums rather than assuming the list must be empty or
+  hardcoding built-in value counts.
 - Internal API call counts, local test results and packaged-build validation are
   not observable merely because Claude Desktop tool calls succeed.
 

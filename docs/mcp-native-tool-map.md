@@ -3,18 +3,15 @@
 For Desktop HTTP connection, authentication, native command arguments, and
 DB-compatible aliases, see the [Desktop DB Graph HTTP API Reference](./native-db-api.md).
 
-This map records native tool behavior, current Logseq API routes, and
-validation evidence and outstanding verification. All MCP graph operations must call `logseq.DB.*` API
-functions; those APIs may delegate internally to Editor/OG implementations.
-Stage 3 audits and validates write routes rather than replacing them with
-direct editor, worker, or DataScript mutations.
+This map describes the current 56-tool MCP implementation, its Logseq API routes,
+validation evidence, and outstanding verification. MCP graph operations call
+`logseq.DB.*` API functions; those APIs may delegate internally to shared
+Editor/App/CLI implementations. Read routing and write safeguards are implemented,
+not a pending migration roadmap. MCP does not directly mutate workers or the DB.
 
-All Stage 2 rows require a defined raw/expanded output contract, current DB
-schema and canonical entity-classification coverage, namespace-aware dispatch,
-focused local checks, and read-only live same-graph parity checks through Claude
-Desktop or an explicitly authorized direct MCP client.
-Candidate implementation, local validation, live validation, and production
-switching are separate statuses; getBlock evidence does not validate other rows.
+Local contract coverage and installed-app validation are separate evidence.
+Read-only same-graph parity checks and approved disposable-graph write checks
+must use the connected revision; one getter's evidence does not validate others.
 
 All tables separate API routing, validation evidence, and outstanding verification.
 Live results are historical unless explicitly tied to the current revision.
@@ -24,7 +21,7 @@ revision has passed live verification. The revision-wide retest requirement belo
 still applies. Monitoring follow-ups remain listed; keeping existing API routes is
 a shared implementation constraint, not an outstanding verification task.
 
-## Current 2.0.2 regression contracts
+## Current 2.0.2 contracts
 
 Revision `2026-11-07.2` requires fresh installed-app verification; historical
 passes below do not verify these changes:
@@ -33,8 +30,8 @@ passes below do not verify these changes:
   registrations. Missing-entity null results and explicit `Page "..." not found`
   or `No entity exists with exact UUID ...` errors establish route reachability.
   Unrelated session/database errors remain inconclusive, not available.
-  Default write probing remains disabled. `graph.compatibility_target` replaces
-  the misleading `verified_against` field; neither the target nor registration
+  Default write probing remains disabled. `graph.compatibility_target` identifies
+  the intended compatibility target; neither the target nor registration
   claims successful real-payload or remote validation.
 - `searchBlocks` preserves the native result envelope but filters its blocks to
   literal, case-sensitive title substrings. Snippets remain disabled. The native
@@ -93,18 +90,18 @@ passes below do not verify these changes:
 
 | Tool | Inputs / key contract | Behavior | Current Logseq API route | Validation evidence | Outstanding verification |
 |---|---|---|---|---|---|
-| `capabilities` | `include_diagnostics?`, `probe_writes?` | capability probes | existing metadata exports are routed through `logseq.DB.getAppInfo` and `logseq.DB.checkCurrentIsDbGraph`; read-only by default | historical same-graph safe-mode run passed on 2.0.1 after DB namespace routing; 21 reads available, 6 invalid-argument reads unknown but independently live-passed, 23 write-dependent tools skipped, 0 write methods probed | current registration/classification retest required; `createPage` remains unprobed; default write probing stays disabled |
+| `capabilities` | `include_diagnostics?`, `probe_writes?` | registration and route-reachability discovery; read-only by default, write probing disabled unless explicitly requested | `logseq.DB.getAppInfo`, `checkCurrentIsDbGraph`, and `getMcpApiMethods`, plus safe route probes | local registration/missing-entity classification coverage; an older 2.0.1 run reported 21 reads available, 6 reads unknown but independently live-passed, and no write probes; those totals are not the current inventory | fresh installed-app registration/classification retest required; safe-mode discovery does not verify writes |
 | `datascriptQuery` | `query`, optional `inputs`; required `question`, `checked_tools`, `reason`, `reads`, `expected_size` for approval | gated read-only last resort; clients without form support fail closed; 1000-row/65536-byte output envelope with `truncated` | unchanged `logseq.DB.datascriptQuery` query and positional inputs, after fresh MCP form approval; Logseq's own read-only behavior | local approval/refusal/no-retry/audit, result-shape/UTF-8 limits, general DataScript and bridge tests pass | live approval and deployment verification pending |
 | `getContentCapabilities` | none; DB-only, no graph-type argument | known built-in formats plus bounded plugin descriptions, status, repository hints, command labels and renderer keys; MCP adds supported/partial/unknown creation guidance | `logseq.DB.getContentCapabilities` uses the application's existing plugin metadata, command and renderer registries; shared API export/standard DB dispatch, not direct App calls from MCP | local API privacy/bounds/no-callback, parser syntax, MCP route/error and actual SDK protocol tests pass; SDK typecheck passes | no visual verification; live deployment verification pending |
 | `getPage` | page name | full page with child blocks | existing `get_page_data` export via `logseq.DB.getPageData`; no duplicate getter | production route switched; local route/capability checks pass; historical same-graph DB-route recheck passed with the recorded UUID/title and four blocks | None recorded |
-| `getPageUUID` | title | `getPage`, query | existing `DB.datascriptQuery` compatibility lookup behind DB aliases; duplicate `getPagesByTitle` implementation removed | historical same-graph live read passed for both recorded fixture titles | None recorded |
+| `getPageUUID` | title | title-to-UUID lookup | fixed read-only queries through `logseq.DB.datascriptQuery` | historical same-graph live read passed for both recorded fixture titles | None recorded |
 | `isTitleAvailable` | title | free or reusable title; recycled-page-only holders include an archive plan | dedicated `logseq.DB.getTitleHolders`; MCP preserves `held_by`, returning `available: true` and `recycled: true` only for recycled-page-only collisions | local reuse/mixed-holder tests | fresh installed-app contract verification required |
 | `findDuplicateTitles` | `normalize`, `include_recycled` | Page/Tag title inventory plus usage/alias queries and grouping | `logseq.DB.getTitleInventory` supplies the complete Page/Tag candidate set; MCP retains normalization, grouping, ranking, and downstream queries | production route switched for inventory; local tests pass; historical same-graph exact-mode read passed (39 titles, no collisions) | None recorded |
 | `inspectPage` | page UUID, `detail` | page plus selected blocks, tags, properties, or declarations | dedicated `logseq.DB.inspectPage` API; retains the detail envelope and query-shaped entity keys | API implemented; local tests pass; historical same-graph live reads passed for all six details | None recorded |
 | `pageStats` | page UUID | fixed counts, subtree/alias/reference/property analysis | dedicated `logseq.DB.getPageStats` API owns the read-only DB aggregation and preserves the response/diagnostic contract | production route switched; local tests pass; historical same-graph live read passed (9 own blocks, 8 with content, no refs/orphans) | None recorded |
 | `getBlockUUID` | page UUID | flat descendant list with order, parent/page references, and cross-page ancestry | dedicated `logseq.DB.getPageBlockUUIDs` API preserves the parent traversal and output fields | production route switched; acronym dispatch fixed (`UUIDs` now resolves to `uuids`); local tests and historical same-graph 9-descendant read passed | None recorded |
 | `getBlock` | block UUID | exact entity query | single MCP adapter calls `logseq.DB.getBlock` using the existing Editor implementation and standard dispatch | production route switched; local tests pass; all eight historical same-graph cases pass, including collapsed and property-bearing blocks | None recorded |
-| `searchBlocks` | `searchTerm` | literal, case-sensitive title filter over bounded native candidates | same exported `search` function through `logseq.DB.search`, snippets disabled; retain envelope/pagination | historical native marker search passed | new literal filtering requires remote retest |
+| `searchBlocks` | `searchTerm` | literal, case-sensitive title filter over bounded native candidates | same exported `search` function through `logseq.DB.search`, snippets disabled; retain envelope/pagination | local literal-filter and MCP protocol coverage; historical native marker search passed | current literal-filter contract requires installed-app retest |
 | `findEntities` | `kind`, `state?`, `page_uuid?`, `where?`, `select?`, `output?`, `limit?`, `cursor?` | structured literal/structural search, projected rows or exact count | `logseq.DB.findEntities`; fixed query forms and typed literal inputs through existing API `<q`, with no worker infrastructure changes | local API/SDK protocol coverage | installed-app verification pending |
 | `getBlockTree` | block UUID, depth/node caps | expanded tree with bounded depth/node count, page/missing distinction, cycle guard | dedicated `logseq.DB.getBlockTree` owns traversal and bounds while preserving the response envelope | production route switched; local tests pass; historical same-graph bounded marker read passed | None recorded |
 | `findBacklinks` | target UUID | separate refs, tag-holder, and property-value groups; counts overlap | dedicated `logseq.DB.getBacklinks` owns the three relation queries and preserves the grouped response/diagnostic | API implemented; local tests pass; historical same-graph reads returned 0 for fixture page and `testtag`, consistent with inspected graph | None recorded |
@@ -172,7 +169,7 @@ The response is `{output,matches,count,count_is_exact,truncated,next_cursor,limi
   graph/search parameters to continue; changing only `limit` is allowed.
   Graph changes invalidate cursors, and changes during a lookup fail explicitly.
   After any repair/write, restart the search rather than continuing an old cursor.
-- `output: "count"` returns the exact total with no rows, no cursor,
+- `output: "count"` returns the exact total with `matches: []`, `next_cursor: null`,
   `count_is_exact: true`, and `truncated: false`. It does not accept a cursor;
   `limit` and `select` apply only to row output.
 - Row output is capped at 1000 rows and 65536 UTF-8 bytes of the serialized
@@ -250,8 +247,8 @@ the full/terse response behavior. Batch writes remain non-atomic.
   verified because `:block/order` is not a normal direct write.
 - `deletePage`, `deleteTag`, `deleteProperty`, `clearPage`, and `removeBlock`
   retain acknowledgement and evidence requirements.
-- `listAssets` now returns asset records rather than attribute-name strings.
+- `listAssets` returns asset metadata records.
   It inventories non-recycled Asset-class entities, not files on disk; remote
   or missing local files and null metadata must not be interpreted as verified files.
-- The registered native names include `creatTag` and `getProperyUsers`.
+- The registered MCP tool names include `creatTag` and `getProperyUsers`.
   Preserve these public spellings unless a contract change is explicitly agreed.

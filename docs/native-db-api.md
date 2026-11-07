@@ -218,10 +218,10 @@ not automatically write verification.
 | `logseq.DB.getPageStats` | `pageUuid` | Structural, empty-block, reference, tag/property-holder, and alias statistics. Throws when the target cannot be inspected as a page. | R |
 | `logseq.DB.getPageProperties` | `pageNameOrUuid` | Read the page's property values. | R |
 | `logseq.DB.getJournalCandidates` | none | Entities with journal-day metadata. Does not create journals. | R |
-| `logseq.DB.createPage` | `name: string`, `properties?: object`, `options?: object` | Create/reuse a page using native behavior. Existing-page reuse does not add MCP's `existing` field or title-release policy. See [write options](#page-and-block-write-options). | W/U |
+| `logseq.DB.createPage` | `name: string`, `properties?: object`, `options?: object` | Create/reuse a page using native behavior. MCP instead reports live-title conflicts and orchestrates recycled-title reuse. See [write options](#page-and-block-write-options). | W/U |
 | `logseq.DB.createJournalPage` | `date: string or timestamp` | Create a journal without redirecting. `YYYY-MM-DD` means that exact local calendar day; timestamps/date-time strings use the parsed instant's local day. Invalid dates do not create a page. | W |
 | `logseq.DB.renamePage` | `pageUuid: string`, `newName: string` | Rename the exact page UUID; returns `true` on completion. Do not pass its title in place of the UUID. | W |
-| `logseq.DB.deletePage` | `pageName: string` | Recycle a page through the native handler. No native MCP acknowledgement or `_removed` renaming policy. | W |
+| `logseq.DB.deletePage` | `pageName: string` | Recycle a page through the native handler, preserving its title. Does not perform MCP's reference acknowledgements or preservation read-back. | W |
 | `logseq.DB.restorePage` | `pageNameOrUuid` | Restore a recycled page. | W |
 | `logseq.DB.listRecycled` | none | Entities with a deletion marker. Not an automatic purge operation. | R |
 | `logseq.DB.deleteRecycledPagePermanently` | `pageNameOrUuid` | Permanently delete a resolved recycled page; only invokes deletion when it is recycled. This API exists even though MCP has no recycle-bin purge tool. | D |
@@ -262,7 +262,7 @@ an options object for a page, explicitly include `includePage:true`.
 | Command | Arguments, in order | Purpose / result | Effect |
 | --- | --- | --- | --- |
 | `logseq.DB.findEntities` | `options: object` | Structured, literal, bounded-output page/block search, including exact counts. See [structured search options](#structured-search-options). | R |
-| `logseq.DB.search` | `query: string`, `options?: {limit?: number}` | Native search-index lookup. Not guaranteed literal substring matching; MCP `searchBlocks` adds its own filtering. Default native limit is 20. | R |
+| `logseq.DB.search` | `query: string`, `options?: {limit?: number, "page-db-id"?: number or string, "more?"?: boolean}` | Native search-index lookup. Default limit is 10; page scope uses a numeric ID or stored page name, not a UUID. Not guaranteed literal substring matching; MCP `searchBlocks` adds its own filtering. | R/U |
 | `logseq.DB.getBacklinks` | `targetUuid` | `{target_uuid, total, refs, tagged, property_values, diagnostic}`. Counts reference categories, not necessarily unique referring entities. | R |
 | `logseq.DB.getPageLinkedReferences` | `pageNameOrUuid` | Linked references grouped by containing page. | R |
 | `logseq.DB.getTagUsers` | `tagUuid` | Entities holding the tag. | R |
@@ -280,6 +280,11 @@ queries have no MCP wrapper row/byte cap or per-call approval dialog. An agent
 operating under an approval-gated MCP workflow must not use HTTP as a way around
 that requirement. Only use raw HTTP queries when that integration and operation
 are explicitly authorized.
+
+For UUID-scoped literal content, prefer `findEntities.page_uuid`. Native
+`search` resolves a string `page-db-id` by stored `:block/name`; an unresolved
+name leaves the search unscoped. Its `more?` option selects the Desktop UI's
+more-result state, not a structured-search cursor.
 
 ### Tags and inheritance
 
@@ -348,7 +353,7 @@ Treat such writes as code changes, not harmless text updates.
 | `logseq.DB.getSelectedBlocks` | none | Currently selected blocks. | R |
 | `logseq.DB.clearSelectedBlocks` | none | Clear UI selection. | U |
 | `logseq.DB.selectBlock` | `uuid` | Select an existing block. | U |
-| `logseq.DB.editBlock` | `uuid`, `options?: {pos?: number or "max"}` | Enter editing mode at the requested position; default is the end. | U |
+| `logseq.DB.editBlock` | `uuid`, `options?: {pos?: number}` | Enter editing mode at a numeric position; omit `pos` to use the native end-of-block default. The JSON string `"max"` is not the internal keyword default. | U |
 | `logseq.DB.exitEditingMode` | `select?: boolean` | Exit editing, optionally selecting the block. | U |
 | `logseq.DB.insertAtEditingCursor` | `content: string` | Insert into the current editing buffer. Depends on an active editor. | W/U |
 | `logseq.DB.restoreEditingCursor` | none | Restore saved cursor state. | U |
@@ -395,9 +400,9 @@ Allowed filter leaves:
 
 | Field | Operator | Value |
 | --- | --- | --- |
-| `title` | `equals`, `contains`, `starts_with` | Literal string, up to 1024 characters. Matching is case-sensitive. |
+| `title` | `equals`, `contains`, `starts_with` | Literal string, up to 1024 characters. `contains`/`starts_with` require nonempty text; `equals` also accepts `""`. Matching is case-sensitive. |
 | `title` | `empty` | No value; matches the exact empty string, not whitespace. |
-| `position` | `eq` | `"first_outline_child"`. |
+| `position` | `eq` | `"first_outline_child"`; only valid for `kind:"block"`. |
 | `has_children` | `eq` | Boolean. |
 | `has_link` | `eq` | Boolean; tests embed/link structure, not every textual reference. |
 
@@ -438,9 +443,11 @@ For literal content on one page, use `kind:"block"`, `page_uuid`, and a
 {"method":"logseq.DB.findEntities","args":[{"kind":"page","state":"all","output":"count"}]}
 ```
 
-Row output has `rows`, `count`, `count_is_exact:false`, `truncated`, and
-`next_cursor`. Here `count` is the number of returned rows, not all matches.
-Count output has the exact total, `count_is_exact:true`, and no rows or cursor.
+Both modes return `{output,matches,count,count_is_exact,truncated,next_cursor,limits}`.
+Row output stores projected rows in `matches`, with `count_is_exact:false`;
+`count` is the number of returned rows, not all matches. Count output returns
+the exact total, `count_is_exact:true`, `matches:[]`, `truncated:false`, and
+`next_cursor:null`. A completed row search also has `next_cursor:null`.
 
 Rows are ordered by internal entity ID. Send the returned cursor unchanged with
 the same graph/search for the next page; the limit may change. A graph revision
@@ -617,7 +624,7 @@ The MCP tool names are not automatically native API commands. For example:
 | `isTitleAvailable` | Title-holder/inventory interpretation, not a native boolean command. |
 | `datascriptQuery` | Native query wrapped with explicit MCP approval, logging, and output limits. |
 
-Direct `/api` calls do not inherit MCP acknowledgements, `verified`, `existing`,
+Direct `/api` calls do not inherit MCP acknowledgements, `verified`,
 `verbose`, `dry_run`, collision/title-release policy, diagnostics, per-query
 approval, or output caps unless the native command explicitly implements them.
 For example, only `upsertNodes` above documents its own `dry-run`, and

@@ -9,6 +9,37 @@ The dated native validation records below preserve their original coverage
 and limitations; they do not override the current tool contracts or reopen
 completed implementation work.
 
+## Current state
+
+The native server registers 56 tools, including `findEntities`.
+`capabilities.graph.contract_revision` is `2026-11-07.2` and identifies the
+implementation, not live verification. Read routing and write safeguards are
+implemented; old stage labels below are not a current implementation backlog.
+See the [tool map](mcp-native-tool-map.md) for current MCP contracts and the
+[native DB API reference](native-db-api.md) for connection and native arguments.
+Dated results and fixture ledgers below describe the builds and checks recorded
+at the time, not fresh installed-app validation.
+
+## Remaining verification and limitations
+
+- Installed-app and client retests remain separate from local tests; a local
+  correction does not establish a live pass. Use the
+  [end-to-end checklist](mcp-native-e2e-test.md) and approved disposable fixtures.
+- The recorded `migratePage` and `clearPage` discrepancies did not reproduce;
+  they are historical observations, not confirmed current defects. Retain the
+  evidence and monitor for recurrence. Individual `moveBlock` placements have
+  recorded live passes; `moveBlocks` rollback and additional batch-placement
+  variants lack live evidence. Populated/external/recycled asset cases also
+  require the fixture-specific checks recorded in the tool map.
+- `listAssets` inventories registered asset entities, not filesystem
+  availability. Search and structured-query output limits do not bound database
+  execution time or internal scans.
+- Preserve the historical Promesa shared-promise dependency follow-up below.
+  Its targeted `capabilities` mitigation did not globally patch or upgrade the
+  dependency; this is not evidence of a confirmed current MCP failure.
+- Preserve retained fixtures and reconcile state before retrying ambiguous
+  writes. Never perform live mutations without explicit approval.
+
 ## Contract rules
 
 ### 2.0.2 regression revision (2026-11-06)
@@ -157,19 +188,24 @@ The implementation-level contract is summarized by category here:
 |---|---|---|
 | Meta | `capabilities` | Report probe states and optional diagnostics. |
 | Content discovery | `getContentCapabilities` | DB-only, no arguments, safe bounded application metadata and renderer registrations; rendering support and MCP creation support are separate; no plugin execution or writes. |
-| Page reads | `getPageUUID`, `isTitleAvailable`, `findDuplicateTitles`, `inspectPage`, `pageStats` | Titles may be ambiguous; page UUIDs are exact; recycled pages do not resolve as live pages. |
+| Page reads | `getPage`, `getPageUUID`, `isTitleAvailable`, `findDuplicateTitles`, `inspectPage`, `pageStats` | Titles may be ambiguous; page UUIDs are exact; recycled pages do not resolve as live pages. |
 | Block reads | `getBlockUUID`, `getBlock`, `searchBlocks`, `getBlockTree`, `findBacklinks`, `findOrphans` | UUID validation; search is case-sensitive, bounded, and single-attempt. |
+| Structured reads | `findEntities` | Read-only structured page/block lookup and exact counts; bounded output does not bound database execution time. |
 | Tag reads | `getTagUUID`, `getTag`, `getTagUsers` | UUID/title distinction; ambiguous tag titles return candidates. |
 | Property reads | `getPropertyIndent`, `getProperyUsers` | Idents are strict attribute names; values may be literals or references. |
-| Lists | `listPages`, `listJournals`, `listTags`, `listProperties`, `listClosedValues`, `listOrphanTags`, `listOrphanProperties`, `listAssets`, `listStatus`, `listRecycled` | Preserve optional count envelopes, caps and recycled filtering; listAssets now inventories registered asset metadata, not filesystem availability. |
+| Lists | `listPages`, `listJournals`, `listTags`, `listProperties`, `listClosedValues`, `listOrphanTags`, `listOrphanProperties`, `listAssets`, `listStatus`, `listRecycled`, `listEmbeds` | Preserve optional count envelopes, caps and recycled filtering; listAssets inventories registered asset metadata, not filesystem availability. |
+| Query | `datascriptQuery` | Read-only last resort; each exact query and its inputs require explicit approval. |
 | Page writes | `importPage`, `repairLinks`, `createPage`, `renamePage`, `retitleOverDuplicate`, `deletePage`, `clearPage` | Read-back required; title clashes, aliases, references, and partial imports retain their current semantics. |
-| Block writes | `createBlock`, `createPageofBlocks`, `updateBlock`, `splitBlock`, `moveBlock`, `moveBlocks`, `migratePage`, `removeBlock` | UUID validation; placement/order and partial batch results are observable and verified. |
+| Block writes | `createBlock`, `createEmbed`, `createPageofBlocks`, `updateBlock`, `splitBlock`, `moveBlock`, `moveBlocks`, `migratePage`, `removeBlock` | UUID validation; placement/order and partial batch results are observable and verified. |
 | Tag writes | `creatTag`, `deleteTag`, `addTag`, `removeTag` | Namespace/entity validation; detach and child-reparent acknowledgements remain required. |
 | Property writes | `createProperty`, `deleteProperty`, `addProperty`, `removeProperty` | `:db/ident` keys, plugin namespace restriction, property type/cardinality, and value-loss acknowledgement remain required. |
 
-## Stage status
+## Historical implementation and validation records
 
-### Stage 0: reconnaissance
+The stage labels, test counts, live results and fixture ledgers in this section
+are historical. They do not establish current deployment or live-test status.
+
+### Stage 0: reconnaissance record
 
 Recorded native baseline: documentation was created, and Logseq build
 and lint stages passed. The aggregate test task had a pre-existing Windows
@@ -200,7 +236,7 @@ The exact selected test subset reports 11 failures in `logseq.api.plugin-test`:
 Windows path separators (`\\` versus `/`) and plugin fixture contents. The
 remaining selected tests pass.
 
-### Stage 1: compatibility implementation
+### Stage 1: compatibility implementation record
 
 Native implementation record. The API adapter is implemented in
 `src/electron/electron/mcp_compat.cljs`; the six existing MCP tools now route
@@ -209,8 +245,9 @@ through it without changing their API method names or argument shapes, and
 recycled-page matches; `getTagUUID` uses the existing tag lookup route with
 the same ambiguity contract, and `getTag` uses an exact UUID query constrained
 to the Tag class. `getPropertyIndent` now uses the Property class to resolve a
-single `:db/ident` without guessing, and `getBlock` uses an exact UUID query
-that rejects page entities. `getTagUsers` now queries all page and block
+single `:db/ident` without guessing. `getBlock` validates the UUID and calls
+`logseq.DB.getBlock` with children excluded and page included; it distinguishes
+missing entities and pages from blocks. `getTagUsers` now queries all page and block
 holders for an exact tag UUID. `listOrphanTags` uses the Tag class and reverse
 `:block/_tags` relation to list unused tags. `listOrphanProperties` validates
 each property ident before checking whether it has any values. `listAssets`
@@ -244,8 +281,11 @@ collisions and verifies the identity Logseq assigns. `deleteTag` requires
 holder-detach and child-reparent acknowledgement and verifies deletion;
 `addTag` verifies the target's tag relation and preserves page identity;
 `removeTag` verifies removal while preserving other tags and page identity.
-`createPage` checks title availability before writing and verifies the created
-page by UUID. `createBlock` verifies its parent, owning page and stored content;
+`deletePage` preserves the recycled page's title, UUID and block inventory.
+When only recycled pages hold a requested title, `createPage` archives those
+holders under UUID-based titles before creating and verifying the new page;
+live or non-page holders remain conflicts. `createBlock` verifies its parent,
+owning page and stored content;
 `updateBlock` verifies title changes on the original UUID. `renamePage`
 preflights title availability and verifies the original page UUID. `moveBlock`
 checks cycle safety and verifies parent, page, descendants, and placement.
@@ -320,21 +360,17 @@ read methods only and marks write-dependent methods `unknown` with
 `basis: "not-probed"`; `probe_writes: true` explicitly opts into mutation
 probes on a disposable graph. `createPage` remains unprobed, and `upsertNodes`
 is neither probed nor reported.
-Native validation requirements:
+Ongoing native validation requirements:
 
 1. Record relevant native build and test results.
 2. Maintain native schemas and domain contracts in the tool map.
 3. Cover API adapter functions with focused tests.
 
-Exit criteria:
+For current contracts and outstanding live checks, use the tool map and
+end-to-end checklist rather than interpreting historical stage criteria as
+current deployment status.
 
-- all documented tools are registered with their native schemas
-- reads and writes preserve their established native contracts
-- every write is read-back verified
-- native unit and live graph tests pass
-- tools run within the existing Logseq desktop lifecycle
-
-### Stage 2: API-backed native reads
+### Stage 2: API-backed native reads record
 
 Scope correction: MCP must call `logseq.DB.*`, but existing Editor APIs are
 valid implementations behind that namespace. This project must not duplicate
@@ -378,13 +414,12 @@ page); the earlier page count of 62 was a miscount. Orphan-tag/property results
 were cross-checked through their holder tools. The UUID-titled tag, duplicate-
 title pages, recycled outline, and Oct 4 blocks were left untouched.
 
-Claude's latest `capabilities` retry passed on Logseq 2.0.1 after graph/version
-metadata moved to DB-namespaced dispatch. It reported 21 read routes available.
-Six reads remained `unknown` because invalid probe arguments returned not-found
-or null, but each passed its independent live read. Twenty-three write-dependent
-tools were skipped, zero write methods were probed, and `createPage` was not
-probed. `listAssets` returned an empty array but remains an explicitly
-unverified discovery probe, not a complete asset inventory.
+In the recorded Logseq 2.0.1 `capabilities` retry, 21 read routes were
+available and six were reported `unknown`; each of those six separately passed
+a live read. This is historical probe evidence, not the current classification
+contract. Twenty-three write-dependent tools were skipped, zero write methods
+were probed, and `createPage` was not probed. `listAssets` returned an empty
+array; that check did not validate a populated asset inventory.
 
 The initial read-only run skipped `capabilities` because its probes could invoke
 mutation routes. The safe default now probes read methods and reports
@@ -483,16 +518,14 @@ This is a single-process local sample, not comparable to the API-only benchmark
 above or a production SLA. It establishes no optimization
 target by itself; no writes were made.
 
-The Stage 2 acceptance rules in `plan.md` apply to every read candidate:
-verify the current DB model, define raw versus expanded output and value/reference
-semantics, preserve identifiers/order/bounds/false values, test namespace-aware
-DB dispatch and errors, and require focused local and live parity evidence.
-Existing suitable DB APIs need validation rather than automatic rewrites.
-Other reads have not been validated by the getBlock tests; they remain pending
-their own evidence. Writes, caching, batching, and compatibility removal remain
-outside this candidate.
+For read changes, verify the current DB model and raw versus expanded output and
+value/reference semantics; preserve identifiers, ordering, bounds and false
+values. Test namespace-aware DB dispatch and errors, and distinguish focused
+local evidence from live parity evidence. Validate suitable existing DB APIs
+rather than automatically rewriting them. `getBlock` tests do not establish
+coverage for other reads.
 
-### Stage 3: API-routed write validation
+### Stage 3: API-routed write validation record
 
 The MCP write adapters already call graph operations through `logseq.DB.*`
 functions. Stage 3 audits and validates that route; it does not replace API
@@ -638,10 +671,9 @@ failure behavior, API errors, and read-back verification. Add or expose a DB API
 only when no suitable existing function supports the MCP contract; reuse
 existing implementations rather than duplicating mutation logic. Live write
 checks require an explicitly approved disposable graph and remain separate
-from local validation. The API-routed write audit and focused local validation
-are complete for the 23 graph-mutating tools. Remaining untested live variants
-and non-reproduced anomalies are listed in the tool map and plan; production
-switching remains a separate explicit decision.
+from local validation. The recorded API-routed write audit and focused local
+validation covered 23 graph-mutating tools. See Remaining verification and
+limitations above for outstanding live variants and non-reproduced anomalies.
 
 ### Claude Desktop full run: 20261006-1104-k7q3
 
@@ -695,7 +727,9 @@ stable test session. Pause mutations and reconcile state after any interruption.
 The clean test graph's built-in pages, two empty journals, and twelve recycled
 run pages match the cleanup report; an empty-looking UI after cleanup is expected.
 
-### Stage 4: optimization
+### Current implementation scope
 
-Not started. No caching, batching, retry redesign, schema change, or broad
-worker refactor is permitted before behavioral parity.
+MCP uses the existing native API boundary. `findEntities` reuses existing API
+queries rather than adding worker infrastructure. Caching, retry redesign,
+schema changes and broad worker refactors are not pending MCP migration tasks;
+they require separate scope and evidence.
