@@ -18,6 +18,7 @@
             [logseq.db.sqlite.export :as sqlite-export]
             [logseq.db.test.helper :as db-test]
             [logseq.graph-parser.block :as gp-block]
+            [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.op :as outliner-op]
             [logseq.outliner.page :as outliner-page]
@@ -102,6 +103,76 @@
           (is (= [:logseq.class/Journal] (map :db/ident (:block/tags journal))))))
       (finally
         (ldb/register-transact-pipeline-fn! identity)))))
+
+(defn- parse-db-block-title
+  "Editor wrap-parse-block extract path for DB graphs."
+  [title]
+  (let [content (str "- " title)
+        ast (gp-mldoc/->edn content (gp-mldoc/default-config :markdown))]
+    (first (gp-block/extract-blocks ast content :markdown
+                                    {:date-formatter date-time-util/default-journal-title-formatter
+                                     :db-graph-mode? true
+                                     :block-pattern "-"
+                                     :user-config {}}))))
+
+(defn- save-parsed-title!
+  [conn block title]
+  (let [parsed (parse-db-block-title title)]
+    (outliner-core/save-block!
+     conn
+     {:db/id (:db/id block)
+      :block/uuid (:block/uuid block)
+      :block/title (:block/title parsed)
+      :block/refs (:block/refs parsed)
+      :block/tags (:block/tags parsed)})))
+
+(defn- assert-no-journal-class
+  [conn]
+  (let [classes (->> (d/datoms @conn :avet :block/tags :logseq.class/Tag)
+                     (map #(d/entity @conn (:e %)))
+                     (remove :logseq.property/built-in?))]
+    (doseq [class classes]
+      (is (nil? (:block/journal-day class))
+          (str (:block/title class) " class must not have journal-day"))
+      (is (nil? (:block.temp/original-page-name class)))
+      (is (not (ldb/journal? class)))
+      (is (not= "00000001" (subs (str (:block/uuid class)) 0 8))
+          (str (:block/title class) " class must not use a journal uuid")))
+    (is (empty? (:errors (worker-db-validate/validate-db conn :fix false)))
+        "Closed schema accepts the graph")))
+
+(deftest save-block-date-hashtag-creates-valid-class-test
+  (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+  (try
+    (doseq [title ["#2024-01-01" "#[[2024-01-01]]" "#x[[Jan 1st, 2024]]"]]
+      (let [conn (db-test/create-conn-with-blocks
+                  [{:page {:block/title "page1"}
+                    :blocks [{:block/title "first"}]}])
+            block (db-test/find-block-by-content @conn "first")]
+        (save-parsed-title! conn block title)
+        (assert-no-journal-class conn)))
+    (testing "a page ref to a date still creates a journal, not a class"
+      (let [conn (db-test/create-conn-with-blocks
+                  [{:page {:block/title "page1"}
+                    :blocks [{:block/title "first"}]}])
+            block (db-test/find-block-by-content @conn "first")]
+        (save-parsed-title! conn block "[[2024-01-01]]")
+        (let [journal (db-test/find-journal-by-journal-day @conn 20240101)]
+          (is (ldb/journal? journal))
+          (is (= 20240101 (:block/journal-day journal)))
+          (is (empty? (:errors (worker-db-validate/validate-db conn :fix false)))))))
+    (testing "an existing journal is not converted when tagging a date"
+      (let [conn (db-test/create-conn-with-blocks
+                  [{:page {:block/title "page1"}
+                    :blocks [{:block/title "first"}]}])
+            block (db-test/find-block-by-content @conn "first")
+            [_ journal-uuid] (outliner-page/create! conn "Jan 1st, 2024" {})]
+        (save-parsed-title! conn block "#Jan 1st, 2024")
+        (is (ldb/journal? (d/entity @conn [:block/uuid journal-uuid])))
+        (is (= 20240101 (:block/journal-day (d/entity @conn [:block/uuid journal-uuid]))))
+        (assert-no-journal-class conn)))
+    (finally
+      (ldb/register-transact-pipeline-fn! identity))))
 
 (defn- raw-block-title
   [db block]

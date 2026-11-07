@@ -88,16 +88,28 @@
          (seq properties)
          (merge properties)))))))
 
+(defn- journal-page-uuid?
+  [block-uuid]
+  (and (uuid? block-uuid)
+       (string/starts-with? (str block-uuid) "00000001-")))
+
 (defn build-new-class
-  "Build a standard new class so that it is consistent across contexts"
+  "Build a standard new class so that it is consistent across contexts.
+   Date-like titles must never keep journal identity on a class."
   [block]
   {:pre [(qualified-keyword? (:db/ident block))]}
-  (block-with-timestamps
-   (cond-> (merge block
-                  {:block/tags (set (conj (:block/tags block) :logseq.class/Tag))})
-     (and (not= (:db/ident block) :logseq.class/Root)
-          (nil? (:logseq.property.class/extends block)))
-     (assoc :logseq.property.class/extends :logseq.class/Root))))
+  (let [replace-uuid? (or (:block/journal-day block)
+                          (journal-page-uuid? (:block/uuid block)))
+        block (cond-> (dissoc block :block/journal-day :block.temp/original-page-name :block/type)
+                replace-uuid? (assoc :block/uuid (common-uuid/gen-uuid)))]
+    (block-with-timestamps
+     (cond-> (merge block
+                    {:block/tags (-> (set (:block/tags block))
+                                     (disj :logseq.class/Journal :logseq.class/Page)
+                                     (conj :logseq.class/Tag))})
+       (and (not= (:db/ident block) :logseq.class/Root)
+            (nil? (:logseq.property.class/extends block)))
+       (assoc :logseq.property.class/extends :logseq.class/Root)))))
 
 (defn build-new-page
   "Builds a basic page to be transacted. A minimal version of gp-block/page-name->map"

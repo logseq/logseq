@@ -268,21 +268,29 @@
            (seq (set/intersection (ref-tag-idents ref)
                                   #{:logseq.class/Page :logseq.class/Journal})))))
 
+(defn- journal-ref?
+  [ref]
+  (or (= "journal" (:block/type ref))
+      (contains? (ref-tag-idents ref) :logseq.class/Journal)
+      (some? (:block/journal-day ref))))
+
 (defn- resolve-page-ref
   [db ref tag-names]
   (if (new-page-ref? ref)
-    (let [class? (contains? tag-names (:block/name ref))]
+    (let [class? (contains? tag-names (:block/name ref))
+          journal? (journal-ref? ref)]
       (if-let [page (and (not class?) (ldb/get-page db (:block/name ref)))]
         [(merge (select-keys page [:db/id :block/uuid :block/title :block/name :db/ident])
                 (select-keys ref [:block.temp/original-page-name]))
          nil]
         (let [{:keys [page-uuid tx-data]} (outliner-page/create db (:block/title ref)
-                                                                 {:uuid (:block/uuid ref)
+                                                                 {:uuid (when-not (and class? journal?)
+                                                                          (:block/uuid ref))
                                                                   :class? class?
-                                                                  :journal? (or (= "journal" (:block/type ref))
-                                                                                (contains? (ref-tag-idents ref)
-                                                                                           :logseq.class/Journal))})]
-          [(cond-> (assoc (select-keys ref [:block/title :block/name :block.temp/original-page-name])
+                                                                  :journal? (and (not class?) journal?)})
+              ref-keys (cond-> [:block/title :block/name]
+                         (not class?) (conj :block.temp/original-page-name))]
+          [(cond-> (assoc (select-keys ref ref-keys)
                           :block/uuid page-uuid)
              class? (assoc :db/ident (or (some :db/ident tx-data)
                                          (:db/ident (d/entity db [:block/uuid page-uuid])))))
@@ -304,7 +312,8 @@
                         [:page (:block/name ref)])]
         (if-let [seen-ref (and new-page? (get seen dedup-key))]
           [(conj resolved [(merge seen-ref
-                                  (select-keys ref [:block.temp/original-page-name]))
+                                  (when-not (contains? tag-names (:block/name ref))
+                                    (select-keys ref [:block.temp/original-page-name])))
                             nil])
            seen]
           (let [[ref' tx-data :as resolved-ref] (resolve-page-ref db ref tag-names)]
