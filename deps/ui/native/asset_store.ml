@@ -14,6 +14,13 @@ let graph_dir repo =
 let asset_dir repo =
   Filename.concat (graph_dir repo) "assets"
 
+let asset_path repo name =
+  if repo = "" then invalid_arg "Graph assets require an open graph";
+  Resource_native.asset_path ~asset_dir:(asset_dir repo) name
+
+let publish_resource_context ~repo =
+  Resource_native.publish ~repo ~graph_dir:(graph_dir repo) ~asset_dir:(asset_dir repo)
+
 let ensure_dir path =
   Daemon_client.mkdir_p path;
   Js.Promise.resolve ()
@@ -59,7 +66,7 @@ let sha256_hex (u8 : Js.Typed_array.Uint8Array.t) : string Js.Promise.t =
 let make_url (_ : Webapi.Blob.t) : string = ""
 
 let write_asset ~repo ~name ~u8 =
-  let path = Filename.concat (asset_dir repo) name in
+  let path = asset_path repo name in
   Daemon_client.mkdir_p (Filename.dirname path);
   let oc = open_out_bin path in
   output_bytes oc u8;
@@ -67,6 +74,6 @@ let write_asset ~repo ~name ~u8 =
   Js.Promise.resolve ()
 
 let delete_asset ~(repo : string) ~(name : string) : unit Js.Promise.t =
-  let path = Filename.concat (asset_dir repo) name in
+  let path = asset_path repo name in
   (try Sys.remove path with _ -> ());
   Js.Promise.resolve ()
