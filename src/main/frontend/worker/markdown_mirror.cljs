@@ -42,6 +42,7 @@
 (defonce ^:private *repo->flush-timeout (atom {}))
 (defonce ^:private *repo->block-render-cache (atom {}))
 (defonce ^:private *repo->warm-pages (atom {}))
+(defonce ^:private *repo->render-options (atom {}))
 (defonce ^:private *render-stats (atom {:own-block-renders 0 :cache-hits 0}))
 (defonce ^:private stem-index-cache (js/WeakMap.))
 
@@ -58,10 +59,12 @@
 (defn clear-block-render-cache!
   ([]
    (reset! *repo->block-render-cache {})
-   (reset! *repo->warm-pages {}))
+   (reset! *repo->warm-pages {})
+   (reset! *repo->render-options {}))
   ([repo]
    (swap! *repo->block-render-cache dissoc repo)
-   (swap! *repo->warm-pages dissoc repo)))
+   (swap! *repo->warm-pages dissoc repo)
+   (swap! *repo->render-options dissoc repo)))
 
 (defn- normalize-unicode
   [s]
@@ -599,14 +602,26 @@
    {:initial-lines [(id-property-line (:block/uuid page))]
     :insert-blank-before-first-block? true}))
 
+(defn- output-options-key
+  [options]
+  [(or (:export-bullet-indentation options) "  ")
+   (:date-formatter options)])
+
+(defn- ensure-render-options!
+  [repo options]
+  (let [k (output-options-key options)]
+    (when-not (= k (get @*repo->render-options repo))
+      (clear-block-render-cache! repo)
+      (swap! *repo->render-options assoc repo k))))
+
 (defn render-page-content-full
   "Synchronous full-page render used as the byte-identity baseline."
   [db page options]
-  (let [page (d/entity db (:db/id page))]
+  (let [page-entity (d/entity db (:db/id page))]
     (add-page-id-to-rendered-content
      db
-     page
-     (block-content db (:block/uuid page) {:include-page-properties? true} options)
+     page-entity
+     (block-content db (:block/uuid page-entity) {:include-page-properties? true} options)
      options)))
 
 (defn- lookup-own-content
@@ -622,9 +637,9 @@
       (do
         (swap! *render-stats update :cache-hits inc)
         (:content entry))
-      (let [block (d/entity db (:db/id block))
+      (let [block-entity (d/entity db (:db/id block))
             raw (common-file/own-block-content db uuid {:init-level level} (block->content-context options))
-            line-info (assoc (block-line-info db block "-") :embed-target nil)
+            line-info (assoc (block-line-info db block-entity "-") :embed-target nil)
             content (decorate-rendered-content
                      db
                      (or raw "")
@@ -726,8 +741,9 @@
 
 (defn- assemble-block
   [repo db block level marker options seen]
-  (let [uuid (:block/uuid block)]
-    (if-let [cached (and uuid (lookup-assembled repo uuid level marker))]
+  (let [uuid (:block/uuid block)
+        cacheable? (empty? seen)]
+    (if-let [cached (and cacheable? uuid (lookup-assembled repo uuid level marker))]
       (do
         (swap! *render-stats update :cache-hits inc)
         cached)
@@ -736,7 +752,7 @@
             expand? (and target (not (contains? seen target-uuid)))
             content (if expand?
                       (let [target-marker (if (order-list-number? target) "1." "-")
-                            seen' (conj seen target-uuid uuid)
+                            seen' (conj seen target-uuid)
                             target-content (assemble-block repo db target level target-marker options seen')
                             children (outline-children block)]
                         (if (seq children)
@@ -748,9 +764,9 @@
                                  marker)
                             children (outline-children block)]
                         (if (seq children)
-                          (string/join "\n" (cons own (assemble-nodes repo db children (inc level) options (conj seen uuid))))
+                          (string/join "\n" (cons own (assemble-nodes repo db children (inc level) options seen)))
                           own)))]
-        (if uuid
+        (if (and uuid cacheable?)
           (store-assembled! repo uuid level marker content)
           content)))))
 
@@ -779,14 +795,15 @@
 
 (defn- <render-page-content-incremental
   [repo db page options]
-  (let [page (d/entity db (:db/id page))
-        page-uuid (:block/uuid page)
+  (ensure-render-options! repo options)
+  (let [page-entity (d/entity db (:db/id page))
+        page-uuid (:block/uuid page-entity)
         warmed? (contains? (get @*repo->warm-pages repo #{}) page-uuid)]
     (p/let [_ (if warmed?
                 (p/resolved nil)
-                (<ensure-jobs-cached! repo db (collect-page-jobs page) options))
-            props (cached-page-properties repo db page options)
-            body (assemble-nodes repo db (page-root-blocks page) 1 options #{})
+                (<ensure-jobs-cached! repo db (collect-page-jobs page-entity) options))
+            props (cached-page-properties repo db page-entity options)
+            body (assemble-nodes repo db (page-root-blocks page-entity) 1 options #{})
             content (string/join "\n"
                                  (concat [(id-property-line page-uuid)]
                                          (when props [props])
@@ -973,6 +990,29 @@
       (= :page-props id) (second k)
       :else id)))
 
+(defn- entity-uuids
+  [db-after db-before eid]
+  (or (:block/uuid (d/entity db-after eid))
+      (when db-before
+        (:block/uuid (d/entity db-before eid)))))
+
+(defn- property-user-uuids
+  "Blocks and pages that store a value for a changed property definition."
+  [db-after db-before eid]
+  (let [after (d/entity db-after eid)
+        before (when db-before (d/entity db-before eid))]
+    (when (or (ldb/property? after) (ldb/property? before))
+      (let [idents (into #{} (keep :db/ident [after before]))]
+        (into #{}
+              (comp (mapcat (fn [ident]
+                              (when ident
+                                (concat (d/datoms db-after :aevt ident)
+                                        (when db-before
+                                          (d/datoms db-before :aevt ident))))))
+                    (keep (fn [datom]
+                            (entity-uuids db-after db-before (:e datom)))))
+              idents)))))
+
 (defn evict-block-render-cache!
   ([repo db tx-data]
    (evict-block-render-cache! repo db nil tx-data))
@@ -981,9 +1021,7 @@
          changed-uuids (into #{}
                              (keep (fn [{:keys [e a v added]}]
                                      (or (when (and (= a :block/uuid) (not added)) v)
-                                         (:block/uuid (d/entity db-after e))
-                                         (when db-before
-                                           (:block/uuid (d/entity db-before e))))))
+                                         (entity-uuids db-after db-before e))))
                              tx-data)
          referring-uuids (into #{}
                                (mapcat (fn [eid]
@@ -993,7 +1031,10 @@
                                             (keep :block/uuid (:block/_refs after))
                                             (keep :block/uuid (:block/_refs before))
                                             (keep :block/uuid (:block/_link after))
-                                            (keep :block/uuid (:block/_link before)))))
+                                            (keep :block/uuid (:block/_link before))
+                                            (keep :block/uuid (:logseq.property/_created-from-property after))
+                                            (keep :block/uuid (:logseq.property/_created-from-property before))
+                                            (property-user-uuids db-after db-before eid))))
                                        changed-eids))
          seed-uuids (into changed-uuids referring-uuids)
          with-ancestors (into seed-uuids
@@ -1014,12 +1055,9 @@
       (swap! *repo->block-render-cache update repo
              (fn [entries]
                (reduce-kv (fn [m k v]
-                            (let [uuid (cache-key-uuid k)]
-                              (if (and (contains? evict-uuids uuid)
-                                       (or (not= :page-props (first k))
-                                           (contains? changed-uuids uuid)))
-                                m
-                                (assoc m k v))))
+                            (if (contains? evict-uuids (cache-key-uuid k))
+                              m
+                              (assoc m k v)))
                           {}
                           (or entries {}))))))))
 

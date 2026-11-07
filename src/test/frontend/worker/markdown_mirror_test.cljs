@@ -1406,6 +1406,81 @@
                        (markdown-mirror/clear-block-render-cache! test-repo)
                        (done)))))))
 
+(deftest incremental-render-invalidates-properties-embeds-and-options-test
+  (async done
+    (let [block-a-uuid #uuid "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa03"
+          block-b-uuid #uuid "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbb03"
+          conn (db-test/create-conn-with-blocks
+                {:properties {:user.property/notes {:logseq.property/type :default}
+                              :user.property/priority {:logseq.property/type :number}}
+                 :pages-and-blocks
+                 [{:page {:block/title "Props Page"
+                          :build/properties
+                          {:user.property/notes
+                           {:build/property-value :block
+                            :block/title "old notes"}}}
+                   :blocks [{:block/title "has prop"
+                             :build/properties {:user.property/priority 1}}
+                            {:block/title "other"}]}
+                  {:page {:block/title "Embed A"}
+                   :blocks [{:block/title "A"
+                             :block/uuid block-a-uuid
+                             :build/keep-uuid? true}]}
+                  {:page {:block/title "Embed B"}
+                   :blocks [{:block/title "B"
+                             :block/uuid block-b-uuid
+                             :build/keep-uuid? true
+                             :build/children [{:block/title "B child"}]}]}]})
+          _ (d/transact! conn [{:db/id (:db/id (d/entity @conn [:block/uuid block-a-uuid]))
+                                :block/link (:db/id (d/entity @conn [:block/uuid block-b-uuid]))}
+                               {:db/id (:db/id (d/entity @conn [:block/uuid block-b-uuid]))
+                                :block/link (:db/id (d/entity @conn [:block/uuid block-a-uuid]))}])
+          props-page (db-test/find-page-by-title @conn "Props Page")
+          embed-a (db-test/find-page-by-title @conn "Embed A")
+          embed-b (db-test/find-page-by-title @conn "Embed B")
+          notes-value (db-test/find-block-by-content @conn "old notes")
+          other (db-test/find-block-by-content @conn "other")
+          priority (d/entity @conn :user.property/priority)]
+      (markdown-mirror/clear-block-render-cache! test-repo)
+      (-> (p/let [_ (<assert-incremental-matches-full
+                     test-repo conn props-page "initial properties page matches full")
+                  _ (evict-tx! test-repo conn
+                               (d/transact! conn [{:db/id (:db/id notes-value)
+                                                   :block/title "new notes"}]))
+                  _ (<assert-incremental-matches-full
+                     test-repo conn props-page "edited page property value matches full")
+                  edited-props (markdown-mirror/render-page-content-full @conn props-page {})
+                  _ (is (string/includes? edited-props "new notes"))
+                  _ (evict-tx! test-repo conn
+                               (d/transact! conn [{:db/id (:db/id priority)
+                                                   :block/title "urgency"
+                                                   :block/name "urgency"}]))
+                  _ (evict-tx! test-repo conn
+                               (d/transact! conn [{:db/id (:db/id other)
+                                                   :block/title "other edited"}]))
+                  _ (<assert-incremental-matches-full
+                     test-repo conn props-page "property rename then unrelated edit matches full")
+                  renamed-props (markdown-mirror/render-page-content-full @conn props-page {})
+                  _ (is (string/includes? renamed-props "urgency"))
+                  _ (is (not (string/includes? renamed-props "priority::")))
+                  _ (<assert-incremental-matches-full
+                     test-repo conn embed-a "cyclic embed A matches full")
+                  _ (<assert-incremental-matches-full
+                     test-repo conn embed-b "cyclic embed B matches full")
+                  _ (<assert-incremental-matches-full
+                     test-repo conn embed-a "cyclic embed A still matches after B was cached")
+                  four-space {:export-bullet-indentation "    " :yield-every nil}
+                  indented (markdown-mirror/<render-page-content
+                            test-repo @conn embed-b four-space)
+                  indented-full (markdown-mirror/render-page-content-full
+                                 @conn embed-b four-space)]
+            (is (= indented-full indented)
+                "changing export indentation invalidates cached output"))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally (fn []
+                       (markdown-mirror/clear-block-render-cache! test-repo)
+                       (done)))))))
+
 (deftest large-page-single-block-edit-is-incremental-test
   (async done
     (let [nested-n 200
