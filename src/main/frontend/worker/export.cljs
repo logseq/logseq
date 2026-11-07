@@ -55,13 +55,14 @@
     (common-file/tree->file-content db tree
                                     {:init-level init-level
                                      :include-properties? include-properties?
+                                     :open-blocks-only? open-blocks-only?
                                      :link link}
                                     content-config)))
 
 (defn- block-ast
-  [db block-uuid content-config]
+  [db block-uuid opts content-config]
   (let [block (some-> (first (ldb/get-block-and-children db block-uuid)) (into {}))
-        content (common-file/tree->file-content db [block] {:init-level 1} content-config)]
+        content (common-file/tree->file-content db [block] (assoc opts :init-level 1) content-config)]
     (content->ast content)))
 
 (defn- block-children-ast
@@ -69,9 +70,9 @@
   (content->ast (block-children-content db block-uuid opts content-config)))
 
 (defn- page-ast
-  [db page-name content-config]
+  [db page-name opts content-config]
   (when-let [page (ldb/get-page db page-name)]
-    (content->ast (block-content db (:block/uuid page) nil content-config))))
+    (content->ast (block-content db (:block/uuid page) opts content-config))))
 
 (defn- root-blocks-content
   [db root-block-uuids opts content-config]
@@ -109,15 +110,16 @@
   (let [remove-options (set (:remove-options options))
         include-properties? (not (contains? remove-options :property))
         open-blocks-only? (boolean (get-in options [:other-options :open-blocks-only]))
+        content-opts {:open-blocks-only? open-blocks-only?
+                      :include-properties? include-properties?}
         {:keys [content format]} (get-blocks-export-data
                                         db
                                         root-block-uuids-or-page-uuid
-                                        {:open-blocks-only? open-blocks-only?
-                                         :include-properties? include-properties?}
+                                        content-opts
                                         content-config)]
-    (binding [common-impl/*block-ast-resolver* #(block-ast db % content-config)
-              common-impl/*block-children-ast-resolver* #(block-children-ast db % {:open-blocks-only? open-blocks-only?} content-config)
-              common-impl/*page-ast-resolver* #(page-ast db % content-config)]
+    (binding [common-impl/*block-ast-resolver* #(block-ast db % content-opts content-config)
+              common-impl/*block-children-ast-resolver* #(block-children-ast db % content-opts content-config)
+              common-impl/*page-ast-resolver* #(page-ast db % content-opts content-config)]
       (case format-type
         :markdown (export-text/export-helper content format options)
         (throw (ex-info "Unsupported worker export format"
