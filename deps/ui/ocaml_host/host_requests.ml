@@ -810,6 +810,39 @@ let handle_editor_pointer e state ~path input =
   | Input.Button_down _ -> reset_editor_pointer state;None
   | _ -> None
 
+(* Fields mounted after startup claim focus themselves — the boot pass
+   only sees the initial tree, so post-boot batches check structural
+   ops and focus the first unclaimed autofocus field they mounted. *)
+let autofocus_claimed : (int, unit) Hashtbl.t = Hashtbl.create 16
+
+let mark_autofocus_claimed id = Hashtbl.replace autofocus_claimed id ()
+
+let claim_autofocus (b : Lui_protocol.patch_batch) =
+  match !env with
+  | None -> ()
+  | Some e ->
+    let structural =
+      List.exists
+        (function
+         | Lui_protocol.CreateNode _ | Lui_protocol.CreateExtension _
+         | Lui_protocol.InsertChild _ | Lui_protocol.MoveChild _ -> true
+         | _ -> false)
+        b.Lui_protocol.ops
+    in
+    if structural then
+      List.iter
+        (fun id ->
+          if
+            not (Hashtbl.mem autofocus_claimed id)
+            && Lui_store.mem e.store id
+            && Lui_store.bool_prop e.store id "autofocus"
+          then begin
+            Hashtbl.replace autofocus_claimed id ();
+            Ui.set_focused e.ui e.store id;
+            e.focused_text_input id
+          end)
+        (Lui_store.preorder e.store)
+
 let flush_pending_focus () =
   match !env with
   | None -> ()

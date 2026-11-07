@@ -842,7 +842,8 @@ let () =
       | None -> Lui_host.apply_batch host b in
     if applied then begin
       Host_interaction.rearm_viewport_rows lazy_fired b;
-      Host_images.sync_batch images store b
+      Host_images.sync_batch images store b;
+      Host_requests.claim_autofocus b
     end
   in
   let apply_patches ?event batches =
@@ -1207,6 +1208,10 @@ let () =
       Ui.set_scale ui !scale_cell;
       Lui_host.resize host ~width:(int_of_float (content_width () *. !scale_cell))
         ~height:dh ~scale:!scale_cell;
+      (* Drop the retained fragment cache on resize: its shift fast path
+         re-emits old-geometry ops alongside the new frame, which shows
+         as doubled text during live-resize. *)
+      Lui_host.invalidate_paint host;
       push_window_size ()
     | Focus_changed id -> focused_text_input id
     | Ime_rect r -> set_ime_rect r
@@ -2064,6 +2069,11 @@ let () =
      Ui.set_focused ui store id;
      focused_text_input id
    | None -> ());
+  List.iter
+    (fun id ->
+      if Lui_store.bool_prop store id "autofocus" then
+        Host_requests.mark_autofocus_claimed id)
+    (Lui_store.preorder store);
   Daemon_client.boot_mark "autofocus";
   (* app-icons is queued during init, before this thread drains the
      mailbox. Without a drain the startup line always reports icons=0
