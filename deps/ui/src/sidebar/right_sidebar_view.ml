@@ -240,9 +240,75 @@ let item_title (it : Sidebar_state.item) =
   | [], _ -> text ~key:"pt-plain" ~value:it.title []
   | crumbs, _ -> breadcrumb crumbs
 
-(* DOM-only bits deleted from the cljs header: draggable="true" (drag
-   reorder is a platform concern) and the pointerup which=2 middle-click
-   removal — LUI press events carry no button index *)
+let close_on_middle st key = function
+  | Lui_protocol.PointerUp (_, detail) when detail.button = 1 ->
+      Sidebar_state.remove_item st key
+  | _ -> ()
+
+let item_drag st key : t =
+ fun context parent ->
+  let origin = ref None and dragged = ref false in
+  let request = Ui_effect.request () in
+  let keys () =
+    List.map (fun (item : Sidebar_state.item) -> item.key)
+      (Runtime.signal_get st.Sidebar_state.items) in
+  let drop ~reload ~order x y =
+    let ticket = Ui_effect.issue request in
+    let current () = Ui_effect.is_current request ticket
+      && Option.fold ~none:false ~some:Runtime.reload_origin_current reload
+      && keys () = order in
+    let measurements = Array.of_list (List.map (fun key ->
+      Ui_services.dom_measure_rect ("sbi-" ^ key)) order) in
+    Ui_effect.task ~scope:context.Lui_ui.ui_scope (Ui_task.all measurements)
+      ~ok:(fun rects ->
+        if current () && Array.exists (fun (left, top, width, height) ->
+          x >= left && x <= left +. width && y >= top && y <= top +. height) rects then begin
+          let gap = ref 0 in
+          Array.iter (fun (_, top, _, height) ->
+            if y >= top +. height /. 2. then incr gap) rects;
+          let rec source_index index = function
+            | source :: _ when source = key -> index
+            | _ :: rest -> source_index (index + 1) rest
+            | [] -> invalid_arg "Sidebar drag source is missing" in
+          let destination = !gap - (if source_index 0 order < !gap then 1 else 0) in
+          Sidebar_state.move_item st key destination
+        end)
+      ~error:(fun error -> if current () then raise error)
+  in
+  (Ui_components.with_props
+    [Ui_components.Prop.cursor `pointer; Ui_components.Prop.user_select `none]
+    (box ~key:("drag-" ^ key) ~accessibility_identifier:("sidebar-panel-drag-" ^ key)
+      ~width:20 ~min_width:20 ~height:32 ~opacity:0.5 ~pointer_capture:true
+      ~on_pointer_down:(function
+        | Lui_protocol.PointerDown (_, detail) when detail.button = 0 ->
+            ignore (Ui_effect.issue request);
+            dragged := false;
+            origin := Some (Runtime.capture_reload_origin (), keys (), detail.x, detail.y)
+        | _ -> ())
+      ~on_pointer_move:(function
+        | Lui_protocol.PointerMove (_, detail) ->
+            (match !origin with
+             | Some (_, _, x, y) when Float.abs (detail.x -. x) +. Float.abs (detail.y -. y) >= 6. ->
+                 dragged := true
+             | _ -> ())
+        | _ -> ())
+      ~on_pointer_up:(fun event ->
+        close_on_middle st key event;
+        match event with
+        | Lui_protocol.PointerUp (_, detail) when detail.button = 0 ->
+            let started = !origin in
+            origin := None;
+            (match started with
+             | Some (reload, order, _, _) when !dragged ->
+                 drop ~reload ~order detail.x detail.y
+             | _ -> ())
+        | _ -> ())
+      ~on_pointer_cancel:(fun _ ->
+        origin := None;
+        ignore (Ui_effect.issue request))
+      [ row ~height:32 ~main:`center ~cross:`center
+          [ Icons.icon ~size:16. "grip-vertical" ] ])) context parent
+
 let item_header st idx (it : Sidebar_state.item) =
   let n = string_of_int idx in
   let collapsed = it.Sidebar_state.collapsed in
@@ -250,14 +316,16 @@ let item_header st idx (it : Sidebar_state.item) =
     ~height:32 ~min_height:32
     ~background:"var(--color-level-2)"
     ~style_class:"sidebar-item-header color-level"
-    ~data_attrs:[ ("style", "box-sizing:border-box") ]
-    [ Ui_components.button ~key:("hdr-" ^ it.key) ~variant:`ghost ~grow:1. ~padding_horizontal:8
+    ~on_pointer_up:(close_on_middle st it.key)
+    [ item_drag st it.key
+    ; Ui_components.button ~key:("hdr-" ^ it.key) ~variant:`ghost ~grow:1. ~min_width:0 ~padding_horizontal:8
         ~height:32
         (* page/block sidebar items can carry an empty title — a button
            with neither text nor accessibility label is rejected and
            kills the whole mount batch *)
         ~label:(if it.title = "" then t "ui/untitled" else it.title)
         ~accessibility_identifier:("sidebar-panel-header-" ^ n)
+        ~on_pointer_up:(close_on_middle st it.key)
         ~on_navigate:(function
           | Lui_protocol.NavigationKey (_, key, true) ->
               let destination = match key with
@@ -284,6 +352,7 @@ let item_header st idx (it : Sidebar_state.item) =
             ~main:`center ~cross:`center
             ~label:(t "sidebar.right/more")
             ~accessibility_identifier:("sbi-more-" ^ it.key)
+            ~on_pointer_up:(close_on_middle st it.key)
             ~style_class:"sidebar-item-more"
             ~width:32 ~height:32
             ~data_attrs:[ ("style", "padding:0;margin-left:8px") ]
@@ -302,6 +371,7 @@ let item_header st idx (it : Sidebar_state.item) =
         ; Ui_components.button ~key:("close-" ^ it.key) ~variant:`ghost ~size:`icon
             ~main:`center ~cross:`center
             ~label:(t "ui/close") ~width:32 ~height:32
+            ~on_pointer_up:(close_on_middle st it.key)
             ~data_attrs:[ ("style", "padding:0;margin-left:8px") ]
             ~on_press:(fun _ -> Sidebar_state.remove_item st it.key)
             [ Icons.icon ~size:16. "x" ] ]
