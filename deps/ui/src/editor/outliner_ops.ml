@@ -1852,6 +1852,7 @@ let apply_and_refresh_result ?opts ops =
    sequence after the model write *)
 let resync_open_editor ?(force = false) () : unit Js.Promise.t =
   let context = Runtime.model () in
+  let input_seq = !S.edit_input_seq in
   match S.editing () with
   | None -> Js.Promise.resolve ()
   | Some e -> (
@@ -1861,22 +1862,54 @@ let resync_open_editor ?(force = false) () : unit Js.Promise.t =
              display override while the store catches up, and reading the
              raw block_title here would clobber text the worker already
              persisted *)
-          let title = S.title_for e.uuid b.Model.block_title in
+          let raw_title = b.Model.block_title in
+          let override = Hashtbl.find_opt S.display_overrides e.uuid in
+          let chosen_title = S.title_for e.uuid raw_title in
+          let source = source_block e.uuid in
           let* title =
-            if source_block e.uuid then Js.Promise.resolve title
-            else title_for_edit title
+            if source then Js.Promise.resolve chosen_title
+            else title_for_edit chosen_title
+          in
+          (* A caught-up store must not rewind accepted input through a
+             display override. *)
+          let* canonical_caught_up =
+            if not force && context_current context
+               && e.S.buffer = e.S.base && e.S.buffer <> title
+               && Option.is_some override
+            then
+              let base = normalized_title e.uuid e.S.base in
+              let* editable_raw =
+                if raw_title = chosen_title then Js.Promise.resolve title
+                else if source then Js.Promise.resolve raw_title
+                else title_for_edit raw_title
+              in
+              Js.Promise.resolve (editable_raw = base)
+            else Js.Promise.resolve false
           in
           (* remote refresh must not clobber typed text: only
                     overwrite when the buffer is still the value the editor
                     opened with and the stored title moved since. undo/redo
                     force it — the user asked for the revert even when an
                     unsaved edit is in flight *)
-          if context_current context
+          if not canonical_caught_up && context_current context
              && (force || (e.S.buffer = e.S.base)) && e.S.buffer <> title
           then
+            (* Geometry may replace the model without superseding input. *)
             S.set (fun st ->
                 match st.S.editing with
-                | Some e' when e'.uuid = e.uuid && e'.epoch == e.epoch ->
+                | Some e'
+                  when e'.uuid = e.uuid && e'.epoch == e.epoch
+                       && (force
+                           || (!S.edit_input_seq = input_seq
+                               && e'.buffer = e.buffer && e'.base = e.base
+                               && e'.scope = e.scope
+                               && e'.model.version = e.model.version
+                               && e'.model.caret = e.model.caret
+                               && e'.model.anchor = e.model.anchor
+                               && e'.model.composition = e.model.composition
+                               && e'.model.composition_text = e.model.composition_text
+                               && Hashtbl.find_opt S.display_overrides e.uuid
+                                  = override)) ->
                     { st with
                    S.editing =
                      Some
