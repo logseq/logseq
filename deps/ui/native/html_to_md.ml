@@ -79,7 +79,15 @@ let rec render context = function
               String.concat "" (List.map (render { context with pre = true }) children)
               |> String.trim
             in
-            "\n\n```\n" ^ content ^ "\n```\n\n"
+            let _, longest =
+              String.fold_left
+                (fun (run, longest) c ->
+                  let run = if c = '`' then run + 1 else 0 in
+                  (run, max run longest))
+                (0, 2) content
+            in
+            let fence = String.make (longest + 1) '`' in
+            "\n\n" ^ fence ^ "\n" ^ content ^ "\n" ^ fence ^ "\n\n"
         | "blockquote" ->
             let lines = String.split_on_char '\n' (String.trim (contents ())) in
             "\n\n" ^ String.concat "\n" (List.map (fun line -> "> " ^ line) lines) ^ "\n\n"
