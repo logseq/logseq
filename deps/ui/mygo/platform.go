@@ -155,6 +155,8 @@ func (s *platformServices) Handle(request string) ([]platformReply, error) {
 
 func (s *platformServices) handle(name, payload string) ([]platformReply, error) {
 	switch name {
+	case "resource-context":
+		return nil, s.resources.InstallGraphContext(payload)
 	case "clipboard":
 		// WriteText discards errors; the transfer API preserves native failures.
 		return platformOperationReply(name, mygo.Clipboard.Write(transfer.TextData(payload)))

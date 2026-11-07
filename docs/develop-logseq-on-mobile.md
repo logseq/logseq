@@ -1,5 +1,9 @@
 # iOS development
 
+> Retired on `refactor/lui`: Android/iOS hosts and Capacitor dependencies were
+> removed. This historical guide does not describe a supported build. Desktop
+> uses MyGo and Web uses Melange; see [the UI guide](../deps/ui/README.md).
+
 ## Installation
 - Install Xcode 13 from App Store.
 - Install [CocoaPods](https://cocoapods.org/)
