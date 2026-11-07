@@ -209,8 +209,8 @@ let run () =
         ; open_url = (fun u -> opened_urls := u :: !opened_urls)
         ; resource_url = (fun path -> "https://app.test/resources/" ^ path)
         ; paints_caret = (fun () -> false)
+        ; component_menus = (fun () -> false)
         ; css_animations = (fun () -> false)
-        ; menu_popup = (fun _ -> false)
         }
     ; dom =
         (let listeners : (string, Ui_services.ev -> unit) Hashtbl.t =

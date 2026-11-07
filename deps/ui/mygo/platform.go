@@ -175,19 +175,19 @@ func (s *platformServices) handle(name, payload string) ([]platformReply, error)
 		}
 		data, err := mygo.Clipboard.Read(transfer.Text)
 		if err != nil && !errors.Is(err, transfer.ErrFormat) {
-			return nil, err
+			return platformJSONReply("clipboard-read", map[string]string{"error": err.Error()})
 		}
 		var text []byte
 		if err == nil {
 			text, err = data.Read(transfer.Text)
 			if err != nil && !errors.Is(err, transfer.ErrFormat) {
-				return nil, err
+				return platformJSONReply("clipboard-read", map[string]string{"error": err.Error()})
 			}
 		}
 		// An absent text representation is an empty text clipboard, not an OS
 		// failure. Ownership changes and provider errors are not masked.
 		if !utf8.Valid(text) {
-			return nil, fmt.Errorf("clipboard text is not UTF-8")
+			return platformJSONReply("clipboard-read", map[string]string{"error": "clipboard text is not UTF-8"})
 		}
 		return platformJSONReply("clipboard-read", map[string]string{"text": string(text)})
 	case "open-url":
@@ -216,6 +216,15 @@ func (s *platformServices) handle(name, payload string) ([]platformReply, error)
 			}
 		}
 		return nil, nil
+	case "native-performance-toggle":
+		var fields map[string]json.RawMessage
+		if err := platformObject(payload, &fields); err != nil {
+			return nil, err
+		}
+		if len(fields) != 0 {
+			return nil, fmt.Errorf("performance toggle requires an empty object")
+		}
+		return []platformReply{{Name: name, Payload: "{}"}}, nil
 	case "ui-state":
 		var state platformUIState
 		if err := platformObject(payload, &state); err != nil {

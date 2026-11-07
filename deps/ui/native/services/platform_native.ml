@@ -73,17 +73,6 @@ let native_performance : Ui_services.native_performance =
   ; toggle_panel = (fun () -> request_host "native-performance-toggle" "{}")
   }
 
-(* In-app menus rendered as real NSMenu popups (experiment). The OCaml
-   host opts in by exporting LOGSEQ_NATIVE_MENUS=1 unless the user
-   pinned =0 — other native hosts leave it unset and keep the LUI
-   overlay menus, so an unsupported host never sees the request. *)
-let native_menu_popup (spec : Json.t) : bool =
-  match Sys.getenv_opt "LOGSEQ_NATIVE_MENUS" with
-  | Some "1" ->
-      request_host "native-menu-popup" (Json.stringify spec);
-      true
-  | _ -> false
-
 (* ---------- persisted ui state (localStorage equivalent) ---------- *)
 
 let app_support_dir =
@@ -251,17 +240,18 @@ let cancel_clipboard_writes () =
 
 (* "clipboard-read" requests are answered by a same-named platform
    event; one resolver per outstanding read, FIFO *)
-let clipboard_read_resolvers : (string -> unit) Queue.t = Queue.create ()
+let clipboard_read_resolvers : ((string, exn) result -> unit) Queue.t = Queue.create ()
 
 let clipboard_read_text () : string Ui_task.t =
-  Ui_task.create (fun ~resolve ~reject:_ ->
-      Queue.add resolve clipboard_read_resolvers;
+  Ui_task.create (fun ~resolve ~reject ->
+      Queue.add (function Ok text -> resolve text | Error error -> reject error)
+        clipboard_read_resolvers;
       Host.clipboard_read ())
 
-let note_clipboard_text s =
+let note_clipboard_result result =
   Host.enqueue (fun () ->
     match Queue.take_opt clipboard_read_resolvers with
-    | Some resolve -> resolve s
+    | Some settle -> settle result
     | None -> ())
 
 (* ---------- host-side document state ---------- *)
@@ -680,8 +670,8 @@ let install_ui_services ~paints_caret ~assert_owner ~request_flush ~dom ~timers 
         ; open_url = Host.open_url
         ; resource_url
         ; paints_caret = (fun () -> paints_caret)
+        ; component_menus = (fun () -> true)
         ; css_animations = (fun () -> false)
-        ; menu_popup = native_menu_popup
         }
     ; dom
     ; timers

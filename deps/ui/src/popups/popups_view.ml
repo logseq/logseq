@@ -806,6 +806,65 @@ let cm_sub_state (st : S.t)
     (Signal.value (st.S.vs))
 ;;
 
+let cm_component_menu (st : S.t) : t =
+ fun context parent ->
+  let cm = Option.get (S.get st).S.cm in
+  let choose_picker picker =
+    let uuid = cm.S.block_id in
+    close_cm st;
+    Ui_services.dom_dispatch_json "ls:block-picker"
+      (Json.Object
+         [ "block", Json.String uuid
+         ; "kind", Json.String
+             (if picker = S.Picker_emoji then "emoji" else "icon") ])
+  in
+  let submenu key label children =
+    menu_trigger ~key ~text:label
+      [ dropdown_menu ~key:"submenu" children ]
+  in
+  let rec entries items =
+    List.mapi (fun i entry ->
+      let key = "entry-" ^ string_of_int i in
+      match entry with
+      | S.Ci_sep -> divider ~key []
+      | S.Ci_item (label, shortcut, command) ->
+          let icon = S.icon_of_cmd command in
+          menu_item ~key ~text:label
+            ?icon:(if icon = "" then None else Some (Icons.name_ref icon))
+            ?shortcut_hint:(Option.map (fun (_, caps) -> String.concat " " caps) shortcut)
+            ~on_press:(fun _ -> run_cm_item st command) []
+      | S.Ci_sub (label, S.Sub_menu children) ->
+          submenu key label (entries children)
+      | S.Ci_sub (label, S.Sub_picker picker) ->
+          menu_item ~key ~text:label
+            ~icon:(Icons.name_ref (if picker = S.Picker_emoji then "mood-smile" else "palette"))
+            ~on_press:(fun _ -> choose_picker picker) []
+      | S.Ci_colors ->
+          submenu key (U.t "property.built-in/background-color")
+            (List.map (fun color ->
+               menu_item ~key:color ~text:(U.t ("color/" ^ color))
+                 ~on_press:(fun _ -> run_cm_color st color) []) S.colors
+             @ [ menu_item ~key:"remove" ~text:(U.t "ui/remove-background")
+                   ~on_press:(fun _ -> run_cm_color st "") [] ])
+      | S.Ci_headings ->
+          submenu key (U.t "property.built-in/heading")
+            (List.init 6 (fun i ->
+               let heading = string_of_int (i + 1) in
+               menu_item ~key:heading ~text:(U.tf "editor/heading" [heading])
+                 ~on_press:(fun _ -> run_cm_heading st heading) [])
+             @ [ menu_item ~key:"auto" ~text:(U.t "editor/auto-heading")
+                   ~on_press:(fun _ -> run_cm_heading st "auto") []
+               ; menu_item ~key:"remove" ~text:(U.t "editor/remove-heading")
+                   ~on_press:(fun _ -> run_cm_heading st "none") [] ]))
+      items
+  in
+  dropdown_menu ~key:"cm" ~at:(cm.S.cx, cm.S.cy)
+    ~anchor:(if cm.S.flip then `above else `below)
+    ~min_width:240 ~accessibility_identifier:"block-context-menu"
+    ~on_dismiss:(fun _ -> close_cm st) (entries cm.S.entries)
+    context parent
+;;
+
 let cm_popover (st : S.t) : t =
   (* see ac_popover: signals must be built per mount *)
  fun context parent ->
@@ -842,7 +901,7 @@ let cm_popover (st : S.t) : t =
               ~accessibility_identifier:"block-context-menu"
               ~on_appear:(fun _ ->
                 match (S.get st).S.cm with
-                | Some cm when not cm.S.native ->
+                | Some cm when not (Ui_services.env_component_menus ()) ->
                     Option.iter
                       (fun (idx, item) -> focus_cm_item st ~sub:false idx item)
                       (List.find_mapi
@@ -1117,7 +1176,7 @@ let menu_keydown st (ev : Ui_services.ev) =
   else
   let menu =
     match (S.get st).S.cm, ev.Ui_services.target with
-    | Some cm, Some target when not cm.S.native
+    | Some cm, Some target when not (Ui_services.env_component_menus ())
         && target.Ui_services.closest "#block-context-menu, #block-context-submenu" <> None ->
         let sub = cm.S.sub_open >= 0 in
         let entries =
@@ -1504,18 +1563,6 @@ let handle_mousedown _st (ev : Ui_services.ev) =
       ev.Ui_services.prevent_default ()
   | _ -> ()
 
-(* the host's NSMenu popup reports the picked spec tag through a
-   "native-menu-select" document event; the tag maps back to the same
-   action the LUI row would have run *)
-let handle_native_menu_select (st : S.t) (ev : Ui_services.ev) =
-  match ev.Ui_services.detail "tag" with
-  | Some s -> (
-      match int_of_string_opt s with
-      | Some tag -> S.cm_native_dispatch st tag
-      | None -> ())
-  | None -> ()
-;;
-
 let install_listeners context st =
   let scope = context.Lui_ui.ui_scope in
   Ui_services.dom_subscribe_document_event ~scope ~capture:true "keydown"
@@ -1529,8 +1576,6 @@ let install_listeners context st =
   Ui_services.dom_subscribe_document_event ~scope "mousemove" (handle_mousemove st);
   Ui_services.dom_subscribe_document_event ~scope ~capture:true "ls:block-picker"
     (handle_block_picker st);
-  Ui_services.dom_subscribe_document_event ~scope "native-menu-select"
-    (handle_native_menu_select st);
   (* the preview survives its trigger element (popup lives in the overlay
      layer); navigation must drop it like cljs' tippy instance dying with
      the reference node *)
@@ -1562,9 +1607,12 @@ let render (_ms : Model.t Signal.signal) : t =
       [ if_ ~test:ac_open (ac_popover st)
       ; keyed ~source:(reactive (fun (v : S.view) ->
           match v.S.cm with
-          | Some cm when not cm.S.native -> [cm.S.epoch]
+          | Some cm -> [cm.S.epoch]
           | _ -> []) (Signal.value st.S.vs))
-          ~key:Fun.id ~cmp:Int.compare ~mount:(fun _ -> cm_popover st)
+          ~key:Fun.id ~cmp:Int.compare
+          ~mount:(fun _ ->
+            if Ui_services.env_component_menus () then cm_component_menu st
+            else cm_popover st)
       ; pv_dyn st
       ; Tooltip.el
       ; Editor_commands.popup_view ]

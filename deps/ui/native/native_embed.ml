@@ -507,6 +507,7 @@ let initialize_unlocked platform_code host_code (payload : string) =
   Editor_commands.install ();
   Editor_keys.install_once ();
   Menu_bar.install ();
+  Menu_commands.install ();
   Asset_dom.install ();
   Router.init ();
   Rtc_flows.init ();
@@ -755,16 +756,10 @@ let platform_event payload =
                 | None -> ())
             | None -> ())
         | _ -> ())
-      else if name = "native-performance" then (
-        let fields = match json with
-          | Js.Json.JObject fields -> fields
-          | _ -> invalid_arg "Invalid native performance sample" in
-        let fps = List.assoc "fps" fields in
-        let sample : Ui_services.native_performance_sample =
-          { fps = (if fps = Js.Json.null then None
-              else Some (Option.get (Js.Json.decodeNumber fps)))
-          ; panel_open = Option.get (Js.Json.decodeBoolean (List.assoc "panel_open" fields)) } in
-        Host.enqueue (fun () -> Platform.update_native_performance sample))
+      else if name = "native-performance-toggle" then
+        Host.enqueue (fun () -> Host_metrics.toggle (); Runtime.flush ())
+      else if name = "mygo-performance" then
+        Host.enqueue (fun () -> Host_metrics.note_host json; Runtime.flush ())
       else if name = "node-rect" then Dom_ext.note_node_rect json
       else if name = "node-natural-size" then
         Dom_ext.note_node_natural_size json
@@ -774,12 +769,11 @@ let platform_event payload =
       then Logseq_editor.note_measurement name json
       else if name = "clipboard-read" then (
         match json with
-        | Js.Json.JObject kvs ->
-            Platform.note_clipboard_text
-              (Option.bind (List.assoc_opt "text" kvs)
-                 Js.Json.decodeString
-              |> Option.value ~default:"")
-        | _ -> Platform.note_clipboard_text "")
+        | Js.Json.JObject [("text", Js.Json.JString text)] ->
+            Platform.note_clipboard_result (Ok text)
+        | Js.Json.JObject [("error", Js.Json.JString message)] ->
+            Platform.note_clipboard_result (Error (Failure message))
+        | _ -> invalid_arg "Invalid clipboard-read result")
       else Host.enqueue (fun () -> Platform.emit_event name json)
   | None -> ()
 
