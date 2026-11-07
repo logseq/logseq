@@ -48,11 +48,6 @@ on:
         type: boolean
         required: true
         default: true
-      build-android:
-        description: 'Build Android App'
-        type: boolean
-        required: true
-        default: true
       publish-linux-stores:
         description: 'Publish Flathub and Snap'
         type: boolean
@@ -916,19 +911,6 @@ jobs:
           name: logseq-darwin-arm64-builds
           path: builds
 
-  # reuse workflow via workflow_call
-  build-android:
-    uses: ./.github/workflows/build-android.yml
-    if: ${{ github.event.inputs.desktop-runtime != 'mygo' && (github.event_name == 'schedule' || github.event.inputs.build-android == 'true') }}
-    with:
-      build-target: "${{ github.event.inputs.build-target }}"
-      # if scheduled, use production mode
-      enable-file-sync-production: "${{ github.event_name == 'schedule' || github.event.inputs.enable-file-sync-production == 'true' }}"
-    secrets:
-      ANDROID_KEYSTORE: "${{ secrets.ANDROID_KEYSTORE }}"
-      ANDROID_KEYSTORE_PASSWORD: "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}"
-      SENTRY_AUTH_TOKEN: "${{ secrets.SENTRY_AUTH_TOKEN }}"
-
   nightly-release:
     if: ${{ github.event_name == 'schedule' || github.event.inputs.build-target == 'nightly' }}
     needs: [ build-macos-x64, build-macos-arm64, build-linux-x64, build-linux-arm64, build-windows-x64, build-windows-arm64 ]
@@ -970,18 +952,11 @@ jobs:
           name: logseq-win-arm64-builds
           path: ./
 
-      - name: Download Android Artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: logseq-android-builds
-          path: ./
-
       - name: Generate SHA256 checksums
         run: |
           sha256sum *-darwin-* > SHA256SUMS.txt
           sha256sum *-win-* >> SHA256SUMS.txt
           sha256sum *-linux-* >> SHA256SUMS.txt
-          sha256sum *.apk >> SHA256SUMS.txt
           cat SHA256SUMS.txt
 
       - name: List files
@@ -1007,7 +982,6 @@ jobs:
             ./*.yml
             ./*.blockmap
             ./*.AppImage
-            ./*.apk
 
   release:
     if: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.build-target == 'beta' || github.event.inputs.build-target == 'stable') }}
@@ -1052,13 +1026,6 @@ jobs:
           name: logseq-win-arm64-builds
           path: ./
 
-      - name: Download Android Artifacts
-        uses: actions/download-artifact@v4
-        if: ${{ github.event_name == 'schedule' || github.event.inputs.build-android == 'true' }}
-        with:
-          name: logseq-android-builds
-          path: ./
-
       - name: List files
         run: ls -rl
 
@@ -1073,7 +1040,6 @@ jobs:
           sha256sum *-darwin-* > SHA256SUMS.txt
           sha256sum *-win-* >> SHA256SUMS.txt
           sha256sum *-linux-* >> SHA256SUMS.txt
-          sha256sum *.apk >> SHA256SUMS.txt
           cat SHA256SUMS.txt
 
       - name: Create Release Draft
@@ -1095,7 +1061,6 @@ jobs:
             ./*.yml
             ./*.blockmap
             ./*.AppImage
-            ./*.apk
 
   trigger-flathub-release:
     runs-on: ubuntu-22.04
