@@ -1,26 +1,32 @@
-# deps/ui — LUI/OCaml web UI architecture
+# deps/ui — OCaml application and Web/MyGo architecture
 
-Logseq web UI rewritten in pure OCaml (Melange) on the LUI web backend.
-No cljs, no React, no shadow-cljs in the UI layer. The DOM contract the
-`clj-e2e` suite depends on is `docs/e2e-contract.md` — read it first.
+Logseq application logic is OCaml. Web compiles through Melange to the LUI
+DOM backend; desktop embeds the native OCaml application library in MyGo.
+MyGo owns native rendering and OS controls. `native/` is application/business
+logic and its service adapters, not the removed SDL renderer. Desktop still
+uses the native database worker. The Web DOM contract is documented in
+`docs/e2e-contract.md`.
 
 ## Build & run
 
 ```sh
-# one-time (blueprint VMs already have opam/pnpm/clojure):
-eval $(opam env)            # any 5.5.x switch with the pins below
-sh deps/ui/scripts/install-opam-deps.sh
-pnpm install              # repo root, if not already done
+# one-time, from the repository root with an OCaml 5.5.x switch selected:
+pnpm install --frozen-lockfile # includes postcss for Dune theme generators
+pnpm --dir deps/db-worker install --ignore-workspace --frozen-lockfile
+pnpm --dir deps/ui install --ignore-workspace --frozen-lockfile
+(cd deps/db-worker && sh scripts/install-opam-deps.sh)
+(cd deps/ui && sh scripts/install-opam-deps.sh)
 
 # build the app bundle -> static/js/main.js
-cd deps/ui && dune build js_app && ../../node_modules/.bin/vite build
+pnpm ui:build
 
 # build the worker -> static/js/db-worker.js
-cd deps/db-worker && dune build js_api && ../../node_modules/.bin/vite build --mode browser
+pnpm db-worker:build
 
-# serve + run e2e (Clojure/Playwright):
-cd clj-e2e && bb serve    # serves ../static on :3002
-bb test -n <ns>           # e.g. bb test -n outliner-basic-test
+# desktop (also builds the native worker):
+pnpm ui:mygo:build
+pnpm ui:mygo
+pnpm ui:mygo:package
 ```
 
 Rebuild after any OCaml change. `pnpm gulp build` WIPES `static/js/*.js`
@@ -34,21 +40,22 @@ copied from `resources/index.html` when it changes.
   **every module name must be globally unique** across dirs. Prefix area
   files (`Editor_state`, `Cmdk_view`, ...).
 - **Max 64 lines per function.** Split with named helpers.
-- No `Obj.magic`/`%identity`, no disabled warnings, no dune edits.
+- No `Obj.magic`/`%identity`, no disabled warnings. Dune changes require explicit
+  authorization.
 - Repo rules (`AGENTS.md`): fail-fast, no compat layers, mandatory i18n for
   user-facing text (use `I18n.t`-style helpers — see `src/app/`), no
   `js/Buffer`, no `List.append` hot loops (use `Rrbvec` or accumulators).
 
 ## Reactivity model (IMPORTANT — differs from React)
 
-- `View.view` runs ONCE. Dynamic UI = signal-driven props
-  (`style_class_signal`, `text_signal`, `attrs_signal_v`, `id_signal` on
-  `Logseq_el.el`) or `dyn ~equal f signal` / `if_ ~test` subtrees.
+- `View.view` runs ONCE. Use `reactive` for derived props and structural
+  children, and `if_`/`keyed` for signal-driven conditional/keyed structure.
+  Direct `dyn` calls are forbidden. Load the repository LUI skill before
+  editing views.
 - After mutating state outside an event handler (async `then_`, timers):
   `Runtime.signal_set signal v` (sets + flushes). Inside `on_dom_event`
   handlers a flush happens automatically after the handler.
-- `dyn` needs a real parent node — the root of a subtree can't be `dyn`;
-  wrap in a `box`/`Logseq_el.el` container.
+- Layout belongs to typed kinds and props, not CSS flex/display overrides.
 
 ## State ownership
 
@@ -71,8 +78,7 @@ design.
 
 - The native host consumes ONLY natively-expressible typed props — no
   CSS parsing, no `var()`/`calc()` resolution. Decoration that cannot
-  be expressed natively stays adapter-side in `ocaml_host/` host
-  hooks.
+  be expressed natively stays in the MyGo adapter, not a second app stylesheet.
 - Web keeps adapter-side leftovers in `resources/css/lui-overlay.css`
   behind the same semantic hook classes (`ui__*`, `cp__*`, `ls-*`):
   keyframe animations, `::selection`/`::first-letter`, `transform`,
@@ -83,29 +89,19 @@ design.
   hook classes for e2e tests, imperative DOM queries, and adapter-side
   decoration only.
 
-## DOM building — the `logseq-*` extension family
+## Platform extensions
 
-`Logseq_el.el` is the escape hatch (raw elements with attrs + DOM events):
-
-```ocaml
-open Lui_elements
-Logseq_el.el ~key:"x" ~tag:"button" ~id:"search-button"
-  ~style_class:"cp__header-btn"             (* static class *)
-  ~style_class_signal:(Logseq_el.class_signal ms (fun m -> "..."))
-  ~attrs:[ ("data-testid", "page title"); ("role", "menuitem") ]
-  ~attrs_signal_v:(Logseq_el.attrs_signal ms (fun m -> [ ("aria-checked", ...) ]))
-  ~text:"..."  ~text_signal:(...)
-  ~events:"click keydown input"             (* space-separated DOM events *)
-  ~on_dom_event:(fun name payload -> ... )  (* payload: JSON string *)
-  [ children ]
-```
+Use typed LUI elements for ordinary views. Platform extensions are reserved
+for genuine platform widgets such as the editor surface, PDF or media. The
+existing `logseq-*` family is a migration boundary, not permission to add raw
+DOM/JSON attributes or a second native document model.
 
 Event payload JSON fields: `key code data inputType shiftKey ctrlKey
 metaKey altKey repeat isComposing button clientX clientY value checked
 targetId targetClass`. On `input`/`change` events `value`/`checked` carry
 the target's current values — read them with `Platform.json_*` helpers.
 
-Standard LUI elements (`box`, `text`, `dyn`, `if_`) are fine inside
+Standard LUI elements (`box`, `text`, `reactive`, `if_`) are fine inside
 `Logseq_el.el` children — extension elements nest freely.
 
 ## Worker calls
@@ -140,7 +136,7 @@ lines untouched. Full inventory: `docs/e2e-contract.md`.
 
 ## Shared runtimes (post-migration, 2026-10)
 
-`deps/ui` builds three runtimes from shared business/view sources:
+`deps/ui` builds Web and MyGo desktop from shared business/view sources:
 
 | Layer | Path | Runs on | Owns |
 | --- | --- | --- | --- |
@@ -149,8 +145,15 @@ lines untouched. Full inventory: `docs/e2e-contract.md`.
 | subs | `subs/` | all | subscription/model layer on `Ui_task`; Js.Promise↔Ui_task bridge (`task_of_promise`) stays at transport edge while worker/sdk emit Js.Promise |
 | web src | `src/` | Melange | web-only view/app code still migrating feature-by-feature; real browser boundary `src/core/web_dom.ml` |
 | web adapter | `web/` | Melange | `platform_web.ml` installs `Ui_services` ops via real browser APIs |
-| native adapter | `native/` | native | host services (`services/platform_native.ml`), lui/native widgets, C bridge, `native_embed` entry |
-| ocaml host | `ocaml_host/` | OCaml+SDL | native host exe; links same shared/native libraries |
+| native application adapter | `native/` | native OCaml | host services (`services/platform_native.ml`), native view overrides, C bridge, `native_embed` entry |
+| desktop host | `mygo/` | Go/MyGo on macOS/Linux | native window/rendering, OS services and OCaml shared-library embedding |
+
+`mygo/build.sh` builds `native/native_embed.exe.o`, links the platform shared
+library, builds the Go executable with CGO, and builds/copies the native worker.
+The packaged launcher resolves the library, worker and resources relative to
+itself. See `../mygo/README.md` for macOS bundle/Linux archive layouts and
+distribution limits. Electron/CLJS releases remain a distinct product path;
+their executables are never labeled MyGo.
 
 Boundary gate: `scripts/check-shared-boundaries.sh` (wired into `dune runtest test/contracts` on Unix) rejects `Js.*`/`Webapi`/`Web_dom`/`Unix`/`Thread`/`Yojson`/`Platform.*` in `src/shared`+`src/contracts`+`subs`. Tracked exceptions (must shrink to zero): `subs/promise_ext.ml` (Js.Promise `let*` still opened by src files), `subs_state` promise↔task adapters.
 
