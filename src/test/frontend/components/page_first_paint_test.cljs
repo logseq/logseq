@@ -21,6 +21,14 @@
   (is (false? (#'page/defer-class-page-below-fold? plain-page {}))
       "Ordinary pages still load their block tree on first paint."))
 
+(deftest sidebar-page-properties-default-collapsed-in-publishing-test
+  (is (true? (#'page/sidebar-page-properties-default-collapsed? tag-page true))
+      "Exported SPA-HTML starts the sidebar property panel collapsed on #task.")
+  (is (false? (#'page/sidebar-page-properties-default-collapsed? tag-page false))
+      "The interactive app still opens class-page sidebar properties.")
+  (is (true? (#'page/sidebar-page-properties-default-collapsed? plain-page true)))
+  (is (true? (#'page/sidebar-page-properties-default-collapsed? plain-page false))))
+
 (defn- below-fold
   "Runs `use-below-fold-ready` with a stubbed state cell. Returns what the
    hook returned, the effect's cleanup (a timer is armed when it is a fn),
