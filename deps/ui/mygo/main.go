@@ -141,6 +141,8 @@ func run() (result error) {
 		host.window = mygo.NewWindow(mygo.WindowOptions{
 			Title: *title, Width: *width, Height: *height,
 			UseContentSize: true, Content: ui.View(host.view),
+			TitleBarStyle:  mygo.TitleBarHiddenInset,
+			TitleBarHeight: 52,
 		})
 		host.window.OnClose(func(e *mygo.CloseEvent) {
 			if host.closeReady || host.err != nil {
