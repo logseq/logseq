@@ -104,6 +104,10 @@ func extensionKey(key ui.Key) string {
 
 func extensionKeyValues(ev ui.InputEvent, key string) map[string]any {
 	values := extensionKeyMetadata(ev, key)
+	// Text is supplied by the keyboard layout, not derived from a US shift map.
+	if ev.Text != "" {
+		values["key-char"] = ev.Text
+	}
 	values["shift"], values["alt"] = ev.Mods&ui.Shift != 0, ev.Mods&ui.Alt != 0
 	values["meta"], values["ctrl"] = ev.Mods&ui.Super != 0, ev.Mods&ui.Ctrl != 0
 	return values
@@ -111,6 +115,9 @@ func extensionKeyValues(ev ui.InputEvent, key string) map[string]any {
 
 func extensionDOMKey(ev ui.InputEvent, key string) map[string]any {
 	values := extensionKeyMetadata(ev, key)
+	if ev.Text != "" {
+		values["keyChar"] = ev.Text
+	}
 	values["shiftKey"], values["altKey"] = ev.Mods&ui.Shift != 0, ev.Mods&ui.Alt != 0
 	values["metaKey"], values["ctrlKey"] = ev.Mods&ui.Super != 0, ev.Mods&ui.Ctrl != 0
 	return values
@@ -120,12 +127,7 @@ func extensionKeyMetadata(ev ui.InputEvent, key string) map[string]any {
 	if key == "Unidentified" && ev.PhysicalKey != ui.KeyUnknown {
 		key = extensionKey(ev.PhysicalKey)
 	}
-	values := map[string]any{"key": key, "code": extensionKeyCode(ev.PhysicalKey), "repeat": ev.Repeat}
-	// Text is supplied by the keyboard layout, not derived from a US shift map.
-	if ev.Text != "" {
-		values["keyChar"] = ev.Text
-	}
-	return values
+	return map[string]any{"key": key, "code": extensionKeyCode(ev.PhysicalKey), "repeat": ev.Repeat}
 }
 
 func extensionKeyCode(key ui.Key) string {
