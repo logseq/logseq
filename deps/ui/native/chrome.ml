@@ -508,7 +508,8 @@ let shell_contents (ms : Model.t Signal.signal) : t =
         [ topbar ms
         ; row ~key:"panes" ~grow:1. ~min_height:0 ~cross:`stretch
             [right_split ms st (left_split ms st (detail_column ms)) (right_sidebar ms);
-             Pdf.container_el ~key:"asc" ~id:"app-single-container"]
+             Pdf.container_el ~key:"asc" ~id:"app-single-container";
+             Host_metrics.panel ()]
         ; performance_bar () ]
     ; overlays ms
     ; help_area ms

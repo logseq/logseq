@@ -136,15 +136,6 @@ and cm_sub =
   | Sub_menu of cm_item list
   | Sub_picker of cm_picker
 
-(* What a native-menu-select tag resolves to — the serializer stores
-   one entry per emitted spec tag so a reply runs exactly what the
-   LUI menu row would have *)
-type cm_native_action =
-  | Cna_cmd of string
-  | Cna_color of string
-  | Cna_heading of string
-  | Cna_picker of cm_picker
-
 type cm_highlight = Main_item of int | Sub_item of int
 
 type cm =
@@ -168,11 +159,6 @@ type cm =
   ; tag : (string * int * bool) option
     (* Some (uuid, db/id, private?) => block-tag chip menu, not the
        block context menu *)
-  ; native : bool
-    (* true while the host's NSMenu popup paints the menu — the LUI
-       popover stays unmounted but the record keeps the block context
-       for the reply dispatch *)
-  ; native_acts : (int * cm_native_action) list
   }
 
 type pv =
@@ -2044,33 +2030,7 @@ let anchor_of_ev (ev : Ui_services.ev) (el : Ui_services.el) =
 
 let anchor_at_point ~x ~y = (x, y, y)
 
-(* ---------- native NSMenu experiment ----------
-
-   The host's popup stub consumes this spec:
-
-   {"cx":float, "cy":float, "atop":float, "flip":bool, "max_h":float,
-    "items":[item]}
-   item =
-     {"t":"header","label":s}                       (* ~20px dim label *)
-     {"t":"sep"}
-     {"t":"item","tag":n,"label":s,"enabled":bool,
-      "icon":s?,      (* tabler name — the host rasterizes to RGBA *)
-      "kbd":[s],      (* shortcut caps → right-aligned keycaps *)
-      "chev":bool}    (* draw the submenu chevron *)
-     {"t":"sub","label":s,"icon":s?,"items":[item]}
-     {"t":"row","h":n,"cells":[cell]}               (* composite row *)
-   cell =
-     {"k":"swatch","tag":n,"color":s,"label":s}
-     {"k":"x","tag":n,"label":s}                    (* remove swatch *)
-     {"k":"icon","tag":n,"icon":s,"label":s}
-   Every selectable leaf carries a unique tag; the popup returns the
-   picked tag (or -1 on dismiss) via "native-menu-select". *)
-
-let cm_spec_tag = ref 0
-
 let icon_of_cmd = function
-  (* icons ride only in the native spec for now — the LUI rows keep
-     their icon-free look for parity with the web menu *)
   | "cut" | "edit-cut" -> "scissors"
   | "delete" -> "trash"
   | "copy" | "edit-copy" -> "copy"
@@ -2088,107 +2048,6 @@ let icon_of_cmd = function
   | "dev/show-block-data" -> "database"
   | "dev/show-block-ast" -> "code"
   | _ -> ""
-
-let cm_native_spec (cm : cm) : Json.t * (int * cm_native_action) list =
-  let acts = ref [] in
-  let leaf act =
-    incr cm_spec_tag;
-    acts := (!cm_spec_tag, act) :: !acts;
-    !cm_spec_tag
-  in
-  let icon_field name =
-    match name with "" -> [] | n -> [ "icon", Json.String n ]
-  in
-  let num v = Json.Number (float_of_int v) in
-  let rec items_of entries =
-    List.concat_map
-      (fun e ->
-        match e with
-        | Ci_sep -> [ Json.Object [ "t", Json.String "sep" ] ]
-        | Ci_colors ->
-            let cells =
-              List.map
-                (fun c ->
-                  Json.Object
-                    [ "k", Json.String "swatch"
-                    ; "tag", num (leaf (Cna_color c))
-                    ; "color", Json.String (color_hex c)
-                    ; "label", Json.String (U.t ("color/" ^ c)) ])
-                colors
-              @ [ Json.Object
-                    [ "k", Json.String "x"
-                    ; "tag", num (leaf (Cna_color ""))
-                    ; "label", Json.String (U.t "ui/remove-background") ] ]
-            in
-            [ Json.Object
-                [ "t", Json.String "row"; "h", Json.Number 38.
-                ; "cells", Json.Array (Array.of_list cells) ] ]
-        | Ci_headings ->
-            let hs =
-              List.init 6 (fun i ->
-                  let n = string_of_int (i + 1) in
-                  ("h-" ^ n, U.tf "editor/heading" [ n ], n))
-              @ [ ("arrow-autofit-height", U.t "editor/auto-heading"
-                 , "auto")
-                ; ("heading-off", U.t "editor/remove-heading", "none") ]
-            in
-            let cells =
-              List.map
-                (fun (icn, label, value) ->
-                  Json.Object
-                    [ "k", Json.String "icon"
-                    ; "tag", num (leaf (Cna_heading value))
-                    ; "icon", Json.String icn
-                    ; "label", Json.String label ])
-                hs
-            in
-            [ Json.Object
-                [ "t", Json.String "row"; "h", Json.Number 38.
-                ; "cells", Json.Array (Array.of_list cells) ] ]
-        | Ci_item (label, scut, cmd) ->
-            let kbd =
-              match scut with
-              | Some (_, caps) ->
-                  [ "kbd"
-                  , Json.Array
-                      (Array.of_list
-                         (List.map (fun c -> Json.String c) caps)) ]
-              | None -> []
-            in
-            [ Json.Object
-                ([ "t", Json.String "item"
-                 ; "tag", num (leaf (Cna_cmd cmd))
-                 ; "label", Json.String label
-                 ; "enabled", Json.Bool true ]
-                @ kbd @ icon_field (icon_of_cmd cmd)) ]
-        | Ci_sub (label, Sub_picker pk) ->
-            [ Json.Object
-                ([ "t", Json.String "item"
-                 ; "tag", num (leaf (Cna_picker pk))
-                 ; "label", Json.String label
-                 ; "enabled", Json.Bool true
-                 ; "chev", Json.Bool true ]
-                @ icon_field
-                    (if pk = Picker_emoji then "mood-smile" else "palette")) ]
-        | Ci_sub (label, Sub_menu items) ->
-            [ Json.Object
-                ([ "t", Json.String "sub"
-                 ; "label", Json.String label
-                 ; "items"
-                   , Json.Array (Array.of_list (items_of items)) ]
-                @ icon_field "code") ])
-      entries
-  in
-  (* items_of's leaf calls fill acts — sequence it before reading the
-     ref; tuple-component evaluation order is unspecified *)
-  let items = items_of cm.entries in
-  ( Json.Object
-      [ "cx", Json.Number cm.cx; "cy", Json.Number cm.cy
-      ; "atop", Json.Number cm.atop; "flip", Json.Bool cm.flip
-      ; "max_h", Json.Number 400.
-      ; "items", Json.Array (Array.of_list items) ]
-  , List.rev !acts )
-;;
 
 let open_cm ?allow_cut ?allow_delete t ~ax ~atop ~abot ~block_id ~multi =
   let entries =
@@ -2212,16 +2071,7 @@ let open_cm ?allow_cut ?allow_delete t ~ax ~atop ~abot ~block_id ~multi =
     { epoch = next_cm_epoch t
     ; cx = ax; cy = (if flip then atop else abot); atop; flip
     ; block_id; multi; entries; sub_open = -1; sub_xy = (0., 0.)
-    ; highlighted = None; tag = None; native = false; native_acts = [] }
-  in
-  (* native NSMenu experiment: hand the serialized menu to the host;
-     when it accepts, the LUI popover stays unmounted while the record
-     keeps the block context for the select reply *)
-  let spec, acts = cm_native_spec cm in
-  let cm =
-    if Ui_services.env_menu_popup spec then
-      { cm with native = true; native_acts = acts }
-    else cm
+    ; highlighted = None; tag = None }
   in
   set_cm t (Some cm)
 ;;
@@ -2233,8 +2083,8 @@ let open_cm_edit t ~ax ~atop ~abot ~block_id =
     { epoch = next_cm_epoch t
     ; cx = ax; cy = (if flip then atop else abot); atop; flip
     ; block_id; multi = false; entries = edit_entries ()
-    ; sub_open = -1; sub_xy = (0., 0.); tag = None; native = false
-    ; highlighted = None; native_acts = [] })
+    ; sub_open = -1; sub_xy = (0., 0.); tag = None
+    ; highlighted = None })
 ;;
 
 (* cljs block-tag popup (block.cljs): Go to #tag (mod+click) / Open in
@@ -2265,8 +2115,8 @@ let open_cm_tag t ~ax ~atop ~abot ~block_id ~tag_uuid ~tag_id ~tag_title
     ; block_id; multi = false
     ; entries = tag_entries ~title:tag_title ~priv
     ; sub_open = -1; sub_xy = (0., 0.)
-    ; tag = Some (tag_uuid, tag_id, priv); native = false
-    ; highlighted = None; native_acts = [] })
+    ; tag = Some (tag_uuid, tag_id, priv)
+    ; highlighted = None })
 ;;
 
 let open_cm_sub t ~index ~x ~y =
@@ -2335,27 +2185,4 @@ let run_cm_heading t h =
         ; "value", Json.String h ];
       close_cm t
   | None -> ()
-;;
-
-
-
-(* native-menu-select reply: resolve the picked tag through the action
-   table the serializer stored on the open menu; -1/unknown = dismiss *)
-let cm_native_dispatch t tag =
-  match (get t).cm with
-  | Some ({ native = true; native_acts = acts; _ } as cm) -> (
-      match List.assoc_opt tag acts with
-      | Some (Cna_cmd cmd) -> run_cm_item t cmd
-      | Some (Cna_color c) -> run_cm_color t c
-      | Some (Cna_heading h) -> run_cm_heading t h
-      | Some (Cna_picker pk) ->
-          let uuid = cm.block_id in
-          close_cm t;
-          Ui_services.dom_dispatch_json "ls:block-picker"
-            (Json.Object
-               [ "block", Json.String uuid
-               ; "kind"
-                 , Json.String (if pk = Picker_emoji then "emoji" else "icon") ])
-      | None -> close_cm t)
-  | _ -> ()
 ;;

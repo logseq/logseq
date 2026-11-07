@@ -2533,7 +2533,7 @@ let run_views ~registry ~profile ~finish =
     check "block-menu listeners cannot focus or activate foreign menu items" (!foreign_actions=0);
     let cm : Popups_state.cm = {epoch=0;cx=0.;cy=0.;atop=0.;flip=false;block_id="context-fixture";
       multi=false;entries=[Ci_item ("Action",None,"fixture-action")];
-      sub_open=(-1);sub_xy=(0.,0.);highlighted=None;tag=None;native=false;native_acts=[]} in
+      sub_open=(-1);sub_xy=(0.,0.);highlighted=None;tag=None} in
     Signal.set context.vs {ac=None;cm=Some cm;pv=None};
     Signal.stabilize context_scheduler;
     let key_in target key =
