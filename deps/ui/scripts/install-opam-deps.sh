@@ -1,6 +1,6 @@
 #!/bin/sh
-# opam deps for deps/ui (Melange UI app). Run after the logseq blueprint's
-# `install OCaml toolchain` + db-worker's install-opam-deps.sh.
+# Minimal OCaml dependencies for the Web UI and MyGo application library.
+# Run after deps/db-worker/scripts/install-opam-deps.sh in the selected switch.
 set -eu
 # Set LUI_SOURCE to a local Git checkout when validating a LUI update.
 # Commit the source changes first. Git pinning excludes ignored build output;
@@ -8,7 +8,7 @@ set -eu
 if [ -n "${LUI_SOURCE:-}" ]; then
   opam pin add --kind=git -y -n lui "$LUI_SOURCE"
 else
-opam pin add -y -n lui git+https://github.com/logseq/lui.git#4782c2644fadc864769a0dc7183e70c220b15946
+  opam pin add -y -n lui git+https://github.com/logseq/lui.git#b0deb5052f53fbb89890437f79d9681c7c7b9aec
 fi
 opam pin add -y -n ocaml-signal git+https://github.com/logseq/ocaml-signal.git#02e18cdc5e0ad672aa223f638eaa3ba52fc9421e
 opam pin add -y -n rrbvec git+https://github.com/logseq/rrbvec.git#main
@@ -20,4 +20,7 @@ opam pin add -y -n melange-edn-melange git+https://github.com/logseq/melange-edn
 opam pin add -y -n melange-edn-native git+https://github.com/logseq/melange-edn.git#main
 opam update lui ocaml-signal rrbvec melange-transit-core melange-transit-melange melange-transit-native melange-edn-core melange-edn-melange melange-edn-native
 opam upgrade -y lui ocaml-signal rrbvec melange-transit-core melange-transit-melange melange-transit-native melange-edn-core melange-edn-melange melange-edn-native
-opam install . --deps-only --with-test --yes 2>/dev/null || opam install lui ocaml-signal rrbvec melange-webapi melange-fetch melange-transit-core melange-transit-melange melange-transit-native melange-edn-core melange-edn-melange melange-edn-native digestif tsdl tgls imagelib decompress mtime -y
+opam install -y lui ocaml-signal rrbvec melange-webapi melange-fetch \
+  melange-transit-core melange-transit-melange melange-transit-native \
+  melange-edn-core melange-edn-melange melange-edn-native \
+  yojson ptime uri digestif mtime markup

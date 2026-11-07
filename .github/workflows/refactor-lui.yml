@@ -14,7 +14,7 @@ concurrency:
 env:
   NODE_VERSION: '22'
   OCAML_VERSION: '5.5.1'
-  LUI_REF: '0ca7c020a5d8c920b7137b6a75971d155025b516'
+  LUI_REF: 'b0deb5052f53fbb89890437f79d9681c7c7b9aec'
 
 jobs:
   ubuntu:
@@ -25,7 +25,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: System deps
-        run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev libpango1.0-dev libcairo2-dev libharfbuzz-dev libfreetype-dev libfontconfig-dev libsdl2-dev libsdl2-ttf-dev libgl1-mesa-dev libegl1-mesa-dev libgles2-mesa-dev libffi-dev libgmp-dev fonts-noto-cjk xvfb xauth
+        run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev libffi-dev libgmp-dev
 
       - uses: pnpm/action-setup@v4
         with:
@@ -112,7 +112,7 @@ jobs:
 
       - name: dune runtest (deps/ui)
         working-directory: deps/ui
-        run: xvfb-run -a opam exec -- dune runtest
+        run: opam exec -- dune runtest
 
       - name: db-worker bundle
         run: pnpm db-worker:build
@@ -136,20 +136,11 @@ jobs:
 
       - name: Linux system deps
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev libgtk-3-dev libpango1.0-dev libcairo2-dev libharfbuzz-dev libfreetype-dev libfontconfig-dev libsdl2-dev libsdl2-ttf-dev libgl1-mesa-dev libegl1-mesa-dev libgles2-mesa-dev libffi-dev libgmp-dev fonts-noto-cjk
+        run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev libgtk-3-dev libpango1.0-dev libcairo2-dev libharfbuzz-dev libfreetype-dev libfontconfig-dev libgl1-mesa-dev libegl1-mesa-dev libgles2-mesa-dev libffi-dev libgmp-dev fonts-noto-cjk
 
       - name: macOS system deps
         if: runner.os == 'macOS'
-        run: brew install pkg-config sqlite3 sdl2 sdl2_ttf libffi gmp
-
-      - name: Select macOS SDK for LUI Metal
-        if: runner.os == 'macOS'
-        run: |
-          export DEVELOPER_DIR=/Applications/Xcode_16.2.app/Contents/Developer
-          test -d "$DEVELOPER_DIR"
-          echo "DEVELOPER_DIR=$DEVELOPER_DIR" >> "$GITHUB_ENV"
-          xcodebuild -version
-          xcrun --sdk macosx --show-sdk-version
+        run: brew install pkg-config sqlite3 libffi gmp dylibbundler
 
       - uses: pnpm/action-setup@v4
         with:
@@ -202,3 +193,11 @@ jobs:
         run: |
           go test ./...
           go vet ./...
+
+      - name: Package MyGo desktop
+        run: pnpm ui:mygo:package
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: logseq-mygo-${{ matrix.os }}
+          path: deps/ui/_build/packages/Logseq-MyGo-*
