@@ -4,13 +4,22 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
 
 	"github.com/egoist/mygo"
 )
 
-// installApplicationMenu runs after App is ready. Business commands return to
-// OCaml through the same PlatformEvent contract as other document events.
-func installApplicationMenu(dispatch func(platformReply) error) error {
+type applicationMenuLabels struct {
+	ToggleLeftSidebar string `json:"toggle-left-sidebar"`
+	Documentation     string `json:"documentation"`
+}
+
+// OCaml supplies translated labels after loading its selected dictionary.
+// Business commands return through the existing PlatformEvent contract.
+func installApplicationMenu(labels applicationMenuLabels, dispatch func(platformReply) error) error {
+	if strings.TrimSpace(labels.ToggleLeftSidebar) == "" || strings.TrimSpace(labels.Documentation) == "" {
+		return fmt.Errorf("application menu requires translated labels")
+	}
 	if dispatch == nil {
 		return fmt.Errorf("application menu requires OCaml event dispatch")
 	}
@@ -45,11 +54,11 @@ func installApplicationMenu(dispatch func(platformReply) error) error {
 			}
 		}
 		item.Submenu = append(item.Submenu, mygo.Separator(), &mygo.MenuItem{
-			Label: "Toggle Left Sidebar", Click: command("toggle-left-sidebar"),
+			Label: labels.ToggleLeftSidebar, Click: command("toggle-left-sidebar"),
 		})
 	}
 	items = append(items, &mygo.MenuItem{Role: mygo.RoleHelp, Submenu: []*mygo.MenuItem{
-		{Label: "Logseq Documentation", Click: command("documentation")},
+		{Label: labels.Documentation, Click: command("documentation")},
 	}})
 	mygo.App.SetMenu(mygo.NewMenu(items))
 	return nil

@@ -32,13 +32,14 @@ type platformServices struct {
 	desktop           platformDesktopServices
 	// Queries run on the UI thread after layout. A false natural-size result
 	// means decoding is still pending, not a successful zero-sized image.
-	NaturalSize func(id int64) (width, height float32, ready bool)
-	EditorDOM   func(c *ui.Context, op string, body json.RawMessage) ([]platformReply, error)
-	DOMMutation func(op string, body json.RawMessage) error
-	Invalidate  func()
-	resources   *resourceRenderer
-	mutations   *domMutationRenderer
-	viewport    viewportRenderer
+	NaturalSize     func(id int64) (width, height float32, ready bool)
+	EditorDOM       func(c *ui.Context, op string, body json.RawMessage) ([]platformReply, error)
+	DOMMutation     func(op string, body json.RawMessage) error
+	Invalidate      func()
+	ApplicationMenu func(applicationMenuLabels) error
+	resources       *resourceRenderer
+	mutations       *domMutationRenderer
+	viewport        viewportRenderer
 }
 
 type platformUIState struct {
@@ -157,6 +158,15 @@ func (s *platformServices) handle(name, payload string) ([]platformReply, error)
 	switch name {
 	case "resource-context":
 		return nil, s.resources.InstallGraphContext(payload)
+	case "application-menu-labels":
+		var labels applicationMenuLabels
+		if err := platformObject(payload, &labels); err != nil {
+			return nil, err
+		}
+		if s.ApplicationMenu == nil {
+			return nil, fmt.Errorf("application menu is not connected")
+		}
+		return nil, s.ApplicationMenu(labels)
 	case "clipboard":
 		// WriteText discards errors; the transfer API preserves native failures.
 		return platformOperationReply(name, mygo.Clipboard.Write(transfer.TextData(payload)))

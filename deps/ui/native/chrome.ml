@@ -530,7 +530,11 @@ let shell_contents (ms : Model.t Signal.signal) : t =
 let shell (ms : Model.t Signal.signal) : t =
  fun context parent ->
   let revision = Signal.state context.Lui_ui.ui_scheduler 0 in
-  let refresh () = Signal.update revision succ; Runtime.flush () in
+  let refresh () =
+    Menu_commands.refresh_labels ();
+    Signal.update revision succ;
+    Runtime.flush ()
+  in
   Platform_native.document_refresh := Some refresh;
   Signal.on_dispose context.Lui_ui.ui_scope (fun () ->
     match !Platform_native.document_refresh with
