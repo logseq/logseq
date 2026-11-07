@@ -5000,9 +5000,10 @@
                :child-uuids child-uuids
                :render-children render-children))))
    (fn [^js previous-props ^js next-props]
-     (let [[_previous-config previous-block previous-child-uuids] (.-args previous-props)
-           [_next-config next-block next-child-uuids] (.-args next-props)]
+     (let [[previous-config previous-block previous-child-uuids] (.-args previous-props)
+           [next-config next-block next-child-uuids] (.-args next-props)]
        (and (same-block-revision? previous-block next-block)
+            (= (:current-page-title previous-config) (:current-page-title next-config))
             (= previous-child-uuids next-child-uuids))))))
 
 (defn- render-loaded-block-row
