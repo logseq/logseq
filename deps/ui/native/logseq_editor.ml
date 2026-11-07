@@ -15,7 +15,7 @@
    implements it in ocaml_host/host_requests.ml):
 
    Events (host -> OCaml, via context.emit on the sink node):
-     key         {key, shift, alt, meta, ctrl, repeat}
+     key         {key, code?, key-char?, shift, alt, meta, ctrl, repeat}
      insert      {text}
      delete      {kind} — "backward" | "forward" | "word-backward" |
                           "word-forward" | "line-backward" |
@@ -76,7 +76,7 @@ let native_profiles =
     }
   ]
 
-(* --- schema — identical to the web twin (same wire vocabulary) --------- *)
+(* --- schema — same event vocabulary, with native key metadata --------- *)
 
 let schema =
   Lui_extension.component identifier
@@ -104,6 +104,8 @@ let schema =
     ]
     [ Lui_extension.event "key"
         [ Lui_extension.event_field "key" Lui_extension.StringScalar true
+        ; Lui_extension.event_field "code" Lui_extension.StringScalar false
+        ; Lui_extension.event_field "key-char" Lui_extension.StringScalar false
         ; Lui_extension.event_field "shift" Lui_extension.BoolScalar false
         ; Lui_extension.event_field "alt" Lui_extension.BoolScalar false
         ; Lui_extension.event_field "meta" Lui_extension.BoolScalar false

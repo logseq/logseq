@@ -40,13 +40,16 @@ func TestExtensionKeyboardMetadata(t *testing.T) {
 			if key == "" {
 				t.Fatal("keyboard event would be discarded")
 			}
-			for _, payload := range []map[string]any{extensionDOMKey(tt.event, key), extensionKeyValues(tt.event, key)} {
+			for characterField, payload := range map[string]map[string]any{
+				"keyChar":  extensionDOMKey(tt.event, key),
+				"key-char": extensionKeyValues(tt.event, key),
+			} {
 				if payload["key"] != tt.key || payload["code"] != tt.code {
 					t.Fatalf("key/code = %v/%v; want %s/%s", payload["key"], payload["code"], tt.key, tt.code)
 				}
-				character, exists := payload["keyChar"]
+				character, exists := payload[characterField]
 				if tt.character == "" && exists || tt.character != "" && character != tt.character {
-					t.Fatalf("keyChar = %v; want OS glyph %q (empty means absent)", character, tt.character)
+					t.Fatalf("%s = %v; want OS glyph %q (empty means absent)", characterField, character, tt.character)
 				}
 			}
 		})

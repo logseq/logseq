@@ -53,8 +53,11 @@ max-width max-height gap row-gap column-gap background shadow display main cross
 	editorProps := extensionFields("string", false, "composition runs accessibility-identifier data-testid style-class attrs")
 	editorProps = append(editorProps, extensionFields("string", true, "block-id")...)
 	editorProps = append(editorProps, extensionFields("int", false, "caret")...)
+	editorKeyFields := extensionFields("string", true, "key")
+	editorKeyFields = append(editorKeyFields, extensionFields("string", false, "code key-char")...)
+	editorKeyFields = append(editorKeyFields, extensionFields("bool", false, "shift alt meta ctrl repeat")...)
 	editorEvents := []extensionEventSchema{
-		{"key", append(extensionFields("string", true, "key"), extensionFields("bool", false, "shift alt meta ctrl repeat")...)},
+		{"key", editorKeyFields},
 		{"insert", extensionFields("string", true, "text")},
 		{"delete", extensionFields("string", true, "kind")},
 		{"composition", append(extensionFields("string", true, "state"), extensionFields("string", false, "text range")...)},
