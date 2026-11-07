@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/egoist/mygo/transfer"
+	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 	luimygo "github.com/logseq/lui/platform/mygo"
 )
@@ -25,7 +25,6 @@ type DocumentEvents struct {
 	codeMirrorComposition func(*ui.Context, luimygo.InputNode) codeMirrorComposition
 	backend               *luimygo.Backend
 	dispatch              DocumentDispatch
-	services              ui.Services
 	pressed               luimygo.InputNode
 	buttons               int
 	preventMouse          int
@@ -45,7 +44,6 @@ func NewDocumentEvents(backend *luimygo.Backend, dispatch DocumentDispatch, code
 // Keep DocumentEvents for the window's lifetime. This overrides the carrier's
 // observational dispatch with the host's synchronous default-prevention ABI.
 func (d *DocumentEvents) Capture(c *ui.Context) {
-	d.services = c.Services()
 	c.CaptureInput(func(ev ui.InputEvent, target ui.InputTarget) bool {
 		return d.input(c, ev, target)
 	})
@@ -271,19 +269,8 @@ func (d *DocumentEvents) command(c *ui.Context, target luimygo.InputNode, ev ui.
 	case "copy", "cut":
 		return d.send(c, target, ev.Text, payload)
 	case "paste", "pasteAndMatchStyle":
-		data := d.services.ReadClipboardData(transfer.Text, transfer.HTML)
-		clipboard := map[string]string{}
-		for _, format := range []transfer.Format{transfer.Text, transfer.HTML} {
-			if _, ok := data.Preferred(format); ok {
-				value, err := data.Read(format)
-				if err != nil {
-					panic(fmt.Errorf("document paste clipboard %s: %w", format, err))
-				}
-				clipboard[string(format)] = string(value)
-			}
-		}
-		payload["clipboardData"] = clipboard
-		return d.send(c, target, "paste", payload)
+		data, err := mygo.Clipboard.Read(clipboardPasteFormats(ev.Text)...)
+		return d.paste(c, target, ev.Text, data, err)
 	}
 	// Native text controls and the editor sink own the original command.
 	// Synthesizing keydown here would execute undo/selectAll/delete twice.
