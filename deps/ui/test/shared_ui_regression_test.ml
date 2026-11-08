@@ -212,7 +212,10 @@ let settings_config ~registry ~profile ~finish =
         check (owner ^ " preserves other graph preferences when toggled")
           (Hashtbl.find files "second-settings-fixture"=config true
            && Hashtbl.find files "settings-config-fixture"=config false
-           && (!current).Model.graph_config=config true);
+           && Wire.get (!current).Model.graph_config "ui/show-brackets?"=Some (Wire.Bool true)
+           && Wire.get (!current).Model.graph_config "start-of-week"=Some (Wire.Int 2)
+           && Wire.get (!current).Model.graph_config "custom-fixture"=Some (Wire.String "retained")
+           && Wire.get (!current).Model.graph_config "ui/auto-expand-block-refs?"=Some (Wire.Bool true));
         ignore (Lui_app.dispose session.S.app);
         next rest;Js.Promise.resolve ()) saved)
   in
@@ -1338,7 +1341,10 @@ let run_views ~registry ~profile ~finish =
           !complete ();
           ignore (Js.Promise.then_ (fun () ->
             check "Config saves refresh only their originating graph"
-              ((!state).graph_config=(if stale || invalid then original else updated));
+              (if stale || invalid then (!state).graph_config=original else
+                 Wire.get (!state).graph_config "start-of-week"=Some (Wire.Int 5)
+                 && Wire.get (!state).graph_config "ui/hide-empty-properties?"
+                    =Some (Wire.Bool false));
             if invalid then check "Invalid config edits report an error and retain the last valid preferences"
               (List.exists (fun toast -> toast.Model.toast_kind="error"
                 && toast.toast_text=I18n.t1 "file.config/invalid-title" "logseq/config.edn") (!state).toasts);
@@ -2208,7 +2214,7 @@ let run_views ~registry ~profile ~finish =
   eqi "global category toggle collapses a partly collapsed list" 0
     (List.length (keymap_rows ()));
   S.text_changed keymap input.M.id "Undo";
-  eqi "search ignores category collapse" 13 (List.length (keymap_rows ()));
+  eqi "search ignores category collapse" 14 (List.length (keymap_rows ()));
   eqi "query results hide category actions" 0 (List.length (category_tools ()));
   S.text_changed keymap input.M.id "";
   eqi "clearing search retains category collapse" 0
@@ -2234,7 +2240,7 @@ let run_views ~registry ~profile ~finish =
   check "keymap search uses fuzzy command identifiers and descriptions"
     (List.length (keymap_rows ()) > 1);
   check "query results flatten categories" (category_headers () = []);
-  eqi "query results retain matches in their original categories" 13
+  eqi "query results retain matches in their original categories" 14
     (List.length (keymap_rows ()));
   check "query counts follow matching commands"
     (M.string_prop (pill "All") "text"
@@ -2247,7 +2253,7 @@ let run_views ~registry ~profile ~finish =
   S.toggle keymap (pill "Disabled").M.id true;
   eqi "filter applies to fuzzy query results" 1 (List.length (keymap_rows ()));
   S.toggle keymap (pill "Disabled").M.id false;
-  eqi "pressing the active filter restores all query results" 13
+  eqi "pressing the active filter restores all query results" 14
     (List.length (keymap_rows ()));
   S.toggle keymap (pill "Disabled").M.id true;
   (match clear_buttons () with
@@ -2406,7 +2412,7 @@ let run_views ~registry ~profile ~finish =
   let push kind text =
     ignore (Lui_app.send notifications.S.app
         (Action.Toast_push { Model.toast_id = 0; toast_text = text;
-          toast_kind = kind; toast_key = None }));
+          toast_kind = kind; toast_key = None; toast_code = None }));
     S.flush notifications
   in
   push "success" "First";

@@ -103,6 +103,54 @@ let state_file () =
 let ls : (string, string) Hashtbl.t = Hashtbl.create 64
 let ls_loaded = ref false
 
+let auth_token_keys = [ "id-token"; "access-token"; "refresh-token" ]
+let auth_tokens : (string * string) list ref = ref []
+let auth_managed = ref false
+let is_auth_token key = List.mem key auth_token_keys
+
+let state_exists () =
+  match Unix.stat (state_file ()) with
+  | _ -> true
+  | exception Unix.Unix_error (Unix.ENOENT, _, _) -> false
+
+exception Incompatible_auth_record
+exception Credential_storage_error of string
+
+let auth_tokens_of_json = function
+  | `Assoc fields ->
+      List.map (fun key ->
+        match List.assoc_opt key fields with
+        | Some (`String value) when value <> "" -> key, value
+        | None | Some `Null | Some (`String "") -> raise Incompatible_auth_record
+        | _ -> raise (Credential_storage_error "Invalid authentication token field")) auth_token_keys
+  | _ -> raise (Credential_storage_error "Invalid authentication record")
+
+let parse_auth_record text =
+  try auth_tokens_of_json (Yojson.Safe.from_string text)
+  with Yojson.Json_error _ ->
+    raise (Credential_storage_error "Invalid authentication record encoding")
+
+let read_legacy_auth_file path =
+  match Unix.openfile path [ Unix.O_RDONLY ] 0 with
+  | descriptor ->
+      let channel = Unix.in_channel_of_descr descriptor in
+      Fun.protect ~finally:(fun () -> close_in_noerr channel) (fun () ->
+        let json = try Yojson.Safe.from_channel channel
+          with Yojson.Json_error _ ->
+            raise (Credential_storage_error "Invalid legacy authentication record encoding") in
+        try auth_tokens_of_json json with Incompatible_auth_record -> [])
+  | exception Unix.Unix_error (Unix.ENOENT, _, _) -> []
+
+let legacy_auth_tokens () =
+  let native_fields = List.filter_map (fun key ->
+    Option.map (fun value -> key, `String value) (Hashtbl.find_opt ls key)) auth_token_keys in
+  if native_fields <> [] then
+    (try auth_tokens_of_json (`Assoc native_fields) with Incompatible_auth_record -> [])
+  else if state_exists () then []
+  else
+    read_legacy_auth_file
+      (Filename.concat (Filename.concat (Unix.getenv "HOME") "logseq") "auth.json")
+
 let rec mkdir_p path =
   if path <> "" && path <> "/" && not (Sys.file_exists path) then begin
     mkdir_p (Filename.dirname path);
@@ -111,36 +159,40 @@ let rec mkdir_p path =
 
 let load_state () =
   if not !ls_loaded then begin
-    ls_loaded := true;
-    (try
-       if Sys.file_exists (state_file ()) then
-         let ic = open_in_bin (state_file ()) in
-         let n = in_channel_length ic in
-         let s = really_input_string ic n in
-         close_in ic;
-         match Yojson.Safe.from_string s with
-         | `Assoc kvs ->
-             List.iter
-               (fun (k, v) ->
-                 match v with
-                 | `String v -> Hashtbl.replace ls k v
-                 | _ -> ())
-               kvs
-         | _ -> ()
-     with _ -> ())
+    if state_exists () then begin
+      let json = try In_channel.with_open_bin (state_file ()) Yojson.Safe.from_channel
+        with Yojson.Json_error _ -> failwith "Invalid native UI state encoding" in
+      match json with
+      | `Assoc kvs ->
+          List.iter (fun (key, value) ->
+            match value with
+            | `String text -> Hashtbl.replace ls key text
+            | _ when is_auth_token key -> failwith "Invalid native authentication token"
+            | _ -> ()) kvs
+      | _ -> failwith "Invalid native UI state"
+    end;
+    ls_loaded := true
   end
 
+let save_state_strict () =
+  if not !auth_managed then invalid_arg "Authentication storage has not been resolved";
+  let directory = app_support_dir () in
+  mkdir_p directory;
+  let json = `Assoc (Hashtbl.fold (fun key value acc ->
+    if is_auth_token key then acc else (key, `String value) :: acc) ls []) in
+  let temporary, channel = Filename.open_temp_file ~mode:[ Open_binary ]
+    ~perms:0o600 ~temp_dir:directory "ui-state-" ".tmp" in
+  Fun.protect ~finally:(fun () ->
+    close_out_noerr channel;
+    if Sys.file_exists temporary then Sys.remove temporary) (fun () ->
+    output_string channel (Yojson.Safe.to_string json);
+    flush channel;
+    Unix.fsync (Unix.descr_of_out_channel channel);
+    close_out channel;
+    Unix.rename temporary (state_file ()))
+
 let save_state () =
-  (try
-     mkdir_p (app_support_dir ());
-     let json =
-       `Assoc
-         (Hashtbl.fold (fun k v acc -> (k, `String v) :: acc) ls [])
-     in
-     let oc = open_out_bin (state_file ()) in
-     output_string oc (Yojson.Safe.to_string json);
-     close_out oc
-   with _ -> ())
+  if !auth_managed then (try save_state_strict () with _ -> ())
 
 (* cljs storage.cljs reads with reader/read-string and writes pr-str,
    so cljs-stored strings appear double-quoted. Strip/add that quoting
@@ -158,14 +210,17 @@ let set_document_title (_ : string) : unit = ()
 
 let local_storage_get k =
   load_state ();
-  Hashtbl.find_opt ls k
+  if is_auth_token k then List.assoc_opt k !auth_tokens
+  else Hashtbl.find_opt ls k
 
 let local_storage_set k v =
+  if is_auth_token k then invalid_arg "Authentication requires OS keychain storage";
   load_state ();
   Hashtbl.replace ls k v;
   save_state ()
 
 let local_storage_remove k =
+  if is_auth_token k then invalid_arg "Authentication requires OS keychain removal";
   load_state ();
   Hashtbl.remove ls k;
   save_state ()

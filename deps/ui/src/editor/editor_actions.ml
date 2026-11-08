@@ -1907,21 +1907,45 @@ let delete_selection () =
 
 (* ---- drag & drop ---- *)
 
-(* is [uuid] nested inside [ancestor]? (walks the parent chain) *)
-let rec is_descendant uuid ancestor =
+let rec has_drag_source_parent sources uuid =
   match S.find_parent uuid with
   | Some (Some p, _) -> (
       match p.Model.block_uuid with
-      | Some pu -> pu = ancestor || is_descendant pu ancestor
+      | Some parent -> S.String_set.mem parent sources || has_drag_source_parent sources parent
       | None -> false)
   | _ -> false
 
+let is_descendant uuid ancestor =
+  has_drag_source_parent (S.String_set.singleton ancestor) uuid
+
+let begin_block_drag ~scope src =
+  if scope <> S.selection_scope () || not (S.String_set.mem src (S.selected ()))
+  then select_single_in ~scope src
+
+let dragged_block_uuids src =
+  if S.String_set.mem src (S.selected ()) then
+    let snapshot = selected_snapshot () in
+    if S.String_set.is_empty snapshot.unresolved then
+      List.filter_map (fun (b : Model.block) -> b.block_uuid) snapshot.roots
+    else []
+  else if S.find src <> None then [ src ] else []
+
+let can_drop_dragged_block src tgt =
+  let selected = S.selected () in
+  let sources =
+    if S.String_set.mem src selected then selected else S.String_set.singleton src
+  in
+  S.find src <> None && S.find tgt <> None
+  && not (S.String_set.mem tgt sources || has_drag_source_parent sources tgt)
+
 (* cljs dnd/move-blocks: :top -> first child of the target's parent (page
-   when top-level); :nested -> last child of target; :sibling -> after
+   when top-level); :nested -> first child of target; :sibling -> after
    target *)
 let drop_dragged_block src tgt move_to =
-  if src = tgt || is_descendant tgt src then ()
+  if not (can_drop_dragged_block src tgt) then ()
   else
+    let sources = dragged_block_uuids src in
+    if sources = [] then () else
     match move_to with
     | "top" -> (
         let parent_uuid =
@@ -1949,14 +1973,14 @@ let drop_dragged_block src tgt move_to =
         match parent_uuid with
         | Some pu ->
             ignore
-              (Ops.apply_and_refresh [ Ops.move_blocks_top [ src ] pu ])
+              (Ops.apply_and_refresh [ Ops.move_blocks_top sources pu ])
         | None -> ())
     | "nested" ->
         ignore
-          (Ops.apply_and_refresh [ Ops.move_blocks [ src ] tgt ~sibling:false ])
+          (Ops.apply_and_refresh [ Ops.move_blocks sources tgt ~sibling:false ])
     | _ ->
         ignore
-          (Ops.apply_and_refresh [ Ops.move_blocks [ src ] tgt ~sibling:true ])
+          (Ops.apply_and_refresh [ Ops.move_blocks sources tgt ~sibling:true ])
 
 (* ---- clipboard ---- *)
 

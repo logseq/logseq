@@ -196,6 +196,7 @@ let disconnected _ _ = invalid_arg "Native host is disconnected"
 let host_op : (string -> string -> unit) ref = ref disconnected
 
 let set_host_op f = host_op := f
+let request_window_close () = !host_op "window-close" ""
 let open_url (u : string) = !host_op "open-url" u
 let clipboard_write (s : string) = !host_op "clipboard" s
 let clipboard_write_request payload = !host_op "clipboard-write" payload

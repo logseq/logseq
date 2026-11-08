@@ -32,6 +32,8 @@ let body_of name (ms : Model.t Signal.signal) : t =
   | "rtc-collaborators" -> Collaborators.body ms
 
   | "quick-add" -> Quick_add_view.body ms
+  | "graph-open" -> Graphs_view.selector ~remove:false ms
+  | "graph-remove" -> Graphs_view.selector ~remove:true ms
   | _ -> box ~key:("empty-" ^ name) []
 
 (* Named dialogs specialize the shared card recipe with typed constraints. *)
@@ -45,7 +47,7 @@ let dialog_spec name =
   | "plugin-readme" -> 24, Ui_components.dialog_width, [Ui_components.Prop.max_height_viewport 0.86]
   | "export-page" -> 24, Ui_components.dialog_width, [Ui_components.Prop.max_height_viewport 0.8]
   | "new-graph" | "add-graph" -> 24, (fun _ -> 500.), []
-  | "login" -> 24, Ui_components.dialog_width, [Ui_components.Prop.padding_top 0]
+  | "login" -> 24, (fun _ -> 488.), [Ui_components.Prop.padding_top 0]
   | _ -> 24, Ui_components.dialog_width, []
 
 (* cljs shui/dialog-open! :title — h2.ui__dialog-title (omitted when none) *)
@@ -62,7 +64,6 @@ let dialog_view name (ms : Model.t Signal.signal) : t =
   let padding, width, binds = dialog_spec name in
   Ui_components.with_props binds
     (Ui_components.dialog ~key:("dlg-" ^ name) ~padding ~width
-       ~content_sized:(name = "login")
        ~style_class:("ls-dialog-" ^ name)
        ~data_attrs:
          (if title = "" then []
@@ -95,7 +96,8 @@ let dialog_view name (ms : Model.t Signal.signal) : t =
                  else [])
               [ body_of name ms ])
           ] )
-       ; dialog_close ~key:"dlg-close" (fun () -> Dialogs_state.close_named name)
+       ; (if name = "graph-open" || name = "graph-remove" then column []
+          else dialog_close ~key:"dlg-close" (fun () -> Dialogs_state.close_named name))
        ])
 
 (* cljs AlertDialog (shui dialog-confirm!): outside presses do NOT
@@ -169,7 +171,13 @@ let prompt_body (p : Dialogs_state.prompt) : t =
                ~data_attrs:[ ("style", "padding-bottom:0.5rem") ]
                ~accessibility_identifier:"ls-prompt-title" []
            ])
-      @ [ Ui_components.input ~key:"prmt-in"
+      @ [ (if p.multiline then
+             Ui_components.textarea ~key:"prmt-in"
+               ~text:(reactive (Signal.value value))
+               ~placeholder:p.placeholder ~height:240 ~autofocus:true
+               ~style_class:"ls-prompt-input"
+               ~on_input:(function Lui_protocol.TextChanged (_, text) -> Signal.set value text | _ -> ()) []
+           else Ui_components.input ~key:"prmt-in"
             ~text:(reactive (Signal.value value))
             ~style_class:"form-input ls-prompt-input"
             ~data_attrs:[ ("style", "display:block;width:100%;margin:0.5rem 0 1rem") ]
@@ -180,9 +188,9 @@ let prompt_body (p : Dialogs_state.prompt) : t =
                   Signal.set value s
               | _ -> ())
             ~on_submit:(fun _ -> submit ())
-            []
+            [])
         ; Ui_components.button ~key:"prmt-ok" ~size:`sm
-            ~variant:`primary ~text:(I18n.t "ui/submit")
+            ~variant:`primary ~text:p.submit_label
             ~on_press:(fun _ -> submit ()) [] ] )
   in
   node ctx parent

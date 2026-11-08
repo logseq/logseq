@@ -186,3 +186,24 @@ and esc_str s =
   Buffer.contents b
 
 let to_string w = let b = Buffer.create 64 in write b w; Buffer.contents b
+
+let pretty w =
+  let buffer = Buffer.create 128 in
+  let formatter = Format.formatter_of_buffer buffer in
+  let rec print f = function
+    | Wire.Map entries ->
+        Format.fprintf f "@[<hov 1>{%a}@]"
+          (Format.pp_print_list ~pp_sep:(fun f () -> Format.fprintf f ",@ ")
+             (fun f (key, value) -> Format.fprintf f "@[<hov 1>%a %a@]" print key print value)) entries
+    | Wire.Array values -> sequence f "[" "]" values
+    | Wire.List values -> sequence f "(" ")" values
+    | Wire.Set values -> sequence f "#{" "}" values
+    | value -> Format.pp_print_string f (to_string value)
+  and sequence f left right values =
+    Format.fprintf f "@[<hov 1>%s%a%s@]" left
+      (Format.pp_print_list ~pp_sep:Format.pp_print_space print) values right
+  in
+  Format.pp_set_margin formatter 80;
+  print formatter w;
+  Format.pp_print_newline formatter ();
+  Buffer.contents buffer

@@ -6,6 +6,31 @@ let repo = Runtime.repo
 
 let reload () = Router.resolve ()
 
+let copy_url uuid =
+  match uuid with
+  | None -> Toast.warning (I18n.t "page/no-page-found-to-copy")
+  | Some uuid ->
+      let graph = Runtime.repo () in
+      let encode = Ui_services.uri_encode_component in
+      let url = match !Runtime.current_graph_uuid with
+        | Some id when String.trim id <> "" ->
+            let base = if Ui_services.env_dev_build () then "http://localhost:3001"
+              else "https://logseq.com" in
+            Some (base ^ "/page/" ^ encode uuid ^ "?graph-id=" ^ encode id)
+        | _ when String.trim graph <> "" ->
+            Some ("logseq://graph/" ^ encode (Graphs_ops.short_name graph) ^ "?block-id=" ^ uuid)
+        | _ -> None in
+      match url with
+      | Some url -> Ui_services.clipboard_copy url
+      | None -> Toast.warning (I18n.t "page/copy-url-unavailable-warning")
+
+let set_public uuid value =
+  let graph = repo () in
+  let* _ = Properties_data.set_block_property ~block_uuid:uuid
+    ~ident:"logseq.property/publishing-public?" ~value:(Wire.Bool value) in
+  if repo () = graph then reload ();
+  Js.Promise.resolve ()
+
 let rename uuid new_title =
   if String.trim new_title = "" then Js.Promise.resolve ()
   else

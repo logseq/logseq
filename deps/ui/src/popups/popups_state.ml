@@ -30,6 +30,7 @@ type item_action =
   | Template_apply of string (* template block uuid — apply-template op *)
   | Run_query of bool (* cljs editor/run-query-command; arg = advanced? *)
   | Plugin_slash of string * string (* plugin pid + trigger tag *)
+  | Configured of Wire.t
   | Noop (* "No matched commands" row — applies to nothing *)
 
 (* cljs commands-map item doc: title attr text, label echo, formatted
@@ -298,7 +299,10 @@ let invalidate_ac t =
   incr t.gen;
   incr t.session
 
+let ac_keys = Keymap_data.chord ()
+
 let close_ac t =
+  Keymap_data.reset_chord ac_keys;
   invalidate_ac t;
   set_ac t None
 let close_cm t = set_cm t None
@@ -400,7 +404,29 @@ let cmd label = Editor_cmd label
 
 (* has_heading gates "Clear heading" (cljs filter-commands drops it when
    the edited block has no heading prop, leaving "No matched commands") *)
-let slash_items ~has_heading : ac_item list =  List.concat
+let configured_slash_items () =
+  let optional_text = function
+    | None | Some Wire.Nil -> None
+    | Some (Wire.String text) | Some (Wire.Keyword text) -> Some text
+    | _ -> invalid_arg "Slash command metadata must be text" in
+  match Wire.get (Runtime.model ()).Model.graph_config "commands" with
+  | None | Some Wire.Nil -> []
+  | Some (Wire.Array rows) ->
+      List.mapi (fun index -> function
+        | Wire.Array (Wire.String label :: output :: rest) when List.length rest <= 3 ->
+            let doc = optional_text (List.nth_opt rest 0) in
+            let icon = match List.nth_opt rest 1 with
+              | Some (Wire.Map _ as options) -> optional_text (Wire.get options "icon")
+              | icon -> optional_text icon in
+            let group = optional_text (List.nth_opt rest 2) in
+            mk_item ~key:("configured:" ^ string_of_int index) ~label ?icon ?group
+              ~desc:(match doc with Some text -> Desc_custom text | None -> Desc_none)
+              (Configured output)
+        | _ -> invalid_arg "Slash command must be [label output doc? icon? group?]") rows
+  | _ -> invalid_arg "Configured commands must be a vector"
+
+let slash_items ~statuses ~priorities ~has_heading : ac_item list =
+  let items = List.concat
     [ group_items "editor.slash/group-basic"
         [ "editor.slash/node-reference", "pageRef"
           , Desc_key "editor.slash/node-reference-desc", Switch Page_ref
@@ -434,19 +460,18 @@ let slash_items ~has_heading : ac_item list =  List.concat
            mk_item ~key:("heading-" ^ l)
              ~label:(U.tf "editor.slash/heading-label" [ l ])
              ~icon:("h-" ^ l) ?group:g ~desc:Desc_self
-             (cmd ("heading:" ^ l))))    ; group_items "editor.slash/group-task-status"
-        [ "property.status/backlog", "Backlog"
-          , Desc_fmt "editor.slash/status-desc", cmd "status:Backlog"
-        ; "property.status/todo", "Todo"
-          , Desc_fmt "editor.slash/status-desc", cmd "status:Todo"
-        ; "property.status/doing", "InProgress50"
-          , Desc_fmt "editor.slash/status-desc", cmd "status:Doing"
-        ; "property.status/in-review", "In Review"
-          , Desc_fmt "editor.slash/status-desc", cmd "status:In Review"
-        ; "property.status/done", "Done"
-          , Desc_fmt "editor.slash/status-desc", cmd "status:Done"
-        ; "property.status/canceled", "Cancelled"
-          , Desc_fmt "editor.slash/status-desc", cmd "status:Canceled" ]    ; group_items "editor.slash/group-task-date"
+             (cmd ("heading:" ^ l))))
+    ; List.filter_map (fun value ->
+        Option.map (fun title ->
+          let label = Properties_data.ref_title value in
+          let icon = match title with
+            | "Canceled" -> "Cancelled" | "Doing" -> "InProgress50" | _ -> title
+          in
+          mk_item ~key:("status:" ^ title) ~label ~icon
+            ~group:(U.t "editor.slash/group-task-status")
+            ~desc:(Desc_custom (U.tf "editor.slash/status-desc" [label]))
+            (cmd ("status:" ^ title))) (Properties_data.entity_title_of value)) statuses
+    ; group_items "editor.slash/group-task-date"
         [ "property.built-in/deadline", "calendar-stats"
           , Desc_none, cmd "deadline"
         ; "property.built-in/scheduled", "calendar-month"
@@ -455,14 +480,15 @@ let slash_items ~has_heading : ac_item list =  List.concat
        mk_item ~key:"editor.slash/no-priority"
          ~label:(U.t "editor.slash/no-priority") ~icon:"priorityLvlNone"
          ?group:g (cmd "priority:")
-       :: List.map            (fun lvl ->
-              let lvl_label = U.t ("property.priority/" ^ lvl) in
-              mk_item ~key:("priority-" ^ lvl)
-                ~label:(U.tf "editor.slash/priority-label" [ lvl_label ])
-                ~icon:("priorityLvl" ^ String.capitalize_ascii lvl)
-                ~desc:
-                  (Desc_custom (U.tf "editor.slash/priority-desc" [ lvl_label ]))
-                ?group:g (cmd ("priority:" ^ lvl)))            [ "low"; "medium"; "high"; "urgent" ])
+       :: List.filter_map (fun value ->
+            Option.map (fun title ->
+              let label = Properties_data.ref_title value in
+              mk_item ~key:("priority:" ^ title)
+                ~label:(U.tf "editor.slash/priority-label" [label])
+                ~icon:("priorityLvl" ^ title)
+                ~desc:(Desc_custom (U.tf "editor.slash/priority-desc" [label]))
+                ?group:g (cmd ("priority:" ^ title)))
+              (Properties_data.entity_title_of value)) priorities)
 
     ; group_items "editor.slash/group-time-and-date"
         [ "date.nlp/tomorrow", "tomorrow"
@@ -507,6 +533,7 @@ let slash_items ~has_heading : ac_item list =  List.concat
         ; "command.editor/add-property", "cube-plus", Desc_none
           , cmd "add-property"
         ; "editor.slash/cloze", "brackets-contain", Desc_none, Emit ("{{cloze }}", 2) ]
+    ; configured_slash_items ()
     ; (match Plugin_host.slash_cmd_tags () with
        | [] -> []
        | xs ->
@@ -519,7 +546,18 @@ let slash_items ~has_heading : ac_item list =  List.concat
                  ~icon:"puzzle" ?group:g ~desc:Desc_none
                  (Plugin_slash (pid, tag)))
              xs)
-    ]
+    ] in
+  let labels = Hashtbl.create (List.length items) in
+  let items = List.fold_right (fun item result ->
+      if Hashtbl.mem labels item.ai_label then result
+      else begin Hashtbl.add labels item.ai_label (); item :: result end) items [] in
+  let page = Option.fold ~none:false ~some:Editor_actions.anchor_is_page_title
+      (Editor_state.editing_uuid ()) in
+  if not page then items else
+    let groups = List.map U.t ["editor.slash/group-task-status";
+      "editor.slash/group-task-date"; "editor.slash/group-priority"] in
+    List.filter (fun item -> item.ai_label = U.t "command.editor/add-property"
+      || Option.fold ~none:false ~some:(fun group -> List.mem group groups) item.ai_group) items
 ;;
 
 (* cljs editor.cljs keeps a fallback item for slash *)
@@ -741,10 +779,25 @@ let page_item_of_row i w =
 let refresh_items t ac =
   match ac.kind with
   | Slash ->
+      let graph = repo () and session = !(t.session) in
+      ignore (let* values = Js.Promise.all [|
+        Properties_data.closed_values (Wire.Keyword "logseq.property/status");
+        Properties_data.closed_values (Wire.Keyword "logseq.property/priority") |] in
+        (match (get t).ac with
+         | Some current when session = !(t.session) && graph = repo ()
+              && current.kind = Slash && current.auuid = ac.auuid
+              && current.query = ac.query ->
+             let items = slash_items ~statuses:(Wire.elems values.(0))
+               ~priorities:(Wire.elems values.(1))
+               ~has_heading:(editing_has_heading ()) |> filter_slash current.query in
+             set_ac t (Some {current with items; chosen = 0})
+         | _ -> ());
+        Js.Promise.resolve ());
       { ac with
         items =
           filter_slash ac.query
-            (slash_items ~has_heading:(editing_has_heading ())) }
+            (slash_items ~statuses:[] ~priorities:[]
+              ~has_heading:(editing_has_heading ())) }
   | Page_ref | Page_embed | Tag_search | Embed_ref ->
       { ac with items = page_items_for t ac.kind ac.query }
   | Template_search -> { ac with items = template_items_for t ac.query }
@@ -1702,6 +1755,183 @@ let run_query t ac ~advanced =
           Outliner_ops.apply_parsed ~rest
             [ (quuid, title); (buuid, "") ])
 
+exception Unsupported_configured_input
+
+let configured_blank units text =
+  let rec blank index =
+    index = S.length text ||
+    let cp = Edit_model.decode_cp units text index in
+    ((cp >= 0x09 && cp <= 0x0D) || cp = 0x20 || cp = 0xA0 || cp = 0x1680
+     || (cp >= 0x2000 && cp <= 0x200A) || cp = 0x2028 || cp = 0x2029
+     || cp = 0x202F || cp = 0x205F || cp = 0x3000 || cp = 0xFEFF)
+    && blank (index + Edit_model.cp_len units text index) in
+  blank 0
+
+let configured_cjk cp =
+  (cp >= 0x3040 && cp <= 0x30FF) || (cp >= 0x3400 && cp <= 0x4DBF)
+  || (cp >= 0x4E00 && cp <= 0x9FFF) || (cp >= 0xF900 && cp <= 0xFAFF)
+  || (cp >= 0xFF66 && cp <= 0xFF9F)
+
+let configured_has_cjk units text =
+  let rec has index =
+    index < S.length text
+    && (configured_cjk (Edit_model.decode_cp units text index)
+        || has (index + Edit_model.cp_len units text index)) in
+  has 0
+
+let configured_concat ~units left right =
+  let horizontal = function ' ' | '\t' | '\r' -> true | _ -> false in
+  let end_ = ref (S.length left) and start = ref 0 in
+  while !end_ > 0 && horizontal left.[!end_ - 1] do decr end_ done;
+  while !start < S.length right && horizontal right.[!start] do incr start done;
+  let left = S.sub left 0 !end_ in
+  left ^ (if configured_blank units left || left.[S.length left - 1] = '\n' then "" else " ")
+    ^ S.sub right !start (S.length right - !start)
+
+let configured_last_index text pattern =
+  if pattern = "" then Some (S.length text) else
+  let rec find start found = match Str_util.index_from text start pattern with
+    | None -> found
+    | Some index -> find (index + 1) (Some index) in
+  find 0 None
+
+let configured_input ?(backward_pos = 0) ?(last_pattern = Some "/")
+    ?end_pattern ?backward_truncate_number ?(only_breakline = false)
+    ?(block_input = false) ?(at_block_start = false) ?(page_ref = false)
+    value (model : Edit_model.t) =
+  let text =
+    if block_input && not at_block_start && model.caret > 0
+       && model.source.[model.caret - 1] <> '\n'
+    then "\n" ^ value else value in
+  let rewind ?(truncate = false) text count =
+    match model.units with
+    | Edit_model.U16 -> max 0 (S.length text - count)
+    | Edit_model.Bytes ->
+        let rec back pos count =
+          if count <= 0 || pos = 0 then pos else
+          let prev = Edit_model.prev_cp model.units text pos in
+          let width = if Edit_model.decode_cp model.units text prev > 0xFFFF then 2 else 1 in
+          if truncate && count < width then raise Unsupported_configured_input;
+          back prev (count - width) in
+        back (S.length text) count in
+  let pos = match end_pattern with
+    | None -> model.caret
+    | Some pattern ->
+        Option.value (Str_util.index_from model.source model.caret pattern)
+          ~default:model.caret in
+  let last_pattern = if backward_truncate_number = None then last_pattern else None in
+  let prefix = S.sub model.source 0 pos in
+  let suffix = S.sub model.source pos (S.length model.source - pos) in
+  let index = Option.bind last_pattern (configured_last_index prefix) in
+  let cjk_adjacent =
+    page_ref && configured_has_cjk model.units text
+    && ((prefix <> "" && configured_cjk (Edit_model.decode_cp model.units prefix
+           (Edit_model.prev_cp model.units prefix (S.length prefix))))
+        || (suffix <> "" && configured_cjk (Edit_model.decode_cp model.units suffix 0))) in
+  let space = match last_pattern with
+    | None -> false
+    | Some pattern ->
+        not (cjk_adjacent || Str_util.starts_with pattern "::" || Str_util.ends_with pattern "::"
+             || Str_util.starts_with pattern "#[[" || Str_util.starts_with pattern "```"
+             || Option.fold ~none:false ~some:(fun index ->
+                  let before = S.sub prefix 0 index in
+                  (Str_util.ends_with before "("
+                   && (Str_util.starts_with pattern "((" || Str_util.starts_with pattern "[["))
+                  || Str_util.starts_with before "{{embed"
+                  || (Str_util.ends_with before "#" && Str_util.starts_with pattern "[[")) index) in
+  let concat left right = if space then configured_concat ~units:model.units left right else left ^ right in
+  let prefix = match backward_truncate_number with
+    | Some 0 -> prefix
+    | Some count -> S.sub prefix 0 (rewind ~truncate:true prefix count) ^ text
+    | None ->
+        (match last_pattern, index with
+         | None, _ -> prefix ^ text
+         | Some pattern, _ when configured_blank model.units pattern -> concat prefix text
+         | Some _, Some index -> concat (S.sub prefix 0 index) text
+         | Some _, None -> prefix) in
+  let suffix =
+    if only_breakline && Str_util.starts_with suffix "\n" then
+      S.sub suffix 1 (S.length suffix - 1)
+    else suffix in
+  let source = if configured_blank model.units suffix then prefix else concat prefix suffix in
+  let pos = rewind prefix backward_pos in
+  if not (configured_blank model.units text) && configured_blank model.units source then model else
+    Edit_model.select (Edit_model.splice model 0 (S.length model.source) source)
+      ~anchor:pos ~focus:pos
+
+let configured_steps ?(at_block_start = false) output =
+  let move direction count model =
+    let rec loop count model = if count <= 0 then model else
+      loop (count - 1) (Edit_model.move model direction ~extend:false) in
+    loop count model in
+  let input text fields =
+    let supported = List.for_all (function
+      | Wire.Keyword ("backward-pos" | "backward-truncate-number"), Wire.Int n -> n >= 0
+      | Wire.Keyword "last-pattern", (Wire.String _ | Wire.Keyword "skip-check")
+      | Wire.Keyword "end-pattern", Wire.String _
+      | Wire.Keyword "only-breakline?", Wire.Bool _
+      | Wire.Keyword ("type" | "command"), _
+      | Wire.Keyword ("backward-pos" | "backward-truncate-number" | "last-pattern"
+                      | "end-pattern" | "only-breakline?"), Wire.Nil -> true
+      | _ -> false) fields in
+    if not supported then None else
+    let options = Wire.Map fields in
+    let integer key = match Wire.get options key with
+      | Some (Wire.Int n) -> Some n | _ -> None in
+    let last_pattern = match Wire.get options "last-pattern" with
+      | Some (Wire.Keyword "skip-check") -> None
+      | Some (Wire.String pattern) -> Some pattern
+      | _ -> Some "/" in
+    let end_pattern = match Wire.get options "end-pattern" with
+      | Some (Wire.String pattern) -> Some pattern | _ -> None in
+    Some (configured_input ~last_pattern ?end_pattern
+      ?backward_pos:(integer "backward-pos")
+      ?backward_truncate_number:(integer "backward-truncate-number")
+      ~at_block_start
+      ~block_input:(match Wire.get options "type" with
+        | Some (Wire.String ("block" | "properties")) -> true | _ -> false)
+      ~page_ref:(Wire.get options "command" = Some (Wire.Keyword "page-ref"))
+      ~only_breakline:(Wire.get options "only-breakline?" = Some (Wire.Bool true)) text) in
+  let step = function
+    | Wire.Array [Wire.Keyword "editor/input"; Wire.String text]
+    | Wire.Array [Wire.Keyword "editor/input"; Wire.String text; Wire.Nil] ->
+        Some (configured_input text)
+    | Wire.Array [Wire.Keyword "editor/input"; Wire.String text; Wire.Map fields] ->
+        input text fields
+    | Wire.Array [Wire.Keyword "editor/cursor-back"; Wire.Int count] when count >= 0 ->
+        Some (move Edit_model.Left count)
+    | Wire.Array [Wire.Keyword "editor/cursor-forward"; Wire.Int count] when count >= 0 ->
+        Some (move Edit_model.Right count)
+    | Wire.Array [Wire.Keyword "editor/move-cursor-to-end"] ->
+        Some (move Edit_model.Doc_end 1)
+    | Wire.Array [Wire.Keyword "editor/clear-current-slash"]
+    | Wire.Array [Wire.Keyword "editor/clear-current-slash"; Wire.Bool false]
+    | Wire.Array [Wire.Keyword "editor/clear-current-slash"; Wire.Nil] ->
+        Some (fun (model : Edit_model.t) ->
+          let prefix = S.sub model.source 0 model.caret in
+          match S.rindex_opt prefix '/' with
+          | None -> model
+          | Some index -> Edit_model.select (Edit_model.splice model index model.caret "")
+              ~anchor:index ~focus:index)
+    | Wire.Array [Wire.Keyword "editor/clear-current-slash"; Wire.Bool true] ->
+        Some (fun (model : Edit_model.t) ->
+          let prefix = S.sub model.source 0 model.caret in
+          match S.rindex_opt prefix '/' with
+          | None -> model
+          | Some index ->
+              let prefix = configured_concat ~units:model.units (S.sub prefix 0 index) "" in
+              let suffix = S.sub model.source model.caret (S.length model.source - model.caret) in
+              Edit_model.select (Edit_model.splice model 0 (S.length model.source) (prefix ^ suffix))
+                ~anchor:(S.length prefix) ~focus:(S.length prefix))
+    | _ -> None in
+  match output with
+  | Wire.String text -> Some [configured_input text]
+  | Wire.Array steps ->
+      List.fold_right (fun value result -> match step value, result with
+        | Some step, Some steps -> Some (step :: steps)
+        | _ -> None) steps (Some [])
+  | _ -> None
+
 let apply_item t ac ~meta it =
   let draft_allowed = match it.ai_act with
     | Emit _ | Noop -> true
@@ -1709,6 +1939,23 @@ let apply_item t ac ~meta it =
     | _ -> false in
   if not (ac_current ac) || (draft_editing () && not draft_allowed) then close_ac t else
   match it.ai_act with
+  | Configured output ->
+      let unsupported () =
+        Toast.error (U.t1 "editor.slash/unsupported-configured-command-error" it.ai_label) in
+      (match configured_steps ~at_block_start:(ac.tpos = 0) output with
+       | None -> unsupported ()
+       | Some steps -> (try
+           let before = Option.map (fun model -> model.Edit_model.source)
+               (Editor_actions.edit_model ac.auuid) in
+           Editor_actions.update_model ac.auuid (fun model ->
+             List.fold_left (fun model step -> step model) model steps);
+           Option.iter (fun model ->
+               if before <> Some model.Edit_model.source then
+                 Outliner_ops.schedule_save ac.auuid model.Edit_model.source)
+             (Editor_actions.edit_model ac.auuid);
+           close_ac t;
+           Editor_sink.focus_input ac.auuid
+           with Unsupported_configured_input -> unsupported ()))
   | Switch kind ->
       invalidate_ac t;
       erase_trigger_text ac;
@@ -1857,27 +2104,24 @@ let ac_keydown t ev =
         close_ac t;
         false)
       else (
-        match ev.Ui_services.key with
-        | Some "ArrowDown" -> move_chosen t 1; true
-        | Some "ArrowUp" -> move_chosen t (-1); true
-        (* cljs binds ctrl+n/ctrl+p alongside the arrows *)
-        | Some "n" when ev.Ui_services.ctrl -> move_chosen t 1; true
-        | Some "p" when ev.Ui_services.ctrl -> move_chosen t (-1); true
+        match Keymap_data.match_event ac_keys
+            ~ids:["auto-complete/next"; "auto-complete/prev"; "auto-complete/complete";
+              "auto-complete/meta-complete"; "auto-complete/shift-complete"] ev with
+        | Keymap_data.Command "auto-complete/next" -> move_chosen t 1; true
+        | Keymap_data.Command "auto-complete/prev" -> move_chosen t (-1); true
         (* cljs enter/meta-complete/shift-complete: apply the chosen
            item — mod+enter inlines a tag — or the kind's on-enter when
            no item matched. shift+enter shares enter: no AC supplies
            on-shift-chosen. Tab is NOT an ac binding on master
            (:editor/indent) — it falls through to the editor keymap *)
-        | Some "Enter" -> (
-            let inline =
-              if Ui_services.env_is_mac () then ev.Ui_services.meta
-              else ev.Ui_services.ctrl
-            in
+        | Keymap_data.Command command -> (
+            let inline = command = "auto-complete/meta-complete" in
             (match List.nth_opt ac.items ac.chosen with
              | Some it -> apply_item t ac ~meta:inline it
              | None -> ac_on_enter t ac);
             true)
-        | Some "Escape" ->
+        | Keymap_data.Prefix -> true
+        | Keymap_data.No_match when ev.Ui_services.key = Some "Escape" ->
             (* cljs: Escape only dismisses the popup — the block stays
                in edit mode (the editor's own Escape exits editing on
                the next press) *)

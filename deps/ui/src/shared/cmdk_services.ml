@@ -71,6 +71,7 @@ type t =
     (* -- host facts -------------------------------------------------- *)
     publishing : unit -> bool
   ; is_mac : unit -> bool
+  ; matches_shortcut : string -> key_ev -> bool
   ; dev_build : unit -> bool
   ; random : unit -> float
   ; now_ms : unit -> float
@@ -82,6 +83,7 @@ type t =
     (* -- dates -------------------------------------------------------- *)
   ; today_journal_day : unit -> int (* yyyymmdd *)
   ; rel_journal_day : int -> int (* today + delta days *)
+  ; shift_journal_day : int -> int -> int
   ; journal_title_of_day : int -> string (* page title for a yyyymmdd day *)
     (* -- model reads --------------------------------------------------- *)
   ; repo : unit -> string option
@@ -148,11 +150,14 @@ type t =
   ; dialogs_is_open : string -> bool
   ; settings_open_at : string -> unit
   ; settings_toggle_wide : unit -> unit
+  ; settings_toggle_document : unit -> unit
+  ; settings_toggle_recent : unit -> unit
   ; settings_toggle_theme : unit -> unit
   ; config_toggle : string -> bool -> unit
     (* -- sidebar --------------------------------------------------------------- *)
   ; sidebar_add_search : string -> unit
   ; sidebar_open_uuid : string -> unit
+  ; sidebar_open_today : unit -> unit
   ; sidebar_open_uuids : string list -> unit (* right-open + open each *)
   ; sidebar_clear : unit -> unit
   ; sidebar_close_top : unit -> unit
@@ -166,6 +171,9 @@ type t =
   ; clear_selection : unit -> unit
   ; select_all : unit -> unit
   ; copy_selection : unit -> unit
+  ; copy_selection_text : unit -> unit
+  ; cut_selection : unit -> unit
+  ; editor_command : string -> unit
   ; delete_selection : unit -> unit
   ; extend_selection : bool -> unit
   ; move_selection_focus : bool -> unit
@@ -189,4 +197,9 @@ type t =
   ; rtc_start : string -> unit
   ; rtc_stop : unit -> unit
   ; export_graph_html : unit -> unit
+  ; publish_page : unit -> unit
+  ; clear_notifications : unit -> unit
+  ; export_data : string -> string option -> unit
+  ; import_data : unit -> unit
+  ; show_data : string -> string option -> unit
   }

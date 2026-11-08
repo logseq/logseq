@@ -45,6 +45,31 @@ let unescape_published s =
     [ "logseq____&amp;", "&"; "logseq____&lt;", "<"; "logseq____&gt;", ">"
     ; "logseq____&quot;", "\""; "logseq____&apos;", "\'" ]
 
+let install_pdf_shortcuts () =
+  let keys = Keymap_data.chord () in
+  Ui_services.dom_on_document_event "keydown" (fun ev ->
+    let input = Option.fold ~none:false ~some:(fun target ->
+        target.Ui_services.closest "input, textarea, select, [contenteditable]" <> None)
+        ev.Ui_services.target in
+    match !Pdf_state.active_viewer with
+    | None -> Keymap_data.reset_chord keys
+    | Some _ when input || Editor_state.editing () <> None -> Keymap_data.reset_chord keys
+    | Some viewer ->
+        let command = Keymap_data.match_event keys
+          ~ids:["pdf/previous-page"; "pdf/next-page"; "pdf/close"; "pdf/find"] ev in
+        let consume () = ev.Ui_services.prevent_default (); ev.Ui_services.stop_immediate () in
+        match command with
+        | Keymap_data.No_match -> ()
+        | Keymap_data.Prefix -> consume ()
+        | Keymap_data.Command id ->
+            consume ();
+            match id with
+            | "pdf/previous-page" -> Pdf_utils.previous_page viewer
+            | "pdf/next-page" -> Pdf_utils.next_page viewer
+            | "pdf/close" -> Pdf_state.set_current None
+            | "pdf/find" -> Option.iter Pdf_toolbar.toggle_finder !Pdf_toolbar.cur
+            | _ -> assert false)
+
 let main root =
   Platform_web.install ~request_flush:Runtime.flush ~dom:Ui_dom_web.ops ~timers:Ui_dom_web.timers ~files:Ui_dom_web.files;
   Keyboard_capture.install ();
@@ -254,6 +279,7 @@ let main root =
     Runtime.send (Action.Boot_graph_ready (repo,config));
     Router.resolve ();
     Js.Promise.resolve ());
+  install_pdf_shortcuts ();
   ignore (Boot.run ())
 
 (* gate first render on the active locale: non-English dicts arrive as

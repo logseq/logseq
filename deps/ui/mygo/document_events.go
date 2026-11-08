@@ -19,6 +19,8 @@ type DocumentDispatch func(name, payload string) bool
 type DocumentEvents struct {
 	// Observe sees the actual retained target before document default handling.
 	Observe func(ui.InputEvent, luimygo.InputNode)
+	// Measure publishes committed hit ancestry before pointer capture runs.
+	Measure func(int64, ui.Rect) bool
 	// Pointer routes editor gestures after unprevented document capture and
 	// before MyGo target delivery. A zero target still allows active drags.
 	Pointer               func(ev ui.InputEvent, target int64) bool
@@ -90,6 +92,20 @@ func (d *DocumentEvents) send(c *ui.Context, target luimygo.InputNode, name stri
 
 func (d *DocumentEvents) input(c *ui.Context, ev ui.InputEvent, host ui.InputTarget) bool {
 	target, _ := d.backend.InputNode(host)
+	if d.Measure != nil && (ev.Kind == ui.InputPointerDown || ev.Kind == ui.InputPointerMove || ev.Kind == ui.InputPointerUp) {
+		for id := target.Node.ID; id != 0; {
+			node, ok := d.backend.Node(id)
+			if !ok {
+				break
+			}
+			if rect, ok := d.backend.Bounds(c, id); ok {
+				if !d.Measure(id, rect) {
+					return true
+				}
+			}
+			id = node.Parent
+		}
+	}
 	if d.Observe != nil {
 		d.Observe(ev, target)
 	}

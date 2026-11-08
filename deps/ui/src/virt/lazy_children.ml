@@ -27,6 +27,12 @@ type mounted_projection =
 
 let mounted_projections : mounted_projection list ref = ref []
 
+let all_mounted_uuids ctx =
+  List.fold_left (fun uuids projection ->
+      if projection.scheduler == ctx.Lui_ui.ui_scheduler then
+        Mounted_uuids.union uuids projection.mounted else uuids)
+    Mounted_uuids.empty !mounted_projections |> Mounted_uuids.elements
+
 let retain_mounted ctx scope =
   let projection =
     match List.find_opt (fun p ->

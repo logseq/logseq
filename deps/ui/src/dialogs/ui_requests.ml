@@ -5,6 +5,7 @@
    {:supported? false} on web; anything else is rejected. *)
 
 open Lui_elements
+open Promise_ext
 
 let if_ = Lui_elements.if_
 
@@ -13,10 +14,10 @@ let resolve id result =
     (Runtime.invoke2 "thread-api/resolve-ui-request" (Wire.String id)
        result)
 
-let reject id =
+let reject ?(payload = Wire.Map [ (Wire.kw "code", Wire.kw "ui-request-rejected") ]) id =
   ignore
     (Runtime.invoke2 "thread-api/reject-ui-request" (Wire.String id)
-       (Wire.Map [ (Wire.kw "code", Wire.kw "ui-request-rejected") ]))
+       payload)
 
 let handle (w : Wire.t) =
   match
@@ -41,7 +42,17 @@ let handle (w : Wire.t) =
             }
       | "native-save-e2ee-password" | "native-get-e2ee-password"
       | "native-delete-e2ee-password" ->
-          resolve id (Wire.Map [ (Wire.kw "supported?", Wire.Bool false) ])
+          let payload = match Wire.get w "payload" with
+            | Some payload -> payload
+            | None -> invalid_arg "Missing keychain request payload" in
+          (let* result = Platform.keychain_request action payload in
+           resolve id result;
+           Js.Promise.resolve ())
+          |> Js.Promise.catch (fun _ ->
+               reject ~payload:(Wire.Map
+                 [ Wire.kw "code", Wire.String "db-sync/keychain-error" ]) id;
+               Js.Promise.resolve ())
+          |> ignore
       | _ -> reject id)
   | _ -> ()
 

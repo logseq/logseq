@@ -833,7 +833,16 @@ let sidebar ~(services : Svs.t) ~query : t =
 let handle_keydown st (ev : Svs.key_ev) : Svs.key_answer =
   let v = S.get st in
   let no = { Svs.prevent = false; stop = false } in
-  if v.S.open_ then
+  let matches = st.S.svs.Svs.matches_shortcut in
+  if matches "go/search" ev || matches "command-palette/toggle" ev then begin
+    if v.S.open_ then S.close st
+    else if matches "command-palette/toggle" ev then S.open_commands st
+    else S.open_palette st;
+    { Svs.prevent = true; stop = true }
+  end else if not v.S.open_ && matches "editor/move-blocks" ev then begin
+    S.open_palette ~move:true st;
+    { Svs.prevent = true; stop = true }
+  end else if v.S.open_ then
     match ev.Svs.key with
     | "Escape" ->
         if S.clear_or_close st then { Svs.prevent = true; stop = true }
@@ -877,24 +886,8 @@ let handle_keydown st (ev : Svs.key_ev) : Svs.key_answer =
     | "c" when (ev.Svs.meta || ev.Svs.ctrl) && not (ev.Svs.shift || ev.Svs.alt) ->
         if S.copy_highlighted_ref st then { Svs.prevent = true; stop = true }
         else no
-    | "k" when ev.Svs.meta || ev.Svs.ctrl ->
-        S.close st;
-        { Svs.prevent = true; stop = false }
     | _ -> no
-  else
-    match ev.Svs.key with
-    | "k"
-      when (ev.Svs.meta || ev.Svs.ctrl)
-           && not (ev.Svs.shift || ev.Svs.alt) ->
-        S.open_palette st;
-        { Svs.prevent = true; stop = false }
-    | "m"
-      when (ev.Svs.meta || ev.Svs.ctrl)
-           && ev.Svs.shift ->
-        (* cljs mod+shift+m -> editor/move-blocks -> cmdk move mode *)
-        S.open_palette ~move:true st;
-        { Svs.prevent = true; stop = false }
-    | _ -> no
+  else no
 
 let handle_click st (ev : Svs.click_ev) =
   (* The retained search button owns its press. Opening here as well

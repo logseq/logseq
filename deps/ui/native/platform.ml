@@ -1,6 +1,23 @@
 let published_db : string option = None
 let published_state : string option = None
 let publishing () = false
+let desktop = true
+
+let global_config_contents () =
+  let path =
+    Filename.concat (Filename.concat (Daemon_client.home ()) ".logseq")
+      "config/config.edn" in
+  let file =
+    try Some (Unix.stat path) with
+    | Unix.Unix_error (Unix.ENOENT, _, _) -> None
+    | Unix.Unix_error (error, _, _) ->
+        raise (Sys_error (Unix.error_message error)) in
+  match file with
+  | Some { Unix.st_kind = Unix.S_REG; _ } ->
+    Js.Promise.resolve
+      (Some (In_channel.with_open_bin path In_channel.input_all))
+  | Some _ -> raise (Sys_error "Global configuration is not a regular file")
+  | None -> Js.Promise.resolve None
 
 (* Native twin of core/platform.ml — same surface, DOM effects replaced
    by in-memory host state + platform requests to the native host.
@@ -16,6 +33,127 @@ let publishing () = false
 open Promise_ext
 
 include Platform_native
+
+let keychain_sequence = ref 0
+let keychain_pending :
+    (string, string * (string option -> unit) * (exn -> unit)) Hashtbl.t = Hashtbl.create 4
+
+let secret_operation ~operation ~service ~account ?value () =
+  incr keychain_sequence;
+  let id = string_of_int !keychain_sequence in
+  Js.Promise.make (fun ~resolve ~reject ->
+      Hashtbl.add keychain_pending id (operation, resolve, reject);
+      let fields =
+        [ "request-id", `String id; "operation", `String operation;
+          "service", `String service; "account", `String account ]
+        @ (match value with Some v -> [ "value", `String v ] | None -> [])
+      in
+      try request_host "keychain" (Yojson.Safe.to_string (`Assoc fields))
+      with error -> Hashtbl.remove keychain_pending id; reject error)
+
+let note_keychain_result json =
+  let fields = match json with
+    | `Assoc fields -> fields
+    | _ -> invalid_arg "Invalid keychain result" in
+  let string name = match List.assoc_opt name fields with
+    | Some (`String value) -> value
+    | _ -> invalid_arg "Invalid keychain result field" in
+  let id = string "request-id" in
+  Host.enqueue (fun () ->
+    match Hashtbl.find_opt keychain_pending id with
+    | None -> invalid_arg "Unknown keychain request"
+    | Some (operation, resolve, reject) ->
+        Hashtbl.remove keychain_pending id;
+        try match string "status" with
+        | "ok" -> resolve (match operation, List.assoc_opt "value" fields with
+            | "get", Some (`String value) -> Some value
+            | ("set" | "delete"), None -> None
+            | _ -> invalid_arg "Invalid keychain value")
+        | "not-found" when operation = "get" || operation = "delete" -> resolve None
+        | "unsupported" -> reject (Credential_storage_error "OS keychain is unavailable")
+        | "error" -> reject (Credential_storage_error "OS keychain operation failed")
+        | "invalid-data" -> reject (Credential_storage_error "OS keychain data is invalid")
+        | _ -> invalid_arg "Unknown keychain result status"
+        with error -> reject error)
+
+let cancel_keychain_requests () =
+  let pending = Hashtbl.fold (fun _ (_, _, reject) acc -> reject :: acc) keychain_pending [] in
+  Hashtbl.clear keychain_pending;
+  List.iter (fun reject -> reject (Failure "Keychain host disconnected")) pending
+
+(* Electron's distributed resources/package.json names the app Logseq. *)
+let keychain_service = "Logseq E2EE"
+let auth_account = "logseq-auth"
+let auth_service = "Logseq"
+
+let keychain_request action payload =
+  let account = match Wire.map_get_string payload "key" with
+    | Some "logseq-encrypted-password" as key -> Option.get key
+    | _ -> invalid_arg "Invalid E2EE keychain account" in
+  let operation, value = match action with
+    | "native-get-e2ee-password" -> "get", None
+    | "native-delete-e2ee-password" -> "delete", None
+    | "native-save-e2ee-password" ->
+        "set", Some (match Wire.map_get_string payload "encrypted-text" with
+          | Some text -> text
+          | None -> invalid_arg "Missing encrypted E2EE password")
+    | _ -> invalid_arg "Invalid E2EE keychain operation" in
+  let* text = secret_operation ~operation ~service:keychain_service ~account ?value () in
+  Js.Promise.resolve (Wire.Map
+    [ Wire.kw "supported?", Wire.Bool true;
+      Wire.kw "encrypted-text", (match text with Some s -> Wire.String s | None -> Wire.Nil) ])
+
+let auth_json tokens = `Assoc (List.map (fun (key, value) -> key, `String value) tokens)
+
+let restore_auth () =
+  (let* stored = secret_operation ~operation:"get" ~service:auth_service
+      ~account:auth_account () in
+  load_state ();
+  let* tokens = match stored with
+    | Some text -> Js.Promise.resolve (parse_auth_record text)
+    | None ->
+        let tokens = legacy_auth_tokens () in
+        if tokens = [] then Js.Promise.resolve []
+        else
+          let* _ = secret_operation ~operation:"set" ~service:auth_service ~account:auth_account
+              ~value:(Yojson.Safe.to_string (auth_json tokens)) () in
+          Js.Promise.resolve tokens in
+  auth_managed := stored <> None || tokens <> []
+    || not (List.exists (Hashtbl.mem ls) auth_token_keys);
+  (* Only remove the old native plaintext after the atomic system-store write. *)
+  if !auth_managed then begin
+    if List.exists (Hashtbl.mem ls) auth_token_keys then save_state_strict ();
+    List.iter (Hashtbl.remove ls) auth_token_keys
+  end;
+  auth_tokens := tokens;
+  Js.Promise.resolve (Ok ()))
+  |> Js.Promise.catch (function
+    | Credential_storage_error _ | Incompatible_auth_record
+    | Unix.Unix_error _ | Sys_error _ -> Js.Promise.resolve (Error ())
+    | error -> Js.Promise.reject error)
+
+let save_auth_tokens id access refresh =
+  let tokens = auth_tokens_of_json (auth_json
+    [ "id-token", id; "access-token", access; "refresh-token", refresh ]) in
+  let* _ = secret_operation ~operation:"set" ~service:auth_service ~account:auth_account
+      ~value:(Yojson.Safe.to_string (auth_json tokens)) () in
+  auth_managed := true;
+  if List.exists (Hashtbl.mem ls) auth_token_keys then save_state_strict ();
+  List.iter (Hashtbl.remove ls) auth_token_keys;
+  auth_tokens := tokens;
+  Js.Promise.resolve ()
+
+let clear_auth_tokens () =
+  let* () = Js.Promise.resolve () in
+  auth_managed := true;
+  save_state_strict ();
+  let* _ = secret_operation ~operation:"delete" ~service:keychain_service
+      ~account:"logseq-encrypted-password" () in
+  let* _ = secret_operation ~operation:"delete" ~service:auth_service
+      ~account:auth_account () in
+  List.iter (Hashtbl.remove ls) auth_token_keys;
+  auth_tokens := [];
+  Js.Promise.resolve ()
 
 (* Native resources are local UTF-8 files and finish loading before any
    view is constructed. Parsing and locale caching remain shared. *)
