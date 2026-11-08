@@ -261,11 +261,11 @@ let finish_drag uuid w =
    .ls-resize-image offsetWidth, live-updates the img width attr on move
    and writes logseq.property.asset/resize-metadata {:width} on end *)
 let start_drag ~side ~uuid ~start_x =
-  match B.query_selector ("#ls-block-" ^ uuid) with
+  match B.query_selector ("#asset-resize-" ^ uuid) with
   | None -> ()
-  | Some row -> (
-      match B.el_query row ".ls-resize-image", B.el_query row "img" with
-      | Some box, Some img ->
+  | Some box -> (
+      match B.el_query box "img" with
+      | Some img ->
           let start_w = B.el_offset_width box in
           B.doc_add_class "is-resizing-buf";
           let rec on_move ev =
@@ -524,6 +524,7 @@ let image_block uuid (b : Model.block) : t =
   box ~key:("ri-" ^ uuid) 
     [ (* ls-resize-image is an imperative query handle (start_drag) *)
       box ~key:("rim-" ^ uuid) ~corner_radius:6
+        ~accessibility_identifier:("asset-resize-" ^ uuid)
         ~style_class:"ls-resize-image"
         (asset_container uuid b ::
          if Ui_services.env_publishing () then []
