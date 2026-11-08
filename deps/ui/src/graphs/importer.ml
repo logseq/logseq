@@ -49,7 +49,8 @@ let ask_name_and_run ?(restored=false) run =
 let import_sqlite_db repo (file : Ui_services.file) =
   let* buf = promise_of (file.Ui_services.file_binary ()) in
   let* _ =
-    (Runtime.invoke2 "thread-api/import-db-binary"
+    Editor_actions.after_pending_input (fun () ->
+     Runtime.invoke2 "thread-api/import-db-binary"
        (Wire.String repo)
        (Wire.Binary buf))
   in
@@ -294,8 +295,9 @@ let import_sqlite_zip repo (file : Ui_services.file) =
   | Some entry -> (
       let* sqlite = zip_entry_data buf entry in
       let* _ =
-        Runtime.invoke2 "thread-api/import-db-binary" (Wire.String repo)
-          (Wire.Binary sqlite)
+        Editor_actions.after_pending_input (fun () ->
+          Runtime.invoke2 "thread-api/import-db-binary" (Wire.String repo)
+            (Wire.Binary sqlite))
       in
       let assets = List.filter asset_zip_entry es in
       let* copied, failed = copy_zip_assets repo buf assets 0 [] in
@@ -313,10 +315,11 @@ let import_sqlite_zip repo (file : Ui_services.file) =
 let import_debug_transit repo (file : Ui_services.file) =
   let* raw = promise_of (file.Ui_services.file_text ()) in
   let* _ =
+    Editor_actions.after_pending_input (fun () ->
     Runtime.invoke2 "thread-api/create-or-open-db" (Wire.String repo)
       (Wire.Map
          [ (Wire.kw "import-type", Wire.Keyword "debug-transit")
-         ; (Wire.kw "debug-transit-raw", Wire.String raw) ])
+         ; (Wire.kw "debug-transit-raw", Wire.String raw) ]))
   in
   Js.Promise.resolve true
 

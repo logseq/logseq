@@ -178,7 +178,8 @@ let create_remote name e2ee =
    the same *)
 let download_remote ~name ~uuid ~e2ee =
   let repo = Graph.full_graph_name name in
-  let* ok = Rtc_ops.download repo uuid e2ee in
+  let* ok = Editor_actions.after_pending_input (fun () ->
+      Rtc_ops.download repo uuid e2ee) in
   if not ok then Js.Promise.resolve ()
   else begin
     let* _ = list_remote_graphs () in
