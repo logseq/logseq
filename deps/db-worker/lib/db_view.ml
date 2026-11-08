@@ -2930,7 +2930,7 @@ let linked_refs_window db (id : entity_id) ~limit : entity list * int =
             datoms db Eavt ~e:d.e ~a:"block/page" ()
             |> Seq.exists (fun (page : datom) ->
                    match entid page.v with
-                   | Some pid -> Int_set.mem pid page_ids
+                   | Some owner_page_id -> Int_set.mem owner_page_id page_ids
                    | None -> false)
           in
           if not on_own_page then begin
