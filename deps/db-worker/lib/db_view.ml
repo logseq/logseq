@@ -476,6 +476,7 @@ let expand_to_top_refs db (top_ref_ids : entity_id list)
    checks — no per-ref entity materialization. *)
 let linked_reference_top_block_ids db (ids : entity_id list)
     (class_ids : entity_id list) : entity_id list =
+  let page_ids = Int_set.of_list ids in
   let hidden_eid = hidden_eid_pred db in
   List.concat_map
     (fun pid ->
@@ -493,7 +494,8 @@ let linked_reference_top_block_ids db (ids : entity_id list)
               else if d.a = "block/page" && !page = None then
                 page := entid d.v);
          not
-           ((class_ids <> []
+           ((match !page with Some pid -> Int_set.mem pid page_ids | None -> false)
+            || (class_ids <> []
              && List.exists (fun t -> List.mem t class_ids) !tags)
             || hidden_eid (Some rid)
             || hidden_eid !page))
@@ -2887,13 +2889,14 @@ let get_query_properties db (query : Wire.t option) (entities : entity list) :
        Some (Wire.Array (List.map (fun a -> Wire.Keyword a) keys)))
 
 (* First [limit] visible linked-reference blocks, plus a raw avet count
-   of every block/refs datom (aliases included). The hidden/page/tags
-   check is one eavt slice per candidate and stops once the window is
-   full; the tail is only counted. Filters, search, and a missing
+   of external block/refs datoms (aliases included). Same-page exclusion
+   uses a bounded block/page seek; the hidden/page/tags check stops once
+   the window is full. Filters, search, and a missing
    row-limit stay on get_linked_references so they keep global order. *)
 let linked_refs_window db (id : entity_id) ~limit : entity list * int =
   let entity = Ldb.ent_of_id db id in
   let ids = dedupe_ids (id :: get_block_alias db id) in
+  let page_ids = Int_set.of_list ids in
   let class_ids =
     match entity with
     | Some e when Ldb.is_class e ->
@@ -2923,14 +2926,23 @@ let linked_refs_window db (id : entity_id) ~limit : entity list * int =
     (fun pid ->
       Seq.iter
         (fun (d : datom) ->
-          incr total;
-          if !ntake < limit && not (Hashtbl.mem seen d.e) then
-            if passes d.e then begin
-              Hashtbl.add seen d.e ();
-              taken := d.e :: !taken;
-              incr ntake
-            end
-            else Hashtbl.add seen d.e ())
+          let on_own_page =
+            datoms db Eavt ~e:d.e ~a:"block/page" ()
+            |> Seq.exists (fun (page : datom) ->
+                   match entid page.v with
+                   | Some pid -> Int_set.mem pid page_ids
+                   | None -> false)
+          in
+          if not on_own_page then begin
+            incr total;
+            if !ntake < limit && not (Hashtbl.mem seen d.e) then
+              if passes d.e then begin
+                Hashtbl.add seen d.e ();
+                taken := d.e :: !taken;
+                incr ntake
+              end
+              else Hashtbl.add seen d.e ()
+          end)
         (datoms db Avet ~a:"block/refs" ~v:(Ref pid) ()))
     ids;
   let ents = List.filter_map (Ldb.ent_of_id db) (List.rev !taken) in

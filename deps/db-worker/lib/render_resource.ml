@@ -575,6 +575,9 @@ let unlinked_reference_exists db repo (id : entity_id) : bool =
   match Ldb.ent_of_id db id with
   | None -> false
   | Some block ->
+      let page_ids =
+        Db_reference.IdSet.of_list (id :: Db_view.get_block_alias_ids db id)
+      in
       let title =
         Unicode.lowercase
           (Option.value (Ldb.string_value block "block/title") ~default:"")
@@ -587,7 +590,11 @@ let unlinked_reference_exists db repo (id : entity_id) : bool =
             | Some c -> c
             | None -> cand
           in
-          cand.id <> id
+          not (Db_reference.IdSet.mem cand.id page_ids)
+          && not
+               (List.exists
+                  (fun pid -> Db_reference.IdSet.mem pid page_ids)
+                  (Ldb.ref_ids cand "block/page"))
           && not (List.mem id (Ldb.ref_ids cand "block/refs"))
           && (match Ldb.string_value cand "block/title" with
               | Some t ->

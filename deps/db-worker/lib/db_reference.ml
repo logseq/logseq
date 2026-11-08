@@ -336,6 +336,7 @@ let hidden_eid_pred db : entity_id option -> bool =
    ancestor walk for hidden — no per-ref entity materialization. *)
 let linked_reference_top_block_ids db (ids : entity_id list)
     (class_ids : entity_id list option) : IdSet.t =
+  let page_ids = IdSet.of_list ids in
   let hidden_eid = hidden_eid_pred db in
   List.concat_map
     (fun pid ->
@@ -355,7 +356,10 @@ let linked_reference_top_block_ids db (ids : entity_id list)
          match class_ids with
          | Some cids when List.exists (fun cid -> List.mem cid !tags) cids ->
              false
-         | _ -> not (hidden_eid (Some rid) || hidden_eid !page))
+         | _ ->
+             not
+               ((match !page with Some pid -> IdSet.mem pid page_ids | None -> false)
+                || hidden_eid (Some rid) || hidden_eid !page))
   |> List.fold_left (fun s eid -> IdSet.add eid s) IdSet.empty
 
 type linked_references =
