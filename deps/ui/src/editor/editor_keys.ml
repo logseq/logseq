@@ -629,6 +629,8 @@ let stroke_of ev =
    while editing, non-editor commands still fire (global-prevent-default)
    except the non-editing-only set *)
 let chord_may_run editing cid =
+  if editing && (cid = "editor/copy" || cid = "editor/cut") then false
+  else
   match Keymap_data.command_handler cid with
   | Some "block-editing-only" -> Option.is_some (S.editing ())
   | Some "global-non-editing-only" -> not editing
