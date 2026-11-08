@@ -30,6 +30,10 @@ let owner_source () = (platform_env ()).owner_source
 let capacitor_runtime () =
   browser_runtime () && String.equal (owner_source ()) "capacitor"
 
+let native_desktop_runtime () =
+  Runtime_env.kind () = Runtime_env.Native
+  && String.equal (owner_source ()) "electron"
+
 let interactive_runtime () =
   let env = platform_env () in
   String.equal env.runtime "browser"

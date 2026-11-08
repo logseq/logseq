@@ -57,6 +57,7 @@
  :account/show-email-address "显示邮箱地址"
  :account/sign-in "登录"
  :account/sign-out "退出登录"
+ :account/sign-out-error "无法退出登录。你的会话尚未清除。"
  :account/sign-up "注册"
  :account/sync-assets-limit "同步附件单个文件最大 100MB"
  :account/synced-status "已同步"

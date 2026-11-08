@@ -57,6 +57,7 @@
  :account/show-email-address "Show email address"
  :account/sign-in "Sign In"
  :account/sign-out "Sign Out"
+ :account/sign-out-error "Could not sign out. Your session has not been cleared."
  :account/sign-up "Sign up"
  :account/sync-assets-limit "Sync assets up to 100MB per file"
  :account/synced-status "Synced"

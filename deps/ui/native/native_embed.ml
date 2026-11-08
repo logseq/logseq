@@ -701,7 +701,11 @@ let platform_event payload =
       let json =
         try Js.Json.parseExn body with _ -> Js.Json.JObject []
       in
-      if name = "clipboard-write-result" then
+      if name = "keychain-result" then
+        let json = try Yojson.Safe.from_string body
+          with Yojson.Json_error _ -> invalid_arg "Invalid keychain result encoding" in
+        Platform.note_keychain_result json
+      else if name = "clipboard-write-result" then
         Platform.note_clipboard_write (Yojson.Safe.from_string body)
       else if name = "window-close-request" then
         Host.enqueue (fun () ->
@@ -810,6 +814,7 @@ let dispose () =
   with_entry_lock (fun () ->
     Editor_actions.cancel_clipboard_actions ();
     Platform.cancel_clipboard_writes ();
+    Platform.cancel_keychain_requests ();
     Host.set_host_op Host.disconnected;
     Queue.clear pending_batches;
     (match !current_app with

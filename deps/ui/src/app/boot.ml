@@ -110,7 +110,8 @@ let run () =
   Worker_events.init ();
   Runtime.worker := Some w;
   (if Ui_services.env_publishing () then !published_boot () else
-  (let* () = Graph.init_worker () in
+  (let* () = Platform.restore_auth () in
+  let* () = Graph.init_worker () in
   let* repos = Graph.list_graphs () in
   boot_mark "list_graphs";
   let* repo =

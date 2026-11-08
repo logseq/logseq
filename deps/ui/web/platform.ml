@@ -4,6 +4,12 @@
 
 let ( let* ) promise f = Js.Promise.then_ f promise
 
+let keychain_request _action _payload =
+  Js.Promise.resolve (Wire.Map [ Wire.kw "supported?", Wire.Bool false ])
+
+let restore_auth () = Js.Promise.resolve ()
+
+
 type loc
 
 external published_db : string option = "logseq_db"
@@ -66,6 +72,16 @@ let local_storage_set k v =
 
 let local_storage_remove k =
   match local_storage_obj with Some s -> ls_remove_item s k | None -> ()
+
+let save_auth_tokens id access refresh =
+  Ui_services.storage_set "id-token" id;
+  Ui_services.storage_set "access-token" access;
+  if refresh <> "" then Ui_services.storage_set "refresh-token" refresh;
+  Js.Promise.resolve ()
+
+let clear_auth_tokens () =
+  List.iter Ui_services.storage_remove [ "id-token"; "access-token"; "refresh-token" ];
+  Js.Promise.resolve ()
 
 (* cljs storage.cljs reads with reader/read-string and writes pr-str,
    so cljs-stored strings appear double-quoted ("\"en\""). Strip/add
