@@ -82,7 +82,7 @@ let selector ~remove (ms : Model.t Signal.signal) : t = fun ctx parent ->
                  Ui_components.button ~variant:`secondary ~size:`sm
                    ~text:(T.t "graph.switch/add-graph-action")
                    ~on_press:(fun _ -> Dialogs_state.close_named "graph-open";
-                     Ui_services.nav_set_hash (Runtime.nav_hash "/graphs")) []]
+                     Ui_services.nav_set_hash (Runtime.nav_hash "#/graphs")) []]
             else column (List.mapi (fun index repo ->
               Ui_components.button ~key:repo ~variant:`ghost ~size:`sm
                 ~background:(if index = chosen then "hsl(var(--accent))" else "transparent")
