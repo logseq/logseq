@@ -231,6 +231,7 @@ let name_pane_view m ~close : t =
                      ~ident:"logseq.property/description" ~value:(W.String new_desc)
                | _ -> Js.Promise.resolve W.Nil)
           | _ -> Js.Promise.resolve W.Nil in
+        m.refresh ();
         S.refresh_all ();
         close ();
         Js.Promise.resolve ()))
