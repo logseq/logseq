@@ -2368,7 +2368,8 @@ let paste_into_editor ~clipboard:(trees, copied_text) ev =
       ev.Ui_services.prevent_default ();
       ev.Ui_services.stop_immediate ();
       let text = paste_source_text ~text:clip_text ~html:clip_html in
-      if trees = [] && not (markdown_blocks text || has_paragraph_break text) then
+      if not (trees <> [] && clip_text = copied_text)
+         && not (markdown_blocks text || has_paragraph_break text) then
         splice_clipboard_text e.uuid text
   | Some e, (_ :: _ as trees) when clip_text = copied_text -> (
       match S.find e.uuid with

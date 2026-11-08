@@ -217,20 +217,21 @@ let editor_box ?area_uuid ?comment_uuid ~scope ~activation ~asset_target ~initia
                  (Signal.value draft) (Signal.value busy))
                ~on_press:(fun _ -> if owns () then Editor_actions.submit_draft uuid) [] ]) ]) ctx parent
 
-let comment_body ~scope ~area_uuid st (comment : Model.block) =
-  let uuid = Option.value comment.block_uuid ~default:"" in
+let comment_body ~scope ~area_uuid st (comment : Model.block Signal.signal) =
+  let uuid = Option.value (Signal.get comment).block_uuid ~default:"" in
   reactive ~equal:(fun a b -> a.editing = b.editing)
     (fun state ->
       if Option.map fst state.editing = Some uuid then
         editor_box ~comment_uuid:uuid ~scope ~asset_target:area_uuid
-          ~activation:(snd (Option.get state.editing)) ~initial:comment.block_title
+          ~activation:(snd (Option.get state.editing)) ~initial:(Signal.get comment).block_title
           ~on_cancel:(fun () -> update st (fun s -> {s with editing = None}))
           ~on_saved:(fun () -> update st (fun s -> {s with editing = None}))
           (Ops.save_block_parsed uuid)
       else
-        column ~style_class:"ls-comment-body" ~min_width:0
-          (Render.title comment.block_title
-           @ [reactions_el uuid comment.block_reactions comment.block_reaction_users]))
+        reactive (fun (comment : Model.block) ->
+          column ~style_class:"ls-comment-body" ~min_width:0
+            (Render.title comment.block_title
+             @ [reactions_el uuid comment.block_reactions comment.block_reaction_users])) comment)
     (Signal.value st)
 
 let comment_actions st (comment : Model.block) =
@@ -268,21 +269,22 @@ let comment_avatar (comment : Model.block) =
         (avatar ~style_class:"ls-comment-avatar" ~width:22 ~height:22
           ~corner_radius:11 ?background ~text:(Collaborators.initials name) ~label:name [])
 
-let comment_row ~scope ~area_uuid st (comment : Model.block) =
-  let uuid = Option.value comment.block_uuid ~default:"" in
-  let author = Option.bind comment.block_created_by (fun a -> a.Model.author_name) in
+let comment_row ~scope ~area_uuid st (comment : Model.block Signal.signal) =
+  let uuid = Option.value (Signal.get comment).block_uuid ~default:"" in
   overlay ~key:("comment-" ^ uuid) ~min_width:0
     ~accessibility_identifier:("comment-" ^ uuid)
     [ row ~style_class:"ls-comment-row" ~gap:8 ~cross:`start
         ~padding_horizontal:2 ~padding_vertical:6 ~min_width:0
-        ((if Rtc_flows.user_uuid () = None then [] else [comment_avatar comment])
+        ((if Rtc_flows.user_uuid () = None then [] else [reactive comment_avatar comment])
         @ [column ~style_class:"ls-comment-main" ~grow:1. ~min_width:0
-        [ row ~style_class:"ls-comment-meta" ~gap:6 ~cross:`center ~flex_wrap:`wrap
-            (if Rtc_flows.user_uuid () = None then [] else
+        [ reactive (fun (comment : Model.block) ->
+            let author = Option.bind comment.block_created_by (fun a -> a.Model.author_name) in
+            row ~style_class:"ls-comment-meta" ~gap:6 ~cross:`center ~flex_wrap:`wrap
+              (if Rtc_flows.user_uuid () = None then [] else
               Option.to_list (Option.map (fun name ->
-                typography "0.75rem" 600 (text ~value:name [])) author))
+                typography "0.75rem" 600 (text ~value:name [])) author))) comment
         ; comment_body ~scope ~area_uuid st comment ]])
-    ; align `top_trailing (comment_actions st comment) ]
+    ; align `top_trailing (reactive (comment_actions st) comment) ]
 
 let add_box ~scope area_uuid : t =
  fun ctx parent ->
@@ -403,7 +405,7 @@ let area_el ?(scope = "main") (blocks : Model.block Signal.signal) : t =
               [ keyed ~source:(reactive (fun (block : Model.block) ->
                     comments_of block) blocks)
                   ~key:(fun (comment : Model.block) -> comment.block_uuid)
-                  ~cmp:compare ~mount:(fun comment -> reactive (comment_row ~scope ~area_uuid:uuid st) comment)
+                  ~cmp:compare ~mount:(comment_row ~scope ~area_uuid:uuid st)
               ; reactive ~equal:(fun (a : Model.block) b ->
                     List.map (fun c -> c.Model.block_uuid) (comments_of a)
                     = List.map (fun c -> c.Model.block_uuid) (comments_of b))
