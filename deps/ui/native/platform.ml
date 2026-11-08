@@ -53,9 +53,9 @@ let note_keychain_result json =
             | ("set" | "delete"), None -> None
             | _ -> invalid_arg "Invalid keychain value")
         | "not-found" when operation = "get" || operation = "delete" -> resolve None
-        | "unsupported" -> reject (Failure "OS keychain is unavailable")
-        | "error" -> reject (Failure "OS keychain operation failed")
-        | "invalid-data" -> reject (Failure "OS keychain data is invalid")
+        | "unsupported" -> reject (Credential_storage_error "OS keychain is unavailable")
+        | "error" -> reject (Credential_storage_error "OS keychain operation failed")
+        | "invalid-data" -> reject (Credential_storage_error "OS keychain data is invalid")
         | _ -> invalid_arg "Unknown keychain result status"
         with error -> reject error)
 
@@ -89,7 +89,7 @@ let keychain_request action payload =
 let auth_json tokens = `Assoc (List.map (fun (key, value) -> key, `String value) tokens)
 
 let restore_auth () =
-  let* stored = secret_operation ~operation:"get" ~service:auth_service
+  (let* stored = secret_operation ~operation:"get" ~service:auth_service
       ~account:auth_account () in
   load_state ();
   let* tokens = match stored with
@@ -109,7 +109,11 @@ let restore_auth () =
     List.iter (Hashtbl.remove ls) auth_token_keys
   end;
   auth_tokens := tokens;
-  Js.Promise.resolve ()
+  Js.Promise.resolve (Ok ()))
+  |> Js.Promise.catch (function
+    | Credential_storage_error _ | Incompatible_auth_record
+    | Unix.Unix_error _ | Sys_error _ -> Js.Promise.resolve (Error ())
+    | error -> Js.Promise.reject error)
 
 let save_auth_tokens id access refresh =
   let tokens = auth_tokens_of_json (auth_json

@@ -114,6 +114,7 @@ let state_exists () =
   | exception Unix.Unix_error (Unix.ENOENT, _, _) -> false
 
 exception Incompatible_auth_record
+exception Credential_storage_error of string
 
 let auth_tokens_of_json = function
   | `Assoc fields ->
@@ -121,12 +122,13 @@ let auth_tokens_of_json = function
         match List.assoc_opt key fields with
         | Some (`String value) when value <> "" -> key, value
         | None | Some `Null | Some (`String "") -> raise Incompatible_auth_record
-        | _ -> failwith "Invalid authentication token field") auth_token_keys
-  | _ -> failwith "Invalid authentication record"
+        | _ -> raise (Credential_storage_error "Invalid authentication token field")) auth_token_keys
+  | _ -> raise (Credential_storage_error "Invalid authentication record")
 
 let parse_auth_record text =
   try auth_tokens_of_json (Yojson.Safe.from_string text)
-  with Yojson.Json_error _ -> failwith "Invalid authentication record encoding"
+  with Yojson.Json_error _ ->
+    raise (Credential_storage_error "Invalid authentication record encoding")
 
 let read_legacy_auth_file path =
   match Unix.openfile path [ Unix.O_RDONLY ] 0 with
@@ -134,7 +136,8 @@ let read_legacy_auth_file path =
       let channel = Unix.in_channel_of_descr descriptor in
       Fun.protect ~finally:(fun () -> close_in_noerr channel) (fun () ->
         let json = try Yojson.Safe.from_channel channel
-          with Yojson.Json_error _ -> failwith "Invalid legacy authentication record encoding" in
+          with Yojson.Json_error _ ->
+            raise (Credential_storage_error "Invalid legacy authentication record encoding") in
         try auth_tokens_of_json json with Incompatible_auth_record -> [])
   | exception Unix.Unix_error (Unix.ENOENT, _, _) -> []
 

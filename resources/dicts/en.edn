@@ -53,6 +53,7 @@
  :account/profile "Profile"
  :account/refresh-token-warning "exceptional status when refresh-token"
  :account/reset-password "Reset password"
+ :account/restore-error "Could not restore your saved sign-in. Local graphs are still available."
  :account/send-code "Send Code"
  :account/show-email-address "Show email address"
  :account/sign-in "Sign In"

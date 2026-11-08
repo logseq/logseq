@@ -53,6 +53,7 @@
  :account/profile "个人资料"
  :account/refresh-token-warning "刷新令牌时收到异常状态"
  :account/reset-password "重置密码"
+ :account/restore-error "无法恢复已保存的登录状态。本地图谱仍可使用。"
  :account/send-code "发送验证码"
  :account/show-email-address "显示邮箱地址"
  :account/sign-in "登录"

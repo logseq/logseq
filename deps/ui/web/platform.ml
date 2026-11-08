@@ -7,7 +7,7 @@ let ( let* ) promise f = Js.Promise.then_ f promise
 let keychain_request _action _payload =
   Js.Promise.resolve (Wire.Map [ Wire.kw "supported?", Wire.Bool false ])
 
-let restore_auth () = Js.Promise.resolve ()
+let restore_auth () = Js.Promise.resolve (Ok ())
 
 
 type loc

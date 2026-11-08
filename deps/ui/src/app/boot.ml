@@ -111,7 +111,10 @@ let run () =
   Worker_events.init ();
   Runtime.worker := Some w;
   (if Ui_services.env_publishing () then !published_boot () else
-  (let* () = Platform.restore_auth () in
+  (let* auth_restored = Platform.restore_auth () in
+  (match auth_restored with
+   | Ok () -> ()
+   | Error () -> Toast.error (I18n.t "account/restore-error"));
   let* () = Graph.init_worker () in
   let* repos = Graph.list_graphs () in
   boot_mark "list_graphs";
