@@ -46,6 +46,9 @@ let block ?(children = []) uuid title : Model.block =
   ; block_page_name = None
   ; block_page_uuid = None
   ; block_reactions = []
+  ; block_reaction_users = []
+  ; block_created_by = None
+  ; block_created_at = None
   ; block_is_comments_area = false
   ; block_is_comment = false
   ; block_comment_targets = 0

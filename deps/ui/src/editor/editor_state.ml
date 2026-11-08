@@ -26,23 +26,54 @@ let edit_units : Edit_model.units =
   | `Bytes -> Edit_model.Bytes
   | `U16 -> Edit_model.U16
 
+(* Object identity keeps signal equality from comparing callback closures. *)
+type draft_owner =
+  < changed : string -> unit
+  ; submit : string -> unit
+  ; dismiss : unit
+  ; current : bool
+  ; asset_target : string >
+
+type editing_owner = Persisted | Explicit_draft of draft_owner
+
 type editing =
   { uuid : string; buffer : string; scope : string; base : string
   ; model : Edit_model.t
   ; submit_on_enter : bool
+  ; owner : editing_owner
   ; epoch : int ref
       (* identity for one edit session: shared through {e with} rebuilds,
          fresh per mk_editing — lets queued input shadows tell "already
          applied to this session" from "a different record was restored" *)
   }
 
-let mk_editing ?(caret = 0) ?(submit_on_enter = false) ~uuid ~buffer ~scope ~base () =
+let mk_editing ?(caret = 0) ?(submit_on_enter = false) ?(owner = Persisted)
+    ~uuid ~buffer ~scope ~base () =
   Editor_sink.invalidate uuid;
   let model =
     Edit_model.select (Edit_model.create ~units:edit_units buffer)
       ~anchor:caret ~focus:caret
   in
-  { uuid; buffer; scope; base; model; submit_on_enter; epoch = ref 0 }
+  { uuid; buffer; scope; base; model; submit_on_enter; owner; epoch = ref 0 }
+
+let is_draft e = match e.owner with Explicit_draft _ -> true | Persisted -> false
+
+let replay_current before after =
+  match before, after with
+  | Some before, Some after when is_draft before || is_draft after ->
+      before.epoch == after.epoch
+  | Some before, None when is_draft before -> false
+  | None, Some after when is_draft after -> false
+  | _ -> true
+
+let equal_editing a b =
+  match a, b with
+  | None, None -> true
+  | Some a, Some b ->
+      a.epoch == b.epoch && a.model == b.model && a.uuid = b.uuid
+      && a.scope = b.scope && a.buffer = b.buffer && a.base = b.base
+      && a.submit_on_enter = b.submit_on_enter && a.owner = b.owner
+  | _ -> false
 
 (* republish with a new model — keeps buffer mirroring model.source *)
 let with_model e model =
@@ -260,7 +291,7 @@ let field_sigs () =
       let s = signal () in
       let f =
         { editing_sig =
-            Signal.cutoff ( = ) (Signal.map (fun st -> st.editing) s)
+            Signal.cutoff equal_editing (Signal.map (fun st -> st.editing) s)
         ; editing_target_sig =
             Signal.cutoff ( = )
               (Signal.map (fun st ->
@@ -432,8 +463,8 @@ let history_editing (e : editing) =
 
 let history_cursor () =
   match editing () with
-  | Some e -> history_editing e
-  | None -> Wire.Map
+  | Some e when not (is_draft e) -> history_editing e
+  | _ -> Wire.Map
       [ Wire.Keyword "scope", Wire.String (selection_scope ())
       ; Wire.Keyword "selected-blocks", Wire.List
           (List.map (fun u -> Wire.Uuid u) (String_set.elements (selected ())))

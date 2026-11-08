@@ -108,7 +108,12 @@ type ac =
   ; chosen : int
   ; auuid : string (* editing uuid the popup was opened on — a remount
      swaps editing_uuid before the position check can run *)
+  ; editor : Editor_state.editing option
   }
+
+let draft_editing () = Option.fold ~none:false ~some:Editor_state.is_draft (Editor_state.editing ())
+let draft_ac_kind = function Page_ref | Block_ref -> true | _ -> false
+let ac_current ac = Editor_state.replay_current ac.editor (Editor_state.editing ())
 
 let ac_height_limit kind ~flipped available =
   let inset, cap =
@@ -1243,6 +1248,7 @@ let measure_ac ?(retries = 120) t kind =
 ;;
 
 let open_ac ?tpos ?(autopair = true) t kind =
+  if not (draft_editing ()) || draft_ac_kind kind then begin
   invalidate_ac t;
   let graph = repo () in
   if !(t.cache_repo) <> Some graph then (
@@ -1261,7 +1267,7 @@ let open_ac ?tpos ?(autopair = true) t kind =
     { kind; x; y; cy; pos_pending = Option.is_none pos
     ; flip = None; flipx = None; query = ""
     ; tpos; tlen
-    ; items = []; chosen = 0; auuid }
+    ; items = []; chosen = 0; auuid; editor = Editor_state.editing () }
   in
   (* cljs autopair: typing [[ inputs ]] immediately with the caret kept
      inside the brackets; insert_text consumes the ghost pair on choice *)
@@ -1287,6 +1293,7 @@ let open_ac ?tpos ?(autopair = true) t kind =
   set_cm t None;
   set_ac t (Some (refresh_items t ac));
   measure_ac t kind
+  end
 ;;
 
 let ac_update t ac q =
@@ -1455,6 +1462,7 @@ let detail_obj pairs = Json.Object pairs;;
 (* replace [tpos, caret) with text in the editing model — equivalent
    to cljs's ls:editor-insert handler *)
 let insert_text (ac : ac) text back =
+  if ac_current ac then
   match Editor_actions.edit_model ac.auuid with
   | Some m ->
       let v = m.Edit_model.source in
@@ -1925,6 +1933,11 @@ let configured_steps ?(at_block_start = false) output =
   | _ -> None
 
 let apply_item t ac ~meta it =
+  let draft_allowed = match it.ai_act with
+    | Emit _ | Noop -> true
+    | Switch kind -> draft_ac_kind kind
+    | _ -> false in
+  if not (ac_current ac) || (draft_editing () && not draft_allowed) then close_ac t else
   match it.ai_act with
   | Configured output ->
       let unsupported () =

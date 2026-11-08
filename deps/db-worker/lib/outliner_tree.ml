@@ -80,6 +80,20 @@ let vec_tree_data ~(include_root : bool) ?(keep_block_tx_id = false)
                          | _ -> t)
                      | _ -> t)
                    xs) )
+        | Wire.Keyword "logseq.property/created-by-ref", Wire.Map author ->
+            let id = match List.assoc_opt (Wire.keyword "db/id") author with
+              | Some (Wire.Int id) -> Some id
+              | Some (Wire.Int64 id) ->
+                  Some (Datascript.Util.int64_to_int_exn "comment author db/id" id)
+              | _ -> None in
+            (match id with
+             | Some id ->
+                 k, (match pull_string db
+                     "[:db/id :block/uuid :block/title :logseq.property.user/avatar]"
+                     (Entity_id id) with
+                   | Some author -> Ds_wire.transit_of_pulled author
+                   | None -> v)
+             | None -> k, v)
         | _ -> (k, v))
       pairs
   in

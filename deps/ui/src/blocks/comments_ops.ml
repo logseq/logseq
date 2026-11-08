@@ -26,6 +26,36 @@ let eligible_targets ~parent_of blocks =
 let can_comment ~parent_of blocks =
   List.exists (fun b -> comment_target_block_p ~parent:(parent_of b) b) blocks
 
+let comment_owned_by ~current_user (block : Model.block) =
+  let author = Option.bind block.block_created_by (fun a -> a.Model.author_uuid) in
+  match author, current_user with
+  | Some author, Some user -> author = user
+  | None, None -> true
+  | _ -> false
+
+let reply_focus_request : (string * string) option ref = ref None
+
+let take_reply_focus_request uuid =
+  if !reply_focus_request = Some (Runtime.repo (), uuid) then begin
+    reply_focus_request := None;
+    true
+  end else false
+
+let reveal uuid =
+  match Ui_services.dom_by_id ("area-" ^ uuid) with
+  | None -> ()
+  | Some area ->
+      area.Ui_services.scroll_into_view_nearest ();
+      (match area.query ".ls-comment-add textarea" with
+       | Some input ->
+           reply_focus_request := None;
+           input.Ui_services.focus ()
+       | None -> Option.iter (fun placeholder -> placeholder.Ui_services.click ())
+           (area.query ".ls-comment-reply-placeholder"))
+
+let reveal_if_requested uuid =
+  if !reply_focus_request = Some (Runtime.repo (), uuid) then reveal uuid
+
 let ensure_for ~on_ready uuids =
   match (Runtime.model ()).Model.repo, uuids with
   | None, _ | _, [] -> ()
@@ -37,9 +67,15 @@ let ensure_for ~on_ready uuids =
        in
        if Runtime.repo () <> repo then Js.Promise.resolve ()
        else
+         let uuid = W.map_get_uuid area "block/uuid" in
+         reply_focus_request := Option.map (fun uuid -> repo, uuid) uuid;
          let* () = Outliner_ops.refresh_page () in
          if Runtime.repo () = repo then
-           Option.iter on_ready (W.map_get_uuid area "block/uuid");
+           Option.iter (fun uuid ->
+             Editor_state.set_collapsed uuid false;
+             on_ready uuid;
+             reveal_if_requested uuid)
+             uuid;
          Js.Promise.resolve ())
       |> Js.Promise.catch (fun error ->
            Ui_services.log_error ("Opening comment thread failed", error);
@@ -56,11 +92,11 @@ let insert_comment_op area_uuid text =
       ; (W.Keyword "block/tags", W.Set [ W.Keyword comment_ident ])
       ]
   in
-  Outliner_ops.insert_blocks [ blk ] area_uuid ~sibling:false
+  Outliner_ops.insert_blocks ~bottom:true [ blk ] area_uuid ~sibling:false
 
 let add_box_of area_uuid =
-  Ui_services.dom_query
-    ("#ls-block-" ^ area_uuid ^ " .ls-comment-add textarea")
+  Option.bind (Ui_services.dom_by_id ("area-" ^ area_uuid))
+    (fun area -> area.Ui_services.query ".ls-comment-add textarea")
 
 let submitting : (string * string, unit) Hashtbl.t = Hashtbl.create 8
 

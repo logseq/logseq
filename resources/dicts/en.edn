@@ -152,8 +152,11 @@
  :block.comments/add-comment "Add comment"
  :block.comments/add-comment-command-desc "Add a comment to this block."
  :block.comments/collapsed-summary (fn [n author] (str n (if (= 1 n) " comment" " comments") " · latest from " author))
+ :block.comments/collapsed-summary-many "{1} comments · latest from {2}"
+ :block.comments/collapsed-summary-one "{1} comment · latest from {2}"
  :block.comments/date-at-time "{1} at {2}"
  :block.comments/label "Comments"
+ :block.comments/load-targets-error "Failed to load comment targets."
  :block.comments/on-those-blocks "On those blocks"
  :block.comments/placeholder "Reply..."
  :block.comments/save-error "Failed to save comment."

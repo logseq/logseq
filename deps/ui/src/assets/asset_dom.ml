@@ -82,6 +82,7 @@ let title_of_name name ext =
 let clear_slash_text () =
   match S.editing () with
   | None -> ()
+  | Some e when S.is_draft e -> ()
   | Some e -> (
       let m = e.S.model in
       let v = m.Edit_model.source in
@@ -95,9 +96,9 @@ let clear_slash_text () =
                   Edit_model.select m' ~anchor:i ~focus:i))
       | None -> ())
 
-let find_by_checksum checksum k =
+let find_by_checksum ~repo checksum k =
   (let* w =
-    Runtime.invoke2 "thread-api/q" (W.String (repo ()))
+    Runtime.invoke2 "thread-api/q" (W.String repo)
       (W.Array
          [ W.String
              "[:find (pull ?b [:block/uuid :block/title]) . :in $ ?c \
@@ -130,7 +131,8 @@ let asset_block_map ~block_id ~title ~ext ~size ~checksum =
 (* one file -> block map option; writes the pfs file on the way. idx=0
    reuses the editing block's uuid when its content is empty
    (cljs empty-target?) *)
-let asset_of_file ~idx ~edit_uuid ~empty_target f =
+let asset_of_file ~upload ~idx f =
+  Editor_actions.check_asset_upload upload;
   let name = B.file_name f in
   let ext = ext_of_name name in
   let title = title_of_name name ext in
@@ -140,21 +142,24 @@ let asset_of_file ~idx ~edit_uuid ~empty_target f =
     Js.Promise.resolve None)
   else
     let* buf = B.file_buffer f in
+    Editor_actions.check_asset_upload upload;
     let u8 = Js.Typed_array.Uint8Array.fromBuffer buf () in
     let* checksum = A.sha256_hex u8 in
-    find_by_checksum checksum (function
+    Editor_actions.check_asset_upload upload;
+    find_by_checksum ~repo:upload.Editor_actions.upload_repo checksum (function
       | Some (uuid, t) ->
-          Toast.warning
-            (I18n.asset_already_exists t uuid);
+          if Editor_actions.asset_upload_current upload then
+            Toast.warning (I18n.asset_already_exists t uuid);
           Js.Promise.resolve None
       | None ->
+          Editor_actions.check_asset_upload upload;
           let block_id =
-            match idx = 0, empty_target, edit_uuid with
-            | true, true, Some u -> u
+            match idx = 0, upload.upload_empty with
+            | true, true -> upload.upload_target
             | _ -> Ui_services.env_random_uuid ()
           in
           let* () =
-            A.write_asset ~repo:(repo ())
+            A.write_asset ~repo:upload.upload_repo
               ~name:(block_id ^ "." ^ ext) ~u8
           in
           Js.Promise.resolve
@@ -162,102 +167,42 @@ let asset_of_file ~idx ~edit_uuid ~empty_target f =
                (asset_block_map ~block_id ~title ~ext
                   ~size ~checksum)))
 
-let collect_files files =
-  let edit = S.editing () in
-  let edit_uuid = Option.map (fun e -> e.S.uuid) edit in
-  let empty_target =
-    match edit with
-    | Some e -> String.trim e.buffer = ""
-    | None -> false
-  in
+let collect_files upload files =
   let rec go i acc =
     if i >= Array.length files then Js.Promise.resolve (List.rev acc)
     else
-      let* v = asset_of_file ~idx:i ~edit_uuid ~empty_target files.(i) in
+      let* v = asset_of_file ~upload ~idx:i files.(i) in
       match v with Some b -> go (i + 1) (b :: acc)
     | None -> go (i + 1) acc
   in
-  (go 0 [], edit_uuid, empty_target)
+  go 0 []
 
 (* cljs db-based-save-assets! — target = edit block when it exists
    (sibling? + replace-empty-target? both true, bottom? true); else the
    current page (cljs falls back to today's journal). *)
-let upload_files (files : Js.Json.t array) =
-  if Array.length files > 0 then begin
-    clear_slash_text ();
-    let blocks_p, edit_uuid, empty_target = collect_files files in
-    let target =
-      match edit_uuid with
-      | Some u -> Some u
-      | None -> (
-          match (Runtime.model ()).Model.route_page with
-          | Some (p : Model.page) -> p.Model.page_uuid
-          | None -> (
-              (* cljs falls back to today's journal — the journals view
-                 is fetched newest-first so today's page leads
-                 model.journals *)
-              match (Runtime.model ()).Model.journals with
-              | j :: _ -> j.Model.page_uuid
-              | [] -> None))
-    in
-    match target with
-    | None -> ()
-    | Some t ->
-        (* cljs db-based-save-assets! commits the pending edit first
-           (has-unsaved-edit? -> save-block-aux!) — the worker only honors
-           replace-empty-target? when the stored target title is blank, so
-           an uncommitted title would silently remap the block uuid *)
-        ignore
-          (let* save_ops =
-             match S.editing () with
-             | Some e -> (
-                 match S.find e.S.uuid with
-                 | Some b when b.Model.block_title <> e.S.buffer ->
-                     let* o =
-                       Outliner_ops.save_block_parsed e.S.uuid e.S.buffer
-                     in
-                     Js.Promise.resolve [ o ]
-                 | _ -> Js.Promise.resolve [])
-             | None -> Js.Promise.resolve []
-           in
-          let* blocks = blocks_p in
-          if blocks = [] then Js.Promise.resolve ()
-          else
-            let sibling = edit_uuid = Some t in
-            let* () =
-              Outliner_ops.apply_and_refresh
-                ~opts:(Outliner_ops.op_opts "insert-blocks")
-                ( save_ops
-                @ [ Outliner_ops.op "insert-blocks"
-                      [ W.List blocks
-                      ; W.Uuid t
-                      ; W.Map
-                          [ W.Keyword "sibling?", W.Bool sibling
-                          ; W.Keyword "keep-uuid?", W.Bool true
-                          ; W.Keyword "bottom?", W.Bool true
-                          ; W.Keyword "replace-empty-target?",
-                              W.Bool sibling
-                          ; W.Keyword "outliner-op",
-                              W.Keyword "insert-blocks" ] ] ] )
-            in
-            (* cljs db-based-save-assets! re-enters edit
-                        on the reused empty-target block so the
-                        buffer holds the new asset title — a later
-                        exit-edit then sees an unchanged buffer
-                        instead of wiping the title with "". The
-                        open textarea keeps its own value, so
-                        resync (state + DOM), not enter_edit *)
-            if empty_target then
-              ignore (Outliner_ops.resync_open_editor ());
-            Js.Promise.resolve ())
-  end
+let upload_files ?upload (files : Js.Json.t array) =
+  let upload = match upload with
+    | Some upload -> Some upload
+    | None -> clear_slash_text (); Editor_actions.capture_asset_upload () in
+  match upload with
+  | Some upload when Array.length files > 0 && Editor_actions.asset_upload_current upload ->
+      ignore ((let* blocks = collect_files upload files in
+        Editor_actions.commit_uploaded_assets upload blocks)
+        |> Js.Promise.catch (fun error ->
+          Ui_services.log_error ("Asset upload failed", error);
+          if Editor_actions.asset_upload_current upload then
+            Toast.error (I18n.t1 "ui/error-boundary-error" "asset-upload:failed");
+          Js.Promise.resolve ()))
+  | _ -> ()
 
 (* cljs image-uploader hid an <input type=file> per editor; here the
    picker is imperative — a transient input via the open-file-picker
    op, no persistent node in the tree. Both the slash command and
    editor_actions.trigger_asset_upload go through this. *)
 let pick_files () =
-  Web_dom.open_file_picker (fun files -> upload_files files)
+  clear_slash_text ();
+  Option.iter (fun upload -> Web_dom.open_file_picker (fun files -> upload_files ~upload files))
+    (Editor_actions.capture_asset_upload ())
 
 (* ---------- lightbox ---------- *)
 
@@ -312,35 +257,65 @@ let finish_drag uuid w =
            "logseq.property.asset/resize-metadata"
            (W.Map [ W.Keyword "width", W.Int (int_of_float w) ]) ])
 
-(* cljs resize-image-handles: interact.js seeds width from
-   .ls-resize-image offsetWidth, live-updates the img width attr on move
-   and writes logseq.property.asset/resize-metadata {:width} on end *)
-let start_drag ~side ~uuid ~start_x =
-  match B.query_selector ("#ls-block-" ^ uuid) with
+let start_drag ~scope ~side ~uuid ~start_x =
+  match B.query_selector ("#asset-resize-" ^ uuid) with
   | None -> ()
-  | Some row -> (
-      match B.el_query row ".ls-resize-image", B.el_query row "img" with
-      | Some box, Some img ->
-          let start_w = B.el_offset_width box in
-          B.doc_add_class "is-resizing-buf";
-          let rec on_move ev =
-            let dx =
-              if side = `Left then start_x -. Web_dom.ev_client_x ev
-              else Web_dom.ev_client_x ev -. start_x
-            in
-            let w = start_w +. dx in
-            if w > 60. || dx > 0. then
-              (* the kind's pixels img carries style width:100% — a live
-                 drag preview has to override the style, not the attr *)
-              B.el_style_set_property img "width"
-                (string_of_int (int_of_float w) ^ "px")
-          and on_up _ev =
-            B.remove_window_listener "pointermove" on_move;
-            B.remove_window_listener "pointerup" on_up;
-            finish_drag uuid (B.el_offset_width box)
+  | Some box -> (
+      match B.el_query box ".lui-image", Runtime.capture_reload_origin () with
+      | Some frame, Some origin when not (Ui_services.env_publishing ()) ->
+          let start_w = B.el_offset_width frame in
+          let start_h = B.el_offset_height frame in
+          let original = List.map (fun el ->
+            el, B.el_style_get_property el "width", B.el_style_get_property el "height")
+            [box; frame] in
+          let width = ref start_w in
+          let active = ref true in
+          let current () =
+            not (Signal.scope_is_disposed scope)
+            && Runtime.reload_origin_current origin
+            && B.el_is_connected box
+            && not (Ui_services.env_publishing ())
           in
+          B.doc_add_class "is-resizing-buf";
+          let rec stop () =
+            if !active then begin
+              active := false;
+              B.remove_window_listener "pointermove" on_move;
+              B.remove_window_listener "pointerup" on_up;
+              B.remove_window_listener "pointercancel" on_cancel;
+              B.doc_rm_class "is-resizing-buf"
+            end
+          and cancel () =
+            if !active then begin
+              List.iter (fun (el, w, h) ->
+                B.el_style_set_property el "width" w;
+                B.el_style_set_property el "height" h) original;
+              stop ()
+            end
+          and on_move ev =
+            if not !active || not (current ()) then cancel ()
+            else begin
+              let dx =
+                if side = `Left then start_x -. Web_dom.ev_client_x ev
+                else Web_dom.ev_client_x ev -. start_x
+              in
+              width := max 60. (start_w +. dx);
+              let w = string_of_int (int_of_float !width) ^ "px" in
+              let h = string_of_int (int_of_float (start_h *. !width /. start_w)) ^ "px" in
+              List.iter (fun el ->
+                B.el_style_set_property el "width" w;
+                B.el_style_set_property el "height" h) [box; frame]
+            end
+          and on_up _ev =
+            let save = !active && current () && !width <> start_w in
+            if save then begin stop (); finish_drag uuid !width end
+            else cancel ()
+          and on_cancel _ev = cancel ()
+          in
+          Signal.on_dispose scope cancel;
           B.add_window_listener "pointermove" on_move;
-          B.add_window_listener "pointerup" on_up
+          B.add_window_listener "pointerup" on_up;
+          B.add_window_listener "pointercancel" on_cancel
       | _ -> ())
 
 (* ---------- action menu + delete ---------- *)
@@ -524,17 +499,36 @@ let asset_img uuid (b : Model.block) file : t =
     ~accessibility_identifier:("asset-img-" ^ uuid)
     ~url:src ~alt:b.Model.block_title ~loading:`lazy_
     ~referrer_policy:`no_referrer ~width:w ?height:h
-    ~data_attrs:[ ("style", "border-radius:2px;position:relative") ]
+    ~corner_radius:2
     ~on_load:(fun _ -> measure_on_load uuid b)
     []
 
 let asset_placeholder : t =
   box ~key:"acph" ~style_class:"asset-container" ~width:250 []
 
+let resize_handle ~scope ~hovered ~height uuid side : t =
+  let cls, alignment = match side with
+    | `Left -> "handle-left image-resize", `leading
+    | `Right -> "handle-right image-resize", `trailing
+  in
+  align alignment
+    (box ~key:("rh-" ^ uuid ^ (if side = `Left then "l" else "r"))
+       ~style_class:cls ~width:6 ~height ~margin_horizontal:5
+       ~background:"rgba(0,0,0,0.3)" ~border_color:"#e5e7eb" ~border_width:1
+       ~corner_radius:999 ~opacity:(reactive (fun h -> if h then 1. else 0.) hovered)
+       ~data_attrs:[("style", "cursor:col-resize;user-select:none;touch-action:none")]
+       ~on_pointer_down:(fun ev -> match ev with
+         | Lui_protocol.PointerDown (_, d) ->
+             start_drag ~scope ~side ~uuid ~start_x:d.Lui_protocol.x
+         | _ -> ()) [])
+
 let asset_container uuid (b : Model.block) : t =
   let ext = Option.value b.Model.block_asset_type ~default:"" in
   let file = uuid ^ "." ^ ext in
   fun context parent ->
+    let hovered = Signal.state context.Lui_ui.ui_scheduler false in
+    let hover value = Runtime.signal_set hovered value in
+    let w, h = img_dims b in
     let ready = ready_for uuid ext context in
     (if not (Runtime.signal_get ready) then
        resolve_img uuid file ext ready);
@@ -543,46 +537,28 @@ let asset_container uuid (b : Model.block) : t =
     (box ~key:("ac-" ^ uuid) ~style_class:"asset-container"
        ([ reactive (fun r ->
              if r then
-               Ui_parts.pressable
-                 ~on_press:(fun _ ->
-                   match
-                     B.query_selector
-                       ("#asset-img-" ^ uuid ^ " .lui-image-pixels")
-                   with
-                   | Some img -> open_lightbox img
-                   | None -> ())
-                 (row ~key:("asset-press-" ^ uuid) [ asset_img uuid b file ])
+               overlay ~key:("rim-" ^ uuid) ~corner_radius:6 ~width:w ?height:h
+                 ~accessibility_identifier:("asset-resize-" ^ uuid)
+                 ~style_class:"ls-resize-image"
+                 ~on_pointer_enter:(fun _ -> hover true)
+                 ~on_pointer_leave:(fun _ -> hover false)
+                 (Ui_parts.pressable
+                    ~on_press:(fun _ ->
+                      match B.query_selector ("#asset-img-" ^ uuid ^ " .lui-image-pixels") with
+                      | Some img -> open_lightbox img
+                      | None -> ())
+                    (row ~key:("asset-press-" ^ uuid) [asset_img uuid b file])
+                  :: if Ui_services.env_publishing () then [] else
+                    let height = max 30 (Option.fold ~none:30 ~some:(fun h -> h * 15 / 100) h) in
+                    List.map (resize_handle ~scope:context.ui_scope
+                      ~hovered:(Signal.value hovered) ~height uuid)
+                      [`Left; `Right])
              else asset_placeholder)
            (Signal.value (ready))
        ] @ (if Ui_services.env_publishing () then [] else [ action_bar uuid b ])))
       context parent
 
-(* pointerdown -> window pointermove/pointerup drag — the window
-   listeners stay imperative (start_drag); only the trigger uses a
-   kind event *)
-let resize_handle uuid side : t =
-  let cls =
-    match side with
-    | `Left -> "handle-left image-resize"
-    | `Right -> "handle-right image-resize"
-  in
-  text ~key:("rh-" ^ uuid ^ (if side = `Left then "l" else "r"))
-    ~style_class:cls
-    ~on_pointer_down:(fun ev ->
-      match ev with
-      | Lui_protocol.PointerDown (_, d) ->
-          start_drag ~side ~uuid ~start_x:d.Lui_protocol.x
-      | _ -> ())
-    []
-
-let image_block uuid (b : Model.block) : t =
-  box ~key:("ri-" ^ uuid) 
-    [ (* ls-resize-image is an imperative query handle (start_drag) *)
-      box ~key:("rim-" ^ uuid) ~corner_radius:6
-        ~style_class:"ls-resize-image"
-        (asset_container uuid b ::
-         if Ui_services.env_publishing () then []
-         else [ resize_handle uuid `Left; resize_handle uuid `Right ]) ]
+let image_block = asset_container
 
 (* resolved object URL for assets/<file> — shared by the pdf/media/
    asset-ref branches (attrs_signal_v so the patch lands in place) *)
@@ -690,17 +666,17 @@ let pdf_block uuid (b : Model.block) : t =
          []))
     context parent
 
+let content_view uuid (b : Model.block) : t =
+  match b.Model.block_asset_type with
+  | Some ext when is_image ext -> image_block uuid b
+  | Some "pdf" -> pdf_block uuid b
+  | _ -> file_block uuid b
+
 (* whole asset branch — .asset-block-wrap replaces .block-content inside
    .block-content-wrapper (cljs block.cljs asset render path) *)
 let block_view uuid (b : Model.block) : t =
-  let body =
-    match b.Model.block_asset_type with
-    | Some ext when is_image ext -> image_block uuid b
-    | Some "pdf" -> pdf_block uuid b
-    | _ -> file_block uuid b
-  in
   column ~key:("abw-" ^ uuid) ~style_class:"asset-block-wrap" ~grow:1.
-    [ box ~key:("abcc-" ^ uuid) ~grow:1. [ body ]
+    [ box ~key:("abcc-" ^ uuid) ~grow:1. [ content_view uuid b ]
     ; Ui_parts.pressable
         ~on_press:(fun _ -> Editor_actions.enter_edit uuid 0)
         (box ~key:("abt-" ^ uuid) ~min_height:24

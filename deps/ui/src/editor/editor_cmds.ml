@@ -116,6 +116,7 @@ let current_block fallback =
    like the event listeners it replaces did. *)
 let run ~command ~block ~value : outcome =
   let h = host () in
+  let scope = Editor_state.interaction_scope () in
   match command with
   | "upload" ->
       h.pick_files ();
@@ -196,9 +197,11 @@ let run ~command ~block ~value : outcome =
                   Handled
               | None -> No_target)
           | "expand-children" ->
+              Editor_state.set_collapsed ~scope uuid false;
               apply [ Outliner_ops.collapse_expand [ (uuid, false) ] ];
               Handled
           | "collapse-children" ->
+              Editor_state.set_collapsed ~scope uuid true;
               apply [ Outliner_ops.collapse_expand [ (uuid, true) ] ];
               Handled
           | "set-color" -> (

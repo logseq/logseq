@@ -36,6 +36,7 @@ let edit_model uuid =
    mid-event aren't clobbered by a stale publish *)
 let update_model uuid f =
   let moved = ref false in
+  let changed = ref None in
   S.set (fun st ->
       match st.S.editing with
       | Some e when e.S.uuid = uuid ->
@@ -43,11 +44,17 @@ let update_model uuid f =
           moved := nm.Edit_model.source = e.S.model.Edit_model.source
                    && nm.Edit_model.caret <> e.S.model.Edit_model.caret;
           if nm.Edit_model.source <> e.S.model.Edit_model.source then begin
-            S.history_input_before := Some (S.history_editing e);
+            (match e.S.owner with
+             | S.Persisted -> S.history_input_before := Some (S.history_editing e)
+             | S.Explicit_draft owner -> changed := Some (e, owner, nm.source));
             Editor_sink.invalidate uuid
           end;
           { st with S.editing = Some (S.with_model e nm) }
       | _ -> st);
+  (match !changed, S.editing () with
+   | Some (before, owner, source), Some live
+     when live.S.epoch == before.S.epoch && owner#current -> owner#changed source
+   | _ -> ());
   if !moved then !(S.caret_changed) uuid
 
 let caret_of uuid =
@@ -395,6 +402,36 @@ let arm_focus ?(schedule = true) request =
 
 let request_focus uuid caret = arm_focus (make_focus_request uuid caret)
 
+let dismiss_draft ?(notify = true) (editing : S.editing) =
+  match editing.S.owner, S.editing () with
+  | S.Explicit_draft owner, Some live when live.S.epoch == editing.S.epoch ->
+      (match !S.pending_focus with
+       | Some request when focus_owned request editing -> S.pending_focus := None
+       | _ -> ());
+      Editor_sink.invalidate editing.S.uuid;
+      S.history_input_before := None;
+      S.set (fun st -> {st with S.editing = None});
+      S.notify_edit_exit editing.S.uuid;
+      if notify then owner#dismiss
+  | _ -> ()
+
+let submit_draft uuid =
+  match S.editing () with
+  | Some e when e.S.uuid = uuid ->
+      (match e.S.owner with
+       | S.Explicit_draft owner when owner#current
+           && not (Edit_model.composing e.S.model)
+           && not !S.structure_pending && !S.pending_edit_real = 0
+           && !S.pending_focus_actions = [] -> owner#submit e.S.buffer
+       | _ -> ())
+  | _ -> ()
+
+let draft_contains_target target =
+  match S.editing (), closest ".ls-comments-area" target with
+  | Some {S.owner = S.Explicit_draft owner; _}, Some area ->
+      area.Ui_services.id () = "area-" ^ owner#asset_target
+  | _ -> false
+
 type split_commit =
   { persist : context:Model.t -> current:(unit -> bool) -> Wire.t option Js.Promise.t
   ; save : Ops.queued_save option
@@ -560,7 +597,10 @@ let commit_result ?(after = fun () -> ()) uuid buf =
 
 let commit uuid buf = ignore (commit_result uuid buf)
 
-let save_if_dirty uuid = commit uuid (Ops.trim_title uuid (live_buffer uuid))
+let save_if_dirty uuid =
+  match S.editing () with
+  | Some e when e.S.uuid = uuid && S.is_draft e -> dismiss_draft e
+  | _ -> commit uuid (Ops.trim_title uuid (live_buffer uuid))
 
 (* deferred blur: committing synchronously on mousedown re-renders the
    tree between mousedown and mouseup, so the browser retargets the click
@@ -660,13 +700,18 @@ let enter_edit ?scope ?(submit_on_enter = false) uuid caret =
 let last_edit_uuid : string option ref = ref None
 
 let rec exit_edit ~select =
+  let before = S.editing () in
   if !S.structure_pending then
-    S.enqueue_edit_action ~real:true (fun () -> exit_edit ~select)
+    S.enqueue_edit_action ~real:true (fun () ->
+      if S.replay_current before (S.editing ()) then exit_edit ~select)
   else if S.ready () then
     match S.editing () with
     | None -> ()
+    | Some e when S.is_draft e -> dismiss_draft e
     | Some e when initial_click_pending e.S.uuid ->
-        S.pending_focus_actions := (fun () -> exit_edit ~select) :: !S.pending_focus_actions
+        S.pending_focus_actions := (fun () ->
+          if S.replay_current before (S.editing ()) then exit_edit ~select)
+          :: !S.pending_focus_actions
     | Some e ->
         last_edit_uuid := Some e.uuid;
         cancel_pending_focus ();
@@ -714,6 +759,7 @@ let flush_edit () =
   if S.ready () then
     match S.editing () with
     | None -> ()
+  | Some e when S.is_draft e -> dismiss_draft e
   | Some e ->
       cancel_pending_focus ();
       let buf = Ops.trim_title e.uuid (live_buffer e.uuid) in
@@ -745,9 +791,12 @@ let () = S.close_block_editor := blur_commit
 (* Run the context commit in the same turn that observes a clean editor. *)
 let after_pending_input commit =
   let context = Runtime.repo (), Runtime.route () in
+  let editing = S.editing () in
   let rec drain () =
     if context <> (Runtime.repo (), Runtime.route ()) then
       Js.Promise.reject (Failure "Editor context changed before input drained")
+    else if not (S.replay_current editing (S.editing ())) then
+      Js.Promise.reject (Failure "Draft activation changed before input drained")
     else if !S.structure_pending then
       let _, complete = Option.get !structure_owner in
       let* () = complete in
@@ -779,9 +828,14 @@ let after_pending_input commit =
     | [] ->
         let* () = Ops.flush_pending_save () in
         if context <> (Runtime.repo (), Runtime.route ())
+           || not (S.replay_current editing (S.editing ()))
            || !S.structure_pending || not (Queue.is_empty S.pending_edit_actions)
            || !S.pending_focus_actions <> [] then drain () else
         match S.editing () with
+        | Some e when S.is_draft e ->
+            clear_pending_blur ();
+            dismiss_draft e;
+            commit ()
         | Some e ->
             let buffer = Ops.trim_title e.S.uuid (live_buffer e.S.uuid) in
             if buffer <> e.S.base then begin
@@ -811,7 +865,30 @@ let after_pending_input commit =
   in
   drain ()
 
-let schedule_blur_commit () =
+let enter_draft ~uuid ~scope ~buffer ~(owner : S.draft_owner) =
+  if not (Ui_services.env_publishing ()) && owner#current then begin
+    let context = Runtime.repo (), Runtime.route () in
+    let install () =
+      if context = (Runtime.repo (), Runtime.route ()) && owner#current then begin
+        !(S.close_property_editor) ();
+        S.history_input_before := None;
+        let caret = String.length buffer in
+        let editing = S.mk_editing ~caret ~owner:(S.Explicit_draft owner)
+            ~uuid ~scope ~buffer ~base:buffer () in
+        S.set (fun st -> {st with S.editing = Some editing;
+          selection_scope = scope; selected = S.String_set.empty;
+          anchor = None; action_bar = false});
+        arm_focus (make_focus_request ~owner:(scope, editing.S.epoch) uuid caret)
+      end;
+      Js.Promise.resolve ()
+    in
+    ignore (after_pending_input install |> Js.Promise.catch (fun error ->
+      Ui_services.log_error ("Draft editor activation failed", error);
+      if owner#current then owner#dismiss;
+      Js.Promise.resolve ()))
+  end
+
+let schedule_blur_commit ?(keep = fun () -> false) () =
   match S.editing () with
   | None -> ()
   | Some e ->
@@ -825,7 +902,8 @@ let schedule_blur_commit () =
                   if !pending_blur_uuid = Some u then begin
                     pending_blur_uuid := None;
                     match S.editing () with
-                    | Some e' when e'.uuid = u -> blur_commit ()
+                    | Some e' when e'.uuid = u && S.replay_current (Some e) (Some e') ->
+                        if not (keep ()) then blur_commit ()
                     | _ -> ()
                   end
                 in
@@ -2310,6 +2388,13 @@ let paste_into_editor ~clipboard:(trees, copied_text) ev =
   let clip_text = ev.Ui_services.clipboard_get "text/plain" in
   let clip_html = ev.Ui_services.clipboard_get "text/html" in
   match (S.editing (), trees) with
+  | Some e, _ when S.is_draft e ->
+      ev.Ui_services.prevent_default ();
+      ev.Ui_services.stop_immediate ();
+      let text = paste_source_text ~text:clip_text ~html:clip_html in
+      if not (trees <> [] && clip_text = copied_text)
+         && not (markdown_blocks text || has_paragraph_break text) then
+        splice_clipboard_text e.uuid text
   | Some e, (_ :: _ as trees) when clip_text = copied_text -> (
       match S.find e.uuid with
       | Some b ->
@@ -2659,15 +2744,21 @@ let redo () = run_history Ops.redo
 (* the Edit_input route for the open editor — structural intents go to
    the outliner ops; focused/menu have no surface effect yet *)
 let route_of uuid : Edit_input.route =
+  let draft () = match S.editing () with
+    | Some e when e.S.uuid = uuid && S.is_draft e -> Some e
+    | _ -> None in
   let submit_on_enter () = match S.editing () with
     | Some e when e.S.uuid = uuid -> e.S.submit_on_enter
     | _ -> false in
   { Edit_input.split_block = (fun () ->
-      if submit_on_enter () then exit_edit ~select:false else split_at_cursor uuid)
-  ; merge_prev = (fun () -> merge_prev uuid)
-  ; indent = (fun () -> indent_or_outdent ~indent:true)
-  ; outdent = (fun () -> indent_or_outdent ~indent:false)
-  ; cancel = (fun () -> exit_edit ~select:(not (submit_on_enter ())))
+      if Option.is_some (draft ()) then submit_draft uuid
+      else if submit_on_enter () then exit_edit ~select:false else split_at_cursor uuid)
+  ; merge_prev = (fun () -> if Option.is_none (draft ()) then merge_prev uuid)
+  ; indent = (fun () -> if Option.is_none (draft ()) then indent_or_outdent ~indent:true)
+  ; outdent = (fun () -> if Option.is_none (draft ()) then indent_or_outdent ~indent:false)
+  ; cancel = (fun () -> match draft () with
+      | Some e -> dismiss_draft e
+      | None -> exit_edit ~select:(not (submit_on_enter ())))
   ; focused =
       (fun b ->
         S.focused_block := (if b then Some uuid else None))
@@ -3090,6 +3181,60 @@ let trigger_asset_upload () =
   Ui_services.dom_dispatch_json "ls:editor-command"
     (Json.Object [ "command", Json.String "upload" ])
 
+type asset_upload =
+  { upload_repo : string
+  ; upload_route : Model.route
+  ; upload_target : string
+  ; upload_edit : S.editing option
+  ; upload_sibling : bool
+  ; upload_empty : bool
+  }
+
+let capture_asset_upload () =
+  let model = Runtime.model () in
+  let edit = S.editing () in
+  let target = match edit with
+    | Some {S.owner = S.Explicit_draft owner; _} -> Some owner#asset_target
+    | Some e -> Some e.S.uuid
+    | None -> (match model.Model.route_page, model.Model.journals with
+        | Some page, _ -> page.Model.page_uuid
+        | None, page :: _ -> page.Model.page_uuid
+        | None, [] -> None) in
+  if Ui_services.env_publishing () then None else
+  Option.bind model.Model.repo (fun repo -> Option.map (fun target ->
+    let persisted = Option.fold ~none:false ~some:(fun e -> not (S.is_draft e)) edit in
+    {upload_repo = repo; upload_route = Runtime.route (); upload_target = target;
+     upload_edit = edit; upload_sibling = persisted;
+     upload_empty = persisted && Option.fold ~none:false
+       ~some:(fun e -> String.trim e.S.buffer = "") edit}) target)
+
+let asset_upload_current upload =
+  upload.upload_repo = Runtime.repo () && upload.upload_route = Runtime.route ()
+  && not (Ui_services.env_publishing ())
+  && match upload.upload_edit, S.editing () with
+     | None, None -> true
+     | Some before, Some live when before.S.epoch == live.S.epoch ->
+         (match live.S.owner with S.Persisted -> true | S.Explicit_draft owner -> owner#current)
+     | _ -> false
+
+let check_asset_upload upload =
+  if not (asset_upload_current upload) then failwith "Asset upload activation ended"
+
+let commit_uploaded_assets upload blocks =
+  if blocks = [] || not (asset_upload_current upload) then Js.Promise.resolve () else
+  let* save_ops = match S.editing () with
+    | Some e when not (S.is_draft e) && e.S.buffer <> e.S.base ->
+        let* op = Ops.save_block_parsed e.S.uuid e.S.buffer in
+        Js.Promise.resolve [op]
+    | _ -> Js.Promise.resolve [] in
+  if not (asset_upload_current upload) then Js.Promise.resolve () else
+  let* () = Ops.apply_and_refresh ~opts:(Ops.op_opts "insert-blocks")
+      (save_ops @ [Ops.insert_blocks ~bottom:true
+        ~replace_empty_target:upload.upload_sibling blocks upload.upload_target
+        ~sibling:upload.upload_sibling]) in
+  if upload.upload_empty && asset_upload_current upload then Ops.resync_open_editor ()
+  else Js.Promise.resolve ()
+
 let file_ext name =
   match String.rindex_opt name '.' with
   | Some i when i + 1 < String.length name ->
@@ -3120,66 +3265,44 @@ let u8_of_binary s =
     s;
   u8
 
-let save_one_asset repo pfs target_uuid ~empty_target ~first
+let save_one_asset upload pfs ~first
     (f : Ui_services.file) =
+  let repo = upload.upload_repo in
   let name = f.Ui_services.file_name in
   let ext = file_ext name in
   let size = int_of_float f.Ui_services.file_size in
   let uuid =
-    match (first, empty_target) with
-    | true, true -> target_uuid
+    match (first, upload.upload_empty) with
+    | true, true -> upload.upload_target
     | _ -> Ui_services.env_random_uuid ()
   in
-  ignore
-    (Ui_task.bind (f.Ui_services.file_binary ()) (fun bin ->
-         let u8 = u8_of_binary bin in
-         ignore
-           (let* checksum = Platform.sha256_hex u8 in
-    let dir =
-      "/" ^ Platform.strip_db_prefix repo ^ "/assets"
-    in
-    let* () = Platform.pfs_ensure_dir pfs dir in
-    let* () =
-      Platform.pfs_write_file pfs
-        (dir ^ "/" ^ uuid ^ "." ^ ext)
-        u8
-    in
-    let* () =
-      Ops.apply_and_refresh
-        [ Ops.insert_blocks ~bottom:true
-            ~replace_empty_target:true
-            [ asset_block_map ~uuid
-                ~title:(file_title name) ~ext
-                ~size ~checksum ]
-            target_uuid ~sibling:true ]
-            in
-            Js.Promise.resolve ());
-         Ui_task.resolve ()))
+  check_asset_upload upload;
+  if ext = "" then begin
+    Toast.error (I18n.tf "asset/invalid-ext-error" [name]);
+    Js.Promise.resolve None
+  end else
+  let* bin = Subs_state.promise_of_task (f.Ui_services.file_binary ()) in
+  check_asset_upload upload;
+  let u8 = u8_of_binary bin in
+  let* checksum = Platform.sha256_hex u8 in
+  check_asset_upload upload;
+  let dir = "/" ^ Platform.strip_db_prefix repo ^ "/assets" in
+  let* () = Platform.pfs_ensure_dir pfs dir in
+  check_asset_upload upload;
+  let* () = Platform.pfs_write_file pfs (dir ^ "/" ^ uuid ^ "." ^ ext) u8 in
+  Js.Promise.resolve (Some (asset_block_map ~uuid ~title:(file_title name) ~ext ~size ~checksum))
 
-let save_uploaded_files (input : Ui_services.el) =
-  match ((Runtime.model ()).Model.repo, S.editing ()) with
-  | Some repo, Some e -> (
-      match Platform.pfs_handle () with
-      | Some pfs ->
-          let buffer = live_buffer e.uuid in
-          let empty_target = String.trim buffer = "" in
-          (* cljs db-based-save-assets! persists the unsaved edit content
-             before inserting — otherwise the worker sees a blank target
-             and replace-empty-target? swaps it for the asset block while
-             it is still being edited *)
-          let pre =
-            if empty_target then Js.Promise.resolve ()
-            else
-              let* sop = Ops.save_block_parsed e.uuid buffer in
-              Ops.apply [ sop ]
-          in
-          ignore
-            (let* () = pre in
-            List.iteri
-              (fun i f ->
-                save_one_asset repo pfs e.uuid ~empty_target
-                  ~first:(i = 0) f)
-              (input.Ui_services.files ());
-            Js.Promise.resolve ())
-      | None -> ())
+let upload_file_snapshots files =
+  match capture_asset_upload (), Platform.pfs_handle () with
+  | Some upload, Some pfs ->
+      let rec collect i acc = function
+        | [] -> commit_uploaded_assets upload (List.rev acc)
+        | file :: rest ->
+            let* block = save_one_asset upload pfs ~first:(i = 0) file in
+            collect (i + 1) (match block with Some block -> block :: acc | None -> acc) rest in
+      ignore (collect 0 [] files |> Js.Promise.catch (fun error ->
+        Ui_services.log_error ("Asset upload failed", error);
+        if asset_upload_current upload then
+          Toast.error (I18n.t1 "ui/error-boundary-error" "asset-upload:failed");
+        Js.Promise.resolve ()))
   | _ -> ()
