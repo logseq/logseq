@@ -114,6 +114,13 @@ let date_to_localedate : Js.Json.t -> string =
 
 let fmt_time ms = date_to_localedate (make_date ms)
 
+let date_to_localeclock : Js.Json.t -> string =
+  [%mel.raw
+    "function (d) { return d.toLocaleTimeString(undefined, \
+     { hour: 'numeric', minute: '2-digit' }) }"]
+
+let fmt_clock ms = date_to_localeclock (make_date ms)
+
 external perf_now : unit -> float = "now" [@@mel.scope "performance"]
 
 let perf_mark : string -> unit =

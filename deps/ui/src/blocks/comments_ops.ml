@@ -9,6 +9,36 @@ module W = Wire
 let comment_ident = "logseq.class/Comment"
 let comments_area_ident = "logseq.class/Comments"
 
+let comment_time_label ~now ~format_date ~format_clock ~translate created_at =
+  Option.map
+    (fun created_at ->
+      let date = Dates.fields created_at in
+      let current = Dates.fields now in
+      let same_day (a : Dates.fields) (b : Dates.fields) =
+        a.year = b.year && a.month = b.month && a.day = b.day
+      in
+      let time = format_clock created_at in
+      if same_day date current then time
+      else
+        let yesterday =
+          Dates.fields
+            (Dates.make ~year:current.year ~month:current.month
+               ~day:(current.day - 1) ())
+        in
+        if same_day date yesterday then
+          translate "block.comments/yesterday-at" [ time ]
+        else
+          translate "block.comments/date-at-time" [ format_date created_at; time ])
+    created_at
+
+let comment_time_title created_at =
+  Option.map
+    (fun created_at ->
+      let date = Dates.fields created_at in
+      Printf.sprintf "%04d-%02d-%02d %02d:%02d"
+        date.year date.month date.day date.hours date.minutes)
+    created_at
+
 let is_comments_area (b : Model.block) =
   b.block_is_comments_area || List.mem comments_area_ident b.block_tag_idents
 
