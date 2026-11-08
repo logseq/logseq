@@ -616,7 +616,7 @@ let measure_rect identifier =
         [("ref", Js.Json.JObject [("#ref", Js.Json.string identifier);
                                   ("measurement-id", Js.Json.number (float_of_int id))])])) )
 
-let note_node_rect (j : Js.Json.t) : unit =
+let note_node_rect (j : Js.Json.t) : bool =
   (match num_prop "measurement-id" (prop "ref" j) with
    | None -> ()
    | Some number ->
@@ -631,23 +631,33 @@ let note_node_rect (j : Js.Json.t) : unit =
             | Some x, Some y, Some width, Some height ->
                 request.resolve_rect (x, y, width, height)
             | _ -> request.reject_rect (Invalid_argument "Native measurement target is unavailable")));
-  (match Option.map int_of_float (num_prop "nodeId" j) with
-   | Some id -> (
-       match prop "rect" j with
-       | Js.Json.JObject _ as r -> Hashtbl.replace rect_store id r
-       | _ -> Hashtbl.remove rect_store id)
-   | None -> ());
-  match prop "ref" j with
-  | Js.Json.JObject _ as ref_ -> (
-      match ref_key_of ref_ with
-      | Some k -> (
-          Option.iter (fun id -> Hashtbl.replace reference_owners k id)
-            (Option.map int_of_float (num_prop "nodeId" j));
-          match prop "rect" j with
-          | Js.Json.JObject _ as r -> Hashtbl.replace ref_rect_store k r
-          | _ -> Hashtbl.remove ref_rect_store k)
-      | None -> ())
-  | _ -> ()
+  let store_rect table key =
+    let previous = Hashtbl.find_opt table key in
+    match prop "rect" j with
+    | Js.Json.JObject _ as rect ->
+        Hashtbl.replace table key rect;
+        previous <> Some rect
+    | _ ->
+        Hashtbl.remove table key;
+        Option.is_some previous
+  in
+  let node_changed =
+    match Option.map int_of_float (num_prop "nodeId" j) with
+    | Some id -> store_rect rect_store id
+    | None -> false
+  in
+  let ref_changed =
+    match prop "ref" j with
+    | Js.Json.JObject _ as ref_ -> (
+        match ref_key_of ref_ with
+        | Some key ->
+            Option.iter (fun id -> Hashtbl.replace reference_owners key id)
+              (Option.map int_of_float (num_prop "nodeId" j));
+            store_rect ref_rect_store key
+        | None -> false)
+    | _ -> false
+  in
+  node_changed || ref_changed
 
 let request_measure (el : element) : unit =
   Host.dom_op "measure-node"

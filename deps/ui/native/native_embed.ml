@@ -766,7 +766,9 @@ let platform_event payload =
         Host.enqueue (fun () -> Host_metrics.toggle (); Runtime.flush ())
       else if name = "mygo-performance" then
         Host.enqueue (fun () -> Host_metrics.note_host json; Runtime.flush ())
-      else if name = "node-rect" then Dom_ext.note_node_rect json
+      else if name = "node-rect" then (
+        if Dom_ext.note_node_rect json then
+          Host.enqueue Editor_actions.focus_pending)
       else if name = "node-natural-size" then
         Dom_ext.note_node_natural_size json
       else if

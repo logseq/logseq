@@ -98,6 +98,7 @@ let published_boot : (unit -> unit Js.Promise.t) ref =
 let boot_mark = Graph.boot_mark
 
 let run () =
+  Editor_actions.after_pending_input (fun () ->
   apply_storage_env ();
   (* emoji-mart: registers <em-emoji> + SearchIndex *)
   Emoji_mart.install ();
@@ -133,6 +134,7 @@ let run () =
   in
   let* () = ensure_today_journal repo in
   boot_mark "journal";
+  Editor_actions.after_pending_input (fun () ->
   Runtime.send (Action.Boot_graph_ready (repo,config));
   Graph.build_search_index repo;
   (* initial route resolution (deep link or home) *)
@@ -144,10 +146,11 @@ let run () =
   if Ui_services.nav_hash () = "" then
     Ui_services.nav_replace_hash "#/";
   boot_mark "route";
-  Js.Promise.resolve ()))
+  Js.Promise.resolve ())))
   |> Js.Promise.catch (fun err ->
          Ui_services.log_error ("boot failed", err);
          let message = I18n.t "graph/load-error" in
+         Editor_actions.after_pending_input (fun () ->
          Runtime.send (Action.Boot_failed message);
          Toast.error message;
-         Js.Promise.resolve ())
+         Js.Promise.resolve ())))

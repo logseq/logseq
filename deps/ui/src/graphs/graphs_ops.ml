@@ -130,9 +130,12 @@ let nav_req = ref 0
 let navigate_journal repo =
   incr nav_req;
   let seq = !nav_req in
+  Editor_actions.after_pending_input (fun () ->
+  if !nav_req <> seq then Js.Promise.resolve () else begin
   Graphs_meta.touch repo;
   let* config = Graph.open_graph repo in
   let* () = Boot.ensure_today_journal repo in
+  Editor_actions.after_pending_input (fun () ->
   if !nav_req = seq then begin
     Worker_events.reset_rtc ();
     Runtime.send (Action.Boot_graph_ready (repo,config));
@@ -140,7 +143,8 @@ let navigate_journal repo =
     Ui_services.nav_set_hash (Runtime.nav_hash "/");
     Router.resolve ()
   end;
-  Js.Promise.resolve ()
+  Js.Promise.resolve ())
+  end)
 
 (* -- create -- *)
 
@@ -174,7 +178,8 @@ let create_remote name e2ee =
    the same *)
 let download_remote ~name ~uuid ~e2ee =
   let repo = Graph.full_graph_name name in
-  let* ok = Rtc_ops.download repo uuid e2ee in
+  let* ok = Editor_actions.after_pending_input (fun () ->
+      Rtc_ops.download repo uuid e2ee) in
   if not ok then Js.Promise.resolve ()
   else begin
     let* _ = list_remote_graphs () in
@@ -220,6 +225,7 @@ let delete_graph repo ~remote =
     !on_repos_changed ()
   in
   let finish () =
+    Editor_actions.after_pending_input (fun () ->
     (* drop the repo from the local list before the worker round-trip:
        the graphs view can re-render the remote row while the unlink is
        in flight, and its click handler decides local-vs-remote from
@@ -249,7 +255,7 @@ let delete_graph repo ~remote =
           Js.Promise.resolve ()
       | false, _ ->
           Toast.success (T.removed repo);
-          Js.Promise.resolve ()
+          Js.Promise.resolve ())
   in
   if remote then
     match

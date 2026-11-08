@@ -237,7 +237,8 @@ let get_path_refs db (entity : entity) : entity list =
          | None -> [])
 
 (* common-initial-data/hidden-ref-pred *)
-let hidden_ref_pred db (id : entity_id) (ref_block : entity) : bool =
+let hidden_ref_pred db (id : entity_id) : entity -> bool =
+  let page_ids = IdSet.of_list (id :: get_block_alias db id) in
   let entity = Ldb.ent_of_id db id in
   let entity_ident = Option.bind entity Ldb.ident_of in
   let class_ids =
@@ -245,23 +246,24 @@ let hidden_ref_pred db (id : entity_id) (ref_block : entity) : bool =
     | Some e when Ldb.is_class e -> Some (id :: structured_children db id)
     | _ -> None
   in
-  ref_block.id = id
-  || (match Ldb.ref_ent ref_block "block/page" with
-      | Some p -> p.id = id || Ldb.hidden p
-      | None -> false)
-  || (match Ldb.ref_ent ref_block "logseq.property/view-for" with
-      | Some v -> v.id = id
-      | None -> false)
-  || Ldb.hidden ref_block
-  || (match class_ids with
-      | Some cids ->
-          List.exists
-            (fun cid -> List.mem cid (Ldb.ref_ids ref_block "block/tags"))
-            cids
-      | None -> false)
-  || (match entity_ident with
-      | Some ident -> Option.is_some (Ldb.value ref_block ident)
-      | None -> false)
+  fun (ref_block : entity) ->
+    IdSet.mem ref_block.id page_ids
+    || (match Ldb.ref_ent ref_block "block/page" with
+        | Some p -> IdSet.mem p.id page_ids || Ldb.hidden p
+        | None -> false)
+    || (match Ldb.ref_ent ref_block "logseq.property/view-for" with
+        | Some v -> v.id = id
+        | None -> false)
+    || Ldb.hidden ref_block
+    || (match class_ids with
+        | Some cids ->
+            List.exists
+              (fun cid -> List.mem cid (Ldb.ref_ids ref_block "block/tags"))
+              cids
+        | None -> false)
+    || (match entity_ident with
+        | Some ident -> Option.is_some (Ldb.value ref_block ident)
+        | None -> false)
 
 (* get-path-refs counterpart for page counting *)
 let get_ref_pages_count db (id : entity_id) (ref_blocks : entity list)
@@ -336,6 +338,7 @@ let hidden_eid_pred db : entity_id option -> bool =
    ancestor walk for hidden — no per-ref entity materialization. *)
 let linked_reference_top_block_ids db (ids : entity_id list)
     (class_ids : entity_id list option) : IdSet.t =
+  let page_ids = IdSet.of_list ids in
   let hidden_eid = hidden_eid_pred db in
   List.concat_map
     (fun pid ->
@@ -355,7 +358,10 @@ let linked_reference_top_block_ids db (ids : entity_id list)
          match class_ids with
          | Some cids when List.exists (fun cid -> List.mem cid !tags) cids ->
              false
-         | _ -> not (hidden_eid (Some rid) || hidden_eid !page))
+         | _ ->
+             not
+               ((match !page with Some pid -> IdSet.mem pid page_ids | None -> false)
+                || hidden_eid (Some rid) || hidden_eid !page))
   |> List.fold_left (fun s eid -> IdSet.add eid s) IdSet.empty
 
 type linked_references =

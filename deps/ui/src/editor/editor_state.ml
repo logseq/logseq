@@ -93,7 +93,16 @@ end)
 (* focus request consumed after the next DOM flush — ops remount the page
    subtree, so the logseq-editor input must be re-focused once it exists
    again *)
-let pending_focus : (string * int * float) option ref = ref None
+type focus_request =
+  { focus_uuid : string
+  ; mutable focus_caret : int
+  ; focus_armed_ms : float
+  ; focus_input_seq : int
+  ; mutable focus_click : (float * float * float) option
+  ; mutable focus_owner : (string * int ref) option
+  }
+
+let pending_focus : focus_request option ref = ref None
 
 (* (uuid, ms, clientX, clientY) of the latest mousedown that a click
    will run enter_edit for — the sink mounts after the pointer already

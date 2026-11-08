@@ -41,12 +41,10 @@ let mount ?(cls = "") uuid scope : t =
     (fun ms ->
       ignore
         (Ui_effect.timeout ~scope:ctx.Lui_ui.ui_scope ms (fun () ->
-             match (S.editing (), Editor_sink.conduit uuid) with
-             | Some e, Some conduit
+             match S.editing () with
+             | Some e
                when e.S.uuid = uuid && e.S.scope = scope ->
-                 Signal.update frame (fun _ ->
-                     Edit_input.measure conduit e.S.model);
-                 Runtime.flush ()
+                 ignore (Editor_actions.refresh_overlay ~frame uuid)
              | _ -> ())))
     [ 0; 40; 120; 300 ];
   let model_sig =
@@ -67,7 +65,8 @@ let mount ?(cls = "") uuid scope : t =
       (Signal.subscribe ~emit_initial:true (S.editing_sig ())
        (fun (e : S.editing option) ->
           match e with
-          | Some e when e.S.uuid = uuid && e.S.scope = scope -> (
+          | Some e when e.S.uuid = uuid && e.S.scope = scope
+                        && not (Editor_actions.initial_click_pending uuid) -> (
               match Edit_model.selection_range e.S.model with
               | Some (lo, hi) -> Editor_sink.select_range uuid lo hi
               | None ->
