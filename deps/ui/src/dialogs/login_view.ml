@@ -174,13 +174,14 @@ let required ctx fields values =
 
 let request fields work =
   Runtime.signal_set fields.pending true;
-  (Js.Promise.resolve () |> Js.Promise.then_ work
+  let operation = Js.Promise.resolve () |> Js.Promise.then_ work in
+  (operation
+   |> Js.Promise.catch (fun _ ->
+          Runtime.signal_set fields.pending false;
+          operation)
    |> Js.Promise.then_ (fun () ->
           Runtime.signal_set fields.pending false;
-          Js.Promise.resolve ())
-   |> Js.Promise.catch (fun error ->
-          Runtime.signal_set fields.pending false;
-          Js.Promise.reject error))
+          Js.Promise.resolve ()))
   |> ignore
 
 let auth_json ctx init =
