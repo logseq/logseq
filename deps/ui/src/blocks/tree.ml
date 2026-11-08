@@ -1024,10 +1024,11 @@ and children_dom ~depth ~editable ~library ~virtualize uuid scope
   let b = Signal.get bs in
   children_container uuid bs
     (if virtualize then
-       Lazy_children.lazy_children ~key:("clist-" ^ uuid) ~uuid
-         ~min_height:(estimate_children_height b)
-         ~render:(fun () ->
-           child_list ~depth ~editable ~library ~virtualize uuid scope bs)
+       column ~grow:1. ~min_width:0
+         [ Lazy_children.lazy_children ~key:("clist-" ^ uuid) ~uuid
+             ~min_height:(estimate_children_height b)
+             ~render:(fun () ->
+               child_list ~depth ~editable ~library ~virtualize uuid scope bs) ]
      else
        column ~key:("clist-" ^ uuid) ~style_class:"block-children" ~grow:1.
          [ child_list ~depth ~editable ~library ~virtualize uuid scope bs ])

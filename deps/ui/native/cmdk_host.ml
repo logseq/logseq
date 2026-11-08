@@ -329,7 +329,9 @@ let services : unit -> Svs.t =
   ; copy_selection = Editor_actions.copy_selection_text
   ; copy_selection_text = (fun () -> Editor_actions.copy_selection_text ~plain:true ())
   ; cut_selection = Editor_actions.cut_selection_text
-  ; editor_command = Editor_keys.dispatch_command
+  ; editor_command = (function
+        | "window/close" -> Host.request_window_close ()
+        | command -> Editor_keys.dispatch_command command)
   ; delete_selection = Editor_actions.delete_selection
   ; extend_selection = Editor_actions.extend_selection
   ; move_selection_focus = Editor_actions.move_selection_focus

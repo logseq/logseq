@@ -90,7 +90,7 @@ let non_mac_default_shortcuts =
 let default_shortcut id =
   match id with
   | "window/close" -> Binds ["mod+w"]
-  | "editor/copy-page-url" -> Disabled
+  | "editor/copy-page-url" -> Unbound
   | _ -> Command_map.find id
     (if Ui_services.env_is_mac () then default_shortcuts
      else non_mac_default_shortcuts)
@@ -300,9 +300,11 @@ let current_items () =
   | Some (revision, platform_mac, items)
     when revision = !shortcut_revision && platform_mac = mac -> items
   | _ ->
-      let items = items @ if Platform.desktop then List.map (fun id ->
-          Shortcut {label = "command." ^ id; title = ":" ^ id ^ "#global-prevent-default";
-            unset = false; bindings = []}) ["window/close"; "editor/copy-page-url"] else [] in
+      let items = items @ if Platform.desktop then List.map (fun (id, handler) ->
+          Shortcut {label = "command." ^ id; title = ":" ^ id ^ "#" ^ handler;
+            unset = false; bindings = []})
+          ["window/close", "global-prevent-default";
+           "editor/copy-page-url", "global-non-editing-only"] else [] in
       let resolved = List.map (function
         | Category _ as item -> item
         | Shortcut row -> Shortcut (row_with_shortcut ~mac
