@@ -265,6 +265,9 @@ let start_drag ~scope ~side ~uuid ~start_x =
       | Some frame, Some origin when not (Ui_services.env_publishing ()) ->
           let start_w = B.el_offset_width frame in
           let start_h = B.el_offset_height frame in
+          let original = List.map (fun el ->
+            el, B.el_style_get_property el "width", B.el_style_get_property el "height")
+            [box; frame] in
           let width = ref start_w in
           let active = ref true in
           let current () =
@@ -282,8 +285,15 @@ let start_drag ~scope ~side ~uuid ~start_x =
               B.remove_window_listener "pointercancel" on_cancel;
               B.doc_rm_class "is-resizing-buf"
             end
+          and cancel () =
+            if !active then begin
+              List.iter (fun (el, w, h) ->
+                B.el_style_set_property el "width" w;
+                B.el_style_set_property el "height" h) original;
+              stop ()
+            end
           and on_move ev =
-            if not (current ()) then stop ()
+            if not !active || not (current ()) then cancel ()
             else begin
               let dx =
                 if side = `Left then start_x -. Web_dom.ev_client_x ev
@@ -298,11 +308,11 @@ let start_drag ~scope ~side ~uuid ~start_x =
             end
           and on_up _ev =
             let save = !active && current () && !width <> start_w in
-            stop ();
-            if save then finish_drag uuid !width
-          and on_cancel _ev = stop ()
+            if save then begin stop (); finish_drag uuid !width end
+            else cancel ()
+          and on_cancel _ev = cancel ()
           in
-          Signal.on_dispose scope stop;
+          Signal.on_dispose scope cancel;
           B.add_window_listener "pointermove" on_move;
           B.add_window_listener "pointerup" on_up;
           B.add_window_listener "pointercancel" on_cancel
