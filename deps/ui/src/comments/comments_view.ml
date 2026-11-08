@@ -309,9 +309,14 @@ let add_box ~scope area_uuid : t =
         else
           Ui_components.button ~variant:`ghost ~style_class:"ls-comment-reply-placeholder"
             ~min_height:34 ~padding_horizontal:7 ~padding_vertical:5 ~main:`start
+            ~on_appear:(fun _ ->
+              if Comments_ops.take_reply_focus_request area_uuid then
+                Runtime.signal_set opened true)
             ~label:(I.t "block.comments/placeholder")
             ~text:(if initial = "" then I.t "block.comments/placeholder" else initial)
-            ~on_press:(fun _ -> Runtime.signal_set opened true) [])
+            ~on_press:(fun _ ->
+              ignore (Comments_ops.take_reply_focus_request area_uuid);
+              Runtime.signal_set opened true) [])
         (Signal.value opened) ]) ctx parent
 
 let header ~scope st (block : Model.block) count : t =

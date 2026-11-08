@@ -35,14 +35,21 @@ let comment_owned_by ~current_user (block : Model.block) =
 
 let reply_focus_request : (string * string) option ref = ref None
 
+let take_reply_focus_request uuid =
+  if !reply_focus_request = Some (Runtime.repo (), uuid) then begin
+    reply_focus_request := None;
+    true
+  end else false
+
 let reveal uuid =
   match Ui_services.dom_by_id ("area-" ^ uuid) with
   | None -> ()
   | Some area ->
-      reply_focus_request := None;
       area.Ui_services.scroll_into_view_nearest ();
       (match area.query ".ls-comment-add textarea" with
-       | Some input -> input.Ui_services.focus ()
+       | Some input ->
+           reply_focus_request := None;
+           input.Ui_services.focus ()
        | None -> Option.iter (fun placeholder -> placeholder.Ui_services.click ())
            (area.query ".ls-comment-reply-placeholder"))
 
