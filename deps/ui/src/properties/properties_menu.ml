@@ -219,10 +219,17 @@ let name_pane_view m ~close : t =
         else Js.Promise.resolve W.Nil in
         let* _ = match prop_uuid m with
           | Some block_uuid when new_desc <> String.trim desc_v ->
-              if new_desc = "" then D.remove_block_property ~block_uuid
-                ~ident:"logseq.property/description"
-              else D.set_block_property ~block_uuid
-                ~ident:"logseq.property/description" ~value:(W.String new_desc)
+              (match D.getf (prop_entity m) "logseq.property/description" with
+               | Some description when description <> W.Nil ->
+                   D.transact
+                     [W.Map
+                        [W.Keyword "block/uuid", W.Uuid (Option.get (D.entity_uuid_of description));
+                         W.Keyword "block/title", W.String new_desc;
+                         W.Keyword "block/updated-at", W.Int64 (Int64.of_float (Ui_services.time_now ()))]]
+               | _ when new_desc <> "" ->
+                   D.set_block_property ~block_uuid
+                     ~ident:"logseq.property/description" ~value:(W.String new_desc)
+               | _ -> Js.Promise.resolve W.Nil)
           | _ -> Js.Promise.resolve W.Nil in
         S.refresh_all ();
         close ();
