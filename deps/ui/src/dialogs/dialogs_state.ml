@@ -13,6 +13,9 @@ type confirm =
 type prompt =
   { title : string
   ; desc : string (* optional subtitle (cljs pdf-password-input) *)
+  ; multiline : bool
+  ; placeholder : string
+  ; submit_label : string
   ; on_submit : string -> unit (* handler closes via close_prompt *)
   }
 
@@ -147,8 +150,9 @@ let confirm () =
       c.on_confirm ()
   | None -> ()
 
-let prompt ~title ?(desc = "") ~on_submit () =
-  set (fun d -> { d with prompt = Some { title; desc; on_submit };
+let prompt ~title ?(desc = "") ?(multiline = false) ?(placeholder = "")
+    ?(submit_label = I18n.t "ui/submit") ~on_submit () =
+  set (fun d -> { d with prompt = Some { title; desc; multiline; placeholder; submit_label; on_submit };
     order = push_layer Prompt d.order })
 
 let submit_prompt v =
@@ -237,7 +241,7 @@ let known name =
     [ "new-graph"; "add-graph"; "settings"; "login"; "import"; "importer"
     ; "export"; "export-graph"; "export-page"; "publish-page"; "plugins"
     ; "plugin-readme"; "plugin-settings"; "sync-server"; "publish-server"
-    ; "rtc-collaborators"; "quick-add" ]
+    ; "rtc-collaborators"; "quick-add"; "graph-open"; "graph-remove" ]
 
 let init () =
   if !init_done then ()

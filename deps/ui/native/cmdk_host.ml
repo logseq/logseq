@@ -63,6 +63,8 @@ let services : unit -> Svs.t =
  fun () ->
   { Svs.publishing = Platform.publishing
   ; is_mac = Platform.is_mac
+  ; matches_shortcut = (fun cid ev -> Keymap_data.matches_key cid
+        ~key:ev.Svs.key ~meta:ev.meta ~ctrl:ev.ctrl ~shift:ev.shift ~alt:ev.alt)
   ; dev_build = (fun () -> Platform.dev_build)
   ; random = js_random
   ; now_ms = Js.Date.now
@@ -73,7 +75,11 @@ let services : unit -> Svs.t =
   ; render_icon = (fun ~size value -> Icon_picker.icon_el ~size:(float_of_int size) value)
   ; today_journal_day = Dates.today_journal_day
   ; rel_journal_day =
-      (fun delta -> Dates.journal_day_of (Dates.add_days (Dates.date_now ()) delta))
+      (fun delta -> Dates.journal_day_of (Dates.shift_day (Dates.date_now ()) delta))
+  ; shift_journal_day =
+      (fun day delta ->
+        Dates.make ~year:(day / 10000) ~month:(day / 100 mod 100) ~day:(day mod 100) ()
+        |> fun date -> Dates.journal_day_of (Dates.shift_day date delta))
   ; journal_title_of_day =
       (fun day ->
         Dates.journal_title_of
@@ -208,7 +214,7 @@ let services : unit -> Svs.t =
              [ ("message", Json.String msg); ("type", Json.String cls) ]))
   ; fuzzy_search = Fuzzy.fuzzy_search
   ; fuzzy_search_multi = Fuzzy.fuzzy_search_multi
-  ; commands = (fun () -> List.map cmd_of (Commands_data.current_table ()))
+  ; commands = (fun () -> List.map cmd_of (Commands_data.current_table ~desktop:true ()))
   ; plugin_commands =
       (fun () -> List.map cmd_of (Plugin_host.palette_commands ()))
   ; exec_palette_command = Plugin_host.exec_palette_command
@@ -279,6 +285,8 @@ let services : unit -> Svs.t =
   ; dialogs_is_open = Dialogs_state.is_open
   ; settings_open_at = Settings_state.open_at
   ; settings_toggle_wide = Settings_state.toggle_wide_mode
+  ; settings_toggle_document = Settings_state.toggle_document_mode
+  ; settings_toggle_recent = Settings_state.toggle_recent
   ; settings_toggle_theme = (fun () -> Settings_view.toggle_theme ())
   ; config_toggle = (fun name default -> Settings_state.config_toggle name ~default)
   ; sidebar_add_search =
@@ -286,6 +294,7 @@ let services : unit -> Svs.t =
         with_sidebar (fun sst -> Sidebar_state.add_search_item sst q))
   ; sidebar_open_uuid =
       (fun uuid -> with_sidebar (fun sst -> Sidebar_state.open_uuid sst uuid))
+  ; sidebar_open_today = (fun () -> with_sidebar Sidebar_state.open_today_journal)
   ; sidebar_open_uuids =
       (fun us ->
         with_sidebar (fun sst ->
@@ -301,14 +310,14 @@ let services : unit -> Svs.t =
   ; sidebar_close_top =
       (fun () ->
         with_sidebar (fun sst ->
-            match List.rev (Runtime.signal_get sst.Sidebar_state.items) with
+            match Runtime.signal_get sst.Sidebar_state.items with
             | top :: _ -> Sidebar_state.remove_item sst top.Sidebar_state.key
             | [] -> ()))
   ; sidebar_ensure_contents =
       (fun () ->
         with_sidebar (fun sst ->
             Sidebar_state.ensure_right_open ();
-            Sidebar_state.ensure_contents sst))
+            Sidebar_state.open_sticky_item sst "contents"))
   ; sidebar_open_cards = Sidebar_state.open_cards
   ; sidebar_toggle_favorite =
       (fun () -> with_sidebar Sidebar_state.toggle_favorite)
@@ -318,6 +327,11 @@ let services : unit -> Svs.t =
   ; clear_selection = Editor_actions.clear_selection
   ; select_all = Editor_actions.select_all
   ; copy_selection = Editor_actions.copy_selection_text
+  ; copy_selection_text = (fun () -> Editor_actions.copy_selection_text ~plain:true ())
+  ; cut_selection = Editor_actions.cut_selection_text
+  ; editor_command = (function
+        | "window/close" -> Host.request_window_close ()
+        | command -> Editor_keys.dispatch_command command)
   ; delete_selection = Editor_actions.delete_selection
   ; extend_selection = Editor_actions.extend_selection
   ; move_selection_focus = Editor_actions.move_selection_focus
@@ -329,7 +343,7 @@ let services : unit -> Svs.t =
   ; toggle_collapse = Editor_actions.toggle_collapse
   ; set_collapsed = Editor_actions.set_collapsed
   ; toggle_open_blocks = Editor_actions.toggle_open_blocks
-  ; cycle_todo = (fun us -> List.iter Editor_commands.cycle_todo us)
+  ; cycle_todo = (fun _ -> ignore (Editor_cmds.run ~command:"cycle-todo" ~block:None ~value:None))
   ; undo = Editor_actions.undo
   ; redo = Editor_actions.redo
   ; quick_add = Editor_actions.quick_add
@@ -337,17 +351,21 @@ let services : unit -> Svs.t =
       (fun us -> List.iter (fun u -> Editor_commands.toggle_own_list u 0) us)
   ; ensure_comments =
       (fun ~repo ~uuids ->
-        ignore
-          (Runtime.invoke2 "thread-api/ensure-comments-area-for-blocks"
-             (Wire.String repo)
-             (Wire.Array (List.map (fun u -> Wire.Uuid u) uuids))
-         |> Js.Promise.then_ (fun _ ->
-                ignore (Outliner_ops.refresh_page ());
-                Js.Promise.resolve ())))
+        if Runtime.repo () = repo then Comments_ops.ensure_for ~on_ready:(fun _ -> ()) uuids)
   ; toggle_left_sidebar = (fun () -> Runtime.send Action.Toggle_left_sidebar)
   ; toggle_right_sidebar = (fun () -> Runtime.send Action.Toggle_right_sidebar)
   ; toggle_help = (fun () -> Runtime.send Action.Help_toggle)
   ; rtc_start = Rtc_ops.start
   ; rtc_stop = Rtc_ops.stop
   ; export_graph_html = (fun () -> ignore (Exporter.export_html ()))
+  ; publish_page = (fun () ->
+        Option.iter (fun (page : Model.page) ->
+            Option.iter (fun uuid ->
+                Publish_view.arm uuid page.page_db_id;
+                Sidebar_state.open_dialog "publish-page") page.page_uuid)
+          !Runtime.current_page)
+  ; clear_notifications = (fun () -> Runtime.send Action.Toasts_clear)
+  ; export_data = Exporter.export_command
+  ; import_data = Importer.import_data
+  ; show_data = Exporter.show_data
   }

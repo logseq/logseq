@@ -262,7 +262,7 @@ let test_update () =
    | Model.Page "foo", None -> check "navigate clears route_page" true
    | _ -> check "navigate clears route_page" false);
   (* toast ids are allocated sequentially *)
-  let toast = { Model.toast_id = 0; toast_text = "hi"; toast_kind = "success"; toast_key = None } in
+  let toast = { Model.toast_id = 0; toast_text = "hi"; toast_kind = "success"; toast_key = None; toast_code = None } in
   let m3 = Update.update m2 (Action.Toast_push toast) in
   let m3 = Update.update m3 (Action.Toast_push toast) in
   eqi "two toasts" 2 (List.length m3.toasts);
@@ -2745,6 +2745,77 @@ let mk_ac kind =
   ; items = []; chosen = 0; auuid = "" }
 
 let test_popups_state () =
+  List.iter (fun (name, units, source, caret, text, options, expected) ->
+    let model = Edit_model.create ~units source in
+    let model = Edit_model.select model ~anchor:caret ~focus:caret in
+    let output = Wire.Array [Wire.Array
+      [Wire.kw "editor/input"; Wire.String text; Edn.parse options]] in
+    let result = try Option.map (fun steps ->
+      let model = List.fold_left (fun model step -> step model) model steps in
+      model.Edit_model.source, model.caret) (Popups_state.configured_steps output)
+      with Popups_state.Unsupported_configured_input -> None in
+    check ("Configured input " ^ name) (result = expected))
+    [ "custom pattern", Edit_model.U16, "left//query", 11, "X",
+      "{:last-pattern \"//\"}", Some ("left X", 6)
+    ; "skip pattern", Edit_model.U16, "left", 4, "X",
+      "{:last-pattern :skip-check}", Some ("leftX", 5)
+    ; "blank pattern", Edit_model.U16, "left", 4, "X",
+      "{:last-pattern \"\"}", Some ("left X", 6)
+    ; "web Unicode blank pattern", Edit_model.U16, "left", 4, "X",
+      {js|{:last-pattern " "}|js}, Some ("left X", 6)
+    ; "native Unicode blank pattern", Edit_model.Bytes, "left", 4, "X",
+      "{:last-pattern \"\194\160\"}", Some ("left X", 6)
+    ; "end pattern", Edit_model.U16, "a /cmdTAIL|suffix", 6, "X",
+      "{:end-pattern \"|\"}", Some ("a X |suffix", 3)
+    ; "zero truncate", Edit_model.U16, "ab/cd", 5, "X",
+      "{:backward-truncate-number 0}", Some ("ab/cd", 5)
+    ; "truncate", Edit_model.U16, "ab/cd", 5, "X",
+      "{:backward-truncate-number 2}", Some ("ab/X", 4)
+    ; "native split surrogate truncate", Edit_model.Bytes, "A\240\159\152\128", 5, "X",
+      "{:backward-truncate-number 1}", None
+    ; "native whole surrogate truncate", Edit_model.Bytes, "A\240\159\152\128", 5, "X",
+      "{:backward-truncate-number 2}", Some ("AX", 2)
+    ; "single breakline", Edit_model.U16, "x\n\nrest", 1, "Q",
+      "{:last-pattern :skip-check :only-breakline? true}", Some ("xQ\nrest", 2)
+    ; "tag spacing", Edit_model.U16, "#[[query", 8, "[[X]]",
+      "{:last-pattern \"[[\"}", Some ("#[[X]]", 6)
+    ; "native UTF-16 backward", Edit_model.Bytes, "/cmd", 4,
+      "\228\184\128\228\186\140", "{:backward-pos 2}",
+      Some ("\228\184\128\228\186\140", 0)
+    ; "web UTF-16 backward", Edit_model.U16, "/cmd", 4,
+      {js|一二|js}, "{:backward-pos 2}", Some ({js|一二|js}, 0)
+    ; "unsupported function", Edit_model.U16, "/cmd", 4, "X",
+      "{:postfix-fn custom-function}", None
+    ; "block input midline", Edit_model.U16, "left/cmd", 8, "X",
+      "{:type \"block\"}", Some ("left \nX", 7)
+    ; "properties input midline", Edit_model.U16, "left", 4, "X",
+      "{:type \"properties\" :last-pattern :skip-check}", Some ("left\nX", 6)
+    ; "block input beginning of line", Edit_model.U16, "left\n", 5, "X",
+      "{:type \"block\" :last-pattern :skip-check}", Some ("left\nX", 6)
+    ; "other input type", Edit_model.U16, "/cmd", 4, "X",
+      "{:type :block}", Some ("X", 1)
+    ; "native page ref CJK prefix", Edit_model.Bytes,
+      "\228\184\173[[\230\150\135", 8, "[[\233\161\181]]",
+      "{:last-pattern \"[[\" :command :page-ref}",
+      Some ("\228\184\173[[\233\161\181]]", 10)
+    ; "web page ref CJK suffix", Edit_model.U16, {js|a[[x中|js}, 4,
+      {js|[[页]]|js}, "{:last-pattern \"[[\" :command :page-ref}",
+      Some ({js|a[[页]]中|js}, 6)
+    ; "page ref non-CJK adjacency", Edit_model.U16, "a[[x", 4,
+      {js|[[页]]|js}, "{:last-pattern \"[[\" :command :page-ref}",
+      Some ({js|a [[页]]|js}, 7)
+    ];
+  let configured_model = Edit_model.select
+      (Edit_model.create ~units:Edit_model.U16 "/cmd") ~anchor:4 ~focus:4 in
+  let output = Edn.parse
+      "[[:editor/input \"AB\" {:type \"block\"}] [:editor/cursor-back 1] \
+        [:editor/input \"C\" {:type \"properties\" :last-pattern :skip-check}]]" in
+  let result = Option.map (fun steps ->
+      let model = List.fold_left (fun model step -> step model) configured_model steps in
+      model.Edit_model.source, model.caret)
+      (Popups_state.configured_steps ~at_block_start:true output) in
+  check "Configured input preserves initial context across ordered steps"
+    (result = Some ("ACB", 2));
   (* fuzzy_score: subsequence match, first*1000 + span *)
   check "fuzzy h1" (Fuzzy.score "h1" "Heading 1" > 0.);
   check "fuzzy te 1" (Fuzzy.score "te 1" "template 1" > 0.);
@@ -2843,17 +2914,17 @@ let test_popups_state () =
   check "slash has clear-heading"
     (List.exists
        (fun (i : Popups_state.ac_item) -> i.ai_key = "editor.slash/clear-heading")
-       (Popups_state.slash_items ~has_heading:true));
+       (Popups_state.slash_items ~statuses:[] ~priorities:[] ~has_heading:true));
   check "slash no clear-heading"
     (not
        (List.exists
           (fun (i : Popups_state.ac_item) ->
             i.ai_key = "editor.slash/clear-heading")
-          (Popups_state.slash_items ~has_heading:false)));
+          (Popups_state.slash_items ~statuses:[] ~priorities:[] ~has_heading:false)));
   check "slash has heading levels"
     (List.exists
        (fun (i : Popups_state.ac_item) -> i.ai_key = "heading-3")
-       (Popups_state.slash_items ~has_heading:false));
+       (Popups_state.slash_items ~statuses:[] ~priorities:[] ~has_heading:false));
   (* block_item_of_row / class_titles_of *)
   let bi =
     Popups_state.block_item_of_row 0
@@ -3321,7 +3392,7 @@ let test_boot () =
 let test_update3 () =
   let keyed k =
     { Model.toast_id = 0; toast_text = "t"; toast_kind = "info"
-    ; toast_key = k }
+    ; toast_key = k; toast_code = None }
   in
   let m =
     Update.update Model.initial (Action.Toast_push (keyed (Some "k1")))

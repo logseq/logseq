@@ -19,6 +19,8 @@ external published_state : string option = "logseq_state"
   [@@mel.scope "globalThis"] [@@mel.return nullable]
 
 let publishing () = published_db <> None
+let desktop = false
+let global_config_contents () = Js.Promise.resolve None
 
 external require_lazy_assets : string -> Js.Json.t = "require"
 external load_dict_chunk : Js.Json.t -> string -> string Js.Promise.t

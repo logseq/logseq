@@ -28,7 +28,8 @@ let toast_icon_color (k : string) : string =
 let toast_item (t : Model.toast) : t =
   let kind = toast_kind_class t.toast_kind in
   let duration =
-    if kind = "error" then 0 else if t.toast_key = None then 1500 else 2000
+    if kind = "error" || Option.is_some t.toast_code then 0
+    else if t.toast_key = None then 1500 else 2000
   in
   fun ctx parent ->
     (toast ~key:("toast-" ^ string_of_int t.toast_id)
@@ -46,9 +47,19 @@ let toast_item (t : Model.toast) : t =
                    [ Ui_components.Prop.font_size "0.875rem"
                    ; Ui_components.Prop.line_height "1.25rem"
                    ; Ui_components.Prop.opacity 0.9 ]
-                   (text ~key:"ti-desc" ~grow:1.
+                   (match t.toast_code with
+                    | None -> text ~key:"ti-desc" ~grow:1.
                       ~foreground:"var(--ls-primary-text-color)"
-                      ~value:t.toast_text [])
+                      ~value:t.toast_text []
+                    | Some code ->
+                        let content = scroll ~max_height:480
+                            [ text ~as_:`Pre ~key:"ti-data" ~style_class:"code"
+                                ~white_space:"pre-wrap" [text ~value:t.toast_text []] ] in
+                        let copy = Ui_components.button ~variant:`default ~size:`sm
+                            ~text:(I18n.t "ui/copy-to-clipboard")
+                            ~on_press:(fun _ -> Ui_services.clipboard_copy code.code_text) [] in
+                        column ~key:"ti-code" ~grow:1. ~gap:12
+                          (if code.code_copy_first then [copy; content] else [content; copy]))
                ; spacer ~width:20 []
                ]
            ; align `trailing

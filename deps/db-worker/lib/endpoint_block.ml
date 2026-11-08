@@ -1444,6 +1444,16 @@ let paste_extract_blocks args : Wire.t Db_worker_effect.t =
                 (fun bm -> Block_map.to_transit (paste_block_of bm))
                 blocks)))
 
+let parse_content_ast args =
+  match args with
+  | [Wire.String repo; Wire.String format; Wire.String content]
+      when repo <> "" && List.mem format ["markdown"; "org"] ->
+      let ast = Gp_mldoc.to_edn ~content:(String content)
+          ~config:(Gp_mldoc.get_default_config ~repo ~format) in
+      Db_worker_effect.pure (Ds_wire.transit_of_value ast)
+  | _ -> invalid_arg "parse-content-ast expects repo, markdown/org format and content"
+
+let () = Dispatcher.register "thread-api/parse-content-ast" parse_content_ast
 let () = Dispatcher.register "thread-api/parse-block" parse_block
 let () =
   Dispatcher.register "thread-api/paste-extract-blocks" paste_extract_blocks

@@ -32,6 +32,8 @@ let body_of name (ms : Model.t Signal.signal) : t =
   | "rtc-collaborators" -> Collaborators.body ms
 
   | "quick-add" -> Quick_add_view.body ms
+  | "graph-open" -> Graphs_view.selector ~remove:false ms
+  | "graph-remove" -> Graphs_view.selector ~remove:true ms
   | _ -> box ~key:("empty-" ^ name) []
 
 (* Named dialogs specialize the shared card recipe with typed constraints. *)
@@ -94,7 +96,8 @@ let dialog_view name (ms : Model.t Signal.signal) : t =
                  else [])
               [ body_of name ms ])
           ] )
-       ; dialog_close ~key:"dlg-close" (fun () -> Dialogs_state.close_named name)
+       ; (if name = "graph-open" || name = "graph-remove" then column []
+          else dialog_close ~key:"dlg-close" (fun () -> Dialogs_state.close_named name))
        ])
 
 (* cljs AlertDialog (shui dialog-confirm!): outside presses do NOT
@@ -168,7 +171,13 @@ let prompt_body (p : Dialogs_state.prompt) : t =
                ~data_attrs:[ ("style", "padding-bottom:0.5rem") ]
                ~accessibility_identifier:"ls-prompt-title" []
            ])
-      @ [ Ui_components.input ~key:"prmt-in"
+      @ [ (if p.multiline then
+             Ui_components.textarea ~key:"prmt-in"
+               ~text:(reactive (Signal.value value))
+               ~placeholder:p.placeholder ~height:240 ~autofocus:true
+               ~style_class:"ls-prompt-input"
+               ~on_input:(function Lui_protocol.TextChanged (_, text) -> Signal.set value text | _ -> ()) []
+           else Ui_components.input ~key:"prmt-in"
             ~text:(reactive (Signal.value value))
             ~style_class:"form-input ls-prompt-input"
             ~data_attrs:[ ("style", "display:block;width:100%;margin:0.5rem 0 1rem") ]
@@ -179,9 +188,9 @@ let prompt_body (p : Dialogs_state.prompt) : t =
                   Signal.set value s
               | _ -> ())
             ~on_submit:(fun _ -> submit ())
-            []
+            [])
         ; Ui_components.button ~key:"prmt-ok" ~size:`sm
-            ~variant:`primary ~text:(I18n.t "ui/submit")
+            ~variant:`primary ~text:p.submit_label
             ~on_press:(fun _ -> submit ()) [] ] )
   in
   node ctx parent

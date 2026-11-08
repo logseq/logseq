@@ -287,6 +287,10 @@ func (h *windowHost) drain() error {
 					return err
 				}
 			case message.request != "":
+				if message.request == "window-close\n" {
+					h.requestClose(false)
+					continue
+				}
 				if body, ok := strings.CutPrefix(message.request, "window-close-result\n"); ok {
 					if err := h.completeClose(body); err != nil {
 						return err

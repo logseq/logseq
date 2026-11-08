@@ -232,10 +232,7 @@ let nav r =
 (* cljs shortcut dispatch for chords already bound in commands_data
    (⌘⇧F favorite, ⌥⇧C contents, …): run the shared command table entry
    so palette and keymap stay on one code path *)
-let run_cid cid =
-  match Cmdk_state.shortcut_action cid with
-  | Some f -> f ()
-  | None -> ()
+let run_cid = Cmdk_state.dispatch_id
 
 (* editor/follow-link: the link construct around the caret — [[title]],
    ((uuid)), [text](url) or a bare http(s):// token *)
@@ -410,7 +407,11 @@ let edit_key ~route ~conduit ~repeat uuid (kev : Edit_model.key_event)
         (* cljs editor/cycle-todo — mod+enter never splits *)
         Editor_commands.cycle_todo uuid;
         m
-    | "Enter" when shift -> Edit_model.insert_text m "\n"
+    | "Enter" when shift ->
+        if Settings_state.doc_mode_newline () then
+          Edit_input.handle ~route ~conduit m (Edit_input.Key ({kev with shift = false}, repeat))
+        else Edit_model.insert_text m "\n"
+    | "Enter" when Settings_state.doc_mode_newline () -> Edit_model.insert_text m "\n"
     | "Enter" ->
         (if Lazy.force perf_keys then
            Printf.eprintf "PERF kdown-split uuid=%s\n%!" uuid);
@@ -560,17 +561,19 @@ let canonical_binding b =
 
 (* (binding stroke sequence, command id) — one row per binding *)
 let chord_table () =
-    List.concat_map
-       (fun (c : Commands_data.cmd) ->
-          match c.Commands_data.sc with
-          | Commands_data.Binds bs ->
+    Keymap_data.current_items () |> Keymap_data.unique_rows
+    |> List.concat_map
+       (fun (row : Keymap_data.row) ->
+          let cid = Keymap_data.command_id row.title in
+          match Keymap_data.handler row, Keymap_data.effective_shortcut cid with
+          | ("auto-complete" | "pdf"), _ -> []
+          | _, Commands_data.Binds bs ->
               List.map
                 (fun b ->
                    ( List.map canonical_binding (String.split_on_char ' ' b)
-                   , c.Commands_data.id ))
+                   , cid ))
                 bs
           | _ -> [])
-       (Commands_data.current_table ())
 
 let cached_chords = ref (-1, [])
 
@@ -582,37 +585,6 @@ let current_chords () =
     cached_chords := (Keymap_data.revision (), table);
     (table, true)
   end
-
-(* cljs :global-non-editing-only ids — never fire while the target is an
-   editable element *)
-let non_editing_only =
-  [ "go/home"; "go/journals"; "go/all-pages"; "go/flashcards"
-  ; "go/all-graphs"; "go/keyboard-shortcuts"; "go/tomorrow"
-  ; "go/next-journal"; "go/prev-journal"; "ui/toggle-document-mode"
-  ; "ui/highlight-recent-blocks"; "ui/toggle-settings"
-  ; "ui/toggle-right-sidebar"; "ui/toggle-left-sidebar"
-  ; "ui/toggle-help"; "ui/toggle-theme"; "editor/copy-page-url"
-  ; "editor/set-tags"; "editor/add-property-deadline"
-  ; "editor/add-property-status"; "editor/add-property-priority"
-  ; "editor/add-property-icon"; "editor/add-reaction"
-  ; "editor/add-comment"; "editor/toggle-display-hidden-properties"
-  ; "ui/toggle-wide-mode"; "ui/select-theme-color"; "ui/goto-plugins"
-  ; "editor/toggle-open-blocks"; "ui/clear-all-notifications"
-  ; "sidebar/close-top"; "misc/export-block-data"
-  ; "misc/export-page-data"; "misc/export-graph-ontology-data"
-  ; "misc/import-edn-data"; "ui/customize-appearance" ]
-
-(* single strokes another listener already owns — dispatching them here
-   would double-fire (palette open/move shortcuts, selection nav,
-   block-edit keys) *)
-let owned_strokes =
-  [ "mod+k"; "mod+shift+m" (* cmdk_view's own document listener *)
-  ; "enter"; "mod+enter"; "backspace"; "delete"; "tab"
-  ; "shift+tab"; "up"; "down"; "left"; "right"; "shift+up"
-  ; "shift+down"; "mod+shift+up"; "mod+shift+down"; "alt+shift+up"
-  ; "alt+shift+down"; "mod+up"; "mod+down"; "mod+;"; "mod+,"; "mod+z"
-  ; "mod+shift+z"; "mod+y"; "mod+a"; "mod+shift+a"; "mod+e"
-  ; "shift+/"; "ctrl+p"; "ctrl+n"; "escape" ]
 
 let chord_seq : string list ref = ref []
 let chord_ms : float ref = ref 0.
@@ -657,13 +629,14 @@ let stroke_of ev =
    while editing, non-editor commands still fire (global-prevent-default)
    except the non-editing-only set *)
 let chord_may_run editing cid =
-  if editing then
-    (* editor/* is owned by on_editor_key while editing; the only
-       exception is add-property, which cljs keeps live in every mode *)
-    cid = "editor/add-property"
-    || ((not (List.mem cid non_editing_only))
-        && not (String.length cid > 7 && String.sub cid 0 7 = "editor/"))
-  else true
+  if editing && (cid = "editor/copy" || cid = "editor/cut") then false
+  else
+  match Keymap_data.command_handler cid with
+  | Some "block-editing-only" -> Option.is_some (S.editing ())
+  | Some "global-non-editing-only" -> not editing
+  | Some "editor-global" -> not editing || Option.is_some (S.editing ())
+  | Some handler -> Keymap_data.global_handler handler
+  | None -> false
 
 let palette_open () =
   match !Cmdk_state.latest_st with
@@ -671,14 +644,13 @@ let palette_open () =
   | None -> false
 
 let on_global_key ev =
-  if input_composing ev then chord_seq := []
+  if ev.Ui_services.default_prevented || input_composing ev then chord_seq := []
   (* the open cmdk palette owns every key *)
-  else if not (palette_open ()) then
+  else if not (ac_popup_open ()) then
     match stroke_of ev with
     | None -> ()
     | Some stroke ->
-        if not (List.exists (fun o -> canonical_binding o = stroke) owned_strokes)
-        then begin
+        begin
           let tbl, changed = current_chords () in
           if changed then chord_seq := [];
           let now = Ui_services.time_now () in
@@ -690,10 +662,17 @@ let on_global_key ev =
             is_editable_target (ev.Ui_services.target)
             || S.editing () <> None
           in
+          let tbl = List.filter (fun (_, cid) -> chord_may_run editing cid) tbl in
+          let tbl = if palette_open () then
+              List.filter (fun (_, cid) -> cid = "go/search" || cid = "command-palette/toggle") tbl
+            else tbl in
           let dispatch cid =
             if chord_may_run editing cid then begin
               ev.Ui_services.prevent_default ();
-              Cmdk_state.dispatch_id cid
+              ev.Ui_services.stop_immediate ();
+              if cid = "go/search" && palette_open () then
+                Option.iter Cmdk_state.close !Cmdk_state.latest_st
+              else Cmdk_state.dispatch_id cid
             end
           in
           match List.find_opt (fun (s, _) -> s = cand) tbl with
@@ -737,6 +716,25 @@ let on_global_key ev =
 
 (* -- normal-mode keys (block selection) -- *)
 
+let blocked_default ev =
+  if input_composing ev || ac_popup_open () then false
+  else match stroke_of ev with
+  | None -> false
+  | Some stroke ->
+      let editing = is_editable_target ev.Ui_services.target || Option.is_some (S.editing ()) in
+      Keymap_data.current_items () |> Keymap_data.unique_rows
+      |> List.exists (fun row ->
+          let cid = Keymap_data.command_id row.Keymap_data.title in
+          let contains = function
+            | Commands_data.Binds bindings ->
+                List.exists (fun binding ->
+                    List.map canonical_binding (String.split_on_char ' ' binding) = [stroke]) bindings
+            | _ -> false
+          in
+          chord_may_run editing cid
+          && contains (Keymap_data.default_shortcut cid)
+          && not (contains (Keymap_data.effective_shortcut cid)))
+
 let on_normal_key ev =
   let key = ev_key ev in
   let shift = shift_held ev
@@ -759,11 +757,7 @@ let on_normal_key ev =
   | " " when ev.Ui_services.ctrl && selected () ->
       (* cljs ctrl+space = add-comment on the selection *)
       ev.Ui_services.prevent_default ();
-      List.iter
-        (fun u ->
-          Popups_state.emit_cmd "add-comment"
-            [ "block", Json.String u ])
-        (A.selected_uuids ())
+      Popups_state.emit_cmd "add-comment" []
   | "ArrowUp" when alt && not shift ->
       (* editor/select-block-up *)
       ev.Ui_services.prevent_default ();
@@ -1197,6 +1191,97 @@ and apply_input ?frame uuid ev =
 
 (* translate a DOM keydown into the Edit_input event the conduit would
    have emitted for it *)
+let dispatch_command cid =
+  let update f = match S.editing () with
+    | Some editing ->
+        let before = editing.S.model in
+        A.update_model editing.S.uuid f;
+        (match S.editing () with
+         | Some current when current.S.uuid = editing.S.uuid
+              && current.S.model.Edit_model.source <> before.Edit_model.source ->
+             Outliner_ops.schedule_save current.S.uuid current.S.model.Edit_model.source;
+             Popups_state.on_model_input ~deleted:false current.S.uuid
+         | _ -> ())
+    | None -> ()
+  in
+  let input key = Option.iter (fun editing ->
+      apply_input ?frame:!S.active_frame editing.S.uuid
+        (Edit_input.Key (Edit_model.key_ev key, false))) (S.editing ())
+  in
+  match S.editing (), cid with
+  | _, "editor/copy-page-url" ->
+      Page_ops.copy_url (Option.bind !Runtime.current_page (fun page -> page.Model.page_uuid))
+  | editing, "editor/jump" ->
+      let selected = A.selected_uuids () in
+      let target = match selected with
+        | uuid :: _ -> Some uuid
+        | [] -> Option.map (fun editing -> editing.S.uuid) editing in
+      let expand = match editing with
+        | Some editing -> Some (editing.S.uuid, editing.S.scope)
+        | None -> Option.map (fun uuid -> uuid, "main") target in
+      let start () =
+        let positions = Hashtbl.create 64 in
+        List.iteri (fun index block -> Option.iter
+            (fun uuid -> Hashtbl.replace positions uuid index) block.Model.block_uuid)
+          (S.flat_visible ());
+        Jump_state.start ~uuid:target
+          ~rank:(fun uuid -> Option.value (Hashtbl.find_opt positions uuid) ~default:max_int)
+          ~clear_selection:(fun () -> A.clear_selection ()) () in
+      (match expand with
+       | Some (uuid, scope) when Option.fold ~none:false
+           ~some:(S.effective_collapsed ~scope) (S.find_in (S.blocks_in_scope scope) uuid) ->
+           A.set_collapsed ~scope uuid false;
+           Ui_services.timers_later ~ms:100 start
+       | _ -> start ())
+  | Some editing, ("editor/up" | "editor/down" | "editor/left" | "editor/right") ->
+      let key = match cid with
+        | "editor/up" -> "ArrowUp" | "editor/down" -> "ArrowDown"
+        | "editor/left" -> "ArrowLeft" | _ -> "ArrowRight"
+      in
+      apply_input ?frame:!S.active_frame editing.S.uuid
+        (Edit_input.Key (Edit_model.key_ev key, false))
+  | Some editing, "editor/insert-link" ->
+      Editor_commands.open_link_form false editing.S.uuid editing.S.model.Edit_model.caret
+  | Some editing, ("editor/follow-link" | "editor/open-link-in-sidebar") ->
+      follow_link editing.S.model ~sidebar:(cid = "editor/open-link-in-sidebar")
+  | Some editing, "editor/zoom-in" -> A.zoom_to editing.S.uuid
+  | _, "editor/zoom-out" -> A.zoom_out ()
+  | Some editing, "editor/copy-embed" ->
+      Ui_services.clipboard_copy (Printf.sprintf "{{embed ((%s))}}" editing.S.uuid)
+  | Some editing, "editor/paste-text-in-one-block-at-point" -> paste_text_at_caret editing.S.uuid
+  | _, "editor/new-block" -> input "Enter"
+  | _, "editor/backspace" -> input "Backspace"
+  | _, "editor/delete" -> input "Delete"
+  | Some _, "editor/escape-editing" -> A.exit_edit ~select:true
+  | _, "editor/new-line" ->
+      Option.iter (fun editing ->
+          apply_input ?frame:!S.active_frame editing.S.uuid
+            (Edit_input.Key ({(Edit_model.key_ev "Enter") with shift = true}, false))) (S.editing ())
+  | _, "editor/bold" -> update (fun model -> wrap_model model "**")
+  | _, "editor/italics" -> update (fun model -> wrap_model model "*")
+  | _, "editor/strike-through" -> update (fun model -> wrap_model model "~~")
+  | _, "editor/highlight" -> update (fun model -> wrap_model model "==")
+  | _, "editor/clear-block" -> update clear_block
+  | _, "editor/kill-line-before" -> update kill_line_before
+  | _, "editor/kill-line-after" -> update kill_line_after
+  | _, "editor/backward-kill-word" -> update Edit_model.delete_word_backward
+  | _, "editor/forward-kill-word" -> update Edit_model.delete_word_forward
+  | _, "editor/backward-word" ->
+      update (fun model -> Edit_model.move model Edit_model.Word_left ~extend:false)
+  | _, "editor/forward-word" ->
+      update (fun model -> Edit_model.move model Edit_model.Word_right ~extend:false)
+  | _, "editor/beginning-of-block" ->
+      update (fun model -> Edit_model.move model Edit_model.Doc_start ~extend:false)
+  | _, "editor/end-of-block" ->
+      update (fun model -> Edit_model.move model Edit_model.Doc_end ~extend:false)
+  | None, ("editor/up" | "editor/down") ->
+      A.move_selection_focus (cid = "editor/up")
+  | None, ("editor/left" | "editor/right") ->
+      (match A.selected_uuids () with
+       | uuid :: _ -> A.enter_edit uuid (if cid = "editor/left" then 0 else -1)
+       | [] -> ())
+  | _ -> ()
+
 let pending_event ev : Edit_input.event option =
   let kev =
     { Edit_model.key = ev_key ev
@@ -1392,6 +1477,10 @@ let consume_drag_click () =
 
 let on_keydown ev =
   if Ui_services.env_native_drag () && ev_key ev = "Escape" then drag_cancel ();
+  if blocked_default ev then begin
+    ev.Ui_services.prevent_default ();
+    ev.Ui_services.stop_immediate ()
+  end else
   let palette_shortcut =
     mods ev && not ev.Ui_services.alt
     && (match String.lowercase_ascii (ev_key ev) with
@@ -1942,8 +2031,8 @@ let installed = State_cell.Once.make ()
 
 let install_once () =
   State_cell.Once.run installed (fun () ->
-    Ui_services.dom_on_document_event ~capture:true "keydown" on_keydown;
     Ui_services.dom_on_document_event ~capture:true "keydown" on_global_key;
+    Ui_services.dom_on_document_event ~capture:true "keydown" on_keydown;
     Ui_services.dom_on_document_event ~capture:true "paste" on_paste;
     Ui_services.dom_on_document_event ~capture:true "copy" on_copy;
     Ui_services.dom_on_document_event ~capture:true "cut" on_cut;

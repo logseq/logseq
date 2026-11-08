@@ -687,6 +687,48 @@ let right_toggle_button ms =
       Sidebar_state.ensure_contents (Sidebar_state.ensure ms))
     ())
 
+let recent_slider (ms : Model.t Signal.signal) : t = fun ctx parent ->
+  Settings_state.ensure ctx;
+  let preferences = Signal.value (Settings_state.state ()) in
+  let refresh () = Settings_state.refresh_recent (Lazy_children.all_mounted_uuids ctx) in
+  (if_ ~test:(reactive (fun state -> state.Settings_state.highlight_recent) preferences)
+    (keyed ~source:(reactive (fun model -> [model.Model.route]) ms)
+      ~key:Fun.id ~cmp:Stdlib.compare ~mount:(fun _ ->
+    row ~key:"recent-slider" ~gap:4 ~cross:`center ~width:280
+      ~on_appear:(fun _ ->
+        let route = (Runtime.model ()).Model.route in
+        Ui_services.timers_later ~ms:0 (fun () ->
+          if (Runtime.model ()).Model.route = route then refresh ()))
+      [ Ui_parts.string_prop Lui_protocol.AccessibilityLabel
+          ~value:(reactive (fun state ->
+              if state.Settings_state.recent_days = 0 then I18n.t "header/highlight-recent-blocks"
+              else I18n.tf "header/highlight-recent-blocks-days-ago" [string_of_int state.recent_days]) preferences)
+        (slider ~key:"recent-days" ~grow:1.
+          ~data_attrs:(reactive (fun state -> ["data-tooltip",
+            if state.Settings_state.recent_days = 0 then I18n.t "header/highlight-recent-blocks"
+            else I18n.tf "header/highlight-recent-blocks-days-ago" [string_of_int state.recent_days]]) preferences)
+          ~value:(reactive (fun state -> float_of_int state.Settings_state.recent_days /. 100.) preferences)
+          ~on_change:(function
+            | Lui_protocol.ValueChanged (_, value) ->
+                Settings_state.set_recent_days (int_of_float (Float.round (value *. 100.)));
+                refresh ()
+            | _ -> ()) [])
+      ; Ui_components.button ~key:"recent-close" ~variant:`ghost ~size:`icon
+          ~icon:(`app "x") ~label:(I18n.t "header/quit-highlight-recent-blocks")
+          ~on_press:(fun _ -> Settings_state.toggle_recent ()) [] ]))) ctx parent
+
+let document_mode_button : t = fun ctx parent ->
+  Settings_state.ensure ctx;
+  let preferences = Signal.value (Settings_state.state ()) in
+  (if_ ~test:(reactive (fun _ -> Settings_state.document_mode ()) preferences)
+    (Ui_components.button ~key:"document-mode" ~variant:`secondary ~size:`sm ~text:"D"
+      ~label:(I18n.t "editor.document-mode/title")
+      ~data_attrs:["data-tooltip", String.concat "\n"
+        [I18n.t "editor.document-mode/title";
+         I18n.tf "editor.document-mode/new-block-hint" [Keymap_data.tooltip_keys "editor/new-line"];
+         I18n.tf "editor.document-mode/toggle-desc" [Keymap_data.tooltip_keys "ui/toggle-document-mode"]]]
+      ~on_press:(fun _ -> Settings_state.toggle_document_mode ()) [])) ctx parent
+
 let header (ms : Model.t Signal.signal) =
   if Ui_services.env_publishing () then
     row ~accessibility_identifier:"head" ~style_class:"cp__header"
@@ -759,7 +801,8 @@ let header (ms : Model.t Signal.signal) =
                   | _ -> spacer ~key:"head-bc-empty" [])
                 ms ])
         ; row ~key:"head-acts" ~cross:`center
-            [ (* cljs header.cljs: inside the same rtc-indicator-visible?
+            [ recent_slider ms; document_mode_button
+            ; (* cljs header.cljs: inside the same rtc-indicator-visible?
                  gate — collaborators then the cloud indicator *)
               Collaborators.widget ms
             ; rtc_indicator ms

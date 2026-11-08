@@ -1418,11 +1418,21 @@ let editor_action st cid : (unit -> unit) option =
   | "editor/redo" -> Some (fun () -> st.svs.Svs.redo ())
   | "editor/quick-add" -> Some (fun () -> st.svs.Svs.quick_add ())
   | "editor/copy" -> Some (fun () -> st.svs.Svs.copy_selection ())
+  | "editor/copy-text" -> Some st.svs.Svs.copy_selection_text
   | "editor/cut" ->
-      Some
-        (fun () ->
-          st.svs.Svs.copy_selection ();
-          st.svs.Svs.delete_selection ())
+      Some st.svs.Svs.cut_selection
+  | "editor/up" | "editor/down" | "editor/left" | "editor/right"
+  | "editor/jump" | "editor/copy-page-url" | "window/close"
+  | "editor/insert-link" | "editor/new-block" | "editor/new-line"
+  | "editor/backspace" | "editor/delete" | "editor/escape-editing"
+  | "editor/follow-link" | "editor/open-link-in-sidebar" | "editor/zoom-in"
+  | "editor/zoom-out" | "editor/backward-kill-word" | "editor/backward-word"
+  | "editor/beginning-of-block" | "editor/clear-block" | "editor/copy-embed"
+  | "editor/end-of-block" | "editor/forward-kill-word" | "editor/forward-word"
+  | "editor/kill-line-after" | "editor/kill-line-before"
+  | "editor/paste-text-in-one-block-at-point" | "editor/bold" | "editor/highlight"
+  | "editor/italics" | "editor/strike-through" | "editor/insert-youtube-timestamp" ->
+      Some (fun () -> st.svs.Svs.editor_command cid)
   | "editor/toggle-display-hidden-properties" ->
       Some (fun () -> st.svs.Svs.toggle_hidden_props ())
   | _ -> None
@@ -1592,24 +1602,53 @@ and run_command st repo (cid : string) =
       st.svs.Svs.dialogs_open "settings"
   | "sidebar/open-today-page" ->
       close st;
-      goto_journal_day (st.svs.Svs.today_journal_day ())
+      st.svs.Svs.sidebar_open_today ()
   | "go/tomorrow" -> rel_journal 1
   | "go/next-journal" -> (
       close st;
-      match cur_day () with
-      | Some d -> goto_journal_day (d + 1)
-      | None -> ())
+      let day = Option.value (cur_day ()) ~default:(st.svs.Svs.today_journal_day ()) in
+      goto_journal_day (st.svs.Svs.shift_journal_day day 1))
   | "go/prev-journal" -> (
       close st;
-      match cur_day () with
-      | Some d -> goto_journal_day (d - 1)
-      | None -> ())
-  | "graph/db-add" | "graph/add" ->
+      let day = Option.value (cur_day ()) ~default:(st.svs.Svs.today_journal_day ()) in
+      goto_journal_day (st.svs.Svs.shift_journal_day day (-1)))
+  | "graph/add" -> nav "#/graphs" Svs.Nav_all_graphs
+  | "graph/open" | "graph/remove" ->
+      close st;
+      st.svs.Svs.dialogs_open (if cid = "graph/open" then "graph-open" else "graph-remove")
+  | "graph/db-add" ->
       close st;
       st.svs.Svs.dialogs_open "new-graph"
   | "graph/export-as-html" ->
       close st;
       st.svs.Svs.export_graph_html ()
+  | "publish/open-dialog" -> close st; st.svs.Svs.publish_page ()
+  | "search/re-index" ->
+      close st;
+      Option.iter (fun repo -> ignore (st.svs.Svs.invoke
+        "thread-api/search-build-blocks-indice-in-worker"
+        [Wire.String repo; Wire.Bool true])) repo
+  | "ui/clear-all-notifications" -> close st; st.svs.Svs.clear_notifications ()
+  | "misc/export-block-data" ->
+      close st;
+      st.svs.Svs.export_data "block" (List.nth_opt (target_uuids st) 0)
+  | "misc/export-page-data" ->
+      close st;
+      st.svs.Svs.export_data "page" (st.svs.Svs.route_page_uuid ())
+  | "misc/export-graph-ontology-data" ->
+      close st; st.svs.Svs.export_data "graph-ontology" None
+  | "misc/import-edn-data" -> close st; st.svs.Svs.import_data ()
+  | "dev/show-block-data" | "dev/show-block-ast" ->
+      close st;
+      st.svs.Svs.show_data cid (List.nth_opt (target_uuids st) 0)
+  | "dev/show-page-data" ->
+      close st; st.svs.Svs.show_data cid (List.nth_opt (target_uuids st) 0)
+  | "dev/recompute-checksum" | "dev/export-client-ops-sqlite" ->
+      close st; st.svs.Svs.export_data cid None
+  | "dev/gc-graph" ->
+      close st;
+      Option.iter (fun repo -> ignore (st.svs.Svs.invoke "thread-api/gc-graph"
+        [Wire.String repo])) repo
   | "dev/validate-db" ->
       close st;
       Option.iter (validate_graph st) repo
@@ -1635,6 +1674,12 @@ and run_command st repo (cid : string) =
   | "ui/toggle-wide-mode" ->
       close st;
       st.svs.Svs.settings_toggle_wide ()
+  | "ui/toggle-document-mode" ->
+      close st;
+      st.svs.Svs.settings_toggle_document ()
+  | "ui/highlight-recent-blocks" ->
+      close st;
+      st.svs.Svs.settings_toggle_recent ()
   | "ui/toggle-theme" ->
       close st;
       st.svs.Svs.settings_toggle_theme ()
@@ -1673,7 +1718,6 @@ and run_command st repo (cid : string) =
   | "ui/toggle-brackets" ->
       close st;
       st.svs.Svs.config_toggle "ui/show-brackets?" true
-  | "graph/open" -> nav "#/graphs" Svs.Nav_all_graphs
   | _ -> (
       (match shortcut_action cid with
        | Some f -> f ()
@@ -1705,6 +1749,12 @@ let copy_highlighted_ref st =
 (* keyboard-shortcut entry point: run a command id exactly as the
    palette would. Palette-shaped commands open the palette in the right
    mode first; everything else dispatches straight through run_command *)
+let open_commands st =
+  open_palette st;
+  set_in st (fun v -> {v with filter = Some G_commands; input = ""; persist = false});
+  st.svs.Svs.set_input_value "";
+  refresh st
+
 let dispatch_id (cid : string) =
   match !latest_st with
   | Some st -> (
@@ -1712,15 +1762,7 @@ let dispatch_id (cid : string) =
       | "go/search" -> open_palette st
       | "command-palette/toggle" ->
           if (get st).open_ then close st
-          else begin
-            open_palette st;
-            (* forced Commands filter is session-local: do not write it
-               back as the next Cmd-K's restored search *)
-            set_in st (fun v ->
-                { v with filter = Some G_commands; input = ""; persist = false });
-            st.svs.Svs.set_input_value "";
-            refresh st
-          end
+          else open_commands st
       | "go/search-in-page" | "editor/move-blocks" | "go/search-themes" ->
           if not (get st).open_ then open_palette st;
           run_with_lifecycle st (st.svs.Svs.repo ()) cid

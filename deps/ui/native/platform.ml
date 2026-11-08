@@ -1,6 +1,23 @@
 let published_db : string option = None
 let published_state : string option = None
 let publishing () = false
+let desktop = true
+
+let global_config_contents () =
+  let path =
+    Filename.concat (Filename.concat (Daemon_client.home ()) ".logseq")
+      "config/config.edn" in
+  let file =
+    try Some (Unix.stat path) with
+    | Unix.Unix_error (Unix.ENOENT, _, _) -> None
+    | Unix.Unix_error (error, _, _) ->
+        raise (Sys_error (Unix.error_message error)) in
+  match file with
+  | Some { Unix.st_kind = Unix.S_REG; _ } ->
+    Js.Promise.resolve
+      (Some (In_channel.with_open_bin path In_channel.input_all))
+  | Some _ -> raise (Sys_error "Global configuration is not a regular file")
+  | None -> Js.Promise.resolve None
 
 (* Native twin of core/platform.ml — same surface, DOM effects replaced
    by in-memory host state + platform requests to the native host.

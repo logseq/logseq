@@ -138,6 +138,13 @@ let key_cell (ctx : V.ctx) ~owner_is_tag ~owner_title ?(icon = true)
       S.refresh_all ();
       Js.Promise.resolve ())
   in
+  let open_key () =
+    match Ui_services.dom_by_id anchor_id with
+    | Some anchor ->
+        Menu.open_menu ~anchor ~owner_uuid:ctx.block_uuid ~owner_id:ctx.block_id
+          ~owner_is_tag ~owner_title ~refresh:ctx.refresh ~with_title:false
+          ~more_options:(reorder_options ctx reorder_rows row) row
+    | None -> () in
   (Lui_elements.row ~gap:4 ~cross:`center ~min_height:28 ~min_width:0 ~grow:1.
      ~style_class:"property-key-inner"
      [ (if icon then
@@ -154,7 +161,8 @@ let key_cell (ctx : V.ctx) ~owner_is_tag ~owner_title ?(icon = true)
               | None -> ())
             [ property_icon row ]
         else Logseq_el.nothing)
-     ; Ui_components.button ~variant:`ghost ~size:`sm ~text_alignment:`start ~grow:1.0
+     ; Jump_state.target ~key:anchor_id ~uuid:ctx.block_uuid ~activate:open_key
+       (Ui_components.button ~variant:`ghost ~size:`sm ~text_alignment:`start ~grow:1.0
          ~min_width:0
          ~style_class:"property-k jtrigger"
          ~foreground:"var(--ls-primary-text-color)"
@@ -162,15 +170,8 @@ let key_cell (ctx : V.ctx) ~owner_is_tag ~owner_title ?(icon = true)
          ~label:(D.row_title row)
          ~text:(D.row_title row)
          ~accessibility_identifier:anchor_id
-         ~on_press:(fun _ ->
-           match Ui_services.dom_by_id anchor_id with
-           | Some anchor ->
-               Menu.open_menu ~anchor ~owner_uuid:ctx.block_uuid
-                 ~owner_id:ctx.block_id ~owner_is_tag ~owner_title
-                 ~refresh:ctx.refresh ~with_title:false
-                 ~more_options:(reorder_options ctx reorder_rows row) row
-           | None -> ())
-         []
+         ~on_press:(fun _ -> open_key ())
+         [])
      ])
     context parent
 

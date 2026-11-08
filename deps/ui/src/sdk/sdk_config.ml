@@ -1,12 +1,68 @@
-(* Graph config backed by the repo's logseq/config.edn file —
-   mirrors config-handler/set-config! + state/get-config. *)
+(* Graph configuration is persisted only under the repo's logseq/config.edn. *)
 
 open Promise_ext
 open Sdk_util
 
 let config_path = "logseq/config.edn"
+let global_config_path = "config/config.edn"
 
 let published_config : Wire.t option ref = ref None
+let global_config = ref (Wire.Map [])
+let db_default_config = Edn.parse
+  {|{:feature/enable-search-remove-accents? true
+     :ui/auto-expand-block-refs? true
+     :default-queries
+     {:journals
+      [{:title-key :journal.default-query/doing
+        :title-icon "InProgress50"
+        :query [:find (pull ?b [*])
+                :in $ ?start ?today
+                :where
+                (task ?b #{"Doing"})
+                [?b :block/page ?p]
+                [?p :block/journal-day ?d]
+                [(>= ?d ?start)]
+                [(<= ?d ?today)]]
+        :inputs [:14d :today]
+        :collapsed? true}
+       {:title-key :journal.default-query/todo
+        :title-icon "Todo"
+        :query [:find (pull ?b [*])
+                :in $ ?start ?next
+                :where
+                (task ?b #{"Todo"})
+                [?b :block/page ?p]
+                [?p :block/journal-day ?d]
+                [(> ?d ?start)]
+                [(< ?d ?next)]]
+        :inputs [:today :7d-after]
+        :group-by-page? false
+        :collapsed? true}]}
+     :ui/hide-empty-properties? false
+     :ui/mask-email? true}|}
+
+let merge_configs current next =
+  match current, next with
+  | Wire.Map current, Wire.Map next ->
+      let kept =
+        List.filter (fun (key, _) -> not (List.mem_assoc key next)) current in
+      let updated =
+        List.map (fun (key, value) ->
+          let value = match List.assoc_opt key current, value with
+            | Some (Wire.Map previous), Wire.Map newer ->
+                let kept =
+                  List.filter (fun (key, _) -> not (List.mem_assoc key newer))
+                    previous in
+                Wire.Map (kept @ newer)
+            | _ -> value in
+          key, value) next in
+      Wire.Map (kept @ updated)
+  | Wire.Map _, _ -> current
+  | _, Wire.Map _ -> next
+  | _ -> Wire.Map []
+
+let effective_config graph =
+  merge_configs (merge_configs db_default_config !global_config) graph
 
 let start_of_week config =
   match config with
@@ -23,9 +79,10 @@ let validate_config config = ignore (start_of_week config);config
 let calendar_week_starts_on () =
   (start_of_week (Runtime.model ()).Model.graph_config + 1) mod 7
 
-let report_config_error = function
-  | Edn.Parse_error _ -> Toast.error (I18n.t1 "file.config/read-failed-title" config_path)
-  | Invalid_argument _ -> Toast.error (I18n.t1 "file.config/invalid-title" config_path)
+let report_config_error ?(path = config_path) = function
+  | Edn.Parse_error _ -> Toast.error (I18n.t1 "file.config/read-failed-title" path)
+  | Sys_error _ -> Toast.error (I18n.t1 "file.config/read-failed-title" path)
+  | Invalid_argument _ -> Toast.error (I18n.t1 "file.config/invalid-title" path)
   | error -> raise error
 
 let parse_config content = validate_config (Edn.parse content)
@@ -33,7 +90,9 @@ let parse_config content = validate_config (Edn.parse content)
 let note_file_saved repo path content =
   if path=config_path then
     match parse_config content with
-    | config -> Runtime.send (Action.Graph_config_loaded (repo,config))
+    | config ->
+        Runtime.send
+          (Action.Graph_config_loaded (repo, effective_config config))
     | exception (Edn.Parse_error _ | Invalid_argument _ as error) -> report_config_error error
 
 let read_repo_config repo =
@@ -52,8 +111,31 @@ let read_repo_config repo =
 
 let read_config repo =
   match !published_config with
-  | Some config -> Js.Promise.resolve (validate_config config)
-  | None -> read_repo_config repo
+  | Some config ->
+      Js.Promise.resolve (validate_config (merge_configs db_default_config config))
+  | None ->
+      let contents =
+        try Platform.global_config_contents () with Sys_error _ as error ->
+          report_config_error ~path:global_config_path error;
+          raise error in
+      let* content = contents in
+      let global = match content with
+        | None | Some "" -> Wire.Map []
+        | Some text ->
+            (match Edn.parse text with
+             | config -> config
+             | exception (Edn.Parse_error _ | Invalid_argument _ as error) ->
+                 report_config_error ~path:global_config_path error;
+                 raise error) in
+      let* graph = read_repo_config repo in
+      let effective = merge_configs (merge_configs db_default_config global) graph in
+      (match validate_config effective with
+       | config ->
+           global_config := global;
+           Js.Promise.resolve config
+       | exception (Invalid_argument _ as error) ->
+           report_config_error ~path:global_config_path error;
+           raise error)
 
 let config_mutations : (string, bool Js.Promise.t) Hashtbl.t = Hashtbl.create 4
 
@@ -103,7 +185,8 @@ let persist_config repo (cfg : Wire.t) =
       ]
   in
   if Rtc_error.is_error result then failwith "Failed to write graph configuration";
-  Runtime.send (Action.Graph_config_loaded (repo,cfg));
+  Runtime.send
+    (Action.Graph_config_loaded (repo, effective_config cfg));
   Js.Promise.resolve ()
 
 let write_config repo cfg =

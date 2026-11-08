@@ -86,6 +86,7 @@ let toast_error msg =
        ; toast_text = msg
        ; toast_kind = "error"
        ; toast_key = None
+       ; toast_code = None
        });
   Runtime.flush ()
 

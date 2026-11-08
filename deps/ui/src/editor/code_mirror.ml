@@ -708,6 +708,7 @@ let copy_button uuid =
            (Action.Toast_push
               { Model.toast_id = 0
               ; toast_key = None
+              ; toast_code = None
               ; toast_text = I18n.t "notification/copied"
               ; toast_kind = "success"
               });

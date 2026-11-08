@@ -1602,6 +1602,8 @@ let on_command (ev : Ui_services.ev) =
                        , Json.String
                            (if command = "add-reaction" then "emoji"
                             else "icon") ) ])
+            | "dev/show-block-data" | "dev/show-block-ast" ->
+                Exporter.show_data command (Some uuid)
             | _ ->
                 ignore
                   (Editor_cmds.run ~command ~block:(Some uuid)

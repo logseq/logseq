@@ -377,7 +377,10 @@ let practice_again st =
   let r = repo () in
   if r = "" then () else load_current st r
 
+let card_keys = Keymap_data.chord ()
+
 let close st =
+  Keymap_data.reset_chord card_keys;
   restart st;
   Runtime.signal_set st.open_ false;
   Render_inline.cloze_reveal_all := false;
@@ -508,23 +511,33 @@ let advance_phase st =
 (* cljs shortcut.handler/cards: s toggles answers, 1-4 click the
    rating buttons (visible when next-phase = :init) *)
 let on_keydown ev st =
-  if Runtime.signal_get st.open_ && not ev.Ui_services.default_prevented then
-    match ev.Ui_services.key with
-    | Some "Escape" -> close st
-    | Some "s" -> advance_phase st
-    | Some k ->
+  let editing = Editor_state.editing () <> None
+    || Option.fold ~none:false ~some:(fun target -> target.Ui_services.closest
+         "input, textarea, select, [contenteditable]" <> None) ev.Ui_services.target in
+  if editing || ev.Ui_services.composing || not (Runtime.signal_get st.open_)
+  then Keymap_data.reset_chord card_keys
+  else if not ev.Ui_services.default_prevented then
+    let matched = Keymap_data.match_event card_keys
+      ~ids:["cards/toggle-answers"; "cards/again"; "cards/hard"; "cards/good"; "cards/easy"] ev in
+    let consume () = ev.Ui_services.prevent_default (); ev.Ui_services.stop_immediate () in
+    match matched with
+    | Keymap_data.No_match when ev.Ui_services.key = Some "Escape" -> consume (); close st
+    | Keymap_data.Command "cards/toggle-answers" -> consume (); advance_phase st
+    | Keymap_data.Command command ->
+        consume ();
         let np =
           next_phase (cur_has_cloze st) (Runtime.signal_get st.phase)
         in
         if np = "init" then
-          match k with
-          | "1" -> rate st "again"
-          | "2" -> rate st "hard"
-          | "3" -> rate st "good"
-          | "4" -> rate st "easy"
+          match command with
+          | "cards/again" -> rate st "again"
+          | "cards/hard" -> rate st "hard"
+          | "cards/good" -> rate st "good"
+          | "cards/easy" -> rate st "easy"
           | _ -> ()
         else ()
-    | None -> ()
+    | Keymap_data.Prefix -> consume ()
+    | Keymap_data.No_match -> ()
 
 let init (ms : Model.t Signal.signal) : t =
   match !st_ref with

@@ -578,6 +578,7 @@
  :editor.slash/tomorrow-desc "插入明天的日期"
  :editor.slash/underline "下划线"
  :editor.slash/underline-desc "创建带下划线的文本样式"
+ :editor.slash/unsupported-configured-command-error "自定义命令“{1}”使用了尚未支持的动作或选项。"
  :editor.slash/upload-asset "上传资源"
  :editor.slash/upload-asset-desc "上传图片、PDF、DOCX 等类型的文件"
  :editor.slash/yesterday-desc "插入昨天的日期"
