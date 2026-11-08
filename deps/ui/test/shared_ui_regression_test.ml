@@ -212,7 +212,10 @@ let settings_config ~registry ~profile ~finish =
         check (owner ^ " preserves other graph preferences when toggled")
           (Hashtbl.find files "second-settings-fixture"=config true
            && Hashtbl.find files "settings-config-fixture"=config false
-           && (!current).Model.graph_config=config true);
+           && Wire.get (!current).Model.graph_config "ui/show-brackets?"=Some (Wire.Bool true)
+           && Wire.get (!current).Model.graph_config "start-of-week"=Some (Wire.Int 2)
+           && Wire.get (!current).Model.graph_config "custom-fixture"=Some (Wire.String "retained")
+           && Wire.get (!current).Model.graph_config "ui/auto-expand-block-refs?"=Some (Wire.Bool true));
         ignore (Lui_app.dispose session.S.app);
         next rest;Js.Promise.resolve ()) saved)
   in
@@ -1338,7 +1341,10 @@ let run_views ~registry ~profile ~finish =
           !complete ();
           ignore (Js.Promise.then_ (fun () ->
             check "Config saves refresh only their originating graph"
-              ((!state).graph_config=(if stale || invalid then original else updated));
+              (if stale || invalid then (!state).graph_config=original else
+                 Wire.get (!state).graph_config "start-of-week"=Some (Wire.Int 5)
+                 && Wire.get (!state).graph_config "ui/hide-empty-properties?"
+                    =Some (Wire.Bool false));
             if invalid then check "Invalid config edits report an error and retain the last valid preferences"
               (List.exists (fun toast -> toast.Model.toast_kind="error"
                 && toast.toast_text=I18n.t1 "file.config/invalid-title" "logseq/config.edn") (!state).toasts);

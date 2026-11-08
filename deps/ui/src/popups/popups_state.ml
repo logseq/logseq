@@ -1756,7 +1756,7 @@ let configured_concat left right =
   left ^ (if S.trim left = "" || left.[S.length left - 1] = '\n' then "" else " ")
     ^ S.sub right !start (S.length right - !start)
 
-let configured_input text (model : Edit_model.t) =
+let configured_input ?(backward_pos = 0) text (model : Edit_model.t) =
   let pos = model.caret in
   let prefix = S.sub model.source 0 pos in
   let suffix = S.sub model.source pos (S.length model.source - pos) in
@@ -1764,9 +1764,10 @@ let configured_input text (model : Edit_model.t) =
     | None -> prefix
     | Some index -> configured_concat (S.sub prefix 0 index) text in
   let source = if S.trim suffix = "" then prefix else configured_concat prefix suffix in
+  let pos = max 0 (S.length prefix - backward_pos) in
   if S.trim text <> "" && S.trim source = "" then model else
     Edit_model.select (Edit_model.splice model 0 (S.length model.source) source)
-      ~anchor:(S.length prefix) ~focus:(S.length prefix)
+      ~anchor:pos ~focus:pos
 
 let configured_steps output =
   let move direction count model =
@@ -1778,6 +1779,10 @@ let configured_steps output =
     | Wire.Array [Wire.Keyword "editor/input"; Wire.String text; Wire.Nil]
     | Wire.Array [Wire.Keyword "editor/input"; Wire.String text; Wire.Map []] ->
         Some (configured_input text)
+    | Wire.Array [Wire.Keyword "editor/input"; Wire.String text;
+                  Wire.Map [ (Wire.Keyword "backward-pos", Wire.Int n) ]]
+      when n >= 0 ->
+        Some (configured_input ~backward_pos:n text)
     | Wire.Array [Wire.Keyword "editor/cursor-back"; Wire.Int count] when count >= 0 ->
         Some (move Edit_model.Left count)
     | Wire.Array [Wire.Keyword "editor/cursor-forward"; Wire.Int count] when count >= 0 ->
