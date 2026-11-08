@@ -208,9 +208,11 @@ let import_file_graph repo files =
       if !attaching then
         match previous_repo with
         | Some previous ->
+            Editor_actions.after_pending_input (fun () ->
             let* config = Graph.open_graph previous in
+            Editor_actions.after_pending_input (fun () ->
             Runtime.send (Action.Boot_graph_ready (previous, config));
-            Js.Promise.resolve false
+            Js.Promise.resolve false))
         | None -> Js.Promise.resolve false
       else Js.Promise.resolve false)
 
