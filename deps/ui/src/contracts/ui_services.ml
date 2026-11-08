@@ -136,6 +136,7 @@ type uri = { encode_component : string -> string }
    the host confirms. copy is the fire-and-forget plain-text write. *)
 type clipboard = {
   copy : string -> unit;
+  write : ?html:string -> ?blocks:string -> string -> unit Ui_task.t;
   write_text : string -> unit Ui_task.t;
   read_text : unit -> string Ui_task.t;
 }
@@ -495,6 +496,7 @@ let log_info v = (get ()).log.info v
 let perf_mark name = (get ()).perf.mark name
 let uri_encode_component s = (get ()).uri.encode_component s
 let clipboard_copy s = (get ()).clipboard.copy s
+let clipboard_write ?html ?blocks s = (get ()).clipboard.write ?html ?blocks s
 let clipboard_write_text s = (get ()).clipboard.write_text s
 let clipboard_read_text () = (get ()).clipboard.read_text ()
 let session_get k = (get ()).session.get k

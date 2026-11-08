@@ -15,10 +15,10 @@ let prevented : Js.Json.t -> bool = [%mel.raw "e => e.prevented"]
 
 let clipboard_event : unit -> Js.Json.t = [%mel.raw
   "function () {
-    const values = {'text/plain': '<b>café 中文 😀</b>', 'text/html': '<b>café 中文 😀</b>', 'application/x-parity': 'opaque', Files: ''};
+    const values = {'text/plain': '<b>café 中文 😀</b>', 'text/html': '<b>café 中文 😀</b>', 'application/x-parity': 'opaque', 'web application/logseq': 'serialized blocks', Files: ''};
     return {reads: 0, clipboardData: {
-      types: {0: 'text/plain', 1: 'text/html', 2: 'application/x-parity', 3: 'Files', length: 4},
-      items: {0: {kind: 'string', type: 'text/plain'}, 1: {kind: 'file', type: 'image/png'}, length: 2},
+      types: {0: 'text/plain', 1: 'text/html', 2: 'application/x-parity', 3: 'web application/logseq', 4: 'Files', length: 5},
+      items: {0: {kind: 'string', type: 'text/plain'}, 1: {kind: 'file', type: 'image/png'}, 2: {kind: 'string', type: 'web application/logseq'}, length: 3},
       files: {0: {name: 'attachment.png', size: 12, type: 'image/png'}, length: 1},
       getData(type) { this.owner.reads++; return values[type]; }
     }};
@@ -35,10 +35,12 @@ let run () =
   check "Clipboard inspection preserves actual array-like MIME entries and Unicode"
     (snapshot.Ui_services.clipboard_formats=
       ["text/plain",{js|<b>café 中文 😀</b>|js};"text/html",{js|<b>café 中文 😀</b>|js};
-       "application/x-parity","opaque";"Files",""]);
-  check "Clipboard inspection reads each admitted format exactly once" (clipboard_reads raw=4);
+       "application/x-parity","opaque";"application/logseq","serialized blocks";"Files",""]);
+  check "Clipboard inspection reads each admitted format exactly once" (clipboard_reads raw=5);
   check "Clipboard inspection preserves item kinds and MIME types"
-    (snapshot.clipboard_items=["string","text/plain";"file","image/png"]);
+    (snapshot.clipboard_items=["string","text/plain";"file","image/png";"string","application/logseq"]);
+  check "Clipboard getter exposes the logical Logseq format"
+    (clip.clipboard_get "application/logseq" = "serialized blocks");
   check "Clipboard inspection retains file metadata without reading contents"
     (snapshot.clipboard_files=["attachment.png","image/png",12.]);
   check "Non-clipboard events expose an empty inspection"

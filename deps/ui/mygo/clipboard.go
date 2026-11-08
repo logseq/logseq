@@ -10,11 +10,24 @@ import (
 	luimygo "github.com/logseq/lui/platform/mygo"
 )
 
+const logseqClipboardFormat transfer.Format = "application/logseq"
+
+func clipboardWriteData(request map[string]string) transfer.Data {
+	reps := []transfer.Representation{transfer.Bytes(transfer.Text, []byte(request["text"]))}
+	if html, ok := request["html"]; ok {
+		reps = append(reps, transfer.Bytes(transfer.HTML, []byte(html)))
+	}
+	if blocks, ok := request["blocks"]; ok {
+		reps = append(reps, transfer.Bytes(logseqClipboardFormat, []byte(blocks)))
+	}
+	return transfer.New(transfer.NewItem(reps...))
+}
+
 func clipboardPasteFormats(command string) []transfer.Format {
 	if command == "pasteAndMatchStyle" {
 		return []transfer.Format{transfer.Text}
 	}
-	return []transfer.Format{transfer.Text, transfer.HTML}
+	return []transfer.Format{transfer.Text, transfer.HTML, logseqClipboardFormat}
 }
 
 func (d *DocumentEvents) paste(c *ui.Context, target luimygo.InputNode, command string, data transfer.Data, readErr error) bool {

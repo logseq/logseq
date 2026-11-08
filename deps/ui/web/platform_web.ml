@@ -210,6 +210,7 @@ let install ~request_flush ~dom ~timers ~files =
     ; uri = { encode_component = Platform.encode_uri_component }
     ; clipboard =
         { copy = Platform.copy_to_clipboard
+        ; write = (fun ?html ?blocks s -> task_of (Platform.clipboard_write ?html ?blocks s))
         ; write_text = (fun s -> task_of (Platform.clipboard_write_text s))
         ; read_text = (fun () -> task_of (Platform.clipboard_read_text ()))
         }

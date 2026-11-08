@@ -190,7 +190,7 @@ let clipboard_write_id = ref 0
 let clipboard_writes : (string, unit Ui_task.t * (unit -> unit) * (exn -> unit)) Hashtbl.t =
   Hashtbl.create 8
 
-let clipboard_write_text text =
+let clipboard_write ?html ?blocks text =
   if !clipboard_write_id = max_int then invalid_arg "Clipboard request identity exhausted";
   incr clipboard_write_id;
   let id = string_of_int !clipboard_write_id in
@@ -199,10 +199,14 @@ let clipboard_write_text text =
     (fun ~resolve ~reject -> complete := Some (resolve,reject)) in
   let resolve,reject = Option.get !complete in
   Hashtbl.add clipboard_writes id (task,resolve,reject);
-  (try Host.clipboard_write_request (Yojson.Safe.to_string
-    (`Assoc ["request-id",`String id;"text",`String text]))
+  let fields = ["request-id",`String id;"text",`String text]
+    @ (match html with None -> [] | Some value -> ["html",`String value])
+    @ (match blocks with None -> [] | Some value -> ["blocks",`String value]) in
+  (try Host.clipboard_write_request (Yojson.Safe.to_string (`Assoc fields))
    with error -> Ui_task.cancel task; raise error);
   task
+
+let clipboard_write_text text = clipboard_write text
 
 let note_clipboard_write json =
   let invalid () = invalid_arg "Invalid native clipboard write result" in
@@ -643,6 +647,7 @@ let install_ui_services ~paints_caret ~assert_owner ~request_flush ~dom ~timers 
         }
     ; clipboard =
         { copy = Host.clipboard_write
+        ; write = clipboard_write
         ; write_text = clipboard_write_text
         ; read_text = clipboard_read_text
         }

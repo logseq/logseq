@@ -95,6 +95,7 @@ type uri = { encode_component : string -> string }
 
 type clipboard = {
   copy : string -> unit;
+  write : ?html:string -> ?blocks:string -> string -> unit Ui_task.t;
   write_text : string -> unit Ui_task.t;
   read_text : unit -> string Ui_task.t;
 }
@@ -385,6 +386,10 @@ val log_info : 'a -> unit
 val perf_mark : string -> unit
 val uri_encode_component : string -> string
 val clipboard_copy : string -> unit
+val clipboard_write : ?html:string -> ?blocks:string -> string -> unit Ui_task.t
+(** Write one item containing plain text and the supplied representations.
+    [blocks] is the existing serialized Logseq clipboard payload, unchanged.
+    Resolve only after host acknowledgement; reject on write failure. *)
 val clipboard_write_text : string -> unit Ui_task.t
 val clipboard_read_text : unit -> string Ui_task.t
 val session_get : string -> string option

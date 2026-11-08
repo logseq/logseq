@@ -208,6 +208,21 @@ let clipboard_write_blob : Webapi.Blob.t -> unit Js.Promise.t =
 external clipboard_write_text : string -> unit Js.Promise.t = "writeText"
   [@@mel.scope ("navigator", "clipboard")]
 
+let clipboard_write_data : string -> string Js.Undefined.t -> string Js.Undefined.t -> unit Js.Promise.t =
+  [%mel.raw {js|function (text, html, blocks) {
+    try {
+      const data = {'text/plain': new Blob([text], {type: 'text/plain'})};
+      if (html !== undefined) data['text/html'] = new Blob([html], {type: 'text/html'});
+      if (blocks !== undefined) data['web application/logseq'] = new Blob([blocks], {type: 'application/logseq'});
+      return navigator.clipboard.write([new ClipboardItem(data)]);
+    } catch (error) {
+      return Promise.reject(error);
+    }
+  }|js}]
+
+let clipboard_write ?html ?blocks text =
+  clipboard_write_data text (Js.Undefined.fromOption html) (Js.Undefined.fromOption blocks)
+
 external clipboard_read_text : unit -> string Js.Promise.t = "readText"
   [@@mel.scope ("navigator", "clipboard")]
 

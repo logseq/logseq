@@ -57,3 +57,54 @@ func TestDocumentClipboardPaste(t *testing.T) {
 		})
 	}
 }
+
+func TestClipboardWriteContract(t *testing.T) {
+	for _, test := range []struct {
+		name, payload string
+		want          map[transfer.Format]string
+	}{
+		{"plain", `{"request-id":"1","text":"plain"}`, map[transfer.Format]string{transfer.Text: "plain"}},
+		{"rich", `{"request-id":"2","text":"café 中文 😀","html":"<b>café 中文 😀</b>","blocks":"{:graph \"logseq_db_test\" :embed-block? nil :op :copy :blocks []}"}`, map[transfer.Format]string{transfer.Text: "café 中文 😀", transfer.HTML: "<b>café 中文 😀</b>", "application/logseq": `{:graph "logseq_db_test" :embed-block? nil :op :copy :blocks []}`}},
+		{"empty representations", `{"request-id":"3","text":"","html":"","blocks":""}`, map[transfer.Format]string{transfer.Text: "", transfer.HTML: "", "application/logseq": ""}},
+		{"missing text", `{"request-id":"1","html":"rich"}`, nil},
+		{"unknown field", `{"request-id":"1","text":"plain","rtf":"rich"}`, nil},
+		{"duplicate text", `{"request-id":"1","text":"plain","text":"other"}`, nil},
+		{"duplicate HTML", `{"request-id":"1","text":"plain","html":"one","html":"two"}`, nil},
+		{"wrong HTML type", `{"request-id":"1","text":"plain","html":null}`, nil},
+		{"wrong blocks type", `{"request-id":"1","text":"plain","blocks":{}}`, nil},
+		{"wrong identity type", `{"request-id":1,"text":"plain"}`, nil},
+		{"zero identity", `{"request-id":"0","text":"plain"}`, nil},
+		{"noncanonical identity", `{"request-id":"01","text":"plain"}`, nil},
+		{"overflow identity", `{"request-id":"9223372036854775808","text":"plain"}`, nil},
+		{"trailing input", `{"request-id":"1","text":"plain"}{}`, nil},
+		{"invalid UTF-8", string([]byte{'{', '"', 0xff}), nil},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			request, err := decodeClipboardWrite(test.payload)
+			if test.want == nil {
+				if err == nil {
+					t.Fatal("malformed clipboard request accepted")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			items := clipboardWriteData(request).Items()
+			if len(items) != 1 {
+				t.Fatalf("clipboard items = %d, want one", len(items))
+			}
+			got := make(map[transfer.Format]string)
+			for _, format := range items[0].Formats() {
+				value, err := items[0].Read(format)
+				if err != nil {
+					t.Fatal(err)
+				}
+				got[format] = string(value)
+			}
+			if !reflect.DeepEqual(got, test.want) {
+				t.Fatalf("representations = %v, want %v", got, test.want)
+			}
+		})
+	}
+}

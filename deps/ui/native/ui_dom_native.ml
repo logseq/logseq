@@ -104,26 +104,33 @@ let file_of_json (f : Js.Json.t) : Ui_services.file =
 
 let clipboard_data e = jfield "clipboardData" e
 
-let text_clipboard_data text =
-  Js.Json.JObject ["text",Js.Json.JString text;
-    "types",Js.Json.JArray [|Js.Json.JString "text/plain"|];
-    "items",Js.Json.JArray [|Js.Json.JObject
-      ["kind",Js.Json.JString "string";"type",Js.Json.JString "text/plain"]|];
-    "files",Js.Json.JArray [||]]
-
 let clipboard_value data mime =
-  if mime="text/plain" then Option.value (jstr "text" data) ~default:"" else ""
+  match jfield mime data with
+  | Some (Js.Json.JString value) -> value
+  | None -> ""
+  | Some _ -> invalid_arg ("Invalid native clipboard representation " ^ mime)
 
 let empty_clipboard_snapshot () = Ui_services.empty_clipboard_snapshot
 
 let inspect_clipboard data () =
+  let formats = match data with
+    | Js.Json.JObject fields -> List.filter_map (function
+        | ("types" | "items" | "files"), _ -> None
+        | mime, Js.Json.JString value -> Some (mime, value)
+        | mime, _ -> invalid_arg ("Invalid native clipboard representation " ^ mime)) fields
+    | _ -> invalid_arg "Invalid native clipboard data" in
   let entries name=match jfield name data with
     | Some (Js.Json.JArray values) -> Array.to_list values
+    | None -> []
     | _ -> invalid_arg ("Invalid native clipboard " ^ name) in
   let field name value=Option.get (jstr name value) in
-  {Ui_services.clipboard_formats=List.map (fun value ->
-     let mime=Option.get (Js.Json.decodeString value) in mime,clipboard_value data mime) (entries "types");
-   clipboard_items=List.map (fun item -> field "kind" item,field "type" item) (entries "items");
+  {Ui_services.clipboard_formats=(match jfield "types" data with
+     | None -> formats
+     | Some _ -> List.map (fun value ->
+         let mime=Option.get (Js.Json.decodeString value) in mime,clipboard_value data mime) (entries "types"));
+   clipboard_items=(match jfield "items" data with
+     | None -> List.map (fun (mime, _) -> "string", mime) formats
+     | Some _ -> List.map (fun item -> field "kind" item,field "type" item) (entries "items"));
    clipboard_files=List.map (fun file -> field "name" file,
      Option.value (jstr "type" file) ~default:"",jnum "size" file) (entries "files")}
 
@@ -255,9 +262,7 @@ let ev_of (e : Js.Json.t) : Ui_services.ev =
   ; clipboard_snapshot = (match clipboard with None -> empty_clipboard_snapshot | Some data -> inspect_clipboard data)
   ; clipboard_set =
       (fun mime text ->
-        (* no clipboardData object natively — a copy/cut event's setData
-           goes straight to the OS clipboard; only text/plain matters to
-           the paste paths that read it back *)
+        (* Rich writes use the acknowledged clipboard service. *)
         if mime = "text/plain" then Host.clipboard_write text)
   ; data_transfer_get =
       (fun mime ->

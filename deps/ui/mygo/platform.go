@@ -175,7 +175,7 @@ func (s *platformServices) handle(name, payload string) ([]platformReply, error)
 		if err != nil {
 			return nil, err
 		}
-		err = mygo.Clipboard.Write(transfer.TextData(request["text"]))
+		err = mygo.Clipboard.Write(clipboardWriteData(request))
 		result := map[string]any{"request-id": request["request-id"], "ok": err == nil}
 		if err != nil {
 			result["error"] = err.Error()
@@ -406,14 +406,14 @@ func decodeClipboardWrite(payload string) (map[string]string, error) {
 	if err != nil || start != json.Delim('{') {
 		return nil, errors.New("clipboard-write: expected object")
 	}
-	request := make(map[string]string, 2)
+	request := make(map[string]string, 4)
 	for decoder.More() {
 		key, err := decoder.Token()
 		if err != nil {
 			return nil, err
 		}
 		name, ok := key.(string)
-		if !ok || (name != "request-id" && name != "text") {
+		if !ok || (name != "request-id" && name != "text" && name != "html" && name != "blocks") {
 			return nil, errors.New("clipboard-write: unknown field")
 		}
 		if _, duplicate := request[name]; duplicate {
@@ -438,7 +438,8 @@ func decodeClipboardWrite(payload string) (map[string]string, error) {
 	}
 	id := request["request-id"]
 	number, err := strconv.ParseUint(id, 10, 63)
-	if len(request) != 2 || err != nil || number == 0 || strconv.FormatUint(number, 10) != id {
+	_, hasText := request["text"]
+	if !hasText || err != nil || number == 0 || strconv.FormatUint(number, 10) != id {
 		return nil, errors.New("clipboard-write: invalid request identity or missing text")
 	}
 	return request, nil

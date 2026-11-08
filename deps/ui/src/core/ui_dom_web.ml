@@ -408,13 +408,26 @@ let transfer_has_files transfer =
 
 let empty_clipboard_snapshot () = Ui_services.empty_clipboard_snapshot
 
+let clipboard_mime = function
+  | "web application/logseq" -> "application/logseq"
+  | mime -> mime
+
+let clipboard_value data mime =
+  let name =
+    if mime = "application/logseq"
+       && Array.exists (fun value -> Js.Json.decodeString value = Some "web application/logseq")
+            (array_from (Option.get (j_field data "types")))
+    then "web application/logseq"
+    else mime in
+  cd_get data name
+
 let inspect_clipboard data () =
   let entries name=Array.to_list (array_from (Option.get (j_field data name))) in
   let string value=Option.get (Js.Json.decodeString value) in
   let field name value=string (Option.get (j_field value name)) in
   {Ui_services.clipboard_formats=List.map (fun value ->
-     let mime=string value in mime,cd_get data mime) (entries "types");
-   clipboard_items=List.map (fun item -> field "kind" item,field "type" item) (entries "items");
+     let mime=string value in clipboard_mime mime,cd_get data mime) (entries "types");
+   clipboard_items=List.map (fun item -> field "kind" item,clipboard_mime (field "type" item)) (entries "items");
    clipboard_files=List.map (fun file -> field "name" file,field "type" file,num file "size")
      (entries "files")}
 
@@ -463,7 +476,7 @@ let ev_of (e : Js.Json.t) : Ui_services.ev =
   ; clipboard_get =
       (fun mime ->
         match clipboard_data_js e with
-        | Some cd -> cd_get cd mime
+        | Some cd -> clipboard_value cd mime
         | None -> "")
   ; clipboard_snapshot = (match clipboard with None -> empty_clipboard_snapshot | Some data -> inspect_clipboard data)
   ; clipboard_set =

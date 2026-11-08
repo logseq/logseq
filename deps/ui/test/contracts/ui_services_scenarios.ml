@@ -186,6 +186,7 @@ let run () =
         }
     ; clipboard =
         { copy = (fun s -> copied := s)
+        ; write = (fun ?html:_ ?blocks:_ s -> copied := s; Ui_task.resolve ())
         ; write_text = (fun s -> copied := s; Ui_task.resolve ())
         ; read_text = (fun () -> incr read_count; Ui_task.resolve !clip)
         }

@@ -65,6 +65,22 @@ Native services compile source links to the worker's canonical codec and
 native Regexp implementation. Checkouts must preserve these symbolic links;
 Windows checkout and packaging behavior still require platform validation.
 
+### Clipboard
+
+`Ui_services.clipboard_write ?html ?blocks text` writes one item and resolves
+only after the host confirms success. The optional `blocks` string retains the
+existing master EDN payload; the host does not reinterpret graph or block data.
+Plain `clipboard_write_text`, `clipboard_read_text` and fire-and-forget copy
+retain their text-only semantics. Native paste snapshots preserve MIME-keyed
+plain text, HTML and `application/logseq`, including while edits are queued;
+paste-and-match-style requests only plain text.
+
+Web writes use the existing ClipboardItem custom key `web application/logseq`
+and expose it as logical `application/logseq` in event snapshots. MyGo's native
+custom MIME is not automatically Chromium's OS custom-format mapping. Native
+and browser structured clipboard interoperability requires separate platform
+validation; this host contract does not claim it.
+
 ## Web
 
 ```sh

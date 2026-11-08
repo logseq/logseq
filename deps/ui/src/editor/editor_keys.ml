@@ -1550,12 +1550,12 @@ let on_paste ev =
     if editor_target || not (is_editable_target ev.Ui_services.target) then
       let clipboard = !(S.clipboard), !(S.clipboard_text) in
       if !S.structure_pending then (
-        let text = ev.Ui_services.clipboard_get "text/plain"
-        and html = ev.Ui_services.clipboard_get "text/html" in
+        let snapshot = ev.Ui_services.clipboard_snapshot () in
         ev.Ui_services.prevent_default ();
         ev.Ui_services.stop_immediate ();
         let saved = { ev with Ui_services.clipboard_get =
-            (function "text/plain" -> text | "text/html" -> html | _ -> "") } in
+            (fun mime -> Option.value (List.assoc_opt mime snapshot.clipboard_formats) ~default:"");
+            clipboard_snapshot = (fun () -> snapshot) } in
         let context = Runtime.repo (), Runtime.route () in
         S.enqueue_edit_action ~real:true (fun () ->
             if context = (Runtime.repo (), Runtime.route ()) then
