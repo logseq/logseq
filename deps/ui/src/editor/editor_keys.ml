@@ -404,6 +404,21 @@ let edit_key ~route ~conduit ~repeat uuid (kev : Edit_model.key_event)
   in
   if Edit_model.composing m then m
   else if ac_popup_open () && ac_owned_key key then m
+  else if (match S.editing () with Some e -> e.S.uuid = uuid && S.is_draft e | None -> false) then
+    (match key with
+     | "Enter" when shift -> Edit_model.insert_text m "\n"
+     | "Enter" -> A.submit_draft uuid; m
+     | "Escape" -> route.Edit_input.cancel (); m
+     | "Backspace" when not (meta || ctrl || kev.alt) ->
+         let paired = delete_pair m in if paired != m then paired else defer ()
+     | _ -> match shortcut_key_str key with
+       | "b" when (meta || ctrl) && not shift -> wrap_model m "**"
+       | "i" when (meta || ctrl) && not shift -> wrap_model m "*"
+       | "s" when (meta || ctrl) && shift -> wrap_model m "~~"
+       | "h" when (meta || ctrl) && shift -> wrap_model m "=="
+       | "v" when (meta || ctrl) && shift -> paste_text_at_caret uuid; m
+       | "z" | "y" when meta || ctrl -> m
+       | _ -> defer ())
   else
     match key with
     | "Enter" when (meta || ctrl) && not shift ->
@@ -976,6 +991,11 @@ and apply_input ?frame uuid ev =
       | _ -> false)
   then ()
   else
+  if (match S.editing () with
+      | Some e when S.is_draft e -> e.S.uuid <> uuid
+          || (match e.S.owner with S.Explicit_draft owner -> not owner#current | _ -> false)
+      | _ -> false) then ()
+  else
   (* Retarget a retired sink before enqueueing a shadow. Otherwise the
      same event could leave two shadows when it re-enters on the live UUID. *)
   let uuid, frame = match S.editing (), ev with
@@ -985,7 +1005,8 @@ and apply_input ?frame uuid ev =
     | _ -> uuid, frame in
   match ev, S.editing () with
   | Edit_input.Key ({ Edit_model.key = "Escape"; _ }, _), Some editing
-    when A.initial_click_pending uuid && !S.pending_focus_actions = [] ->
+    when not (S.is_draft editing)
+         && A.initial_click_pending uuid && !S.pending_focus_actions = [] ->
       A.flush_edit ();
       if not editing.S.submit_on_enter then A.select_single_in ~scope:editing.S.scope uuid;
       S.notify_edit_exit uuid
@@ -999,10 +1020,12 @@ and apply_input ?frame uuid ev =
      && (A.initial_click_pending uuid
          || (!S.pending_focus_actions <> [] && not !A.drain_gate)) then begin
     let context = Runtime.repo (), Runtime.route () in
+    let before = S.editing () in
     S.pending_focus_actions :=
       (fun () ->
         match S.editing () with
-        | Some current when context = (Runtime.repo (), Runtime.route ()) ->
+        | Some current when context = (Runtime.repo (), Runtime.route ())
+                            && S.replay_current before (Some current) ->
             apply_input ?frame:!S.active_frame current.S.uuid ev
         | _ -> Ui_services.log_error "queued editor input cancelled after its editing context ended")
       :: !S.pending_focus_actions;
@@ -1016,9 +1039,12 @@ and apply_input ?frame uuid ev =
    | _ -> ());
   (match ev with
    | Edit_input.Blur when A.initial_click_pending uuid && !S.pending_focus_actions <> [] ->
+       let before = S.editing () in
        S.pending_focus_actions :=
          (fun () -> match S.editing () with
-          | Some current -> A.update_model current.S.uuid Edit_model.composition_cancel
+          | Some current when S.replay_current before (Some current) ->
+              A.update_model current.S.uuid Edit_model.composition_cancel
+          | Some _ -> ()
           | None -> ())
          :: !S.pending_focus_actions
    | _ -> ());
@@ -1030,6 +1056,7 @@ and apply_input ?frame uuid ev =
               && !S.pending_edit_real = 0
               && local_input_during_split uuid ev in
   let context = Runtime.repo (), Runtime.route () in
+  let before = S.editing () in
   let enqueue ~real f =
     let queued_at = Ui_services.time_now () in
     let kind = match ev with
@@ -1051,7 +1078,8 @@ and apply_input ?frame uuid ev =
             kind uuid (Ui_services.time_now () -. queued_at));
         if context = (Runtime.repo (), Runtime.route ()) then
           match S.editing () with
-          | Some e -> f e
+          | Some e when S.replay_current before (Some e) -> f e
+          | Some _ -> ()
           | None -> ())
   in
   (* Optimistic splits own their recovery log. Other in-flight edits
@@ -1079,10 +1107,13 @@ and apply_input ?frame uuid ev =
       if local then (
         incr S.optimistic_input_seq;
         let context = Runtime.repo (), Runtime.route () in
+        let before = S.editing () in
         let replay () =
           if context = (Runtime.repo (), Runtime.route ()) then
             match S.editing () with
-            | Some current -> apply_input ?frame:!S.active_frame current.S.uuid ev
+            | Some current when S.replay_current before (Some current) ->
+                apply_input ?frame:!S.active_frame current.S.uuid ev
+            | Some _ -> ()
             | None -> () in
         S.optimistic_input_replay := (!S.optimistic_input_seq, replay) :: !S.optimistic_input_replay);
       (* Focus/Blur/Menu are lifecycle emits, not input — counting them
@@ -1109,6 +1140,7 @@ and apply_input ?frame uuid ev =
         | Edit_input.Key (kev, repeat) ->
             edit_key ~route ~conduit ~repeat uuid kev m0
         | Edit_input.Insert text -> insert_autopair m0 text
+        | Edit_input.Blur when S.is_draft e && Edit_model.composing m0 -> m0
         | Edit_input.Delete Edit_input.Del_backward ->
             let paired = delete_pair m0 in
             if paired != m0 then paired else Edit_input.handle ~route ~conduit m0 ev
@@ -1132,6 +1164,13 @@ and apply_input ?frame uuid ev =
          over the committed merge *)
       A.update_model uuid (fun m_cur -> if m_cur == e.S.model then m' else m_cur);
       (match ev with
+       | Edit_input.Blur when S.is_draft e ->
+           A.schedule_blur_commit ~keep:(fun () ->
+             let target = Ui_services.dom_active_element () in
+             A.draft_contains_target target
+             || Option.fold ~none:false ~some:Popups_state.inside target) ()
+       | _ -> ());
+      (match ev with
        | Edit_input.Key
            ({ Edit_model.key = "ArrowUp" | "ArrowDown"; meta = false
             ; ctrl = false; alt = false; _ }, _)
@@ -1142,7 +1181,7 @@ and apply_input ?frame uuid ev =
              !S.last_edit_input_ms 6
        | _ -> ());
       if m'.Edit_model.source <> m0.source then begin
-        Outliner_ops.schedule_save uuid m'.Edit_model.source;
+        if not (S.is_draft e) then Outliner_ops.schedule_save uuid m'.Edit_model.source;
         Popups_state.on_model_input ~deleted:
           (match ev with Edit_input.Delete _ | Edit_input.Key ({key = "Backspace"; _}, _) -> true | _ -> false)
           uuid
@@ -1548,7 +1587,11 @@ let on_paste ev =
       | Some e, Some input -> input.Ui_services.attr "data-block-id" = Some e.S.uuid
       | _ -> false
     in
-    if editor_target || not (is_editable_target ev.Ui_services.target) then
+    if editor_target && ev.Ui_services.has_files then begin
+      ev.Ui_services.prevent_default ();
+      ev.Ui_services.stop_immediate ();
+      A.upload_file_snapshots ev.Ui_services.files
+    end else if editor_target || not (is_editable_target ev.Ui_services.target) then
       let clipboard = !(S.clipboard), !(S.clipboard_text) in
       if !S.structure_pending then (
         let text = ev.Ui_services.clipboard_get "text/plain"
@@ -1558,8 +1601,10 @@ let on_paste ev =
         let saved = { ev with Ui_services.clipboard_get =
             (function "text/plain" -> text | "text/html" -> html | _ -> "") } in
         let context = Runtime.repo (), Runtime.route () in
+        let before = S.editing () in
         S.enqueue_edit_action ~real:true (fun () ->
-            if context = (Runtime.repo (), Runtime.route ()) then
+            if context = (Runtime.repo (), Runtime.route ())
+               && S.replay_current before (S.editing ()) then
               A.paste_blocks ~clipboard saved))
       else A.paste_blocks ~clipboard ev
 
@@ -1911,7 +1956,8 @@ let on_mousedown (ev : Ui_services.ev) =
         | Some el when Popups_state.inside el -> ()
         | _ ->
             if Editor_commands.click_guard () then ()
-            else A.schedule_blur_commit ())
+            else if not (A.draft_contains_target ev.Ui_services.target) then
+              A.schedule_blur_commit ())
   end
 
 (* -- drag & drop (cljs components/block.cljs on-drag-start/

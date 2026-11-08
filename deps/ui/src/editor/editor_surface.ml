@@ -19,8 +19,16 @@ open Lui_elements
 
 module S = Editor_state
 
-let mount ?(cls = "") uuid scope : t =
+let mount ?(cls = "") ?owner uuid scope : t =
  fun ctx parent ->
+  let accepts (e : S.editing) =
+    e.S.uuid = uuid && e.S.scope = scope
+    && (match owner, e.S.owner with
+        | None, _ -> true
+        | Some expected, S.Explicit_draft live -> expected == live
+        | _ -> false)
+  in
+  let epoch = ref None in
   (* per-mount measurement state — the conduit writes caret/selection
      rects back through apply_input after each event; registered so
      caret moves outside apply_input (click hit-test, set_caret) can
@@ -43,7 +51,7 @@ let mount ?(cls = "") uuid scope : t =
         (Ui_effect.timeout ~scope:ctx.Lui_ui.ui_scope ms (fun () ->
              match S.editing () with
              | Some e
-               when e.S.uuid = uuid && e.S.scope = scope ->
+               when accepts e ->
                  ignore (Editor_actions.refresh_overlay ~frame uuid)
              | _ -> ())))
     [ 0; 40; 120; 300 ];
@@ -51,7 +59,7 @@ let mount ?(cls = "") uuid scope : t =
     Edit_view.own ctx (Signal.map
       (fun e ->
         match e with
-        | Some e when e.S.uuid = uuid && e.S.scope = scope -> e.S.model
+        | Some e when accepts e -> epoch := Some e.S.epoch; e.S.model
         | _ -> Edit_model.create ~units:S.edit_units "")
       (S.editing_sig ()))
   in
@@ -65,7 +73,7 @@ let mount ?(cls = "") uuid scope : t =
       (Signal.subscribe ~emit_initial:true (S.editing_sig ())
        (fun (e : S.editing option) ->
           match e with
-          | Some e when e.S.uuid = uuid && e.S.scope = scope
+          | Some e when accepts e
                         && not (Editor_actions.initial_click_pending uuid) -> (
               match Edit_model.selection_range e.S.model with
               | Some (lo, hi) -> Editor_sink.select_range uuid lo hi
@@ -77,6 +85,13 @@ let mount ?(cls = "") uuid scope : t =
     ~id:("editor-edit-block-" ^ uuid)
     [ Edit_view.view ~model:model_sig
         ~frame:(Signal.value (frame)) ~block_id:uuid ~cls
-        ~on_input:(Editor_keys.apply_input ~frame uuid)
+        ~on_input:(fun input ->
+          match owner, !epoch, S.editing () with
+          | None, _, _ -> Editor_keys.apply_input ~frame uuid input
+          | Some owner, Some mounted, Some live
+            when not (Signal.scope_is_disposed ctx.Lui_ui.ui_scope)
+              && accepts live && mounted == live.S.epoch && owner#current ->
+              Editor_keys.apply_input ~frame uuid input
+          | _ -> ())
     ])
     ctx parent

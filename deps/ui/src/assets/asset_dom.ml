@@ -82,6 +82,7 @@ let title_of_name name ext =
 let clear_slash_text () =
   match S.editing () with
   | None -> ()
+  | Some e when S.is_draft e -> ()
   | Some e -> (
       let m = e.S.model in
       let v = m.Edit_model.source in
@@ -95,9 +96,9 @@ let clear_slash_text () =
                   Edit_model.select m' ~anchor:i ~focus:i))
       | None -> ())
 
-let find_by_checksum checksum k =
+let find_by_checksum ~repo checksum k =
   (let* w =
-    Runtime.invoke2 "thread-api/q" (W.String (repo ()))
+    Runtime.invoke2 "thread-api/q" (W.String repo)
       (W.Array
          [ W.String
              "[:find (pull ?b [:block/uuid :block/title]) . :in $ ?c \
@@ -130,7 +131,8 @@ let asset_block_map ~block_id ~title ~ext ~size ~checksum =
 (* one file -> block map option; writes the pfs file on the way. idx=0
    reuses the editing block's uuid when its content is empty
    (cljs empty-target?) *)
-let asset_of_file ~idx ~edit_uuid ~empty_target f =
+let asset_of_file ~upload ~idx f =
+  Editor_actions.check_asset_upload upload;
   let name = B.file_name f in
   let ext = ext_of_name name in
   let title = title_of_name name ext in
@@ -140,21 +142,24 @@ let asset_of_file ~idx ~edit_uuid ~empty_target f =
     Js.Promise.resolve None)
   else
     let* buf = B.file_buffer f in
+    Editor_actions.check_asset_upload upload;
     let u8 = Js.Typed_array.Uint8Array.fromBuffer buf () in
     let* checksum = A.sha256_hex u8 in
-    find_by_checksum checksum (function
+    Editor_actions.check_asset_upload upload;
+    find_by_checksum ~repo:upload.Editor_actions.upload_repo checksum (function
       | Some (uuid, t) ->
-          Toast.warning
-            (I18n.asset_already_exists t uuid);
+          if Editor_actions.asset_upload_current upload then
+            Toast.warning (I18n.asset_already_exists t uuid);
           Js.Promise.resolve None
       | None ->
+          Editor_actions.check_asset_upload upload;
           let block_id =
-            match idx = 0, empty_target, edit_uuid with
-            | true, true, Some u -> u
+            match idx = 0, upload.upload_empty with
+            | true, true -> upload.upload_target
             | _ -> Ui_services.env_random_uuid ()
           in
           let* () =
-            A.write_asset ~repo:(repo ())
+            A.write_asset ~repo:upload.upload_repo
               ~name:(block_id ^ "." ^ ext) ~u8
           in
           Js.Promise.resolve
@@ -162,102 +167,42 @@ let asset_of_file ~idx ~edit_uuid ~empty_target f =
                (asset_block_map ~block_id ~title ~ext
                   ~size ~checksum)))
 
-let collect_files files =
-  let edit = S.editing () in
-  let edit_uuid = Option.map (fun e -> e.S.uuid) edit in
-  let empty_target =
-    match edit with
-    | Some e -> String.trim e.buffer = ""
-    | None -> false
-  in
+let collect_files upload files =
   let rec go i acc =
     if i >= Array.length files then Js.Promise.resolve (List.rev acc)
     else
-      let* v = asset_of_file ~idx:i ~edit_uuid ~empty_target files.(i) in
+      let* v = asset_of_file ~upload ~idx:i files.(i) in
       match v with Some b -> go (i + 1) (b :: acc)
     | None -> go (i + 1) acc
   in
-  (go 0 [], edit_uuid, empty_target)
+  go 0 []
 
 (* cljs db-based-save-assets! — target = edit block when it exists
    (sibling? + replace-empty-target? both true, bottom? true); else the
    current page (cljs falls back to today's journal). *)
-let upload_files (files : Js.Json.t array) =
-  if Array.length files > 0 then begin
-    clear_slash_text ();
-    let blocks_p, edit_uuid, empty_target = collect_files files in
-    let target =
-      match edit_uuid with
-      | Some u -> Some u
-      | None -> (
-          match (Runtime.model ()).Model.route_page with
-          | Some (p : Model.page) -> p.Model.page_uuid
-          | None -> (
-              (* cljs falls back to today's journal — the journals view
-                 is fetched newest-first so today's page leads
-                 model.journals *)
-              match (Runtime.model ()).Model.journals with
-              | j :: _ -> j.Model.page_uuid
-              | [] -> None))
-    in
-    match target with
-    | None -> ()
-    | Some t ->
-        (* cljs db-based-save-assets! commits the pending edit first
-           (has-unsaved-edit? -> save-block-aux!) — the worker only honors
-           replace-empty-target? when the stored target title is blank, so
-           an uncommitted title would silently remap the block uuid *)
-        ignore
-          (let* save_ops =
-             match S.editing () with
-             | Some e -> (
-                 match S.find e.S.uuid with
-                 | Some b when b.Model.block_title <> e.S.buffer ->
-                     let* o =
-                       Outliner_ops.save_block_parsed e.S.uuid e.S.buffer
-                     in
-                     Js.Promise.resolve [ o ]
-                 | _ -> Js.Promise.resolve [])
-             | None -> Js.Promise.resolve []
-           in
-          let* blocks = blocks_p in
-          if blocks = [] then Js.Promise.resolve ()
-          else
-            let sibling = edit_uuid = Some t in
-            let* () =
-              Outliner_ops.apply_and_refresh
-                ~opts:(Outliner_ops.op_opts "insert-blocks")
-                ( save_ops
-                @ [ Outliner_ops.op "insert-blocks"
-                      [ W.List blocks
-                      ; W.Uuid t
-                      ; W.Map
-                          [ W.Keyword "sibling?", W.Bool sibling
-                          ; W.Keyword "keep-uuid?", W.Bool true
-                          ; W.Keyword "bottom?", W.Bool true
-                          ; W.Keyword "replace-empty-target?",
-                              W.Bool sibling
-                          ; W.Keyword "outliner-op",
-                              W.Keyword "insert-blocks" ] ] ] )
-            in
-            (* cljs db-based-save-assets! re-enters edit
-                        on the reused empty-target block so the
-                        buffer holds the new asset title — a later
-                        exit-edit then sees an unchanged buffer
-                        instead of wiping the title with "". The
-                        open textarea keeps its own value, so
-                        resync (state + DOM), not enter_edit *)
-            if empty_target then
-              ignore (Outliner_ops.resync_open_editor ());
-            Js.Promise.resolve ())
-  end
+let upload_files ?upload (files : Js.Json.t array) =
+  let upload = match upload with
+    | Some upload -> Some upload
+    | None -> clear_slash_text (); Editor_actions.capture_asset_upload () in
+  match upload with
+  | Some upload when Array.length files > 0 && Editor_actions.asset_upload_current upload ->
+      ignore ((let* blocks = collect_files upload files in
+        Editor_actions.commit_uploaded_assets upload blocks)
+        |> Js.Promise.catch (fun error ->
+          Ui_services.log_error ("Asset upload failed", error);
+          if Editor_actions.asset_upload_current upload then
+            Toast.error (I18n.t1 "ui/error-boundary-error" "asset-upload:failed");
+          Js.Promise.resolve ()))
+  | _ -> ()
 
 (* cljs image-uploader hid an <input type=file> per editor; here the
    picker is imperative — a transient input via the open-file-picker
    op, no persistent node in the tree. Both the slash command and
    editor_actions.trigger_asset_upload go through this. *)
 let pick_files () =
-  Web_dom.open_file_picker (fun files -> upload_files files)
+  clear_slash_text ();
+  Option.iter (fun upload -> Web_dom.open_file_picker (fun files -> upload_files ~upload files))
+    (Editor_actions.capture_asset_upload ())
 
 (* ---------- lightbox ---------- *)
 
