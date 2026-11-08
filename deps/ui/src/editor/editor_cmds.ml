@@ -112,18 +112,91 @@ let current_block fallback =
   | None -> Editor_state.editing_uuid ()
 ;;
 
+let operating_uuids block =
+  let selected = Editor_state.selected () in
+  if Editor_state.selection_active ()
+     && (match block with None -> true | Some u -> Editor_state.String_set.mem u selected)
+  then Editor_actions.selected_uuids ()
+  else Option.to_list (current_block block)
+
+let cycle_todos uuids =
+  if uuids <> [] then
+    let context = Runtime.model () in
+    ignore
+      (let* blocks = Runtime.invoke2 "thread-api/get-blocks" (W.String (repo ()))
+         (W.Array (List.map (fun uuid -> W.Map
+           [ W.String "id", W.Uuid uuid
+           ; W.String "opts", W.Map [ W.Keyword "children?", W.Bool false ] ]) uuids)) in
+       let* choices = Properties_data.closed_values (W.Keyword "logseq.property/status") in
+       let choices = Wire.elems choices in
+       let row_id row = Properties_data.geti (Properties_data.untag row) "db/id" in
+       let row_ident row = Properties_data.getk (Properties_data.untag row) "db/ident" in
+       let ops = List.filter_map (fun pair ->
+         let block = Option.value (W.get pair "block") ~default:W.Nil in
+         match W.map_get_uuid block "block/uuid" with
+         | None -> None
+         | Some uuid ->
+             let id = Option.bind (W.get block "logseq.property/status") Properties_data.entity_id_of in
+             let ident = List.find_map (fun row -> if row_id row = id then row_ident row else None) choices in
+             let next = match ident with
+               | Some "logseq.property/status.todo" -> Some "logseq.property/status.doing"
+               | Some "logseq.property/status.doing" -> Some "logseq.property/status.done"
+               | Some "logseq.property/status.done" -> None
+               | _ -> Some "logseq.property/status.todo" in
+             match next with
+             | None -> Some (Outliner_ops.remove_block_property uuid "logseq.property/status")
+             | Some ident -> List.find_map (fun row ->
+                 if row_ident row = Some ident then Option.map (fun id ->
+                   Outliner_ops.batch_set_property [uuid] "logseq.property/status" (W.Int id) ~entity_id:true) (row_id row)
+                 else None) choices) (Wire.elems blocks) in
+       if Outliner_ops.context_current context && ops <> [] then
+         ignore (Outliner_ops.apply_and_refresh ~opts:(Outliner_ops.op_opts "cycle-todos") ops);
+       Js.Promise.resolve ())
+
+let collapse_subtrees uuids collapsed =
+  let context = Runtime.model () in
+  ignore (let* rows = Runtime.invoke2 "thread-api/get-blocks" (W.String (repo ()))
+      (W.Array (List.map (fun uuid -> W.Map
+        [ W.String "id", W.Uuid uuid
+        ; W.String "opts", W.Map
+            [ W.Keyword "children?", W.Bool true
+            ; W.Keyword "all?", W.Bool true
+            ; W.Keyword "include-collapsed-children?", W.Bool true ] ]) uuids)) in
+    let seen = Hashtbl.create 32 in
+    let blocks = List.concat_map (fun row ->
+      Option.to_list (W.get row "block")
+      @ Option.fold ~none:[] ~some:Wire.elems (W.get row "children")) (Wire.elems rows) in
+    let pairs = List.filter_map (fun block ->
+      match W.map_get_uuid block "block/uuid" with
+      | Some uuid when not (Hashtbl.mem seen uuid) ->
+          Hashtbl.add seen uuid (); Some (uuid, collapsed)
+      | _ -> None) blocks in
+    if Outliner_ops.context_current context && pairs <> [] then
+      apply [ Outliner_ops.collapse_expand pairs ];
+    Js.Promise.resolve ())
+
 (* "upload" needs no block target — dispatch it before the uuid check
    like the event listeners it replaces did. *)
 let run ~command ~block ~value : outcome =
   let h = host () in
+  let uuids = operating_uuids block in
   match command with
+  | ("cycle-todo" | "add-comment") when uuids = [] -> No_target
+  | "cycle-todo" -> cycle_todos uuids; Handled
+  | "add-comment" ->
+      let targets = List.filter_map Editor_state.find uuids
+        |> Comments_ops.eligible_targets ~parent_of:(fun b ->
+             Option.bind b.Model.block_uuid (fun u -> Option.bind (Editor_state.find_parent u) fst))
+        |> List.filter_map (fun b -> b.Model.block_uuid) in
+      Comments_ops.ensure_for ~on_ready:(fun _ -> ()) targets;
+      Handled
   | "upload" ->
       h.pick_files ();
       Handled
   | ("copy" | "cut" | "delete")
     when Editor_state.selection_active ()
          && (match block with
-             | None -> false
+             | None -> true
              | Some uuid -> Editor_state.String_set.mem uuid (Editor_state.selected ())) ->
       (match command with
        | "copy" -> Editor_actions.copy_selection_text ()
@@ -139,7 +212,15 @@ let run ~command ~block ~value : outcome =
               h.open_right_sidebar uuid;
               Handled
           | "copy-ref" ->
-              h.clipboard_write ("[[" ^ uuid ^ "]]");
+              let blocks = List.filter_map Editor_state.find uuids in
+              let root_level = ref (match blocks with b :: _ -> b.Model.block_level | [] -> 1) in
+              let refs = List.filter_map (fun (b : Model.block) ->
+                root_level := min !root_level b.block_level;
+                Option.map (fun uuid -> String.make (max 0 (b.block_level - !root_level)) '\t'
+                  ^ "- [[" ^ uuid ^ "]]") b.block_uuid) blocks in
+              h.clipboard_write (if Editor_state.selection_active ()
+                && Editor_state.String_set.mem uuid (Editor_state.selected ())
+                then String.concat "\n\n" refs else "[[" ^ uuid ^ "]]");
               Handled
           | "copy" ->
               let title =
@@ -196,10 +277,10 @@ let run ~command ~block ~value : outcome =
                   Handled
               | None -> No_target)
           | "expand-children" ->
-              apply [ Outliner_ops.collapse_expand [ (uuid, false) ] ];
+              collapse_subtrees uuids false;
               Handled
           | "collapse-children" ->
-              apply [ Outliner_ops.collapse_expand [ (uuid, true) ] ];
+              collapse_subtrees uuids true;
               Handled
           | "set-color" -> (
               match value with
@@ -209,47 +290,37 @@ let run ~command ~block ~value : outcome =
                      (creating it when missing), the same call cljs
                      set-block-property! makes *)
                   apply_soft
-                    [ batch_set [ uuid ]
+                    [ batch_set uuids
                         "logseq.property/background-color" (W.String c) ];
                   Handled
               | _ ->
                   apply_soft
-                    [ batch_remove [ uuid ] "logseq.property/background-color" ];
+                    [ batch_remove uuids "logseq.property/background-color" ];
                   Handled)
           | "set-heading" -> (
               (match value with
                | Some "auto" ->
                    apply_soft
-                     [ batch_set [ uuid ] "logseq.property/heading" (W.Bool true) ]
+                     [ batch_set uuids "logseq.property/heading" (W.Bool true) ]
                | Some v ->
                    (try
                       apply_soft
-                        [ batch_set [ uuid ] "logseq.property/heading"
+                        [ batch_set uuids "logseq.property/heading"
                             (W.Int (int_of_string v)) ]
                     with _ ->
                       apply_soft
-                        [ batch_remove [ uuid ] "logseq.property/heading" ])
+                        [ batch_remove uuids "logseq.property/heading" ])
                | None ->
                    apply_soft
-                     [ batch_remove [ uuid ] "logseq.property/heading" ]);
+                     [ batch_remove uuids "logseq.property/heading" ]);
               Handled)
           | "toggle-numbered-list" ->
-              ignore
-                (let* w = Sdk_util.get_by_id (W.String uuid) in
-                let cur =
-                  match Decode.order_list_type_of_wire w with
-                  | Some s -> s
-                  | None -> ""
-                in
-                (if cur = "number" then
-                   apply_soft
-                     [ batch_remove [ uuid ]
-                         "logseq.property/order-list-type" ]
-                 else
-                   apply_soft
-                     [ batch_set [ uuid ] "logseq.property/order-list-type"
-                         (W.String "number") ]);
-                Js.Promise.resolve ());
+              let ordered = List.exists (fun u ->
+                match Editor_state.find u with
+                | Some b -> b.Model.block_order_list = Some "number"
+                | None -> false) uuids in
+              apply_soft [ if ordered then batch_remove uuids "logseq.property/order-list-type"
+                else batch_set uuids "logseq.property/order-list-type" (W.String "number") ];
               Handled
           | "make-flashcard" ->
               ignore
@@ -260,8 +331,7 @@ let run ~command ~block ~value : outcome =
                 (match W.map_get_int w "db/id" with
                  | Some dbid ->
                      apply_soft
-                       [ Outliner_ops.set_block_property uuid "block/tags"
-                           (W.Int dbid) ]
+                       [ batch_set uuids "block/tags" (W.Int dbid) ]
                  | None -> ());
                 Js.Promise.resolve ());
               Handled
@@ -300,17 +370,6 @@ let run ~command ~block ~value : outcome =
                 (let* sop = Outliner_ops.save_block_parsed uuid ("> " ^ title) in
                  Outliner_ops.apply_and_refresh_deferred [ sop ]);
               Handled
-          | "add-comment" ->
-              (* cljs add-comment over the block selection — the comments
-                 area mounts once the refresh lands *)
-              ignore
-                (let* _ =
-                   Runtime.invoke2
-                     "thread-api/ensure-comments-area-for-blocks"
-                     (W.String (repo ()))
-                     (W.Array [ W.Uuid uuid ])
-                 in Outliner_ops.refresh_page ());
-              Handled
           | "copy-export-as" ->
               (* cljs export-blocks: block ctx menu -> [block] :block; the
                  selection ctx menu exports the top-level selected roots *)
@@ -326,7 +385,7 @@ let run ~command ~block ~value : outcome =
               Export_state.arm_blocks uuids;
               Sidebar_state.open_dialog "export-page";
               Handled
-          | "cycle-todo" | "deadline" | "scheduled" | "date-picker"
+          | "deadline" | "scheduled" | "date-picker"
           | "set-icon" | "add-reaction" ->
               h.report_error "editor command not implemented" command;
               Unimplemented command

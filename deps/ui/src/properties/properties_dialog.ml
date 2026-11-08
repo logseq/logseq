@@ -164,8 +164,8 @@ let add_empty_text_block d prop =
 (* chosen an existing property from the select *)
 let rec property_chosen d prop =
   if d.d_remove then (
-    finish_write d (for_owners d (fun block_uuid ->
-      D.remove_block_property ~block_uuid ~ident:(ident_of prop))))
+    finish_write d (D.apply "batch-remove-property"
+      [ D.uuid_list (owners d); W.Keyword (ident_of prop) ]))
   else if d.d_target.is_tag then (
     finish_write d (D.class_add_property ~class_uuid:d.d_target.uuid
          ~ident:(ident_of prop)))
@@ -796,9 +796,11 @@ let current_target () : target option =
           | None -> None))
 
 (* open the dialog for a specific block uuid (slash command path) *)
-let open_for_block uuid =
-  open_dialog
-    { uuid; uuids = []; db_id = None; is_tag = false; title = "" }
+let open_for_block ?(uuids = []) ?on_close ?(phase = Prop_select) uuid =
+  let target = { uuid; uuids; db_id = None; is_tag = false; title = "" } in
+  match Ui_services.dom_query (".ls-block[data-blockid='" ^ uuid ^ "']") with
+  | Some anchor -> open_for_anchor_el ?on_close ~phase anchor target
+  | None -> open_dialog ?on_close ~phase target
 
 (* cljs :editor/new-property {:property-key ident}: the dialog jumps
    straight to the value-editing phase for the named property — a
@@ -892,8 +894,7 @@ let open_for_block_with_property ?context_revision ?scope ?view_parent ?on_close
      | Ok prop when active ->
          (match D.untag prop with
           | W.Map _ as p ->
-              open_dialog ?on_close ~phase:(Value_edit p)
-                { uuid; uuids; db_id = None; is_tag = false; title = "" }
+              open_for_block ~uuids ?on_close ~phase:(Value_edit p) uuid
           | _ -> ())
      | Error error when active ->
          Ui_services.log_error ("property lookup failed", error)

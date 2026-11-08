@@ -1921,14 +1921,78 @@ let remember_selection_copy ~plain blocks text =
   S.clipboard := (if plain then [] else blocks);
   S.clipboard_text := text
 
-let copy_selection ev =
-  match selected_copy_blocks ~plain:false (selected_snapshot ()) with
-  | None | Some [] -> ()
-  | Some blocks ->
-      let text = selection_text ~plain:false blocks in
-      ev.Ui_services.clipboard_set "text/plain" text;
-      remember_selection_copy ~plain:false blocks text;
-      ev.Ui_services.prevent_default ()
+let copied_block_maps = ref None
+
+let canonical_clipboard_block block =
+  let derived =
+    [ "block/alias-source-page-class?"; "block/alias-source-page-id"
+    ; "block/alias-source-page-uuid"; "block/comment-threads"; "block/link-id"
+    ; "block/page-id"; "block/page-name"; "block/page-uuid"; "block/parent-id"
+    ; "block/parent-uuid"; "block/raw-title"; "logseq.property/description-title"
+    ; "logseq.property/query-block?"; "logseq.property/query-id"
+    ; "logseq.property.recycle/original-page-title"; "logseq.property/view-for-id"
+    ; "logseq.property/views"; "logseq.property.view/gallery-asset-property-ident"
+    ; "logseq.property.view/type-id"; "logseq.property.view/type-ident" ] in
+  let reference value =
+    match Wire.map_get_uuid (Properties_data.untag value) "block/uuid" with
+    | Some uuid -> Wire.Array [ Wire.Keyword "block/uuid"; Wire.Uuid uuid ]
+    | None -> value in
+  match Properties_data.untag block with
+  | Wire.Map fields -> Wire.Map (List.filter_map (fun (key, value) ->
+      let name = match key with Wire.Keyword k | Wire.String k -> k | _ -> "" in
+      if List.mem name derived || String.starts_with ~prefix:"block.temp/" name
+      then None
+      else Some (key, match value with
+        | Wire.Set xs -> Wire.Set (List.map reference xs)
+        | Wire.Array xs -> Wire.Array (List.map reference xs)
+        | Wire.List xs -> Wire.List (List.map reference xs)
+        | value -> reference value)) fields)
+  | _ -> invalid_arg "clipboard block must be an entity"
+
+let load_selection_copy snapshot =
+  let roots = List.filter_map (fun b -> b.Model.block_uuid) snapshot.roots in
+  let requests = List.map (fun uuid -> Wire.Map
+      [ Wire.String "id", Wire.Uuid uuid
+      ; Wire.String "opts", Wire.Map
+          [ Wire.Keyword "children?", Wire.Bool true
+          ; Wire.Keyword "all?", Wire.Bool true
+          ; Wire.Keyword "include-collapsed-children?", Wire.Bool true
+          ; Wire.Keyword "include-property-block?", Wire.Bool true ] ]) roots in
+  let* loaded = Runtime.invoke2 "thread-api/get-blocks"
+      (Wire.String (Runtime.repo ())) (Wire.Array requests) in
+  let seen = Hashtbl.create 32 and levels = Hashtbl.create 32 in
+  let maps = List.concat_map (fun pair ->
+      let block = match Wire.get pair "block" with
+        | Some b -> b | None -> failwith "clipboard source unavailable" in
+      let children = Option.fold ~none:[] ~some:Wire.elems (Wire.get pair "children") in
+      if Wire.get block "block/name" <> None then children else block :: children)
+      (Wire.elems loaded)
+    |> List.filter_map (fun block ->
+      let block = canonical_clipboard_block block in
+      match Wire.map_get_uuid block "block/uuid" with
+      | None -> failwith "clipboard source UUID unavailable"
+      | Some uuid when Hashtbl.mem seen uuid -> None
+      | Some uuid ->
+          Hashtbl.add seen uuid ();
+          let parent = Option.bind (Wire.get block "block/parent") (function
+            | Wire.Array [ Wire.Keyword "block/uuid"; Wire.Uuid u ] -> Some u
+            | _ -> None) in
+          let level = 1 + Option.value ~default:0 (Option.bind parent (Hashtbl.find_opt levels)) in
+          Hashtbl.replace levels uuid level;
+          (match block with Wire.Map fields -> Some (Wire.Map
+            ((Wire.Keyword "block/level", Wire.Int level) :: fields))
+           | _ -> invalid_arg "clipboard block must be an entity")) in
+  let* content = Runtime.invoke "thread-api/export-blocks-as-format"
+      [ Wire.String (Runtime.repo ()); Ops.uuids_list roots; Wire.Keyword "markdown"
+      ; Wire.Map
+          [ Wire.Keyword "indent-style", Wire.String
+              (Export_state.stored_or "copy/export-block-text-indent-style" "dashes")
+          ; Wire.Keyword "remove-options", Wire.Set
+              (List.map (fun k -> Wire.Keyword k) (Export_state.stored_removals ())) ]
+      ; Wire.Map [ Wire.Keyword "export-bullet-indentation", Wire.String "\t" ] ] in
+  match content with
+  | Wire.String text -> Js.Promise.resolve (maps, text)
+  | _ -> failwith "clipboard export unavailable"
 
 let write_clipboard_text ~current text on_written =
   let write = Ui_services.clipboard_write_text text in
@@ -1976,23 +2040,31 @@ let cut_editing_text uuid =
             Outliner_ops.schedule_save uuid (live_buffer uuid))
   | _ -> Ui_task.reject Ui_task.Cancelled
 
-let write_selection_copy ~plain ~cut =
+let write_selection_copy ?(on_copy = fun () -> ()) ~plain:_ ~cut () =
   let snapshot = selected_snapshot () in
   let before = S.history_cursor () in
   let current = clipboard_action_current () in
-  match selected_copy_blocks ~plain snapshot with
+  match selected_copy_blocks ~plain:false snapshot with
   | None | Some [] -> ()
   | Some blocks ->
-      let text = selection_text ~plain blocks in
-      ignore (write_clipboard_text ~current:(fun () -> current () &&
+      let fresh () = current () &&
           List.for_all (fun block ->
             match block.Model.block_uuid with
             | Some uuid -> (match S.find uuid with Some live -> live == block | None -> false)
-            | None -> false) snapshot.blocks) text (fun () ->
-          remember_selection_copy ~plain blocks text;
-          if cut then
-            delete_selected_uuids ~selected:snapshot.selection ~scope:snapshot.scope
-              ~before snapshot.uuids))
+            | None -> false) snapshot.blocks in
+      ignore ((let* maps, text = load_selection_copy snapshot in
+        if not (fresh ()) then Js.Promise.resolve ()
+        else Subs_state.promise_of_task (write_clipboard_text ~current:fresh text (fun () ->
+            remember_selection_copy ~plain:false blocks text;
+            copied_block_maps := Some (blocks, maps,
+              if cut then List.filter_map (fun b -> b.Model.block_uuid) snapshot.roots else []);
+            if cut then
+              delete_selected_uuids ~selected:snapshot.selection ~scope:snapshot.scope
+                ~before snapshot.uuids
+            else on_copy ())))
+        |> Js.Promise.catch (fun error ->
+             Ui_services.log_error ("copy-selection failed", error);
+             Js.Promise.resolve ()))
 
 let cut_block_text uuid =
   match S.find uuid with
@@ -2004,8 +2076,13 @@ let cut_block_text uuid =
         block.Model.block_title (fun () ->
           ignore (Ops.apply_and_refresh [ Ops.delete_blocks [ uuid ] ])))
 
-let copy_selection_text ?(plain = false) () = write_selection_copy ~plain ~cut:false
-let cut_selection_text () = write_selection_copy ~plain:false ~cut:true
+let copy_selection_text ?(plain = false) () = write_selection_copy ~plain ~cut:false ()
+let cut_selection_text () = write_selection_copy ~plain:false ~cut:true ()
+let copy_selection_from_bar () =
+  write_selection_copy ~on_copy:(fun () -> clear_selection ()) ~plain:false ~cut:false ()
+let copy_selection ev =
+  ev.Ui_services.prevent_default ();
+  copy_selection_text ()
 let cut_selection ev =
   ev.Ui_services.prevent_default ();
   cut_selection_text ()
@@ -2189,8 +2266,45 @@ let paste_history_opts target_uuid =
   Ops.history_opts ~opts:(Ops.op_opts "paste") ~before:(S.history_cursor ()) ~after ()
 
 let paste_trees trees target_uuid ~replace_empty =
-  Ops.apply_and_refresh_result ~opts:(paste_history_opts target_uuid)
-    [ Ops.paste_trees trees target_uuid ~replace_empty ]
+  let context = Runtime.model () in
+  let opts = paste_history_opts target_uuid in
+  match !copied_block_maps with
+  | Some (copied, maps, cut_roots) when copied == trees ->
+      let* move_cut =
+        if cut_roots = [] then Js.Promise.resolve false
+        else
+          let* rows = Runtime.invoke2 "thread-api/get-blocks" (Wire.String (Runtime.repo ()))
+              (Wire.Array (List.map (fun uuid -> Wire.Map
+                [ Wire.String "id", Wire.Uuid uuid
+                ; Wire.String "opts", Wire.Map [ Wire.Keyword "children?", Wire.Bool false ] ]) cut_roots)) in
+          let rows = Wire.elems rows in
+          Js.Promise.resolve (List.length rows = List.length cut_roots
+            && List.for_all (fun row ->
+              Option.bind (Wire.get row "block") (fun b -> Wire.get b "logseq.property/deleted-at")
+              |> function Some Wire.Nil | Some (Wire.Bool false) | None -> false | _ -> true) rows)
+      in
+      if not (Ops.context_current context) then Js.Promise.resolve None
+      else if move_cut then
+        let tx = List.concat_map (fun uuid -> List.map (fun attr -> Wire.Array
+            [ Wire.Keyword "db/retract"
+            ; Wire.Array [ Wire.Keyword "block/uuid"; Wire.Uuid uuid ]
+            ; Wire.Keyword attr ])
+            [ "logseq.property/deleted-at"; "logseq.property/deleted-by-ref"
+            ; "logseq.property.recycle/original-parent"; "logseq.property.recycle/original-page"
+            ; "logseq.property.recycle/original-order" ]) cut_roots in
+        let opts = match opts with Wire.Map fields -> Wire.Map
+            ((Wire.Keyword "additional-tx", Wire.Array tx) :: fields)
+          | _ -> invalid_arg "paste history options must be a map" in
+        Ops.apply_and_refresh_result ~opts [ Ops.move_blocks cut_roots target_uuid ~sibling:true ]
+      else
+        Ops.apply_and_refresh_result ~opts [ Ops.op "insert-blocks"
+          [ Wire.Array maps; Wire.Uuid target_uuid
+          ; Wire.Map
+              [ Wire.Keyword "sibling?", Wire.Bool true
+              ; Wire.Keyword "keep-uuid?", Wire.Bool false
+              ; Wire.Keyword "replace-empty-target?", Wire.Bool replace_empty
+              ; Wire.Keyword "outliner-op", Wire.Keyword "paste" ] ] ]
+  | _ -> Ops.apply_and_refresh_result ~opts [ Ops.paste_trees trees target_uuid ~replace_empty ]
 
 (* thread-api/paste-extract-blocks + insert-blocks — the worker turns
    markdown clipboard text into preorder block maps which insert-blocks

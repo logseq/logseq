@@ -365,7 +365,7 @@ and node ~model () : t =
                                          ~label:(I18n.t "ui/copy")
                                          ~text:(I18n.t "ui/copy")
                                          ~on_press:(fun _ ->
-                                           Editor_actions.copy_selection_text ())
+                                           Editor_actions.copy_selection_from_bar ())
                                          ();
                                        sbtn ~key:"sb-set"
                                          ~label:(I18n.t "property/set-property")
@@ -389,7 +389,7 @@ and node ~model () : t =
                                               (I18n.t "editor/delete-selection")
                                             ~icon:(`app "trash")
                                             ~on_press:(fun _ ->
-                                              Editor_actions.delete_selection ())
+                                              Editor_actions.cut_selection_text ())
                                             ();
                                         ]
                                       else [])

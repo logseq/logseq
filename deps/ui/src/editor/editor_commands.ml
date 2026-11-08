@@ -1566,7 +1566,13 @@ let on_command (ev : Ui_services.ev) =
     match detail_str ev "command" with
     | None -> ()
     | Some command -> (
-        match detail_str ev "block" with
+        let block = match detail_str ev "block" with
+          | Some _ as block -> block
+          | None when S.editing () = None ->
+              List.nth_opt (Editor_actions.selected_uuids ()) 0
+          | None -> None
+        in
+        match block with
         | Some uuid -> (
             (* deadline/scheduled on a non-editing block (the `p d`
                chord) open the calendar anchored at the block row;
@@ -1574,24 +1580,29 @@ let on_command (ev : Ui_services.ev) =
                owns *)
             match command with
             | "deadline" ->
-                open_cal (Cal_prop ("logseq.property/deadline", "")) uuid 0
+                Properties_dialog.open_for_block_with_property
+                  ~uuids:(Editor_cmds.operating_uuids (Some uuid)) uuid
+                  ~ident:"logseq.property/deadline"
             | "scheduled" ->
-                open_cal (Cal_prop ("logseq.property/scheduled", "")) uuid 0
+                Properties_dialog.open_for_block_with_property
+                  ~uuids:(Editor_cmds.operating_uuids (Some uuid)) uuid
+                  ~ident:"logseq.property/scheduled"
             (* cljs :editor/new-property {:property-key k} — p s/p p/p t
                land in that property's value editor *)
             | "add-property" ->
-                Properties_dialog.open_for_block uuid
+                Properties_dialog.open_for_block
+                  ~uuids:(Editor_cmds.operating_uuids (Some uuid)) uuid
             | "add-property-status" ->
                 Properties_dialog.open_for_block_with_property
-                  ~uuids:[ uuid ] uuid
+                  ~uuids:(Editor_cmds.operating_uuids (Some uuid)) uuid
                   ~ident:"logseq.property/status"
             | "add-property-priority" ->
                 Properties_dialog.open_for_block_with_property
-                  ~uuids:[ uuid ] uuid
+                  ~uuids:(Editor_cmds.operating_uuids (Some uuid)) uuid
                   ~ident:"logseq.property/priority"
             | "set-tags" ->
                 Properties_dialog.open_for_block_with_property
-                  ~uuids:[ uuid ] uuid ~ident:"block/tags"
+                  ~uuids:(Editor_cmds.operating_uuids (Some uuid)) uuid ~ident:"block/tags"
             | "set-icon" | "add-reaction" ->
                 (* the pickers live in the popups layer — editor modules
                    cannot reach icon_picker without a module cycle *)

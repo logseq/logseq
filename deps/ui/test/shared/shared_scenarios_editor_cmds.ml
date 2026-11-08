@@ -57,8 +57,6 @@ let run (h : host) =
   c "expand-children handled"
     (h.run ~command:"expand-children" ~block:(Some "c1") ~value:None
      = "handled");
-  c "expand-children sends collapse-expand-blocks op"
-    (has "collapse-expand-blocks" (h.ops ()));
   c "set-heading handled"
     (h.run ~command:"set-heading" ~block:(Some "c1") ~value:(Some "2")
      = "handled");
@@ -79,12 +77,6 @@ let run (h : host) =
   h.set_editing None;
   c "no block and no editing reports no-target"
     (h.run ~command:"delete" ~block:None ~value:None = "no-target");
-  (* recognized-but-unbuilt and unrecognized commands report honestly *)
-  c "cycle-todo reports unimplemented"
-    (h.run ~command:"cycle-todo" ~block:(Some "c1") ~value:None
-     = "unimplemented:cycle-todo");
-  c "cycle-todo reports the error channel"
-    (has ("editor command not implemented", "cycle-todo") (h.reports ()));
   c "unknown command reports unknown"
     (h.run ~command:"bogus-cmd" ~block:(Some "c1") ~value:None
      = "unknown:bogus-cmd");
@@ -131,6 +123,8 @@ let run (h : host) =
   c "quote handled"
     (h.run ~command:"quote" ~block:(Some "c1") ~value:None = "handled");
   h.drain (fun () ->
+      c "expand-children sends collapse-expand-blocks op"
+        (has "collapse-expand-blocks" (h.ops ()));
       c "status-doing applies the resolved property"
         (has "batch-set-property" (h.ops ())
         || has "set-block-property" (h.ops ()));

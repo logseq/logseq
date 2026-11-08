@@ -1424,16 +1424,29 @@ let handle_click st (ev : Ui_services.ev) =
    (the commands route through ls:editor-command, which only popups can
    service: icon_picker pulls in pages/comments that would cycle back
    into editor_keys) *)
+let set_block_icons uuids = function
+  | Icon_picker.Remove ->
+      Editor_cmds.apply [Editor_cmds.batch_remove uuids "logseq.property/icon"]
+  | (Icon_picker.Emoji _ | Icon_picker.Tabler _) as choice ->
+      let value = match choice with
+        | Icon_picker.Emoji id -> Wire.Map
+            [ Wire.Keyword "type", Wire.Keyword "emoji"
+            ; Wire.Keyword "id", Wire.String id ]
+        | Icon_picker.Tabler (id, color) -> Wire.Map
+            ([ Wire.Keyword "type", Wire.Keyword "tabler-icon"
+             ; Wire.Keyword "id", Wire.String id ]
+              @ Option.to_list (Option.map
+                  (fun color -> Wire.Keyword "color", Wire.String color) color))
+        | Icon_picker.Remove -> invalid_arg "icon value required"
+      in
+      Editor_cmds.apply [Editor_cmds.batch_set uuids "logseq.property/icon" value]
+
 let open_block_picker uuid emoji_only =
   match
     Ui_services.dom_query (".ls-block[data-blockid='" ^ uuid ^ "']")
   with
   | Some anchor ->
-      let uuids =
-        match Ui_services.dom_selected_block_uuids () with
-        | [] -> [ uuid ]
-        | sel -> sel
-      in
+      let uuids = Editor_cmds.operating_uuids (Some uuid) in
       if emoji_only then
         ignore
           (Icon_picker.open_picker_with_opts ~anchor ~del:false
@@ -1447,10 +1460,9 @@ let open_block_picker uuid emoji_only =
                | _ -> ()))
       else
         ignore
-          (Icon_picker.open_picker_with_opts ~anchor ~del:false
+          (Icon_picker.open_picker_with_opts ~anchor ~del:true
              ~opts:{ Icon_picker.emoji_only = false; sub = false }
-             ~on_chosen:(fun c ->
-               List.iter (fun u -> Page.set_icon u c) uuids))
+             ~on_chosen:(set_block_icons uuids))
   | None -> ()
 
 let handle_block_picker _st (ev : Ui_services.ev) =
@@ -1465,8 +1477,8 @@ let handle_block_picker _st (ev : Ui_services.ev) =
 let open_cm_picker (st : S.t) (pk : S.cm_picker)
     (anchor : Ui_services.el) (cm : S.cm) =
   let uuids =
-    if cm.S.multi && Ui_services.dom_selected_block_uuids () <> [] then
-      Ui_services.dom_selected_block_uuids ()
+    if cm.S.multi then
+      Editor_actions.selected_uuids ()
     else [ cm.S.block_id ]
   in
   close_cm_picker ();
@@ -1474,10 +1486,10 @@ let open_cm_picker (st : S.t) (pk : S.cm_picker)
   | S.Picker_icon ->
       cm_picker_key :=
         Some
-          (Icon_picker.open_picker_with_opts ~anchor ~del:false
+          (Icon_picker.open_picker_with_opts ~anchor ~del:true
              ~opts:{ Icon_picker.emoji_only = false; sub = true }
              ~on_chosen:(fun c ->
-               List.iter (fun u -> Page.set_icon u c) uuids;
+               set_block_icons uuids c;
                close_cm st))
   | S.Picker_emoji ->
       cm_picker_key :=

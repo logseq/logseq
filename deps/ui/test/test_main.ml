@@ -84,6 +84,8 @@ let rec cmds_after n f =
          else (cmds_after (n - 1) f; Js.Promise.resolve ()))))
 
 let test_editor_cmds () =
+  Editor_state.set_silent (fun state ->
+    { state with Editor_state.selected = Editor_state.String_set.empty });
   let clip = ref [] and side = ref [] and dialogs = ref []
   and picked = ref 0 and plugs = ref [] and reports = ref [] in
   let invokes = ref [] in
