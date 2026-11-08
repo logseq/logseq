@@ -172,16 +172,24 @@ let required ctx fields values =
         set_auth ctx (fun a -> { a with err = "" });
         true
 
-let request ctx fields work =
+let request fields work =
   Runtime.signal_set fields.pending true;
   (Js.Promise.resolve () |> Js.Promise.then_ work
-   |> Js.Promise.catch (fun _ ->
-          fail ctx (T.t "account/sign-in-error");
-          Js.Promise.resolve ())
    |> Js.Promise.then_ (fun () ->
           Runtime.signal_set fields.pending false;
-          Js.Promise.resolve ()))
+          Js.Promise.resolve ())
+   |> Js.Promise.catch (fun error ->
+          Runtime.signal_set fields.pending false;
+          Js.Promise.reject error))
   |> ignore
+
+let auth_json ctx init =
+  (let* resp = Fetch.fetchWithInit cognito_url init in
+   Fetch.Response.json resp)
+  |> Js.Promise.then_ (fun json -> Js.Promise.resolve (Some json))
+  |> Js.Promise.catch (fun _ ->
+         fail ctx (T.t "account/sign-in-error");
+         Js.Promise.resolve None)
 
 (* cognito's REST __type may carry a namespace prefix
    (com.amazon.coral.service#NotAuthorizedException); cljs reads the
@@ -257,15 +265,16 @@ let cognito_call ctx fields target payload f_ok =
       ~body:(Fetch.BodyInit.make payload)
       ()
   in
-  request ctx fields (fun () ->
-   let* resp = Fetch.fetchWithInit cognito_url init in
-   let* json = Fetch.Response.json resp in
-   match Js.Json.decodeObject json with
+  request fields (fun () ->
+   let* json = auth_json ctx init in
+   match json with
+   | None -> Js.Promise.resolve ()
+   | Some json -> (match Js.Json.decodeObject json with
    | Some o -> (
        match dict_str o "__type" with
        | Some _ -> fail ctx (error_message json); Js.Promise.resolve ()
        | None -> f_ok json)
-   | None -> f_ok json)
+   | None -> f_ok json))
 
 let submit ctx fields =
   let user = String.trim (Runtime.signal_get fields.email)
@@ -283,16 +292,15 @@ let submit ctx fields =
         ~body:(Fetch.BodyInit.make (body_json user pass))
         ()
     in
-    request ctx fields (fun () ->
-    let* resp = Fetch.fetchWithInit cognito_url init in
-    let* json = Fetch.Response.json resp in
-    match tokens_of json with
+    request fields (fun () ->
+    let* json = auth_json ctx init in
+    match Option.bind json tokens_of with
     | Some (id, acc, refresh) ->
         store_tokens id acc refresh;
         Dialogs_state.close_named "login";
         Js.Promise.resolve ()
     | None ->
-        fail ctx (error_message json);
+        Option.iter (fun json -> fail ctx (error_message json)) json;
         Js.Promise.resolve ())
 
 let json_obj xs = Js.Json.object_ (Js.Dict.fromList xs)
