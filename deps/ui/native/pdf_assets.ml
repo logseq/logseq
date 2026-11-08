@@ -1,8 +1,5 @@
-(* Native twin of src/extension/pdf_assets.ml — annotation persistence,
-   ref-block lifecycle, and open-by-ref navigation for the PDFKit
-   viewer. Assets live on disk under the graph's assets dir (no pfs),
-   Js.Promise resolves synchronously, and area images arrive as bytes
-   rendered by the host side. *)
+(* Native annotation persistence and ref-block lifecycle. Assets live
+   under the graph's assets dir; area images arrive as host-rendered bytes. *)
 
 open Promise_ext
 module W = Wire
@@ -86,6 +83,64 @@ let area_highlight (hl : Model.hl) = hl.hl_image <> None
 
 (* ---------- worker access ---------- *)
 
+type write_context =
+  { model : Model.t
+  ; repo : string
+  ; history : W.t
+  ; runtime_url : string
+  ; current : unit -> bool
+  ; journal_day : int
+  ; journal_title : string
+  }
+
+let capture_write_context ?(current = fun () -> true) () =
+  let model = Runtime.model () in
+  match model.Model.repo with
+  | None -> invalid_arg "PDF annotations require an open graph"
+  | Some repo ->
+      let asset = !Pdf_state.current in
+      let history = Outliner_ops.current_history_opts (W.Map []) in
+      let journal_day = Dates.today_journal_day () in
+      let journal_title = Dates.today () in
+      let* runtime =
+        Daemon_client.ipc
+          [ W.String "db-worker-runtime"; W.String repo; W.Map [] ]
+      in
+      (match W.map_get_string runtime "base-url" with
+       | Some runtime_url when runtime_url <> "" ->
+           Js.Promise.resolve
+             { model; repo; history; runtime_url; journal_day; journal_title
+             ; current = (fun () ->
+                 Runtime.repo () = repo && !Pdf_state.current = asset
+                 && current ()) }
+       | _ -> Js.Promise.reject (Failure "PDF graph runtime has no endpoint"))
+
+let invoke_for context name args =
+  Daemon_client.post_invoke context.runtime_url ("thread-api/" ^ name)
+    (W.String context.repo :: args)
+
+let entity_for context ref_wire = invoke_for context "entity" [ ref_wire ]
+
+let apply_for context ?(opts = W.Map []) ops =
+  let opts =
+    match opts, context.history with
+    | W.Map kvs, W.Map history -> W.Map (kvs @ history)
+    | _ -> invalid_arg "PDF transaction options must be a map"
+  in
+  (* Accepted asset writes outlive their view; only UI refresh is guarded. *)
+  let current () =
+    context.current () && Outliner_ops.context_current context.model
+  in
+  let invoke3 name repo ops opts =
+    Daemon_client.post_invoke context.runtime_url name [ repo; ops; opts ]
+  in
+  let* result =
+    Outliner_ops.submit_result ~invoke3 ~current context.model opts ops
+  in
+  if current () then
+    Outliner_ops.refresh_via_delta result
+  else Js.Promise.resolve ()
+
 let entity_of ref_wire = Properties_data.entity ref_wire
 
 let entity_uuid (w : W.t) = W.map_get_uuid w "block/uuid"
@@ -98,10 +153,10 @@ let entity_prop_dbid (w : W.t) k =
   | None -> None
 
 (* cljs <highlight-color-id — closed values of hl-color, match by title *)
-let highlight_color_id color =
+let highlight_color_id context color =
   let* ws =
-    Properties_data.closed_values
-      (W.Keyword "logseq.property.pdf/hl-color")
+    invoke_for context "get-property-closed-values"
+      [ W.Keyword "logseq.property.pdf/hl-color" ]
   in
   Js.Promise.resolve
     (List.find_map
@@ -158,12 +213,18 @@ let load_hls_data (asset : Model.pdf_asset)
 
 (* cljs db-based-ensure-ref-block! — annotation ref block under the pdf
    asset block, created on demand when the hl is first referenced *)
-let ensure_ref_block (asset : Model.pdf_asset) (hl : Model.hl)
+let ensure_ref_block ?context
+    (asset : Model.pdf_asset) (hl : Model.hl)
     : unit Js.Promise.t =
+  let* context =
+    match context with
+    | Some context -> Js.Promise.resolve context
+    | None -> capture_write_context ()
+  in
   match hl.hl_id, asset.Model.pdf_block_uuid with
   | None, _ | _, None -> Js.Promise.resolve ()
   | Some id, Some block_uuid ->
-      let* w = entity_of (Properties_data.uuid_ref id) in
+      let* w = entity_for context (Properties_data.uuid_ref id) in
       (match W.map_get_string w "block/title" with
        | Some _ -> Js.Promise.resolve ()
        | None ->
@@ -175,7 +236,7 @@ let ensure_ref_block (asset : Model.pdf_asset) (hl : Model.hl)
            let* color_kvs =
              match hl.hl_color with
              | Some c ->
-                 let* i = highlight_color_id c in
+                 let* i = highlight_color_id context c in
                  Js.Promise.resolve
                    (match i with
                     | Some cid ->
@@ -221,39 +282,38 @@ let ensure_ref_block (asset : Model.pdf_asset) (hl : Model.hl)
                           W.Map
                             (List.map (fun (k, v) -> (W.String k, v)) kvs)
                         in
-                        let* _ =
-                          Outliner_ops.apply_result
-                            ~opts:(Outliner_ops.op_opts "insert-blocks")
-                            [ Outliner_ops.insert_blocks ~bottom:true
-                                [ bm ] block_uuid ~sibling:false ]
-                        in
-                        (* keep the blocks pane in sync like
-                           apply_and_refresh *)
-                        Outliner_ops.apply_and_refresh []))
+                        apply_for context
+                          ~opts:(Outliner_ops.op_opts "insert-blocks")
+                          [ Outliner_ops.insert_blocks ~bottom:true
+                              [ bm ] block_uuid ~sibling:false ]))
   |> Js.Promise.then_ (fun () ->
          match hl.hl_id, hl.hl_image with
          | Some id, Some image_id ->
-             let* image = entity_of (W.Int64 image_id) in
+             let* image = entity_for context (W.Int64 image_id) in
              (match entity_uuid image with
               | Some uuid ->
-                  Outliner_ops.apply_and_refresh
+                  apply_for context
                     [ Outliner_ops.move_blocks [ uuid ] id ~sibling:false ]
               | None -> Js.Promise.resolve ())
          | _ -> Js.Promise.resolve ())
 
 (* cljs update-hl-block! — mirror color onto the ref block property *)
-let update_hl_block (hl : Model.hl) =
+let update_hl_block_for context (hl : Model.hl) =
   match hl.hl_id, hl.hl_color with
   | Some uuid, Some color ->
-      ignore
-        (let* id = highlight_color_id color in
-         match id with
-         | Some cid ->
-             Properties_data.set_block_property ~block_uuid:uuid
-               ~ident:"logseq.property.pdf/hl-color"
-               ~value:(W.Int cid)
-         | None -> Js.Promise.resolve (W.Map []))
-  | _ -> ()
+      let* id = highlight_color_id context color in
+      (match id with
+       | Some cid ->
+           apply_for context
+             [ Outliner_ops.set_block_property uuid
+                 "logseq.property.pdf/hl-color" (W.Int cid) ]
+       | None -> Js.Promise.resolve ())
+  | _ -> Js.Promise.resolve ()
+
+let update_hl_block (hl : Model.hl) =
+  ignore
+    (let* context = capture_write_context () in
+     update_hl_block_for context hl)
 
 (* cljs del-ref-block! *)
 let del_ref_block (hl : Model.hl) =
@@ -265,28 +325,38 @@ let del_ref_block (hl : Model.hl) =
   | None -> ()
 
 (* cljs copy-hl-ref! — ensure the ref block exists, then copy ((uuid)) *)
-let copy_hl_ref (hl : Model.hl) =
-  match !Pdf_state.current, hl.hl_id with
-  | Some asset, Some id ->
-      ignore
-        (let* () = ensure_ref_block asset hl in
-         Platform.copy_to_clipboard ("((" ^ id ^ "))");
-         Js.Promise.resolve ())
-  | _ -> ()
-
-(* cljs goto-block-ref! — open the ref block's page *)
-let goto_block_ref (hl : Model.hl) =
+let copy_hl_ref_for context asset (hl : Model.hl) =
   match hl.hl_id with
   | Some id ->
+      let* () = ensure_ref_block ~context asset hl in
+      if context.current () then Platform.copy_to_clipboard ("((" ^ id ^ "))");
+      Js.Promise.resolve ()
+  | None -> Js.Promise.resolve ()
+
+let copy_hl_ref (hl : Model.hl) =
+  match !Pdf_state.current with
+  | Some asset ->
       ignore
-        (let* () =
-           match !Pdf_state.current with
-           | Some asset -> ensure_ref_block asset hl
-           | None -> Js.Promise.resolve ()
-         in
-         Platform.set_location_hash
-           (Runtime.nav_hash ("#/page/" ^ id));
-         Js.Promise.resolve ())
+        (let* context = capture_write_context () in
+         copy_hl_ref_for context asset hl)
+  | None -> ()
+
+(* cljs goto-block-ref! — open the ref block's page *)
+let goto_block_ref_for context asset (hl : Model.hl) =
+  match hl.hl_id with
+  | Some id ->
+      let* () = ensure_ref_block ~context asset hl in
+      if context.current () then
+        Platform.set_location_hash (Runtime.nav_hash ("#/page/" ^ id));
+      Js.Promise.resolve ()
+  | None -> Js.Promise.resolve ()
+
+let goto_block_ref (hl : Model.hl) =
+  match !Pdf_state.current with
+  | Some asset ->
+      ignore
+        (let* context = capture_write_context () in
+         goto_block_ref_for context asset hl)
   | None -> ()
 
 (* cljs goto-annotations-page! — pdf block page, optionally anchored to
@@ -339,22 +409,31 @@ let goto_asset_block uuid =
 
 (* cljs editor-assets db-based-save-assets! {:pdf-area? true} — write
    assets/<uuid>.png, insert an asset block into today's journal *)
-let save_area_png (png : Bytes.t) : int option Js.Promise.t =
+let save_area_png ~context (png : Bytes.t) : int Js.Promise.t =
+  let journal_page () =
+    invoke_for context "get-journal-page-by-day" [ W.Int context.journal_day ]
+  in
   let uuid = Platform.random_uuid () in
   let* checksum = Asset_store.sha256_hex png in
   let* () =
-    Asset_store.write_asset ~repo:(repo ()) ~name:(uuid ^ ".png")
+    Asset_store.write_asset ~repo:context.repo ~name:(uuid ^ ".png")
       ~u8:png
   in
   let size = Bytes.length png in
-  let day = Dates.today_journal_day () in
   let* w =
-    let* w = Properties_data.journal_page_by_day day in
+    let* w = journal_page () in
     match W.map_get_uuid w "block/uuid" with
     | Some _ -> Js.Promise.resolve w
     | None ->
-        let* () = !Pdf_state.create_today_journal () in
-        Properties_data.journal_page_by_day day
+        let* () =
+          apply_for context
+            [ Outliner_ops.op "create-page"
+                [ W.String context.journal_title
+                ; W.Map
+                    [ W.Keyword "today-journal?", W.Bool true
+                    ; W.Keyword "split-namespace?", W.Bool false ] ] ]
+        in
+        journal_page ()
   in
   match W.map_get_uuid w "block/uuid" with
   | Some page_uuid ->
@@ -370,15 +449,17 @@ let save_area_png (png : Bytes.t) : int option Js.Promise.t =
             W.String checksum
           ]
       in
-      let* _ =
-        Outliner_ops.apply_result
+      let* () =
+        apply_for context
           ~opts:(Outliner_ops.op_opts "insert-blocks")
           [ Outliner_ops.insert_blocks ~bottom:true [ bm ] page_uuid
               ~sibling:false ]
       in
-      let* e = entity_of (Properties_data.uuid_ref uuid) in
-      Js.Promise.resolve (entity_dbid e)
-  | None -> Js.Promise.resolve None
+      let* e = entity_for context (Properties_data.uuid_ref uuid) in
+      (match entity_dbid e with
+       | Some id -> Js.Promise.resolve id
+       | None -> Js.Promise.reject (Failure "PDF area asset was not created"))
+  | None -> Js.Promise.reject (Failure "PDF area journal was not created")
 
 (* the on-disk path an area hl's image asset resolves to (content.image
    is the asset block's db/id) *)
