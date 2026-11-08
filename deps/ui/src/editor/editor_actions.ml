@@ -363,6 +363,8 @@ type split_batch =
   }
 
 let active_split_batch : split_batch option ref = ref None
+(* A retired operation must not release a newer context's input gate. *)
+let structure_owner = ref (ref ())
 
 let split_owned batch =
   match !active_split_batch with Some active -> active == batch | None -> false
@@ -388,28 +390,33 @@ type structure_guard =
 
 let run_structure ?recover ?current_guard ~restore p finish =
   let context = Runtime.repo (), Runtime.route () in
+  let owner = ref () in
   let started_at = Ui_services.time_now () in
   Ui_services.perf_mark "editor:structure-start";
   (match current_guard with
    | None -> Option.iter retire_split !active_split_batch
    | Some _ -> ());
-  let current () =
+  let context_current () =
     match current_guard with
     | Some guard -> guard.structure_current ()
     | None -> context = (Runtime.repo (), Runtime.route ())
   in
   let owned () =
-    match current_guard with
+    !structure_owner == owner && match current_guard with
     | Some guard -> guard.structure_owned ()
     | None -> true
   in
-  if Option.is_none current_guard || current () then S.structure_pending := true;
+  if Option.is_none current_guard || context_current () then begin
+    structure_owner := owner;
+    S.structure_pending := true
+  end;
+  let current () = owned () && context_current () in
   let release () = if owned () then S.structure_pending := false in
   let drain () =
-    if Option.is_none current_guard || current () then begin
+    if owned () && (Option.is_none current_guard || current ()) then begin
       Runtime.flush_now ();
-      S.drain_edit_actions ();
-      Ops.resume_pending_save ()
+      if owned () then S.drain_edit_actions ();
+      if owned () then Ops.resume_pending_save ()
     end
   in
   let settled = p |> Js.Promise.catch (fun _ ->
@@ -648,7 +655,16 @@ let flush_edit () =
          Printf.eprintf "PERF editing-clear src=flush uuid=%s\n%!" e.uuid);
       Editor_sink.invalidate e.uuid;
       S.set (fun st -> { st with S.editing = None });
-      Option.iter (fun save -> ignore (Ops.save_pending save)) save
+      Option.iter (fun save ->
+          match !active_split_batch with
+          | Some batch when batch.running && !S.optimistic_split_ready ->
+              (* The final row still depends on this batch's accepted inserts. *)
+              Queue.add
+                { persist = (fun ~context:_ ~current:_ -> Js.Promise.resolve None)
+                ; save = Some save; context = save.Ops.context; restore = e
+                ; replay_after = !S.optimistic_input_seq }
+                batch.commits
+          | _ -> ignore (Ops.save_pending save)) save
 
 (* property value cells open their own inline editor — entering one
    exits block editing just like a click into another block *)
@@ -808,9 +824,7 @@ let enqueue_split batch ~context ~save ~restore persist =
         batch.restore <- Some job.restore;
         batch.replay_after <- job.replay_after;
         let operation = let* () = persist_save job in
-         let* response =
-           if current () then job.persist ~context:job.context ~current
-           else Js.Promise.resolve None in
+         let* response = job.persist ~context:job.context ~current in
          if current () then batch.last_response <- response;
          drain () in
         operation |> Js.Promise.catch (fun _ ->
@@ -926,14 +940,13 @@ let split_at_cursor uuid =
         let batch = split_batch_for () in
         let save = Ops.take_pending_save () in
         let persist ~context ~current =
-          if not (current ()) then Js.Promise.resolve None else
+          (* UI ownership may expire, but accepted edits retain their origin. *)
           let origin_repo = Option.get context.Model.repo in
           let* a = Js.Promise.all
               [| Ops.block_map_parsed_source ~origin_repo ~source uuid before
                ; Ops.block_map_parsed_source ~page:library ~origin_repo
                    ~source:false new_uuid after |] in
-          if not (current ()) then Js.Promise.resolve None else
-          Ops.apply_result_for ~current context ~flush_save:false ~opts
+          Ops.submit_result ~current context opts
             ([ Ops.op "save-block" [ a.(0); Wire.Map [] ]
             ; Ops.insert_blocks [ a.(1) ] uuid ~sibling ]
             @ if above then [ Ops.move_blocks [ uuid ] new_uuid ~sibling:true ] else [])

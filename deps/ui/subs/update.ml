@@ -9,6 +9,7 @@ open Model
 let effects (action : Action.t) : unit =
   match action with
   | Action.Boot_graph_ready (repo, _) ->
+      !(Subs_state.on_navigate) ();
       Subs_state.current_repo := Some repo;
       Subs_state.current_graph_uuid := None;
       Subs_state.app_hooks.on_graph_opened repo;
@@ -17,11 +18,14 @@ let effects (action : Action.t) : unit =
       Subs_state.app_hooks.plugin_event "current-graph-changed"
         (Json.Object [])
   | Action.Graph_closed ->
+      !(Subs_state.on_navigate) ();
       Subs_state.current_repo := None;
       Subs_state.current_page := None;
       Subs_state.app_hooks.plugin_event "current-graph-changed"
         (Json.Object []);
       Subs_state.current_route := None
+  | Action.Boot_failed _ ->
+      !(Subs_state.on_navigate) ()
   | Action.Page_loaded page ->
       Subs_state.app_hooks.nav_load_done ();
       (* a fresh full-fetch replaces the tree at an unknown rev — the
