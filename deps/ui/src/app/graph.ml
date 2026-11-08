@@ -53,6 +53,7 @@ let list_graphs () =
   Js.Promise.resolve (Decode.repos_of_list_db w)
 
 let open_graph repo =
+  Editor_actions.after_pending_input (fun () ->
   (* cljs theme.cljs effect [current-repo]: pdf viewer resets when the
      repo changes *)
   Pdf_state.set_current None;
@@ -62,7 +63,7 @@ let open_graph repo =
       (Wire.Map [])
   in
   boot_mark "create-or-open replied";
-  Sdk_config.read_config repo
+  Sdk_config.read_config repo)
 
 (* cljs events.cljs <build-search-index!: on graph open the frontend asks
    the worker to build blocks_fts; seed entities (Library etc.) only reach
@@ -79,6 +80,7 @@ let build_search_index repo =
   |> ignore
 
 let create_graph ?(remote = false) name =
+  Editor_actions.after_pending_input (fun () ->
   let repo = full_graph_name name in
   let* _ =
     Runtime.invoke2 "thread-api/create-or-open-db" (Wire.String repo)
@@ -93,7 +95,7 @@ let create_graph ?(remote = false) name =
              [ (Wire.kw "creating-remote-graph?", Wire.Bool true) ]
            else []))
   in
-  Js.Promise.resolve repo
+  Js.Promise.resolve repo)
 
 (* cljs <create! title {:today-journal? true} via outliner-op create-page *)
 let create_today_journal repo =

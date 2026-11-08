@@ -762,15 +762,20 @@ let after_pending_input commit =
         let before = !S.pending_focus_actions in
         S.pending_focus_actions := List.rev rest;
         drain_gate := true;
-        (try action (); drain_gate := false
-         with error ->
-           drain_gate := false;
-           S.pending_focus_actions := before;
-           raise error);
+        let replay =
+          try action (); drain_gate := false; Ok ()
+          with error ->
+            drain_gate := false;
+            S.pending_focus_actions := before;
+            Error error
+        in
+        (match replay with
+        | Error error -> Js.Promise.reject error
+        | Ok () ->
         if not !S.structure_pending
            && List.length !S.pending_focus_actions >= List.length before then
           Js.Promise.reject (Failure "Editor input has not reached its editing session")
-        else drain ()
+        else drain ())
     | [] ->
         let* () = Ops.flush_pending_save () in
         if context <> (Runtime.repo (), Runtime.route ())
@@ -781,7 +786,15 @@ let after_pending_input commit =
             let buffer = Ops.trim_title e.S.uuid (live_buffer e.S.uuid) in
             if buffer <> e.S.base then begin
               let* saved = Ops.save_pending_result (Ops.accept_save e.S.uuid buffer) in
-              if Option.is_some saved then S.set_silent (fun st ->
+              match saved with
+              | None ->
+                  (match S.editing () with
+                   | Some live when live.S.epoch == e.S.epoch
+                       && live.S.buffer = e.S.buffer && live.S.base = e.S.base ->
+                       Js.Promise.reject (Failure "Editor save made no progress before context change")
+                   | _ -> drain ())
+              | Some _ ->
+              S.set_silent (fun st ->
                   match st.S.editing with
                   | Some live when live.S.epoch == e.S.epoch && live.S.buffer = e.S.buffer ->
                       { st with S.editing = Some { live with S.base = buffer } }
