@@ -461,9 +461,12 @@ let flush_render_data () =
 
 let apply = Sdk_util.apply_op
 
-let set_block_property ~block_uuid ~ident ~value =
-  apply "set-block-property"
+let set_block_property_for_repo repo ~block_uuid ~ident ~value =
+  Sdk_util.apply_op_for_repo repo "set-block-property"
     [ W.Uuid block_uuid; W.Keyword ident; value ]
+
+let set_block_property ~block_uuid ~ident ~value =
+  set_block_property_for_repo (Runtime.repo ()) ~block_uuid ~ident ~value
 
 let remove_block_property ~block_uuid ~ident =
   apply "remove-block-property" [ W.Uuid block_uuid; W.Keyword ident ]
@@ -483,8 +486,8 @@ let batch_delete_property_value ~block_uuids ~ident ~value =
   apply "batch-delete-property-value"
     [ uuid_list block_uuids; W.Keyword ident; value ]
 
-let upsert_property ?ident ~schema ~property_name () =
-  apply "upsert-property"
+let upsert_property ?(repo = Runtime.repo ()) ?ident ~schema ~property_name () =
+  Sdk_util.apply_op_for_repo repo "upsert-property"
     [ (match ident with Some i -> W.Keyword i | None -> W.Nil)
     ; schema
     ; W.Map [ (W.Keyword "property-name", W.String property_name) ]
@@ -543,8 +546,8 @@ let add_existing_to_closed_values ~ident values =
   apply "add-existing-values-to-closed-values"
     [ W.Keyword ident; W.List (List.map (fun v -> W.String v) values) ]
 
-let transact tx =
-  apply "transact" [ W.List tx; W.Map [] ]
+let transact ?(repo = Runtime.repo ()) tx =
+  Sdk_util.apply_op_for_repo repo "transact" [ W.List tx; W.Map [] ]
 
 (* property text values save through the same wrap-parse-block path as
    block titles so [[refs]]/#tags inside them materialize entities *)

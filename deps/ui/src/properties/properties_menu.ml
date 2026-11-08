@@ -201,6 +201,13 @@ let text_form_view ?(disabled = false) ~title_v ~desc_v ~title_placeholder ~desc
     context parent
 
 let name_pane_view m ~close : t =
+ fun context parent ->
+  let repo = Runtime.repo () and route = Runtime.route () in
+  let revision = (Runtime.model ()).Model.context_revision in
+  let current () =
+    Runtime.repo () = repo && Runtime.route () = route
+    && (Runtime.model ()).Model.context_revision = revision
+  in
   let desc_v =
     match D.getf (prop_entity m) "logseq.property/description" with
     | Some d -> D.ref_title d
@@ -214,27 +221,29 @@ let name_pane_view m ~close : t =
       and new_desc = String.trim new_desc in
       if new_name <> "" then ignore (let* _ =
         if new_name <> String.trim (prop_title m) then
-          D.upsert_property ~ident:(prop_ident m) ~schema:(W.Map [])
+          D.upsert_property ~repo ~ident:(prop_ident m) ~schema:(W.Map [])
             ~property_name:new_name ()
         else Js.Promise.resolve W.Nil in
         let* _ = match prop_uuid m with
           | Some block_uuid when new_desc <> String.trim desc_v ->
               (match D.getf (prop_entity m) "logseq.property/description" with
                | Some description when description <> W.Nil ->
-                   D.transact
+                   D.transact ~repo
                      [W.Map
                         [W.Keyword "block/uuid", W.Uuid (Option.get (D.entity_uuid_of description));
                          W.Keyword "block/title", W.String new_desc;
                          W.Keyword "block/updated-at", W.Int64 (Int64.of_float (Ui_services.time_now ()))]]
                | _ when new_desc <> "" ->
-                   D.set_block_property ~block_uuid
+                   D.set_block_property_for_repo repo ~block_uuid
                      ~ident:"logseq.property/description" ~value:(W.String new_desc)
                | _ -> Js.Promise.resolve W.Nil)
           | _ -> Js.Promise.resolve W.Nil in
-        m.refresh ();
-        S.refresh_all ();
-        close ();
+        if current () then (
+          m.refresh ();
+          S.refresh_all ();
+          if Ui_effect.alive context.Lui_ui.ui_scope then close ());
         Js.Promise.resolve ()))
+    context parent
 
 (* choices pane: scrollable list + add + per-choice edit *)
 let choices_pane_view m ~set_pane ~close : t =

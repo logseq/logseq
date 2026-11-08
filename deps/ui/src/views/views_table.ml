@@ -726,7 +726,8 @@ let column_menuitem_els inst (c : V.column) (p : W.t) =
 
 (* cljs header-cp: property columns open one .ls-property-dropdown —
    sort more-options first, then the configure list, no title *)
-let open_property_menu inst ~anchor (c : V.column) (p : W.t) =
+let open_property_menu inst ~scope ~anchor (c : V.column) (p : W.t) =
+  let current = V.current_view inst in
   let owner_uuid =
     match inst.V.kind with
     | V.KTagPage u | V.KPropertyPage u -> u
@@ -737,7 +738,7 @@ let open_property_menu inst ~anchor (c : V.column) (p : W.t) =
     ~owner_is_tag:
       (match inst.V.kind with V.KTagPage _ -> true | _ -> false)
     ~owner_title:c.V.c_name
-    ~refresh:(fun () -> refresh inst)
+    ~refresh:(fun () -> if Ui_effect.alive scope && current () then refresh inst)
     ~more_options:(column_menuitem_els inst c p)
     ~with_title:false
     (W.Map
@@ -798,6 +799,7 @@ let resize_handle inst (c : V.column) : t =
   node
 
 let header_cell ?rows inst (c : V.column) : t =
+ fun context parent ->
   with_column_width inst c
   (if Ui_services.env_publishing () then
     box [ text ~value:c.V.c_name [] ]
@@ -817,7 +819,8 @@ let header_cell ?rows inst (c : V.column) : t =
         match c.V.c_prop with
         | Some p -> (
             match Ui_services.dom_by_id (header_cell_id inst c) with
-            | Some anchor -> open_property_menu inst ~anchor c p
+            | Some anchor ->
+                open_property_menu inst ~scope:context.Lui_ui.ui_scope ~anchor c p
             | None -> ())
         | None ->
             if sortable c then
@@ -845,6 +848,7 @@ let header_cell ?rows inst (c : V.column) : t =
                   [ Ui_components.Prop.overflow `hidden ]
                   (header_button inst c)
               ; resize_handle inst c ])))
+    context parent
 
 (* ---------- action bar ---------- *)
 
