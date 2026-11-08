@@ -1747,13 +1747,25 @@ let run_query t ac ~advanced =
           Outliner_ops.apply_parsed ~rest
             [ (quuid, title); (buuid, "") ])
 
-let configured_concat left right =
+exception Unsupported_configured_input
+
+let configured_blank units text =
+  let rec blank index =
+    index = S.length text ||
+    let cp = Edit_model.decode_cp units text index in
+    ((cp >= 0x09 && cp <= 0x0D) || cp = 0x20 || cp = 0xA0 || cp = 0x1680
+     || (cp >= 0x2000 && cp <= 0x200A) || cp = 0x2028 || cp = 0x2029
+     || cp = 0x202F || cp = 0x205F || cp = 0x3000 || cp = 0xFEFF)
+    && blank (index + Edit_model.cp_len units text index) in
+  blank 0
+
+let configured_concat ~units left right =
   let horizontal = function ' ' | '\t' | '\r' -> true | _ -> false in
   let end_ = ref (S.length left) and start = ref 0 in
   while !end_ > 0 && horizontal left.[!end_ - 1] do decr end_ done;
   while !start < S.length right && horizontal right.[!start] do incr start done;
   let left = S.sub left 0 !end_ in
-  left ^ (if S.trim left = "" || left.[S.length left - 1] = '\n' then "" else " ")
+  left ^ (if configured_blank units left || left.[S.length left - 1] = '\n' then "" else " ")
     ^ S.sub right !start (S.length right - !start)
 
 let configured_last_index text pattern =
@@ -1766,7 +1778,7 @@ let configured_last_index text pattern =
 let configured_input ?(backward_pos = 0) ?(last_pattern = Some "/")
     ?end_pattern ?backward_truncate_number ?(only_breakline = false)
     text (model : Edit_model.t) =
-  let rewind text count =
+  let rewind ?(truncate = false) text count =
     match model.units with
     | Edit_model.U16 -> max 0 (S.length text - count)
     | Edit_model.Bytes ->
@@ -1774,6 +1786,7 @@ let configured_input ?(backward_pos = 0) ?(last_pattern = Some "/")
           if count <= 0 || pos = 0 then pos else
           let prev = Edit_model.prev_cp model.units text pos in
           let width = if Edit_model.decode_cp model.units text prev > 0xFFFF then 2 else 1 in
+          if truncate && count < width then raise Unsupported_configured_input;
           back prev (count - width) in
         back (S.length text) count in
   let pos = match end_pattern with
@@ -1796,23 +1809,23 @@ let configured_input ?(backward_pos = 0) ?(last_pattern = Some "/")
                    && (Str_util.starts_with pattern "((" || Str_util.starts_with pattern "[["))
                   || Str_util.starts_with before "{{embed"
                   || (Str_util.ends_with before "#" && Str_util.starts_with pattern "[[")) index) in
-  let concat left right = if space then configured_concat left right else left ^ right in
+  let concat left right = if space then configured_concat ~units:model.units left right else left ^ right in
   let prefix = match backward_truncate_number with
     | Some 0 -> prefix
-    | Some count -> S.sub prefix 0 (rewind prefix count) ^ text
+    | Some count -> S.sub prefix 0 (rewind ~truncate:true prefix count) ^ text
     | None ->
         (match last_pattern, index with
          | None, _ -> prefix ^ text
-         | Some pattern, _ when S.trim pattern = "" -> concat prefix text
+         | Some pattern, _ when configured_blank model.units pattern -> concat prefix text
          | Some _, Some index -> concat (S.sub prefix 0 index) text
          | Some _, None -> prefix) in
   let suffix =
     if only_breakline && Str_util.starts_with suffix "\n" then
       S.sub suffix 1 (S.length suffix - 1)
     else suffix in
-  let source = if S.trim suffix = "" then prefix else concat prefix suffix in
+  let source = if configured_blank model.units suffix then prefix else concat prefix suffix in
   let pos = rewind prefix backward_pos in
-  if S.trim text <> "" && S.trim source = "" then model else
+  if not (configured_blank model.units text) && configured_blank model.units source then model else
     Edit_model.select (Edit_model.splice model 0 (S.length model.source) source)
       ~anchor:pos ~focus:pos
 
@@ -1871,7 +1884,7 @@ let configured_steps output =
           match S.rindex_opt prefix '/' with
           | None -> model
           | Some index ->
-              let prefix = configured_concat (S.sub prefix 0 index) "" in
+              let prefix = configured_concat ~units:model.units (S.sub prefix 0 index) "" in
               let suffix = S.sub model.source model.caret (S.length model.source - model.caret) in
               Edit_model.select (Edit_model.splice model 0 (S.length model.source) (prefix ^ suffix))
                 ~anchor:(S.length prefix) ~focus:(S.length prefix))
@@ -1887,9 +1900,11 @@ let configured_steps output =
 let apply_item t ac ~meta it =
   match it.ai_act with
   | Configured output ->
+      let unsupported () =
+        Toast.error (U.t1 "editor.slash/unsupported-configured-command-error" it.ai_label) in
       (match configured_steps output with
-       | None -> Toast.error (U.t1 "editor.slash/unsupported-configured-command-error" it.ai_label)
-       | Some steps ->
+       | None -> unsupported ()
+       | Some steps -> (try
            let before = Option.map (fun model -> model.Edit_model.source)
                (Editor_actions.edit_model ac.auuid) in
            Editor_actions.update_model ac.auuid (fun model ->
@@ -1899,7 +1914,8 @@ let apply_item t ac ~meta it =
                  Outliner_ops.schedule_save ac.auuid model.Edit_model.source)
              (Editor_actions.edit_model ac.auuid);
            close_ac t;
-           Editor_sink.focus_input ac.auuid)
+           Editor_sink.focus_input ac.auuid
+           with Unsupported_configured_input -> unsupported ()))
   | Switch kind ->
       invalidate_ac t;
       erase_trigger_text ac;

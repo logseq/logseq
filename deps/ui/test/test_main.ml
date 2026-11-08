@@ -2750,9 +2750,10 @@ let test_popups_state () =
     let model = Edit_model.select model ~anchor:caret ~focus:caret in
     let output = Wire.Array [Wire.Array
       [Wire.kw "editor/input"; Wire.String text; Edn.parse options]] in
-    let result = Option.map (fun steps ->
+    let result = try Option.map (fun steps ->
       let model = List.fold_left (fun model step -> step model) model steps in
-      model.Edit_model.source, model.caret) (Popups_state.configured_steps output) in
+      model.Edit_model.source, model.caret) (Popups_state.configured_steps output)
+      with Popups_state.Unsupported_configured_input -> None in
     check ("Configured input " ^ name) (result = expected))
     [ "custom pattern", Edit_model.U16, "left//query", 11, "X",
       "{:last-pattern \"//\"}", Some ("left X", 6)
@@ -2760,12 +2761,20 @@ let test_popups_state () =
       "{:last-pattern :skip-check}", Some ("leftX", 5)
     ; "blank pattern", Edit_model.U16, "left", 4, "X",
       "{:last-pattern \"\"}", Some ("left X", 6)
+    ; "web Unicode blank pattern", Edit_model.U16, "left", 4, "X",
+      {js|{:last-pattern " "}|js}, Some ("left X", 6)
+    ; "native Unicode blank pattern", Edit_model.Bytes, "left", 4, "X",
+      "{:last-pattern \"\194\160\"}", Some ("left X", 6)
     ; "end pattern", Edit_model.U16, "a /cmdTAIL|suffix", 6, "X",
       "{:end-pattern \"|\"}", Some ("a X |suffix", 3)
     ; "zero truncate", Edit_model.U16, "ab/cd", 5, "X",
       "{:backward-truncate-number 0}", Some ("ab/cd", 5)
     ; "truncate", Edit_model.U16, "ab/cd", 5, "X",
       "{:backward-truncate-number 2}", Some ("ab/X", 4)
+    ; "native split surrogate truncate", Edit_model.Bytes, "A\240\159\152\128", 5, "X",
+      "{:backward-truncate-number 1}", None
+    ; "native whole surrogate truncate", Edit_model.Bytes, "A\240\159\152\128", 5, "X",
+      "{:backward-truncate-number 2}", Some ("AX", 2)
     ; "single breakline", Edit_model.U16, "x\n\nrest", 1, "Q",
       "{:last-pattern :skip-check :only-breakline? true}", Some ("xQ\nrest", 2)
     ; "tag spacing", Edit_model.U16, "#[[query", 8, "[[X]]",
