@@ -189,7 +189,7 @@ let auth_json ctx init =
    Fetch.Response.json resp)
   |> Js.Promise.then_ (fun json -> Js.Promise.resolve (Some json))
   |> Js.Promise.catch (fun _ ->
-         fail ctx (T.t "account/sign-in-error");
+         fail ctx (T.t "account/auth-error-generic");
          Js.Promise.resolve None)
 
 (* cognito's REST __type may carry a namespace prefix
@@ -234,7 +234,7 @@ let error_message (json : Js.Json.t) =
   in
   match error_name_of json with
   | Some n -> I18n.t (key n)
-  | None -> (T.t "account/sign-in-error")
+  | None -> T.t "account/auth-error-generic"
 
 (* cljs login.cljs validate-password! — client-side policy check before
    the signup / confirm-reset calls *)
