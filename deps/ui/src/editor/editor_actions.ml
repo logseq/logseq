@@ -69,10 +69,7 @@ let sel_span uuid =
 (* the mousedown that opened an edit lands before the sink exists —
    hit-test its recorded coords against the now-mounted runs so the
    caret lands on the click point instead of the enter_edit default *)
-let click_offset uuid =
-  match !S.click_point with
-  | Some (u, ms, x, y)
-    when u = uuid && Ui_services.time_now () -. ms < 1500. -> (
+let click_offset uuid (_, x, y) =
       match
         ( Editor_sink.conduit uuid
         , Ui_services.dom_by_id ("edit-block-" ^ uuid) )
@@ -80,58 +77,30 @@ let click_offset uuid =
       | Some conduit, Some el -> (
           match closest ".block-editor" (Some el) with
           | None -> None
+          | Some c when c.Ui_services.rect_pending () -> None
           | Some c ->
               let l, t, _w, _h = c.Ui_services.rect () in
               conduit.Edit_input.offset_at
                 ~x:(int_of_float x - int_of_float l)
                 ~y:(int_of_float y - int_of_float t))
-      | _ -> None)
-  | _ -> None
+      | _ -> None
 
-(* programmatic caret moves never pass through apply_input, so the
-   mounted surface's overlay keeps its stale rect — re-measure it from
-   the model just published *)
-(* returns whether the active frame ended up with a caret rect: callers
-   that schedule overlays need to know the measurement actually landed
-   (a missing conduit/model/frame, or a rect that still can't be
-   measured, means the caret stays unpainted) *)
-let refresh_overlay uuid =
-  match (!S.active_frame, Editor_sink.conduit uuid, edit_model uuid) with
-  | Some fr, Some conduit, Some m ->
-      (* Resolve a click before the first overlay measurement, so the
-         fallback caret never paints at the end of the block. *)
-      let m =
-        match !S.pending_focus with
-        | Some (u, _, armed_ms) when u = uuid && !S.last_edit_input_ms <= armed_ms ->
-            (match click_offset uuid with
-             | Some off ->
-                 let next = Edit_model.select m ~anchor:off ~focus:off in
-                 if next <> m then
-                   S.set_silent (fun st ->
-                       match st.S.editing with
-                       | Some e when e.uuid = uuid ->
-                           { st with editing = Some (S.with_model e next) }
-                       | _ -> st);
-                 next
-             | None -> m)
-        | _ -> m
-      in
-      let measured = Edit_input.measure conduit m in
-      let current =
-        match (Signal.state_pending fr) with
-        | Some v -> v
-        | None -> Signal.get_state fr
-      in
-      if Option.is_some measured.Edit_input.caret && measured <> current then begin
-        Signal.update fr (fun _ -> measured);
-        Runtime.flush ()
-      end;
-      Option.is_some measured.Edit_input.caret
-  | _ -> false
+let initial_click_pending uuid =
+  match !S.pending_focus with
+  | Some request -> request.S.focus_uuid = uuid && Option.is_some request.S.focus_click
+  | None -> false
 
-let set_caret uuid pos =
-  update_model uuid (fun m -> Edit_model.select m ~anchor:pos ~focus:pos);
-  ignore (refresh_overlay uuid)
+let cancel_pending_focus () =
+  if !S.pending_focus_actions <> [] then
+    Ui_services.log_error "queued editor actions cancelled because their editing context ended";
+  S.pending_focus := None;
+  S.pending_focus_actions := []
+
+let focus_owned (request : S.focus_request) (editing : S.editing) =
+  request.S.focus_uuid = editing.S.uuid
+  && match request.S.focus_owner with
+     | Some (scope, epoch) -> scope = editing.S.scope && epoch == editing.S.epoch
+     | None -> true
 
 (* splice [lo, hi) -> text; caret lands after the inserted text *)
 let splice_range uuid lo hi text =
@@ -174,46 +143,46 @@ let retry_delay_ms attempts = min 200 (12 lsl (min 4 (attempts / 8)))
    triggers — the gate keeps a nested pass from replaying twice *)
 let drain_gate = ref false
 
-let drain_pending_focus_actions () =
-  if !drain_gate then ()
-  else
-    match List.rev !S.pending_focus_actions with
-    | [] -> ()
-    | f :: rest ->
-        drain_gate := true;
-        S.pending_focus_actions := List.rev rest;
-        (try f ()
-         with e ->
-           Ui_services.log_error ("queued key replay failed", e));
-        drain_gate := false
-
 (* the arm the focus op was last emitted for — re-emitting every retry
    saturates the host's op queue while the focus event still hasn't had
    a turn, which is exactly what keeps ae from resolving. The arm
-   triple (not just the uuid) keys the dedup and every arm-site resets
+   identity (not just the uuid) keys the dedup and every arm-site resets
    it: a second edit on the same block mounts a NEW input element that
    still needs its own emit *)
-let last_focus_emitted : (string * int * float) option ref = ref None
+let last_focus_emitted : S.focus_request option ref = ref None
 
-(* on native the rect and offset-at replies land a tick after the
-   first read — a one-shot [click_offset] would settle on the
-   enter_edit default before the answer arrives. Re-poll while the
-   click_point window holds; a key press since the arm
-   (last_edit_input_ms > armed_ms) keeps the model's caret *)
-let rec apply_click_offset uuid fallback armed_ms attempts =
-  match S.editing () with
-  | Some e when e.S.uuid = uuid && !S.last_edit_input_ms <= armed_ms -> (
-      match click_offset uuid with
-      | Some off -> set_caret uuid off
-      | None ->
-          if attempts <= 0 then set_caret uuid fallback
-          else
-            ignore
-              (Ui_services.timers_timeout
-                 (fun () ->
-                   apply_click_offset uuid fallback armed_ms (attempts - 1))
-                 16))
+let note_focus_blur uuid =
+  match !S.pending_focus, S.editing () with
+  | Some request, Some editing
+    when focus_owned request editing && initial_click_pending uuid ->
+      last_focus_emitted := Some request
   | _ -> ()
+
+(* Accepted clicks retain their point until geometry arrives; explicit
+   pointer input supersedes that point without overwriting its selection. *)
+let resolve_initial_click (request : S.focus_request) (editing : S.editing) =
+  match request.S.focus_click with
+  | None -> true
+  | Some point ->
+      if !S.last_edit_input_ms > request.S.focus_armed_ms
+         || !S.edit_input_seq <> request.S.focus_input_seq
+      then (
+        request.S.focus_click <- None;
+        request.S.focus_caret <- editing.S.model.Edit_model.caret;
+        true)
+      else match click_offset request.S.focus_uuid point with
+      | None -> false
+      | Some offset ->
+          let model = Edit_model.select editing.S.model ~anchor:offset ~focus:offset in
+          S.set_silent (fun st ->
+              match st.S.editing with
+              | Some current when current.S.epoch == editing.S.epoch
+                                  && current.S.scope = editing.S.scope ->
+                  { st with editing = Some (S.with_model current model) }
+              | _ -> st);
+          request.S.focus_caret <- model.Edit_model.caret;
+          request.S.focus_click <- None;
+          true
 
 let rec apply_focus () =
   (* a stale retry timer can fire after its arm was consumed or replaced;
@@ -221,7 +190,20 @@ let rec apply_focus () =
      against the live editing state instead of dropping the presses *)
   match !S.pending_focus with
   | None -> drain_pending_focus_actions ()
-  | Some (uuid, caret, armed_ms) -> (
+  | Some request -> (
+      let uuid = request.S.focus_uuid in
+      let caret = request.S.focus_caret in
+      let armed_ms = request.S.focus_armed_ms in
+      match S.editing () with
+      | Some editing when Option.is_some request.S.focus_owner
+                          && not (focus_owned request editing) ->
+          cancel_pending_focus ();
+          last_focus_emitted := None;
+      | None when Option.is_some request.S.focus_owner -> cancel_pending_focus ()
+      | None -> retry_focus ()
+      | Some editing when editing.S.uuid <> uuid -> retry_focus ()
+      | Some editing ->
+        request.S.focus_owner <- Some (editing.S.scope, editing.S.epoch);
       if !(S.code_focus) ~caret uuid then (
         (* CodeMirror-backed code block: cm.focus() + setCursor landed *)
         S.pending_focus := None;
@@ -236,11 +218,11 @@ let rec apply_focus () =
            patch or two after pending_focus arms, and an emit fired
            into the void would never be repeated *)
         if
-          !last_focus_emitted <> Some (uuid, caret, armed_ms)
+          (match !last_focus_emitted with Some emitted -> emitted != request | None -> true)
           && Editor_sink.can_focus uuid
         then begin
-          Editor_sink.focus_input uuid;
-          last_focus_emitted := Some (uuid, caret, armed_ms)
+          last_focus_emitted := Some request;
+          Editor_sink.focus_input uuid
         end;
         (* emitting focus_input flushes the sink's focus event through
            apply_input -> Runtime.flush -> focus_pending, which re-enters
@@ -249,13 +231,19 @@ let rec apply_focus () =
            is still the armed one: a nested landing (None) or a newer
            arm must not be stomped by this stale pass's caret *)
         if
-          Editor_sink.is_focused uuid
-          && !S.pending_focus = Some (uuid, caret, armed_ms)
+          (Editor_sink.is_focused uuid || Option.is_some request.S.focus_click)
+          && (match !S.pending_focus with Some current -> current == request | None -> false)
         then (
           (* a pending apply+refresh can still replace the sink after
              landing — only consume the pending state once the input
              really holds focus; otherwise keep retrying so the
              remounted editor gets it *)
+          let ready = match S.editing () with
+            | Some current when focus_owned request current -> resolve_initial_click request current
+            | _ -> false
+          in
+          if not ready then retry_focus ()
+          else begin
           S.pending_focus := None;
           focus_attempts := 0;
           last_focus_emitted := None;
@@ -266,7 +254,7 @@ let rec apply_focus () =
           if !S.last_edit_input_ms <= armed_ms then
             (match S.editing () with
              | Some e when Edit_model.selection_range e.S.model <> None -> ()
-             | _ -> apply_click_offset uuid caret armed_ms 30);
+             | _ -> set_caret uuid request.S.focus_caret);
           (* the sink's runs prop and first layout can lag the landing —
              a split/merge's remount by far more than a patch or two —
              and the immediate measure then yields no caret rect, so the
@@ -281,14 +269,15 @@ let rec apply_focus () =
               (Ui_services.timers_timeout
                  (fun () ->
                    match S.editing () with
-                   | Some e when e.S.uuid = uuid ->
+                   | Some e when e.S.epoch == editing.S.epoch && e.S.scope = editing.S.scope ->
                        if (not (refresh_overlay uuid)) && attempt < 25 then
                          retry_measure (attempt + 1)
                    | _ -> ())
                  (if attempt = 0 then 0 else 40))
           in
           retry_measure 0;
-          drain_pending_focus_actions ())
+          drain_pending_focus_actions ()
+          end)
         else if !S.pending_focus = None then ()
         else (
           if Lazy.force perf_keys then
@@ -298,6 +287,11 @@ let rec apply_focus () =
 
 and retry_focus () =
   incr focus_attempts;
+  let waiting_for_click =
+    match !S.pending_focus with
+    | Some request -> Option.is_some request.S.focus_click
+    | None -> false
+  in
   if !focus_attempts < 50 then begin
     (* the editing row can sit outside the virtual window — a scroll
        jump (Home/End, a remount, an insert below the viewport edge)
@@ -306,21 +300,16 @@ and retry_focus () =
        range remounts the row so focus can land *)
     if !focus_attempts = 1 || !focus_attempts mod 10 = 5 then
       (match !S.pending_focus with
-       | Some (u, _, _) ->
+       | Some request ->
            (* flat stream keys are the block's own uuid — no more
               top-level key like the nested list had *)
-           !(S.scroll_key_into_view) u
+           !(S.scroll_key_into_view) request.S.focus_uuid
        | None -> ());
-    if not !retry_timer_armed then begin
-      retry_timer_armed := true;
-      ignore
-        (Ui_services.timers_timeout
-           (fun () ->
-             retry_timer_armed := false;
-             apply_focus ())
-           (retry_delay_ms !focus_attempts))
-    end
+    schedule_focus_retry (retry_delay_ms !focus_attempts)
   end
+  else if waiting_for_click then (
+    if !focus_attempts = 50 then
+      Ui_services.log_error "initial click position unavailable; input remains queued until geometry arrives or editing is cancelled")
   else (
     S.pending_focus := None;
     focus_attempts := 0;
@@ -331,19 +320,80 @@ and retry_focus () =
       {js|focus retry budget exhausted — editor sink never mounted|js};
     drain_pending_focus_actions ())
 
+and schedule_focus_retry delay =
+  if not !retry_timer_armed then begin
+    retry_timer_armed := true;
+    ignore (Ui_services.timers_timeout
+      (fun () -> retry_timer_armed := false; apply_focus ()) delay)
+  end
+
+and drain_pending_focus_actions () =
+  if !drain_gate
+     || (match !S.pending_focus with
+         | Some request -> Option.is_some request.S.focus_click
+         | None -> false)
+  then ()
+  else
+    match List.rev !S.pending_focus_actions with
+    | [] -> ()
+    | f :: rest ->
+        drain_gate := true;
+        S.pending_focus_actions := List.rev rest;
+        (try f () with e -> Ui_services.log_error ("queued key replay failed", e));
+        drain_gate := false;
+        if !S.pending_focus_actions <> [] then schedule_focus_retry (retry_delay_ms 0)
+
+and refresh_overlay ?frame ?model ?(flush = true) uuid =
+  if flush && initial_click_pending uuid then apply_focus ();
+  let frame = match frame with Some _ -> frame | None -> !S.active_frame in
+  match (frame, !S.active_frame, Editor_sink.conduit uuid, S.editing ()) with
+  | Some fr, Some active, Some conduit, Some e when fr == active && e.S.uuid = uuid ->
+      let waiting = initial_click_pending uuid in
+      let measured =
+        if waiting then Edit_input.empty_frame
+        else Edit_input.measure conduit (Option.value model ~default:e.S.model)
+      in
+      let current =
+        match Signal.state_pending fr with Some v -> v | None -> Signal.get_state fr
+      in
+      if (waiting || Option.is_some measured.Edit_input.caret) && measured <> current then begin
+        Signal.update fr (fun _ -> measured);
+        if flush then Runtime.flush ()
+      end;
+      Option.is_some measured.Edit_input.caret
+  | _ -> false
+
+and set_caret uuid pos =
+  update_model uuid (fun m -> Edit_model.select m ~anchor:pos ~focus:pos);
+  ignore (refresh_overlay uuid)
+
 (* flush-time pass over pending focus — main.ml and the test driver run
    one pass per UI flush; the retry loop rides the same entry point *)
 let focus_pending () = apply_focus ()
 
-let request_focus uuid caret =
-  S.pending_focus := Some (uuid, caret, !S.last_edit_input_ms);
+let make_focus_request ?click ?owner uuid caret =
+  let owner = match owner with
+    | Some _ -> owner
+    | None when S.ready () ->
+        (match S.editing () with
+         | Some e when e.S.uuid = uuid -> Some (e.S.scope, e.S.epoch)
+         | _ -> None)
+    | None -> None
+  in
+  { S.focus_uuid = uuid; focus_caret = caret; focus_armed_ms = !S.last_edit_input_ms
+  ; focus_input_seq = !S.edit_input_seq; focus_click = click; focus_owner = owner }
+
+let arm_focus ?(schedule = true) request =
+  S.pending_focus := Some request;
   last_focus_emitted := None;
   (* pending_focus_actions intentionally kept: keys queued during the
      remount window belong to the next focus landing as well *)
   focus_attempts := 0;
   (* usually the input already exists — land right away; otherwise
      the arm rides the next flush pass *)
-  ignore (Ui_services.timers_timeout apply_focus 0)
+  if schedule then ignore (Ui_services.timers_timeout apply_focus 0)
+
+let request_focus uuid caret = arm_focus (make_focus_request uuid caret)
 
 type split_commit =
   { persist : context:Model.t -> current:(unit -> bool) -> Wire.t option Js.Promise.t
@@ -464,10 +514,7 @@ let run_structure ?recover ?current_guard ~restore p finish =
 (* Arm the optimistic editor now and again after canonical rows land. *)
 let with_focus_after ~restore uuid caret p =
   S.click_point := None;
-  S.pending_focus := Some (uuid, caret, !S.last_edit_input_ms);
-  last_focus_emitted := None;
-  focus_attempts := 0;
-  ignore (Ui_services.timers_timeout apply_focus 0);
+  request_focus uuid caret;
   run_structure ~restore p (fun () ->
     match S.editing () with
     | Some e when e.S.uuid = uuid -> request_focus uuid e.S.model.Edit_model.caret
@@ -529,18 +576,29 @@ let scope_of_uuid uuid =
   | Some el -> scope_of_el el
   | None -> "main"
 
-let rec enter_edit ?scope ?(submit_on_enter = false) uuid caret =
+let enter_edit ?scope ?(submit_on_enter = false) uuid caret =
   if Ui_services.env_publishing () then () else
   let context = Runtime.repo (), Runtime.route () in
   let scope = match scope with Some sc -> sc | None -> scope_of_uuid uuid in
+  let click = match !S.click_point with
+    | (Some (u, ms, x, y) as point) when u = uuid && Ui_services.time_now () -. ms < 1500. ->
+        if !S.click_point == point then S.click_point := None;
+        Some (ms, x, y)
+    | _ -> None
+  in
+  let rec enter () =
+  clear_pending_blur ();
   if (match S.editing () with Some e -> e.S.uuid = uuid && e.S.scope = scope | None -> false)
-  then clear_pending_blur ()
+  then ()
+  else if (match S.editing () with Some e -> initial_click_pending e.S.uuid | None -> false) then
+    S.pending_focus_actions :=
+      (fun () -> if context = (Runtime.repo (), Runtime.route ()) then enter ())
+      :: !S.pending_focus_actions
   else if !S.structure_pending then
     S.enqueue_edit_action ~real:true (fun () ->
       if context = (Runtime.repo (), Runtime.route ()) then
-        enter_edit ~scope ~submit_on_enter uuid caret)
+        enter ())
   else (
-  clear_pending_blur ();
   (* single editing surface (cljs): a block editor opening commits any
      open property-value editor first *)
   !(S.close_property_editor) ();
@@ -557,30 +615,38 @@ let rec enter_edit ?scope ?(submit_on_enter = false) uuid caret =
             if context = (Runtime.repo (), Runtime.route ()) then (
             (if Lazy.force perf_keys then
                Printf.eprintf "PERF editing-set src=enter_edit uuid=%s\n%!" uuid);
+            let editing = S.mk_editing ~caret ~submit_on_enter ~uuid ~buffer ~scope ~base:buffer () in
+            arm_focus ~schedule:false
+              (make_focus_request ?click ~owner:(scope, editing.S.epoch) uuid caret);
             S.set (fun st ->
                 { st with
-                  S.editing =
-                    Some (S.mk_editing ~caret ~submit_on_enter ~uuid ~buffer ~scope ~base:buffer ())
+                  S.editing = Some editing
                 ; selection_scope = scope
                 ; selected = S.String_set.empty
                 ; anchor = None
                 ; action_bar = false
-                }));
+                });
+            ignore (Ui_services.timers_timeout apply_focus 0));
             Js.Promise.resolve ()) in
-          run_structure ~restore p (fun () -> request_focus uuid caret)
+          run_structure ~restore p (fun () ->
+              match S.editing () with
+              | Some e when e.S.uuid = uuid && e.S.scope = scope ->
+                  (match !S.pending_focus with
+                   | Some request when focus_owned request e ->
+                       if Option.is_some request.S.focus_click then apply_focus ()
+                       else arm_focus request
+                   | None when Option.is_none click -> request_focus uuid e.S.model.Edit_model.caret
+                   | None -> ()
+                   | Some _ -> ())
+              | _ -> ())
 
   | None -> ())
+  in enter ()
 
 (* block that was under edit most recently — cljs keeps state/editing
    until another edit starts; our mousedown-blur commits earlier, so
    context commands (e.g. Add comment via cmdk) still need the block *)
 let last_edit_uuid : string option ref = ref None
-
-(* leaving edit mode cancels both a pending refocus and the editing
-   keys queued behind it *)
-let cancel_pending_focus () =
-  S.pending_focus := None;
-  S.pending_focus_actions := []
 
 let rec exit_edit ~select =
   if !S.structure_pending then
@@ -588,6 +654,8 @@ let rec exit_edit ~select =
   else if S.ready () then
     match S.editing () with
     | None -> ()
+    | Some e when initial_click_pending e.S.uuid ->
+        S.pending_focus_actions := (fun () -> exit_edit ~select) :: !S.pending_focus_actions
     | Some e ->
         last_edit_uuid := Some e.uuid;
         cancel_pending_focus ();
@@ -664,10 +732,17 @@ let schedule_blur_commit () =
           (fun () ->
             match !pending_blur_uuid with
             | Some u ->
-                pending_blur_uuid := None;
-                (match S.editing () with
-                 | Some e' when e'.uuid = u -> blur_commit ()
-                 | _ -> ())
+                let finish () =
+                  if !pending_blur_uuid = Some u then begin
+                    pending_blur_uuid := None;
+                    match S.editing () with
+                    | Some e' when e'.uuid = u -> blur_commit ()
+                    | _ -> ()
+                  end
+                in
+                if initial_click_pending u then
+                  S.pending_focus_actions := finish :: !S.pending_focus_actions
+                else finish ()
             | None -> ())
           0)
 
@@ -2695,7 +2770,7 @@ let quick_add_open_dialog puuid blocks =
                          ~scope:"quick-add"
                          ~base:(String.trim last.Model.block_title) ())
                 });
-            S.pending_focus := Some (u, caret, !S.last_edit_input_ms))
+            request_focus u caret)
       | None -> ())
   | [] -> ()
 
