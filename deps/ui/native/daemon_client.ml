@@ -785,12 +785,18 @@ let invoke_blocking base_url name args =
         | None -> Wire.Nil)
     | None -> Wire.Nil
 
-let post_invoke base_url name args =
+let post_invoke ?expected_worker base_url name args =
   let p, resolve, reject = Js.Promise.pending () in
   ignore
     (Thread.create
        (fun () ->
          try
+           Option.iter
+             (fun (worker : attachment) ->
+               let _, port = daemon_address worker.base_url in
+               if not (probe_daemon ~pid:worker.pid ~port ~key:worker.key) then
+                 failwith "Captured graph worker is no longer ready")
+             expected_worker;
            let result = invoke_blocking base_url name args in
            Host.enqueue (fun () -> resolve result)
          with e ->
@@ -800,6 +806,16 @@ let post_invoke base_url name args =
            Host.enqueue (fun () -> reject e))
        ());
   p
+
+let capture_invoke (t : transport) ~repo =
+  let worker =
+    match find_attachment repo with
+    | Some worker when Atomic.get worker.state = Ready -> worker
+    | Some _ | None -> failwith "Graph worker is not ready for capture"
+  in
+  if t.repo <> repo || t.base_url <> worker.base_url then
+    failwith "Graph worker transport does not match capture";
+  fun name args -> post_invoke ~expected_worker:worker worker.base_url name args
 
 let capture_ipc args =
   match args with
@@ -956,12 +972,12 @@ let list_graphs () : Wire.t Js.Promise.t =
     (Wire.Array
        (List.map (fun w -> Wire.Map [ (Wire.kw "name", w) ]) names))
 
-let flush_pending (t : transport) : unit Js.Promise.t =
+let flush_pending (t : transport) ~base_url : unit Js.Promise.t =
   let rec loop () =
     if Queue.is_empty t.pending then Js.Promise.resolve ()
     else
       let name, args = Queue.take t.pending in
-      let* _ = post_invoke t.base_url name args in
+      let* _ = post_invoke base_url name args in
       loop ()
   in
   loop ()
@@ -978,14 +994,14 @@ let invoke (t : transport) (name : string) (args : Wire.t list) :
           if Atomic.get worker.state = Detached then
             failwith "Graph worker was detached while opening";
           let base = worker.base_url in
-          if base <> t.base_url then (
+          if base <> t.base_url || repo <> t.repo then (
             (if t.repo <> "" && t.repo <> repo then
                ignore
                  (ipc
                     [ Wire.String "releaseDbWorkerRuntime"
                     ; Wire.String t.repo ]));
             attach t repo base);
-          let* _ = flush_pending t in
+          let* _ = flush_pending t ~base_url:base in
           let* result = post_invoke base name args in
           ignore (Atomic.compare_and_set worker.state Opening Ready);
           if Atomic.get worker.state <> Ready then

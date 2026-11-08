@@ -88,6 +88,7 @@ let ipc args = capture_ipc args ()
 type transport =
   { mutable base_url : string
   ; mutable repo : string
+  ; mutable ready : bool ref
   ; mutable es : event_source option
   ; mutable sink : string -> Wire.t -> unit
   ; pending : (string * Wire.t list) Queue.t
@@ -130,6 +131,12 @@ let post_invoke (base_url : string) (name : string) (args : Wire.t list)
       | Some s -> Js.Promise.resolve (Transit.of_string s)
       | None -> Js.Promise.resolve Wire.Nil)
   | None -> Js.Promise.resolve Wire.Nil
+
+let capture_invoke (t : transport) ~repo =
+  if t.repo <> repo || t.base_url = "" || not !(t.ready) then
+    failwith "Graph worker transport is not ready for capture";
+  let base_url = t.base_url in
+  fun name args -> post_invoke base_url name args
 
 (* SSE frames are {"type": "<kind>", "payload": "<transit>"} — payload
    carries the same [<kw> ...] transit frame the JS worker posts via
@@ -180,12 +187,12 @@ let list_graphs () : Wire.t Js.Promise.t =
 (* invokes issued before the first graph daemon attaches (set-context,
    sync config, app state) are global state — replay them in order on
    the first runtime. *)
-let flush_pending (t : transport) : unit Js.Promise.t =
+let flush_pending (t : transport) ~base_url : unit Js.Promise.t =
   let rec loop () =
     if Queue.is_empty t.pending then Js.Promise.resolve ()
     else
       let name, args = Queue.take t.pending in
-      let* _ = post_invoke t.base_url name args in
+      let* _ = post_invoke base_url name args in
       loop ()
   in
   loop ()
@@ -228,19 +235,22 @@ let invoke (t : transport) (name : string) (args : Wire.t list) :
               ; Wire.String repo
               ; runtime_opts ]
           in
-          (match Wire.map_get_string rt "base-url" with
-           | Some base when base <> "" ->
-               if base <> t.base_url then (
-                 (if t.repo <> "" && t.repo <> repo then
-                    ignore (ipc [ Wire.String "releaseDbWorkerRuntime"
-                                ; Wire.String t.repo ]));
-                 attach t repo base)
-           | _ ->
-               raise
-                 (Failure
-                    ("db-worker-runtime returned no base-url for " ^ repo)));
-          let* _ = flush_pending t in
-          post_invoke t.base_url name args
+          let base =
+            match Wire.map_get_string rt "base-url" with
+            | Some base when base <> "" -> base
+            | _ -> failwith ("db-worker-runtime returned no base-url for " ^ repo)
+          in
+          let ready = ref false in
+          t.ready <- ready;
+          if base <> t.base_url || repo <> t.repo then (
+            (if t.repo <> "" && t.repo <> repo then
+               ignore (ipc [ Wire.String "releaseDbWorkerRuntime"
+                           ; Wire.String t.repo ]));
+            attach t repo base);
+          let* _ = flush_pending t ~base_url:base in
+          let* result = post_invoke base name args in
+          ready := true;
+          Js.Promise.resolve result
       | _ -> Js.Promise.reject (Failure "create-or-open-db: bad args"))
   | _ ->
       if t.base_url = "" then (
@@ -256,6 +266,7 @@ let create_transport () : transport =
   in
   { base_url = ""
   ; repo = ""
+  ; ready = ref false
   ; es = None
   ; sink = (fun _ _ -> ())
   ; pending = Queue.create ()
