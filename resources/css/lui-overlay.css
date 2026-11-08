@@ -655,35 +655,6 @@
   margin: 0.5rem 0 1rem;
 }
 
-/* cljs login.css: login form controls span the card width */
-.lui-dialog.ls-dialog-login .form-input,
-.lui-dialog.ls-dialog-login .ui__button.as-solid {
-  width: 100%;
-}
-
-/* cljs login.css: .ui__dialog-content[label=user-login] centers a
-   ~440px authenticator column */
-.lui-dialog.ls-dialog-login {
-  display: flex;
-  align-items: center;
-  width: auto;
-  max-width: none;
-  padding: 0 1.5rem 1.5rem;
-}
-
-.lui-dialog.ls-dialog-login .ui__dialog-main-content {
-  padding: 0;
-  width: 70vw;
-  max-width: 500px;
-  position: relative;
-}
-
-@media (min-width: 640px) {
-  .lui-dialog.ls-dialog-login .ui__dialog-main-content {
-    width: 440px;
-  }
-}
-
 /* e2ee password modal */
 .e2ee-password-modal-content {
   max-width: 42rem;
@@ -1197,16 +1168,6 @@ select.form-select {
 /* page ⋯ menu (toolbar dots) / page context menu */
 /* dots menu width (16rem) moved to ~width:256 on the page-menu popover */
 
-/* login dialog body — cljs login.css: mx-auto w-full max-w-[440px] px-1 */
-.cp__user-login {
-  margin-left: auto;
-  margin-right: auto;
-  width: 100%;
-  max-width: 440px;
-  padding-left: 0.25rem;
-  padding-right: 0.25rem;
-}
-
 .cp__user-login .desc {
   font-size: 0.875rem;
   opacity: 0.8;
@@ -1215,46 +1176,6 @@ select.form-select {
 /* cljs login.css bumps the muted text/links up to 80% */
 .cp__user-login span.opacity-50 {
   opacity: 0.8;
-}
-
-/* component-kind twins of the login footer utilities:
-   span.opacity-50 + a.opacity-60.underline.text-sm and p.pt-4.text-center */
-.cp__user-login .ls-auth-muted {
-  font-size: 0.875rem;
-  opacity: 0.8;
-}
-
-/* cljs card-header (p-6 + pb-7) + card-title (text-2xl) */
-.cp__user-login .ls-auth-title {
-  font-size: 1.5rem;
-  line-height: 1;
-  padding-top: 1.5rem;
-  padding-bottom: 1.75rem;
-}
-
-/* cljs login.css field rows: label text-sm lh-5 + flex-col gap-3 pb-1
-   wrapper — LUI's label sits at lh-14 with no bottom pad */
-.cp__user-login .ls-auth-field .lui-label {
-  line-height: 20px;
-}
-
-.cp__user-login .ls-auth-field {
-  padding-bottom: 4px;
-}
-
-/* cljs footer is one p.pt-4.text-center with two lh-6 lines; LUI
-   splits it into two rows — pt-4 + two 24px rows */
-.cp__user-login .ls-auth-foot {
-  padding-top: 16px;
-}
-
-.cp__user-login .ls-auth-foot > .lui-row {
-  min-height: 24px;
-}
-
-/* cljs shui button default size is h-10 */
-.cp__user-login .ui__button {
-  height: 2.5rem;
 }
 
 /* cljs file_sync.css .cp__rtc-sync-indicator — state dot on the cloud
