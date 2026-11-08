@@ -207,12 +207,41 @@ let ensure_graph_created (repo : string) : unit =
 let attachment_key repo =
   (realpath (root_dir ()), graphs_dir (), realpath (lifecycle_dir ()), repo)
 
-(* (canonical storage, repo) -> base-url of the attached daemon. Daemons
+(* (canonical storage, repo) -> attached daemon. Daemons
    outlive the app on purpose: a live daemon keeps its repo admission
    and the graph open, so a later launch re-attaches in one healthz
    round-trip instead of paying a cold spawn + graph open. *)
-let attached : (string * string * string * string, string) Hashtbl.t =
-  Hashtbl.create 4
+module Attachments = Map.Make (struct
+  type t = string * string * string * string
+  let compare = Stdlib.compare
+end)
+
+type attachment_state = Opening | Ready | Detached
+
+let storage_config () =
+  (Sys.getenv_opt "HOME", Sys.getenv_opt "LOGSEQ_ROOT_DIR",
+   Sys.getenv_opt "LOGSEQ_GRAPHS_DIR")
+
+type attachment =
+  { key : Attachments.key
+  ; config : string option * string option * string option
+  ; base_url : string
+  ; pid : int
+  ; state : attachment_state Atomic.t
+  }
+
+let attached = Atomic.make Attachments.empty
+
+let find_attachment repo =
+  let config = storage_config () in
+  Attachments.fold
+    (fun (_, _, _, name) worker found ->
+      if name <> repo || worker.config <> config then found
+      else
+        match found with
+        | None -> Some worker
+        | Some _ -> failwith "Graph worker attachment is ambiguous")
+    (Atomic.get attached) None
 
 (* boot timing: stderr marks carry seconds since module init so launch
    profiling needs no external stopwatch *)
@@ -229,9 +258,9 @@ let boot_mark msg =
     (Unix.gettimeofday () -. boot_t0) (Unix.gettimeofday ()) msg
 
 (* spawn main.exe for [repo] (canonical "logseq_db_<name>"), wait for it
-   to publish its port. Returns base-url. Blocking — caller runs this on
+   to publish its port. Returns base-url and pid. Blocking — caller runs this on
    a systhread. *)
-let spawn_daemon (repo : string) : string =
+let spawn_daemon (repo : string) : string * int =
   boot_mark ("spawn_daemon " ^ repo);
   mkdir_p (root_dir ());
   mkdir_p (graphs_dir ());
@@ -269,7 +298,7 @@ let spawn_daemon (repo : string) : string =
         boot_mark
           ("daemon up pid=" ^ string_of_int pid ^ " port="
            ^ string_of_int port);
-        "http://127.0.0.1:" ^ string_of_int port
+        ("http://127.0.0.1:" ^ string_of_int port), pid
     | None ->
         if Unix.gettimeofday () > deadline then
           failwith
@@ -370,7 +399,7 @@ let probe_daemon ~(pid : int) ~(port : int) ~key : bool =
       with _ -> false)
   | _ -> false
 
-let find_live_daemon key : string option =
+let find_live_daemon key : (string * int) option =
   let entries = read_server_list () in
   boot_mark ("probe server-list entries="
     ^ string_of_int (List.length entries));
@@ -380,7 +409,7 @@ let find_live_daemon key : string option =
          boot_mark
            ("probe ok pid=" ^ string_of_int pid ^ " port="
             ^ string_of_int port);
-         Some ("http://127.0.0.1:" ^ string_of_int port)
+         Some (("http://127.0.0.1:" ^ string_of_int port), pid)
        end else begin
          boot_mark
            ("probe fail pid=" ^ string_of_int pid ^ " port="
@@ -426,23 +455,27 @@ let record_last_repo (repo : string) : unit =
     Unix.close fd
   with _ -> ()
 
-let ensure_attached (repo : string) : string =
+let ensure_attached (repo : string) : attachment =
   Mutex.lock attach_mu;
   Fun.protect ~finally:(fun () -> Mutex.unlock attach_mu) (fun () ->
       let key = attachment_key repo in
-      match Hashtbl.find_opt attached key with
-      | Some base -> base
-      | None ->
-          let base =
+      match Attachments.find_opt key (Atomic.get attached) with
+      | Some worker when Atomic.get worker.state <> Detached -> worker
+      | Some _ | None ->
+          let base, pid =
             match find_live_daemon key with
-            | Some base ->
+            | Some (base, pid) ->
                 boot_mark ("reuse daemon " ^ base);
-                base
+                base, pid
             | None -> spawn_daemon repo
           in
-          Hashtbl.replace attached key base;
+          let worker =
+            { key; config = storage_config (); base_url = base; pid
+            ; state = Atomic.make Opening }
+          in
+          Atomic.set attached (Attachments.add key worker (Atomic.get attached));
           record_last_repo repo;
-          base)
+          worker)
 
 (* Cold-start overlap: spawn the graph's daemon on a background thread
    while the app is still booting, so the runtime ipc later attaches to
@@ -565,41 +598,18 @@ let prewarm () : unit =
 let start_prewarm =
   State_cell.Once.memo (fun () -> ignore (Domain.spawn prewarm))
 
-(* ---------- ipc (was window.apis.doAction) ---------- *)
-
-let ipc (args : Wire.t list) : Wire.t Js.Promise.t =
+let request_runtime repo =
   let p, resolve, reject = Js.Promise.pending () in
-  let run () =
-    try
-      match args with
-      | [ Wire.String "getGraphs" ] ->
-          boot_mark "ipc getGraphs";
-          Host.enqueue (fun () ->
-              resolve (Wire.Array (list_repo_names ())))
-      | [ Wire.String "db-worker-runtime"; Wire.String repo; _ ] ->
-          boot_mark ("ipc db-worker-runtime " ^ repo);
-          let base = ensure_attached repo in
-          Host.enqueue (fun () ->
-              resolve
-                (Wire.Map [ (Wire.kw "base-url", Wire.String base) ]));
-          (* launchctl calls take ~300ms — keep them off the ipc
-             resolution path *)
-          ensure_login_daemon repo
-      | [ Wire.String "releaseDbWorkerRuntime"; Wire.String repo ] ->
-          (* detach only — the daemon keeps the repo open so a later
-             attach (or the next app launch) is instant *)
-          let key = attachment_key repo in
-          Mutex.lock attach_mu;
-          Hashtbl.remove attached key;
-          Mutex.unlock attach_mu;
-          Host.enqueue (fun () -> resolve Wire.Nil)
-      | _ -> Host.enqueue (fun () -> resolve Wire.Nil)
-    with e ->
-      prerr_endline
-        ("[daemon] ipc failed: " ^ Printexc.to_string e);
-      Host.enqueue (fun () -> reject e)
-  in
-  ignore (Thread.create (fun () -> run ()) ());
+  ignore
+    (Thread.create
+       (fun () ->
+         try
+           boot_mark ("ipc db-worker-runtime " ^ repo);
+           let worker = ensure_attached repo in
+           Host.enqueue (fun () -> resolve worker);
+           ensure_login_daemon repo
+         with error -> Host.enqueue (fun () -> reject error))
+       ());
   p
 
 (* ---------- http ---------- *)
@@ -726,10 +736,7 @@ let json_field (name : string) (j : Js.Json.t) : Js.Json.t option =
       | None -> None)
   | _ -> None
 
-let post_invoke (base_url : string) (name : string) (args : Wire.t list)
-    : Wire.t Js.Promise.t =
-  let p, resolve, reject = Js.Promise.pending () in
-  (* host:port from base-url like http://127.0.0.1:PORT *)
+let daemon_address base_url =
   let host, port =
     match
       String.split_on_char '/'
@@ -741,6 +748,10 @@ let post_invoke (base_url : string) (name : string) (args : Wire.t list)
         | _ -> ("127.0.0.1", 0))
     | _ -> ("127.0.0.1", 0)
   in
+  host, port
+
+let invoke_blocking base_url name args =
+  let host, port = daemon_address base_url in
   let body =
     Yojson.Safe.to_string
       (`Assoc
@@ -748,42 +759,40 @@ let post_invoke (base_url : string) (name : string) (args : Wire.t list)
         ; "argsTransit", `String (Transit.to_string (Wire.Array args)) ])
   in
   boot_mark ("invoke " ^ name);
+  let status, resp = http_post ~host ~port ~path:"/v1/invoke" ~body in
+  boot_mark ("invoke " ^ name ^ " done");
+  let j = Js.Json.parseExn resp in
+  let ok =
+    match json_field "ok" j with
+    | Some v -> Js.Json.decodeBoolean v = Some true
+    | None -> false
+  in
+  if status < 200 || status >= 300 || not ok then
+    let message =
+      match json_field "error" j with
+      | Some e -> (
+          match json_field "message" e with
+          | Some m -> Option.value (Js.Json.decodeString m) ~default:""
+          | None -> "")
+      | None -> ""
+    in
+    failwith ("db-worker daemon " ^ name ^ ": " ^ message)
+  else
+    match json_field "resultTransit" j with
+    | Some rt -> (
+        match Js.Json.decodeString rt with
+        | Some s -> Transit.of_string s
+        | None -> Wire.Nil)
+    | None -> Wire.Nil
+
+let post_invoke base_url name args =
+  let p, resolve, reject = Js.Promise.pending () in
   ignore
     (Thread.create
        (fun () ->
          try
-           let _status, resp = http_post ~host ~port ~path:"/v1/invoke" ~body in
-           boot_mark ("invoke " ^ name ^ " done");
-           let j = Js.Json.parseExn resp in
-           let ok =
-             match json_field "ok" j with
-             | Some v -> Js.Json.decodeBoolean v = Some true
-             | None -> false
-           in
-           if not ok then
-             let message =
-               match json_field "error" j with
-               | Some e -> (
-                   match json_field "message" e with
-                   | Some m ->
-                       Option.value (Js.Json.decodeString m) ~default:""
-                   | None -> "")
-               | None -> ""
-             in
-             prerr_endline ("[daemon] invoke " ^ name ^ " failed: " ^ message);
-             Host.enqueue (fun () ->
-                 reject
-                   (Failure ("db-worker daemon " ^ name ^ ": " ^ message)))
-           else
-             let result =
-               match json_field "resultTransit" j with
-               | Some rt -> (
-                   match Js.Json.decodeString rt with
-                   | Some s -> Transit.of_string s
-                   | None -> Wire.Nil)
-               | None -> Wire.Nil
-             in
-             Host.enqueue (fun () -> resolve result)
+           let result = invoke_blocking base_url name args in
+           Host.enqueue (fun () -> resolve result)
          with e ->
            prerr_endline
              ("[daemon] invoke " ^ name ^ " transport error: "
@@ -791,6 +800,96 @@ let post_invoke (base_url : string) (name : string) (args : Wire.t list)
            Host.enqueue (fun () -> reject e))
        ());
   p
+
+let capture_ipc args =
+  match args with
+  | [ Wire.String "db-worker-runtime"; Wire.String repo; _ ] ->
+      fun () ->
+        let* worker = request_runtime repo in
+        Js.Promise.resolve
+          (Wire.Map [ Wire.kw "base-url", Wire.String worker.base_url ])
+  | _ -> (
+  let backup =
+    match args with
+    | [ Wire.String "db-export"; Wire.String repo; Wire.Bool true ] ->
+        let worker =
+          match find_attachment repo with
+          | Some worker when Atomic.get worker.state = Ready -> worker
+          | Some _ | None -> failwith "Graph worker is not ready for manual backup"
+        in
+        Some (worker, Host.random_uuid ())
+    | Wire.String "db-export" :: _ -> invalid_arg "Invalid manual backup request"
+    | _ -> None
+  in
+  let detach =
+    match args with
+    | [ Wire.String "releaseDbWorkerRuntime"; Wire.String repo ] ->
+        find_attachment repo
+    | _ -> None
+  in
+  fun () ->
+    Option.iter (fun worker -> Atomic.set worker.state Detached) detach;
+    let p, resolve, reject = Js.Promise.pending () in
+    let run () =
+      try
+        match backup, args with
+        | Some (worker, temp_id), _ ->
+            let key = worker.key in
+            let _, graphs_dir, _, repo = key in
+            let _, port = daemon_address worker.base_url in
+            let require_identity () =
+              match Attachments.find_opt key (Atomic.get attached) with
+              | Some current when current == worker && Atomic.get worker.state = Ready -> ()
+              | Some _ | None -> failwith "Manual backup worker was replaced"
+            in
+            let require_current () =
+              require_identity ();
+              if not (probe_daemon ~pid:worker.pid ~port ~key) then
+                failwith "Manual backup worker is no longer ready";
+              require_identity ()
+            in
+            require_current ();
+            let result =
+              Graph_backup.create_manual ~graphs_dir ~repo ~temp_id
+                ~check_current:require_identity
+                ~snapshot:(fun path ->
+                  require_current ();
+                  let ack =
+                    invoke_blocking worker.base_url "thread-api/backup-db-sqlite"
+                      [ Wire.String repo; Wire.String path ]
+                  in
+                  if Wire.map_get_string ack "path" <> Some path then
+                    failwith "SQLite backup acknowledgement did not match its target";
+                  require_current ())
+            in
+            require_current ();
+            Host.enqueue (fun () ->
+                try require_identity (); resolve result
+                with error -> reject error)
+        | None, [ Wire.String "getGraphs" ] ->
+            boot_mark "ipc getGraphs";
+            let graphs = list_repo_names () in
+            Host.enqueue (fun () -> resolve (Wire.Array graphs))
+        | None, [ Wire.String "releaseDbWorkerRuntime"; Wire.String _ ] ->
+            Option.iter
+              (fun worker ->
+                let key = worker.key in
+                Mutex.lock attach_mu;
+                Fun.protect ~finally:(fun () -> Mutex.unlock attach_mu) (fun () ->
+                    match Attachments.find_opt key (Atomic.get attached) with
+                    | Some current when current == worker ->
+                        Atomic.set attached
+                          (Attachments.remove key (Atomic.get attached))
+                    | Some _ | None -> ()))
+              detach;
+            Host.enqueue (fun () -> resolve Wire.Nil)
+        | None, _ -> Host.enqueue (fun () -> resolve Wire.Nil)
+      with error -> Host.enqueue (fun () -> reject error)
+    in
+    ignore (Thread.create (fun () -> run ()) ());
+    p)
+
+let ipc args = capture_ipc args ()
 
 (* SSE: lines "data: {json}"; payload is a transit string carrying
    [<kw> ...]. *)
@@ -875,26 +974,23 @@ let invoke (t : transport) (name : string) (args : Wire.t list) :
   | "thread-api/create-or-open-db" -> (
       match args with
       | Wire.String repo :: _ ->
-          let* rt =
-            ipc
-              [ Wire.String "db-worker-runtime"
-              ; Wire.String repo
-              ; Wire.Map [] ]
-          in
-          (match Wire.map_get_string rt "base-url" with
-           | Some base when base <> "" ->
-               if base <> t.base_url then (
-                 (if t.repo <> "" && t.repo <> repo then
-                    ignore
-                      (ipc
-                         [ Wire.String "releaseDbWorkerRuntime"
-                         ; Wire.String t.repo ]));
-                 attach t repo base)
-           | _ ->
-               failwith
-                 ("db-worker-runtime returned no base-url for " ^ repo));
+          let* worker = request_runtime repo in
+          if Atomic.get worker.state = Detached then
+            failwith "Graph worker was detached while opening";
+          let base = worker.base_url in
+          if base <> t.base_url then (
+            (if t.repo <> "" && t.repo <> repo then
+               ignore
+                 (ipc
+                    [ Wire.String "releaseDbWorkerRuntime"
+                    ; Wire.String t.repo ]));
+            attach t repo base);
           let* _ = flush_pending t in
-          post_invoke t.base_url name args
+          let* result = post_invoke base name args in
+          ignore (Atomic.compare_and_set worker.state Opening Ready);
+          if Atomic.get worker.state <> Ready then
+            failwith "Graph worker was detached while opening";
+          Js.Promise.resolve result
       | _ -> Js.Promise.reject (Failure "create-or-open-db: bad args"))
   | _ ->
       if t.base_url = "" then (

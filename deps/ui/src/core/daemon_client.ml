@@ -70,16 +70,18 @@ let is_electron () : bool =
 
 (* apis.doAction(arg) -> ipcRenderer.invoke('main', arg). The handler
    decodes a transit string frame and answers a transit string. *)
-let ipc (args : Wire.t list) : Wire.t Js.Promise.t =
+let capture_ipc (args : Wire.t list) =
   let apis = getf window_ "apis" in
-  let* result =
-    meth_promise apis "doAction"
-      [| Js.Json.string (Transit.to_string (Wire.Array args)) |]
-  in
-  Js.Promise.resolve
-    (match Js.Json.decodeString result with
-     | Some s -> Transit.of_string s
-     | None -> Wire.Nil)
+  let do_action = getf apis "doAction" in
+  let frame = Js.Json.string (Transit.to_string (Wire.Array args)) in
+  fun () ->
+    let* result = reflect_apply_promise do_action apis [| frame |] in
+    Js.Promise.resolve
+      (match Js.Json.decodeString result with
+       | Some s -> Transit.of_string s
+       | None -> Wire.Nil)
+
+let ipc args = capture_ipc args ()
 
 (* ---------- transport ---------- *)
 

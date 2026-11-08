@@ -74,10 +74,10 @@ let exn_info ?(code : string option) (message : string)
        | None -> [])
       @ List.map (fun (k, v) -> (Wire.Keyword k, Wire.String v)) fields )
 
-let backup_root_dir_name = "backup"
-let backup_db_file_name = "db.sqlite"
-let backup_metadata_file_name = "metadata.edn"
-let metadata_schema_version = 1
+let backup_root_dir_name = Graph_backup_policy.backup_root_dir_name
+let backup_db_file_name = Graph_backup_policy.backup_db_file_name
+let backup_metadata_file_name = Graph_backup_policy.backup_metadata_file_name
+let metadata_schema_version = Graph_backup_policy.metadata_schema_version
 
 let required_opt (v : 'a option) (label : string) : 'a =
   match v with
@@ -169,9 +169,7 @@ let build_backup_name ?(timestamp : string option) (repo : string)
   let graph_name =
     required_opt (Graph_dir.repo_to_graph_dir_key repo) "graph name"
   in
-  match trimmed_option label with
-  | Some label -> graph_name ^ "-" ^ label ^ "-" ^ timestamp
-  | None -> graph_name ^ "-" ^ timestamp
+  Graph_backup_policy.build_backup_name ~graph_name ~label ~timestamp
 
 type backup_target = {
   backup_name : string;
@@ -184,7 +182,7 @@ let next_backup_target ~(graphs_dir : string) ~(repo : string)
   required_string base_name "backup-name";
   let rec loop suffix =
     let backup_name =
-      if suffix = 0 then base_name else base_name ^ "-" ^ string_of_int suffix
+      Graph_backup_policy.candidate_name ~base_name ~suffix
     in
     let dir_path = backup_dir_path ~graphs_dir ~repo ~backup_name in
     if Fs.exists_sync dir_path then loop (suffix + 1)
@@ -328,7 +326,7 @@ let reserve_next_backup_target ~(graphs_dir : string) ~(repo : string)
     [%mel.obj { recursive = true }];
   let rec loop suffix =
     let backup_name =
-      if suffix = 0 then base_name else base_name ^ "-" ^ string_of_int suffix
+      Graph_backup_policy.candidate_name ~base_name ~suffix
     in
     let dir_path = backup_dir_path ~graphs_dir ~repo ~backup_name in
     match (try Ok (Fs.mkdir_sync dir_path) with e -> Error e) with
@@ -363,14 +361,12 @@ let write_metadata ~(graphs_dir : string) ~(repo : string)
     (backup_metadata_path ~graphs_dir ~repo ~backup_name)
     (Edn_util.pr_str
        (Datascript.Map
-          [ (Datascript.Keyword "schema-version"
-            , Datascript.Int64 (Int64.of_int metadata_schema_version))
-          ; (Datascript.Keyword "name", Datascript.String backup_name)
-          ; (Datascript.Keyword "repo", Datascript.String repo)
-          ; (Datascript.Keyword "source", Datascript.Keyword source)
-          ; (Datascript.Keyword "created-at-ms", edn_ms created_at_ms)
-          ; (Datascript.Keyword "db-path", Datascript.String db_path)
-          ]))
+          (Graph_backup_policy.metadata_fields
+             ~keyword:(fun value -> Datascript.Keyword value)
+             ~string:(fun value -> Datascript.String value)
+             ~int:(fun value -> Datascript.Int64 (Int64.of_int value))
+             ~backup_name ~repo ~source ~created_at:(edn_ms created_at_ms)
+             ~db_path)))
 
 let throttled ~(graphs_dir : string) ~(repo : string) ~(source : string)
     ~(throttle_ms : int option) ~(now_ms : float) : bool =
