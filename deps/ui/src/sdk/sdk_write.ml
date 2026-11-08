@@ -691,13 +691,15 @@ let create_journal_page a _b _c _d =
     | Js.Json.JSONString s -> (
         match float_of_string_opt s with
         | Some ms -> Some (Dates.journal_day_of (Dates.of_ms ms))
+        | None
+          when String.length s = 10 && s.[4] = '-' && s.[7] = '-' ->
+            Option.bind (Dates.parse_local_datetime s) (fun date ->
+              let f = Dates.fields date in
+              if Printf.sprintf "%04d-%02d-%02d" f.year f.month f.day = s then
+                Some (Dates.journal_day_of date)
+              else None)
         | None ->
-            let parsed =
-              if String.length s = 10 && s.[4] = '-' && s.[7] = '-' then
-                Dates.parse_local_datetime s
-              else Dates.parse s
-            in
-            Option.map Dates.journal_day_of parsed)
+            Option.map Dates.journal_day_of (Dates.parse s))
     | _ -> None
   in
   match day_int with
