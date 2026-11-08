@@ -131,9 +131,12 @@ let on_drag_start ev _m =
   dragging_uuid := None;
   (match K.op_source (K.ev_operation ev) with
    | Some d ->
-       let src = K.entity_uuid (K.entity_data d) in
-       A.begin_block_drag ~scope:(A.scope_of_uuid src) src;
-       dragging_uuid := Some src
+       Option.iter
+         (fun el ->
+           let src = K.entity_uuid (K.entity_data d) in
+           A.begin_block_drag ~scope:(A.scope_of_el (Ui_dom_web.el_of el)) src;
+           dragging_uuid := Some src)
+         (K.draggable_element d)
    | None -> ());
   clear_drop_target ()
 

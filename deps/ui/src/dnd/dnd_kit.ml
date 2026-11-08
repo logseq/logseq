@@ -93,6 +93,9 @@ external new_droppable : Js.Json.t -> manager -> droppable = "Droppable"
 external destroy_draggable : draggable -> unit = "destroy" [@@mel.send]
 external destroy_droppable : droppable -> unit = "destroy" [@@mel.send]
 
+external draggable_element : draggable -> element option = "element"
+  [@@mel.get] [@@mel.return nullable]
+
 external droppable_element : droppable -> element option = "element"
   [@@mel.get] [@@mel.return nullable]
 
