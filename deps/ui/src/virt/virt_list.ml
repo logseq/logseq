@@ -119,9 +119,27 @@ let rows_sig ~key ~cmp ~mount ?(on_end = fun () -> ())
   if Ui_services.env_rtc_test_mode () && not (Logseq_virt.force_virtualized ()) then
     keyed ~source ~key ~cmp ~mount ctx parent
   else
-  let sched = ctx.Lui_ui.ui_scheduler in
+  let module Items = Map.Make (struct
+    type t = string
+    let compare = cmp
+  end) in
+  let items = Logseq_el.own ctx (Signal.map
+      (List.fold_left (fun items item -> Items.add (key item) item items) Items.empty)
+      source) in
+  let render initial : t = fun row_ctx row_parent ->
+    let item_key = key initial in
+    let current = ref initial in
+    let item_sig = Logseq_el.own row_ctx (Signal.map (fun items ->
+        (match Items.find_opt item_key items with
+         | Some item -> current := item
+         | None -> ());
+        (* A removed row keeps its final value until the virtualizer retires it. *)
+        !current) items) in
+    mount item_sig row_ctx row_parent
+  in
   let arr_sig = Logseq_el.own ctx (Signal.map Array.of_list source) in
   list ~key_of:key ~estimate_size ~on_end ?overscan
+    ~same_item:(fun a b -> cmp (key a) (key b) = 0)
     ~data_sig:(fun _ -> Some arr_sig)
-    ~render:(fun it -> mount (Signal.constant sched it))
+    ~render
     [||] ctx parent
