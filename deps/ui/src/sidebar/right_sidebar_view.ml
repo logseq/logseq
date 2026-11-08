@@ -394,14 +394,14 @@ let help_pane st =
   let icon_item ~key label ic =
     box ~key ~style_class:"ls-hp-item"
       ~data_attrs:[ ("style", item_style) ]
-      [ text ~style_class:"ls-hp-iconrow"
+      [ Ui_components.button ~variant:`ghost ~style_class:"ls-hp-iconrow"
+          ~height:24 ~padding:0 ~main:`start ~cross:`center ~gap:4
           ~foreground:"var(--lx-accent-11, var(--ls-link-text-color))"
           ~data_attrs:[ ("style", "cursor:pointer") ]
           ~on_press:(fun _ ->
             Sidebar_state.open_sticky_item st "shortcut-settings")
-          [ row ~cross:`center ~gap:4
-              [ text ~value:label []
-              ; icon_ ~size:18 ic ] ]
+          [ text ~value:label []
+          ; icon_ ~size:18 ic ]
       ]
   in
   let icon_ext_item ~key label ic url =
