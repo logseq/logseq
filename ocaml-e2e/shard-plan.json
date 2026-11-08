@@ -1,6 +1,10 @@
 {
   "tasks": [
     {
+      "file": "test_lui_parity.js",
+      "slow": false
+    },
+    {
       "file": "test_rtc_extra_part2.js",
       "shard": "slow:online-two-clients-u",
       "shardNames": [
