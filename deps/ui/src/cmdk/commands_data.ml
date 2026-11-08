@@ -62,9 +62,12 @@ let table : cmd list Lazy.t =
     (Array.to_list
        (Array.map decode_cmd (jarr (Js.Json.parseExn table_json))))
 
-let current_table () =
+let current_table ?(desktop = false) () =
   List.map (fun command ->
-      { command with sc = Keymap_data.effective_shortcut command.id }) (Lazy.force table)
+      { command with sc = Keymap_data.effective_shortcut command.id })
+    (Lazy.force table @ if desktop then List.map (fun id ->
+       {id; label = "command." ^ id; i18n = true; dev = false; sc = Unbound})
+       ["editor/copy-page-url"; "window/close"] else [])
 
 (* cljs shortcut-utils/decorate-binding (literal replace order matters:
    "shift+/" -> "?" before "shift" -> shift glyph). *)

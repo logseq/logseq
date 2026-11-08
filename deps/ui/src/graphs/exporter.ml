@@ -27,6 +27,111 @@ let short_repo () =
 
 let secs () = int_of_float (Ui_services.time_now () /. 1000.)
 
+let then_keep promise f =
+  ignore (let* value = promise in f value; Js.Promise.resolve ())
+
+let export_command kind uuid =
+  let graph = Runtime.repo () in
+  if graph <> "" then
+    match kind, uuid with
+    | ("block" | "page"), None ->
+        Toast.warning (T.t (kind ^ "/not-found-warning"))
+    | "dev/export-client-ops-sqlite", _ ->
+        then_keep (Runtime.invoke1 "thread-api/export-client-ops-db-binary"
+          (Wire.String graph)) (function
+          | Wire.Binary data ->
+              Ui_services.files_download_binary
+                ~filename:(Printf.sprintf "%s_client_ops_%d.sqlite" (short_repo ()) (secs ()))
+                ~mime:"application/octet-stream" data
+          | _ -> Toast.error (T.t "export/error-unexpected"))
+    | "dev/recompute-checksum", _ ->
+        then_keep (Runtime.invoke1 "thread-api/recompute-checksum-diagnostics"
+          (Wire.String graph)) (fun data ->
+          Ui_services.files_download_text
+            ~filename:(Printf.sprintf "%s_checksum_%d.edn" (short_repo ()) (secs ()))
+            ~mime:"application/edn" (Edn.to_string data))
+    | _ ->
+        let target = match kind, uuid with
+          | "block", Some uuid ->
+              [Wire.kw "block-id", Wire.Array [Wire.kw "block/uuid"; Wire.Uuid uuid]]
+          | "page", Some uuid ->
+              [Wire.kw "page-id", Wire.Array [Wire.kw "block/uuid"; Wire.Uuid uuid]]
+          | "graph-ontology", None -> []
+          | _ -> invalid_arg ("export command: " ^ kind)
+        in
+        then_keep (Runtime.invoke2 "thread-api/export-edn" (Wire.String graph)
+          (Wire.Map ((Wire.kw "export-type", Wire.Keyword kind) :: target)))
+          (fun data ->
+            match Wire.get data "export-edn-error" with
+            | Some error -> Toast.error (Edn.to_string error)
+            | None ->
+                ignore (Ui_task.catch
+                  (Ui_task.bind (Ui_services.clipboard_write_text (Edn.to_string data))
+                    (fun () ->
+                      Toast.success (T.t ("export/" ^ kind ^ "-data-copied"));
+                      Ui_task.resolve ()))
+                  (fun error ->
+                    Ui_services.log_error_message (Printexc.to_string error);
+                    Ui_task.resolve ())))
+
+let show_data command uuid =
+  match uuid with
+  | None -> Toast.warning (T.t (if command = "dev/show-page-data"
+      then "page/not-found-warning" else "block/not-found-warning"))
+  | Some uuid ->
+      let graph = Runtime.repo () in
+      let pull selector target = Runtime.invoke3 "thread-api/pull"
+          (Wire.String graph) (Wire.String selector) target in
+      let debug_data data =
+        match data with
+        | Wire.Map entries ->
+            let extra =
+              (match Wire.get data "block/properties" with
+               | Some (Wire.Array pairs | Wire.List pairs) when pairs <> [] ->
+                   let pairs = List.map (function
+                       | Wire.Array [key; value] | Wire.List [key; value] -> key, value
+                       | _ -> invalid_arg "block/properties requires key/value pairs") pairs in
+                   [Wire.kw "block.debug/properties", Wire.Map pairs]
+               | _ -> [])
+              @ (match Wire.get data "block/refs" with
+                 | Some (Wire.Array refs | Wire.List refs | Wire.Set refs) when refs <> [] ->
+                     [Wire.kw "block.debug/refs", Wire.Array
+                        (List.map (fun reference -> Option.value
+                            (Wire.get reference "block/title") ~default:reference) refs)]
+                 | _ -> []) in
+            Wire.Map (entries @ extra)
+        | _ -> data in
+      ignore (let* target =
+        if command = "dev/show-page-data" then
+          let* block = pull "[:db/id {:block/page [:db/id]}]"
+              (Wire.Array [Wire.kw "block/uuid"; Wire.Uuid uuid]) in
+          Js.Promise.resolve (Option.bind (Wire.get block "block/page")
+              (fun page -> Wire.get page "db/id")
+            |> fun page -> match page with Some id -> Some id | None -> Wire.get block "db/id")
+        else Js.Promise.resolve (Some (Wire.Array [Wire.kw "block/uuid"; Wire.Uuid uuid])) in
+        match target with
+        | None -> Toast.warning (T.t "page/not-found-warning"); Js.Promise.resolve ()
+        | Some target ->
+            let* data = pull "[*]" target in
+            let* data = if command = "dev/show-block-ast" then
+                let title = match Wire.get data "block/title" with
+                  | Some (Wire.String title) -> title
+                  | _ -> invalid_arg "AST block requires a title" in
+                let format = match Wire.get data "block/format" with
+                  | None -> "markdown"
+                  | Some (Wire.Keyword format | Wire.String format) -> format
+                  | _ -> invalid_arg "AST block format must be a keyword or string" in
+                Runtime.invoke3 "thread-api/parse-content-ast" (Wire.String graph)
+                  (Wire.String format) (Wire.String title)
+              else Js.Promise.resolve data in
+            let prefix = "ID: " ^ Option.fold ~none:"nil" ~some:Edn.to_string
+                (Wire.get data "db/id") ^ "\n" in
+            let body = Edn.pretty (debug_data data) in
+            Toast.code ~copy_first:(command = "dev/show-block-ast")
+              ~prefix:(if command = "dev/show-block-ast" then "" else prefix) body;
+            Ui_services.log_info body;
+            Js.Promise.resolve ())
+
 let export_binary () =
   let* w = Runtime.invoke1 "thread-api/export-db-binary" (Wire.String (repo ())) in
   match w with

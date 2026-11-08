@@ -576,6 +576,7 @@
  :editor.slash/tomorrow-desc "Insert the date of tomorrow"
  :editor.slash/underline "Underline"
  :editor.slash/underline-desc "Create an underline text decoration"
+ :editor.slash/unsupported-configured-command-error "The configured command \"{1}\" uses actions or options that are not supported yet."
  :editor.slash/upload-asset "Upload an asset"
  :editor.slash/upload-asset-desc "Upload file types like image, PDF, DOCX, etc."
  :editor.slash/yesterday-desc "Insert the date of yesterday"

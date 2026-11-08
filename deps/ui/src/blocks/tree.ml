@@ -45,7 +45,17 @@ let block_key (b : Model.block) =
 
 let track_mounted_row ~scope (b : Model.block) child =
   match b.block_uuid with
-  | Some uuid -> Lazy_children.track_mounted ~scope ~uuid child
+  | Some uuid ->
+      Lazy_children.track_mounted ~scope ~uuid (fun ctx parent ->
+          Settings_state.ensure ctx;
+          Ui_parts.string_prop Lui_protocol.BackgroundValue
+            ~value:(reactive (fun selected preferences ->
+              if S.String_set.mem uuid selected then "var(--ls-block-highlight-color)"
+              else if preferences.Settings_state.highlight_recent
+                  && Settings_state.Recent_blocks.mem uuid preferences.recent_blocks
+              then "var(--ls-secondary-background-color, var(--lx-gray-03))"
+              else "transparent")
+              (S.selected_sig ()) (Signal.value (Settings_state.state ()))) child ctx parent)
   | None -> child
 
 (* -- per-row signals -- *)
@@ -241,6 +251,7 @@ let hidden_tag_ident (ident : string) : bool =
    bullets shrink *)
 let control_wrap ~scope ~library uuid (b : Model.block) : t =
  fun ctx parent ->
+  Settings_state.ensure ctx;
   let order_list = b.Model.block_order_list = Some "number" in
   let bullet_cls =
     "bullet-container cursor"
@@ -376,7 +387,9 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
                         (box ~key:("b-" ^ uuid)
                            ~transition:"transform 0.2s"
                            ~width:6 ~height:6 ~corner_radius:999
-                           ~opacity:1.
+                           ~opacity:(reactive (fun collapsed _ ->
+                             if not collapsed && Settings_state.document_mode () then 0. else 1.)
+                             cs (Signal.value (Settings_state.state ())))
                            ~background:"var(--lx-gray-09, var(--ls-block-bullet-color))"
                            ~data_attrs:
                              [ ("data-blockid", uuid) ]
@@ -475,7 +488,8 @@ let content_wrapper uuid (b : Model.block) : t =
   row ~key:("cw-" ^ uuid)
     ~style_class:"block-content-wrapper" ~grow:1.
     ~data_attrs:[ ("style", "user-select:text;overflow-x:visible") ]
-    [ content_el uuid b
+    [ Jump_state.target ~key:"content" ~uuid
+        ~activate:(fun () -> Editor_actions.enter_edit uuid (-1)) (content_el uuid b)
     ; row ~key:("bic-" ^ uuid) ~cross:`center []
     ]
 
@@ -830,13 +844,6 @@ and row_el ~depth ~editable ~virtualize scope ~(library : bool)
           rides a typed background signal; the matching `rounded` is
           only visible while the fill shows *)
        ~corner_radius:4
-       ~background_signal:
-         (Signal.map
-            (fun sel ->
-              if S.String_set.mem uuid sel then
-                "var(--ls-block-highlight-color)"
-              else "transparent")
-            (S.selected_sig ()))
        ~data_attrs_signal:(row_attrs_sig ~scope ~depth ~editable uuid b)
     [ row_main ~editable ~library scope b
     ; (* .ls-block-content-indent: block properties area + block-below
@@ -892,14 +899,6 @@ and row_sig ~depth ~editable ~library ~virtualize scope
        ~accessibility_identifier:("ls-block-" ^ key)
        ~transition:Ui_components.block_transition
        ~corner_radius:4
-       ~background_signal:
-         (Signal.map2
-            (fun b sel ->
-              let u = Option.value b.Model.block_uuid ~default:"" in
-              if S.String_set.mem u sel then
-                "var(--ls-block-highlight-color)"
-              else "transparent")
-            bs (S.selected_sig ()))
        ~data_attrs_signal:(row_attrs_sig_of ~scope ~depth ~editable bs)
     [ reactive
         ~equal:

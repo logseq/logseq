@@ -2208,7 +2208,7 @@ let run_views ~registry ~profile ~finish =
   eqi "global category toggle collapses a partly collapsed list" 0
     (List.length (keymap_rows ()));
   S.text_changed keymap input.M.id "Undo";
-  eqi "search ignores category collapse" 13 (List.length (keymap_rows ()));
+  eqi "search ignores category collapse" 14 (List.length (keymap_rows ()));
   eqi "query results hide category actions" 0 (List.length (category_tools ()));
   S.text_changed keymap input.M.id "";
   eqi "clearing search retains category collapse" 0
@@ -2234,7 +2234,7 @@ let run_views ~registry ~profile ~finish =
   check "keymap search uses fuzzy command identifiers and descriptions"
     (List.length (keymap_rows ()) > 1);
   check "query results flatten categories" (category_headers () = []);
-  eqi "query results retain matches in their original categories" 13
+  eqi "query results retain matches in their original categories" 14
     (List.length (keymap_rows ()));
   check "query counts follow matching commands"
     (M.string_prop (pill "All") "text"
@@ -2247,7 +2247,7 @@ let run_views ~registry ~profile ~finish =
   S.toggle keymap (pill "Disabled").M.id true;
   eqi "filter applies to fuzzy query results" 1 (List.length (keymap_rows ()));
   S.toggle keymap (pill "Disabled").M.id false;
-  eqi "pressing the active filter restores all query results" 13
+  eqi "pressing the active filter restores all query results" 14
     (List.length (keymap_rows ()));
   S.toggle keymap (pill "Disabled").M.id true;
   (match clear_buttons () with
@@ -2406,7 +2406,7 @@ let run_views ~registry ~profile ~finish =
   let push kind text =
     ignore (Lui_app.send notifications.S.app
         (Action.Toast_push { Model.toast_id = 0; toast_text = text;
-          toast_kind = kind; toast_key = None }));
+          toast_kind = kind; toast_key = None; toast_code = None }));
     S.flush notifications
   in
   push "success" "First";

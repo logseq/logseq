@@ -498,7 +498,7 @@ let value_button ~text ~on_press : t =
     ~on_press []
 
 (* text/number cell: ghost button <-> autofocused text_field *)
-let scalar_edit_cell ctx row : t =
+let scalar_edit_cell ?(jump_target = true) ctx row : t =
  fun context parent ->
   let sched = context.Lui_ui.ui_scheduler in
   let ident = D.row_ident row |> Option.value ~default:"" in
@@ -537,8 +537,9 @@ let scalar_edit_cell ctx row : t =
     close_editor := (fun () -> commit true));
   (column ~gap:0 ~grow:1.0
      [ if_ ~test:(Logseq_el.own context (Signal.map (fun e -> not e) (Signal.value editing)))
-         (value_button ~text:initial ~on_press:(fun _ ->
-              open_editor ~steal:true ()))
+         (Jump_state.target ~enabled:jump_target ~key:("value-" ^ ctx.owner_key ^ "-" ^ ident)
+            ~uuid:ctx.block_uuid ~activate:(fun () -> open_editor ~steal:true ())
+            (value_button ~text:initial ~on_press:(fun _ -> open_editor ~steal:true ())))
      ; if_ ~test:(Signal.value editing)
          (fun edit_context edit_parent ->
           let live = ref true in
@@ -581,17 +582,20 @@ let scalar_edit_cell ctx row : t =
      ])
     context parent
 
-let checkbox_view ctx row : t =
+let checkbox_view ?(jump_target = true) ctx row : t =
   let value = D.row_value row in
   let checked = match value with W.Bool b -> b | _ -> false in
-  Ui_components.checkbox ~checked
+  let activate () = set_scalar ctx
+      ~ident:(D.row_ident row |> Option.value ~default:"") ~value:(W.Bool (not checked)) in
+  Jump_state.target ~enabled:jump_target ~key:("value-" ^ ctx.owner_key ^ "-" ^ D.row_title row)
+    ~uuid:ctx.block_uuid ~activate (Ui_components.checkbox ~checked
     ~on_toggle:(fun ev ->
       match ev with
       | Lui_protocol.ToggleChanged (_, b) ->
           let ident = D.row_ident row |> Option.value ~default:"" in
           set_scalar ctx ~ident ~value:(W.Bool b)
       | _ -> ())
-    []
+    [])
 
 (* ---------- repeat column (cljs repeat-setting) ----------
 
@@ -950,7 +954,7 @@ let date_picker_pop ~anchor_target ctx ~ident ~is_datetime ~value ~on_dismiss : 
            on_dismiss ();
            Js.Promise.resolve ())) ~on_dismiss])) context parent
 
-let date_view ~(hover : bool Signal.state option) ctx row : t =
+let date_view ?(jump_target = true) ~(hover : bool Signal.state option) ctx row : t =
  fun context parent ->
   let sched = context.Lui_ui.ui_scheduler in
 
@@ -972,6 +976,7 @@ let date_view ~(hover : bool Signal.state option) ctx row : t =
   let hover =
     match hover with Some h -> h | None -> Signal.state sched false
   in
+  (Jump_state.target ~enabled:jump_target ~key:anchor_id ~uuid:ctx.block_uuid ~activate:open_picker
   (Lui_elements.row ~gap:4 ~cross:`center ~grow:1.0 ~accessibility_identifier:anchor_id
      ~style_class:"ls-datetime"
      ~on_pointer_enter:(fun _ ->
@@ -1020,10 +1025,10 @@ let date_view ~(hover : bool Signal.state option) ctx row : t =
                 ~label:(I18n.t "ui/edit")
                 ~on_press:(fun _ -> open_picker ()) [] ])
 
-     ])
+     ]))
     context parent
 
-let many_dates_view ~hover ctx row : t =
+let many_dates_view ~jump_target ~hover ctx row : t =
   let ty = D.row_type row in
   let values = List.filter (fun value -> not (D.value_empty_p value))
     (D.value_elems (D.row_value row)) in
@@ -1035,7 +1040,7 @@ let many_dates_view ~hover ctx row : t =
          | Some uuid -> link ~url:("#/page/" ^ uuid) ~target:`self_ ~text:label []
          | None -> text ~value:label []])
       (List.mapi (fun index value -> index, value) values)
-      @ [date_view ~hover ctx (D.row_with_value row W.Nil)])
+      @ [date_view ~jump_target ~hover ctx (D.row_with_value row W.Nil)])
 
 (* chips of the current refs — click navigates to the page *)
 let ref_chips row : t list =
@@ -1059,7 +1064,7 @@ let ref_chips row : t list =
     (D.value_elems value)
 
 (* multi-toggle extends picker — stays open across picks *)
-let extends_view ctx row : t =
+let extends_view ~jump_target ctx row : t =
  fun context parent ->
   let sched = context.Lui_ui.ui_scheduler in
   let open_ = Signal.state sched false in
@@ -1141,6 +1146,8 @@ let extends_view ctx row : t =
         Runtime.signal_set picker_st (Some (options, selected'))
   in
   let chips = ref_chips row in
+  (Jump_state.target ~enabled:jump_target ~key:("extends-" ^ ctx.owner_key)
+     ~uuid:ctx.block_uuid ~activate:(fun () -> load (); Runtime.signal_set open_ true)
   (column ~gap:2 ~grow:1.0 ~min_width:0
      [ Lui_elements.row ~gap:4 ~cross:`center ~min_width:0 ~flex_wrap:`wrap
          (chips
@@ -1180,10 +1187,10 @@ let extends_view ctx row : t =
                             options))
                 (Signal.value picker_st)
             ])
-     ])
+     ]))
     context parent
 
-let closed_value_view ~positioned ~table_view ctx row : t =
+let closed_value_view ?(jump_target = true) ~positioned ~table_view ctx row : t =
  fun context parent ->
   let value = D.row_value row in
   let many = D.row_many row in
@@ -1200,17 +1207,8 @@ let closed_value_view ~positioned ~table_view ctx row : t =
   let label = if display = "" then I18n.t "ui/empty" else display in
   let show_text = display <> "" &&
     not (positioned && ident = "logseq.property/status" && Option.is_some icon_id) in
-  (column ~gap:0 ~grow:1.0
-     [ Ui_components.with_props
-         [ Ui_components.Prop.hover_background "var(--lx-gray-03)"
-         ; Ui_components.Prop.hover_foreground "inherit" ]
-         (Ui_components.button ~variant:`ghost ~label
-            ~accessibility_identifier:anchor_id
-            ?height:(if many then None else Some 24) ~min_height:24
-            ~padding_horizontal:0 ~padding_vertical:0 ~main:`start
-            ~style_class:"pv-closed-value"
-         ~on_press:(fun _ ->
-           open_value_picker anchor_id
+  let activate () =
+    open_value_picker anchor_id
              (fun ~alive ~close popup_context popup_parent ->
              let sched = popup_context.Lui_ui.ui_scheduler in
              let selected = Signal.state sched [] in
@@ -1272,7 +1270,18 @@ let closed_value_view ~positioned ~table_view ctx row : t =
                          Sel.view ~compact:true ~show_empty_result:false
                            ~selected_keys:(Signal.value selected)
                            ~placeholder:(I18n.t1 "property/set-placeholder" (D.row_title row)) items)
-                   (Signal.value items_st) ]) popup_context popup_parent))
+                   (Signal.value items_st) ]) popup_context popup_parent) in
+  (Jump_state.target ~enabled:jump_target ~key:anchor_id ~uuid:ctx.block_uuid ~activate
+  (column ~gap:0 ~grow:1.0
+     [ Ui_components.with_props
+         [ Ui_components.Prop.hover_background "var(--lx-gray-03)"
+         ; Ui_components.Prop.hover_foreground "inherit" ]
+         (Ui_components.button ~variant:`ghost ~label
+            ~accessibility_identifier:anchor_id
+            ?height:(if many then None else Some 24) ~min_height:24
+            ~padding_horizontal:0 ~padding_vertical:0 ~main:`start
+            ~style_class:"pv-closed-value"
+         ~on_press:(fun _ -> activate ())
          [ Lui_elements.row ~gap:4 ~cross:`center ~min_width:0 ~flex_wrap:`wrap
              (if many && not (D.value_empty_p value) then
                 List.concat_map (fun (index, item) ->
@@ -1282,26 +1291,18 @@ let closed_value_view ~positioned ~table_view ctx row : t =
                   (List.mapi (fun index item -> index, item) (D.value_elems value))
               else (match icon_id with None -> [] | Some id -> [ Icons.icon id ])
                 @ if show_text then [ text ~value:display [] ] else []) ])
-     ])
+     ]))
     context parent
 
 (* node/page/class/asset: ref chips + picker button *)
-let node_view ctx row : t =
+let node_view ?(jump_target = true) ctx row : t =
  fun context parent ->
   let ident = D.row_ident row |> Option.value ~default:"" in
   let many = D.row_many row in
   let chips = ref_chips row in
   let anchor_id = "property-node-" ^ ctx.owner_key ^ "-" ^ ctx.block_uuid ^ "-" ^ ident in
-  (column ~gap:2 ~grow:1.0 ~min_width:0
-     [ Lui_elements.row ~gap:4 ~cross:`center ~min_width:0 ~flex_wrap:`wrap
-         ((if many then chips else [])
-         @ [ Ui_components.button ~variant:`ghost
-               ~accessibility_identifier:anchor_id
-               ?icon:(if many then Some (`app "plus") else None)
-               ~label:(I18n.t "property/select-property-placeholder")
-               ~main:`start ~min_height:24 ~min_width:24
-               ~on_press:(fun _ ->
-         open_value_picker anchor_id
+  let activate () =
+    open_value_picker anchor_id
            (fun ~alive ~close context' parent' ->
            let selected = Signal.state context'.Lui_ui.ui_scheduler [] in
            let block = D.uuid_ref ctx.block_uuid in
@@ -1337,12 +1338,22 @@ let node_view ctx row : t =
               ~new_option:(if List.mem (D.row_type row) ["node";"class"] then
                 Some (new_node ctx row ~close:(if many then (fun () -> ()) else close)) else None)
               ~initial ~on_search)
-             context' parent'))
+             context' parent') in
+  (Jump_state.target ~enabled:jump_target ~key:anchor_id ~uuid:ctx.block_uuid ~activate
+  (column ~gap:2 ~grow:1.0 ~min_width:0
+     [ Lui_elements.row ~gap:4 ~cross:`center ~min_width:0 ~flex_wrap:`wrap
+         ((if many then chips else [])
+         @ [ Ui_components.button ~variant:`ghost
+               ~accessibility_identifier:anchor_id
+               ?icon:(if many then Some (`app "plus") else None)
+               ~label:(I18n.t "property/select-property-placeholder")
+               ~main:`start ~min_height:24 ~min_width:24
+               ~on_press:(fun _ -> activate ())
                (if many then [] else if chips = [] then
                  [text ~value:(I18n.t "ui/empty") ~foreground:"var(--lx-gray-09)" []]
                 else chips)
            ])
-     ])
+     ]))
     context parent
 
 (* ---------- dispatch ---------- *)
@@ -1351,11 +1362,12 @@ let node_view ctx row : t =
    value column. [hover] (when the row supplies one) reflects pointer
    hover over the whole property-pair so hover-only affordances like
    the date edit pencil match the cljs row-hover rule. *)
-let rec view ?(positioned = false) ?(table_view = false) ~(hover : bool Signal.state option)
+let rec view ?(jump_target = true) ?(positioned = false) ?(table_view = false) ~(hover : bool Signal.state option)
     ctx row : t =
   let row' = D.row_with_effective_value row in
   let ty = D.row_type row' in
   let ident = D.row_ident row' |> Option.value ~default:"" in
+  let jump_target = jump_target && not positioned && not table_view in
   if Ui_services.env_publishing () then
     let rec display value =
       match value with
@@ -1368,21 +1380,21 @@ let rec view ?(positioned = false) ?(table_view = false) ~(hover : bool Signal.s
       | _ -> Logseq_el.fragment (Render_inline.parse (D.value_display value))
     in
     display (D.row_effective_value row')
-  else if ident = "logseq.property/icon" then icon_view ctx row'
-  else if D.row_many row' && List.mem ty ["date"; "datetime"] then many_dates_view ~hover ctx row'
-  else if D.row_closed_values row' <> [] then closed_value_view ~positioned ~table_view ctx row'
+  else if ident = "logseq.property/icon" then icon_view ~jump_target ctx row'
+  else if D.row_many row' && List.mem ty ["date"; "datetime"] then many_dates_view ~jump_target ~hover ctx row'
+  else if D.row_closed_values row' <> [] then closed_value_view ~jump_target ~positioned ~table_view ctx row'
   else
     match ty with
-    | "checkbox" -> checkbox_view ctx row'
-    | "number" -> scalar_edit_cell ctx row'
-    | "date" | "datetime" -> date_view ~hover ctx row'
-    | "url" -> url_view ctx row'
+    | "checkbox" -> checkbox_view ~jump_target ctx row'
+    | "number" -> scalar_edit_cell ~jump_target ctx row'
+    | "date" | "datetime" -> date_view ~jump_target ~hover ctx row'
+    | "url" -> url_view ~jump_target ctx row'
     | "node" | "asset" | "page" | "class" | "property" ->
         if ident = "logseq.property.class/extends" then
-          extends_view ctx row'
-        else node_view ctx row'
+          extends_view ~jump_target ctx row'
+        else node_view ~jump_target ctx row'
     | _ ->
-        let cell = scalar_edit_cell ctx row' in
+        let cell = scalar_edit_cell ~jump_target ctx row' in
         (* cljs embeds every non-closed scalar value in a
            .property-block-container .ls-block row — control-wrap bullet
            + content; empty values show only .property-panel-bullet *)
@@ -1395,22 +1407,12 @@ let rec view ?(positioned = false) ?(table_view = false) ~(hover : bool Signal.s
    produced by the generic write paths. The cell shows the current
    icon (or Empty) and pressing it opens the picker anchored on
    itself; choices write the map the icon schema requires. *)
-and icon_view ctx row : t =
+and icon_view ?(jump_target = true) ctx row : t =
  fun context parent ->
   let anchor_id = "pv-icon-" ^ ctx.block_uuid in
   let icon = Node_icon.decode (D.row_value row) in
-  (Lui_elements.row ~gap:0 ~grow:1.0
-     [ Ui_components.button ~variant:`ghost ~grow:1.0 ~text_alignment:`start
-         ~accessibility_identifier:anchor_id ~style_class:"pv-scalar"
-         ~label:"Icon"
-         ~foreground:"var(--ls-primary-text-color)"
-         ~text:(match icon with Some _ -> "" | None -> I18n.t "ui/empty")
-         ~data_attrs:
-           [ ( "style"
-             , "height:auto;min-height:0;padding:0;line-height:20px;\
-                justify-content:flex-start" ) ]
-         ~on_press:(fun _ ->
-           match Ui_services.dom_query ("#" ^ anchor_id) with
+  let activate () =
+    match Ui_services.dom_query ("#" ^ anchor_id) with
            | Some anchor ->
                Icon_picker.open_picker ~anchor ~del:(icon <> None)
                  ~on_chosen:(fun c ->
@@ -1438,10 +1440,22 @@ and icon_view ctx row : t =
                                 | None -> [])))
                    |> ignore;
                    S.refresh_all ())
-           | None -> ())
+           | None -> () in
+  (Jump_state.target ~enabled:jump_target ~key:anchor_id ~uuid:ctx.block_uuid ~activate
+  (Lui_elements.row ~gap:0 ~grow:1.0
+     [ Ui_components.button ~variant:`ghost ~grow:1.0 ~text_alignment:`start
+         ~accessibility_identifier:anchor_id ~style_class:"pv-scalar"
+         ~label:"Icon"
+         ~foreground:"var(--ls-primary-text-color)"
+         ~text:(match icon with Some _ -> "" | None -> I18n.t "ui/empty")
+         ~data_attrs:
+           [ ( "style"
+             , "height:auto;min-height:0;padding:0;line-height:20px;\
+                justify-content:flex-start" ) ]
+         ~on_press:(fun _ -> activate ())
          (match icon with
           | Some value -> [ Icon_picker.icon_el value ]
-          | None -> []) ])
+          | None -> []) ]))
     context parent
 
 (* cljs embeds non-closed values in
@@ -1470,11 +1484,13 @@ and block_value_wrap (inner : t) : t =
    property-value cell (no .property-block-container / .ls-block wrap);
    click navigates (target=_blank), editing goes through the property
    menu. empty values keep the press-to-edit affordance *)
-and url_view ctx row : t =
+and url_view ~jump_target ctx row : t =
   let value = D.row_value row in
   let url = String.trim (D.value_display value) in
-  if url = "" then scalar_edit_cell ctx row
+  if url = "" then scalar_edit_cell ~jump_target ctx row
   else
+    Jump_state.target ~enabled:jump_target ~key:("url-" ^ ctx.owner_key ^ "-" ^ D.row_title row)
+      ~uuid:ctx.block_uuid ~activate:(fun () -> Ui_services.env_open_url url)
     (Ui_components.with_props
          [ Ui_components.Prop.text_decoration "none";
            Ui_components.Prop.white_space `normal; Ui_components.Prop.min_width 0 ]

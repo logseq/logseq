@@ -3,12 +3,17 @@
    `(name key)` semantics (namespace stripped). *)
 
 open Promise_ext
+module Recent_blocks = Set.Make (String)
+
 type t =
   { tab : string
   ; journal_uuid : string option
   ; date_format : string
   ; date_format_saving : bool
   ; tick : int
+  ; highlight_recent : bool
+  ; recent_days : int
+  ; recent_blocks : Recent_blocks.t
   }
 
 let initial =
@@ -17,6 +22,9 @@ let initial =
   ; date_format = "MMM do, yyyy"
   ; date_format_saving = false
   ; tick = 0
+  ; highlight_recent = false
+  ; recent_days = 3
+  ; recent_blocks = Recent_blocks.empty
   }
 
 include State_cell.Make (struct
@@ -24,7 +32,13 @@ include State_cell.Make (struct
   let name = "settings"
 end)
 
-let ensure ctx = mount ctx initial
+let ensure ctx =
+  if not (ready ()) then begin
+    let recent_days = match Ui_services.storage_get "highlight-recent-days" with
+      | Some value -> int_of_string (Ui_services.storage_unquote value)
+      | None -> 3 in
+    mount ctx {initial with recent_days}
+  end
 
 (* Data publications advance the model revision without ending settings. *)
 let lifecycle_revision = ref 0
@@ -236,6 +250,51 @@ let storage_bool key ~default =
 
 let storage_set_bool key b =
   Ui_services.storage_set key (if b then "\"true\"" else "\"false\"")
+
+let document_mode () = storage_bool "mode?" ~default:false
+
+let toggle_document_mode () =
+  storage_set_bool "mode?" (not (document_mode ()));
+  poke ()
+
+let doc_mode_newline () =
+  document_mode () && not (config_bool "shortcut/doc-mode-enter-for-new-block?" ~default:false)
+
+let toggle_recent () =
+  set (fun state -> {state with highlight_recent = not state.highlight_recent;
+    recent_blocks = Recent_blocks.empty})
+
+let set_recent_days days =
+  Ui_services.storage_set "highlight-recent-days" (string_of_int days);
+  set (fun state -> {state with recent_days = days})
+
+let refresh_recent uuids =
+  let state = value () in
+  let current = capture_context () in
+  let threshold = Ui_services.time_now () -. float_of_int state.recent_days *. 86400000. in
+  let items = List.map (fun uuid -> Wire.Map [
+      Wire.kw "id", Wire.Uuid uuid;
+      Wire.kw "opts", Wire.Map [Wire.kw "children?", Wire.Bool false]]) uuids in
+  ignore (let* result = Runtime.invoke2 "thread-api/get-blocks"
+      (Wire.String (Runtime.repo ())) (Wire.Array items) in
+    if current () && (value ()).highlight_recent && (value ()).recent_days = state.recent_days then begin
+      let rows = match result with Wire.Array rows | Wire.List rows -> rows
+        | _ -> invalid_arg "recent blocks: invalid get-blocks response" in
+      let recent_blocks = List.fold_left (fun recent row ->
+          match Wire.get row "block" with
+          | Some block ->
+              let updated = match Wire.get block "block/updated-at" with
+                | Some (Wire.Int n) -> Some (float_of_int n)
+                | Some (Wire.Int64 n) -> Some (Int64.to_float n)
+                | Some (Wire.Float n) -> Some n
+                | _ -> None in
+              (match Wire.map_get_uuid block "block/uuid", updated with
+               | Some uuid, Some updated when updated > threshold -> Recent_blocks.add uuid recent
+               | _ -> recent)
+          | None -> recent) Recent_blocks.empty rows in
+      set (fun state -> {state with recent_blocks})
+    end;
+    Js.Promise.resolve ())
 
 (* cljs ui-handler/toggle-wide-mode!: storage + ls-wide-mode on
    main#app-container-wrapper *)

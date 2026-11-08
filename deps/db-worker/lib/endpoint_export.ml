@@ -311,7 +311,18 @@ let import_edn_data (conn : conn) (export_map_w : Wire.t)
     Some (Wire.Map [ Wire.keyword "error", Wire.String msg ])
   in
   match
-    (try Sqlite_export.build_import export_map db None
+    (try
+       let current_block =
+         match Sqlite_build.bm_get import_options_m "current-block" with
+         | Nil -> None
+         | Map _ as value ->
+             let block = Sqlite_build.bm_of_value value in
+             (match Sqlite_build.bm_get block "block/uuid" with
+              | Uuid uuid -> entity db (Lookup_ref ("block/uuid", Uuid uuid))
+              | _ -> invalid_arg "current-block requires :block/uuid")
+         | _ -> invalid_arg "current-block requires a block map"
+       in
+       Sqlite_export.build_import export_map db current_block
      with e ->
        Worker_log.error "Import EDN error: "
          [ ("error", Printexc.to_string e) ];

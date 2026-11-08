@@ -777,7 +777,7 @@ let export_edn inst =
      Runtime.send
        (A.Toast_push
           { M.toast_id = 0; toast_key = None; toast_text = (I.t "export/view-nodes-data-copied")
-          ; toast_kind = "success" });
+          ; toast_kind = "success"; toast_code = None });
      Ui_task.resolve ()))
 
 (* Next reference window. A worker that ignored row-limit left every

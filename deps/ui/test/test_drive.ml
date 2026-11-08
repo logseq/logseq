@@ -629,7 +629,7 @@ let test_toasts () =
   send
     (Action.Toast_push
        { Model.toast_id = 1; toast_text = "Saved"; toast_kind = "success"
-       ; toast_key = None });
+       ; toast_key = None; toast_code = None });
   (match find_where (fun n -> n.M.kind = "toast") with
    | [] -> check "toast node" false
    | t :: _ ->

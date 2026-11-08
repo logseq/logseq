@@ -12,6 +12,50 @@ module T = I18n
    promise-chained — bridge at the call site *)
 let promise_of = Subs_state.promise_of_task
 
+let then_keep promise f =
+  ignore (let* value = promise in f value; Js.Promise.resolve ())
+
+let import_data () =
+  let graph = Runtime.repo () in
+  if graph <> "" then
+    Dialogs_state.prompt ~title:(T.t "command.misc/import-edn-data")
+      ~multiline:true ~placeholder:"{}" ~submit_label:(T.t "import/title")
+      ~on_submit:(fun source ->
+        match (try Some (Edn.parse source) with _ -> None) with
+        | Some (Wire.Map _ as data) ->
+            Dialogs_state.close_prompt ();
+            let run current =
+              if Runtime.repo () = graph then
+                let target = Wire.Map (match current with
+                  | Some block -> [Wire.kw "current-block", block]
+                  | None -> []) in
+                then_keep (Outliner_ops.apply_and_refresh_result
+                  [Outliner_ops.op "batch-import-edn" [data; target]]) (function
+                  | None -> ()
+                  | Some data ->
+                    match Option.bind (Wire.get data "result")
+                        (fun result -> Wire.get result "error") with
+                    | Some (Wire.String message) -> Toast.error message
+                    | Some error -> Toast.error (Edn.to_string error)
+                    | None -> Toast.success (T.t "import/successful")) in
+            if Wire.get data "logseq.db.sqlite.export/block" = Some (Wire.Bool true) then
+              let current = match Editor_state.editing () with
+                | Some editing -> Some editing.Editor_state.uuid
+                | None -> List.nth_opt (Editor_actions.selected_uuids ()) 0 in
+              (match current with
+               | None -> Toast.warning (T.t "block/not-found-warning"); run None
+               | Some uuid ->
+                   then_keep (Runtime.invoke3 "thread-api/pull" (Wire.String graph)
+                     (Wire.String "[:block/uuid {:block/page [:block/uuid]}]")
+                     (Wire.Array [Wire.kw "block/uuid"; Wire.Uuid uuid]))
+                     (fun block -> match Wire.get block "block/page" with
+                       | Some (Wire.Map _ as page) ->
+                           run (Some (Wire.Map [Wire.kw "block/uuid", Wire.Uuid uuid;
+                             Wire.kw "block/page", page]))
+                       | _ -> Toast.error (T.t "import/cannot-import-block-into-non-block-entity")))
+            else run None
+        | _ -> Toast.warning (T.t "import/submitted-edn-invalid")) ()
+
 let finish_import repo =
   Toast.success (T.t "import/file-finished");
   Ui_services.timers_later ~ms:4000 (fun () ->

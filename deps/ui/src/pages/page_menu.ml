@@ -4,6 +4,7 @@
    not emit. *)
 
 open Lui_elements
+open Promise_ext
 
 
 
@@ -18,6 +19,23 @@ let icon_item ?(data_attrs = []) key label icon_name on_click =
 
 let separator key = Menu_item.separator ~key ~mv:4 ~mh:(-4)
 
+let public_item uuid : t = fun ctx parent ->
+  let value = Signal.state ctx.Lui_ui.ui_scheduler None in
+  let graph = Runtime.repo () in
+  let alive = ref true in
+  Signal.on_dispose ctx.Lui_ui.ui_scope (fun () -> alive := false);
+  ignore (let* data = Runtime.invoke3 "thread-api/pull" (Wire.String graph)
+      (Wire.String "[:logseq.property/publishing-public?]")
+      (Wire.Array [Wire.kw "block/uuid"; Wire.Uuid uuid]) in
+    if !alive && Runtime.repo () = graph then
+      Runtime.signal_set value (Some (Wire.get data "logseq.property/publishing-public?" = Some (Wire.Bool true)));
+    Js.Promise.resolve ());
+  (reactive (function
+    | None -> column []
+    | Some public -> item "public" (I18n.t (if public then "page/make-private" else "page/make-public"))
+        (fun () -> Runtime.send (Action.Page_menu_set None);
+          ignore (Page_ops.set_public uuid (not public)))) (Signal.value value)) ctx parent
+
 (* items for the current route page; convert only for non-tag pages.
    Recycle navigates to the builtin "Recycle" page by name — cljs
    header.cljs shows it whenever the page identity resolves. *)
@@ -25,7 +43,8 @@ let page_items (p : Model.page) =
   (* cljs page_menu.cljs: delete hidden for contents page and
      :logseq.property/built-in? pages *)
   let del =
-    if p.page_built_in then []
+    if p.page_built_in || String.lowercase_ascii p.page_title = "contents"
+       || Ui_services.env_publishing () then []
     else
       [ item "del" (I18n.t "page/delete") (fun () ->
             match p.page_uuid with
@@ -108,7 +127,8 @@ let page_items (p : Model.page) =
     with
     | Some "true" | Some "\"true\"" ->
         [ item "dev-page-data" "(Dev) Show page data" (fun () ->
-              Runtime.send (Action.Page_menu_set None)) ]
+              Runtime.send (Action.Page_menu_set None);
+              Exporter.show_data "dev/show-page-data" p.page_uuid) ]
     | _ -> []
   in
   let plugin_items =
@@ -125,7 +145,11 @@ let page_items (p : Model.page) =
               pid key))
       (Plugin_host.simple_commands_of_type "page-menu-item")
   in
-  fav @ del @ [ export_page; publish_page ] @ convert @ dev
+  let copy_url = if Platform.desktop then
+      [item "copy-url" (I18n.t "page/copy-url") (fun () ->
+        Runtime.send (Action.Page_menu_set None); Page_ops.copy_url p.page_uuid)] else [] in
+  let public = if Platform.desktop then Option.to_list (Option.map public_item p.page_uuid) else [] in
+  fav @ copy_url @ del @ [ export_page; publish_page ] @ public @ convert @ dev
   @ plugin_items
 
 (* Keep separators and the first/last non-separator graphemes intact. *)

@@ -221,9 +221,12 @@ type index_progress_event =
   }
 
 (* worker :notification broadcast -> toast *)
+type toast_code = { code_text : string; code_copy_first : bool }
+
 type toast =
   { toast_id : int
   ; toast_text : string
+  ; toast_code : toast_code option
   ; toast_kind : string (* "success" | "error" | "warning" | ... *)
   ; toast_key : string option (* sdk show_msg key — close_msg targets it *)
   }

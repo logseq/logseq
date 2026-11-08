@@ -262,7 +262,7 @@ let test_update () =
    | Model.Page "foo", None -> check "navigate clears route_page" true
    | _ -> check "navigate clears route_page" false);
   (* toast ids are allocated sequentially *)
-  let toast = { Model.toast_id = 0; toast_text = "hi"; toast_kind = "success"; toast_key = None } in
+  let toast = { Model.toast_id = 0; toast_text = "hi"; toast_kind = "success"; toast_key = None; toast_code = None } in
   let m3 = Update.update m2 (Action.Toast_push toast) in
   let m3 = Update.update m3 (Action.Toast_push toast) in
   eqi "two toasts" 2 (List.length m3.toasts);
@@ -2843,17 +2843,17 @@ let test_popups_state () =
   check "slash has clear-heading"
     (List.exists
        (fun (i : Popups_state.ac_item) -> i.ai_key = "editor.slash/clear-heading")
-       (Popups_state.slash_items ~has_heading:true));
+       (Popups_state.slash_items ~statuses:[] ~priorities:[] ~has_heading:true));
   check "slash no clear-heading"
     (not
        (List.exists
           (fun (i : Popups_state.ac_item) ->
             i.ai_key = "editor.slash/clear-heading")
-          (Popups_state.slash_items ~has_heading:false)));
+          (Popups_state.slash_items ~statuses:[] ~priorities:[] ~has_heading:false)));
   check "slash has heading levels"
     (List.exists
        (fun (i : Popups_state.ac_item) -> i.ai_key = "heading-3")
-       (Popups_state.slash_items ~has_heading:false));
+       (Popups_state.slash_items ~statuses:[] ~priorities:[] ~has_heading:false));
   (* block_item_of_row / class_titles_of *)
   let bi =
     Popups_state.block_item_of_row 0
@@ -3321,7 +3321,7 @@ let test_boot () =
 let test_update3 () =
   let keyed k =
     { Model.toast_id = 0; toast_text = "t"; toast_kind = "info"
-    ; toast_key = k }
+    ; toast_key = k; toast_code = None }
   in
   let m =
     Update.update Model.initial (Action.Toast_push (keyed (Some "k1")))

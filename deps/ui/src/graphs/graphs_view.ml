@@ -44,6 +44,52 @@ let open_in_another_tab repo =
        ^ "#/?graph-id=" ^ uuid)
   | None -> ()
 
+let selector ~remove (ms : Model.t Signal.signal) : t = fun ctx parent ->
+  let query = Signal.state ctx.Lui_ui.ui_scheduler "" in
+  let chosen = Signal.state ctx.Lui_ui.ui_scheduler 0 in
+  let candidates model query =
+    let repos = List.filter (fun repo ->
+      not (Graphs_ops.is_demo repo)
+      && (remove || model.Model.repo <> Some repo)) model.Model.repos in
+    if String.trim query = "" then repos
+    else Fuzzy.fuzzy_search ~extract:short_name ~limit:(List.length repos) repos query in
+  let select repo =
+    Dialogs_state.close_named (if remove then "graph-remove" else "graph-open");
+    if remove then ignore (Graphs_ops.delete_graph ~remote:false repo)
+    else ignore (Graphs_ops.navigate_journal repo) in
+  let submit () =
+    Option.iter select (List.nth_opt
+      (candidates (Runtime.model ()) (Runtime.signal_get query)) (Runtime.signal_get chosen)) in
+  (column ~key:"graph-selector" ~gap:12
+    [ Ui_components.input ~text:(reactive (Signal.value query)) ~autofocus:true
+        ~placeholder:(T.t (if remove then "select/default-prompt" else "graph.switch/select-prompt"))
+        ~label:(T.t (if remove then "command.graph/remove" else "command.graph/open"))
+        ~on_input:(function
+          | Lui_protocol.TextChanged (_, value) -> Signal.set query value; Signal.set chosen 0
+          | _ -> ())
+        ~on_navigate:(fun event ->
+          let count = List.length (candidates (Runtime.model ()) (Runtime.signal_get query)) in
+          let delta = match event with Lui_protocol.NavigateNext _ -> 1
+            | Lui_protocol.NavigatePrevious _ -> -1 | _ -> 0 in
+          if count > 0 then Signal.update chosen (fun value -> (value + delta + count) mod count))
+        ~on_submit:(fun _ -> submit ()) []
+    ; scroll ~max_height:360
+        [ reactive (fun model query chosen ->
+            let repos = candidates model query in
+            if repos = [] && not remove then
+              column ~gap:8
+                [text ~value:(T.t "graph.switch/empty-desc") [];
+                 Ui_components.button ~variant:`secondary ~size:`sm
+                   ~text:(T.t "graph.switch/add-graph-action")
+                   ~on_press:(fun _ -> Dialogs_state.close_named "graph-open";
+                     Ui_services.nav_set_hash (Runtime.nav_hash "/graphs")) []]
+            else column (List.mapi (fun index repo ->
+              Ui_components.button ~key:repo ~variant:`ghost ~size:`sm
+                ~background:(if index = chosen then "hsl(var(--accent))" else "transparent")
+                ~text:(short_name repo) ~on_press:(fun _ -> select repo) [])
+              repos)) ms (Signal.value query) (Signal.value chosen) ]
+    ]) ctx parent
+
 (* cljs repo.cljs repo-item row *)
 let graph_row repo : t =
  fun ctx parent ->
