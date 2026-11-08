@@ -829,7 +829,7 @@ let load_route (route : Model.route) =
   | Model.File _ | Model.Not_found _ | Model.Settings ->
       ()
 
-let resolve () =
+let rec resolve () =
   Ui_services.perf_mark "router:resolve";
   let route = parse_hash () in
   (match Runtime.route () with
@@ -841,6 +841,15 @@ let resolve () =
          resolve) is skipped entirely — the dedupe clears on commit *)
       if !loading_route <> Some route then load_route route;
       Option.iter jump_to_anchor (route_anchor ())
+  | _ when !Editor_state.structure_pending ->
+      let context = Runtime.repo (), Runtime.route () in
+      Editor_state.enqueue_edit_action ~real:true (fun () ->
+        if context = (Runtime.repo (), Runtime.route ()) then resolve ())
+  | _ when !Editor_state.pending_focus_actions <> [] && not !Editor_actions.drain_gate ->
+      let context = Runtime.repo (), Runtime.route () in
+      Editor_state.pending_focus_actions :=
+        (fun () -> if context = (Runtime.repo (), Runtime.route ()) then resolve ())
+        :: !Editor_state.pending_focus_actions
   | _ ->
       (* commit and close any in-progress edit before the route swaps
          (cljs exits editing on navigation) *)
