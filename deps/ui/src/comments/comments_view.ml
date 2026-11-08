@@ -110,7 +110,7 @@ let reactions_el uuid reactions users =
                ~on_press:(fun _ -> open_reaction_picker uuid ("rx-add-" ^ uuid)) [] ])
 
 (* Draft ownership survives worker-driven render remounts. *)
-let editor_box ?area_uuid ?comment_uuid ~scope ~activation ~asset_target ~initial
+let editor_box ?area_uuid ?comment_uuid ~scope ~activation ~current_activation ~asset_target ~initial
     ?on_cancel ~on_saved prepare : t =
  fun ctx parent ->
   let draft = Signal.state_at ctx.Lui_ui.ui_scheduler ctx.ui_state_scope draft_slot initial in
@@ -126,7 +126,7 @@ let editor_box ?area_uuid ?comment_uuid ~scope ~activation ~asset_target ~initia
   let context = Runtime.repo (), Runtime.route () in
   let alive () = not (Signal.scope_is_disposed ctx.ui_state_scope)
     && context = (Runtime.repo (), Runtime.route ())
-    && Runtime.signal_get active = activation in
+    && Runtime.signal_get active = activation && current_activation () in
   let create_session () =
   let mount_token = Ui_services.env_random_uuid () in
   let uuid = Option.value comment_uuid ~default:(Ui_services.env_random_uuid ()) in
@@ -238,10 +238,13 @@ let comment_body ~scope ~area_uuid st (comment : Model.block Signal.signal) =
   reactive ~equal:(fun a b -> a.editing = b.editing)
     (fun state ->
       if Option.map fst state.editing = Some uuid then
+        let activation = snd (Option.get state.editing) in
+        let current_activation () = (Runtime.signal_get st).editing = Some (uuid, activation) in
+        let finish () = update st (fun s ->
+          if s.editing = Some (uuid, activation) then {s with editing = None} else s) in
         editor_box ~comment_uuid:uuid ~scope ~asset_target:area_uuid
-          ~activation:(snd (Option.get state.editing)) ~initial:(Signal.get comment).block_title
-          ~on_cancel:(fun () -> update st (fun s -> {s with editing = None}))
-          ~on_saved:(fun () -> update st (fun s -> {s with editing = None}))
+          ~activation ~current_activation ~initial:(Signal.get comment).block_title
+          ~on_cancel:finish ~on_saved:finish
           (Ops.save_block_parsed uuid)
       else
         reactive (fun (comment : Model.block) ->
@@ -314,8 +317,10 @@ let add_box ~scope area_uuid : t =
     [ reactive (function
         | Some activation ->
           editor_box ~area_uuid ~scope ~asset_target:area_uuid
-            ~activation ~initial:(load_draft area_uuid)
-            ~on_cancel:(fun () -> Runtime.signal_set opened None)
+            ~activation ~current_activation:(fun () -> Runtime.signal_get opened = Some activation)
+            ~initial:(load_draft area_uuid)
+            ~on_cancel:(fun () ->
+              if Runtime.signal_get opened = Some activation then Runtime.signal_set opened None)
             ~on_saved:(fun () -> ())
             (fun content ->
               let* block = Ops.block_map_parsed (Ui_services.env_random_uuid ()) content in
