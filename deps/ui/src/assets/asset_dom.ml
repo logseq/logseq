@@ -257,35 +257,55 @@ let finish_drag uuid w =
            "logseq.property.asset/resize-metadata"
            (W.Map [ W.Keyword "width", W.Int (int_of_float w) ]) ])
 
-(* cljs resize-image-handles: interact.js seeds width from
-   .ls-resize-image offsetWidth, live-updates the img width attr on move
-   and writes logseq.property.asset/resize-metadata {:width} on end *)
-let start_drag ~side ~uuid ~start_x =
+let start_drag ~scope ~side ~uuid ~start_x =
   match B.query_selector ("#asset-resize-" ^ uuid) with
   | None -> ()
   | Some box -> (
-      match B.el_query box "img" with
-      | Some img ->
-          let start_w = B.el_offset_width box in
-          B.doc_add_class "is-resizing-buf";
-          let rec on_move ev =
-            let dx =
-              if side = `Left then start_x -. Web_dom.ev_client_x ev
-              else Web_dom.ev_client_x ev -. start_x
-            in
-            let w = start_w +. dx in
-            if w > 60. || dx > 0. then
-              (* the kind's pixels img carries style width:100% — a live
-                 drag preview has to override the style, not the attr *)
-              B.el_style_set_property img "width"
-                (string_of_int (int_of_float w) ^ "px")
-          and on_up _ev =
-            B.remove_window_listener "pointermove" on_move;
-            B.remove_window_listener "pointerup" on_up;
-            finish_drag uuid (B.el_offset_width box)
+      match B.el_query box ".lui-image", Runtime.capture_reload_origin () with
+      | Some frame, Some origin when not (Ui_services.env_publishing ()) ->
+          let start_w = B.el_offset_width frame in
+          let start_h = B.el_offset_height frame in
+          let width = ref start_w in
+          let active = ref true in
+          let current () =
+            not (Signal.scope_is_disposed scope)
+            && Runtime.reload_origin_current origin
+            && B.el_is_connected box
+            && not (Ui_services.env_publishing ())
           in
+          B.doc_add_class "is-resizing-buf";
+          let rec stop () =
+            if !active then begin
+              active := false;
+              B.remove_window_listener "pointermove" on_move;
+              B.remove_window_listener "pointerup" on_up;
+              B.remove_window_listener "pointercancel" on_cancel;
+              B.doc_rm_class "is-resizing-buf"
+            end
+          and on_move ev =
+            if not (current ()) then stop ()
+            else begin
+              let dx =
+                if side = `Left then start_x -. Web_dom.ev_client_x ev
+                else Web_dom.ev_client_x ev -. start_x
+              in
+              width := max 60. (start_w +. dx);
+              let w = string_of_int (int_of_float !width) ^ "px" in
+              let h = string_of_int (int_of_float (start_h *. !width /. start_w)) ^ "px" in
+              List.iter (fun el ->
+                B.el_style_set_property el "width" w;
+                B.el_style_set_property el "height" h) [box; frame]
+            end
+          and on_up _ev =
+            let save = !active && current () && !width <> start_w in
+            stop ();
+            if save then finish_drag uuid !width
+          and on_cancel _ev = stop ()
+          in
+          Signal.on_dispose scope stop;
           B.add_window_listener "pointermove" on_move;
-          B.add_window_listener "pointerup" on_up
+          B.add_window_listener "pointerup" on_up;
+          B.add_window_listener "pointercancel" on_cancel
       | _ -> ())
 
 (* ---------- action menu + delete ---------- *)
@@ -469,17 +489,36 @@ let asset_img uuid (b : Model.block) file : t =
     ~accessibility_identifier:("asset-img-" ^ uuid)
     ~url:src ~alt:b.Model.block_title ~loading:`lazy_
     ~referrer_policy:`no_referrer ~width:w ?height:h
-    ~data_attrs:[ ("style", "border-radius:2px;position:relative") ]
+    ~corner_radius:2
     ~on_load:(fun _ -> measure_on_load uuid b)
     []
 
 let asset_placeholder : t =
   box ~key:"acph" ~style_class:"asset-container" ~width:250 []
 
+let resize_handle ~scope ~hovered ~height uuid side : t =
+  let cls, alignment = match side with
+    | `Left -> "handle-left image-resize", `leading
+    | `Right -> "handle-right image-resize", `trailing
+  in
+  align alignment
+    (box ~key:("rh-" ^ uuid ^ (if side = `Left then "l" else "r"))
+       ~style_class:cls ~width:6 ~height ~margin_horizontal:5
+       ~background:"rgba(0,0,0,0.3)" ~border_color:"#e5e7eb" ~border_width:1
+       ~corner_radius:999 ~opacity:(reactive (fun h -> if h then 1. else 0.) hovered)
+       ~data_attrs:[("style", "cursor:col-resize;user-select:none;touch-action:none")]
+       ~on_pointer_down:(fun ev -> match ev with
+         | Lui_protocol.PointerDown (_, d) ->
+             start_drag ~scope ~side ~uuid ~start_x:d.Lui_protocol.x
+         | _ -> ()) [])
+
 let asset_container uuid (b : Model.block) : t =
   let ext = Option.value b.Model.block_asset_type ~default:"" in
   let file = uuid ^ "." ^ ext in
   fun context parent ->
+    let hovered = Signal.state context.Lui_ui.ui_scheduler false in
+    let hover value = Runtime.signal_set hovered value in
+    let w, h = img_dims b in
     let ready = ready_for uuid ext context in
     (if not (Runtime.signal_get ready) then
        resolve_img uuid file ext ready);
@@ -488,47 +527,28 @@ let asset_container uuid (b : Model.block) : t =
     (box ~key:("ac-" ^ uuid) ~style_class:"asset-container"
        ([ reactive (fun r ->
              if r then
-               Ui_parts.pressable
-                 ~on_press:(fun _ ->
-                   match
-                     B.query_selector
-                       ("#asset-img-" ^ uuid ^ " .lui-image-pixels")
-                   with
-                   | Some img -> open_lightbox img
-                   | None -> ())
-                 (row ~key:("asset-press-" ^ uuid) [ asset_img uuid b file ])
+               overlay ~key:("rim-" ^ uuid) ~corner_radius:6 ~width:w ?height:h
+                 ~accessibility_identifier:("asset-resize-" ^ uuid)
+                 ~style_class:"ls-resize-image"
+                 ~on_pointer_enter:(fun _ -> hover true)
+                 ~on_pointer_leave:(fun _ -> hover false)
+                 (Ui_parts.pressable
+                    ~on_press:(fun _ ->
+                      match B.query_selector ("#asset-img-" ^ uuid ^ " .lui-image-pixels") with
+                      | Some img -> open_lightbox img
+                      | None -> ())
+                    (row ~key:("asset-press-" ^ uuid) [asset_img uuid b file])
+                  :: if Ui_services.env_publishing () then [] else
+                    let height = max 30 (Option.fold ~none:30 ~some:(fun h -> h * 15 / 100) h) in
+                    List.map (resize_handle ~scope:context.ui_scope
+                      ~hovered:(Signal.value hovered) ~height uuid)
+                      [`Left; `Right])
              else asset_placeholder)
            (Signal.value (ready))
        ] @ (if Ui_services.env_publishing () then [] else [ action_bar uuid b ])))
       context parent
 
-(* pointerdown -> window pointermove/pointerup drag — the window
-   listeners stay imperative (start_drag); only the trigger uses a
-   kind event *)
-let resize_handle uuid side : t =
-  let cls =
-    match side with
-    | `Left -> "handle-left image-resize"
-    | `Right -> "handle-right image-resize"
-  in
-  text ~key:("rh-" ^ uuid ^ (if side = `Left then "l" else "r"))
-    ~style_class:cls
-    ~on_pointer_down:(fun ev ->
-      match ev with
-      | Lui_protocol.PointerDown (_, d) ->
-          start_drag ~side ~uuid ~start_x:d.Lui_protocol.x
-      | _ -> ())
-    []
-
-let image_block uuid (b : Model.block) : t =
-  box ~key:("ri-" ^ uuid) 
-    [ (* ls-resize-image is an imperative query handle (start_drag) *)
-      box ~key:("rim-" ^ uuid) ~corner_radius:6
-        ~accessibility_identifier:("asset-resize-" ^ uuid)
-        ~style_class:"ls-resize-image"
-        (asset_container uuid b ::
-         if Ui_services.env_publishing () then []
-         else [ resize_handle uuid `Left; resize_handle uuid `Right ]) ]
+let image_block = asset_container
 
 (* resolved object URL for assets/<file> — shared by the pdf/media/
    asset-ref branches (attrs_signal_v so the patch lands in place) *)

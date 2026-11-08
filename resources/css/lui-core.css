@@ -2223,7 +2223,7 @@ a.tag {
 
 /* cljs renders the inline img at natural size; the image kind's
    inline width/height:100% style only fits a sized container */
-.asset-container img.lui-image-pixels {
+.asset-container.image img.lui-image-pixels {
   width: auto !important;
   height: auto !important;
   max-width: 100%;
