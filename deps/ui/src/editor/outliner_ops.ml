@@ -1034,6 +1034,46 @@ let op_names ops =
          | _ -> "?")
        ops)
 
+type write_receipt = { repo : string; acknowledged : unit Js.Promise.t }
+
+let accepted_writes : write_receipt list ref = ref []
+
+(* Pre-RPC asset/PDF pipelines must register their whole accepted operation here. *)
+let track_accepted_write ?(check = fun _ -> ()) ~repo work =
+  (* Register before invoking work: native continuations can run inline. *)
+  let publish = ref (fun _ -> ()) in
+  let accepted = Js.Promise.make (fun ~resolve ~reject:_ ->
+      publish := (fun result -> resolve (result, ()) [@u])) in
+  let acknowledged =
+    let* result, () = accepted in
+    let* result = result in
+    check result;
+    Js.Promise.resolve ()
+  in
+  let receipt = { repo; acknowledged } in
+  accepted_writes := receipt :: !accepted_writes;
+  let release () =
+    accepted_writes := List.filter (fun live -> live != receipt) !accepted_writes
+  in
+  ignore
+    ((let* () = acknowledged in
+      release ();
+      Js.Promise.resolve ())
+     |> Js.Promise.catch (fun _ ->
+          release ();
+          Js.Promise.resolve ()));
+  let result = try work () with error -> Js.Promise.reject error in
+  !publish result;
+  result
+
+let capture_write_receipts repo =
+  List.filter_map (fun receipt ->
+      if receipt.repo = repo then Some receipt.acknowledged else None) !accepted_writes
+
+let await_write_receipts receipts =
+  let* _ = Js.Promise.all (Array.of_list receipts) in
+  Js.Promise.resolve ()
+
 let submit_result ?(invoke3 = Runtime.invoke3) ?current context opts ops : Wire.t option Js.Promise.t =
   let current =
     match current with
@@ -1043,6 +1083,7 @@ let submit_result ?(invoke3 = Runtime.invoke3) ?current context opts ops : Wire.
   match context.Model.repo with
   | None -> Js.Promise.resolve None
   | Some repo ->
+      track_accepted_write ~repo (fun () ->
       let opts =
         match opts with
         | Wire.Map kvs ->
@@ -1053,6 +1094,9 @@ let submit_result ?(invoke3 = Runtime.invoke3) ?current context opts ops : Wire.
         let* r = invoke3 "thread-api/apply-outliner-ops"
             (Wire.String repo) (Wire.Array ops) opts in
         check_loader_result r;
+        (match r with
+         | Wire.Map _ -> ()
+         | _ -> failwith "Outliner write returned no acknowledgement");
         (* Autosave has no immediate refresh. Only its current context
            may consume the returned delta on a later broadcast. *)
         if current () then
@@ -1064,12 +1108,17 @@ let submit_result ?(invoke3 = Runtime.invoke3) ?current context opts ops : Wire.
       p |> Js.Promise.catch (fun e ->
           Ui_services.log_error ("apply-outliner-ops failed", op_names ops, e);
           if current () then Toast.error (I18n.t "ui/save-changes-error");
-          p)
+          p))
 
 let take_pending_save () =
   match !pending_save with
   | None -> None
   | Some save -> clear_pending_save (); Some save
+
+let take_pending_save_for_repo repo =
+  match !pending_save with
+  | Some save when save.context.Model.repo = Some repo -> take_pending_save ()
+  | _ -> None
 
 let pending_save_for uuid =
   match !pending_save with
@@ -1128,13 +1177,25 @@ let release_save save =
 
 let save_pending_result save =
   if not (save_current save) then Js.Promise.resolve None else
+  let check = function
+    | Some _ -> ()
+    | None -> failwith "Accepted editor save was superseded"
+  in
+  track_accepted_write ~check ~repo:(Option.get save.context.repo) (fun () ->
+  let worker = !(Runtime.worker) in
   let write =
     let* bm =
       block_map_parsed_source ~origin_repo:(Option.get save.context.repo)
         ~source:save.source save.uuid save.title
     in
     if not (save_current save) then Js.Promise.resolve None else
-    let* result = submit_result save.context save.opts [ op "save-block" [ bm; Wire.Map [] ] ] in
+    if not (Option.equal ( == ) worker !(Runtime.worker)) then
+      Js.Promise.reject (Failure "Autosave worker changed before write") else
+    let invoke3 name a b c = match worker with
+      | Some worker -> Worker_client.invoke worker name [a; b; c]
+      | None -> Js.Promise.reject (Failure "Autosave requires a worker")
+    in
+    let* result = submit_result ~invoke3 save.context save.opts [ op "save-block" [ bm; Wire.Map [] ] ] in
     let current = save_current save in
     if current then begin
       release_save save;
@@ -1148,7 +1209,7 @@ let save_pending_result save =
     end;
     Js.Promise.resolve (if current then result else None)
   in
-  write |> Js.Promise.catch (fun _ -> release_save save; write)
+  write |> Js.Promise.catch (fun _ -> release_save save; write))
 
 let save_pending save =
   let* _ = save_pending_result save in
@@ -1164,6 +1225,9 @@ let cancel_pending_save () =
 (* Flush committed text before structural actions without transferring
    the initiating action into a new graph or route after the await. *)
 let rec apply_result_for ?current context ?(flush_save = true) ?(opts = Wire.Map []) ops =
+  match context.Model.repo with
+  | None -> Js.Promise.resolve None
+  | Some repo -> track_accepted_write ~repo (fun () ->
   let is_current =
     match current with
     | Some current -> current
@@ -1177,7 +1241,7 @@ let rec apply_result_for ?current context ?(flush_save = true) ?(opts = Wire.Map
       apply_result_for ?current context ~opts ops
   | None ->
       if flush_save then Ui_services.timers_clear_timeout !save_timer;
-      submit_result ?current context opts ops
+      submit_result ?current context opts ops)
 
 let apply_result ?current ?flush_save ?opts ops =
   let context = Runtime.model () in

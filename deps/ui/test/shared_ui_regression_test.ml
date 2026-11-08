@@ -802,7 +802,9 @@ let run_views ~registry ~profile ~finish =
                      | Some property -> Wire.get property "logseq.property/type"=Some (Wire.Keyword column.Views_state.c_type)
                      | None -> false)
                    | _ -> false);
-              Js.Promise.resolve (if name="thread-api/get-view-filter-data" then data else Wire.Nil));
+              Js.Promise.resolve (if name="thread-api/get-view-filter-data" then data
+                else if name="thread-api/apply-outliner-ops" then Wire.Map [Wire.kw "result",Wire.Nil]
+                else Wire.Nil));
             on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
           let instance = ref None in
           let selector = mount (fun _ context parent ->
@@ -973,7 +975,9 @@ let run_views ~registry ~profile ~finish =
             Js.Promise.resolve (if method_="thread-api/get-view-filter-data" then Wire.Map
               [Wire.kw "value-source",Wire.Keyword source;Wire.kw "many?",Wire.Bool many;
                Wire.kw "values",Wire.Array (List.map (fun (label,value) -> Wire.Map
-                 [Wire.kw "label",Wire.String label;Wire.kw "value",value]) choices)] else Wire.Nil));
+                 [Wire.kw "label",Wire.String label;Wire.kw "value",value]) choices)]
+              else if method_="thread-api/apply-outliner-ops" then Wire.Map [Wire.kw "result",Wire.Nil]
+              else Wire.Nil));
             on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
           let previous={Views_state.c_prop="fixture/previous";c_op="is";c_val=Some (Wire.Bool true)}
           and current={Views_state.c_prop=column.Views_state.c_id;c_op=operator;c_val=Some initial}
@@ -1084,7 +1088,8 @@ let run_views ~registry ~profile ~finish =
               if Wire.get opts "operator"=Some (Wire.Keyword after) then
                 Wire.Map [Wire.kw "value-after-operator-change",normalized]
               else Wire.Map [Wire.kw "operators",Wire.Array [Wire.Keyword after]]
-            end else Wire.Nil in
+            end else if method_="thread-api/apply-outliner-ops" then Wire.Map [Wire.kw "result",Wire.Nil]
+            else Wire.Nil in
             Js.Promise.resolve response);on_message=(fun _ _ -> ());
             dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
           let instance=ref None in
@@ -1161,6 +1166,7 @@ let run_views ~registry ~profile ~finish =
     Runtime.worker:=Some {Worker_client.invoke_fn=(fun method_ _ -> Js.Promise.resolve
       (if method_="thread-api/get-view-filter-data" then Wire.Map
         [Wire.kw "value-source",Wire.Keyword "property-values";Wire.kw "values",Wire.Array []]
+       else if method_="thread-api/apply-outliner-ops" then Wire.Map [Wire.kw "result",Wire.Nil]
        else Wire.Nil));on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
     let instance=ref None in
     let selector=mount (fun _ context parent ->
@@ -1255,7 +1261,9 @@ let run_views ~registry ~profile ~finish =
   in
   let filter_scope_check () =
     let previous_worker= !Runtime.worker and previous_model= !Runtime.read_model in
-    Runtime.worker:=Some {Worker_client.invoke_fn=(fun _ _ -> Js.Promise.resolve Wire.Nil);
+    Runtime.worker:=Some {Worker_client.invoke_fn=(fun name _ -> Js.Promise.resolve
+      (if name="thread-api/apply-outliner-ops" then Wire.Map [Wire.kw "result",Wire.Nil]
+       else Wire.Nil));
       on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
     Runtime.read_model:=(fun () -> Model.initial);
     List.iter (fun query -> List.iter (fun operator ->
@@ -1502,7 +1510,9 @@ let run_views ~registry ~profile ~finish =
     Runtime.read_model := (fun () -> {Model.initial with repo=Some "custom-date-fixture"});
     Runtime.worker := Some {Worker_client.invoke_fn=(fun name _ ->
       Js.Promise.resolve (if name="thread-api/get-view-filter-data" then
-        Wire.Map [Wire.kw "value-source",Wire.Keyword "timestamp"] else Wire.Nil));
+        Wire.Map [Wire.kw "value-source",Wire.Keyword "timestamp"]
+        else if name="thread-api/apply-outliner-ops" then Wire.Map [Wire.kw "result",Wire.Nil]
+        else Wire.Nil));
       on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
     let rec next = function
       | [] -> Runtime.worker:=previous_worker;Runtime.read_model:=previous_model;

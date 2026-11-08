@@ -284,6 +284,99 @@ let reset_editor () =
 
 (* ---------- composition ---------- *)
 
+let test_save_barrier_acknowledgement (h : host) =
+  let rec run = function
+    | [] -> Js.Promise.resolve ()
+    | outcome :: rest ->
+        reset_editor ();
+        stage_page h [ Test_check.block "b1" "hello" ];
+        set_editing ~uuid:"b1" ~buffer:"hello" ~caret:2 ~base:"hello";
+        let resume = ref (fun () -> ()) in
+        let gate = Js.Promise.make (fun ~resolve ~reject:_ ->
+            resume := (fun () -> resolve true [@u])) in
+        Runtime.worker := Some
+          { Worker_client.invoke_fn = (fun name args ->
+              if name <> "thread-api/apply-outliner-ops" then
+                Js.Promise.resolve (worker_handler h name args)
+              else
+                let* _ = gate in
+                match outcome with
+                | "ack" -> Js.Promise.resolve (worker_handler h name args)
+                | "nil" -> Js.Promise.resolve W.Nil
+                | _ -> h.reject_promise "accepted write failed")
+          ; on_message = (fun _ _ -> ())
+          ; dead = Js.Promise.make (fun ~resolve:_ ~reject:_ -> ()) };
+        let write = Ops.apply_result ~flush_save:false
+            [ Ops.op "save-block"
+                [ W.Map [ W.kw "block/uuid", W.Uuid "b1";
+                          W.kw "block/title", W.String "saved" ]; W.Map [] ] ] in
+        let write = (let* _ = write in Js.Promise.resolve ())
+            |> Js.Promise.catch (fun _ -> Js.Promise.resolve ()) in
+        let first_done = ref false in
+        let first =
+          (let* () = A.save_barrier () in
+           first_done := true; Js.Promise.resolve false)
+          |> Js.Promise.catch (fun _ -> first_done := true; Js.Promise.resolve true)
+        in
+        let callbacks = ref 0 in
+        let owner : S.draft_owner = object
+          method changed (_ : string) = incr callbacks
+          method submit (_ : string) = incr callbacks
+          method dismiss = incr callbacks
+          method current = true
+          method asset_target = "b1"
+        end in
+        let draft = S.mk_editing ~owner:(S.Explicit_draft owner) ~uuid:"draft"
+            ~scope:"comments" ~buffer:"draft" ~base:"draft" () in
+        let model = EM.select draft.S.model ~anchor:1 ~focus:3 in
+        let model = EM.composition_update (EM.composition_begin model 3) ~text:"preedit" in
+        let draft = S.with_model draft model in
+        S.set_silent (fun st -> { st with S.editing = Some draft });
+        let second_done = ref false in
+        let second =
+          (let* () = A.save_barrier () in
+           second_done := true; Js.Promise.resolve true)
+          |> Js.Promise.catch (fun _ -> second_done := true; Js.Promise.resolve false)
+        in
+        let* () = Js.Promise.resolve () in
+        check ("barriers await the already dispatched write: " ^ outcome)
+          (not !first_done && not !second_done);
+        !resume ();
+        let* () = write in
+        let* stale_rejected = first in
+        let* acknowledged = second in
+        check ("old barrier rejects a replacement activation: " ^ outcome) stale_rejected;
+        check ("only acknowledged writes release the draft barrier: " ^ outcome)
+          (acknowledged = (outcome = "ack"));
+        check ("barrier preserves draft, selection, composition and owner: " ^ outcome)
+          (Option.fold ~none:false ~some:(fun live -> live == draft) (S.editing ())
+           && EM.composing (editing_now ()).S.model && !callbacks = 0);
+        check ("only the accepted original write reaches persisted state: " ^ outcome)
+          (match !Runtime.current_page with
+           | Some p -> titles_of p = [ if outcome = "ack" then "saved" else "hello" ]
+           | None -> false);
+        let* () =
+          if outcome <> "ack" then Js.Promise.resolve () else
+          let editor = S.mk_editing ~uuid:"b1" ~scope:"main"
+              ~buffer:"committed" ~base:"saved" () in
+          let model = EM.composition_update
+              (EM.composition_begin (EM.select editor.S.model ~anchor:1 ~focus:3) 3)
+              ~text:"preedit" in
+          let editor = S.with_model editor model in
+          S.set_silent (fun st -> { st with S.editing = Some editor });
+          let* () = A.save_barrier () in
+          check "ordinary barrier saves committed text without altering selection or IME"
+            (current_titles () = [ "committed" ]
+             && Option.fold ~none:false ~some:(fun live ->
+                 live.S.epoch == editor.S.epoch && live.S.model == model
+                 && live.S.buffer = "committed" && live.S.base = "committed") (S.editing ()));
+          Js.Promise.resolve ()
+        in
+        reset_editor ();
+        run rest
+  in
+  run [ "ack"; "nil"; "failure" ]
+
 let test_composition (h : host) =
   let* () = settle h 40 in
   stage_page h [ Test_check.block "b1" "hello" ];
@@ -1070,6 +1163,7 @@ let run (_h : host) =
 (* async stage: chained into the drive runner's promise drain *)
 let async_stage (h : host) : unit Js.Promise.t =
   let saved = h.snapshot () in
+  let* () = test_save_barrier_acknowledgement h in
   let* () = test_composition h in
   let* () = test_save_debounce h in
   let* () = test_embed_persists_erased_buffer h in

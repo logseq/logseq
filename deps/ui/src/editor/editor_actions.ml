@@ -865,6 +865,80 @@ let after_pending_input commit =
   in
   drain ()
 
+(* The consumer captures its ready repo/worker before calling, without yielding. *)
+let save_barrier () : unit Js.Promise.t =
+  let context = Runtime.model () in
+  let editing = S.editing () in
+  let worker = !(Runtime.worker) in
+  let structure = if !S.structure_pending then !structure_owner else None in
+  let current () =
+    Ops.context_current context
+    && Option.equal ( == ) worker !(Runtime.worker)
+    && match editing, S.editing () with
+       | None, None -> true
+       | Some origin, Some live ->
+           origin.S.epoch == live.S.epoch && origin.S.uuid = live.S.uuid
+           && origin.S.scope = live.S.scope
+       | _ -> false
+  in
+  let stale () = Js.Promise.reject (Failure "Editor save barrier origin changed") in
+  match context.Model.repo, worker with
+  | None, _ -> Js.Promise.reject (Failure "Editor save barrier requires a graph")
+  | _, None -> Js.Promise.reject (Failure "Editor save barrier requires a worker")
+  | Some repo, Some _ ->
+      let receipts = Ops.capture_write_receipts repo in
+      let pending = Ops.take_pending_save_for_repo repo in
+      let pending_ack = match pending with
+        | None -> Js.Promise.resolve ()
+        | Some save ->
+            let* result = Ops.save_pending_result save in
+            match result with
+            | Some _ -> Js.Promise.resolve ()
+            | None -> Js.Promise.reject (Failure "Accepted editor save was superseded")
+      in
+      let initial = pending_ack :: receipts in
+      let initial = match structure with
+        | None -> initial
+        | Some (_, complete) -> complete :: initial
+      in
+      let rec drain () =
+        if not (current ()) then stale ()
+        else if Option.fold ~none:false ~some:S.is_draft editing then
+          Js.Promise.resolve ()
+        else if !S.structure_pending then
+          let _, complete = Option.get !structure_owner in
+          let* () = complete in
+          drain ()
+        else if not (Queue.is_empty S.pending_edit_actions) then begin
+          let before = Queue.length S.pending_edit_actions in
+          S.drain_edit_actions ();
+          if not !S.structure_pending && Queue.length S.pending_edit_actions >= before then
+            Js.Promise.reject (Failure "Editor input made no progress before save")
+          else drain ()
+        end else if !drain_gate || !S.pending_focus_actions <> [] then
+          Js.Promise.reject (Failure "Editor focus replay is still active")
+        else
+          let pending = Ops.take_pending_save_for_repo repo in
+          let save = match pending, S.editing () with
+            | Some save, _ -> Some save
+            | None, Some e ->
+                let buffer = live_buffer e.S.uuid in
+                if buffer = e.S.base then None
+                else Some (Ops.accept_save e.S.uuid buffer)
+            | None, None -> None
+          in
+          match save with
+          | None -> Js.Promise.resolve ()
+          | Some save ->
+              let* result = Ops.save_pending_result save in
+              if not (current ()) then stale () else
+              match result with
+              | None -> Js.Promise.reject (Failure "Editor save revision was superseded")
+              | Some _ -> drain ()
+      in
+      let* () = Ops.await_write_receipts initial in
+      drain ()
+
 let enter_draft ~uuid ~scope ~buffer ~(owner : S.draft_owner) =
   if not (Ui_services.env_publishing ()) && owner#current then begin
     let context = Runtime.repo (), Runtime.route () in
