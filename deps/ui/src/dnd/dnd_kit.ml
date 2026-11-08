@@ -6,6 +6,7 @@
 
 type element = Js.Json.t
 type manager
+type actions
 type monitor
 type draggable
 type droppable
@@ -47,6 +48,13 @@ external make_manager : Js.Json.t -> manager = "DragDropManager"
 
 external monitor : manager -> monitor = "monitor" [@@mel.get]
 
+external actions : manager -> actions = "actions" [@@mel.get]
+
+external stop_opts : event:Js.Json.t -> canceled:bool -> unit -> Js.Json.t
+  = "" [@@mel.obj]
+
+external stop : actions -> Js.Json.t -> unit = "stop" [@@mel.send]
+
 (* monitor.addEventListener(name, (event, manager) => ()) -> unlisten *)
 (* monitor.addEventListener(name, (event, manager) => ()); the
    returned unlisten handle is intentionally discarded *)
@@ -84,6 +92,9 @@ external new_droppable : Js.Json.t -> manager -> droppable = "Droppable"
 
 external destroy_draggable : draggable -> unit = "destroy" [@@mel.send]
 external destroy_droppable : droppable -> unit = "destroy" [@@mel.send]
+
+external draggable_element : draggable -> element option = "element"
+  [@@mel.get] [@@mel.return nullable]
 
 external droppable_element : droppable -> element option = "element"
   [@@mel.get] [@@mel.return nullable]

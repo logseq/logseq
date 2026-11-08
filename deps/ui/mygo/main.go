@@ -134,6 +134,22 @@ func run() (result error) {
 		}
 		host.document.Pointer = host.services.EditorPointer
 		host.document.Observe = host.services.ObserveDocumentInput
+		host.document.Measure = func(id int64, rect ui.Rect) bool {
+			replies, err := platformJSONReply("node-rect", map[string]any{
+				"nodeId": id,
+				"rect": map[string]float32{"left": rect.X, "top": rect.Y,
+					"right": rect.X + rect.W, "bottom": rect.Y + rect.H,
+					"width": rect.W, "height": rect.H},
+			})
+			if err == nil {
+				err = r.PlatformEvent(replies[0])
+			}
+			if err != nil {
+				host.fail(err)
+				return false
+			}
+			return true
+		}
 		host.services.mutations.Activate = func(n luimygo.Node) error {
 			if n.Identifier == "logseq-input" || n.Identifier == "logseq-textarea" {
 				return fmt.Errorf("native input activation requires the control's default action")

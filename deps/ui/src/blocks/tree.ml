@@ -740,6 +740,7 @@ and row_main ~editable ~library scope (b : Model.block) : t =
   let uuid = Option.value b.block_uuid ~default:"" in
   let key = block_key b in
   (* data-has-heading feeds block.css selectors — rides ~data_attrs *)
+  let content =
   row ~key:("main-" ^ key)
       ~style_class:"block-main-container" ~gap:4 ~min_height:24
         ~data_attrs:
@@ -805,6 +806,30 @@ and row_main ~editable ~library scope (b : Model.block) : t =
             ; Comments_view.reactions_el uuid b.Model.block_reactions
             ]
         ]
+  in
+  if not (Ui_services.env_native_drag ()) then content
+  else
+    let indicator zone offset edge =
+      if_
+        ~test:(reactive
+          (function
+            | Some (_, target, move_to) -> target = uuid && move_to = zone
+            | None -> false)
+          (S.drag_sig ()))
+        (Ui_components.with_props
+           [ Ui_components.Prop.position `absolute
+           ; Ui_components.Prop.inset_left offset
+           ; Ui_components.Prop.inset_right 0.
+           ; edge ]
+           (box ~height:3 ~background:"hsl(var(--border))" []))
+    in
+    Ui_components.with_props [ Ui_components.Prop.position `relative ]
+      (column ~key:("drag-" ^ key)
+         [ content
+         ; indicator "top" 20. (Ui_components.Prop.inset_top 0.)
+         ; indicator "sibling" 20. (Ui_components.Prop.inset_bottom 0.)
+         ; indicator "nested" 48. (Ui_components.Prop.inset_bottom 0.)
+         ])
 
 and row_el ~depth ~editable ~virtualize scope ~(library : bool)
     (b : Model.block) : t =

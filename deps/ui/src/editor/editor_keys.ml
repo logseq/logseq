@@ -1335,8 +1335,7 @@ let native_drag_target ev src =
     match closest ".ls-block" (ev.Ui_services.target) with
     | Some el -> (
         match el.Ui_services.attr "data-blockid" with
-        | Some t when t <> src && S.find t <> None
-                      && not (A.is_descendant t src) ->
+        | Some t when A.can_drop_dragged_block src t ->
             let left, top, width, height = el.Ui_services.rect () in
             if el.Ui_services.rect_pending () || width <= 0. || height <= 0.
             then None
@@ -1368,10 +1367,7 @@ let on_native_pointermove ev =
           ~x:ev.Ui_services.x ~y:ev.Ui_services.y
           ~target:(native_drag_target ev source) !drag_state;
         if not was_active && Drag.preview !drag_state <> None then
-          S.set (fun st -> { st with
-            S.selected = S.String_set.singleton source;
-            selection_scope = !drag_scope; anchor = Some source;
-            action_bar = false });
+          A.begin_block_drag ~scope:!drag_scope source;
         publish_drag ()
 
 let on_native_pointerup ev =

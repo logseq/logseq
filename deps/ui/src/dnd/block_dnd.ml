@@ -130,7 +130,13 @@ let clear_drop_target () =
 let on_drag_start ev _m =
   dragging_uuid := None;
   (match K.op_source (K.ev_operation ev) with
-   | Some d -> dragging_uuid := Some (K.entity_uuid (K.entity_data d))
+   | Some d ->
+       Option.iter
+         (fun el ->
+           let src = K.entity_uuid (K.entity_data d) in
+           A.begin_block_drag ~scope:(A.scope_of_el (Ui_dom_web.el_of el)) src;
+           dragging_uuid := Some src)
+         (K.draggable_element d)
    | None -> ());
   clear_drop_target ()
 
@@ -150,19 +156,17 @@ let coords_of ev op =
    indent (x-offset > 50) -> :nested; else :sibling *)
 let update_drop_target src tgt_el client_x client_y =
   match Web_dom.el_get_attr tgt_el "data-blockid" with
-  | Some tgt when tgt <> src && not (A.is_descendant tgt src) ->
+  | Some tgt when A.can_drop_dragged_block src tgt ->
       let rect = Web_dom.el_bounding_rect tgt_el in
       let first =
         match S.find_parent tgt with
         | Some (_, idx) -> idx = 0
         | None -> false
       in
-      let near_top = Float.abs (client_y -. Web_dom.rect_top rect) <= 16.0 in
-      let x_off = client_x -. Web_dom.rect_left rect in
       let move_to =
-        if first && near_top then "top"
-        else if x_off > 50.0 then "nested"
-        else "sibling"
+        Block_drag.zone ~first ~left:(Web_dom.rect_left rect)
+          ~top:(Web_dom.rect_top rect) ~x:client_x ~y:client_y
+        |> Block_drag.zone_name
       in
       drop_target := Some (tgt, move_to);
       show_indicator tgt_el move_to
@@ -225,6 +229,14 @@ let install () =
     K.on mon "dragmove" (fun ev _ -> update_from_event ev) ();
     K.on mon "dragover" (fun ev _ -> update_from_event ev) ();
     K.on mon "dragend" on_drag_end ();
+    let cancel ev =
+      dragging_uuid := None;
+      clear_drop_target ();
+      K.stop (K.actions m) (K.stop_opts ~event:ev ~canceled:true ())
+    in
+    Web_dom.add_window_listener "blur" cancel;
+    Web_dom.on_document_event "visibilitychange" (fun ev ->
+      if not (Web_dom.document_visible ()) then cancel ev);
     scan m;
     let obs = Web_dom.new_observer (fun () -> scan m) in
     Web_dom.obs_observe obs Web_dom.document_element (Web_dom.mo_opts ~childList:true ~subtree:true))
