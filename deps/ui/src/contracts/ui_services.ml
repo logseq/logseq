@@ -132,6 +132,12 @@ type perf = { mark : string -> unit }
 
 type uri = { encode_component : string -> string }
 
+type clipboard_snapshot = {
+  clipboard_formats : (string * string) list;
+  clipboard_items : (string * string) list;
+  clipboard_files : (string * string * float) list;
+}
+
 (* Clipboard ops are best-effort host requests; the task resolves when
    the host confirms. copy is the fire-and-forget plain-text write. *)
 type clipboard = {
@@ -139,6 +145,7 @@ type clipboard = {
   write : ?html:string -> ?blocks:string -> string -> unit Ui_task.t;
   write_text : string -> unit Ui_task.t;
   read_text : unit -> string Ui_task.t;
+  read : (string list -> clipboard_snapshot Ui_task.t) option;
 }
 
 (* Per-tab/session storage — browser sessionStorage semantics: the
@@ -309,12 +316,6 @@ type el = {
   (* <input type=file> selections. *)
   style_prop : string -> string;
   (* Computed style property — "" where the host has no stylesheets. *)
-}
-
-type clipboard_snapshot = {
-  clipboard_formats : (string * string) list;
-  clipboard_items : (string * string) list;
-  clipboard_files : (string * string * float) list;
 }
 
 let empty_clipboard_snapshot =
@@ -499,6 +500,8 @@ let clipboard_copy s = (get ()).clipboard.copy s
 let clipboard_write ?html ?blocks s = (get ()).clipboard.write ?html ?blocks s
 let clipboard_write_text s = (get ()).clipboard.write_text s
 let clipboard_read_text () = (get ()).clipboard.read_text ()
+let clipboard_read formats =
+  Option.map (fun read -> read formats) (get ()).clipboard.read
 let session_get k = (get ()).session.get k
 let session_set k v = (get ()).session.set k v
 

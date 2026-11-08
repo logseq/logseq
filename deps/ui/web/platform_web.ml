@@ -146,6 +146,18 @@ let task_of (p : 'a Js.Promise.t) : 'a Ui_task.t =
              Js.Promise.resolve ())
            (Js.Promise.then_ (fun v -> resolve v; Js.Promise.resolve ()) p)))
 
+let clipboard_read formats =
+  task_of
+    (Js.Promise.then_
+       (fun values ->
+         let values = Array.to_list values in
+         Js.Promise.resolve
+           { Ui_services.clipboard_formats = values
+           ; clipboard_items = List.map (fun (mime, _) -> "string", mime) values
+           ; clipboard_files = []
+           })
+       (Platform.clipboard_read (Array.of_list formats)))
+
 let install ~request_flush ~dom ~timers ~files =
   if Platform.local_storage_obj = None then
     invalid_arg "Browser local storage is unavailable";
@@ -213,6 +225,7 @@ let install ~request_flush ~dom ~timers ~files =
         ; write = (fun ?html ?blocks s -> task_of (Platform.clipboard_write ?html ?blocks s))
         ; write_text = (fun s -> task_of (Platform.clipboard_write_text s))
         ; read_text = (fun () -> task_of (Platform.clipboard_read_text ()))
+        ; read = Some clipboard_read
         }
     ; session =
         { get = Platform.session_storage_get

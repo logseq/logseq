@@ -93,11 +93,18 @@ type perf = { mark : string -> unit }
 
 type uri = { encode_component : string -> string }
 
+type clipboard_snapshot = {
+  clipboard_formats : (string * string) list;
+  clipboard_items : (string * string) list;
+  clipboard_files : (string * string * float) list;
+}
+
 type clipboard = {
   copy : string -> unit;
   write : ?html:string -> ?blocks:string -> string -> unit Ui_task.t;
   write_text : string -> unit Ui_task.t;
   read_text : unit -> string Ui_task.t;
+  read : (string list -> clipboard_snapshot Ui_task.t) option;
 }
 
 type session = {
@@ -234,12 +241,6 @@ type el = {
   query_all : string -> el list;
   files : unit -> file list;
   style_prop : string -> string;
-}
-
-type clipboard_snapshot = {
-  clipboard_formats : (string * string) list;
-  clipboard_items : (string * string) list;
-  clipboard_files : (string * string * float) list;
 }
 
 val empty_clipboard_snapshot : clipboard_snapshot
@@ -392,6 +393,11 @@ val clipboard_write : ?html:string -> ?blocks:string -> string -> unit Ui_task.t
     Resolve only after host acknowledgement; reject on write failure. *)
 val clipboard_write_text : string -> unit Ui_task.t
 val clipboard_read_text : unit -> string Ui_task.t
+val clipboard_read : string list -> clipboard_snapshot Ui_task.t option
+(** Start reading requested textual formats from the first item immediately.
+    [None] means asynchronous format reads are unsupported by this host.
+    Missing formats are omitted; API and representation failures reject the task.
+    Custom Logseq data uses the logical [application/logseq] key. *)
 val session_get : string -> string option
 val session_set : string -> string -> unit
 

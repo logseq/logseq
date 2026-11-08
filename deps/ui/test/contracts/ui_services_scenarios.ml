@@ -189,6 +189,7 @@ let run () =
         ; write = (fun ?html:_ ?blocks:_ s -> copied := s; Ui_task.resolve ())
         ; write_text = (fun s -> copied := s; Ui_task.resolve ())
         ; read_text = (fun () -> incr read_count; Ui_task.resolve !clip)
+        ; read = None
         }
     ; session =
         { get = (fun k -> Hashtbl.find_opt session_tbl k)

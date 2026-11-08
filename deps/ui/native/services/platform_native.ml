@@ -650,6 +650,7 @@ let install_ui_services ~paints_caret ~assert_owner ~request_flush ~dom ~timers 
         ; write = clipboard_write
         ; write_text = clipboard_write_text
         ; read_text = clipboard_read_text
+        ; read = None
         }
     ; session =
         { get = session_storage_get

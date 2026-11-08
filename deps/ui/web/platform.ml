@@ -226,6 +226,20 @@ let clipboard_write ?html ?blocks text =
 external clipboard_read_text : unit -> string Js.Promise.t = "readText"
   [@@mel.scope ("navigator", "clipboard")]
 
+let clipboard_read : string array -> (string * string) array Js.Promise.t =
+  [%mel.raw {js|async function (formats) {
+    const items = await navigator.clipboard.read();
+    const item = items[0];
+    if (!item) return [];
+    const values = await Promise.all(formats.map(async function (mime) {
+      const type = mime === 'application/logseq' ? 'web application/logseq' : mime;
+      if (!item.types.includes(type)) return null;
+      const blob = await item.getType(type);
+      return [mime, await blob.text()];
+    }));
+    return values.filter(function (value) { return value !== null; });
+  }|js}]
+
 let copy_to_clipboard s = ignore (clipboard_write_text s)
 
 external decode_uri : string -> string = "decodeURIComponent"
