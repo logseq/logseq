@@ -70,7 +70,9 @@ let read_file_bytes path =
   close_in ic;
   Bytes.of_string b
 
-let asset_of_path ~repo ~idx ~edit_uuid ~empty_target path =
+let asset_of_path ~upload ~idx path =
+  Editor_actions.check_asset_upload upload;
+  let repo = upload.Editor_actions.upload_repo in
   let name = Filename.basename path in
   let ext = ext_of_name name in
   let title = title_of_name name ext in
@@ -81,16 +83,17 @@ let asset_of_path ~repo ~idx ~edit_uuid ~empty_target path =
   else
     let u8 = read_file_bytes path in
     let* checksum = Asset_store.sha256_hex u8 in
+    Editor_actions.check_asset_upload upload;
     find_by_checksum ~repo checksum (function
       | Some (uuid, t) ->
-          Toast.warning (I18n.asset_already_exists t uuid);
+          if Editor_actions.asset_upload_current upload then
+            Toast.warning (I18n.asset_already_exists t uuid);
           Js.Promise.resolve None
       | None ->
-          if Runtime.repo () <> repo then
-            failwith "Graph changed during asset upload";
+          Editor_actions.check_asset_upload upload;
           let block_id =
-            match idx = 0, empty_target, edit_uuid with
-            | true, true, Some u -> u
+            match idx = 0, upload.upload_empty with
+            | true, true -> upload.upload_target
             | _ -> Platform.random_uuid ()
           in
           let* () =
@@ -104,90 +107,37 @@ let asset_of_path ~repo ~idx ~edit_uuid ~empty_target path =
 
 (* cljs db-based-save-assets! — target = edit block when it exists, else
    current page, else today's journal *)
-let upload_paths (paths : string list) =
-  let repo = Runtime.repo () in
-  if paths <> [] && repo <> "" then
-    let edit = S.editing () in
-    let edit_uuid = Option.map (fun e -> e.S.uuid) edit in
-    let empty_target =
-      match edit with
-      | Some e -> String.trim e.S.buffer = ""
-      | None -> false
-    in
+let upload_paths ?upload (paths : string list) =
+  let upload = match upload with Some upload -> Some upload
+    | None -> Editor_actions.capture_asset_upload () in
+  match upload with
+  | Some upload when paths <> [] && Editor_actions.asset_upload_current upload ->
     let rec go i paths acc =
       match paths with
       | [] -> Js.Promise.resolve (List.rev acc)
       | path :: tl ->
-          if Runtime.repo () <> repo then
-            failwith "Graph changed during asset upload";
+          Editor_actions.check_asset_upload upload;
           let* v =
-            asset_of_path ~repo ~idx:i ~edit_uuid ~empty_target path
+            asset_of_path ~upload ~idx:i path
           in
           (match v with
            | Some b -> go (i + 1) tl (b :: acc)
            | None -> go (i + 1) tl acc)
     in
-    let target =
-      match edit_uuid with
-      | Some u -> Some u
-      | None -> (
-          match !Runtime.current_page with
-          | Some (p : Model.page) -> p.Model.page_uuid
-          | None -> (
-              match !Runtime.current_journals with
-              | j :: _ -> j.Model.page_uuid
-              | [] -> None))
-    in
-    match target with
-    | None -> ()
-    | Some t ->
-        (let* save_ops =
-             match S.editing () with
-             | Some e -> (
-                 match S.find e.S.uuid with
-                 | Some b when b.Model.block_title <> e.S.buffer ->
-                     let* o =
-                       Outliner_ops.save_block_parsed e.S.uuid e.S.buffer
-                     in
-                     Js.Promise.resolve [ o ]
-                 | _ -> Js.Promise.resolve [])
-             | None -> Js.Promise.resolve []
-           in
-           let* blocks = go 0 paths [] in
-           if Runtime.repo () <> repo then
-             failwith "Graph changed during asset upload";
-           if blocks = [] then Js.Promise.resolve ()
-           else
-             let sibling = edit_uuid = Some t in
-             let* () =
-               Outliner_ops.apply_and_refresh
-                 ~opts:(Outliner_ops.op_opts "insert-blocks")
-                 (save_ops
-                 @ [ Outliner_ops.op "insert-blocks"
-                       [ W.List blocks
-                       ; W.Uuid t
-                       ; W.Map
-                           [ W.Keyword "sibling?", W.Bool sibling
-                           ; W.Keyword "keep-uuid?", W.Bool true
-                           ; W.Keyword "bottom?", W.Bool true
-                           ; W.Keyword "replace-empty-target?",
-                               W.Bool sibling
-                           ; W.Keyword "outliner-op",
-                               W.Keyword "insert-blocks" ] ] ])
-             in
-             if empty_target then
-               ignore (Outliner_ops.resync_open_editor ());
-             Js.Promise.resolve ())
+        (let* blocks = go 0 paths [] in
+         Editor_actions.commit_uploaded_assets upload blocks)
         |> Js.Promise.catch (fun error ->
              Ui_services.log_error ("Asset upload failed", error);
-             Toast.error (I18n.t1 "ui/error-boundary-error" "asset-upload:failed");
+             if Editor_actions.asset_upload_current upload then
+               Toast.error (I18n.t1 "ui/error-boundary-error" "asset-upload:failed");
              Js.Promise.resolve ())
         |> ignore
+  | _ -> ()
 
 (* The file picker is imperative — the "upload" editor command calls
    Browser_ui.open_file_picker (host NSOpenPanel) and feeds the picked
    file snapshots through upload_paths. No hidden input node. *)
-let upload_files files =
+let upload_files ?upload files =
   let file_path (f : Js.Json.t) : string option =
     match f with
     | Js.Json.JObject kvs -> (
@@ -199,14 +149,12 @@ let upload_files files =
   let paths = List.filter_map file_path (Array.to_list files) in
   if List.length paths <> Array.length files then
     Toast.error (I18n.t1 "ui/error-boundary-error" "asset-upload:path-required")
-  else upload_paths paths
+  else upload_paths ?upload paths
 
 let pick_files () =
-  let repo = Runtime.repo () in
-  Browser_ui.open_file_picker (fun files ->
-      if repo <> Runtime.repo () then
-        Toast.error (I18n.t1 "ui/error-boundary-error" "asset-upload:graph-changed")
-      else upload_files files)
+  Option.iter (fun upload -> Browser_ui.open_file_picker (fun files ->
+    if Editor_actions.asset_upload_current upload then upload_files ~upload files))
+    (Editor_actions.capture_asset_upload ())
 
 let on_asset_write_finish ~repo':_ ~asset_id:_ = ()
 let retry_pending () = ()

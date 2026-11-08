@@ -1086,6 +1086,10 @@ let take_pending_save_for uuid =
   | Some save -> clear_pending_save (); Some save
 
 let accept_save ?opts uuid title =
+  (match S.editing () with
+   | Some e when e.S.uuid = uuid && S.is_draft e ->
+       invalid_arg "Explicit editor drafts cannot enter autosave"
+   | _ -> ());
   let context = Runtime.model () in
   let origin = Runtime.capture_reload_origin () in
   let source = source_block uuid in
@@ -1720,6 +1724,9 @@ let last_inserted_uuid (resp : Wire.t option) : string option =
 
 
 let schedule_save uuid title =
+  if not (match S.editing () with
+    | Some e -> e.S.uuid = uuid && S.is_draft e
+    | None -> false) then begin
   let context = Runtime.model () in
   let before =
     match pending_save_for uuid with
@@ -1747,6 +1754,7 @@ let schedule_save uuid title =
     | _ -> ()
   in
   save_timer := Ui_services.timers_timeout save_when_ready 400
+  end
 
 
 let resume_pending_save () =
@@ -1855,6 +1863,7 @@ let resync_open_editor ?(force = false) () : unit Js.Promise.t =
   let input_seq = !S.edit_input_seq in
   match S.editing () with
   | None -> Js.Promise.resolve ()
+  | Some e when S.is_draft e -> Js.Promise.resolve ()
   | Some e -> (
       match S.find e.uuid with
       | Some b ->

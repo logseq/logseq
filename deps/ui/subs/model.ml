@@ -21,6 +21,12 @@ type icon = Node_icon.t =
   ; icon_color : string option
   }
 
+type comment_author =
+  { author_uuid : string option
+  ; author_name : string option
+  ; author_avatar : string option
+  }
+
 type block =
   { block_uuid : string option
   ; block_db_id : int option
@@ -43,6 +49,9 @@ type block =
                                        namespace breadcrumbs resolve the
                                        page's ancestors through it *)
   ; block_reactions : (string * int) list (* emoji-id, count *)
+  ; block_reaction_users : (string * comment_author option) list
+  ; block_created_by : comment_author option
+  ; block_created_at : float option
   ; block_is_comments_area : bool
   ; block_is_comment : bool
   ; block_comment_targets : int (* live :comments/blocks target count *)
@@ -341,6 +350,9 @@ let empty_block ~uuid ~title ~is_page : block =
   ; block_page_name = None
   ; block_page_uuid = None
   ; block_reactions = []
+  ; block_reaction_users = []
+  ; block_created_by = None
+  ; block_created_at = None
   ; block_is_comments_area = false
   ; block_is_comment = false
   ; block_comment_targets = 0

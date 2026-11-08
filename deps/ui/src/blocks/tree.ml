@@ -722,6 +722,25 @@ let content_wrap key (b : Model.block) children =
    unavailable at module-init time *)
 let () = Asset_dom.install ()
 
+let comments_row ~scope ~depth ~editable ~library (bs : Model.block Signal.signal) : t =
+ fun ctx parent ->
+  let block = Signal.get bs in
+  let uuid = Option.value block.block_uuid ~default:"" in
+  let key = block_key block in
+  (track_mounted_row ~scope block
+    (with_editor_font
+      (Ui_parts.class_signal (row_class_sig_of bs) Fun.id
+        (column ~key:("ls-" ^ scope ^ "-" ^ key)
+          ~accessibility_identifier:("ls-block-" ^ key) ~corner_radius:4
+          ~background:(reactive (fun selected ->
+              if S.String_set.mem uuid selected then "var(--ls-block-highlight-color)"
+              else "transparent") (S.selected_sig ()))
+          ~data_attrs_signal:(row_attrs_sig_of ~scope ~depth ~editable bs)
+          [ row ~style_class:"block-main-container" ~gap:4 ~min_height:24
+              [ reactive (control_wrap ~scope ~library uuid) bs
+              ; column ~grow:1. ~min_width:0 [Comments_view.area_el ~scope bs] ] ]))))
+    ctx parent
+
 let rec block_row
     ?(depth = 0) ?(scope = "main") ?(editable = true) ?(library = false)
     ?(virtualize = false) (b : Model.block) : t =
@@ -802,7 +821,7 @@ and row_main ~editable ~library scope (b : Model.block) : t =
                         ]
                     ]
                 ]
-            ; Comments_view.reactions_el uuid b.Model.block_reactions
+            ; Comments_view.reactions_el uuid b.Model.block_reactions b.Model.block_reaction_users
             ]
         ]
 
@@ -810,7 +829,9 @@ and row_el ~depth ~editable ~virtualize scope ~(library : bool)
     (b : Model.block) : t =
 
   let uuid = Option.value b.block_uuid ~default:"" in
-  if b.Model.block_is_comments_area then Comments_view.area_el_static b
+  if b.Model.block_is_comments_area then
+    (fun ctx parent -> comments_row ~scope ~depth ~editable ~library
+      (Signal.constant ctx.Lui_ui.ui_scheduler b) ctx parent)
   else
   let key = block_key b in
   let embed = b.block_link <> None in
@@ -963,7 +984,8 @@ and block_row_sig
  fun ctx parent ->
   S.ensure ctx;
   let b0 = Signal.get bs in
-  (if b0.Model.block_is_comments_area then Comments_view.area_el bs
+  (if b0.Model.block_is_comments_area then
+     comments_row ~scope ~depth ~editable ~library bs
    else row_sig ~depth ~editable:(editable && not (Ui_services.env_publishing ())) ~library ~virtualize scope bs)
     ctx parent
 
@@ -1119,7 +1141,7 @@ and block_row_static ?(depth = 0) ?(library = false) (b : Model.block) : t =
                         ]
                     ]
                 ]
-            ; Comments_view.reactions_el uuid b.Model.block_reactions
+            ; Comments_view.reactions_el uuid b.Model.block_reactions b.Model.block_reaction_users
             ]
         ]
     ; Properties_area.block_area ~scope:"reference" ~uuid
