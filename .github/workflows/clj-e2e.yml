@@ -125,6 +125,7 @@ jobs:
               logseq.e2e.library-basic-test
               logseq.e2e.rtc-basic-test
               logseq.e2e.assets-basic-test
+              logseq.e2e.pdf-annotation-basic-test
           - shard: graph-properties
             namespaces: >-
               logseq.e2e.graph-navigation-basic-test

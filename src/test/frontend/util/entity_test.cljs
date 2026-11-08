@@ -27,6 +27,24 @@
     (is (not (entity/page? 1)))
     (is (not (entity/page? nil)))))
 
+(deftest pdf-annotation-predicate-test
+  (testing "PDF annotations are identified by class tag or ls-type"
+    (is (entity/pdf-annotation?
+         {:block/tags [{:db/ident :logseq.class/Pdf-annotation}]}))
+    (is (entity/pdf-annotation?
+         {:block/tags [:logseq.class/Pdf-annotation]}))
+    (is (entity/pdf-annotation?
+         {:logseq.property/ls-type :annotation}))
+    (is (entity/pdf-annotation?
+         {:logseq.property/ls-type "annotation"}))
+    (is (entity/pdf-annotation?
+         {:logseq.property.pdf/hl-value {:id (random-uuid) :page 1}})))
+  (testing "ordinary blocks and pages are not PDF annotations"
+    (is (not (entity/pdf-annotation?
+              {:block/tags [{:db/ident :logseq.class/Page}]})))
+    (is (not (entity/pdf-annotation? {:block/title "highlighted text"})))
+    (is (not (entity/pdf-annotation? nil)))))
+
 (deftest library-outline-child-uuids-keeps-pages-only
   (let [page-uuid #uuid "11111111-1111-1111-1111-111111111111"
         journal-uuid #uuid "22222222-2222-2222-2222-222222222222"
