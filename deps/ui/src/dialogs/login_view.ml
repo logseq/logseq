@@ -22,10 +22,7 @@ let text_of ev =
   | Lui_protocol.TextChanged (_, s) -> s
   | _ -> ""
 
-(* Form field values ride Signal.state now (previously read back from
-   the DOM via input[name=…] selectors at submit time). One record per
-   mounted body; a field's state survives tab switches so re-mounted
-   inputs restore through ~text_signal. *)
+(* Form field values belong to one mounted body and reset on tab switches. *)
 type fields =
   { email : string Signal.state
   ; username : string Signal.state
@@ -114,7 +111,7 @@ type auth_tab =
   | Signup
   | Reset_pw
   | Reset_confirm of string (* username the reset code was sent for *)
-  | Confirm_code of string * string (* username, next-step *)
+  | Confirm_code of string * string option (* username, delivery destination *)
 
 type auth_ui =
   { tab : auth_tab
@@ -136,17 +133,22 @@ let auth_st ctx =
       s
 
 let set_auth ctx f =
-  Signal.update (auth_st ctx) f;
-  Runtime.flush ()
+  if Ui_effect.alive ctx.Lui_ui.ui_scope then (
+    Signal.update (auth_st ctx) f;
+    Runtime.flush ())
 
-let set_tab ctx tab =
-  set_auth ctx (fun a -> { a with tab; err = "" });
-  (* autofocus alone doesn't refire on a patched-in node *)
-  ignore
-    (Ui_effect.timeout ~scope:ctx.Lui_ui.ui_scope 32 (fun () ->
-         match Ui_services.dom_query ".cp__user-login [autofocus]" with
-         | Some el -> el.Ui_services.focus ()
-         | None -> ()))
+let set_tab ctx fields tab =
+  if Ui_effect.alive ctx.Lui_ui.ui_scope then (
+    List.iter (fun field -> Signal.set field "")
+      [ fields.email; fields.username; fields.password; fields.confirm_password
+      ; fields.code; fields.invalid_field ];
+    set_auth ctx (fun a -> { a with tab; err = "" });
+    (* autofocus alone doesn't refire on a patched-in node *)
+    ignore
+      (Ui_effect.timeout ~scope:ctx.Lui_ui.ui_scope 32 (fun () ->
+           match Ui_services.dom_query ".cp__user-login [autofocus]" with
+           | Some el -> el.Ui_services.focus ()
+           | None -> ())))
 
 let fail ctx msg = set_auth ctx (fun a -> { a with err = msg })
 
@@ -297,10 +299,16 @@ let submit ctx fields =
     match Option.bind json tokens_of with
     | Some (id, acc, refresh) ->
         let* () = store_tokens id acc refresh in
-        Dialogs_state.close_named "login";
+        if Ui_effect.alive ctx.Lui_ui.ui_scope then
+          Dialogs_state.close_named "login";
         Js.Promise.resolve ()
     | None ->
-        Option.iter (fun json -> fail ctx (error_message json)) json;
+        Option.iter (fun json ->
+            match error_name_of json with
+            | Some "PasswordResetRequiredException" -> set_tab ctx fields Reset_pw
+            | Some "UserNotConfirmedException" ->
+                set_tab ctx fields (Confirm_code (user, None))
+            | _ -> fail ctx (error_message json)) json;
         Js.Promise.resolve ())
 
 let json_obj xs = Js.Json.object_ (Js.Dict.fromList xs)
@@ -331,18 +339,24 @@ let signup_submit ctx fields =
                  |] )
            ])
     in
-    (* cognito returns nextStep.signUpStep in the REST response *)
     cognito_call ctx fields "SignUp" payload (fun json ->
-        let confirmed =
+        let confirmed, destination =
           match Js.Json.decodeObject json with
           | Some o -> (
-              match Js.Dict.get o "UserConfirmed" with
-              | Some v -> Js.Json.decodeBoolean v = Some true
-              | None -> false)
-          | None -> false
+              let confirmed =
+                Option.bind (Js.Dict.get o "UserConfirmed") Js.Json.decodeBoolean
+                = Some true
+              in
+              let destination =
+                Option.bind
+                  (Option.bind (Js.Dict.get o "CodeDeliveryDetails") Js.Json.decodeObject)
+                  (fun details -> dict_str details "Destination")
+              in
+              confirmed, destination)
+          | None -> false, None
         in
-        set_tab ctx
-          (if confirmed then Login else Confirm_code (user, "CONFIRM_SIGN_UP"));
+        set_tab ctx fields
+          (if confirmed then Login else Confirm_code (user, destination));
         Js.Promise.resolve ())
 
 let forgot_submit ctx fields =
@@ -356,7 +370,7 @@ let forgot_submit ctx fields =
            ; ("Username", Js.Json.string user) ])
     in
     cognito_call ctx fields "ForgotPassword" payload (fun _ ->
-        set_tab ctx (Reset_confirm user);
+        set_tab ctx fields (Reset_confirm user);
         Js.Promise.resolve ())
 
 let reset_submit ctx fields user =
@@ -378,10 +392,10 @@ let reset_submit ctx fields user =
            ; ("Password", Js.Json.string pass) ])
     in
     cognito_call ctx fields "ConfirmForgotPassword" payload (fun _ ->
-        set_tab ctx Login;
+        set_tab ctx fields Login;
         Js.Promise.resolve ())
 
-let confirm_submit ctx fields user _next_step =
+let confirm_submit ctx fields user =
   let code = Runtime.signal_get fields.code in
   if not (required ctx fields [ ("code", code) ]) then ()
   else
@@ -393,7 +407,7 @@ let confirm_submit ctx fields user _next_step =
            ; ("ConfirmationCode", Js.Json.string code) ])
     in
     cognito_call ctx fields "ConfirmSignUp" payload (fun _ ->
-        set_tab ctx Login;
+        set_tab ctx fields Login;
         Js.Promise.resolve ())
 
 let sign_out ctx =
@@ -451,9 +465,7 @@ let action_link fields ~key ctx text_ tab =
        ~variant:`ghost ~height:24 ~min_height:24 ~padding:0
        ~background:"transparent" ~border_width:0
        ~disabled_signal:(Signal.value fields.pending)
-       ~on_press:(fun _ ->
-         Runtime.signal_set fields.invalid_field "";
-         set_tab ctx tab)
+       ~on_press:(fun _ -> set_tab ctx fields tab)
        [])
 
 let back_link ctx fields =
@@ -534,13 +546,16 @@ let reset_confirm_panel ctx fields user =
     ; back_link ctx fields
     ]
 
-let confirm_panel ctx fields user next_step =
-  let on_submit () = confirm_submit ctx fields user next_step in
+let confirm_panel ctx fields user destination =
+  let on_submit () = confirm_submit ctx fields user in
   column ~key:"f-confirm" ~gap:16 ~cross:`stretch
-    [ Ui_components.with_props [ Ui_components.Prop.opacity 0.8 ]
+    [ Ui_components.with_props
+      [ Ui_components.Prop.opacity 0.6; Ui_components.Prop.padding_bottom 8 ]
       (paragraph ~key:"cc-hint" ~style_class:"ls-auth-muted"
         ~font_size:"0.875rem"
-        ~value:(I18n.t "account/code-on-the-way-tip") [])
+        ~value:(match destination with
+          | Some destination -> I18n.t1 "account/code-sent-to-email" destination
+          | None -> I18n.t "account/code-on-the-way-tip") [])
     ; input_row fields ~key:"r-code" ~id:"code" ~caption:(I18n.t "account/enter-code")
         ~autofocus:true ~secure:false ~value:fields.code ~on_submit
     ; submit_btn fields ~key:"cc-btn" (I18n.t "account/confirm") on_submit
@@ -568,9 +583,9 @@ let panel ctx fields (a : auth_ui) : t =
         | Reset_confirm user ->
             ( I18n.t "account/reset-password"
             , [ reset_confirm_panel ctx fields user ] )
-        | Confirm_code (user, next_step) ->
+        | Confirm_code (user, destination) ->
             ( I18n.t "account/confirm"
-            , [ confirm_panel ctx fields user next_step ] ))
+            , [ confirm_panel ctx fields user destination ] ))
   in
   Logseq_el.fragment
     ((* cljs card-header (p-6 + pb-7) + card-title (text-2xl) *)
