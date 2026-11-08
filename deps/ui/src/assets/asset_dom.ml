@@ -635,17 +635,17 @@ let pdf_block uuid (b : Model.block) : t =
          []))
     context parent
 
+let content_view uuid (b : Model.block) : t =
+  match b.Model.block_asset_type with
+  | Some ext when is_image ext -> image_block uuid b
+  | Some "pdf" -> pdf_block uuid b
+  | _ -> file_block uuid b
+
 (* whole asset branch — .asset-block-wrap replaces .block-content inside
    .block-content-wrapper (cljs block.cljs asset render path) *)
 let block_view uuid (b : Model.block) : t =
-  let body =
-    match b.Model.block_asset_type with
-    | Some ext when is_image ext -> image_block uuid b
-    | Some "pdf" -> pdf_block uuid b
-    | _ -> file_block uuid b
-  in
   column ~key:("abw-" ^ uuid) ~style_class:"asset-block-wrap" ~grow:1.
-    [ box ~key:("abcc-" ^ uuid) ~grow:1. [ body ]
+    [ box ~key:("abcc-" ^ uuid) ~grow:1. [ content_view uuid b ]
     ; Ui_parts.pressable
         ~on_press:(fun _ -> Editor_actions.enter_edit uuid 0)
         (box ~key:("abt-" ^ uuid) ~min_height:24

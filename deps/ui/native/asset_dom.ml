@@ -220,6 +220,8 @@ let block_view uuid (b : Model.block) : Lui_elements.t =
          Lui_elements.image ~key:("asset-image-" ^ uuid) ~url:source ~alt:file
            ~max_height:800 []) ]
 
+let content_view = block_view
+
 let install () =
   Render_inline.inline_asset_renderer := Some block_view;
   (* "upload" is dispatched by the shared editor command dispatcher —

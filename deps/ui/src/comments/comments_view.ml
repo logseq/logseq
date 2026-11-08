@@ -248,8 +248,12 @@ let comment_body ~scope ~area_uuid st (comment : Model.block Signal.signal) =
           (Ops.save_block_parsed uuid)
       else
         reactive (fun (comment : Model.block) ->
+          let content = Render.title_block ~self:uuid ~annot:true comment in
+          let content = match comment.block_asset_type with
+            | Some _ -> Asset_dom.content_view uuid comment :: content
+            | None -> content in
           column ~style_class:"ls-comment-body" ~min_width:0
-            (Render.title comment.block_title
+            (content
              @ [reactions_el uuid comment.block_reactions comment.block_reaction_users])) comment)
     (Signal.value st)
 
