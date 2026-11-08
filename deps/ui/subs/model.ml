@@ -78,7 +78,7 @@ type block =
     (* pdf annotation props — on Pdf-annotation child blocks *)
   ; block_hl_type : string option (* logseq.property.pdf/hl-type *)
   ; block_hl_page : int option (* logseq.property.pdf/hl-page *)
-  ; block_hl_color : string option (* hl-value properties.color *)
+  ; block_hl_color : string option (* hl-color closed-value title *)
   ; block_bg_color : string option
     (* logseq.property/background-color — closed-value title *)
   ; block_hl : hl option (* logseq.property.pdf/hl-value *)

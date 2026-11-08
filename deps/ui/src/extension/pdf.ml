@@ -43,17 +43,28 @@ type mount =
   ; mutable viewer : S.viewer option
   ; mutable interactables : Js.Json.t list
   ; mutable generation : int
+  ; mutable ref_timers : int list
   }
 
 let current_mount : mount option ref = ref None
 
+let is_current m =
+  match !current_mount with Some current -> current == m | None -> false
+
+let clear_ref_timers m =
+  List.iter Web_dom.clear_timeout m.ref_timers;
+  m.ref_timers <- []
+
 let teardown () =
   (match !current_mount with
    | Some m ->
+       m.generation <- m.generation + 1;
+       clear_ref_timers m;
        (match m.viewer with
         | Some v -> U.cleanup v
         | None -> ());
        set_active_viewer None;
+       S.active_viewer := None;
        (match m.doc with
         | Some d -> ignore (U.doc_destroy d)
         | None -> ());
@@ -73,27 +84,34 @@ let teardown () =
 (* ---------- debounced last-visit persistence (cljs
    debounce-set-last-visit-page!/scale! at 300ms) ---------- *)
 
-let extra_timer : int option ref = ref None
+let page_timer : int option ref = ref None
+let scale_timer : int option ref = ref None
+
+let debounce timer f =
+  Option.iter Web_dom.clear_timeout !timer;
+  timer := Some (Web_dom.set_timeout_id (fun () -> timer := None; f ()) 300)
 
 let set_hls_extra (asset : Model.pdf_asset) (extra : Js.Json.t) =
-  (match !extra_timer with
-   | Some t -> Web_dom.clear_timeout t
-   | None -> ());
-  extra_timer :=
-    Some
-      (Web_dom.set_timeout_id
-         (fun () ->
-           (match asset.pdf_block_uuid, U.json_f extra "page" with
-            | Some uuid, Some p when p > 0. ->
-                ignore
-                  (Properties_data.set_block_property ~block_uuid:uuid
-                     ~ident:"logseq.property.asset/last-visit-page"
-                     ~value:(Wire.Int (int_of_float p)))
-            | _ -> ());
-           match U.json_s extra "scale", asset.pdf_block_db_id with
-           | Some s, Some dbid -> S.set_stored_scale dbid s
-           | _ -> ())
-         300)
+  let repo = Runtime.repo () in
+  (match asset.pdf_block_uuid, U.json_f extra "page" with
+   | Some uuid, Some p when p > 0. ->
+       debounce page_timer (fun () ->
+           if Runtime.repo () = repo then
+             ignore
+               (Properties_data.set_block_property ~block_uuid:uuid
+                  ~ident:"logseq.property.asset/last-visit-page"
+                  ~value:(Wire.Int (int_of_float p))))
+   | _ -> ());
+  let scale =
+    match U.json_s extra "scale" with
+    | Some s -> Some s
+    | None -> Option.map (Printf.sprintf "%g") (U.json_f extra "scale")
+  in
+  match scale, asset.pdf_block_db_id with
+  | Some s, Some dbid ->
+      debounce scale_timer (fun () ->
+          if Runtime.repo () = repo then S.set_stored_scale dbid s)
+  | _ -> ()
 
 (* ---------- getDocument ---------- *)
 
@@ -192,30 +210,33 @@ let boot_viewer (m : mount) (el : D.el) (pdf_doc : Js.Json.t) :
 (* cljs event-bus wiring: pagesinit -> initial scale + ready; resizing
    re-pins "auto"; ls-update-extra-state + scaleChanging persist the
    last-visit extra state *)
-let wire_bus ~(bus : Js.Json.t) ~(viewer : S.viewer)
+let wire_bus (m : mount) ~(bus : Js.Json.t) ~(viewer : S.viewer)
     ~(initial_scale : string) ~(on_page_ready : unit -> unit) : unit =
   U.bus_on bus "pagesinit" (fun _ ->
-      U.set_scale_value viewer
-        (if initial_scale = "" then "auto" else initial_scale);
-      on_page_ready ());
+      if is_current m then (
+        U.set_scale_value viewer
+          (if initial_scale = "" then "auto" else initial_scale);
+        on_page_ready ()));
   U.bus_on bus "resizing" (fun _ ->
-      match U.scale_value viewer with
+      if is_current m then match U.scale_value viewer with
       | Some "auto" -> U.set_scale_value viewer "auto"
       | _ -> ());
   let push_extra data =
-    match !S.current with
-    | Some a -> set_hls_extra a data
-    | None -> ()
+    if is_current m then
+      match !S.current with
+      | Some a -> set_hls_extra a data
+      | None -> ()
   in
   U.bus_on bus "ls-update-extra-state" push_extra;
   U.bus_on bus "scaleChanging" (fun data ->
+      if is_current m then (
       (match U.json_f data "scale" with
        | Some s -> U.set_scale_value viewer (Printf.sprintf "%g" s)
        | None -> (
            match U.json_s data "scale" with
            | Some s -> U.set_scale_value viewer s
            | None -> ()));
-      push_extra data)
+      push_extra data))
 
 (* cljs pdf-resizer — interact.draggable handle writes
    --ph-view-container-width + container width 20-80vw *)
@@ -252,20 +273,26 @@ let mount_resizer (m : mount) (parent : D.el) (viewer : S.viewer) :
 
 (* cljs pdf-highlight-finder — armed ref-hl scrolls into view once the
    viewer exists (500ms first open); a 1s timer disarms it *)
-let apply_ref_hl (viewer : S.viewer) : unit =
+let apply_ref_hl ?(delay = 500) (m : mount) (viewer : S.viewer) : unit =
+  clear_ref_timers m;
   match !S.ref_hl with
   | None -> ()
   | Some hl ->
-      ignore
-        (Web_dom.set_timeout_id
+      let scroll_timer =
+        Web_dom.set_timeout_id
            (fun () ->
-             match hl.Model.hl_id with
+             if is_current m then match hl.Model.hl_id with
              | Some _ -> U.scroll_to_highlight viewer hl
              | None ->
                  U.set_current_page viewer
                    (if hl.hl_page > 0 then hl.hl_page else 1))
-           500);
-      ignore (Web_dom.set_timeout_id (fun () -> S.ref_hl := None) 1000)
+           delay
+      in
+      let clear_timer =
+        Web_dom.set_timeout_id
+          (fun () -> if is_current m then S.ref_hl := None) 1000
+      in
+      m.ref_timers <- [ scroll_timer; clear_timer ]
 
 (* cljs pdf-viewer render: cnt > viewer(.pdfViewer + .pp-holder) +
    resizer + toolbar; highlights attach after pagesinit *)
@@ -289,21 +316,26 @@ let mount_viewer (m : mount) (loader : D.el) (pdf_doc : Js.Json.t)
   let viewer, bus = boot_viewer m vel pdf_doc in
   S.hls := initial_hls;
   U.bus_on bus "textlayerrendered" (fun ev ->
-      match U.json_f ev "pageNumber" with
+      if is_current m then match U.json_f ev "pageNumber" with
       | Some p ->
           Pdf_hls.render_page ~viewer ~page:(int_of_float p)
       | None -> ());
-  wire_bus ~bus ~viewer ~initial_scale
+  wire_bus m ~bus ~viewer ~initial_scale
     ~on_page_ready:(fun () ->
       Pdf_hls.install ~viewer ~el:vel ~holder);
   (* cljs: initial page applied 16ms after viewer construction *)
   ignore
     (Web_dom.set_timeout_id
-       (fun () -> U.set_current_page viewer initial_page)
+       (fun () ->
+         if is_current m then
+           U.set_current_page viewer
+             (match !S.ref_hl with
+              | Some hl -> hl.Model.hl_page
+              | None -> initial_page))
        16);
   mount_resizer m cnt viewer;
   Pdf_toolbar.mount ~viewer ~parent:cnt ~bus;
-  apply_ref_hl viewer
+  apply_ref_hl m viewer
 
 (* cljs pdf-loader: hls data + getDocument in parallel; error dispatch
    on error.name; PasswordException opens the prompt and retries *)
@@ -316,13 +348,14 @@ let rec load (m : mount) (loader : D.el) (asset : Model.pdf_asset)
           (Pdf_assets.load_hls_data asset,
            get_doc ~url:asset.pdf_url ~password)
       in
-      if m.generation = gen then
+      if is_current m && m.generation = gen then
         mount_viewer m loader doc ~initial_hls:hls
           ~initial_page:(Option.value page ~default:1)
-          ~initial_scale:scale;
+          ~initial_scale:scale
+      else ignore (U.doc_destroy doc);
       Js.Promise.resolve ())
      |> Js.Promise.catch (fun err ->
-            if m.generation = gen then
+            if is_current m && m.generation = gen then
               handle_load_error m loader asset err;
             Js.Promise.resolve ()))
 
@@ -347,7 +380,8 @@ and handle_load_error (m : mount) (loader : D.el)
            [ U.err_message err ]);
       S.set_current None
   | "PasswordException" ->
-      ask_password ~on_submit:(fun pw -> load m loader asset ~password:pw)
+      ask_password ~on_submit:(fun pw ->
+          if is_current m then load m loader asset ~password:pw)
   | _ -> (
       match asset.pdf_block_external_url with
       | Some ext when Str_util.starts_with ext "http://" || Str_util.starts_with ext "https://"
@@ -379,7 +413,8 @@ let mount_container (asset : Model.pdf_asset) : unit =
         ; doc = None
         ; viewer = None
         ; interactables = []
-        ; generation = 0 }
+        ; generation = 0
+        ; ref_timers = [] }
       in
       current_mount := Some m;
       ignore
@@ -391,6 +426,7 @@ let mount_container (asset : Model.pdf_asset) : unit =
                  let loader = Web_dom.create_element "div" in
                  Web_dom.el_set_class loader "extensions__pdf-loader";
                  Web_dom.el_append_child el loader;
+                 loading_view loader;
                  load m loader asset ~password:"")
              | _ -> ())
            100)
@@ -400,9 +436,14 @@ let mount_container (asset : Model.pdf_asset) : unit =
 let on_current_change (asset : Model.pdf_asset option) : unit =
   match asset with
   | Some a -> mount_container a
-  | None -> teardown ()
+  | None -> S.ref_hl := None; teardown ()
 
 let install () : unit =
+  S.highlight_request :=
+    (fun _ ->
+      match !current_mount with
+      | Some m -> Option.iter (apply_ref_hl ~delay:50 m) m.viewer
+      | None -> ());
   S.open_request := on_current_change;
   (* ![alt](x.pdf) embeds in block text: resolve the pfs asset to an
      object URL, then open it in this viewer *)

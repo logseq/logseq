@@ -230,6 +230,16 @@ let ensure_ref_block (asset : Model.pdf_asset) (hl : Model.hl)
                         (* keep the blocks pane in sync like
                            apply_and_refresh *)
                         Outliner_ops.apply_and_refresh []))
+  |> Js.Promise.then_ (fun () ->
+         match hl.hl_id, hl.hl_image with
+         | Some id, Some image_id ->
+             let* image = entity_of (W.Int64 image_id) in
+             (match entity_uuid image with
+              | Some uuid ->
+                  Outliner_ops.apply_and_refresh
+                    [ Outliner_ops.move_blocks [ uuid ] id ~sibling:false ]
+              | None -> Js.Promise.resolve ())
+         | _ -> Js.Promise.resolve ())
 
 (* cljs update-hl-block! — mirror color onto the ref block property *)
 let update_hl_block (hl : Model.hl) =
@@ -310,15 +320,13 @@ let open_block_ref (b : Model.block) =
              in
              if not (Sys.file_exists path) then Js.Promise.resolve ()
              else begin
-               Pdf_state.ref_hl := Some hl;
                let external_url =
                  W.map_get_string aw
                    "logseq.property.asset/external-url"
                in
-               Pdf_state.set_current
-                 (Some
-                    (inflate ~uuid:(Some uuid) ~db_id:(Some asset_dbid)
-                       ~external_url ~path));
+               Pdf_state.open_highlight
+                 (inflate ~uuid:(Some uuid) ~db_id:(Some asset_dbid)
+                    ~external_url ~path) hl;
                Js.Promise.resolve ()
              end)
   | _ -> ()

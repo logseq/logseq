@@ -345,6 +345,16 @@ let ensure_ref_block (asset : Model.pdf_asset) (hl : Model.hl)
                         (* keep the blocks pane in sync like
                            apply_and_refresh *)
                         Outliner_ops.apply_and_refresh []))
+  |> Js.Promise.then_ (fun () ->
+         match hl.hl_id, hl.hl_image with
+         | Some id, Some image_id ->
+             let* image = entity_of (W.Int64 image_id) in
+             (match entity_uuid image with
+              | Some uuid ->
+                  Outliner_ops.apply_and_refresh
+                    [ Outliner_ops.move_blocks [ uuid ] id ~sibling:false ]
+              | None -> Js.Promise.resolve ())
+         | _ -> Js.Promise.resolve ())
 
 (* cljs update-hl-block! — mirror color onto the ref block property *)
 let update_hl_block (hl : Model.hl) =
@@ -443,13 +453,12 @@ let open_block_ref (b : Model.block) =
                        ~name:(u ^ ".pdf") ~mime:"application/pdf"
                  | None -> Js.Promise.resolve file_path)
            in
-           Pdf_state.ref_hl := Some hl;
            (match
               inflate_asset ~original_path:file_path ~href
                 ~block_uuid:asset_uuid ~block_db_id:(Some asset_dbid)
                 ~block_external_url:external_url
             with
-            | Some a -> Pdf_state.set_current (Some a)
+            | Some a -> Pdf_state.open_highlight a hl
             | None ->
                 Ui_services.log_error ("pdf inflate failed", file_path));
            Js.Promise.resolve ())

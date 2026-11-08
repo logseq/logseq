@@ -1,5 +1,5 @@
 (* Native twin — the pdf viewer is a declarative logseq-pdf extension
-   element inside #app-single-container (PDFKit on the host side),
+   element inside #app-single-container (requires a host PDF adapter),
    instead of the imperative pdf.js portal. S.open_request pushes the
    asset into a signal the chrome's container reads.
 
@@ -434,6 +434,11 @@ let container_el ~key ~id : Lui_elements.t =
     context
 
 let install () =
+  Pdf_state.highlight_request :=
+    (fun hl ->
+      update_view (fun v ->
+          { v with page = hl.Model.hl_page; ref_hl = hl.hl_id
+          ; rev = v.rev + 1 }));
   Pdf_state.open_request :=
     (fun a ->
       incr load_generation;
