@@ -298,7 +298,7 @@ let comment_row ~scope ~area_uuid st (comment : Model.block Signal.signal) =
         @ [column ~style_class:"ls-comment-main" ~grow:1. ~min_width:0
         [ reactive (fun (comment : Model.block) ->
             let author = Option.bind comment.block_created_by (fun a -> a.Model.author_name) in
-            row ~style_class:"ls-comment-meta" ~gap:6 ~cross:`center ~flex_wrap:`wrap
+            row ~style_class:"ls-comment-meta" ~min_height:28 ~gap:6 ~cross:`center ~flex_wrap:`wrap
               (if Rtc_flows.user_uuid () = None then [] else
               Option.to_list (Option.map (fun name ->
                 typography "0.75rem" 600 (text ~value:name [])) author))) comment
