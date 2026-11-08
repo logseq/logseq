@@ -131,6 +131,7 @@ let hidden_ref_id_pred_with db (id : entity_id)
     ?(is_class : bool option)
     ?(entity_ident : attr option option)
     () : entity_id option -> bool =
+  let page_ids = Int_set.of_list (id :: get_block_alias_ids db id) in
   let entity_ident, class_ids =
     match is_class, entity_ident with
     | Some ic, Some ident ->
@@ -149,7 +150,7 @@ let hidden_ref_id_pred_with db (id : entity_id)
     match ref_eid with
     | None -> true
     | Some rid ->
-        if rid = id then true
+        if Int_set.mem rid page_ids then true
         else
           (* one eavt slice answers block/page, view-for, tags and the
              ident check — cljs issues ~4 separate index scans per ref;
@@ -172,7 +173,9 @@ let hidden_ref_id_pred_with db (id : entity_id)
                  match entity_ident with
                  | Some ident -> if d.a = ident then ident_hit := true
                  | None -> ()));
-          !page = Some id
+          (match !page with
+           | Some page_id -> Int_set.mem page_id page_ids
+           | None -> false)
           || !view_for = Some id
           || hidden_eid !page
           || hidden_eid ref_eid
@@ -187,6 +190,7 @@ let hidden_ref_id_pred db (id : entity_id) : entity_id option -> bool =
 
 (* common-initial-data/hidden-ref-pred — entity variant *)
 let hidden_ref_pred db (id : entity_id) : entity -> bool =
+  let page_ids = Int_set.of_list (id :: get_block_alias db id) in
   let entity = Ldb.ent_of_id db id in
   let entity_ident = Option.bind entity Ldb.ident_of in
   let class_ids =
@@ -196,9 +200,9 @@ let hidden_ref_pred db (id : entity_id) : entity -> bool =
     | _ -> None
   in
   fun (ref_block : entity) ->
-    ref_block.id = id
+    Int_set.mem ref_block.id page_ids
     || (match Ldb.ref_ent ref_block "block/page" with
-        | Some p -> p.id = id
+        | Some p -> Int_set.mem p.id page_ids
         | None -> false)
     || (match Ldb.ref_ent ref_block "logseq.property/view-for" with
         | Some v -> v.id = id
