@@ -679,8 +679,8 @@ let create_page a b c _d =
        | None -> ());
       Js.Promise.resolve res)
 
-(* cljs create_journal_page: new Date(arg) — accepts epoch ms or an
-   ISO date string; NaN → no page. journal pages get a day-derived
+(* Date-only strings retain their calendar day; other inputs use the
+   local day of the parsed instant. Journal pages get a day-derived
    uuid worker-side (Common_uuid/gen_journal_page_uuid), so resolve
    the entity by its formatted title, not a client-generated uuid *)
 let create_journal_page a _b _c _d =
@@ -692,7 +692,12 @@ let create_journal_page a _b _c _d =
         match float_of_string_opt s with
         | Some ms -> Some (Dates.journal_day_of (Dates.of_ms ms))
         | None ->
-            Option.map Dates.journal_day_of (Dates.parse s))
+            let parsed =
+              if String.length s = 10 && s.[4] = '-' && s.[7] = '-' then
+                Dates.parse_local_datetime s
+              else Dates.parse s
+            in
+            Option.map Dates.journal_day_of parsed)
     | _ -> None
   in
   match day_int with
