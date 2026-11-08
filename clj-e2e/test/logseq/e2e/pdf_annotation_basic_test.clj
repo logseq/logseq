@@ -2,6 +2,7 @@
   "Clicking a [[uuid]] ref to a PDF annotation opens the PDF at the highlight
   (db-test#1511)."
   (:require
+   [clojure.edn :as edn]
    [clojure.test :refer [deftest is testing use-fixtures]]
    [logseq.e2e.api :refer [ls-api-call!]]
    [logseq.e2e.assert :as assert]
@@ -51,6 +52,16 @@
   (ls-api-call! :datascriptQuery
                 (str "[:find ?e . :where [?e :db/ident " ident "]]")))
 
+(defn- zlib-text-highlight
+  "Geometry of a real text highlight on zlib.pdf, from the exporter fixture."
+  []
+  (-> (asset-path "deps/graph-parser/test/resources/exporter-test-graph/assets/zlib.edn")
+      str
+      slurp
+      edn/read-string
+      :highlights
+      first))
+
 (defn- create-annotation!
   [asset hl-text]
   (let [annotation (ls-api-call! :editor.insertBlock
@@ -58,13 +69,17 @@
                                  hl-text
                                  {:sibling false})
         annotation-uuid (get annotation "uuid")
-        color-id (closed-value-id ":logseq.property/color.yellow")]
+        color-id (closed-value-id ":logseq.property/color.yellow")
+        fixture (zlib-text-highlight)]
     ;; Pdf-annotation is a private tag and ls-type is a keyword property, so the
-    ;; plugin API cannot set those. hl-value is enough for the click handler.
+    ;; plugin API cannot set those. A full hl-value (id/page/position) is enough
+    ;; for the click handler and for the viewer to render/scroll the overlay.
     (ls-api-call! :editor.upsertBlockProperty annotation-uuid "logseq.property/asset" (:id asset))
-    (ls-api-call! :editor.upsertBlockProperty annotation-uuid "logseq.property.pdf/hl-page" 1)
+    (ls-api-call! :editor.upsertBlockProperty annotation-uuid "logseq.property.pdf/hl-page" (:page fixture))
     (ls-api-call! :editor.upsertBlockProperty annotation-uuid "logseq.property.pdf/hl-value"
-                  {:id annotation-uuid :page 1})
+                  (-> fixture
+                      (assoc :id annotation-uuid)
+                      (assoc-in [:properties :color] "yellow")))
     (when color-id
       (ls-api-call! :editor.upsertBlockProperty annotation-uuid "logseq.property.pdf/hl-color" color-id))
     annotation-uuid))
@@ -99,5 +114,12 @@
       (w/wait-for "body.is-pdf-active")
       (assert/assert-is-visible ".extensions__pdf-viewer")
       (is (true? (pdf-viewer-open?)))
+      ;; The overlay wrapper has no box of its own; the absolutely positioned
+      ;; rect items are what the viewer paints and scrolls to.
+      (let [hl-sel (str ".extensions__pdf-viewer #hl_" annotation-uuid
+                        " .hls-text-region-item")]
+        (w/wait-for hl-sel {:timeout 15000})
+        (assert/assert-is-visible hl-sel)
+        (-> (w/-query hl-sel) .first assert/assert-that .isInViewport))
       (is (= notes-page (page/get-page-name))
           "Must stay on the notes page instead of routing to the PDF asset path"))))
