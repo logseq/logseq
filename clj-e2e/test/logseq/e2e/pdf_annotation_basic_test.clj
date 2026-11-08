@@ -89,6 +89,11 @@
   (boolean
    (w/eval-js "document.body.classList.contains('is-pdf-active')")))
 
+(defn- notes-page-ref
+  "The pasted [[uuid]] on the notes page, not the copy that appears in the sidebar."
+  [hl-text]
+  (loc/filter "#main-content-container a.page-ref" :has-text hl-text))
+
 (deftest pdf-annotation-ref-click-opens-viewer-test
   (testing "normal click on an annotation page-ref opens the PDF, shift-click opens the sidebar"
     (let [asset (upload-pdf!)
@@ -99,10 +104,9 @@
       (page/new-page notes-page)
       (b/new-block (str "See [[" annotation-uuid "]]"))
       (util/exit-edit)
-      (assert/assert-is-visible
-       (loc/filter "a.page-ref" :has-text hl-text))
+      (assert/assert-is-visible (notes-page-ref hl-text))
 
-      (w/click (loc/filter "a.page-ref" :has-text hl-text)
+      (w/click (notes-page-ref hl-text)
                (doto (Locator$ClickOptions.)
                  (.setModifiers [KeyboardModifier/SHIFT])))
       (assert/assert-is-visible
@@ -110,7 +114,7 @@
       (is (false? (pdf-viewer-open?))
           "Shift-click must not open the PDF viewer")
 
-      (w/click (loc/filter "a.page-ref" :has-text hl-text))
+      (w/click (notes-page-ref hl-text))
       (w/wait-for "body.is-pdf-active")
       (assert/assert-is-visible ".extensions__pdf-viewer")
       (is (true? (pdf-viewer-open?)))
