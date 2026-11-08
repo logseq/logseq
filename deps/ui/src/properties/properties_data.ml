@@ -103,7 +103,7 @@ let row_closed_values row =
   | Some w -> W.elems w
   | None -> []
 
-let row_is_class_schema row = match getf row "schema?" with Some _ -> true | None -> false
+let row_is_class_schema row = getb row "schema?"
 
 let row_hidden row =
   getb (row_prop row) "logseq.property/hide?"

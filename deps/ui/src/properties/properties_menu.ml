@@ -37,6 +37,12 @@ let prop_title m = D.row_title m.row
 let prop_entity m = D.row_prop m.row
 let prop_type m = D.row_type m.row
 let closed_values m = D.row_closed_values m.row
+let built_in m = D.getb (prop_entity m) "logseq.property/built-in?"
+let schema_owner m = m.owner_is_tag && D.row_is_class_schema m.row
+let special_property m =
+  List.mem (prop_ident m) ["block/title"; "block/tags"; "block/created-at"; "block/updated-at"]
+let class_structure m =
+  List.mem (prop_ident m) ["logseq.property.class/extends"; "logseq.property.class/properties"]
 
 (* ----- type sub-pane ----- *)
 
@@ -76,25 +82,33 @@ type menu_pane =
   | MNodeTags
   | MEditChoice of W.t
 
-let type_submenu m ~close =
-  submenu ~text:(I18n.t "property/type")
+let type_submenu m ~used ~close =
+  reactive (fun used ->
+  let locked = built_in m || used <> Some false in
+  if locked then
+    menu_item ~text:(I18n.t "property/type") ~disabled:true
+      ~tooltip:(I18n.t "property/type-locked-help")
+      [text ~value:(match List.assoc_opt (prop_type m) type_names with
+        | Some key -> I18n.t key | None -> prop_type m) []]
+  else submenu ~text:(I18n.t "property/type")
     (List.map
        (fun (ty, label_key) ->
          menu_item ~text:(I18n.t label_key)
            ~checked:(prop_type m = ty)
            ~on_press:(fun _ ->
              ignore
-               (D.upsert_property_no_name ~ident:(prop_ident m)
+               (let* _ = D.upsert_property_no_name ~ident:(prop_ident m)
                   ~schema:
                     (W.Map
                        [ ( W.Keyword "logseq.property/type"
                          , W.Keyword ty )
                        ])
-                  ());
-             S.refresh_all ();
-             close ())
+                  () in
+                S.refresh_all ();
+                close ();
+                Js.Promise.resolve ()))
            [] )
-       type_names)
+       type_names)) (Signal.value used)
 
 let position_submenu m ~close =
   submenu ~text:(I18n.t "property/ui-position")
@@ -116,10 +130,11 @@ let position_submenu m ~close =
 
 (* delete confirmation as a semantic dialog on the view-overlay stack *)
 let delete_confirm_dialog context m ~close =
-  let title = I18n.t "property/delete-from-node" in
+  let title = I18n.t (if schema_owner m then "property/delete-from-tag"
+    else "property/delete-from-node") in
   let desc =
     I18n.t1
-      (if m.owner_is_tag then "property/delete-from-tag-confirm"
+      (if schema_owner m then "property/delete-from-tag-confirm"
        else "property/delete-from-node-confirm")
       (prop_title m)
   in
@@ -128,26 +143,26 @@ let delete_confirm_dialog context m ~close =
   in
   let confirm () =
     S.pop_view_overlay context;
-    if D.row_is_class_schema m.row || m.owner_is_tag then
-      ignore
-        (D.class_remove_property ~class_uuid:m.owner_uuid
-           ~ident:(prop_ident m))
-    else
-      ignore
-        (D.remove_block_property ~block_uuid:m.owner_uuid
-           ~ident:(prop_ident m));
-    S.refresh_all ();
-    close ()
+    ignore (let* _ =
+      if schema_owner m then
+        D.class_remove_property ~class_uuid:m.owner_uuid ~ident:(prop_ident m)
+      else D.remove_block_property ~block_uuid:m.owner_uuid ~ident:(prop_ident m)
+      in
+      S.refresh_all ();
+      close ();
+      Js.Promise.resolve ())
   in
   Ui_components.dialog ~text:title ~description:desc ~on_dismiss:dismiss
-    [ Ui_components.button ~text:(I18n.t "ui/cancel") ~variant:`outline
-        ~on_press:dismiss []
-    ; Ui_components.button ~text:(I18n.t "ui/confirm") ~variant:`destructive
-        ~on_press:(fun _ -> confirm ()) []
+    [ row ~main:`end_ ~gap:8
+        [ Ui_components.button ~text:(I18n.t "ui/cancel") ~variant:`outline
+            ~on_press:dismiss []
+        ; Ui_components.button ~text:(I18n.t "ui/confirm") ~variant:`destructive
+            ~on_press:(fun _ -> confirm ()) []
+        ]
     ]
 
 (* title/desc form for name pane + choice editing *)
-let text_form_view ~title_v ~desc_v ~title_placeholder ~desc_placeholder
+let text_form_view ?(disabled = false) ~title_v ~desc_v ~title_placeholder ~desc_placeholder
     on_save : t =
  fun context parent ->
   let sched = context.Lui_ui.ui_scheduler in
@@ -158,14 +173,14 @@ let text_form_view ~title_v ~desc_v ~title_placeholder ~desc_placeholder
     || String.trim desc <> String.trim desc_v
   in
   (column ~gap:8 ~padding:8
-    [ Ui_components.text_field ~placeholder:title_placeholder
+    [ Ui_components.text_field ~placeholder:title_placeholder ~disabled
         ~text:(reactive Fun.id (Signal.value title_st))
         ~on_input:(fun ev ->
           match ev with
           | Lui_protocol.TextChanged (_, t) -> Signal.set title_st t
           | _ -> ())
         []
-    ; Ui_components.textarea ~placeholder:desc_placeholder
+    ; Ui_components.textarea ~placeholder:desc_placeholder ~disabled
         ~text:(reactive Fun.id (Signal.value desc_st))
         ~on_input:(fun ev ->
           match ev with
@@ -174,12 +189,12 @@ let text_form_view ~title_v ~desc_v ~title_placeholder ~desc_placeholder
         []
     ; row ~main:`end_
         [ Ui_components.button ~variant:`primary ~text:(I18n.t "ui/save")
-            ~disabled:(reactive (fun title desc -> not (changed title desc))
+            ~disabled:(reactive (fun title desc -> disabled || not (changed title desc))
               (Signal.value title_st) (Signal.value desc_st))
             ~on_press:(fun _ ->
               let title = Runtime.signal_get title_st
               and desc = Runtime.signal_get desc_st in
-              if changed title desc then on_save title desc)
+              if not disabled && changed title desc then on_save title desc)
             []
         ]
     ])
@@ -191,26 +206,27 @@ let name_pane_view m ~close : t =
     | Some d -> D.ref_title d
     | None -> ""
   in
-  text_form_view ~title_v:(prop_title m) ~desc_v
+  text_form_view ~disabled:(built_in m) ~title_v:(prop_title m) ~desc_v
     ~title_placeholder:(I18n.t "property/name-placeholder")
     ~desc_placeholder:(I18n.t "property/description-placeholder")
     (fun new_name new_desc ->
       let new_name = String.trim new_name
       and new_desc = String.trim new_desc in
-      if new_name <> "" then (
-        (if new_name <> String.trim (prop_title m) then
-           ignore
-             (D.upsert_property ~ident:(prop_ident m) ~schema:(W.Map [])
-                ~property_name:new_name ()));
-        (match prop_uuid m with
-         | Some pu when new_desc <> "" && new_desc <> String.trim desc_v ->
-             ignore
-               (D.set_block_property ~block_uuid:pu
-                  ~ident:"logseq.property/description"
-                  ~value:(W.String new_desc))
-         | _ -> ());
+      if new_name <> "" then ignore (let* _ =
+        if new_name <> String.trim (prop_title m) then
+          D.upsert_property ~ident:(prop_ident m) ~schema:(W.Map [])
+            ~property_name:new_name ()
+        else Js.Promise.resolve W.Nil in
+        let* _ = match prop_uuid m with
+          | Some block_uuid when new_desc <> String.trim desc_v ->
+              if new_desc = "" then D.remove_block_property ~block_uuid
+                ~ident:"logseq.property/description"
+              else D.set_block_property ~block_uuid
+                ~ident:"logseq.property/description" ~value:(W.String new_desc)
+          | _ -> Js.Promise.resolve W.Nil in
         S.refresh_all ();
-        close ()))
+        close ();
+        Js.Promise.resolve ()))
 
 (* choices pane: scrollable list + add + per-choice edit *)
 let choices_pane_view m ~set_pane ~close : t =
@@ -431,69 +447,59 @@ let supports_default_value m =
   && closed_values m = []
   && prop_ident m <> "logseq.property/enable-history?"
 
-let multiple_values_item m ~close : t =
- fun context parent ->
+let multiple_values_item m ~used ~close : t =
   let many = D.row_many m.row in
-  let used = Signal.state context.Lui_ui.ui_scheduler None in
-  ignore (let* values = D.property_values ~property_ident:(prop_ident m)
-    ~block:(D.uuid_ref m.owner_uuid) in
-    if Ui_effect.alive context.Lui_ui.ui_scope then
-      Runtime.signal_set used (Some (W.elems values <> []));
-    Js.Promise.resolve ());
   let save () =
     ignore (let* _ = D.upsert_property_no_name ~ident:(prop_ident m)
       ~schema:(W.Map [(W.Keyword "db/cardinality", W.Keyword (if many then "one" else "many"))]) () in
       S.refresh_all ();
       Js.Promise.resolve ())
   in
-  (menu_item ~text:(I18n.t "property/multiple-values") ~checked:many
-     ~disabled:(reactive (function None -> true | Some used -> many && used) (Signal.value used))
+  menu_item ~text:(I18n.t "property/multiple-values") ~checked:many
+     ~disabled:(reactive Option.is_none (Signal.value used))
      ~on_press:(fun _ ->
        match Runtime.signal_get used with
-       | None | Some true when many -> ()
        | None -> ()
        | Some used ->
            close ();
-           if used then
+           if used && not many then
              Dialogs_state.ask ~title:(I18n.t "property/multiple-values")
                ~desc:(I18n.t "property/multiple-values-confirm") ~on_confirm:save ()
-           else save ()) []) context parent
+           else save ()) []
 
 let default_value_pane_view m ~close : t =
- fun context parent ->
-  let sched = context.Lui_ui.ui_scheduler in
-  let editing = Signal.state sched false in
-  let buffer = Signal.state sched "" in
-  (column ~gap:0
-     [ if_ ~test:(Logseq_el.own context (Signal.map (fun e -> not e) (Signal.value editing)))
-         (menu_item ~text:(I18n.t "property/set-default-value")
-            ~on_press:(fun _ -> Runtime.signal_set editing true) [])
-     ; if_ ~test:(Signal.value editing)
-         (Ui_components.text_field ~autofocus:true
-            ~text:(reactive Fun.id (Signal.value buffer))
-            ~on_input:(fun ev ->
-              match ev with
-              | Lui_protocol.TextChanged (_, t) -> Signal.set buffer t
-              | _ -> ())
-            ~on_submit:(fun _ ->
-              match prop_uuid m with
-              | Some pu ->
-                  ignore
-                    (D.create_property_text_block ~block_uuid:pu
-                       ~ident:"logseq.property/default-value"
-                       ~title:(Runtime.signal_get buffer)
-                       ~new_block_id:(Ui_services.env_random_uuid ()) ());
-                  S.refresh_all ();
-                  close ()
-              | None -> ())
-            [])
-     ])
-    context parent
+  let block_uuid = Option.get (prop_uuid m) in
+  let save operation = ignore (let* _ = operation in
+    S.refresh_all ();
+    close ();
+    Js.Promise.resolve ()) in
+  let initial =
+    let* values = D.property_values ~property_ident:(prop_ident m)
+      ~block:(D.uuid_ref block_uuid) in
+    let items = List.filter_map (fun choice ->
+      let value = Option.get (D.getf choice "value") in
+      let label = D.value_display (Option.get (D.getf choice "label")) in
+      Option.map (fun id -> Properties_select.item label (fun () ->
+        save (D.set_block_property ~block_uuid ~ident:"logseq.property/default-value"
+          ~value:(W.Int id)))) (D.entity_id_of value)) (W.elems values) in
+    let items = if D.getf (prop_entity m) "logseq.property/default-value" = None then items
+      else items @ [Properties_select.item ~icon:"x" (I18n.t "property/clear-value")
+        (fun () -> save (D.remove_block_property ~block_uuid
+          ~ident:"logseq.property/default-value"))] in
+    Js.Promise.resolve items in
+  Properties_value.picker_content ?selected_keys:None
+    ~placeholder:(I18n.t1 "property/set-placeholder" (prop_title m))
+    ~initial ~on_search:(fun query -> let* items = initial in
+      Js.Promise.resolve (Fuzzy.fuzzy_search ~extract:(fun item -> item.Properties_select.it_title)
+        ~limit:100 items query))
+    ~new_option:(Some (fun title -> save (D.create_property_text_block ~block_uuid
+      ~ident:"logseq.property/default-value" ~title
+      ~new_block_id:(Ui_services.env_random_uuid ()) ())))
 
 (* the config items of the main pane — shared by menu_view (in-tree
    anchor) and open_menu (element anchor); [context] is needed for the
    delete item's view-overlay confirm dialog *)
-let main_items context m ~set_pane ~close =
+let main_items context m ~used ~can_remove ~set_pane ~close =
   let toggle_view label ident_key =
     let current = D.getb (prop_entity m) ident_key in
     menu_item ~text:label ~checked:current
@@ -508,12 +514,12 @@ let main_items context m ~set_pane ~close =
         | None -> ())
       []
   in
-  [ menu_item ~text:(I18n.t "property/name")
+  (if special_property m then [] else [ menu_item ~text:(I18n.t "property/name")
       ~on_press:(fun _ -> Runtime.signal_set set_pane MName) []
-    ; type_submenu m ~close
-    ]
-    @ (if prop_type m = "node" then
+    ]) @ [type_submenu m ~used ~close]
+    @ (if prop_type m = "node" && prop_ident m <> "logseq.property.class/extends" then
          [ menu_item ~text:(I18n.t "property/specify-node-tags")
+             ~disabled:(built_in m)
              ~on_press:(fun _ -> Runtime.signal_set set_pane MNodeTags)
                [] ]
        else [])
@@ -537,14 +543,20 @@ let main_items context m ~set_pane ~close =
       [ menu_item ~text:(I18n.t "property/available-choices")
           ~on_press:(fun _ -> Runtime.signal_set set_pane MChoices) []
       ] else [])
-    @ (if D.row_supports_many m.row then
-      [ multiple_values_item m ~close ] else [])
-    @ [ position_submenu m ~close
-      ; toggle_view (I18n.t "property/hide-by-default")
+    @ (if D.row_supports_many m.row && not (built_in m) then
+      [ multiple_values_item m ~used ~close ] else [])
+    @ (if prop_ident m <> "logseq.property/enable-history?"
+          && not (special_property m) && not (class_structure m) then
+      (if List.mem (prop_type m) ["default"; "number"; "date"; "checkbox"; "node"]
+        && not (prop_type m = "default" && closed_values m = []
+          && D.row_position m.row = "logseq.property.ui-position/properties")
+       then [position_submenu m ~close] else [])
+      @ [toggle_view (I18n.t "property/hide-by-default")
           "logseq.property/hide?"
       ; toggle_view (I18n.t "property/hide-empty-value")
           "logseq.property/hide-empty-value"
-      ; menu_item ~text:(I18n.t "property/go-to-this-property")
+      ] else [])
+    @ (if special_property m then [] else [menu_item ~text:(I18n.t "property/go-to-this-property")
           ~on_press:(fun _ ->
             (match prop_uuid m with
              | Some u ->
@@ -553,18 +565,17 @@ let main_items context m ~set_pane ~close =
                    (Runtime.nav_hash ("#/page/" ^ u))
              | None -> ());
             close ())
-          []
-      ; menu_item ~variant:`destructive
+          []])
+    @ [if_ ~test:(Signal.value can_remove) (menu_item ~variant:`destructive
           ~text:
             (I18n.t
-               (if m.owner_is_tag then "property/delete-from-tag"
+               (if schema_owner m then "property/delete-from-tag"
                 else "property/delete-from-node"))
           ~on_press:(fun _ ->
             S.push_view_overlay context ~key:"property-delete"
               ~view:(delete_confirm_dialog context m ~close)
               ~on_escape:(fun () -> ()))
-          []
-      ]
+          [])]
 
 (* the pane-swapping body shared by menu_view (in-tree anchor) and
    open_menu (element anchor): MMain lists more_options + the config
@@ -573,6 +584,21 @@ let main_items context m ~set_pane ~close =
 let menu_body_view ~more_options ~with_title m ~close : t =
  fun context parent ->
   let pane = Signal.state context.Lui_ui.ui_scheduler MMain in
+  let used = Signal.state context.Lui_ui.ui_scheduler None in
+  let can_remove = Signal.state context.Lui_ui.ui_scheduler
+    (not (schema_owner m || class_structure m)) in
+  if schema_owner m then ignore (let* owner = D.entity_by_uuid m.owner_uuid in
+    let own_properties = Option.fold ~none:[] ~some:W.elems
+      (D.getf (D.untag owner) "logseq.property.class/properties") in
+    if Ui_effect.alive context.Lui_ui.ui_scope then
+      Runtime.signal_set can_remove (List.exists (fun property ->
+        D.entity_id_of property = D.entity_id_of (prop_entity m)) own_properties);
+    Js.Promise.resolve ());
+  ignore (let* values = D.property_values ~property_ident:(prop_ident m)
+    ~block:(D.uuid_ref m.owner_uuid) in
+    if Ui_effect.alive context.Lui_ui.ui_scope then
+      Runtime.signal_set used (Some (W.elems values <> []));
+    Js.Promise.resolve ());
   (reactive
      (fun p ->
         (* stable root: same-kind prop diffs across reactive branches
@@ -586,7 +612,7 @@ let menu_body_view ~more_options ~with_title m ~close : t =
                            ~value:(I18n.t "ui/configure") [] ]
                      else [])
                     @ more_options
-                    @ main_items context m ~set_pane:pane ~close)
+                    @ main_items context m ~used ~can_remove ~set_pane:pane ~close)
              | MName -> name_pane_view m ~close
              | MChoices -> choices_pane_view m ~set_pane:pane ~close
              | MEditChoice c -> edit_choice_view m c ~set_pane:pane ~close

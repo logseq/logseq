@@ -179,6 +179,34 @@ let show_panel_bullet row =
   || (match D.row_type row with "default" | "url" -> false | _ -> true)
   || D.value_empty_p (D.row_value row)
 
+let schema_description (ctx : V.ctx) row : t =
+ fun context parent ->
+  let prop = D.row_prop row in
+  let uuid = Option.get (D.entity_uuid_of prop) in
+  let key = "description:" ^ uuid in
+  let st = S.area_state context ~key ~fetch:(fun publish ->
+    let* wire = D.display_props ~show_hidden:true (D.uuid_ref uuid) in
+    let rows, hidden = D.split_display wire in
+    let rows = match List.find_opt
+      (fun r -> D.row_ident r = Some "logseq.property/description") (rows @ hidden) with
+      | Some description -> [description]
+      | None -> (match D.getf wire "description-property" with
+          | Some (W.Map _ as property) -> [W.Map
+              [W.Keyword "property-id", W.Keyword "logseq.property/description";
+               W.Keyword "property", property; W.Keyword "value", W.Nil]]
+          | _ -> []) in
+    publish { S.empty_area_data with rows };
+    Js.Promise.resolve ()) in
+  let ctx = { ctx with owner_key = key; block_uuid = uuid;
+    block_id = D.entity_id_of prop; class_schema = false } in
+  let node = (reactive (fun data ->
+    match List.find_opt (fun r -> D.row_ident r = Some "logseq.property/description")
+      data.S.rows with
+    | Some description -> V.view ~hover:None ctx description
+    | None -> Logseq_el.nothing) (Signal.value st)) context parent in
+  S.note_area_node ~key node;
+  node
+
 let value_cell ~(hover : bool Signal.state option) ctx row : t =
   (* cljs renders entity-valued properties (even :default/:url) as a
      nested ls-block — its block-control bullet shows beside the value;
@@ -208,7 +236,8 @@ let value_cell ~(hover : bool Signal.state option) ctx row : t =
             ]
         ]
       else [])
-    @ [ V.view ~hover ctx row ])
+    @ [ if D.row_is_class_schema row then schema_description ctx row
+        else V.view ~hover ctx row ])
 
 let panel_row (ctx : V.ctx) ~owner_is_tag ~owner_title ?(reorder_rows = []) row : t =
  fun context parent ->
@@ -688,6 +717,7 @@ let class_schema_row prop =
         (W.Map
            [ (W.Keyword "property-id", W.Keyword ident)
            ; (W.Keyword "property", prop)
+           ; (W.Keyword "schema?", W.Bool true)
            ; (W.Keyword "value", W.Nil) ])
   | None -> None
 
