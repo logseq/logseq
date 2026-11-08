@@ -55,7 +55,7 @@ let selector ~remove (ms : Model.t Signal.signal) : t = fun ctx parent ->
     else Fuzzy.fuzzy_search ~extract:short_name ~limit:(List.length repos) repos query in
   let select repo =
     Dialogs_state.close_named (if remove then "graph-remove" else "graph-open");
-    if remove then ignore (Graphs_ops.delete_graph ~remote:false repo)
+    if remove then Graphs_ops.ask_delete ~remote:false repo
     else ignore (Graphs_ops.navigate_journal repo) in
   let submit () =
     Option.iter select (List.nth_opt
