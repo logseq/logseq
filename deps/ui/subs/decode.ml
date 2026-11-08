@@ -120,6 +120,24 @@ let reactions_of_wire (w : Wire.t) : (string * int) list =
     [] xs
   |> List.rev
 
+let comment_author_of_wire w =
+  Option.map
+    (fun author ->
+      { Model.author_uuid = Wire.map_get_uuid author "block/uuid"
+      ; author_name = Wire.map_get_string author "block/title"
+      ; author_avatar = Wire.map_get_string author "logseq.property.user/avatar"
+      })
+    (Wire.get w "logseq.property/created-by-ref")
+
+let reaction_users_of_wire w =
+  match Wire.get w "block.temp/reactions" with
+  | None -> []
+  | Some reactions ->
+      List.filter_map (fun reaction ->
+        Option.map (fun emoji -> emoji, comment_author_of_wire reaction)
+          (Wire.map_get_string reaction "logseq.property.reaction/emoji-id"))
+        (Wire.elems reactions)
+
 let count_refs (w : Wire.t) (k : string) : int =
   match Wire.get w k with
   | Some (Wire.List xs) | Some (Wire.Array xs) | Some (Wire.Set xs) ->
@@ -391,6 +409,14 @@ let rec block_of_wire ?(order_index = 1) ?(parent_query_id = None)
   ; block_icon = Node_icon.own w
   ; block_tag_icons = Node_icon.inherited tag_entries
   ; block_reactions = reactions_of_wire w
+  ; block_reaction_users = reaction_users_of_wire w
+  ; block_created_by = comment_author_of_wire w
+  ; block_created_at =
+      (match Wire.get w "block/created-at" with
+       | Some (Wire.Int n) -> Some (float_of_int n)
+       | Some (Wire.Int64 n) | Some (Wire.Date_ms n) -> Some (Int64.to_float n)
+       | Some (Wire.Float n) -> Some n
+       | _ -> None)
   ; block_is_comments_area = false
   ; block_is_comment = false
   ; block_comment_targets = count_refs w "logseq.property.comments/blocks"

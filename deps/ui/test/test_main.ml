@@ -850,6 +850,21 @@ let test_title_refs2 () =
 
 let wmap kvs = Wire.Map (List.map (fun (k, v) -> (Wire.kw k, v)) kvs)
 
+let () =
+  let author = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" in
+  let other = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" in
+  List.iter (fun (owner, current_user, expected) ->
+    let wire = wmap (match owner with
+      | None -> []
+      | Some uuid -> ["logseq.property/created-by-ref",
+          wmap ["block/uuid", Wire.Uuid uuid]]) in
+    let comment = Decode.block_of_wire wire in
+    check "comment edit/delete ownership matches the current user"
+      (Comments_ops.comment_owned_by ~current_user comment = expected))
+    [None, None, true; None, Some author, false;
+     Some author, None, false; Some author, Some other, false;
+     Some author, Some author, true]
+
 let test_decode3 () =
   (* prop_label accepts scalar and entity-map values *)
   check "prop_label keyword"

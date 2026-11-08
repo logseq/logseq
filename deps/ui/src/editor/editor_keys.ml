@@ -1405,6 +1405,7 @@ let on_keydown ev =
   in
   if input_composing ev || Ui_services.env_publishing () || palette_open ()
      || palette_shortcut
+     || closest ".ls-comment-box, .ls-comment-reply-placeholder" ev.Ui_services.target <> None
      || (match ev.Ui_services.target with
          | Some target -> Popups_state.inside target
          | None -> false)

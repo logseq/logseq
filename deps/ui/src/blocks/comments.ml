@@ -21,27 +21,15 @@ let comment_target_block_p = Comments_ops.comment_target_block_p
 let eligible_targets = Comments_ops.eligible_targets
 let can_comment = Comments_ops.can_comment
 
-external el_scroll_into_view : D.el -> unit = "scrollIntoView" [@@mel.send]
-
 (* ---- write paths ---- *)
 
 (* cljs reveal-comments-area!: scroll the area into view and focus its
    reply box *)
-let reveal uuid =
-  match D.get_element_by_id ("ls-block-" ^ uuid) with
-  | Some blk -> (
-      el_scroll_into_view blk;
-      match
-        Web_dom.query_selector
-          ("#ls-block-" ^ uuid ^ " .ls-comment-add textarea")
-      with
-      | Some el -> D.el_focus el
-      | None -> ())
-  | None -> ()
+let reveal = Comments_ops.reveal
 
 (* cljs add-comment-to-blocks! → ensure-comments-area-for-blocks then
    reveal; the endpoint inserts the area child when it does not exist yet *)
-let ensure_for uuids = Comments_ops.ensure_for ~on_ready:reveal uuids
+let ensure_for uuids = Comments_ops.ensure_for ~on_ready:(fun _ -> ()) uuids
 
 (* cljs add-comment-to-current-context!: an editing blank block becomes
    the comments area itself; otherwise ensure an area for the editing

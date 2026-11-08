@@ -802,7 +802,7 @@ and row_main ~editable ~library scope (b : Model.block) : t =
                         ]
                     ]
                 ]
-            ; Comments_view.reactions_el uuid b.Model.block_reactions
+            ; Comments_view.reactions_el uuid b.Model.block_reactions b.Model.block_reaction_users
             ]
         ]
 
@@ -1118,7 +1118,7 @@ and block_row_static ?(depth = 0) ?(library = false) (b : Model.block) : t =
                         ]
                     ]
                 ]
-            ; Comments_view.reactions_el uuid b.Model.block_reactions
+            ; Comments_view.reactions_el uuid b.Model.block_reactions b.Model.block_reaction_users
             ]
         ]
     ; Properties_area.block_area ~scope:"reference" ~uuid
