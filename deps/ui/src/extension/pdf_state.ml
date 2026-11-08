@@ -39,6 +39,18 @@ let set_current (a : Model.pdf_asset option) =
 (* block ref click armed a scroll target for the next/current viewer *)
 let ref_hl : Model.hl option ref = ref None
 
+let highlight_request : (Model.hl -> unit) ref = ref (fun _ -> ())
+
+let open_highlight (asset : Model.pdf_asset) (hl : Model.hl) =
+  let already_open =
+    match !current with
+    | Some a -> a.Model.pdf_identity = asset.pdf_identity
+    | None -> false
+  in
+  ref_hl := Some hl;
+  set_current (Some asset);
+  if already_open then !highlight_request hl
+
 (* the live pdfjs viewer (cljs window.lsActivePdfViewer mirrors this) *)
 let active_viewer : viewer option ref = ref None
 
