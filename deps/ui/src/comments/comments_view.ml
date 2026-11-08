@@ -8,7 +8,7 @@ module P = Ui_components.Prop
 type area_st =
   { targets_open : bool
   ; editing : string option
-  ; target_titles : (string * string) list
+  ; target_titles : (string * string) list option
   }
 
 let area_slot : area_st Signal.state_slot = Signal.state_slot "comments-area"
@@ -23,6 +23,24 @@ let save_draft uuid value = Ui_services.storage_set (draft_key uuid) value
 let update st f = Runtime.signal_set st (f (Runtime.signal_get st))
 let typography size weight el =
   Ui_components.with_props [ P.font_size size; P.font_weight weight ] el
+
+let comments_of (block : Model.block) =
+  List.filter (Comments_ops.is_comment ~parent:block) block.block_children
+
+let collapsed_label (block : Model.block) =
+  let comments = comments_of block in
+  let latest = List.fold_left (fun latest (comment : Model.block) ->
+    match latest with
+    | None -> Some comment
+    | Some previous ->
+        if Option.value comment.block_created_at ~default:0.
+           >= Option.value previous.Model.block_created_at ~default:0.
+        then Some comment else latest) None comments in
+  let author = Option.bind latest (fun c ->
+    Option.bind c.Model.block_created_by (fun a -> a.Model.author_name)) in
+  I.tf (if List.length comments = 1 then "block.comments/collapsed-summary-one"
+        else "block.comments/collapsed-summary-many")
+    [string_of_int (List.length comments); Option.value author ~default:""]
 
 let fetch_target_titles ids =
   match (Runtime.model ()).Model.repo with
@@ -160,6 +178,9 @@ let comment_actions st (comment : Model.block) =
       ~label ~tooltip:label ~icon ~on_press:(fun _ -> callback ()) [] in
   if Ui_services.env_publishing () then Logseq_el.nothing else
   row ~style_class:"ls-comment-actions" ~gap:1 ~cross:`center
+    ~padding:3 ~margin_right:8 ~corner_radius:14 ~border_width:1
+    ~border_color:"var(--lx-gray-04-alpha, var(--rx-gray-04-alpha))"
+    ~background:"var(--ls-primary-background-color)"
     [ action ("cr-" ^ uuid) (`app "mood-smile") (I.t "command.editor/add-reaction")
         (fun () -> open_reaction_picker uuid ("cr-" ^ uuid))
     ; if Comments_ops.comment_owned_by ~current_user:(Rtc_flows.user_uuid ()) comment then
@@ -170,19 +191,35 @@ let comment_actions st (comment : Model.block) =
               (fun () -> Comments_ops.delete uuid) ]
       else Logseq_el.nothing ]
 
+let comment_avatar (comment : Model.block) =
+  let author = comment.block_created_by in
+  let name = Option.value (Option.bind author (fun a -> a.Model.author_name)) ~default:"" in
+  match Option.bind author (fun a -> a.Model.author_avatar) with
+  | Some url when String.trim url <> "" ->
+      image ~style_class:"ls-comment-avatar" ~width:22 ~height:22
+        ~corner_radius:11 ~url ~alt:name []
+  | _ ->
+      let background = Option.map Collaborators.uuid_color
+          (Option.bind author (fun a -> a.Model.author_uuid)) in
+      typography "0.625rem" 400
+        (avatar ~style_class:"ls-comment-avatar" ~width:22 ~height:22
+          ~corner_radius:11 ?background ~text:(Collaborators.initials name) ~label:name [])
+
 let comment_row st (comment : Model.block) =
   let uuid = Option.value comment.block_uuid ~default:"" in
   let author = Option.bind comment.block_created_by (fun a -> a.Model.author_name) in
-  row ~key:("comment-" ^ uuid) ~style_class:"ls-comment-row" ~gap:8 ~cross:`start
-    ~padding_horizontal:2 ~padding_vertical:6 ~min_width:0
+  overlay ~key:("comment-" ^ uuid) ~min_width:0
     ~accessibility_identifier:("comment-" ^ uuid)
-    [ column ~style_class:"ls-comment-main" ~grow:1. ~min_width:0
+    [ row ~style_class:"ls-comment-row" ~gap:8 ~cross:`start
+        ~padding_horizontal:2 ~padding_vertical:6 ~min_width:0
+        ((if Rtc_flows.user_uuid () = None then [] else [comment_avatar comment])
+        @ [column ~style_class:"ls-comment-main" ~grow:1. ~min_width:0
         [ row ~style_class:"ls-comment-meta" ~gap:6 ~cross:`center ~flex_wrap:`wrap
             (if Rtc_flows.user_uuid () = None then [] else
               Option.to_list (Option.map (fun name ->
                 typography "0.75rem" 600 (text ~value:name [])) author))
-        ; comment_body st comment ]
-    ; comment_actions st comment ]
+        ; comment_body st comment ]])
+    ; align `top_trailing (comment_actions st comment) ]
 
 let add_box area_uuid : t =
  fun ctx parent ->
@@ -190,6 +227,7 @@ let add_box area_uuid : t =
   let initial = load_draft area_uuid in
   (column ~style_class:"ls-comment-add" ~padding:8 ~min_width:0
     ~background:"var(--ls-primary-background-color)"
+    ~border_width:1 ~border_color:"var(--lx-gray-04-alpha, var(--rx-gray-04-alpha))"
     [ reactive (fun open_ ->
         if open_ then
           editor_box ~area_uuid ~initial:(load_draft area_uuid) ~autofocus:true
@@ -204,50 +242,55 @@ let add_box area_uuid : t =
             ~on_press:(fun _ -> Runtime.signal_set opened true) [])
         (Signal.value opened) ]) ctx parent
 
-let header ~alive st (block : Model.block) count : t =
+let header ~scope st (block : Model.block) count : t =
  fun ctx parent ->
   let uuid = Option.value block.block_uuid ~default:"" in
   row ~style_class:"ls-comments-header" ~gap:8 ~cross:`center ~min_height:30
     ~padding_horizontal:10 ~padding_vertical:5
     [ reactive (fun editing ->
-        if editing then
+        if Option.fold ~none:false
+            ~some:(fun e -> e.Editor_state.uuid = uuid && e.scope = scope) editing then
           column ~style_class:"ls-comments-title-editor" ~grow:1. ~min_width:0
-            [Comments.title_editor_el uuid]
+            [Editor_surface.mount uuid scope]
         else
           typography "0.75rem" 600
             (Ui_components.button ~variant:`ghost ~style_class:"ls-comments-label"
-              ~height:20 ~padding:0 ~label:(I.t "editor/click-to-edit")
+              ~height:20 ~min_width:0 ~padding:0 ~label:(I.t "editor/click-to-edit")
+              ~disabled:(Ui_services.env_publishing ())
               ~text:(let title = String.trim block.block_title in
                 if title = "" then I.t "block.comments/label" else title)
-              ~on_press:(fun _ -> Editor_actions.enter_edit uuid 0) []))
-        (Logseq_el.own ctx (Comments.editing_sig uuid))
+              ~on_press:(fun _ -> Editor_actions.enter_edit ~scope uuid 0) []))
+        (Editor_state.editing_sig ())
     ; typography "0.75rem" 400
         (text ~style_class:"ls-comments-count" ~value:(string_of_int count) [])
     ; spacer ~grow:1. []
-    ; if List.length block.block_comment_target_ids > 1 then
+    ; reactive (fun state ->
+      if Option.fold ~none:false ~some:(fun targets -> List.length targets > 1) state.target_titles then
         Ui_components.button ~variant:`ghost ~height:20 ~padding:0
           ~style_class:"ls-comments-targets-toggle" ~text:(I.t "block.comments/on-those-blocks")
-          ~on_press:(fun _ ->
-            let open_ = not (Runtime.signal_get st).targets_open in
-            update st (fun s -> {s with targets_open = open_});
-            if open_ then begin
-              let repo = Runtime.repo () in
-              (let* targets = fetch_target_titles block.block_comment_target_ids in
-               if !alive && Runtime.repo () = repo then
-                 update st (fun s -> {s with target_titles = targets});
-               Js.Promise.resolve ())
-              |> Js.Promise.catch (fun error ->
-                   Ui_services.log_error ("Comment targets failed", error);
-                   Js.Promise.resolve ()) |> ignore
-            end) []
-      else Logseq_el.nothing ] ctx parent
+          ~on_press:(fun _ -> update st (fun s -> {s with targets_open = not s.targets_open})) []
+      else Logseq_el.nothing) (Signal.value st) ] ctx parent
 
-let area_el (blocks : Model.block Signal.signal) : t =
+let load_targets st ids : t =
+ fun ctx parent ->
+  let repo = Runtime.repo () in
+  let alive () = not (Signal.scope_is_disposed ctx.Lui_ui.ui_scope) && Runtime.repo () = repo in
+  (let* targets = if ids = [] then Js.Promise.resolve [] else fetch_target_titles ids in
+   if alive () then update st (fun s -> {s with target_titles = Some targets});
+   Js.Promise.resolve ())
+  |> Js.Promise.catch (fun error ->
+    if alive () then begin
+      update st (fun s -> {s with target_titles = None});
+      Ui_services.log_error ("Comment targets failed", error);
+      Toast.error (I.t "block.comments/load-targets-error")
+    end;
+    Js.Promise.resolve ()) |> ignore;
+  Logseq_el.nothing ctx parent
+
+let area_el ?(scope = "main") (blocks : Model.block Signal.signal) : t =
  fun ctx parent ->
   let st = Signal.state_at ctx.Lui_ui.ui_scheduler ctx.ui_state_scope area_slot
-      { targets_open = false; editing = None; target_titles = [] } in
-  let alive = ref true in
-  Signal.on_dispose ctx.Lui_ui.ui_scope (fun () -> alive := false);
+      { targets_open = false; editing = None; target_titles = None } in
   (reactive ~equal:(fun (a : Model.block) b -> a.block_uuid = b.block_uuid)
     (fun block ->
     let uuid = Option.value block.block_uuid ~default:"" in
@@ -257,30 +300,51 @@ let area_el (blocks : Model.block Signal.signal) : t =
       ~min_width:0 ~grow:1.
       ~border_width:1 ~border_color:"var(--lx-gray-04-alpha, var(--rx-gray-04-alpha))"
       ~corner_radius:8 ~background:"var(--lx-gray-02, var(--ls-secondary-background-color))"
-      [ reactive (fun (block : Model.block) ->
-          let comments = List.filter (Comments_ops.is_comment ~parent:block) block.block_children in
-          header ~alive st block (List.length comments)) blocks
-      ; reactive ~equal:(fun a b -> a.targets_open = b.targets_open && a.target_titles = b.target_titles)
-          (fun state -> if not state.targets_open then Logseq_el.nothing else
+      [ reactive (fun (block : Model.block) -> load_targets st block.block_comment_target_ids) blocks
+      ; reactive (fun (block : Model.block) (collapse : Editor_state.collapse_view) ->
+          if Editor_state.effective_collapsed_in_view ~scope uuid block.block_default_collapsed collapse then
+            typography "0.75rem" 400
+              (Ui_components.button ~variant:`ghost ~style_class:"ls-comments-summary"
+                ~min_height:30 ~padding_horizontal:10 ~padding_vertical:5 ~main:`start
+                ~text:(collapsed_label block)
+                ~on_press:(fun _ -> Editor_state.set_collapsed ~scope uuid false) [])
+          else header ~scope st block (List.length (comments_of block))) blocks (Editor_state.collapse_sig ())
+      ; if_ ~test:(reactive (fun (block : Model.block) (collapse : Editor_state.collapse_view) ->
+            not (Editor_state.effective_collapsed_in_view ~scope uuid block.block_default_collapsed collapse))
+            blocks (Editor_state.collapse_sig ()))
+        (column ~min_width:0 [
+        reactive ~equal:(fun a b -> a.targets_open = b.targets_open && a.target_titles = b.target_titles)
+          (fun state -> if not state.targets_open ||
+              Option.fold ~none:true ~some:(fun targets -> List.length targets <= 1) state.target_titles
+            then Logseq_el.nothing else
             column ~style_class:"ls-comments-targets" ~gap:4 ~padding_horizontal:10
               ~padding_vertical:4
               (List.map (fun (target, title) ->
                 Ui_components.button ~key:target ~variant:`ghost ~main:`start
                   ~style_class:"ls-comments-target" ~text:title
                   ~on_press:(fun _ -> Ui_services.nav_set_hash
-                    (Runtime.nav_hash ("#/page/" ^ target))) []) state.target_titles))
+                    (Runtime.nav_hash ("#/page/" ^ target))) [])
+                (Option.value state.target_titles ~default:[])))
           (Signal.value st)
       ; scroll ~orientation:`vertical ~max_height:320
+          ~accessibility_identifier:("comments-list-" ^ uuid)
           [ column ~style_class:"ls-comments-list" ~padding_horizontal:8 ~padding_vertical:4
               ~min_width:0
               [ keyed ~source:(reactive (fun (block : Model.block) ->
-                    List.filter (Comments_ops.is_comment ~parent:block) block.block_children) blocks)
+                    comments_of block) blocks)
                   ~key:(fun (comment : Model.block) -> comment.block_uuid)
-                  ~cmp:compare ~mount:(fun comment -> reactive (comment_row st) comment) ] ]
+                  ~cmp:compare ~mount:(fun comment -> reactive (comment_row st) comment)
+              ; reactive ~equal:(fun (a : Model.block) b ->
+                    List.map (fun c -> c.Model.block_uuid) (comments_of a)
+                    = List.map (fun c -> c.Model.block_uuid) (comments_of b))
+                  (fun _ -> box ~height:0 ~on_appear:(fun _ ->
+                    Option.iter (fun list ->
+                      list.Ui_services.set_scroll_top (list.scroll_height ()))
+                      (Ui_services.dom_by_id ("comments-list-" ^ uuid))) []) blocks ] ]
       ; if Ui_services.env_publishing () then Logseq_el.nothing else
           reactive ~equal:(fun (a : Model.block) b -> a.block_uuid = b.block_uuid)
-            (fun block -> add_box (Option.value block.block_uuid ~default:"")) blocks ]) blocks)
+            (fun block -> add_box (Option.value block.block_uuid ~default:"")) blocks ]) ]) blocks)
     ctx parent
 
-let area_el_static (block : Model.block) : t =
- fun ctx parent -> area_el (Signal.constant ctx.Lui_ui.ui_scheduler block) ctx parent
+let area_el_static ?scope (block : Model.block) : t =
+ fun ctx parent -> area_el ?scope (Signal.constant ctx.Lui_ui.ui_scheduler block) ctx parent
