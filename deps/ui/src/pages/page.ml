@@ -1145,7 +1145,7 @@ let journals_view_ms (ms : Model.t Signal.signal) : t =
       (Signal.map (fun (m : Model.t) -> m.Model.journals) ms)
   in
   (box ~key:"journals" ~accessibility_identifier:"journals"
-    ~grow:1. ~min_width:280
+    ~grow:1. ~min_width:0
     ~data_attrs:[ ("style", "overflow-anchor:none;height:100%") ]
     [ box ~key:"js"
         [ box ~key:"jvp"
