@@ -334,14 +334,31 @@ let whole_selected (m : Edit_model.t) =
   && m.Edit_model.anchor = Some 0
   && m.Edit_model.caret = String.length m.Edit_model.source
 
-(* wrap the model's selection with a markdown marker pair *)
+(* Match master's normal-text formatting; retain whitespace-only behavior. *)
 let wrap_model (m : Edit_model.t) marker =
   let s, e = A.sel_span_of m in
   let ml = String.length marker in
-  let inner = String.sub m.Edit_model.source s (e - s) in
-  Edit_model.select
-    (Edit_model.splice m s e (marker ^ inner ^ marker))
-    ~anchor:(s + ml) ~focus:(e + ml)
+  let selected = String.sub m.Edit_model.source s (e - s) in
+  let blank = s <> e && String.trim selected = "" in
+  let lo, hi =
+    if blank then s, e
+    else
+      let rec left i =
+        if i < e && m.source.[i] = ' ' then left (i + 1) else i in
+      let rec right i =
+        if i > s && m.source.[i - 1] = ' ' then right (i - 1) else i in
+      left s, right e
+  in
+  let inner = if blank then selected else String.trim selected in
+  if not blank && Str_util.starts_at m.source (lo - ml) marker
+     && Str_util.starts_at m.source hi marker then
+    Edit_model.select (Edit_model.splice m (lo - ml) (hi + ml) inner)
+      ~anchor:(lo - ml) ~focus:(hi - ml)
+  else
+    let updated = Edit_model.splice m lo hi (marker ^ inner ^ marker) in
+    let caret = hi + ml in
+    Edit_model.select updated
+      ~anchor:(if blank then lo + ml else caret) ~focus:caret
 
 (* up/down inside the editing model: alt/meta+shift moves the block, mod
    collapses, boundary arrows leave the buffer *)
