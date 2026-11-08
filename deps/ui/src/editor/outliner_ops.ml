@@ -1034,7 +1034,7 @@ let op_names ops =
          | _ -> "?")
        ops)
 
-let submit_result ?current context opts ops : Wire.t option Js.Promise.t =
+let submit_result ?(invoke3 = Runtime.invoke3) ?current context opts ops : Wire.t option Js.Promise.t =
   let current =
     match current with
     | Some current -> current
@@ -1050,7 +1050,7 @@ let submit_result ?current context opts ops : Wire.t option Js.Promise.t =
         | _ -> opts
       in
       let p =
-        let* r = Runtime.invoke3 "thread-api/apply-outliner-ops"
+        let* r = invoke3 "thread-api/apply-outliner-ops"
             (Wire.String repo) (Wire.Array ops) opts in
         check_loader_result r;
         (* Autosave has no immediate refresh. Only its current context

@@ -654,7 +654,8 @@ and mount_finder (t : t) : finder =
       f.f_val <- Web_dom.el_value input;
       f.f_entered0 <- String.trim f.f_val <> "";
       f.f_entered <- false;
-      refresh_go_btn t f iw);
+      refresh_go_btn t f iw;
+      render_finder_state t f);
   Web_dom.el_on input "keyup" (fun e ->
       match Web_dom.ev_which e with
       | 13 ->
@@ -1174,13 +1175,14 @@ and wire_bus (t : t) : unit =
              | Some s -> Some (int_of_float s)
              | None -> None);
           f.f_query <- Option.value (U.json_s ev "rawQuery") ~default:"";
-          match U.json_o ev "matchesCount" with
+          (match U.json_o ev "matchesCount" with
           | Some m ->
               f.f_cur <- Option.value (U.json_f m "current") ~default:0.
                          |> int_of_float;
               f.f_total <- Option.value (U.json_f m "total") ~default:0.
                            |> int_of_float
-          | None -> ())
+          | None -> ());
+          render_finder_state t f)
       | None -> ())
 
 (* teardown — document-level listeners die with the viewer *)

@@ -369,9 +369,6 @@ let rec block_of_wire ?(order_index = 1) ?(parent_query_id = None)
     | _ -> None
   in
   let hl = hl_of_wire (Wire.get w "logseq.property.pdf/hl-value") in
-  let hl_color =
-    match hl with Some h -> h.Model.hl_color | None -> None
-  in
   { block_uuid = uuid
   ; block_db_id = db_id
   ; block_title = title
@@ -456,7 +453,7 @@ let rec block_of_wire ?(order_index = 1) ?(parent_query_id = None)
   ; block_ls_type = prop_label w "logseq.property/ls-type"
   ; block_hl_type = prop_label w "logseq.property.pdf/hl-type"
   ; block_hl_page = num_prop "logseq.property.pdf/hl-page"
-  ; block_hl_color = hl_color
+  ; block_hl_color = prop_label w "logseq.property.pdf/hl-color"
   ; block_bg_color = prop_label w "logseq.property/background-color"
   ; block_hl = hl
   ; block_asset_ref =

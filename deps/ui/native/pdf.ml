@@ -1,5 +1,5 @@
 (* Native twin — the pdf viewer is a declarative logseq-pdf extension
-   element inside #app-single-container (PDFKit on the host side),
+   element inside #app-single-container (requires a host PDF adapter),
    instead of the imperative pdf.js portal. S.open_request pushes the
    asset into a signal the chrome's container reads.
 
@@ -35,7 +35,7 @@ let view_sig : view option Signal.state option ref = ref None
 
 let get_view () =
   match !view_sig with
-  | Some s -> Signal.get (Signal.value s)
+  | Some s -> Runtime.signal_get s
   | None -> None
 
 let set_view v =
@@ -180,25 +180,52 @@ let update_hls f =
       Pdf_state.set_hls hls;
       { v with hls; rev = v.rev + 1 })
 
+let view_current accepted () =
+  match get_view () with
+  | Some current ->
+      current.repo = accepted.repo && current.instance = accepted.instance
+      && current.asset = accepted.asset && Runtime.repo () = accepted.repo
+      && !load_generation = accepted.instance
+      && !Pdf_state.current = Some accepted.asset
+  | None -> false
+
+let write_for accepted f =
+  ignore
+    (let* context =
+       Pdf_assets.capture_write_context ~current:(view_current accepted) ()
+     in
+     f context)
+
+let copy_hl_ref accepted hl =
+  write_for accepted (fun context ->
+      Pdf_assets.copy_hl_ref_for context accepted.asset hl)
+
 let add_hl hl =
-  update_hls (fun hls -> hls @ [ hl ]);
-  ignore (Pdf_assets.copy_hl_ref hl)
+  match get_view () with
+  | Some accepted ->
+      update_hls (fun hls -> hls @ [ hl ]);
+      copy_hl_ref accepted hl
+  | None -> ()
 
 let add_area_hl (j : J.t) =
-  match jstr j "png" with
-  | None -> ()
-  | Some b64 ->
+  match get_view (), jstr j "png" with
+  | Some accepted, Some b64 ->
+      let context =
+        Pdf_assets.capture_write_context ~current:(view_current accepted) ()
+      in
       let hl = hl_of_json j in
       ignore
-        (let png = Bytes.of_string (Transit.base64_decode b64) in
-         let* db_id = Pdf_assets.save_area_png png in
+        (let* context = context in
+         let png = Bytes.of_string (Transit.base64_decode b64) in
+         let* db_id = Pdf_assets.save_area_png ~context png in
          let hl =
            { hl with
-             Model.hl_image = Option.map Int64.of_int db_id }
+             Model.hl_image = Some (Int64.of_int db_id) }
          in
-         update_hls (fun hls -> hls @ [ hl ]);
-         Pdf_assets.copy_hl_ref hl;
+         let* () = Pdf_assets.copy_hl_ref_for context accepted.asset hl in
+         if context.current () then update_hls (fun hls -> hls @ [ hl ]);
          Js.Promise.resolve ())
+  | _ -> ()
 
 let del_hl id =
   match get_view () with
@@ -215,16 +242,20 @@ let del_hl id =
       | None -> ())
 
 let color_hl id color =
-  update_hls
-    (fun hls ->
-      List.map
-        (fun (hl : Model.hl) ->
-          if hl.hl_id = Some id then
-            let hl' = { hl with Model.hl_color = Some color } in
-            Pdf_assets.update_hl_block hl';
-            hl'
-          else hl)
-        hls)
+  match get_view () with
+  | Some accepted ->
+      update_hls
+        (fun hls ->
+          List.map
+            (fun (hl : Model.hl) ->
+              if hl.hl_id = Some id then
+                let hl' = { hl with Model.hl_color = Some color } in
+                write_for accepted (fun context ->
+                    Pdf_assets.update_hl_block_for context hl');
+                hl'
+              else hl)
+            hls)
+  | None -> ()
 
 let with_hl id f =
   match get_view () with
@@ -232,7 +263,7 @@ let with_hl id f =
       match
         List.find_opt (fun (hl : Model.hl) -> hl.hl_id = Some id) v.hls
       with
-      | Some hl -> f hl
+      | Some hl -> f v hl
       | None -> ())
   | None -> ()
 
@@ -305,11 +336,13 @@ let on_dom_event name payload =
       | _ -> ())
   | "pdf-hl-ref" -> (
       match jstr j "id" with
-      | Some id -> with_hl id Pdf_assets.copy_hl_ref
+      | Some id -> with_hl id copy_hl_ref
       | None -> ())
   | "pdf-hl-link" -> (
       match jstr j "id" with
-      | Some id -> with_hl id Pdf_assets.goto_block_ref
+      | Some id -> with_hl id (fun accepted hl ->
+          write_for accepted (fun context ->
+              Pdf_assets.goto_block_ref_for context accepted.asset hl))
       | None -> ())
   | "pdf-annots" -> (
       match get_view () with
@@ -434,6 +467,11 @@ let container_el ~key ~id : Lui_elements.t =
     context
 
 let install () =
+  Pdf_state.highlight_request :=
+    (fun hl ->
+      update_view (fun v ->
+          { v with page = hl.Model.hl_page; ref_hl = hl.hl_id
+          ; rev = v.rev + 1 }));
   Pdf_state.open_request :=
     (fun a ->
       incr load_generation;
