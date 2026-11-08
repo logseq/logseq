@@ -364,7 +364,7 @@ type split_batch =
 
 let active_split_batch : split_batch option ref = ref None
 (* A retired operation must not release a newer context's input gate. *)
-let structure_owner = ref (ref ())
+let structure_owner : (unit ref * unit Js.Promise.t) option ref = ref None
 
 let split_owned batch =
   match !active_split_batch with Some active -> active == batch | None -> false
@@ -402,12 +402,13 @@ let run_structure ?recover ?current_guard ~restore p finish =
     | None -> context = (Runtime.repo (), Runtime.route ())
   in
   let owned () =
-    !structure_owner == owner && match current_guard with
+    (match !structure_owner with Some (active, _) -> active == owner | None -> false)
+    && match current_guard with
     | Some guard -> guard.structure_owned ()
     | None -> true
   in
-  if Option.is_none current_guard || context_current () then begin
-    structure_owner := owner;
+  let claimed = Option.is_none current_guard || context_current () in
+  if claimed then begin
     S.structure_pending := true
   end;
   let current () = owned () && context_current () in
@@ -457,7 +458,7 @@ let run_structure ?recover ?current_guard ~restore p finish =
      ignore (Ui_services.perf_mark "struct:drained");
      Js.Promise.resolve ()
   in
-  ignore (match current_guard with
+  let complete = match current_guard with
     | None -> finished
     | Some guard ->
         (let* () = finished in
@@ -466,7 +467,10 @@ let run_structure ?recover ?current_guard ~restore p finish =
         |> Js.Promise.catch (fun _ ->
             release ();
             guard.structure_finish ();
-            finished))
+            finished)
+  in
+  if claimed then structure_owner := Some (owner, complete);
+  ignore complete
 
 (* Arm the optimistic editor now and again after canonical rows land. *)
 let with_focus_after ~restore uuid caret p =
@@ -669,6 +673,62 @@ let flush_edit () =
 (* property value cells open their own inline editor — entering one
    exits block editing just like a click into another block *)
 let () = S.close_block_editor := blur_commit
+
+(* Run the context commit in the same turn that observes a clean editor. *)
+let after_pending_input commit =
+  let context = Runtime.repo (), Runtime.route () in
+  let rec drain () =
+    if context <> (Runtime.repo (), Runtime.route ()) then
+      Js.Promise.reject (Failure "Editor context changed before input drained")
+    else if !S.structure_pending then
+      let _, complete = Option.get !structure_owner in
+      let* () = complete in
+      drain ()
+    else if not (Queue.is_empty S.pending_edit_actions) then begin
+      S.drain_edit_actions ();
+      drain ()
+    end else if !drain_gate then
+      Js.Promise.reject (Failure "Editor input replay is still active")
+    else match List.rev !S.pending_focus_actions with
+    | action :: rest ->
+        let before = !S.pending_focus_actions in
+        S.pending_focus_actions := List.rev rest;
+        drain_gate := true;
+        (try action (); drain_gate := false
+         with error ->
+           drain_gate := false;
+           S.pending_focus_actions := before;
+           raise error);
+        if not !S.structure_pending
+           && List.length !S.pending_focus_actions >= List.length before then
+          Js.Promise.reject (Failure "Editor input has not reached its editing session")
+        else drain ()
+    | [] ->
+        let* () = Ops.flush_pending_save () in
+        if context <> (Runtime.repo (), Runtime.route ())
+           || !S.structure_pending || not (Queue.is_empty S.pending_edit_actions)
+           || !S.pending_focus_actions <> [] then drain () else
+        match S.editing () with
+        | Some e ->
+            let buffer = Ops.trim_title e.S.uuid (live_buffer e.S.uuid) in
+            if buffer <> e.S.base then begin
+              let* saved = Ops.save_pending_result (Ops.accept_save e.S.uuid buffer) in
+              if Option.is_some saved then S.set_silent (fun st ->
+                  match st.S.editing with
+                  | Some live when live.S.epoch == e.S.epoch && live.S.buffer = e.S.buffer ->
+                      { st with S.editing = Some { live with S.base = buffer } }
+                  | _ -> st);
+              drain ()
+            end else begin
+              clear_pending_blur ();
+              cancel_pending_focus ();
+              Editor_sink.invalidate e.S.uuid;
+              S.set (fun st -> { st with S.editing = None });
+              commit ()
+            end
+        | None -> commit ()
+  in
+  drain ()
 
 let schedule_blur_commit () =
   match S.editing () with

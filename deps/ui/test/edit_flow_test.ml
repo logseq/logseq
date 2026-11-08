@@ -845,7 +845,63 @@ let test_navigation_retires_dirty_editor (h : host) =
      | _ -> false);
   Ui_services.nav_set_hash hash;
   reset_editor ();
-  Js.Promise.resolve ()
+  let rec switch = function
+    | [] -> Js.Promise.resolve ()
+    | reject_save :: rest ->
+        stage_page h [ Test_check.block "b1" "hello" ];
+        set_editing ~uuid:"b1" ~buffer:"hello" ~caret:5 ~base:"hello";
+        let release = ref (fun () -> ()) in
+        let structure = Js.Promise.make (fun ~resolve ~reject:_ ->
+            release := (fun () -> resolve W.Nil [@u]))
+          |> Js.Promise.then_ (fun _ -> Js.Promise.resolve ()) in
+        A.run_structure ~restore:(S.editing ()) structure (fun () -> ());
+        Editor_keys.apply_input "b1" (EI.Delete EI.Del_backward);
+        Editor_keys.apply_input "b1" (EI.Insert "q");
+        S.pending_focus_actions := [ (fun () -> Editor_keys.apply_input "b1" (EI.Insert "x")) ];
+        let saved = ref W.Nil and complete = ref (fun () -> ()) in
+        Runtime.worker := Some
+          { Worker_client.invoke_fn = (fun name args ->
+              if name = "thread-api/apply-outliner-ops" then begin
+                saved := W.Array args;
+                Js.Promise.make (fun ~resolve ~reject:_ ->
+                    complete := (fun () -> resolve W.Nil [@u]))
+                |> Js.Promise.then_ (fun _ ->
+                    if reject_save then h.reject_promise "navigation save rejected"
+                    else Js.Promise.resolve (W.Map [ W.Keyword "result", W.Nil ]))
+              end else if name = "thread-api/get-journal-page-by-day" then
+                Js.Promise.resolve (W.Map [])
+              else if name = "thread-api/get-latest-journals" then
+                Js.Promise.resolve (W.List [])
+              else Js.Promise.resolve
+                (if owned_call name then worker_handler h name args else h.base_handler name args))
+          ; on_message = (fun _ _ -> ())
+          ; dead = Js.Promise.make (fun ~resolve:_ ~reject:_ -> ()) };
+        let failed = ref false in
+        let navigation = Graphs_ops.navigate_journal "navigation-other-graph"
+          |> Js.Promise.catch (fun _ -> failed := true; Js.Promise.resolve ()) in
+        let* () = h.wait_ms 25 in
+        check "graph switch keeps A while accepted input is queued"
+          (Runtime.repo () = h.repo && (editing_now ()).S.buffer = "hello");
+        !release ();
+        let* () = h.wait_ms 25 in
+        check "graph switch saves queued structural then text input in A"
+          (match !saved with
+           | W.Array [ W.String repo; W.Array [ W.Array [ W.Keyword "save-block"; W.Array (bm :: _) ] ]; _ ] ->
+               repo = h.repo && W.get bm "block/title" = Some (W.String "hellqx")
+           | _ -> false);
+        check "graph switch waits for the accepted text save"
+          (Runtime.repo () = h.repo && (editing_now ()).S.buffer = "hellqx");
+        !complete ();
+        let* () = navigation in
+        check "only a successful save permits leaving A"
+          (if reject_save then
+             !failed && Runtime.repo () = h.repo
+             && (editing_now ()).S.buffer = "hellqx" && (editing_now ()).S.base = "hello"
+           else not !failed && Runtime.repo () = "navigation-other-graph" && S.editing () = None);
+        reset_editor ();
+        switch rest
+  in
+  switch [ false; true ]
 
 let test_history_after_navigation (h : host) =
   let* () = settle h 40 in
