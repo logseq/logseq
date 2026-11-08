@@ -204,11 +204,15 @@ let ensure_graph_created (repo : string) : unit =
 
 (* ---------- daemon spawn ---------- *)
 
-(* repo -> base-url of the daemon this process is attached to. Daemons
+let attachment_key repo =
+  (realpath (root_dir ()), graphs_dir (), realpath (lifecycle_dir ()), repo)
+
+(* (canonical storage, repo) -> base-url of the attached daemon. Daemons
    outlive the app on purpose: a live daemon keeps its repo admission
    and the graph open, so a later launch re-attaches in one healthz
    round-trip instead of paying a cold spawn + graph open. *)
-let attached : (string, string) Hashtbl.t = Hashtbl.create 4
+let attached : (string * string * string * string, string) Hashtbl.t =
+  Hashtbl.create 4
 
 (* boot timing: stderr marks carry seconds since module init so launch
    profiling needs no external stopwatch *)
@@ -336,45 +340,53 @@ let http_get ~(port : int) ~(path : string) : (int * string) option =
     (try Unix.close fd with _ -> ());
     None
 
-(* /healthz tells us which repo the daemon owns and whether it is
-   ready — a ready daemon already holds the admission and has run
-   create-or-open-db, so attaching is a warm path. *)
-let probe_daemon ~(port : int) : (string * bool) option =
+(* /healthz identifies the ready worker and its canonical storage. *)
+let probe_daemon ~(pid : int) ~(port : int) ~key : bool =
+  let root, graphs, lifecycle, repo = key in
   match http_get ~port ~path:"/healthz" with
   | Some (status, body) when status >= 200 && status < 300 -> (
       try
         match Yojson.Safe.from_string body with
         | `Assoc kvs ->
-            let field name =
-              match List.assoc_opt name kvs with
-              | Some (`String s) -> s
-              | _ -> ""
-            in
-            Some (field "repo", field "status" = "ready")
-        | _ -> None
-      with _ -> None)
-  | _ -> None
+            let field name = List.assoc_opt name kvs in
+            field "repo" = Some (`String repo)
+            && field "status" = Some (`String "ready")
+            && field "pid" = Some (`Int pid)
+            && field "port" = Some (`Int port)
+            && (match field "storage" with
+                | Some (`Assoc storage) ->
+                    let path name =
+                      match List.assoc_opt name storage with
+                      | Some (`String p)
+                        when p <> "" && not (Filename.is_relative p) ->
+                          Some (Unix.realpath p)
+                      | _ -> None
+                    in
+                    path "root" = Some root
+                    && path "graphsDir" = Some graphs
+                    && path "lifecycleDir" = Some lifecycle
+                | _ -> false)
+        | _ -> false
+      with _ -> false)
+  | _ -> false
 
-let find_live_daemon (repo : string) : string option =
+let find_live_daemon key : string option =
   let entries = read_server_list () in
   boot_mark ("probe server-list entries="
     ^ string_of_int (List.length entries));
   List.find_map
     (fun (pid, port) ->
-       match probe_daemon ~port with
-       | Some (r, true) when r = repo ->
-           boot_mark
-             ("probe ok pid=" ^ string_of_int pid ^ " port="
-              ^ string_of_int port);
-           Some ("http://127.0.0.1:" ^ string_of_int port)
-       | r ->
-           boot_mark
-             ("probe fail pid=" ^ string_of_int pid ^ " port="
-              ^ string_of_int port ^ " got="
-              ^ (match r with
-                 | Some (rr, ready) -> rr ^ " ready=" ^ string_of_bool ready
-                 | None -> "none"));
-           None)
+       if probe_daemon ~pid ~port ~key then begin
+         boot_mark
+           ("probe ok pid=" ^ string_of_int pid ^ " port="
+            ^ string_of_int port);
+         Some ("http://127.0.0.1:" ^ string_of_int port)
+       end else begin
+         boot_mark
+           ("probe fail pid=" ^ string_of_int pid ^ " port="
+            ^ string_of_int port);
+         None
+       end)
     entries
 
 (* ---------- graph listing ---------- *)
@@ -397,7 +409,7 @@ let list_repo_names () : Wire.t list =
 (* ---------- attach + prewarm ---------- *)
 
 (* Serializes attach-or-spawn across the prewarm thread and ipc callers
-   so only one daemon is ever spawned per repo: a second waiter blocks
+   so only one daemon is spawned per storage/repo: a second waiter blocks
    on the mutex, then finds the freshly published daemon in
    server-list / `attached`. *)
 let attach_mu = Mutex.create ()
@@ -417,17 +429,18 @@ let record_last_repo (repo : string) : unit =
 let ensure_attached (repo : string) : string =
   Mutex.lock attach_mu;
   Fun.protect ~finally:(fun () -> Mutex.unlock attach_mu) (fun () ->
-      match Hashtbl.find_opt attached repo with
+      let key = attachment_key repo in
+      match Hashtbl.find_opt attached key with
       | Some base -> base
       | None ->
           let base =
-            match find_live_daemon repo with
+            match find_live_daemon key with
             | Some base ->
                 boot_mark ("reuse daemon " ^ base);
                 base
             | None -> spawn_daemon repo
           in
-          Hashtbl.replace attached repo base;
+          Hashtbl.replace attached key base;
           record_last_repo repo;
           base)
 
@@ -575,8 +588,9 @@ let ipc (args : Wire.t list) : Wire.t Js.Promise.t =
       | [ Wire.String "releaseDbWorkerRuntime"; Wire.String repo ] ->
           (* detach only — the daemon keeps the repo open so a later
              attach (or the next app launch) is instant *)
+          let key = attachment_key repo in
           Mutex.lock attach_mu;
-          Hashtbl.remove attached repo;
+          Hashtbl.remove attached key;
           Mutex.unlock attach_mu;
           Host.enqueue (fun () -> resolve Wire.Nil)
       | _ -> Host.enqueue (fun () -> resolve Wire.Nil)
