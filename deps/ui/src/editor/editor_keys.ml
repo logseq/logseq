@@ -1734,7 +1734,8 @@ let on_click ev =
                          sup.fn, [contenteditable=true], .cloze, \
                          .cloze-revealed, .query-table, .image-resize, \
                          .view-action-type, .ui-fenced-code-editor, \
-                         .block-editor, .prefix-link, [data-pressable]"
+                         .block-editor, .prefix-link, .asset-container, \
+                         .ls-comment-row, [data-pressable]"
                         target
                     with
                     | Some _ -> ()
@@ -1911,7 +1912,8 @@ let on_mousedown (ev : Ui_services.ev) =
            "button, a, input, audio, video, details, summary, \
             sup.fn, [contenteditable=true], .cloze, \
             .cloze-revealed, .query-table, .image-resize, \
-            .view-action-type, .ui-fenced-code-editor"
+            .view-action-type, .ui-fenced-code-editor, \
+            .asset-container, .ls-comment-row"
            ev.Ui_services.target
        with
        | Some _ -> ("", now, stale)
