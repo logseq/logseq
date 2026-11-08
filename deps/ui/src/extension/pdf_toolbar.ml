@@ -654,7 +654,8 @@ and mount_finder (t : t) : finder =
       f.f_val <- Web_dom.el_value input;
       f.f_entered0 <- String.trim f.f_val <> "";
       f.f_entered <- false;
-      refresh_go_btn t f iw);
+      refresh_go_btn t f iw;
+      render_finder_state t f);
   Web_dom.el_on input "keyup" (fun e ->
       match Web_dom.ev_which e with
       | 13 ->
