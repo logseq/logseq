@@ -8,8 +8,7 @@ type pfs = string
 let graphs_dir () = Daemon_client.graphs_dir ()
 
 let graph_dir repo =
-  Filename.concat (graphs_dir ())
-    (Platform.strip_db_prefix repo)
+  Filename.concat (graphs_dir ()) (Daemon_client.encode_graph repo)
 
 let asset_dir repo =
   Filename.concat (graph_dir repo) "assets"
@@ -19,7 +18,10 @@ let asset_path repo name =
   Resource_native.asset_path ~asset_dir:(asset_dir repo) name
 
 let publish_resource_context ~repo =
-  Resource_native.publish ~repo ~graph_dir:(graph_dir repo) ~asset_dir:(asset_dir repo)
+  if repo = "" then Resource_native.publish ~repo ~graph_dir:"" ~asset_dir:""
+  else
+    Resource_native.publish ~repo ~graph_dir:(graph_dir repo)
+      ~asset_dir:(asset_dir repo)
 
 let ensure_dir path =
   Daemon_client.mkdir_p path;
