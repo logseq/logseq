@@ -11,6 +11,11 @@ type area_st =
   ; target_titles : (string * string) list
   }
 
+let area_slot : area_st Signal.state_slot = Signal.state_slot "comments-area"
+let draft_slot : string Signal.state_slot = Signal.state_slot "comment-draft"
+let saving_slot : bool Signal.state_slot = Signal.state_slot "comment-saving"
+let reply_open_slot : bool Signal.state_slot = Signal.state_slot "comment-reply-open"
+
 let draft_key uuid = "comments-" ^ uuid ^ "-draft"
 let load_draft uuid = Option.value (Ui_services.storage_get (draft_key uuid)) ~default:""
 let save_draft uuid value = Ui_services.storage_set (draft_key uuid) value
@@ -86,10 +91,9 @@ let reactions_el uuid reactions users =
 (* Drafts stay mounted independently of the worker's comment-list refresh. *)
 let editor_box ?area_uuid ~initial ~autofocus ?on_cancel ~on_saved submit : t =
  fun ctx parent ->
-  let draft = Signal.state ctx.Lui_ui.ui_scheduler initial in
-  let busy = Signal.state ctx.Lui_ui.ui_scheduler false in
-  let alive = ref true in
-  Signal.on_dispose ctx.Lui_ui.ui_scope (fun () -> alive := false);
+  let draft = Signal.state_at ctx.Lui_ui.ui_scheduler ctx.ui_state_scope draft_slot initial in
+  let busy = Signal.state_at ctx.Lui_ui.ui_scheduler ctx.ui_state_scope saving_slot false in
+  let alive () = not (Signal.scope_is_disposed ctx.ui_state_scope) in
   let save () =
     let original = Runtime.signal_get draft in
     let content = String.trim original in
@@ -98,7 +102,7 @@ let editor_box ?area_uuid ~initial ~autofocus ?on_cancel ~on_saved submit : t =
       (let* () = submit content in
        Option.iter (fun uuid ->
          if load_draft uuid = original then save_draft uuid "") area_uuid;
-       if !alive then begin
+       if alive () then begin
          if Runtime.signal_get draft = original then begin
            Runtime.signal_set draft "";
            on_saved ()
@@ -107,7 +111,7 @@ let editor_box ?area_uuid ~initial ~autofocus ?on_cancel ~on_saved submit : t =
        end;
        Js.Promise.resolve ())
       |> Js.Promise.catch (fun error ->
-           if !alive then Runtime.signal_set busy false;
+           if alive () then Runtime.signal_set busy false;
            Ui_services.log_error ("Comment save failed", error);
            Toast.error (I.t "block.comments/save-error");
            Js.Promise.resolve ()) |> ignore
@@ -182,7 +186,7 @@ let comment_row st (comment : Model.block) =
 
 let add_box area_uuid : t =
  fun ctx parent ->
-  let opened = Signal.state ctx.Lui_ui.ui_scheduler false in
+  let opened = Signal.state_at ctx.Lui_ui.ui_scheduler ctx.ui_state_scope reply_open_slot false in
   let initial = load_draft area_uuid in
   (column ~style_class:"ls-comment-add" ~padding:8 ~min_width:0
     ~background:"var(--ls-primary-background-color)"
@@ -240,7 +244,7 @@ let header ~alive st (block : Model.block) count : t =
 
 let area_el (blocks : Model.block Signal.signal) : t =
  fun ctx parent ->
-  let st = Signal.state ctx.Lui_ui.ui_scheduler
+  let st = Signal.state_at ctx.Lui_ui.ui_scheduler ctx.ui_state_scope area_slot
       { targets_open = false; editing = None; target_titles = [] } in
   let alive = ref true in
   Signal.on_dispose ctx.Lui_ui.ui_scope (fun () -> alive := false);
@@ -267,10 +271,12 @@ let area_el (blocks : Model.block Signal.signal) : t =
                     (Runtime.nav_hash ("#/page/" ^ target))) []) state.target_titles))
           (Signal.value st)
       ; scroll ~orientation:`vertical ~max_height:320
-          [ reactive (fun (block : Model.block) ->
-              let comments = List.filter (Comments_ops.is_comment ~parent:block) block.block_children in
-              column ~style_class:"ls-comments-list" ~padding_horizontal:8 ~padding_vertical:4
-                ~min_width:0 (List.map (comment_row st) comments)) blocks ]
+          [ column ~style_class:"ls-comments-list" ~padding_horizontal:8 ~padding_vertical:4
+              ~min_width:0
+              [ keyed ~source:(reactive (fun (block : Model.block) ->
+                    List.filter (Comments_ops.is_comment ~parent:block) block.block_children) blocks)
+                  ~key:(fun (comment : Model.block) -> comment.block_uuid)
+                  ~cmp:compare ~mount:(fun comment -> reactive (comment_row st) comment) ] ]
       ; if Ui_services.env_publishing () then Logseq_el.nothing else
           reactive ~equal:(fun (a : Model.block) b -> a.block_uuid = b.block_uuid)
             (fun block -> add_box (Option.value block.block_uuid ~default:"")) blocks ]) blocks)
