@@ -87,9 +87,7 @@ let tokens_of resp =
           | _ -> None))
 
 let store_tokens id acc refresh =
-  Ui_services.storage_set "id-token" id;
-  Ui_services.storage_set "access-token" acc;
-  if refresh <> "" then Ui_services.storage_set "refresh-token" refresh;
+  let* () = Platform.save_auth_tokens id acc refresh in
   ignore
     (Runtime.invoke1 "thread-api/sync-app-state"
        (Wire.Map
@@ -100,7 +98,8 @@ let store_tokens id acc refresh =
           ; (Wire.kw "auth/oauth-token-url", Wire.String oauth_token_url)
           ]));
   (* cljs flows/current-login-user watch -> trigger-start-rtc [:login] *)
-  Rtc_flows.notify_login ()
+  Rtc_flows.notify_login ();
+  Js.Promise.resolve ()
 
 (* cljs components/user/login.cljs authenticator — a small tab state
    machine over the dialog: login / signup / reset-password / confirm-code,
@@ -299,7 +298,7 @@ let submit ctx fields =
     let* json = auth_json ctx init in
     match Option.bind json tokens_of with
     | Some (id, acc, refresh) ->
-        store_tokens id acc refresh;
+        let* () = store_tokens id acc refresh in
         if Ui_effect.alive ctx.Lui_ui.ui_scope then
           Dialogs_state.close_named "login";
         Js.Promise.resolve ()
@@ -412,8 +411,13 @@ let confirm_submit ctx fields user =
         Js.Promise.resolve ())
 
 let sign_out ctx =
-  Rtc_flows.sign_out ();
-  set_auth ctx (fun _ -> { tab = Login; err = ""; session_user = None })
+  (let* () = Rtc_flows.sign_out () in
+   set_auth ctx (fun _ -> { tab = Login; err = ""; session_user = None });
+   Js.Promise.resolve ())
+  |> Js.Promise.catch (fun _ ->
+       fail ctx (I18n.t "account/sign-out-error");
+       Js.Promise.resolve ())
+  |> ignore
 
 (* cljs user.cljs username — the id-token's cognito:username claim *)
 let session_username = Rtc_flows.username

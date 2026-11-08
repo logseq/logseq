@@ -156,6 +156,8 @@ func (s *platformServices) Handle(request string) ([]platformReply, error) {
 
 func (s *platformServices) handle(name, payload string) ([]platformReply, error) {
 	switch name {
+	case "keychain":
+		return keychainRequest(payload)
 	case "resource-context":
 		return nil, s.resources.InstallGraphContext(payload)
 	case "application-menu-labels":

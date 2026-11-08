@@ -4,6 +4,7 @@
    not emit. *)
 
 open Lui_elements
+open Promise_ext
 
 
 
@@ -201,9 +202,14 @@ let user_item () : Lui_elements.t =
             ~style_class:"ui__button as-ghost"
             ~label:(I18n.t "ui/logout") ~icon:(`app "logout")
             ~on_press:(fun _ ->
-              Rtc_flows.sign_out ();
-              Runtime.send (Action.Page_menu_set None);
-              Runtime.flush ())
+              (let* () = Rtc_flows.sign_out () in
+               Runtime.send (Action.Page_menu_set None);
+               Runtime.flush ();
+               Js.Promise.resolve ())
+              |> Js.Promise.catch (fun _ ->
+                   Toast.error (I18n.t "account/sign-out-error");
+                   Js.Promise.resolve ())
+              |> ignore)
             []
         ])
     ]

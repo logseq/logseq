@@ -248,8 +248,8 @@ let notify_logout () = Rtc_ops.stop ()
 (* cljs user.cljs logout — clear tokens, push the empty auth state to
    the worker and stop sync (<rtc-stop!) *)
 let sign_out () =
-  List.iter Ui_services.storage_remove
-    [ "id-token"; "access-token"; "refresh-token" ];
+  let open Promise_ext in
+  let* () = Platform.clear_auth_tokens () in
   ignore
     (Runtime.invoke1 "thread-api/sync-app-state"
        (Wire.Map
@@ -257,7 +257,8 @@ let sign_out () =
           ; (Wire.kw "auth/access-token", Wire.String "")
           ; (Wire.kw "auth/refresh-token", Wire.String "")
           ]));
-  notify_logout ()
+  notify_logout ();
+  Js.Promise.resolve ()
 
 let () =
   Runtime.rtc_log_handler := on_log;

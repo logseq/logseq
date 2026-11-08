@@ -210,4 +210,20 @@ let () =
               check "vector truncate recreates an empty index"
                 (Vector_index.query reopened ~embedding:[|1.; 0.; 0.|] ~limit:10 ~page:None = [])))))
   end;
+  test "native credentials require the secure host" (fun () ->
+    let directory = Filename.temp_file "worker-secret-boundary-" "" in
+    Sys.remove directory;
+    Unix.mkdir directory 0o700;
+    Unix.putenv "LOGSEQ_WORKER_KV_DIR" directory;
+    let kv_file = Filename.concat directory "kv-store.json" in
+    Fun.protect ~finally:(fun () ->
+      if Sys.file_exists kv_file then Sys.remove kv_file;
+      Unix.rmdir directory) (fun () ->
+      let rejected run = try run (); false with Failure _ -> true in
+      let denied =
+        [ rejected (fun () -> await (Secret_store.save ~key:"synthetic-key" "synthetic-value"));
+          rejected (fun () -> ignore (await (Secret_store.read ~key:"synthetic-key")));
+          rejected (fun () -> await (Secret_store.delete ~key:"synthetic-key")) ] in
+      check "native secret operations fail closed without creating a KV file"
+        (List.for_all Fun.id denied && not (Sys.file_exists kv_file))));
   if !failures <> 0 then exit 1
