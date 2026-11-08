@@ -1756,15 +1756,62 @@ let configured_concat left right =
   left ^ (if S.trim left = "" || left.[S.length left - 1] = '\n' then "" else " ")
     ^ S.sub right !start (S.length right - !start)
 
-let configured_input ?(backward_pos = 0) text (model : Edit_model.t) =
-  let pos = model.caret in
+let configured_last_index text pattern =
+  if pattern = "" then Some (S.length text) else
+  let rec find start found = match Str_util.index_from text start pattern with
+    | None -> found
+    | Some index -> find (index + 1) (Some index) in
+  find 0 None
+
+let configured_input ?(backward_pos = 0) ?(last_pattern = Some "/")
+    ?end_pattern ?backward_truncate_number ?(only_breakline = false)
+    text (model : Edit_model.t) =
+  let rewind text count =
+    match model.units with
+    | Edit_model.U16 -> max 0 (S.length text - count)
+    | Edit_model.Bytes ->
+        let rec back pos count =
+          if count <= 0 || pos = 0 then pos else
+          let prev = Edit_model.prev_cp model.units text pos in
+          let width = if Edit_model.decode_cp model.units text prev > 0xFFFF then 2 else 1 in
+          back prev (count - width) in
+        back (S.length text) count in
+  let pos = match end_pattern with
+    | None -> model.caret
+    | Some pattern ->
+        Option.value (Str_util.index_from model.source model.caret pattern)
+          ~default:model.caret in
+  let last_pattern = if backward_truncate_number = None then last_pattern else None in
   let prefix = S.sub model.source 0 pos in
   let suffix = S.sub model.source pos (S.length model.source - pos) in
-  let prefix = match S.rindex_opt prefix '/' with
-    | None -> prefix
-    | Some index -> configured_concat (S.sub prefix 0 index) text in
-  let source = if S.trim suffix = "" then prefix else configured_concat prefix suffix in
-  let pos = max 0 (S.length prefix - backward_pos) in
+  let index = Option.bind last_pattern (configured_last_index prefix) in
+  let space = match last_pattern with
+    | None -> false
+    | Some pattern ->
+        not (Str_util.starts_with pattern "::" || Str_util.ends_with pattern "::"
+             || Str_util.starts_with pattern "#[[" || Str_util.starts_with pattern "```"
+             || Option.fold ~none:false ~some:(fun index ->
+                  let before = S.sub prefix 0 index in
+                  (Str_util.ends_with before "("
+                   && (Str_util.starts_with pattern "((" || Str_util.starts_with pattern "[["))
+                  || Str_util.starts_with before "{{embed"
+                  || (Str_util.ends_with before "#" && Str_util.starts_with pattern "[[")) index) in
+  let concat left right = if space then configured_concat left right else left ^ right in
+  let prefix = match backward_truncate_number with
+    | Some 0 -> prefix
+    | Some count -> S.sub prefix 0 (rewind prefix count) ^ text
+    | None ->
+        (match last_pattern, index with
+         | None, _ -> prefix ^ text
+         | Some pattern, _ when S.trim pattern = "" -> concat prefix text
+         | Some _, Some index -> concat (S.sub prefix 0 index) text
+         | Some _, None -> prefix) in
+  let suffix =
+    if only_breakline && Str_util.starts_with suffix "\n" then
+      S.sub suffix 1 (S.length suffix - 1)
+    else suffix in
+  let source = if S.trim suffix = "" then prefix else concat prefix suffix in
+  let pos = rewind prefix backward_pos in
   if S.trim text <> "" && S.trim source = "" then model else
     Edit_model.select (Edit_model.splice model 0 (S.length model.source) source)
       ~anchor:pos ~focus:pos
@@ -1774,15 +1821,35 @@ let configured_steps output =
     let rec loop count model = if count <= 0 then model else
       loop (count - 1) (Edit_model.move model direction ~extend:false) in
     loop count model in
+  let input text fields =
+    let supported = List.for_all (function
+      | Wire.Keyword ("backward-pos" | "backward-truncate-number"), Wire.Int n -> n >= 0
+      | Wire.Keyword "last-pattern", (Wire.String _ | Wire.Keyword "skip-check")
+      | Wire.Keyword "end-pattern", Wire.String _
+      | Wire.Keyword "only-breakline?", Wire.Bool _
+      | Wire.Keyword ("backward-pos" | "backward-truncate-number" | "last-pattern"
+                      | "end-pattern" | "only-breakline?"), Wire.Nil -> true
+      | _ -> false) fields in
+    if not supported then None else
+    let options = Wire.Map fields in
+    let integer key = match Wire.get options key with
+      | Some (Wire.Int n) -> Some n | _ -> None in
+    let last_pattern = match Wire.get options "last-pattern" with
+      | Some (Wire.Keyword "skip-check") -> None
+      | Some (Wire.String pattern) -> Some pattern
+      | _ -> Some "/" in
+    let end_pattern = match Wire.get options "end-pattern" with
+      | Some (Wire.String pattern) -> Some pattern | _ -> None in
+    Some (configured_input ~last_pattern ?end_pattern
+      ?backward_pos:(integer "backward-pos")
+      ?backward_truncate_number:(integer "backward-truncate-number")
+      ~only_breakline:(Wire.get options "only-breakline?" = Some (Wire.Bool true)) text) in
   let step = function
     | Wire.Array [Wire.Keyword "editor/input"; Wire.String text]
-    | Wire.Array [Wire.Keyword "editor/input"; Wire.String text; Wire.Nil]
-    | Wire.Array [Wire.Keyword "editor/input"; Wire.String text; Wire.Map []] ->
+    | Wire.Array [Wire.Keyword "editor/input"; Wire.String text; Wire.Nil] ->
         Some (configured_input text)
-    | Wire.Array [Wire.Keyword "editor/input"; Wire.String text;
-                  Wire.Map [ (Wire.Keyword "backward-pos", Wire.Int n) ]]
-      when n >= 0 ->
-        Some (configured_input ~backward_pos:n text)
+    | Wire.Array [Wire.Keyword "editor/input"; Wire.String text; Wire.Map fields] ->
+        input text fields
     | Wire.Array [Wire.Keyword "editor/cursor-back"; Wire.Int count] when count >= 0 ->
         Some (move Edit_model.Left count)
     | Wire.Array [Wire.Keyword "editor/cursor-forward"; Wire.Int count] when count >= 0 ->

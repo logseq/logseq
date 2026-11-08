@@ -2745,6 +2745,39 @@ let mk_ac kind =
   ; items = []; chosen = 0; auuid = "" }
 
 let test_popups_state () =
+  List.iter (fun (name, units, source, caret, text, options, expected) ->
+    let model = Edit_model.create ~units source in
+    let model = Edit_model.select model ~anchor:caret ~focus:caret in
+    let output = Wire.Array [Wire.Array
+      [Wire.kw "editor/input"; Wire.String text; Edn.parse options]] in
+    let result = Option.map (fun steps ->
+      let model = List.fold_left (fun model step -> step model) model steps in
+      model.Edit_model.source, model.caret) (Popups_state.configured_steps output) in
+    check ("Configured input " ^ name) (result = expected))
+    [ "custom pattern", Edit_model.U16, "left//query", 11, "X",
+      "{:last-pattern \"//\"}", Some ("left X", 6)
+    ; "skip pattern", Edit_model.U16, "left", 4, "X",
+      "{:last-pattern :skip-check}", Some ("leftX", 5)
+    ; "blank pattern", Edit_model.U16, "left", 4, "X",
+      "{:last-pattern \"\"}", Some ("left X", 6)
+    ; "end pattern", Edit_model.U16, "a /cmdTAIL|suffix", 6, "X",
+      "{:end-pattern \"|\"}", Some ("a X |suffix", 3)
+    ; "zero truncate", Edit_model.U16, "ab/cd", 5, "X",
+      "{:backward-truncate-number 0}", Some ("ab/cd", 5)
+    ; "truncate", Edit_model.U16, "ab/cd", 5, "X",
+      "{:backward-truncate-number 2}", Some ("ab/X", 4)
+    ; "single breakline", Edit_model.U16, "x\n\nrest", 1, "Q",
+      "{:last-pattern :skip-check :only-breakline? true}", Some ("xQ\nrest", 2)
+    ; "tag spacing", Edit_model.U16, "#[[query", 8, "[[X]]",
+      "{:last-pattern \"[[\"}", Some ("#[[X]]", 6)
+    ; "native UTF-16 backward", Edit_model.Bytes, "/cmd", 4,
+      "\228\184\128\228\186\140", "{:backward-pos 2}",
+      Some ("\228\184\128\228\186\140", 0)
+    ; "web UTF-16 backward", Edit_model.U16, "/cmd", 4,
+      {js|一二|js}, "{:backward-pos 2}", Some ({js|一二|js}, 0)
+    ; "unsupported function", Edit_model.U16, "/cmd", 4, "X",
+      "{:postfix-fn custom-function}", None
+    ];
   (* fuzzy_score: subsequence match, first*1000 + span *)
   check "fuzzy h1" (Fuzzy.score "h1" "Heading 1" > 0.);
   check "fuzzy te 1" (Fuzzy.score "te 1" "template 1" > 0.);
