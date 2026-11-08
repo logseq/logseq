@@ -99,9 +99,11 @@ let editor_box ?area_uuid ~initial ~autofocus ?on_cancel ~on_saved submit : t =
        Option.iter (fun uuid ->
          if load_draft uuid = original then save_draft uuid "") area_uuid;
        if !alive then begin
-         if Runtime.signal_get draft = original then Runtime.signal_set draft "";
-         Runtime.signal_set busy false;
-         on_saved ()
+         if Runtime.signal_get draft = original then begin
+           Runtime.signal_set draft "";
+           on_saved ()
+         end;
+         Runtime.signal_set busy false
        end;
        Js.Promise.resolve ())
       |> Js.Promise.catch (fun error ->
