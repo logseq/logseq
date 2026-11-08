@@ -532,8 +532,7 @@ let test_editor_escape () =
       check "Escape routes to exit_edit"
         (!Editor_actions.last_edit_uuid = Some "b1"))
 
-(* cljs: mod+b/mod+i wrap the selection (or the caret) with ** / *;
-   the wrapped text stays selected inside the markers *)
+(* cljs: mod+b/mod+i insert markers or remove a matching wrapper. *)
 let test_editor_format_wraps () =
   stage_main_session [ block "b1" "hello world" ];
   set_editing "b1" "hello world" ~caret:6;
@@ -552,6 +551,18 @@ let test_editor_format_wraps () =
   Editor_keys.on_keydown (key_event ~meta:true "i");
   check "mod+i wraps the selection with *"
     (Editor_actions.live_buffer "b1" = "*hello* world");
+  clear_editing ();
+  set_editing "b1" "hello *world*" ~caret:12;
+  Editor_actions.update_model "b1"
+    (fun m -> Edit_model.select m ~anchor:7 ~focus:12);
+  Editor_keys.on_keydown (key_event ~meta:true "i");
+  check "mod+i removes matching markers around the selection"
+    (Editor_actions.live_buffer "b1" = "hello world");
+  (match Editor_state.editing () with
+   | Some e ->
+       check "removing markers preserves the inner selection"
+         (Edit_model.selection_range e.Editor_state.model = Some (6, 11))
+   | None -> check "editing survives removing markers" false);
   clear_editing ()
 
 (* cljs config: ctrl+shift+b/f are the mac word-movement bindings;
