@@ -223,6 +223,12 @@ let init () =
        | _ -> ());
       Js.Promise.resolve Wire.Nil);
   Runtime.on_navigate := (fun () ->
+      Editor_actions.flush_edit ();
+      Editor_actions.structure_owner := ref ();
+      Option.iter Editor_actions.retire_split !Editor_actions.active_split_batch;
+      Editor_state.structure_pending := false;
+      Queue.clear Editor_state.pending_edit_actions;
+      Editor_state.pending_edit_real := 0;
       Subs.clear_pending_deltas ();
       (* a route change abandons the old page's selection/editor state —
          leaving `selected` behind keeps the selection action bar visible
