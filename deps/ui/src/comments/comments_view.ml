@@ -15,7 +15,9 @@ let area_slot : area_st Signal.state_slot = Signal.state_slot "comments-area"
 let draft_slot : string Signal.state_slot = Signal.state_slot "comment-draft"
 let saving_slot : string option Signal.state_slot = Signal.state_slot "comment-saving"
 let activation_slot : string Signal.state_slot = Signal.state_slot "comment-activation"
-let reply_open_slot : bool Signal.state_slot = Signal.state_slot "comment-reply-open"
+let session_slot : (string * Editor_state.draft_owner * bool ref) option Signal.state_slot =
+  Signal.state_slot "comment-session"
+let reply_open_slot : string option Signal.state_slot = Signal.state_slot "comment-reply-open"
 
 let draft_key uuid = "comments-" ^ uuid ^ "-draft"
 let load_draft uuid = Option.value (Ui_services.storage_get (draft_key uuid)) ~default:""
@@ -107,24 +109,27 @@ let reactions_el uuid reactions users =
                ~label:(I.t "command.editor/add-reaction") ~icon:(`app "plus")
                ~on_press:(fun _ -> open_reaction_picker uuid ("rx-add-" ^ uuid)) [] ])
 
-(* Drafts stay mounted independently of the worker's comment-list refresh. *)
+(* Draft ownership survives worker-driven render remounts. *)
 let editor_box ?area_uuid ?comment_uuid ~scope ~activation ~asset_target ~initial
     ?on_cancel ~on_saved prepare : t =
  fun ctx parent ->
   let draft = Signal.state_at ctx.Lui_ui.ui_scheduler ctx.ui_state_scope draft_slot initial in
   let busy = Signal.state_at ctx.Lui_ui.ui_scheduler ctx.ui_state_scope saving_slot None in
   let active = Signal.state_at ctx.Lui_ui.ui_scheduler ctx.ui_state_scope activation_slot "" in
+  let session = Signal.state_at ctx.Lui_ui.ui_scheduler ctx.ui_state_scope session_slot None in
   if Runtime.signal_get active <> activation then begin
     Runtime.signal_set active activation;
     Runtime.signal_set draft initial;
-    Runtime.signal_set busy None
+    Runtime.signal_set busy None;
+    Runtime.signal_set session None
   end;
+  let context = Runtime.repo (), Runtime.route () in
+  let alive () = not (Signal.scope_is_disposed ctx.ui_state_scope)
+    && context = (Runtime.repo (), Runtime.route ())
+    && Runtime.signal_get active = activation in
+  let create_session () =
   let mount_token = Ui_services.env_random_uuid () in
   let uuid = Option.value comment_uuid ~default:(Ui_services.env_random_uuid ()) in
-  let context = Runtime.repo (), Runtime.route () in
-  let alive () = not (Signal.scope_is_disposed ctx.ui_scope)
-    && not (Signal.scope_is_disposed ctx.ui_state_scope)
-    && context = (Runtime.repo (), Runtime.route ()) in
   let owner : Editor_state.draft_owner = object (self)
     method current = alive ()
     method asset_target = asset_target
@@ -188,20 +193,31 @@ let editor_box ?area_uuid ?comment_uuid ~scope ~activation ~asset_target ~initia
               Js.Promise.resolve ()) |> ignore) area_uuid
       | _ -> ()
   end in
+  Signal.on_dispose ctx.ui_state_scope (fun () ->
+    (match Editor_state.editing () with
+     | Some e when e.Editor_state.owner = Editor_state.Explicit_draft owner ->
+         Editor_actions.dismiss_draft ~notify:false e
+     | _ -> ());
+    if not (Signal.scope_is_disposed ctx.ui_state_scope)
+       && Runtime.signal_get busy = Some mount_token then Runtime.signal_set busy None);
+  uuid, owner, ref false in
+  let uuid, owner, started = match Runtime.signal_get session with
+    | Some current -> current
+    | None ->
+        let current = create_session () in
+        Runtime.signal_set session (Some current);
+        current in
   let owns () = alive () && match Editor_state.editing () with
     | Some e -> e.Editor_state.owner = Editor_state.Explicit_draft owner
     | None -> false in
   let cancel () = if owns () then Option.iter (fun e -> Editor_actions.dismiss_draft e)
       (Editor_state.editing ()) in
-  Signal.on_dispose ctx.ui_scope (fun () ->
-    (match Editor_state.editing () with
-     | Some e when e.Editor_state.owner = Editor_state.Explicit_draft owner ->
-         Editor_actions.dismiss_draft e
-     | _ -> ());
-    if not (Signal.scope_is_disposed ctx.ui_state_scope)
-       && Runtime.signal_get busy = Some mount_token then Runtime.signal_set busy None);
-  let activate _ = Editor_actions.enter_draft ~uuid ~scope
-      ~buffer:(Runtime.signal_get draft) ~owner
+  let activate _ =
+    if owns () then Editor_actions.request_focus uuid (Editor_actions.caret_of uuid)
+    else if not !started then begin
+      started := true;
+      Editor_actions.enter_draft ~uuid ~scope ~buffer:(Runtime.signal_get draft) ~owner
+    end
   in
   (row ~style_class:"ls-comment-box" ~gap:8 ~cross:`start ~min_width:0
     [ column ~grow:1. ~min_width:0 ~min_height:34
@@ -288,16 +304,18 @@ let comment_row ~scope ~area_uuid st (comment : Model.block Signal.signal) =
 
 let add_box ~scope area_uuid : t =
  fun ctx parent ->
-  let opened = Signal.state_at ctx.Lui_ui.ui_scheduler ctx.ui_state_scope reply_open_slot false in
+  let opened = Signal.state_at ctx.Lui_ui.ui_scheduler ctx.ui_state_scope reply_open_slot None in
+  let open_reply () = if Runtime.signal_get opened = None then
+    Runtime.signal_set opened (Some (Ui_services.env_random_uuid ())) in
   let initial = load_draft area_uuid in
   (column ~style_class:"ls-comment-add" ~padding:8 ~min_width:0
     ~background:"var(--ls-primary-background-color)"
     ~border_width:1 ~border_color:"var(--lx-gray-04-alpha, var(--rx-gray-04-alpha))"
-    [ reactive (fun open_ ->
-        if open_ then
+    [ reactive (function
+        | Some activation ->
           editor_box ~area_uuid ~scope ~asset_target:area_uuid
-            ~activation:(Ui_services.env_random_uuid ()) ~initial:(load_draft area_uuid)
-            ~on_cancel:(fun () -> Runtime.signal_set opened false)
+            ~activation ~initial:(load_draft area_uuid)
+            ~on_cancel:(fun () -> Runtime.signal_set opened None)
             ~on_saved:(fun () -> ())
             (fun content ->
               let* block = Ops.block_map_parsed (Ui_services.env_random_uuid ()) content in
@@ -306,17 +324,17 @@ let add_box ~scope area_uuid : t =
                     Wire.Set [Wire.Keyword Comments_ops.comment_ident]) :: fields)
                 | _ -> invalid_arg "Parsed comment must be a block map" in
               Js.Promise.resolve (Ops.insert_blocks ~bottom:true [block] area_uuid ~sibling:false))
-        else
+        | None ->
           Ui_components.button ~variant:`ghost ~style_class:"ls-comment-reply-placeholder"
             ~min_height:34 ~padding_horizontal:7 ~padding_vertical:5 ~main:`start
             ~on_appear:(fun _ ->
               if Comments_ops.take_reply_focus_request area_uuid then
-                Runtime.signal_set opened true)
+                open_reply ())
             ~label:(I.t "block.comments/placeholder")
             ~text:(if initial = "" then I.t "block.comments/placeholder" else initial)
             ~on_press:(fun _ ->
               ignore (Comments_ops.take_reply_focus_request area_uuid);
-              Runtime.signal_set opened true) [])
+              open_reply ()) [])
         (Signal.value opened) ]) ctx parent
 
 let header ~scope st (block : Model.block) count : t =
