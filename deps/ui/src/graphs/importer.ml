@@ -38,7 +38,8 @@ let import_data () =
                     | Some (Wire.String message) -> Toast.error message
                     | Some error -> Toast.error (Edn.to_string error)
                     | None -> Toast.success (T.t "import/successful")) in
-            if Wire.get data "logseq.db.sqlite.export/block" = Some (Wire.Bool true) then
+            if (match Wire.get data "logseq.db.sqlite.export/block" with
+                | Some (Wire.Map _) -> true | _ -> false) then
               let current = match Editor_state.editing () with
                 | Some editing -> Some editing.Editor_state.uuid
                 | None -> List.nth_opt (Editor_actions.selected_uuids ()) 0 in
