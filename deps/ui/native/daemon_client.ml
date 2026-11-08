@@ -21,7 +21,22 @@ let root_dir () =
   | Some d -> d
   | None -> Filename.concat (home ()) "logseq"
 
-let graphs_dir () = Filename.concat (root_dir ()) "graphs"
+let realpath p = try Unix.realpath p with _ -> p
+
+let graphs_dir () =
+  let path =
+    match Sys.getenv_opt "LOGSEQ_GRAPHS_DIR" with
+    | Some dir -> dir
+    | None -> Filename.concat (root_dir ()) "graphs"
+  in
+  let path =
+    if String.starts_with ~prefix:"~" path then
+      Filename.concat (home ()) (String.sub path 1 (String.length path - 1))
+    else path
+  in
+  realpath
+    (if Filename.is_relative path then Filename.concat (Sys.getcwd ()) path
+     else path)
 
 let server_list_path () = Filename.concat (root_dir ()) "server-list"
 
@@ -117,25 +132,7 @@ let graph_name repo =
   if name = "" then failwith "repo is required";
   name
 
-let encode_graph repo =
-  let name = graph_name repo in
-  let unreserved c =
-    (c >= 'A' && c <= 'Z')
-    || (c >= 'a' && c <= 'z')
-    || (c >= '0' && c <= '9')
-    || c = '-' || c = '_' || c = '.' || c = '!' || c = '*'
-    || c = '\'' || c = '(' || c = ')'
-  in
-  let b = Buffer.create (String.length name) in
-  String.iter
-    (fun c ->
-       if c = ' ' then Buffer.add_char b ' '
-       else if unreserved c then Buffer.add_char b c
-       else Buffer.add_string b (Printf.sprintf "~%02X" (Char.code c)))
-    name;
-  Buffer.contents b
-
-let realpath p = try Unix.realpath p with _ -> p
+let encode_graph repo = Graph_dir.encode_graph_dir_name (graph_name repo)
 
 let sha256_hex s =
   Digestif.SHA256.(to_hex (digest_string s))
@@ -232,12 +229,13 @@ let boot_mark msg =
    a systhread. *)
 let spawn_daemon (repo : string) : string =
   boot_mark ("spawn_daemon " ^ repo);
+  mkdir_p (root_dir ());
   mkdir_p (graphs_dir ());
   ensure_graph_created repo;
   let bin = daemon_bin () in
   let log_path =
     Filename.concat (root_dir ())
-      ("db-worker-" ^ repo ^ ".log")
+      ("db-worker-" ^ Graph_dir.encode_graph_dir_name repo ^ ".log")
   in
   let log_fd =
     Unix.openfile log_path [ Unix.O_CREAT; Unix.O_WRONLY; Unix.O_APPEND ]
@@ -387,9 +385,14 @@ let list_repo_names () : Wire.t list =
   else
     Sys.readdir dir |> Array.to_list
     |> List.filter (fun name ->
-           name <> "" && name.[0] <> '.'
-           && Sys.is_directory (Filename.concat dir name))
-    |> List.map (fun name -> Wire.String ("logseq_db_" ^ name))
+        name <> ""
+        && name.[0] <> '.'
+        && Sys.is_directory (Filename.concat dir name))
+    |> List.filter_map (fun entry ->
+        match Graph_dir.decode_canonical_graph_dir_key entry with
+        | Some name when name <> "Unlinked graphs" && name <> "backup" ->
+            Some (Wire.String ("logseq_db_" ^ name))
+        | _ -> None)
 
 (* ---------- attach + prewarm ---------- *)
 
