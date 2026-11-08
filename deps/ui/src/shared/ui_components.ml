@@ -955,14 +955,18 @@ let color_swatch ~key ~size ~background ~on_press ?(selected = false)
 (* `.bottom-property-pill` — 24px rounded chip (key + ":" + value):
    gray-03 fill, inset 1px ring, nowrap. The class stays as the
    native/web hook; visuals ride typed props. *)
-let property_pill ~key children : t =
+let property_pill ~key ?accessibility_identifier ?data_attrs ?on_navigation_key
+    ?on_pointer_enter ?on_pointer_leave children : t =
   with_props
     [ ( Prop.shadow "inset 0 0 0 1px var(--lx-gray-06, var(--ls-border-color))" )
     ; Prop.font_size "0.875rem"
     ; Prop.line_height "20px"
     ; Prop.overflow `hidden
+    ; Prop.focus_shadow "inset 0 0 0 1px var(--ls-link-text-color)"
     ]
     (row ~key ~style_class:"bottom-property-pill"
+       ?accessibility_identifier ?data_attrs ?on_navigation_key
+       ?on_pointer_enter ?on_pointer_leave
        ~cross:`center ~gap:4 ~height:24 ~padding_vertical:2
        ~padding_horizontal:8 ~corner_radius:9999 ~min_width:0
        ~background:

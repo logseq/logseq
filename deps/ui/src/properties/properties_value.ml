@@ -950,7 +950,7 @@ let date_picker_pop ~anchor_target ctx ~ident ~is_datetime ~value ~on_dismiss : 
            on_dismiss ();
            Js.Promise.resolve ())) ~on_dismiss])) context parent
 
-let date_view ~(hover : bool Signal.state option) ctx row : t =
+let date_view ?(bottom_pill = false) ~(hover : bool Signal.state option) ctx row : t =
  fun context parent ->
   let sched = context.Lui_ui.ui_scheduler in
 
@@ -1011,10 +1011,10 @@ let date_view ~(hover : bool Signal.state option) ctx row : t =
              property panel (block-below pills keep it always visible) —
              the row's pointer enter/leave drives the opacity *)
           box ~opacity:(reactive
-                          (fun h -> if h then 1. else 0.)
+                          (fun h -> if h then 1. else if bottom_pill then 0.5 else 0.)
                           (Signal.value hover))
             [ Ui_components.button ~variant:`ghost ~size:`icon ~icon:(`app "edit")
-                ~style_class:"prop-edit-ico"
+                ~style_class:(if bottom_pill then "bottom-property-edit-icon" else "prop-edit-ico")
                 ~width:18 ~height:18
                 ~data_attrs:[ ("style", "min-width:0;padding:0") ]
                 ~label:(I18n.t "ui/edit")
@@ -1023,7 +1023,7 @@ let date_view ~(hover : bool Signal.state option) ctx row : t =
      ])
     context parent
 
-let many_dates_view ~hover ctx row : t =
+let many_dates_view ?(bottom_pill = false) ~hover ctx row : t =
   let ty = D.row_type row in
   let values = List.filter (fun value -> not (D.value_empty_p value))
     (D.value_elems (D.row_value row)) in
@@ -1035,7 +1035,7 @@ let many_dates_view ~hover ctx row : t =
          | Some uuid -> link ~url:("#/page/" ^ uuid) ~target:`self_ ~text:label []
          | None -> text ~value:label []])
       (List.mapi (fun index value -> index, value) values)
-      @ [date_view ~hover ctx (D.row_with_value row W.Nil)])
+      @ [date_view ~bottom_pill ~hover ctx (D.row_with_value row W.Nil)])
 
 (* chips of the current refs — click navigates to the page *)
 let ref_chips row : t list =
@@ -1351,7 +1351,8 @@ let node_view ctx row : t =
    value column. [hover] (when the row supplies one) reflects pointer
    hover over the whole property-pair so hover-only affordances like
    the date edit pencil match the cljs row-hover rule. *)
-let rec view ?(positioned = false) ?(table_view = false) ~(hover : bool Signal.state option)
+let rec view ?(positioned = false) ?(table_view = false) ?(bottom_pill = false)
+    ~(hover : bool Signal.state option)
     ctx row : t =
   let row' = D.row_with_effective_value row in
   let ty = D.row_type row' in
@@ -1369,13 +1370,13 @@ let rec view ?(positioned = false) ?(table_view = false) ~(hover : bool Signal.s
     in
     display (D.row_effective_value row')
   else if ident = "logseq.property/icon" then icon_view ctx row'
-  else if D.row_many row' && List.mem ty ["date"; "datetime"] then many_dates_view ~hover ctx row'
+  else if D.row_many row' && List.mem ty ["date"; "datetime"] then many_dates_view ~bottom_pill ~hover ctx row'
   else if D.row_closed_values row' <> [] then closed_value_view ~positioned ~table_view ctx row'
   else
     match ty with
     | "checkbox" -> checkbox_view ctx row'
     | "number" -> scalar_edit_cell ctx row'
-    | "date" | "datetime" -> date_view ~hover ctx row'
+    | "date" | "datetime" -> date_view ~bottom_pill ~hover ctx row'
     | "url" -> url_view ctx row'
     | "node" | "asset" | "page" | "class" | "property" ->
         if ident = "logseq.property.class/extends" then
@@ -1386,7 +1387,7 @@ let rec view ?(positioned = false) ?(table_view = false) ~(hover : bool Signal.s
         (* cljs embeds every non-closed scalar value in a
            .property-block-container .ls-block row — control-wrap bullet
            + content; empty values show only .property-panel-bullet *)
-        if ty = "default" && D.ref_title (D.row_value row') <> ""
+        if not bottom_pill && ty = "default" && D.ref_title (D.row_value row') <> ""
         then block_value_wrap cell
         else cell
 

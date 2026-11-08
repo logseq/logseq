@@ -110,7 +110,7 @@ let property_icon row =
 (* the key (name + bullet) opens a retained overlay so property refreshes
    do not reset the active pane. cljs property-key-cp skips the
    .property-icon picker for other-position keys (pills) *)
-let key_cell (ctx : V.ctx) ~owner_is_tag ~owner_title ?(icon = true)
+let key_cell (ctx : V.ctx) ~owner_is_tag ~owner_title ?(icon = true) ?(bottom_pill = false)
     ?(reorder_rows = [])
     row : t =
  fun context parent ->
@@ -138,7 +138,7 @@ let key_cell (ctx : V.ctx) ~owner_is_tag ~owner_title ?(icon = true)
       S.refresh_all ();
       Js.Promise.resolve ())
   in
-  (Lui_elements.row ~gap:4 ~cross:`center ~min_height:28 ~min_width:0 ~grow:1.
+  (Lui_elements.row ~gap:4 ~cross:`center ~min_height:(if bottom_pill then 20 else 28) ~min_width:0 ~grow:1.
      ~style_class:"property-key-inner"
      [ (if icon then
           Ui_components.button ~variant:`ghost ~width:18 ~min_width:18
@@ -159,6 +159,7 @@ let key_cell (ctx : V.ctx) ~owner_is_tag ~owner_title ?(icon = true)
          ~style_class:"property-k jtrigger"
          ~foreground:"var(--ls-primary-text-color)"
          ~padding:0 ~min_height:0
+         ?height:(if bottom_pill then Some 20 else None)
          ~label:(D.row_title row)
          ~text:(D.row_title row)
          ~accessibility_identifier:anchor_id
@@ -270,12 +271,10 @@ let panel_row (ctx : V.ctx) ~owner_is_tag ~owner_title ?(reorder_rows = []) row 
     ])
     context parent
 
-(* hidden-properties toggle row — `p a` parity. Fresh element each
-   render so the label + chevron follow the current [S.show_hidden]. *)
-let toggle_row () : t =
+let toggle_row (ctx : V.ctx) ~show_hidden : t =
   let label =
     I18n.t
-      (if !S.show_hidden then "property/collapse-hidden-properties"
+      (if show_hidden then "property/collapse-hidden-properties"
        else "property/show-hidden-properties")
   in
   row ~gap:0 ~padding_horizontal:0 ~min_width:0
@@ -283,15 +282,14 @@ let toggle_row () : t =
     [ column ~min_width:80 ~max_width:200 ~style_class:"property-key-panel"
         ~main:`center ~min_height:28
         [ Ui_components.button ~variant:`ghost ~size:`sm ~text_alignment:`start
-            ~icon:(`app (if !S.show_hidden then "chevron-up"
+            ~icon:(`app (if show_hidden then "chevron-up"
                          else "chevron-down"))
             ~style_class:"property-key-inner hidden-properties-toggle-key"
             ~min_height:28 ~foreground:"var(--ls-primary-text-color)"
             ~grow:1. ~min_width:0 ~padding:0
             ~label ~text:label
             ~on_press:(fun _ ->
-              S.toggle_hidden ();
-              S.refresh_all ())
+              S.toggle_hidden ~uuid:ctx.block_uuid ())
             []
         ]
     ]
@@ -338,7 +336,7 @@ let can_toggle_hidden (ctx : V.ctx) ~below_rows =
    [has_hidden]: while expanded the worker merges hidden rows into
    [d.rows] (carrying logseq.property/hide?) and leaves [d.hidden]
    empty — count both shapes or the toggle would disappear on expand. *)
-let panel_children (ctx : V.ctx) ~owner_is_tag ~owner_title ~can_toggle
+let panel_children (ctx : V.ctx) ~owner_is_tag ~owner_title ~can_toggle ~show_hidden
     (d : S.area_data) : t list =
   let has_hidden =
     d.hidden <> []
@@ -349,24 +347,75 @@ let panel_children (ctx : V.ctx) ~owner_is_tag ~owner_title ~can_toggle
   List.map (panel_row ctx ~owner_is_tag ~owner_title ~reorder_rows:d.rows) d.rows
   @ (if owner_is_tag then []
      else
-       (if !S.show_hidden && d.hidden <> [] then
+       (if show_hidden && d.hidden <> [] then
           List.map (panel_row ctx ~owner_is_tag ~owner_title ~reorder_rows:d.hidden) d.hidden
         else [])
-       @ (if can_toggle && has_hidden then [ toggle_row () ] else []))
+       @ (if can_toggle && has_hidden then [ toggle_row ctx ~show_hidden ] else []))
 
 let panel_view ctx ~owner_is_tag ~owner_title ~can_toggle d : t =
-  column ~gap:0 ~min_width:0 ~corner_radius:6 ~style_class:"properties-panel"
-    (panel_children ctx ~owner_is_tag ~owner_title ~can_toggle d)
+ fun context parent ->
+  (reactive
+     (fun show_hidden ->
+       column ~gap:0 ~min_width:0 ~corner_radius:6 ~style_class:"properties-panel"
+         (panel_children ctx ~owner_is_tag ~owner_title ~can_toggle ~show_hidden d))
+     (S.show_hidden_signal context ~uuid:ctx.V.block_uuid)) context parent
 
 (* ---------- pills (block-below) ---------- *)
 
-(* cljs bottom-property-pill-cp: inline-flex pill = [key + ":"] row
-   then .bottom-property-content value — all on one line *)
-let pill_view (ctx : V.ctx) ~owner_is_tag ~owner_title prow : t =
+let pill_id (ctx : V.ctx) row =
+  "bottom-property-" ^ ctx.owner_key ^ "-" ^ Option.get (D.row_ident row)
+
+let focus_pill ids index =
+  Option.iter (fun id ->
+    Option.iter (fun (el : Ui_services.el) -> el.focus ()) (Ui_services.dom_by_id id))
+    (List.nth_opt ids (max 0 (min (List.length ids - 1) index)))
+
+let pill_navigation ~scope (ctx : V.ctx) ~ids ~index ~activate = function
+  | Lui_protocol.NavigationKey (_, key, _) ->
+      (match key with
+       | "ArrowLeft" | "ArrowRight" ->
+           focus_pill ids (match index with None -> 0
+             | Some i -> i + if key = "ArrowLeft" then -1 else 1)
+       | "ArrowUp" -> Editor_actions.enter_edit ~scope ctx.block_uuid max_int
+       | "ArrowDown" ->
+           Option.iter (fun (block : Model.block) ->
+             Option.iter (fun uuid -> Editor_actions.enter_edit ~scope uuid 0)
+               block.block_uuid)
+             (Editor_state.next_visible ~scope ctx.block_uuid)
+       | "Enter" | " " -> activate ()
+       | _ -> ())
+  | _ -> ()
+
+let activate_pill (ctx : V.ctx) row =
+  let ident = Option.get (D.row_ident row) in
+  let anchor prefix = Ui_services.dom_by_id
+    (prefix ^ ctx.owner_key ^ "-" ^ ctx.block_uuid ^ "-" ^ ident) in
+  let trigger =
+    if D.row_closed_values row <> [] then anchor "property-closed-"
+    else match D.row_type row with
+      | "node" | "asset" | "page" | "class" | "property" -> anchor "property-node-"
+      | _ -> Option.bind (Ui_services.dom_by_id (pill_id ctx row))
+          (fun (pill : Ui_services.el) ->
+            Option.bind (pill.query ".bottom-property-content")
+              (fun (content : Ui_services.el) ->
+                content.query "button, input[type='checkbox'], [role='checkbox']"))
+  in
+  Option.iter (fun (el : Ui_services.el) -> el.click ()) trigger
+
+let pill_view (ctx : V.ctx) ~scope ~ids ~index ~owner_is_tag ~owner_title prow : t =
+ fun context parent ->
+  let hover = Signal.state context.Lui_ui.ui_scheduler false in
   Ui_components.property_pill
     ~key:("pp-" ^ Option.value (D.row_ident prow) ~default:"x")
+    ~accessibility_identifier:(pill_id ctx prow)
+    ~data_attrs:["tabindex", "-1"; "data-bottom-row-nav", "true";
+      "data-bottom-pill-focusable", "true"]
+    ~on_navigation_key:(pill_navigation ~scope ctx ~ids ~index:(Some index)
+      ~activate:(fun () -> activate_pill ctx prow))
+    ~on_pointer_enter:(fun _ -> Runtime.signal_set hover true)
+    ~on_pointer_leave:(fun _ -> Runtime.signal_set hover false)
     [ Lui_elements.row ~gap:0 ~cross:`center
-        [ key_cell ctx ~owner_is_tag ~owner_title ~icon:false prow
+        [ key_cell ctx ~owner_is_tag ~owner_title ~icon:false ~bottom_pill:true prow
         ; text ~value:":"
             ~data_attrs:[ ("style", "user-select:none") ] []
         ]
@@ -374,24 +423,50 @@ let pill_view (ctx : V.ctx) ~owner_is_tag ~owner_title prow : t =
         [ Ui_components.Prop.font_size "0.875rem" ]
         (Lui_elements.row ~gap:4 ~cross:`center ~min_height:20 ~min_width:0
            ~style_class:"bottom-property-content property-value-container"
-           [ V.view ~hover:None ctx prow ])
-    ]
+           [ V.view ~bottom_pill:true ~hover:(Some hover) ctx prow ])
+    ] context parent
 
-let pills_view ctx ~owner_is_tag ~owner_title below_rows : t =
+let pills_view ctx ~scope ~owner_is_tag ~owner_title ~hidden_toggle below_rows : t =
+ fun context parent ->
+  let hidden_id = "bottom-property-hidden-" ^ ctx.V.owner_key in
+  let ids = List.map (pill_id ctx) below_rows
+      @ if hidden_toggle then [hidden_id] else [] in
+  (reactive (fun show_hidden ->
+  let hidden_control =
+    if not hidden_toggle then [] else
+      let label = I18n.t (if show_hidden then "property/collapse-hidden-properties"
+                         else "property/show-hidden-properties") in
+      let activate () = S.toggle_hidden ~uuid:ctx.block_uuid () in
+      [ Ui_components.property_pill ~key:"hidden"
+          ~accessibility_identifier:hidden_id
+          ~data_attrs:["tabindex", "-1"; "data-bottom-row-nav", "true";
+            "data-bottom-pill-focusable", "true"]
+          ~on_navigation_key:(pill_navigation ~scope ctx ~ids
+            ~index:(Some (List.length below_rows)) ~activate)
+          [ Ui_components.button ~variant:`ghost ~size:`sm ~height:20
+              ~min_height:20 ~padding:0 ~label ~text:label
+              ~icon:(`app (if show_hidden then "chevron-up" else "chevron-down"))
+              ~style_class:"bottom-property-hidden-toggle-btn"
+              ~data_attrs:["tabindex", "-1"]
+              ~on_press:(fun _ -> activate ()) [] ] ]
+  in
   Ui_components.with_props
     [ Ui_components.Prop.font_size "0.875rem" ]
     (column ~gap:4 ~grow:1.0
        ~min_width:0 ~style_class:"positioned-properties block-below"
     [ row ~gap:6 ~cross:`center ~grow:1.0
         ~min_width:0 ~style_class:"bottom-properties-row"
+        ~accessibility_identifier:("bottom-properties-" ^ ctx.V.owner_key)
+        ~data_attrs:["tabindex", "-1"; "data-bottom-properties-row", ctx.block_uuid]
+        ~on_navigation_key:(pill_navigation ~scope ctx ~ids ~index:None ~activate:(fun () -> ()))
         ~padding_vertical:4
         [ row ~gap:8 ~cross:`center ~grow:1.0 ~flex_wrap:`wrap
             ~min_width:0 ~style_class:"bottom-properties-pills-strip"
-            (List.map
-               (pill_view ctx ~owner_is_tag ~owner_title)
-               below_rows)
+            (List.mapi
+               (fun index -> pill_view ctx ~scope ~ids ~index ~owner_is_tag ~owner_title)
+               below_rows @ hidden_control)
         ]
-    ])
+    ])) (S.show_hidden_signal context ~uuid:ctx.block_uuid)) context parent
 
 (* cljs new-property: .ls-new-property > secondary sm button with a
    plus icon *)
@@ -422,20 +497,23 @@ let block_key uuid = "block:" ^ uuid
    maps, the display-properties rows, and the block's own attrs *)
 let block_fetch uuid (publish : S.area_data -> unit) : unit Js.Promise.t =
   let* block_w = D.block_render_data uuid in
-  (match block_w with
+  match block_w with
    | W.Map _ ->
        let left = D.positioned_rows block_w "block-left" in
        let right = D.positioned_rows block_w "block-right" in
        let below = D.positioned_rows block_w "block-below" in
-       let display =
-         Option.value ~default:W.Nil
-           (W.get block_w "block.temp/display-properties")
+       let* display =
+         if S.empty_hidden_visible ~uuid () then
+           D.display_props ~show_hidden:true (D.uuid_ref uuid)
+         else Js.Promise.resolve
+           (Option.value ~default:W.Nil
+              (W.get block_w "block.temp/display-properties"))
        in
        let rows, hidden = D.split_display display in
        publish
-         { S.empty_area_data with left; right; below; rows; hidden }
-   | _ -> ());
-  Js.Promise.resolve ()
+         { S.empty_area_data with left; right; below; rows; hidden };
+       Js.Promise.resolve ()
+   | _ -> Js.Promise.resolve ()
 
 let block_state (context : Lui_ui.ui_context) uuid =
   S.area_state context ~key:(block_key uuid) ~fetch:(block_fetch uuid)
@@ -497,13 +575,19 @@ let block_below_pills ~scope ~uuid : t =
   let node =
     (reactive
        (fun (d : S.area_data) ->
-          if d.below = [] then
+          let below = List.filter (fun r -> D.row_ident r <> Some "logseq.property/icon") d.below in
+          let hidden_toggle =
+            not (Ui_services.env_publishing ()) && d.hidden <> []
+            && match !Runtime.current_route with
+               | Some (Model.Block_zoom root) -> root = uuid
+               | _ -> false
+          in
+          if d.below = [] || (below = [] && not hidden_toggle) then
             Logseq_el.nothing
           else
             let ctx = block_ctx ~owner_key:(scope ^ ":below:" ^ key) uuid key in
-            pills_view ctx ~owner_is_tag:false ~owner_title:"" d.below)
-       (Signal.map (fun (d : S.area_data) -> d) (Signal.value st))
-       ~equal:(fun (a : S.area_data) (b : S.area_data) -> a.below = b.below))
+            pills_view ctx ~scope ~owner_is_tag:false ~owner_title:"" ~hidden_toggle below)
+       (Signal.value st))
       context parent
   in
   S.note_area_node ~key node;
@@ -761,7 +845,7 @@ let page_fetch ~uuid ~is_tag ~db_id (publish : S.area_data -> unit) :
     unit Js.Promise.t =
   let* wire =
     D.display_props ~page_title:true ~tag_dialog:false
-      ~show_hidden:!S.show_hidden (D.uuid_ref uuid)
+      ~show_hidden:(S.empty_hidden_visible ~uuid ()) (D.uuid_ref uuid)
   in
   let raw_rows, hidden = D.split_display wire in
   let _l, _b, panel_rows =
@@ -919,7 +1003,7 @@ let sidebar_area ~uuid ~db_id ~title ~is_tag : t =
     S.area_state context ~key ~fetch:(fun publish ->
         let* wire =
           D.display_props ~page_title:false ~tag_dialog:false
-            ~sidebar:true ~show_hidden:!S.show_hidden (D.uuid_ref uuid)
+            ~sidebar:true ~show_hidden:(S.empty_hidden_visible ~uuid ()) (D.uuid_ref uuid)
         in
         let rows, hidden = D.split_display wire in
         let rows = List.filter is_panel_row rows in
@@ -964,7 +1048,7 @@ let sidebar_area ~uuid ~db_id ~title ~is_tag : t =
               ~accessibility_identifier:("sbprops-" ^ uuid)
               ~style_class:"ls-page-properties ls-properties-area"
               (panel_view ctx ~owner_is_tag:is_tag ~owner_title:title
-                 ~can_toggle:(can_toggle_hidden ctx ~below_rows:[])
+                 ~can_toggle:true
                  d
                ::
                (if is_tag then

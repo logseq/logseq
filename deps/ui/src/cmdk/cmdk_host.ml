@@ -256,7 +256,12 @@ let services : unit -> Svs.t =
         | [] -> ())
   ; toggle_hidden_props =
       (fun () ->
-        Properties_state.toggle_hidden ();
+        let uuids =
+          List.sort_uniq String.compare
+            (Editor_actions.selected_uuids ()
+             @ Option.to_list (Editor_state.editing_uuid ()))
+        in
+        Properties_state.toggle_empty_hidden ~uuids;
         Properties_state.refresh_all ())
   ; pick_emoji =
       (fun ~block_uuid ~on_chosen ->

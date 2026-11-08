@@ -6,6 +6,7 @@
 open Promise_ext
 module D = Properties_data
 module W = Wire
+module String_set = Set.Make (String)
 
 (* ---------- tracked popup surfaces ---------- *)
 
@@ -200,23 +201,53 @@ let close_overlays () =
 
 let overlay_open () = !overlays <> [] || view_overlay_open ()
 
-(* ---------- show hidden properties toggle (`p a`) ---------- *)
+(* ---------- hidden-property visibility ---------- *)
 
-let show_hidden = ref false
-let show_hidden_state : bool Signal.state option ref = ref None
+let hidden_ids = ref String_set.empty
+let hidden_states : (string, bool Signal.state) Hashtbl.t = Hashtbl.create 16
 
-let show_hidden_signal (context : Lui_ui.ui_context) =
-  match !show_hidden_state with
-  | Some s -> Signal.value s
-  | None ->
-      let s = Signal.state context.Lui_ui.ui_scheduler !show_hidden in
-      show_hidden_state := Some s;
-      (Signal.value s)
-let toggle_hidden () =
-  show_hidden := not !show_hidden;
-  (match !show_hidden_state with
-   | Some s -> Signal.set s !show_hidden
-   | None -> ())
+let hidden_visible ~uuid () = String_set.mem uuid !hidden_ids
+
+let show_hidden_signal (context : Lui_ui.ui_context) ~uuid =
+  let state =
+    match Hashtbl.find_opt hidden_states uuid with
+    | Some state -> state
+    | None ->
+        let state =
+          Signal.state context.Lui_ui.ui_scheduler (hidden_visible ~uuid ())
+        in
+        Hashtbl.add hidden_states uuid state;
+        state
+  in
+  Signal.value state
+
+let toggle_hidden ~uuid () =
+  let visible = not (hidden_visible ~uuid ()) in
+  hidden_ids :=
+    (if visible then String_set.add else String_set.remove) uuid !hidden_ids;
+  Option.iter (fun state -> Runtime.signal_set state visible)
+    (Hashtbl.find_opt hidden_states uuid)
+
+type empty_hidden_scope = Global | Blocks of String_set.t
+
+let empty_hidden = ref (Global, false)
+
+let toggle_empty_hidden ~uuids =
+  let ids = List.fold_left (fun ids uuid -> String_set.add uuid ids)
+      String_set.empty uuids in
+  let scope, show = !empty_hidden in
+  empty_hidden :=
+    if String_set.is_empty ids then
+      (Global, match scope with Global -> not show | Blocks _ -> true)
+    else
+      (Blocks ids,
+       match scope with
+       | Global -> true
+       | Blocks previous -> if String_set.equal previous ids then not show else true)
+
+let empty_hidden_visible ~uuid () =
+  let scope, show = !empty_hidden in
+  show && match scope with Global -> true | Blocks ids -> String_set.mem uuid ids
 
 (* ---------- mounted area registry (declarative) ---------- *)
 
