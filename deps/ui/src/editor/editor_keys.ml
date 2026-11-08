@@ -914,7 +914,7 @@ let local_input_during_split uuid ev =
    two reply round-trips (caret_rect, then offset_at). Aborts on a newer
    input, a caret change, block switch, or exhaustion — mine_ms tracks
    this retry chain's own note_input stamps so a real keystroke wins *)
-let rec retry_vertical uuid ev armed_caret mine_ms attempts =
+let rec retry_vertical uuid scope epoch ev armed_caret mine_ms attempts =
   if attempts > 0 then
     ignore
       (Ui_services.timers_timeout
@@ -922,10 +922,11 @@ let rec retry_vertical uuid ev armed_caret mine_ms attempts =
            match S.editing () with
            | Some e2
           when e2.S.uuid = uuid
+               && e2.S.scope = scope && e2.S.epoch == epoch
                && !S.last_edit_input_ms <= mine_ms
                && e2.S.model.Edit_model.caret = armed_caret ->
             apply_input uuid ev;
-            retry_vertical uuid ev armed_caret !S.last_edit_input_ms
+            retry_vertical uuid scope epoch ev armed_caret !S.last_edit_input_ms
               (attempts - 1)
         | _ -> ())
          16)
@@ -965,6 +966,45 @@ and apply_input ?frame uuid ev =
               | Edit_input.Delete _ | Edit_input.Key _) when e.S.uuid <> uuid ->
         e.S.uuid, !S.active_frame
     | _ -> uuid, frame in
+  match ev, S.editing () with
+  | Edit_input.Key ({ Edit_model.key = "Escape"; _ }, _), Some editing
+    when A.initial_click_pending uuid && !S.pending_focus_actions = [] ->
+      A.flush_edit ();
+      if not editing.S.submit_on_enter then A.select_single_in ~scope:editing.S.scope uuid;
+      S.notify_edit_exit uuid
+  | _ ->
+  let real_input = match ev with
+    | Edit_input.Insert _ | Edit_input.Composition _ | Edit_input.Delete _
+    | Edit_input.Key _ -> true
+    | _ -> false
+  in
+  if real_input
+     && (A.initial_click_pending uuid
+         || (!S.pending_focus_actions <> [] && not !A.drain_gate)) then begin
+    let context = Runtime.repo (), Runtime.route () in
+    S.pending_focus_actions :=
+      (fun () ->
+        match S.editing () with
+        | Some current when context = (Runtime.repo (), Runtime.route ()) ->
+            apply_input ?frame:!S.active_frame current.S.uuid ev
+        | _ -> Ui_services.log_error "queued editor input cancelled after its editing context ended")
+      :: !S.pending_focus_actions;
+    Runtime.flush ()
+  end else begin
+  (* Blur remains immediate; cancel composition again after older queued
+     composition updates, which have not reached the model yet. *)
+  (match ev, frame, !S.active_frame with
+   | Edit_input.Blur, Some current, Some active when current == active -> A.note_focus_blur uuid
+   | Edit_input.Blur, None, _ -> A.note_focus_blur uuid
+   | _ -> ());
+  (match ev with
+   | Edit_input.Blur when A.initial_click_pending uuid && !S.pending_focus_actions <> [] ->
+       S.pending_focus_actions :=
+         (fun () -> match S.editing () with
+          | Some current -> A.update_model current.S.uuid Edit_model.composition_cancel
+          | None -> ())
+         :: !S.pending_focus_actions
+   | _ -> ());
   let caret_frame = match frame with Some _ -> frame | None -> !S.active_frame in
   Option.iter
     (fun frame -> Edit_view.notify_caret_input uuid (Signal.value frame) ev)
@@ -1061,12 +1101,12 @@ and apply_input ?frame uuid ev =
          Publish model and overlay together instead of two DOM batches. *)
       (match frame with
        | Some fr when Ui_services.env_edit_units () = `U16 && m'.source == m0.source
-                      && Edit_view.reveal_dirty m0 m' = [] ->
-           let measured = Edit_input.measure conduit m' in
-           if Option.is_some measured.Edit_input.caret then begin
-             S.premeasured_model := Some m';
-             Signal.update fr (fun _ -> measured)
-           end
+                      && Edit_view.reveal_dirty m0 m' = []
+                      && (match S.editing () with
+                          | Some current -> current.S.epoch == e.S.epoch && current.S.scope = e.S.scope
+                          | None -> false) ->
+           if A.refresh_overlay ~frame:fr ~model:m' ~flush:false uuid then
+             S.premeasured_model := Some m'
        | _ -> ());
       (* Compare against the session model before line measurement;
          refresh_lines may have derived m0 without publishing it. A structural op that settled mid-dispatch (e.g. merge_next on a
@@ -1081,7 +1121,7 @@ and apply_input ?frame uuid ev =
          when Ui_services.env_edit_units () = `Bytes && m'.Edit_model.caret = m0.Edit_model.caret
               && m'.Edit_model.anchor = m0.Edit_model.anchor
               && not (S.selection_active ()) ->
-           retry_vertical uuid ev m0.Edit_model.caret
+           retry_vertical uuid e.S.scope e.S.epoch ev m0.Edit_model.caret
              !S.last_edit_input_ms 6
        | _ -> ());
       if m'.Edit_model.source <> m0.source then begin
@@ -1105,12 +1145,7 @@ and apply_input ?frame uuid ev =
                `fun _ -> m2` would resurrect this event's stale caret *)
             A.update_model uuid (fun m ->
                 Edit_model.set_lines m m2.Edit_model.lines);
-          let m_now =
-            match A.edit_model uuid with Some m -> m | None -> m2
-          in
-          let measured = Edit_input.measure conduit' m_now in
-          if Option.is_some measured.Edit_input.caret then
-            Signal.update fr (fun _ -> measured);
+          ignore (A.refresh_overlay ~frame:fr ~flush:false uuid);
           Runtime.flush_now ();
           (* a measure taken mid-layout/remount can come back with no
              caret rect — iOS taps reorder focus/scroll work around the
@@ -1129,7 +1164,9 @@ and apply_input ?frame uuid ev =
                   (Ui_services.timers_timeout
                      (fun () ->
                        match S.editing () with
-                    | Some e when e.S.uuid = uuid ->
+                    | Some current when current.S.uuid = uuid
+                                        && current.S.scope = e.S.scope
+                                        && current.S.epoch == e.S.epoch ->
                         if not (A.refresh_overlay uuid) then
                           retry_caret (n - 1)
                     | _ -> ())
@@ -1139,6 +1176,7 @@ and apply_input ?frame uuid ev =
           end)
       | _ -> ())
   | _ -> ()
+  end
 
 (* translate a DOM keydown into the Edit_input event the conduit would
    have emitted for it *)
@@ -1387,9 +1425,9 @@ let on_keydown ev =
           | Some _ when closest ".ed-input" target = None -> ()
           | _ -> (
           match (S.editing (), !S.pending_focus) with
-          | Some e, Some (uuid, _, _)
-            when e.S.uuid = uuid
-                 && not (targets_block_editor uuid target) -> (
+          | Some e, Some request
+            when e.S.uuid = request.S.focus_uuid
+                 && not (targets_block_editor request.S.focus_uuid target) -> (
               match (ev_key ev, racing_edit_uuid ()) with
               | key, Some u
                 when u <> e.S.uuid
@@ -1426,10 +1464,7 @@ let on_keydown ev =
                      arrived at <body>. Re-arm pending focus on the
                      editing block and route the key through the
                      remount-window handler. *)
-                  S.pending_focus :=
-                    Some (e.S.uuid, A.caret_of e.S.uuid,
-                      !S.last_edit_input_ms);
-                  ignore (Ui_services.timers_timeout A.apply_focus 0);
+                  A.request_focus e.S.uuid (A.caret_of e.S.uuid);
                   on_pending_focus_key ev e)
           | _ -> (
           match S.editing_uuid () with

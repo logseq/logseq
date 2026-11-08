@@ -1213,7 +1213,7 @@ let async_checks () =
 type snapshot =
   { editor_st : Editor_state.t Signal.state option
   ; editor_fields : Editor_state.field_sigs option
-  ; editor_pending_focus : (string * int * float) option
+  ; editor_pending_focus : Editor_state.focus_request option
   ; editor_focused : string option
   ; editor_pending_actions : (unit -> unit) list
   ; editor_display_overrides : (string, string) Hashtbl.t

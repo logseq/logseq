@@ -660,7 +660,8 @@ let test_enter_split (h : host) =
   check "enter caret at 0" (e.S.model.EM.caret = 0);
   check "enter splits ordering" (current_titles () = [ "ab"; "cd" ]);
   (match !S.pending_focus with
-   | Some (u, 0, _) -> check "enter re-targets focus" (u = e.S.uuid)
+   | Some request when request.S.focus_caret = 0 ->
+       check "enter re-targets focus" (request.S.focus_uuid = e.S.uuid)
    | _ -> check "enter re-targets focus" false);
   let* () = settle h 40 in
   check "enter emitted insert-blocks" (List.mem "insert-blocks" (op_names ()));
