@@ -1759,6 +1759,18 @@ let configured_blank units text =
     && blank (index + Edit_model.cp_len units text index) in
   blank 0
 
+let configured_cjk cp =
+  (cp >= 0x3040 && cp <= 0x30FF) || (cp >= 0x3400 && cp <= 0x4DBF)
+  || (cp >= 0x4E00 && cp <= 0x9FFF) || (cp >= 0xF900 && cp <= 0xFAFF)
+  || (cp >= 0xFF66 && cp <= 0xFF9F)
+
+let configured_has_cjk units text =
+  let rec has index =
+    index < S.length text
+    && (configured_cjk (Edit_model.decode_cp units text index)
+        || has (index + Edit_model.cp_len units text index)) in
+  has 0
+
 let configured_concat ~units left right =
   let horizontal = function ' ' | '\t' | '\r' -> true | _ -> false in
   let end_ = ref (S.length left) and start = ref 0 in
@@ -1777,7 +1789,12 @@ let configured_last_index text pattern =
 
 let configured_input ?(backward_pos = 0) ?(last_pattern = Some "/")
     ?end_pattern ?backward_truncate_number ?(only_breakline = false)
-    text (model : Edit_model.t) =
+    ?(block_input = false) ?(at_block_start = false) ?(page_ref = false)
+    value (model : Edit_model.t) =
+  let text =
+    if block_input && not at_block_start && model.caret > 0
+       && model.source.[model.caret - 1] <> '\n'
+    then "\n" ^ value else value in
   let rewind ?(truncate = false) text count =
     match model.units with
     | Edit_model.U16 -> max 0 (S.length text - count)
@@ -1798,10 +1815,15 @@ let configured_input ?(backward_pos = 0) ?(last_pattern = Some "/")
   let prefix = S.sub model.source 0 pos in
   let suffix = S.sub model.source pos (S.length model.source - pos) in
   let index = Option.bind last_pattern (configured_last_index prefix) in
+  let cjk_adjacent =
+    page_ref && configured_has_cjk model.units text
+    && ((prefix <> "" && configured_cjk (Edit_model.decode_cp model.units prefix
+           (Edit_model.prev_cp model.units prefix (S.length prefix))))
+        || (suffix <> "" && configured_cjk (Edit_model.decode_cp model.units suffix 0))) in
   let space = match last_pattern with
     | None -> false
     | Some pattern ->
-        not (Str_util.starts_with pattern "::" || Str_util.ends_with pattern "::"
+        not (cjk_adjacent || Str_util.starts_with pattern "::" || Str_util.ends_with pattern "::"
              || Str_util.starts_with pattern "#[[" || Str_util.starts_with pattern "```"
              || Option.fold ~none:false ~some:(fun index ->
                   let before = S.sub prefix 0 index in
@@ -1829,7 +1851,7 @@ let configured_input ?(backward_pos = 0) ?(last_pattern = Some "/")
     Edit_model.select (Edit_model.splice model 0 (S.length model.source) source)
       ~anchor:pos ~focus:pos
 
-let configured_steps output =
+let configured_steps ?(at_block_start = false) output =
   let move direction count model =
     let rec loop count model = if count <= 0 then model else
       loop (count - 1) (Edit_model.move model direction ~extend:false) in
@@ -1840,6 +1862,7 @@ let configured_steps output =
       | Wire.Keyword "last-pattern", (Wire.String _ | Wire.Keyword "skip-check")
       | Wire.Keyword "end-pattern", Wire.String _
       | Wire.Keyword "only-breakline?", Wire.Bool _
+      | Wire.Keyword ("type" | "command"), _
       | Wire.Keyword ("backward-pos" | "backward-truncate-number" | "last-pattern"
                       | "end-pattern" | "only-breakline?"), Wire.Nil -> true
       | _ -> false) fields in
@@ -1856,6 +1879,10 @@ let configured_steps output =
     Some (configured_input ~last_pattern ?end_pattern
       ?backward_pos:(integer "backward-pos")
       ?backward_truncate_number:(integer "backward-truncate-number")
+      ~at_block_start
+      ~block_input:(match Wire.get options "type" with
+        | Some (Wire.String ("block" | "properties")) -> true | _ -> false)
+      ~page_ref:(Wire.get options "command" = Some (Wire.Keyword "page-ref"))
       ~only_breakline:(Wire.get options "only-breakline?" = Some (Wire.Bool true)) text) in
   let step = function
     | Wire.Array [Wire.Keyword "editor/input"; Wire.String text]
@@ -1902,7 +1929,7 @@ let apply_item t ac ~meta it =
   | Configured output ->
       let unsupported () =
         Toast.error (U.t1 "editor.slash/unsupported-configured-command-error" it.ai_label) in
-      (match configured_steps output with
+      (match configured_steps ~at_block_start:(ac.tpos = 0) output with
        | None -> unsupported ()
        | Some steps -> (try
            let before = Option.map (fun model -> model.Edit_model.source)

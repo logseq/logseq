@@ -2786,7 +2786,36 @@ let test_popups_state () =
       {js|一二|js}, "{:backward-pos 2}", Some ({js|一二|js}, 0)
     ; "unsupported function", Edit_model.U16, "/cmd", 4, "X",
       "{:postfix-fn custom-function}", None
+    ; "block input midline", Edit_model.U16, "left/cmd", 8, "X",
+      "{:type \"block\"}", Some ("left \nX", 7)
+    ; "properties input midline", Edit_model.U16, "left", 4, "X",
+      "{:type \"properties\" :last-pattern :skip-check}", Some ("left\nX", 6)
+    ; "block input beginning of line", Edit_model.U16, "left\n", 5, "X",
+      "{:type \"block\" :last-pattern :skip-check}", Some ("left\nX", 6)
+    ; "other input type", Edit_model.U16, "/cmd", 4, "X",
+      "{:type :block}", Some ("X", 1)
+    ; "native page ref CJK prefix", Edit_model.Bytes,
+      "\228\184\173[[\230\150\135", 8, "[[\233\161\181]]",
+      "{:last-pattern \"[[\" :command :page-ref}",
+      Some ("\228\184\173[[\233\161\181]]", 10)
+    ; "web page ref CJK suffix", Edit_model.U16, {js|a[[x中|js}, 4,
+      {js|[[页]]|js}, "{:last-pattern \"[[\" :command :page-ref}",
+      Some ({js|a[[页]]中|js}, 6)
+    ; "page ref non-CJK adjacency", Edit_model.U16, "a[[x", 4,
+      {js|[[页]]|js}, "{:last-pattern \"[[\" :command :page-ref}",
+      Some ({js|a [[页]]|js}, 7)
     ];
+  let configured_model = Edit_model.select
+      (Edit_model.create ~units:Edit_model.U16 "/cmd") ~anchor:4 ~focus:4 in
+  let output = Edn.parse
+      "[[:editor/input \"AB\" {:type \"block\"}] [:editor/cursor-back 1] \
+        [:editor/input \"C\" {:type \"properties\" :last-pattern :skip-check}]]" in
+  let result = Option.map (fun steps ->
+      let model = List.fold_left (fun model step -> step model) configured_model steps in
+      model.Edit_model.source, model.caret)
+      (Popups_state.configured_steps ~at_block_start:true output) in
+  check "Configured input preserves initial context across ordered steps"
+    (result = Some ("ACB", 2));
   (* fuzzy_score: subsequence match, first*1000 + span *)
   check "fuzzy h1" (Fuzzy.score "h1" "Heading 1" > 0.);
   check "fuzzy te 1" (Fuzzy.score "te 1" "template 1" > 0.);
