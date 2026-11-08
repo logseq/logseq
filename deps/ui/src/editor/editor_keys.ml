@@ -686,7 +686,8 @@ let palette_open () =
   | None -> false
 
 let on_global_key ev =
-  if input_composing ev then chord_seq := []
+  if input_composing ev || closest ".pswp" ev.Ui_services.target <> None
+  then chord_seq := []
   (* the open cmdk palette owns every key *)
   else if not (palette_open ()) then
     match stroke_of ev with
@@ -1444,6 +1445,7 @@ let on_keydown ev =
   in
   if input_composing ev || Ui_services.env_publishing () || palette_open ()
      || palette_shortcut
+     || closest ".pswp" ev.Ui_services.target <> None
      || closest ".ls-comment-box, .ls-comment-reply-placeholder" ev.Ui_services.target <> None
      || (match ev.Ui_services.target with
          | Some target -> Popups_state.inside target
