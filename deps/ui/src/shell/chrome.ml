@@ -687,13 +687,18 @@ let right_toggle_button ms =
       Sidebar_state.ensure_contents (Sidebar_state.ensure ms))
     ())
 
-let recent_slider : t = fun ctx parent ->
+let recent_slider (ms : Model.t Signal.signal) : t = fun ctx parent ->
   Settings_state.ensure ctx;
   let preferences = Signal.value (Settings_state.state ()) in
   let refresh () = Settings_state.refresh_recent (Lazy_children.all_mounted_uuids ctx) in
   (if_ ~test:(reactive (fun state -> state.Settings_state.highlight_recent) preferences)
-    (row ~key:"recent-slider" ~gap:4 ~cross:`center ~width:280
-      ~on_appear:(fun _ -> refresh ())
+    (keyed ~source:(reactive (fun model -> [model.Model.route]) ms)
+      ~key:Fun.id ~cmp:Stdlib.compare ~mount:(fun _ ->
+    row ~key:"recent-slider" ~gap:4 ~cross:`center ~width:280
+      ~on_appear:(fun _ ->
+        let route = (Runtime.model ()).Model.route in
+        Ui_services.timers_later ~ms:0 (fun () ->
+          if (Runtime.model ()).Model.route = route then refresh ()))
       [ Ui_parts.string_prop Lui_protocol.AccessibilityLabel
           ~value:(reactive (fun state ->
               if state.Settings_state.recent_days = 0 then I18n.t "header/highlight-recent-blocks"
@@ -710,7 +715,7 @@ let recent_slider : t = fun ctx parent ->
             | _ -> ()) [])
       ; Ui_components.button ~key:"recent-close" ~variant:`ghost ~size:`icon
           ~icon:(`app "x") ~label:(I18n.t "header/quit-highlight-recent-blocks")
-          ~on_press:(fun _ -> Settings_state.toggle_recent ()) [] ])) ctx parent
+          ~on_press:(fun _ -> Settings_state.toggle_recent ()) [] ]))) ctx parent
 
 let document_mode_button : t = fun ctx parent ->
   Settings_state.ensure ctx;
@@ -796,7 +801,7 @@ let header (ms : Model.t Signal.signal) =
                   | _ -> spacer ~key:"head-bc-empty" [])
                 ms ])
         ; row ~key:"head-acts" ~cross:`center
-            [ recent_slider; document_mode_button
+            [ recent_slider ms; document_mode_button
             ; (* cljs header.cljs: inside the same rtc-indicator-visible?
                  gate — collaborators then the cloud indicator *)
               Collaborators.widget ms

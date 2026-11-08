@@ -271,13 +271,15 @@ let set_recent_days days =
 let refresh_recent uuids =
   let state = value () in
   let current = capture_context () in
+  let route = (Runtime.model ()).Model.route in
   let threshold = Ui_services.time_now () -. float_of_int state.recent_days *. 86400000. in
   let items = List.map (fun uuid -> Wire.Map [
       Wire.kw "id", Wire.Uuid uuid;
       Wire.kw "opts", Wire.Map [Wire.kw "children?", Wire.Bool false]]) uuids in
   ignore (let* result = Runtime.invoke2 "thread-api/get-blocks"
       (Wire.String (Runtime.repo ())) (Wire.Array items) in
-    if current () && (value ()).highlight_recent && (value ()).recent_days = state.recent_days then begin
+    if current () && (Runtime.model ()).Model.route = route
+       && (value ()).highlight_recent && (value ()).recent_days = state.recent_days then begin
       let rows = match result with Wire.Array rows | Wire.List rows -> rows
         | _ -> invalid_arg "recent blocks: invalid get-blocks response" in
       let recent_blocks = List.fold_left (fun recent row ->
