@@ -1,4 +1,4 @@
-//go:build darwin || linux
+//go:build darwin || linux || windows
 
 // logseq-mygo hosts the Logseq OCaml application in a native MyGo window.
 package main
@@ -597,6 +597,19 @@ func prepareNativeEnvironment() error {
 		return err
 	}
 	home := os.Getenv("HOME")
+	if runtime.GOOS == "windows" {
+		home, err = os.UserHomeDir()
+		if err != nil {
+			return fmt.Errorf("Windows user home: %w", err)
+		}
+		if !filepath.IsAbs(home) {
+			return fmt.Errorf("USERPROFILE must be an absolute path")
+		}
+		// The worker's home-based paths must match Electron's Windows home.
+		if err := os.Setenv("HOME", home); err != nil {
+			return err
+		}
+	}
 	if home == "" {
 		return fmt.Errorf("HOME must be set for native persistence and daemon configuration")
 	}
@@ -608,6 +621,15 @@ func prepareNativeEnvironment() error {
 			stateHome = filepath.Join(home, ".local", "state")
 		}
 		stateDefault = filepath.Join(stateHome, "logseq")
+	} else if runtime.GOOS == "windows" {
+		configHome, err := os.UserConfigDir()
+		if err != nil {
+			return fmt.Errorf("Windows application data: %w", err)
+		}
+		if !filepath.IsAbs(configHome) {
+			return fmt.Errorf("APPDATA must be an absolute path")
+		}
+		stateDefault = filepath.Join(configHome, "Logseq")
 	}
 	for name, defaultPath := range map[string]string{
 		"LOGSEQ_UI_STATE_DIR": stateDefault,

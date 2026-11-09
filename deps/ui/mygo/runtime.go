@@ -1,4 +1,4 @@
-//go:build darwin || linux
+//go:build darwin || linux || windows
 
 package main
 
@@ -130,7 +130,7 @@ func (r *ocamlRuntime) run(call func() error) error {
 }
 
 func (r *ocamlRuntime) load(path string) error {
-	handle, err := purego.Dlopen(path, purego.RTLD_NOW|purego.RTLD_LOCAL)
+	handle, err := openNativeLibrary(path)
 	if err != nil {
 		return fmt.Errorf("logseq: load OCaml library: %w", err)
 	}
@@ -177,9 +177,9 @@ func (r *ocamlRuntime) load(path string) error {
 	// or incomplete bridge is an error, not a partially functioning backend.
 	symbols := make(map[string]uintptr, len(bindings))
 	for suffix := range bindings {
-		ptr, lookupErr := purego.Dlsym(handle, "lui_ocaml_"+suffix)
+		ptr, lookupErr := nativeLibrarySymbol(handle, "lui_ocaml_"+suffix)
 		if lookupErr != nil {
-			closeErr := purego.Dlclose(handle)
+			closeErr := closeNativeLibrary(handle)
 			if closeErr != nil {
 				return fmt.Errorf("logseq: missing lui_ocaml_%s: %w (unload: %v)", suffix, lookupErr, closeErr)
 			}
@@ -196,7 +196,7 @@ func (r *ocamlRuntime) load(path string) error {
 	for event, suffix := range pointerNames {
 		f.pointer[event] = *bindings[suffix].(*pointerFunction)
 	}
-	r.callbacks[0] = purego.NewCallback(func(ptr unsafe.Pointer) {
+	r.callbacks[0] = nativePatchCallback(func(ptr unsafe.Pointer) {
 		if ptr == nil {
 			r.failCallback("patch callback received a null pointer")
 			return
@@ -212,15 +212,15 @@ func (r *ocamlRuntime) load(path string) error {
 		r.mu.Unlock()
 		r.signal()
 	})
-	r.callbacks[1] = purego.NewCallback(func() { r.signal() })
-	r.callbacks[3] = purego.NewCallback(func(ptr unsafe.Pointer, length int32) {
+	r.callbacks[1] = nativeSignalCallback(func() { r.signal() })
+	r.callbacks[3] = nativeBufferCallback(func(ptr unsafe.Pointer, length int32) {
 		if length < 0 || ptr == nil {
 			r.failCallback("editor snapshot received an invalid buffer")
 			return
 		}
 		r.editorJSON = append(r.editorJSON[:0], unsafe.Slice((*byte)(ptr), int(length))...)
 	})
-	r.callbacks[2] = purego.NewCallback(func(ptr unsafe.Pointer, length int32) {
+	r.callbacks[2] = nativeBufferCallback(func(ptr unsafe.Pointer, length int32) {
 		if length < 0 || ptr == nil {
 			r.failCallback("platform callback received an invalid buffer")
 			return
@@ -293,6 +293,8 @@ func (r *ocamlRuntime) Start() error {
 		platform := int32(4)
 		if runtime.GOOS == "darwin" {
 			platform = 1
+		} else if runtime.GOOS == "windows" {
+			platform = 5
 		}
 		// MyGo leaves caret painting to the shared measured overlay.
 		// GenericHost is host code zero; it does not imply a caret painter.

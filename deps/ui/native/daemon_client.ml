@@ -12,9 +12,10 @@ open Promise_ext
 (* ---------- paths ---------- *)
 
 let home () =
-  match Sys.getenv_opt "HOME" with
+  let variable = if Sys.os_type = "Win32" then "USERPROFILE" else "HOME" in
+  match Sys.getenv_opt variable with
   | Some h -> h
-  | None -> failwith "HOME not set"
+  | None -> failwith (variable ^ " not set")
 
 let root_dir () =
   match Sys.getenv_opt "LOGSEQ_ROOT_DIR" with
@@ -47,14 +48,17 @@ let rec mkdir_p path =
   end
 
 let daemon_bin () =
+  let worker_name =
+    if Sys.os_type = "Win32" then "logseq-db-worker.exe" else "logseq-db-worker"
+  in
   let candidates =
     (match Sys.getenv_opt "LOGSEQ_DB_WORKER_BIN" with
      | Some p -> [ p ]
      | None -> [])
     @ [ Filename.concat (Filename.dirname Sys.executable_name)
-          "logseq-db-worker"
+          worker_name
       ; Filename.concat (Filename.dirname Sys.executable_name)
-          "../Resources/logseq-db-worker"
+          (Filename.concat "../Resources" worker_name)
       (* in-tree dune build: <root>/deps/ui/_build/default/ocaml_host/
          -> <root>/deps/db-worker/_build/default/bin/main.exe *)
       ; Filename.concat (Filename.dirname Sys.executable_name)
@@ -245,7 +249,8 @@ let spawn_daemon (repo : string) : string =
     Unix.openfile log_path [ Unix.O_CREAT; Unix.O_WRONLY; Unix.O_APPEND ]
       0o644
   in
-  let devnull = Unix.openfile "/dev/null" [ Unix.O_RDONLY ] 0 in
+  let null_device = if Sys.os_type = "Win32" then "NUL" else "/dev/null" in
+  let devnull = Unix.openfile null_device [ Unix.O_RDONLY ] 0 in
   let pid =
     Unix.create_process bin
       [| bin
