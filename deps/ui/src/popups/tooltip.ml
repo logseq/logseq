@@ -8,7 +8,7 @@
    foreign elements found by delegated document listeners. So the
    bubble mounts as a singleton `popover` node emitted from
    popups_view's fragment, driven by the state signal below; placement
-   is the old arithmetic — mount under the trigger, measure the
+   defaults to the old arithmetic — mount under the trigger, measure the
    rendered bubble, then clamp to the viewport and flip above when
    there's no room below. *)
 
@@ -19,8 +19,8 @@ type tip = {
   tip_keys : string;
   tip_x : float; (* bubble left, viewport coords *)
   tip_y : float; (* bubble top *)
-  tip_arrow_x : float; (* arrow left offset inside the bubble *)
-  tip_above : bool; (* bubble sits above the trigger *)
+  tip_arrow_offset : float; (* arrow offset along the bubble edge *)
+  tip_side : Ui_components.tooltip_side;
 }
 
 let state : tip option Signal.state option ref = ref None
@@ -82,7 +82,7 @@ let label_for (trig : Ui_services.el) =
 (* two-phase placement: the popover mounts under the trigger first;
    once its own rect resolves we clamp x to the viewport, flip above
    when the bubble wouldn't fit below, and re-centre the arrow on the
-   trigger — identical math to the imperative version *)
+   trigger — identical default math to the imperative version *)
 let show_for (trig : Ui_services.el) =
   (* a present data-tooltip owns the tip decision — an empty value is
      an explicit suppression (its trigger still needs aria-label for
@@ -95,6 +95,12 @@ let show_for (trig : Ui_services.el) =
       armed_on := Some trig;
       let keys =
         Option.value (trig.Ui_services.attr "data-tooltip-keys") ~default:""
+      in
+      let requested_side =
+        match trig.Ui_services.attr "data-tooltip-side" with
+        | None | Some "bottom" -> `bottom
+        | Some "left" -> `left
+        | Some side -> invalid_arg ("Unsupported tooltip side: " ^ side)
       in
       let rec mount measure_attempts =
         if not (trig.Ui_services.connected ()) then hide ()
@@ -115,8 +121,8 @@ let show_for (trig : Ui_services.el) =
                    tip_keys = keys;
                    tip_x = trig_cx;
                    tip_y = trig_bottom;
-                   tip_arrow_x = 0.;
-                   tip_above = false;
+                   tip_arrow_offset = 0.;
+                   tip_side = `bottom;
                  });
             let rec place tries =
               if not (trig.Ui_services.connected ()) || label_for trig <> Some label
@@ -132,32 +138,54 @@ let show_for (trig : Ui_services.el) =
                       let trig_cx = tx +. (tw /. 2.) in
                       let trig_bottom = ty +. th in
                       let _, _, w, h = bubble.Ui_services.rect () in
-                      let x =
-                        Float.max 5.
-                          (Float.min
-                             (trig_cx -. (w /. 2.))
-                             (Ui_services.dom_viewport_width () -. w -. 5.))
-                      in
-                      (* base-ui side=bottom, sideOffset 0 — the arrow visually
-                     bridges the gap to the trigger; flip above when there's
-                     no room *)
-                      let above =
-                        Ui_services.dom_viewport_height () -. trig_bottom -. h
-                        < 8.
+                      let tip_x, tip_y, tip_arrow_offset, tip_side =
+                        match requested_side with
+                        | `left ->
+                            let trig_cy = ty +. (th /. 2.) in
+                            let y =
+                              Float.max 5.
+                                (Float.min
+                                   (trig_cy -. (h /. 2.))
+                                   (Ui_services.dom_viewport_height () -. h -. 5.))
+                            in
+                            ( Float.max 5.
+                                (Float.min (tx -. w)
+                                   (Ui_services.dom_viewport_width () -. w -. 5.))
+                            , y
+                            , Float.max 4.
+                                (Float.min (trig_cy -. y -. 4.) (h -. 12.))
+                            , `left )
+                        | `bottom ->
+                            let x =
+                              Float.max 5.
+                                (Float.min
+                                   (trig_cx -. (w /. 2.))
+                                   (Ui_services.dom_viewport_width () -. w -. 5.))
+                            in
+                            (* base-ui side=bottom, sideOffset 0; flip above
+                               when there's no room below. *)
+                            let above =
+                              Ui_services.dom_viewport_height () -. trig_bottom -. h
+                              < 8.
+                            in
+                            ( x
+                            , Float.max 5.
+                                (Float.min
+                                   (if above then ty -. h else trig_bottom)
+                                   (Ui_services.dom_viewport_height () -. h -. 5.))
+                            , Float.max 4.
+                                (Float.min (trig_cx -. x -. 4.) (w -. 12.))
+                            , if above then `top else `bottom )
                       in
                       set_tip
                         (Some
                            {
                              tip_label = label;
                              tip_keys = keys;
-                             tip_x = x;
-                             tip_y = Float.max 5.
-                               (Float.min
-                                  (if above then ty -. h else trig_bottom)
-                                  (Ui_services.dom_viewport_height () -. h -. 5.));
-                             tip_arrow_x = Float.max 4.
-                               (Float.min (trig_cx -. x -. 4.) (w -. 12.));
-                             tip_above = above;
+                             tip_x;
+                             tip_y;
+                             tip_arrow_offset;
+                             tip_side;
                            })
             in
             schedule 16 (fun () -> place 8)
@@ -189,7 +217,7 @@ let tip_view (tip : tip) : t =
           ]
   in
   Ui_components.tooltip_content ~key:"lui-tip" ~at:(tip.tip_x, tip.tip_y)
-    ~arrow_x:tip.tip_arrow_x ~above:tip.tip_above [ body ]
+    ~arrow_offset:tip.tip_arrow_offset ~side:tip.tip_side [ body ]
 
 (* singleton bubble — one tip at a time, so the reactive can emit the
    popover directly under popups_view's fragment *)

@@ -38,7 +38,8 @@ let ghost_btn_cls ?(mid = "") ?(tail = "") () =
 (* cljs icon-btn: data-tooltip/data-tooltip-keys feed the tooltip
    reader (popups/tooltip.ml el_closest [data-tooltip],[aria-label]);
    ~label lands as aria-label *and* the tooltip text *)
-let icon_btn ?tip ?keys ?(with_shortcut = false) ~key ~id ~cls ~icon ~on_click () =
+let icon_btn ?tip ?keys ?(with_shortcut = false)
+    ?(tooltip_side : [ `bottom | `left ] = `bottom) ~key ~id ~cls ~icon ~on_click () =
   (* chrome 32px icon button: 8px pad, 20px glyph, radius, opacity
      states — what the deleted .cp__header/.left-sidebar-top icon-btn
      rules styled *)
@@ -52,7 +53,10 @@ let icon_btn ?tip ?keys ?(with_shortcut = false) ~key ~id ~cls ~icon ~on_click (
        @ (match keys with
           | Some k -> [ ("data-tooltip-keys", k) ]
           | None -> [])
-       @ (if with_shortcut then [ ("data-tooltip-shortcut", "true") ] else []))
+       @ (if with_shortcut then [ ("data-tooltip-shortcut", "true") ] else [])
+       @ (match tooltip_side with
+          | `bottom -> []
+          | `left -> [ ("data-tooltip-side", "left") ]))
        ~on_press:(fun _ -> on_click None) [])
 
 (* cljs header.cljs with-shortcut :go/search — title + ⌘K keycap *)
@@ -679,7 +683,7 @@ let back_and_forward () =
    is empty (state/sidebar-add-content-when-open!) *)
 let right_toggle_button ms =
   Ui_components.header_right_sidebar_toggle
-  (icon_btn ~key:"rs-toggle" ~id:"" ~with_shortcut:true
+  (icon_btn ~key:"rs-toggle" ~id:"" ~with_shortcut:true ~tooltip_side:`left
     ~cls:(ghost_btn_cls ~tail:"toggle-right-sidebar" ())
     ~icon:"layout-sidebar-right"
     ~tip:(I18n.t "command.ui/toggle-right-sidebar") ~keys:"T R"
