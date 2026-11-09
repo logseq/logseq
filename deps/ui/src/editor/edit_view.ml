@@ -391,7 +391,6 @@ let frag_binds cls =
     (fun t ->
       match t with
       | "ed-bold" -> [ Ui_components.Prop.font_weight 700 ]
-      | "ed-italic" -> [ Ui_components.Prop.font_style "italic" ]
       | "ed-code" ->
           [ ( Ui_components.Prop.font_family
                 "MonoLisa, 'Fira Code', Monaco, Menlo, Consolas, \
