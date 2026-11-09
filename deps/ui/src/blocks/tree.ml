@@ -383,9 +383,9 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
                            ~transition:"transform 0.2s"
                            ~width:6 ~height:6 ~corner_radius:999
                            ~opacity:(reactive (fun collapsed _ ->
-                             if not collapsed && Settings_state.document_mode () then 0. else 1.)
+                             if not collapsed && Settings_state.document_mode () then 0. else 0.8)
                              cs (Signal.value (Settings_state.state ())))
-                           ~background:"var(--lx-gray-09, var(--ls-block-bullet-color))"
+                           ~background:"var(--lx-gray-08, var(--ls-block-bullet-color))"
                            ~data_attrs:
                              [ ("data-blockid", uuid) ]
                      []))
