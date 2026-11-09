@@ -130,7 +130,9 @@ main.ls-fold-button-on-right {
        absolute arrow's containing block. Stay static and use the mobile
        app's margins. Journal blocks are outside .blocks-container, so this
        is scoped to the fold-on-right root rather than that class. */
-    &[data-has-heading] {
+    &[data-has-heading],
+    &:has(textarea.h1),
+    &:has(textarea.h2) {
       > .block-control-wrap {
         @apply static;
       }
