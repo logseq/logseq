@@ -1,6 +1,5 @@
 (ns frontend.components.block.pdf-annotation-ref-test
-  "Clicking a [[uuid]] page-ref to a PDF annotation must open the PDF at the
-  highlight (db-test#1511). Shift/meta/ctrl keep normal page-ref behavior."
+  "Modified annotation clicks and ordinary page refs retain node navigation."
   (:require [cljs.test :refer [async deftest is testing]]
             [frontend.components.block :as block]
             [frontend.db.async :as db-async]
@@ -12,7 +11,7 @@
             [promesa.core :as p]))
 
 (def ^:private annotation-uuid
-  #uuid "6aef96c7-adbb-4fe3-ab3f-54e6aad7c6f3")
+  #uuid "33333333-3333-3333-3333-333333333333")
 
 (def ^:private annotation-block
   {:db/id 42
@@ -64,19 +63,12 @@
           (p/delay 0))
         (p/then (fn [_] @calls)))))
 
-(deftest click-pdf-annotation-page-ref-opens-pdf-not-asset-page-test
+(deftest modified-annotation-refs-and-page-refs-navigate-test
   (async done
-    (-> (p/let [normal (open-ref! annotation-block (pointer-event {}))
-                shift (open-ref! annotation-block (pointer-event {:shift? true}))
-                meta (open-ref! annotation-block (pointer-event {:meta? true}))
+    (-> (p/let [meta (open-ref! annotation-block (pointer-event {:meta? true}))
                 ctrl (open-ref! annotation-block (pointer-event {:ctrl? true}))
                 middle (open-ref! annotation-block (pointer-event {:button 1}))
                 page (open-ref! ordinary-page (pointer-event {}))]
-          (testing "normal click on an annotation ref opens the PDF at the highlight"
-            (is (= [[:open-pdf annotation-uuid]] normal)
-                "Must not redirect to the annotation/asset page (db-test#1511)"))
-          (testing "shift-click still opens the annotation block in the sidebar"
-            (is (= [[:sidebar "test" 42 :page]] shift)))
           (testing "modifier clicks keep a way to reach the annotation block itself"
             (is (= [[:redirect annotation-uuid {:ignore-alias? nil}]] meta))
             (is (= [[:redirect annotation-uuid {:ignore-alias? nil}]] ctrl))

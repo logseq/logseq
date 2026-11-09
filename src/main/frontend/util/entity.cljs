@@ -54,11 +54,9 @@
       (property? entity)))
 
 (defn pdf-annotation?
-  "PDF highlight blocks. Clicking a ref to one should open the PDF at the highlight."
+  "Returns whether `entity` has the PDF annotation class."
   [entity]
-  (or (tagged-with? entity :logseq.class/Pdf-annotation)
-      (= :annotation (keyword (:logseq.property/ls-type entity)))
-      (some? (:logseq.property.pdf/hl-value entity))))
+  (tagged-with? entity :logseq.class/Pdf-annotation))
 
 (defn library-outline-child-uuids
   "Library outlines nested pages, not normal blocks."
