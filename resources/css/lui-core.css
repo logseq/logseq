@@ -1367,14 +1367,13 @@ a.page-title {
 }
 
 
-/* cljs bottom-property-edit-icon: always visible inside pills; the
-   same pencil inside a panel row is hover-only like
-   .property-panel-edit-btn */
+/* Pills retain a half-opacity pencil; panel pencils are hover-only.
+   Hover/focus appearance overrides the button's inline typed opacity. */
 
 .property-pair.property-panel-row:hover .prop-edit-ico,
-.bottom-property-pill .prop-edit-ico,
+.bottom-property-pill:hover .prop-edit-ico,
 .prop-edit-ico:focus-visible {
-  opacity: 1;
+  opacity: 1 !important;
 }
 
 .ls-block.property-value-container {

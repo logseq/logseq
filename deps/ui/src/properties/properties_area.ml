@@ -335,7 +335,9 @@ let panel_view ctx ~owner_is_tag ~owner_title ~can_toggle d : t =
 (* cljs bottom-property-pill-cp: inline-flex pill = [key + ":"] row
    then .bottom-property-content value — all on one line *)
 let pill_view (ctx : V.ctx) ~owner_is_tag ~owner_title prow : t =
-  Ui_components.property_pill
+ fun context parent ->
+  let hover = Signal.state context.Lui_ui.ui_scheduler false in
+  let node = (Ui_components.property_pill
     ~key:("pp-" ^ Option.value (D.row_ident prow) ~default:"x")
     [ Lui_elements.row ~gap:0 ~cross:`center
         [ key_cell ctx ~owner_is_tag ~owner_title ~icon:false prow
@@ -346,8 +348,14 @@ let pill_view (ctx : V.ctx) ~owner_is_tag ~owner_title prow : t =
         [ Ui_components.Prop.font_size "0.875rem" ]
         (Lui_elements.row ~gap:4 ~cross:`center ~min_height:20 ~min_width:0
            ~style_class:"bottom-property-content property-value-container"
-           [ V.view ~hover:None ctx prow ])
-    ]
+           [ V.view ~bottom_pill:true ~hover:(Some hover) ctx prow ])
+    ]) context parent in
+  Ui_components.Prop.set context node (Ui_components.Prop.pointer_enabled true);
+  Lui_ui.on_event context node (function
+    | Lui_protocol.PointerEnter _ -> Runtime.signal_set hover true
+    | Lui_protocol.PointerLeave _ -> Runtime.signal_set hover false
+    | _ -> ());
+  node
 
 let pills_view ctx ~owner_is_tag ~owner_title below_rows : t =
   Ui_components.with_props

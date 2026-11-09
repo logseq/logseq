@@ -954,11 +954,21 @@ let date_picker_pop ~anchor_target ctx ~ident ~is_datetime ~value ~on_dismiss : 
            on_dismiss ();
            Js.Promise.resolve ())) ~on_dismiss])) context parent
 
-let date_view ?(jump_target = true) ~(hover : bool Signal.state option) ctx row : t =
+let date_view ?(jump_target = true) ?(bottom_pill = false) ?raw_value
+    ~(hover : bool Signal.state option) ctx row : t =
  fun context parent ->
   let sched = context.Lui_ui.ui_scheduler in
 
   let value = D.row_value row in
+  let raw_value = Option.value raw_value ~default:value in
+  (* The pill excludes identity-map placeholders, not bare keywords. *)
+  let has_pill_value =
+    match raw_value with
+    | W.Nil -> false
+    | W.Map _ as v ->
+        D.getk v "db/ident" <> Some "logseq.property/empty-placeholder"
+    | _ -> true
+  in
   let is_datetime = D.row_type row = "datetime" in
   let ident = D.row_ident row |> Option.value ~default:"" in
   let anchor_id = "property-date-" ^ ctx.owner_key ^ "-" ^ ctx.block_uuid ^ "-" ^ ident in
@@ -973,6 +983,7 @@ let date_view ?(jump_target = true) ~(hover : bool Signal.state option) ctx row 
   (* cljs reveals .property-panel-edit-btn while the pointer is over
      the property-pair; without a row-supplied signal fall back to
      hover on the value cell itself *)
+  let cell_hover = not bottom_pill || Option.is_none hover in
   let hover =
     match hover with Some h -> h | None -> Signal.state sched false
   in
@@ -980,10 +991,11 @@ let date_view ?(jump_target = true) ~(hover : bool Signal.state option) ctx row 
   (Lui_elements.row ~gap:4 ~cross:`center ~grow:1.0 ~accessibility_identifier:anchor_id
      ~style_class:"ls-datetime"
      ~on_pointer_enter:(fun _ ->
-       Signal.set hover true;
-       Runtime.flush ())
+       if cell_hover then (
+         Signal.set hover true;
+         Runtime.flush ()))
      ~on_pointer_leave:(fun _ ->
-       if Runtime.signal_get hover then (
+       if cell_hover && Runtime.signal_get hover then (
          Signal.set hover false;
          Runtime.flush ()))
      [ (if D.value_empty_p value then
@@ -992,6 +1004,11 @@ let date_view ?(jump_target = true) ~(hover : bool Signal.state option) ctx row 
           if D.row_many row then
             Ui_components.button ~variant:`ghost ~size:`icon
              ~icon:(`app "calendar-plus") ~label:(I18n.t "property/set-value")
+              ~on_press:(fun _ -> open_picker ()) []
+          else if bottom_pill && D.empty_placeholder_p raw_value then
+            Ui_components.button ~variant:`ghost ~icon:(`app "line-dashed")
+              ~height:20 ~padding:0 ~style_class:"empty-btn"
+              ~label:(I18n.t "property/set-value")
               ~on_press:(fun _ -> open_picker ()) []
           else value_button ~text:"" ~on_press:(fun _ -> open_picker ())
         else
@@ -1010,20 +1027,19 @@ let date_view ?(jump_target = true) ~(hover : bool Signal.state option) ctx row 
                value_button
                  ~text:(date_display (D.row_type row) value)
                  ~on_press:(fun _ -> open_picker ())))
-     ; (if D.value_empty_p value then Logseq_el.nothing
+     ; (if (if bottom_pill then not has_pill_value else D.value_empty_p value)
+        then Logseq_el.nothing
         else
-          (* cljs .property-panel-edit-btn is hover-only inside the
-             property panel (block-below pills keep it always visible) —
-             the row's pointer enter/leave drives the opacity *)
-          box ~opacity:(reactive
-                          (fun h -> if h then 1. else 0.)
-                          (Signal.value hover))
-            [ Ui_components.button ~variant:`ghost ~size:`icon ~icon:(`app "edit")
+          Ui_parts.float_prop Lui_protocol.Opacity
+            ~value:(reactive
+                      (fun h -> if h then 1. else if bottom_pill then 0.5 else 0.)
+                      (Signal.value hover))
+            (Ui_components.button ~variant:`ghost ~size:`icon ~icon:(`app "edit")
                 ~style_class:"prop-edit-ico"
                 ~width:18 ~height:18
                 ~data_attrs:[ ("style", "min-width:0;padding:0") ]
                 ~label:(I18n.t "ui/edit")
-                ~on_press:(fun _ -> open_picker ()) [] ])
+                ~on_press:(fun _ -> open_picker ()) []))
 
      ]))
     context parent
@@ -1362,7 +1378,8 @@ let node_view ?(jump_target = true) ctx row : t =
    value column. [hover] (when the row supplies one) reflects pointer
    hover over the whole property-pair so hover-only affordances like
    the date edit pencil match the cljs row-hover rule. *)
-let rec view ?(jump_target = true) ?(positioned = false) ?(table_view = false) ~(hover : bool Signal.state option)
+let rec view ?(jump_target = true) ?(positioned = false) ?(table_view = false)
+    ?(bottom_pill = false) ~(hover : bool Signal.state option)
     ctx row : t =
   let row' = D.row_with_effective_value row in
   let ty = D.row_type row' in
@@ -1387,7 +1404,8 @@ let rec view ?(jump_target = true) ?(positioned = false) ?(table_view = false) ~
     match ty with
     | "checkbox" -> checkbox_view ~jump_target ctx row'
     | "number" -> scalar_edit_cell ~jump_target ctx row'
-    | "date" | "datetime" -> date_view ~jump_target ~hover ctx row'
+    | "date" | "datetime" ->
+        date_view ~jump_target ~bottom_pill ~raw_value:(D.row_value row) ~hover ctx row'
     | "url" -> url_view ~jump_target ctx row'
     | "node" | "asset" | "page" | "class" | "property" ->
         if ident = "logseq.property.class/extends" then
