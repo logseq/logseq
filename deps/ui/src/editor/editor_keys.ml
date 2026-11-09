@@ -649,7 +649,6 @@ let chord_may_run ~target editing cid =
     | Some e ->
         not (S.is_draft e)
         && not (is_editable_target target && closest ".editor-wrapper" target = None)
-        && whole_selected e.S.model
     | None -> not editing
   else
   match Keymap_data.command_handler cid with
@@ -690,7 +689,13 @@ let on_global_key ev =
               List.filter (fun (_, cid) -> cid = "go/search" || cid = "command-palette/toggle") tbl
             else tbl in
           let dispatch cid =
-            if chord_may_run ~target:ev.Ui_services.target editing cid then begin
+            let yield_to_editor =
+              match cid, S.editing () with
+              | "editor/select-parent", Some e -> not (whole_selected e.S.model)
+              | _ -> false
+            in
+            if not yield_to_editor
+               && chord_may_run ~target:ev.Ui_services.target editing cid then begin
               ev.Ui_services.prevent_default ();
               ev.Ui_services.stop_immediate ();
               if cid = "go/search" && palette_open () then
