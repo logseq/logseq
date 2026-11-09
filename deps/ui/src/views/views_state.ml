@@ -90,6 +90,7 @@ type vstate =
   ; qsrc : string (* query source text (value block title) *)
   ; query_block_uuid : string
         (* logseq.property/query value block uuid — query writes target it *)
+  ; query_has_settings : bool (* owner Model has the built-in Query tag *)
   ; query_editor_open : bool (* raw-source CodeMirror visible *)
   ; props_loaded : bool
   ; all_props : (string, W.t) Hashtbl.t (* ident -> property entity *)
@@ -169,6 +170,7 @@ let empty_vstate () : vstate =
   ; query_view = W.Nil
   ; qsrc = ""
   ; query_block_uuid = ""
+  ; query_has_settings = false
   ; query_editor_open = false
   ; props_loaded = false
   ; all_props = Hashtbl.create 17

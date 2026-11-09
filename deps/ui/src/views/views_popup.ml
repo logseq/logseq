@@ -119,12 +119,16 @@ let anchor_identifier (anchor : U.el) =
    (menu surfaces); select/custom popups keep caller-driven classes. *)
 type popup_anchor = Target of string | Rectangle of (float * float * float * float)
 
-let anchored_popover ~key ~id ~anchor ~align_end ~cls ~card ?role ~on_dismiss children : t =
+let anchored_popover ~key ~id ~anchor ~align_end ~cls ~card ?role
+    ?max_height_viewport ~on_dismiss children : t =
   let anchor_target, anchor_rect, alignment = match anchor with
     | Target target -> Some target, None, (if align_end then `end_ else `start)
     | Rectangle rect -> None, Some rect, `center in
   Ui_components.with_props
-    (if card then [ Ui_components.card_shadow ] else [])
+    ((if card then [ Ui_components.card_shadow ] else [])
+     @ (match max_height_viewport with
+       | Some height -> [ Ui_components.Prop.max_height_viewport height ]
+       | None -> []))
     (popover ~key ?role ~accessibility_identifier:id
        ~transition:Ui_components.popover_transition
        ~anchor:`below ?anchor_target ?anchor_rect ~anchor_offset:0.
@@ -375,6 +379,7 @@ let show_custom_rect ~rect ~cls content =
 let show_select ~(anchor : U.el) ~items ~placeholder ?(multiple = false)
     ?(selected_values = [])
     ?(input_padding_horizontal = 8)
+    ?(width = 224) ?(fit_results = false)
     ?on_apply ?(extra : (unit -> t option) option)
     ?(wrap_cls = "") ?(align_end = false) ?(footer = [])
     ?(custom_content = fun _ -> None) ~on_chosen () =
@@ -467,9 +472,11 @@ let show_select ~(anchor : U.el) ~items ~placeholder ?(multiple = false)
           else text ~style_class:"ls-ac-empty" ~value:(I.t "search/no-result")
             ~padding_vertical:6 ~padding_horizontal:8 []
         else
+          let height = 32 * List.length visible in
           list ~accessibility_identifier:"ui__ac-inner"
             ~style_class:"cp__select-results"
-            ~height:(min 280 (32 * List.length visible))
+            ~height:(if fit_results then height else min 280 height)
+            ?min_height:(if fit_results then Some 0 else None)
             ~scroll_target:(reactive (fun picked ->
               "ac-" ^ string_of_int (bounded (List.length visible) picked)) csig)
             ~scroll_token_signal:csig ~scroll_anchor:`nearest
@@ -481,7 +488,7 @@ let show_select ~(anchor : U.el) ~items ~placeholder ?(multiple = false)
         ; Ui_components.Prop.font_size "14px"
         ; Ui_components.Prop.line_height "20px" ]
         (column ~key:("vpsel-" ^ string_of_int id)
-           ~style_class:"cp__select cp__select-main" ~width:224 ~cross:`stretch
+           ~style_class:"cp__select cp__select-main" ~width ~cross:`stretch
            ([ Ui_components.with_props
                 [ Ui_components.Prop.font_size "16px"
                 ; Ui_components.Prop.line_height "24px"
@@ -490,6 +497,7 @@ let show_select ~(anchor : U.el) ~items ~placeholder ?(multiple = false)
                    ~style_class:"cp__select-input" ~placeholder
                    ~text:(reactive Fun.id qsig)
                    ~autofocus:true ~height:32
+                   ?min_height:(if fit_results then Some 32 else None)
                    ~padding_horizontal:input_padding_horizontal ~padding_vertical:4
                    ~background:"transparent" ~border_width:0 ~corner_radius:0
                    ~foreground:"var(--ls-secondary-text-color)"
@@ -503,7 +511,8 @@ let show_select ~(anchor : U.el) ~items ~placeholder ?(multiple = false)
                      | Lui_protocol.NavigateNext _ -> navigate 1
                      | _ -> ())
                    ~on_submit:(fun _ -> submit ()) [])
-            ; column ~padding_vertical:4 ~cross:`stretch [ results ] ]
+            ; column ~padding_vertical:4 ~cross:`stretch
+                ?min_height:(if fit_results then Some 0 else None) [ results ] ]
             @ (match multiple,on_apply with
               | true,Some apply ->
               [ column ~style_class:"cp__select-apply" ~padding:16
@@ -527,6 +536,7 @@ let show_select ~(anchor : U.el) ~items ~placeholder ?(multiple = false)
     in
     anchored_popover ~key:("vpsel-p" ^ string_of_int id) ~role:`menu
       ~id:("vpsel-p" ^ string_of_int id) ~anchor:(Target anchor_target) ~align_end ~card:true
+      ?max_height_viewport:(if fit_results then Some 0.75 else None)
       ~cls:("ui__dropdown-menu-content " ^ wrap_cls)
       ~on_dismiss:(fun _ -> close_entry id)
       [ wrap ] context parent

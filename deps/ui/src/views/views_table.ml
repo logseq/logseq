@@ -1971,6 +1971,13 @@ let result_el inst (s : V.vstate) : t =
   if s.V.view_error <> None then
     error_el ~title:(I.t "view/error") ~content:(Option.get s.V.view_error)
   else if s.V.loading && not has_data then box ~key:"ls-view-pending" []
+  else if (match inst.V.kind with
+    | V.KQuery _ ->
+        not s.V.loading && s.V.display_type = "table"
+        (* The loaded view can filter out every raw query UUID. *)
+        && (has_data || s.V.query_rows = []) && Wr.row_count s.V.data = 0
+    | _ -> false) then
+    spacer ~key:"ls-query-empty" []
   else
     (* master renders no empty-state copy under an empty table *)
     match s.V.display_type with
