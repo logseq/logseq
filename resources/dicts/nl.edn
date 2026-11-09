@@ -170,6 +170,8 @@
  :class.validation/parents-must-be-tags "Bovenliggende tags moeten tags zijn."
  :class.validation/tag-with-non-tag "Kan geen tag instellen met een ingebouwde pagina die geen tag \"{1}\" is."
 
+ :cmdk/current-page-badge "Huidige pagina"
+
  :cmdk.action/apply-theme "Thema toepassen"
  :cmdk.action/copy-ref "Referentie kopiëren"
  :cmdk.action/create "Aanmaken"

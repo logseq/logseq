@@ -225,6 +225,8 @@
  :class.validation/parents-must-be-tags "Etiket üst öğeleri etiket olmalıdır."
  :class.validation/tag-with-non-tag "\"{1}\" etiketi olmayan yerleşik sayfayla etiket ayarlanamıyor."
 
+ :cmdk/current-page-badge "Mevcut sayfa"
+
  :cmdk.action/apply-theme "Temayı uygula"
  :cmdk.action/copy-ref "Referansı kopyala"
  :cmdk.action/create "Oluştur"

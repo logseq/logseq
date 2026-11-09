@@ -171,6 +171,19 @@ let rec property_chosen d prop =
          ~ident:(ident_of prop)))
   else if is_checkbox prop then (
     write_prop_value d prop (Some (W.Bool false)))
+  else if d.d_target.uuids = []
+          && not (is_many prop)
+          && List.mem (type_of prop) ["default"; "url"]
+          && Option.fold ~none:true ~some:(fun values -> W.elems values = [])
+               (D.getf prop "property/closed-values") then (
+    ignore (let* block = D.entity_by_uuid d.d_target.uuid in
+      (match !current with
+      | Some active when active == d ->
+          if Option.is_none (D.getf (D.untag block) (ident_of prop)) then
+            add_empty_text_block d prop
+          else set_phase d (Value_edit prop)
+      | _ -> ());
+      Js.Promise.resolve ()))
   else set_phase d (Value_edit prop)
 
 (* values may be bare eids, bare ident keywords or entity stubs whose

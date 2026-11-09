@@ -170,6 +170,8 @@
  :class.validation/parents-must-be-tags "Rodzice tagów muszą być tagami."
  :class.validation/tag-with-non-tag "Nie można ustawić tagu dla wbudowanej strony, który nie jest tagiem „{1}”."
 
+ :cmdk/current-page-badge "Bieżąca strona"
+
  :cmdk.action/apply-theme "Zastosuj motyw"
  :cmdk.action/copy-ref "Kopiuj odniesienie"
  :cmdk.action/create "Utwórz"

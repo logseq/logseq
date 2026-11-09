@@ -1,7 +1,7 @@
 (* Node embeds — cljs commands.cljs db-based-embed-block +
-   components/editor.cljs page-on-chosen-handler: picking a page inserts a
-   sibling block on the current block, titled with the page name and
-   carrying :block/link to the page entity; replace-empty-target turns the
+   components/editor.cljs block-on-chosen-handler: picking an entity inserts a
+   sibling block on the current block carrying :block/link to the selected
+   entity; replace-empty-target turns the
    block the user was typing in into the embed. *)
 
 open Promise_ext
@@ -27,9 +27,10 @@ let ensure_page_id ~context ~current repo (title : string) : int option Js.Promi
     if Option.is_none result || not (current ()) then Js.Promise.resolve None
     else fetch ()
 
-let insert title =
+let insert ?target_id title =
   let context = Runtime.model () in
-  match (String.trim title = "", context.Model.repo, S.editing ())
+  match (String.trim title = "" && Option.is_none target_id,
+         context.Model.repo, S.editing ())
   with
   | true, _, _ | _, None, _ | _, _, None -> ()
   | false, Some repo, Some editor ->
@@ -49,13 +50,16 @@ let insert title =
       ignore
         (let* saved = Ops.save_pending_result save in
          if Option.is_none saved || not (current ()) then Js.Promise.resolve () else
-         let* v = ensure_page_id ~context ~current repo title in
+         let* v = match target_id with
+           | Some id -> Js.Promise.resolve (Some id)
+           | None -> ensure_page_id ~context ~current repo title
+         in
          match v with
-         | Some page_id when current () ->
+         | Some link_id when current () ->
           let owner = Ops.refresh_owner_for None in
           let* result = Ops.apply_result_for ~current context
             [ Ops.insert_blocks ~replace_empty_target:true
-                [ Ops.block_map ~title ~link:page_id
+                [ Ops.block_map ~title ~link:link_id
                     (Ui_services.env_random_uuid ()) ]
                 uuid ~sibling:true ] in
           if Option.is_none result || not (current ()) then Js.Promise.resolve ()

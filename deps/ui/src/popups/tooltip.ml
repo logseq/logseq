@@ -60,18 +60,24 @@ let schedule ms f =
       ms
 
 let label_for (trig : Ui_services.el) =
-  match trig.Ui_services.attr "data-tooltip" with
-  | Some "" -> None
-  | Some text -> Some text
-  | None ->
-      if
-        trig.Ui_services.tag () = "BUTTON"
-        || trig.Ui_services.attr "role" = Some "button"
-      then
-        match trig.Ui_services.attr "aria-label" with
-        | Some "" | None -> None
-        | Some _ as label -> label
-      else None
+  if trig.Ui_services.attr "data-tooltip-shortcut" = Some "true"
+     && not
+          (Settings_state.storage_bool "shortcut-tooltip?" ~default:true
+          && Settings_state.config_bool "ui/enable-tooltip?" ~default:true)
+  then None
+  else
+    match trig.Ui_services.attr "data-tooltip" with
+    | Some "" -> None
+    | Some text -> Some text
+    | None ->
+        if
+          trig.Ui_services.tag () = "BUTTON"
+          || trig.Ui_services.attr "role" = Some "button"
+        then
+          match trig.Ui_services.attr "aria-label" with
+          | Some "" | None -> None
+          | Some _ as label -> label
+        else None
 
 (* two-phase placement: the popover mounts under the trigger first;
    once its own rect resolves we clamp x to the viewport, flip above

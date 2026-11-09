@@ -68,7 +68,8 @@ let localization () =
        "settings.sync-server/url","Translated Sync server";
        "page/not-found-title","Translated Not Found";
        "library/add-existing-pages","Translated Add Pages";
-       "view.table/select-column","Translated Select column"];
+       "view.table/select-column","Translated Select column";
+       "cmdk/current-page-badge","Translated Current Page badge"];
     Hashtbl.replace I18n.locale_tbls "zh-CN" (Some dictionary);
     Platform.local_storage_set "preferred-language" "\"zh-CN\"";
     check "Locale fixture loads after application modules initialize"
@@ -118,8 +119,8 @@ let localization () =
          "Translated Sync server";"Translated Add Pages"];
       List.iter (fun (_,_,value) -> check ("Localized search heading: " ^ value)
           (List.mem value texts)) group_labels;
-      eqi "Search current-page badge shares the localized group name" 2
-        (List.length (List.filter ((=) "Translated Current page") texts));
+      check "Search current-page badge resolves its own late locale entry"
+        (List.mem "Translated Current Page badge" texts);
       check "Late locale reaches the retained More recipe"
         (List.exists (fun n -> M.string_prop n "accessibility-label"=Some "Translated More") (nodes session)));
     check "Built-in view columns resolve the initialized locale"
@@ -2176,7 +2177,7 @@ let run_views ~registry ~profile ~finish =
   let pill prefix =
     List.find
       (fun n ->
-        match M.string_prop n "text" with
+        match M.string_prop n "accessibility-label" with
         | Some text -> String.starts_with ~prefix text
         | None -> false)
       (keymap_nodes ())
@@ -2221,10 +2222,10 @@ let run_views ~registry ~profile ~finish =
     (List.length (keymap_rows ()));
   eqi "clearing search restores category actions" 2
     (List.length (category_tools ()));
-  S.toggle keymap (pill "Disabled").M.id true;
+  S.press keymap (pill "Disabled").M.id;
   check "status filter shows commands independently of category collapse"
     (keymap_rows () <> [] && category_headers () = []);
-  S.toggle keymap (pill "All").M.id true;
+  S.press keymap (pill "All").M.id;
   eqi "restoring All retains category collapse" 0 (List.length (keymap_rows ()));
   S.press keymap (first_category ()).M.id;
   check "individual expansion opens just one group"
@@ -2243,19 +2244,19 @@ let run_views ~registry ~profile ~finish =
   eqi "query results retain matches in their original categories" 14
     (List.length (keymap_rows ()));
   check "query counts follow matching commands"
-    (M.string_prop (pill "All") "text"
+    (M.string_prop (pill "All") "accessibility-label"
     <> Some
          ((I18n.t "keymap/all")
          ^ {js| · |js}
          ^ string_of_int (Keymap_data.count Keymap_data.All)));
   eqi "nonempty query shows exactly one clear control" 1
     (List.length (clear_buttons ()));
-  S.toggle keymap (pill "Disabled").M.id true;
+  S.press keymap (pill "Disabled").M.id;
   eqi "filter applies to fuzzy query results" 1 (List.length (keymap_rows ()));
-  S.toggle keymap (pill "Disabled").M.id false;
+  S.press keymap (pill "Disabled").M.id;
   eqi "pressing the active filter restores all query results" 14
     (List.length (keymap_rows ()));
-  S.toggle keymap (pill "Disabled").M.id true;
+  S.press keymap (pill "Disabled").M.id;
   (match clear_buttons () with
   | [ clear ] -> S.press keymap clear.M.id
   | _ -> ());
@@ -2263,7 +2264,7 @@ let run_views ~registry ~profile ~finish =
     (M.string_prop input "text" = Some ""
     && List.exists (fun n -> n.M.id = input.M.id) (keymap_nodes ()));
   check "query clear removes its control" (clear_buttons () = []);
-  S.toggle keymap (pill "All").M.id true;
+  S.press keymap (pill "All").M.id;
   check "all without a query restores category headers"
     (category_headers () <> []);
   S.text_changed keymap input.M.id "zzzz-no-shortcut";
@@ -2352,15 +2353,15 @@ let run_views ~registry ~profile ~finish =
     (configured_binding () <> None);
   let custom_label = (I18n.t "keymap/custom") ^ {js| · 1|js} in
   let custom_pill () = List.find (fun n ->
-      M.string_prop n "text" = Some custom_label)
+      M.string_prop n "accessibility-label" = Some custom_label)
       (configured_nodes ()) in
   check "stored custom shortcut contributes to the Custom count"
-    (List.exists (fun n -> M.string_prop n "text"
+    (List.exists (fun n -> M.string_prop n "accessibility-label"
        = Some custom_label) (configured_nodes ()));
-  (match List.find_opt (fun n -> M.string_prop n "text"
+  (match List.find_opt (fun n -> M.string_prop n "accessibility-label"
        = Some custom_label) (configured_nodes ()) with
    | Some _ ->
-       S.toggle configured_keymap (custom_pill ()).M.id true;
+       S.press configured_keymap (custom_pill ()).M.id;
        eqi "Custom filter contains the stored command" 1
          (List.length (List.filter (fun n -> class_has n "shortcut-row")
            (configured_nodes ())))

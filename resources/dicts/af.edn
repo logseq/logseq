@@ -170,6 +170,8 @@
  :class.validation/parents-must-be-tags "Bovenliggende tags moeten tags zijn."
  :class.validation/tag-with-non-tag "Kan nie merker stel met ingeboude bladsy wat nie 'n merker \"{1}\" is nie."
 
+ :cmdk/current-page-badge "Huidige bladsy"
+
  :cmdk.action/apply-theme "Pas tema toe"
  :cmdk.action/copy-ref "Kopieer verwysing"
  :cmdk.action/create "Skep"

@@ -1,7 +1,8 @@
 (* Document-level event handling for the outliner. LUI's dom-event channel
    cannot preventDefault and lacks caret/selection info, so the full key
    contract lives here in capture phase; dispatch is by event target:
-   inside .editor-wrapper -> editing mode, else normal (block-select) mode. *)
+   inside .editor-wrapper -> editing mode, else normal (block-select) mode.
+   Non-editor controls retain their own activation and navigation keys. *)
 
 module S = Editor_state
 module A = Editor_actions
@@ -24,6 +25,26 @@ let readonly_block_target target =
 let ( let* ) p f = Js.Promise.then_ f p
 
 let mods ev = ev.Ui_services.ctrl || ev.Ui_services.meta
+
+let non_editor_control_target target =
+  closest ".ed-input, .CodeMirror, .code-editor" target = None
+  && (is_editable_target target
+      || closest
+           "button, a[href], input, textarea, select, \
+            [role='button'], [role='link'], [role='checkbox'], [role='radio'], \
+            [role='switch'], [role='tab'], [role='slider'], [role='spinbutton'], \
+            [role='combobox'], [role='textbox'], [role='listbox'], [role='option'], \
+            [role='menuitem'], [role='menuitemcheckbox'], [role='menuitemradio']"
+           target <> None)
+
+let control_owned_key ev =
+  not (mods ev || ev.Ui_services.alt)
+  && non_editor_control_target ev.Ui_services.target
+  && (match ev_key ev with
+      | "Enter" | " " | "Tab" | "Escape" | "Backspace" | "Delete"
+      | "ArrowLeft" | "ArrowRight" | "ArrowUp" | "ArrowDown"
+      | "Home" | "End" | "PageUp" | "PageDown" -> true
+      | _ -> false)
 
 let input_composing ev =
   ev.Ui_services.composing
@@ -642,19 +663,22 @@ let stroke_of ev =
    them when a sequence crosses into chords those paths can't see;
    while editing, non-editor commands still fire (global-prevent-default)
    except the non-editing-only set *)
-let chord_may_run ~target editing cid =
+let chord_may_run ~target ~control editing cid =
   if editing && (cid = "editor/copy" || cid = "editor/cut") then false
   else if cid = "editor/select-parent" then
-    match S.editing () with
+    not control
+    && (match S.editing () with
     | Some e ->
         not (S.is_draft e)
         && not (is_editable_target target && closest ".editor-wrapper" target = None)
-    | None -> not editing
+    | None -> not editing)
   else
   match Keymap_data.command_handler cid with
-  | Some "block-editing-only" -> Option.is_some (S.editing ())
+  | Some "block-editing-only" -> not control && Option.is_some (S.editing ())
   | Some "global-non-editing-only" -> not editing
-  | Some "editor-global" -> not editing || Option.is_some (S.editing ())
+  | Some "editor-global" ->
+      (not control || not (String.starts_with ~prefix:"editor/" cid))
+      && (not editing || Option.is_some (S.editing ()))
   | Some handler -> Keymap_data.global_handler handler
   | None -> false
 
@@ -666,6 +690,7 @@ let palette_open () =
 let on_global_key ev =
   if ev.Ui_services.default_prevented || input_composing ev
      || closest ".pswp" ev.Ui_services.target <> None
+     || control_owned_key ev
   then chord_seq := []
   (* the open cmdk palette owns every key *)
   else if not (ac_popup_open ()) then
@@ -684,7 +709,8 @@ let on_global_key ev =
             is_editable_target (ev.Ui_services.target)
             || S.editing () <> None
           in
-          let tbl = List.filter (fun (_, cid) -> chord_may_run ~target:ev.Ui_services.target editing cid) tbl in
+          let control = non_editor_control_target ev.Ui_services.target in
+          let tbl = List.filter (fun (_, cid) -> chord_may_run ~target:ev.Ui_services.target ~control editing cid) tbl in
           let tbl = if palette_open () then
               List.filter (fun (_, cid) -> cid = "go/search" || cid = "command-palette/toggle") tbl
             else tbl in
@@ -695,7 +721,7 @@ let on_global_key ev =
               | _ -> false
             in
             if not yield_to_editor
-               && chord_may_run ~target:ev.Ui_services.target editing cid then begin
+               && chord_may_run ~target:ev.Ui_services.target ~control editing cid then begin
               ev.Ui_services.prevent_default ();
               ev.Ui_services.stop_immediate ();
               if cid = "go/search" && palette_open () then
@@ -748,8 +774,8 @@ let on_global_key ev =
 
 (* -- normal-mode keys (block selection) -- *)
 
-let blocked_default ev =
-  if input_composing ev || ac_popup_open () then false
+let blocked_default ~control ev =
+  if control || input_composing ev || ac_popup_open () then false
   else match stroke_of ev with
   | None -> false
   | Some stroke ->
@@ -763,7 +789,7 @@ let blocked_default ev =
                     List.map canonical_binding (String.split_on_char ' ' binding) = [stroke]) bindings
             | _ -> false
           in
-          chord_may_run ~target:ev.Ui_services.target editing cid
+          chord_may_run ~target:ev.Ui_services.target ~control editing cid
           && contains (Keymap_data.default_shortcut cid)
           && not (contains (Keymap_data.effective_shortcut cid)))
 
@@ -980,6 +1006,10 @@ let rec retry_vertical uuid scope epoch ev armed_caret mine_ms attempts =
 and apply_input ?frame uuid ev =
   let ev =
     match ev with
+    | Edit_input.Key (({ Edit_model.key = "ArrowLeft" | "ArrowRight"
+                       ; ctrl = true; meta = false; alt = false; _ } as key), repeat)
+      when not (Ui_services.env_is_mac ()) ->
+        Edit_input.Key ({key with ctrl = false; alt = true}, repeat)
     | Edit_input.Key (key, repeat)
       when key.Edit_model.ctrl && not (key.meta || key.alt)
            && Ui_services.env_is_mac () ->
@@ -1533,7 +1563,8 @@ let consume_drag_click () =
 
 let on_keydown ev =
   if Ui_services.env_native_drag () && ev_key ev = "Escape" then drag_cancel ();
-  if blocked_default ev then begin
+  let control = non_editor_control_target ev.Ui_services.target in
+  if blocked_default ~control ev then begin
     ev.Ui_services.prevent_default ();
     ev.Ui_services.stop_immediate ()
   end else
@@ -1568,6 +1599,7 @@ let on_keydown ev =
     then
       (if Lazy.force perf_keys then
          Printf.eprintf "PERF kdown-ate popup_key key=%s\n%!" (ev_key ev))
+    else if control then ()
     else
       let target = ev.Ui_services.target in
       (* CodeMirror surfaces (fenced-code editor, query source editor)

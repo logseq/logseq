@@ -288,6 +288,11 @@ let refresh_block inst f =
           else begin
           (match ents with
            | b :: _ ->
+               let owner = Decode.block_of_wire b in
+               let query_has_settings =
+                 owner.Model.block_uuid = Some block_uuid
+                 && List.mem "logseq.class/Query" owner.Model.block_tag_idents
+               in
                (match query_value_block b with
                 | Some vb ->
                     let qsrc =
@@ -331,11 +336,13 @@ let refresh_block inst f =
                         ; qsrc
                         ; ref_titles
                         ; is_advanced
+                        ; query_has_settings
                         })
                 | None ->
                     V.update inst (fun s ->
                         { s with
                           V.query_block_uuid = ""
+                        ; query_has_settings
                         ; qsrc =
                             (if s.V.query_editor_open then s.V.qsrc else "")
                         ; is_advanced = false
@@ -343,7 +350,7 @@ let refresh_block inst f =
                (match Wr.decode_view_ent b with
                 | Some v -> V.update inst (fun s -> V.apply_view_entity s v)
                 | None -> ())
-           | [] -> ());
+           | [] -> V.update inst (fun s -> { s with V.query_has_settings = false }));
           f ()
           end)
   | _ -> f ()

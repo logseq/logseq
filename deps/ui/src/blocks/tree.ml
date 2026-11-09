@@ -168,19 +168,33 @@ let block_heading_lvl (b : Model.block) =
       | Some (lvl, _) -> Some lvl
       | None -> None)
 
-let bullet_size (b : Model.block) =
+(* Library keeps default page controls as bullets; explicit, inherited
+   and PDF icons remain visible. Type precedence is shared with search. *)
+let node_icon ~(library : bool) (b : Model.block) : Model.icon option =
+  let cls name = List.mem ("logseq.class/" ^ name) b.block_tag_idents in
+  let has_default = cls "Tag" || cls "Property" || cls "Page" || cls "Journal" in
+  if b.block_icon <> None || b.block_tag_icons <> []
+     || b.block_asset_type = Some "pdf" || (has_default && not library) then
+    Node_icon.resolve ~own:b.block_icon ~is_class:(cls "Tag")
+      ~is_property:(cls "Property") ~asset_type:b.block_asset_type
+      ~inherited:b.block_tag_icons
+      ~fallback:(if has_default then Some (Node_icon.tabler "file") else None)
+  else None
+
+let bullet_size ~library (b : Model.block) =
   if b.block_order_list = Some "number" then 20
+  else if node_icon ~library b = None then 16
   else match block_heading_lvl b with
     | Some 1 -> 28 | Some 2 -> 24 | Some 3 -> 20
     | Some 4 -> 16 | Some 5 -> 13 | Some 6 -> 12
     | _ -> 16
 
-let children_container uuid (bs : Model.block Signal.signal) content =
-  let indent b = 22 + bullet_size b / 2 - 1
+let children_container ~library uuid (bs : Model.block Signal.signal) content =
+  let indent b = 22 + bullet_size ~library b / 2 - 1
     - (if b.Model.block_order_list = Some "number" then 3 else 0) in
   (* Center the one-pixel guide on the bullet, including odd icon sizes. *)
   let guide_left b =
-    let size = bullet_size b in
+    let size = bullet_size ~library b in
     float_of_int size /. 2. -. float_of_int (size / 2) +. 0.5 in
   Ui_parts.int_prop Lui_protocol.MarginLeft ~value:(reactive indent bs)
   (Ui_components.with_props
@@ -213,19 +227,6 @@ let heading_attrs (b : Model.block) =
   | _ -> []
 
 (* -- control wrap: collapse arrow + bullet -- *)
-
-(* Library keeps default page controls as bullets; explicit, inherited
-   and PDF icons remain visible. Type precedence is shared with search. *)
-let node_icon ~(library : bool) (b : Model.block) : Model.icon option =
-  let cls name = List.mem ("logseq.class/" ^ name) b.block_tag_idents in
-  let has_default = cls "Tag" || cls "Property" || cls "Page" || cls "Journal" in
-  if b.block_icon <> None || b.block_tag_icons <> []
-     || b.block_asset_type = Some "pdf" || (has_default && not library) then
-    Node_icon.resolve ~own:b.block_icon ~is_class:(cls "Tag")
-      ~is_property:(cls "Property") ~asset_type:b.block_asset_type
-      ~inherited:b.block_tag_icons
-      ~fallback:(if has_default then Some (Node_icon.tabler "file") else None)
-  else None
 
 let icon_el uuid icon : t =
   Icon_picker.icon_el ~key:("ic-" ^ uuid) ~size:14. ~cls:"ui__icon" icon
@@ -283,12 +284,7 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
      --ls-block-icon-size lives in the lui-core.css [data-heading]
      rules *)
 
-  let icon_size =
-    match block_heading_lvl b with
-    | Some 1 -> 28 | Some 2 -> 24 | Some 3 -> 20
-    | Some 4 -> 16 | Some 5 -> 13 | Some 6 -> 12
-    | _ -> 0
-  in
+  let control_size = bullet_size ~library b in
   row ~key:("ctrlw-" ^ uuid) ~height:24 ~cross:`center
     ~style_class:"block-control-wrap"
     ~data_attrs:
@@ -361,9 +357,8 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
             (box ~key:("dotw-" ^ uuid)
                ~accessibility_identifier:("dot-" ^ uuid)
                ~main:`center ~cross:`center ~corner_radius:8
-               ~width:(if order_list then 20 else if icon_size > 0 then icon_size else 16)
-               ~min_width:(if order_list then 20 else if icon_size > 0 then icon_size else 16)
-               ~height:(if order_list then 16 else if icon_size > 0 then icon_size else 16)
+               ~width:control_size ~min_width:control_size
+               ~height:(if order_list then 16 else control_size)
                ~data_attrs:
                  ([ ("data-blockid", uuid); ("draggable", string_of_bool (not (Ui_services.env_publishing ()))) ])
                [ (match node_icon ~library b with
@@ -388,9 +383,9 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
                            ~transition:"transform 0.2s"
                            ~width:6 ~height:6 ~corner_radius:999
                            ~opacity:(reactive (fun collapsed _ ->
-                             if not collapsed && Settings_state.document_mode () then 0. else 1.)
+                             if not collapsed && Settings_state.document_mode () then 0. else 0.8)
                              cs (Signal.value (Settings_state.state ())))
-                           ~background:"var(--lx-gray-09, var(--ls-block-bullet-color))"
+                           ~background:"var(--lx-gray-08, var(--ls-block-bullet-color))"
                            ~data_attrs:
                              [ ("data-blockid", uuid) ]
                      []))
@@ -432,8 +427,8 @@ let content_el uuid (b : Model.block) : t =
      string is ignored by the native host; the cursor prop is what it
      reads, and an I-beam is the pointer for rendered block text. *)
   Ui_components.with_props [ Ui_components.Prop.cursor `text ]
-  (box ~key:("content-" ^ uuid) ~style_class:"block-content"
-    ~min_height:24 ~main:`center ~grow:1. ~background:title_bg
+  (column ~key:("content-" ^ uuid) ~style_class:"block-content"
+    ~min_height:24 ~min_width:0 ~main:`center ~cross:`stretch ~grow:1. ~background:title_bg
     ~accessibility_identifier:("block-content-" ^ uuid)
     ~data_attrs:
       ([ ("data-blockid", uuid); ("data-containerid", uuid)
@@ -470,6 +465,7 @@ let content_el uuid (b : Model.block) : t =
                    ]
                | Some `inline ->
                    [ row ~key:("bt-" ^ uuid)
+                       ~grow:(if block_heading_lvl b <> None then 1. else 0.)
                        (Render.title_block ~self:uuid ~annot:true
                           ~resolved:(S.title_for uuid b.block_title)
                           b)
@@ -1069,7 +1065,7 @@ and child_list ~depth ~editable ~library ~virtualize uuid scope
 and children_dom ~depth ~editable ~library ~virtualize uuid scope
     (bs : Model.block Signal.signal) : t =
   let b = Signal.get bs in
-  children_container uuid bs
+  children_container ~library uuid bs
     (if virtualize then
        column ~grow:1. ~min_width:0
          [ Lazy_children.lazy_children ~key:("clist-" ^ uuid) ~uuid
@@ -1177,7 +1173,7 @@ and block_row_static ?(depth = 0) ?(library = false) (b : Model.block) : t =
 and children_static_el ~depth ~library uuid (b : Model.block) : t =
  fun ctx parent ->
   let bs = Signal.constant ctx.Lui_ui.ui_scheduler b in
-  children_container uuid bs
+  children_container ~library uuid bs
     (column ~key:("clist-" ^ uuid) ~style_class:"block-children" ~grow:1.
       (List.map (block_row_static ~depth:(depth + 1) ~library) b.block_children))
     ctx parent

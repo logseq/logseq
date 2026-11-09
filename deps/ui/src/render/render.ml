@@ -310,20 +310,6 @@ let src_eval_el ~(code : string) ~(uuid : string) : t =
              [] ] ])
     context parent
 
-(* cljs block-title-aux query-setting: class-Query blocks get a ghost
-   settings button next to the title (opacity-0 until the head row is
-   hovered) that toggles the query source editor inside the block's
-   below-row .custom-query-results view *)
-let query_setting_el ~block_uuid =
-  Ui_components.button ~key:"qs" ~variant:`ghost ~size:`icon
-    ~style_class:"ls-query-setting"
-    ~transition:"opacity .3s ease-in"
-    ~foreground:"var(--ls-secondary-text-color, var(--lx-gray-11))"
-    ~label:(I18n.t "block/set-query")
-    ~icon:(`app "settings")
-    ~on_press:(fun _ -> Views_view.toggle_query_editor ~block_uuid)
-    []
-
 (* cljs cards-block?: logseq.class/Cards tag adds a "Practice" ghost
    button next to the title that opens the flashcards modal
    ([:modal/show-cards (:db/id block)] -> ls:open-cards {eid}) *)
@@ -686,11 +672,9 @@ let title_outer_kind (b : Model.block) =
         else Some `inline
 
 (* self: uuid of the block whose title this is — seeds the ref chain
-   (cljs :ref-set) that suppresses self/cycle references. is_query:
-   class-Query blocks keep their title and append the query-setting
-   ghost button; the live query shell lives below the block row
-   (query_below_el). is_cards: class-Cards blocks append "Practice". *)
-let title ?heading ?(is_query = false) ?(is_cards = false)
+   (cljs :ref-set) that suppresses self/cycle references.
+   is_cards: class-Cards blocks append "Practice". *)
+let title ?heading ?(is_cards = false)
     ?(card_eid : int option = None) ?(self = "")
     ?(wrap_attrs = []) ?(prefix : t option = None) (s : string) : t list =
   match html_body s with
@@ -718,11 +702,7 @@ let title ?heading ?(is_query = false) ?(is_cards = false)
         | None -> (
             (* {{query}} is a normal inline macro — macro_el renders the
                deprecation .warning inside .block-title-wrap like cljs *)
-            let tail =
-              (if is_query && not (Ui_services.env_publishing ()) then [ query_setting_el ~block_uuid:self ]
-               else [])
-              @ if is_cards then [ practice_el ~eid:card_eid ] else []
-            in
+            let tail = if is_cards then [ practice_el ~eid:card_eid ] else [] in
             content ?heading ~self ~wrap_attrs ~prefix s :: tail))
 
 (* display-type/heading aware variant — the block model carries
@@ -760,7 +740,6 @@ let title_block ?(self = "") ?resolved ?(annot = false)
                 [ src_eval_el ~code
                     ~uuid:(Option.value b.Model.block_uuid ~default:"") ] ]
       | None ->
-          title ?heading ~is_query:(is_query_block b)
-            ~is_cards:(is_cards_block b)
+          title ?heading ~is_cards:(is_cards_block b)
             ~card_eid:b.Model.block_db_id ~self ~wrap_attrs ~prefix
             (Option.value resolved ~default:s))

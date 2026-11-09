@@ -170,6 +170,8 @@
  :class.validation/parents-must-be-tags "والدین باید برچسب باشند."
  :class.validation/tag-with-non-tag "نمی توان برچسب را با صفحه داخلی که برچسب \"{1}\" نیست تنظیم کرد."
 
+ :cmdk/current-page-badge "صفحه فعلی"
+
  :cmdk.action/apply-theme "اعمال پوسته"
  :cmdk.action/copy-ref "کپی مرجع"
  :cmdk.action/create "ایجاد"

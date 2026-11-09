@@ -233,6 +233,8 @@
  :class.validation/parents-must-be-tags "标签的父级必须是标签。"
  :class.validation/tag-with-non-tag "无法使用不是标签“{1}”的内置页面设置标签。"
 
+ :cmdk/current-page-badge "当前页面"
+
  :cmdk.action/apply-theme "应用主题"
  :cmdk.action/copy-ref "复制引用"
  :cmdk.action/create "创建"

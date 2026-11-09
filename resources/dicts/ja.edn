@@ -170,6 +170,8 @@
  :class.validation/parents-must-be-tags "タグの親はタグでなければなりません。"
  :class.validation/tag-with-non-tag "タグ「{1}」以外の組み込みページにはタグを設定できません。"
 
+ :cmdk/current-page-badge "現在のページ"
+
  :cmdk.action/apply-theme "テーマを適用"
  :cmdk.action/copy-ref "参照をコピー"
  :cmdk.action/create "作成"

@@ -933,7 +933,6 @@ html[data-theme="dark"] #left-sidebar > .shade-mask {
 
   .sidebar-item-list {
     margin-left: 0.25rem;
-    margin-top: -8px;
     padding-bottom: 150px;
     height: calc(100vh - 48px);
     /* cljs mounts the list as a plain block container — item heights
@@ -1368,14 +1367,13 @@ a.page-title {
 }
 
 
-/* cljs bottom-property-edit-icon: always visible inside pills; the
-   same pencil inside a panel row is hover-only like
-   .property-panel-edit-btn */
+/* Pills retain a half-opacity pencil; panel pencils are hover-only.
+   Hover/focus appearance overrides the button's inline typed opacity. */
 
 .property-pair.property-panel-row:hover .prop-edit-ico,
-.bottom-property-pill .prop-edit-ico,
+.bottom-property-pill:hover .prop-edit-ico,
 .prop-edit-ico:focus-visible {
-  opacity: 1;
+  opacity: 1 !important;
 }
 
 .ls-block.property-value-container {

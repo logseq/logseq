@@ -200,6 +200,8 @@
  :class.validation/parents-must-be-tags "標籤的父級必須是標籤。"
  :class.validation/tag-with-non-tag "無法使用不是標籤「{1}」的內建頁面設定標籤。"
 
+ :cmdk/current-page-badge "當前頁面"
+
  :cmdk.action/apply-theme "套用主題"
  :cmdk.action/copy-ref "複製引用"
  :cmdk.action/create "建立"

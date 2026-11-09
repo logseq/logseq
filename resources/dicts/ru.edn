@@ -170,6 +170,8 @@
  :class.validation/parents-must-be-tags "Родители тегов должны быть тегами."
  :class.validation/tag-with-non-tag "Невозможно установить тег для встроенной страницы, которая не является тегом «{1}»."
 
+ :cmdk/current-page-badge "Текущая страница"
+
  :cmdk.action/apply-theme "Применить тему"
  :cmdk.action/copy-ref "Копировать ссылку"
  :cmdk.action/create "Создать"

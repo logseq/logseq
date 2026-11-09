@@ -24,7 +24,7 @@ type item_action =
   | Emit_exit of string (* ls:editor-insert {text, exit} — cljs clear-edit! *)
   | Switch of ac_kind (* reopen as another autocomplete *)
   | Editor_cmd of string (* ls:editor-command {command, from, to} *)
-  | Embed of string (* page title — insert a :block/link embed *)
+  | Embed_target of int (* selected entity id *)
   | Tag_apply of string (* existing entity — cljs tag-on-chosen-handler *)
   | Tag_create of string (* "New tag" row — always creates a class *)
   | Template_apply of string (* template block uuid — apply-template op *)
@@ -646,7 +646,6 @@ let page_items_for t kind q =
   let act_of ~created title =
     match kind with
     | Tag_search -> if created then Tag_create title else Tag_apply title
-    | Embed_ref -> Embed title
     | Page_embed -> Emit ("{{embed [[" ^ title ^ "]]}}", 0)
     | _ -> Emit ("[[" ^ title ^ "]]", 0)
   in
@@ -668,7 +667,7 @@ let page_items_for t kind q =
         (* cljs get-matched-classes → fuzzy-search (limit 20) *)
         Fuzzy.fuzzy_search ~extract:fst ~limit:20 !(t.tag_titles) q
         |> List.map wrap_tag
-    | Page_ref | Page_embed | Embed_ref ->
+    | Page_ref | Page_embed ->
         if q = "" then
           List.map
             (fun en ->
@@ -677,7 +676,6 @@ let page_items_for t kind q =
                 ~node_icon:("calendar", false)
                 ~label:(U.t (nlp_i18n_key en)) ~icon:"calendar"
                 (match kind with
-                 | Embed_ref -> Embed jt
                  | Page_embed -> Emit ("{{embed [[" ^ jt ^ "]]}}", 0)
                  | _ -> Emit ("[[" ^ jt ^ "]]", 0)))
             nlp_en_names
@@ -741,7 +739,7 @@ let template_items_for t q =
 
 let repo = Runtime.repo
 
-let page_item_of_row i w =
+let page_item_of_row ?(kind = Page_ref) i w =
   let title =
     match
       [ Cmdk_state.str_field w "block.temp/original-title"
@@ -764,7 +762,12 @@ let page_item_of_row i w =
   (* cljs page-on-chosen-handler: non-page results are inserted as uuid
      page-refs ([[uuid]]) so retitling the target renames the link *)
   let act =
-    if is_page then Emit ("[[" ^ title ^ "]]", 0) else Emit ("[[" ^ uuid ^ "]]", 0)
+    if kind = Embed_ref then
+      match Wire.map_get_int w "db/id" with
+      | Some id -> Embed_target id
+      | None -> invalid_arg "Node embed search result is missing db/id"
+    else if is_page then Emit ("[[" ^ title ^ "]]", 0)
+    else Emit ("[[" ^ uuid ^ "]]", 0)
   in
   (* cljs node-render: node icon + title, block rows carry a .breadcrumb
      row with the parent page path *)
@@ -798,9 +801,10 @@ let refresh_items t ac =
           filter_slash ac.query
             (slash_items ~statuses:[] ~priorities:[]
               ~has_heading:(editing_has_heading ())) }
-  | Page_ref | Page_embed | Tag_search | Embed_ref ->
+  | Page_ref | Page_embed | Tag_search ->
       { ac with items = page_items_for t ac.kind ac.query }
   | Template_search -> { ac with items = template_items_for t ac.query }
+  | Embed_ref -> { ac with items = [] }
   | Block_ref -> ac (* filled asynchronously by run_block_search *)
 ;;
 
@@ -863,7 +867,7 @@ let run_block_search t ac =
    (or second, when the first match starts with the query). *)
 let run_node_search t ac =
   incr t.gen;
-  let gen = !(t.gen) and graph = repo () in
+  let gen = !(t.gen) and graph = repo () and session = !(t.session) in
   ignore
     ((let* w =
        Runtime.invoke3 "thread-api/search-blocks"
@@ -878,7 +882,7 @@ let run_node_search t ac =
             ; (Wire.kw "enable-snippet?", Wire.Bool false)
             ; (Wire.kw "include-breadcrumb?", Wire.Bool true)
             ; (Wire.kw "include-matched-count?", Wire.Bool true)
-            ; (Wire.kw "built-in?", Wire.Bool true)
+            ; (Wire.kw "built-in?", Wire.Bool (ac.kind = Page_ref))
             ; (Wire.kw "dev?", Wire.Bool false) ])
      in
      let rows =
@@ -892,8 +896,20 @@ let run_node_search t ac =
      in
      (match (get t).ac with
       | Some a
-        when gen = !(t.gen) && graph = repo () && a.kind = Page_ref
-             && a.query = ac.query ->
+        when gen = !(t.gen) && session = !(t.session) && graph = repo ()
+             && (a.kind = Page_ref || a.kind = Embed_ref) && a.kind = ac.kind
+             && a.auuid = ac.auuid && ac_current a && a.query = ac.query
+             && (match ac.editor, Editor_state.editing () with
+                 | Some origin, Some editor ->
+                     editor.uuid = ac.auuid && origin.epoch == editor.epoch
+                 | _ -> false) ->
+          let rows =
+            if a.kind = Embed_ref then
+              List.filter (fun row ->
+                Wire.map_get_uuid row "block/uuid" <> Some a.auuid
+                && Cmdk_state.str_field row "block/uuid" <> Some a.auuid) rows
+            else rows
+          in
           let pages, blocks =
             List.partition
               (fun w ->
@@ -908,8 +924,11 @@ let run_node_search t ac =
              titles stand in for cljs's leftover source so a search index
              that is still (re)building can't starve the menu, and nlp
              date pages join the pool as they do in cljs nlp-pages?. *)
-          let matched_pages = List.mapi page_item_of_row pages
-          and matched_blocks = List.mapi page_item_of_row blocks in
+          let matched_pages = List.mapi (page_item_of_row ~kind:a.kind) pages
+          and matched_blocks = List.mapi (page_item_of_row ~kind:a.kind) blocks in
+          let items =
+            if a.kind = Embed_ref then matched_pages @ matched_blocks
+            else begin
           let seen = Hashtbl.create 32 in
           List.iter
             (fun it -> Hashtbl.replace seen it.ai_label ())
@@ -949,8 +968,7 @@ let run_node_search t ac =
             take 50
               (matched_pages @ nlp @ leftover @ matched_blocks)
           in
-          let items =
-            match
+          match
               List.filter
                 (fun it -> S.sub it.ai_key 0 4 = "new:")
                 (page_items_for t a.kind a.query)
@@ -967,6 +985,7 @@ let run_node_search t ac =
                    | m :: rest -> m :: new_items @ rest
                    | [] -> new_items)
                 else new_items @ matched
+            end
           in
           set_ac t (Some { a with items = renumber items; chosen = 0 })
       | _ -> ());
@@ -1019,7 +1038,7 @@ let load_titles t =
      (match (get t).ac with
       | Some ({ kind = Page_ref; query; _ } as ac) when String.trim query <> "" ->
           run_node_search t ac
-      | Some ({ kind = Page_ref | Page_embed | Tag_search | Embed_ref; _ } as ac) ->
+      | Some ({ kind = Page_ref | Page_embed | Tag_search; _ } as ac) ->
           set_ac t (Some (refresh_items t ac))
       | _ -> ()));
      Js.Promise.resolve ())
@@ -1286,9 +1305,9 @@ let open_ac ?tpos ?(autopair = true) t kind =
         | None -> ())
    | _ -> ());
   (match kind with
-   | Page_ref | Page_embed | Embed_ref -> load_titles t
+   | Page_ref | Page_embed -> load_titles t
    | Tag_search -> load_tag_titles t
-   | Template_search -> load_templates t   | Block_ref -> ()
+   | Template_search -> load_templates t   | Block_ref | Embed_ref -> ()
    | Slash -> ());
   set_cm t None;
   set_ac t (Some (refresh_items t ac));
@@ -1301,7 +1320,8 @@ let ac_update t ac q =
   let ac = { ac with query = q; chosen = 0 } in
   set_ac t (Some (refresh_items t ac));
   if ac.kind = Block_ref then run_block_search t ac
-  else if ac.kind = Page_ref && String.trim q <> "" then run_node_search t ac
+  else if (ac.kind = Page_ref || ac.kind = Embed_ref) && String.trim q <> ""
+  then run_node_search t ac
 ;;
 
 let query_closed ac q =
@@ -1960,7 +1980,7 @@ let apply_item t ac ~meta it =
       invalidate_ac t;
       erase_trigger_text ac;
       (match kind with
-       | Page_ref | Page_embed | Tag_search | Embed_ref -> load_titles t
+       | Page_ref | Page_embed | Tag_search -> load_titles t
        | Template_search -> load_templates t
        | _ -> ());
       set_ac t
@@ -1969,10 +1989,10 @@ let apply_item t ac ~meta it =
               { ac with kind; flip = None; flipx = None; query = ""; tlen = 0
               ; items = []; chosen = 0 }));
       measure_ac t kind
-  | Embed title ->
+  | Embed_target target_id ->
       erase_trigger_text ac;
       close_ac t;
-      Editor_embed.insert title
+      Editor_embed.insert ~target_id ""
   | Emit (text, back) -> insert_text ac text back; close_ac t
   | Emit_exit text -> emit ~exit:true ac.auuid ac.tpos text; close_ac t
   | Editor_cmd c ->
