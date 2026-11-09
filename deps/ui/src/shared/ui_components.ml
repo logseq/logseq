@@ -523,6 +523,7 @@ let keycap ~key ~boxed ~glow ?(min_slot = 20) ~value : t =
        ~foreground:"var(--lx-gray-12, var(--rx-gray-12))"
        [ with_props
            [ Prop.font_size "var(--lx-text-header)"
+           ; Prop.foreground "var(--lx-gray-12, var(--rx-gray-12))"
            ; Prop.font_weight 400
            ; Prop.line_height "16px"
            ; Prop.letter_spacing (-0.5)
