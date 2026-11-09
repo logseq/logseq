@@ -263,13 +263,8 @@ let query_setting_el inst : t =
     ~label ~data_attrs:[ "data-tooltip", "" ]
     ~icon:(`app "settings")
     ~on_press:(fun _ -> if current () then Views_query.toggle_source_editor inst)
-    [ Ui_components.with_props [ Ui_components.card_shadow ]
-        (tooltip ~key:"query-setting-tip" ~text:label ~anchor:`above
-           ~anchor_alignment:`center ~anchor_offset:8. ~tooltip_delay:500
-           ~style_class:"ui__tooltip-content"
-           ~padding_horizontal:12 ~padding_vertical:6 ~corner_radius:6
-           ~background:"hsl(var(--popover))"
-           ~foreground:"hsl(var(--popover-foreground))" []) ]
+    [ tooltip ~key:"query-setting-tip" ~text:label ~anchor:`above
+        ~anchor_alignment:`center ~anchor_offset:8. ~tooltip_delay:500 [] ]
 
 let query_builder_header inst (s : V.vstate) : t =
   let builder =
