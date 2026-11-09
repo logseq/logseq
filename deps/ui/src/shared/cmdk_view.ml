@@ -373,7 +373,7 @@ let hl_span ?(single_line = false) key (item_sig : S.item Signal.signal)
 
 let badge_el svs key =
   Ui_components.cmdk_badge ~key
-    ~value:(svs.Svs.i18n "cmdk.group/current-page")
+    ~value:(svs.Svs.i18n "cmdk/current-page-badge")
 
 (* -- item row -------------------------------------------------------- *)
 

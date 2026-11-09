@@ -233,6 +233,8 @@
  :class.validation/parents-must-be-tags "Cannot create this tag unless all parents are tags."
  :class.validation/tag-with-non-tag "Can't set tag with built-in page that isn't a tag \"{1}\"."
 
+ :cmdk/current-page-badge "Current Page"
+
  :cmdk.action/apply-theme "Apply theme"
  :cmdk.action/copy-ref "Copy ref"
  :cmdk.action/create "Create"

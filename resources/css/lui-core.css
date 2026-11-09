@@ -933,7 +933,6 @@ html[data-theme="dark"] #left-sidebar > .shade-mask {
 
   .sidebar-item-list {
     margin-left: 0.25rem;
-    margin-top: -8px;
     padding-bottom: 150px;
     height: calc(100vh - 48px);
     /* cljs mounts the list as a plain block container — item heights

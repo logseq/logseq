@@ -291,7 +291,7 @@ let cmdk_palette ~key ~sidebar children =
 let cmdk_input_row ~key children =
   with_props
     [ ( Prop.shadow
-          "inset 0 -1px 0 0 var(--ls-border-color, \
+          "inset 0 -1px 0 0 var(--lx-gray-07, \
            hsl(var(--border)))" )
     ]
     (row ~key ~style_class:"cp__cmdk-input-row" ~cross:`center ~gap:8
@@ -337,13 +337,11 @@ let cmdk_scroller ~key ~bottom_pad children =
 
 (* -- cmdk groups ----------------------------------------------------- *)
 
-(* Group frame: the bottom hairline is a real child (a 1px stretch box),
-   skipped on the last group — same visual as the deleted border-bottom
-   rule. *)
+(* Master fades the group borders without fading the result content. *)
 let cmdk_group_hairline ~key : t =
-  box ~key ~height:1
+  box ~key ~height:1 ~opacity:0.6
     ~background:
-      "var(--lx-gray-06, var(--ls-border-color, hsl(var(--border))))"
+      "var(--ls-border-color, var(--lx-gray-06, hsl(var(--border))))"
     []
 
 let cmdk_group ~key ~kind ~last_signal ~pad children =
