@@ -199,7 +199,7 @@ let clear el st =
     (fun (target, name, f) -> remove_listener target name f)
     st.listeners;
   st.listeners <- [];
-  if st.role = "block" && st.uuid <> "" then Code_mirror.unmount st.uuid;
+  if st.role = "block" && st.uuid <> "" then Option.iter (fun element -> Code_mirror.unmount ~element st.uuid) st.line;
   D.el_replace_children (element_to_json el);
   W.Element.removeAttribute "style" el;
   st.line <- None;
@@ -226,11 +226,11 @@ let set_property el prop value =
       match (st.line, st.role) with
       | Some line, "block" ->
           D.el_set_attr line "data-lang" v;
-          Code_mirror.set_language st.uuid v
+          Option.iter (fun element -> Code_mirror.set_language ~element st.uuid v) st.line
       | _ -> ())
   | "value", StringValue v -> (
       st.value <- v;
-      if st.role = "block" then Code_mirror.set_controlled_value st.uuid v;
+      if st.role = "block" then Option.iter (fun element -> Code_mirror.set_controlled_value ~element st.uuid v) st.line;
       match st.line with
       | Some line when st.role = "query" && st.composing ->
           st.composition_cancelled <- true;
@@ -255,7 +255,7 @@ let set_property el prop value =
                if b then D.el_set_attr line "readonly" ""
                else D.el_remove_attr line "readonly"
            | None -> ());
-          if st.uuid <> "" then Code_mirror.set_read_only st.uuid b
+          if st.uuid <> "" then Option.iter (fun element -> Code_mirror.set_read_only ~element st.uuid b) st.line
       | "query" -> (
           match st.line with
           | Some line ->

@@ -7,6 +7,44 @@
 
 module String_set = Stdlib.Set.Make (String)
 
+type row_ref = { link_hosts : string list; owner_uuid : string }
+module Row_set = Stdlib.Set.Make (struct
+  type t = row_ref
+  let compare = Stdlib.compare
+end)
+
+let ordinary_row owner_uuid = { link_hosts = []; owner_uuid }
+
+let row_wire row =
+  Wire.Map
+    [ Wire.Keyword "link-hosts", Wire.List (List.map (fun u -> Wire.Uuid u) row.link_hosts)
+    ; Wire.Keyword "owner-uuid", Wire.Uuid row.owner_uuid ]
+
+let row_of_wire wire =
+  match Wire.map_get_uuid wire "owner-uuid", Wire.map_get wire "link-hosts" with
+  | Some owner_uuid, Some (Wire.List hosts) ->
+      let rec decode acc = function
+        | [] -> Some { owner_uuid; link_hosts = List.rev acc }
+        | Wire.Uuid u :: rest -> decode (u :: acc) rest
+        | _ -> None
+      in
+      decode [] hosts
+  | _ -> None
+
+(* Mount/DOM identifiers only; never used as a block UUID or container scope. *)
+let row_key row =
+  String.concat "--" (row.link_hosts @ [row.owner_uuid])
+
+let row_attrs row =
+  [ "data-row-owner", row.owner_uuid
+  ; "data-row-hosts", String.concat "/" row.link_hosts ]
+
+let row_of_el el =
+  match el.Ui_services.attr "data-row-owner", el.Ui_services.attr "data-row-hosts" with
+  | Some owner_uuid, Some hosts ->
+      Some { owner_uuid; link_hosts = if hosts = "" then [] else String.split_on_char '/' hosts }
+  | _ -> None
+
 (* [scope] is the container the edit started in ("main" or
    "sidebar") — the same block can render in both trees, so only the
    initiating scope mounts the editor (cljs keys the editor by
@@ -38,6 +76,7 @@ type editing_owner = Persisted | Explicit_draft of draft_owner
 
 type editing =
   { uuid : string; buffer : string; scope : string; base : string
+  ; row_ref : row_ref
   ; model : Edit_model.t
   ; submit_on_enter : bool
   ; owner : editing_owner
@@ -47,14 +86,15 @@ type editing =
          applied to this session" from "a different record was restored" *)
   }
 
-let mk_editing ?(caret = 0) ?(submit_on_enter = false) ?(owner = Persisted)
+let mk_editing ?row_ref ?(caret = 0) ?(submit_on_enter = false) ?(owner = Persisted)
     ~uuid ~buffer ~scope ~base () =
   Editor_sink.invalidate uuid;
   let model =
     Edit_model.select (Edit_model.create ~units:edit_units buffer)
       ~anchor:caret ~focus:caret
   in
-  { uuid; buffer; scope; base; model; submit_on_enter; owner; epoch = ref 0 }
+  let row_ref = Option.value row_ref ~default:(ordinary_row uuid) in
+  { uuid; row_ref; buffer; scope; base; model; submit_on_enter; owner; epoch = ref 0 }
 
 let is_draft e = match e.owner with Explicit_draft _ -> true | Persisted -> false
 
@@ -72,6 +112,7 @@ let equal_editing a b =
   | Some a, Some b ->
       a.epoch == b.epoch && a.model == b.model && a.uuid = b.uuid
       && a.scope = b.scope && a.buffer = b.buffer && a.base = b.base
+      && a.row_ref = b.row_ref
       && a.submit_on_enter = b.submit_on_enter && a.owner = b.owner
   | _ -> false
 
@@ -82,9 +123,10 @@ let with_model e model =
 
 type t =
   { editing : editing option
-  ; selected : String_set.t
+  ; selected : Row_set.t
   ; selection_scope : string
-  ; anchor : string option (* selection focus end for shift-arrow *)
+  ; anchor : row_ref option
+  ; head : row_ref option
   ; action_bar : bool
   ; collapsed : String_set.t
   ; expanded : String_set.t
@@ -96,17 +138,18 @@ type t =
       (* bumped by Render_inline cache invalidations via worker_events —
          lets painted rows recheck their rendered-ref gens without
          subscribing the whole state record *)
-  ; drag : (string * string * string) option
-      (* native bullet-drag affordance: (src_uuid, tgt_uuid, move_to)
+  ; drag : (row_ref * row_ref option * string) option
+      (* native bullet-drag affordance: (source row, target row, move_to)
          while a drag gesture is in flight — the web dnd-kit path never
          sets it *)
   }
 
 let initial =
   { editing = None
-  ; selected = String_set.empty
+  ; selected = Row_set.empty
   ; selection_scope = "main"
   ; anchor = None
+  ; head = None
   ; action_bar = false
   ; collapsed = String_set.empty
   ; expanded = String_set.empty
@@ -273,13 +316,13 @@ let equal_collapse_view a b =
 
 type field_sigs =
   { editing_sig : editing option Signal.signal
-  ; editing_target_sig : (string * string) option Signal.signal
-  ; selected_sig : String_set.t Signal.signal
-  ; anchor_sig : string option Signal.signal
+  ; editing_target_sig : (row_ref * string) option Signal.signal
+  ; selected_sig : (string * Row_set.t) Signal.signal
+  ; anchor_sig : row_ref option Signal.signal
   ; action_bar_sig : bool Signal.signal
   ; collapse_sig : collapse_view Signal.signal
   ; invalidation_sig : int Signal.signal
-  ; drag_sig : (string * string * string) option Signal.signal
+  ; drag_sig : (row_ref * row_ref option * string) option Signal.signal
   }
 
 let field_sigs_opt : field_sigs option ref = ref None
@@ -295,10 +338,11 @@ let field_sigs () =
         ; editing_target_sig =
             Signal.cutoff ( = )
               (Signal.map (fun st ->
-                Option.map (fun editing -> editing.uuid, editing.scope) st.editing) s)
+                Option.map (fun editing -> editing.row_ref, editing.scope) st.editing) s)
         ; selected_sig =
-            Signal.cutoff String_set.equal
-              (Signal.map (fun st -> st.selected) s)
+            Signal.cutoff (fun (scope, rows) (scope', rows') ->
+              scope = scope' && Row_set.equal rows rows')
+              (Signal.map (fun st -> st.selection_scope, st.selected) s)
         ; anchor_sig =
             Signal.cutoff ( = ) (Signal.map (fun st -> st.anchor) s)
         ; action_bar_sig =
@@ -374,11 +418,10 @@ let editing_uuid () =
   match editing () with Some e -> Some e.uuid | None -> None
 
 let selection_state () = if ready () then value () else initial
-let selected () = (selection_state ()).selected
+let selected_rows () = (selection_state ()).selected
 let selection_scope () = (selection_state ()).selection_scope
 let interaction_scope () =
   match editing () with Some e -> e.scope | None -> selection_scope ()
-let is_selected uuid = String_set.mem uuid (selected ())
 let collapsed () = (read ()).collapsed
 let is_collapsed uuid = String_set.mem uuid (collapsed ())
 let is_expanded uuid = String_set.mem uuid (read ()).expanded
@@ -386,29 +429,32 @@ let is_expanded uuid = String_set.mem uuid (read ()).expanded
 (* per-scope collapse: cljs scopes UI collapse overrides by container
    (the same block can render collapsed in the page but expanded as a
    sidebar/zoom root); "scope\x00uuid" keys the override sets *)
-let collapse_key scope uuid = scope ^ "\x00" ^ uuid
+let collapse_key ?row_ref scope uuid =
+  match row_ref with
+  | Some row when row <> ordinary_row uuid -> scope ^ "\x00" ^ row_key row ^ "\x00" ^ uuid
+  | _ -> scope ^ "\x00" ^ uuid
 
 (* cljs get-block-collapsed: the per-scope UI override wins, then the
    global expanded override, then the persisted :block/collapsed? datom *)
-let collapsed_in ~scope (st : t) uuid =
-  let k = collapse_key scope uuid in
+let collapsed_in ?row_ref ~scope (st : t) uuid =
+  let k = collapse_key ?row_ref scope uuid in
   if String_set.mem k st.expanded_ui then false
   else if String_set.mem k st.collapsed_ui then true
   else if String_set.mem uuid st.expanded then false
   else String_set.mem uuid st.collapsed
 
 (* same check on the projected [collapse_view] carried by [collapse_sig] *)
-let collapsed_in_view ~scope (v : collapse_view) uuid =
-  let k = collapse_key scope uuid in
+let collapsed_in_view ?row_ref ~scope (v : collapse_view) uuid =
+  let k = collapse_key ?row_ref scope uuid in
   if String_set.mem k v.cv_expanded_ui then false
   else if String_set.mem k v.cv_collapsed_ui then true
   else if String_set.mem uuid v.cv_expanded then false
   else String_set.mem uuid v.cv_collapsed
 
-let is_collapsed_in ?(scope = "main") uuid = collapsed_in ~scope (read ()) uuid
+let is_collapsed_in ?row_ref ?(scope = "main") uuid = collapsed_in ?row_ref ~scope (read ()) uuid
 
-let collapsed_ui_transform ~scope uuid v (st : t) =
-  let k = collapse_key scope uuid in
+let collapsed_ui_transform ?row_ref ~scope uuid v (st : t) =
+  let k = collapse_key ?row_ref scope uuid in
   { st with
     collapsed_ui =
       (if v then String_set.add k st.collapsed_ui
@@ -418,9 +464,9 @@ let collapsed_ui_transform ~scope uuid v (st : t) =
        else String_set.add k st.expanded_ui)
   }
 
-let set_collapsed ?(scope = "main") uuid v =
-  if ready () then set (collapsed_ui_transform ~scope uuid v)
-  else defer_init (collapsed_ui_transform ~scope uuid v)
+let set_collapsed ?row_ref ?(scope = "main") uuid v =
+  if ready () then set (collapsed_ui_transform ?row_ref ~scope uuid v)
+  else defer_init (collapsed_ui_transform ?row_ref ~scope uuid v)
 
 (* cljs block.cljs mounts a container's root block with
    set-collapsed-block! false — a zoomed/sidebar root always shows its
@@ -429,48 +475,54 @@ let expand_root ~scope uuid = set_collapsed ~scope uuid false
 
 (* render-time collapse: scoped overrides first, then persisted flag ||
    view default, minus the explicit user-expand override *)
-let effective_collapsed_in ~scope uuid default (st : t) =
+let effective_collapsed_in ?row_ref ~scope uuid default (st : t) =
   if String_set.mem uuid st.expanded
-     || String_set.mem (collapse_key scope uuid) st.expanded_ui
+     || String_set.mem (collapse_key ?row_ref scope uuid) st.expanded_ui
   then false
-  else collapsed_in ~scope st uuid || default
+  else collapsed_in ?row_ref ~scope st uuid || default
 
-let effective_collapsed_in_view ~scope uuid default (v : collapse_view) =
+let effective_collapsed_in_view ?row_ref ~scope uuid default (v : collapse_view) =
   if String_set.mem uuid v.cv_expanded
-     || String_set.mem (collapse_key scope uuid) v.cv_expanded_ui
+     || String_set.mem (collapse_key ?row_ref scope uuid) v.cv_expanded_ui
   then false
-  else collapsed_in_view ~scope v uuid || default
+  else collapsed_in_view ?row_ref ~scope v uuid || default
 
-let effective_collapsed ?(scope = "main") (b : Model.block) =
+let effective_collapsed ?row_ref ?(scope = "main") (b : Model.block) =
   match b.Model.block_uuid with
   | None -> false
   | Some u ->
-      effective_collapsed_in ~scope u b.Model.block_default_collapsed
+      effective_collapsed_in ?row_ref ~scope u b.Model.block_default_collapsed
         (read ())
 let anchor () = (selection_state ()).anchor
-let selection_active () = not (String_set.is_empty (selected ()))
+let selection_active () = not (Row_set.is_empty (selected_rows ()))
+
+(* Opaque history cursor metadata is not graph data. Debug transaction dumps
+   and daemon failure logs can serialize it. *)
+let history_context () =
+  let m = Runtime.model () in
+  let view = match m.Model.route with
+    | Model.Home -> "home" | Model.Journals -> "journals" | Model.Library -> "library"
+    | Model.Page u -> "page/" ^ u | Model.Block_zoom u -> "zoom/" ^ u
+    | Model.All_pages -> "pages" | Model.All_graphs -> "graphs" | Model.Import -> "import"
+    | Model.Bug_report -> "bug-report" | Model.Bug_report_clipboard -> "bug-report-clipboard"
+    | Model.Settings -> "settings" | Model.File u -> "file/" ^ u | Model.Not_found u -> "missing/" ^ u
+  in
+  Wire.Map
+    [ Wire.Keyword "repo", (match m.Model.repo with Some r -> Wire.String r | None -> Wire.Nil)
+    ; Wire.Keyword "view", Wire.String view ]
 
 (* History cursors travel with their transaction, including the editing scope
    and selection. The worker keeps the before/after pair opaque. *)
-let history_editing (e : editing) =
+let history_editing ?(row_map = Fun.id) (e : editing) =
   Wire.Map
     [ Wire.Keyword "block-uuid", Wire.Uuid e.uuid
+    ; Wire.Keyword "row-ref", row_wire (row_map e.row_ref)
+    ; Wire.Keyword "row-context", history_context ()
     ; Wire.Keyword "scope", Wire.String e.scope
     ; Wire.Keyword "caret", Wire.Int e.model.Edit_model.caret
     ; Wire.Keyword "anchor",
         (match e.model.Edit_model.anchor with Some a -> Wire.Int a | None -> Wire.Nil)
     ]
-
-let history_cursor () =
-  match editing () with
-  | Some e when not (is_draft e) -> history_editing e
-  | _ -> Wire.Map
-      [ Wire.Keyword "scope", Wire.String (selection_scope ())
-      ; Wire.Keyword "selected-blocks", Wire.List
-          (List.map (fun u -> Wire.Uuid u) (String_set.elements (selected ())))
-      ; Wire.Keyword "selection-anchor",
-          (match anchor () with Some u -> Wire.Uuid u | None -> Wire.Nil)
-      ]
 
 (* Captured before a source mutation and consumed by its scheduled save. *)
 let history_input_before : Wire.t option ref = ref None
@@ -495,6 +547,50 @@ let children_of (b : Model.block) =
   match b.Model.block_link with
   | Some _ -> b.Model.block_embed_children
   | None -> b.Model.block_children
+
+type projected_row =
+  { row_ref : row_ref
+  ; depth : int
+  ; parent : row_ref option
+  ; owner : Model.block
+  ; target : Model.block
+  ; children : Model.block list
+  ; child_hosts : string list
+  }
+
+let project_row ~scope ?(depth = 0) ?(link_hosts = []) ?parent (owner : Model.block) =
+  let node_scope = scope = "main" || String.starts_with ~prefix:"zoom-" scope in
+  let linked =
+    if not node_scope then None
+    else Option.bind owner.Model.block_link (fun id ->
+      List.find_opt (fun (b : Model.block) -> b.block_db_id = Some id && not b.block_is_page)
+        owner.block_embed_children)
+  in
+  let target = Option.value linked ~default:owner in
+  let owner_uuid = match owner.block_uuid with
+    | Some uuid -> uuid
+    | None -> invalid_arg "projected rows require an owning UUID" in
+  let row_ref = { link_hosts; owner_uuid } in
+  { row_ref; depth; parent; owner; target; children = children_of target
+  ; child_hosts = if linked = None then link_hosts else link_hosts @ [owner_uuid] }
+
+let target_uuid row = match row.target.Model.block_uuid with
+  | Some uuid -> uuid
+  | None -> invalid_arg "projected targets require a UUID"
+
+let row_collapsed ~scope row =
+  effective_collapsed ~row_ref:row.row_ref ~scope row.target
+
+let projected_rows ?(visible = false) ~scope blocks =
+  let rec walk acc depth link_hosts parent blocks =
+    List.fold_left (fun acc b ->
+      let row = project_row ~scope ~depth ~link_hosts ?parent b in
+      let acc = row :: acc in
+      if visible && row_collapsed ~scope row then acc
+      else walk acc (depth + 1) row.child_hosts (Some row.row_ref) row.children)
+      acc blocks
+  in
+  List.rev (walk [] 0 [] None blocks)
 
 let rec find_in blocks uuid =
   match blocks with
@@ -523,7 +619,75 @@ let blocks_in_scope scope =
   if scope = "main" || scope = page_scope then page_blocks ()
   else match scope with
     | "quick-add" -> (Quick_add_state.value ()).Quick_add_state.blocks
-    | _ -> (List.assoc scope !extra_sources) ()
+    | _ -> (match List.assoc_opt scope !extra_sources with Some source -> source () | None -> [])
+
+let rows_in_scope ?(visible = false) scope =
+  projected_rows ~visible ~scope (blocks_in_scope scope)
+
+let resolve_row ~scope row_ref =
+  List.find_opt (fun row -> row.row_ref = row_ref) (rows_in_scope scope)
+
+let valid_row ~scope ?uuid row_ref =
+  match resolve_row ~scope row_ref with
+  | Some row -> Option.fold ~none:true ~some:(fun uuid -> target_uuid row = uuid) uuid
+  | None ->
+      let m = Runtime.model () in
+      let pages = match m.Model.route_page with Some p -> [p] | None -> m.journals in
+      scope = "main" && row_ref.link_hosts = []
+      && Option.fold ~none:true ~some:(fun uuid -> uuid = row_ref.owner_uuid) uuid
+      && List.exists (fun (p : Model.page) -> p.page_uuid = Some row_ref.owner_uuid) pages
+
+let selected () =
+  Row_set.fold (fun row owners -> String_set.add row.owner_uuid owners)
+    (selected_rows ()) String_set.empty
+
+let is_selected uuid = String_set.mem uuid (selected ())
+
+let history_cursor ?(row_map = Fun.id) () =
+  match editing () with
+  | Some e when not (is_draft e) -> history_editing ~row_map e
+  | _ -> Wire.Map
+      [ Wire.Keyword "scope", Wire.String (selection_scope ())
+      ; Wire.Keyword "row-context", history_context ()
+      ; Wire.Keyword "selected-rows", Wire.List (List.map (fun row -> row_wire (row_map row)) (Row_set.elements (selected_rows ())))
+      ; Wire.Keyword "row-anchor", (match anchor () with Some row -> row_wire (row_map row) | None -> Wire.Nil)
+      ; Wire.Keyword "row-head", (match (selection_state ()).head with Some row -> row_wire (row_map row) | None -> Wire.Nil)
+      ; Wire.Keyword "selected-blocks", Wire.List
+          (List.map (fun u -> Wire.Uuid u) (String_set.elements (selected ())))
+      ; Wire.Keyword "selection-anchor",
+          (match anchor () with Some row -> Wire.Uuid row.owner_uuid | None -> Wire.Nil)
+      ]
+
+let row_neighbor ?(siblings = false) ~scope row_ref direction =
+  let rows = rows_in_scope ~visible:(not siblings) scope in
+  let rows = if not siblings then rows else
+    match List.find_opt (fun row -> row.row_ref = row_ref) rows with
+    | Some row -> List.filter (fun sibling -> sibling.parent = row.parent) rows
+    | None -> [] in
+  let rec scan prev = function
+    | [] -> None
+    | row :: rest ->
+        if row.row_ref = row_ref then
+          (match direction, rest with `Prev, _ -> prev | `Next, row :: _ -> Some row | _ -> None)
+        else scan (Some row) rest
+  in
+  scan None rows
+
+let row_ancestor_key ~scope ~link_hosts row_ref =
+  let rec walk row_ref =
+    if row_ref.link_hosts = link_hosts then Some row_ref.owner_uuid
+    else match resolve_row ~scope row_ref with
+      | Some { parent = Some parent; _ } -> walk parent
+      | _ -> None
+  in
+  walk row_ref
+
+let row_mount_id ~scope:_ row_ref =
+  "ls-block-" ^ row_key row_ref
+
+let selected_ordered_rows () =
+  List.filter (fun row -> Row_set.mem row.row_ref (selected_rows ()))
+    (rows_in_scope (selection_scope ()))
 
 let find uuid =
   match find_in (page_blocks ()) uuid with
@@ -629,43 +793,20 @@ let rec top_level_uuid uuid =
 
 (* DFS over visible (non-collapsed-subtree) blocks *)
 let flat_visible ?(scope = "main") () =
-  let rec go acc blocks =
-    match blocks with
-    | [] -> acc
-    | b :: rest ->
-        let acc = b :: acc in
-        let acc =
-          if effective_collapsed ~scope b then acc
-          else go acc (children_of b)
-        in
-        go acc rest
-  in
-  List.rev (go [] (blocks_in_scope scope))
+  List.map (fun row -> row.target) (rows_in_scope ~visible:true scope)
 
 let flat_all () =
-  let rec go acc blocks =
-    match blocks with
-    | [] -> acc
-    | b :: rest -> go (go (b :: acc) (children_of b)) rest
-  in
-  List.rev (go [] (page_blocks ()))
+  List.map (fun row -> row.target) (rows_in_scope "main")
 
-let neighbor_of ?(scope = "main") uuid dir =
-  let flat = flat_visible ~scope () in
-  let rec scan prev = function
-    | [] -> None
-    | b :: rest ->
-        if b.Model.block_uuid = Some uuid then (
-          match dir, rest with
-          | `Prev, _ -> prev
-          | `Next, h :: _ -> Some h
-          | `Next, [] -> None)
-        else scan (Some b) rest
-  in
-  scan None flat
+let neighbor_of ?row_ref ?(scope = "main") uuid dir =
+  let row_ref = match row_ref, editing () with
+    | Some row, _ -> row
+    | None, Some e when e.uuid = uuid && e.scope = scope -> e.row_ref
+    | _ -> ordinary_row uuid in
+  Option.map (fun row -> row.target) (row_neighbor ~scope row_ref dir)
 
-let prev_visible ?(scope = "main") uuid = neighbor_of ~scope uuid `Prev
-let next_visible ?(scope = "main") uuid = neighbor_of ~scope uuid `Next
+let prev_visible ?row_ref ?(scope = "main") uuid = neighbor_of ?row_ref ~scope uuid `Prev
+let next_visible ?row_ref ?(scope = "main") uuid = neighbor_of ?row_ref ~scope uuid `Next
 
 let prev_sibling uuid =
   match find_parent uuid with

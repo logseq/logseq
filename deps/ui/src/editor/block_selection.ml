@@ -56,7 +56,7 @@ let consume_suppress () =
 let set_anchor uuid =
   (* Signal.update stages the value until flush; a deferred anchor read in
      the IO callback must see it, so take the flushing path *)
-  S.set (fun st -> { st with S.anchor = Some uuid })
+  S.set (fun st -> { st with S.anchor = Some uuid; head = Some uuid })
 
 (* cljs block-content mousedown modifiers run block-selection ops
    instead of arming the range drag or starting an edit; returns true
@@ -80,8 +80,9 @@ let modifier_select ev uuid =
                    st with
                    S.selected =
                      List.fold_left
-                       (fun s u -> S.String_set.add u s)
+                       (fun s u -> S.Row_set.add u s)
                        st.S.selected range;
+                   head = Some uuid;
                    action_bar = true;
                  })
        | None -> ()
@@ -89,15 +90,15 @@ let modifier_select ev uuid =
        (* meta: toggle the clicked block in the selection *)
        S.set (fun st ->
            let sel =
-             if S.String_set.mem uuid st.S.selected then
-               S.String_set.remove uuid st.S.selected
-             else S.String_set.add uuid st.S.selected
+             if S.Row_set.mem uuid st.S.selected then
+               S.Row_set.remove uuid st.S.selected
+             else S.Row_set.add uuid st.S.selected
            in
            {
              st with
              S.selected = sel;
-             anchor = (if S.String_set.is_empty sel then None else Some uuid);
-             action_bar = not (S.String_set.is_empty sel);
+             anchor = (if S.Row_set.is_empty sel then None else Some uuid);
+             action_bar = not (S.Row_set.is_empty sel);
            })
      else
        (* shift: range-select anchor..clicked; with no stored anchor the
@@ -109,7 +110,8 @@ let modifier_select ev uuid =
              S.set (fun st ->
                  {
                    st with
-                   S.selected = S.String_set.of_list range;
+                   S.selected = S.Row_set.of_list range;
+                   head = Some uuid;
                    action_bar = true;
                  })
            (* a stale/off-screen anchor yields no range — fall back to
@@ -133,7 +135,7 @@ let pointerdown ev =
   then
     match closest ".ls-block" ev.Ui_services.target with
     | Some block_el -> (
-        match block_el.Ui_services.attr "data-blockid" with
+        match S.row_of_el block_el with
         | Some uuid ->
             let scope = Editor_actions.scope_of_el block_el in
             S.set (fun st ->
@@ -142,8 +144,9 @@ let pointerdown ev =
                   {
                     st with
                     S.selection_scope = scope;
-                    selected = S.String_set.empty;
+                    selected = S.Row_set.empty;
                     anchor = None;
+                    head = None;
                     action_bar = false;
                   });
             (* the row's control band (collapse arrow, bullet) runs its
@@ -165,7 +168,7 @@ let pointermove ev =
         match closest ".ls-block" ev.Ui_services.target with
         | Some block_el
           when Editor_actions.scope_of_el block_el = S.selection_scope () -> (
-            match block_el.Ui_services.attr "data-blockid" with
+            match S.row_of_el block_el with
             | Some uuid when uuid <> anchor || !dragged ->
                 let range = Editor_actions.range_between anchor uuid in
                 if range <> [] then (
@@ -173,7 +176,8 @@ let pointermove ev =
                   S.set (fun st ->
                       {
                         st with
-                        S.selected = S.String_set.of_list range;
+                        S.selected = S.Row_set.of_list range;
+                        head = Some uuid;
                         action_bar = false;
                       }))
             | _ -> ())
@@ -184,7 +188,7 @@ let pointerup () =
   if is_down () && !dragged then (
     suppress_click := true;
     (* cljs raises the multi-select action bar on pointerup *)
-    match S.selected () |> S.String_set.elements with
+    match S.selected_rows () |> S.Row_set.elements with
     | _ :: _ -> Editor_actions.show_action_bar ()
     | [] -> ());
   reset_gesture ()
@@ -205,7 +209,7 @@ let extend_to uuid =
               st with
               S.selected =
                 List.fold_left
-                  (fun s u -> S.String_set.add u s)
+                  (fun s u -> S.Row_set.add u s)
                   st.S.selected range;
               action_bar = false;
             }))

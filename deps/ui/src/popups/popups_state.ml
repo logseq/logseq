@@ -551,7 +551,7 @@ let slash_items ~statuses ~priorities ~has_heading : ac_item list =
   let items = List.fold_right (fun item result ->
       if Hashtbl.mem labels item.ai_label then result
       else begin Hashtbl.add labels item.ai_label (); item :: result end) items [] in
-  let page = Option.fold ~none:false ~some:Editor_actions.anchor_is_page_title
+  let page = Option.fold ~none:false ~some:(fun uuid -> Editor_actions.anchor_is_page_title (Editor_state.ordinary_row uuid))
       (Editor_state.editing_uuid ()) in
   if not page then items else
     let groups = List.map U.t ["editor.slash/group-task-status";

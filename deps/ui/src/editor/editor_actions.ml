@@ -308,9 +308,11 @@ and retry_focus () =
     if !focus_attempts = 1 || !focus_attempts mod 10 = 5 then
       (match !S.pending_focus with
        | Some request ->
-           (* flat stream keys are the block's own uuid — no more
-              top-level key like the nested list had *)
-           !(S.scroll_key_into_view) request.S.focus_uuid
+           (match S.editing () with
+            | Some e when focus_owned request e ->
+                Option.iter !(S.scroll_key_into_view)
+                  (S.row_ancestor_key ~scope:e.scope ~link_hosts:[] e.row_ref)
+            | _ -> ())
        | None -> ());
     schedule_focus_retry (retry_delay_ms !focus_attempts)
   end
@@ -627,10 +629,11 @@ let scope_of_uuid uuid =
   | Some el -> scope_of_el el
   | None -> "main"
 
-let enter_edit ?scope ?(submit_on_enter = false) uuid caret =
+let enter_edit ?row_ref ?scope ?(submit_on_enter = false) uuid caret =
   if Ui_services.env_publishing () then () else
   let context = Runtime.repo (), Runtime.route () in
   let scope = match scope with Some sc -> sc | None -> scope_of_uuid uuid in
+  let row_ref = Option.value row_ref ~default:(S.ordinary_row uuid) in
   let click = match !S.click_point with
     | (Some (u, ms, x, y) as point) when u = uuid && Ui_services.time_now () -. ms < 1500. ->
         if !S.click_point == point then S.click_point := None;
@@ -639,7 +642,7 @@ let enter_edit ?scope ?(submit_on_enter = false) uuid caret =
   in
   let rec enter () =
   clear_pending_blur ();
-  if (match S.editing () with Some e -> e.S.uuid = uuid && e.S.scope = scope | None -> false)
+  if (match S.editing () with Some e -> e.S.uuid = uuid && e.S.scope = scope && e.S.row_ref = row_ref | None -> false)
   then ()
   else if (match S.editing () with Some e -> initial_click_pending e.S.uuid | None -> false) then
     S.pending_focus_actions :=
@@ -654,7 +657,7 @@ let enter_edit ?scope ?(submit_on_enter = false) uuid caret =
      open property-value editor first *)
   !(S.close_property_editor) ();
   (match S.editing () with
-  | Some e when e.uuid <> uuid || e.scope <> scope -> save_if_dirty e.uuid
+  | Some e when e.uuid <> uuid || e.scope <> scope || e.row_ref <> row_ref -> save_if_dirty e.uuid
   | _ -> ());
   match S.find uuid with
       | Some _b ->
@@ -663,17 +666,20 @@ let enter_edit ?scope ?(submit_on_enter = false) uuid caret =
           let restore = S.editing () in
           let p =
             (let* buffer = Ops.title_on_entry uuid (display_title uuid) in
-            if context = (Runtime.repo (), Runtime.route ()) then (
+            if context = (Runtime.repo (), Runtime.route ())
+               && (match S.resolve_row ~scope row_ref with
+                   | Some row -> S.target_uuid row = uuid
+                   | None -> row_ref = S.ordinary_row uuid && row_ref.link_hosts = []) then (
             (if Lazy.force perf_keys then
                Printf.eprintf "PERF editing-set src=enter_edit uuid=%s\n%!" uuid);
-            let editing = S.mk_editing ~caret ~submit_on_enter ~uuid ~buffer ~scope ~base:buffer () in
+            let editing = S.mk_editing ~row_ref ~caret ~submit_on_enter ~uuid ~buffer ~scope ~base:buffer () in
             arm_focus ~schedule:false
               (make_focus_request ?click ~owner:(scope, editing.S.epoch) uuid caret);
             S.set (fun st ->
                 { st with
                   S.editing = Some editing
                 ; selection_scope = scope
-                ; selected = S.String_set.empty
+                ; selected = S.Row_set.empty
                 ; anchor = None
                 ; action_bar = false
                 });
@@ -681,7 +687,7 @@ let enter_edit ?scope ?(submit_on_enter = false) uuid caret =
             Js.Promise.resolve ()) in
           run_structure ~restore p (fun () ->
               match S.editing () with
-              | Some e when e.S.uuid = uuid && e.S.scope = scope ->
+              | Some e when e.S.uuid = uuid && e.S.scope = scope && e.S.row_ref = row_ref ->
                   (match !S.pending_focus with
                    | Some request when focus_owned request e ->
                        if Option.is_some request.S.focus_click then apply_focus ()
@@ -736,8 +742,9 @@ let rec exit_edit ~select =
                     S.editing = None
                   ; selection_scope = e.scope
                   ; selected =
-                      (if select then S.String_set.singleton e.uuid else st.selected)
-                  ; anchor = (if select then Some e.uuid else st.anchor)
+                      (if select then S.Row_set.singleton e.row_ref else st.selected)
+                  ; anchor = (if select then Some e.row_ref else st.anchor)
+                  ; head = (if select then Some e.row_ref else st.head)
                     (* Escape selects the block without raising the action bar. *)
                   ; action_bar = false
                   });
@@ -876,7 +883,7 @@ let enter_draft ~uuid ~scope ~buffer ~(owner : S.draft_owner) =
         let editing = S.mk_editing ~caret ~owner:(S.Explicit_draft owner)
             ~uuid ~scope ~buffer ~base:buffer () in
         S.set (fun st -> {st with S.editing = Some editing;
-          selection_scope = scope; selected = S.String_set.empty;
+          selection_scope = scope; selected = S.Row_set.empty;
           anchor = None; action_bar = false});
         arm_focus (make_focus_request ~owner:(scope, editing.S.epoch) uuid caret)
       end;
@@ -956,8 +963,40 @@ let optimistic_edit ?owner (f : Model.page -> Model.page option) =
       in
       loop [] !Runtime.current_journals)
 
-let apply_indent_outdent ?parent_original uuids indent =
-  let opts = Ops.current_history_opts (Wire.Map []) in
+let apply_indent_outdent ~row_ref uuids indent =
+  let scope = S.interaction_scope () in
+  let before = S.selection_state () in
+  let context = Runtime.repo (), Runtime.route () in
+  let current () =
+    context = (Runtime.repo (), Runtime.route ())
+    && scope = S.interaction_scope ()
+    && (match before.S.editing, S.editing () with
+        | Some e, Some live -> e.S.epoch == live.S.epoch && e.row_ref = live.row_ref
+        | None, None -> S.Row_set.equal before.selected (S.selected_rows ())
+            && before.anchor = S.anchor () && before.head = (S.selection_state ()).head
+        | _ -> false) in
+  match S.resolve_row ~scope row_ref with
+  | None -> Js.Promise.resolve ()
+  | Some row ->
+  let parent = Option.bind row.S.parent (S.resolve_row ~scope) in
+  let parent_original = Option.bind parent (fun parent ->
+    if parent.S.owner.block_link <> None then parent.owner.block_uuid else None) in
+  let hosts =
+    if indent then
+      Option.fold ~none:row_ref.S.link_hosts ~some:(fun prev -> prev.S.child_hosts)
+        (S.row_neighbor ~siblings:true ~scope row_ref `Prev)
+    else match parent, parent_original with
+      | Some parent, Some _ -> parent.S.row_ref.link_hosts
+      | _ -> row_ref.link_hosts in
+  let rec suffix prefix path = match prefix, path with
+    | [], path -> Some path
+    | p :: ps, h :: hs when p = h -> suffix ps hs
+    | _ -> None in
+  let row_map row = match suffix row_ref.link_hosts row.S.link_hosts with
+    | Some tail -> {row with S.link_hosts = hosts @ tail}
+    | None -> row in
+  let opts = Ops.history_opts ~before:(S.history_cursor ())
+      ~after:(S.history_cursor ~row_map ()) () in
   let* cfg = Sdk_config.read_config (Runtime.repo ()) in
   let logical =
     match Wire.get cfg "editor/logical-outdenting?" with
@@ -965,26 +1004,45 @@ let apply_indent_outdent ?parent_original uuids indent =
     | Some (Wire.Bool b) -> b
     | Some _ -> failwith "Logical outdenting configuration must be boolean"
   in
-  if parent_original = None then
+  if context <> (Runtime.repo (), Runtime.route ()) then Js.Promise.resolve () else
+  let () = if parent_original = None then
     optimistic_edit (fun p ->
         if indent then Model.indent_blocks p uuids
-        else Model.outdent_blocks ~logical p uuids);
-  Ops.apply_and_refresh ~opts
-    [ Ops.indent_outdent ?parent_original ~logical uuids indent ]
+        else Model.outdent_blocks ~logical p uuids) in
+  let* () = Ops.apply_and_refresh ~opts
+      [ Ops.indent_outdent ?parent_original ~logical uuids indent ] in
+  if current () then begin
+    let relocate row =
+      let next = row_map row in
+      if S.valid_row ~scope next then Some next
+      else if S.valid_row ~scope row then Some row else None in
+    S.set (fun st ->
+      {st with
+        S.editing = Option.bind st.S.editing (fun e ->
+          Option.bind (relocate e.S.row_ref) (fun row_ref ->
+            if S.valid_row ~scope ~uuid:e.uuid row_ref then Some {e with S.row_ref}
+            else None))
+      ; selected = S.Row_set.fold (fun row rows ->
+          Option.fold ~none:rows ~some:(fun row -> S.Row_set.add row rows) (relocate row))
+          st.selected S.Row_set.empty
+      ; anchor = Option.bind st.anchor relocate
+      ; head = Option.bind st.head relocate})
+  end;
+  Js.Promise.resolve ()
 
 (* cljs keydown-new-block: Enter on an empty last child outdents it
    instead of inserting a sibling (when no right sibling exists) *)
-let outdent_empty_last_child uuid e b =
+let outdent_empty_last_child uuid (e : S.editing) b =
   let _ = (e, b) in
   if String.trim (live_buffer uuid) <> "" then false
   else
-    match S.find_parent uuid with
+    match S.find_parent e.S.row_ref.owner_uuid with
     | Some (Some parent, idx) ->
         let last = List.length parent.Model.block_children - 1 in
         if idx < last then false
         else (
           with_focus_after ~restore:(Some e) uuid e.S.model.Edit_model.caret
-            (apply_indent_outdent [ uuid ] false);
+            (apply_indent_outdent ~row_ref:e.row_ref [ e.row_ref.owner_uuid ] false);
           true)
     | _ -> false
 (* cljs compute-fst-snd-block-text: the new block's half is triml'd *)
@@ -1098,7 +1156,7 @@ let can_split_optimistically uuid =
   match S.editing (), S.find uuid with
   | Some e, Some b when e.S.uuid = uuid ->
       let empty = String.trim e.S.buffer = "" in
-      let parent_ordered, last_child = match S.find_parent uuid with
+      let parent_ordered, last_child = match S.find_parent e.S.row_ref.owner_uuid with
         | Some (Some parent, idx) ->
             parent.Model.block_order_list <> None,
             idx = List.length parent.Model.block_children - 1
@@ -1151,14 +1209,19 @@ let split_at_cursor uuid =
         let library = library_context () in
         let sibling =
           not focused_root
-          && (above || library || S.is_collapsed_in ~scope:e.S.scope uuid
+          && (above || library || S.is_collapsed_in ~row_ref:e.row_ref ~scope:e.S.scope uuid
               || b.Model.block_children = [])
         in
         mark "prelude";
+        let row = S.resolve_row ~scope:e.scope e.row_ref in
+        let insert_uuid = if sibling then e.row_ref.owner_uuid else uuid in
+        let row_ref = { S.owner_uuid = new_uuid
+          ; link_hosts = if sibling then e.row_ref.link_hosts
+              else Option.fold ~none:e.row_ref.link_hosts ~some:(fun row -> row.S.child_hosts) row } in
         let opts = Ops.history_opts ~opts:(Ops.op_opts "insert-blocks")
             ~before:(S.history_editing e)
             ~after:(S.history_editing
-              (S.mk_editing ~uuid:new_uuid ~buffer:after ~scope:e.scope ~base:after ())) () in
+              (S.mk_editing ~row_ref ~uuid:new_uuid ~buffer:after ~scope:e.scope ~base:after ())) () in
         (* Capture this block's debounce now, before the next editor can
            schedule a save for a UUID the worker has not inserted yet. *)
         let context = Runtime.model () in
@@ -1174,14 +1237,14 @@ let split_at_cursor uuid =
                    ~source:false new_uuid after |] in
           Ops.submit_result ~current context opts
             ([ Ops.op "save-block" [ a.(0); Wire.Map [] ]
-            ; Ops.insert_blocks [ a.(1) ] uuid ~sibling ]
-            @ if above then [ Ops.move_blocks [ uuid ] new_uuid ~sibling:true ] else [])
+            ; Ops.insert_blocks [ a.(1) ] insert_uuid ~sibling ]
+            @ if above then [ Ops.move_blocks [ e.row_ref.owner_uuid ] new_uuid ~sibling:true ] else [])
         in
         mark "ops";
         (* optimistic insert: mount the new row and retitle the split
            block synchronously — the worker delta splices the real
            record over the placeholder when it lands *)
-        optimistic_edit ~owner:batch.owner (fun p ->
+        if e.row_ref = S.ordinary_row uuid then optimistic_edit ~owner:batch.owner (fun p ->
             Model.split_insert ~above p ~uuid ~before
               ~new_block:
                 (Model.empty_block ~uuid:new_uuid ~title:after
@@ -1201,7 +1264,7 @@ let split_at_cursor uuid =
             { st with
               S.editing =
                 Some
-                  (S.mk_editing ~uuid:new_uuid ~buffer:after ~scope:e.scope
+                  (S.mk_editing ~row_ref ~uuid:new_uuid ~buffer:after ~scope:e.scope
                      ~base:after ()) });
         mark "editing";
         S.click_point := None;
@@ -1220,9 +1283,14 @@ let insert_sibling_after ?(after_insert = fun _ -> Js.Promise.resolve ()) uuid =
       let new_uuid = Ui_services.env_random_uuid () in
       let library = library_context () in
       let sibling =
-        library || S.is_collapsed_in ~scope:e.S.scope uuid
+        library || S.is_collapsed_in ~row_ref:e.row_ref ~scope:e.S.scope uuid
         || b.Model.block_children = []
       in
+      let row = S.resolve_row ~scope:e.scope e.row_ref in
+      let insert_uuid = if sibling then e.row_ref.owner_uuid else uuid in
+      let row_ref = { S.owner_uuid = new_uuid
+        ; link_hosts = if sibling then e.row_ref.link_hosts
+            else Option.fold ~none:e.row_ref.link_hosts ~some:(fun row -> row.S.child_hosts) row } in
       let p =
         let* m = Ops.block_map_parsed uuid buf in
         let* () =
@@ -1230,11 +1298,11 @@ let insert_sibling_after ?(after_insert = fun _ -> Js.Promise.resolve ()) uuid =
             [ Ops.op "save-block" [ m; Wire.Map [] ]
             ; Ops.insert_blocks
                 [ Ops.block_map ~title:"" ~page:library new_uuid ]
-                uuid ~sibling ]
+                insert_uuid ~sibling ]
         in
         after_insert new_uuid
       in
-      optimistic_edit (fun p ->
+      if e.row_ref = S.ordinary_row uuid then optimistic_edit (fun p ->
           Model.split_insert p ~uuid ~before:buf
             ~new_block:
               (Model.empty_block ~uuid:new_uuid ~title:"" ~is_page:library)
@@ -1250,7 +1318,7 @@ let insert_sibling_after ?(after_insert = fun _ -> Js.Promise.resolve ()) uuid =
           { st with
             S.editing =
               Some
-                (S.mk_editing ~uuid:new_uuid ~buffer:"" ~scope:e.scope
+                (S.mk_editing ~row_ref ~uuid:new_uuid ~buffer:"" ~scope:e.scope
                    ~base:"" ())
           });
       with_focus_after ~restore:(Some e) new_uuid 0 p  | _ -> ()
@@ -1305,9 +1373,10 @@ let merge_prev uuid =
   match
     ( S.editing ()
     , S.find uuid
-    , S.prev_visible ~scope:(match S.editing () with Some e -> e.scope | None -> "main") uuid )
+    , (match S.editing () with Some e -> S.row_neighbor ~scope:e.scope e.row_ref `Prev | None -> None) )
   with
-  | Some e, Some b, Some prev when e.uuid = uuid -> (
+  | Some e, Some b, Some prev_row when e.uuid = uuid -> (
+      let prev = prev_row.S.target in
       match prev.Model.block_uuid with
       | None -> ()
       | Some prev_uuid ->
@@ -1352,13 +1421,16 @@ let merge_prev uuid =
                in
                let* pbuf = Ops.title_for_edit (String.trim ptitle) in
                let merged, caret = merge_source pbuf buf in
-              if context <> (Runtime.repo (), Runtime.route ()) then Js.Promise.resolve ()
+              if context <> (Runtime.repo (), Runtime.route ())
+                 || not (match S.editing () with
+                   | Some live -> live.S.epoch == e.S.epoch && live.row_ref = e.row_ref
+                   | None -> false) then Js.Promise.resolve ()
               else (
               S.set (fun st ->
                   { st with
                     S.editing =
                       Some
-                        (S.mk_editing ~caret ~uuid:prev_uuid ~buffer:merged
+                        (S.mk_editing ~row_ref:prev_row.row_ref ~caret ~uuid:prev_uuid ~buffer:merged
                            ~scope:e.scope ~base:merged ()) });
               request_focus prev_uuid caret;
               Ops.apply_and_refresh
@@ -1386,9 +1458,10 @@ let merge_next_now uuid =
   match
     ( S.editing ()
     , S.find uuid
-    , S.next_visible ~scope:(match S.editing () with Some e -> e.scope | None -> "main") uuid )
+    , (match S.editing () with Some e -> S.row_neighbor ~scope:e.scope e.row_ref `Next | None -> None) )
   with
-  | Some e, Some b, Some next when e.uuid = uuid -> (
+  | Some e, Some b, Some next_row when e.uuid = uuid -> (
+      let next = next_row.S.target in
       match next.Model.block_uuid with
       | None -> ()
       | Some next_uuid ->
@@ -1417,13 +1490,16 @@ let merge_next_now uuid =
                    (String.trim
                       (S.title_for next_uuid next.Model.block_title))
                in
-              if context <> (Runtime.repo (), Runtime.route ()) then Js.Promise.resolve ()
+              if context <> (Runtime.repo (), Runtime.route ())
+                 || not (match S.editing () with
+                   | Some live -> live.S.epoch == e.S.epoch && live.row_ref = e.row_ref
+                   | None -> false) then Js.Promise.resolve ()
               else (
               S.set (fun st ->
                   { st with
                     S.editing =
                       Some
-                        (S.mk_editing ~uuid:next_uuid ~buffer:nbuf
+                        (S.mk_editing ~row_ref:next_row.row_ref ~uuid:next_uuid ~buffer:nbuf
                            ~scope:e.scope ~base:nbuf ()) });
               request_focus next_uuid 0;
               Ops.apply_and_refresh
@@ -1443,13 +1519,16 @@ let merge_next_now uuid =
                       (S.title_for next_uuid next.Model.block_title))
                in
                let merged, caret = merge_source buf nbuf in
-              if context <> (Runtime.repo (), Runtime.route ()) then Js.Promise.resolve ()
+              if context <> (Runtime.repo (), Runtime.route ())
+                 || not (match S.editing () with
+                   | Some live -> live.S.epoch == e.S.epoch && live.row_ref = e.row_ref
+                   | None -> false) then Js.Promise.resolve ()
               else (
               S.set (fun st ->
                   { st with
                     S.editing =
                       Some
-                        (S.mk_editing ~caret ~uuid
+                        (S.mk_editing ~row_ref:e.row_ref ~caret ~uuid
                            ~buffer:merged ~scope:e.scope ~base:merged ())
                   });
               request_focus uuid caret;
@@ -1473,6 +1552,7 @@ let merge_next uuid =
   | Some _ -> ()
   | None ->
       let plan = !S.edit_input_seq in
+      let editing = S.editing () in
       S.merge_plan_seq := Some plan;
       let context = Runtime.repo (), Runtime.route () in
       ignore
@@ -1483,6 +1563,10 @@ let merge_next uuid =
                  S.merge_plan_seq := None;
                  if !S.edit_input_seq = plan
                     && context = (Runtime.repo (), Runtime.route ())
+                    && (match editing, S.editing () with
+                        | Some before, Some live -> before.S.epoch == live.S.epoch
+                            && before.row_ref = live.row_ref && before.scope = live.scope
+                        | _ -> false)
                  then merge_next_now uuid
              | _ -> ())
            0)
@@ -1513,228 +1597,160 @@ let selection_forest () =
       pages
 
 type selected_snapshot =
-  { selection : S.String_set.t
+  { selection : S.Row_set.t
   ; scope : string
+  ; refs : S.row_ref list
   ; uuids : string list
   ; blocks : Model.block list
   ; roots : Model.block list
-  ; unresolved : S.String_set.t
+  ; unresolved : S.Row_set.t
   }
 
 let selected_snapshot () =
-  let selection = S.selected () in
-  let seen = ref S.String_set.empty and ordered = ref [] in
-  let blocks = ref [] and roots = ref [] in
-  let rec walk under_selected forest =
-    List.iter (fun (b : Model.block) ->
-      let selected = match b.block_uuid with
-        | Some u -> S.String_set.mem u selection
-        | None -> false
-      in
-      (match b.block_uuid with
-       | Some u when selected && not (S.String_set.mem u !seen) ->
-           seen := S.String_set.add u !seen;
-           ordered := u :: !ordered;
-           blocks := b :: !blocks;
-           if not under_selected then roots := b :: !roots
-       | _ -> ());
-      walk (under_selected || selected) (S.children_of b)) forest
+  let selection = S.selected_rows () in
+  let scope = S.selection_scope () in
+  let rows = S.projected_rows ~scope (selection_forest ()) in
+  let resolved = ref S.Row_set.empty and seen = ref S.String_set.empty in
+  let seen_roots = ref S.String_set.empty in
+  let refs = ref [] and uuids = ref [] and blocks = ref [] and roots = ref [] in
+  let parents = Hashtbl.create (List.length rows) in
+  List.iter (fun row -> Hashtbl.replace parents row.S.row_ref row.S.parent) rows;
+  let rec under_selected row_ref =
+    match Hashtbl.find_opt parents row_ref with
+    | Some (Some parent) -> S.Row_set.mem parent selection || under_selected parent
+    | _ -> false
   in
-  walk false (selection_forest ());
-  let unresolved = S.String_set.diff selection !seen in
-  (* Selection membership survives virtualization and transient model reloads. *)
-  { selection; scope = S.selection_scope (); roots = List.rev !roots
-  ; blocks = List.rev !blocks; unresolved
-  ; uuids = List.rev !ordered @ S.String_set.elements unresolved }
+  List.iter (fun row ->
+    if S.Row_set.mem row.S.row_ref selection then begin
+      resolved := S.Row_set.add row.row_ref !resolved;
+      refs := row.row_ref :: !refs;
+      let uuid = row.row_ref.S.owner_uuid in
+      if not (S.String_set.mem uuid !seen) then begin
+        seen := S.String_set.add uuid !seen;
+        uuids := uuid :: !uuids;
+        blocks := row.owner :: !blocks
+      end;
+      if not (under_selected row.row_ref) && not (S.String_set.mem uuid !seen_roots) then begin
+        seen_roots := S.String_set.add uuid !seen_roots;
+        roots := row.owner :: !roots
+      end
+    end) rows;
+  let unresolved = S.Row_set.diff selection !resolved in
+  let missing = S.Row_set.elements unresolved in
+  let missing_uuids = List.filter_map (fun row ->
+    if S.String_set.mem row.S.owner_uuid !seen then None
+    else (seen := S.String_set.add row.owner_uuid !seen; Some row.owner_uuid)) missing in
+  { selection; scope; refs = List.rev !refs @ missing
+  ; uuids = List.rev !uuids @ missing_uuids
+  ; blocks = List.rev !blocks; roots = List.rev !roots; unresolved }
 
-(* Worker operations consume document order, never UUID sort order. *)
-let selected_uuids () =
-  (selected_snapshot ()).uuids
+let selected_uuids () = (selected_snapshot ()).uuids
+let selected_refs () = (selected_snapshot ()).refs
 
 let index_of lst u =
   let rec go i = function
     | x :: _ when x = u -> i
     | _ :: rest -> go (i + 1) rest
     | [] -> -1
-  in
-  go 0 lst
+  in go 0 lst
 
-(* the page-title row is a selectable .ls-block that sits above every
-   block without being part of the flat list — a selection anchored on
-   it extends down into the blocks *)
-let anchor_is_page_title anchor =
+let anchor_is_page_title row =
+  row.S.link_hosts = [] &&
   let model = Runtime.model () in
   let pages = match model.Model.route_page with Some p -> [p] | None -> model.journals in
-  List.exists (fun (p : Model.page) -> p.page_uuid = Some anchor) pages
+  List.exists (fun (p : Model.page) -> p.page_uuid = Some row.S.owner_uuid) pages
 
-(* range anchor..head (inclusive) in visible order; [] when either
-   endpoint isn't a visible block (e.g. a journal row's page uuid from a
-   co-mounted virt list extending on the same scroller) *)
+let flat_refs () =
+  List.map (fun row -> row.S.row_ref)
+    (S.rows_in_scope ~visible:true (S.selection_scope ()))
+
 let range_between anchor head =
-  let uuids = flat_uuids () in
-  let ia = index_of uuids anchor and ih = index_of uuids head in
+  let rows = flat_refs () in
+  let ia = index_of rows anchor and ih = index_of rows head in
   if ia >= 0 && ih >= 0 then
-    let lo, hi = (min ia ih, max ia ih) in
-    List.filteri (fun i _ -> i >= lo && i <= hi) uuids
-  else if ia < 0 && ih >= 0 && anchor_is_page_title anchor then
-    anchor :: List.filteri (fun i _ -> i <= ih) uuids
+    List.filteri (fun i _ -> i >= min ia ih && i <= max ia ih) rows
+  else if ih >= 0 && anchor_is_page_title anchor then
+    anchor :: List.filteri (fun i _ -> i <= ih) rows
   else []
 
-(* extend selection one visible step from the current head *)
-let extend_selection up =
-  let sel = S.selected () in
-  match S.anchor () with
-  | None -> ()
-  | Some anchor -> (
-      let uuids = flat_uuids () in
-      let ordered = List.filter (fun u -> S.String_set.mem u sel) uuids in
-      let head =
-        match (up, ordered) with
-        | true, h :: _ -> Some h
-        | false, _ :: _ -> Some (List.nth ordered (List.length ordered - 1))
-        | _ -> None
-      in
-      match head with
-      | None -> (
-          (* only the title row selected: ArrowDown enters the block
-             list from the top *)
-          match (up, uuids) with
-          | false, first :: _ when anchor_is_page_title anchor ->
-              let range = range_between anchor first in
-              S.set (fun st ->
-                  { st with
-                    S.selected = S.String_set.of_list range
-                  ; anchor = Some anchor
-                  ; action_bar = true
-                  })
-          | _ -> ())
-      | Some h -> (
-          let nbr =
-            (if up
-             then S.prev_visible ~scope:(S.selection_scope ())
-             else S.next_visible ~scope:(S.selection_scope ()))
-              h
-          in
-          match nbr with
-          | None ->
-              (* head is the topmost flat block: cljs
-                 navigable-sibling-block treats .ls-page-title as a
-                 block, so shift+up past it conj's the title row into
-                 the selection *)
-              if up && S.selection_scope () = "main" then
-                (match Ui_services.dom_query ".ls-page-title .ls-block" with
-                 | Some tb -> (
-                     match tb.Ui_services.attr "data-blockid" with
-                     | Some t when not (S.String_set.mem t sel) ->
-                         S.set (fun st ->
-                             { st with
-                               S.selected = S.String_set.add t sel
-                             ; action_bar = true
-                             })
-                     | _ -> ())
-                 | None -> ())
-          | Some nb -> (
-              match nb.Model.block_uuid with
-              | None -> ()
-              | Some nu ->
-                  let range = range_between anchor nu in
-                  S.set (fun st ->
-                      { st with
-                        S.selected = S.String_set.of_list range
-                      ; anchor = Some anchor
-                      ; action_bar = true
-                      }))))
-
-let select_single_in ~scope uuid =
+let select_row_in ~scope row_ref =
   S.set (fun st ->
-      { st with
-        S.selected = S.String_set.singleton uuid
-      ; selection_scope = scope
-      ; anchor = Some uuid
-      ; action_bar = false
-      })
+    { st with S.selected = S.Row_set.singleton row_ref; selection_scope = scope
+    ; anchor = Some row_ref; head = Some row_ref; action_bar = false })
 
+let select_single_in ~scope uuid = select_row_in ~scope (S.ordinary_row uuid)
 let select_single uuid = select_single_in ~scope:(scope_of_uuid uuid) uuid
 
+let extend_selection up =
+  match S.anchor () with
+  | None -> ()
+  | Some anchor ->
+      let head = Option.value (S.selection_state ()).S.head ~default:anchor in
+      let next = match S.row_neighbor ~scope:(S.selection_scope ()) head
+          (if up then `Prev else `Next) with
+        | Some row -> Some row.S.row_ref
+        | None when not up && anchor_is_page_title anchor -> List.nth_opt (flat_refs ()) 0
+        | None when up && S.selection_scope () = "main" ->
+            (match (Runtime.model ()).Model.route_page with
+             | Some p -> Option.map S.ordinary_row p.Model.page_uuid
+             | None -> None)
+        | _ -> None in
+      Option.iter (fun head ->
+        let range = if anchor_is_page_title head then
+          head :: range_between head anchor else range_between anchor head in
+        if range <> [] then S.set (fun st ->
+          { st with S.selected = S.Row_set.of_list range
+          ; head = Some head; action_bar = true })) next
+
 let select_all () =
-  match flat_uuids () with
+  match flat_refs () with
   | [] -> ()
-  | first :: _ ->
+  | first :: rest ->
+      let rows = first :: rest in
       S.set (fun st ->
-          { st with
-            S.selected = S.String_set.of_list (flat_uuids ())
-          ; anchor = Some first
-          ; action_bar = false
-          })
+        { st with S.selected = S.Row_set.of_list rows; anchor = Some first
+        ; head = Some (List.hd (List.rev rows)); action_bar = false })
 
 let clear_selection ?scope () =
   S.set (fun st ->
-      { st with
-        S.selected = S.String_set.empty
-      ; selection_scope = (match scope with Some scope -> scope | None -> st.selection_scope)
-      ; anchor = None
-      ; action_bar = false
-      })
+      { st with S.selected = S.Row_set.empty
+      ; selection_scope = Option.value scope ~default:st.selection_scope
+      ; anchor = None; head = None; action_bar = false })
 
-(* cljs editor-handler/show-action-bar!: pointer gestures and
-   shift+arrow selection raise the popover; bare selection changes
-   (Escape, mod+a, click-clear) leave it hidden *)
-let show_action_bar () =
-  S.set (fun st -> { st with S.action_bar = true })
+let show_action_bar () = S.set (fun st -> { st with S.action_bar = true })
+let hide_action_bar () = S.set (fun st -> { st with S.action_bar = false })
 
-let hide_action_bar () =
-  S.set (fun st -> { st with S.action_bar = false })
-
-(* shift+arrow arriving during the pending-focus window replays here once
-   focus lands: exit edit into selection, then extend one visible step *)
 let shift_arrow_select up =
   match S.editing () with
-  | Some _ ->
-      exit_edit ~select:true;
-      show_action_bar ()
+  | Some _ -> exit_edit ~select:true; show_action_bar ()
   | None -> extend_selection up
 
-(* cljs editor/select-parent: with a selection, move it to the first
-   block's parent (all blocks when the parent is the page); without one,
-   select all blocks *)
 let select_parent () =
-  match selected_uuids () with
-  | u :: _ -> (
-      match S.find_parent u with
-      | Some (Some p, _) -> (
-          match p.Model.block_uuid with
-          | Some pu -> select_single_in ~scope:(S.selection_scope ()) pu
-          | None -> select_all ())
-      | _ -> select_all ())
+  match selected_refs () with
+  | row_ref :: _ ->
+      (match S.resolve_row ~scope:(S.selection_scope ()) row_ref with
+       | Some { S.parent = Some parent; _ } -> select_row_in ~scope:(S.selection_scope ()) parent
+       | _ -> select_all ())
   | [] -> select_all ()
-(* move selection up/down one block (single-block arrow nav in normal
-   mode, plain move for shift-extend callers) *)
+
 let move_selection_focus up =
-  match S.selected () |> S.String_set.elements with
-  | [ cur ] -> (
-      let nb =
-        (if up
-         then S.prev_visible ~scope:(S.selection_scope ())
-         else S.next_visible ~scope:(S.selection_scope ()))
-          cur
-      in
-      match nb with
-      | Some b -> (
-          match b.Model.block_uuid with
-          | Some u -> select_single_in ~scope:(S.selection_scope ()) u
-          | None -> ())
-      | None -> ())
+  match S.Row_set.elements (S.selected_rows ()) with
+  | [cur] ->
+      Option.iter (fun row -> select_row_in ~scope:(S.selection_scope ()) row.S.row_ref)
+        (S.row_neighbor ~scope:(S.selection_scope ()) cur (if up then `Prev else `Next))
   | _ -> ()
 
 (* ---- block structure ops ---- *)
 
 let indent_or_outdent ~indent =
-  let sel = S.selected () in
-  let uuids =
-    match S.editing_uuid () with
-    | Some u when S.String_set.mem u sel -> selected_uuids ()
-    | Some u -> [ u ]
-    | None -> selected_uuids ()
+  let refs = match S.editing () with
+    | Some e when not (S.Row_set.mem e.S.row_ref (S.selected_rows ())) -> [e.row_ref]
+    | _ -> selected_refs () in
+  let _, uuids = List.fold_left (fun (seen, acc) row ->
+    if S.String_set.mem row.S.owner_uuid seen then seen, acc
+    else S.String_set.add row.owner_uuid seen, row.owner_uuid :: acc)
+    (S.String_set.empty, []) refs in
+  let uuids = List.rev uuids
   in
   match uuids with
   | [] -> ()
@@ -1742,55 +1758,46 @@ let indent_or_outdent ~indent =
       (* cljs expand-collapsed-indent-target!: indenting under a
          collapsed sibling expands it — clear the local collapsed
          override so the indented block stays visible *)
-      if indent then
-        List.iter
-          (fun u ->
-            match S.prev_sibling u with
-            | Some s -> (
-                match s.Model.block_uuid with
-                | Some su ->
-                    S.set_silent (fun st ->
-                        S.collapsed_ui_transform ~scope:(S.interaction_scope ()) su
-                          false
-                          { st with
-                            S.collapsed =
-                              S.String_set.remove su st.S.collapsed
-                          })
-                | None -> ())
-            | None -> ())
-          uuids;
-      (* outdent of a block rendered inside a page embed must move it next
-         to the embed block, not inside the linked page — cljs
-         get-first-block-original reads data-originalblockid off the ancestor
-         .ls-block; the model parent is the embed block *)
-      let parent_original =
-        match S.find_parent focus with
-        | Some (Some p, _) when p.Model.block_link <> None ->
-            p.Model.block_uuid
-        | _ -> None
-      in
-      let caret = match S.editing () with
-        | Some e when e.S.uuid = focus -> e.S.model.Edit_model.caret
-        | _ -> 0
-      in
-      with_focus_after ~restore:(S.editing ()) focus caret
-        (apply_indent_outdent ?parent_original uuids indent)
+      if indent then (
+        let scope = S.interaction_scope () in
+        List.iter (fun row_ref ->
+          match S.row_neighbor ~siblings:true ~scope row_ref `Prev with
+          | Some sibling ->
+              let uuid = S.target_uuid sibling in
+              S.set_silent (fun st ->
+                S.collapsed_ui_transform ~row_ref:sibling.S.row_ref ~scope uuid false
+                  {st with S.collapsed = S.String_set.remove uuid st.S.collapsed})
+          | None -> ()) refs);
+      let editing = S.editing () in
+      let target, caret = match editing with
+        | Some e when e.S.row_ref.owner_uuid = focus -> e.uuid, e.model.Edit_model.caret
+        | _ -> focus, 0 in
+      with_focus_after ~restore:editing target caret
+        (apply_indent_outdent ~row_ref:(List.hd refs) uuids indent)
 
 let move_up_down_tail = ref (Js.Promise.resolve ())
 
 let move_blocks_up_down ?uuid up =
   let context = Runtime.repo (), Runtime.route () in
   let scope = S.interaction_scope () in
+  let origin = S.selection_state () in
+  let current () = context = (Runtime.repo (), Runtime.route ())
+      && scope = S.interaction_scope ()
+      && (match origin.S.editing, S.editing () with
+          | Some before, Some live -> before.S.epoch == live.S.epoch
+              && before.row_ref = live.row_ref
+          | None, None -> S.Row_set.equal origin.selected (S.selected_rows ())
+              && origin.anchor = S.anchor () && origin.head = (S.selection_state ()).head
+          | _ -> false) in
+  let uuids = match uuid, origin.editing with
+    | Some uuid, Some e when e.S.uuid = uuid -> [e.row_ref.owner_uuid]
+    | Some _, _ -> []
+    | None, _ -> let snapshot = selected_snapshot () in
+        if S.Row_set.is_empty snapshot.unresolved then snapshot.uuids else [] in
+  let opts = Ops.current_history_opts (Ops.op_opts "move-blocks-up-down") in
   let move () =
-    if context <> (Runtime.repo (), Runtime.route ())
-       || scope <> S.interaction_scope () then Js.Promise.resolve ()
+    if not (current ()) then Js.Promise.resolve ()
     else
-      let uuids =
-        match uuid, S.editing () with
-        | Some uuid, Some e when e.S.uuid = uuid -> [ uuid ]
-        | Some _, _ -> []
-        | None, _ -> selected_uuids ()
-      in
       match uuids with
       | [] -> Js.Promise.resolve ()
       | uuids ->
@@ -1804,10 +1811,8 @@ let move_blocks_up_down ?uuid up =
                 Js.Promise.resolve [ save ]
             | None -> Js.Promise.resolve []
           in
-          (* Selection is UUIDs plus container scope, not DOM rows: keep
-             it intact across refresh, never reselect over a click/Escape. *)
-          Ops.apply_and_refresh ~opts:(Ops.op_opts "move-blocks-up-down")
-            (saves @ [ Ops.move_up_down uuids up ])
+          if not (current ()) then Js.Promise.resolve () else
+          Ops.apply_and_refresh ~opts (saves @ [ Ops.move_up_down uuids up ])
   in
   let pending =
     Js.Promise.then_ move !move_up_down_tail
@@ -1826,37 +1831,43 @@ let action_context () =
 let delete_selected_uuids ~selected ~scope ~before uuids =
   let context = Runtime.model () in
   let owner = Ops.refresh_owner_for None in
+  let anchor = S.anchor () and head = (S.selection_state ()).head in
   let current () =
     Ops.refresh_current ?owner context
-    && scope = S.selection_scope () && selected == S.selected ()
+    && anchor = S.anchor () && head = (S.selection_state ()).head
+    && scope = S.selection_scope () && S.Row_set.equal selected (S.selected_rows ())
   in
   match uuids with
   | [] -> ()
   | _ when !selection_delete_pending || not (current ()) -> ()
-  | first :: _ ->
+  | _ :: _ ->
       selection_delete_pending := true;
-      let prev =
-        match S.prev_visible ~scope first with
-        | Some p -> p.Model.block_uuid
-        | None -> None
-      in
+      let prev = S.rows_in_scope ~visible:true scope
+        |> List.find_opt (fun row -> S.Row_set.mem row.S.row_ref selected)
+        |> fun row -> Option.bind row (fun row -> S.row_neighbor ~scope row.S.row_ref `Prev) in
       let p =
         let* previous =
-          match Option.bind prev S.find with
-          | Some b when not (List.mem (Option.get b.Model.block_uuid) uuids) ->
-              let* buffer = Ops.title_for_edit (String.trim b.Model.block_title) in
-              Js.Promise.resolve (Some (Option.get b.block_uuid, buffer))
+          match prev with
+          | Some row when not (List.mem row.S.row_ref.owner_uuid uuids) ->
+              let* buffer = Ops.title_for_edit (String.trim row.S.target.Model.block_title) in
+              Js.Promise.resolve (Some (row, buffer))
           | _ -> Js.Promise.resolve None
         in
         let after =
           match previous with
-          | Some (uuid, buffer) -> Wire.Map
-              [ Wire.Keyword "block-uuid", Wire.Uuid uuid
+          | Some (row, buffer) -> Wire.Map
+              [ Wire.Keyword "block-uuid", Wire.Uuid (S.target_uuid row)
+              ; Wire.Keyword "row-ref", S.row_wire row.S.row_ref
+              ; Wire.Keyword "row-context", S.history_context ()
               ; Wire.Keyword "scope", Wire.String scope
               ; Wire.Keyword "caret", Wire.Int (String.length buffer)
               ; Wire.Keyword "anchor", Wire.Nil ]
           | None -> Wire.Map
               [ Wire.Keyword "scope", Wire.String scope
+              ; Wire.Keyword "row-context", S.history_context ()
+              ; Wire.Keyword "selected-rows", Wire.List []
+              ; Wire.Keyword "row-anchor", Wire.Nil
+              ; Wire.Keyword "row-head", Wire.Nil
               ; Wire.Keyword "selected-blocks", Wire.List []
               ; Wire.Keyword "selection-anchor", Wire.Nil ]
         in
@@ -1877,13 +1888,13 @@ let delete_selected_uuids ~selected ~scope ~before uuids =
               if current ()
               then (
                 let editing = match previous, S.editing () with
-                  | Some (uuid, buffer), None when S.find uuid <> None ->
-                      Some (S.mk_editing ~uuid ~buffer ~scope ~base:buffer
+                  | Some (row, buffer), None when S.valid_row ~scope row.S.row_ref ->
+                      Some (S.mk_editing ~row_ref:row.row_ref ~uuid:(S.target_uuid row) ~buffer ~scope ~base:buffer
                               ~caret:(String.length buffer) ())
                   | _, current -> current
                 in
                 S.set (fun st -> {st with S.editing = editing;
-                   selected = S.String_set.empty; anchor = None; action_bar = false});
+                   selected = S.Row_set.empty; anchor = None; head = None; action_bar = false});
                 match editing with
                 | Some e -> request_focus e.S.uuid e.S.model.Edit_model.caret
                 | None -> ());
@@ -1900,7 +1911,7 @@ let delete_selected_uuids ~selected ~scope ~before uuids =
 
 let delete_selection () =
   let snapshot = selected_snapshot () in
-  if S.String_set.is_empty snapshot.unresolved then
+  if S.Row_set.is_empty snapshot.unresolved then
     delete_selected_uuids ~selected:snapshot.selection ~scope:snapshot.scope
       ~before:(S.history_cursor ()) snapshot.uuids
   else Ui_services.log_error "selection entities unavailable"
@@ -1918,14 +1929,15 @@ let rec has_drag_source_parent sources uuid =
 let is_descendant uuid ancestor =
   has_drag_source_parent (S.String_set.singleton ancestor) uuid
 
-let begin_block_drag ~scope src =
-  if scope <> S.selection_scope () || not (S.String_set.mem src (S.selected ()))
-  then select_single_in ~scope src
+let begin_block_drag ?row_ref ~scope src =
+  let row_ref = Option.value row_ref ~default:(S.ordinary_row src) in
+  if scope <> S.selection_scope () || not (S.Row_set.mem row_ref (S.selected_rows ()))
+  then select_row_in ~scope row_ref
 
 let dragged_block_uuids src =
   if S.String_set.mem src (S.selected ()) then
     let snapshot = selected_snapshot () in
-    if S.String_set.is_empty snapshot.unresolved then
+    if S.Row_set.is_empty snapshot.unresolved then
       List.filter_map (fun (b : Model.block) -> b.block_uuid) snapshot.roots
     else []
   else if S.find src <> None then [ src ] else []
@@ -1941,7 +1953,21 @@ let can_drop_dragged_block src tgt =
 (* cljs dnd/move-blocks: :top -> first child of the target's parent (page
    when top-level); :nested -> first child of target; :sibling -> after
    target *)
-let drop_dragged_block src tgt move_to =
+let drop_dragged_block ?source_ref ?target_ref src tgt move_to =
+  let scope = S.selection_scope () in
+  let valid uuid = function
+    | Some row -> row.S.owner_uuid = uuid && S.valid_row ~scope row
+    | None -> true in
+  let same_row = match source_ref, target_ref with
+    | Some source, Some target -> source = target
+    | _ -> false in
+  let target = match move_to, target_ref with
+    | "nested", Some row -> Option.map S.target_uuid (S.resolve_row ~scope row)
+    | _ -> Some tgt in
+  if same_row || not (valid src source_ref && valid tgt target_ref) then () else
+  match target with
+  | None -> ()
+  | Some tgt ->
   if not (can_drop_dragged_block src tgt) then ()
   else
     let sources = dragged_block_uuids src in
@@ -2009,7 +2035,7 @@ let export_titles blocks =
   Buffer.contents buf
 
 let selected_copy_blocks ~plain snapshot =
-  if S.String_set.is_empty snapshot.unresolved then
+  if S.Row_set.is_empty snapshot.unresolved then
     Some (if plain then snapshot.blocks else snapshot.roots)
   else (
     Ui_services.log_error "selection entities unavailable";
@@ -2280,14 +2306,28 @@ let paste_focus () =
     if context = (Runtime.repo (), Runtime.route ()) && session_current ()
     then edit_last_inserted ~scope resp
 
-let paste_history_opts target_uuid =
+let insertion_row ~scope target_uuid =
+  match S.editing () with
+  | Some e when e.S.uuid = target_uuid && e.scope = scope ->
+      S.resolve_row ~scope e.row_ref
+  | _ -> List.find_opt (fun row -> row.S.row_ref.owner_uuid = target_uuid)
+      (S.selected_ordered_rows ())
+
+let paste_history_opts ?(sibling = true) target_uuid =
   let scope = match S.editing () with
     | Some e -> e.S.scope
-    | None -> scope_of_uuid target_uuid in
+    | None -> S.selection_scope () in
+  let hosts = match insertion_row ~scope target_uuid with
+    | Some row -> if sibling then row.row_ref.link_hosts else row.child_hosts
+    | None -> [] in
   let after = Wire.Map
       [ Wire.Keyword "block-uuid", Wire.Keyword "last-inserted-block"
       ; Wire.Keyword "scope", Wire.String scope
-      ; Wire.Keyword "caret", Wire.Keyword "end" ] in
+      ; Wire.Keyword "caret", Wire.Keyword "end"
+      ; Wire.Keyword "row-context", S.history_context ()
+      ; Wire.Keyword "row-ref", Wire.Map
+          [ Wire.Keyword "link-hosts", Wire.List (List.map (fun u -> Wire.Uuid u) hosts)
+          ; Wire.Keyword "owner-uuid", Wire.Keyword "last-inserted-block" ] ] in
   Ops.history_opts ~opts:(Ops.op_opts "paste") ~before:(S.history_cursor ()) ~after ()
 
 let paste_trees trees target_uuid ~replace_empty =
@@ -2302,7 +2342,7 @@ let paste_markdown_blocks uuid text ~replace_empty ~sibling =
   let current = paste_context_current () in
   let repo = Runtime.repo () in
   let focus = paste_focus () in
-  let opts = paste_history_opts uuid in
+  let opts = paste_history_opts ~sibling uuid in
   let* w =
     Runtime.invoke3 "thread-api/paste-extract-blocks"
       (Wire.String repo)
@@ -2520,11 +2560,11 @@ let paste_blocks ~clipboard:((trees, copied_text) as clipboard) ev =
 
 (* ---- misc ---- *)
 
-let toggle_collapse ?(scope = "main") uuid =
+let toggle_collapse ?row_ref ?(scope = "main") uuid =
   match S.find uuid with
   | Some b when S.children_of b <> [] ->
       if b.Model.block_default_collapsed
-         && not (S.is_collapsed_in ~scope uuid)
+         && not (S.is_collapsed_in ?row_ref ~scope uuid)
       then
         (* view-default collapse (page child on a non-Library page): a
            click expands it locally without persisting — cljs
@@ -2532,12 +2572,12 @@ let toggle_collapse ?(scope = "main") uuid =
         S.set (fun st ->
             { st with
               S.expanded_ui =
-                S.String_set.add (S.collapse_key scope uuid)
+                S.String_set.add (S.collapse_key ?row_ref scope uuid)
                   st.S.expanded_ui
             })
       else
-        let now = not (S.effective_collapsed ~scope b) in
-        S.set_collapsed ~scope uuid now;
+        let now = not (S.effective_collapsed ?row_ref ~scope b) in
+        S.set_collapsed ?row_ref ~scope uuid now;
         if not (Ui_services.env_publishing ()) then
           ignore (Ops.apply [ Ops.collapse_expand [ (uuid, now) ] ])
   | _ -> ()
@@ -2555,111 +2595,58 @@ let set_collapsed ?(scope = "main") uuid collapsed =
    outline level (expand = shallowest collapsed level, collapse =
    deepest expandable level) *)
 let collapse_expand ~collapse () =
-  let set u want =
-    match S.find u with
-    | Some b
-      when S.children_of b <> [] && S.effective_collapsed b <> want ->
-        toggle_collapse u
-    | _ -> ()
-  in
-  match S.editing_uuid () with
-  | Some u -> set u collapse
-  | None -> (
-      match selected_uuids () with
-      | _ :: _ as us -> List.iter (fun u -> set u collapse) us
-      | [] ->
-          let blocks = S.flat_all () in
-          let lvl (b : Model.block) = b.Model.block_level in
-          if collapse then (
-            let deepest =
-              List.fold_left
-                (fun acc b ->
-                  if S.children_of b <> [] && not (S.effective_collapsed b)
-                  then max acc (lvl b)
-                  else acc)
-                0 blocks
-            in
-            List.iter
-              (fun (b : Model.block) ->
-                if lvl b = deepest && S.children_of b <> []
-                   && not (S.effective_collapsed b)
-                then
-                  match b.Model.block_uuid with
-                  | Some u -> toggle_collapse u
-                  | None -> ())
-              blocks)
-          else
-            let shallowest =
-              List.fold_left
-                (fun acc b ->
-                  if S.effective_collapsed b then min acc (lvl b)
-                  else acc)
-                max_int blocks
-            in
-            List.iter
-              (fun (b : Model.block) ->
-                if lvl b = shallowest && S.effective_collapsed b then
-                  match b.Model.block_uuid with
-                  | Some u -> toggle_collapse u
-                  | None -> ())
-              blocks)
+  let scope = S.interaction_scope () in
+  let set row =
+    if row.S.children <> [] && S.row_collapsed ~scope row <> collapse then
+      toggle_collapse ~row_ref:row.row_ref ~scope (S.target_uuid row) in
+  match S.editing () with
+  | Some e -> Option.iter set (S.resolve_row ~scope e.row_ref)
+  | None ->
+      let selected = selected_refs () |> List.filter_map (S.resolve_row ~scope) in
+      if selected <> [] then List.iter set selected
+      else
+        let rows = S.rows_in_scope scope in
+        let candidates = List.filter (fun row ->
+          if collapse then row.S.children <> [] && not (S.row_collapsed ~scope row)
+          else S.row_collapsed ~scope row) rows in
+        let level = List.fold_left (fun level row ->
+          if collapse then max level row.S.depth else min level row.S.depth)
+          (if collapse then min_int else max_int) candidates in
+        List.iter (fun row -> if row.S.depth = level then set row) candidates
 
 (* cljs editor/toggle-collapse!: edit mode toggles the open block,
-   selection toggles all selected by the first block's state, otherwise
-   no-op *)
+   selection toggles all selected by the first block's state. *)
 let toggle_children_collapse () =
-  let cur =
-    match S.editing_uuid () with
-    | Some u -> [ u ]
-    | None -> selected_uuids ()
-  in
-  match cur with
-  | u :: us -> (
-      match S.find u with
-      | Some b ->
-          let want = not (S.effective_collapsed b) in
-          List.iter
-            (fun u ->
-              match S.find u with
-              | Some b
-                when S.children_of b <> []
-                     && S.effective_collapsed b <> want ->
-                  toggle_collapse u
-              | _ -> ())
-            (u :: us)
-      | None -> ())
+  let scope = S.interaction_scope () in
+  let rows = match S.editing () with
+    | Some e -> Option.to_list (S.resolve_row ~scope e.row_ref)
+    | None -> List.filter_map (S.resolve_row ~scope) (selected_refs ()) in
+  match rows with
   | [] -> ()
+  | first :: _ ->
+      let want = not (S.row_collapsed ~scope first) in
+      List.iter (fun row ->
+        if row.S.children <> [] && S.row_collapsed ~scope row <> want then
+          toggle_collapse ~row_ref:row.row_ref ~scope (S.target_uuid row)) rows
 
 (* cljs editor/toggle-open-blocks: any collapsed block -> expand all,
-   else collapse all collapsible blocks *)
+   else collapse all collapsible blocks. *)
 let toggle_open_blocks () =
-  let expandable =
-    List.filter
-      (fun (b : Model.block) ->
-        S.children_of b <> [] || S.effective_collapsed b)
-      (S.flat_all ())
-  in
-  let collapsed = not (List.exists S.effective_collapsed expandable) in
-  let pairs =
-    List.filter_map
-      (fun (b : Model.block) ->
-        match b.Model.block_uuid with
-        | Some u when S.effective_collapsed b <> collapsed ->
-            Some (u, collapsed)
-        | _ -> None)
-      expandable
-  in
+  let scope = S.interaction_scope () in
+  let rows = S.rows_in_scope scope |> List.filter (fun row ->
+    row.S.children <> [] || S.row_collapsed ~scope row) in
+  let collapsed = not (List.exists (S.row_collapsed ~scope) rows) in
+  let seen, pairs = List.fold_left (fun (seen, pairs) row ->
+    let uuid = S.target_uuid row in
+    if S.String_set.mem uuid seen || S.row_collapsed ~scope row = collapsed then seen, pairs
+    else S.String_set.add uuid seen, (uuid, collapsed) :: pairs)
+      (S.String_set.empty, []) rows in
+  ignore seen;
   S.set (fun st ->
-      { st with
-        S.collapsed =
-          (if collapsed then
-             List.fold_left
-               (fun acc (u, _) -> S.String_set.add u acc)
-               st.S.collapsed pairs
-           else S.String_set.empty)
-      ; S.expanded = S.String_set.empty
-      });
-  if pairs <> [] then ignore (Ops.apply [ Ops.collapse_expand pairs ])
+    List.fold_left (fun st row ->
+      S.collapsed_ui_transform ~row_ref:row.S.row_ref ~scope
+        (S.target_uuid row) collapsed st) st rows);
+  if pairs <> [] then ignore (Ops.apply [ Ops.collapse_expand (List.rev pairs) ])
 
 let restore_history result =
   let context = action_context () in
@@ -2667,51 +2654,54 @@ let restore_history result =
   let current () = context = action_context ()
       && (match editing, S.editing () with
           | None, None -> true
-          | Some before, Some now -> before.S.uuid = now.S.uuid
-              && before.S.scope = now.S.scope && before.S.model == now.S.model
+          | Some before, Some now -> before.S.epoch == now.S.epoch
+              && before.S.row_ref = now.S.row_ref && before.S.model == now.S.model
           | _ -> false) in
   let cursors = match Wire.map_get result "editor-cursors" with
-    | Some (Wire.List xs) | Some (Wire.Array xs) -> xs
-    | _ -> [] in
+    | Some (Wire.List xs) | Some (Wire.Array xs) -> xs | _ -> [] in
   let undo = Wire.map_get result "undo?" = Some (Wire.Bool true) in
   match (if undo then cursors else List.rev cursors) with
   | [] -> Ops.resync_open_editor ~force:true ()
   | cursor :: _ ->
       S.history_input_before := None;
       S.click_point := None;
-      (match Wire.map_get_uuid cursor "block-uuid" with
-       | Some uuid ->
-           let scope = Option.get (Wire.map_get_string cursor "scope") in
-           let* title = Ops.title_for_edit (model_title uuid) in
-           if not (current ()) then Js.Promise.resolve () else
-           let caret = match Wire.map_get cursor "caret" with
-             | Some (Wire.Int caret) -> caret
-             | Some (Wire.Keyword "end") -> String.length title
-             | _ -> invalid_arg "history caret must be an offset or end" in
-           let submit_on_enter = match S.editing () with
-             | Some e when e.S.uuid = uuid && e.S.scope = scope -> e.S.submit_on_enter
-             | _ -> false in
-           let e = S.mk_editing ~caret ~submit_on_enter ~uuid ~buffer:title ~scope ~base:title () in
-           let e = match Wire.map_get cursor "anchor" with
-             | Some (Wire.Int anchor) ->
-                 S.with_model e (Edit_model.select e.S.model ~anchor ~focus:caret)
-             | _ -> e in
-           S.set (fun st -> { st with S.editing = Some e;
-             S.selected = S.String_set.empty; anchor = None; action_bar = false });
-           request_focus uuid caret;
-           Js.Promise.resolve ()
-       | None ->
-           let selected = match Wire.map_get cursor "selected-blocks" with
-             | Some (Wire.List xs) ->
-                 List.fold_left (fun acc -> function
-                   | Wire.Uuid u -> S.String_set.add u acc
-                   | _ -> invalid_arg "history selection must contain UUIDs") S.String_set.empty xs
-             | _ -> invalid_arg "history cursor must contain editing or selection state" in
-           let anchor = Wire.map_get_uuid cursor "selection-anchor" in
-           let selection_scope = Option.get (Wire.map_get_string cursor "scope") in
-           S.set (fun st -> { st with S.editing = None; selected; anchor;
-             selection_scope; action_bar = false });
-           Js.Promise.resolve ())
+      if Wire.map_get cursor "row-context" <> Some (S.history_context ())
+      then Js.Promise.resolve () else
+      let scope = Option.get (Wire.map_get_string cursor "scope") in
+      match Wire.map_get_uuid cursor "block-uuid" with
+      | Some uuid ->
+          (match Option.bind (Wire.map_get cursor "row-ref") S.row_of_wire with
+           | Some row_ref when S.valid_row ~scope ~uuid row_ref ->
+               let* title = Ops.title_for_edit (model_title uuid) in
+               if not (current ()) || not (S.valid_row ~scope ~uuid row_ref)
+               then Js.Promise.resolve () else
+               let caret = match Wire.map_get cursor "caret" with
+                 | Some (Wire.Int caret) -> caret
+                 | Some (Wire.Keyword "end") -> String.length title
+                 | _ -> invalid_arg "history caret must be an offset or end" in
+               let e = S.mk_editing ~row_ref ~caret ~uuid ~buffer:title ~scope ~base:title () in
+               let e = match Wire.map_get cursor "anchor" with
+                 | Some (Wire.Int anchor) ->
+                     S.with_model e (Edit_model.select e.S.model ~anchor ~focus:caret)
+                 | _ -> e in
+               S.set (fun st -> { st with S.editing = Some e; selection_scope = scope
+                 ; selected = S.Row_set.empty; anchor = None; head = None; action_bar = false });
+               request_focus uuid caret;
+               Js.Promise.resolve ()
+           | _ -> Js.Promise.resolve ())
+      | None ->
+          let selected = match Wire.map_get cursor "selected-rows" with
+            | Some (Wire.List rows) -> List.filter_map S.row_of_wire rows
+                |> List.filter (S.valid_row ~scope) |> S.Row_set.of_list
+            | _ -> S.Row_set.empty in
+          let endpoint key = Option.bind (Wire.map_get cursor key) S.row_of_wire
+            |> fun row -> match row with
+               | Some row when S.valid_row ~scope row -> Some row
+               | _ -> None in
+          let anchor = endpoint "row-anchor" and head = endpoint "row-head" in
+          S.set (fun st -> { st with S.editing = None; selected; anchor; head
+            ; selection_scope = scope; action_bar = false });
+          Js.Promise.resolve ()
 
 let () = S.restore_history := restore_history
 
@@ -2836,51 +2826,37 @@ let focus_page_title () =
           | None -> ())
       | None -> ())
 
-let arrow_nav uuid up =
-  let scope =
-    match S.editing () with Some e -> e.scope | None -> "main"
-  in
-  let nb =
-    (if up
-     then S.prev_visible ~scope
-     else S.next_visible ~scope)
-      uuid
-  in
-  match nb with
-  | Some b -> (
-      match b.Model.block_uuid with
-      | Some nu ->
-          save_if_dirty uuid;
-          enter_edit ~scope nu (caret_of uuid)
-      | None -> ())
-  | None -> if up && scope = "main" then (exit_edit ~select:false; focus_page_title ())
+let edit_neighbor uuid up =
+  match S.editing () with
+  | Some e when e.S.uuid = uuid ->
+      S.row_neighbor ~scope:e.scope e.row_ref (if up then `Prev else `Next)
+  | _ -> None
 
-(* ArrowLeft/Right at a collapsed buffer edge crosses into the adjacent
-   block — master keeps one logical caret across block boundaries:
-   left at the buffer start lands at the previous block's end, right
-   at the buffer end lands at the next block's start *)
+let arrow_nav uuid up =
+  match edit_neighbor uuid up, S.editing () with
+  | Some row, Some e ->
+      let caret = caret_of uuid in
+      save_if_dirty uuid;
+      enter_edit ~row_ref:row.S.row_ref ~scope:e.scope (S.target_uuid row) caret
+  | None, Some e when up && e.S.scope = "main" ->
+      exit_edit ~select:false; focus_page_title ()
+  | _ -> ()
+
 let arrow_edge uuid up =
-  let scope =
-    match S.editing () with Some e -> e.scope | None -> "main"
-  in
-  let nb =
-    (if up then S.prev_visible ~scope else S.next_visible ~scope) uuid
-  in
-  match nb with
-  | Some b -> (
-      match b.Model.block_uuid with
-      | Some nu ->
-          save_if_dirty uuid;
-          if up then
-            ignore
-              (let* buffer =
-                 Ops.title_on_entry nu (display_title nu)
-               in
-               enter_edit ~scope nu (String.length buffer);
-               Js.Promise.resolve ())
-          else enter_edit ~scope nu 0
-      | None -> ())
-  | None -> ()
+  match edit_neighbor uuid up, S.editing () with
+  | Some row, Some e ->
+      let target = S.target_uuid row in
+      let context = action_context () in
+      save_if_dirty uuid;
+      if up then ignore (
+        let* buffer = Ops.title_on_entry target (display_title target) in
+        if context = action_context ()
+           && (match S.editing () with Some live -> live.S.epoch == e.S.epoch && live.row_ref = e.row_ref | None -> false)
+           && S.valid_row ~scope:e.scope ~uuid:target row.row_ref
+        then enter_edit ~row_ref:row.row_ref ~scope:e.scope target (String.length buffer);
+        Js.Promise.resolve ())
+      else enter_edit ~row_ref:row.row_ref ~scope:e.scope target 0
+  | _ -> ()
 
 (* append a fresh block at the bottom of the current page — or, on
    journals, at the bottom of the journal item the add-button lives in
