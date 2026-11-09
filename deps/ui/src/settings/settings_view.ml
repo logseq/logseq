@@ -106,7 +106,7 @@ let lang_menu_close mst =
   Runtime.flush ()
 
 let lang_menu ~scope ~key st mst =
-  Ui_components.menu_card ~key:("lm-" ^ key) ~max_height:288
+  Ui_components.menu_card ~key:("lm-" ^ key)
     ~cls:"ls-select-content"
     ~anchor:`below ~anchor_alignment:`start
     ~on_dismiss:(fun _ev -> lang_menu_close mst)
