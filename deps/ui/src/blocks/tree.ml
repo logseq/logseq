@@ -220,7 +220,7 @@ let children_container ~library uuid (bs : Model.block Signal.signal) content =
           ; Ui_components.Prop.cursor `pointer ]
           (box ~key:("border-" ^ uuid) ~style_class:"block-children-left-border"
             ~width:4 ~corner_radius:2 ~opacity:0.6
-            ~data_attrs_signal:(Signal.map (fun (b : Model.block) ->
+            ~data_attrs:(reactive (fun (b : Model.block) ->
               ["data-blockid", Option.get b.block_uuid]) bs) [])
       ; Ui_components.with_props
           [ Ui_components.Prop.position `absolute
