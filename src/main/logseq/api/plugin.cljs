@@ -54,10 +54,6 @@
           path (util/node-path.join path "package.json")]
       (fs/write-plain-text-file! repo nil path (js/JSON.stringify data nil 2) {:skip-compare? true}))))
 
-(defn- storage-dir
-  [root-dir sub-root]
-  (util/node-path.normalize (util/node-path.join root-dir sub-root)))
-
 (defn- sub-path?
   [root-dir path]
   (let [relative (.relative util/node-path root-dir path)
@@ -78,6 +74,10 @@
   (let [path (util/node-path.normalize (util/node-path.join root-dir file))]
     (assert-storage-path! root-dir path action)
     path))
+
+(defn- storage-dir
+  [root-dir sub-root]
+  (storage-file-path root-dir sub-root "access"))
 
 (defn- plugin-storage-root
   [assets?]
