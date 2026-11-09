@@ -3809,6 +3809,89 @@
                               (ldb/sort-by-order (ldb/get-page-blocks @conn (:db/id favorites-page))))]
            (is (= [page-b-id page-a-id] page-ids))))))))
 
+(defn- transact-duplicate-favorites!
+  "Favorites page whose two blocks both link to the same page, as left behind by
+   importing an OG config.edn with `:favorites [\"foo\" \"Foo\"]` (#8596)."
+  [conn {:keys [favorites-page-uuid page-uuid other-page-uuid]}]
+  (d/transact! conn [{:block/uuid favorites-page-uuid
+                      :block/title common-config/favorites-page-name
+                      :block/name common-config/favorites-page-name}
+                     {:block/uuid page-uuid
+                      :block/title "Foo"
+                      :block/name "foo"}
+                     {:block/uuid other-page-uuid
+                      :block/title "Bar"
+                      :block/name "bar"}
+                     {:block/uuid #uuid "44444444-4444-4444-4444-444444444444"
+                      :block/title ""
+                      :block/page [:block/uuid favorites-page-uuid]
+                      :block/parent [:block/uuid favorites-page-uuid]
+                      :block/order "a"
+                      :block/link [:block/uuid page-uuid]}
+                     {:block/uuid #uuid "55555555-5555-5555-5555-555555555555"
+                      :block/title ""
+                      :block/page [:block/uuid favorites-page-uuid]
+                      :block/parent [:block/uuid favorites-page-uuid]
+                      :block/order "b"
+                      :block/link [:block/uuid other-page-uuid]}
+                     {:block/uuid #uuid "66666666-6666-6666-6666-666666666666"
+                      :block/title ""
+                      :block/page [:block/uuid favorites-page-uuid]
+                      :block/parent [:block/uuid favorites-page-uuid]
+                      :block/order "c"
+                      :block/link [:block/uuid page-uuid]}]))
+
+(def ^:private duplicate-favorites-ids
+  {:favorites-page-uuid #uuid "11111111-1111-1111-1111-111111111111"
+   :page-uuid #uuid "22222222-2222-2222-2222-222222222222"
+   :other-page-uuid #uuid "33333333-3333-3333-3333-333333333333"})
+
+(deftest get-favorite-pages-dedupes-pages-linked-twice
+  (restoring-worker-state
+   (fn []
+     (let [get-favorites! (get @thread-api/*thread-apis :thread-api/get-favorite-pages)
+           conn (d/create-conn db-schema/schema)
+           {:keys [page-uuid other-page-uuid]} duplicate-favorites-ids]
+       (transact-duplicate-favorites! conn duplicate-favorites-ids)
+       (reset! worker-state/*datascript-conns {test-repo conn})
+       (is (fn? get-favorites!))
+       (when (fn? get-favorites!)
+         (is (= [page-uuid other-page-uuid]
+                (mapv :block/uuid (get-favorites! test-repo)))))))))
+
+(deftest unfavorite-page-removes-duplicate-favorite-blocks
+  (restoring-worker-state
+   (fn []
+     (let [set-favorite! (get @thread-api/*thread-apis :thread-api/set-page-favorite)
+           conn (d/create-conn db-schema/schema)
+           {:keys [favorites-page-uuid page-uuid other-page-uuid]} duplicate-favorites-ids]
+       (transact-duplicate-favorites! conn duplicate-favorites-ids)
+       (reset! worker-state/*datascript-conns {test-repo conn})
+       (when (fn? set-favorite!)
+         (set-favorite! test-repo page-uuid false)
+         (let [favorites-page (d/entity @conn [:block/uuid favorites-page-uuid])
+               other-page-id (:db/id (d/entity @conn [:block/uuid other-page-uuid]))]
+           (is (= [other-page-id]
+                  (mapv #(get-in % [:block/link :db/id])
+                        (ldb/get-page-blocks @conn (:db/id favorites-page)))))))))))
+
+(deftest reorder-favorites-drops-duplicate-favorite-blocks
+  (restoring-worker-state
+   (fn []
+     (let [reorder! (get @thread-api/*thread-apis :thread-api/reorder-favorites)
+           conn (d/create-conn db-schema/schema)
+           {:keys [favorites-page-uuid page-uuid other-page-uuid]} duplicate-favorites-ids]
+       (transact-duplicate-favorites! conn duplicate-favorites-ids)
+       (reset! worker-state/*datascript-conns {test-repo conn})
+       (when (fn? reorder!)
+         (reorder! test-repo [other-page-uuid page-uuid])
+         (let [favorites-page (d/entity @conn [:block/uuid favorites-page-uuid])
+               page-id (:db/id (d/entity @conn [:block/uuid page-uuid]))
+               other-page-id (:db/id (d/entity @conn [:block/uuid other-page-uuid]))]
+           (is (= [other-page-id page-id]
+                  (mapv #(get-in % [:block/link :db/id])
+                        (ldb/sort-by-order (ldb/get-page-blocks @conn (:db/id favorites-page))))))))))))
+
 (deftest get-page-route-info-resolves-page-flags-and-alias-source
   (restoring-worker-state
    (fn []
