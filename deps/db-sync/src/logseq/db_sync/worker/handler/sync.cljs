@@ -345,7 +345,9 @@
 
 (def ^:private delete-outliner-ops
   #{:delete-blocks
-    :delete-page})
+    :delete-page
+    :recycle-gc
+    :recycle-delete-permanently})
 
 (defn- request-context->tx-meta
   [{:keys [graph-id client-revision username]}]

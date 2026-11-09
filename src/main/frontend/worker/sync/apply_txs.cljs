@@ -1114,14 +1114,16 @@
     (mapcat
      (fn [item]
        (if (and (retract-entity-op? item)
-                (block-ref? (second item))
-                (block-entity db (second item)))
-         (let [root (block-entity db (second item))]
+                (block-ref? (second item)))
+         (if-let [root (block-entity db (second item))]
            (concat (->> (block-descendants root)
                         (remove #(contains? explicit-retracts (:db/id %)))
                         (map (fn [entity]
                                [:db/retractEntity (block-entity-ref entity)])))
-                   [item]))
+                   [item])
+           ;; Retracting an already-retracted entity is a no-op. Drop it so a
+           ;; concurrent recycle-gc from another client cannot fail rebase.
+           [])
          [item]))
      tx-data)))
 
@@ -1285,7 +1287,9 @@
                 tx-data (cond->> tx-data
                           db-before-local-reversal
                           (drop-local-reversal-stale-target-ops db-before-local-reversal db))
-                tx-data (seq (tx-sanitize/sanitize-tx db tx-data))
+                tx-data (seq (tx-sanitize/sanitize-tx
+                              db tx-data
+                              {:drop-missing-retract-ops? true}))
                 tx-meta (apply-tx-meta remote-tx)
                 report (ldb/transact! conn tx-data tx-meta)
                 results' (cond-> results

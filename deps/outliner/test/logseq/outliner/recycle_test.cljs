@@ -180,6 +180,21 @@
     (is (nil? (recycle/gc! conn {:now-ms (* 29 24 3600 1000)})))
     (is (some? (d/entity @conn page-id)))))
 
+(deftest gc-transact-is-persistable-sync-op
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}}])
+        page (ldb/get-page @conn "page1")
+        *tx-meta (atom nil)]
+    (ldb/transact! conn
+                   (recycle/recycle-page-tx-data @conn page {:now-ms 0})
+                   {:outliner-op :delete-page})
+    (d/listen! conn ::capture-gc-meta
+               (fn [tx-report]
+                 (reset! *tx-meta (:tx-meta tx-report))))
+    (is (true? (recycle/gc! conn {:now-ms (* 31 24 3600 1000)})))
+    (is (= :recycle-gc (:outliner-op @*tx-meta)))
+    (is (not (false? (:persist-op? @*tx-meta))))))
+
 (deftest apply-ops-permanently-delete-recycled-page-removes-page-and-descendants
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "page1"}

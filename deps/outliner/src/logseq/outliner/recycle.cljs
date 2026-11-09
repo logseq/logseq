@@ -321,17 +321,13 @@
           db cutoff)
      (map #(d/entity db %))
      (filter recycled?)
-     (mapcat (fn [entity]
-               (if (ldb/page? entity)
-                 (map (fn [id] [:db/retractEntity id]) (page-tree-ids db entity))
-                 (map (fn [node] [:db/retractEntity (:db/id node)]) (block-subtree db entity)))))
+     (mapcat #(permanently-delete-tx-data db %))
      distinct
-     seq
-     (with-delete-cleanup-tx db))))
+     seq)))
 
 (defn ^:api gc!
   [conn opts]
   (when-let [tx-data (seq (gc-tx-data @conn opts))]
     (ldb/transact! conn tx-data {:outliner-op :recycle-gc
-                                 :persist-op? false})
+                                 :gen-undo-ops? false})
     true))
