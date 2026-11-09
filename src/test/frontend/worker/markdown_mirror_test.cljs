@@ -1,14 +1,20 @@
 (ns frontend.worker.markdown-mirror-test
-  (:require [cljs.test :refer [async deftest is testing]]
+  (:require [cljs.test :refer [async deftest is testing use-fixtures]]
+            [clojure.string :as string]
             [datascript.core :as d]
             [frontend.worker.db-listener :as db-listener]
             [frontend.worker.markdown-mirror :as markdown-mirror]
             [frontend.worker.platform :as worker-platform]
             [logseq.db :as ldb]
+            [logseq.db.frontend.content :as db-content]
             [logseq.db.test.helper :as db-test]
             [promesa.core :as p]))
 
 (def test-repo "logseq_db_graph-xxx")
+
+(use-fixtures :each
+  {:before (fn []
+             (markdown-mirror/clear-block-render-cache!))})
 
 (defn- fake-platform
   ([] (fake-platform {:runtime :node}))
@@ -1271,4 +1277,371 @@
                     (is (not (some #{contents-path} @deletes)))
                     (is (= contents-content (get @files contents-path)))))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(defn- <count-update-block-content-calls
+  [f]
+  (let [calls (atom 0)
+        original db-content/update-block-content]
+    (set! db-content/update-block-content
+          (fn [& args]
+            (swap! calls inc)
+            (apply original args)))
+    (-> (p/let [content (f)]
+          {:content content :calls @calls})
+        (p/finally #(set! db-content/update-block-content original)))))
+
+(defn- evict-tx!
+  [repo _conn tx-report]
+  (markdown-mirror/evict-block-render-cache!
+   repo
+   (:db-after tx-report)
+   (:db-before tx-report)
+   (:tx-data tx-report)))
+
+(defn- <assert-incremental-matches-full
+  [repo conn page message]
+  (p/let [incremental (markdown-mirror/<render-page-content
+                       repo @conn page {})
+          full (markdown-mirror/render-page-content-full @conn page {})]
+    (is (= full incremental) message)
+    incremental))
+
+(deftest incremental-page-render-matches-full-across-edits-test
+  (async done
+    (let [target-uuid #uuid "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa01"
+          embed-uuid #uuid "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbb01"
+          nested-uuid #uuid "cccccccc-cccc-4ccc-8ccc-cccccccccc01"
+          conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "TargetOld"}
+                   :blocks [{:block/title "Target"
+                             :block/uuid target-uuid
+                             :build/keep-uuid? true
+                             :build/children [{:block/title "Target child"}]}]}
+                  {:page {:block/title "Source"}
+                   :blocks [{:block/title "See [[TargetOld]]"}
+                            {:block/title "parent"
+                             :block/uuid nested-uuid
+                             :build/keep-uuid? true
+                             :build/children [{:block/title "child a"}
+                                              {:block/title "child b"}]}
+                            {:block/title ""
+                             :block/uuid embed-uuid
+                             :build/keep-uuid? true}
+                            {:block/title "tail"}]}]})
+          _ (d/transact! conn [{:db/id (:db/id (d/entity @conn [:block/uuid embed-uuid]))
+                                :block/link (:db/id (d/entity @conn [:block/uuid target-uuid]))}])
+          page (db-test/find-page-by-title @conn "Source")
+          target-page (db-test/find-page-by-title @conn "TargetOld")
+          child-a (db-test/find-block-by-content @conn "child a")
+          tail (db-test/find-block-by-content @conn "tail")
+          parent (d/entity @conn [:block/uuid nested-uuid])]
+      (markdown-mirror/clear-block-render-cache! test-repo)
+      (-> (p/let [_ (<assert-incremental-matches-full
+                     test-repo conn page "initial incremental render matches full")
+                  ;; Edit a nested child
+                  _ (evict-tx! test-repo conn
+                               (d/transact! conn [{:db/id (:db/id child-a) :block/title "child a edited"}]))
+                  _ (<assert-incremental-matches-full
+                     test-repo conn page "edit of nested child matches full")
+                  ;; Edit the referenced page title
+                  _ (evict-tx! test-repo conn
+                               (d/transact! conn [{:db/id (:db/id target-page)
+                                                   :block/title "TargetNew"
+                                                   :block/name "targetnew"}]))
+                  _ (<assert-incremental-matches-full
+                     test-repo conn page "referenced page rename matches full")
+                  ;; Edit the embedded block
+                  _ (evict-tx! test-repo conn
+                               (d/transact! conn [{:db/id (:db/id (d/entity @conn [:block/uuid target-uuid]))
+                                                   :block/title "Target edited"}]))
+                  _ (<assert-incremental-matches-full
+                     test-repo conn page "embedded block edit matches full")
+                  ;; Move tail under parent
+                  _ (evict-tx! test-repo conn
+                               (d/transact! conn [{:db/id (:db/id tail)
+                                                   :block/parent (:db/id parent)
+                                                   :block/order "a9"}]))
+                  _ (<assert-incremental-matches-full
+                     test-repo conn page "block move matches full")
+                  ;; Move nested child b to a different parent so the old
+                  ;; parent's assembled cache is evicted from db-before.
+                  child-b (db-test/find-block-by-content @conn "child b")
+                  _ (evict-tx! test-repo conn
+                               (d/transact! conn [{:db/id (:db/id child-b)
+                                                   :block/parent (:db/id tail)
+                                                   :block/order "a0"}]))
+                  _ (<assert-incremental-matches-full
+                     test-repo conn page "move between parents matches full")
+                  ;; Collapse does not change mirrored markdown
+                  _ (evict-tx! test-repo conn
+                               (d/transact! conn [{:db/id (:db/id parent)
+                                                   :block/collapsed? true}]))
+                  _ (<assert-incremental-matches-full
+                     test-repo conn page "collapse matches full")
+                  ;; Delete a child
+                  _ (evict-tx! test-repo conn
+                               (d/transact! conn [[:db/retractEntity (:db/id child-a)]]))
+                  _ (<assert-incremental-matches-full
+                     test-repo conn page "delete matches full")
+                  ;; Rename the source page itself
+                  _ (evict-tx! test-repo conn
+                               (d/transact! conn [{:db/id (:db/id page)
+                                                   :block/title "Source Renamed"
+                                                   :block/name "source renamed"}]))
+                  renamed (d/entity @conn (:db/id page))
+                  _ (<assert-incremental-matches-full
+                     test-repo conn renamed "page rename matches full")]
+            (is (string/includes?
+                 (markdown-mirror/render-page-content-full @conn renamed {})
+                 "See [[TargetNew]]"))
+            (is (string/includes?
+                 (markdown-mirror/render-page-content-full @conn renamed {})
+                 "Target edited")))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally (fn []
+                       (markdown-mirror/clear-block-render-cache! test-repo)
+                       (done)))))))
+
+(deftest incremental-render-invalidates-properties-embeds-and-options-test
+  (async done
+    (let [block-a-uuid #uuid "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa03"
+          block-b-uuid #uuid "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbb03"
+          conn (db-test/create-conn-with-blocks
+                {:properties {:user.property/notes {:logseq.property/type :default}
+                              :user.property/priority {:logseq.property/type :number}}
+                 :pages-and-blocks
+                 [{:page {:block/title "Props Page"
+                          :build/properties
+                          {:user.property/notes
+                           {:build/property-value :block
+                            :block/title "old notes"}}}
+                   :blocks [{:block/title "has prop"
+                             :build/properties {:user.property/priority 1}}
+                            {:block/title "other"}]}
+                  {:page {:block/title "Embed A"}
+                   :blocks [{:block/title "A"
+                             :block/uuid block-a-uuid
+                             :build/keep-uuid? true}]}
+                  {:page {:block/title "Embed B"}
+                   :blocks [{:block/title "B"
+                             :block/uuid block-b-uuid
+                             :build/keep-uuid? true
+                             :build/children [{:block/title "B child"}]}]}]})
+          _ (d/transact! conn [{:db/id (:db/id (d/entity @conn [:block/uuid block-a-uuid]))
+                                :block/link (:db/id (d/entity @conn [:block/uuid block-b-uuid]))}
+                               {:db/id (:db/id (d/entity @conn [:block/uuid block-b-uuid]))
+                                :block/link (:db/id (d/entity @conn [:block/uuid block-a-uuid]))}])
+          props-page (db-test/find-page-by-title @conn "Props Page")
+          embed-a (db-test/find-page-by-title @conn "Embed A")
+          embed-b (db-test/find-page-by-title @conn "Embed B")
+          notes-value (db-test/find-block-by-content @conn "old notes")
+          other (db-test/find-block-by-content @conn "other")
+          priority (d/entity @conn :user.property/priority)]
+      (markdown-mirror/clear-block-render-cache! test-repo)
+      (-> (p/let [_ (<assert-incremental-matches-full
+                     test-repo conn props-page "initial properties page matches full")
+                  _ (evict-tx! test-repo conn
+                               (d/transact! conn [{:db/id (:db/id notes-value)
+                                                   :block/title "new notes"}]))
+                  _ (<assert-incremental-matches-full
+                     test-repo conn props-page "edited page property value matches full")
+                  edited-props (markdown-mirror/render-page-content-full @conn props-page {})
+                  _ (is (string/includes? edited-props "new notes"))
+                  _ (evict-tx! test-repo conn
+                               (d/transact! conn [{:db/id (:db/id priority)
+                                                   :block/title "urgency"
+                                                   :block/name "urgency"}]))
+                  _ (evict-tx! test-repo conn
+                               (d/transact! conn [{:db/id (:db/id other)
+                                                   :block/title "other edited"}]))
+                  _ (<assert-incremental-matches-full
+                     test-repo conn props-page "property rename then unrelated edit matches full")
+                  renamed-props (markdown-mirror/render-page-content-full @conn props-page {})
+                  _ (is (string/includes? renamed-props "urgency"))
+                  _ (is (not (string/includes? renamed-props "priority::")))
+                  _ (<assert-incremental-matches-full
+                     test-repo conn embed-a "cyclic embed A matches full")
+                  _ (<assert-incremental-matches-full
+                     test-repo conn embed-b "cyclic embed B matches full")
+                  _ (<assert-incremental-matches-full
+                     test-repo conn embed-a "cyclic embed A still matches after B was cached")
+                  four-space {:export-bullet-indentation "    "}
+                  indented (markdown-mirror/<render-page-content
+                            test-repo @conn embed-b four-space)
+                  indented-full (markdown-mirror/render-page-content-full
+                                 @conn embed-b four-space)]
+            (is (= indented-full indented)
+                "changing export indentation invalidates cached output"))
+          (p/catch (fn [e] (is false (str "unexpected error: " e))))
+          (p/finally (fn []
+                       (markdown-mirror/clear-block-render-cache! test-repo)
+                       (done)))))))
+
+(deftest large-page-single-block-edit-is-incremental-test
+  (async done
+    (let [nested-n 200
+          top-n 800
+          target-uuid #uuid "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa02"
+          embed-uuid #uuid "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbb02"
+          conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "RefTarget"}
+                   :blocks [{:block/title "embedded target"
+                             :block/uuid target-uuid
+                             :build/keep-uuid? true
+                             :build/children [{:block/title "embedded child"}]}]}
+                  {:page {:block/title "Large Page"}
+                   :blocks (into [{:block/title ""
+                                   :block/uuid embed-uuid
+                                   :build/keep-uuid? true}
+                                  {:block/title "parent"
+                                   :build/children
+                                   (mapv (fn [i] {:block/title (str "nested " i)})
+                                         (range nested-n))}]
+                                 (mapv (fn [i]
+                                         {:block/title (if (zero? (mod i 11))
+                                                         (str "see [[RefTarget]] " i)
+                                                         (str "block " i))})
+                                       (range top-n)))}]})
+          _ (d/transact! conn [{:db/id (:db/id (d/entity @conn [:block/uuid embed-uuid]))
+                                :block/link (:db/id (d/entity @conn [:block/uuid target-uuid]))}])
+          page (db-test/find-page-by-title @conn "Large Page")
+          edit-block (db-test/find-block-by-content @conn "block 3")
+          block-count (+ top-n nested-n 3)]
+      (-> (p/let [initial (markdown-mirror/<render-page-content test-repo @conn page {})
+                  _ (is (= (markdown-mirror/render-page-content-full @conn page {}) initial))
+                  report (d/transact! conn [{:db/id (:db/id edit-block)
+                                             :block/title "block 3 edited"}])
+                  _ (evict-tx! test-repo conn report)
+                  full (<count-update-block-content-calls
+                        #(markdown-mirror/render-page-content-full @conn page {}))
+                  incremental (<count-update-block-content-calls
+                               #(markdown-mirror/<render-page-content test-repo @conn page {}))]
+            (is (= (:content full) (:content incremental)))
+            (is (> (:calls full) block-count))
+            (is (<= (:calls incremental) 8)
+                "A single edit must not serialize the entire page again."))
+          (p/catch #(is false (str %)))
+          (p/finally done)))))
+
+(deftest cold-render-edit-keeps-latest-content-test
+  (async done
+    (let [{:keys [platform files]} (fake-platform)
+          opts {:platform platform}
+          conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "Batch"}
+                   :blocks (mapv #(hash-map :block/title (str "row " %)) (range 130))}]})
+          page (db-test/find-page-by-title @conn "Batch")
+          block (db-test/find-block-by-content @conn "row 100")
+          _ (markdown-mirror/set-enabled! test-repo true)
+          initial-report (d/transact! conn [{:db/id (:db/id block) :block/title "intermediate"}])]
+      (-> (p/let [_ (markdown-mirror/<handle-tx-report! test-repo conn initial-report (assoc opts :defer? true))
+                  race (let [pending (markdown-mirror/<flush-repo! test-repo opts)]
+                         [pending (d/transact! conn [{:db/id (:db/id block) :block/title "revised"}])])
+                  _ (markdown-mirror/<handle-tx-report! test-repo conn (second race) (assoc opts :defer? true))
+                  _ (first race)
+                  _ (markdown-mirror/<flush-repo! test-repo opts)]
+            (is (= (markdown-mirror/render-page-content-full @conn page {})
+                   (get @files (page-path "pages/Batch.md")))))
+          (p/catch #(is false (str %)))
+          (p/finally (fn [] (markdown-mirror/set-enabled! test-repo false) (done)))))))
+
+(deftest transitive-embed-edit-matches-full-test
+  (async done
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks [{:page {:block/title "Chain"}
+                                     :blocks (mapv #(hash-map :block/title %) ["A" "B" "C" "D"])}]})
+          page (db-test/find-page-by-title @conn "Chain")
+          blocks (mapv #(db-test/find-block-by-content @conn %) ["A" "B" "C" "D"])]
+      (doseq [[source target] (partition 2 1 blocks)]
+        (d/transact! conn [{:db/id (:db/id source) :block/link (:db/id target)}]))
+      (-> (p/let [_ (markdown-mirror/<render-page-content test-repo @conn page {})
+                  _ (evict-tx! test-repo conn
+                              (d/transact! conn [{:db/id (:db/id (last blocks)) :block/title "revised"}]))
+                  content (markdown-mirror/<render-page-content test-repo @conn page {})]
+            (is (= (markdown-mirror/render-page-content-full @conn page {}) content)))
+          (p/catch #(is false (str %)))
+          (p/finally done)))))
+
+(deftest embed-source-properties-match-full-test
+  (async done
+    (let [conn (db-test/create-conn-with-blocks
+                {:properties {:user.property/priority {:logseq.property/type :number}}
+                 :pages-and-blocks [{:page {:block/title "Properties"}
+                                     :blocks [{:block/title "source"
+                                               :build/properties {:user.property/priority 1}}
+                                              {:block/title "target"}]}]})
+          page (db-test/find-page-by-title @conn "Properties")
+          source (db-test/find-block-by-content @conn "source")
+          target (db-test/find-block-by-content @conn "target")]
+      (d/transact! conn [{:db/id (:db/id source) :block/link (:db/id target)}])
+      (-> (p/let [content (markdown-mirror/<render-page-content test-repo @conn page {})]
+            (is (= (markdown-mirror/render-page-content-full @conn page {}) content)))
+          (p/catch #(is false (str %)))
+          (p/finally done)))))
+
+(deftest source-child-embed-keeps-independent-context-test
+  (async done
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks [{:page {:block/title "Source"}
+                                     :blocks [{:block/title "outer"
+                                               :build/children [{:block/title "child"}]}]}
+                                    {:page {:block/title "Target"}
+                                     :blocks [{:block/title "target"}]}]})
+          page (db-test/find-page-by-title @conn "Source")
+          target (db-test/find-block-by-content @conn "target")]
+      (doseq [title ["outer" "child"]]
+        (d/transact! conn [{:db/id (:db/id (db-test/find-block-by-content @conn title))
+                           :block/link (:db/id target)}]))
+      (-> (p/let [content (markdown-mirror/<render-page-content test-repo @conn page {})]
+            (is (= (markdown-mirror/render-page-content-full @conn page {}) content)))
+          (p/catch #(is false (str %)))
+          (p/finally done)))))
+
+(deftest superseded-rename-cleans-original-path-test
+  (async done
+    (let [{:keys [platform files]} (fake-platform)
+          opts {:platform platform :defer? true}
+          conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "Before"} :blocks [{:block/title "initial"}]}])
+          page (db-test/find-page-by-title @conn "Before")
+          block (db-test/find-block-by-content @conn "initial")]
+      (markdown-mirror/set-enabled! test-repo true)
+      (-> (p/let [_ (markdown-mirror/<mirror-page! test-repo @conn (:db/id page) opts)
+                  rename-report (d/transact! conn [{:db/id (:db/id page)
+                                                    :block/title "After" :block/name "after"}])
+                  _ (markdown-mirror/<handle-tx-report! test-repo conn rename-report opts)
+                  race (let [pending (markdown-mirror/<flush-repo! test-repo opts)]
+                         [pending (d/transact! conn [{:db/id (:db/id block) :block/title "latest"}])])
+                  _ (markdown-mirror/<handle-tx-report! test-repo conn (second race) opts)
+                  _ (first race)
+                  _ (markdown-mirror/<flush-repo! test-repo opts)]
+            (is (= {(page-path "pages/After.md")
+                    (markdown-mirror/render-page-content-full @conn page {})}
+                   @files)))
+          (p/catch #(is false (str %)))
+          (p/finally (fn [] (markdown-mirror/set-enabled! test-repo false) (done)))))))
+
+(deftest deep-outline-renders-without-recursion-test
+  (async done
+    (let [depth 1500
+          conn (db-test/create-conn-with-blocks [{:page {:block/title "Deep"}}])
+          page (db-test/find-page-by-title @conn "Deep")]
+      (d/transact! conn
+                   (mapv (fn [i]
+                           {:db/id (- (inc i))
+                            :block/uuid (random-uuid)
+                            :block/title "node"
+                            :block/page (:db/id page)
+                            :block/parent (if (zero? i) (:db/id page) (- i))
+                            :block/order "a0"})
+                         (range depth)))
+      (-> (p/let [content (markdown-mirror/<render-page-content test-repo @conn page {})]
+            (is (= (str (page-marker (:block/uuid page)) "\n\n"
+                        (string/join "\n" (map #(str (.repeat "  " %) "- node") (range depth))))
+                   content)))
+          (p/catch #(is false (str %)))
           (p/finally done)))))
