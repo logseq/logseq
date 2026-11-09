@@ -171,6 +171,11 @@ let rec property_chosen d prop =
          ~ident:(ident_of prop)))
   else if is_checkbox prop then (
     write_prop_value d prop (Some (W.Bool false)))
+  else if d.d_target.uuids = []
+          && List.mem (type_of prop) ["default"; "url"]
+          && Option.fold ~none:true ~some:(fun values -> W.elems values = [])
+               (D.getf prop "property/closed-values") then
+    add_empty_text_block d prop
   else set_phase d (Value_edit prop)
 
 (* values may be bare eids, bare ident keywords or entity stubs whose
