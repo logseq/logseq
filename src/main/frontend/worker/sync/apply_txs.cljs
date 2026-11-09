@@ -1114,16 +1114,14 @@
     (mapcat
      (fn [item]
        (if (and (retract-entity-op? item)
-                (block-ref? (second item)))
-         (if-let [root (block-entity db (second item))]
+                (block-ref? (second item))
+                (block-entity db (second item)))
+         (let [root (block-entity db (second item))]
            (concat (->> (block-descendants root)
                         (remove #(contains? explicit-retracts (:db/id %)))
                         (map (fn [entity]
                                [:db/retractEntity (block-entity-ref entity)])))
-                   [item])
-           ;; Retracting an already-retracted entity is a no-op. Drop it so a
-           ;; concurrent recycle-gc from another client cannot fail rebase.
-           [])
+                   [item]))
          [item]))
      tx-data)))
 
@@ -1287,12 +1285,7 @@
                 tx-data (cond->> tx-data
                           db-before-local-reversal
                           (drop-local-reversal-stale-target-ops db-before-local-reversal db))
-                tx-data (if (and tx-data (= :recycle-gc (:outliner-op remote-tx)))
-                          (outliner-recycle/recycle-gc-tx-against-db db tx-data)
-                          tx-data)
-                tx-data (seq (tx-sanitize/sanitize-tx
-                              db (or tx-data [])
-                              {:drop-missing-retract-ops? true}))
+                tx-data (seq (tx-sanitize/sanitize-tx db tx-data))
                 tx-meta (apply-tx-meta remote-tx)
                 report (ldb/transact! conn tx-data tx-meta)
                 results' (cond-> results
@@ -1646,12 +1639,15 @@
         (ldb/transact! conn tx-data
                        {:outliner-op :recycle-delete-permanently})))
 
+    :recycle-gc
+    (let [[root-uuid deleted-at] args]
+      ;; Skip roots that a preceding remote tx restored, recycled again or removed.
+      (when-let [tx-data (outliner-recycle/gc-root-tx-data @conn root-uuid deleted-at)]
+        (ldb/transact! conn tx-data
+                       {:outliner-op :recycle-gc})))
+
     (let [[tx-data tx-meta] args
-          recycle-gc? (or (= :recycle-gc (:outliner-op tx-meta))
-                          (= :recycle-gc (:original-outliner-op tx-meta)))
-          tx-data (if recycle-gc?
-                    (outliner-recycle/recycle-gc-tx-against-db @conn tx-data)
-                    (expand-block-retracts-to-descendants @conn tx-data))]
+          tx-data (expand-block-retracts-to-descendants @conn tx-data)]
       (when-let [tx-data (seq tx-data)]
         (ldb/transact! conn tx-data tx-meta)))))
 

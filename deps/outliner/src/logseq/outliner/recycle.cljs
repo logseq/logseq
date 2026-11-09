@@ -287,47 +287,20 @@
       (ldb/transact! conn tx-data {:outliner-op :restore-recycled})
       true)))
 
-(defn- retract-entity-op?
-  [item]
-  (and (vector? item)
-       (= 2 (count item))
-       (contains? #{:db/retractEntity :db.fn/retractEntity} (first item))))
-
-(defn- tx-retract-target-entity
-  [db item]
-  (cond
-    (retract-entity-op? item)
-    (d/entity db (second item))
-
-    (and (vector? item)
-         (>= (count item) 4)
-         (= :db/retract (first item))
-         (= :block/uuid (nth item 2)))
-    (or (d/entity db (second item))
-        (d/entity db [:block/uuid (nth item 3)]))))
-
-(defn- recycled-root-uuids
-  [db root]
-  (when (and root (recycled? root))
-    (if (ldb/page? root)
-      (keep (fn [id]
-              (some-> (d/entity db id) :block/uuid))
-            (page-tree-ids db root))
-      (keep :block/uuid (block-subtree db root)))))
-
-(defn- recycled-root-retract-tx-data
-  [db root]
-  (some->> (recycled-root-uuids db root)
-           distinct
-           seq
-           (map (fn [block-uuid]
-                  [:db/retractEntity [:block/uuid block-uuid]]))))
-
 (defn ^:api permanently-delete-tx-data
   [db root]
-  (some->> (recycled-root-retract-tx-data db root)
-           (with-delete-cleanup-tx db)
-           seq))
+  (when (and root (recycled? root))
+    (some->> (if (ldb/page? root)
+               (keep (fn [id]
+                       (some-> (d/entity db id) :block/uuid))
+                     (page-tree-ids db root))
+               (keep :block/uuid (block-subtree db root)))
+             (map (fn [block-uuid]
+                    [:db/retractEntity [:block/uuid block-uuid]]))
+             distinct
+             seq
+             (with-delete-cleanup-tx db)
+             seq)))
 
 (defn ^:api permanently-delete!
   [conn root-uuid]
@@ -336,45 +309,52 @@
       (ldb/transact! conn tx-data {:outliner-op :recycle-delete-permanently})
       true)))
 
-(defn- expired-recycled-entities
+(defn- expired-recycled-roots
   [db {:keys [now-ms] :or {now-ms (common-util/time-ms)}}]
   (let [cutoff (- now-ms retention-ms)]
-    (->> (d/q '[:find [?e ...]
-                :in $ ?cutoff
-                :where
-                [?e :logseq.property/deleted-at ?deleted-at]
-                [(<= ?deleted-at ?cutoff)]]
-              db cutoff)
-         (map #(d/entity db %))
-         (filter recycled?))))
+    (->>
+     (d/q '[:find [?e ...]
+            :in $ ?cutoff
+            :where
+            [?e :logseq.property/deleted-at ?deleted-at]
+            [(<= ?deleted-at ?cutoff)]]
+          db cutoff)
+     (map #(d/entity db %))
+     (filter recycled?))))
 
 (defn- gc-tx-data
-  [db opts]
-  (when-let [retracts (->> (expired-recycled-entities db opts)
-                           (mapcat #(recycled-root-retract-tx-data db %))
-                           distinct
-                           seq)]
-    (seq (with-delete-cleanup-tx db retracts))))
+  [db roots]
+  (->> roots
+       (mapcat (fn [entity]
+                 (if (ldb/page? entity)
+                   (map (fn [id] [:db/retractEntity id]) (page-tree-ids db entity))
+                   (map (fn [node] [:db/retractEntity (:db/id node)]) (block-subtree db entity)))))
+       distinct
+       seq
+       (with-delete-cleanup-tx db)))
 
-(defn ^:api recycle-gc-tx-against-db
-  "Rebuild a recorded recycle-gc transaction against current db.
-
-  Retracts of restored (live) or already-missing entities are dropped. Remaining
-  retracts keep the current subtree of still-recycled roots, and ref/history
-  cleanup is recomputed so a later restore is not undone."
-  [db tx-data]
-  (when-let [retracts (->> tx-data
-                           (keep (fn [item] (tx-retract-target-entity db item)))
-                           (filter recycled?)
-                           (common-util/distinct-by :db/id)
-                           (mapcat #(recycled-root-retract-tx-data db %))
-                           distinct
-                           seq)]
-    (seq (with-delete-cleanup-tx db retracts))))
+(defn ^:api gc-root-tx-data
+  "Tx data that permanently deletes the recycled root GC saw, identified by
+  `root-uuid` and its `deleted-at`. Returns nil when the root has since been
+  restored, recycled again or removed."
+  [db root-uuid deleted-at]
+  (let [root (d/entity db [:block/uuid root-uuid])]
+    (when (= deleted-at (:logseq.property/deleted-at root))
+      (permanently-delete-tx-data db root))))
 
 (defn ^:api gc!
+  "Permanently deletes expired recycled roots in one synced transaction and
+  returns its tx report, or nil when nothing expired.
+
+  The `:recycle-gc` outliner op recorded per root lets db-sync replay the GC
+  against the current db on every rebase instead of replaying raw retracts."
   [conn opts]
-  (when-let [tx-data (seq (gc-tx-data @conn opts))]
-    (ldb/transact! conn tx-data {:outliner-op :recycle-gc
-                                 :gen-undo-ops? false})
-    true))
+  (let [db @conn
+        roots (expired-recycled-roots db opts)]
+    (when-let [tx-data (seq (gc-tx-data db roots))]
+      (ldb/transact! conn tx-data {:outliner-op :recycle-gc
+                                   :outliner-ops (mapv (fn [root]
+                                                         [:recycle-gc [(:block/uuid root)
+                                                                       (:logseq.property/deleted-at root)]])
+                                                       roots)
+                                   :gen-undo-ops? false}))))
