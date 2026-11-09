@@ -125,6 +125,50 @@ main.ls-fold-button-on-right {
 
   .block-main-container {
     padding-right: calc(1.2rem + env(safe-area-inset-right, 0px)); /* leave room for the right fold toggle */
+
+    /* block.css shifts heading wrappers with top, which makes them the
+       absolute arrow's containing block. Stay static and use the mobile
+       app's margins. Journal blocks are outside .blocks-container, so this
+       is scoped to the fold-on-right root rather than that class. */
+    &[data-has-heading],
+    &:has(textarea.h1),
+    &:has(textarea.h2) {
+      > .block-control-wrap {
+        @apply static;
+      }
+    }
+
+    &[data-has-heading="1"],
+    &:has(textarea.h1) {
+      > .block-control-wrap,
+      > .block-control-wrap > .block-control {
+        @apply mt-[18px];
+      }
+
+      > .block-control-wrap.is-with-icon {
+        margin-top: calc(0.25rem + (2rem * 1.38 - var(--ls-block-icon-size, 28px)) / 2);
+      }
+
+      > .block-control-wrap.is-with-icon > .block-control {
+        @apply mt-0;
+      }
+    }
+
+    &[data-has-heading="2"],
+    &:has(textarea.h2) {
+      > .block-control-wrap,
+      > .block-control-wrap > .block-control {
+        @apply mt-3;
+      }
+
+      > .block-control-wrap.is-with-icon {
+        margin-top: calc(0.25rem + (1.5rem * 1.38 - var(--ls-block-icon-size, 24px)) / 2);
+      }
+
+      > .block-control-wrap.is-with-icon > .block-control {
+        @apply mt-0;
+      }
+    }
   }
 
   .cp__sidebar-left-layout {
