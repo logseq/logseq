@@ -375,6 +375,7 @@ let show_custom_rect ~rect ~cls content =
 let show_select ~(anchor : U.el) ~items ~placeholder ?(multiple = false)
     ?(selected_values = [])
     ?(input_padding_horizontal = 8)
+    ?(width = 224) ?(fit_results = false)
     ?on_apply ?(extra : (unit -> t option) option)
     ?(wrap_cls = "") ?(align_end = false) ?(footer = [])
     ?(custom_content = fun _ -> None) ~on_chosen () =
@@ -467,9 +468,11 @@ let show_select ~(anchor : U.el) ~items ~placeholder ?(multiple = false)
           else text ~style_class:"ls-ac-empty" ~value:(I.t "search/no-result")
             ~padding_vertical:6 ~padding_horizontal:8 []
         else
+          let height = 32 * List.length visible in
           list ~accessibility_identifier:"ui__ac-inner"
             ~style_class:"cp__select-results"
-            ~height:(min 280 (32 * List.length visible))
+            ~height:(if fit_results then height else min 280 height)
+            ?min_height:(if fit_results then Some height else None)
             ~scroll_target:(reactive (fun picked ->
               "ac-" ^ string_of_int (bounded (List.length visible) picked)) csig)
             ~scroll_token_signal:csig ~scroll_anchor:`nearest
@@ -481,7 +484,7 @@ let show_select ~(anchor : U.el) ~items ~placeholder ?(multiple = false)
         ; Ui_components.Prop.font_size "14px"
         ; Ui_components.Prop.line_height "20px" ]
         (column ~key:("vpsel-" ^ string_of_int id)
-           ~style_class:"cp__select cp__select-main" ~width:224 ~cross:`stretch
+           ~style_class:"cp__select cp__select-main" ~width ~cross:`stretch
            ([ Ui_components.with_props
                 [ Ui_components.Prop.font_size "16px"
                 ; Ui_components.Prop.line_height "24px"

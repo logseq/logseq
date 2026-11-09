@@ -590,6 +590,7 @@ let picker inst ~tree ~loc ~anchor =
   ignore
     (P.show_select ~anchor ~placeholder:(I.t "query.builder/add-filter-or-operator-placeholder")
        ~items:(P.fixed_items items) ~wrap_cls:"query-builder-picker"
+       ~width:260 ~fit_results:true
        ~on_chosen:(fun it _ _ ->
          match it.P.si_value with
          | op when is_op op ->
@@ -720,7 +721,7 @@ and add_filter_btn inst ~tree ~loc ~with_label : t =
     ~icon:(`app "plus") ~size:`sm ~height:24 ~foreground:"muted-foreground"
     ~label:(I.t "view.filter/filter")
     ?text:(if with_label then Some (I.t "view.filter/filter") else None)
-    ~grow:1. ~min_width:0
+    ~min_width:0
     ~style_class:"jtrigger"
     ~on_press:(fun _ ->
       match Ui_services.dom_by_id id with
@@ -756,7 +757,7 @@ let editor_el inst ~tree : t =
         ; text ~value:message [] ]
   | _ ->
   column ~style_class:"cp__query-builder"
-    [ column ~key:"f" ~gap:4
+    [ row ~key:"f" ~gap:4 ~cross:`center ~flex_wrap:`wrap
         ( (match !tree with
            | COp ("and", []) -> []
            | t ->

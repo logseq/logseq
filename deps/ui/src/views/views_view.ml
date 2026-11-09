@@ -149,6 +149,7 @@ let body_eq (a : V.vstate) (b : V.vstate) =
   && a.V.query_view = b.V.query_view
   && a.V.query_error = b.V.query_error
   && a.V.is_advanced = b.V.is_advanced
+  && a.V.query_has_settings = b.V.query_has_settings
   && a.V.qsrc = b.V.qsrc
   && a.V.view_uuid = b.V.view_uuid
   && a.V.views = b.V.views
@@ -252,19 +253,45 @@ let query_content inst (s : V.vstate) : t =
           ~body:(body_el inst) ]
   | `Loading -> spacer ~key:"query-loading" []
 
+let query_setting_el inst : t =
+  let current = V.current_view inst in
+  let label = I.t "block/set-query" in
+  Ui_components.button ~key:"qs" ~variant:`ghost ~size:`icon
+    ~width:24 ~height:24 ~style_class:"ls-query-setting"
+    ~transition:"opacity .3s ease-in"
+    ~foreground:"var(--ls-secondary-text-color, var(--lx-gray-11))"
+    ~label ~data_attrs:[ "data-tooltip", "" ]
+    ~icon:(`app "settings")
+    ~on_press:(fun _ -> if current () then Views_query.toggle_source_editor inst)
+    [ Ui_components.with_props [ Ui_components.card_shadow ]
+        (tooltip ~key:"query-setting-tip" ~text:label ~anchor:`above
+           ~anchor_alignment:`center ~anchor_offset:8. ~tooltip_delay:500
+           ~style_class:"ui__tooltip-content"
+           ~padding_horizontal:12 ~padding_vertical:6 ~corner_radius:6
+           ~background:"hsl(var(--popover))"
+           ~foreground:"hsl(var(--popover-foreground))" []) ]
+
+let query_builder_header inst (s : V.vstate) : t =
+  let builder =
+    match Views_query.parse_src_result s.V.qsrc with
+    | Error _ | Ok (Views_query.QDatalog _) -> []
+    | Ok _ ->
+        if s.V.is_advanced then []
+        else [ Views_builder.builder_el inst ~tree:(Views_builder.tree_for inst) ]
+  in
+  let settings =
+    if s.V.query_has_settings && not (Ui_services.env_publishing ()) then
+      [ query_setting_el inst ]
+    else []
+  in
+  row ~key:"query-builder-header" ~style_class:"block-head-wrap"
+    ~cross:`center ~gap:4 ~min_width:0 ~flex_wrap:`wrap (builder @ settings)
+
 let query_view_el inst : t =
   Logseq_el.fragment
     [ column ~gap:0 ~min_width:0 ~min_height:0 ~grow:1.
         [ column ~gap:0 ~min_width:0 ~min_height:0 ~grow:1.
-            [ reactive ~equal:body_eq
-                (fun s ->
-                  (* DSL queries, including blank ones, get the builder panel. *)
-                  match Views_query.parse_src_result s.V.qsrc with
-                  | Error _ | Ok (Views_query.QDatalog _) -> spacer ~key:"builder-off" []
-                  | Ok _ ->
-                      if s.V.is_advanced then spacer ~key:"builder-off" []
-                      else Views_builder.builder_el inst ~tree:(Views_builder.tree_for inst))
-                (sig_of inst)
+            [ reactive ~equal:body_eq (query_builder_header inst) (sig_of inst)
             ; reactive ~equal:(fun a b -> query_content_key a=query_content_key b
                 && (a.V.query_view = W.Nil || a.V.blocks == b.V.blocks))
                 (query_content inst) (sig_of inst)
@@ -1043,9 +1070,7 @@ let view ~kind ~owner : t =
    | _ -> view_el inst)
     ctx parent
 
-(* toggle the raw-source editor for the query block's view — called by
-   the .ls-query-setting button render.ml emits inside
-   .custom-query-results *)
+(* Toggle the raw-source editor of the cached query instance. *)
 let toggle_query_editor ~block_uuid =
   match Hashtbl.find_opt query_insts (Runtime.repo (), block_uuid) with
   | Some inst -> Views_query.toggle_source_editor inst
