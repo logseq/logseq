@@ -1320,8 +1320,10 @@ let handle_contextmenu st (ev : Ui_services.ev) =
               ev.Ui_services.stop_propagation ();
               (* cljs block-content contextmenu selects the block it
                  opened on, unless it is already in a multi-selection *)
-              if not (Editor_state.is_selected id) then
-                Editor_actions.select_single id;
+              Option.iter (fun row ->
+                if not (Editor_state.Row_set.mem row (Editor_state.selected_rows ())) then
+                  Editor_actions.select_row_in ~scope:(Editor_actions.scope_of_el blk) row)
+                (Option.bind (blk.Ui_services.closest ".ls-block") Editor_state.row_of_el);
               close_cm_picker ();
               (* cljs popup-show! re-anchors the menu to the event
                  target element (centered, dropping from its bottom
@@ -1401,8 +1403,10 @@ let handle_contextmenu st (ev : Ui_services.ev) =
                      && not (el.Ui_services.editable ()) ->
                   ev.Ui_services.prevent_default ();
                   ev.Ui_services.stop_propagation ();
-                  if not (Editor_state.is_selected id) then
-                    Editor_actions.select_single id;
+                  Option.iter (fun row ->
+                    if not (Editor_state.Row_set.mem row (Editor_state.selected_rows ())) then
+                      Editor_actions.select_row_in ~scope:(Editor_actions.scope_of_el blk) row)
+                    (Editor_state.row_of_el blk);
                   close_cm_picker ();
                   let ax, atop, abot = S.anchor_of_ev ev el in
                   S.open_cm st ~ax ~atop ~abot ~block_id:id ~multi:false

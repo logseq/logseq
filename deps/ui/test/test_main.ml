@@ -3068,9 +3068,13 @@ let test_editor_actions () =
     && not (Editor_actions.has_selected_ancestor sel "gc2")
     && not (Editor_actions.has_selected_ancestor sel "top"));
   check "range_between"
-    (Editor_actions.range_between "gc" "top" = [ "gc"; "p2"; "gc2"; "top" ]);
+    (List.map (fun row -> row.Editor_state.owner_uuid)
+      (Editor_actions.range_between (Editor_state.ordinary_row "gc") (Editor_state.ordinary_row "top"))
+    = [ "gc"; "p2"; "gc2"; "top" ]);
   check "range_between reversed"
-    (Editor_actions.range_between "top" "gc" = [ "gc"; "p2"; "gc2"; "top" ]);
+    (List.map (fun row -> row.Editor_state.owner_uuid)
+      (Editor_actions.range_between (Editor_state.ordinary_row "top") (Editor_state.ordinary_row "gc"))
+    = [ "gc"; "p2"; "gc2"; "top" ]);
   check "flat_uuids"
     (Editor_actions.flat_uuids () = [ "a"; "ca"; "p1"; "gc"; "p2"; "gc2"; "top" ]);
   check "drop_own_order_list ok"
@@ -3584,6 +3588,29 @@ let test_title_refs3 () =
 
 (* ---- editor_actions: selection membership and document order ---- *)
 
+let test_node_occurrence_projection () =
+  let module S = Editor_state in
+  let target = { (block ~children:[block "leaf" "Leaf"] "u" "Nested target") with
+    Model.block_db_id = Some 3 } in
+  let nested = { (block "j" "") with
+    Model.block_link = Some 3; block_embed_children = [target] } in
+  let target = { (block ~children:[nested] "t" "Target") with
+    Model.block_db_id = Some 2 } in
+  let hosts = List.map (fun uuid ->
+    { (block uuid "") with Model.block_link = Some 2
+      ; block_embed_children = [block "unrelated" "Unrelated"; target] }) ["h1"; "h2"] in
+  let actual = S.projected_rows ~scope:"main" hosts |> List.map (fun row ->
+    row.S.row_ref.owner_uuid, row.row_ref.link_hosts, S.target_uuid row,
+    Option.map (fun parent -> parent.S.owner_uuid, parent.link_hosts) row.parent) in
+  check "Node projection preserves repeated and nested occurrence identity"
+    (actual =
+      [ "h1", [], "t", None
+      ; "j", ["h1"], "u", Some ("h1", [])
+      ; "leaf", ["h1"; "j"], "leaf", Some ("j", ["h1"])
+      ; "h2", [], "t", None
+      ; "j", ["h2"], "u", Some ("h2", [])
+      ; "leaf", ["h2"; "j"], "leaf", Some ("j", ["h2"]) ])
+
 let test_selected_uuids () =
   let module S = Editor_state in
   let saved_model = !model_stub in
@@ -3602,7 +3629,7 @@ let test_selected_uuids () =
   List.iter (fun (label, model, scope, expected) ->
       model_stub := model;
       S.st := Some (Signal.state sched
-        { S.initial with selected = S.String_set.of_list (List.rev expected)
+        { S.initial with selected = S.Row_set.of_list (List.map S.ordinary_row (List.rev expected))
         ; selection_scope = scope });
       check ("selected_uuids document order: " ^ label)
         (Editor_actions.selected_uuids () = expected))
@@ -3615,7 +3642,7 @@ let test_selected_uuids () =
       { Model.initial with journals = [p; { (page [block "b" "Second"]) with
           page_uuid = Some "q" }] }, "main", ["p"; "z"; "a"; "m"; "q"; "b"] ];
   S.st := Some (Signal.state sched
-    { S.initial with selected = S.String_set.of_list ["unloaded"; "z"] });
+    { S.initial with selected = S.Row_set.of_list (List.map S.ordinary_row ["unloaded"; "z"]) });
   model_stub := { Model.initial with route_page = Some p };
   check "selected_uuids retains unresolved membership during reload"
     (S.String_set.equal (S.String_set.of_list (Editor_actions.selected_uuids ()))
@@ -4671,6 +4698,7 @@ let () =
   test_edn3 ();
   test_block_parse3 ();
   test_title_refs3 ();
+  test_node_occurrence_projection ();
   test_selected_uuids ();
   test_update_sidebar2 ();
   test_decode7 ();

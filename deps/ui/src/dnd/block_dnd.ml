@@ -120,22 +120,24 @@ let hide_indicator () =
 
 (* ---------- drag lifecycle ---------- *)
 
-let dragging_uuid : string option ref = ref None
-let drop_target : (string * string) option ref = ref None
+let dragging_row : S.row_ref option ref = ref None
+let drop_target : (S.row_ref * string) option ref = ref None
 
 let clear_drop_target () =
   drop_target := None;
   hide_indicator ()
 
 let on_drag_start ev _m =
-  dragging_uuid := None;
+  dragging_row := None;
   (match K.op_source (K.ev_operation ev) with
    | Some d ->
        Option.iter
          (fun el ->
-           let src = K.entity_uuid (K.entity_data d) in
-           A.begin_block_drag ~scope:(A.scope_of_el (Ui_dom_web.el_of el)) src;
-           dragging_uuid := Some src)
+           let origin = Ui_dom_web.el_of el in
+           Option.iter (fun row ->
+             A.begin_block_drag ~row_ref:row ~scope:(A.scope_of_el origin) row.S.owner_uuid;
+             dragging_row := Some row)
+             (Option.bind (origin.Ui_services.closest ".ls-block") S.row_of_el))
          (K.draggable_element d)
    | None -> ());
   clear_drop_target ()
@@ -155,8 +157,9 @@ let coords_of ev op =
 (* cljs block-drag-over: near the top of the first block -> :top; deep
    indent (x-offset > 50) -> :nested; else :sibling *)
 let update_drop_target src tgt_el client_x client_y =
-  match Web_dom.el_get_attr tgt_el "data-blockid" with
-  | Some tgt when A.can_drop_dragged_block src tgt ->
+  match S.row_of_el (Ui_dom_web.el_of tgt_el) with
+  | Some row when A.can_drop_dragged_block src row.S.owner_uuid ->
+      let tgt = row.S.owner_uuid in
       let rect = Web_dom.el_bounding_rect tgt_el in
       let first =
         match S.find_parent tgt with
@@ -168,7 +171,7 @@ let update_drop_target src tgt_el client_x client_y =
           ~top:(Web_dom.rect_top rect) ~x:client_x ~y:client_y
         |> Block_drag.zone_name
       in
-      drop_target := Some (tgt, move_to);
+      drop_target := Some (row, move_to);
       show_indicator tgt_el move_to
   | _ ->
       clear_drop_target ()
@@ -179,9 +182,10 @@ let update_drop_target src tgt_el client_x client_y =
    block to a position that is no longer under the pointer. *)
 let update_from_event ev =
   if S.ready () then
-    match !dragging_uuid with
+    match !dragging_row with
     | None -> ()
-    | Some src -> (
+    | Some source -> (
+        let src = source.S.owner_uuid in
         let op = K.ev_operation ev in
         match K.op_target op with
         | Some dp -> (
@@ -196,12 +200,12 @@ let update_from_event ev =
 let on_drag_end ev _m =
   (if S.ready () && not (K.ev_canceled ev) then begin
      update_from_event ev;
-     match (!dragging_uuid, !drop_target) with
+     match (!dragging_row, !drop_target) with
      | Some src, Some (tgt, move_to) ->
-         A.drop_dragged_block src tgt move_to
+         A.drop_dragged_block ~source_ref:src ~target_ref:tgt src.S.owner_uuid tgt.S.owner_uuid move_to
      | _ -> ()
    end);
-  dragging_uuid := None;
+  dragging_row := None;
   clear_drop_target ()
 
 (* ---------- install ---------- *)
@@ -230,7 +234,7 @@ let install () =
     K.on mon "dragover" (fun ev _ -> update_from_event ev) ();
     K.on mon "dragend" on_drag_end ();
     let cancel ev =
-      dragging_uuid := None;
+      dragging_row := None;
       clear_drop_target ();
       K.stop (K.actions m) (K.stop_opts ~event:ev ~canceled:true ())
     in

@@ -54,22 +54,24 @@ let mounted_uuids ~scope ctx =
   Signal.on_dispose ctx.Lui_ui.ui_scope (fun () -> release_mounted projection);
   Signal.value projection.state
 
-let track_mounted ~scope ~uuid child : t =
+let track_mounted ?mount_key ?current_uuid:(_ : (unit -> string) option)
+    ~scope ~uuid child : t =
  fun ctx parent ->
   let projection = retain_mounted ctx scope in
-  let count = Option.value (Hashtbl.find_opt projection.counts uuid) ~default:0 in
-  Hashtbl.replace projection.counts uuid (count + 1);
+  let key = Option.value mount_key ~default:uuid in
+  let count = Option.value (Hashtbl.find_opt projection.counts key) ~default:0 in
+  Hashtbl.replace projection.counts key (count + 1);
   if count = 0 then begin
-    projection.mounted <- Mounted_uuids.add uuid projection.mounted;
+    projection.mounted <- Mounted_uuids.add key projection.mounted;
     Signal.set projection.state projection.mounted
   end;
   Signal.on_dispose ctx.Lui_ui.ui_scope (fun () ->
-    let count = Hashtbl.find projection.counts uuid in
+    let count = Hashtbl.find projection.counts key in
     if count = 1 then begin
-      Hashtbl.remove projection.counts uuid;
-      projection.mounted <- Mounted_uuids.remove uuid projection.mounted;
+      Hashtbl.remove projection.counts key;
+      projection.mounted <- Mounted_uuids.remove key projection.mounted;
       Signal.set projection.state projection.mounted
-    end else Hashtbl.replace projection.counts uuid (count - 1);
+    end else Hashtbl.replace projection.counts key (count - 1);
     release_mounted projection);
   child ctx parent
 

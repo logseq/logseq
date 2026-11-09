@@ -872,7 +872,9 @@ let on_normal_key ev =
           match S.anchor () with
           | Some u when selected () ->
               ev.Ui_services.prevent_default ();
-              A.enter_edit ~scope:(S.selection_scope ()) u 0
+              (match S.resolve_row ~scope:(S.selection_scope ()) u with
+               | Some row -> A.enter_edit ~row_ref:u ~scope:(S.selection_scope ()) (S.target_uuid row) 0
+               | None -> ())
           | _ -> ()))
   | "Escape" ->
       (* cljs: first Escape closes the action-bar popover, the next one
@@ -1411,55 +1413,40 @@ let on_pending_focus_key ev e =
    falls to on_normal_key and dies — on the web the click handler
    enters edit synchronously first. Keys that outrun the pending edit
    replay into the landed block instead. *)
-let last_block_mousedown : (string * float * string) ref = ref ("", 0.0, "")
+type click_edit =
+  { uuid : string; row_ref : S.row_ref option; armed_ms : float
+  ; before : int ref option
+  }
+
+let last_block_mousedown : click_edit option ref = ref None
+
+let click_edit_matches click e =
+  click.uuid = e.S.uuid && click.row_ref = Some e.S.row_ref
 
 let racing_edit_uuid () =
-  let (u, t, stale) = !last_block_mousedown in
-  (* the gap stays open only until the mousedown's own enter_edit
-     resolves: while the replaced record (or no record) is still the
-     editing one, keys belong to the incoming block. Once editing
-     lands on a third uuid — e.g. Enter split the clicked block — the
-     mousedown's intent is spent and queueing for it drops keys. *)
-  let e = S.editing_uuid () in
-  let gap_open =
-    (stale <> "" && e = Some stale)
-    || (stale = "" && e = None)
-    || e = Some u
-  in
-  if u <> "" && gap_open && Ui_services.time_now () -. t < 5000.0
-  then Some u
-  else None
+  match !last_block_mousedown with
+  | Some click when Ui_services.time_now () -. click.armed_ms < 5000. ->
+      let gap_open = match S.editing () with
+        | None -> click.before = None
+        | Some e -> (Option.fold ~none:false ~some:(fun epoch -> epoch == e.S.epoch) click.before)
+            || click_edit_matches click e in
+      if gap_open then Some click.uuid else None
+  | _ -> None
 
-(* replay [ev] through the remount-window handler once the mousedown's
-   own enter_edit lands. A specific-uuid replay waits for that uuid;
-   the add-button wildcard ("*") waits for an edit on ANY block other
-   than the one the mousedown blurred — replaying into the dying record
-   would write keystrokes over a block the user never opened. A record
-   that never seeded its buffer (title_for_edit still pending) shows
-   base=buffer="" while the model holds a title — replaying into it
-   would commit the bare key over the block's real text, so drop the
-   key instead. The queued action re-queues itself while the click is
-   still racing so an unrelated drain can't drop it; a click that
-   never enters edit lets the window expire and the key is dropped
-   like a normal-mode shortcut miss. *)
-let queue_racing_key ev uuid =
+let queue_racing_key ev _uuid =
   ev.Ui_services.stop_propagation ();
-  let (_, _, stale) = !last_block_mousedown in
+  let request = !last_block_mousedown in
   let replay e =
-    if
-      e.S.base = "" && e.S.buffer = ""
-      && String.trim (A.display_title e.S.uuid) <> ""
-    then () (* unseeded record — dropping beats corrupting the title *)
-    else on_pending_focus_key ev e
-  in
+    if e.S.base = "" && e.S.buffer = "" && String.trim (A.display_title e.S.uuid) <> ""
+    then () else on_pending_focus_key ev e in
   let rec action () =
-    match S.editing () with
-    | Some e when e.S.uuid = uuid -> replay e
-    | Some e when uuid = "*" && e.S.uuid <> stale -> replay e
-    | _ ->
-        if Option.is_some (racing_edit_uuid ()) then
-          S.pending_focus_actions := action :: !S.pending_focus_actions
-  in
+    if request == !last_block_mousedown then
+      match request, S.editing () with
+      | Some click, Some e when click_edit_matches click e -> replay e
+      | Some { uuid = "*"; before; _ }, Some e
+        when not (Option.fold ~none:false ~some:(fun epoch -> epoch == e.S.epoch) before) -> replay e
+      | _ -> if Option.is_some (racing_edit_uuid ()) then
+          S.pending_focus_actions := action :: !S.pending_focus_actions in
   S.pending_focus_actions := action :: !S.pending_focus_actions
 
 (* Native gestures use the host's hit-tested document targets, not DOM
@@ -1468,16 +1455,16 @@ let queue_racing_key ev uuid =
 module Drag = Block_drag
 
 let drag_state = ref Drag.empty
-let drag_scope = ref "main"
+let drag_scope = ref ("main", None, None)
 
 let drag_context () = Runtime.repo (), Runtime.route ()
 
 let publish_drag () =
   if S.ready () then begin
-    let next = Option.map (fun (source, target) ->
-      match target with
-      | Some (target, zone) -> source, target, Drag.zone_name zone
-      | None -> source, "", "") (Drag.preview !drag_state) in
+    let next = Option.bind (Drag.preview !drag_state) (fun (_, target) ->
+      let _, source, target_row = !drag_scope in
+      Option.map (fun source -> source, target_row,
+        (match target with Some (_, zone) -> Drag.zone_name zone | None -> "")) source) in
     if next <> S.drag () then S.set_drag next
   end
 
@@ -1487,26 +1474,31 @@ let drag_cancel () =
 
 let drag_reset () =
   drag_state := Drag.empty;
+  drag_scope := ("main", None, None);
   publish_drag ()
 
 let arm_drag (ev : Ui_services.ev) =
   match closest ".bullet-container" ev.Ui_services.target with
   | Some el -> (
-      match el.Ui_services.attr "data-blockid" with
-      | Some u when S.find u <> None ->
-          drag_scope := A.scope_of_el el;
+      match Option.bind (closest ".ls-block" (Some el)) S.row_of_el with
+      | Some row when S.find row.S.owner_uuid <> None ->
+          let u = row.S.owner_uuid in
+          drag_scope := (A.scope_of_el el, Some row, None);
           drag_state := Drag.arm ~context:(drag_context ()) ~source:u
             ~x:ev.Ui_services.x ~y:ev.Ui_services.y
       | _ -> ())
   | None -> ()
 
 let native_drag_target ev src =
+  let scope, source, _ = !drag_scope in
+  drag_scope := (scope, source, None);
   if readonly_block_target ev.Ui_services.target then None
   else
     match closest ".ls-block" (ev.Ui_services.target) with
     | Some el -> (
-        match el.Ui_services.attr "data-blockid" with
-        | Some t when A.can_drop_dragged_block src t ->
+        match S.row_of_el el with
+        | Some row when A.can_drop_dragged_block src row.S.owner_uuid ->
+            let t = row.S.owner_uuid in
             let left, top, width, height = el.Ui_services.rect () in
             if el.Ui_services.rect_pending () || width <= 0. || height <= 0.
             then None
@@ -1516,6 +1508,7 @@ let native_drag_target ev src =
                 | Some (_, idx) -> idx = 0
                 | None -> false
               in
+              drag_scope := (scope, source, Some row);
               Some (t, Drag.zone ~first ~left ~top
                 ~x:ev.Ui_services.x ~y:ev.Ui_services.y)
         | _ -> None)
@@ -1538,7 +1531,8 @@ let on_native_pointermove ev =
           ~x:ev.Ui_services.x ~y:ev.Ui_services.y
           ~target:(native_drag_target ev source) !drag_state;
         if not was_active && Drag.preview !drag_state <> None then
-          A.begin_block_drag ~scope:!drag_scope source;
+          (let scope, row_ref, _ = !drag_scope in
+           A.begin_block_drag ?row_ref ~scope source);
         publish_drag ()
 
 let on_native_pointerup ev =
@@ -1553,7 +1547,8 @@ let on_native_pointerup ev =
           drag_state := next;
           publish_drag ();
           Option.iter (fun (source, target, zone) ->
-            A.drop_dragged_block source target (Drag.zone_name zone)) drop
+            let _, source_ref, target_ref = !drag_scope in
+            A.drop_dragged_block ?source_ref ?target_ref source target (Drag.zone_name zone)) drop
 
 let consume_drag_click () =
   let next, suppress = Drag.consume_click !drag_state in
@@ -1826,14 +1821,14 @@ let on_click ev =
             ev.Ui_services.prevent_default ();
             match uuid_of_prefixed "control-" (el.Ui_services.id ()) with
             | Some u ->
-                A.toggle_collapse ~scope:(A.scope_of_el el) u
+                A.toggle_collapse ?row_ref:(Option.bind (closest ".ls-block" (Some el)) S.row_of_el) ~scope:(A.scope_of_el el) u
             | None -> ())
         | None -> (
             match closest ".block-children-left-border" target with
             | Some el -> (
                 match el.Ui_services.attr "data-blockid" with
                 | Some u ->
-                    A.toggle_collapse ~scope:(A.scope_of_el el) u
+                    A.toggle_collapse ?row_ref:(Option.bind (closest ".ls-block" (Some el)) S.row_of_el) ~scope:(A.scope_of_el el) u
                 | None -> ())
             | None -> (
                 match closest ".bullet-container" target with
@@ -1930,7 +1925,7 @@ let on_click ev =
                                                    the tree where the click
                                                    landed mounts the editor *)
                                                 let scope = A.scope_of_el el in
-                                                A.enter_edit ~scope u
+                                                A.enter_edit ?row_ref:(Option.bind (closest ".ls-block" (Some el)) S.row_of_el) ~scope u
                                                   (String.length
                                                      (A.model_title u))
                                             | None -> ())
@@ -1967,7 +1962,7 @@ let on_click ev =
                                                     with
                                                     | Some u ->
                                                         let scope = A.scope_of_el el in
-                                                        A.enter_edit ~scope
+                                                        A.enter_edit ?row_ref:(S.row_of_el el) ~scope
                                                           u
                                                           (String.length
                                                              (A.model_title
@@ -2035,52 +2030,22 @@ let on_mousedown (ev : Ui_services.ev) =
        mousedown is about to replace, so wildcard replays never write
        into that dying record. Mirrors the interactive exclusions
        on_click applies before enter_edit. *)
-    let stale =
-      match S.editing () with Some e -> e.S.uuid | None -> ""
-    in
     let now = Ui_services.time_now () in
+    let before = Option.map (fun e -> e.S.epoch) (S.editing ()) in
+    let click uuid row_ref = Some { uuid; row_ref; armed_ms = now; before } in
     last_block_mousedown :=
-      (if readonly then ("", now, stale) else match
-         closest
-           "button, a, input, audio, video, details, summary, \
-            sup.fn, [contenteditable=true], .cloze, \
-            .cloze-revealed, .query-table, .image-resize, \
-            .view-action-type, .ui-fenced-code-editor, \
-            .asset-container, .ls-comment-row"
-           ev.Ui_services.target
-       with
-       | Some _ -> ("", now, stale)
-       | None -> (
-           match closest ".block-content" ev.Ui_services.target with
-           | Some el ->
-               ( Option.value (el.Ui_services.attr "data-blockid")
-                   ~default:""
-               , now, stale )
-           | None -> (
-               (* the add-block row appends a block then enters edit —
-                  its uuid doesn't exist yet, so record a wildcard that
-                  replays into the next edit landing *)
-               match
-                   closest ".block-add-button" ev.Ui_services.target
-               with
-               | Some _ -> ("*", now, stale)
-               | None -> (
-                   (* row padding lands inside .ls-block but outside
-                      .block-content — the block it belongs to is still
-                      the edit the click is about to start *)
-                   match closest ".ls-block" ev.Ui_services.target with
-                   | Some el ->
-                       ( Option.value
-                           (uuid_of_prefixed "ls-block-"
-                              (el.Ui_services.id ()))
-                           ~default:""
-                       , now, stale )
-                   | None -> ("", now, stale)))));
+      (if readonly || closest
+          "button, a, input, audio, video, details, summary, sup.fn, [contenteditable=true], .cloze, .cloze-revealed, .query-table, .image-resize, .view-action-type, .ui-fenced-code-editor, .asset-container, .ls-comment-row"
+          ev.Ui_services.target <> None then None
+       else if closest ".block-add-button" ev.Ui_services.target <> None
+       then click "*" None
+       else match closest ".ls-block" ev.Ui_services.target with
+         | Some el -> Option.bind (el.Ui_services.attr "data-blockid")
+             (fun uuid -> click uuid (S.row_of_el el))
+         | None -> None);
     (match !last_block_mousedown with
-     | u, _, stale when u <> "" && u <> "*"
-                        && (u <> stale || closest ".editor-wrapper" ev.Ui_services.target = None) ->
-         S.click_point :=
-           Some (u, now, ev.Ui_services.x, ev.Ui_services.y)
+     | Some click when click.uuid <> "*" && closest ".editor-wrapper" ev.Ui_services.target = None ->
+         S.click_point := Some (click.uuid, now, ev.Ui_services.x, ev.Ui_services.y)
      | _ -> S.click_point := None);
     if S.editing () <> None then
     match

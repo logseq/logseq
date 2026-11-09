@@ -997,10 +997,12 @@ let test_queued_history_origin (h : host) =
 
 let test_delete_selection_history (h : host) =
   let* () = settle h 40 in
-  stage_page h [ Test_check.block "b0" "previous";
-                 Test_check.block "b1" "first"; Test_check.block "b2" "second" ];
+  let blocks = [ Test_check.block "b0" "previous";
+                 Test_check.block "b1" "first"; Test_check.block "b2" "second" ] in
+  stage_page h blocks;
   S.set (fun st -> { st with S.editing = None;
-      selected = S.String_set.of_list ["b1"; "b2"]; anchor = Some "b2" });
+      selected = S.Row_set.of_list (List.map S.ordinary_row ["b1"; "b2"]);
+      anchor = Some (S.ordinary_row "b2") });
   let expected = S.history_cursor () in
   check "selection history records the range anchor"
     (W.map_get_uuid expected "selection-anchor" = Some "b2");
@@ -1017,10 +1019,11 @@ let test_delete_selection_history (h : host) =
   let* () = settle h 40 in
   check "delete history keeps the selection before entering the previous block"
     (W.map_get !options "undo-redo/editor-info" = Some expected);
+  stage_page h blocks;
   let* () = A.restore_history
       (W.Map [ W.Keyword "undo?", W.Bool true;
                W.Keyword "editor-cursors", W.List [expected] ]) in
-  check "undo restores the selected range anchor" ((S.read ()).anchor = Some "b2");
+  check "undo restores the selected range anchor" ((S.read ()).anchor = Some (S.ordinary_row "b2"));
   reset_editor ();
   Js.Promise.resolve ()
 

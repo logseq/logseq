@@ -283,8 +283,15 @@ let observer () =
    in the scroll direction — cljs virtuoso items-rendered boundary.
    Unlike a per-entry intersection walk it can't regress the range when
    a stale row fires its observer late *)
-let extend_drag uuid =
-  if Block_selection.is_down () then Block_selection.extend_to uuid
+let extend_drag list_el index =
+  if Block_selection.is_down () then
+    match Web_dom.el_query list_el
+      ("[data-index='" ^ string_of_int index ^ "'] > .ls-block") with
+    | Some node ->
+        let el = Ui_dom_web.el_of node in
+        if Editor_actions.scope_of_el el = Editor_state.selection_scope () then
+          Option.iter Block_selection.extend_to (Editor_state.row_of_el el)
+    | None -> ()
 
 (* observe every [data-index] row under a [data-virtuoso-scroller] once;
    rows LUI rebuilds lose the marker and get re-observed *)
@@ -401,11 +408,11 @@ let attach (ctx : Lui_ui.ui_context) st margin list_id scroll_parent_id
           | Some `Down, _ :: _ ->
               (match List.nth_opt rows (List.length rows - 1) with
                | Some r when r.v_index < Array.length !data ->
-                   extend_drag (key_of !data.(r.v_index))
+                   extend_drag list_el r.v_index
                | _ -> ())
           | Some `Up, first :: _ ->
               if first.v_index < Array.length !data then
-                extend_drag (key_of !data.(first.v_index))
+                extend_drag list_el first.v_index
           | _ -> ()
         end
       in

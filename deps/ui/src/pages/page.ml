@@ -403,8 +403,8 @@ let title_content (page : Model.page) : t =
     ~id:("block-content-" ^ uuid) ~events:(String.concat " " events)
     ?on_dom_event:on_event
     ~attrs:
-      [ ("data-blockid", uuid); ("data-containerid", uuid); ("data-type", "default")
-      ; ("style", "width: 100%;display:inline;cursor:pointer") ]
+      (S.row_attrs (S.ordinary_row uuid) @ [ ("data-blockid", uuid); ("data-containerid", uuid); ("data-type", "default")
+      ; ("style", "width: 100%;display:inline;cursor:pointer") ])
     [ row ~key:"pt-bci" ~main:`space_between
         [ Ui_components.with_props
             [ Ui_components.Prop.flex_wrap `wrap ]
@@ -546,14 +546,14 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
              a dynamic selected class — migrates with the block
              extension *)
           Ui_parts.class_signal (S.selected_sig ())
-            (fun selected ->
-              if S.String_set.mem uuid selected then "selected ls-block"
+            (fun (scope, selected) ->
+              if scope = "main" && S.Row_set.mem (S.ordinary_row uuid) selected then "selected ls-block"
               else "ls-block")
             (column ~key:"pt-block" ~padding_vertical:2
                ~transition:Ui_components.block_transition
                ~accessibility_identifier:("ls-block-" ^ uuid)
                ~data_attrs:
-              [ ("data-blockid", uuid); ("data-containerid", uuid)
+              (S.row_attrs (S.ordinary_row uuid) @ [ ("data-blockid", uuid); ("data-containerid", uuid)
               ; ("data-block-title", page.page_title)
               ; ("data-haschild", "false")
               ; ("data-comment-item", "false")
@@ -561,7 +561,7 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
               ; ("data-collapsed", "false")
               ; ( "data-db-collapsable"
                 , if page.Model.page_db_collapsable then "true" else "false" )
-              ; ("data-block-format", "markdown") ]
+              ; ("data-block-format", "markdown") ])
             [ (* The negative leading margin exposes the disclosure control
                  while stretch preserves the content's trailing edge. *)
               row ~key:"pt-row"
@@ -745,7 +745,7 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
   (* Page and journal titles sit outside the outliner data-cid containers;
      selection therefore resolves these rows to the main scope. *)
   (match page.page_uuid with
-   | Some uuid -> Lazy_children.track_mounted ~scope:"main" ~uuid
+   | Some uuid -> Lazy_children.track_mounted ?current_uuid:None ~mount_key:uuid ~scope:"main" ~uuid
    | None -> Fun.id)
     (row ~key:"page-title" ~grow:1. ~cross:`start
     ~style_class:"ls-page-title content title"
@@ -790,7 +790,7 @@ let blocks_inner ?puuid ?(virtualize = false) ?(library = false)
               ~pin_key:(fun () ->
                 match S.editing () with
                 | Some e when e.S.scope = scope ->
-                    Some (S.top_level_uuid e.S.uuid)
+                    S.row_ancestor_key ~scope ~link_hosts:[] e.S.row_ref
                 | _ -> None)
               ~pin_sig:(fun () ->
                 if S.ready () then Some (S.editing_sig ()) else None)
@@ -1095,7 +1095,7 @@ let journal_item_sig (ms : Model.t Signal.signal)
                            [ Lazy_children.lazy_rows ~source:blocks_sig
                                ~active_key:(Some (Logseq_el.own ctx
                                  (Signal.map (function
-                                   | Some (uuid, "main") -> Some uuid
+                                   | Some (row_ref, "main") -> S.row_ancestor_key ~scope:"main" ~link_hosts:[] row_ref
                                    | _ -> None) (S.editing_target_sig ()))))
                                ~key:Tree.block_key ~cmp:String.compare
                                ~estimate_height:(fun b ->

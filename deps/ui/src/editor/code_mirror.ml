@@ -18,7 +18,7 @@ module A = Editor_actions
 module Ops = Outliner_ops
 
 (* Web CodeMirror owns its input callbacks directly. *)
-let on_native_event _ ~name:_ ~value:_ ~key:_ = ()
+let on_native_event ?editing_row:_ _ ~name:_ ~value:_ ~key:_ = ()
 
 type cm_module
 type t
@@ -198,7 +198,7 @@ let theme_name () =
   if D.el_class_contains D.document_element "dark" then "solarized dark"
   else "solarized light"
 
-(* -- instances keyed by block uuid -- *)
+(* -- instances keyed by rendered occurrence -- *)
 
 type composition =
   { history : Js.Json.t
@@ -208,6 +208,8 @@ type composition =
 
 type block_instance =
   { cm : t
+  ; origin : (string * string * S.row_ref) option
+  ; mutable epoch : int ref option
   ; mutable committed : string
   ; mutable composition : composition option
   ; mutable composition_live : bool
@@ -215,7 +217,7 @@ type block_instance =
   ; mutable listeners : (D.el * string * (D.ev -> unit) * bool) list
   }
 
-let instances : (string, block_instance) Hashtbl.t = Hashtbl.create 8
+let instances : ((string * string * S.row_ref), block_instance) Hashtbl.t = Hashtbl.create 8
 
 type file_owner =
   { mutable file_live : bool
@@ -267,33 +269,46 @@ let cancel_composition st =
           set_history st.cm pending.history;
           set_selections st.cm pending.selections)
 
-let release_instance uuid =
-  match Hashtbl.find_opt instances uuid with
+let origin_of_element uuid element =
+  let el = Ui_dom_web.el_of element in
+  Option.bind (el.Ui_services.closest ".ls-block") (fun row ->
+    Option.map (fun row_ref -> uuid, A.scope_of_el row, row_ref) (S.row_of_el row))
+
+let origin ?editing_row ?element uuid =
+  match editing_row, element with
+  | Some (scope, row_ref), _ -> Some (uuid, scope, row_ref)
+  | None, Some element -> origin_of_element uuid element
+  | None, None -> Option.bind (S.editing ()) (fun e ->
+      if e.S.uuid = uuid then Some (uuid, e.scope, e.row_ref) else None)
+
+let release_instance ?element uuid =
+  match Option.bind (origin ?element uuid) (Hashtbl.find_opt instances) with
   | None -> ()
   | Some st ->
-      Hashtbl.remove instances uuid;
-      List.iter
-        (fun (el, name, f, capture) -> remove_listener el name f capture)
-        st.listeners;
+      Option.iter (Hashtbl.remove instances) st.origin;
+      List.iter (fun (el, name, f, capture) -> remove_listener el name f capture) st.listeners;
       st.listeners <- [];
       cancel_composition st;
       to_textarea st.cm
 
-let block_instance uuid =
-  match Hashtbl.find_opt instances uuid with
+let block_instance ?editing_row ?element uuid =
+  match Option.bind (origin ?editing_row ?element uuid) (Hashtbl.find_opt instances) with
   | Some st when D.el_is_connected (get_wrapper st.cm) -> Some st
-  | Some _ ->
-      release_instance uuid;
-      None
+  | Some _ -> release_instance ?element uuid; None
   | None -> None
 
 let current_instance uuid c =
-  match block_instance uuid with
-  | Some st when st.cm == c -> Some st
-  | _ -> None
+  Hashtbl.fold (fun (target, _, _) st found ->
+    if target = uuid && st.cm == c && D.el_is_connected (get_wrapper c)
+    then Some st else found) instances None
 
-let instance uuid =
-  Option.map (fun st -> st.cm) (block_instance uuid)
+let instance ?editing_row ?element uuid = Option.map (fun st -> st.cm) (block_instance ?editing_row ?element uuid)
+
+let accepts_input st =
+  match st.origin, st.epoch, S.editing () with
+  | Some (uuid, scope, row_ref), Some epoch, Some e ->
+      e.S.uuid = uuid && e.scope = scope && e.row_ref = row_ref && e.epoch == epoch
+  | _ -> false
 
 (* Exit paths must not read CM5's mutable, possibly marked document. *)
 let live_value uuid =
@@ -333,17 +348,17 @@ let focus_block ~caret uuid =
 (* Esc (cljs extraKeys "Esc" -> save-editor!): persist + leave edit mode
    and select the block. cljs additionally re-enters raw-mode editing;
    the OCaml surface has no raw mode for code blocks, so Esc exits. *)
-let on_escape uuid =
-  match block_instance uuid with
-  | Some st when st.composition = None ->
+let on_escape uuid c =
+  match current_instance uuid c with
+  | Some st when accepts_input st && st.composition = None ->
       A.sync_buffer uuid st.committed;
       A.exit_edit ~select:true
   | _ -> ()
 
 (* Shift-Enter (cljs wrapper keydown): save + insert a sibling block *)
-let on_shift_enter uuid =
-  match block_instance uuid with
-  | Some st when st.composition = None -> A.insert_sibling_after uuid
+let on_shift_enter uuid c =
+  match current_instance uuid c with
+  | Some st when accepts_input st && st.composition = None -> A.insert_sibling_after uuid
   | _ -> ()
 
 let update_calc c =
@@ -365,7 +380,7 @@ let update_calc c =
    buffer + the debounced worker save; calc results recompute live *)
 let on_change uuid c =
   match current_instance uuid c with
-  | Some st when not st.synchronizing && st.composition = None ->
+  | Some st when accepts_input st && not st.synchronizing && st.composition = None ->
       let v = get_value c in
       if v <> st.committed then begin
         st.committed <- v;
@@ -384,24 +399,32 @@ let on_cm_blur uuid c =
       st.composition_live <- false;
       cancel_composition st;
       (match S.editing () with
-       | Some e when e.S.uuid = uuid -> A.blur_commit ()
+       | Some _ when accepts_input st -> A.blur_commit ()
        | _ -> ())
 
 (* cljs focus: edit-block! runs whenever the focused CM is not the
    current edit block — so clicking a code block enters edit state even
    when nothing was editing; the click-placed caret is kept since CM is
    already focused (focus_block short-circuits) *)
-let on_cm_focus uuid =
-  match S.editing () with
-  | Some e when e.S.uuid = uuid -> ()
-  | _ -> A.enter_edit uuid (String.length (A.model_title uuid))
+let on_cm_focus uuid c =
+  match current_instance uuid c with
+  | Some st ->
+      Option.iter (fun (_, scope, row_ref) ->
+        A.enter_edit ~scope ~row_ref uuid (String.length (A.model_title uuid));
+        let adopt () = match S.editing () with
+          | Some e when e.S.uuid = uuid && e.scope = scope && e.row_ref = row_ref ->
+              st.epoch <- Some e.epoch
+          | _ -> () in
+        adopt ();
+        S.pending_focus_actions := adopt :: !S.pending_focus_actions) st.origin
+  | None -> ()
 
 let composing_key st ev =
   st.composition <> None || event_composing ev || D.ev_key_code ev = 229
 
 let on_cm_keydown uuid c ev =
   match current_instance uuid c with
-  | Some st when composing_key st ev ->
+  | Some st when composing_key st ev || not (accepts_input st) ->
       ignore_cm_event ev true;
       D.ev_stop_propagation ev
   | None ->
@@ -431,7 +454,7 @@ let at_end c =
 let wrapper_keydown uuid c ev =
   match current_instance uuid c with
   | None -> D.ev_stop_propagation ev
-  | Some st when composing_key st ev -> D.ev_stop_propagation ev
+  | Some st when composing_key st ev || not (accepts_input st) -> D.ev_stop_propagation ev
   | Some _ -> (
       let key = D.ev_key ev in
       match (key, D.ev_ctrl ev || D.ev_meta ev, D.ev_shift ev) with
@@ -455,7 +478,7 @@ let wrapper_pointerdown _uuid ev =
   if S.selection_active () then
     S.set (fun st ->
         { st with
-          S.selected = S.String_set.empty
+          S.selected = S.Row_set.empty
         ; action_bar = false
         })
 
@@ -465,9 +488,9 @@ let make_options ~uuid ~lang ~mode ~read_only =
   let extra_keys =
     Js.Dict.fromList
       [ ("Esc", fun c ->
-            if current_instance uuid c <> None then on_escape uuid)
+            if current_instance uuid c <> None then on_escape uuid c)
       ; ("Shift-Enter", fun c ->
-            if current_instance uuid c <> None then on_shift_enter uuid)
+            if current_instance uuid c <> None then on_shift_enter uuid c)
       ]
   in
   let opts =
@@ -500,17 +523,18 @@ let mount ?(read_only = false) uuid textarea =
     from_textarea (cm ()) textarea
       (make_options ~uuid ~lang ~mode ~read_only)
   in
-  release_instance uuid;
+  release_instance ~element:textarea uuid;
+  let origin = origin_of_element uuid textarea in
   let st =
-    { cm = c; committed = get_value c; composition = None
+    { cm = c; origin; epoch = None; committed = get_value c; composition = None
     ; composition_live = false
     ; synchronizing = false; listeners = [] }
   in
-  Hashtbl.replace instances uuid st;
+  Option.iter (fun key -> Hashtbl.replace instances key st) origin;
   on_event c "change" (fun c -> on_change uuid c);
   on_event c "blur" (on_cm_blur uuid);
   on_event c "focus" (fun c ->
-      if current_instance uuid c <> None then on_cm_focus uuid);
+      if current_instance uuid c <> None then on_cm_focus uuid c);
   on_dom_event c "keydown" (on_cm_keydown uuid);
   let listen el name capture f =
     D.el_listen el name f capture;
@@ -548,23 +572,23 @@ let mount ?(read_only = false) uuid textarea =
       ignore
         (ensure_mode file
          |> Js.Promise.then_ (fun () ->
-                (match instance uuid with
-                 | Some c' when c' == c && Js.Json.decodeString (get_option c "mode") = Some mode ->
+                (match current_instance uuid c with
+                 | Some st when st.cm == c && Js.Json.decodeString (get_option c "mode") = Some mode ->
                      set_option c "mode" (Js.Json.string mode)
                  | _ -> ());
                 Js.Promise.resolve ()))
   | None -> ()
 
 (* live read-only toggle for the extension's read-only prop *)
-let set_read_only uuid flag =
-  match block_instance uuid with
+let set_read_only ?element uuid flag =
+  match block_instance ?element uuid with
   | Some st ->
       if flag then cancel_composition st;
       set_option st.cm "readOnly" (Js.Json.boolean flag)
   | None -> ()
 
-let set_controlled_value uuid value =
-  match block_instance uuid with
+let set_controlled_value ?element uuid value =
+  match block_instance ?element uuid with
   | Some st when st.committed <> value
               || (st.composition = None && get_value st.cm <> value) ->
       cancel_composition st;
@@ -579,9 +603,9 @@ let set_controlled_value uuid value =
       update_calc st.cm
   | _ -> ()
 
-let set_language uuid lang =
+let set_language ?element uuid lang =
   let lang = normalize_lang lang in
-  match instance uuid with
+  match instance ?element uuid with
   | None -> ()
   | Some c ->
       let mode = cm_mode lang in
@@ -593,7 +617,7 @@ let set_language uuid lang =
            ignore
              (ensure_mode file
               |> Js.Promise.then_ (fun () ->
-                     (match instance uuid with
+                     (match instance ?element uuid with
                       | Some current when current == c && Js.Json.decodeString (get_option c "mode") = Some mode ->
                           set_option c "mode" (Js.Json.string mode)
                       | _ -> ());
@@ -602,15 +626,14 @@ let set_language uuid lang =
 (* cljs sync-editor-code!: a title written by another path (undo, db
    refresh, /code conversion) is pushed into an unfocused editor *)
 let sync_titles (_st : S.t) =
-  Hashtbl.iter
-    (fun uuid _c ->
-      match (instance uuid, S.find uuid) with
-      | Some c, Some b ->
-          let code = b.Model.block_title in
-          if (not (has_focus c)) && get_value c <> code then
-            set_controlled_value uuid code
-      | _ -> ())
-    instances
+  Hashtbl.iter (fun (uuid, _, _) st ->
+    match S.find uuid with
+    | Some b when not (has_focus st.cm) && get_value st.cm <> b.Model.block_title ->
+        cancel_composition st;
+        st.committed <- b.block_title;
+        with_model_update st (fun () -> set_value st.cm b.block_title);
+        update_calc st.cm
+    | _ -> ()) instances
 
 let watch : unit Signal.signal option ref = ref None
 
@@ -624,46 +647,45 @@ let ensure_watch () =
         watch := Some (Signal.map sync_titles (S.signal ()))
 
 (* Lazy mounts are deduplicated until the core chunk arrives. *)
-let pending_mounts : (string, D.el) Hashtbl.t = Hashtbl.create 4
+let pending_mounts : D.el list ref = ref []
 
 let mount_async uuid el =
   ensure_watch ();
-  if instance uuid = None && not (Hashtbl.mem pending_mounts uuid) then begin
-    Hashtbl.replace pending_mounts uuid el;
-    ignore
-      (ensure_core ()
-       |> Js.Promise.then_ (fun () ->
-              (match Hashtbl.find_opt pending_mounts uuid with
-               | Some pending when pending == el ->
-                   Hashtbl.remove pending_mounts uuid;
-                   if instance uuid = None && D.el_is_connected el then
-                     mount
-                       ~read_only:(D.el_get_attr el "readonly" <> None)
-                       uuid el
-               | _ -> ());
-              Js.Promise.resolve ()))
+  if instance ~element:el uuid = None
+     && not (List.exists (fun pending -> pending == el) !pending_mounts) then begin
+      pending_mounts := el :: !pending_mounts;
+      ignore (ensure_core () |> Js.Promise.then_ (fun () ->
+        if List.exists (fun pending -> pending == el) !pending_mounts then begin
+          pending_mounts := List.filter (fun pending -> pending != el) !pending_mounts;
+          match origin_of_element uuid el with
+          | Some _ when instance ~element:el uuid = None && D.el_is_connected el ->
+              mount ~read_only:(D.el_get_attr el "readonly" <> None) uuid el
+          | _ -> ()
+        end;
+        Js.Promise.resolve ()))
   end
 
-(* The adapter releases its block-role instance on node removal. *)
-let unmount uuid =
-  Hashtbl.remove pending_mounts uuid;
-  release_instance uuid
+let unmount ~element uuid =
+  pending_mounts := List.filter (fun pending -> pending != element) !pending_mounts;
+  release_instance ~element uuid
 
 (* -- language picker (.code-block-actions .select-language) -- *)
 (* cljs shows the picker as a menu anchored under the button —
    Views_popup.show_menu owns placement, keyboard nav and dismissal. *)
 
-let pick_lang uuid lang =
+let pick_lang ?editing_row ?element uuid lang =
+  let context = Runtime.repo (), Runtime.route () in
   ignore
     (let* () = ensure_core () in
-     (match (instance uuid, mode_file lang) with
+     if context <> (Runtime.repo (), Runtime.route ()) then Js.Promise.resolve () else begin
+     (match (instance ?editing_row ?element uuid, mode_file lang) with
       | Some c, Some file ->
           (* fetch the mode chunk first, then swap — same post-load path
              as mount *)
           ignore
             (ensure_mode file
              |> Js.Promise.then_ (fun () ->
-                    (match instance uuid with
+                    (match instance ?editing_row ?element uuid with
                      | Some c' when c' == c ->
                          set_option c "mode" (Js.Json.string file)
                      | _ -> ());
@@ -673,14 +695,23 @@ let pick_lang uuid lang =
        (Ops.apply_and_refresh
           [ Ops.set_block_property uuid "logseq.property.code/lang"
               (Wire.String lang) ]);
-     Js.Promise.resolve ())
+     Js.Promise.resolve () end)
 
-let open_lang_picker uuid =
+let open_lang_picker ?editing_row ?element uuid =
+  let context = Runtime.repo (), Runtime.route () in
+  let current () = context = (Runtime.repo (), Runtime.route ())
+      && (match origin ?editing_row ?element uuid with
+          | Some (_, scope, row_ref) when row_ref.S.owner_uuid <> uuid || row_ref.link_hosts <> [] ->
+              S.valid_row ~scope ~uuid row_ref
+          | _ -> true) in
   ignore
     (let* () = ensure_core () in
+     if not (current ()) then Js.Promise.resolve () else begin
      (match
         Ui_services.dom_query
-          ("#ls-block-" ^ uuid ^ " .select-language")
+          (match origin ?editing_row ?element uuid with
+           | Some (_, scope, row_ref) -> "#" ^ S.row_mount_id ~scope row_ref ^ " .select-language"
+           | None -> "")
       with
       | Some button ->
           Views_popup.show_menu ~anchor:button
@@ -691,16 +722,16 @@ let open_lang_picker uuid =
                  | Some name ->
                      Some
                        (Views_popup.MItem
-                          (name, fun () -> pick_lang uuid name))
+                          (name, fun () -> if current () then pick_lang ?editing_row ?element uuid name))
                  | None -> None)
                (Array.to_list (mode_infos (cm ()))))
       | None -> ());
-     Js.Promise.resolve ())
+     Js.Promise.resolve () end)
 
 (* .code-block-actions copy button (cljs copy-code!: clipboard +
    "Copied!" notification) *)
-let copy_button uuid =
-  match instance uuid with
+let copy_button ?editing_row ?element uuid =
+  match instance ?editing_row ?element uuid with
   | Some c ->
       ignore
         (Ui_task.bind (Ui_services.clipboard_write_text (get_value c)) (fun () ->
@@ -778,7 +809,7 @@ let mount_file ~owner ~on_change textarea =
   Web_dom.js_set opts_json "extraKeys" extra_keys;
   let c = from_textarea (cm ()) textarea opts_json in
   let st =
-    { cm = c; committed = get_value c; composition = None
+    { cm = c; origin = None; epoch = None; committed = get_value c; composition = None
     ; composition_live = false; synchronizing = false; listeners = [] }
   in
   owner.file_editor <- Some st;

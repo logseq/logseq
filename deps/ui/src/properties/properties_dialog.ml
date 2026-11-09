@@ -836,13 +836,18 @@ let open_for_block_with_property ?context_revision ?scope ?view_parent ?on_close
       !Runtime.current_page in
   let page = page_target () in
   let selection = Editor_state.selection_state () in
-  let editing_target (st : Editor_state.t) =
-    Option.map (fun (e : Editor_state.editing) -> e.uuid, e.scope) st.editing
+  let editing_valid (st : Editor_state.t) =
+    match selection.editing, st.editing with
+    | None, None -> true
+    | Some before, Some live -> before.uuid = live.uuid && before.scope = live.scope
+        && before.row_ref = live.row_ref && before.epoch == live.epoch
+    | _ -> false
   in
   let selection_valid (st : Editor_state.t) =
-    Editor_state.String_set.equal selection.selected st.selected
+    Editor_state.Row_set.equal selection.selected st.selected
+    && selection.anchor = st.anchor && selection.head = st.head
     && selection.selection_scope = st.selection_scope
-    && editing_target selection = editing_target st
+    && editing_valid st
   in
   let checks = ref [] in
   let watch signal read valid =
@@ -919,10 +924,9 @@ let open_for_current () =
       (* cljs anchors the picker at the block's content left-bottom
          (cal_pos recipe: block x+24, bottom+4) — not at the caret *)
       let anchor_el =
-        match Editor_state.editing_uuid () with
-        | Some u ->
-            Ui_services.dom_query
-              (".ls-block[data-blockid='" ^ u ^ "']")
+        match Editor_state.editing () with
+        | Some e ->
+            Ui_services.dom_by_id (Editor_state.row_mount_id ~scope:e.scope e.row_ref)
         | None -> None
       in
       (match anchor_el with

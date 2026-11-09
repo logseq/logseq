@@ -19,10 +19,12 @@ open Lui_elements
 
 module S = Editor_state
 
-let mount ?(cls = "") ?owner uuid scope : t =
+let mount ?row_ref ?(cls = "") ?owner uuid scope : t =
  fun ctx parent ->
+  let row_ref = Option.value row_ref ~default:(S.ordinary_row uuid) in
   let accepts (e : S.editing) =
     e.S.uuid = uuid && e.S.scope = scope
+    && e.S.row_ref = row_ref
     && (match owner, e.S.owner with
         | None, _ -> true
         | Some expected, S.Explicit_draft live -> expected == live
@@ -87,7 +89,10 @@ let mount ?(cls = "") ?owner uuid scope : t =
         ~frame:(Signal.value (frame)) ~block_id:uuid ~cls
         ~on_input:(fun input ->
           match owner, !epoch, S.editing () with
-          | None, _, _ -> Editor_keys.apply_input ~frame uuid input
+          | None, Some mounted, Some live
+            when not (Signal.scope_is_disposed ctx.Lui_ui.ui_scope)
+              && accepts live && mounted == live.S.epoch ->
+              Editor_keys.apply_input ~frame uuid input
           | Some owner, Some mounted, Some live
             when not (Signal.scope_is_disposed ctx.Lui_ui.ui_scope)
               && accepts live && mounted == live.S.epoch && owner#current ->

@@ -67,7 +67,7 @@ let selection_context (model : Model.t) sel =
   let scope = S.selection_scope () in
   ( model.repo,
     model.route,
-    scope,
+    (scope, S.selected_rows (), S.anchor (), (S.selection_state ()).S.head),
     model.context_revision,
     resolve_parent model ~scope ~selected:sel )
 
@@ -75,7 +75,9 @@ let with_mounted_anchor sel render : t =
  fun ctx parent ->
   let mounted = Lazy_children.mounted_uuids ~scope:(S.selection_scope ()) ctx in
   let anchor_of mounted =
-    List.find_opt (fun uuid -> Lazy_children.Mounted_uuids.mem uuid mounted) sel
+    List.find_map (fun row ->
+      let key = S.row_key row in
+      if Lazy_children.Mounted_uuids.mem key mounted then Some key else None) sel
   in
   (reactive
      ~equal:(fun left right -> anchor_of left = anchor_of right)
@@ -230,7 +232,7 @@ let install_listeners () =
           let context =
             (Runtime.repo (), Runtime.route (), S.selection_scope ())
           in
-          let selection = S.selected () in
+          let selection = S.selected_rows () in
           cancel_pending_show ();
           pending_show :=
             Some
@@ -240,7 +242,7 @@ let install_listeners () =
                    if
                      context
                      <> (Runtime.repo (), Runtime.route (), S.selection_scope ())
-                     || not (S.String_set.equal selection (S.selected ()))
+                     || not (S.Row_set.equal selection (S.selected_rows ()))
                    then ()
                    else
                      match tgt with
@@ -260,8 +262,9 @@ let install_listeners () =
                  0)))
 
 let same_bar_state (left, lp, lc, ld, lm) (right, rp, rc, rd, rm) =
-  S.String_set.equal left.S.selected right.S.selected
+  S.Row_set.equal left.S.selected right.S.selected
   && left.S.selection_scope = right.S.selection_scope
+  && left.S.anchor = right.S.anchor && left.S.head = right.S.head
   && left.S.action_bar = right.S.action_bar
   && left.S.editing = None = (right.S.editing = None)
   && lp = rp && lc = rc
@@ -307,7 +310,7 @@ and node ~model () : t =
          | [], _ | _, (Pending | Invalid _ | Unsupported_scope _) ->
              Logseq_el.nothing
          | first :: _, Ready _ ->
-             with_mounted_anchor sel (function
+             with_mounted_anchor (Editor_actions.selected_refs ()) (function
                | None -> Logseq_el.nothing
                | Some anchor ->
                    with_cut_eligibility model sel (fun eligibility ->

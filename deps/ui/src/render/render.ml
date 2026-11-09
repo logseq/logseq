@@ -187,7 +187,7 @@ let calc_results_el code =
 (* cljs components/block.cljs src-cp actions bar — .code-block-actions
    with a language picker button + copy button. Handlers live in
    Code_mirror (open_lang_picker/copy_button). *)
-let code_block_actions ~self lang =
+let code_block_actions ?editing_row ~self lang =
   (* the language picker is anchored by the .select-language query in
      Code_mirror — the class stays *)
   row ~key:"cba" ~style_class:"code-block-actions" ~gap:4
@@ -199,12 +199,12 @@ let code_block_actions ~self lang =
           (if lang <> "" then lang
            else I18n.t "editor/code-language-placeholder")
         ~icon:(`app "chevron-down") ~icon_placement:`trailing
-        ~on_press:(fun _ -> Code_mirror.open_lang_picker self)
+        ~on_press:(fun _ -> Code_mirror.open_lang_picker ?editing_row self)
         [])
     ; Ui_components.button ~key:"cp" ~variant:`ghost ~size:`sm
         ~icon:(`app "copy") ~icon_placement:`leading
         ~text:(I18n.t "ui/copy")
-        ~on_press:(fun _ -> Code_mirror.copy_button self)
+        ~on_press:(fun _ -> Code_mirror.copy_button ?editing_row self)
         []
     ]
 
@@ -216,7 +216,7 @@ let code_block_actions ~self lang =
    codemirror@5) —
    DOM structure matches cljs so both display and edit look identical.
    ~extra appends inside .extensions__code (the src-eval .results div). *)
-let code_block ?(self = "") ?(extra = []) lang code =
+let code_block ?editing_row ?(self = "") ?(extra = []) lang code =
   let lang =
     (* cljs src-cp aliases the fence's stored lang to clojure *)
     match lang with
@@ -227,7 +227,7 @@ let code_block ?(self = "") ?(extra = []) lang code =
   row ~key:("fcb-" ^ self) ~grow:1.0
     ~style_class:"ui-fenced-code-editor"
     [ box ~key:"wrap" ~grow:1.0 ~style_class:"ls-code-editor-wrap"
-        [ code_block_actions ~self lang
+        [ code_block_actions ?editing_row ~self lang
         ; row ~key:"ec" ~grow:1.0 ~style_class:"extensions__code"
             ([ (if lang <> "" && not calc then
                  text ~key:"lang"
@@ -241,7 +241,7 @@ let code_block ?(self = "") ?(extra = []) lang code =
                       instance) *)
                    Logseq_codemirror.cm ~key:"ta" ~uuid:self ~lang
                      ~value:code ~read_only:(self = "" || Ui_services.env_publishing ())
-                     ~source_role:"block" ~on_event:(Code_mirror.on_native_event self) ()
+                     ~source_role:"block" ~on_event:(Code_mirror.on_native_event ?editing_row self) ()
                  ; (if not calc then Logseq_el.fragment []
                     else
                       match calc_results_el code with
@@ -674,7 +674,7 @@ let title_outer_kind (b : Model.block) =
 (* self: uuid of the block whose title this is — seeds the ref chain
    (cljs :ref-set) that suppresses self/cycle references.
    is_cards: class-Cards blocks append "Practice". *)
-let title ?heading ?(is_cards = false)
+let title ?editing_row ?heading ?(is_cards = false)
     ?(card_eid : int option = None) ?(self = "")
     ?(wrap_attrs = []) ?(prefix : t option = None) (s : string) : t list =
   match html_body s with
@@ -698,7 +698,7 @@ let title ?heading ?(is_cards = false)
         | Some body -> [ body ]
         | None -> (
         match src_block s with
-        | Some (lang, code) -> [ code_block ~self lang code ]
+        | Some (lang, code) -> [ code_block ?editing_row ~self lang code ]
         | None -> (
             (* {{query}} is a normal inline macro — macro_el renders the
                deprecation .warning inside .block-title-wrap like cljs *)
@@ -709,7 +709,7 @@ let title ?heading ?(is_cards = false)
    logseq.property.node/display-type + logseq.property/heading.
    ~resolved: the caller's ref-resolved title (uuid refs rendered to page
    titles); code/math surfaces keep the raw block_title. *)
-let title_block ?(self = "") ?resolved ?(annot = false)
+let title_block ?editing_row ?(self = "") ?resolved ?(annot = false)
     (b : Model.block) : t list =
   let s = b.Model.block_title in
   let heading = b.Model.block_heading in
@@ -728,18 +728,18 @@ let title_block ?(self = "") ?resolved ?(annot = false)
   match b.Model.block_display_type with
   | Some "code" ->
       let lang = Option.value b.Model.block_code_lang ~default:"" in
-      [ code_block ~self lang s ]
+      [ code_block ?editing_row ~self lang s ]
   | Some "math" ->
       [ box ~style_class:"math-block"
           [ Render_inline.katex_el ~block:true ~display:true s ] ]
   | _ -> (
       match src_eval_parts s with
       | Some (lang, code) ->
-          [ code_block ~self lang code
+          [ code_block ?editing_row ~self lang code
               ~extra:
                 [ src_eval_el ~code
                     ~uuid:(Option.value b.Model.block_uuid ~default:"") ] ]
       | None ->
-          title ?heading ~is_cards:(is_cards_block b)
+          title ?editing_row ?heading ~is_cards:(is_cards_block b)
             ~card_eid:b.Model.block_db_id ~self ~wrap_attrs ~prefix
             (Option.value resolved ~default:s))

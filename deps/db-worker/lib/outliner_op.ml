@@ -899,7 +899,14 @@ let apply_ops (conn : conn) (ops : Wire.t) (opts : Wire.t) : Wire.t =
           | Some (Wire.Uuid _ as uuid) -> uuid
           | _ -> raise (Invalid_outliner_op "paste history requires an inserted UUID") in
         Outliner_tx_meta.tx_meta_put tx_meta "undo-redo/editor-info-after"
-          (Ds_wire.value_of_transit (Cljs_map.assoc cursor "block-uuid" uuid))
+          (Ds_wire.value_of_transit
+            (let cursor = Cljs_map.assoc cursor "block-uuid" uuid in
+             match Cljs_map.get cursor "row-ref" with
+             | Some row when Cljs_map.get row "owner-uuid"
+                 = Some (Wire.Keyword "last-inserted-block") ->
+                 Cljs_map.assoc cursor "row-ref" (Cljs_map.assoc row "owner-uuid" uuid)
+             | Some _ -> Cljs_map.dissoc cursor "row-ref"
+             | None -> cursor))
     | _ -> tx_meta
   in
   let tx_meta = Outliner_tx_meta.tx_meta_put tx_meta "outliner-ops"
