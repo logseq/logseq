@@ -21,6 +21,8 @@ let native_system =
 
 let is_mac () = native_system = "Darwin"
 
+let home_variable = if native_system = "Win32" then "USERPROFILE" else "HOME"
+
 let asset_path path =
   if not (Filename.is_relative path) then path
   else
@@ -38,8 +40,20 @@ let resource_url path =
   let absolute_path =
     if Filename.is_relative resource_path then Filename.concat (Sys.getcwd ()) resource_path
     else resource_path in
-  let encoded = Uri.pct_encode ~component:(`Custom (`Path, "/", "")) absolute_path in
-  Uri.to_string (Uri.make ~scheme:"file" ~host:"" ~path:encoded ())
+  let host, path =
+    if native_system = "Win32" then
+      let path = String.map (function '\\' -> '/' | c -> c) absolute_path in
+      if String.starts_with ~prefix:"//" path then
+        match String.index_from_opt path 2 '/' with
+        | Some index ->
+            String.sub path 2 (index - 2),
+            String.sub path index (String.length path - index)
+        | None -> invalid_arg "UNC asset path must contain a share"
+      else "", path
+    else "", absolute_path
+  in
+  let encoded = Uri.pct_encode ~component:(`Custom (`Path, "/", "")) path in
+  Uri.to_string (Uri.make ~scheme:"file" ~host ~path:encoded ())
 
 (* ---------- host request channel ---------- *)
 
@@ -80,6 +94,13 @@ let app_support_dir =
     match Sys.getenv_opt "LOGSEQ_UI_STATE_DIR" with
     | Some path when path <> "" -> path
     | Some _ -> invalid_arg "LOGSEQ_UI_STATE_DIR must not be empty"
+    | None when native_system = "Win32" ->
+        let app_data =
+          match Sys.getenv_opt "APPDATA" with
+          | Some path when path <> "" && not (Filename.is_relative path) -> path
+          | _ -> invalid_arg "APPDATA must be an absolute path"
+        in
+        Filename.concat app_data "Logseq"
     | None when native_system = "Linux" ->
         let state_home =
           match Sys.getenv_opt "XDG_STATE_HOME" with
@@ -87,12 +108,12 @@ let app_support_dir =
               path
           | Some _ | None ->
               (* XDG ignores empty or relative base directories. *)
-              Filename.concat (Unix.getenv "HOME") ".local/state"
+              Filename.concat (Unix.getenv home_variable) ".local/state"
         in
         Filename.concat state_home "logseq"
     | None ->
         Filename.concat
-          (Filename.concat (Unix.getenv "HOME") "Library")
+          (Filename.concat (Unix.getenv home_variable) "Library")
           "Application Support/logseq"
   in
   fun () -> path
@@ -149,7 +170,7 @@ let legacy_auth_tokens () =
   else if state_exists () then []
   else
     read_legacy_auth_file
-      (Filename.concat (Filename.concat (Unix.getenv "HOME") "logseq") "auth.json")
+      (Filename.concat (Filename.concat (Unix.getenv home_variable) "logseq") "auth.json")
 
 let rec mkdir_p path =
   if path <> "" && path <> "/" && not (Sys.file_exists path) then begin

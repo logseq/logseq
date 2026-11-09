@@ -287,7 +287,7 @@
    uri
    unix
    threads.posix
-   digestif str markup)
+   digestif str markup mirage-crypto-rng.unix)
  (preprocess
   (pps lui.ppx)))
 

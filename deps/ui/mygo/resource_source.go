@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -27,7 +28,7 @@ const (
 type resourceSource struct{ kind, value string }
 
 func resourceSourceForURL(raw string) (resourceSource, error) {
-	if raw == "" || strings.ContainsRune(raw, 0) || strings.HasPrefix(raw, "//") {
+	if raw == "" || strings.ContainsRune(raw, 0) || (runtime.GOOS != "windows" && strings.HasPrefix(raw, "//")) {
 		return resourceSource{}, errors.New("missing or invalid image source")
 	}
 	if filepath.IsAbs(raw) {
@@ -46,11 +47,27 @@ func resourceSourceForURL(raw string) (resourceSource, error) {
 		}
 		return resourceSource{"url", raw}, nil
 	case "file":
-		if (u.Host != "" && u.Host != "localhost") || u.User != nil || u.RawQuery != "" || u.Fragment != "" ||
-			u.Opaque != "" || !filepath.IsAbs(u.Path) || strings.ContainsRune(u.Path, 0) {
+		if u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Opaque != "" || strings.ContainsRune(u.Path, 0) {
 			return resourceSource{}, errors.New("file image URL must name an absolute local path")
 		}
-		return resourceSource{"file", filepath.Clean(u.Path)}, nil
+		path := u.Path
+		if runtime.GOOS == "windows" {
+			if u.Host != "" && u.Host != "localhost" {
+				if strings.ContainsAny(u.Host, ":\\/@[]") || !strings.HasPrefix(path, "/") {
+					return resourceSource{}, errors.New("file image URL must name an absolute UNC path")
+				}
+				path = "//" + u.Host + path
+			} else if len(path) >= 3 && path[0] == '/' && path[2] == ':' {
+				path = path[1:]
+			}
+			path = filepath.FromSlash(path)
+		} else if u.Host != "" && u.Host != "localhost" {
+			return resourceSource{}, errors.New("file image URL must name an absolute local path")
+		}
+		if !filepath.IsAbs(path) {
+			return resourceSource{}, errors.New("file image URL must name an absolute local path")
+		}
+		return resourceSource{"file", filepath.Clean(path)}, nil
 	case "":
 		return resourceSource{}, errors.New("relative image source requires an OCaml-owned resolver")
 	default:
