@@ -309,13 +309,15 @@ let item_drag st (it : Sidebar_state.item) : t =
       ~on_pointer_cancel:(fun _ ->
         origin := None;
         ignore (Ui_effect.issue request))
-      [ row ~key:("arrow-" ^ key) ~height:32 ~main:`center ~cross:`center
+      [ Ui_components.with_props
+          [ Ui_components.Prop.opacity 0.5; Ui_components.Prop.hover_opacity 1. ]
+          (row ~key:("arrow-" ^ key) ~height:32 ~main:`center ~cross:`center
           ~style_class:
             (if it.Sidebar_state.collapsed then "rotating-arrow collapsed"
              else "rotating-arrow not-collapsed")
           [ Lui_elements.icon ~key:("arw-" ^ key)
               ~name:(`app "rotating-arrow") ~point_size:16
-              ~transition:"transform 100ms ease-in" [] ] ])) context parent
+              ~transition:"transform 100ms ease-in" [] ]) ])) context parent
 
 let item_header st idx (it : Sidebar_state.item) =
   let n = string_of_int idx in
@@ -358,8 +360,8 @@ let item_header st idx (it : Sidebar_state.item) =
             ~accessibility_identifier:("sbi-more-" ^ it.key)
             ~on_pointer_up:(close_on_middle st it.key)
             ~style_class:"sidebar-item-more"
-            ~width:32 ~height:32
-            ~data_attrs:[ ("style", "padding:0;margin-left:8px") ]
+            ~width:32 ~height:32 ~padding:0
+            ~foreground:"hsl(var(--muted-foreground))"
             (* press events carry no pointer coordinates — anchor the
                menu at the button's rect instead of click clientX/Y *)
             ~on_press:(fun _ ->
@@ -374,9 +376,9 @@ let item_header st idx (it : Sidebar_state.item) =
             [ Icons.icon ~size:16. "dots" ]
         ; Ui_components.button ~key:("close-" ^ it.key) ~variant:`ghost ~size:`icon
             ~main:`center ~cross:`center
-            ~label:(t "ui/close") ~width:32 ~height:32
+            ~label:(t "ui/close") ~width:32 ~height:32 ~padding:0
+            ~foreground:"hsl(var(--muted-foreground))"
             ~on_pointer_up:(close_on_middle st it.key)
-            ~data_attrs:[ ("style", "padding:0;margin-left:8px") ]
             ~on_press:(fun _ -> Sidebar_state.remove_item st it.key)
             [ Icons.icon ~size:16. "x" ] ]
     ])
