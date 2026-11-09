@@ -170,6 +170,8 @@
  :class.validation/parents-must-be-tags "태그의 부모는 태그여야 합니다."
  :class.validation/tag-with-non-tag "\"{1}\" 태그가 아닌 내장 페이지에는 태그를 설정할 수 없습니다."
 
+ :cmdk/current-page-badge "현재 페이지"
+
  :cmdk.action/apply-theme "테마 적용"
  :cmdk.action/copy-ref "참조 복사"
  :cmdk.action/create "만들기"

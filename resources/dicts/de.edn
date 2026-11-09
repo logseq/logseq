@@ -170,6 +170,8 @@
  :class.validation/parents-must-be-tags "Eltern von Tags müssen Tags sein."
  :class.validation/tag-with-non-tag "Tag kann nicht mit integrierter Seite festgelegt werden, die kein Tag „{1}“ ist."
 
+ :cmdk/current-page-badge "Aktuelle Seite"
+
  :cmdk.action/apply-theme "Thema anwenden"
  :cmdk.action/copy-ref "Referenz kopieren"
  :cmdk.action/create "Erstellen"

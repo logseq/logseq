@@ -191,6 +191,8 @@
  :class.validation/parents-must-be-tags "Không thể tạo thẻ này trừ khi tất cả các cấp trên đều là thẻ."
  :class.validation/tag-with-non-tag "Không thể đặt thẻ với trang tích hợp sẵn không phải là thẻ \"{1}\"."
 
+ :cmdk/current-page-badge "Trang hiện tại"
+
  :cmdk.action/apply-theme "Áp dụng chủ đề"
  :cmdk.action/copy-ref "Sao chép tham chiếu"
  :cmdk.action/create "Tạo"

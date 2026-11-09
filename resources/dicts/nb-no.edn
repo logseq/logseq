@@ -170,6 +170,8 @@
  :class.validation/parents-must-be-tags "Overordnede tagger må være tagger."
  :class.validation/tag-with-non-tag "Kan ikke angi tag med innebygd side som ikke er en tag \"{1}\"."
 
+ :cmdk/current-page-badge "Gjeldende side"
+
  :cmdk.action/apply-theme "Bruk tema"
  :cmdk.action/copy-ref "Kopier referanse"
  :cmdk.action/create "Opprett"

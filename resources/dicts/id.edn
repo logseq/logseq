@@ -170,6 +170,8 @@
  :class.validation/parents-must-be-tags "Induk harus berupa tag."
  :class.validation/tag-with-non-tag "Tidak dapat menyetel tag dengan halaman bawaan yang bukan tag \"{1}\"."
 
+ :cmdk/current-page-badge "Halaman saat ini"
+
  :cmdk.action/apply-theme "Terapkan tema"
  :cmdk.action/copy-ref "Salin referensi"
  :cmdk.action/create "Buat"

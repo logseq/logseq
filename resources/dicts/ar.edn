@@ -170,6 +170,8 @@
  :class.validation/parents-must-be-tags "الأصول يجب أن تكون وسوماً."
  :class.validation/tag-with-non-tag "لا يمكن تعيين علامة بصفحة مضمنة ليست علامة \"{1}\"."
 
+ :cmdk/current-page-badge "الصفحة الحالية"
+
  :cmdk.action/apply-theme "تطبيق السمة"
  :cmdk.action/copy-ref "نسخ المرجع"
  :cmdk.action/create "إنشاء"
