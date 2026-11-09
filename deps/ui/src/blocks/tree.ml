@@ -1076,10 +1076,12 @@ and child_list ~link_hosts ~depth ~editable ~library ~virtualize uuid scope
 
 and children_dom ~link_hosts ~depth ~editable ~library ~virtualize uuid scope
     (bs : Model.block Signal.signal) : t =
+ fun ctx parent ->
   let row = S.project_row ~scope ~link_hosts (Signal.get bs) in
   let b = row.S.target and mount_key = S.row_key row.row_ref in
-  children_container ~library uuid
-    (Signal.map (fun b -> (S.project_row ~scope ~link_hosts b).S.target) bs)
+  let displayed = Signal.own_signal ctx.Lui_ui.ui_scope
+      (Signal.map (fun b -> (S.project_row ~scope ~link_hosts b).S.target) bs) in
+  (children_container ~library uuid displayed
     (if virtualize then
        column ~grow:1. ~min_width:0
          [ Lazy_children.lazy_children ~key:("clist-" ^ mount_key) ~uuid:mount_key
@@ -1088,7 +1090,8 @@ and children_dom ~link_hosts ~depth ~editable ~library ~virtualize uuid scope
                child_list ~link_hosts ~depth ~editable ~library ~virtualize uuid scope bs) ]
      else
        column ~key:("clist-" ^ uuid) ~style_class:"block-children" ~grow:1.
-         [ child_list ~link_hosts ~depth ~editable ~library ~virtualize uuid scope bs ])
+         [ child_list ~link_hosts ~depth ~editable ~library ~virtualize uuid scope bs ]))
+    ctx parent
 
 and children_el ~link_hosts ~depth ~editable ~library ~virtualize uuid scope
     (b : Model.block) : t =

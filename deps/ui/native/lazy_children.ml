@@ -14,7 +14,7 @@ module Mounted_uuids = Stdlib.Set.Make (String)
 type mounted_projection =
   { scheduler : Signal.scheduler
   ; scope : string
-  ; counts : (string, (unit -> string) * int) Hashtbl.t
+  ; counts : (string, int) Hashtbl.t
   ; state : Mounted_uuids.t Signal.state
   ; mutable mounted : Mounted_uuids.t
   ; mutable users : int
@@ -54,24 +54,24 @@ let mounted_uuids ~scope ctx =
   Signal.on_dispose ctx.Lui_ui.ui_scope (fun () -> release_mounted projection);
   Signal.value projection.state
 
-let track_mounted ?mount_key ?current_uuid ~scope ~uuid child : t =
+let track_mounted ?mount_key ?current_uuid:(_ : (unit -> string) option)
+    ~scope ~uuid child : t =
  fun ctx parent ->
   let projection = retain_mounted ctx scope in
   let key = Option.value mount_key ~default:uuid in
-  let uuid_source = Option.value current_uuid ~default:(fun () -> uuid) in
-  let count = Option.fold ~none:0 ~some:snd (Hashtbl.find_opt projection.counts key) in
-  Hashtbl.replace projection.counts key (uuid_source, count + 1);
+  let count = Option.value (Hashtbl.find_opt projection.counts key) ~default:0 in
+  Hashtbl.replace projection.counts key (count + 1);
   if count = 0 then begin
     projection.mounted <- Mounted_uuids.add key projection.mounted;
     Signal.set projection.state projection.mounted
   end;
   Signal.on_dispose ctx.Lui_ui.ui_scope (fun () ->
-    let source, count = Hashtbl.find projection.counts key in
+    let count = Hashtbl.find projection.counts key in
     if count = 1 then begin
       Hashtbl.remove projection.counts key;
       projection.mounted <- Mounted_uuids.remove key projection.mounted;
       Signal.set projection.state projection.mounted
-    end else Hashtbl.replace projection.counts key (source, count - 1);
+    end else Hashtbl.replace projection.counts key (count - 1);
     release_mounted projection);
   child ctx parent
 
