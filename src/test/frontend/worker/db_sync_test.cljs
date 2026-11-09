@@ -4563,6 +4563,28 @@
                                 (= :logseq.kv/recycle-last-gc-at (:e item))))
                           (:tx (first pending))))))))))
 
+(deftest graph-open-recycle-gc-queues-deletion-and-converges-checksum-test
+  (testing "graph open runs recycle GC before db listeners attach, so it queues the returned tx report"
+    (let [{:keys [conn server-conn client-ops-conn page-uuid]} (setup-expired-recycled-page)]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (client-op/update-local-checksum test-repo (sync-checksum/recompute-checksum @conn) (:max-tx @conn))
+          (d/unlisten! conn ::listen-db)
+          (let [gc-tx-report (with-redefs [common-util/time-ms (constantly recycle-gc-now-ms)]
+                               (transaction-handler/maybe-run-recycle-gc! conn))]
+            (is (nil? (d/entity @conn [:block/uuid page-uuid])))
+            (is (empty? (sync-apply/pending-txs test-repo)))
+            (db-sync/handle-local-tx! test-repo gc-tx-report)
+            (db-sync/reconcile-local-checksum! test-repo conn))
+          (let [pending (sync-apply/pending-txs test-repo)]
+            (is (= 1 (count pending)))
+            (is (= :recycle-gc (:outliner-op (first pending))))
+            (is (true? (pending-tx-retracts-block-uuid? (first pending) page-uuid))))
+          (upload-pending-and-assert-converged! conn server-conn)
+          (is (nil? (d/entity @server-conn [:block/uuid page-uuid])))
+          (is (= (sync-checksum/recompute-checksum @server-conn)
+                 (client-op/get-local-checksum test-repo))))))))
+
 (deftest apply-remote-recycle-gc-of-already-retracted-entity-is-noop-test
   (testing "applying a remote recycle GC retract of an already-removed entity is a no-op"
     (let [{:keys [conn client-ops-conn page-uuid child-uuid]} (setup-expired-recycled-page)]
