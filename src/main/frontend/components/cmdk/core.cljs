@@ -243,7 +243,7 @@
 ;; Each result group has it's own load-results function
 (defmulti load-results (fn [group _state] group))
 
-(declare <page-uuid)
+(declare <page-uuid <search-page-uuid)
 
 (defn- recent-page-items
   [pages]
@@ -527,16 +527,16 @@
     (let [!results (::results state)
           !input (::input state)
           repo (state/get-current-repo)
-          expanded? (::expanded? state)
-          opts (cmdk-state/cmdk-block-search-options
-                {:filter-group :current-page
-                 :dev? config/dev?
-                 :expanded? expanded?})]
+          expanded? (::expanded? state)]
       (swap! !results assoc-in [group :status] :loading)
-      (swap! !results assoc-in [:current-page :status] :loading)
-      (p/let [current-page-uuid (<page-uuid repo current-page)
-              opts (assoc opts :page-uuid current-page-uuid)
-              search-result (search/block-search repo @!input opts)
+      (p/let [current-page-uuid (<search-page-uuid repo current-page)
+              opts (cmdk-state/cmdk-block-search-options
+                    {:filter-group :current-page
+                     :dev? config/dev?
+                     :expanded? expanded?
+                     :page-uuid current-page-uuid})
+              search-result (when current-page-uuid
+                              (search/block-search repo @!input opts))
               {:keys [blocks matched-count]} (block-search-result->items search-result)
               blocks (remove nil? blocks)
               items (map (fn [block]
@@ -598,25 +598,31 @@
                   (:source-block highlighted-item))]
     (:block/uuid block)))
 
+(defn- route-node-ref
+  [node]
+  (cond
+    (uuid? node) [:block/uuid node]
+    (common-util/uuid-string? node) [:block/uuid (uuid node)]
+    :else [:block/name (common-util/page-name-sanity-lc node)]))
+
 (defn- <page-uuid
   [repo page-id-name-or-uuid]
-  (cond
-    (uuid? page-id-name-or-uuid)
+  (if (or (uuid? page-id-name-or-uuid) (nil? page-id-name-or-uuid))
     (p/resolved page-id-name-or-uuid)
+    (p/let [page (state/<invoke-db-worker :thread-api/pull
+                                          repo
+                                          [:block/uuid]
+                                          (route-node-ref page-id-name-or-uuid))]
+      (:block/uuid page))))
 
-    (nil? page-id-name-or-uuid)
-    (p/resolved nil)
-
-    :else
-    (let [lookup-ref (if (and (string? page-id-name-or-uuid)
-                              (common-util/uuid-string? page-id-name-or-uuid))
-                       [:block/uuid (uuid page-id-name-or-uuid)]
-                       [:block/name (common-util/page-name-sanity-lc page-id-name-or-uuid)])]
-      (p/let [page (state/<invoke-db-worker :thread-api/pull
-                                            repo
-                                            [:block/uuid]
-                                            lookup-ref)]
-        (:block/uuid page)))))
+(defn- <search-page-uuid
+  [repo route-node]
+  (p/let [node (state/<invoke-db-worker :thread-api/pull
+                                        repo
+                                        [:block/uuid {:block/page [:block/uuid]}]
+                                        (route-node-ref route-node))]
+    (or (get-in node [:block/page :block/uuid])
+        (:block/uuid node))))
 
 (defn- block-page-uuid
   [block]
