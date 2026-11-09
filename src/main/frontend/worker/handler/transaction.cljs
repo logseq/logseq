@@ -28,16 +28,18 @@
     [:delete-blocks]})
 
 (defn maybe-run-recycle-gc!
+  "Returns the tx report of the recycle GC deletion when one was transacted."
   [conn]
   (let [now (common-util/time-ms)
         last-gc-at (:kv/value (d/entity @conn recycle-gc-kv))]
     (when (or (not (number? last-gc-at))
               (> (- now last-gc-at) outliner-recycle/gc-interval-ms))
-      (outliner-recycle/gc! conn {:now-ms now})
-      (ldb/transact! conn [{:db/ident recycle-gc-kv
-                            :kv/value now}]
-                     {:persist-op? false
-                      :skip-validate-db? true}))))
+      (let [gc-tx-report (outliner-recycle/gc! conn {:now-ms now})]
+        (ldb/transact! conn [{:db/ident recycle-gc-kv
+                              :kv/value now}]
+                       {:persist-op? false
+                        :skip-validate-db? true})
+        gc-tx-report))))
 
 (def-thread-api :thread-api/set-context
   [context]
