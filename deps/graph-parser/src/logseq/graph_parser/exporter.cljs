@@ -3206,6 +3206,39 @@
                    (rest blocks)))
         tx-data))))
 
+(defn- collect-block-uuid-lookups
+  "Lookup refs [:block/uuid uuid] anywhere in an import tx."
+  [form]
+  (let [ids (volatile! (transient []))]
+    (letfn [(visit [x]
+              (cond
+                (and (vector? x)
+                     (= 2 (count x))
+                     (= :block/uuid (first x))
+                     (uuid? (second x)))
+                (vswap! ids conj! (second x))
+
+                (map? x)
+                (doseq [v (vals x)] (visit v))
+
+                (coll? x)
+                (doseq [v x] (visit v))))]
+      (visit form)
+      (persistent! @ids))))
+
+(defn- prepend-unresolved-block-lookups
+  "Datascript rejects a ref lookup unless that entity is already in the db.
+   Import txs point at journals and blocks that a later file creates, and at
+   entities that appear only later in this tx. A uuid-only map at the front of
+   the tx lets the lookup resolve; the real entity map upserts the same uuid."
+  [db tx]
+  (let [tx (vec tx)
+        missing (->> (collect-block-uuid-lookups tx)
+                     distinct
+                     (remove #(d/entity db [:block/uuid %]))
+                     (mapv (fn [id] {:block/uuid id})))]
+    (into missing tx)))
+
 (defn- build-file-import-blocks-index
   [blocks-tx]
   (let [block-ids (into [] (map (fn [block] {:block/uuid (:block/uuid block)})) blocks-tx)
@@ -3301,8 +3334,10 @@
           classes-tx' (concat classes-tx retract-page-tags-tx)
           custom-status-tx @(:custom-status-tx tx-options)
           main-tx-start (when log-fn (import-profile/now-ms))
-          tx' (build-file-import-main-tx pages-tx'' page-properties-tx property-page-properties-tx
-                                         classes-tx classes-tx' custom-status-tx blocks-tx)
+          tx' (prepend-unresolved-block-lookups
+               @conn
+               (build-file-import-main-tx pages-tx'' page-properties-tx property-page-properties-tx
+                                          classes-tx classes-tx' custom-status-tx blocks-tx))
           _ (log-phase-ms! log-fn :main-tx main-tx-start {:file file :tx-count (count tx')})
           _ (import-progress! options {:phase :transact :file file})
           transact-start (when log-fn (import-profile/now-ms))

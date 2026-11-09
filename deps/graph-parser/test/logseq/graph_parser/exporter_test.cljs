@@ -1350,6 +1350,32 @@ abc
       (is (not= (.getTime modified-at) (:block/created-at page)))
       (is (empty? (:errors (db-validate/validate-local-db! @conn)))))))
 
+(deftest-async import-date-property-before-journal-file
+  ;; https://github.com/logseq/logseq/issues/13976
+  ;; A node/date property lookup of a journal page is transacted before that
+  ;; journal file. The journal uuid is preindexed, but the page entity is
+  ;; deferred, so Datascript throws :entity-id/missing.
+  (let [journal-day 20231228
+        expected-created-at (date-time-util/journal-day->ms journal-day)
+        block-uuid #uuid "658d002d-b615-4176-8be5-269641a2f92d"
+        note {:path "aaa.md"
+              :content "when:: [[Dec 28th, 2023]]\n\n- note\n"}
+        journal {:path "journals/2023_12_28.md"
+                 :content (str "- journal block\n  id:: " block-uuid "\n")}]
+    (p/let [conn (<export-in-memory-doc-files [journal note] {})
+            page (ldb/get-page @conn "aaa")
+            journal-page (ldb/get-journal-page-by-day @conn journal-day)
+            when-targets (map :db/id (:user.property/when page))
+            block (d/entity @conn [:block/uuid block-uuid])]
+      (is (= (:db/id journal-page) (first when-targets)))
+      (is (= (common-uuid/gen-uuid :journal-page-uuid journal-day)
+             (:block/uuid journal-page)))
+      (is (= expected-created-at (:block/created-at journal-page)))
+      (is (= journal-day (:block/journal-day journal-page)))
+      (is (= "journal block" (:block/title block)))
+      (is (= (:db/id journal-page) (:db/id (:block/page block))))
+      (is (empty? (:errors (db-validate/validate-local-db! @conn)))))))
+
 (deftest-async export-doc-files-keeps-journal-day-when-journal-mentions-another-date
   (let [expected (date-time-util/journal-day->ms 20240308)
         journal {:path "journals/2024_03_08.md"
