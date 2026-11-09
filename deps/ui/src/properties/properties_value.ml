@@ -568,7 +568,8 @@ let scalar_edit_cell ?(jump_target = true) ctx row : t =
           let off = (Ui_services.get ()).dom.subscribe_window_event "keydown" on_key in
           Signal.on_unmount edit_context.Lui_ui.ui_scope (fun () -> live := false);
           Signal.on_dispose edit_context.Lui_ui.ui_scope off;
-          (Ui_components.text_field ~autofocus:true ~submit_on_blur:true
+          (Ui_components.text_field ~height:28 ~padding_vertical:0
+            ~autofocus:true ~submit_on_blur:true
             ~accessibility_identifier:field_id
             ~text:(reactive Fun.id (Signal.value buffer))
             ~on_input:(fun ev ->
