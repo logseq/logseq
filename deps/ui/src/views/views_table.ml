@@ -1974,7 +1974,8 @@ let result_el inst (s : V.vstate) : t =
   else if (match inst.V.kind with
     | V.KQuery _ ->
         not s.V.loading && s.V.display_type = "table"
-        && s.V.query_rows = [] && Wr.row_count s.V.data = 0
+        (* The loaded view can filter out every raw query UUID. *)
+        && (has_data || s.V.query_rows = []) && Wr.row_count s.V.data = 0
     | _ -> false) then
     spacer ~key:"ls-query-empty" []
   else
