@@ -2,6 +2,7 @@
   (:require [cljs.core.async :as a]
             [cljs.test :refer [async deftest is testing]]
             [electron.ipc :as ipc]
+            [frontend.config :as config]
             [frontend.handler.user :as user-handler]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -152,6 +153,14 @@
         (finally
           (state/set-state! :auth/current-login-user old-login-user)
           (reset! state/*db-worker old-worker))))))
+
+(deftest can-list-remote-graphs-uses-default-server-test
+  (with-redefs [config/dev? false
+                config/get-custom-sync-server-url (constantly nil)
+                state/user-groups (constantly #{})
+                user-handler/logged-in? (constantly true)]
+    (is (false? (user-handler/rtc-group?)))
+    (is (true? (user-handler/can-list-remote-graphs?)))))
 
 (deftest logout-skips-e2ee-password-clear-when-db-worker-missing-test
   (testing "logout should not call db-worker API when db-worker is unavailable"
