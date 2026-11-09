@@ -1388,11 +1388,11 @@ let merge_prev uuid =
           then (
             (* empty prev: current moves after it, prev dies *)
             let ops =
-              [ Ops.move_blocks [ uuid ] prev_uuid ~sibling:true
-              ; Ops.delete_blocks [ prev_uuid ]
+              [ Ops.move_blocks [ e.row_ref.owner_uuid ] prev_row.row_ref.owner_uuid ~sibling:true
+              ; Ops.delete_blocks [ prev_row.row_ref.owner_uuid ]
               ]
             in
-            optimistic_edit (fun p -> Model.delete_block p prev_uuid);
+            optimistic_edit (fun p -> Model.delete_block p prev_row.row_ref.owner_uuid);
             S.set (fun st ->
                 { st with
                   S.editing =
@@ -1417,7 +1417,7 @@ let merge_prev uuid =
                in
                let ops =
                  move_children_ops b prev_uuid
-                 @ [ Ops.delete_blocks [ uuid ]; sop ]
+                 @ [ Ops.delete_blocks [ e.row_ref.owner_uuid ]; sop ]
                in
                let* pbuf = Ops.title_for_edit (String.trim ptitle) in
                let merged, caret = merge_source pbuf buf in
@@ -1477,9 +1477,9 @@ let merge_next_now uuid =
             let ops =
               move_children_except_ops b next_uuid next_uuid
               @ (if is_parent_of b next_uuid then
-                   [ Ops.move_blocks [ next_uuid ] uuid ~sibling:true ]
+                   [ Ops.move_blocks [ next_row.row_ref.owner_uuid ] e.row_ref.owner_uuid ~sibling:true ]
                  else [])
-              @ [ Ops.delete_blocks [ uuid ] ]
+              @ [ Ops.delete_blocks [ e.row_ref.owner_uuid ] ]
             in
             (* the row repaints before the delete lands — pin its live
                (empty) buffer so it doesn't flash the stale title *)
@@ -1509,7 +1509,7 @@ let merge_next_now uuid =
               if S.editing_uuid () = Some next_uuid then request_focus next_uuid 0))
           else (
             let ops =
-              move_children_ops next uuid @ [ Ops.delete_blocks [ next_uuid ] ]
+              move_children_ops next uuid @ [ Ops.delete_blocks [ next_row.row_ref.owner_uuid ] ]
 
             in
             let context = Runtime.repo (), Runtime.route () in
