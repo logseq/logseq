@@ -250,6 +250,7 @@ let allowed_options_for_path path =
       [|
         "id";
         "page";
+        "rename";
         "restore";
         "update-tags";
         "update-properties";
@@ -633,6 +634,7 @@ let parsed_upsert_command ?(args = Vec.empty) options = function
                 id = int64_option "id" options;
                 page = option_value "page" options;
                 restore = option_present "restore" options;
+                rename = option_value "rename" options;
                 update_tags_edn = option_value "update-tags" options;
                 update_properties_edn = option_value "update-properties" options;
                 remove_tags_edn = option_value "remove-tags" options;
