@@ -585,11 +585,10 @@ let shortcut_help () =
    hr.my-4. collapsed? = (not class?) — class pages start expanded.
    The area mounts declaratively inside the host div. *)
 let sidebar_props_row st (it : Sidebar_state.item) =
-  let empty = spacer ~key:("props-none-" ^ it.key) [] in
   match it.Sidebar_state.kind with
   | "contents" | "page" -> (
       match it.Sidebar_state.page with
-      | None -> empty
+      | None -> []
       | Some p ->
           let collapsed = it.Sidebar_state.props_collapsed in
           let uuid = Option.value p.Model.page_uuid ~default:"" in
@@ -608,7 +607,8 @@ let sidebar_props_row st (it : Sidebar_state.item) =
                       ~is_tag:p.Model.page_is_tag ]
               ; divider ~key:("phr-" ^ it.key) ~padding_vertical:16 [] ]
           in
-          box ~key:("props-" ^ it.key)
+          (* Master insets properties and cancels the following page-inner gap. *)
+          [ box ~key:("props-" ^ it.key) ~margin_top:8 ~margin_bottom:(-16)
             [ column ~gap:8
                 (row ~cross:`center
                    [ Ui_components.with_props
@@ -629,14 +629,14 @@ let sidebar_props_row st (it : Sidebar_state.item) =
                      Sidebar_state.toggle_props st it.key)
                    []) ]
                  :: body)
-            ])
-  | _ -> empty
+            ] ])
+  | _ -> []
 
 let object_tabs_host (it : Sidebar_state.item) =
   match it.Sidebar_state.page with
   | Some page when page.Model.page_is_tag || page.Model.page_is_property ->
-      Page.object_tabs_el ~key_prefix:("tabs-" ^ it.key) page
-  | _ -> spacer ~key:("tabs-none-" ^ it.key) []
+      [ Page.object_tabs_el ~key_prefix:("tabs-" ^ it.key) page ]
+  | _ -> []
 
 let item_body st idx (it : Sidebar_state.item) =
   let n = string_of_int idx in
@@ -712,9 +712,9 @@ let item_body st idx (it : Sidebar_state.item) =
             (column ~key:("inner-" ^ it.key) ~gap:16
                ~style_class:"page-inner"
             ~data_attrs:[ ("style", "margin-bottom:0;padding-bottom:64px") ]
-            ([ sidebar_props_row st it
-              ; object_tabs_host it
-             ; box ~key:("pbi-" ^ it.key)
+            (sidebar_props_row st it
+             @ object_tabs_host it
+             @ [ box ~key:("pbi-" ^ it.key)
                  ~style_class:"ls-page-blocks"
                  ~margin_left:(-20) ~min_height:60
                  ~data_attrs:[ ("style", "overflow:hidden") ]
@@ -737,7 +737,7 @@ let item_body st idx (it : Sidebar_state.item) =
              ]
             (* linked references sit inside .page-inner in cljs *)
             @ (match it.kind, it.uuid with
-               | "page", Some uuid ->
+               | "page", Some uuid when it.linked_refs <> [] ->
                    [ Page.references_view ~page_uuid:uuid
                        ~has_refs:(it.linked_refs <> []) () ]
                | _ -> [])))
