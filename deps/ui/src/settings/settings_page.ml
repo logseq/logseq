@@ -405,7 +405,6 @@ let rec keymap_binding ~key (b : Keymap_data.binding) =
                   };
               ])))
   else
-    let cls = "shui-shortcut-" ^ b.kind ^ " shui-shortcut-glow" in
     (* ls-dc is display:contents — the box is transparent on web, so the
      shortcut cells flow as direct children of the action wrap *)
     box ~key ~style_class:"ls-dc" ~display:`contents
@@ -413,7 +412,7 @@ let rec keymap_binding ~key (b : Keymap_data.binding) =
         box ~key:(key ^ "w") ~style_class:"shui-shortcut-wrap"
           ~display:`inline_flex
           [
-            row ~key:(key ^ "d") ~style_class:cls ~cross:`center
+            row ~key:(key ^ "d") ~cross:`center
               ~data_attrs:[ ("data-shortcut-binding", b.data) ]
               [
                 (let cells =
@@ -431,7 +430,9 @@ let rec keymap_binding ~key (b : Keymap_data.binding) =
                                 ~key:(key ^ "k" ^ string_of_int i)
                                 ~boxed:(b.kind = "separate") ~glow:true
                                 ~min_slot:20
-                                ~value:k;
+                                ~value:
+                                  (Cmdk_view.print_shortcut_key
+                                     (Cmdk_host.services ()) k);
                             ])
                         b.keys)
                  in
@@ -476,6 +477,10 @@ let keymap_label row = I18n.t (command_key_of row.Keymap_data.title)
 
 let keymap_pill st ~key ~title filter =
   let active s = s.km_filter = filter in
+  let count model =
+    string_of_int
+      (Keymap_data.count ~query:model.km_query ~label:keymap_label filter)
+  in
   reactive ~equal:(fun before after -> active before = active after)
     (fun model ->
       let checked = active model in
@@ -484,31 +489,38 @@ let keymap_pill st ~key ~title filter =
         ; Ui_components.Prop.font_size "0.75rem"
         ; Ui_components.Prop.line_height "1rem"
         ; Ui_components.Prop.cursor `pointer
-        ; Ui_components.Prop.opacity (if checked then 1. else 0.7)
-        ; Ui_components.Prop.hover_opacity 1.
         ]
-        (toggle_button ~key ~variant:`ghost ~foreground:"inherit"
-           ~text:
-             (reactive
-                (fun model ->
-                  title ^ {js| · |js}
-                  ^ string_of_int
-                      (Keymap_data.count ~query:model.km_query ~label:keymap_label filter))
-                (Signal.value st))
-           ~checked ~min_height:0 ~padding_vertical:2 ~padding_horizontal:8
+        (Ui_parts.string_prop Lui_protocol.AccessibilityLabel
+           ~value:(reactive
+             (fun model -> title ^ {js| · |js} ^ count model)
+             (Signal.value st))
+        (Ui_components.button ~key ~variant:`ghost
+           ~foreground:
+             (if checked then "var(--lx-gray-12, var(--rx-gray-12))"
+              else "var(--lx-gray-09, var(--rx-gray-09))")
+           ~selected:checked ~min_height:0 ~padding_vertical:2 ~padding_horizontal:8
            ~corner_radius:9999 ~border_width:1
-           ~border_color:"var(--lx-gray-06, var(--ls-border-color, hsl(var(--border))))"
+           ~border_color:
+             (if checked then "transparent"
+              else "var(--lx-gray-06, var(--ls-border-color, hsl(var(--border))))")
            ~background:
              (if checked then
-                "var(--lx-gray-04, var(--ls-tertiary-background-color, hsl(var(--muted))))"
+                "var(--lx-gray-06-alpha, var(--rx-gray-06-alpha))"
               else "transparent")
-           ~on_toggle:(fun _ ->
+           ~on_press:(fun _ ->
              let model = Runtime.signal_get st in
              Runtime.signal_set st
                { model with
                  km_filter =
                    (if model.km_filter = filter then Keymap_data.All else filter) })
-           []))
+           [ row ~key:"label" ~cross:`center ~gap:0
+               [ text ~key:"title" ~font_weight:(if checked then 500 else 400)
+                   ~foreground:"inherit" ~value:title []
+               ; Ui_components.with_props [ Ui_components.Prop.opacity 0.6 ]
+                   (text ~key:"count" ~font_weight:400 ~foreground:"inherit"
+                      ~value:(reactive (fun model -> {js| · |js} ^ count model)
+                        (Signal.value st)) [])
+               ] ])))
     (Signal.value st)
 
 let keymap_recorded_keys ?(pending = false) ?(wrap = false) ?(trailing = [])
@@ -738,7 +750,7 @@ let keymap_controls ?editing st =
     ~background:"hsl(var(--background))"
     [
       row ~key:"km-tb" ~style_class:"shortcut-toolbar-row" ~cross:`center
-        ~main:`space_between ~flex_wrap:`wrap ~gap:8
+        ~main:`space_between ~flex_wrap:`wrap ~gap:12
         [
           box ~key:"km-sw-w" ~grow:1. ~min_width:0
             [
