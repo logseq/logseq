@@ -327,9 +327,8 @@ let perf_keys =
 
 (* whole buffer is one selection *)
 let whole_selected (m : Edit_model.t) =
-  m.Edit_model.source <> ""
-  && m.Edit_model.anchor = Some 0
-  && m.Edit_model.caret = String.length m.Edit_model.source
+  let lo, hi = A.sel_span_of m in
+  lo = 0 && hi = String.length m.Edit_model.source
 
 (* Match master's normal-text formatting; retain whitespace-only behavior. *)
 let wrap_model (m : Edit_model.t) marker =
@@ -643,8 +642,15 @@ let stroke_of ev =
    them when a sequence crosses into chords those paths can't see;
    while editing, non-editor commands still fire (global-prevent-default)
    except the non-editing-only set *)
-let chord_may_run editing cid =
+let chord_may_run ~target editing cid =
   if editing && (cid = "editor/copy" || cid = "editor/cut") then false
+  else if cid = "editor/select-parent" then
+    match S.editing () with
+    | Some e ->
+        not (S.is_draft e)
+        && not (is_editable_target target && closest ".editor-wrapper" target = None)
+        && whole_selected e.S.model
+    | None -> not editing
   else
   match Keymap_data.command_handler cid with
   | Some "block-editing-only" -> Option.is_some (S.editing ())
@@ -679,16 +685,20 @@ let on_global_key ev =
             is_editable_target (ev.Ui_services.target)
             || S.editing () <> None
           in
-          let tbl = List.filter (fun (_, cid) -> chord_may_run editing cid) tbl in
+          let tbl = List.filter (fun (_, cid) -> chord_may_run ~target:ev.Ui_services.target editing cid) tbl in
           let tbl = if palette_open () then
               List.filter (fun (_, cid) -> cid = "go/search" || cid = "command-palette/toggle") tbl
             else tbl in
           let dispatch cid =
-            if chord_may_run editing cid then begin
+            if chord_may_run ~target:ev.Ui_services.target editing cid then begin
               ev.Ui_services.prevent_default ();
               ev.Ui_services.stop_immediate ();
               if cid = "go/search" && palette_open () then
                 Option.iter Cmdk_state.close !Cmdk_state.latest_st
+              else if cid = "editor/select-parent" then
+                (match S.editing () with
+                 | Some _ -> A.exit_edit ~select:true
+                 | None -> A.select_parent ())
               else Cmdk_state.dispatch_id cid
             end
           in
@@ -748,7 +758,7 @@ let blocked_default ev =
                     List.map canonical_binding (String.split_on_char ' ' binding) = [stroke]) bindings
             | _ -> false
           in
-          chord_may_run editing cid
+          chord_may_run ~target:ev.Ui_services.target editing cid
           && contains (Keymap_data.default_shortcut cid)
           && not (contains (Keymap_data.effective_shortcut cid)))
 
