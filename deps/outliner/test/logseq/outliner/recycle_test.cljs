@@ -1,8 +1,9 @@
 (ns logseq.outliner.recycle-test
-  (:require [cljs.test :refer [deftest is]]
+  (:require [cljs.test :refer [deftest is testing]]
             [datascript.core :as d]
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
+            [logseq.common.util.block-ref :as block-ref]
             [logseq.db :as ldb]
             [logseq.db.test.helper :as db-test]
             [logseq.outliner.op :as outliner-op]
@@ -194,6 +195,80 @@
     (is (true? (recycle/gc! conn {:now-ms (* 31 24 3600 1000)})))
     (is (= :recycle-gc (:outliner-op @*tx-meta)))
     (is (not (false? (:persist-op? @*tx-meta))))))
+
+(deftest gc-rewrites-live-refs-to-multiple-expired-roots
+  (testing "one cleanup pass inlines every expired ref in a live block title"
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "Live"}
+                  :blocks [{:block/title "A"}
+                           {:block/title "B"}
+                           {:block/title "placeholder"}]}])
+          block-a (db-test/find-block-by-content @conn "A")
+          block-b (db-test/find-block-by-content @conn "B")
+          live (db-test/find-block-by-content @conn "placeholder")
+          live-id (:db/id live)
+          a-uuid (:block/uuid block-a)
+          b-uuid (:block/uuid block-b)
+          raw-title (str "See " (block-ref/->block-ref (str a-uuid))
+                         " and " (block-ref/->block-ref (str b-uuid)))]
+      (ldb/transact! conn [{:db/id live-id
+                            :block/title raw-title
+                            :block/raw-title raw-title
+                            :block/refs [(:db/id block-a) (:db/id block-b)]}])
+      (ldb/transact! conn
+                     (recycle/recycle-blocks-tx-data @conn [block-a] {:now-ms 0})
+                     {:outliner-op :delete-blocks})
+      (ldb/transact! conn
+                     (recycle/recycle-blocks-tx-data @conn [(d/entity @conn (:db/id block-b))] {:now-ms 0})
+                     {:outliner-op :delete-blocks})
+      (let [tx (#'recycle/gc-tx-data @conn {:now-ms (* 31 24 3600 1000)})
+            title-adds (->> tx
+                            (filter (fn [item]
+                                      (and (vector? item)
+                                           (= :db/add (first item))
+                                           (= live-id (second item))
+                                           (= :block/title (nth item 2 nil)))))
+                            (map #(nth % 3)))]
+        (is (= ["See A and B"] title-adds)))
+      (is (true? (recycle/gc! conn {:now-ms (* 31 24 3600 1000)})))
+      (is (= "See A and B" (:block/title (d/entity @conn live-id))))
+      (is (nil? (d/entity @conn [:block/uuid a-uuid])))
+      (is (nil? (d/entity @conn [:block/uuid b-uuid]))))))
+
+(deftest recycle-gc-tx-against-db-skips-restored-root
+  (testing "recorded recycle-gc retracts skip a root that has been restored"
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "keep"}}
+                 {:page {:block/title "drop"}}])
+          keep-page (ldb/get-page @conn "keep")
+          drop-page (ldb/get-page @conn "drop")
+          keep-uuid (:block/uuid keep-page)
+          drop-uuid (:block/uuid drop-page)]
+      (ldb/transact! conn
+                     (recycle/recycle-page-tx-data @conn keep-page {:now-ms 0})
+                     {:outliner-op :delete-page})
+      (ldb/transact! conn
+                     (recycle/recycle-page-tx-data @conn (d/entity @conn (:db/id drop-page)) {:now-ms 0})
+                     {:outliner-op :delete-page})
+      (recycle/restore! conn keep-uuid)
+      (let [recorded [[:db/retractEntity [:block/uuid keep-uuid]]
+                      [:db/retractEntity [:block/uuid drop-uuid]]]
+            tx (recycle/recycle-gc-tx-against-db @conn recorded)]
+        (is (not-any? (fn [item]
+                        (= item [:db/retractEntity [:block/uuid keep-uuid]]))
+                      tx))
+        (is (some (fn [item]
+                    (= item [:db/retractEntity [:block/uuid drop-uuid]]))
+                  tx)))
+      (ldb/transact! conn
+                     (recycle/recycle-gc-tx-against-db
+                      @conn
+                      [[:db/retractEntity [:block/uuid keep-uuid]]
+                       [:db/retractEntity [:block/uuid drop-uuid]]])
+                     {:outliner-op :recycle-gc})
+      (is (some? (d/entity @conn [:block/uuid keep-uuid])))
+      (is (not (ldb/recycled? (d/entity @conn [:block/uuid keep-uuid]))))
+      (is (nil? (d/entity @conn [:block/uuid drop-uuid]))))))
 
 (deftest apply-ops-permanently-delete-recycled-page-removes-page-and-descendants
   (let [conn (db-test/create-conn-with-blocks
