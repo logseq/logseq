@@ -472,7 +472,7 @@ let show_select ~(anchor : U.el) ~items ~placeholder ?(multiple = false)
           list ~accessibility_identifier:"ui__ac-inner"
             ~style_class:"cp__select-results"
             ~height:(if fit_results then height else min 280 height)
-            ?min_height:(if fit_results then Some height else None)
+            ?min_height:(if fit_results then Some 0 else None)
             ~scroll_target:(reactive (fun picked ->
               "ac-" ^ string_of_int (bounded (List.length visible) picked)) csig)
             ~scroll_token_signal:csig ~scroll_anchor:`nearest
@@ -493,6 +493,7 @@ let show_select ~(anchor : U.el) ~items ~placeholder ?(multiple = false)
                    ~style_class:"cp__select-input" ~placeholder
                    ~text:(reactive Fun.id qsig)
                    ~autofocus:true ~height:32
+                   ?min_height:(if fit_results then Some 32 else None)
                    ~padding_horizontal:input_padding_horizontal ~padding_vertical:4
                    ~background:"transparent" ~border_width:0 ~corner_radius:0
                    ~foreground:"var(--ls-secondary-text-color)"
@@ -506,7 +507,8 @@ let show_select ~(anchor : U.el) ~items ~placeholder ?(multiple = false)
                      | Lui_protocol.NavigateNext _ -> navigate 1
                      | _ -> ())
                    ~on_submit:(fun _ -> submit ()) [])
-            ; column ~padding_vertical:4 ~cross:`stretch [ results ] ]
+            ; column ~padding_vertical:4 ~cross:`stretch
+                ?min_height:(if fit_results then Some 0 else None) [ results ] ]
             @ (match multiple,on_apply with
               | true,Some apply ->
               [ column ~style_class:"cp__select-apply" ~padding:16
