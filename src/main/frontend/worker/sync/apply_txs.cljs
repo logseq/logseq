@@ -1287,8 +1287,11 @@
                 tx-data (cond->> tx-data
                           db-before-local-reversal
                           (drop-local-reversal-stale-target-ops db-before-local-reversal db))
+                tx-data (if (and tx-data (= :recycle-gc (:outliner-op remote-tx)))
+                          (outliner-recycle/recycle-gc-tx-against-db db tx-data)
+                          tx-data)
                 tx-data (seq (tx-sanitize/sanitize-tx
-                              db tx-data
+                              db (or tx-data [])
                               {:drop-missing-retract-ops? true}))
                 tx-meta (apply-tx-meta remote-tx)
                 report (ldb/transact! conn tx-data tx-meta)
@@ -1644,7 +1647,11 @@
                        {:outliner-op :recycle-delete-permanently})))
 
     (let [[tx-data tx-meta] args
-          tx-data (expand-block-retracts-to-descendants @conn tx-data)]
+          recycle-gc? (or (= :recycle-gc (:outliner-op tx-meta))
+                          (= :recycle-gc (:original-outliner-op tx-meta)))
+          tx-data (if recycle-gc?
+                    (outliner-recycle/recycle-gc-tx-against-db @conn tx-data)
+                    (expand-block-retracts-to-descendants @conn tx-data))]
       (when-let [tx-data (seq tx-data)]
         (ldb/transact! conn tx-data tx-meta)))))
 

@@ -4605,6 +4605,68 @@
           (is (= (sync-checksum/recompute-checksum @conn)
                  (client-op/get-local-checksum test-repo))))))))
 
+(deftest restore-before-pending-recycle-gc-rebase-keeps-page-test
+  (testing "rebasing a pending recycle GC after a remote restore keeps the restored page"
+    (let [{:keys [conn client-ops-conn page-uuid child-uuid]} (setup-expired-recycled-page)]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (listen-local-checksum! conn)
+          (let [restore-conn (d/conn-from-db @conn)
+                restore-report (ldb/transact!
+                                restore-conn
+                                (outliner-recycle/restore-tx-data
+                                 @restore-conn
+                                 (d/entity @restore-conn [:block/uuid page-uuid]))
+                                {:outliner-op :restore-recycled})
+                restore-tx (vec (db-normalize/normalize-tx-data
+                                 (:db-after restore-report)
+                                 (:db-before restore-report)
+                                 (:tx-data restore-report)))]
+            (is (true? (outliner-recycle/gc! conn {:now-ms recycle-gc-now-ms})))
+            (is (nil? (d/entity @conn [:block/uuid page-uuid])))
+            (is (= :applied
+                   (try
+                     (#'sync-apply/apply-remote-txs!
+                      test-repo
+                      nil
+                      [{:tx-data restore-tx
+                        :outliner-op :restore-recycled}])
+                     :applied
+                     (catch :default error
+                       error))))
+            (let [page (d/entity @conn [:block/uuid page-uuid])]
+              (is (some? page))
+              (is (not (ldb/recycled? page)))
+              (is (some? (d/entity @conn [:block/uuid child-uuid]))))
+            (is (empty? (sync-apply/pending-txs test-repo)))
+            (is (= (sync-checksum/recompute-checksum @conn)
+                   (client-op/get-local-checksum test-repo)))))))))
+
+(deftest recycle-gc-upload-after-remote-restore-does-not-delete-page-test
+  (testing "server recycle-gc does not retract a page another client has already restored"
+    (let [{:keys [conn server-conn client-ops-conn page-uuid child-uuid]}
+          (setup-expired-recycled-page)]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (listen-local-checksum! conn)
+          (is (true? (outliner-recycle/gc! conn {:now-ms recycle-gc-now-ms})))
+          (ldb/transact! server-conn
+                         (outliner-recycle/restore-tx-data
+                          @server-conn
+                          (d/entity @server-conn [:block/uuid page-uuid]))
+                         {:outliner-op :restore-recycled})
+          (let [{:keys [tx-entries]}
+                (sync-apply/prepare-upload-tx-entries conn (sync-apply/pending-txs test-repo))]
+            (is (seq tx-entries))
+            (doseq [{:keys [tx-data outliner-op]} tx-entries]
+              (#'sync-handler/apply-tx-entry!
+               server-conn {:tx (sqlite-util/write-transit-str tx-data)
+                            :outliner-op outliner-op})))
+          (let [page (d/entity @server-conn [:block/uuid page-uuid])]
+            (is (some? page))
+            (is (not (ldb/recycled? page)))
+            (is (some? (d/entity @server-conn [:block/uuid child-uuid])))))))))
+
 (deftest apply-history-action-replays-set-block-property-from-tx-data-with-raw-uuid-id-test
   (testing "apply-history-action should replay set-block-property from tx-data with raw block uuid ids"
     (let [graph {:classes {:tag1 {}}
