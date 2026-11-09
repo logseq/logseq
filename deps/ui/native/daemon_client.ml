@@ -149,9 +149,14 @@ let lifecycle_dir () =
     store_id
 
 let new_uuid () =
-  let ic = open_in_bin "/dev/urandom" in
-  let b = really_input_string ic 16 in
-  close_in ic;
+  let b =
+    if Sys.os_type = "Win32" then Mirage_crypto_rng_unix.getrandom 16
+    else
+      let ic = open_in_bin "/dev/urandom" in
+      let b = really_input_string ic 16 in
+      close_in ic;
+      b
+  in
   let b = Bytes.of_string b in
   Bytes.set b 6 (Char.chr ((Char.code (Bytes.get b 6) land 0x0f) lor 0x40));
   Bytes.set b 8 (Char.chr ((Char.code (Bytes.get b 8) land 0x3f) lor 0x80));
