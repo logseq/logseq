@@ -965,6 +965,10 @@ let rec retry_vertical uuid scope epoch ev armed_caret mine_ms attempts =
 and apply_input ?frame uuid ev =
   let ev =
     match ev with
+    | Edit_input.Key (({ Edit_model.key = "ArrowLeft" | "ArrowRight"
+                       ; ctrl = true; meta = false; alt = false; _ } as key), repeat)
+      when not (Ui_services.env_is_mac ()) ->
+        Edit_input.Key ({key with ctrl = false; alt = true}, repeat)
     | Edit_input.Key (key, repeat)
       when key.Edit_model.ctrl && not (key.meta || key.alt)
            && Ui_services.env_is_mac () ->
