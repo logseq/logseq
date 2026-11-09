@@ -1038,7 +1038,7 @@ and child_list ~link_hosts ~depth ~editable ~library ~virtualize uuid scope
            ~active_key:(Some (Logseq_el.own ctx
              (Signal.map (function
                | Some (row_ref, target_scope) when target_scope=scope ->
-                   S.row_ancestor_key ~scope ~link_hosts:child_hosts row_ref
+                   S.row_ancestor_key ~parent:row.row_ref ~scope ~link_hosts:child_hosts row_ref
                | _ -> None) (S.editing_target_sig ()))))
            ~estimate_height:(fun block -> 32. +. estimate_children_height block)
            ~source:(Logseq_el.own ctx (Signal.map children bs))

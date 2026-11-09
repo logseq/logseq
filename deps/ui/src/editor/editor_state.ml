@@ -673,11 +673,12 @@ let row_neighbor ?(siblings = false) ~scope row_ref direction =
   in
   scan None rows
 
-let row_ancestor_key ~scope ~link_hosts row_ref =
+let row_ancestor_key ?parent ~scope ~link_hosts row_ref =
   let rec walk row_ref =
-    if row_ref.link_hosts = link_hosts then Some row_ref.owner_uuid
-    else match resolve_row ~scope row_ref with
-      | Some { parent = Some parent; _ } -> walk parent
+    match resolve_row ~scope row_ref with
+      | Some row when row.parent = parent && row_ref.link_hosts = link_hosts ->
+          Some row_ref.owner_uuid
+      | Some { parent = Some ancestor; _ } -> walk ancestor
       | _ -> None
   in
   walk row_ref
