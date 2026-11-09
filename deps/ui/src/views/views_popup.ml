@@ -119,12 +119,16 @@ let anchor_identifier (anchor : U.el) =
    (menu surfaces); select/custom popups keep caller-driven classes. *)
 type popup_anchor = Target of string | Rectangle of (float * float * float * float)
 
-let anchored_popover ~key ~id ~anchor ~align_end ~cls ~card ?role ~on_dismiss children : t =
+let anchored_popover ~key ~id ~anchor ~align_end ~cls ~card ?role
+    ?max_height_viewport ~on_dismiss children : t =
   let anchor_target, anchor_rect, alignment = match anchor with
     | Target target -> Some target, None, (if align_end then `end_ else `start)
     | Rectangle rect -> None, Some rect, `center in
   Ui_components.with_props
-    (if card then [ Ui_components.card_shadow ] else [])
+    ((if card then [ Ui_components.card_shadow ] else [])
+     @ (match max_height_viewport with
+       | Some height -> [ Ui_components.Prop.max_height_viewport height ]
+       | None -> []))
     (popover ~key ?role ~accessibility_identifier:id
        ~transition:Ui_components.popover_transition
        ~anchor:`below ?anchor_target ?anchor_rect ~anchor_offset:0.
@@ -532,6 +536,7 @@ let show_select ~(anchor : U.el) ~items ~placeholder ?(multiple = false)
     in
     anchored_popover ~key:("vpsel-p" ^ string_of_int id) ~role:`menu
       ~id:("vpsel-p" ^ string_of_int id) ~anchor:(Target anchor_target) ~align_end ~card:true
+      ?max_height_viewport:(if fit_results then Some 0.75 else None)
       ~cls:("ui__dropdown-menu-content " ^ wrap_cls)
       ~on_dismiss:(fun _ -> close_entry id)
       [ wrap ] context parent
