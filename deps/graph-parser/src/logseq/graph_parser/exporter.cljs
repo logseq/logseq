@@ -3340,8 +3340,7 @@
           _ (import-progress! options {:phase :blocks-tx :file file})
           blocks-start (when log-fn (import-profile/now-ms))
           blocks-tx (<build-blocks-tx conn blocks pre-blocks per-file-state tx-options walked-by-uuid)
-          _ (log-phase-ms! log-fn :blocks-tx blocks-start {:file file
-                                                           :blocks (count blocks)})
+          _ (log-phase-ms! log-fn :blocks-tx blocks-start {:file file :blocks (count blocks)})
           _ (track-placeholder-ref-uuids! (:import-state options) blocks-tx)
           split-start (when log-fn (import-profile/now-ms))
           {:keys [property-pages-tx property-page-properties-tx] pages-tx' :pages-tx}
