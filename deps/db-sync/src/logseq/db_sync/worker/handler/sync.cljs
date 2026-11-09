@@ -16,7 +16,6 @@
             [logseq.db-sync.worker.routes.semantic :as semantic-routes]
             [logseq.db-sync.worker.routes.sync :as sync-routes]
             [logseq.db-sync.worker.ws :as ws]
-            [logseq.outliner.recycle :as outliner-recycle]
             [promesa.core :as p]))
 
 (def ^:private snapshot-download-batch-size 10000)
@@ -346,9 +345,7 @@
 
 (def ^:private delete-outliner-ops
   #{:delete-blocks
-    :delete-page
-    :recycle-gc
-    :recycle-delete-permanently})
+    :delete-page})
 
 (defn- request-context->tx-meta
   [{:keys [graph-id client-revision username]}]
@@ -571,11 +568,8 @@
                         (catch :default error
                           (throw (ex-info "Invalid transaction payload"
                                           {:error :db-sync/invalid-field} error))))
-        tx-data (if (= outliner-op :recycle-gc)
-                  (or (outliner-recycle/recycle-gc-tx-against-db db input-tx-data) [])
-                  input-tx-data)
         tx-data (tx-sanitize/sanitize-tx db
-                                         tx-data
+                                         input-tx-data
                                          {:drop-missing-retract-ops? (or (= outliner-op :fix)
                                                                          (contains? delete-outliner-ops outliner-op))
                                           :drop-ops-targeting-retracted-entities? (contains? delete-outliner-ops

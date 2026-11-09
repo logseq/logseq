@@ -609,6 +609,13 @@
         (ldb/transact! conn tx-data
                        {:outliner-op :recycle-delete-permanently})))
 
+    :recycle-gc
+    (let [[root-uuid deleted-at] args]
+      ;; Skip roots that a preceding remote tx restored, recycled again or removed.
+      (when-let [tx-data (outliner-recycle/gc-root-tx-data @conn root-uuid deleted-at)]
+        (ldb/transact! conn tx-data
+                       {:outliner-op :recycle-gc})))
+
     :set-block-property
     (let [[block-eid property-id v] args
           block-eid' (or (replay-entity-id-value @conn block-eid)
