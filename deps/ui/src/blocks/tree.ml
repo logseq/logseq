@@ -43,20 +43,27 @@ let block_key (b : Model.block) =
   | Some u -> u
   | None -> "block-" ^ string_of_int (Option.value b.block_db_id ~default:0)
 
-let track_mounted_row ?row_ref ~scope (b : Model.block) child =
+let track_mounted_row ?row_ref ?uuid_signal ~scope (b : Model.block) child =
   match b.block_uuid with
   | Some uuid ->
       let row_ref = Option.value row_ref ~default:(S.ordinary_row uuid) in
-      Lazy_children.track_mounted ~scope ~uuid ~mount_key:(S.row_key row_ref) (fun ctx parent ->
+      Lazy_children.track_mounted
+        ?current_uuid:(Option.map (fun signal () -> Signal.get signal) uuid_signal)
+        ~scope ~uuid ~mount_key:(S.row_key row_ref) (fun ctx parent ->
           Settings_state.ensure ctx;
-          Ui_parts.string_prop Lui_protocol.BackgroundValue
-            ~value:(reactive (fun (selected_scope, selected) preferences ->
+          let background canonical_uuid (selected_scope, selected) preferences =
               if selected_scope = scope && S.Row_set.mem row_ref selected then "var(--ls-block-highlight-color)"
               else if preferences.Settings_state.highlight_recent
-                  && Settings_state.Recent_blocks.mem uuid preferences.recent_blocks
+                  && Settings_state.Recent_blocks.mem canonical_uuid preferences.recent_blocks
               then "var(--ls-secondary-background-color, var(--lx-gray-03))"
-              else "transparent")
-              (S.selected_sig ()) (Signal.value (Settings_state.state ()))) child ctx parent)
+              else "transparent" in
+          let selected = S.selected_sig () in
+          let preferences = Signal.value (Settings_state.state ()) in
+          match uuid_signal with
+          | Some signal -> Ui_parts.string_prop Lui_protocol.BackgroundValue
+              ~value:(reactive background signal selected preferences) child ctx parent
+          | None -> Ui_parts.string_prop Lui_protocol.BackgroundValue
+              ~value:(reactive (background uuid) selected preferences) child ctx parent)
   | None -> child
 
 (* -- per-row signals -- *)
@@ -213,7 +220,8 @@ let children_container ~library uuid (bs : Model.block Signal.signal) content =
           ; Ui_components.Prop.cursor `pointer ]
           (box ~key:("border-" ^ uuid) ~style_class:"block-children-left-border"
             ~width:4 ~corner_radius:2 ~opacity:0.6
-            ~data_attrs:["data-blockid", uuid] [])
+            ~data_attrs_signal:(Signal.map (fun (b : Model.block) ->
+              ["data-blockid", Option.get b.block_uuid]) bs) [])
       ; Ui_components.with_props
           [ Ui_components.Prop.position `absolute
           ; Ui_components.Prop.inset_top 0.
@@ -897,16 +905,14 @@ and row_el ~link_hosts ~depth ~editable ~virtualize scope ~library b : t =
 and row_sig ~link_hosts ~depth ~editable ~library ~virtualize scope
     (bs : Model.block Signal.signal) : t =
  fun ctx parent ->
-  let targets = Logseq_el.own ctx (Signal.map (fun b -> [b]) bs) in
-  (Lui_elements.keyed ~source:targets ~cmp:String.compare
-    ~key:(fun b -> S.target_uuid (S.project_row ~scope ~link_hosts b))
-    ~mount:(fun bs -> fun ctx parent ->
   let b0 = Signal.get bs in
   let key = block_key b0 in
   let row0 = S.project_row ~scope ~link_hosts b0 in
   let row_ref = row0.S.row_ref in
   let displayed = Logseq_el.own ctx
     (Signal.map (fun b -> (S.project_row ~scope ~link_hosts b).S.target) bs) in
+  let uuid_signal = Logseq_el.own ctx
+      (Signal.map (fun b -> S.target_uuid (S.project_row ~scope ~link_hosts b)) bs) in
   (* the record isn't the only input to row_main: Render resolves
      [[uuid]]/((uuid))/#[[uuid]] refs through Render_inline's pull cache
      at mount, and an untouched record keeps its mount on every
@@ -930,7 +936,7 @@ and row_sig ~link_hosts ~depth ~editable ~library ~virtualize scope
             || contains_sub title ("((" ^ u ^ "))"))
       ib
   in
-  (track_mounted_row ~row_ref ~scope row0.target
+  (track_mounted_row ~row_ref ~uuid_signal ~scope row0.target
     (with_editor_font
     (Ui_parts.class_signal (row_class_sig_of ~scope ~row_ref displayed) Fun.id
     (column ~key:("ls-" ^ scope ^ "-" ^ key)
@@ -940,19 +946,20 @@ and row_sig ~link_hosts ~depth ~editable ~library ~virtualize scope
        ~data_attrs_signal:(row_attrs_sig_of ~scope ~link_hosts ~depth ~editable bs)
     [ reactive
         ~equal:
-          (fun ((a : Model.block), ga, ia) ((b : Model.block), gb, ib) ->
-          a == b && ga = gb && not (gen_bumped a ia ib))
-        (fun ((b : Model.block), _g, _i) ->
-          row_main ~row_ref ~node_embed:(row0.target != row0.owner)
+          (fun ((a : Model.block), na, ga, ia) ((b : Model.block), nb, gb, ib) ->
+          a == b && na = nb && ga = gb && not (gen_bumped a ia ib))
+        (fun ((b : Model.block), node_embed, _g, _i) ->
+          row_main ~row_ref ~node_embed
             ~editable ~library scope b)
         (Logseq_el.own ctx
            (Signal.map2
-              (fun (b : Model.block) (_tick : int) ->
+              (fun (owner : Model.block) (_tick : int) ->
+                let row = S.project_row ~scope ~link_hosts owner in
                 let g, i = Render_inline.invalidation () in
-                (b, g, i))
-              displayed (S.invalidation_sig ())))
-    ; Properties_area.block_area ~scope
-        ~uuid:(S.target_uuid row0)
+                (row.target, row.target != row.owner, g, i))
+              bs (S.invalidation_sig ())))
+    ; reactive ~equal:String.equal
+        (fun uuid -> Properties_area.block_area ~scope ~uuid) uuid_signal
     ; (* the query/cards shell keys off the live block record — a block
          that becomes a query/cards block after mount (title or property
          edit) republishes bs and mounts the section instead of keeping
@@ -964,11 +971,13 @@ and row_sig ~link_hosts ~depth ~editable ~library ~virtualize scope
                 (fun (b : Model.block) ->
                   Render.is_query_block b || Render.is_cards_block b)
                 displayed))
-        (Render.query_below_el
-           (S.target_uuid row0))
-    ; row_children ~link_hosts ~depth ~editable ~library ~virtualize scope bs
+        (reactive ~equal:String.equal Render.query_below_el uuid_signal)
+    ; reactive ~equal:( = )
+        (fun _ -> row_children ~link_hosts ~depth ~editable ~library ~virtualize scope bs)
+        (Logseq_el.own ctx (Signal.map (fun b ->
+          (S.project_row ~scope ~link_hosts b).S.child_hosts) bs))
     ]))))
-    ctx parent)) ctx parent
+    ctx parent
 
 and row_children ~link_hosts ~depth ~editable ~library ~virtualize scope
     (bs : Model.block Signal.signal) : t =

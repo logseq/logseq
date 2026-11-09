@@ -19,7 +19,7 @@ module Mounted_uuids = Stdlib.Set.Make (String)
 type mounted_projection =
   { scheduler : Signal.scheduler
   ; scope : string
-  ; counts : (string, string * int) Hashtbl.t
+  ; counts : (string, (unit -> string) * int) Hashtbl.t
   ; state : Mounted_uuids.t Signal.state
   ; mutable mounted : Mounted_uuids.t
   ; mutable users : int
@@ -30,7 +30,7 @@ let mounted_projections : mounted_projection list ref = ref []
 let all_mounted_uuids ctx =
   List.fold_left (fun uuids projection ->
       if projection.scheduler == ctx.Lui_ui.ui_scheduler then
-        Hashtbl.fold (fun _ (uuid, _) acc -> Mounted_uuids.add uuid acc)
+        Hashtbl.fold (fun _ (uuid, _) acc -> Mounted_uuids.add (uuid ()) acc)
           projection.counts uuids else uuids)
     Mounted_uuids.empty !mounted_projections |> Mounted_uuids.elements
 
@@ -66,23 +66,24 @@ let mounted_uuids ~scope ctx =
   Signal.on_dispose ctx.Lui_ui.ui_scope (fun () -> release_mounted projection);
   Signal.value projection.state
 
-let track_mounted ?mount_key ~scope ~uuid child : t =
+let track_mounted ?mount_key ?current_uuid ~scope ~uuid child : t =
  fun ctx parent ->
   let projection = retain_mounted ctx scope in
   let key = Option.value mount_key ~default:uuid in
+  let uuid_source = Option.value current_uuid ~default:(fun () -> uuid) in
   let count = Option.fold ~none:0 ~some:snd (Hashtbl.find_opt projection.counts key) in
-  Hashtbl.replace projection.counts key (uuid, count + 1);
+  Hashtbl.replace projection.counts key (uuid_source, count + 1);
   if count = 0 then begin
     projection.mounted <- Mounted_uuids.add key projection.mounted;
     Signal.set projection.state projection.mounted
   end;
   Signal.on_dispose ctx.Lui_ui.ui_scope (fun () ->
-    let _, count = Hashtbl.find projection.counts key in
+    let source, count = Hashtbl.find projection.counts key in
     if count = 1 then begin
       Hashtbl.remove projection.counts key;
       projection.mounted <- Mounted_uuids.remove key projection.mounted;
       Signal.set projection.state projection.mounted
-    end else Hashtbl.replace projection.counts key (uuid, count - 1);
+    end else Hashtbl.replace projection.counts key (source, count - 1);
     release_mounted projection);
   child ctx parent
 

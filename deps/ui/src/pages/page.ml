@@ -745,7 +745,7 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
   (* Page and journal titles sit outside the outliner data-cid containers;
      selection therefore resolves these rows to the main scope. *)
   (match page.page_uuid with
-   | Some uuid -> Lazy_children.track_mounted ~mount_key:uuid ~scope:"main" ~uuid
+   | Some uuid -> Lazy_children.track_mounted ?current_uuid:None ~mount_key:uuid ~scope:"main" ~uuid
    | None -> Fun.id)
     (row ~key:"page-title" ~grow:1. ~cross:`start
     ~style_class:"ls-page-title content title"
