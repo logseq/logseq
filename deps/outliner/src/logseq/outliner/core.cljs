@@ -17,6 +17,7 @@
             [logseq.outliner.datascript :as ds]
             [logseq.outliner.page :as outliner-page]
             [logseq.outliner.pipeline :as outliner-pipeline]
+            [logseq.outliner.recycle :as outliner-recycle]
             [logseq.outliner.tree :as otree]
             [logseq.outliner.tx-meta :as outliner-tx-meta]
             [logseq.outliner.validate :as outliner-validate]
@@ -1392,14 +1393,20 @@
        candidate-comments-areas))))
 
 (defn ^:api ^:large-vars/cleanup-todo delete-blocks
-  "Delete blocks from the tree."
-  [db blocks _opts]
+  "Delete blocks from the tree.
+
+  | Option | Description |
+  |--------|-------------|
+  | `:cut?` | Recycle selections containing assets so existing references survive the move. |"
+  [db blocks {:keys [cut?] :as opts}]
   (let [top-level-blocks (filter-top-level-blocks db blocks delete-covers-selected-ancestor?)
         non-consecutive? (and (> (count top-level-blocks) 1) (seq (ldb/get-non-consecutive-blocks db top-level-blocks)))
         top-level-blocks* (get-top-level-blocks top-level-blocks non-consecutive?)
         top-level-blocks (remove outliner-validate/built-in-entity? top-level-blocks*)
         deleted-block-ids (into #{} (mapcat #(block-subtree-ids db %) top-level-blocks))
-        orphaned-comments-areas (orphaned-range-comments-areas db deleted-block-ids)
+        recycle-cut? (and cut? (some #(ldb/asset? (d/entity db %)) deleted-block-ids))
+        orphaned-comments-areas (when-not recycle-cut?
+                                  (orphaned-range-comments-areas db deleted-block-ids))
         top-level-blocks (concat top-level-blocks orphaned-comments-areas)
         txs-state (ds/new-outliner-txs-state)
         block-ids (map (fn [b] [:block/uuid (:block/uuid b)]) top-level-blocks)
@@ -1421,6 +1428,13 @@
                                                (:db/id (:logseq.property/default-value from-property)))
                                          (not (:block/closed-value-property start-block)))]
         (cond
+          recycle-cut?
+          (do
+            (swap! txs-state into
+                   (outliner-recycle/recycle-blocks-tx-data db (remove ldb/page? top-level-blocks) opts))
+            (doseq [page (filter ldb/page? top-level-blocks)]
+              (otree/-del page txs-state db)))
+
           (and delete-one-block? default-value-property?)
           (let [datoms (d/datoms db :avet (:db/ident from-property) (:db/id start-block))
                 tx-data (map (fn [d] {:db/id (:e d)

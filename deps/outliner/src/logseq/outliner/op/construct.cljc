@@ -881,13 +881,17 @@
         (into save-ops))))
 
 (defn- build-inverse-delete-blocks
-  [db-before ids]
+  [db-before db-after ids]
   (let [{:keys [roots incomplete?]} (selected-block-roots db-before ids)
-        plans (mapv #(delete-root->restore-plan db-before %) roots)]
+        recycled-roots (filter #(ldb/recycled? (d/entity db-after [:block/uuid (:block/uuid %)])) roots)
+        recycled-ids (set (map :db/id recycled-roots))
+        plans (mapv #(delete-root->restore-plan db-before %)
+                    (remove #(contains? recycled-ids (:db/id %)) roots))]
     (when (and (not incomplete?)
                (seq roots)
                (every? some? plans))
-      (seq (restore-plans->ops db-before plans)))))
+      (seq (concat (map (fn [root] [:restore-recycled [(:block/uuid root)]]) recycled-roots)
+                   (restore-plans->ops db-before plans))))))
 
 (defn- move-root->restore-op
   [db-before root]
@@ -1198,7 +1202,13 @@
 
                           :delete-blocks
                           (let [[ids _opts] args]
-                            (build-inverse-delete-blocks db-before ids))
+                            (build-inverse-delete-blocks db-before db-after ids))
+
+                          :restore-recycled
+                          (let [[root-id] args
+                                root (block-entity db-before root-id)]
+                            (when (and root (not (ldb/page? root)))
+                              (restore-plans->ops db-before [(delete-root->restore-plan db-before root)])))
 
                           :create-page
                           (let [[_title opts] args]

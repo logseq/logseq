@@ -644,3 +644,61 @@
              (->> (:block/_parent (db-test/find-page-by-title @conn "target"))
                   ldb/sort-by-order
                   (mapv :block/title)))))))
+
+(deftest cut-asset-preserves-copies-through-history
+  (doseq [nested? [false true]]
+    (let [asset-data {:block/title "document"
+                      :build/tags #{:logseq.class/Asset}
+                      :build/properties {:logseq.property.asset/type "pdf"
+                                         :logseq.property.asset/checksum "abc"
+                                         :logseq.property.asset/size 42}}
+          conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "source"}
+                  :blocks [(if nested?
+                             {:block/title "folder" :build/children [asset-data]}
+                             asset-data)]}
+                 {:page {:block/title "dest"} :blocks [{:block/title "anchor"}]}])
+          asset (db-test/find-block-by-content @conn "document")
+          root (if nested? (db-test/find-block-by-content @conn "folder") asset)
+          target (db-test/find-block-by-content @conn "anchor")
+          asset-id (:db/id asset)
+          asset-ref [:block/uuid (:block/uuid asset)]
+          root-uuid (:block/uuid root)
+          copy-uuid (random-uuid)
+          reports (atom [])
+          apply-with-history!
+          (fn [ops]
+            (outliner-op/apply-ops! conn ops {})
+            (let [{:keys [db-before db-after tx-data tx-meta]} (last @reports)]
+              (op-construct/derive-history-outliner-ops db-before db-after tx-data tx-meta)))
+          check-link! (fn []
+                        (is (= (:block/uuid asset)
+                               (:block/uuid (:block/link (d/entity @conn [:block/uuid copy-uuid])))))
+                        (is (= "pdf" (:logseq.property.asset/type (d/entity @conn asset-ref)))))]
+      (outliner-core/insert-blocks! conn [{:block/uuid copy-uuid :block/title "document"
+                                         :block/link asset-id}]
+                                    target {:sibling? true :keep-uuid? true})
+      (d/listen! conn ::cut-asset-history #(swap! reports conj %))
+      (let [cut (apply-with-history! [[:delete-blocks [[root-uuid] {:cut? true}]]])]
+        (check-link!)
+        (is (ldb/recycled? (d/entity @conn [:block/uuid root-uuid])))
+        (let [paste (apply-with-history!
+                     [[:restore-recycled [root-uuid]]
+                      [:move-blocks [[root-uuid] (:block/uuid target) {:sibling? true}]]])]
+          (check-link!)
+          (is (= (:db/id (ldb/get-page @conn "dest"))
+                 (:db/id (:block/page (d/entity @conn asset-ref)))))
+          (is (seq (:inverse-outliner-ops paste)))
+          (outliner-op/apply-ops! conn (:inverse-outliner-ops paste) {})
+          (check-link!)
+          (is (ldb/recycled? (d/entity @conn [:block/uuid root-uuid])))
+          (outliner-op/apply-ops! conn (:inverse-outliner-ops cut) {})
+          (check-link!)
+          (is (= (:db/id (ldb/get-page @conn "source"))
+                 (:db/id (:block/page (d/entity @conn asset-ref)))))
+          (outliner-op/apply-ops! conn (:forward-outliner-ops cut) {})
+          (outliner-op/apply-ops! conn (:forward-outliner-ops paste) {})
+          (check-link!)
+          (is (not (ldb/recycled? (d/entity @conn [:block/uuid root-uuid]))))
+          (is (= (:db/id (ldb/get-page @conn "dest"))
+                 (:db/id (:block/page (d/entity @conn asset-ref))))))))))
