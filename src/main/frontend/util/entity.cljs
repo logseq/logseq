@@ -53,6 +53,11 @@
       (class? entity)
       (property? entity)))
 
+(defn pdf-annotation?
+  "Returns whether `entity` has the PDF annotation class."
+  [entity]
+  (tagged-with? entity :logseq.class/Pdf-annotation))
+
 (defn library-outline-child-uuids
   "Library outlines nested pages, not normal blocks."
   [child-blocks]

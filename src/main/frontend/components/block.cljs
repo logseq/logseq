@@ -819,6 +819,13 @@
         (nil? page)
         (state/pub-event! [:page/create page-name])
 
+        ;; Normal click on a PDF annotation ref opens the PDF at the highlight.
+        ;; Shift-click (sidebar) and meta/ctrl/middle-click still reach the
+        ;; annotation block itself.
+        (and (entity/pdf-annotation? page)
+             (not (or (= (.-button e) 1) (.-metaKey e) (.-ctrlKey e))))
+        (pdf-assets/open-block-ref! page)
+
         (and (fn? (:on-pointer-down config))
              (not (or (= (.-button e) 1) (.-metaKey e) (.-ctrlKey e))))
         ((:on-pointer-down config) e)
