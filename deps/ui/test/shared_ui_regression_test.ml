@@ -68,7 +68,8 @@ let localization () =
        "settings.sync-server/url","Translated Sync server";
        "page/not-found-title","Translated Not Found";
        "library/add-existing-pages","Translated Add Pages";
-       "view.table/select-column","Translated Select column"];
+       "view.table/select-column","Translated Select column";
+       "cmdk/current-page-badge","Translated Current Page badge"];
     Hashtbl.replace I18n.locale_tbls "zh-CN" (Some dictionary);
     Platform.local_storage_set "preferred-language" "\"zh-CN\"";
     check "Locale fixture loads after application modules initialize"
@@ -118,8 +119,8 @@ let localization () =
          "Translated Sync server";"Translated Add Pages"];
       List.iter (fun (_,_,value) -> check ("Localized search heading: " ^ value)
           (List.mem value texts)) group_labels;
-      eqi "Search current-page badge shares the localized group name" 2
-        (List.length (List.filter ((=) "Translated Current page") texts));
+      check "Search current-page badge resolves its own late locale entry"
+        (List.mem "Translated Current Page badge" texts);
       check "Late locale reaches the retained More recipe"
         (List.exists (fun n -> M.string_prop n "accessibility-label"=Some "Translated More") (nodes session)));
     check "Built-in view columns resolve the initialized locale"

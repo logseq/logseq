@@ -245,8 +245,9 @@ let close_on_middle st key = function
       Sidebar_state.remove_item st key
   | _ -> ()
 
-let item_drag st key : t =
+let item_drag st (it : Sidebar_state.item) : t =
  fun context parent ->
+  let key = it.Sidebar_state.key in
   let origin = ref None and dragged = ref false in
   let request = Ui_effect.request () in
   let keys () =
@@ -278,7 +279,7 @@ let item_drag st key : t =
   (Ui_components.with_props
     [Ui_components.Prop.cursor `pointer; Ui_components.Prop.user_select `none]
     (box ~key:("drag-" ^ key) ~accessibility_identifier:("sidebar-panel-drag-" ^ key)
-      ~width:20 ~min_width:20 ~height:32 ~opacity:0.5 ~pointer_capture:true
+      ~width:20 ~min_width:20 ~height:32 ~pointer_capture:true
       ~on_pointer_down:(function
         | Lui_protocol.PointerDown (_, detail) when detail.button = 0 ->
             ignore (Ui_effect.issue request);
@@ -301,24 +302,27 @@ let item_drag st key : t =
             (match started with
              | Some (reload, order, _, _) when !dragged ->
                  drop ~reload ~order detail.x detail.y
+             | Some _ -> Sidebar_state.toggle_collapsed st key
              | _ -> ())
         | _ -> ())
       ~on_pointer_cancel:(fun _ ->
         origin := None;
         ignore (Ui_effect.issue request))
-      [ row ~height:32 ~main:`center ~cross:`center
-          [ Icons.icon ~size:16. "grip-vertical" ] ])) context parent
+      [ row ~key:("arrow-" ^ key) ~height:32 ~main:`center ~cross:`center
+          ~style_class:
+            (if it.Sidebar_state.collapsed then "rotating-arrow collapsed"
+             else "rotating-arrow not-collapsed")
+          [ Ui_parts.rotating_arrow ("arw-" ^ key) ] ])) context parent
 
 let item_header st idx (it : Sidebar_state.item) =
   let n = string_of_int idx in
-  let collapsed = it.Sidebar_state.collapsed in
   row ~key:("hd-" ^ it.key) ~main:`space_between ~cross:`center
-    ~height:32 ~min_height:32
+    ~height:32 ~min_height:32 ~corner_radius:6
     ~background:"var(--color-level-2)"
     ~style_class:"sidebar-item-header color-level"
     ~on_pointer_up:(close_on_middle st it.key)
-    [ item_drag st it.key
-    ; Ui_components.button ~key:("hdr-" ^ it.key) ~variant:`ghost ~grow:1. ~min_width:0 ~padding_horizontal:8
+    [ item_drag st it
+    ; Ui_components.button ~key:("hdr-" ^ it.key) ~variant:`ghost ~grow:1. ~min_width:0 ~padding_horizontal:2
         ~height:32
         (* page/block sidebar items can carry an empty title — a button
            with neither text nor accessibility label is rejected and
@@ -338,13 +342,7 @@ let item_header st idx (it : Sidebar_state.item) =
               Option.iter (Sidebar_state.move_item st it.key) destination
           | _ -> ())
         ~on_press:(fun _ -> Sidebar_state.toggle_collapsed st it.key)
-        [ row ~key:("arrow-" ^ it.key) ~cross:`center
-            (* cljs: .rotating-arrow.(not-)collapsed > FA caret-right *)
-            ~style_class:
-              (if collapsed then "rotating-arrow collapsed"
-               else "rotating-arrow not-collapsed")
-            [ Ui_parts.rotating_arrow ("arw-" ^ it.key) ]
-        ; box ~key:("ht-" ^ it.key) ~grow:1.
+        [ box ~key:("ht-" ^ it.key) ~grow:1.
             [ item_title it ] ]
     ; row ~key:("ia-" ^ it.key) ~cross:`center
         ~style_class:"item-actions"
@@ -612,8 +610,14 @@ let sidebar_props_row st (it : Sidebar_state.item) =
           in
           box ~key:("props-" ^ it.key)
             [ column ~gap:8
-                (Ui_components.button ~variant:`ghost ~size:`sm
+                (row ~cross:`center
+                   [ Ui_components.with_props
+                       [ Ui_components.Prop.font_size "12px"
+                       ; Ui_components.Prop.font_weight 400
+                       ; Ui_components.Prop.line_height "16px" ]
+                     (Ui_components.button ~variant:`ghost ~size:`sm
                    ~style_class:"ui__button"
+                   ~main:`start ~padding_horizontal:4
                    ~foreground:
                      "var(--ls-secondary-text-color, \
                       hsl(var(--muted-foreground)))"
@@ -623,7 +627,7 @@ let sidebar_props_row st (it : Sidebar_state.item) =
                          else "page/hide-properties"))
                    ~on_press:(fun _ ->
                      Sidebar_state.toggle_props st it.key)
-                   []
+                   []) ]
                  :: body)
             ])
   | _ -> empty
@@ -742,7 +746,11 @@ let item_body st idx (it : Sidebar_state.item) =
 
 
 let sidebar_item st idx (it : Sidebar_state.item) =
-  column ~key:("item-" ^ it.key)
+  Ui_components.with_props
+    [ Ui_components.Prop.position `relative
+    ; Ui_components.Prop.shadow
+        "0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)" ]
+    (column ~key:("item-" ^ it.key) ~corner_radius:6 ~margin_bottom:8
     ~min_height:(if it.collapsed then 32 else 100)
     ~background:"var(--lx-gray-02, var(--color-level-1))"
     ~style_class:
@@ -750,7 +758,6 @@ let sidebar_item st idx (it : Sidebar_state.item) =
        ^ it.kind
        ^ if it.Sidebar_state.collapsed then " collapsed" else "")
     ~accessibility_identifier:("sbi-" ^ it.Sidebar_state.key)
-    ~data_attrs:[ ("style", "position:relative") ]
     [ Ui_components.with_props
         [ Ui_components.Prop.position `relative ]
         (column ~key:("wrap-" ^ it.key) ~grow:1.
@@ -759,7 +766,7 @@ let sidebar_item st idx (it : Sidebar_state.item) =
             (if it.collapsed then [Ui_components.Prop.display `none] else [])
             (item_body st idx it)
         ; item_menu_host st it ])
-    ]
+    ])
 
 (* ---------- inner ---------- *)
 
