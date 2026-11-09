@@ -313,7 +313,7 @@ let test_block_tree () =
                   &&
                   match M.string_prop c "background" with
                   | Some bg ->
-                      let needle = "gray-09" in
+                      let needle = "gray-08" in
                       let nlen = String.length needle in
                       let rec has i =
                         i + nlen <= String.length bg
