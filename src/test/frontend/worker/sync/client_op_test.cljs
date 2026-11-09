@@ -84,6 +84,34 @@
         (client-op/remove-asset-op repo asset-uuid)
         (is (= 0 (client-op/get-unpushed-asset-ops-count repo)))))))
 
+(deftest pending-local-tx-count-adjust-without-cached-count-reads-sqlite-test
+  (testing "an adjust before the first read must not hide pending txs already stored in sqlite"
+    (let [repo "repo-pending-count"
+          upsert-pending! (fn []
+                            (client-op/upsert-local-tx-entry!
+                             repo
+                             {:tx-id (random-uuid)
+                              :created-at 1
+                              :pending? true
+                              :failed? false
+                              :normalized-tx-data []
+                              :reversed-tx-data []}))]
+      (with-client-ops-db
+        repo
+        (fn [_db]
+          (try
+            (swap! client-op/*repo->pending-local-tx-count dissoc repo)
+            (upsert-pending!)
+            (upsert-pending!)
+            (upsert-pending!)
+            (client-op/adjust-pending-local-tx-count! repo 1)
+            (is (= 3 (client-op/get-pending-local-tx-count repo)))
+            (upsert-pending!)
+            (client-op/adjust-pending-local-tx-count! repo 1)
+            (is (= 4 (client-op/get-pending-local-tx-count repo)))
+            (finally
+              (swap! client-op/*repo->pending-local-tx-count dissoc repo))))))))
+
 (deftest cleanup-finished-history-ops-removes-only-unreferenced-finished-txs-test
   (let [repo "repo-cleanup"
         keep-tx-id (random-uuid)

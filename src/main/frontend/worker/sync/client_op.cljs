@@ -322,12 +322,15 @@
       count')))
 
 (defn adjust-pending-local-tx-count!
+  "Applies `delta` to the cached count after client_ops was written. Without a
+  cached count, the next read loads it from sqlite, which already includes the
+  write."
   [repo delta]
   (swap! *repo->pending-local-tx-count
          (fn [m]
-           (let [base (or (get m repo) 0)
-                 next (max 0 (+ base delta))]
-             (assoc m repo next)))))
+           (if (contains? m repo)
+             (assoc m repo (max 0 (+ (get m repo) delta)))
+             m))))
 
 (defn get-local-checksum
   [repo]
