@@ -897,6 +897,10 @@ and row_el ~link_hosts ~depth ~editable ~virtualize scope ~library b : t =
 and row_sig ~link_hosts ~depth ~editable ~library ~virtualize scope
     (bs : Model.block Signal.signal) : t =
  fun ctx parent ->
+  let targets = Logseq_el.own ctx (Signal.map (fun b -> [b]) bs) in
+  (Lui_elements.keyed ~source:targets ~cmp:String.compare
+    ~key:(fun b -> S.target_uuid (S.project_row ~scope ~link_hosts b))
+    ~mount:(fun bs -> fun ctx parent ->
   let b0 = Signal.get bs in
   let key = block_key b0 in
   let row0 = S.project_row ~scope ~link_hosts b0 in
@@ -964,7 +968,7 @@ and row_sig ~link_hosts ~depth ~editable ~library ~virtualize scope
            (S.target_uuid row0))
     ; row_children ~link_hosts ~depth ~editable ~library ~virtualize scope bs
     ]))))
-    ctx parent
+    ctx parent)) ctx parent
 
 and row_children ~link_hosts ~depth ~editable ~library ~virtualize scope
     (bs : Model.block Signal.signal) : t =
