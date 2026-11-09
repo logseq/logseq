@@ -647,25 +647,26 @@ let ensure_watch () =
         watch := Some (Signal.map sync_titles (S.signal ()))
 
 (* Lazy mounts are deduplicated until the core chunk arrives. *)
-let pending_mounts : ((string * string * S.row_ref), D.el) Hashtbl.t = Hashtbl.create 4
+let pending_mounts : D.el list ref = ref []
 
 let mount_async uuid el =
   ensure_watch ();
-  match origin_of_element uuid el with
-  | Some key when instance ~element:el uuid = None && not (Hashtbl.mem pending_mounts key) ->
-      Hashtbl.replace pending_mounts key el;
+  if instance ~element:el uuid = None
+     && not (List.exists (fun pending -> pending == el) !pending_mounts) then begin
+      pending_mounts := el :: !pending_mounts;
       ignore (ensure_core () |> Js.Promise.then_ (fun () ->
-        (match Hashtbl.find_opt pending_mounts key with
-         | Some pending when pending == el ->
-             Hashtbl.remove pending_mounts key;
-             if instance ~element:el uuid = None && D.el_is_connected el then
-               mount ~read_only:(D.el_get_attr el "readonly" <> None) uuid el
-         | _ -> ());
+        if List.exists (fun pending -> pending == el) !pending_mounts then begin
+          pending_mounts := List.filter (fun pending -> pending != el) !pending_mounts;
+          match origin_of_element uuid el with
+          | Some _ when instance ~element:el uuid = None && D.el_is_connected el ->
+              mount ~read_only:(D.el_get_attr el "readonly" <> None) uuid el
+          | _ -> ()
+        end;
         Js.Promise.resolve ()))
-  | _ -> ()
+  end
 
 let unmount ~element uuid =
-  Option.iter (Hashtbl.remove pending_mounts) (origin_of_element uuid element);
+  pending_mounts := List.filter (fun pending -> pending != element) !pending_mounts;
   release_instance ~element uuid
 
 (* -- language picker (.code-block-actions .select-language) -- *)
