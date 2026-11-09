@@ -170,6 +170,8 @@
  :class.validation/parents-must-be-tags "Rodiče štítků musí být štítky."
  :class.validation/tag-with-non-tag "Nelze nastavit značku s vestavěnou stránkou, která není značkou „{1}“."
 
+ :cmdk/current-page-badge "Aktuální stránka"
+
  :cmdk.action/apply-theme "Použít motiv"
  :cmdk.action/copy-ref "Kopírovat odkaz"
  :cmdk.action/create "Vytvořit"

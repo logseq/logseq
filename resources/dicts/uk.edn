@@ -225,6 +225,8 @@
  :class.validation/parents-must-be-tags "Цей тег неможливо створити, доки всі батьківські елементи не будуть тегами."
  :class.validation/tag-with-non-tag "Неможливо встановити тег із вбудованою сторінкою, яка не є тегом \"{1}\"."
 
+ :cmdk/current-page-badge "Поточна сторінка"
+
  :cmdk.action/apply-theme "Застосувати тему"
  :cmdk.action/copy-ref "Скопіювати посилання"
  :cmdk.action/create "Створити"

@@ -170,6 +170,8 @@
  :class.validation/parents-must-be-tags "I genitori dei tag devono essere tag."
  :class.validation/tag-with-non-tag "Impossibile impostare un tag con una pagina incorporata che non sia un tag \"{1}\"."
 
+ :cmdk/current-page-badge "Pagina corrente"
+
  :cmdk.action/apply-theme "Applica tema"
  :cmdk.action/copy-ref "Copia riferimento"
  :cmdk.action/create "Crea"

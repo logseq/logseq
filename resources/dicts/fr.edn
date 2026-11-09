@@ -170,6 +170,8 @@
  :class.validation/parents-must-be-tags "Les parents de tags doivent être des tags."
  :class.validation/tag-with-non-tag "Impossible de définir une balise avec une page intégrée qui n'est pas une balise « {1} »."
 
+ :cmdk/current-page-badge "Page actuelle"
+
  :cmdk.action/apply-theme "Appliquer le thème"
  :cmdk.action/copy-ref "Copier la référence"
  :cmdk.action/create "Créer"

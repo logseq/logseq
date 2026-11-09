@@ -170,6 +170,8 @@
  :class.validation/parents-must-be-tags "Els pares d'etiquetes han de ser etiquetes."
  :class.validation/tag-with-non-tag "No es pot establir una etiqueta amb una pàgina integrada que no sigui una etiqueta \"{1}\"."
 
+ :cmdk/current-page-badge "Pàgina actual"
+
  :cmdk.action/apply-theme "Aplica el tema"
  :cmdk.action/copy-ref "Copiar referència"
  :cmdk.action/create "Crear"
