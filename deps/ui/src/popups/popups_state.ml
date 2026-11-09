@@ -647,7 +647,6 @@ let page_items_for t kind q =
   let act_of ~created title =
     match kind with
     | Tag_search -> if created then Tag_create title else Tag_apply title
-    | Embed_ref -> Embed title
     | Page_embed -> Emit ("{{embed [[" ^ title ^ "]]}}", 0)
     | _ -> Emit ("[[" ^ title ^ "]]", 0)
   in
@@ -669,7 +668,7 @@ let page_items_for t kind q =
         (* cljs get-matched-classes → fuzzy-search (limit 20) *)
         Fuzzy.fuzzy_search ~extract:fst ~limit:20 !(t.tag_titles) q
         |> List.map wrap_tag
-    | Page_ref | Page_embed | Embed_ref ->
+    | Page_ref | Page_embed ->
         if q = "" then
           List.map
             (fun en ->
@@ -678,7 +677,6 @@ let page_items_for t kind q =
                 ~node_icon:("calendar", false)
                 ~label:(U.t (nlp_i18n_key en)) ~icon:"calendar"
                 (match kind with
-                 | Embed_ref -> Embed jt
                  | Page_embed -> Emit ("{{embed [[" ^ jt ^ "]]}}", 0)
                  | _ -> Emit ("[[" ^ jt ^ "]]", 0)))
             nlp_en_names
@@ -804,9 +802,10 @@ let refresh_items t ac =
           filter_slash ac.query
             (slash_items ~statuses:[] ~priorities:[]
               ~has_heading:(editing_has_heading ())) }
-  | Page_ref | Page_embed | Tag_search | Embed_ref ->
+  | Page_ref | Page_embed | Tag_search ->
       { ac with items = page_items_for t ac.kind ac.query }
   | Template_search -> { ac with items = template_items_for t ac.query }
+  | Embed_ref -> { ac with items = [] }
   | Block_ref -> ac (* filled asynchronously by run_block_search *)
 ;;
 
@@ -924,10 +923,9 @@ let run_node_search t ac =
              date pages join the pool as they do in cljs nlp-pages?. *)
           let matched_pages = List.mapi (page_item_of_row ~kind:a.kind) pages
           and matched_blocks = List.mapi (page_item_of_row ~kind:a.kind) blocks in
-          let page_action title =
-            if a.kind = Embed_ref then Embed title
-            else Emit ("[[" ^ title ^ "]]", 0)
-          in
+          let items =
+            if a.kind = Embed_ref then matched_pages @ matched_blocks
+            else begin
           let seen = Hashtbl.create 32 in
           List.iter
             (fun it -> Hashtbl.replace seen it.ai_label ())
@@ -938,7 +936,7 @@ let run_node_search t ac =
                  if Hashtbl.mem seen title then None
                  else Some (mk_item ~key:("page:" ^ title) ~label:title
                               ~node:true ~node_icon:("file", true)
-                              (page_action title)))
+                              (Emit ("[[" ^ title ^ "]]", 0))))
               (Fuzzy.fuzzy_search ~extract:(fun ti -> ti) ~limit:50
                  !(t.titles) a.query)
           in
@@ -956,7 +954,7 @@ let run_node_search t ac =
                      (mk_item ~key:("nlp:" ^ en) ~node:true
                         ~node_icon:("calendar", false) ~label
                         ~icon:"calendar"
-                        (page_action jt)))
+                        (Emit ("[[" ^ jt ^ "]]", 0))))
               (Fuzzy.fuzzy_search
                  ~extract:(fun en ->
                     en ^ " "
@@ -967,8 +965,7 @@ let run_node_search t ac =
             take 50
               (matched_pages @ nlp @ leftover @ matched_blocks)
           in
-          let items =
-            match
+          match
               List.filter
                 (fun it -> S.sub it.ai_key 0 4 = "new:")
                 (page_items_for t a.kind a.query)
@@ -985,6 +982,7 @@ let run_node_search t ac =
                    | m :: rest -> m :: new_items @ rest
                    | [] -> new_items)
                 else new_items @ matched
+            end
           in
           set_ac t (Some { a with items = renumber items; chosen = 0 })
       | _ -> ());
@@ -1035,10 +1033,9 @@ let load_titles t =
               xs
         | _ -> []);
      (match (get t).ac with
-      | Some ({ kind = Page_ref | Embed_ref; query; _ } as ac)
-          when String.trim query <> "" ->
+      | Some ({ kind = Page_ref; query; _ } as ac) when String.trim query <> "" ->
           run_node_search t ac
-      | Some ({ kind = Page_ref | Page_embed | Tag_search | Embed_ref; _ } as ac) ->
+      | Some ({ kind = Page_ref | Page_embed | Tag_search; _ } as ac) ->
           set_ac t (Some (refresh_items t ac))
       | _ -> ()));
      Js.Promise.resolve ())
@@ -1305,9 +1302,9 @@ let open_ac ?tpos ?(autopair = true) t kind =
         | None -> ())
    | _ -> ());
   (match kind with
-   | Page_ref | Page_embed | Embed_ref -> load_titles t
+   | Page_ref | Page_embed -> load_titles t
    | Tag_search -> load_tag_titles t
-   | Template_search -> load_templates t   | Block_ref -> ()
+   | Template_search -> load_templates t   | Block_ref | Embed_ref -> ()
    | Slash -> ());
   set_cm t None;
   set_ac t (Some (refresh_items t ac));
@@ -1980,7 +1977,7 @@ let apply_item t ac ~meta it =
       invalidate_ac t;
       erase_trigger_text ac;
       (match kind with
-       | Page_ref | Page_embed | Tag_search | Embed_ref -> load_titles t
+       | Page_ref | Page_embed | Tag_search -> load_titles t
        | Template_search -> load_templates t
        | _ -> ());
       set_ac t
