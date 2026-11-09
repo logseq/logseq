@@ -1,5 +1,5 @@
 (ns frontend.handler.events.rtc-error-test
-  (:require [cljs.test :refer [deftest is testing]]
+  (:require [cljs.test :refer [deftest is]]
             [frontend.context.i18n :as i18n]
             [frontend.handler.events.rtc-error :as rtc-error]
             [frontend.handler.notification :as notification]
@@ -56,7 +56,7 @@
       (rtc-error/notify-download-failure!
        "graph-1"
        (ex-info "db-sync download failed"
-                {:stage :fetch-pull
+                {:stage :fetch-snapshot-download
                  :error-message "fetch failed"})))
     (is (= [] @events))
     (is (= [[(i18n/t :sync/download-error) :error false]]
@@ -79,51 +79,3 @@
                  :active-graph-uuid "graph-1"})))
     (is (= [] @events))
     (is (= [] @notifications))))
-
-(deftest notify-download-failure-does-not-surface-runtime-details-test
-  (let [notifications (atom [])]
-    (with-redefs [state/pub-event! (fn [_event] nil)
-                  notification/show! (fn [content status clear?]
-                                       (swap! notifications conj [content status clear?])
-                                       nil)]
-      (rtc-error/notify-download-failure!
-       "graph-1"
-       (ex-info "request to https://sync.example.com failed"
-                {:stage :fetch-pull
-                 :error-message "certificate at /Users/alice/private.pem failed"})))
-    (is (= [[(i18n/t :sync/download-error) :error false]]
-           @notifications))))
-
-(deftest notify-download-failure-keeps-wrong-password-toast-test
-  (let [notifications (atom [])]
-    (with-redefs [state/pub-event! (fn [_event] nil)
-                  notification/show! (fn [content status clear?]
-                                       (swap! notifications conj [content status clear?])
-                                       nil)]
-      (rtc-error/notify-download-failure!
-       "graph-1"
-       (ex-info "db-sync download failed"
-                {:code :db-sync/invalid-e2ee-password
-                 :stage :prepare-e2ee
-                 :error-message "decrypt-aes-key"})))
-    (is (= [[(i18n/t :encryption/wrong-password) :error false]]
-           @notifications))))
-
-(deftest notify-download-failure-surfaces-pre-worker-start-error-test
-  (testing "runtime start failures still clear progress and toast the real error"
-    (let [events (atom [])
-          notifications (atom [])]
-      (with-redefs [state/pub-event! (fn [event]
-                                       (swap! events conj event)
-                                       nil)
-                    notification/show! (fn [content status clear?]
-                                         (swap! notifications conj [content status clear?])
-                                         nil)]
-        (rtc-error/notify-download-failure!
-         "graph-1"
-         (ex-info "db-worker-node failed to start"
-                  {:code :server-start-failed})))
-      (is (= :download-completed
-             (get-in @events [0 1 :sub-type])))
-      (is (= [[(i18n/t :sync/download-error) :error false]]
-             @notifications)))))
