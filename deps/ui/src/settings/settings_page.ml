@@ -431,8 +431,10 @@ let rec keymap_binding ~key (b : Keymap_data.binding) =
                                 ~boxed:(b.kind = "separate") ~glow:true
                                 ~min_slot:20
                                 ~value:
-                                  (Cmdk_view.print_shortcut_key
-                                     (Cmdk_host.services ()) k);
+                                  (if k = Cmdk_view.g_opt () then
+                                     Cmdk_view.print_shortcut_key
+                                       (Cmdk_host.services ()) k
+                                   else k);
                             ])
                         b.keys)
                  in
