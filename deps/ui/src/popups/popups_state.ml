@@ -24,7 +24,6 @@ type item_action =
   | Emit_exit of string (* ls:editor-insert {text, exit} — cljs clear-edit! *)
   | Switch of ac_kind (* reopen as another autocomplete *)
   | Editor_cmd of string (* ls:editor-command {command, from, to} *)
-  | Embed of string (* page title — insert a :block/link embed *)
   | Embed_target of int (* selected entity id *)
   | Tag_apply of string (* existing entity — cljs tag-on-chosen-handler *)
   | Tag_create of string (* "New tag" row — always creates a class *)
@@ -766,7 +765,7 @@ let page_item_of_row ?(kind = Page_ref) i w =
     if kind = Embed_ref then
       match Wire.map_get_int w "db/id" with
       | Some id -> Embed_target id
-      | None -> Noop
+      | None -> invalid_arg "Node embed search result is missing db/id"
     else if is_page then Emit ("[[" ^ title ^ "]]", 0)
     else Emit ("[[" ^ uuid ^ "]]", 0)
   in
@@ -899,7 +898,11 @@ let run_node_search t ac =
       | Some a
         when gen = !(t.gen) && session = !(t.session) && graph = repo ()
              && (a.kind = Page_ref || a.kind = Embed_ref) && a.kind = ac.kind
-             && a.auuid = ac.auuid && ac_current a && a.query = ac.query ->
+             && a.auuid = ac.auuid && ac_current a && a.query = ac.query
+             && (match ac.editor, Editor_state.editing () with
+                 | Some origin, Some editor ->
+                     editor.uuid = ac.auuid && origin.epoch == editor.epoch
+                 | _ -> false) ->
           let rows =
             if a.kind = Embed_ref then
               List.filter (fun row ->
@@ -1986,10 +1989,6 @@ let apply_item t ac ~meta it =
               { ac with kind; flip = None; flipx = None; query = ""; tlen = 0
               ; items = []; chosen = 0 }));
       measure_ac t kind
-  | Embed title ->
-      erase_trigger_text ac;
-      close_ac t;
-      Editor_embed.insert title
   | Embed_target target_id ->
       erase_trigger_text ac;
       close_ac t;
