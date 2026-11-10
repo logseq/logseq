@@ -1,7 +1,9 @@
 (ns logseq.outliner.core-test
   (:require [cljs.test :refer [deftest is testing]]
             [datascript.core :as d]
+            [clojure.string :as string]
             [logseq.db :as ldb]
+            [logseq.db.frontend.content :as db-content]
             [logseq.db.test.helper :as db-test]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.op :as outliner-op]
@@ -10,7 +12,8 @@
             [logseq.common.util :as common-util]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.common.uuid :as common-uuid]
-            [logseq.graph-parser.block :as gp-block]))
+            [logseq.graph-parser.block :as gp-block]
+            [logseq.graph-parser.mldoc :as gp-mldoc]))
 
 (deftest insert-blocks-does-not-trust-stale-right-order
   (let [conn (db-test/create-conn-with-blocks
@@ -101,6 +104,72 @@
     (is (= (str "#[[" class-uuid "]]") (:block/title block)))
     (is (= class-uuid (-> block :block/refs first :block/uuid)))
     (is (= class-uuid (-> block :block/tags first :block/uuid)))))
+
+(defn- parse-typed-hashtag
+  [title]
+  (let [content (str common-config/block-pattern " " title)
+        ast (gp-mldoc/->db-edn content :markdown)
+        parsed (first (gp-block/extract-blocks ast content :markdown
+                                               {:db-graph-mode? true
+                                                :block-pattern common-config/block-pattern}))]
+    {:parsed parsed
+     :id-title (db-content/title-ref->id-ref title (:block/refs parsed))}))
+
+(deftest typed-non-ascii-hashtags-remain-tags-after-save
+  (testing "Hashtags typed without autocomplete stay readable after save and re-edit"
+    (doseq [tag-title ["research" "исследование" "日本語" "über" "café"]]
+      (let [title (str "hello #" tag-title)
+            conn (db-test/create-conn-with-blocks
+                  [{:page {:block/title "page1"} :blocks [{:block/title "seed"}]}])
+            seed (db-test/find-block-by-content @conn "seed")
+            {:keys [parsed id-title]} (parse-typed-hashtag title)
+            {:keys [block page-txs]}
+            (#'outliner-core/resolve-page-refs
+             @conn
+             {:block/title id-title
+              :block/refs (:block/refs parsed)
+              :block/tags (:block/tags parsed)})
+            _ (d/transact! conn (vec (concat page-txs
+                                             [(merge {:db/id (:db/id seed)
+                                                      :block/uuid (:block/uuid seed)}
+                                                     (select-keys block [:block/title :block/refs :block/tags]))])))
+            block' (d/entity @conn (:db/id seed))
+            stored (:v (first (d/datoms @conn :eavt (:db/id seed) :block/title)))
+            display (db-content/id-ref->title-ref
+                     stored
+                     (:block/refs block')
+                     {:db @conn
+                      :replace-pages-with-same-name? false})
+            tag (db-test/find-page-by-title @conn tag-title)]
+        (is (string/includes? id-title "[[")
+            (str "#" tag-title " is stored as an id ref"))
+        (is (= title display)
+            (str "#" tag-title " converts back on re-edit"))
+        (is (ldb/class? tag)
+            (str "#" tag-title " is indexed as a DB tag"))
+        (is (qualified-keyword? (:db/ident tag))
+            (str "#" tag-title " has a class ident"))))))
+
+(deftest typed-hashtag-resolves-existing-class
+  (testing "A hashtag typed for an existing class references that class, not a duplicate"
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "page1"} :blocks [{:block/title "seed"}]}])
+          class-uuid (random-uuid)
+          _ (d/transact! conn [{:db/ident :user.class/Sample-x1
+                                :block/name "sample"
+                                :block/title "Sample"
+                                :block/uuid class-uuid
+                                :block/tags :logseq.class/Tag}])
+          {:keys [parsed id-title]} (parse-typed-hashtag "object #Sample")
+          {:keys [block page-txs]}
+          (#'outliner-core/resolve-page-refs
+           @conn
+           {:block/title id-title
+            :block/refs (:block/refs parsed)
+            :block/tags (:block/tags parsed)})]
+      (is (empty? page-txs))
+      (is (= class-uuid (-> block :block/tags first :block/uuid)))
+      (is (string/includes? (:block/title block) (str class-uuid))))))
 
 (defn- page-uuids-named
   [db title]
