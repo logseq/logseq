@@ -2173,6 +2173,7 @@
                   target-block
                   sibling?
                   keep-uuid?
+                  cut?
                   revert-cut-txs
                   skip-empty-target?
                   ops-only?
@@ -2198,11 +2199,11 @@
     (p/let [target-block' (if (and empty-target? target-block-has-children? paste-nested-blocks?)
                             (<left-sibling-or-parent (state/get-current-repo) target-block)
                             target-block)
-            current-blocks (when keep-uuid?
+            current-blocks (when cut?
                              (db-async/<get-blocks (state/get-current-repo)
                                                   (keep :block/uuid blocks) {:children? false}))]
       (let [existing-blocks (filter :block/uuid
-                                   (if keep-uuid? (unwrap-block-results current-blocks) blocks))
+                                   (if cut? (unwrap-block-results current-blocks) blocks))
             move-from-recycle? (and keep-uuid?
                                     (seq existing-blocks)
                                     (or (seq revert-cut-txs)
