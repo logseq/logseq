@@ -410,9 +410,18 @@
          {:value "property"}
          (objects/property-related-objects page opts))))]))
 
+(defn- sidebar-page-properties-default-collapsed?
+  "Sidebar property panels start collapsed for ordinary pages. Class pages
+   start expanded in the interactive app so tag schema is visible. Publishing
+   remounts without persisted UI state, so it always starts collapsed."
+  [page publishing?]
+  (boolean (or publishing? (not (entity/class? page)))))
+
 (hsx/defc sidebar-page-properties
   [config page]
-  (let [[collapsed? set-collapsed!] (hooks/use-state (not (entity/class? page)))]
+  (let [[collapsed? set-collapsed!] (hooks/use-state (sidebar-page-properties-default-collapsed?
+                                                      page
+                                                      config/publishing?))]
     [:div.ls-sidebar-page-properties.flex.flex-col.gap-2.mt-2
      [:div
       (shui/button
