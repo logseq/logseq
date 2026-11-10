@@ -25,6 +25,19 @@
         [:number-gt :number-lt :number-gte :number-lte :between]
         nil)))))
 
+(defn- temporal-filter-value?
+  "Values that :before/:after and :date-before/:date-after can keep when
+   flipping direction. Timestamp filters use epoch numbers, relative strings
+   such as \"1 day ago\" (see common-util/get-timestamp), or a js Date from
+   the custom-date calendar. Date-property filters use journal page uuids
+   (or the entity map before persist)."
+  [value]
+  (or (number? value)
+      (string? value)
+      (uuid? value)
+      (instance? js/Date value)
+      (and (map? value) (contains? value :block/uuid))))
+
 (defn- view-filter-value-after-operator-change
   [operator value]
   (case operator
@@ -42,7 +55,7 @@
       value)
 
     (:date-before :date-after :before :after)
-    (when (number? value) value)))
+    (when (temporal-filter-value? value) value)))
 
 (defn- view-filter-value-source
   [property operator]
