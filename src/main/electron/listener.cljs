@@ -107,6 +107,12 @@
                  (fn [repo]
                    (ui-handler/open-new-window-or-tab! repo)))
 
+  (safe-api-call "switchGraph"
+                 ;; logseq://graph/... when the graph is not already open in a window
+                 (fn [repo]
+                   (when repo
+                     (state/pub-event! [:graph/switch repo]))))
+
   (safe-api-call "invokeLogseqAPI"
                  (fn [^js data]
                    (let [sync-id (.-syncId data)

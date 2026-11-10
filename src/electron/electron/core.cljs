@@ -11,6 +11,7 @@
             [electron.configs :as cfgs]
             [electron.db :as db]
             [electron.db-worker :as db-worker]
+            [electron.deeplink :as deeplink]
             [electron.embedding-server :as embedding-server]
             [electron.exceptions :as exceptions]
             [electron.handler :as handler]
@@ -44,6 +45,8 @@
 (defonce *teardown-fn (volatile! nil))
 (defonce *lifecycle-op (volatile! (p/resolved nil)))
 (defonce *quit-dirty? (volatile! true))
+;; macOS may emit open-url before the main window exists on cold start.
+(defonce *pending-open-url (atom nil))
 
 (defn setup-updater! [^js win]
   ;; manual/auto updater
@@ -277,26 +280,61 @@
         menu (.buildFromTemplate Menu (clj->js template))]
     (.setApplicationMenu Menu menu)))
 
-(defn- find-deeplink-url
-  "Extract a deeplink URL from a sequence of command-line argument strings."
-  [args]
-  (some #(when (string/starts-with? % (str LSP_SCHEME ":")) %) args))
+(defn take-pending-open-url!
+  "Return and clear any open-url captured before the main window existed."
+  []
+  (let [url @*pending-open-url]
+    (reset! *pending-open-url nil)
+    url))
+
+(defn note-open-url!
+  "Handle a protocol URL immediately when a window exists; otherwise stash it
+   for cold-start handling. Returns `:handled`, `:pending`, or nil."
+  [url]
+  (cond
+    (not (string? url))
+    nil
+
+    @*win
+    (do (open-url-handler @*win url)
+        :handled)
+
+    :else
+    (do (reset! *pending-open-url url)
+        (logger/info "open-url-pending" {:url url})
+        :pending)))
+
+(defn graph-name-from-deeplink-url
+  "Resolve `logseq://graph/<identifier>` to a full graph name, else nil."
+  [url]
+  (when-let [identifier (deeplink/graph-identifier-from-url url)]
+    (handler/get-graph-name identifier)))
+
+(defn startup-deeplink-url
+  "Cold-start deeplink: macOS open-url may arrive before ready; Windows/Linux
+   pass the URL on argv."
+  ([]
+   (deeplink/startup-deeplink-url (take-pending-open-url!)
+                                  (js->clj (.-argv js/process))
+                                  mac?)))
 
 (defn- setup-deeplink! []
-  ;; macOS: app fires open-url for custom-protocol links when the app is already running
+  ;; macOS emits open-url for custom-protocol links. On cold start this often
+  ;; fires before ready / before the main window exists — stash then.
   (.on app "open-url"
        (fn [^js event url]
          (.preventDefault event)
-         (when-let [win @*win]
-           (open-url-handler win url)))))
+         (note-open-url! url))))
 
-(defn- handle-initial-deeplink!
-  "On Windows/Linux, the protocol URL is passed as a command-line argument
-   on the first launch. Call this after the main window is ready."
-  [win]
-  (when-not mac?
-    (when-let [url (find-deeplink-url (rest (js->clj (.-argv js/process))))]
-      (open-url-handler win url))))
+(defn- handle-deferred-deeplink!
+  "After the main window exists, handle any leftover protocol URL that was not
+   consumed as the startup graph (x-callback, new-window, page redirects, or a
+   late open-url that raced window creation)."
+  [win startup-url startup-graph]
+  (when-let [url (or (when (and startup-url (nil? startup-graph))
+                       startup-url)
+                     (take-pending-open-url!))]
+    (open-url-handler win url)))
 
 (defn- maybe-warn-wrong-release!
   []
@@ -400,7 +438,14 @@
              (p/then
               (fn [_]
                 (let [t0 (setup-interceptor! app')
-                      ^js win (win/create-main-window!)
+                      ;; Prefer opening the deeplink graph in the main window on
+                      ;; cold start instead of restoring last-used then opening
+                      ;; a second window (db-test #1520).
+                      startup-url (startup-deeplink-url)
+                      startup-graph (graph-name-from-deeplink-url startup-url)
+                      ^js win (win/create-main-window!
+                               win/MAIN_WINDOW_ENTRY
+                               (when startup-graph {:graph startup-graph}))
                       _ (reset! *win win)]
 
                   (utils/<restore-proxy-settings)
@@ -410,8 +455,7 @@
                   (db/ensure-graphs-dir!)
                   (install-cli-launcher!)
 
-                  ;; Windows/Linux: handle deeplink URL passed on first launch via argv
-                  (handle-initial-deeplink! win)
+                  (handle-deferred-deeplink! win startup-url startup-graph)
                   (maybe-warn-wrong-release!)
 
                   (vreset! *setup-fn
@@ -500,7 +544,7 @@
              (when-let [window @*win]
                (win/switch-to-window! window)
                ;; Windows/Linux: deeplink URL may appear in subsequent-instance commandLine
-               (when-let [url (find-deeplink-url (rest (js->clj command-line)))]
+               (when-let [url (deeplink/find-deeplink-url (rest (js->clj command-line)))]
                  (open-url-handler window url)))))
 
       (.on app "window-all-closed" (fn []

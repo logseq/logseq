@@ -35,28 +35,40 @@
 (defn local-url-handler
   "Given a URL with `graph identifier` as path, `page` (optional) and `block-id`
    (optional) as parameters, open the local graphs accordingly.
-   `graph identifier` is the name of the graph to open, e.g. `lambda`"
+   `graph identifier` is the name of the graph to open, e.g. `lambda`
+
+   `logseq://graph/...` reuses an existing window on that graph when possible,
+   otherwise switches the target window's graph in place. Use
+   `logseq://new-window/...` (`force-new-window?`) to open another window."
   [^js win parsed-url force-new-window?]
   (let [graph-identifier (decode (string/replace (.-pathname parsed-url) "/" ""))
         [page-name block-id file] (get-URL-decoded-params parsed-url ["page" "block-id" "file"])
         graph-name (when graph-identifier (handler/get-graph-name graph-identifier))]
     (if graph-name
-      (p/let [window-on-graph (first (win/get-graph-all-windows (utils/get-graph-dir graph-name)))
-              open-new-window? (or force-new-window? (not window-on-graph))]
-          ;; TODO: call open new window on new graph without renderer (remove the reliance on local storage)
+      (p/let [window-on-graph (first (win/get-graph-all-windows (utils/get-graph-dir graph-name)))]
           ;; TODO: allow open new window on specific page, without waiting for `graph ready` ipc then redirect to that page
-        (when (or page-name block-id file)
-          (let [redirect-f (fn [win' graph-name']
+        (let [redirect-f (when (or page-name block-id file)
+                           (fn [win' graph-name']
                              (when (= graph-name graph-name')
                                (send-to-renderer win' "redirectWhenExists" {:page-name page-name
                                                                             :block-id block-id
-                                                                            :file file})))]
-            (if open-new-window?
-              (state/set-state! :window/once-graph-ready redirect-f)
-              (do (win/switch-to-window! window-on-graph)
-                  (redirect-f window-on-graph graph-name)))))
-        (when open-new-window?
-          (send-to-renderer win "openNewWindowOfGraph" graph-name)))
+                                                                            :file file}))))]
+          (cond
+            window-on-graph
+            (do (win/switch-to-window! window-on-graph)
+                (when redirect-f
+                  (redirect-f window-on-graph graph-name)))
+
+            force-new-window?
+            (do (when redirect-f
+                  (state/set-state! :window/once-graph-ready redirect-f))
+                (send-to-renderer win "openNewWindowOfGraph" graph-name))
+
+            :else
+            (do (when redirect-f
+                  (state/set-state! :window/once-graph-ready redirect-f))
+                (win/switch-to-window! win)
+                (send-to-renderer win "switchGraph" graph-name)))))
       (graph-identifier-error-handler graph-identifier))))
 
 (defn- x-callback-url-handler
