@@ -8,6 +8,7 @@
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db.async :as db-async]
+            [frontend.db.hooks :as db-hooks]
             [frontend.handler.block :as block-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.editor.assets :as editor-assets]
@@ -38,6 +39,10 @@
 (defn- use-current-edit-content
   []
   (rfx/use-sub [:editor/content (:block/uuid (state/get-edit-block))]))
+
+(defn- block-heading-value
+  [block]
+  (pu/lookup block :logseq.property/heading))
 
 (defn filter-commands
   [page? has-heading? commands]
@@ -103,8 +108,16 @@
   [id format]
   (let [[matched'] (hooks/use-atom *matched-commands)
         edit-block (state/get-edit-block)
+        {:keys [status value error]} (db-hooks/use-block-projection-snapshot
+                                      (:block/uuid edit-block)
+                                      block-heading-value)
         page? (entity/page? edit-block)
-        has-heading? (boolean (pu/lookup edit-block :logseq.property/heading))
+        has-heading? (boolean
+                      (case status
+                        :ready value
+                        :loading (block-heading-value edit-block)
+                        :missing nil
+                        :error (throw error)))
         matched (or (filter-commands page? has-heading? matched') no-matched-commands)
         filtered? (slash-commands-search-filtered? matched' @commands/*initial-commands)]
     (ui/auto-complete
