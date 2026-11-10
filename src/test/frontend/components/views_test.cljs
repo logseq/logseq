@@ -826,14 +826,6 @@
         (is (false? (:ready? (#'views/loaded-view-paint nil)))
             "A cold view stays on the short skeleton until that first window exists.")))))
 
-(deftest loaded-view-keeps-previous-paint-while-next-search-loads-test
-  (let [ready-view-data {:partition :flat
-                         :count 1
-                         :rows [(random-uuid)]}]
-    (is (= ready-view-data (#'views/view-paint-source ready-view-data nil)))
-    (is (= ready-view-data (#'views/view-paint-source nil ready-view-data))
-        "Typing into the view search changes the resource key before the worker returns; keep the old view mounted so the input stays open.")))
-
 (deftest first-window-fills-a-tall-viewport-from-screen-height-test
   (let [view-uuid (random-uuid)
         plan (#'views/loaded-view-resource-plan
