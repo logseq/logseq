@@ -5,6 +5,8 @@
             [frontend.handler.db-based.sync :as rtc-handler]
             [frontend.handler.graph :as graph-handler]
             [frontend.handler.repo :as repo-handler]
+            [frontend.context.i18n :as i18n]
+            [frontend.handler.notification :as notification]
             [frontend.handler.user :as user-handler]
             [frontend.state :as state]
             [frontend.mobile.util :as mobile-util]
@@ -114,6 +116,46 @@
                            (finish-async-test! done)))
                  (p/catch (fn [error]
                             (is false (str error))
+                            (finish-async-test! done))))))))
+
+(deftest upload-local-graph-shows-error-when-decrypt-private-key-fails-test
+  (async done
+         (let [upload-fn (some-> (resolve 'frontend.components.repo/upload-local-graph-with-confirm!) deref)
+               shown (atom [])]
+           (if-not upload-fn
+             (do
+               (is false "missing upload-local-graph-with-confirm!")
+               (finish-async-test! done))
+             (-> (p/with-redefs [shui/dialog-confirm! (fn [_content _opts]
+                                                        (p/resolved nil))
+                                 rtc-handler/<rtc-upload-graph! (fn [_repo _graph-e2ee?]
+                                                                  (p/rejected
+                                                                   (ex-info "decrypt-private-key"
+                                                                            {}
+                                                                            (js/DOMException. "OperationError" "OperationError"))))
+                                 state/get-current-repo (fn []
+                                                          "logseq_db_demo")
+                                 rtc-indicator/on-upload-finished-task (fn [f]
+                                                                         (f))
+                                 util/mobile? (fn [] false)
+                                 shui/popup-show! (fn [& _] nil)
+                                 shui/popup-hide! (fn [& _] nil)
+                                 i18n/t (fn [key & _args] key)
+                                 notification/show! (fn [content status persist?]
+                                                      (swap! shown conj {:content content
+                                                                         :status status
+                                                                         :persist? persist?}))]
+                   (upload-fn {:url "logseq_db_demo"
+                               :graph-e2ee? true}))
+                 (p/then (fn [_]
+                           (is false "expected upload decrypt failure")
+                           (finish-async-test! done)))
+                 (p/catch (fn [error]
+                            (is (= "decrypt-private-key" (ex-message error)))
+                            (is (= [{:content :encryption/wrong-password
+                                     :status :error
+                                     :persist? false}]
+                                   @shown))
                             (finish-async-test! done))))))))
 
 (deftest upload-local-graph-switches-before-uploading-non-current-graph-test
@@ -228,6 +270,36 @@
                  (p/catch (fn [error]
                             (is false (str error))
                             (finish-async-test! done))))))))
+
+(deftest handle-cloud-graph-error-shows-wrong-password-for-decrypt-private-key-test
+  (let [shown (atom [])]
+    (with-redefs [i18n/t (fn [key & _args] key)
+                  notification/show! (fn [content status persist?]
+                                       (swap! shown conj {:content content
+                                                          :status status
+                                                          :persist? persist?}))]
+      (#'repo/handle-cloud-graph-error!
+       (ex-info "decrypt-private-key"
+                {}
+                (js/DOMException. "OperationError" "OperationError")))
+      (is (= [{:content :encryption/wrong-password
+               :status :error
+               :persist? false}]
+             @shown)))))
+
+(deftest handle-cloud-graph-error-shows-generic-error-for-other-failures-test
+  (let [shown (atom [])]
+    (with-redefs [i18n/t (fn [key & _args] key)
+                  notification/show! (fn [content status persist?]
+                                       (swap! shown conj {:content content
+                                                          :status status
+                                                          :persist? persist?}))]
+      (#'repo/handle-cloud-graph-error!
+       (ex-info "db-sync missing base" {:repo "logseq_db_demo"}))
+      (is (= [{:content :sync/something-wrong
+               :status :error
+               :persist? false}]
+             @shown)))))
 
 (deftest upload-local-graph-hides-mobile-popup-when-upload-errors-test
   (async done
