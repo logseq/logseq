@@ -1430,6 +1430,38 @@
       (finally
         (ldb/register-transact-pipeline-fn! identity)))))
 
+(deftest page-to-block-repoints-descendant-block-page-test
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "Alpha"}}
+               {:page {:block/title "Beta"}
+                :blocks [{:block/title "First"
+                          :build/children [{:block/title "Second"}]}]}])
+        parent (db-test/find-page-by-title @conn "Alpha")
+        nested (db-test/find-page-by-title @conn "Beta")
+        child (db-test/find-block-by-content @conn "First")
+        grandchild (db-test/find-block-by-content @conn "Second")]
+    (with-transact-pipeline
+      (fn []
+        (outliner-core/move-blocks! conn [nested] parent {:sibling? false})
+        (let [nested' (d/entity @conn (:db/id nested))
+              child' (d/entity @conn (:db/id child))
+              grandchild' (d/entity @conn (:db/id grandchild))]
+          (is (ldb/internal-page? nested'))
+          (is (= [(:db/id nested') (:db/id nested')]
+                 (mapv (comp :db/id :block/page) [child' grandchild'])))
+          (outliner-property/delete-property-value! conn (:db/id nested') :block/tags :logseq.class/Page)
+          (let [demoted (d/entity @conn (:db/id nested'))
+                child-after (d/entity @conn (:db/id child'))
+                grandchild-after (d/entity @conn (:db/id grandchild'))]
+            (is (not (ldb/page? demoted)))
+            (is (nil? (:block/name demoted)))
+            (is (= [(:db/id parent) (:db/id demoted) (:db/id child-after)]
+                   (mapv (comp :db/id :block/parent) [demoted child-after grandchild-after]))
+                "Page conversion preserves the outline structure")
+            (is (= [(:db/id parent) (:db/id parent) (:db/id parent)]
+                   (mapv (comp :db/id :block/page) [demoted child-after grandchild-after]))
+                "The demoted block and its descendants belong to the parent page")))))))
+
 (defn- block-ref-ids
   [block]
   (set (map :db/id (:block/refs block))))
