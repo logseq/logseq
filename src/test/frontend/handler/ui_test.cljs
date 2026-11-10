@@ -6,6 +6,8 @@
             [frontend.storage :as storage]
             [frontend.state :as state]
             [frontend.util :as util]
+            [logseq.shui.dialog.core :as shui-dialog]
+            [logseq.shui.ui :as shui]
             [promesa.core :as p]))
 
 (deftest auto-complete-scroll-geometry-test
@@ -175,6 +177,35 @@
              (fn []
                (state/replace-state! previous-state)
                (done))))))))
+
+(deftest toggle-cards-respects-flashcards-feature-flag
+  (testing "does not open cards when Flashcards is disabled"
+    (let [events (atom [])]
+      (with-redefs [state/enable-flashcards? (constantly false)
+                    state/pub-event! (fn [event] (swap! events conj event))
+                    shui-dialog/get-dialog (constantly nil)]
+        (ui-handler/toggle-cards!)
+        (is (empty? @events)
+            "gf/tc must not publish :modal/show-cards when the feature is off"))))
+
+  (testing "opens cards when Flashcards is enabled"
+    (let [events (atom [])]
+      (with-redefs [state/enable-flashcards? (constantly true)
+                    state/pub-event! (fn [event] (swap! events conj event))
+                    shui-dialog/get-dialog (constantly nil)]
+        (ui-handler/toggle-cards!)
+        (is (= [[:modal/show-cards]] @events)
+            "gf/tc still open cards after the feature is turned back on"))))
+
+  (testing "can still close an already open cards dialog when the feature is off"
+    (let [closed? (atom false)]
+      (with-redefs [state/enable-flashcards? (constantly false)
+                    state/pub-event! (fn [_event]
+                                       (throw (ex-info "should not open cards" {})))
+                    shui-dialog/get-dialog (constantly :srs)
+                    shui/dialog-close! (fn [] (reset! closed? true))]
+        (ui-handler/toggle-cards!)
+        (is (true? @closed?))))))
 
 (deftest get-file-content-skips-when-db-worker-not-ready-test
   (let [previous @state/*db-worker]
