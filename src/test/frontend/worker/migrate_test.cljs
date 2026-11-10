@@ -466,6 +466,20 @@
       (is (= (set (keys file-attrs))
              (set (get-in result [:upgrade-result-coll 0 :migrate-updates :delete-properties]))))
       (is (nil? (db-migrate/migrate conn :target-version {:major 65 :minor 35}))))))
+(deftest migrate-65-36-adds-asset-plugin-id-property
+  (let [conn (d/create-conn db-schema/schema)]
+    (d/transact! conn [{:db/ident :logseq.kv/schema-version
+                        :kv/value {:major 65 :minor 35}}])
+    (let [result (db-migrate/migrate conn :target-version {:major 65 :minor 36})
+          property (d/entity @conn :logseq.property.asset/plugin-id)]
+      (is (= {:major 65 :minor 36}
+             (:kv/value (d/entity @conn :logseq.kv/schema-version))))
+      (is (= :string (:logseq.property/type property)))
+      (is (true? (:logseq.property/hide? property)))
+      (is (some #(= {:properties [:logseq.property.asset/plugin-id]}
+                    (:migrate-updates %))
+                (:upgrade-result-coll result))))))
+
 (deftest upgrade-version-skips-existing-property
   (let [conn (d/create-conn db-schema/schema)
         property-ident :logseq.property/assignee

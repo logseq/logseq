@@ -25,6 +25,15 @@
               {:block/uuid asset-uuid
                :logseq.property.asset/type "pdf"}))))))
 
+(deftest asset-relative-path-plugin-storage-test
+  (testing "plugin assets resolve inside the plugin's sandbox storage"
+    (let [asset-uuid (random-uuid)]
+      (is (= (str "assets/storages/my-plugin/" asset-uuid ".png")
+             (block-asset/asset-relative-path
+              {:block/uuid asset-uuid
+               :logseq.property.asset/type "png"
+               :logseq.property.asset/plugin-id "my-plugin"}))))))
+
 (deftest show-missing-file-warning-test
   (testing "shows missing-file warning for local asset files that are absent"
     (is (true?

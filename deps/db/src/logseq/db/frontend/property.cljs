@@ -591,6 +591,12 @@
                                                       :hide? true
                                                       :public? false}
                                              :rtc property-ignore-rtc}
+     :logseq.property.asset/plugin-id {:title "Asset storage plugin"
+                                       :schema {:type :string
+                                                :hide? true
+                                                :public? false}
+                                       :properties
+                                       {:logseq.property/description "Plugin whose sandbox storage (assets/storages/<plugin-id>/) holds this asset's file"}}
      :logseq.property.asset/remote-metadata {:title "File remote metadata"
                                              :schema
                                              {:type :map

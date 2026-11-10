@@ -46,6 +46,7 @@
             [logseq.common.config :as common-config]
             [logseq.common.path :as path]
             [logseq.common.util :as common-util]
+            [logseq.db.frontend.asset :as db-asset]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
             [logseq.shui.dialog.core :as shui-dialog]))
@@ -436,9 +437,8 @@
           image? (contains? (common-config/img-formats) asset-type)
           video? (contains? config/video-formats asset-type)
           pdf? (= :pdf asset-type)
-          file-name (str (:block/uuid asset) "." asset-type-str)
-          ;; Prefer external-url so plugin-sandboxed assets resolve to their
-          ;; real on-disk path; mirrors the asset-cp render-side fix.
+          file-name (db-asset/asset-file-path (:block/uuid asset) asset-type-str
+                                              (:logseq.property.asset/plugin-id asset))
           rel-path (or (:logseq.property.asset/external-url asset)
                        (path/path-join (str "../" common-config/local-assets-dir) file-name))]
       (cond
