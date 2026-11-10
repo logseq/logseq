@@ -2543,6 +2543,212 @@
       (throw (js/Error. "findEntities returned an invalid result envelope")))
     (js->clj result :keywordize-keys true)))
 
+(def ^:private link-suggestion-limits
+  {:max_text_length 20000 :max_pages 10000 :max_name_records 50000
+   :max_inventory_bytes 8388608 :max_spans 10000 :max_suggestions 100 :max_bytes 65536})
+
+(defn- link-result-bytes [value]
+  (.-length (.encode (js/TextEncoder.) (js/JSON.stringify (clj->js value)))))
+
+(defn- <link-pages
+  [api-fn options]
+  (letfn [(read-page [cursor pages seen inventory-bytes]
+            (p/let [result (find-entities api-fn (clj->js (cond-> (merge {:kind "page" :state "live" :limit 1000} options)
+                                                         cursor (assoc :cursor cursor))))
+                    rows (:matches result)
+                    pages (into pages rows)
+                    inventory-bytes (+ inventory-bytes (link-result-bytes rows))
+                    next-cursor (:next_cursor result)]
+              (when (or (> (count pages) (:max_pages link-suggestion-limits))
+                        (and (:truncated result) (>= (count pages) (:max_pages link-suggestion-limits)))
+                        (> inventory-bytes (:max_inventory_bytes link-suggestion-limits)))
+                (throw (js/Error. "suggestLinks graph inventory exceeds its page/byte scan limits; no suggestions returned")))
+              (if (:truncated result)
+                (do
+                  (when (or (empty? rows) (not (map? next-cursor)) (contains? seen next-cursor))
+                    (throw (js/Error. "suggestLinks received invalid findEntities pagination")))
+                  (read-page next-cursor pages (conj seen next-cursor) inventory-bytes))
+                pages)))]
+    (read-page nil [] #{} 0)))
+
+(defn- link-name-index
+  [pages names-field]
+  (reduce
+   (fn [index {:keys [uuid title] :as page}]
+     (when-not (and (common-util/uuid-string? uuid) (string? title)
+                    (vector? (get page names-field)))
+       (throw (js/Error. "suggestLinks received invalid page/name data from findEntities")))
+     (let [names (if (= names-field :aliases)
+                   (cons {:uuid uuid :title title :source "title" :recycled false}
+                         (map #(assoc % :source "alias") (:aliases page)))
+                   (:matched_names page))]
+       (reduce
+        (fn [result {name-uuid :uuid name-title :title :keys [source recycled]}]
+          (when-not (and (common-util/uuid-string? name-uuid) (string? name-title)
+                         (contains? #{"title" "alias"} source) (false? recycled))
+            (throw (js/Error. "suggestLinks received invalid or recycled name data from findEntities")))
+          (if (or (string/blank? name-title) (> (count name-title) 1024))
+            result
+            (update-in result [name-title uuid]
+                       (fn [candidate]
+                         (-> (or candidate {:uuid uuid :title title :matches #{}})
+                             (update :matches conj {:source source :name_uuid name-uuid}))))))
+        index names)))
+   {} pages))
+
+(defn- fenced-link-ranges
+  [text]
+  (loop [offset 0 fence nil ranges []]
+    (if (>= offset (count text))
+      (cond-> ranges fence (conj [(:start fence) (count text)]))
+      (let [newline-index (.indexOf text "\n" offset)
+            end (if (neg? newline-index) (count text) (inc newline-index))
+            line (subs text offset (if (neg? newline-index) end newline-index))
+            opening (re-find #"^ {0,3}(`{3,}|~{3,})" line)]
+        (cond
+          (and fence
+               (re-matches (re-pattern (str "^ {0,3}" (:char fence) "{" (:length fence) ",}[ \\t\\r]*$")) line))
+          (recur end nil (conj ranges [(:start fence) end]))
+          fence (recur end fence ranges)
+          opening (recur end {:start offset :char (subs (second opening) 0 1)
+                              :length (count (second opening))} ranges)
+          :else (recur end nil ranges))))))
+
+(defn- balanced-link-end
+  [text start opening closing]
+  (loop [offset (+ start (count opening)) depth 1]
+    (cond
+      (>= offset (count text)) (count text)
+      (= "\\" (subs text offset (inc offset))) (recur (+ offset 2) depth)
+      (.startsWith text opening offset) (recur (+ offset (count opening)) (inc depth))
+      (.startsWith text closing offset) (if (= depth 1) (+ offset (count closing))
+                                           (recur (+ offset (count closing)) (dec depth)))
+      :else (recur (inc offset) depth))))
+
+(defn- inline-code-end
+  [text start]
+  (let [delimiter (re-find #"^`+" (subs text start))
+        width (count delimiter)]
+    (loop [offset (+ start width)]
+      (let [end (.indexOf text delimiter offset)]
+        (cond
+          (neg? end) (count text)
+          (or (= "`" (subs text (max 0 (dec end)) end))
+              (.startsWith text "`" (+ end width))) (recur (+ end width))
+          :else (+ end width))))))
+
+(defn- link-mask-prefix
+  [text]
+  (let [blocked (js/Uint8Array. (count text))
+        mask! (fn [start end] (.fill blocked 1 start end))]
+    (doseq [[start end] (fenced-link-ranges text)] (mask! start end))
+    (loop [offset 0]
+      (when (< offset (count text))
+        (let [tail (subs text offset)
+              first-char (subs tail 0 1)
+              url (some-> (.exec (js/RegExp. "^(?:https?://|ftp://|mailto:|www\\.)[^\\s<>]+" "i") tail) (aget 0))
+              tag (re-find #"^#[^\s#()\[\]{}<>.,;:!?]+" tail)
+              end (cond
+                    (pos? (aget blocked offset)) (inc offset)
+                    (= "\\" first-char) (min (count text) (+ offset 2))
+                    (= "`" first-char) (inline-code-end text offset)
+                    (.startsWith tail "[[") (balanced-link-end text offset "[[" "]]")
+                    (.startsWith tail "{{") (balanced-link-end text offset "{{" "}}")
+                    (.startsWith tail "((") (balanced-link-end text offset "((" "))")
+                    (= "[" first-char)
+                    (let [label-end (balanced-link-end text offset "[" "]")]
+                      (cond
+                        (.startsWith text "(" label-end) (balanced-link-end text label-end "(" ")")
+                        (.startsWith text "[" label-end) (balanced-link-end text label-end "[" "]")
+                        :else label-end))
+                    (= "<" first-char)
+                    (let [close (.indexOf text ">" offset)]
+                      (if (neg? close) (inc offset) (inc close)))
+                    url (+ offset (count url))
+                    tag (+ offset (count tag))
+                    :else offset)]
+          (when (> end offset) (mask! offset end))
+          (recur (max (inc offset) end)))))
+    (let [prefix (js/Int32Array. (inc (count text)))]
+      (dotimes [offset (count text)]
+        (aset prefix (inc offset) (+ (aget prefix offset) (aget blocked offset))))
+      prefix)))
+
+(defn- link-word-boundary?
+  [text start end]
+  (and (not (.test (js/RegExp. "[\\p{L}\\p{N}\\p{M}_]$" "u")
+                   (subs text (max 0 (- start 2)) start)))
+       (not (.test (js/RegExp. "^[\\p{L}\\p{N}\\p{M}_]" "u")
+                   (subs text end (min (count text) (+ end 2)))))))
+
+(defn- link-spans
+  [text names]
+  (let [mask-prefix (link-mask-prefix text)
+        spans (reduce
+               (fn [result name]
+                 (loop [offset 0 result result]
+                   (let [start (.indexOf text name offset)
+                         end (+ start (count name))]
+                     (if (neg? start)
+                       result
+                       (let [match? (and (= (aget mask-prefix start) (aget mask-prefix end))
+                                         (link-word-boundary? text start end))
+                             result (cond-> result match? (conj {:start start :end end :text name}))]
+                         (when (> (count result) (:max_spans link-suggestion-limits))
+                           (throw (js/Error. "suggestLinks exceeds the matched-span limit; use a shorter draft")))
+                         (recur (inc start) result))))))
+               [] names)]
+    (reduce (fn [result span]
+              (if (< (:start span) (or (:end (peek result)) 0))
+                result
+                (conj result span)))
+            [] (sort-by (juxt :start (comp - :end)) spans))))
+
+(defn- bounded-link-suggestions
+  [spans index limit page-count]
+  (let [envelope (fn [suggestions]
+                   {:suggestions suggestions :count (count suggestions) :total_spans (count spans)
+                    :truncated (< (count suggestions) (count spans)) :offset_unit "utf16"
+                    :pages_scanned page-count :limits link-suggestion-limits})]
+    (loop [remaining (take limit spans) suggestions []]
+      (if-let [span (first remaining)]
+        (let [candidates (->> (vals (get index (:text span)))
+                              (sort-by :uuid)
+                              (mapv #(update % :matches (fn [matches] (vec (sort-by (juxt :source :name_uuid) matches))))))
+              suggestion (assoc span :candidates candidates :ambiguous (> (count candidates) 1))
+              next-suggestions (conj suggestions suggestion)]
+          (if (> (link-result-bytes (envelope next-suggestions)) (:max_bytes link-suggestion-limits))
+            (if (empty? suggestions)
+              (throw (js/Error. "suggestLinks candidate list exceeds the response limit; no candidates were omitted"))
+              (envelope suggestions))
+            (recur (next remaining) next-suggestions)))
+        (envelope suggestions)))))
+
+(defn suggest-links
+  [api-fn args]
+  (let [text (aget args "text")
+        limit (or (aget args "limit") 20)]
+    (when-not (and (string? text) (not (string/blank? text))
+                   (<= (count text) (:max_text_length link-suggestion-limits))
+                   (integer? limit) (<= 1 limit (:max_suggestions link-suggestion-limits)))
+      (throw (js/Error. "suggestLinks requires a nonblank draft of at most 20000 UTF-16 units and limit 1..100")))
+    (p/let [pages (<link-pages api-fn {:select ["uuid" "title" "aliases"]})
+            _ (when (> (reduce + (map #(inc (count (:aliases %))) pages)) (:max_name_records link-suggestion-limits))
+                (throw (js/Error. "suggestLinks exceeds the name-record scan limit; no suggestions returned")))
+            index (link-name-index pages :aliases)
+            spans (link-spans text (keys index))
+            result (bounded-link-suggestions spans index limit (count pages))]
+      (p/loop [batches (seq (partition-all 31 (distinct (map :text (:suggestions result)))))]
+        (if-let [names (first batches)]
+          (p/let [fresh (<link-pages api-fn {:name_source "both"
+                                            :where {:any (mapv #(hash-map :field "title" :op "equals" :value %) names)}
+                                            :select ["uuid" "title" "matched_names"]})
+                  fresh-index (link-name-index fresh :matched_names)]
+            (when-not (= (select-keys index names) fresh-index)
+              (throw (js/Error. "Graph names changed while suggesting links; rerun against the current graph before using targets")))
+            (p/recur (next batches)))
+          result)))))
+
 (defn search-blocks
   [api-fn args]
   (let [term (aget args "searchTerm")]
@@ -2685,6 +2891,7 @@
    :getPage ["logseq.DB.getPageData"]
    :searchBlocks ["logseq.DB.search"]
    :findEntities ["logseq.DB.findEntities"]
+   :suggestLinks ["logseq.DB.findEntities"]
    :listTags ["logseq.DB.listTags"]
    :listProperties ["logseq.DB.listProperties"]
    :getPageUUID ["logseq.DB.datascriptQuery"]
@@ -2906,7 +3113,7 @@
                 version (:version info)
                 body {:graph {:version version
                               :compatibility_target "2.0.2"
-                              :contract_revision "2026-11-07.2"
+                              :contract_revision "2026-11-10.1"
                               :version_matches (= version "2.0.2")
                               :checked_at (/ (.now js/Date) 1000)}
                       :tools tools

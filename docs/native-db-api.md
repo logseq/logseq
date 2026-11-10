@@ -655,6 +655,7 @@ The MCP tool names are not automatically native API commands. For example:
 | MCP tool | Native route(s) / distinction |
 | --- | --- |
 | `searchBlocks` | Native `search` plus MCP literal-result filtering. Use `findEntities` for framed literal native search. |
+| `suggestLinks` | MCP-only draft analysis over native `findEntities` title/alias reads; not a new native command. |
 | `pageStats` | Native `getPageStats`; MCP adds its result contract. |
 | `createProperty` | Native `upsertProperty` plus MCP checks/diagnostics. |
 | `listClosedValues` | Native `getClosedValues`. |

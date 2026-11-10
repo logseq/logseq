@@ -263,7 +263,7 @@
                        second-response (.callTool client #js {:name "datascriptQuery" :arguments args})
                        _ (reset! decision #js {:action "decline"})
                        refused (.callTool client #js {:name "datascriptQuery" :arguments args})]
-                 (is (= 56 (alength (aget inventory "tools"))))
+                 (is (= 57 (alength (aget inventory "tools"))))
                  (is (= 1 (count (filter #(= "datascriptQuery" (aget % "name")) (array-seq (aget inventory "tools"))))))
                  (is (not (aget first-response "isError")))
                  (is (not (aget second-response "isError")))
@@ -295,7 +295,7 @@
                          tool (first (filter #(= "getContentCapabilities" (aget % "name")) (array-seq (aget inventory "tools"))))
                          response (.callTool client #js {:name "getContentCapabilities" :arguments #js {}})
                          body (js->clj (js/JSON.parse (aget response "content" 0 "text")) :keywordize-keys true)]
-                   (is (= 56 (alength (aget inventory "tools"))))
+                   (is (= 57 (alength (aget inventory "tools"))))
                    (is (zero? (alength (js/Object.keys (aget tool "inputSchema" "properties")))))
                    (is (true? (aget tool "annotations" "readOnlyHint")))
                    (is (not (aget response "isError")))
@@ -892,6 +892,225 @@
           (p/catch (fn [error] (is false (.-message error))))
           (p/finally (fn [] (p/let [_ (.close client) _ (.close server)] (js/queueMicrotask done))))))))
 
+(defn- link-fixture-api
+  [conn calls]
+  (fn [method args]
+    (swap! calls conj [method args])
+    (when-not (= "logseq.DB.findEntities" method)
+      (throw (js/Error. "Link suggestions must only call the structured read API")))
+    (p/with-redefs [state/get-current-repo (constantly "link-fixture")
+                    db-async/<q (fn [_ query-options query & inputs]
+                                  (is (= {:transact-db? false} query-options))
+                                  (js/Promise.resolve (apply d/q query @conn inputs)))]
+      (db-based-api/find-entities (first args)))))
+
+(deftest suggest-links-preserves-spans-alias-evidence-and-ambiguity
+  (let [{:keys [conn]} (find-entities-fixture)
+        _ (add-search-aliases! conn)
+        _ (d/transact! conn
+                       [{:db/id 183 :block/uuid (uuid "00000000-0000-4000-8000-000000000183")
+                         :block/title "MCP" :block/tags [158]}
+                        {:db/id 184 :block/uuid (uuid "00000000-0000-4000-8000-000000000184")
+                         :block/title "Other" :block/tags [158]}])
+        before @conn
+        calls (atom [])
+        text "\uD83D\uDE00 Fixture and Alpha; MCP Other. alpha SuperFixture Fixture2 _Fixture \u00e9Fixture Fixture\u00e9. Fixture\u3002 MCP Gone Old alias"]
+    (async done
+      (-> (p/let [result (mcp-compat/suggest-links (link-fixture-api conn calls) #js {:text text})]
+            (is (= ["Fixture" "Alpha" "MCP Other" "Fixture" "MCP"] (mapv :text (:suggestions result))))
+            (is (= 3 (get-in result [:suggestions 0 :start])))
+            (is (= "utf16" (:offset_unit result)))
+            (is (every? #(= (:text %) (subs text (:start %) (:end %))) (:suggestions result)))
+            (is (= 3 (count (get-in result [:suggestions 1 :candidates]))))
+            (is (true? (get-in result [:suggestions 1 :ambiguous])))
+            (is (false? (get-in result [:suggestions 0 :ambiguous])))
+            (is (= {:source "alias" :name_uuid "00000000-0000-4000-8000-000000000180"}
+                   (get-in result [:suggestions 1 :candidates 0 :matches 0])))
+            (is (= 5 (:total_spans result)))
+            (is (false? (:truncated result)))
+            (is (= 2 (count @calls)))
+            (is (= before @conn)))
+          (p/catch (fn [error] (is false (.-stack error))))
+          (p/finally done)))))
+
+(deftest suggest-links-skips-markup-code-tags-and-urls
+  (let [{:keys [conn]} (find-entities-fixture)
+        calls (atom [])
+        text (string/join "\n"
+                          ["Fixture"
+                           "[[Fixture]] ((Fixture)) {{embed [[Fixture]]}} {{link:Fixture}}"
+                           "[Fixture](https://example.test/a(Fixture)) ![Fixture](image.png)"
+                           "[Fixture][ref] [Fixture] <Fixture> <a title=\"Fixture\">"
+                           "#Fixture #[[Fixture]] \\Fixture"
+                           "https://example.test/Fixture www.example.test/Fixture HTTPS://example.test/Fixture"
+                           "`Fixture` ``inside ` Fixture``"
+                           "```text" "Fixture" "````"
+                           "~~~" "Fixture" "~~~"
+                           "``unclosed Fixture"])]
+    (async done
+      (-> (p/let [result (mcp-compat/suggest-links (link-fixture-api conn calls) #js {:text text})]
+            (is (= [{:start 0 :end 7 :text "Fixture"
+                     :candidates [{:uuid "00000000-0000-4000-8000-000000000160" :title "Fixture"
+                                   :matches [{:source "title" :name_uuid "00000000-0000-4000-8000-000000000160"}]}]
+                     :ambiguous false}]
+                   (:suggestions result))))
+          (p/catch (fn [error] (is false (.-stack error))))
+          (p/finally done)))))
+
+(deftest suggest-links-bounds-output-without-dropping-ambiguous-candidates
+  (let [{:keys [conn]} (find-entities-fixture)
+        _ (add-search-aliases! conn)
+        calls (atom [])
+        api (link-fixture-api conn calls)]
+    (d/transact! conn [{:db/id 160 :block/title (.repeat "x" 30000)}])
+    (async done
+      (-> (p/let [limited (mcp-compat/suggest-links api #js {:text "Alpha Alternate Alpha" :limit 1})
+                  byte-limited (mcp-compat/suggest-links api #js {:text "Alpha Alternate Alpha"})
+                  _ (d/transact! conn [{:db/id 160 :block/title (.repeat "\u00e9" 20000)}
+                                       {:db/id 168 :block/title (.repeat "\u00e9" 20000)}])
+                  oversized (-> (mcp-compat/suggest-links api #js {:text "Alpha"})
+                                (p/catch #(hash-map :error %)))]
+            (is (= 1 (:count limited)))
+            (is (= 3 (count (get-in limited [:suggestions 0 :candidates]))))
+            (is (true? (:truncated limited)))
+            (is (= 2 (:count byte-limited)))
+            (is (= 3 (:total_spans byte-limited)))
+            (is (true? (:truncated byte-limited)))
+            (is (<= (js/Buffer.byteLength (js/JSON.stringify (clj->js byte-limited)) "utf8") 65536))
+            (is (instance? js/Error (:error oversized)))
+            (is (string/includes? (.-message (:error oversized)) "candidate list")))
+          (p/catch (fn [error] (is false (.-stack error))))
+          (p/finally done)))))
+
+(deftest suggest-links-refuses-stale-targets-and-api-failures
+  (let [{:keys [conn]} (find-entities-fixture)
+        _ (add-search-aliases! conn)
+        calls (atom [])
+        api (link-fixture-api conn calls)
+        changing-api (fn [method args]
+                       (when (aget (first args) "where")
+                         (d/transact! conn [[:db/retract 160 :logseq.property/alias 180]
+                                            [:db/retract 160 :block/alias 180]]))
+                       (api method args))]
+    (async done
+      (-> (p/let [stale (-> (mcp-compat/suggest-links changing-api #js {:text "Alpha"})
+                            (p/catch #(hash-map :error %)))
+                  failed (-> (mcp-compat/suggest-links
+                              (fn [& _] (p/rejected (js/Error. "Read unavailable"))) #js {:text "Fixture"})
+                             (p/catch #(hash-map :error %)))
+                  empty-result (mcp-compat/suggest-links api #js {:text "No matching graph names here"})]
+            (is (instance? js/Error (:error stale)))
+            (is (string/includes? (.-message (:error stale)) "Graph names changed"))
+            (is (= "Read unavailable" (.-message (:error failed))))
+            (is (= [] (:suggestions empty-result)))
+            (is (= 0 (:count empty-result)))
+            (is (false? (:truncated empty-result))))
+          (p/catch (fn [error] (is false (.-stack error))))
+          (p/finally done)))))
+
+(deftest suggest-links-enforces-scan-limits-and-pagination
+  (let [calls (atom 0)
+        make-page (fn [id] {:uuid (str "00000000-0000-4000-8000-" (.padStart (str id) 12 "0"))
+                           :title (str "Name " id) :aliases []})
+        pages (mapv make-page (range 10001))
+        api-for (fn [size]
+                  (fn [method args]
+                    (is (= "logseq.DB.findEntities" method))
+                    (swap! calls inc)
+                    (let [offset (or (some-> (first args) (aget "cursor") (aget "after_id")) 0)
+                          end (min size (+ offset 1000))
+                          more? (< end size)]
+                      (clj->js {:matches (subvec pages offset end) :count (- end offset) :truncated more?
+                                :next_cursor (when more? {:after_id end :basis_rev 1 :fingerprint 1})}))))]
+    (async done
+      (-> (p/let [at-cap (mcp-compat/suggest-links (api-for 10000) #js {:text "Absent"})
+                  _ (is (= 10 @calls))
+                  over-cap (-> (mcp-compat/suggest-links (api-for 10001) #js {:text "Absent"})
+                               (p/catch #(hash-map :error %)))
+                  bad-cursor (-> (mcp-compat/suggest-links
+                                  (fn [& _] #js {:matches #js [] :count 0 :truncated true :next_cursor nil})
+                                  #js {:text "Absent"})
+                                 (p/catch #(hash-map :error %)))]
+            (is (= 10000 (:pages_scanned at-cap)))
+            (is (= 0 (:count at-cap)))
+            (is (instance? js/Error (:error over-cap)))
+            (is (string/includes? (.-message (:error over-cap)) "scan limits"))
+            (is (instance? js/Error (:error bad-cursor)))
+            (is (= 20 @calls)))
+          (p/catch (fn [error] (is false (.-stack error))))
+          (p/finally done)))))
+
+(deftest suggest-links-native-api-and-mcp-protocol
+  (let [{:keys [conn]} (find-entities-fixture)
+        server (mcp-server/create-mcp-api-server (link-fixture-api conn (atom [])))
+        client (Client. #js {:name "link-suggestions-test" :version "1"} #js {:capabilities #js {}})
+        transports (.createLinkedPair InMemoryTransport)]
+    (doseq [args [#js {:text ""} #js {:text "  "} #js {:text (.repeat "x" 20001)}
+                   #js {:text "Fixture" :limit 0} #js {:text "Fixture" :limit 101}]]
+      (is (thrown? js/Error (mcp-compat/suggest-links (fn [& _] (throw (js/Error. "Unexpected API call"))) args))))
+    (async done
+      (-> (p/let [_ (.connect server (aget transports 0))
+                  _ (.connect client (aget transports 1))
+                  response (.callTool ^js client #js {:name "suggestLinks" :arguments #js {:text "Fixture"}})
+                  body (js->clj (js/JSON.parse (aget response "content" 0 "text")) :keywordize-keys true)
+                  refused (.callTool ^js client #js {:name "suggestLinks"
+                                                     :arguments #js {:text "Fixture" :write true}})
+                  tools (.listTools ^js client)]
+            (is (not (true? (aget response "isError"))))
+            (is (= ["Fixture"] (mapv :text (:suggestions body))))
+            (is (true? (aget refused "isError")))
+            (is (some #(and (= "suggestLinks" (aget % "name"))
+                            (true? (aget % "annotations" "readOnlyHint"))
+                            (false? (aget % "annotations" "destructiveHint")))
+                      (array-seq (aget tools "tools")))))
+          (p/catch (fn [error] (is false (.-stack error))))
+          (p/finally (fn [] (p/let [_ (.close client) _ (.close server)] (js/queueMicrotask done))))))))
+
+(deftest suggest-links-rechecks-more-than-one-filter-batch
+  (let [{:keys [conn]} (find-entities-fixture)
+        calls (atom [])
+        titles (mapv #(str "Topic" %) (range 40))]
+    (d/transact! conn
+                 (map-indexed (fn [index title]
+                                {:db/id (+ 200 index)
+                                 :block/uuid (uuid (str "00000000-0000-4000-8000-"
+                                                        (.padStart (str (+ 200 index)) 12 "0")))
+                                 :block/title title :block/tags [158]})
+                              titles))
+    (async done
+      (-> (p/let [result (mcp-compat/suggest-links (link-fixture-api conn calls)
+                                                 #js {:text (string/join ", " titles) :limit 100})]
+            (is (= titles (mapv :text (:suggestions result))))
+            (is (false? (:truncated result)))
+            (is (= 3 (count @calls))))
+          (p/catch (fn [error] (is false (.-stack error))))
+          (p/finally done)))))
+
+(deftest suggest-links-enforces-name-record-and-inventory-byte-caps
+  (let [page-uuid "00000000-0000-4000-8000-000000000160"
+        alias {:uuid "00000000-0000-4000-8000-000000000180" :title "Alpha" :recycled false}
+        response-for (fn [page] (fn [& _] (clj->js {:matches [page] :count 1 :truncated false})))
+        page {:uuid page-uuid :title "Fixture" :aliases []}]
+    (async done
+      (-> (p/let [names (-> (mcp-compat/suggest-links
+                             (response-for (assoc page :aliases (vec (repeat 50000 alias)))) #js {:text "Absent"})
+                            (p/catch #(hash-map :error %)))
+                  data (-> (mcp-compat/suggest-links
+                            (response-for (assoc page :title (.repeat "x" 8388608))) #js {:text "Absent"})
+                           (p/catch #(hash-map :error %)))
+                  spans (-> (mcp-compat/suggest-links
+                             (response-for (assoc page :title "a" :aliases [(assoc alias :title "a a")]))
+                             #js {:text (.repeat "a " 10000)})
+                            (p/catch #(hash-map :error %)))]
+            (is (instance? js/Error (:error names)))
+            (is (string/includes? (.-message (:error names)) "name-record"))
+            (is (instance? js/Error (:error data)))
+            (is (string/includes? (.-message (:error data)) "scan limits"))
+            (is (instance? js/Error (:error spans)))
+            (is (string/includes? (.-message (:error spans)) "matched-span")))
+          (p/catch (fn [error] (is false (.-stack error))))
+          (p/finally done)))))
+
 (deftest list-embeds-routes-filters-and-validates-inputs
   (let [calls (atom [])
         result #js {:embeds #js [] :count 0 :truncated false}
@@ -905,7 +1124,7 @@
                  (is (= {:embeds [] :count 0 :truncated false} response))
                  (is (= [["logseq.DB.listEmbeds" [args]]] @calls))
                  (is (= mcp-compat/list-embeds (get-in mcp-server/data-tools [:listEmbeds :fn])))
-                 (is (= 55 (+ (count mcp-server/api-tools) (count mcp-server/data-tools))))
+                 (is (= 56 (+ (count mcp-server/api-tools) (count mcp-server/data-tools))))
                  (is (string/includes? (aget (get-in mcp-server/data-tools [:createEmbed :config]) "description") "before retrying"))
                  (is (string? (aget (aget (aget (get-in mcp-server/data-tools [:createEmbed :config]) "inputSchema") "target_uuid") "description"))))
                (p/catch (fn [error] (is false (str error))))

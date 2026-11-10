@@ -3,7 +3,7 @@
 For Desktop HTTP connection, authentication, native command arguments, and
 DB-compatible aliases, see the [Desktop DB Graph HTTP API Reference](./native-db-api.md).
 
-This map describes the current 56-tool MCP implementation, its Logseq API routes,
+This map describes the current 57-tool MCP implementation, its Logseq API routes,
 inputs, behavior, and remaining verification. MCP graph operations call
 `logseq.DB.*` API functions; those APIs may delegate internally to shared
 Editor/App/CLI implementations. MCP does not directly mutate workers or the DB.
@@ -15,8 +15,8 @@ Idle-timeout session expiry remains untested.
 
 ## Current 2.0.2 contracts
 
-The server exposes 56 tools with compatibility target `2.0.2` and contract
-revision `2026-11-07.2`.
+The server exposes 57 tools with compatibility target `2.0.2` and contract
+revision `2026-11-10.1`.
 
 - `capabilities` uses `logseq.DB.getMcpApiMethods` to read callable renderer API
   registrations. Missing-entity null results and explicit `Page "..." not found`
@@ -129,6 +129,7 @@ revision `2026-11-07.2`.
 | `getBlock` | block UUID | exact block read, including collapsed/property-bearing entities | `logseq.DB.getBlock` | None |
 | `searchBlocks` | `searchTerm` | literal, case-sensitive title filter over bounded native candidates; handles quoted text; preserves native envelope/pagination without snippets | `logseq.DB.search` | None |
 | `findEntities` | `kind`, `state?`, `name_source?`, `page_uuid?`, `where?`, `select?`, `output?`, `limit?`, `cursor?` | read-only literal/structural search without per-query approval; page title/alias matching, opt-in alias inventory and match details, selected fields, exact counts, live/recycled/all inventories and revision-bound cursors; has_link matches embeds, not ordinary page references | `logseq.DB.findEntities`; fixed query forms and typed literal inputs through existing API `<q` | None |
+| `suggestLinks` | draft `text`, `limit?` | read-only title/alias link candidates with exact spans, ambiguity and markup/code masking; bounded live inventory and fresh name checks, no automatic edits | `logseq.DB.findEntities`; MCP-only text analysis, no new native API | Live Desktop validation |
 | `getBlockTree` | block UUID, depth/node caps | expanded tree with bounded depth/node count, page/missing distinction and cycle guard | `logseq.DB.getBlockTree` | None |
 | `findBacklinks` | target UUID | separate refs, tag-holder and property-value groups; counts may overlap | `logseq.DB.getBacklinks` | None |
 | `findOrphans` | page UUID | finds blocks whose parent ancestry disagrees with their stored owning page | `logseq.DB.getPageBlockUUIDs`; MCP filters by owning page UUID | None |
@@ -241,6 +242,48 @@ The response is `{output,matches,count,count_is_exact,truncated,next_cursor,limi
 - Orphan audits, deleted-target references and duplicate-title predicates are
   not part of this vocabulary. Use existing dedicated tools or separately
   approved `datascriptQuery` for unsupported questions.
+
+## Link suggestions
+
+`suggestLinks` analyzes supplied draft text, not stored block content:
+
+```json
+{"text":"Project Alpha needs a review.","limit":20}
+```
+
+It reads live Page-class titles and aliases through `findEntities`. Names match
+literally and case-sensitively, with no adjacent Unicode letter, number, combining
+mark or underscore. Blank names and names longer than 1024 UTF-16 units are not
+suggested. Common Markdown links/images, wiki links, block references, macros
+(including embed syntax), inline/fenced code, URLs, tags and angle-bracket markup
+are masked. This conservative scanner is not Logseq's renderer or a full Markdown
+parser; malformed/unclosed markup can suppress the remaining draft.
+
+Spans are leftmost-first and non-overlapping, preferring the longest name at the
+same start. Each suggestion has `start`, exclusive `end`, exact `text`,
+`ambiguous`, and `candidates`. Offsets use UTF-16 code units, so JavaScript
+`text.slice(start,end)` recovers the exact matched text. Each candidate contains
+the target `uuid`, `title`, and `matches: [{source,name_uuid}]`, where source is
+`title` or `alias`. Multiple candidate targets are never silently resolved.
+As with `findEntities`, an alias entity's own title remains a candidate alongside
+pages declaring it as an alias; this tool does not invent canonical redirects.
+
+The envelope is `{suggestions,count,total_spans,truncated,offset_unit,pages_scanned,limits}`.
+`total_spans` counts the non-overlapping draft spans before output truncation;
+`count` counts returned suggestions. Limit defaults to 20, range 1-100. Output
+is capped at 65536 UTF-8 bytes; later spans may be omitted with `truncated:true`,
+but candidate lists inside a returned span are complete. A single oversized
+candidate list errors instead of hiding ambiguity. There is no result cursor;
+use a smaller draft to inspect omitted spans.
+
+Drafts must be nonblank and at most 20000 UTF-16 units. Scans are capped at
+10000 live pages, 50000 name records and 8 MiB of serialized inventory; at most
+10000 raw matching spans are considered. Exceeding any scan/match cap errors,
+not partial success. Existing per-call `findEntities` row/byte limits also apply.
+Inventory cursor/revision failures propagate without a silent retry. Returned
+names are reread in bounded exact-match batches; changed/missing/newly ambiguous
+targets fail explicitly. No cache, raw query, graph writes or external services
+are used. Suggestions do not authorize inserting links or modifying aliases.
 
 ## Lists
 

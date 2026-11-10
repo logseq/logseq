@@ -35,7 +35,7 @@ Electron API bridge (`api-fn`)
 Graph/database worker
 ```
 
-The server registers 56 tools. `upsertNodes` is not an advertised MCP tool.
+The server registers 57 tools. `upsertNodes` is not an advertised MCP tool.
 Handlers use the existing desktop API bridge; MCP does not open its own
 database connection or implement a separate transaction path.
 

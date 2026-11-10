@@ -4,7 +4,7 @@ Updated 2026-11-07. Attach this document to Claude Desktop to test the native
 Logseq MCP server at `http://127.0.0.1:12315/mcp` from setup through cleanup.
 This is a test specification, not a results log. Keep results in a separate report.
 
-The expected inventory is **56 tools**. Native Logseq source, SDK, tests and
+The expected inventory is **57 tools**. Native Logseq source, SDK, tests and
 advertised schemas define the contracts. Use native DB skills whose search,
 asset, timeout and output assumptions match the connected server.
 Use this guide alone rather than combining it with older testing checklists.
@@ -13,7 +13,7 @@ Use this guide alone rather than combining it with older testing checklists.
 
 These are current implementation contracts; this specification records no live passes. First check
 `capabilities.graph.compatibility_target` is `2.0.2` and `contract_revision` is
-`2026-11-07.2`; the app version alone cannot distinguish builds.
+`2026-11-10.1`; the app version alone cannot distinguish builds.
 
 On fresh, approved run-owned fixtures:
 
@@ -104,7 +104,7 @@ Send this with the attached document:
 
 ```text
 Run the attached Native Logseq MCP End-to-End Test against my connected native
-Logseq MCP server. First verify its exact 56-tool inventory and live schemas.
+Logseq MCP server. First verify its exact 57-tool inventory and live schemas.
 Confirm the desktop is using a stable, watcher-free build and no edits/builds
 will run during the test. Do not start writes if source watching is active.
 Ask me to confirm the graph is disposable and approve the fixture creation,
@@ -129,7 +129,7 @@ approval form or Logseq Desktop approval dialog. Broad test or cleanup approval
 does not cover queries. Never
 silently retry or use raw API access instead.
 
-Finish with all 56 tools accounted for, detailed case results, cleanup evidence,
+Finish with all 57 tools accounted for, detailed case results, cleanup evidence,
 remaining fixtures, limitations, and a readiness verdict. Do not claim full
 coverage for cases that were blocked, manually skipped, or not actually called.
 ```
@@ -233,7 +233,7 @@ Maintain these ledgers after every phase:
 | Run | date, run ID, server/build identification if available, graph/user approval, advertised schemas, baseline counts |
 | Fixtures | role, kind, UUID/ident, original/current title, parent/page, origin (this run or user-prepared), cleanup action/status |
 | Cases | ID, tool, sanitized arguments, response summary, independent read, expected/actual state, duration, verdict |
-| Coverage | each of the 56 names, called/not called, supporting case IDs, positive/negative/manual coverage |
+| Coverage | each of the 57 names, called/not called, supporting case IDs, positive/negative/manual coverage |
 
 Assign case IDs such as B-01 and F-03 to every actual call/assertion sequence.
 Checkpoint the ledgers after each phase. On resumption, reread ledger targets,
@@ -255,6 +255,7 @@ Keep the intentionally unusual spellings, including `creatTag`,
 | `getPage` | B, F: page content and nested structural/embed nodes |
 | `searchBlocks` | I: exact case-sensitive marker, different-case/absent marker, and misspelling using searchTerm only |
 | `findEntities` | I and regression retest: structured empty-first/text searches, selected fields, live/recycled counts, cursor continuation/invalidation, malformed-input refusal, no per-query approval |
+| `suggestLinks` | I: draft title/alias matches, exact UTF-16 spans, ambiguity, markup/code exclusions, limits, fresh target checks and no graph changes |
 | `listTags` | A, D, K: baseline, run tags, removal; expand false/true |
 | `listProperties` | A, E, K: baseline, canonical definitions, removal; expand false/true |
 | `getPageUUID` | B, C, K: title resolution, rename, recycled-title behavior |
@@ -559,6 +560,14 @@ so an empty result is not proof of graph-wide absence.
 Exercise `findEntities` for page-scoped literal searches, selected `matches`
 fields, exact counts, and cursor behavior as specified in the regression retest.
 Avoid one-character/common-word/global stress searches.
+Exercise `suggestLinks` with a short draft mentioning run-owned page titles and
+owner-prepared aliases. Include existing wiki/Markdown links, inline/fenced code,
+a URL and a different-case mention; those must not produce new candidates.
+Check `text.slice(start,end)`, candidate UUIDs, ambiguity and result truncation.
+Shared names must not choose one target automatically. Do not write graph
+content merely to exercise scan caps; automated fixtures cover those thresholds.
+Compare run-owned graph content before/after: suggestions must change nothing.
+This procedure records no live pass on its own.
 On timeout, stop and inspect connection health; never blindly repeat the search.
 
 ### J. Asset Inventory
@@ -677,7 +686,7 @@ Return a self-contained report with:
    run ID, baseline and final inventories, and whether the build was development
    or packaged (unknown if not supplied by the user).
 2. One row per case with arguments, verdict, observed state and independent read.
-3. One row for every one of the 56 tools, with actual call evidence and uncovered
+3. One row for every one of the 57 tools, with actual call evidence and uncovered
    positive/negative/manual variants. A capabilities probe is not tool-call coverage.
 4. Page/block embed creation, discovery, backlink/count checks, removal and
    preserved-target evidence; asset empty vs populated coverage separately.
