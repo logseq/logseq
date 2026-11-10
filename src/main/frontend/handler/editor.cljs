@@ -19,6 +19,7 @@
             [frontend.handler.common.editor :as editor-common-handler]
             [frontend.handler.db-based.editor :as db-editor-handler]
             [frontend.handler.editor.autopair :as editor-autopair]
+            [frontend.handler.editor.pending-save :as pending-save]
             [frontend.handler.export.html :as export-html]
             [frontend.handler.export.text :as export-text]
             [frontend.handler.notification :as notification]
@@ -125,32 +126,37 @@
   (let [{:keys [status value]} (db-subs/block-snapshot (:block/uuid block))]
     (if (= :ready status) value block)))
 
-(defonce ^:private *pending-block-save-titles (atom {}))
+(defonce ^:private *pending-block-saves (atom {}))
 
-(defn- clear-pending-block-save-title!
-  [block-uuid value]
-  (swap! *pending-block-save-titles
-         (fn [pending-titles]
-           (if (= value (get pending-titles block-uuid))
-             (dissoc pending-titles block-uuid)
-             pending-titles))))
+(defn- clear-pending-block-save!
+  [key save-id]
+  (swap! *pending-block-saves
+         (fn [saves]
+           (if (= save-id (get-in saves [key :save-id]))
+             (dissoc saves key)
+             saves))))
 
 (defn- save-block-with-pending-title!
   [block value opts]
-  (let [block-uuid (:block/uuid block)]
-    (swap! *pending-block-save-titles assoc block-uuid value)
+  (let [block-uuid (:block/uuid block)
+        repo (state/get-current-repo)
+        key [repo block-uuid]
+        save-id (pending-save/persist! repo block-uuid value)
+        complete! (fn []
+                    (clear-pending-block-save! key save-id)
+                    (pending-save/clear-if-match! repo block-uuid save-id))]
+    (swap! *pending-block-saves assoc key {:save-id save-id :title value})
     (try
       (let [result (save-block-inner! block value opts)]
         (if (p/promise? result)
           (-> result
-              (p/then (fn [_]
-                        (clear-pending-block-save-title! block-uuid value)))
+              (p/then (fn [_] (complete!)))
               (p/catch (fn [_]
-                         (clear-pending-block-save-title! block-uuid value))))
-          (clear-pending-block-save-title! block-uuid value))
+                         (clear-pending-block-save! key save-id))))
+          (complete!))
         result)
       (catch :default error
-        (clear-pending-block-save-title! block-uuid value)
+        (clear-pending-block-save! key save-id)
         (throw error)))))
 
 (defn save-block-if-changed!
@@ -160,9 +166,8 @@
     {:keys [force?]
      :as opts}]
    (let [block (latest-renderer-block block)
-         content (get @*pending-block-save-titles
-                      (:block/uuid block)
-                      (:block/title block))]
+         key [(state/get-current-repo) (:block/uuid block)]
+         content (get-in @*pending-block-saves [key :title] (:block/title block))]
      (cond
        force?
        (save-block-with-pending-title! block value opts)
@@ -1696,11 +1701,56 @@
 
 (defn save-current-block-before-navigate!
   "Closes any open editor popup so the raw textarea value is persisted,
-   then exits editing."
+  then exits editing."
   []
   (state/clear-editor-action!)
   (save-current-block!)
   (state/clear-edit!))
+
+(defn flush-editor-on-unload!
+  "Synchronously persist whatever the editor still holds so a reload can
+  replay it. Then start a best-effort save in case the worker is still
+  reachable (desktop db-worker-node survives renderer reload)."
+  []
+  (let [repo (state/get-current-repo)
+        block (state/get-edit-block)
+        value (editor-input-value (state/get-edit-input-id))
+        block-uuid (:block/uuid block)
+        pending-title (get-in @*pending-block-saves [[repo block-uuid] :title])]
+    (when (and repo block (string? value))
+      (let [title (string/trim value)]
+        (when (not= title pending-title)
+          (pending-save/persist! repo block-uuid title))))
+    (save-current-block! {:flush-input? true})))
+
+(defonce ^:private *unload-flush-installed? (atom false))
+
+(defn install-unload-flush!
+  []
+  (when (and (exists? js/window)
+             (not util/node-test?)
+             (compare-and-set! *unload-flush-installed? false true))
+    (.addEventListener js/window "pagehide" flush-editor-on-unload!)))
+
+(defn <restore-pending-block-saves!
+  "Replay pending titles for `repo` after a reload.
+  Clears the recovery entry when the block is missing or its title already matches."
+  [repo]
+  (when repo
+    (p/all
+     (map (fn [{:keys [block-uuid save-id title]}]
+            (-> (p/let [block (db-async/<get-block repo block-uuid {:children? false})]
+                  (when (and (= repo (state/get-current-repo))
+                             (pending-save/current? repo block-uuid save-id))
+                    (let [result (save-block-aux! block title {})]
+                      (pending-save/clear-if-match! repo block-uuid save-id)
+                      result)))
+                (p/catch (fn [error]
+                           (log/error :restore-pending-block-save-failed
+                                      {:repo repo
+                                       :block-uuid block-uuid
+                                       :error error})))))
+          (pending-save/entries repo)))))
 
 (def insert-command! editor-common-handler/insert-command!)
 
