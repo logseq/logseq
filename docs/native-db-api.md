@@ -389,9 +389,10 @@ Treat such writes as code changes, not harmless text updates.
 | --- | --- |
 | `kind` | Required: `"page"` or `"block"`. Uses canonical entity classification. |
 | `state` | `"live"` (default), `"recycled"`, or `"all"`. Recycling includes relevant ancestry/owning-page state. |
+| `name_source` | `"title"` (default), `"alias"`, or `"both"`. Alias matching is valid only for `kind:"page"`. Controls the names tested by title filters; does not change the returned entity's own title. |
 | `page_uuid` | Optional existing Page-class UUID; only valid for `kind:"block"`. |
 | `where` | Optional filter tree: a leaf, `{"all":[...]}`, or `{"any":[...]}`. Groups must be nonempty. |
-| `select` | Row fields: `uuid`, `title`, `page_uuid`, `page_title`, `parent_uuid`, `recycled`. Defaults to `["uuid","title","page_uuid"]`. |
+| `select` | Row fields: `uuid`, `title`, `page_uuid`, `page_title`, `parent_uuid`, `recycled`, `aliases` (pages only), `matched_names`. Defaults to `["uuid","title","page_uuid"]`; name details are fetched only when selected. |
 | `output` | `"rows"` (default) or `"count"`. |
 | `limit` | Row limit: default 50; integer 1..1000. Applies to row output, not the count total. |
 | `cursor` | Returned continuation object `{after_id,basis_rev,fingerprint}`; omit on the first call. Not allowed with count output. |
@@ -408,6 +409,44 @@ Allowed filter leaves:
 
 At most 32 filter nodes and depth 4 are allowed, with the root at depth zero.
 There are no arbitrary attributes, regexes, Datalog, or JavaScript callbacks.
+With `name_source:"alias"`, title filters test the titles of entities referenced
+by the result page's `:logseq.property/alias` or legacy `:block/alias` relations.
+`"both"` tests the page's own title as well. A single candidate name must satisfy
+the whole filter; structural predicates still describe the result page. There is
+no automatic case folding, recursive alias-chain resolution or choice of one
+target when several pages declare the same alias.
+
+Results and exact counts are distinct result entities, not individual matching
+names. `state` filters those entities; `"live"` additionally excludes recycled
+alias names. `"recycled"` and `"all"` allow either live or recycled names on the
+selected entities. `aliases` lists declared names as `{uuid,title,recycled}`;
+`matched_names` lists qualifying names as `{uuid,title,source,recycled}`, with
+`source:"title"` or `"alias"`. These arrays are UUID-ordered (matched names first
+group by source) and share the response byte cap. An oversized single row errors;
+select fewer fields rather than assuming an alias list was silently truncated.
+Rows keep the declaring page's UUID and title. A title-only match can still be
+an alias entity's own page; inspect the match details rather than assuming it
+was resolved to another page.
+
+For alias-only lookup:
+
+```json
+{
+  "method": "logseq.DB.findEntities",
+  "args": [{
+    "kind": "page",
+    "name_source": "alias",
+    "where": {"field": "title", "op": "equals", "value": "Alpha"},
+    "select": ["uuid", "title", "matched_names"]
+  }]
+}
+```
+
+For a paginated graph-wide alias inventory, omit `where` and use
+`{"kind":"page","name_source":"alias","select":["uuid","title","aliases"]}`.
+Only pages with qualifying aliases are included; use title mode with the same
+selection to include pages with no aliases (their `aliases` is `[]`).
+
 First-outline-child means the first direct ordinary outline child by order/ID,
 excluding built-in view children and structural/property-value children.
 

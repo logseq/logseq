@@ -629,6 +629,99 @@
            (js->clj result :keywordize-keys true))
          (p/catch #(hash-map :error %))))))
 
+(defn- add-search-aliases!
+  [conn]
+  (d/transact! conn
+               [{:db/id 180 :block/uuid (uuid "00000000-0000-4000-8000-000000000180")
+                 :block/title "Alpha" :block/name "alpha" :block/tags [158]}
+                {:db/id 181 :block/uuid (uuid "00000000-0000-4000-8000-000000000181")
+                 :block/title "Alternate" :block/name "alternate" :block/tags [158]}
+                {:db/id 182 :block/uuid (uuid "00000000-0000-4000-8000-000000000182")
+                 :block/title "Old alias" :block/name "old alias" :block/tags [158]
+                 :logseq.property/deleted-at 1}
+                {:db/id 160 :logseq.property/alias [180 181 182] :block/alias [180]}
+                {:db/id 168 :block/alias [180]}
+                {:db/id 170 :logseq.property/alias [181]}]))
+
+(deftest find-entities-alias-matching-and-inventory
+  (let [{:keys [conn]} (find-entities-fixture)
+        _ (add-search-aliases! conn)
+        before @conn
+        query #(<find-fixture-entities before %)
+        options {:kind "page" :name_source "alias"
+                 :where {:field "title" :op "equals" :value "Alpha"}
+                 :select ["uuid" "title" "aliases" "matched_names"]}]
+    (async done
+      (-> (p/let [titles (query (assoc options :name_source "title"))
+                  aliases (query options)
+                  both (query (assoc options :name_source "both"))
+                  mixed (query (assoc options :name_source "both"
+                                              :where {:any [{:field "title" :op "equals" :value "Fixture"}
+                                                            {:field "title" :op "equals" :value "Alpha"}]}))
+                  count-result (query (assoc options :output "count"))
+                  prefix (query (assoc options :where {:field "title" :op "starts_with" :value "Al"}))
+                  wrong-case (query (assoc options :where {:field "title" :op "contains" :value "alpha"}))
+                  all-filter (query (assoc options :where {:all [{:field "title" :op "equals" :value "Alpha"}
+                                                                {:field "title" :op "equals" :value "Alternate"}]}))
+                  inventory (query (dissoc options :where))
+                  no-aliases (query {:kind "page" :where {:field "title" :op "equals" :value "Nested"}
+                                    :select ["uuid" "aliases" "matched_names"]})
+                  old-live (query (assoc options :where {:field "title" :op "equals" :value "Old alias"}))
+                  old-all (query (assoc options :state "all"
+                                               :where {:field "title" :op "equals" :value "Old alias"}))
+                  recycled (query (assoc options :state "recycled"
+                                                :where {:field "title" :op "equals" :value "Alternate"}))]
+            (is (not-any? :error [titles aliases both mixed count-result prefix wrong-case all-filter
+                                 inventory no-aliases old-live old-all recycled]))
+            (is (= ["Alpha"] (mapv :title (:matches titles))))
+            (is (= ["Fixture" "MCP Other"] (mapv :title (:matches aliases))))
+            (is (= ["Fixture" "MCP Other" "Alpha"] (mapv :title (:matches both))))
+            (is (= ["alias" "title"] (mapv :source (:matched_names (first (:matches mixed))))))
+            (is (= ["Alpha" "Fixture"] (mapv :title (:matched_names (first (:matches mixed))))))
+            (is (= 2 (:count count-result)))
+            (is (true? (:count_is_exact count-result)))
+            (is (= 2 (:count prefix)))
+            (is (= 2 (count (:matched_names (first (:matches prefix))))))
+            (is (empty? (:matches wrong-case)))
+            (is (empty? (:matches all-filter)))
+            (is (= ["Fixture" "MCP Other"] (mapv :title (:matches inventory))))
+            (is (= [] (:aliases (first (:matches no-aliases)))))
+            (is (= "title" (get-in no-aliases [:matches 0 :matched_names 0 :source])))
+            (is (= ["Alpha" "Alternate"] (mapv :title (:aliases (first (:matches aliases))))))
+            (is (= [{:uuid "00000000-0000-4000-8000-000000000180"
+                     :title "Alpha" :source "alias" :recycled false}]
+                   (:matched_names (first (:matches aliases)))))
+            (is (empty? (:matches old-live)))
+            (is (= ["Fixture"] (mapv :title (:matches old-all))))
+            (is (true? (:recycled (last (:aliases (first (:matches old-all)))))))
+            (is (= ["MCP Gone"] (mapv :title (:matches recycled))))
+            (is (= before @conn)))
+          (p/catch (fn [error] (is false (.-stack error))))
+          (p/finally done)))))
+
+(deftest find-entities-alias-pagination-and-response-limits
+  (let [{:keys [conn]} (find-entities-fixture)
+        _ (add-search-aliases! conn)
+        options {:kind "page" :name_source "alias" :limit 1 :select ["uuid" "aliases"]}]
+    (async done
+      (-> (p/let [first-page (<find-fixture-entities @conn options)
+                  last-page (<find-fixture-entities @conn (assoc options :cursor (:next_cursor first-page)))
+                  changed-mode (<find-fixture-entities @conn (assoc options :name_source "both"
+                                                                           :cursor (:next_cursor first-page)))
+                  _ (d/transact! conn [{:db/id 180 :block/title (.repeat "\u00e9" 40000)}])
+                  oversized (<find-fixture-entities @conn options)
+                  compact (<find-fixture-entities @conn (assoc options :select ["uuid"]))]
+            (is (true? (:truncated first-page)))
+            (is (= ["00000000-0000-4000-8000-000000000160"
+                    "00000000-0000-4000-8000-000000000168"]
+                   (mapv :uuid (concat (:matches first-page) (:matches last-page)))))
+            (is (false? (:truncated last-page)))
+            (is (instance? js/Error (:error changed-mode)))
+            (is (instance? js/Error (:error oversized)))
+            (is (= 1 (:count compact))))
+          (p/catch (fn [error] (is false (.-stack error))))
+          (p/finally done)))))
+
 (deftest find-entities-structure-text-and-counts
   (let [{:keys [conn]} (find-entities-fixture)
         before @conn
@@ -729,6 +822,10 @@
                      {:kind "block" :where {:all (vec (repeat 33 {:field "title" :op "empty"}))}}
                      {:kind "block" :page_uuid "not-a-uuid"}
                      {:kind "page" :select ["uuid" "password"]}
+                     {:kind "page" :name_source "unknown"}
+                     {:kind "block" :name_source "alias"}
+                     {:kind "block" :name_source "both"}
+                     {:kind "block" :select ["aliases"]}
                      {:kind "page" :limit 1001}]]
       (is (thrown? js/Error (db-based-api/find-entities (clj->js options)))))))
 
@@ -754,6 +851,7 @@
 
 (deftest find-entities-native-api-and-mcp-protocol
   (let [{:keys [conn]} (find-entities-fixture)
+        _ (add-search-aliases! conn)
         calls (atom [])
         api (fn [method args]
               (swap! calls conj [method args])
@@ -772,14 +870,22 @@
                   _ (.connect client (aget transports 1))
                   response (.callTool ^js client #js {:name "findEntities" :arguments options})
                   body (js->clj (js/JSON.parse (aget response "content" 0 "text")) :keywordize-keys true)
+                  alias-response (.callTool ^js client #js {:name "findEntities"
+                                                           :arguments #js {:kind "page" :name_source "alias"
+                                                                           :where #js {:field "title" :op "equals" :value "Alpha"}
+                                                                           :select #js ["uuid" "matched_names"]}})
+                  alias-body (js->clj (js/JSON.parse (aget alias-response "content" 0 "text")) :keywordize-keys true)
                   refused (.callTool ^js client #js {:name "findEntities"
                                                  :arguments #js {:kind "page" :query "[:find ?e]"}})
                   tools (.listTools ^js client)]
             (is (not (true? (aget response "isError"))))
-            (is (= 4 (:count body)))
+            (is (= 7 (:count body)))
             (is (true? (:count_is_exact body)))
+            (is (not (true? (aget alias-response "isError"))))
+            (is (= 2 (:count alias-body)))
+            (is (= "alias" (get-in alias-body [:matches 0 :matched_names 0 :source])))
             (is (true? (aget refused "isError")))
-            (is (= 1 (count @calls)))
+            (is (= 2 (count @calls)))
             (is (some #(and (= "findEntities" (aget % "name"))
                             (true? (aget % "annotations" "readOnlyHint")))
                       (array-seq (aget tools "tools")))))

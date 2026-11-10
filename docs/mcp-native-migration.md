@@ -186,6 +186,12 @@ live/recycled inventories and exact counts. It calls `logseq.DB.findEntities`
 in the existing API structure, using fixed query forms and typed inputs through
 the existing DB query API. No new worker, worker route or DB schema is introduced.
 
+Page searches also support `name_source:"title"|"alias"|"both"` (default
+`"title"`), with opt-in `aliases` and `matched_names` fields. Omitting the title
+filter in alias mode gives a paginated alias inventory. Alias matches return
+distinct declaring pages; ambiguous/shared names are not silently resolved.
+Existing title-only defaults and the tool count are unchanged.
+
 See the [tool-map examples and limits](mcp-native-tool-map.md#structured-entity-search)
 for the filter vocabulary, selected fields and cursor/count contracts.
 Output is bounded to 1000 rows and 65536 UTF-8 response bytes, with explicit

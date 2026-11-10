@@ -899,7 +899,7 @@
   {:max_rows 1000 :max_bytes 65536 :max_filter_nodes 32 :max_filter_depth 4})
 
 (def ^:private entity-search-fields
-  #{"uuid" "title" "page_uuid" "page_title" "parent_uuid" "recycled"})
+  #{"uuid" "title" "page_uuid" "page_title" "parent_uuid" "recycled" "aliases" "matched_names"})
 
 (defn- require-search-keys!
   [value allowed]
@@ -947,9 +947,9 @@
 
 (defn- validate-entity-search
   [options]
-  (require-search-keys! options #{:kind :state :page_uuid :where :select :output :limit :cursor})
-  (let [{:keys [kind state output limit select cursor page_uuid where]
-         :or {state "live" output "rows" limit 50 select ["uuid" "title" "page_uuid"]}} options]
+  (require-search-keys! options #{:kind :state :name_source :page_uuid :where :select :output :limit :cursor})
+  (let [{:keys [kind state name_source output limit select cursor page_uuid where]
+         :or {state "live" name_source "title" output "rows" limit 50 select ["uuid" "title" "page_uuid"]}} options]
     (when-not (and (contains? #{"page" "block"} kind)
                    (contains? #{"live" "recycled" "all"} state)
                    (contains? #{"rows" "count"} output)
@@ -957,6 +957,10 @@
                    (vector? select) (seq select) (every? entity-search-fields select)
                    (= (count select) (count (distinct select))))
       (throw (js/Error. "findEntities has invalid kind, state, output, select or limit")))
+    (when-not (and (contains? #{"title" "alias" "both"} name_source)
+                   (or (= "page" kind)
+                       (and (= "title" name_source) (not (some #{"aliases"} select)))))
+      (throw (js/Error. "findEntities alias matching and aliases selection are only valid for pages")))
     (when (contains? options :page_uuid)
       (when-not (and (= "block" kind) (util/uuid-string? page_uuid))
         (throw (js/Error. "findEntities page_uuid must be a UUID and is only valid for blocks"))))
@@ -968,7 +972,7 @@
                      (integer? (:after_id cursor)) (pos? (:after_id cursor))
                      (integer? (:basis_rev cursor)) (integer? (:fingerprint cursor)))
         (throw (js/Error. "findEntities cursor is invalid or was supplied for count output"))))
-    (assoc options :state state :output output :limit limit :select select)))
+    (assoc options :state state :name_source name_source :output output :limit limit :select select)))
 
 (def ^:private entity-search-rules
   '[[(page-like ?e)
@@ -978,6 +982,9 @@
     [(recycled ?e) [?e :logseq.property/deleted-at]]
     [(recycled ?e) [?e :block/parent ?parent] (recycled ?parent)]
     [(recycled ?e) [?e :block/page ?page] [?page :logseq.property/deleted-at]]
+    [(entity-name ?e ?name ?source) [(identity ?e) ?name] [(ground "title") ?source]]
+    [(entity-name ?e ?name ?source) [?e :logseq.property/alias ?name] [(ground "alias") ?source]]
+    [(entity-name ?e ?name ?source) [?e :block/alias ?name] [(ground "alias") ?source]]
     [(outline-child ?e ?page)
      [?e :block/parent ?page] [?e :block/page] [?e :block/uuid] [?e :block/order]
      (not (page-like ?e))
@@ -1017,24 +1024,45 @@
       "has_link" (if (:value node) '[?e :block/link] '(not [?e :block/link])))))
 
 (defn- entity-search-query
-  [{:keys [kind state where page_uuid output limit cursor]}]
+  [{:keys [kind state name_source where page_uuid output limit cursor]}]
   (let [parameters (atom [])
         filter-clause (when where (entity-filter-query where parameters))
         clauses (concat
-                 '[[?e :block/uuid] [?e :block/title ?title] [(> ?e ?after)]]
+                 '[[?e :block/uuid] [?e :block/title] [(> ?e ?after)]]
                  (if (= "page" kind)
                    '[[?e :block/tags ?class] [?class :db/ident :logseq.class/Page] [(identity ?e) ?page]]
                    '[[?e :block/page ?page] (not (page-like ?e))])
                  (case state "live" '[(not (recycled ?e))] "recycled" '[(recycled ?e)] "all" [])
+                 (if (= "title" name_source)
+                   '[[(identity ?e) ?name] [(ground "title") ?source]]
+                   (concat '[(entity-name ?e ?name ?source)]
+                           (when (= "alias" name_source) '[[(= ?source "alias")]])))
+                 '[[?name :block/uuid] [?name :block/title ?title]]
+                 (when (= "live" state) '[(not (recycled ?name))])
                  (when page_uuid '[[?page :block/uuid ?page-uuid]])
                  (when filter-clause [filter-clause]))
-        inputs (concat ['$ '% '?after] (when (= "rows" output) ['?take])
-                       (when page_uuid ['?page-uuid]) (map first @parameters))]
+        inputs (concat ['$ '% '?after] (when page_uuid ['?page-uuid]) (map first @parameters))
+        values (vec (concat [entity-search-rules (or (:after_id cursor) 0)]
+                            (when page_uuid [(uuid page_uuid)]) (map second @parameters)))]
     {:query (vec (concat [:find (if (= "count" output) '(count ?e) '(min ?take ?e)) '. :in]
-                         inputs [:where] clauses))
-     :inputs (vec (concat [entity-search-rules (or (:after_id cursor) 0)]
-                          (when (= "rows" output) [(inc limit)])
-                          (when page_uuid [(uuid page_uuid)]) (map second @parameters)))}))
+                         inputs (when (= "rows" output) ['?take]) [:where] clauses))
+     :inputs (cond-> values (= "rows" output) (conj (inc limit)))
+     :names-query (vec (concat '[:find ?e (pull ?name [:block/uuid :block/title]) ?source ?recycled :in]
+                               inputs '[[?e ...]] [:where] clauses
+                               '[(or-join [?name ?recycled]
+                                          (and (recycled ?name) [(ground true) ?recycled])
+                                          (and (not (recycled ?name)) [(ground false) ?recycled]))]))
+     :names-inputs values}))
+
+(defn- <entity-search-names
+  [repo options ids]
+  (let [{:keys [names-query names-inputs]} (entity-search-query options)]
+    (p/let [rows (apply db-async/<q repo {:transact-db? false} names-query (conj names-inputs ids))]
+      (reduce (fn [result [id entity source recycled?]]
+                (update result id (fnil conj [])
+                        {:uuid (str (:block/uuid entity)) :title (:block/title entity)
+                         :source source :recycled recycled?}))
+              {} rows))))
 
 (defn- entity-search-selector
   [kind select]
@@ -1047,7 +1075,7 @@
       (fields "parent_uuid") (conj {:block/parent [:block/uuid]}))))
 
 (defn- project-search-entity
-  [kind select [entity recycled?]]
+  [kind select aliases matched-names [entity recycled?]]
   (let [page (if (= "page" kind) entity (:block/page entity))]
     (into {}
           (map (fn [field]
@@ -1058,11 +1086,14 @@
                     "page_uuid" (some-> page :block/uuid str)
                     "page_title" (:block/title page)
                     "parent_uuid" (some-> entity :block/parent :block/uuid str)
+                    "aliases" (->> (get aliases (:db/id entity))
+                                   (sort-by :uuid) (mapv #(dissoc % :source)))
+                    "matched_names" (vec (sort-by (juxt :source :uuid) (get matched-names (:db/id entity))))
                     "recycled" recycled?)]))
           select)))
 
 (defn- <entity-search-result
-  [{:keys [kind output select cursor]} basis-rev fingerprint rows more?]
+  [{:keys [kind output select cursor]} basis-rev fingerprint rows more? aliases matched-names]
   (let [envelope (fn [matches after-id truncated? count]
                    {:output output :matches matches :count count :count_is_exact (= "count" output)
                     :truncated truncated?
@@ -1075,7 +1106,7 @@
       (p/resolved (envelope [] nil false rows))
       (loop [remaining rows matches [] after-id (or (:after_id cursor) 0)]
         (if-let [row (first remaining)]
-          (let [next-matches (conj matches (project-search-entity kind select row))
+          (let [next-matches (conj matches (project-search-entity kind select aliases matched-names row))
                 next-id (:db/id (first row))
                 candidate (envelope next-matches next-id (boolean (or more? (next remaining))) (count next-matches))]
             (if (> (byte-count candidate) (:max_bytes entity-search-limits))
@@ -1117,6 +1148,11 @@
                                (and (recycled ?e) [(ground true) ?recycled])
                                (and (not (recycled ?e)) [(ground false) ?recycled]))]
                     entity-search-rules (vec (take limit found))))
+            ids (mapv (comp :db/id first) rows)
+            aliases (when (and (seq ids) (some #{"aliases"} select))
+                      (<entity-search-names repo (assoc options :name_source "alias" :where nil) ids))
+            matched-names (when (and (seq ids) (some #{"matched_names"} select))
+                            (<entity-search-names repo options ids))
             final-rev (db-async/<q repo {:transact-db? false}
                                  '[:find ?rev . :in $ :where [(get $ :max-tx) ?rev]])
             _ (when (not= basis-rev final-rev)
@@ -1125,7 +1161,8 @@
                                           (if (= "count" output)
                                             (if (nil? found) 0 found)
                                             (sort-by #(get-in % [0 :db/id]) rows))
-                                          (and (= "rows" output) (> (count found) limit)))]
+                                          (and (= "rows" output) (> (count found) limit))
+                                          aliases matched-names)]
       (bean/->js result))))
 
 (defn list-embeds [options]

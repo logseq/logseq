@@ -128,7 +128,7 @@ revision `2026-11-07.2`.
 | `getBlockUUID` | page UUID | flat descendant list with order, parent/page references, and cross-page ancestry | `logseq.DB.getPageBlockUUIDs` | None |
 | `getBlock` | block UUID | exact block read, including collapsed/property-bearing entities | `logseq.DB.getBlock` | None |
 | `searchBlocks` | `searchTerm` | literal, case-sensitive title filter over bounded native candidates; handles quoted text; preserves native envelope/pagination without snippets | `logseq.DB.search` | None |
-| `findEntities` | `kind`, `state?`, `page_uuid?`, `where?`, `select?`, `output?`, `limit?`, `cursor?` | read-only literal/structural search without per-query approval; selected fields, exact counts, live/recycled/all inventories, empty results and revision-bound cursors; has_link matches embeds, not ordinary page references | `logseq.DB.findEntities`; fixed query forms and typed literal inputs through existing API `<q` | None |
+| `findEntities` | `kind`, `state?`, `name_source?`, `page_uuid?`, `where?`, `select?`, `output?`, `limit?`, `cursor?` | read-only literal/structural search without per-query approval; page title/alias matching, opt-in alias inventory and match details, selected fields, exact counts, live/recycled/all inventories and revision-bound cursors; has_link matches embeds, not ordinary page references | `logseq.DB.findEntities`; fixed query forms and typed literal inputs through existing API `<q` | None |
 | `getBlockTree` | block UUID, depth/node caps | expanded tree with bounded depth/node count, page/missing distinction and cycle guard | `logseq.DB.getBlockTree` | None |
 | `findBacklinks` | target UUID | separate refs, tag-holder and property-value groups; counts may overlap | `logseq.DB.getBacklinks` | None |
 | `findOrphans` | page UUID | finds blocks whose parent ancestry disagrees with their stored owning page | `logseq.DB.getPageBlockUUIDs`; MCP filters by owning page UUID | None |
@@ -188,8 +188,36 @@ inherited through parent ancestry and the owning page.
 
 Defaults are `state: "live"`, `output: "rows"`, `limit: 50`, and
 `select: ["uuid","title","page_uuid"]`. Additional selectable fields are
-`page_title`, `parent_uuid`, and `recycled`; unrelated data is not pulled.
+`page_title`, `parent_uuid`, `recycled`, `aliases` (pages only), and
+`matched_names`; unrelated data is not pulled.
 An unknown/non-Page `page_uuid` is an error and scope is valid only for blocks.
+
+For page aliases, set `name_source: "alias"` or `"both"`; the default `"title"`
+preserves ordinary title-only searches. The same literal title predicates then
+test alias titles, or both the page's title and aliases. Each candidate name must
+satisfy the entire filter. Results retain the declaring page's UUID/title, and
+counts deduplicate pages even when multiple names match. Shared aliases return
+all declaring pages, not an automatically chosen destination. Alias matching
+uses direct current/legacy alias relations, not recursive alias chains.
+
+```json
+{
+  "kind": "page",
+  "name_source": "alias",
+  "where": {"field": "title", "op": "equals", "value": "Alpha"},
+  "select": ["uuid", "title", "matched_names"]
+}
+```
+
+`matched_names` contains `{uuid,title,source,recycled}` records, where source is
+`"title"` or `"alias"`; `aliases` contains declared `{uuid,title,recycled}`
+records regardless of the title filter. Both are opt-in. The result entity's
+state is filtered normally; live searches also exclude recycled alias names.
+Recycled/all searches permit either state of alias names. Alias-only searches
+without `where`, selecting `uuid`, `title` and `aliases`, provide a paginated
+graph-wide alias inventory. Title mode with that selection also includes pages
+without aliases. A title match on an alias page is still that page, not an
+implicit redirect. All nested name records share the existing response byte cap.
 
 The response is `{output,matches,count,count_is_exact,truncated,next_cursor,limits}`:
 

@@ -34,6 +34,13 @@ On fresh, approved run-owned fixtures:
   use `matches`, and row `count` is only the returned count.
   Test an empty result. See [structured examples](mcp-native-tool-map.md#structured-entity-search);
   output limits do not promise bounded DB execution time.
+- On owner-approved, run-owned alias fixtures, compare default title-only,
+  `name_source: "alias"` and `"both"` searches. Check declaring-page UUIDs,
+  opt-in `aliases`/`matched_names`, shared-alias ambiguity, distinct-page
+  counts, live/recycled handling, and cursor continuation for an alias inventory
+  without `where`. Creating alias relations is not supported by the MCP property
+  tools; ask the owner to prepare them in the UI rather than bypassing that
+  boundary. This is a procedure, not a recorded live pass.
 - Repeat `createPage` on a run-owned title. Expect `status: "conflict"`,
   `created: false`, `verified: false`, and `held_by`, without MCP `isError` or
   graph changes. Also check a title held by a run-owned tag.
