@@ -132,6 +132,7 @@ fn native_sink(context: ExtensionContext, block: String, read: SnapshotReader) -
         composing,
         ready,
         state.clone(),
+        block.clone(),
     );
 
     let change_context = context.clone();
@@ -363,6 +364,7 @@ fn bind_keys(
     composing: Signal<bool>,
     ready: Signal<bool>,
     state: Rc<RefCell<Transport>>,
+    block: String,
 ) {
     effect(move || {
         if !focused.get() || composing.get() || !ready.get() {
@@ -403,6 +405,7 @@ fn bind_keys(
                 }
                 let context = context.clone();
                 let state = state.clone();
+                let block = block.clone();
                 on_key_with(
                     &chord,
                     KeyOptions {
@@ -412,7 +415,10 @@ fn bind_keys(
                         ..Default::default()
                     },
                     move |_| {
-                        if owner.is_live() && !composing.get_untracked() {
+                        if owner.is_live()
+                            && string(&context, "block-id") == block
+                            && !composing.get_untracked()
+                        {
                             state.borrow_mut().serial += 1;
                             emit(
                                 &context,
@@ -427,6 +433,7 @@ fn bind_keys(
         for chord in ["ctrl+a", "cmd+a"] {
             let context = context.clone();
             let state = state.clone();
+            let block = block.clone();
             on_key_with(
                 chord,
                 KeyOptions {
@@ -435,7 +442,7 @@ fn bind_keys(
                     ..Default::default()
                 },
                 move |_| {
-                    if owner.is_live() {
+                    if owner.is_live() && string(&context, "block-id") == block {
                         state.borrow_mut().serial += 1;
                         emit(
                             &context,
