@@ -1,0 +1,11 @@
+# Native PDFKit qualification boundary
+
+Run `cargo run --manifest-path deps/ui/nsh/Cargo.toml --example pdf_qualification -- <fresh-directory>` on macOS. The directory must not already exist. The runner always uses NSH's background application policy and inspects only its own content views. It opens no user graph or OCaml library and has a 60-second process deadline.
+
+`ok: true` and `qualificationScope: "native-api-checks"` establish the listed PDFKit document, page, scale, real text selection, highlight projection and error behaviors. They do **not** establish readable page pixels. The first actual locked/background run passed those APIs while its AppKit content-cache images showed a blank page and a small annotation mark. Visible page text remains unqualified.
+
+Before each capture, the harness now performs one public `PDFView.layoutDocumentView`, AppKit subtree layout and `NSView.display` operation. It records native bounds, visible rectangles, layer-backed state, pending layout/display flags, window occlusion and application activation before/after. It then captures the actual application content through the existing LUI capture implementation. No timer, display tick, layer-hosting override, PDF thumbnail or separately rendered page substitutes for the real view.
+
+Apple documents that [`PDFView.layoutDocumentView`](https://developer.apple.com/documentation/pdfkit/pdfview/layoutdocumentview()) is already called by document/zoom operations. Therefore a missing explicit call is not an established explanation for the blank capture. [`NSView.display`](https://developer.apple.com/documentation/appkit/nsview/display()) requests drawing of the real view hierarchy where possible. Its completion and cleared pending flags alone do not prove that asynchronous PDFKit page layers contributed pixels to [`cacheDisplay`](https://developer.apple.com/documentation/appkit/nsview/cachedisplay(in:to:)).
+
+Inspect both PNGs after every run and record the result separately from the API assertions. `appContentPixels.status` remains `unqualified`; native layer/capture limitations must be reported if the page still does not appear. Full OCaml asset persistence/toolbar behavior, hardware input, keyboard focus and non-macOS providers require separate qualification.

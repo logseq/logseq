@@ -1,4 +1,6 @@
-//! Real PDFKit provider qualification. No OCaml library or user graph is opened.
+//! Real PDFKit API qualification, not proof of page pixels or complete UI.
+//! Captures require visual review; a successful PNG alone is insufficient.
+//! No OCaml library or user graph is opened.
 //! Run on macOS: cargo run --example pdf_qualification -- <evidence-directory>
 #[cfg(not(target_os = "macos"))]
 fn main() -> std::process::ExitCode {
@@ -48,6 +50,7 @@ mod macos {
         model: Signal<Value>,
         directory: PathBuf,
         events: RefCell<Vec<Value>>,
+        captures: RefCell<Vec<Value>>,
     }
 
     fn fail(message: impl ToString) {
@@ -68,6 +71,18 @@ mod macos {
     }
 
     impl Flow {
+        async fn capture(&self, name: &str) -> Result<(), String> {
+            let drawing = inspect(Inspection::Drawing).await?;
+            let capture = lui_nsh::native_capture::screenshot().await?;
+            std::fs::write(self.directory.join(name), capture.png)
+                .map_err(|error| error.to_string())?;
+            self.captures.borrow_mut().push(json!({
+                "file":name,"width":capture.width,"height":capture.height,
+                "drawing":drawing,"pixelQualification":"unqualified"
+            }));
+            Ok(())
+        }
+
         fn event(self: &Rc<Self>, event: &NativeEvent) {
             if STATUS.load(Ordering::Acquire) != 0 {
                 return;
@@ -103,9 +118,7 @@ mod macos {
                                 fit: false,
                             })
                             .await?;
-                            let capture = lui_nsh::native_capture::screenshot().await?;
-                            std::fs::write(flow.directory.join("pdf-initial.png"), capture.png)
-                                .map_err(|e| e.to_string())?;
+                            flow.capture("pdf-initial.png").await?;
                             flow.phase.set(2);
                             flow.reference.command("next-page", json!(null));
                             Ok::<_, String>(())
@@ -189,9 +202,7 @@ mod macos {
                                 fit: false,
                             })
                             .await?;
-                            let capture = lui_nsh::native_capture::screenshot().await?;
-                            std::fs::write(flow.directory.join("pdf-highlight.png"), capture.png)
-                                .map_err(|e| e.to_string())?;
+                            flow.capture("pdf-highlight.png").await?;
                             flow.phase.set(9);
                             let mut model = flow.model.get_untracked();
                             model["path"] = json!(flow.directory.join("replacement.pdf"));
@@ -242,11 +253,15 @@ mod macos {
                     }
                     let evidence = json!({"ok":true,"qualification":"native-pdfkit",
                         "background":true,"evidenceDirectory":self.directory,
-                        "checks":["real-document","two-pages","rotated-page-width","native-zoom",
+                        "qualificationScope":"native-api-checks",
+                        "nativeApiChecks":["real-document","two-pages","rotated-page-width","native-zoom",
                             "actual-text-selection","highlight-event-envelope","projected-native-annotation",
                             "source-replacement","unreadable-document-error"],
                         "events":self.events.borrow().clone(),
-                        "unqualified":["hardware-pointer","keyboard-focus","OCaml-persistence","full-PDF-toolbar","Linux","Windows"]});
+                        "captures":self.captures.borrow().clone(),
+                        "appContentPixels":{"status":"unqualified",
+                            "reason":"AppKit cache output requires visual review; PDFKit page layers may be absent even when native API checks pass"},
+                        "unqualified":["app-content-pixels","visible-page-text","hardware-pointer","keyboard-focus","OCaml-persistence","full-PDF-toolbar","Linux","Windows"]});
                     match std::fs::write(
                         self.directory.join("result.json"),
                         format!("{evidence}\n"),
@@ -333,6 +348,7 @@ mod macos {
             model,
             directory,
             events: RefCell::new(Vec::new()),
+            captures: RefCell::new(Vec::new()),
         });
         native("logseq.pdfkit")
             .element_ref(&reference)
@@ -349,6 +365,7 @@ mod macos {
             fit: bool,
         },
         Selection,
+        Drawing,
     }
     type MainReply = Arc<Mutex<(Option<Result<Value, String>>, Option<Waker>)>>;
 
@@ -415,6 +432,24 @@ mod macos {
                 "actual PDF document does not contain two pages",
             )?;
             match action {
+                Inspection::Drawing => {
+                    let before = drawing_state(&view);
+                    // Public AppKit drawing only: never substitute PDFPage's
+                    // image/draw methods or change native layer hosting.
+                    view.layoutDocumentView();
+                    if let Some(content) = view.window().and_then(|window| window.contentView()) {
+                        content.layoutSubtreeIfNeeded();
+                    }
+                    view.layoutSubtreeIfNeeded();
+                    if let Some(document) = view.documentView() {
+                        document.layoutSubtreeIfNeeded();
+                        document.display();
+                    }
+                    view.display();
+                    Ok(json!({"before":before,"after":drawing_state(&view),
+                        "preparation":["PDFView.layoutDocumentView","NSView.layoutSubtreeIfNeeded","NSView.display"],
+                        "displayTickWait":false,"substitutedPageImage":false}))
+                }
                 Inspection::Document {
                     expected,
                     annotation,
@@ -475,6 +510,32 @@ mod macos {
                     Ok(json!({"selected":true}))
                 }
             }
+        }
+    }
+
+    fn rectangle(rect: platform::objc2_foundation::NSRect) -> Value {
+        json!({"x":rect.origin.x,"y":rect.origin.y,
+            "width":rect.size.width,"height":rect.size.height})
+    }
+
+    fn view_state(view: &NSView) -> Value {
+        json!({"bounds":rectangle(view.bounds()),"frame":rectangle(view.frame()),
+            "visibleRect":rectangle(view.visibleRect()),
+            "hidden":view.isHiddenOrHasHiddenAncestor(),"needsLayout":view.needsLayout(),
+            "needsDisplay":view.needsDisplay(),"wantsLayer":view.wantsLayer(),
+            "hasLayer":view.layer().is_some(),"subviews":view.subviews().len()})
+    }
+
+    fn drawing_state(view: &PDFView) -> Value {
+        // SAFETY: called only inside inspect_main on AppKit's main queue.
+        unsafe {
+            let main = MainThreadMarker::new().expect("main-queue inspection");
+            json!({"applicationActive":NSApplication::sharedApplication(main).isActive(),
+                "pdfView":view_state(view),
+                "documentView":view.documentView().map(|view|view_state(&view)),
+                "visiblePageCount":view.visiblePages().len(),
+                "window":view.window().map(|window|json!({"visible":window.isVisible(),
+                    "occlusionState":window.occlusionState().bits()}))})
         }
     }
 
