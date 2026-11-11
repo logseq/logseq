@@ -1,0 +1,240 @@
+//! These tests run the actual native editor and the canonical exported app schema.
+use super::*;
+use lui_nsh::{
+    extensions::{Extensions, Profile},
+    render::{Event, Renderer},
+    wire::Batch,
+};
+use nsh_core::{
+    platform::{Idiom, Os},
+    prelude::*,
+};
+use nsh_engine::{EngineConfig, EngineContext, Root};
+use nsh_testing::Headless;
+use serde_json::{Value, json};
+use std::{
+    cell::Cell,
+    rc::Rc,
+    sync::{Arc, Mutex},
+};
+
+fn schema() -> Schema {
+    serde_json::from_str::<Vec<Schema>>(include_str!("../../schemas.json"))
+        .unwrap()
+        .into_iter()
+        .find(|schema| schema.identifier == "logseq-codemirror")
+        .unwrap()
+}
+fn batch(generation: u64, ops: Value) -> Batch {
+    Batch::decode(&json!({"generation":generation,"ops":ops}).to_string()).unwrap()
+}
+type Events = Arc<Mutex<Vec<serde_json::Map<String, Value>>>>;
+#[derive(Clone)]
+struct Fixture {
+    query: bool,
+    readonly: bool,
+    events: Events,
+}
+#[component]
+fn CodeMirrorFixture() -> impl IntoElement {
+    let fixture = engine_context::<Fixture>().unwrap();
+    let registry = register_codemirror(Extensions::builder(), schema())
+        .unwrap()
+        .freeze(Profile {
+            os: "linux".into(),
+            host: "generic".into(),
+        })
+        .unwrap();
+    let generation = Rc::new(Cell::new(1));
+    let event_generation = generation.clone();
+    let events = fixture.events.clone();
+    let renderer = Renderer::with_extensions(registry, move |event, renderer| {
+        if let Event::Extension { values, .. } = event {
+            let input = values["name"] == "input";
+            let value = values.get("value").cloned();
+            events.lock().unwrap().push(values);
+            if input {
+                let next = event_generation.get() + 1;
+                renderer.apply(batch(next,json!([
+                    {"op":"set-extension-prop","id":1,"property":"value","value":value.unwrap()}
+                ]))).unwrap();
+                event_generation.set(next);
+            }
+        }
+    });
+    renderer.apply(batch(1,json!([
+        {"op":"create-extension","id":1,"identifier":"logseq-codemirror","fingerprint":schema().fingerprint},
+        {"op":"set-extension-prop","id":1,"property":"uuid","value":"first"},
+        {"op":"set-extension-prop","id":1,"property":"source-role","value":if fixture.query {"query"} else {"block"}},
+        {"op":"set-extension-prop","id":1,"property":"value","value":"initial"},
+        {"op":"set-extension-prop","id":1,"property":"lang","value":"edn"},
+        {"op":"set-extension-prop","id":1,"property":"read-only","value":fixture.readonly}
+    ]))).unwrap();
+    renderer.set_root(1).unwrap();
+    let action_renderer = renderer.clone();
+    let action = move |label: &'static str, properties: Value| {
+        let renderer = action_renderer.clone();
+        let generation = generation.clone();
+        nsh_base::button().child(text(label)).on_press(move || {
+            let ops = properties
+                .as_object()
+                .unwrap()
+                .iter()
+                .map(|(property, value)| {
+                    json!({
+                        "op":"set-extension-prop","id":1,"property":property,"value":value
+                    })
+                })
+                .collect::<Vec<_>>();
+            let next = generation.get() + 1;
+            renderer.apply(batch(next, json!(ops))).unwrap();
+            generation.set(next);
+        })
+    };
+    view()
+        .w(px(640.0))
+        .child(renderer.element())
+        .child(action("Remote source", json!({"value":"remote"})))
+        .child(action(
+            "Rebind source",
+            json!({"uuid":"second","value":"replacement"}),
+        ))
+        .child(action("Change language", json!({"lang":"rust"})))
+}
+fn start(query: bool, readonly: bool) -> (Headless, Events) {
+    let events = Arc::new(Mutex::new(Vec::new()));
+    let mut config = EngineConfig {
+        context: EngineContext::default().with(Fixture {
+            query,
+            readonly,
+            events: events.clone(),
+        }),
+        ..EngineConfig::new(Root::of::<CodeMirrorFixture>())
+    };
+    config.environment.os = Os::Linux;
+    config.environment.idiom = Idiom::Desktop;
+    let mut app = Headless::start(config).unwrap();
+    app.wait_for("id:lui-1").unwrap();
+    (app, events)
+}
+fn native(app: &Headless) -> nsh_core::NodeId {
+    app.screen()
+        .layout_nodes()
+        .into_iter()
+        .find(|node| node.test_id.as_deref() == Some("lui-1"))
+        .unwrap()
+        .id
+}
+
+#[test]
+fn code_editor_echo_and_language_updates_keep_native_identity_and_undo() {
+    let (mut app, events) = start(false, false);
+    let before = native(&app);
+    app.type_text("id:lui-1", "你😀").unwrap();
+    let draft = events
+        .lock()
+        .unwrap()
+        .iter()
+        .rev()
+        .find(|event| event["name"] == "input")
+        .unwrap()["value"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert!(draft.contains("你😀"));
+    app.press("text:Change language").unwrap();
+    assert_eq!(native(&app), before);
+    app.type_text("id:lui-1", "").unwrap();
+    app.press_key("ctrl+z").unwrap();
+    assert_eq!(events.lock().unwrap().last().unwrap()["value"], "initial");
+}
+
+#[test]
+fn source_rebinding_replaces_native_editor_but_plain_authoritative_updates_do_not() {
+    let (mut app, _) = start(false, false);
+    let before = native(&app);
+    app.press("text:Remote source").unwrap();
+    app.wait_for("text:remote").unwrap();
+    assert_eq!(native(&app), before);
+    app.press("text:Rebind source").unwrap();
+    app.wait_for("text:replacement").unwrap();
+    assert_ne!(native(&app), before);
+}
+
+#[test]
+fn readonly_editor_preserves_text_and_emits_no_input() {
+    let (mut app, events) = start(false, true);
+    assert!(app.type_text("id:lui-1", "forbidden").is_err());
+    app.wait_for("text:initial").unwrap();
+    assert!(
+        !events
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|event| event["name"] == "input")
+    );
+}
+
+#[test]
+fn query_enter_and_block_shift_enter_emit_existing_app_commands_without_newlines() {
+    for (query, key, expected) in [
+        (true, "enter", "Enter"),
+        (false, "shift+enter", "Shift-Enter"),
+    ] {
+        let (mut app, events) = start(query, false);
+        app.type_text("id:lui-1", "").unwrap();
+        app.press_key(key).unwrap();
+        let events = events.lock().unwrap();
+        let command = events
+            .iter()
+            .find(|event| event.get("key") == Some(&Value::from(expected)))
+            .unwrap();
+        assert_eq!(command["name"], "key");
+        assert_eq!(command["value"], "initial");
+        assert!(!events.iter().any(|event| event["name"] == "input"));
+    }
+}
+
+#[test]
+fn focused_query_retains_draft_when_evaluation_snapshot_changes() {
+    let (mut app, events) = start(true, false);
+    app.type_text("id:lui-1", " draft").unwrap();
+    let draft = events
+        .lock()
+        .unwrap()
+        .iter()
+        .rev()
+        .find(|event| event["name"] == "input")
+        .unwrap()["value"]
+        .clone();
+    app.press("text:Remote source").unwrap();
+    app.press_key("enter").unwrap();
+    let events = events.lock().unwrap();
+    let command = events
+        .iter()
+        .rev()
+        .find(|event| event.get("key") == Some(&Value::from("Enter")))
+        .unwrap();
+    assert_eq!(command["value"], draft);
+}
+
+#[test]
+fn native_composition_is_not_forwarded_as_committed_query_input_or_enter() {
+    let (mut app, events) = start(true, false);
+    app.compose("id:lui-1", "ni").unwrap();
+    assert!(
+        !events
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|event| event["name"] == "input")
+    );
+    app.press_key("enter").unwrap();
+    assert!(
+        !events
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|event| event.get("key") == Some(&Value::from("Enter")))
+    );
+}
