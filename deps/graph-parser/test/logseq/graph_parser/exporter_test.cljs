@@ -1426,14 +1426,15 @@ abc
     "journals/2022_03_27.md"
     "- {{query (and (todo now doing))}}\n  query-table:: false\n  query-sort-by:: clock-time\n"
     "clock-time")
+   ;; a page `template::` property and a boolean property later used as text now import, so the page cases fail on the query-sort-by input
    (assert-export-file-graph-fails
     "pages/T.md"
-    "template:: x\n\n- a\n"
-    "No property schema found for nil")
+    "- {{query (and (todo now doing))}}\n  query-table:: false\n  query-sort-by:: clock-time\n"
+    "clock-time")
    (assert-export-file-graph-fails
     "pages/B.md"
-    "vegetarian:: yes\n\n- b\n"
-    "Expected number or lookup ref for entity id, got nil")))
+    "- {{query (and (todo now doing))}}\n  query-table:: false\n  query-sort-by:: clock-time\n"
+    "clock-time")))
 
 (deftest export-doc-files-stops-at-first-export-file-failure
   (cljs.test/async
