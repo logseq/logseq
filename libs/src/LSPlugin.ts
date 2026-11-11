@@ -1102,7 +1102,7 @@ export interface IDBProxy {
   }>
   getTag: IEditorProxy['getTag']
   getTagUsers: (tagUuid: BlockUUID) => Promise<Array<BlockEntity | PageEntity>>
-  getBacklinks: (targetUuid: BlockUUID) => Promise<Record<string, any>>
+  getBacklinks: (targetUuid: BlockUUID, options?: { include_metadata?: boolean }) => Promise<Record<string, any>>
   getTitleHolders: (title: string) => Promise<Array<Record<string, any>>>
   getTitleInventory: () => Promise<Array<{
     id: EntityID
@@ -1114,9 +1114,16 @@ export interface IDBProxy {
   getJournalCandidates: () => Promise<Array<Record<string, any>>>
   listRecycled: () => Promise<Array<Record<string, any>>>
   getStatusRows: () => Promise<Array<[Record<string, any>, Record<string, any>]>>
-  getClosedValues: () => Promise<Array<[Record<string, any>, Record<string, any>]>>
-  getOrphanTags: () => Promise<Array<Record<string, any>>>
-  getOrphanProperties: () => Promise<Array<{ ident: string; title: string; type: string | null }>>
+  getClosedValues: (options?: {
+    include_metadata?: boolean
+  }) => Promise<Array<[Record<string, any>, Record<string, any>]>>
+  getOrphanTags: (options?: { include_metadata?: boolean }) => Promise<Array<Record<string, any>>>
+  getOrphanProperties: (options?: { include_metadata?: boolean }) => Promise<Array<{
+    ident: string
+    title: string
+    type: string | null
+    built_in?: boolean
+  }>>
   getPropertyUsers: (propertyIdent: string) => Promise<Array<{
     holder: Record<string, any>
     value: any

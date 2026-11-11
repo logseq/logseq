@@ -406,10 +406,22 @@
 
 (declare <inspect-page-query inspect-page-structural-property?)
 
-(defn get-backlinks [target-uuid]
+(defn- include-metadata? [method options]
+  (let [options (if (undefined? options) #js {} options)]
+    (when-not (and options (object? options) (not (array? options))
+                   (every? #{"include_metadata"} (js/Object.keys options))
+                   (or (undefined? (aget options "include_metadata"))
+                       (boolean? (aget options "include_metadata"))))
+      (throw (js/Error. (str method " options must contain only an optional boolean include_metadata"))))
+    (true? (aget options "include_metadata"))))
+
+(defn get-backlinks
+  ([target-uuid] (get-backlinks target-uuid #js {}))
+  ([target-uuid options]
   (when-not (util/uuid-string? target-uuid)
     (throw (js/Error. "target_uuid must be a UUID")))
-  (let [repo (state/get-current-repo)
+  (let [metadata? (include-metadata? "getBacklinks" options)
+        repo (state/get-current-repo)
         target-uuid* (sdk-utils/uuid-or-throw-error target-uuid)]
     (p/let [target-id (<inspect-page-query
                        repo
@@ -433,7 +445,9 @@
             value-rows (if target-id
                          (<inspect-page-query
                           repo
-                          "[:find (pull ?entity [:block/uuid :block/title :block/name :block/page {:block/link [:db/id :block/uuid :block/title :block/name]}]) (pull ?property [:db/ident :block/title]) :in $ ?target ?class :where [?property :block/tags ?class] [?property :db/ident ?attribute] [?entity ?attribute ?target]]"
+                          (str "[:find (pull ?entity [:block/uuid :block/title :block/name "
+                               (when metadata? ":logseq.property.view/feature-type ")
+                               ":block/page {:block/link [:db/id :block/uuid :block/title :block/name]}]) (pull ?property [:db/ident :block/title]) :in $ ?target ?class :where [?property :block/tags ?class] [?property :db/ident ?attribute] [?entity ?attribute ?target]]")
                           target-id property-class)
                          [])]
       (let [property-values (->> value-rows
@@ -453,7 +467,7 @@
                               (count tagged) " tag holder(s), "
                               (count property-values) " property value(s).")
                          "Nothing refers to this entity.")}
-          false))))))
+          false)))))))
 
 (defn get-title-holders [title]
   (let [repo (state/get-current-repo)
@@ -514,38 +528,56 @@
                     :where [?entity :logseq.property/status ?value]])]
       (bean/->js (sdk-utils/normalize-keyword-for-json (api-util/with-embed-info-tree rows) false)))))
 
-(defn get-closed-values []
-  (let [repo (state/get-current-repo)]
-    (p/let [rows (db-async/<q
-                  repo
-                  {:transact-db? false}
-                  '[:find (pull ?property [:db/ident :block/title])
-                    (pull ?value [:db/ident :block/title :block/order])
-                    :where [?value :block/closed-value-property ?property]])]
-      (bean/->js (sdk-utils/normalize-keyword-for-json rows false)))))
+(defn get-closed-values
+  ([] (get-closed-values #js {}))
+  ([options]
+   (let [metadata? (include-metadata? "getClosedValues" options)
+         repo (state/get-current-repo)
+         query (if metadata?
+                   '[:find (pull ?property [:db/ident :block/title :db/valueType])
+                     (pull ?value [:db/id :db/ident :block/title :block/order :logseq.property/deleted-at])
+                     :where [?value :block/closed-value-property ?property]]
+                   '[:find (pull ?property [:db/ident :block/title])
+                     (pull ?value [:db/ident :block/title :block/order])
+                     :where [?value :block/closed-value-property ?property]])]
+       (p/let [rows (db-async/<q repo {:transact-db? false} query)]
+         (bean/->js (sdk-utils/normalize-keyword-for-json rows false))))))
 
-(defn get-orphan-tags []
-  (let [repo (state/get-current-repo)]
+(defn get-orphan-tags
+  ([] (get-orphan-tags #js {}))
+  ([options]
+  (let [metadata? (include-metadata? "getOrphanTags" options)
+        repo (state/get-current-repo)]
     (p/let [tag-class (db-async/<q repo {}
                                    '[:find ?class .
                                      :where [?class :db/ident :logseq.class/Tag]])
             tags (db-async/<q
                   repo
                   {:transact-db? false}
-                  '[:find [(pull ?tag [:db/id :db/ident :block/uuid :block/title]) ...]
-                    :in $ [?class ...]
+                  '[:find [(pull ?tag ?pattern) ...]
+                    :in $ [?class ...] ?pattern
                     :where
                     [?tag :block/tags ?class]
                     (not-join [?tag]
                               [?holder :block/tags ?tag])]
-                  [tag-class])]
-      (bean/->js (sdk-utils/normalize-keyword-for-json tags false)))))
+                  [tag-class]
+                  (cond-> [:db/id :db/ident :block/uuid :block/title]
+                    metadata? (conj :logseq.property/built-in?)))]
+      (bean/->js
+       (sdk-utils/normalize-keyword-for-json
+        (mapv #(cond-> (dissoc % :logseq.property/built-in?)
+                 metadata? (assoc :built_in (boolean (:logseq.property/built-in? %))))
+              tags)
+        false))))))
 
 (def ^:private orphan-property-ident-pattern
   #"(?i):[a-z][\w.-]*/[\w.?!+-]+")
 
-(defn get-orphan-properties []
-  (let [repo (state/get-current-repo)]
+(defn get-orphan-properties
+  ([] (get-orphan-properties #js {}))
+  ([options]
+  (let [metadata? (include-metadata? "getOrphanProperties" options)
+        repo (state/get-current-repo)]
     (p/let [properties (db-async/<get-all-properties repo {})
             used-idents (db-async/<q
                          repo
@@ -560,11 +592,12 @@
                                     (when (and (keyword? ident)
                                                (re-matches orphan-property-ident-pattern (str ident))
                                                (not (contains? used-idents ident)))
-                                      {:ident (str ident)
-                                       :title (:block/title property)
-                                       :type (if (keyword? type) (name type) type)})))
+                                      (cond-> {:ident (str ident)
+                                               :title (:block/title property)
+                                               :type (if (keyword? type) (name type) type)}
+                                        metadata? (assoc :built_in (boolean (:logseq.property/built-in? property)))))))
                                 properties))]
-      (bean/->js (sdk-utils/normalize-keyword-for-json orphans false)))))
+      (bean/->js (sdk-utils/normalize-keyword-for-json orphans false))))))
 
 (defn list-assets []
   (let [repo (state/get-current-repo)]
@@ -899,7 +932,7 @@
   {:max_rows 1000 :max_bytes 65536 :max_filter_nodes 32 :max_filter_depth 4})
 
 (def ^:private entity-search-fields
-  #{"uuid" "title" "page_uuid" "page_title" "parent_uuid" "recycled" "aliases" "matched_names"})
+  #{"uuid" "title" "page_uuid" "page_title" "parent_uuid" "recycled" "aliases" "matched_names" "built_in"})
 
 (defn- require-search-keys!
   [value allowed]
@@ -1072,6 +1105,7 @@
     (cond-> [:db/id :block/uuid]
       (or (fields "title") (and (= "page" kind) (fields "page_title"))) (conj :block/title)
       (and (= "block" kind) (or (fields "page_uuid") (fields "page_title"))) (conj {:block/page page-fields})
+      (fields "built_in") (conj :logseq.property/built-in?)
       (fields "parent_uuid") (conj {:block/parent [:block/uuid]}))))
 
 (defn- project-search-entity
@@ -1089,6 +1123,7 @@
                     "aliases" (->> (get aliases (:db/id entity))
                                    (sort-by :uuid) (mapv #(dissoc % :source)))
                     "matched_names" (vec (sort-by (juxt :source :uuid) (get matched-names (:db/id entity))))
+                    "built_in" (boolean (:logseq.property/built-in? entity))
                     "recycled" recycled?)]))
           select)))
 

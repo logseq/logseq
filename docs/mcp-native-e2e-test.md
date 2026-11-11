@@ -4,7 +4,7 @@ Updated 2026-11-07. Attach this document to Claude Desktop to test the native
 Logseq MCP server at `http://127.0.0.1:12315/mcp` from setup through cleanup.
 This is a test specification, not a results log. Keep results in a separate report.
 
-The expected inventory is **57 tools**. Native Logseq source, SDK, tests and
+The expected inventory is **58 tools**. Native Logseq source, SDK, tests and
 advertised schemas define the contracts. Use native DB skills whose search,
 asset, timeout and output assumptions match the connected server.
 Use this guide alone rather than combining it with older testing checklists.
@@ -13,7 +13,7 @@ Use this guide alone rather than combining it with older testing checklists.
 
 These are current implementation contracts; this specification records no live passes. First check
 `capabilities.graph.compatibility_target` is `2.0.2` and `contract_revision` is
-`2026-11-10.1`; the app version alone cannot distinguish builds.
+`2026-11-11.1`; the app version alone cannot distinguish builds.
 
 On fresh, approved run-owned fixtures:
 
@@ -104,7 +104,7 @@ Send this with the attached document:
 
 ```text
 Run the attached Native Logseq MCP End-to-End Test against my connected native
-Logseq MCP server. First verify its exact 57-tool inventory and live schemas.
+Logseq MCP server. First verify its exact 58-tool inventory and live schemas.
 Confirm the desktop is using a stable, watcher-free build and no edits/builds
 will run during the test. Do not start writes if source watching is active.
 Ask me to confirm the graph is disposable and approve the fixture creation,
@@ -129,7 +129,7 @@ approval form or Logseq Desktop approval dialog. Broad test or cleanup approval
 does not cover queries. Never
 silently retry or use raw API access instead.
 
-Finish with all 57 tools accounted for, detailed case results, cleanup evidence,
+Finish with all 58 tools accounted for, detailed case results, cleanup evidence,
 remaining fixtures, limitations, and a readiness verdict. Do not claim full
 coverage for cases that were blocked, manually skipped, or not actually called.
 ```
@@ -233,7 +233,7 @@ Maintain these ledgers after every phase:
 | Run | date, run ID, server/build identification if available, graph/user approval, advertised schemas, baseline counts |
 | Fixtures | role, kind, UUID/ident, original/current title, parent/page, origin (this run or user-prepared), cleanup action/status |
 | Cases | ID, tool, sanitized arguments, response summary, independent read, expected/actual state, duration, verdict |
-| Coverage | each of the 57 names, called/not called, supporting case IDs, positive/negative/manual coverage |
+| Coverage | each of the 58 names, called/not called, supporting case IDs, positive/negative/manual coverage |
 
 Assign case IDs such as B-01 and F-03 to every actual call/assertion sequence.
 Checkpoint the ledgers after each phase. On resumption, reread ledger targets,
@@ -256,6 +256,7 @@ Keep the intentionally unusual spellings, including `creatTag`,
 | `searchBlocks` | I: exact case-sensitive marker, different-case/absent marker, and misspelling using searchTerm only |
 | `findEntities` | I and regression retest: structured empty-first/text searches, selected fields, live/recycled counts, cursor continuation/invalidation, malformed-input refusal, no per-query approval |
 | `suggestLinks` | I: draft title/alias matches, exact UTF-16 spans, ambiguity, markup/code exclusions, limits, fresh target checks and no graph changes |
+| `getGraphHealth` | I: five default observations, four opt-in audits, replacement check selection, page scope, nested sampling/caps, opt-in choice metadata and unchanged graph |
 | `listTags` | A, D, K: baseline, run tags, removal; expand false/true |
 | `listProperties` | A, E, K: baseline, canonical definitions, removal; expand false/true |
 | `getPageUUID` | B, C, K: title resolution, rename, recycled-title behavior |
@@ -568,6 +569,37 @@ Shared names must not choose one target automatically. Do not write graph
 content merely to exercise scan caps; automated fixtures cover those thresholds.
 Compare run-owned graph content before/after: suggestions must change nothing.
 This procedure records no live pass on its own.
+Call `getGraphHealth({})`, then `{"sample_limit":1}` while the graph is stable.
+Compare duplicate group/member totals with `findDuplicateTitles(normalize="exact",
+include_recycled=true)` after excluding blank titles, and tag/property totals
+with `listOrphanTags`/`listOrphanProperties`. Counts must not shrink with samples;
+check both group and member `truncated` flags. Recycled titles are included.
+Reject `sample_limit=0`, `21`, a fraction, null and unknown arguments. Do not
+delete candidates or treat zero counts as certification. Compare run-owned
+content before/after; the summary must write nothing. Do not create large
+graphs to test caps; automated fixtures cover thresholds. The reads are not
+an atomic snapshot, so concurrent edits invalidate cross-tool comparisons.
+Confirm the defaults also include `alias_ambiguity` and
+`unresolved_placeholders`: a single declaration plus its alias carrier is not
+ambiguous; two declaring pages or an unrelated same-title page remain ambiguous.
+Literal run-owned import markers report missing/resolvable/ambiguous targets
+without changing blocks. Repeat using `checks:["unresolved_placeholders"]`;
+other check reports must be absent.
+Opt in to `empty_pages` and `page_ownership_mismatches` with run-owned
+`page_uuids`. Alias-only pages and referenced empty pages must not appear as
+empty candidates. Ownership mismatch observations never authorize moving blocks.
+Nested page descendants, including recycled pages under Recycle, must be compared
+to their nearest page ancestor, not the audited root; genuine disagreements show
+`expected_page_uuid`.
+Opt in separately to `references_to_recycled` and `invalid_choice_values`
+only when existing approved fixtures fit the documented fan-out caps. Recycled
+referrers and built-ins can explain results.
+Exclude recycle original-page/original-parent bookkeeping, but retain real
+self-links and built-in view references in recycled-reference counts.
+Check unsupported-storage counts, `validation_complete` and all nested truncation flags; no membership result
+certifies class-scoped exclusions or schema validity. Do not write invalid
+values merely to create fixtures. Verify legacy `listClosedValues()` still has
+the original projection; choice metadata is opt-in only on the native API.
 On timeout, stop and inspect connection health; never blindly repeat the search.
 
 ### J. Asset Inventory
@@ -686,7 +718,7 @@ Return a self-contained report with:
    run ID, baseline and final inventories, and whether the build was development
    or packaged (unknown if not supplied by the user).
 2. One row per case with arguments, verdict, observed state and independent read.
-3. One row for every one of the 57 tools, with actual call evidence and uncovered
+3. One row for every one of the 58 tools, with actual call evidence and uncovered
    positive/negative/manual variants. A capabilities probe is not tool-call coverage.
 4. Page/block embed creation, discovery, backlink/count checks, removal and
    preserved-target evidence; asset empty vs populated coverage separately.

@@ -10,8 +10,9 @@ remaining work, not a history of migration stages or test runs.
 
 ## Current state
 
-The native server registers 57 tools, including `findEntities` and `suggestLinks`.
-`capabilities.graph.contract_revision` is `2026-11-10.1` and identifies the
+The native server registers 58 tools, including `findEntities`, `suggestLinks`
+and `getGraphHealth`.
+`capabilities.graph.contract_revision` is `2026-11-11.1` and identifies the
 implementation. Read routing and write safeguards are implemented.
 See the [tool map](mcp-native-tool-map.md) for current MCP contracts and the
 [native DB API reference](native-db-api.md) for connection and native arguments.
@@ -175,12 +176,12 @@ The [current tool-map contracts](mcp-native-tool-map.md#current-202-contracts)
 and [end-to-end cases](mcp-native-e2e-test.md#202-regression-retest) define literal
 search, heading imports, repeated-title creation, MCP deletion/archive titles,
 capability discovery and session behavior.
-The deployment marker is `capabilities.graph.contract_revision = 2026-11-10.1`,
+The deployment marker is `capabilities.graph.contract_revision = 2026-11-11.1`,
 with `compatibility_target = 2.0.2`. These identify the active implementation.
 
 ### Structured findEntities
 
-The current native inventory is 57 tools. `findEntities` adds framed, read-only
+The current native inventory is 58 tools. `findEntities` adds framed, read-only
 page/block searches for empty first outline blocks, page-scoped literal text,
 live/recycled inventories and exact counts. It calls `logseq.DB.findEntities`
 in the existing API structure, using fixed query forms and typed inputs through
@@ -227,6 +228,37 @@ Draft, raw-span and response caps also apply; no cache, raw query or graph write
 is introduced. See the [link-suggestion contract](mcp-native-tool-map.md#link-suggestions)
 for exact inputs, output and truncation semantics. Automated native-query and
 MCP protocol fixtures are not a live Desktop graph pass.
+
+### getGraphHealth
+
+`getGraphHealth` defaults to exact nonblank Page/Tag title groups (including
+recycled), tags without direct holders, properties without values, live alias
+ambiguity and literal import placeholders. Explicit `checks` replaces the
+defaults; opt-in audits cover apparently empty/unreferenced pages, parent/page
+mismatches, references to directly recycled targets, and closed-choice
+membership. `page_uuids` scopes only the two page audits. No native export or
+raw-query route is added. `getClosedValues({include_metadata:true})` supplies
+choice identity/storage metadata; default API calls retain their original
+projection. SDK options and a real-query regression test cover that contract.
+Health alias counts exclude the alias carrier's own title as a competitor.
+Ownership checks respect nearest nested-page boundaries, including recycled
+pages, and expose `expected_page_uuid`. Recycle original-page/original-parent
+bookkeeping is excluded from recycled-target references; genuine self-links
+and view references remain. Native APIs, `findOrphans`, `findEntities` and
+`suggestLinks` retain their existing behavior.
+
+There is no healthy/unhealthy verdict, convention-dependent missing-summary/tag
+check, merge eligibility, repair, or atomic snapshot guarantee.
+Built-ins, retained recycled definitions, other references and child tags can
+explain findings. Samples default to 5, optionally 1-20, including nested
+members. Per-response caps are 10000 rows/8 MiB; aggregate caps are 32 MiB/400
+calls, with fan-out limits of 100 pages, 100 recycled targets and 50 choice
+properties. These do not bound native execution or transfer. Choice checks
+report unsupported storage explicitly and do not validate class-scoped
+exclusions or general schema rules. Errors never become
+partial reports or zero counts. Responses above 65536 UTF-8 bytes error.
+See the [health contract](mcp-native-tool-map.md#graph-health-observations).
+Corrected health filters still require live Desktop verification.
 
 ### getContentCapabilities
 

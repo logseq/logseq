@@ -323,7 +323,7 @@ orchestrates existing native operations; do not send a nonexistent
 | `logseq.DB.removeBlockProperty` | `blockUuid`, `key: string` | Remove the property value from this block, not its definition. | W |
 | `logseq.DB.addPropertyValueChoices` | `property: uuid or {uuid}`, `choices: array of uuid or {uuid}` | Add existing value entities as closed-value choices. Not an array of display labels. | W |
 | `logseq.DB.setPropertyNodeTags` | `propertyId`, `numericTagIds: number[]` | Set allowed node classes on a property. Tag IDs must be numeric database IDs, not UUID strings. | W |
-| `logseq.DB.getClosedValues` | none | Property/value pairs for existing closed choices, including built-in enums when present. | R |
+| `logseq.DB.getClosedValues` | `options?` | Property/value pairs for existing closed choices, including built-in enums. Default/`include_metadata:false` preserves the original projection; `include_metadata:true` additionally returns property `valueType`, choice `id` and directly stored deletion metadata. Options accept only the optional boolean `include_metadata`. No UUID/content expansion or writes. | R |
 | `logseq.DB.getStatusRows` | none | Entity/status-value pairs for entities with Status. | R |
 
 ### Assets, DB-stored resources, and graph transfer
@@ -656,6 +656,7 @@ The MCP tool names are not automatically native API commands. For example:
 | --- | --- |
 | `searchBlocks` | Native `search` plus MCP literal-result filtering. Use `findEntities` for framed literal native search. |
 | `suggestLinks` | MCP-only draft analysis over native `findEntities` title/alias reads; not a new native command. |
+| `getGraphHealth` | MCP-only observations over existing read APIs: five default checks plus optional page, recycled-reference and choice-membership audits. Choice validation explicitly requests `getClosedValues({include_metadata:true})`; existing no-argument API callers retain their response shape. Not a new native command or atomic snapshot. |
 | `pageStats` | Native `getPageStats`; MCP adds its result contract. |
 | `createProperty` | Native `upsertProperty` plus MCP checks/diagnostics. |
 | `listClosedValues` | Native `getClosedValues`. |

@@ -263,7 +263,7 @@
                        second-response (.callTool client #js {:name "datascriptQuery" :arguments args})
                        _ (reset! decision #js {:action "decline"})
                        refused (.callTool client #js {:name "datascriptQuery" :arguments args})]
-                 (is (= 57 (alength (aget inventory "tools"))))
+                 (is (= 58 (alength (aget inventory "tools"))))
                  (is (= 1 (count (filter #(= "datascriptQuery" (aget % "name")) (array-seq (aget inventory "tools"))))))
                  (is (not (aget first-response "isError")))
                  (is (not (aget second-response "isError")))
@@ -295,7 +295,7 @@
                          tool (first (filter #(= "getContentCapabilities" (aget % "name")) (array-seq (aget inventory "tools"))))
                          response (.callTool client #js {:name "getContentCapabilities" :arguments #js {}})
                          body (js->clj (js/JSON.parse (aget response "content" 0 "text")) :keywordize-keys true)]
-                   (is (= 57 (alength (aget inventory "tools"))))
+                   (is (= 58 (alength (aget inventory "tools"))))
                    (is (zero? (alength (js/Object.keys (aget tool "inputSchema" "properties")))))
                    (is (true? (aget tool "annotations" "readOnlyHint")))
                    (is (not (aget response "isError")))
@@ -1124,7 +1124,7 @@
                  (is (= {:embeds [] :count 0 :truncated false} response))
                  (is (= [["logseq.DB.listEmbeds" [args]]] @calls))
                  (is (= mcp-compat/list-embeds (get-in mcp-server/data-tools [:listEmbeds :fn])))
-                 (is (= 56 (+ (count mcp-server/api-tools) (count mcp-server/data-tools))))
+                 (is (= 57 (+ (count mcp-server/api-tools) (count mcp-server/data-tools))))
                  (is (string/includes? (aget (get-in mcp-server/data-tools [:createEmbed :config]) "description") "before retrying"))
                  (is (string? (aget (aget (aget (get-in mcp-server/data-tools [:createEmbed :config]) "inputSchema") "target_uuid") "description"))))
                (p/catch (fn [error] (is false (str error))))
@@ -3164,6 +3164,423 @@
                             result))
                      (is (= [["logseq.DB.getOrphanProperties" []]] @calls))
                      (done))))))
+
+(defn- health-fixture-api [inventories calls]
+  (fn [method args]
+    (swap! calls conj [method args])
+    (when-not (contains? #{"logseq.DB.getTitleInventory" "logseq.DB.getOrphanTags" "logseq.DB.getOrphanProperties"
+                          "logseq.DB.findEntities" "logseq.DB.getPageStats" "logseq.DB.getPageBlockUUIDs"
+                          "logseq.DB.listRecycled" "logseq.DB.getBacklinks" "logseq.DB.getClosedValues" "logseq.DB.getPropertyUsers"} method)
+      (throw (js/Error. (str "Unexpected health API: " method))))
+    (clj->js (if (= method "logseq.DB.findEntities")
+               (get inventories [method (aget (first args) "kind")] {:matches [] :count 0 :truncated false})
+               (get inventories [method (first args)] (get inventories method []))))))
+
+(deftest graph-health-counts-exact-titles-and-bounds-examples
+  (let [calls (atom [])
+        title-row {:uuid "page-1" :title "Alpha" :kind "page" :recycled false}
+        inventories {"logseq.DB.getTitleInventory"
+                     [title-row (assoc title-row :uuid "page-2" :recycled true)
+                      (assoc title-row :uuid "tag-1" :kind "tag")
+                      (assoc title-row :uuid "page-3" :title "alpha")
+                      (assoc title-row :uuid "page-4" :title "")
+                      (assoc title-row :uuid "page-5" :title "")
+                      (assoc title-row :uuid "page-6" :title nil)
+                      (assoc title-row :uuid "page-7" :title "  ")
+                      (assoc title-row :uuid "page-8" :title "  ")]
+                     "logseq.DB.getOrphanTags" [{:uuid "tag-z" :title "Z" :ident "tag/Z"}
+                                               {:uuid "tag-a" :title "A" :ident "tag/A"}
+                                               {:uuid "tag-b" :title "B" :ident "tag/B"}]
+                     "logseq.DB.getOrphanProperties" [{:ident ":property/Z" :title "Z" :type "number"}
+                                                     {:ident ":property/A" :title "A" :type "string"}
+                                                     {:ident ":property/B" :title "B" :type "default"}]}]
+    (async done
+      (-> (p/let [result (mcp-compat/get-graph-health (health-fixture-api inventories calls) #js {:sample_limit 2})
+                  duplicates (get-in result [:checks :duplicate_titles])
+                  group (first (:examples duplicates))]
+            (is (= 9 (:title_entities_scanned result)))
+            (is (= [1 3 false] ((juxt :count :entity_count :truncated) duplicates)))
+            (is (= ["Alpha" 3 true] ((juxt :title :entity_count :truncated) group)))
+            (is (= [{:uuid "page-1" :kind "page" :recycled false}
+                    {:uuid "page-2" :kind "page" :recycled true}] (:entities group)))
+            (doseq [check [:tags_without_holders :properties_without_values]]
+              (is (= [3 true] ((juxt :count :truncated) (get-in result [:checks check]))))
+              (is (= ["A" "B"] (mapv :title (get-in result [:checks check :examples])))))
+            (is (= "independent_reads" (:consistency result)))
+            (is (= [["logseq.DB.getTitleInventory" []] ["logseq.DB.getOrphanTags" []]
+                    ["logseq.DB.getOrphanProperties" []]] (take 3 @calls)))
+            (is (= 5 (count @calls))))
+          (p/catch (fn [error] (is false (.-stack error))))
+          (p/finally done)))))
+
+(deftest graph-health-samples-groups-without-losing-total-counts
+  (let [rows (for [title ["C" "B" "A"] index (range 2)]
+               {:uuid (str title index) :title title :kind "page" :recycled false})]
+    (async done
+      (-> (p/let [result (mcp-compat/get-graph-health
+                         (health-fixture-api {"logseq.DB.getTitleInventory" rows} (atom [])) #js {:sample_limit 1})
+                  duplicates (get-in result [:checks :duplicate_titles])]
+            (is (= [3 6 true] ((juxt :count :entity_count :truncated) duplicates)))
+            (is (= ["A"] (mapv :title (:examples duplicates))))
+            (is (= 1 (count (get-in duplicates [:examples 0 :entities])))))
+          (p/catch (fn [error] (is false (.-stack error))))
+          (p/finally done)))))
+
+(deftest graph-health-rejects-failed-or-malformed-inventories
+  (async done
+    (-> (p/all
+         (for [method ["logseq.DB.getTitleInventory" "logseq.DB.getOrphanTags" "logseq.DB.getOrphanProperties"]
+               invalid [nil {:error "fixture API failure"} {} [nil] [{:title 9}]]]
+           (-> (mcp-compat/get-graph-health (health-fixture-api {method invalid} (atom [])) #js {})
+               (p/then (fn [_] (is false (str "Accepted invalid inventory: " method))))
+               (p/catch (fn [error]
+                          (is (instance? js/Error error))
+                          (is (string/includes? (.-message error)
+                                                (if (:error invalid) "fixture API failure" "invalid inventory"))
+                              (pr-str [method invalid])))))))
+        (p/catch (fn [error] (is false (.-stack error))))
+        (p/finally done))))
+
+(deftest graph-health-enforces-row-byte-and-response-limits
+  (let [row {:uuid "page-1" :title "" :kind "page" :recycled false}
+        rows (mapv #(assoc row :uuid (str %) :title (str %)) (range 10000))
+        exact-bytes [(assoc row :title (.repeat "x" (- 8388608 (#'mcp-compat/mcp-result-bytes [row]))))]
+        run (fn [titles] (mcp-compat/get-graph-health
+                          (health-fixture-api {"logseq.DB.getTitleInventory" titles} (atom [])) #js {}))]
+    (async done
+      (-> (p/let [at-rows (run rows)
+                  at-bytes (run exact-bytes)
+                  failures (p/all (map #(-> (run %) (p/catch (fn [error] {:error error})))
+                                       [(conj rows (assoc row :uuid "overflow"))
+                                        [(update (first exact-bytes) :title str "x")]
+                                        [(assoc row :title (.repeat "x" 66000))
+                                         (assoc row :uuid "page-2" :title (.repeat "x" 66000))]]))]
+            (is (= 10000 (:title_entities_scanned at-rows)))
+            (is (= 1 (:title_entities_scanned at-bytes)))
+            (is (= 8388608 (#'mcp-compat/mcp-result-bytes exact-bytes)))
+            (is (every? #(instance? js/Error (:error %)) failures))
+            (is (= [true true false] (mapv #(string/includes? (.-message (:error %)) "scan limits") failures)))
+            (is (string/includes? (.-message (:error (last failures))) "response exceeds")))
+          (p/catch (fn [error] (is false (.-stack error))))
+          (p/finally done)))))
+
+(deftest graph-health-mcp-protocol-is-strict-and-read-only
+  (let [calls (atom [])
+        server (mcp-server/create-mcp-api-server (health-fixture-api {} calls))
+        client (Client. #js {:name "graph-health-test" :version "1"} #js {:capabilities #js {}})
+        transports (.createLinkedPair InMemoryTransport)]
+    (doseq [value [nil 0 21 1.5 "5"]]
+      (is (thrown? js/Error (mcp-compat/get-graph-health
+                            (fn [& _] (throw (js/Error. "Unexpected API call"))) #js {:sample_limit value}))))
+    (async done
+      (-> (p/let [_ (.connect server (aget transports 0))
+                  _ (.connect client (aget transports 1))
+                  response (.callTool ^js client #js {:name "getGraphHealth" :arguments #js {}})
+                  body (js->clj (js/JSON.parse (aget response "content" 0 "text")) :keywordize-keys true)
+                  refused (.callTool ^js client #js {:name "getGraphHealth" :arguments #js {:write true}})
+                  invalid (.callTool ^js client #js {:name "getGraphHealth" :arguments #js {:sample_limit 21}})
+                  tools (.listTools ^js client)]
+            (is (not (true? (aget response "isError"))))
+            (is (= 5 (get-in body [:limits :sample_limit])))
+            (doseq [check (vals (:checks body))]
+              (is (= [0 [] false] ((juxt :count :examples :truncated) check))))
+            (is (true? (aget refused "isError")))
+            (is (true? (aget invalid "isError")))
+            (is (= 5 (count @calls)))
+            (is (= mcp-compat/graph-health-default-checks (:checks_run body)))
+            (is (some #(and (= "getGraphHealth" (aget % "name"))
+                            (true? (aget % "annotations" "readOnlyHint"))
+                            (false? (aget % "annotations" "destructiveHint")))
+                      (array-seq (aget tools "tools")))))
+          (p/catch (fn [error] (is false (.-stack error))))
+          (p/finally (fn [] (p/let [_ (.close client) _ (.close server)] (js/queueMicrotask done))))))))
+
+(defn- health-uuid [index]
+  (str "00000000-0000-4000-8000-" (.padStart (str index) 12 "0")))
+
+(defn- health-envelope [rows]
+  {:matches (vec rows) :count (count rows) :truncated false})
+
+(deftest closed-choice-metadata-is-opt-in-and-keeps-legacy-projection
+  (let [conn (d/create-conn {:db/ident {:db/unique :db.unique/identity}
+                              :block/closed-value-property {:db/valueType :db.type/ref}})]
+    (d/transact! conn [{:db/id 1 :db/ident :plugin.property/Choice :block/title "Choice"
+                        :db/valueType :db.type/ref :db/cardinality :db.cardinality/one}
+                       {:db/id 2 :block/uuid (uuid (health-uuid 2)) :block/title "Red" :block/order "a"
+                        :block/closed-value-property 1 :logseq.property/deleted-at 123}])
+    (doseq [options [nil #js [] #js {:include_metadata "yes"} #js {:other true}]]
+      (is (thrown? js/Error (db-based-api/get-closed-values options))))
+    (async done
+      (-> (p/with-redefs [state/get-current-repo (constantly "health-fixture")
+                         db-async/<q (fn [_ options query]
+                                       (is (= {:transact-db? false} options))
+                                       (js/Promise.resolve (d/q query @conn)))]
+            (p/let [legacy (db-based-api/get-closed-values)
+                    omitted (db-based-api/get-closed-values js/undefined)
+                    disabled (db-based-api/get-closed-values #js {:include_metadata false})
+                    metadata (db-based-api/get-closed-values #js {:include_metadata true})]
+              (let [[property choice] (first (js->clj legacy :keywordize-keys true))
+                    [detailed-property detailed-choice] (first (js->clj metadata :keywordize-keys true))]
+                (is (= (js->clj legacy) (js->clj disabled)))
+                (is (= (js->clj legacy) (js->clj omitted)))
+                (is (= #{:ident :title} (set (keys property))))
+                (is (= #{:title :order} (set (keys choice))))
+                (is (= ":db.type/ref" (:valueType detailed-property)))
+                (is (= 2 (:id detailed-choice)))
+                (is (= 123 (get detailed-choice (keyword ":logseq.property/deleted-at"))))
+                (is (= choice (select-keys detailed-choice [:title :order])))
+                (is (not (contains? detailed-choice :uuid))))))
+          (p/catch (fn [error] (is false (.-stack error))))
+          (p/finally done)))))
+
+(deftest graph-health-defaults-report-alias-overlap-and-import-markers
+  (let [calls (atom [])
+        alias-uuid (health-uuid 9)
+        pages [{:uuid (health-uuid 1) :title "First"
+                :aliases [{:uuid alias-uuid :title "Shared" :recycled false}]}
+               {:uuid (health-uuid 2) :title "Shared" :aliases []}
+               {:uuid (health-uuid 3) :title "shared" :aliases []}]
+        titles [{:uuid (health-uuid 4) :title "Found" :kind "page" :recycled false}
+                {:uuid (health-uuid 5) :title "Work" :kind "tag" :recycled false}
+                {:uuid (health-uuid 6) :title "Work" :kind "tag" :recycled false}
+                {:uuid (health-uuid 7) :title "Missing" :kind "page" :recycled true}]
+        inventories {"logseq.DB.getTitleInventory" titles
+                     ["logseq.DB.findEntities" "page"] (health-envelope pages)
+                     ["logseq.DB.findEntities" "block"]
+                     (health-envelope [{:uuid (health-uuid 10) :page_uuid (health-uuid 1)
+                                        :title "{{link:Missing}} {{link:Found}} {{tag:Work}} {{link:Missing}} {{link:Unclosed"}])}]
+    (async done
+      (-> (p/let [result (mcp-compat/get-graph-health (health-fixture-api inventories calls) #js {:sample_limit 1})
+                  aliases (get-in result [:checks :alias_ambiguity])
+                  placeholders (get-in result [:checks :unresolved_placeholders])
+                  complete (mcp-compat/get-graph-health (health-fixture-api inventories (atom []))
+                                                       #js {:checks #js ["unresolved_placeholders"] :sample_limit 20})]
+            (is (= [1 false] ((juxt :count :truncated) aliases)))
+            (is (= ["Shared" 2 true] ((juxt :name :candidate_count :truncated) (first (:examples aliases)))))
+            (is (= [{:source "alias" :name_uuid alias-uuid}] (get-in aliases [:examples 0 :candidates 0 :matches])))
+            (is (= [3 1 4 true] ((juxt :count :block_count :occurrence_count :truncated) placeholders)))
+            (is (= [["Found" "resolvable" 1] ["Missing" "missing" 2] ["Work" "ambiguous" 1]]
+                   (mapv (juxt :name :resolution :occurrences) (get-in complete [:checks :unresolved_placeholders :examples]))))
+            (is (= 5 (count @calls)))
+            (is (= (set mcp-compat/graph-health-default-checks) (set (:checks_run result)))))
+          (p/catch (fn [error] (is false (.-stack error))))
+          (p/finally done)))))
+
+(deftest graph-health-page-audits-exclude-aliases-and-support-explicit-scope
+  (let [pages (mapv #(hash-map :uuid (health-uuid %) :title (str "Page " %)) (range 1 5))
+        stats (fn [index] {:page_uuid (health-uuid index) :content_blocks 0 :own_blocks 1 :empty_blocks 1
+                           :refs 0 :tag_holders 0 :property_values 0 :aliases [] :is_alias_of nil})
+        inventories {["logseq.DB.findEntities" "page"] (health-envelope pages)
+                     ["logseq.DB.getPageStats" (health-uuid 1)] (stats 1)
+                     ["logseq.DB.getPageStats" (health-uuid 2)] (assoc (stats 2) :is_alias_of (health-uuid 9))
+                     ["logseq.DB.getPageStats" (health-uuid 3)] (assoc (stats 3) :refs 1)
+                     ["logseq.DB.getPageStats" (health-uuid 4)] (assoc (stats 4) :content_blocks 1)
+                     ["logseq.DB.getPageBlockUUIDs" (health-uuid 1)]
+                     [{:uuid (health-uuid 10) :parent {:uuid (health-uuid 1)} :page {:uuid (health-uuid 2)}}
+                      {:uuid (health-uuid 11) :parent {:uuid (health-uuid 1)} :page {:uuid (health-uuid 1)}}]}
+        calls (atom [])]
+    (async done
+      (-> (p/let [all (mcp-compat/get-graph-health (health-fixture-api inventories (atom []))
+                                                  #js {:checks #js ["empty_pages" "page_ownership_mismatches"]})
+                  scoped (mcp-compat/get-graph-health (health-fixture-api inventories calls)
+                                                     (clj->js {:checks ["empty_pages" "page_ownership_mismatches"]
+                                                               :page_uuids [(health-uuid 1)]}))]
+            (is (= [(health-uuid 1)] (mapv :uuid (get-in all [:checks :empty_pages :examples]))))
+            (is (= 4 (get-in all [:checks :empty_pages :pages_scanned])))
+            (is (= 1 (get-in scoped [:checks :empty_pages :pages_scanned])))
+            (is (= [{:page_uuid (health-uuid 1) :block_uuid (health-uuid 10)
+                     :stored_page_uuid (health-uuid 2) :expected_page_uuid (health-uuid 1)}]
+                   (get-in scoped [:checks :page_ownership_mismatches :examples])))
+            (is (= 1 (get-in scoped [:checks :page_ownership_mismatches :distinct_block_count])))
+            (is (= 3 (count @calls)))
+            (is (not-any? #(= "logseq.DB.getTitleInventory" (first %)) @calls)))
+          (p/catch (fn [error] (is false (.-stack error))))
+          (p/finally done)))))
+
+(deftest graph-health-alias-carriers-are-not-competing-declarations
+  (let [alias {:uuid (health-uuid 9) :title "Shared" :recycled false}
+        main {:uuid (health-uuid 1) :title "Main" :aliases [alias]}
+        carrier {:uuid (:uuid alias) :title (:title alias) :aliases []}
+        run (fn [pages]
+              (mcp-compat/get-graph-health
+               (health-fixture-api {["logseq.DB.findEntities" "page"] (health-envelope pages)} (atom []))
+               #js {:checks #js ["alias_ambiguity"]}))]
+    (async done
+      (-> (p/let [normal (run [main carrier])
+                  shared (run [main carrier (assoc main :uuid (health-uuid 2))])
+                  overlap (run [main carrier {:uuid (health-uuid 3) :title "Shared" :aliases []}])]
+            (is (= 0 (get-in normal [:checks :alias_ambiguity :count])))
+            (doseq [[result candidates] [[shared [(health-uuid 1) (health-uuid 2)]]
+                                         [overlap [(health-uuid 1) (health-uuid 3)]]]]
+              (is (= 1 (get-in result [:checks :alias_ambiguity :count])))
+              (is (= 2 (get-in result [:checks :alias_ambiguity :examples 0 :candidate_count])))
+              (is (= candidates (mapv :uuid (get-in result [:checks :alias_ambiguity :examples 0 :candidates]))))))
+          (p/catch (fn [error] (is false (.-stack error))))
+          (p/finally done)))))
+
+(deftest graph-health-ownership-respects-nested-pages-without-hiding-real-mismatches
+  (let [root (health-uuid 1)
+        nested (health-uuid 2)
+        blocks [{"block/uuid" nested "block/name" "recycled-page" "block/parent" {"block/uuid" root}}
+                {"block/uuid" (health-uuid 3) "block/parent" {"block/uuid" nested} "block/page" {"block/uuid" nested}}
+                {:uuid (health-uuid 4) :parent {:uuid (health-uuid 3)} :page {:uuid nested}}
+                {:uuid (health-uuid 5) :parent {:uuid (health-uuid 3)} :page {:uuid root}}
+                {:uuid (health-uuid 6) :parent {:uuid root} :page {:uuid nested}}]
+        run (fn [rows]
+              (mcp-compat/get-graph-health
+               (health-fixture-api {["logseq.DB.findEntities" "page"]
+                                   (health-envelope [{:uuid root :title "Recycle"}])
+                                   ["logseq.DB.getPageBlockUUIDs" root] rows} (atom []))
+               #js {:checks #js ["page_ownership_mismatches"]}))]
+    (async done
+      (-> (p/let [result (run blocks)
+                  missing (-> (run [(nth blocks 2)]) (p/catch #(hash-map :error %)))
+                  cyclic (-> (run [{:uuid (health-uuid 3) :parent {:uuid (health-uuid 4)} :page {:uuid root}}
+                                    {:uuid (health-uuid 4) :parent {:uuid (health-uuid 3)} :page {:uuid root}}])
+                             (p/catch #(hash-map :error %)))]
+            (is (= 2 (get-in result [:checks :page_ownership_mismatches :count])))
+            (is (= [[(health-uuid 5) nested root] [(health-uuid 6) root nested]]
+                   (mapv (juxt :block_uuid :expected_page_uuid :stored_page_uuid)
+                         (get-in result [:checks :page_ownership_mismatches :examples]))))
+            (doseq [failure [missing cyclic]]
+              (is (instance? js/Error (:error failure)))
+              (is (string/includes? (.-message (:error failure)) "page ancestry"))))
+          (p/catch (fn [error] (is false (.-stack error))))
+          (p/finally done)))))
+
+(deftest graph-health-excludes-recycle-bookkeeping-but-keeps-real-self-and-view-references
+  (let [target (health-uuid 1)
+        self {:uuid target :title "Recycled"}
+        view {:uuid (health-uuid 2) :title "Linked references"}
+        bookkeeping [{:holder self :property {:ident ":logseq.property.recycle/original-page"}}
+                     {:holder view :property {:ident ":logseq.property.recycle/original-parent"}}]
+        run (fn [refs values]
+              (mcp-compat/get-graph-health
+               (health-fixture-api {"logseq.DB.listRecycled" [self]
+                                    ["logseq.DB.getBacklinks" target]
+                                    {:target_uuid target :total (+ (count refs) (count values))
+                                     :refs refs :tagged [] :property_values values}} (atom []))
+               #js {:checks #js ["references_to_recycled"]}))]
+    (async done
+      (-> (p/let [normal (run [] bookkeeping)
+                  real (run [self view] (conj bookkeeping {:holder self :property {:ident ":plugin.property/Ref"}}))
+                  over-cap (-> (run [] (vec (repeat 10001 (first bookkeeping))))
+                               (p/catch #(hash-map :error %)))]
+            (is (= [0 0 1] ((juxt :count :reference_count :targets_scanned)
+                             (get-in normal [:checks :references_to_recycled]))))
+            (is (= [1 3] ((juxt :count :reference_count) (get-in real [:checks :references_to_recycled]))))
+            (is (= ["reference" "reference" "property_value"]
+                   (mapv :relation (get-in real [:checks :references_to_recycled :examples 0 :references]))))
+            (is (= [target (:uuid view) target]
+                   (mapv #(get-in % [:holder :uuid])
+                         (get-in real [:checks :references_to_recycled :examples 0 :references]))))
+            (is (instance? js/Error (:error over-cap)))
+            (is (string/includes? (.-message (:error over-cap)) "scan limits")))
+          (p/catch (fn [error] (is false (.-stack error))))
+          (p/finally done)))))
+
+(deftest graph-health-audits-recycled-references-and-reference-choice-membership
+  (let [target (health-uuid 8)
+        holder {:uuid (health-uuid 1) :title "Holder"}
+        property {:ident ":plugin.property/Choice" :title "Choice" :valueType ":db.type/ref"}
+        inventories {"logseq.DB.listRecycled" [{:uuid target :title "Recycled"}]
+                     ["logseq.DB.getBacklinks" target] {:target_uuid target :total 3 :refs [holder] :tagged [holder]
+                                                       :property_values [{:holder holder :property {:ident ":plugin.property/Ref"}}]}
+                     "logseq.DB.getClosedValues" [[property {:id 10 :title "Allowed"}]
+                                                  [property {:id 12 :title "Recycled" ":logseq.property/deleted-at" 123}]
+                                                  [{:ident ":plugin.property/Other" :valueType ":db.type/string"} {:id 20 :title "Other"}]]
+                     ["logseq.DB.getPropertyUsers" ":plugin.property/Choice"]
+                     [{:holder holder :value 10 :value_entity {:id 10}}
+                      {:holder holder :value 12 :value_entity {:id 12}}
+                      {:holder holder :value 20 :value_entity {:id 20}}
+                      {:holder holder :value "invalid" :value_entity nil}]}
+        calls (atom [])]
+    (async done
+      (-> (p/let [result (mcp-compat/get-graph-health (health-fixture-api inventories calls)
+                                                    #js {:checks #js ["references_to_recycled" "invalid_choice_values"]
+                                                         :sample_limit 1})
+                  references (get-in result [:checks :references_to_recycled])
+                  choices (get-in result [:checks :invalid_choice_values])]
+            (is (= [1 3 1] ((juxt :count :reference_count :targets_scanned) references)))
+            (is (true? (get-in references [:examples 0 :truncated])))
+            (is (= "reference" (get-in references [:examples 0 :references 0 :relation])))
+            (is (= [3 1 1 false true] ((juxt :count :properties_scanned :unchecked_property_count :validation_complete :truncated) choices)))
+            (is (= [12] (mapv :value (:examples choices))))
+            (is (= ":plugin.property/Other" (get-in choices [:unchecked_properties 0 :ident])))
+            (is (= ["logseq.DB.listRecycled" "logseq.DB.getBacklinks" "logseq.DB.getClosedValues" "logseq.DB.getPropertyUsers"]
+                   (mapv first @calls)))
+            (is (true? (aget (first (second (nth @calls 2))) "include_metadata"))))
+          (p/catch (fn [error] (is false (.-stack error))))
+          (p/finally done)))))
+
+(deftest graph-health-bounds-fanout-and-rejects-invalid-selections
+  (let [api (health-fixture-api {} (atom []))
+        row {:uuid (health-uuid 1) :title "Page" :aliases []}
+        failure (fn [inventories args]
+                  (-> (mcp-compat/get-graph-health (health-fixture-api inventories (atom [])) (clj->js args))
+                      (p/catch #(hash-map :error %))))]
+    (doseq [args [#js {:checks nil} #js {:checks #js []} #js {:checks #js ["unknown"]}
+                  #js {:checks #js ["empty_pages" "empty_pages"]} #js {:page_uuids #js []}
+                  #js {:checks #js ["empty_pages"] :page_uuids #js ["bad"]}]]
+      (is (thrown? js/Error (mcp-compat/get-graph-health api args))))
+    (async done
+      (-> (p/let [pages (failure {["logseq.DB.findEntities" "page"] (health-envelope (repeat 101 row))}
+                                 {:checks ["empty_pages"]})
+                  scope (failure {} {:checks ["empty_pages"] :page_uuids [(health-uuid 1)]})
+                  recycled (failure {"logseq.DB.listRecycled" (repeat 101 row)} {:checks ["references_to_recycled"]})
+                  choices (failure {"logseq.DB.getClosedValues"
+                                    (mapv #(vector {:ident (str ":plugin.property/P" %) :valueType ":db.type/ref"} {:id %}) (range 51))}
+                                   {:checks ["invalid_choice_values"]})
+                  malformed (failure {["logseq.DB.findEntities" "page"] {:matches [] :count 0 :truncated true}}
+                                     {:checks ["alias_ambiguity"]})]
+            (doseq [[result message] [[pages "at most 100"] [scope "verify targets"]
+                                      [recycled "recycled-target limit"] [choices "choice-property limit"]
+                                      [malformed "pagination"]]]
+              (is (instance? js/Error (:error result)))
+              (is (string/includes? (.-message (:error result)) message))))
+          (p/catch (fn [error] (is false (.-stack error))))
+          (p/finally done)))))
+
+(deftest graph-health-pages-completely-or-errors-at-scan-cap
+  (let [api (fn [total calls]
+              (fn [method args]
+                (swap! calls inc)
+                (is (= "logseq.DB.findEntities" method))
+                (let [offset (or (some-> (first args) (aget "cursor") (aget "offset")) 0)
+                      end (min total (+ offset 1000))
+                      rows (mapv #(hash-map :uuid (health-uuid %) :title (str "Page " %) :aliases []) (range offset end))]
+                  (clj->js (cond-> {:matches rows :count (count rows) :truncated (< end total)}
+                             (< end total) (assoc :next_cursor {:offset end}))))))
+        calls (atom 0)]
+    (async done
+      (-> (p/let [complete (mcp-compat/get-graph-health (api 10000 calls) #js {:checks #js ["alias_ambiguity"]})
+                  excess (-> (mcp-compat/get-graph-health (api 10001 calls) #js {:checks #js ["alias_ambiguity"]})
+                             (p/catch #(hash-map :error %)))]
+            (is (= 10000 (get-in complete [:checks :alias_ambiguity :names_examined])))
+            (is (= 0 (get-in complete [:checks :alias_ambiguity :count])))
+            (is (instance? js/Error (:error excess)))
+            (is (string/includes? (.-message (:error excess)) "scan limits"))
+            (is (= 20 @calls)))
+          (p/catch (fn [error] (is false (.-stack error))))
+          (p/finally done)))))
+
+(deftest graph-health-bounds-name-records-and-total-read-budget
+  (let [alias {:uuid (health-uuid 2) :title (.repeat "x" 1025) :recycled false}
+        page {:uuid (health-uuid 1) :title "Page" :aliases (vec (repeat 49999 alias))}
+        budget (atom {:calls 0 :bytes 33554430})
+        api (fn [& _] #js [])]
+    (is (= 2 (:names_examined (#'mcp-compat/health-alias-groups [page] 1))))
+    (is (thrown? js/Error (#'mcp-compat/health-alias-groups [(update page :aliases conj alias)] 1)))
+    (is (thrown? js/Error (#'mcp-compat/<health-read api (atom {:calls 400 :bytes 0}) "fixture" [] vector?)))
+    (async done
+      (-> (p/let [at-cap (#'mcp-compat/<health-read api budget "fixture" [] vector?)
+                  over-cap (-> (#'mcp-compat/<health-read api budget "fixture" [] vector?)
+                               (p/catch #(hash-map :error %)))]
+            (is (= [] at-cap))
+            (is (instance? js/Error (:error over-cap)))
+            (is (string/includes? (.-message (:error over-cap)) "scan limits")))
+          (p/catch (fn [error] (is false (.-stack error))))
+          (p/finally done)))))
 
 (deftest list-assets-uses-db-api-and-preserves-inventory
   (let [calls (atom [])

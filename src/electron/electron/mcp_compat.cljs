@@ -307,6 +307,7 @@
         :name (:block/name entity)
         :title (:block/title entity)
         :page (:block/page entity)
+        :parent (:block/parent entity)
         :_parent (:block/_parent entity)
         nil)))
 
@@ -2547,7 +2548,7 @@
   {:max_text_length 20000 :max_pages 10000 :max_name_records 50000
    :max_inventory_bytes 8388608 :max_spans 10000 :max_suggestions 100 :max_bytes 65536})
 
-(defn- link-result-bytes [value]
+(defn- mcp-result-bytes [value]
   (.-length (.encode (js/TextEncoder.) (js/JSON.stringify (clj->js value)))))
 
 (defn- <link-pages
@@ -2557,7 +2558,7 @@
                                                          cursor (assoc :cursor cursor))))
                     rows (:matches result)
                     pages (into pages rows)
-                    inventory-bytes (+ inventory-bytes (link-result-bytes rows))
+                    inventory-bytes (+ inventory-bytes (mcp-result-bytes rows))
                     next-cursor (:next_cursor result)]
               (when (or (> (count pages) (:max_pages link-suggestion-limits))
                         (and (:truncated result) (>= (count pages) (:max_pages link-suggestion-limits)))
@@ -2595,6 +2596,11 @@
                              (update :matches conj {:source source :name_uuid name-uuid}))))))
         index names)))
    {} pages))
+
+(defn- link-candidate-pages [pages include-built-ins?]
+  (when-not (every? #(boolean? (:built_in %)) pages)
+    (throw (js/Error. "suggestLinks received missing or invalid built-in metadata")))
+  (if include-built-ins? pages (filterv (complement :built_in) pages)))
 
 (defn- fenced-link-ranges
   [text]
@@ -2717,7 +2723,7 @@
                               (mapv #(update % :matches (fn [matches] (vec (sort-by (juxt :source :name_uuid) matches))))))
               suggestion (assoc span :candidates candidates :ambiguous (> (count candidates) 1))
               next-suggestions (conj suggestions suggestion)]
-          (if (> (link-result-bytes (envelope next-suggestions)) (:max_bytes link-suggestion-limits))
+          (if (> (mcp-result-bytes (envelope next-suggestions)) (:max_bytes link-suggestion-limits))
             (if (empty? suggestions)
               (throw (js/Error. "suggestLinks candidate list exceeds the response limit; no candidates were omitted"))
               (envelope suggestions))
@@ -2727,27 +2733,394 @@
 (defn suggest-links
   [api-fn args]
   (let [text (aget args "text")
-        limit (or (aget args "limit") 20)]
+        limit (or (aget args "limit") 20)
+        include-built-ins? (if (undefined? (aget args "include_built_ins")) false (aget args "include_built_ins"))]
+    (when-not (boolean? include-built-ins?)
+      (throw (js/Error. "suggestLinks include_built_ins must be a boolean")))
     (when-not (and (string? text) (not (string/blank? text))
                    (<= (count text) (:max_text_length link-suggestion-limits))
                    (integer? limit) (<= 1 limit (:max_suggestions link-suggestion-limits)))
       (throw (js/Error. "suggestLinks requires a nonblank draft of at most 20000 UTF-16 units and limit 1..100")))
-    (p/let [pages (<link-pages api-fn {:select ["uuid" "title" "aliases"]})
+    (p/let [pages (<link-pages api-fn {:select ["uuid" "title" "aliases" "built_in"]})
             _ (when (> (reduce + (map #(inc (count (:aliases %))) pages)) (:max_name_records link-suggestion-limits))
                 (throw (js/Error. "suggestLinks exceeds the name-record scan limit; no suggestions returned")))
-            index (link-name-index pages :aliases)
+            index (link-name-index (link-candidate-pages pages include-built-ins?) :aliases)
             spans (link-spans text (keys index))
             result (bounded-link-suggestions spans index limit (count pages))]
       (p/loop [batches (seq (partition-all 31 (distinct (map :text (:suggestions result)))))]
         (if-let [names (first batches)]
           (p/let [fresh (<link-pages api-fn {:name_source "both"
                                             :where {:any (mapv #(hash-map :field "title" :op "equals" :value %) names)}
-                                            :select ["uuid" "title" "matched_names"]})
-                  fresh-index (link-name-index fresh :matched_names)]
+                                            :select ["uuid" "title" "matched_names" "built_in"]})
+                  fresh-index (link-name-index (link-candidate-pages fresh include-built-ins?) :matched_names)]
             (when-not (= (select-keys index names) fresh-index)
               (throw (js/Error. "Graph names changed while suggesting links; rerun against the current graph before using targets")))
             (p/recur (next batches)))
           result)))))
+
+(def ^:private graph-health-limits
+  {:max_sample_limit 20 :max_inventory_rows 10000
+   :max_inventory_bytes 8388608 :max_bytes 65536 :max_name_records 50000
+   :max_inspected_pages 100 :max_recycled_targets 100 :max_choice_properties 50
+   :max_api_calls 400 :max_total_inventory_bytes 33554432})
+
+(def graph-health-default-checks
+  ["duplicate_titles" "tags_without_holders" "properties_without_values"
+   "alias_ambiguity" "unresolved_placeholders"])
+
+(def graph-health-checks
+  (into graph-health-default-checks
+        ["empty_pages" "page_ownership_mismatches" "references_to_recycled" "invalid_choice_values"]))
+
+(defn- <health-read
+  [api-fn budget method args valid?]
+  (when (>= (:calls @budget) (:max_api_calls graph-health-limits))
+    (throw (js/Error. "getGraphHealth exceeds its API-call limit; request fewer checks or scoped page audits")))
+  (swap! budget update :calls inc)
+  (p/let [result (api-fn method args)]
+    (let [error (and result (aget result "error"))]
+      (when error
+        (throw (js/Error. (str error))))
+      (let [payload-size (mcp-result-bytes result)]
+        (swap! budget update :bytes + payload-size)
+        (when (or (> payload-size (:max_inventory_bytes graph-health-limits))
+                  (> (:bytes @budget) (:max_total_inventory_bytes graph-health-limits)))
+          (throw (js/Error. (str "getGraphHealth inventory exceeds scan limits for " method "; no report returned")))))
+      (let [rows (js->clj result :keywordize-keys true)]
+        (when-not (valid? rows)
+          (throw (js/Error. (str "getGraphHealth received an invalid inventory from " method))))
+        rows))))
+
+(defn- <health-inventory
+  [api-fn budget method args valid-row?]
+  (p/let [rows (<health-read api-fn budget method args
+                            #(and (vector? %) (every? valid-row? %)))]
+    (let [row-count (count rows)]
+      (when (> row-count (:max_inventory_rows graph-health-limits))
+        (throw (js/Error. (str "getGraphHealth inventory exceeds scan limits for " method "; no report returned"))))
+      rows)))
+
+(defn- <health-entities
+  [api-fn budget options]
+  (letfn [(read-page [cursor rows seen]
+            (p/let [result (<health-read api-fn budget "logseq.DB.findEntities"
+                                         [(clj->js (cond-> (assoc options :limit 1000)
+                                                     cursor (assoc :cursor cursor)))]
+                                         #(and (map? %) (vector? (:matches %))
+                                               (every? (fn [row] (and (map? row) (common-util/uuid-string? (:uuid row))
+                                                                      (string? (:title row)))) (:matches %))
+                                               (= (:count %) (count (:matches %)))
+                                               (boolean? (:truncated %))))]
+              (let [all-rows (into rows (:matches result))
+                    next-cursor (:next_cursor result)]
+                (when (or (> (count all-rows) (:max_inventory_rows graph-health-limits))
+                          (and (:truncated result) (>= (count all-rows) (:max_inventory_rows graph-health-limits))))
+                  (throw (js/Error. "getGraphHealth findEntities inventory exceeds scan limits; no report returned")))
+                (if (:truncated result)
+                  (do
+                    (when (or (empty? (:matches result)) (not (map? next-cursor)) (contains? seen next-cursor))
+                      (throw (js/Error. "getGraphHealth received invalid findEntities pagination")))
+                    (read-page next-cursor all-rows (conj seen next-cursor)))
+                  all-rows))))]
+    (read-page nil [] #{})))
+
+(defn- health-sample
+  [rows sample-limit]
+  {:count (count rows)
+   :examples (vec (take sample-limit rows))
+   :truncated (> (count rows) sample-limit)})
+
+(defn- health-user-sample [rows sample-limit]
+  (when-not (every? #(boolean? (:built_in %)) rows)
+    (throw (js/Error. "getGraphHealth received missing or invalid built-in metadata")))
+  (let [built-ins (filterv :built_in rows)
+        users (filterv (complement :built_in) rows)]
+    (assoc (health-sample (mapv #(dissoc % :built_in) users) sample-limit)
+           :built_in_count (count built-ins)
+           :built_in_examples (mapv #(dissoc % :built_in) (take sample-limit built-ins))
+           :built_in_truncated (> (count built-ins) sample-limit))))
+
+(defn- health-alias-groups [pages sample-limit]
+  (when-not (every? #(and (map? %) (common-util/uuid-string? (:uuid %))
+                          (string? (:title %)) (vector? (:aliases %))) pages)
+    (throw (js/Error. "getGraphHealth received invalid live page/alias data")))
+  (when (> (reduce + (map #(inc (count (:aliases %))) pages)) (:max_name_records graph-health-limits))
+    (throw (js/Error. "getGraphHealth exceeds its name-record scan limit; no report returned")))
+  (let [index (reduce (fn [index {:keys [uuid title aliases]}]
+                        (reduce (fn [index [name source]]
+                                  (when-not (and (map? name) (common-util/uuid-string? (:uuid name))
+                                                 (string? (:title name)) (false? (:recycled name)))
+                                    (throw (js/Error. "getGraphHealth received invalid live alias data")))
+                                  (if (string/blank? (:title name))
+                                    index
+                                    (update-in index [(:title name) uuid]
+                                               (fn [candidate]
+                                                 (-> (or candidate {:uuid uuid :title title :matches #{}})
+                                                     (update :matches conj {:source source :name_uuid (:uuid name)}))))))
+                                index
+                                (cons [{:uuid uuid :title title :recycled false} "title"]
+                                      (map #(vector % "alias") aliases))))
+                      {} pages)
+        groups (->> index
+                    (map (fn [[name candidates]]
+                           (let [alias-uuids (set (for [candidate (vals candidates)
+                                                       match (:matches candidate)
+                                                       :when (= "alias" (:source match))]
+                                                   (:name_uuid match)))]
+                             [name (into {}
+                                         (keep (fn [[uuid candidate]]
+                                                 (let [matches (if (contains? alias-uuids uuid)
+                                                                 (set (remove #(= "title" (:source %)) (:matches candidate)))
+                                                                 (:matches candidate))]
+                                                   (when (seq matches)
+                                                     [uuid (assoc candidate :matches matches)]))))
+                                         candidates)])))
+                    (filter (fn [[_ candidates]]
+                              (and (> (count candidates) 1)
+                                   (some #(some (fn [match] (= "alias" (:source match))) (:matches %))
+                                         (vals candidates)))))
+                    (sort-by key)
+                    (mapv (fn [[name candidates]]
+                            {:name name :candidate_count (count candidates)
+                             :candidates (mapv #(let [matches (sort-by (juxt :source :name_uuid) (:matches %))]
+                                                  (assoc % :matches (vec (take sample-limit matches))
+                                                         :match_count (count matches)
+                                                         :matches_truncated (> (count matches) sample-limit)))
+                                               (take sample-limit (sort-by :uuid (vals candidates))))
+                             :truncated (> (count candidates) sample-limit)})))]
+    (assoc (health-sample groups sample-limit) :names_examined (count index))))
+
+(defn- health-placeholders [blocks titles sample-limit]
+  (let [index (group-by (juxt :kind :title) (remove :recycled titles))
+        markers (->> blocks
+                     (mapcat (fn [{:keys [uuid title page_uuid]}]
+                               (when-not (and (common-util/uuid-string? uuid) (string? title))
+                                 (throw (js/Error. "getGraphHealth received invalid placeholder block data")))
+                               (for [[[kind name] occurrences]
+                                     (frequencies (map #(vec (rest %)) (re-seq #"\{\{(link|tag):([^}]+)\}\}" title)))
+                                     :let [candidates (sort-by :uuid (get index [(if (= kind "link") "page" "tag") name]))]]
+                                 {:block_uuid uuid :page_uuid page_uuid :kind kind :name name :occurrences occurrences
+                                  :resolution (case (count candidates) 0 "missing" 1 "resolvable" "ambiguous")
+                                  :candidate_count (count candidates)
+                                  :candidates (mapv #(select-keys % [:uuid :title]) (take sample-limit candidates))
+                                  :truncated (> (count candidates) sample-limit)})))
+                     (sort-by (juxt :block_uuid :kind :name))
+                     vec)]
+    (when (> (count markers) (:max_inventory_rows graph-health-limits))
+      (throw (js/Error. "getGraphHealth exceeds its placeholder scan limit; no report returned")))
+    (assoc (health-sample markers sample-limit)
+           :block_count (count (set (map :block_uuid markers)))
+           :occurrence_count (reduce + (map :occurrences markers)))))
+
+(defn- health-structural-page [root-uuid blocks block]
+  (loop [node block seen #{}]
+    (let [parent-uuid (page-stats-field (page-stats-field node :parent) :uuid)]
+      (cond
+        (= root-uuid parent-uuid) root-uuid
+        (or (nil? parent-uuid) (contains? seen parent-uuid) (not (contains? blocks parent-uuid)))
+        (throw (js/Error. "getGraphHealth received incomplete or cyclic page ancestry; no report returned"))
+        (page-stats-field (get blocks parent-uuid) :name) parent-uuid
+        :else (recur (get blocks parent-uuid) (conj seen parent-uuid))))))
+
+(defn- <health-page-audits [api-fn budget pages checks sample-limit]
+  (p/loop [remaining pages empty-pages [] mismatches []]
+    (if-let [{:keys [uuid title] :as page} (first remaining)]
+      (p/let [stats (when (contains? checks "empty_pages")
+                      (<health-read api-fn budget "logseq.DB.getPageStats" [uuid]
+                                    #(and (map? %) (= uuid (:page_uuid %))
+                                          (every? (fn [field] (let [value (get % field)]
+                                                               (and (integer? value) (<= 0 value))))
+                                                  [:content_blocks :own_blocks :empty_blocks :refs :tag_holders :property_values])
+                                          (vector? (:aliases %)))))
+              blocks (when (contains? checks "page_ownership_mismatches")
+                       (<health-inventory api-fn budget "logseq.DB.getPageBlockUUIDs" [uuid]
+                                           #(and (map? %) (common-util/uuid-string? (page-stats-field % :uuid)))))]
+        (let [empty-page? (and stats (zero? (:content_blocks stats))
+                          (zero? (+ (:refs stats) (:tag_holders stats) (:property_values stats)))
+                          (nil? (:is_alias_of stats)) (empty? (:aliases stats)))
+              by-uuid (into {} (map #(vector (page-stats-field % :uuid) %) blocks))
+              inconsistent (keep (fn [block]
+                                   (when-let [owner-uuid (page-stats-field (page-stats-field block :page) :uuid)]
+                                     (let [expected (health-structural-page uuid by-uuid block)]
+                                       (when (not= expected owner-uuid)
+                                         {:page_uuid uuid :block_uuid (page-stats-field block :uuid)
+                                          :stored_page_uuid owner-uuid :expected_page_uuid expected}))))
+                                 blocks)]
+          (p/recur (rest remaining)
+                   (cond-> empty-pages empty-page? (conj (merge {:uuid uuid :title title :built_in (:built_in page)}
+                                                           (select-keys stats [:own_blocks :empty_blocks :content_blocks]))))
+                   (into mismatches inconsistent))))
+      (cond-> {}
+        (contains? checks "empty_pages")
+        (assoc :empty_pages (assoc (health-user-sample empty-pages sample-limit) :pages_scanned (count pages)))
+        (contains? checks "page_ownership_mismatches")
+        (assoc :page_ownership_mismatches (assoc (health-sample (vec (distinct mismatches)) sample-limit)
+                                                :pages_scanned (count pages)
+                                                :distinct_block_count (count (set (map :block_uuid mismatches)))))))))
+
+(defn- <health-recycled-references [api-fn budget sample-limit]
+  (p/let [targets (<health-inventory api-fn budget "logseq.DB.listRecycled" []
+                                      #(and (map? %) (common-util/uuid-string? (page-stats-field % :uuid))))]
+    (if (> (count targets) (:max_recycled_targets graph-health-limits))
+      (throw (js/Error. "getGraphHealth exceeds its recycled-target limit; use listRecycled and targeted findBacklinks"))
+      (p/loop [remaining (sort-by #(page-stats-field % :uuid) targets) findings []]
+        (if-let [target (first remaining)]
+          (p/let [uuid (page-stats-field target :uuid)
+                  links (<health-read api-fn budget "logseq.DB.getBacklinks" [uuid #js {:include_metadata true}]
+                                      #(and (map? %) (= uuid (:target_uuid %))
+                                            (every? (fn [field] (and (vector? (get % field)) (every? map? (get % field))))
+                                                    [:refs :tagged :property_values])
+                                            (= (:total %) (+ (count (:refs %)) (count (:tagged %)) (count (:property_values %))))))]
+            (let [references (vec (concat (map #(hash-map :relation "reference" :holder %) (:refs links))
+                                          (map #(hash-map :relation "tag_holder" :holder %) (:tagged links))
+                                          (->> (:property_values links)
+                                               (remove #(or (contains? #{":logseq.property.recycle/original-page"
+                                                                          ":logseq.property.recycle/original-parent"}
+                                                                        (get-in % [:property :ident]))
+                                                            (and (= ":logseq.property/view-for" (get-in % [:property :ident]))
+                                                                 (built-in-reference-view? (:holder %)))))
+                                               (map #(assoc % :relation "property_value")))))]
+              (when (> (:total links) (:max_inventory_rows graph-health-limits))
+                (throw (js/Error. "getGraphHealth recycled references exceed scan limits; no report returned")))
+              (p/recur (rest remaining)
+                       (cond-> findings (seq references)
+                         (conj {:uuid uuid :title (page-stats-field target :title)
+                                :reference_count (count references)
+                                :references (mapv #(-> %
+                                                       (update :holder select-keys [:uuid :title])
+                                                       (cond-> (:property %) (update :property select-keys [:ident :title])))
+                                                  (take sample-limit references))
+                                :truncated (> (count references) sample-limit)})))))
+          (assoc (health-sample findings sample-limit)
+                 :targets_scanned (count targets)
+                 :reference_count (reduce + (map :reference_count findings))))))))
+
+(defn- <health-choice-values [api-fn budget sample-limit]
+  (p/let [choices (<health-inventory api-fn budget "logseq.DB.getClosedValues" [#js {:include_metadata true}]
+                                     #(and (vector? %) (= 2 (count %)) (every? map? %)
+                                           (string? (:ident (first %))) (integer? (:id (second %)))))
+          by-property (group-by #(-> % first :ident) choices)]
+    (if (> (count by-property) (:max_choice_properties graph-health-limits))
+      (throw (js/Error. "getGraphHealth exceeds its choice-property limit; use listClosedValues and targeted getProperyUsers"))
+      (p/loop [remaining (sort-by key by-property) findings [] unchecked [] inspected 0]
+        (if-let [[ident entries] (first remaining)]
+          (let [property (ffirst entries)
+                ref? (contains? #{":db.type/ref" "db.type/ref"} (:valueType property))
+                allowed (set (keep (fn [[_ value]]
+                                     (when (nil? (get value (keyword ":logseq.property/deleted-at"))) (:id value)))
+                                   entries))
+                property-ident (str ":" (string/replace-first ident #"^:" ""))]
+            (when-not (query-ident property-ident)
+              (throw (js/Error. "getGraphHealth received an invalid closed-choice property ident")))
+            (if-not ref?
+              (p/recur (rest remaining) findings
+                       (conj unchecked {:ident ident :reason "Non-reference choice storage is not validated"}) inspected)
+              (p/let [users (<health-inventory api-fn budget "logseq.DB.getPropertyUsers" [property-ident]
+                                                #(and (map? %) (map? (:holder %)) (contains? % :value)))]
+                (let [invalid (filterv #(not (contains? allowed (:value %))) users)]
+                  (p/recur (rest remaining)
+                           (into findings (map #(hash-map :property_ident ident
+                                                          :holder (select-keys (:holder %) [:uuid :title])
+                                                          :value (:value %)
+                                                          :value_entity (select-keys (:value_entity %) [:id :ident :title]))
+                                               invalid))
+                           unchecked (inc inspected))))))
+          (assoc (health-sample findings sample-limit)
+                 :properties_scanned inspected :validation_complete (empty? unchecked)
+                 :unchecked_property_count (count unchecked)
+                 :unchecked_properties (vec (take sample-limit unchecked))
+                 :unchecked_properties_truncated (> (count unchecked) sample-limit)
+                 :scope "Reference-valued property membership in non-recycled declared choices; not class-scoped exclusions or general type/schema validation"))))))
+
+(defn get-graph-health
+  [api-fn args]
+  (let [sample-limit (if (undefined? (aget args "sample_limit")) 5 (aget args "sample_limit"))
+        requested (if (undefined? (aget args "checks")) graph-health-default-checks (js->clj (aget args "checks")))
+        checks (set requested)
+        page-uuids (when-not (undefined? (aget args "page_uuids")) (js->clj (aget args "page_uuids")))
+        page-audits? (some checks ["empty_pages" "page_ownership_mismatches"])
+        budget (atom {:calls 0 :bytes 0})]
+    (when-not (and (integer? sample-limit) (<= 1 sample-limit (:max_sample_limit graph-health-limits)))
+      (throw (js/Error. "getGraphHealth sample_limit must be an integer from 1 to 20")))
+    (when-not (and (vector? requested) (seq requested) (= (count checks) (count requested))
+                   (every? (set graph-health-checks) requested))
+      (throw (js/Error. "getGraphHealth checks must be a nonempty unique list of supported checks")))
+    (when (and (not (undefined? (aget args "page_uuids")))
+               (not (and page-audits? (vector? page-uuids) (seq page-uuids)
+                         (<= (count page-uuids) (:max_inspected_pages graph-health-limits))
+                         (= (count page-uuids) (count (set page-uuids)))
+                         (every? common-util/uuid-string? page-uuids))))
+      (throw (js/Error. "getGraphHealth page_uuids requires page audits and 1..100 unique live page UUIDs")))
+    (p/let [titles (when (some checks ["duplicate_titles" "unresolved_placeholders"])
+                    (<health-inventory api-fn budget "logseq.DB.getTitleInventory" []
+                                     #(and (map? %) (or (nil? (:title %)) (string? (:title %)))
+                                           (string? (:uuid %)) (#{"page" "tag"} (:kind %))
+                                           (boolean? (:recycled %)))))
+            tags (when (checks "tags_without_holders")
+                   (<health-inventory api-fn budget "logseq.DB.getOrphanTags" [#js {:include_metadata true}]
+                                      #(and (map? %) (or (nil? (:title %)) (string? (:title %)))
+                                            (boolean? (:built_in %))
+                                            (or (nil? (:uuid %)) (string? (:uuid %))))))
+            properties (when (checks "properties_without_values")
+                         (<health-inventory api-fn budget "logseq.DB.getOrphanProperties" [#js {:include_metadata true}]
+                                            #(and (map? %) (string? (:ident %))
+                                                  (boolean? (:built_in %))
+                                                  (or (nil? (:title %)) (string? (:title %))))))
+            pages (when (or page-audits? (checks "alias_ambiguity"))
+                    (<health-entities api-fn budget {:kind "page" :state "live"
+                                                     :select (cond-> ["uuid" "title"]
+                                                               (checks "alias_ambiguity") (conj "aliases")
+                                                               (checks "empty_pages") (conj "built_in"))}))
+            blocks (when (checks "unresolved_placeholders")
+                     (<health-entities api-fn budget {:kind "block" :state "live" :select ["uuid" "title" "page_uuid"]
+                                                      :where {:any [{:field "title" :op "contains" :value "{{link:"}
+                                                                    {:field "title" :op "contains" :value "{{tag:"}]}}))
+            audit-pages (when page-audits?
+                          (let [selected (if page-uuids (filterv #(contains? (set page-uuids) (:uuid %)) pages) pages)]
+                            (when (or (> (count selected) (:max_inspected_pages graph-health-limits))
+                                      (and page-uuids (not= (count page-uuids) (count selected))))
+                              (throw (js/Error. "getGraphHealth page audits require at most 100 live pages; scope with page_uuids and verify targets")))
+                            selected))
+            page-reports (when page-audits? (<health-page-audits api-fn budget (sort-by :uuid audit-pages) checks sample-limit))
+            recycled (when (checks "references_to_recycled") (<health-recycled-references api-fn budget sample-limit))
+            choice-values (when (checks "invalid_choice_values") (<health-choice-values api-fn budget sample-limit))
+            groups (->> (group-title-candidates (filterv #(not (string/blank? (:title %))) titles) "exact")
+                        (sort-by #(-> % first :title))
+                        (mapv (fn [members]
+                                {:title (:title (first members))
+                                 :entity_count (count members)
+                                 :entities (->> members
+                                                (sort-by :uuid)
+                                                (take sample-limit)
+                                                (mapv #(select-keys % [:uuid :kind :recycled])))
+                                 :truncated (> (count members) sample-limit)})))
+            reports (cond-> (or page-reports {})
+                      (checks "duplicate_titles")
+                      (assoc :duplicate_titles (assoc (health-sample groups sample-limit)
+                                                       :entity_count (reduce + (map :entity_count groups))))
+                      (checks "tags_without_holders")
+                      (assoc :tags_without_holders (health-user-sample (->> tags (sort-by (juxt :title :uuid :ident))
+                                                                      (mapv #(select-keys % [:uuid :title :ident :built_in])))
+                                                                 sample-limit))
+                      (checks "properties_without_values")
+                      (assoc :properties_without_values (health-user-sample (->> properties (sort-by :ident)
+                                                                           (mapv #(select-keys % [:ident :title :type :built_in])))
+                                                                      sample-limit))
+                      (checks "alias_ambiguity") (assoc :alias_ambiguity (health-alias-groups pages sample-limit))
+                      (checks "unresolved_placeholders") (assoc :unresolved_placeholders (health-placeholders blocks titles sample-limit))
+                      recycled (assoc :references_to_recycled recycled)
+                      choice-values (assoc :invalid_choice_values choice-values))
+            result {:checks reports
+                    :checks_run requested
+                    :title_entities_scanned (when titles (count titles))
+                    :page_uuids (when page-audits? (mapv :uuid audit-pages))
+                    :consistency "independent_reads"
+                    :limits (assoc graph-health-limits :sample_limit sample-limit)
+                    :diagnostic "Observations, not defects or cleanup instructions. Defaults include title collisions, unused definitions, alias ambiguity and literal import placeholders. Other audits are opt-in. Unused tags/properties and empty pages separate built-ins into built_in_count/built_in_examples. Recycle bookkeeping and built-in reference-view ownership relations are excluded from recycled-target references; genuine references remain. Empty pages, ownership mismatches, alias overlap and references to recycled targets may be intentional. Referrers may also be recycled; choice checks do not validate class scopes. Independent reads are not an atomic snapshot; no graph changes were made."}]
+      (do
+        (when (> (mcp-result-bytes result) (:max_bytes graph-health-limits))
+          (throw (js/Error. "getGraphHealth response exceeds its byte limit; lower sample_limit or inspect the detailed tools")))
+        result))))
 
 (defn search-blocks
   [api-fn args]
@@ -2892,6 +3265,9 @@
    :searchBlocks ["logseq.DB.search"]
    :findEntities ["logseq.DB.findEntities"]
    :suggestLinks ["logseq.DB.findEntities"]
+   :getGraphHealth ["logseq.DB.getTitleInventory" "logseq.DB.getOrphanTags" "logseq.DB.getOrphanProperties"
+                    "logseq.DB.findEntities" "logseq.DB.getPageStats" "logseq.DB.getPageBlockUUIDs"
+                    "logseq.DB.listRecycled" "logseq.DB.getBacklinks" "logseq.DB.getClosedValues" "logseq.DB.getPropertyUsers"]
    :listTags ["logseq.DB.listTags"]
    :listProperties ["logseq.DB.listProperties"]
    :getPageUUID ["logseq.DB.datascriptQuery"]
@@ -3113,7 +3489,7 @@
                 version (:version info)
                 body {:graph {:version version
                               :compatibility_target "2.0.2"
-                              :contract_revision "2026-11-10.1"
+                              :contract_revision "2026-11-11.1"
                               :version_matches (= version "2.0.2")
                               :checked_at (/ (.now js/Date) 1000)}
                       :tools tools

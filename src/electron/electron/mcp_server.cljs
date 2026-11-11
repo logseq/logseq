@@ -274,8 +274,8 @@
                              (.describe "Default title. Page-only alias/both matches names declared by a page's alias relations; returns the declaring page, not the alias entity. Without a title filter, alias inventories pages with aliases."))
             :page_uuid (-> (z/string) .uuid .optional)
             :where (-> (entity-filter-schema 4) .optional)
-            :select (-> (z/array (z/enum #js ["uuid" "title" "page_uuid" "page_title" "parent_uuid" "recycled" "aliases" "matched_names"]))
-                        (.min 1) (.max 8) .optional
+            :select (-> (z/array (z/enum #js ["uuid" "title" "page_uuid" "page_title" "parent_uuid" "recycled" "aliases" "matched_names" "built_in"]))
+                        (.min 1) (.max 9) .optional
                         (.describe "Optional aliases lists declared alias UUID/title/recycled records (pages only). matched_names adds UUID/title/source/recycled records for names satisfying the full filter. Ordinary title remains the result entity's own title."))
             :output (-> (z/enum #js ["rows" "count"]) .optional)
             :limit (-> (z/number) .int (.min 1) (.max 1000) .optional)
@@ -303,6 +303,8 @@
                  :description "Read-only link candidates for supplied draft text, not a graph write or content search. Uses live Page-class titles and aliases via findEntities; literal case-sensitive whole-name matches, with Unicode letter/number/mark/underscore boundaries. Skips common Markdown links/images, wiki links, block refs, macros/embeds, inline/fenced code, URLs, tags and angle-bracket markup; conservative masking is not a full renderer/parser. Leftmost non-overlapping spans win, longest at the same start. Returns exclusive-end UTF-16 offsets, exact text, target UUID/title and title/alias evidence; multiple targets remain ambiguous. Title matches on alias entities remain candidates, not implicit redirects. Rechecks returned names against the graph; changed targets fail explicitly. No cache. Defaults to 20 suggestions, max 100; max draft 20000 UTF-16 units. Scans at most 10000 live pages, 50000 name records and 8 MiB of inventory; exceeding a scan cap errors rather than hiding ambiguity. Blank or over-1024-unit names are not suggested. At most 10000 matching spans and 65536 UTF-8 output bytes; truncation may omit later spans, never candidates within a returned span. No page creation, alias mutation or automatic insertion."
                  :annotations #js {:readOnlyHint true :destructiveHint false :openWorldHint false}
                  :inputSchema (-> (z/object #js {:text (-> (z/string) (.min 1) (.max 20000))
+                                                 :include_built_ins (-> (z/boolean) .optional
+                                                                        (.describe "Default false. Include directly flagged built-in declaring pages as suggestion targets."))
                                                  :limit (-> (z/number) .int (.min 1) (.max 100) .optional)})
                                   .strict)}}
    :getContentCapabilities
@@ -579,6 +581,16 @@
                  :description "Report and rank similar page/tag titles with content, block-reference, recycled, and alias evidence. This tool never changes data."
                  :inputSchema #js {:normalize (-> (z/enum #js ["exact" "loose" "fuzzy"]) .optional)
                                    :include_recycled (-> (z/boolean) .optional)}}}
+   :getGraphHealth
+   {:fn mcp-compat/get-graph-health
+    :config #js {:title "Get Graph Health"
+                 :description "Read-only observations, never a health verdict or cleanup authorization. Defaults: duplicate_titles (exact nonblank page/tag titles including recycled), tags_without_holders, properties_without_values, alias_ambiguity (shared live aliases/title overlap, excluding the alias carrier's own title as a competitor), unresolved_placeholders (literal {{link:...}}/{{tag:...}} markers including resolvable ones). checks replaces the default selection; additionally supports empty_pages (no content, inbound references or aliases), page_ownership_mismatches (stored page differs from nearest structural page ancestor; respects nested/recycled page boundaries; includes expected_page_uuid), references_to_recycled (directly recycled targets excluding recycle original-page/original-parent bookkeeping; genuine self/view references and recycled referrers still count), invalid_choice_values (reference-valued properties using values outside non-recycled declared choices; not class-scoped exclusions or general schema validation; unchecked properties are explicit). page_uuids scopes only empty_pages/page_ownership_mismatches; otherwise those inspect all live pages, max 100. At most 100 recycled targets and 50 choice properties. Counts stay complete per selected check, samples default 5 (1-20), nested lists are sampled too. Per-read 10000 rows/8 MiB, total 32 MiB/400 native calls, name records 50000, response 65536 UTF-8 bytes. Caps fail the entire report, not partial counts. Caps do not bound native execution or transfer. Built-ins, aliases, code examples and child tags can explain findings; independent reads are not atomic. No raw queries, repair or graph writes."
+                 :inputSchema (-> (z/object #js {:sample_limit (-> (z/number) .int (.min 1) (.max 20) .optional)
+                                                 :checks (-> (z/array (z/enum (clj->js mcp-compat/graph-health-checks)))
+                                                             (.min 1) (.max 9) .optional)
+                                                 :page_uuids (-> (z/array (-> (z/string) .uuid)) (.min 1) (.max 100) .optional)})
+                                  .strict)
+                 :annotations #js {:readOnlyHint true :destructiveHint false :openWorldHint false}}}
    :listRecycled
    {:fn mcp-compat/list-recycled
     :config #js {:title "List Recycled"
