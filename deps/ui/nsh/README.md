@@ -280,3 +280,24 @@ runner. The private DB worker, its SQLite/native dependencies, complete resource
 actual App startup, packaged launch, signing and upgrade remain separate gates.
 A successful DLL export probe alone must not be reported as a working Windows
 Logseq application. The guard tests use mocks and do not establish those results.
+
+## Actual application CI boundary
+
+`.github/workflows/nsh-desktop.yml` checks out the immutable LUI provider beside
+Logseq, runs strict actual-App Rust checks and service/factory tests, then invokes
+the staged native build and its real OCaml startup gate on Linux and macOS.
+It packages that exact qualified host with `ui:nsh:package --built-host`, checks
+the archive's source receipt, extracts it outside the checkout, and re-runs the
+real App Headless gate with the archive's actual OCaml library, DB worker and
+resources:
+
+```sh
+python3 deps/ui/nsh/qualify_packaged_startup.py /absolute/Logseq-NSH-archive \
+  --evidence /absolute/packaged-startup.json
+```
+
+The macOS extraction also verifies the packaged code signature. This establishes
+packaged resource/runtime startup, not a native window launch or pixel/UX parity.
+`packaged-startup.json` records those remaining boundaries explicitly. The generic
+LUI Todos package qualifier uses a different application ABI and is not substituted
+for this actual Logseq gate. Windows remains outside this Unix application CI job.

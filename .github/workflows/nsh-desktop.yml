@@ -1,0 +1,121 @@
+name: Actual Logseq NSH desktop
+
+on:
+  push:
+    branches: ['refactor/lui']
+  pull_request:
+    branches: ['refactor/lui']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: logseq-nsh-desktop-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  LUI_REF: 28fcb8d1595f0866ef3c1da448b3b2b6df650d7e
+  RUSTUP_TOOLCHAIN: 1.97.0
+  CARGO_BUILD_JOBS: 2
+  # Keep the platform's final signed/native bytes; the macOS archive stripper
+  # is not used by the qualified host's build path.
+  CARGO_PROFILE_RELEASE_STRIP: none
+
+jobs:
+  native-desktop:
+    name: Actual App build and packaged startup (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-26]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 180
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - name: Linux native development libraries and virtual display
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsqlite3-dev libffi-dev libgmp-dev \
+            libgtk-4-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+            libclang-dev pkg-config fonts-dejavu-core fonts-noto-cjk xvfb dbus-x11
+      - name: macOS native development libraries
+        if: runner.os == 'macOS'
+        run: brew install pkg-config sqlite3 libffi gmp
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: '5.5.1'
+          dune-cache: true
+      - name: Select the active OCaml switch for native subprocesses
+        run: echo "OPAMSWITCH=$(opam switch show)" >> "$GITHUB_ENV"
+      - name: Checkout the exact LUI application provider beside Logseq
+        run: |
+          lui_source="$(dirname "$GITHUB_WORKSPACE")/lui"
+          git clone --no-checkout https://github.com/logseq/lui.git "$lui_source"
+          git -C "$lui_source" checkout --detach "$LUI_REF"
+          test "$(git -C "$lui_source" rev-parse HEAD)" = "$LUI_REF"
+          echo "LUI_SOURCE=$lui_source" >> "$GITHUB_ENV"
+          echo "LUI_SOURCE_ROOT=$lui_source" >> "$GITHUB_ENV"
+      - name: Root stylesheet and native generator dependencies
+        run: pnpm install --frozen-lockfile
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: true
+      - name: Actual worker and application OCaml dependencies
+        run: |
+          (cd deps/db-worker && sh scripts/install-opam-deps.sh)
+          (cd deps/ui && sh scripts/install-opam-deps.sh)
+      - name: Install the pinned native Rust toolchain
+        run: rustup toolchain install 1.97.0 --profile minimal --component rustfmt,clippy
+      - name: Actual native App formatting and strict compiler checks
+        run: |
+          cargo fmt --manifest-path deps/ui/nsh/Cargo.toml --check
+          cargo clippy --locked --manifest-path deps/ui/nsh/Cargo.toml --all-targets -- -D warnings
+      - name: Windows candidate source guards (not Windows qualification)
+        run: python3 -m unittest discover -s deps/ui/nsh -p test_windows_dll_builder.py
+      - name: Actual native factories and host service tests
+        run: cargo test --locked --manifest-path deps/ui/nsh/Cargo.toml --lib --bin nsh-app-logseq
+      - name: Build and qualify the complete staged native application
+        run: |
+          mkdir -p _build/nsh-ci
+          binary=$(bash deps/ui/nsh/build.sh 2> >(tee _build/nsh-ci/build.log >&2))
+          test -f "$binary"
+          node "$LUI_SOURCE_ROOT/tooling/lui_build_receipt.mjs" check --artifact "$binary"
+          printf '%s\n' "$binary" > _build/nsh-ci/binary.txt
+          cp "$binary.lui-build.json" _build/nsh-ci/actual-app.lui-build.json
+          printf 'LUI=%s\nLOGSEQ=%s\n' "$LUI_REF" "$(git rev-parse HEAD)" > _build/nsh-ci/revisions.txt
+      - name: Package the qualified actual native host
+        run: |
+          archive=$(pnpm --silent ui:nsh:package --built-host "$PWD/deps/ui/_build/nsh/logseq-nsh" 2> >(tee _build/nsh-ci/package.log >&2))
+          test -f "$archive"
+          node "$LUI_SOURCE_ROOT/tooling/lui_build_receipt.mjs" check --artifact "$archive"
+          printf '%s\n' "$archive" > _build/nsh-ci/archive.txt
+          cp "$archive.lui-build.json" _build/nsh-ci/package.lui-build.json
+      - name: Qualify actual packaged runtime and resources outside the checkout
+        run: |
+          archive=$(cat _build/nsh-ci/archive.txt)
+          python3 deps/ui/nsh/qualify_packaged_startup.py "$archive" \
+            --evidence _build/nsh-ci/packaged-startup.json \
+            > _build/nsh-ci/packaged-startup.log 2>&1
+      - name: Preserve application build and startup evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: actual-logseq-nsh-${{ matrix.os }}
+          path: |
+            _build/nsh-ci/
+          if-no-files-found: error
