@@ -2,9 +2,10 @@
 //! NSH owns text editing, selection, undo, composition and syntax rendering.
 use super::{boolean, string};
 use lui_nsh::{extensions::ExtensionContext, store::Node};
-use nsh_base::editor::{Editor, EditorApi, EditorEvent, EditorProps};
+use nsh_base::editor::{Editor, EditorEvent, EditorProps};
 use nsh_core::{keymap::When, prelude::*};
 use serde_json::{Map, Value};
+use std::{cell::RefCell, rc::Rc};
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 struct Source {
@@ -50,17 +51,16 @@ pub(super) fn element(context: ExtensionContext) -> AnyElement {
 fn editor_for(context: ExtensionContext, source: Source) -> AnyElement {
     let owner = Owner::current();
     let focused = signal(false);
-    let handle = component_ref::<Editor>();
-    let initial = string(&context, "value");
+    let initial = SharedString::from(string(&context, "value"));
+    // Scalar callback observation only; NSH owns the document, selections and
+    // undo. This needs no second reference, model, or reactive copy effect.
+    let observed = Rc::new(RefCell::new(initial.clone()));
     let read_only_context = context.clone();
     let read_only_source = source.clone();
     let read_only = computed(move || read_only_source.read_only(&read_only_context));
-    let value_context = context.clone();
-    let value_source = source.clone();
-    let language_context = context.clone();
-    let label_context = context.clone();
     let keys_context = context.clone();
     let keys_source = source.clone();
+    let keys_value = observed.clone();
     effect(move || {
         if !focused.get() || read_only.get() {
             return;
@@ -71,6 +71,7 @@ fn editor_for(context: ExtensionContext, source: Source) -> AnyElement {
         {
             let context = keys_context.clone();
             let source = keys_source.clone();
+            let value = keys_value.clone();
             on_key_with(
                 native,
                 KeyOptions {
@@ -79,27 +80,32 @@ fn editor_for(context: ExtensionContext, source: Source) -> AnyElement {
                     ..Default::default()
                 },
                 move |_| {
-                    if owner.is_live()
-                        && Source::read(&context) == source
-                        && let Some(api) = handle.api::<EditorApi>()
-                    {
-                        emit(&context, "key", &api.value(), Some(key));
+                    if owner.is_live() && Source::read(&context) == source {
+                        let value = value.borrow().clone();
+                        emit(&context, "key", &value, Some(key));
                     }
                 },
             );
         }
     });
-    let test_id = format!("lui-{}", context.node.get_untracked().id);
+    let value_context = context.clone();
+    let value_source = source.clone();
+    let value_observation = observed.clone();
+    let language_context = context.clone();
+    let label_context = context.clone();
     let events_context = context.clone();
     let events_source = source.clone();
+    let test_id = format!("lui-{}", context.node.get_untracked().id);
     Editor::element(EditorProps {
-        default_value: Some(SharedString::from(initial)).into(),
+        default_value: Some(initial).into(),
         value: Prop::bind(move || {
-            // Query execution snapshots must not replace the draft being edited.
+            // Query execution snapshots must not replace the native draft.
             if value_source.role == "query" && focused.get() {
                 None
             } else {
-                Some(SharedString::from(string(&value_context, "value")))
+                let value = SharedString::from(string(&value_context, "value"));
+                *value_observation.borrow_mut() = value.clone();
+                Some(value)
             }
         }),
         language: Prop::bind(move || language(&string(&language_context, "lang"))),
@@ -119,27 +125,27 @@ fn editor_for(context: ExtensionContext, source: Source) -> AnyElement {
             return;
         }
         match event {
-            EditorEvent::Change(value) => emit(&events_context, "input", value, None),
+            EditorEvent::Change(value) => {
+                *observed.borrow_mut() = value.clone();
+                emit(&events_context, "input", value, None);
+            }
             EditorEvent::Focus => {
                 focused.set(true);
-                if events_source.role == "block"
-                    && let Some(api) = handle.api::<EditorApi>()
-                {
-                    emit(&events_context, "focus", &api.value(), None);
+                if events_source.role == "block" {
+                    let value = observed.borrow().clone();
+                    emit(&events_context, "focus", &value, None);
                 }
             }
             EditorEvent::Blur => {
+                let value = observed.borrow().clone();
                 focused.set(false);
-                if events_source.role == "block"
-                    && let Some(api) = handle.api::<EditorApi>()
-                {
-                    emit(&events_context, "blur", &api.value(), None);
+                if events_source.role == "block" {
+                    emit(&events_context, "blur", &value, None);
                 }
             }
             _ => {}
         }
     })
-    .component_ref(&handle)
     .element_ref(&context.reference)
     .test_id(&test_id)
     .w_full()
