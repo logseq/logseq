@@ -95,6 +95,7 @@ fn editor_for(context: ExtensionContext, source: Source) -> AnyElement {
             );
         }
     });
+    let test_id = format!("lui-{}", context.node.get_untracked().id);
     editor()
         .default_value(initial)
         .value(move || {
@@ -142,6 +143,7 @@ fn editor_for(context: ExtensionContext, source: Source) -> AnyElement {
         })
         .component_ref(&handle)
         .element_ref(&context.reference)
+        .test_id(&test_id)
         .w_full()
         .into_element()
 }
