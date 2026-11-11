@@ -1,5 +1,6 @@
 //! Native implementations of the application's canonical extension schemas.
 mod codemirror;
+mod editor;
 mod raw;
 mod raw_style;
 
@@ -35,6 +36,19 @@ pub fn register_raw(builder: ExtensionBuilder, schema: Schema) -> Result<Extensi
         .validate(&identifier, raw::validate)
 }
 
+/// Register the native input sink for the existing authoritative block editor.
+pub fn register_editor(
+    builder: ExtensionBuilder,
+    schema: Schema,
+) -> Result<ExtensionBuilder, String> {
+    if schema.identifier != "logseq-editor" {
+        return Err("block editor registration requires its canonical app schema".into());
+    }
+    builder
+        .register(schema, editor::element)?
+        .validate("logseq-editor", editor::validate)
+}
+
 fn string(context: &ExtensionContext, name: &str) -> String {
     context
         .property(name)
@@ -50,3 +64,6 @@ fn boolean(context: &ExtensionContext, name: &str) -> bool {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod raw_tests;

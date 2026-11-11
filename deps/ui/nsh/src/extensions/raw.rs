@@ -324,7 +324,7 @@ fn host<E: Element + Interactive + Accessible>(
                 );
             }
         })
-        .on_mouse_down(move |event: &nsh_core::MouseEvent| {
+        .on_press_down(move |event: &nsh_core::PressEvent| {
             emit_dom(
                 &down,
                 owner,
@@ -340,8 +340,12 @@ fn host<E: Element + Interactive + Accessible>(
                 pointer(event.page_position, event.modifiers),
             )
         })
-        .on_mouse_enter(move || emit_dom(&enter, owner, "mouseenter", json!({})))
-        .on_mouse_leave(move || emit_dom(&leave, owner, "mouseleave", json!({})))
+        .on_mouse_enter(move |_: &nsh_core::MouseEvent| {
+            emit_dom(&enter, owner, "mouseenter", json!({}))
+        })
+        .on_mouse_leave(move |_: &nsh_core::MouseEvent| {
+            emit_dom(&leave, owner, "mouseleave", json!({}))
+        })
         .on_context_menu(move |event: &ContextMenuEvent| {
             emit_dom(
                 &menu,
