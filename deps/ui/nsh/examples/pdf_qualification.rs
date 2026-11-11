@@ -401,7 +401,7 @@ mod macos {
                 pending.extend(view.subviews().iter());
             }
         }
-        found.ok_or("own native PDFView is not attached")
+        found.ok_or_else(|| "own native PDFView is not attached".to_owned())
     }
 
     fn inspect_main(action: Inspection) -> Result<Value, String> {
