@@ -116,3 +116,29 @@ filesystem I/O or selector tree. Existing typed asset Images already use the
 absolute paths supplied by OCaml's Asset_store; this change does not invent a
 new canonical Image property or wire ordinal. PDF viewing is a separate native
 extension and is not represented by an image placeholder.
+
+
+### NSH header More uses the native attached Menu
+
+On `NshHost`, `Chrome.dots_btn` now permanently attaches a canonical
+`ContextMenu` to its retained Button. The existing desktop adapter lowers that
+pair to the public NSH `Menu` trigger slot. NSH owns opening, arrow navigation,
+activation, outside/Escape dismissal and focus restoration. Pressing More no
+longer sets `Model.page_menu`; its existing page/global action callbacks remain
+unchanged. Web and the other maintained hosts retain their external anchored
+popover and controlled `Page_menu_set` behavior.
+
+For example, native header code uses `dots_btn ms`, with the existing model
+signal, instead of dispatching `Page_menu_set (Some (...))` to open an external
+role-menu Popover. The bounded menu list is reconciled on existing model
+notifications, refreshing page/auth actions without a new store or controller;
+stable keys preserve the trigger and Menu owner. Publishing permission loads
+into a disabled retained MenuItem. The native signed-in account container is a
+semantic MenuItem, with its existing email/visibility/logout controls retained.
+
+Native placement follows NSH's trigger, collision and motion policies; the old
+Web-specific -33pt alignment adjustment is not applied. Generic externally
+anchored role-menu popovers remain unsupported, including separate property and
+view menus; this change qualifies only the header producer. The actual app
+startup gate now opens More, requires Settings and Appearance, dismisses using
+native Escape, reopens, and verifies trigger/journal-body identities.

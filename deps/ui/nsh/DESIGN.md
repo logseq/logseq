@@ -43,3 +43,15 @@ Inner opacity/transform recipes remain with their native transition owner when
 those supported properties actually change; they are not presented as native
 grid-track animation. Verify expand/collapse, editor retention and focus behavior
 in the real app after the body startup gate passes.
+
+
+## Header More menu
+
+The existing chrome Button permanently owns its attached native Menu; there is
+one NSH open/focus/keyboard/dismissal controller. Page/global action recipes keep
+their shared theme tokens and canonical MenuItems. Popup entrance/exit and
+reduced-motion policy belong to the existing native Menu parts. No application
+animation timer, viewport positioning loop or secondary popup state is added.
+Verify light/dark, keyboard selection, Escape focus restoration and collision
+placement in the actual native app; the Headless startup gate proves the native
+composition and retained identities, not pixel quality.

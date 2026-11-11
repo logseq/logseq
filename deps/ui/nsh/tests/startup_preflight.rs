@@ -171,6 +171,49 @@ fn mount_actual_application() -> Result<(), String> {
     if startup_body::identity(app.screen()) != Some(body) {
         return Err("restoring viewport remounted the journal body or main scroll".into());
     }
+    // More must exercise the native Menu trigger and dismissal controller. A
+    // generic semantic dismiss event would miss unsupported popup composition.
+    let more_identity = |screen: &nsh_testing::Screen| {
+        screen
+            .layout_nodes()
+            .into_iter()
+            .find(|node| node.test_id.as_deref() == Some("toolbar-dots-btn"))
+            .map(|node| node.id)
+    };
+    let more = more_identity(app.screen()).ok_or("native More trigger is not mounted")?;
+    for _ in 0..2 {
+        app.press("role:button[More]")?;
+        wait_for_chrome(
+            &mut app,
+            "native More menu with Settings and Appearance",
+            Duration::from_secs(10),
+            |screen| {
+                screen.matches("role:menuitem[Settings]") == Ok(true)
+                    && screen.matches("role:menuitem[Appearance]") == Ok(true)
+            },
+        )?;
+        if more_identity(app.screen()) != Some(more)
+            || startup_body::identity(app.screen()) != Some(body)
+        {
+            return Err("opening More remounted its trigger or the journal body".into());
+        }
+        app.press_key("escape")?;
+        wait_for_chrome(
+            &mut app,
+            "native Escape dismissal retains the journal body",
+            Duration::from_secs(10),
+            |screen| {
+                screen.count("role:menuitem[Settings]") == Ok(0)
+                    && screen.count("role:menuitem[Appearance]") == Ok(0)
+                    && startup_body::ready(screen)
+            },
+        )?;
+        if more_identity(app.screen()) != Some(more)
+            || startup_body::identity(app.screen()) != Some(body)
+        {
+            return Err("dismissing More remounted its trigger or the journal body".into());
+        }
+    }
     // Headless owns and joins the engine thread on drop. The process boundary
     // also isolates OCaml's persistent worker from every other Rust test.
     drop(app);
