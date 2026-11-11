@@ -793,6 +793,61 @@ let query_entry_value (entry : query_entry) =
          (Edn_util.keyword "query", entry.query);
        |])
 
+let query_input_bindings query =
+  let rec find_in values =
+    match Vec.pop_front values with
+    | None -> Vec.empty
+    | Some (value, rest) when Edn_util.as_keyword value = Some "in" ->
+        collect Vec.empty rest
+    | Some (_, rest) -> find_in rest
+  and collect bindings values =
+    match Vec.pop_front values with
+    | None -> bindings
+    | Some (value, _) when Option.is_some (Edn_util.as_keyword value) ->
+        bindings
+    | Some (value, rest) -> collect (Vec.push_back bindings value) rest
+  in
+  match Edn_util.as_vector query with
+  | Some values ->
+      find_in values
+      |> Vec.filter (fun value -> Edn_util.as_symbol value <> Some "$")
+  | None -> Vec.empty
+
+let custom_query_value query inputs =
+  let bindings = query_input_bindings query in
+  (* CLI inputs bind % positionally; Desktop carries rules separately. A full
+     input vector includes that slot. Otherwise the worker supplies rules. *)
+  let query_inputs, rules =
+    if
+      Vec.length bindings = Vec.length inputs
+      && Vec.exists (fun value -> Edn_util.as_symbol value = Some "%") bindings
+    then
+      Vec.fold_left
+        (fun (values, current_rules) (binding, value) ->
+          if Edn_util.as_symbol binding = Some "%" then
+            let rules_value =
+              match Edn_util.as_seq value with
+              | Some rule_values -> Edn_util.vector_vec rule_values
+              | None -> value
+            in
+            (values, Some rules_value)
+          else (Vec.push_back values value, current_rules))
+        (Vec.empty, None)
+        (Vec.combine bindings inputs)
+    else (inputs, None)
+  in
+  let fields =
+    Vec.of_array
+      [|
+        (Edn_util.keyword "query", query);
+        (Edn_util.keyword "inputs", Edn_util.vector_vec query_inputs);
+      |]
+  in
+  Edn_util.map_t_vec
+    (match rules with
+    | Some value -> Vec.push_back fields (Edn_util.keyword "rules", value)
+    | None -> fields)
+
 let query_result mode value =
   Cli_result.ok ~command:Command_id.Query mode
     (Query_result
@@ -821,14 +876,7 @@ let execute_with_mode action config mode =
         | Ok invoke_config ->
             map (query_result mode)
               (Transport.thread_api_query_custom invoke_config ~repo
-                 ~query:
-                   (Edn_util.map_t_vec
-                      (Vec.of_array
-                         [|
-                           (Edn_util.keyword "query", query);
-                           ( Edn_util.keyword "inputs",
-                             Edn_util.vector_vec inputs );
-                         |]))
+                 ~query:(custom_query_value query inputs)
                  ~context:(Edn_util.map_t_vec Vec.empty)))
 
 let meta ?(examples = Vec.empty) id doc =

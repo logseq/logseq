@@ -72,7 +72,9 @@ test('CLI and Desktop advanced queries execute against the same worker database'
     fs.rmSync(rootDir, {recursive: true, force: true});
   });
   const configPath = path.join(rootDir, 'cli.edn');
-  fs.writeFileSync(configPath, '{:custom-queries {"echo" {:query [:find ?v . :in $ ?v :where [(identity ?v) ?x]] :inputs ["value"]}}}');
+  fs.writeFileSync(configPath, `{:custom-queries {
+    "echo" {:query [:find ?v . :in $ ?v :where [(identity ?v) ?x]] :inputs ["value"]}
+    "twice" {:query [:find ?y . :in $ % ?x :where (twice ?x ?y)] :inputs ["rules" "value"]}}}`);
   const env = {...process.env, LOGSEQ_CLI_BASE_URL: `http://127.0.0.1:${server.address().port}`};
   async function cli(...args) {
     try {
@@ -86,9 +88,9 @@ test('CLI and Desktop advanced queries execute against the same worker database'
       return {error};
     }
   }
-  function desktop(query, inputs = '[]') {
+  function desktop(query, inputs = '[]', rules) {
     const parsedInputs = read(inputs);
-    let spec = read(`{:kind :datalog :query ${query} :inputs ${inputs}}`);
+    let spec = read(`{:kind :datalog :query ${query} :inputs ${inputs} ${rules ? ':rules ' + rules : ''}}`);
     if (c.some(c.hash_set(read(':today')), parsedInputs)) {
       const day = global.logseq.db.frontend.inputs.resolve_input(c.deref(conn), read(':today'), read('{}'));
       spec = c.assoc.cljs$core$IFn$_invoke$arity$3(spec, read(':today-day'), day);
@@ -137,6 +139,62 @@ test('CLI and Desktop advanced queries execute against the same worker database'
       `[:find ?title .${inClause} :where (parent ?parent ?child) [?parent :block/title "Home"] [?child :block/title ?title] [(= ?title "Child")]]`,
       '[]', '"Child"'));
   }
+  const callerRules = '[[(twice ?x ?y) [(* ?x 2) ?y]]]';
+  for (const [bindings, inputs] of [
+    ['% $ ?x', `[${callerRules} 21]`],
+    ['$ % ?x', `[${callerRules} 21]`],
+    ['$ ?x %', `[21 ${callerRules}]`]
+  ]) {
+    const query = `[:find ?y . :in ${bindings} :where (twice ?x ?y)]`;
+    await t.test(`Desktop caller rules at :in ${bindings}`, () => {
+      assert.equal(print(desktop(query, '[21]', callerRules)), '42');
+    });
+    await t.test(`CLI caller rules at :in ${bindings}`, async () => {
+      const result = await cli('--query', query, '--inputs', inputs);
+      assert.ifError(result.error);
+      assert.equal(print(result.value), print(desktop(query, '[21]', callerRules)));
+      assert.equal(print(result.value), '42');
+    });
+  }
+  await t.test('caller rules preserve collection input bindings', async () => {
+    const query = '[:find [?y ...] :in $ % [?x ...] :where (twice ?x ?y)]';
+    const result = await cli('--query', query, '--inputs', `[${callerRules} [21 22]]`);
+    assert.ifError(result.error);
+    assert.deepEqual(Array.from(c.to_array(result.value)).sort(), [42, 44]);
+    assert.equal(print(result.value), print(desktop(query, '[[21 22]]', callerRules)));
+  });
+  const middleBuiltIn = '[:find ?title . :in $ % ?parent :where (parent ?parent ?child) [?child :block/title ?title] [(= ?title "Child")]]';
+  await t.test('Desktop inserts discovered rules before ordinary inputs', () => {
+    assert.equal(print(desktop(middleBuiltIn, '[1]')), '"Child"');
+  });
+  await t.test('CLI inserts discovered rules before ordinary inputs', () => parity(middleBuiltIn, '[1]', '"Child"'));
+  await t.test('caller rules without ordinary inputs', async () => {
+    const rules = '[[(answer ?n) [(identity 42) ?n]]]';
+    const query = '[:find ?n . :in $ % :where (answer ?n)]';
+    const result = await cli('--query', query, '--inputs', `[${rules}]`);
+    assert.ifError(result.error);
+    assert.equal(print(result.value), print(desktop(query, '[]', rules)));
+    assert.equal(print(result.value), '42');
+  });
+  await t.test('caller rule lists normalize to the Desktop rules vector', async () => {
+    const result = await cli('--query', '[:find ?y . :in $ % ?x :where (twice ?x ?y)]',
+      '--inputs', '[([(twice ?x ?y) [(* ?x 2) ?y]]) 21]');
+    assert.ifError(result.error);
+    assert.equal(print(result.value), '42');
+  });
+  await t.test('caller rules and discovered built-in rules are combined', async () => {
+    const query = '[:find ?y . :in $ % ?x :where (twice ?x ?y) (parent ?p ?c)]';
+    const result = await cli('--query', query, '--inputs', `[${callerRules} 21]`);
+    assert.ifError(result.error);
+    assert.equal(print(result.value), print(desktop(query, '[21]', callerRules)));
+    assert.equal(print(result.value), '42');
+  });
+  await t.test('ordinary vector inputs are not treated as rules', () => parity(echo, '[[21 22]]', '[21 22]'));
+  await t.test('named query keeps positional caller rules', async () => {
+    const result = await cli('--name', 'twice', '--inputs', `[${callerRules} 21]`);
+    assert.ifError(result.error);
+    assert.equal(print(result.value), '42');
+  });
   await t.test('queries without inputs', () => parity('[:find ?title . :where [?e :block/title ?title] [(= ?title "Home")]]', '[]', '"Home"'));
   for (const input of [':current-page', ':query-page', ':current-block', ':parent-block']) {
     await t.test(`${input} requires explicit context`, async () => {
