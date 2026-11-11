@@ -222,10 +222,12 @@
       (is (true? (:logseq.property/hide-empty-value (d/entity @conn :user.property/hide-empty))))
       (is (contains? (full-ids (worker-property/display-properties @conn (d/entity @conn (:db/id blk)) {} false))
                      :user.property/hide-empty)))
-    (testing "state-hide-empty keeps a hidden-by-default property that has a value"
-      (is (contains? (full-ids (worker-property/display-properties
-                                db blk {:state-hide-empty-properties? true} false))
-                     :user.property/hidden)))
+    (testing "state-hide-empty still hides a hidden-by-default property that has a value"
+      (let [result (worker-property/display-properties
+                    db blk {:state-hide-empty-properties? true} false)]
+        (is (contains? (set (map :property-id (:hidden-properties result)))
+                       :user.property/hidden))
+        (is (not (contains? (full-ids result) :user.property/hidden)))))
     (testing "every tagged class contributes its properties"
       (let [ids (full-ids (worker-property/display-properties db blk {} false))]
         (is (contains? ids :user.property/cpa))
