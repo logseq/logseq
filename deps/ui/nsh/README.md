@@ -310,3 +310,31 @@ packaged resource/runtime startup, not a native window launch or pixel/UX parity
 `packaged-startup.json` records those remaining boundaries explicitly. The generic
 LUI Todos package qualifier uses a different application ABI and is not substituted
 for this actual Logseq gate. Windows remains outside this Unix application CI job.
+
+
+## Native editor text-span policy
+
+Logseq's shared editor emits one standard Text per logical line, with keyed Text
+fragments directly inside it. NSH natively treats nested Text as spans in that
+parent's single attributed-text layout; the span's `display=block` does not
+introduce a separate block, row or native text view. For NshHost only, shown
+markup delimiters therefore use that supported native display value rather than
+browser `inline`. The fragment's source text, keyed identity and line parent are
+retained through reveal changes. Maintained Web, Apple and other hosts retain
+their existing inline value.
+
+Native inline-code fragments inherit the actual parent size (`1em`), retaining
+their monospace family and authored marks. This is an intentional native visual
+policy: NSH exposes inherited size but not an arbitrary fraction of the current
+parent metric. It does not guess a 16-point parent or implement a CSS resolver.
+Other hosts retain their existing `0.9em` code treatment.
+
+`Edit_view_test` records actual line/fragment output for WebHost, SwiftUIHost and
+NshHost, checking those distinct properties and retained IDs through reveal.
+`cargo test --test editor_spans` consumes the corresponding standard LUI shape
+through the real renderer/public Headless engine, checking one attributed line,
+ordered span ranges, live inherited size, reveal and native Text/span identity.
+These are source/consumer checks, not an operating-system IME qualification. The
+shown-run policy alone does not prove concealed-delimiter advance removal;
+`visibility:hidden` and `display:none` have different text-layout semantics and
+require a separate renderer projection check.

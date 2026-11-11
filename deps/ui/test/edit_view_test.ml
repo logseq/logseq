@@ -241,6 +241,58 @@ let test_shape_gated ~env () =
          | None -> false)
        (cls_nodes h "ed-delim"))
 
+(* Native Text children remain spans by parent kind; this is a producer
+   policy, not a generic conversion from browser inline flow into block layout. *)
+let test_native_span_policy ~env () =
+  env.install ();
+  List.iter (fun (profile, nsh) ->
+    let session = S.mount ~profile ~initial:(M.create "a **b** and `code`")
+      ~reducer:(fun model caret -> M.select model ~anchor:caret ~focus:caret)
+      ~view:(fun _ctx source _send ->
+        Lui_elements.column
+          [ Lui_elements.keyed ~source:(reactive Edit_view.lines_of source)
+              ~key:(fun (line : Edit_view.line) -> line.lidx) ~cmp:Int.compare
+              ~mount:(Edit_view.line_view ~on_input:(fun _ -> ())) ]) () in
+    Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose session.S.app)) (fun () ->
+      let all () = DM.all_nodes session.S.tree in
+      let named token = List.filter (fun node ->
+        match DM.string_prop node "style-class" with
+        | Some cls -> DM.contains_ic cls token
+        | None -> false) (all ()) in
+      let line = List.hd (named "ed-line") in
+      let children () = DM.children session.S.tree line.DM.id in
+      let before = List.map (fun node -> node.DM.id) (children ()) in
+      check "the actual model emits code fragments" (named "ed-code" <> []);
+      check "code runs have an explicit host typography policy"
+        (List.for_all (fun node -> DM.string_prop node "font-size"
+          = Some (if nsh then "1em" else "0.9em")) (named "ed-code"));
+      check "concealed delimiter source text remains logical source"
+        (List.for_all (fun node -> DM.string_prop node "display" = Some "none"
+          && (match DM.string_prop node "text" with Some text -> text <> "" | None -> false))
+          (named "ed-delim"));
+      ignore (Lui_app.send session.S.app 4);
+      S.poll session;
+      let shown = List.filter (fun node ->
+        match DM.string_prop node "style-class" with
+        | Some cls -> not (DM.contains_ic cls "ed-hidden")
+        | None -> false) (named "ed-delim") in
+      eqi "strong markup reveals its two source delimiters" 2 (List.length shown);
+      check "shown delimiter display follows the actual host"
+        (List.for_all (fun node -> DM.string_prop node "display"
+          = Some (if nsh then "block" else "inline")) shown);
+      check "fragment spans remain direct children of the same Text line"
+        (line.DM.kind = "text"
+         && List.for_all (fun node -> node.DM.parent = Some line.DM.id) (children ()));
+      check "reveal retains keyed run nodes" (before=List.map (fun node -> node.DM.id) (children ()));
+      ignore (Lui_app.send session.S.app 0);
+      S.poll session;
+      check "concealment retains keyed run nodes" (before=List.map (fun node -> node.DM.id) (children ()));
+      check "host presentation policy never edits the source"
+        ((S.read_model session).M.source = "a **b** and `code`")))
+    [({profile_os=WebOS;profile_host=WebHost},false)
+    ;({profile_os=MacOS;profile_host=SwiftUIHost},false)
+    ;({profile_os=MacOS;profile_host=NshHost},true)]
+
 (* ---------- overlay frame ---------- *)
 
 let test_overlay ~env () =
@@ -528,6 +580,7 @@ let run ~env =
   test_emit_structure ~env ();
   test_incremental ();
   test_shape_gated ~env ();
+  test_native_span_policy ~env ();
   test_overlay ~env ();
   test_sink_events ~env ();
   test_input_mapping ();

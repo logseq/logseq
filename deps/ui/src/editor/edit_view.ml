@@ -385,8 +385,7 @@ let accent_fg = "var(--lx-accent-11, var(--ls-link-text-color))"
 
 (* Typed inline marks keep editing geometry shared across hosts. Keyed
    remounts pick up mark changes; delimiter visibility stays reactive. *)
-let frag_binds cls =
-  let module P = Lui_protocol in
+let frag_binds ~nsh cls =
   List.concat_map
     (fun t ->
       match t with
@@ -396,7 +395,7 @@ let frag_binds cls =
           [ ( Ui_components.Prop.font_family
                 "MonoLisa, 'Fira Code', Monaco, Menlo, Consolas, \
                  'COURIER NEW', monospace" )
-          ; Ui_components.Prop.font_size "0.9em"
+          ; Ui_components.Prop.font_size (if nsh then "1em" else "0.9em")
           ; ( Ui_components.Prop.background
                 "var(--lx-gray-06, var(--ls-page-inline-code-bg-color))"
             )
@@ -422,25 +421,27 @@ let frag_binds cls =
    class toggles go through Ui_parts.class_signal (binds StyleClass on
    the mounted node) *)
 let frag_view ~on_input ~start_off_of (frag_s : frag Signal.signal) : t =
-  match (Signal.sample frag_s).kind with
+ fun context parent ->
+  let nsh = Lui_ui.host context = NshHost in
+  (match (Signal.sample frag_s).kind with
   | Frag_pad ->
       text ~value:(reactive (fun f -> f.text) frag_s)
         ~style_class:"ed-r ed-pad" []
   | Frag_plain ->
       Ui_parts.class_signal frag_s (fun f -> "ed-r" ^ cls_suffix f)
         (Ui_components.with_props
-           (frag_binds (Signal.sample frag_s).cls)
+           (frag_binds ~nsh (Signal.sample frag_s).cls)
            (text ~value:(reactive (fun f -> f.text) frag_s)
               ~style_class:"ed-r" []))
   | Frag_delim ->
       Ui_parts.string_prop DisplayValue
-        ~value:(reactive (fun f -> if f.shown then "inline" else "none") frag_s)
+        ~value:(reactive (fun f -> if not f.shown then "none" else if nsh then "block" else "inline") frag_s)
       (Ui_parts.class_signal frag_s
         (fun f ->
           "ed-r ed-delim" ^ (if f.shown then "" else " ed-hidden")
           ^ cls_suffix f)
         (Ui_components.with_props
-           (frag_binds (Signal.sample frag_s).cls
+           (frag_binds ~nsh (Signal.sample frag_s).cls
             @ if accent_ref (Signal.sample frag_s).cls
               then []
               else
@@ -452,7 +453,7 @@ let frag_view ~on_input ~start_off_of (frag_s : frag Signal.signal) : t =
       Ui_parts.class_signal frag_s
         (fun f -> "ed-r ed-raw" ^ cls_suffix f)
         (Ui_components.with_props
-           (frag_binds (Signal.sample frag_s).cls
+           (frag_binds ~nsh (Signal.sample frag_s).cls
             @ if accent_ref (Signal.sample frag_s).cls
               then []
               else
@@ -474,7 +475,7 @@ let frag_view ~on_input ~start_off_of (frag_s : frag Signal.signal) : t =
       Ui_parts.class_signal frag_s
         (fun f -> "ed-r ed-pill" ^ cls_suffix f)
         (Ui_components.with_props
-           (frag_binds (Signal.sample frag_s).cls
+           (frag_binds ~nsh (Signal.sample frag_s).cls
             @ [ Ui_components.Prop.cursor `pointer ]
             @ if accent_ref (Signal.sample frag_s).cls
               then []
@@ -491,7 +492,8 @@ let frag_view ~on_input ~start_off_of (frag_s : frag Signal.signal) : t =
                 on_input
                   (Edit_input.Pointer
                      (start_off_of (Signal.sample frag_s).idx + 1, false)))
-              []))
+              [])))
+    context parent
 
 let same_rendered_frags before after =
   let rec equal a b =
