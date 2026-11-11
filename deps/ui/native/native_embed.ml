@@ -497,13 +497,16 @@ let initialize_unlocked platform_code host_code (payload : string) =
   Host.set_host_op (fun name payload ->
       platform_request (name ^ "\n" ^ payload));
   Resource_native.reset ();
-  if host_kind = Lui_protocol.GenericHost then
+  if host_kind = Lui_protocol.GenericHost
+     || host_kind = Lui_protocol.NshHost then
     platform_request
       ("app-icons\n"
        ^ Js.Json.stringify
            (Js.Json.JObject
               (List.map (fun (name, svg) -> name, Js.Json.JString svg)
-                 (Icons.app_icon_svgs ()))));
+                 (Icons.app_icon_svgs
+                    ~include_tabler:(host_code = 6 || host_kind = Lui_protocol.NshHost)
+                    ()))));
   (* Platform's request channel ("<op>\n<payload>") shares the same wire
      as Host's — clipboard-write, ui-state, etc. *)
   Platform.host_request := platform_request;
@@ -955,3 +958,15 @@ let () =
   Callback.register "lui_ocaml_root_node" Ffi.root_node;
   Callback.register "lui_ocaml_editor_snapshot" Ffi.editor_snapshot;
   Callback.register "lui_ocaml_resync" Ffi.resync
+
+
+(* Export contracts without starting the graph, daemon, timers or application.
+   The native host records this receipt from the same linked OCaml object. *)
+let extension_schemas () =
+  let schemas =
+    Logseq_el.carrier_schema :: Logseq_editor.schema :: Logseq_codemirror.schema
+    :: List.map Logseq_el.schema_of Logseq_el.tags
+  in
+  "[" ^ String.concat "," (List.map Lui_extension.schema_json schemas) ^ "]"
+
+let () = Callback.register "logseq_lui_extension_schemas" extension_schemas

@@ -283,8 +283,22 @@ let priority_icons =
 (* Native hosts resolve bundled Tabler icons on demand. Only custom
    overrides cross the app-icons channel, preserving their precedence
    without expanding and duplicating the complete bundled table. *)
-let app_icon_svgs ?(ext = []) () : (string * string) list =
-  ext @ (custom_icons @ extension_icons @ status_icons @ priority_icons)
+let app_icon_svgs ?(ext = []) ?(include_tabler = false) ()
+    : (string * string) list =
+  let base =
+    if include_tabler then
+      Icon_tabler_data.tabler_names ()
+      |> List.filter_map (fun name ->
+             match Icon_tabler_data.tabler_children name with
+             | [] -> None
+             | kids -> Some (name, svg_of_children ~size:24. name kids))
+    else []
+  in
+  List.fold_left
+    (fun icons (name, svg) -> Lui_protocol.String_map.add name svg icons)
+    Lui_protocol.String_map.empty
+    (base @ ext @ custom_icons @ extension_icons @ status_icons @ priority_icons)
+  |> Lui_protocol.String_map.bindings
 ;;
 
 (* Web icon registry. Its entries carry data URIs; extension entries
