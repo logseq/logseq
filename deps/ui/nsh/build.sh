@@ -32,6 +32,10 @@ if [[ $(uname -s) == Linux ]]; then
   system_archive_dir=$(dirname "$system_archive")
   export OCAMLPARAM="${OCAMLPARAM:-_},cclib=-L$system_archive_dir"
 fi
+# Refuse stale canonical domains before compiling the application provider.
+# Regeneration is an explicit source change, so a new enum case cannot reuse an
+# old Rust contract that would hide its missing native implementation.
+(cd "$lui_source" && OPAMSWITCH="$switch" "$python_bin" tooling/generate_nsh_contract.py --check) >&2
 (cd "$lui_source" && opam exec --switch="$switch" -- dune build @install) >&2
 (cd "$ui_root" && opam exec --switch="$switch" -- env \
   OCAMLPATH="$lui_source/_build/install/default/lib${OCAMLPATH:+:$OCAMLPATH}" \

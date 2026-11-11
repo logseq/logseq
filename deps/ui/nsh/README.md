@@ -31,6 +31,12 @@ maintained LUI Apple/iOS, Android or Web backends.
 
 ## Actual-application startup gate
 
+The build first checks LUI's generated canonical contract for freshness. Closed
+domains such as display and image fit become Rust enums, and their native
+provider matches are exhaustive: adding a canonical case requires explicit
+provider handling before compilation succeeds. Open style strings still require
+validation, and compilation does not prove all dynamic application paths.
+
 Before writing the build receipt or reporting success, `build.sh` runs
 `cargo test --test startup_preflight` with the newly built OCaml library,
 resources and private DB worker. One isolated child process mounts the actual
