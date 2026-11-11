@@ -1,6 +1,9 @@
 //! User-authored raw markup. Application controls remain typed LUI components.
 use super::{raw_style, string};
-use lui_nsh::{extensions::ExtensionContext, store::Node};
+use lui_nsh::{
+    extensions::{ExtensionContext, ExtensionStyle},
+    store::Node,
+};
 use nsh_core::{element::ImageSrc, keymap::Modifiers, prelude::*};
 use serde_json::{Map, Value, json};
 
@@ -34,16 +37,24 @@ pub(super) fn validate(node: &Node) -> Result<(), String> {
     {
         return Err("raw input type is not supported by the native text/checkbox host".into());
     }
-    raw_style::compile(node, tag, |value| {
-        // Scoped tokens are resolved by the retained renderer theme at mount.
-        // Their expression is application-owned, unlike raw numeric layout.
-        Ok(if value.contains("var(") {
-            "#000000".into()
-        } else {
-            value.into()
-        })
-    })?;
     Ok(())
+}
+
+/// Resolve colors and lengths against the same final scoped theme as built-in
+/// controls before a transaction or theme refresh can publish any native state.
+pub(super) fn validate_themed(node: &Node, style: &ExtensionStyle<'_>) -> Result<(), String> {
+    let identifier = &node
+        .extension
+        .as_ref()
+        .expect("raw extension validator")
+        .identifier;
+    let tag = identifier
+        .strip_prefix("logseq-")
+        .expect("validated raw identifier");
+    if tag == "dom" {
+        return Ok(());
+    }
+    raw_style::compile(node, tag, |value| style.resolve_text(value)).map(|_| ())
 }
 
 pub(super) fn element(context: ExtensionContext) -> AnyElement {

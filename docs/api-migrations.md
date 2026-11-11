@@ -58,3 +58,12 @@ Quit and Close use NSH's native roles; application shutdown remains owned by the
 root's save/close handshake. Standard role labels and shortcuts follow NSH's
 platform implementation. The application menu exists on macOS; other desktops
 place Quit in File. No separate menu focus or keyboard controller is introduced.
+
+Raw layout accepts numeric point strings, CSS `px`, percentages and `auto` where
+the corresponding native property supports them. Scoped color expressions use
+the same final theme resolver as typed controls, including transaction preflight;
+invalid style/theme combinations leave the previous tree and native state intact.
+Raw Button/Checkbox activation uses native semantic events: click payloads identify
+the node and omit unavailable physical pointer coordinates/modifiers. For menus
+or gestures that require those details, use the typed LUI component rather than
+raw button markup. The raw View/Text/Input hosts retain native pointer payloads.

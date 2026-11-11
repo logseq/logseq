@@ -33,7 +33,8 @@ pub fn register_raw(builder: ExtensionBuilder, schema: Schema) -> Result<Extensi
     let identifier = schema.identifier.clone();
     builder
         .register(schema, raw::element)?
-        .validate(&identifier, raw::validate)
+        .validate(&identifier, raw::validate)?
+        .validate_themed(&identifier, raw::validate_themed)
 }
 
 /// Register the native input sink for the existing authoritative block editor.
