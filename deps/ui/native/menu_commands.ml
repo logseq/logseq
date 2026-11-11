@@ -9,7 +9,13 @@ let refresh_labels () =
     (Js.Json.stringify
        (Js.Json.JObject
           [ "toggle-left-sidebar", Js.Json.JString (I18n.t "command.ui/toggle-left-sidebar")
-          ; "documentation", Js.Json.JString (I18n.t "help/docs") ]))
+          ; "documentation", Js.Json.JString (I18n.t "help/docs")
+          ; "file", Js.Json.JString (I18n.t "desktop.menu/file-label")
+          ; "edit", Js.Json.JString (I18n.t "desktop.menu/edit-label")
+          ; "view", Js.Json.JString (I18n.t "desktop.menu/view-label")
+          ; "window", Js.Json.JString (I18n.t "desktop.menu/window-label")
+          ; "help", Js.Json.JString (I18n.t "desktop.menu/help-label")
+          ; "reload", Js.Json.JString (I18n.t "desktop.menu/reload-label") ]))
 
 let install () =
   refresh_labels ();

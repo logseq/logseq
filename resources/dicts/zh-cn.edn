@@ -494,6 +494,13 @@
  :deeplink/open-graph-error "打开图谱失败。图谱 `{1}` 不存在。"
  :deeplink/open-page-error "打开链接失败。页面 `{1}` 不存在于当前图谱中。"
 
+ :desktop.menu/edit-label "编辑"
+ :desktop.menu/file-label "文件"
+ :desktop.menu/help-label "帮助"
+ :desktop.menu/reload-label "重新加载"
+ :desktop.menu/view-label "视图"
+ :desktop.menu/window-label "窗口"
+
  :editor/add-content-first-warning "请先添加一些内容。"
  :editor/auto-heading "自动标题"
  :editor/block-search "搜索块"

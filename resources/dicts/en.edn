@@ -494,6 +494,13 @@
  :deeplink/open-graph-error "Open graph failed. Graph `{1}` doesn't exist."
  :deeplink/open-page-error "Open link failed. Page `{1}` doesn't exist in the graph."
 
+ :desktop.menu/edit-label "Edit"
+ :desktop.menu/file-label "File"
+ :desktop.menu/help-label "Help"
+ :desktop.menu/reload-label "Reload"
+ :desktop.menu/view-label "View"
+ :desktop.menu/window-label "Window"
+
  :editor/add-content-first-warning "Please add some content first."
  :editor/auto-heading "Auto heading"
  :editor/block-search "Search for a block"

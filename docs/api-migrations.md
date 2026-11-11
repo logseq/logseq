@@ -40,3 +40,21 @@ unsupported raw tags is rejected before publication rather than displaying an
 empty surrogate. Use the existing typed LUI component where one is available.
 The `logseq-dom` document-event carrier is intentionally zero-size; document
 routing belongs to the application's typed runtime services, not a second tree.
+
+
+## Native desktop application menus
+
+NSH installs the application, File, Edit, View, Window and Help menus using native
+menu roles. The `application-menu-labels` service now includes translated `file`,
+`edit`, `view`, `window`, `help` and `reload` fields in addition to the existing
+sidebar/documentation labels. The OCaml exporter supplies them from the selected
+dictionary; older MyGo JSON decoding ignores these additive fields. For example,
+rebuilding the native OCaml app before launching NSH supplies the new menu labels;
+a hand-authored two-field payload is rejected rather than shipping blank menus.
+
+Reload (`Mod+R`), Toggle Left Sidebar and Documentation send the existing
+`application-menu-command` platform event with `detail.command`. Edit commands,
+Quit and Close use NSH's native roles; application shutdown remains owned by the
+root's save/close handshake. Standard role labels and shortcuts follow NSH's
+platform implementation. The application menu exists on macOS; other desktops
+place Quit in File. No separate menu focus or keyboard controller is introduced.
