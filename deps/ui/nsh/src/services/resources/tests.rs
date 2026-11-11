@@ -165,7 +165,7 @@ fn GraphSwitch() -> impl IntoElement {
                     2 => "",
                     _ => unreachable!(),
                 };
-                assert_eq!(actual, ImageSrc::from(expected));
+                assert_eq!(actual, ImageSrc::from(expected.to_owned()));
                 assert_eq!(actual.is_empty(), phase == 2);
                 seen.lock().unwrap().push(phase);
                 actual

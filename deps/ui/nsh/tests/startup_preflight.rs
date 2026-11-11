@@ -119,7 +119,7 @@ fn mount_actual_application() -> Result<(), String> {
         startup_body::sidebar_ready,
     )?;
     let body =
-        startup_body::identity(&app.screen()).ok_or("qualified journal identity is missing")?;
+        startup_body::identity(app.screen()).ok_or("qualified journal identity is missing")?;
     // Resize and toggle through real public native input. The source graph,
     // Journals region and main scroll must remain mounted, with a dated title
     // still visible even if asynchronous page metadata repaints that text.
@@ -134,7 +134,7 @@ fn mount_actual_application() -> Result<(), String> {
                 && startup_body::ready(screen)
         },
     )?;
-    if startup_body::identity(&app.screen()) != Some(body) {
+    if startup_body::identity(app.screen()) != Some(body) {
         return Err("viewport resize remounted the journal body or main scroll".into());
     }
     app.press("role:button[Toggle left sidebar]")?;
@@ -144,7 +144,7 @@ fn mount_actual_application() -> Result<(), String> {
         Duration::from_secs(10),
         |screen| screen.count("id:left-sidebar") == Ok(0) && startup_body::ready(screen),
     )?;
-    if startup_body::identity(&app.screen()) != Some(body) {
+    if startup_body::identity(app.screen()) != Some(body) {
         return Err("sidebar collapse remounted the journal body or main scroll".into());
     }
     app.press("role:button[Toggle left sidebar]")?;
@@ -154,7 +154,7 @@ fn mount_actual_application() -> Result<(), String> {
         Duration::from_secs(10),
         |screen| startup_body::sidebar_ready(screen) && startup_body::ready(screen),
     )?;
-    if startup_body::identity(&app.screen()) != Some(body) {
+    if startup_body::identity(app.screen()) != Some(body) {
         return Err("sidebar reopening remounted the journal body or main scroll".into());
     }
     app.set_viewport(Size::new(px(1440.0), px(900.0)))?;
@@ -168,7 +168,7 @@ fn mount_actual_application() -> Result<(), String> {
                 && startup_body::ready(screen)
         },
     )?;
-    if startup_body::identity(&app.screen()) != Some(body) {
+    if startup_body::identity(app.screen()) != Some(body) {
         return Err("restoring viewport remounted the journal body or main scroll".into());
     }
     // Headless owns and joins the engine thread on drop. The process boundary

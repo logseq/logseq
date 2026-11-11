@@ -76,17 +76,10 @@ fn identity_layout(nodes: &[LayoutNode], shown: impl Fn(&str) -> bool) -> Option
             .iter()
             .find(|node| node.test_id.as_deref() == Some(identifier))
     };
-    let Some(space) = named("nsh-right-split-space").filter(|node| measurable(node)) else {
-        return None;
-    };
-    let Some(main) =
-        named("main-content-container").filter(|node| measurable(node) && node.scroll.is_some())
-    else {
-        return None;
-    };
-    let Some(journals) = named("journals").filter(|node| measurable(node)) else {
-        return None;
-    };
+    let space = named("nsh-right-split-space").filter(|node| measurable(node))?;
+    let main =
+        named("main-content-container").filter(|node| measurable(node) && node.scroll.is_some())?;
+    let journals = named("journals").filter(|node| measurable(node))?;
     let index = nodes
         .iter()
         .map(|node| (node.id, node))
