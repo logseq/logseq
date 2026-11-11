@@ -67,3 +67,17 @@ Raw Button/Checkbox activation uses native semantic events: click payloads ident
 the node and omit unavailable physical pointer coordinates/modifiers. For menus
 or gestures that require those details, use the typed LUI component rather than
 raw button markup. The raw View/Text/Input hosts retain native pointer payloads.
+
+### Native theme snapshots include the Web typography scale
+
+The native CSS palette generator now reads `--text-*` declarations directly from
+this application's pinned Tailwind `theme.css`, matching the theme imported by
+`tailwind.all.css`. These source declarations are the lowest-priority root layer;
+authored base/unlayered declarations and application theme overrides retain their
+precedence in light, dark and accent modes. Other Tailwind namespaces are outside
+this typography change.
+
+For example, the existing sidebar `~font_size:"var(--text-sm)"` now resolves from
+its real `0.875rem` stylesheet source instead of failing native startup. No NSH
+fallback font size, new theme API or wire ordinal is introduced. Changing the
+pinned stylesheet's text scale changes the generated palette on the next build.

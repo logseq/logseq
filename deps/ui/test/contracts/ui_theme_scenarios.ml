@@ -190,6 +190,25 @@ let run () =
         (find "--border" ((Ui_theme.css_palette snapshot.Ui_theme.mode ~accent:"logseq").root) = Some border))
     [ (light, "0 0% 100%", "300 1% 92%");
       (dark, "192 100% 11%", "192 100% 14%") ];
+  (* Native theme snapshots inherit the same Tailwind text scale as Web.
+     These declarations belong to the source CSS, not application overrides. *)
+  List.iter (fun dark ->
+    List.iter (fun accent ->
+      let mode = if dark then Ui_theme.Dark else Ui_theme.Light in
+      let palette = Ui_theme.css_palette mode ~accent in
+      let vars = Ui_theme_vars.resolve_layers ~root:palette.root
+        ~body:palette.body ~application:palette.application ~overrides:[] in
+      check "source-owned Tailwind small text size"
+        (Hashtbl.find_opt vars "--text-sm" = Some "0.875rem");
+      check "source-owned Tailwind text sizes remain distinct"
+        (Hashtbl.find_opt vars "--text-xs" = Some "0.75rem"
+         && Hashtbl.find_opt vars "--text-base" = Some "1rem");
+      let overridden = Ui_theme_vars.resolve_layers ~root:palette.root
+        ~body:palette.body ~application:palette.application
+        ~overrides:["--text-sm", "1.125rem"] in
+      check "application text-scale override retains precedence"
+        (Hashtbl.find_opt overridden "--text-sm" = Some "1.125rem"))
+      Ui_theme_css.accents) [false; true];
   (* both variants emit the same var name set — mode flips can never
      leave stale names on the root *)
   let names (s : Ui_theme.snapshot) = List.map fst s.vars |> List.sort compare in

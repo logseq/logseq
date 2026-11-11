@@ -10,6 +10,20 @@ const rules = []
 const accents = new Set(['', 'none', 'logseq'])
 const owned = new Set()
 
+// The Web entry imports Tailwind's theme before the application stylesheets.
+// Keep its typography scale source-owned instead of repeating native constants.
+const tailwindTheme = new URL(import.meta.resolve('tailwindcss/theme.css'))
+const defaults = postcss.parse(await readFile(tailwindTheme, 'utf8'), { from: tailwindTheme.pathname })
+defaults.walkAtRules('theme', rule => {
+  if (!rule.params.split(/\s+/).includes('default')) return
+  const declarations = rule.nodes.filter(node => node.type === 'decl' && node.prop.startsWith('--text-'))
+  if (!declarations.length) return
+  for (const declaration of declarations) owned.add(declaration.prop)
+  // Tailwind's theme layer precedes both authored base and unlayered rules.
+  rules.push({mode: null, accent: null, body: null, scope: 'root', specificity: 0,
+    layer: -1, declarations})
+})
+
 // Compile the authored HTML/body/application palette scopes. Other component scopes remain CSS-owned.
 // Reject a new global selector shape instead of silently inventing native colors.
 function globalScope(selector, rule) {
