@@ -3318,6 +3318,21 @@
     {:pages pages :blocks blocks :walked-by-uuid walked-by-uuid
      :tx-options tx-options :old-properties old-properties}))
 
+(defn- transact-upstream-properties!
+  "Transacts the property changes an import made upstream. A checkbox property whose
+  value no longer parses reports its failure with :reason-code :invalid-property-value."
+  [conn upstream-properties upstream-properties-tx tx-meta options]
+  (try
+    (transact-imported-data! conn upstream-properties-tx tx-meta options)
+    (catch :default error
+      (let [{:keys [entity-id] kind :error} (ex-data error)]
+        (throw (if (and (= :entity-id/syntax kind) (nil? entity-id)
+                        (some (comp #{:checkbox} :from-type val) upstream-properties))
+                 (ex-info (ex-message error)
+                          (assoc (ex-data error) :reason-code :invalid-property-value)
+                          error)
+                 error))))))
+
 (defn <add-file-to-db-graph
   "Parse file and save parsed data to the given db graph.
 
@@ -3380,16 +3395,7 @@
           upstream-properties-tx
           (build-upstream-properties-tx @conn upstream-properties (:import-state options) log-fn)
           upstream-tx-report
-          (try
-            (transact-imported-data! conn upstream-properties-tx tx-meta options)
-            (catch :default error
-              (let [{:keys [entity-id] kind :error} (ex-data error)]
-                (throw (if (and (= :entity-id/syntax kind) (nil? entity-id)
-                                (some (comp #{:checkbox} :from-type val) upstream-properties))
-                         (ex-info (ex-message error)
-                                  (assoc (ex-data error) :reason-code :invalid-property-value)
-                                  error)
-                         error)))))
+          (transact-upstream-properties! conn upstream-properties upstream-properties-tx tx-meta options)
           _ (log-phase-ms! log-fn :upstream upstream-start {:file file})
           _ (log-phase-ms! log-fn :file file-start {:file file})]
     [main-tx-report upstream-tx-report]))
