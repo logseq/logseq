@@ -91,8 +91,7 @@ let dots_btn (ms : Model.t Signal.signal) : t =
             ~accessibility_identifier:"toolbar-dots-btn"
             ~style_class:"toolbar-dots-btn" ~label:(I18n.t "header/more")
             [Icons.icon ~size:20. "dots";
-             context_menu ~key:"page-menu" ~width:256
-               ~style_class:"ui__dropdown-menu-content ls-dots-menu" items])) ms)
+             context_menu ~key:"page-menu" items])) ms)
       context parent
 
 let home_btn ms =
