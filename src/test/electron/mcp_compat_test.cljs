@@ -888,7 +888,11 @@
             (is (= 2 (count @calls)))
             (is (some #(and (= "findEntities" (aget % "name"))
                             (true? (aget % "annotations" "readOnlyHint")))
-                      (array-seq (aget tools "tools")))))
+                      (array-seq (aget tools "tools"))))
+            (let [tool (first (filter #(= "findEntities" (aget % "name")) (array-seq (aget tools "tools"))))]
+              (is (= ["title" "alias" "both"] (js->clj (aget tool "inputSchema" "properties" "name_source" "enum"))))
+              (is (every? (set (js->clj (aget tool "inputSchema" "properties" "select" "items" "enum")))
+                          ["aliases" "matched_names" "built_in"]))))
           (p/catch (fn [error] (is false (.-message error))))
           (p/finally (fn [] (p/let [_ (.close client) _ (.close server)] (js/queueMicrotask done))))))))
 
@@ -957,6 +961,34 @@
           (p/catch (fn [error] (is false (.-stack error))))
           (p/finally done)))))
 
+(deftest suggest-links-filters-built-in-targets-with-explicit-opt-in-and-keeps-html-text
+  (let [{:keys [conn]} (find-entities-fixture)
+        api (link-fixture-api conn (atom []))
+        text "<span title=\"Fixture\">Fixture</span> Library"]
+    (d/transact! conn [{:db/id 200 :block/uuid (uuid "00000000-0000-4000-8000-000000000200")
+                       :block/title "Library" :block/tags [158] :logseq.property/built-in? true}])
+    (doseq [flag [nil "true" 1]]
+      (is (thrown? js/Error (mcp-compat/suggest-links api #js {:text text :include_built_ins flag}))))
+    (async done
+      (-> (p/let [default (mcp-compat/suggest-links api #js {:text text})
+                  included (mcp-compat/suggest-links api #js {:text text :include_built_ins true})
+                  excluded (mcp-compat/suggest-links api #js {:text text :include_built_ins false})
+                  stale (-> (mcp-compat/suggest-links
+                             (fn [method args]
+                               (when (aget (first args) "where")
+                                 (d/transact! conn [[:db/add 160 :logseq.property/built-in? true]]))
+                               (api method args))
+                             #js {:text "Fixture"})
+                            (p/catch #(hash-map :error %)))]
+            (is (= ["Fixture"] (mapv :text (:suggestions default))))
+            (is (= (:suggestions default) (:suggestions excluded)))
+            (is (= ["Fixture" "Library"] (mapv :text (:suggestions included))))
+            (is (= (.indexOf text ">Fixture") (dec (get-in default [:suggestions 0 :start]))))
+            (is (instance? js/Error (:error stale)))
+            (is (string/includes? (.-message (:error stale)) "Graph names changed")))
+          (p/catch (fn [error] (is false (.-stack error))))
+          (p/finally done)))))
+
 (deftest suggest-links-bounds-output-without-dropping-ambiguous-candidates
   (let [{:keys [conn]} (find-entities-fixture)
         _ (add-search-aliases! conn)
@@ -1011,7 +1043,7 @@
 (deftest suggest-links-enforces-scan-limits-and-pagination
   (let [calls (atom 0)
         make-page (fn [id] {:uuid (str "00000000-0000-4000-8000-" (.padStart (str id) 12 "0"))
-                           :title (str "Name " id) :aliases []})
+                           :title (str "Name " id) :aliases [] :built_in false})
         pages (mapv make-page (range 10001))
         api-for (fn [size]
                   (fn [method args]
@@ -1055,10 +1087,16 @@
                   body (js->clj (js/JSON.parse (aget response "content" 0 "text")) :keywordize-keys true)
                   refused (.callTool ^js client #js {:name "suggestLinks"
                                                      :arguments #js {:text "Fixture" :write true}})
+                  bad-flag (.callTool ^js client #js {:name "suggestLinks"
+                                                      :arguments #js {:text "Fixture" :include_built_ins "true"}})
                   tools (.listTools ^js client)]
             (is (not (true? (aget response "isError"))))
             (is (= ["Fixture"] (mapv :text (:suggestions body))))
             (is (true? (aget refused "isError")))
+            (is (true? (aget bad-flag "isError")))
+            (is (some #(and (= "suggestLinks" (aget % "name"))
+                            (= "boolean" (aget % "inputSchema" "properties" "include_built_ins" "type")))
+                      (array-seq (aget tools "tools"))))
             (is (some #(and (= "suggestLinks" (aget % "name"))
                             (true? (aget % "annotations" "readOnlyHint"))
                             (false? (aget % "annotations" "destructiveHint")))
@@ -1090,7 +1128,7 @@
   (let [page-uuid "00000000-0000-4000-8000-000000000160"
         alias {:uuid "00000000-0000-4000-8000-000000000180" :title "Alpha" :recycled false}
         response-for (fn [page] (fn [& _] (clj->js {:matches [page] :count 1 :truncated false})))
-        page {:uuid page-uuid :title "Fixture" :aliases []}]
+        page {:uuid page-uuid :title "Fixture" :aliases [] :built_in false}]
     (async done
       (-> (p/let [names (-> (mcp-compat/suggest-links
                              (response-for (assoc page :aliases (vec (repeat 50000 alias)))) #js {:text "Absent"})
@@ -3188,12 +3226,12 @@
                       (assoc title-row :uuid "page-6" :title nil)
                       (assoc title-row :uuid "page-7" :title "  ")
                       (assoc title-row :uuid "page-8" :title "  ")]
-                     "logseq.DB.getOrphanTags" [{:uuid "tag-z" :title "Z" :ident "tag/Z"}
-                                               {:uuid "tag-a" :title "A" :ident "tag/A"}
-                                               {:uuid "tag-b" :title "B" :ident "tag/B"}]
-                     "logseq.DB.getOrphanProperties" [{:ident ":property/Z" :title "Z" :type "number"}
-                                                     {:ident ":property/A" :title "A" :type "string"}
-                                                     {:ident ":property/B" :title "B" :type "default"}]}]
+                     "logseq.DB.getOrphanTags" [{:uuid "tag-z" :title "Z" :ident "tag/Z" :built_in false}
+                                               {:uuid "tag-a" :title "A" :ident "tag/A" :built_in false}
+                                               {:uuid "tag-b" :title "B" :ident "tag/B" :built_in false}]
+                     "logseq.DB.getOrphanProperties" [{:ident ":property/Z" :title "Z" :type "number" :built_in false}
+                                                     {:ident ":property/A" :title "A" :type "string" :built_in false}
+                                                     {:ident ":property/B" :title "B" :type "default" :built_in false}]}]
     (async done
       (-> (p/let [result (mcp-compat/get-graph-health (health-fixture-api inventories calls) #js {:sample_limit 2})
                   duplicates (get-in result [:checks :duplicate_titles])
@@ -3207,8 +3245,10 @@
               (is (= [3 true] ((juxt :count :truncated) (get-in result [:checks check]))))
               (is (= ["A" "B"] (mapv :title (get-in result [:checks check :examples])))))
             (is (= "independent_reads" (:consistency result)))
-            (is (= [["logseq.DB.getTitleInventory" []] ["logseq.DB.getOrphanTags" []]
-                    ["logseq.DB.getOrphanProperties" []]] (take 3 @calls)))
+            (is (= ["logseq.DB.getTitleInventory" "logseq.DB.getOrphanTags" "logseq.DB.getOrphanProperties"]
+                   (mapv first (take 3 @calls))))
+            (doseq [[_ args] (take 2 (rest @calls))]
+              (is (true? (aget (first args) "include_metadata"))))
             (is (= 5 (count @calls))))
           (p/catch (fn [error] (is false (.-stack error))))
           (p/finally done)))))
@@ -3301,6 +3341,58 @@
 (defn- health-envelope [rows]
   {:matches (vec rows) :count (count rows) :truncated false})
 
+(deftest health-native-metadata-is-opt-in-and-preserves-default-inventories
+  (let [{:keys [conn page-uuid]} (page-fixture)]
+    (d/transact! conn
+                 [{:db/id 210 :block/uuid (uuid (health-uuid 210)) :block/title "Built-in tag"
+                   :db/ident :logseq.class/Unused :block/tags [159] :logseq.property/built-in? true}
+                  {:db/id 211 :block/uuid (uuid (health-uuid 211)) :block/title "Library" :block/tags [159]}
+                  {:db/id 212 :db/ident :logseq.property/Unused :block/title "Built-in property"
+                   :block/tags [157] :logseq.property/built-in? true}
+                  {:db/id 213 :db/ident :plugin.property/Unused :block/title "User property" :block/tags [157]}
+                  {:db/id 214 :db/ident :logseq.property/view-for :block/title "This view belongs to" :block/tags [157]}
+                  {:db/id 215 :block/uuid (uuid (health-uuid 215)) :block/title "Linked references"
+                   :logseq.property.view/feature-type :linked-references :logseq.property/view-for 160}])
+    (doseq [api [db-based-api/get-orphan-tags db-based-api/get-orphan-properties
+                 #(db-based-api/get-backlinks page-uuid %)]
+            options [nil #js [] #js {:include_metadata "yes"} #js {:other true}]]
+      (is (thrown? js/Error (api options))))
+    (async done
+      (-> (p/with-redefs [state/get-current-repo (constantly "health-metadata-fixture")
+                         db-async/<q (fn [_ _ query & inputs]
+                                       (js/Promise.resolve (apply d/q query @conn inputs)))
+                         db-async/<get-all-properties
+                         (fn [& _] (js/Promise.resolve (mapv #(d/pull @conn '[*] %) [212 213])))]
+            (p/let [tags (db-based-api/get-orphan-tags)
+                    tags-disabled (db-based-api/get-orphan-tags #js {:include_metadata false})
+                    tags-omitted (db-based-api/get-orphan-tags js/undefined)
+                    detailed-tags (db-based-api/get-orphan-tags #js {:include_metadata true})
+                    properties (db-based-api/get-orphan-properties)
+                    properties-disabled (db-based-api/get-orphan-properties #js {:include_metadata false})
+                    properties-omitted (db-based-api/get-orphan-properties js/undefined)
+                    detailed-properties (db-based-api/get-orphan-properties #js {:include_metadata true})
+                    links (db-based-api/get-backlinks page-uuid)
+                    links-disabled (db-based-api/get-backlinks page-uuid #js {:include_metadata false})
+                    links-omitted (db-based-api/get-backlinks page-uuid js/undefined)
+                    detailed-links (db-based-api/get-backlinks page-uuid #js {:include_metadata true})]
+              (doseq [[legacy disabled omitted] [[tags tags-disabled tags-omitted]
+                                                 [properties properties-disabled properties-omitted]
+                                                 [links links-disabled links-omitted]]]
+                (is (= (js->clj legacy) (js->clj disabled) (js->clj omitted))))
+              (doseq [[legacy detailed] [[tags detailed-tags] [properties detailed-properties]]]
+                (let [rows (js->clj detailed :keywordize-keys true)]
+                  (is (= #{true false} (set (map :built_in rows)))))
+                (is (= (set (js->clj legacy :keywordize-keys true))
+                       (set (map #(dissoc % :built_in) (js->clj detailed :keywordize-keys true))))))
+              (let [feature :view_feature
+                    detailed (js->clj detailed-links :keywordize-keys true)
+                    legacy (js->clj links :keywordize-keys true)]
+                (is (= "linked-references" (get-in detailed [:property_values 0 :holder feature])))
+                (is (= legacy (update detailed :property_values
+                                       #(mapv (fn [row] (update row :holder dissoc feature)) %)))))))
+          (p/catch (fn [error] (is false (.-stack error))))
+          (p/finally done)))))
+
 (deftest closed-choice-metadata-is-opt-in-and-keeps-legacy-projection
   (let [conn (d/create-conn {:db/ident {:db/unique :db.unique/identity}
                               :block/closed-value-property {:db/valueType :db.type/ref}})]
@@ -3367,7 +3459,7 @@
           (p/finally done)))))
 
 (deftest graph-health-page-audits-exclude-aliases-and-support-explicit-scope
-  (let [pages (mapv #(hash-map :uuid (health-uuid %) :title (str "Page " %)) (range 1 5))
+  (let [pages (mapv #(hash-map :uuid (health-uuid %) :title (str "Page " %) :built_in false) (range 1 5))
         stats (fn [index] {:page_uuid (health-uuid index) :content_blocks 0 :own_blocks 1 :empty_blocks 1
                            :refs 0 :tag_holders 0 :property_values 0 :aliases [] :is_alias_of nil})
         inventories {["logseq.DB.findEntities" "page"] (health-envelope pages)
@@ -3510,6 +3602,62 @@
             (is (= ["logseq.DB.listRecycled" "logseq.DB.getBacklinks" "logseq.DB.getClosedValues" "logseq.DB.getPropertyUsers"]
                    (mapv first @calls)))
             (is (true? (aget (first (second (nth @calls 2))) "include_metadata"))))
+          (p/catch (fn [error] (is false (.-stack error))))
+          (p/finally done)))))
+
+(deftest graph-health-separates-built-ins-with-independent-counts-and-samples
+  (let [rows [{:uuid (health-uuid 1) :title "Built-in A" :ident ":logseq.property/A" :built_in true}
+              {:uuid (health-uuid 2) :title "Built-in B" :ident ":logseq.property/B" :built_in true}
+              {:uuid (health-uuid 3) :title "Library" :ident ":plugin.property/A" :built_in false}
+              {:uuid (health-uuid 4) :title "User" :ident ":plugin.property/B" :built_in false}]
+        inventories (into {"logseq.DB.getOrphanTags" rows
+                            "logseq.DB.getOrphanProperties" rows
+                            ["logseq.DB.findEntities" "page"] (health-envelope rows)}
+                           (map (fn [{:keys [uuid]}]
+                                  [["logseq.DB.getPageStats" uuid]
+                                   {:page_uuid uuid :content_blocks 0 :own_blocks 0 :empty_blocks 0
+                                    :refs 0 :tag_holders 0 :property_values 0 :aliases []}]) rows))
+        checks ["tags_without_holders" "properties_without_values" "empty_pages"]]
+    (async done
+      (-> (p/let [sampled (mcp-compat/get-graph-health (health-fixture-api inventories (atom []))
+                                                      (clj->js {:checks checks :sample_limit 1}))
+                  complete (mcp-compat/get-graph-health (health-fixture-api inventories (atom []))
+                                                       (clj->js {:checks checks :sample_limit 20}))]
+            (doseq [check checks
+                    :let [small (get-in sampled [:checks (keyword check)])
+                          full (get-in complete [:checks (keyword check)])]]
+              (is (= [2 2 true true] ((juxt :count :built_in_count :truncated :built_in_truncated) small)))
+              (is (= ["Library"] (mapv :title (:examples small))))
+              (is (= ["Built-in A"] (mapv :title (:built_in_examples small))))
+              (is (= [2 2 false false] ((juxt :count :built_in_count :truncated :built_in_truncated) full)))
+              (is (= 2 (count (:examples full))))
+              (is (= 2 (count (:built_in_examples full))))))
+          (p/catch (fn [error] (is false (.-stack error))))
+          (p/finally done)))))
+
+(deftest graph-health-excludes-only-built-in-reference-view-ownership
+  (let [target (health-uuid 1)
+        linked {:uuid (health-uuid 2) :title "Not a guessed title" :view_feature "linked-references"}
+        unlinked {:uuid (health-uuid 3) :title "Unlinked references"
+                  ":logseq.property.view/feature-type" ":unlinked-references"}
+        user {:uuid (health-uuid 4) :title "Linked references"
+              ":logseq.property.view/feature-type" ":table"}
+        ownership (fn [holder] {:holder holder :property {:ident ":logseq.property/view-for"}})
+        run (fn [refs values]
+              (mcp-compat/get-graph-health
+               (health-fixture-api {"logseq.DB.listRecycled" [{:uuid target :title "Recycled"}]
+                                    ["logseq.DB.getBacklinks" target]
+                                    {:target_uuid target :total (+ (count refs) (count values))
+                                     :refs refs :tagged [] :property_values values}} (atom []))
+               #js {:checks #js ["references_to_recycled"] :sample_limit 1}))]
+    (async done
+      (-> (p/let [owned (run [] [(ownership linked) (ownership unlinked)])
+                  actual (run [linked] [(ownership linked) (ownership unlinked) (ownership user)
+                                        {:holder linked :property {:ident ":plugin.property/ActualLink"}}])]
+            (is (= [0 0] ((juxt :count :reference_count) (get-in owned [:checks :references_to_recycled]))))
+            (is (= [1 3] ((juxt :count :reference_count) (get-in actual [:checks :references_to_recycled]))))
+            (is (true? (get-in actual [:checks :references_to_recycled :examples 0 :truncated])))
+            (is (= "reference" (get-in actual [:checks :references_to_recycled :examples 0 :references 0 :relation]))))
           (p/catch (fn [error] (is false (.-stack error))))
           (p/finally done)))))
 

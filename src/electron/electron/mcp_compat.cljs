@@ -1357,7 +1357,8 @@
 
 (defn- reference-view-feature
   [entity]
-  (some-> (or (:logseq.property.view/feature-type entity)
+  (some-> (or (:view_feature entity)
+              (:logseq.property.view/feature-type entity)
               (get entity (keyword ":logseq.property.view/feature-type")))
           str
           (string/replace-first #"^:" "")))

@@ -453,7 +453,14 @@
       (let [property-values (->> value-rows
                                  (remove #(inspect-page-structural-property? (second %)))
                                  (mapv (fn [[holder property]]
-                                         {:holder holder :property property})))
+                                         {:holder (if metadata?
+                                                    (let [feature (keyword ":logseq.property.view/feature-type")]
+                                                      (-> holder
+                                                          (dissoc feature)
+                                                          (assoc :view_feature (some-> (get holder feature) str
+                                                                                     (string/replace-first #"^:" "")))))
+                                                    holder)
+                                          :property property})))
             total (+ (count refs) (count tagged) (count property-values))]
         (bean/->js
          (sdk-utils/normalize-keyword-for-json
