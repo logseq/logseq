@@ -863,8 +863,8 @@ let foldable_title ?on_click ?(control = true) ?(collapsed = false) key
     ]
 
 let foldable_content key inner : t =
+  Ui_components.foldable_motion @@
   box ~key:(key ^ "-fc") ~style_class:"ls-foldable-content"
-    ~transition:"grid-template-rows 0.2s ease-in-out"
     [ box ~key:"fci"  [ inner ] ]
 
 (* cljs reference/references -> views/view :linked-references DOM —

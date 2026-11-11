@@ -1495,8 +1495,8 @@ let foldable inst ~key ~title ~(body : t) : t =
     ; Ui_parts.class_signal collapsed_sig
         (fun c ->
           "ls-foldable-content" ^ if c then " is-collapsed" else "")
-        (box ~key:"content" ~grow:1.
-           ~transition:"grid-template-rows 0.2s ease-in-out"
+        (Ui_components.foldable_motion ~collapsed_signal:collapsed_sig @@
+         box ~key:"content" ~grow:1.
            [ box ~style_class:"ls-foldable-content-inner" ~grow:1.
                ~transition:
                  "opacity 0.2s ease-in-out, transform 0.2s ease-in-out"

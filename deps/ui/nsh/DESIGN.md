@@ -30,3 +30,16 @@ The recipe does not add entering/leaving animations, list choreography or
 layout animation. Native light/dark, selection motion, interruption and reduced
 motion need review in the real app after the startup gate passes. Source changes
 or recording-host assertions do not constitute that visual qualification.
+
+## Controlled foldable content
+
+The existing view state owns grouped-content collapse. The shared
+`foldable_motion` recipe maps that same state to native display-none/block on
+NSH, retaining the content's owner and native identities. The layout change is
+immediate, including with reduced motion; no grid-track interpolation, timer,
+replacement collapse controller or new layout animation is introduced. The
+existing Web/mobile grid-template-rows 200ms ease-in-out recipe remains intact.
+Inner opacity/transform recipes remain with their native transition owner when
+those supported properties actually change; they are not presented as native
+grid-track animation. Verify expand/collapse, editor retention and focus behavior
+in the real app after the body startup gate passes.

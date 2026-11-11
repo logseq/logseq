@@ -353,3 +353,19 @@ recipe instead of `column ~transition:Ui_components.block_transition children`.
 The original string remains the non-NSH recipe. This is an application-level
 motion choice, not general support for multiple CSS transition timings in NSH;
 other authored incompatible combinations still fail capability validation.
+
+### NSH grouped-content collapse
+
+`Views_table.foldable` now applies the existing `collapsed_groups` signal to
+native display-none/block through `Ui_components.foldable_motion`. The same
+content node and descendants survive collapse and reopen. NSH changes the
+layout immediately using its supported native visibility policy, so collapsed
+content does not stay interactive merely because the CSS class is unavailable.
+Web and mobile keep the grid-template-rows 200ms ease-in-out transition and
+existing collapsed classes.
+
+Use `Ui_components.foldable_motion ~collapsed_signal (box ~key children)` for
+this retained-content recipe. Omit the optional signal for an always-expanded
+wrapper, as `Page.foldable_content` does. This adaptation does not provide
+arbitrary CSS grid-track animation in NSH and does not alter the application's
+collapse state or introduce another controller.

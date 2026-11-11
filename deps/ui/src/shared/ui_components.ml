@@ -50,6 +50,20 @@ let block_motion (element : t) : t =
             else block_transition)
     element context parent
 
+(* Grid track animation belongs to the CSS host. Native collapse uses the
+   existing controlled state and native visibility, preserving the subtree. *)
+let foldable_motion ?collapsed_signal (element : t) : t =
+ fun context parent ->
+  if Lui_ui.host context = P.NshHost then
+    match collapsed_signal with
+    | Some source ->
+        Ui_parts.string_prop P.DisplayValue
+          ~value:(reactive (fun collapsed -> if collapsed then "none" else "block") source)
+          element context parent
+    | None -> Ui_parts.string_prop P.DisplayValue ~value:"block" element context parent
+  else Ui_parts.string_prop P.Transition ~value:"grid-template-rows 0.2s ease-in-out"
+    element context parent
+
 let foldable_control ?key children : t =
   box ?key ~style_class:"ls-foldable-title-control block-control"
     ~width:22 ~height:22 ~padding:2 ~margin_top:1 ~margin_left:(-27) children
