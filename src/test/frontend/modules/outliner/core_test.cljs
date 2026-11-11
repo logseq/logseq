@@ -249,6 +249,35 @@
                                  {:sibling? false}))
     (is (= [4 5] (get-children 30)))))
 
+(deftest test-move-property-value-and-next-block-keeps-both
+  (testing "a last child that is a property value, with the block after its
+  parent: both are moved, none left out by the page-order sort"
+    (transact-tree! [[22 [[2 [[3] [4]]]
+                          [5]
+                          [30]]]])
+    ;; 4 becomes a value of 2's property, as a property value block is
+    (let [conn (conn/get-db test-db false)
+          property-ident :user.property/steps]
+      (d/transact! conn [{:db/ident :logseq.property/created-from-property
+                          :db/valueType :db.type/ref
+                          :db/cardinality :db.cardinality/one
+                          :db/index true}
+                         {:db/ident property-ident
+                          :db/valueType :db.type/ref
+                          :db/cardinality :db.cardinality/many
+                          :logseq.property/type :default}])
+      (d/transact! conn [{:db/id (:db/id (get-block 4))
+                          :logseq.property/created-from-property
+                          (:db/id (d/entity @conn property-ident))}
+                         [:db/add (:db/id (get-block 2)) property-ident (:db/id (get-block 4))]]))
+    (outliner-tx/transact!
+     (transact-opts)
+     (outliner-core/move-blocks! (conn/get-db test-db false)
+                                 [(get-block 4) (get-block 5)] (get-block 30)
+                                 {:sibling? false}))
+    (is (= #{4 5} (set (get-children 30))) "both moved")
+    (is (= [3] (get-children 2)))))
+
 (deftest test-indent-blocks
   (testing "
   [1 [[2 [[3
