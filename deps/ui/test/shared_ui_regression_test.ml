@@ -476,8 +476,39 @@ let standalone_inline_groups ~registry =
     ;({P.profile_os=P.MacOS;P.profile_host=P.SwiftUIHost},false)
     ;({P.profile_os=P.MacOS;P.profile_host=P.NshHost},true)]
 
+let selectable_block_motion ~registry =
+  List.iter (fun (profile, native) ->
+    let session = S.mount ~registry ~profile ~initial:false
+      ~reducer:(fun _ selected -> selected)
+      ~view:(fun _ selected _ ->
+        Ui_components.block_motion
+          (Lui_elements.column ~key:"motion-block" ~style_class:"test-motion-block"
+             ~background:(reactive (fun value -> if value then "primary" else "transparent") selected)
+             [Lui_elements.text ~key:"motion-label" ~value:"Fixture block" []])) () in
+    Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose session.S.app))
+      (fun () ->
+        let block () = List.find (fun node -> class_has node "test-motion-block") (nodes session) in
+        let label () = List.find (fun node -> M.string_prop node "text"=Some "Fixture block") (nodes session) in
+        let id = (block ()).M.id and child = (label ()).M.id in
+        let count = List.length (nodes session) in
+        let expected = if native then "transform 200ms ease-out, background-color 200ms ease-out"
+          else "transform 0.3s ease, background-color 0.2s cubic-bezier(0, 1, 0, 1)" in
+        List.iter (fun selected ->
+          ignore (Lui_app.send session.S.app selected);
+          S.flush session;
+          check "block motion follows the host recipe" (M.string_prop (block ()) "transition"=Some expected);
+          check "block motion preserves selection paint updates"
+            (M.string_prop (block ()) "background"=Some (if selected then "primary" else "transparent"));
+          check "block motion keeps the same node, child and tree size"
+            ((block ()).M.id=id && (label ()).M.id=child && List.length (nodes session)=count))
+          [true;false]))
+    [({P.profile_os=P.WebOS;P.profile_host=P.WebHost},false)
+    ;({P.profile_os=P.IOS;P.profile_host=P.SwiftUIHost},false)
+    ;({P.profile_os=P.MacOS;P.profile_host=P.NshHost},true)]
+
 let run_views ~registry ~profile ~finish =
   standalone_inline_groups ~registry;
+  selectable_block_motion ~registry;
   table_resize_transaction ();
   table_range_selection ();
   grouped_table_selection ~registry ~profile;
