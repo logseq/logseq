@@ -342,6 +342,8 @@ mod tests {
         let status = signal("Waiting".to_owned());
         let measuring = renderer.clone();
         let retiring = renderer.clone();
+        let tasks = Rc::new(RefCell::new(Vec::<nsh_core::element::Spawned<()>>::new()));
+        let retire_tasks = tasks.clone();
         view()
             .child(renderer.element())
             .child(
@@ -349,7 +351,7 @@ mod tests {
                     .child(text("Measure current"))
                     .on_press(move || {
                         let renderer = measuring.clone();
-                        spawn(async move {
+                        tasks.borrow_mut().push(spawn(async move {
                             let events = handle(
                                 "measure-node",
                                 r##"{"ref":{"#ref":"measured","measurement-id":71}}"##,
@@ -367,7 +369,7 @@ mod tests {
                             assert_eq!(event["nodeId"], 1);
                             assert_eq!(event["rect"]["width"], 240.0);
                             status.set("Measured current".into());
-                        });
+                        }));
                     }),
             )
             .child(
@@ -388,7 +390,7 @@ mod tests {
                             .unwrap();
                         retiring.set_root(1).unwrap();
                         let renderer = retiring.clone();
-                        spawn(async move {
+                        retire_tasks.borrow_mut().push(spawn(async move {
                             let event = reply(
                                 json!({"node-id":1,"measurement-id":72}),
                                 Some(&target),
@@ -401,7 +403,7 @@ mod tests {
                             assert!(value.get("nodeId").is_none());
                             assert_eq!(value["ref"], json!({"node-id":1,"measurement-id":72}));
                             status.set("Retired measurement rejected".into());
-                        });
+                        }));
                     }),
             )
             .child(text(move || status.get()))
