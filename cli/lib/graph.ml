@@ -1118,12 +1118,17 @@ let execute_graph_export mode _graph repo opts config =
                 pure (graph_export_message mode config output_path))))
 
 let graph_import_rejection result =
-  match Edn_util.get result "error" with
+  let error =
+    match Edn_util.tagged_error_value result with
+    | Some _ as error -> error
+    | None -> Edn_util.get result "error"
+  in
+  match error with
   | Some error when not (Edn_util.is_null error) ->
       let message =
-        match Edn_util.as_string error with
-        | Some message -> message
-        | None -> Melange_edn_melange.to_edn_string error
+        Edn_util.worker_error_message
+          ~default_message:(Melange_edn_melange.to_edn_string error)
+          error
       in
       Some (Error.make Error.Graph_validation_failed message)
   | _ -> None

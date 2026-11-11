@@ -171,6 +171,27 @@ let get_int value key = Option.bind (get value key) as_int
 let get_int64 value key = Option.bind (get value key) as_int64
 let get_bool value key = Option.bind (get value key) as_bool
 
+let unquote_transit_value = function
+  | Melange_edn_melange.Any
+      (Melange_edn_melange.Tagged (("transit/quote" | "'"), value)) ->
+      value
+  | value -> value
+
+let tagged_error_value value =
+  match unquote_transit_value value with
+  | Melange_edn_melange.Any
+      (Melange_edn_melange.Tagged (("error" | "js/Error"), value)) ->
+      Some value
+  | _ -> None
+
+let rec worker_error_message ~default_message value =
+  match tagged_error_value value with
+  | Some value -> worker_error_message ~default_message value
+  | None -> (
+      match get_string value "message" with
+      | Some message -> message
+      | None -> Option.value (as_string_like value) ~default:default_message)
+
 let assoc key value raw =
   match as_map raw with
   | Some fields ->
