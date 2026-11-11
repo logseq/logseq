@@ -252,3 +252,31 @@ has no MyGo selection and remains independent. This cutover does not implement
 Windows OCaml DLL packaging, an NSH release/update feed, native PDF annotation,
 or every raw markup/media widget. Passing the staged Headless startup gate is
 not an outside-checkout OS launch, IME, accessibility or update qualification.
+
+## Native Windows DLL candidate
+
+On a native Windows x86_64 OCaml 5.5.1 toolchain with the actual application
+OCaml dependencies installed, run:
+
+```powershell
+python deps/ui/nsh/build_windows_dll.py
+```
+
+This source recipe builds the four actual Logseq native library archives,
+compiles `native_embed.ml` and the real seven-argument `logseq_lui_bridge.c` with
+the configured OCaml C compiler, and links a candidate DLL using
+`-output-complete-obj`. It does not use the Unix `_pic` executable-object target
+or LUI's generic three-argument bridge. A separate child process checks native
+DLL loading and every declared bridge export; no exported application startup
+function is called by that probe. Loader/CRT initializers may run.
+
+The candidate and `ocaml-toolchain.json` are written beneath
+`deps/ui/_build/nsh-windows-candidate`, separate from the qualified application
+publication directory. The receipt records compiler settings, exports, candidate
+bytes and the actual four compiled archive digests. Its named source digests are
+limited to the builder and bridge/entry sources; they are not a full application
+build-freshness receipt. Windows compile/load execution still requires a real
+runner. The private DB worker, its SQLite/native dependencies, complete resources,
+actual App startup, packaged launch, signing and upgrade remain separate gates.
+A successful DLL export probe alone must not be reported as a working Windows
+Logseq application. The guard tests use mocks and do not establish those results.
