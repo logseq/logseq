@@ -11,16 +11,6 @@
 #include <caml/printexc.h>
 #include <caml/startup.h>
 
-void logseq_lui_wakeup(void) {
-  fputs("schema export unexpectedly started an application service\n", stderr);
-  abort();
-}
-void logseq_lui_platform_request(value payload) {
-  (void)payload;
-  fputs("schema export unexpectedly requested a platform service\n", stderr);
-  abort();
-}
-
 int main(void) {
 #if defined(_WIN32)
   wchar_t *arguments[] = {L"logseq_schema_export", NULL};

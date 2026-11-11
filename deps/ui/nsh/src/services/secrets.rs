@@ -4,6 +4,40 @@ use lui_nsh::runtime::PlatformEvent;
 use nsh_core::prelude::blocking;
 use serde::Deserialize;
 use serde_json::{Value, json};
+use std::{cell::RefCell, collections::BTreeMap};
+
+/// Explicit dependency injection for an isolated startup qualification. The
+/// native runner never selects the in-memory store from environment variables.
+pub enum CredentialStore {
+    Native,
+    Isolated(RefCell<BTreeMap<(String, String), String>>),
+}
+impl CredentialStore {
+    pub fn isolated() -> Self {
+        Self::Isolated(RefCell::new(BTreeMap::new()))
+    }
+    pub async fn handle(
+        &self,
+        operation: &str,
+        payload: &str,
+    ) -> Result<Vec<PlatformEvent>, String> {
+        if operation != "keychain" {
+            return Err(format!("unsupported credential operation: {operation}"));
+        }
+        let request = Request::decode(payload)?;
+        let reply = match self {
+            Self::Native => {
+                // Vault access can prompt or wait for D-Bus; it holds neither
+                // the engine nor the persistent OCaml runtime worker.
+                blocking(move || execute(request))
+                    .await
+                    .map_err(|_| "native credential task failed".to_owned())?
+            }
+            Self::Isolated(values) => isolated_result(&mut values.borrow_mut(), request),
+        };
+        Ok(vec![reply])
+    }
+}
 
 // Deliberately not Debug: this request can own an encryption credential.
 #[derive(Deserialize)]
@@ -34,17 +68,30 @@ impl Request {
     }
 }
 
-pub async fn handle(operation: &str, payload: &str) -> Result<Vec<PlatformEvent>, String> {
-    if operation != "keychain" {
-        return Err(format!("unsupported credential operation: {operation}"));
+fn isolated_result(
+    values: &mut BTreeMap<(String, String), String>,
+    request: Request,
+) -> PlatformEvent {
+    let key = (request.service, request.account);
+    match request.operation.as_str() {
+        "get" => match values.get(&key) {
+            Some(value) => result(&request.id, "ok", Some(value.clone())),
+            None => result(&request.id, "not-found", None),
+        },
+        "set" => {
+            values.insert(key, request.value.expect("validated keychain set"));
+            result(&request.id, "ok", None)
+        }
+        "delete" => {
+            let status = if values.remove(&key).is_some() {
+                "ok"
+            } else {
+                "not-found"
+            };
+            result(&request.id, status, None)
+        }
+        _ => unreachable!("validated keychain operation"),
     }
-    let request = Request::decode(payload)?;
-    // Reuse NSH's runtime blocking pool. Vault access can prompt/unlock or wait
-    // for D-Bus and must hold neither the engine nor the OCaml runtime worker.
-    let reply = blocking(move || execute(request))
-        .await
-        .map_err(|_| "native credential task failed".to_owned())?;
-    Ok(vec![reply])
 }
 
 #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
@@ -102,6 +149,43 @@ fn result(id: &str, status: &str, value: Option<String>) -> PlatformEvent {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn isolated_credentials_are_owned_in_memory_and_never_restore_native_auth() {
+        let store = CredentialStore::isolated();
+        let CredentialStore::Isolated(values) = store else {
+            panic!("isolated startup must not select native credentials");
+        };
+        let send = |operation: &str, account: &str, value: Option<&str>| {
+            let payload = json!({"request-id":"fixture","operation":operation,
+                "service":"Logseq","account":account,"value":value});
+            let reply = isolated_result(
+                &mut values.borrow_mut(),
+                Request::decode(&payload.to_string()).unwrap(),
+            );
+            serde_json::from_str::<Value>(&reply.payload).unwrap()
+        };
+        assert_eq!(send("get", "logseq-auth", None)["status"], "not-found");
+        assert_eq!(send("set", "logseq-auth", Some("A\0中😀"))["status"], "ok");
+        assert_eq!(send("get", "logseq-auth", None)["value"], "A\0中😀");
+        assert_eq!(
+            send("get", "different-account", None)["status"],
+            "not-found"
+        );
+        assert_eq!(send("set", "empty", Some(""))["status"], "ok");
+        assert_eq!(send("get", "empty", None)["value"], "");
+        let independent = isolated_result(
+            &mut BTreeMap::new(),
+            Request::decode(r#"{"request-id":"fresh","operation":"get","service":"Logseq","account":"logseq-auth"}"#).unwrap(),
+        );
+        assert_eq!(
+            serde_json::from_str::<Value>(&independent.payload).unwrap()["status"],
+            "not-found"
+        );
+        assert_eq!(send("delete", "logseq-auth", None)["status"], "ok");
+        assert_eq!(send("get", "logseq-auth", None)["status"], "not-found");
+        assert_eq!(send("delete", "logseq-auth", None)["status"], "not-found");
+    }
+
     #[test]
     fn credential_requests_preserve_existing_validation_and_allow_empty_secret() {
         let request = Request::decode(r#"{"request-id":"17","operation":"set","service":"Logseq E2EE","account":"test","value":""}"#).unwrap();

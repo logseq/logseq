@@ -42,7 +42,11 @@ Before writing the build receipt or reporting success, `build.sh` runs
 resources and private DB worker. One isolated child process mounts the actual
 `nsh_app_logseq::App` with public NSH Headless. Fresh home/state/graph directories
 keep user data separate; no agent listener, login daemon, OS window, screenshot
-or application activation is used. The test requires Demo/Journals and real
+or application activation is used. Its explicit `StartupPreflight` engine
+context injects an owner-local empty credential store: changing HOME alone
+would not isolate the OS keychain. The production runner always uses the native
+vault; no environment variable selects the in-memory test store.
+The test requires Demo/Journals and real
 Search/sidebar buttons and fails immediately when `lui-backend-error` appears.
 Its engine and private worker processes are cleaned up after either outcome.
 

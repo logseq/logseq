@@ -4,7 +4,7 @@ use nsh_core::{
     platform::{Idiom, Os},
     prelude::*,
 };
-use nsh_engine::{EngineConfig, Root};
+use nsh_engine::{EngineConfig, EngineContext, Root};
 use nsh_testing::Headless;
 use std::{
     cell::RefCell,
@@ -49,6 +49,7 @@ fn require_artifacts() -> Result<(), String> {
 
 fn mount_actual_application() -> Result<(), String> {
     let mut config = EngineConfig::new(Root::of::<nsh_app_logseq::App>());
+    config.context = EngineContext::default().with(nsh_app_logseq::StartupPreflight);
     config.viewport = Size::new(px(1440.0), px(900.0));
     config.environment.idiom = Idiom::Desktop;
     config.environment.os = if cfg!(target_os = "macos") {
