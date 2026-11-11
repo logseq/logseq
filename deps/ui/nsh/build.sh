@@ -101,8 +101,9 @@ cargo test --locked --manifest-path "$nsh_root/Cargo.toml" \
   "$staging/$(basename "$library")" "$library" "$staged_resources" "$resources"
 "$python_bin" - "$staging/logseq-nsh" "$output/logseq-nsh" \
   "$staging/$(basename "$library")" "$library" "$staged_resources" "$resources" <<'PUBLISH'
+import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import shutil
 import sys
 import tempfile
@@ -123,13 +124,28 @@ def atomic_copy(source, destination):
 
 source_resources, destination_resources = map(Path, sys.argv[5:7])
 files = {file.relative_to(source_resources) for file in source_resources.rglob("*") if file.is_file()}
+previous_receipt = Path(sys.argv[2] + ".lui-build.json")
+try:
+    previous = json.loads(previous_receipt.read_text())
+except (OSError, json.JSONDecodeError):
+    previous = {}
+owned = previous.get("ownedResources", [])
+if not isinstance(owned, list) or any(not isinstance(name, str) for name in owned):
+    raise SystemExit("Invalid previous NSH resource ownership receipt")
+for name in owned:
+    relative = PurePosixPath(name)
+    if not name or relative.is_absolute() or ".." in relative.parts:
+        raise SystemExit("Invalid previous NSH resource ownership path")
 for relative in sorted(files):
     atomic_copy(source_resources / relative, destination_resources / relative)
-# This directory contains only build-managed resources. Remove obsolete files
-# only on the qualified success path so the final receipt describes that set.
-for file in destination_resources.rglob("*"):
-    if file.is_file() and file.relative_to(destination_resources) not in files:
-        file.unlink()
+# Resources is shared with maintained backends. Retire only paths explicitly
+# owned by a previous NSH receipt; a legacy receipt authorizes no deletion.
+for name in owned:
+    relative = Path(name)
+    if relative not in files:
+        destination = destination_resources / relative
+        if destination.is_file() or destination.is_symlink():
+            destination.unlink()
 atomic_copy(sys.argv[3], sys.argv[4])
 atomic_copy(sys.argv[1], sys.argv[2])
 # Local publication is per-file atomic, not a multi-file transaction. Any copy

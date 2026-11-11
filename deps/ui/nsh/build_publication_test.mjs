@@ -85,8 +85,9 @@ else: sys.exit('unexpected Cargo operation')
   const old = new Map([
     [path.join(output, "logseq-nsh"), "previous-executable"],
     [path.join(output, "liblogseq_ui.so"), "previous-library"],
-    [path.join(output, "logseq-nsh.lui-build.json"), "previous-receipt"],
+    [path.join(output, "logseq-nsh.lui-build.json"), JSON.stringify({ownedResources:["old-resource.json"]})],
     [path.join(resources, "old-resource.json"), "previous-resource"],
+    [path.join(resources, "apple-unrelated-resource.json"), "maintained-backend-resource"],
     [path.join(resources, "logseq-db-worker"), "previous-worker"],
   ]);
   for (const [file, contents] of old) write(file, contents);
@@ -109,7 +110,7 @@ for (const failure of ["gate", "source", "after-gate"]) {
     } finally { rmSync(app.temporary, {recursive:true, force:true}); }
   });
 }
-test("qualified publication preserves tested digests, removes stale resources and includes shared SVG sources", async () => {
+test("qualified publication preserves shared outputs, retires owned resources and records tested digests", async () => {
   const app = fixture();
   try {
     const result = app.run();
@@ -118,8 +119,11 @@ test("qualified publication preserves tested digests, removes stale resources an
     assert.equal(readFileSync(artifact, "utf8"), "new-executable");
     assert.equal(readFileSync(path.join(app.resources, "logseq-db-worker"), "utf8"), "new-worker");
     assert.equal(existsSync(path.join(app.resources, "old-resource.json")), false);
+    assert.equal(readFileSync(path.join(app.resources, "apple-unrelated-resource.json"), "utf8"), "maintained-backend-resource");
     const receipt = JSON.parse(readFileSync(artifact + ".lui-build.json", "utf8"));
     assert.equal(receipt.artifact, artifact);
+    assert.ok(receipt.ownedResources.includes("logseq-db-worker"));
+    assert.ok(!receipt.ownedResources.includes("apple-unrelated-resource.json"));
     assert.ok(Object.keys(receipt.files).some(file => file.endsWith("platform/web/src/icons/check.svg")));
     assert.ok(Object.keys(receipt.files).some(file => file.endsWith("platform/nsh/contract.json")));
     assert.ok(Object.keys(receipt.files).every(file => !file.includes(".publication.")));

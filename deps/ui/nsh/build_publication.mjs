@@ -82,7 +82,8 @@ async function main() {
     const [snapshotFile, manifestFile, artifact, finalArtifact, library, finalLibrary, resources, finalResources] = args;
     const snapshot = read(snapshotFile);
     const api = await check(snapshot, manifestFile);
-    const stagedInputs = [library, resources].map(file => portable(path.relative(snapshot.root, file)));
+    const resourceInputs = api.listInputs(snapshot.root, [portable(path.relative(snapshot.root, resources))]);
+    const stagedInputs = [portable(path.relative(snapshot.root, library)), ...resourceInputs];
     const receiptFile = api.writeReceipt({artifact, command:snapshot.command, root:snapshot.root,
       inputs:[...snapshot.inputs, ...stagedInputs]});
     const receipt = read(receiptFile);
@@ -97,6 +98,7 @@ async function main() {
       return file;
     };
     receipt.artifact = path.resolve(finalArtifact);
+    receipt.ownedResources = resourceInputs.map(file => portable(path.relative(resources, path.resolve(snapshot.root, file))));
     receipt.inputs = receipt.inputs.map(file => portable(path.relative(snapshot.root, relocate(path.resolve(snapshot.root, file)))));
     receipt.files = Object.fromEntries(Object.entries(receipt.files).map(([file, hash]) =>
       [portable(path.relative(snapshot.root, relocate(path.resolve(snapshot.root, file)))), hash]));

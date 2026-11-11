@@ -68,8 +68,10 @@ Compilation, preflight or source-stability failure leaves the published artifact
 set and its prior receipt untouched.
 
 Only a qualified candidate reaches publication. Resources and code use
-same-filesystem atomic file replacement, with the receipt replaced last; stale
-build-managed resource files are removed on this success path. The build never
+same-filesystem atomic file replacement, with the receipt replaced last. The
+Resources directory is shared with maintained backends: only stale paths listed
+in an earlier NSH receipt's `ownedResources` are removed on this success path.
+Legacy receipts authorize no deletion, and unrelated outputs remain untouched. The build never
 truncates mapped code or stops a running application. Local publication is not a
 multi-file transaction: an I/O failure partway through publication stops without
 a new successful receipt, and the old receipt will reject the partial set. This
@@ -98,7 +100,9 @@ The existing receipt API snapshots explicit source inputs before compilation
 and rechecks them before and after qualification. Added, removed or changed
 inputs reject publication. Regenerating a changed canonical schemas.json is a
 source change too: review the update and rerun the cached build. Final receipt
-paths are relocated from tested staged bytes; a new source edit cannot be
+paths are relocated from tested staged bytes. Installed resource inputs list
+individual owned files rather than unrelated shared-directory contents; a new
+source edit cannot be
 recorded as if it had been compiled. Receipts do not replace native launch,
 signing, updater or visual qualification.
 
