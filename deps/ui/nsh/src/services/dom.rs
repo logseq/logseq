@@ -335,8 +335,8 @@ mod tests {
                 1,
                 json!([
             {"op":"create-node","id":1,"kind":"box"},
-            {"op":"set-prop","id":1,"property":"width","value":240.0},
-            {"op":"set-prop","id":1,"property":"height","value":100.0},
+            {"op":"set-prop","id":1,"property":"width","value":240},
+            {"op":"set-prop","id":1,"property":"height","value":100},
             {"op":"set-prop","id":1,"property":"accessibility-identifier","value":"measured"}]),
             ))
             .unwrap();
@@ -387,7 +387,7 @@ mod tests {
                                 2,
                                 json!([
                     {"op":"drop-node","id":1},{"op":"create-node","id":1,"kind":"box"},
-                    {"op":"set-prop","id":1,"property":"width","value":500.0}]),
+                    {"op":"set-prop","id":1,"property":"width","value":500}]),
                             ))
                             .unwrap();
                         retiring.set_root(1).unwrap();
