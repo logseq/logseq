@@ -21,7 +21,8 @@ keyring = { version = "=3.6.3", default-features = false, features = ["sync-secr
 nsh-platform-linux = { git = "https://github.com/logseq/nsh", rev = "bfa15d0c843c0d6f5bf3a2a230e8ca56b876b61c", default-features = false, features = ["editor", "highlight"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-objc2-pdf-kit = { version = "=0.3.2", default-features = false, features = ["std", "PDFDocument", "PDFPage", "PDFView", "PDFSelection", "PDFAnnotation", "PDFAnnotationUtilities", "PDFBorder", "objc2-app-kit", "objc2-core-graphics"] }
+objc2-pdf-kit = { version = "=0.3.2", default-features = false, features = ["std", "PDFDocument", "PDFPage", "PDFView", "PDFSelection", "PDFAnnotation", "PDFAnnotationUtilities", "PDFBorder", "objc2-app-kit", "objc2-core-graphics", "objc2-core-foundation"] }
+objc2-foundation = { version = "=0.3.2", default-features = false, features = ["std", "NSUUID"] }
 block2 = "=0.6.2"
 dispatch2 = "=0.3.1"
 keyring = { version = "=3.6.3", default-features = false, features = ["apple-native"] }

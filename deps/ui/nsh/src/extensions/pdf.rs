@@ -1,7 +1,7 @@
 //! The actual native PDF extension: PDFKit owns document, selection and scrolling.
 use super::raw_style;
 use lui_nsh::{extensions::ExtensionContext, store::Node};
-use nsh_core::{element::StyleRefinement, prelude::*};
+use nsh_core::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 use std::{collections::BTreeMap, path::Path, sync::Arc};
@@ -219,11 +219,13 @@ pub(super) fn element(context: ExtensionContext) -> AnyElement {
     let annotations = context.clone();
     let menu = nsh_base::Popover::element(nsh_base::PopoverProps {
         open: Prop::bind(move || Some(popup.get())),
-        popup_style: StyleRefinement::default()
-            .p(px(8.0))
-            .rounded(px(6.0))
-            .bg(nsh_base::theme().background)
-            .into(),
+        popup_style: {
+            let mut popup = view()
+                .p(px(8.0))
+                .rounded(px(6.0))
+                .bg(nsh_base::theme().background);
+            popup.style().clone().into()
+        },
         ..Default::default()
     })
     .fill(
@@ -362,4 +364,104 @@ pub(super) fn element(context: ExtensionContext) -> AnyElement {
             },
         ))
         .into_element()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn attrs() -> BTreeMap<String, String> {
+        BTreeMap::from([
+            (
+                "path".into(),
+                "/private/Graph/assets/Unicode 文档.pdf".into(),
+            ),
+            ("repo".into(), "private-graph".into()),
+            ("identity".into(), "document-a".into()),
+            ("instance".into(), "mounted-a".into()),
+        ])
+    }
+
+    #[test]
+    fn persisted_highlights_and_document_event_identity_remain_ocaml_owned() {
+        let mut source = attrs();
+        source.insert("page".into(), "3".into());
+        source.insert("scale".into(), "page-width".into());
+        source.insert("labels".into(), json!({"close":"Close"}).to_string());
+        let rect = json!({"x1":10,"y1":20,"x2":90,"y2":35,"w":600,"h":800});
+        source.insert(
+            "hls".into(),
+            json!([{"id":"persisted-a","page":3,"color":null,"bounding":rect,
+                "rects":[rect],"text":"Existing selected text","image":null}])
+            .to_string(),
+        );
+        let model = Model::read(&source).unwrap();
+        assert_eq!(model.page, 3);
+        assert_eq!(model.scale, "page-width");
+        assert_eq!(model.highlights[0].id, "persisted-a");
+        assert_eq!(model.highlights[0].rects[0].y2, 35.0);
+        assert_eq!(model.labels["close"], "Close");
+        let payload = model.payload(
+            json!({"repo":"retired-graph","identity":"retired-document",
+                "instance":"retired-mount","page":4})
+            .as_object()
+            .unwrap()
+            .clone(),
+        );
+        assert_eq!(
+            payload,
+            json!({"repo":"private-graph","identity":"document-a",
+                "instance":"mounted-a","page":4})
+        );
+        assert_eq!(Model::read(&attrs()).unwrap().page, 1);
+        assert_eq!(Model::read(&attrs()).unwrap().scale, "auto");
+    }
+
+    #[test]
+    fn unsupported_requests_fail_instead_of_becoming_native_noops() {
+        for (name, value) in [
+            ("path", "https://example.invalid/book.pdf"),
+            ("path", "../assets/book.pdf"),
+            ("page", "0"),
+            ("page", "1.5"),
+            ("scale", "NaN"),
+            ("scale", "inf"),
+            ("scale", "-1"),
+            ("scale", "0"),
+            ("area_mode", "true"),
+            ("hl_mode", "true"),
+            ("theme", "dark"),
+            ("automenu", "enabled"),
+        ] {
+            let mut source = attrs();
+            source.insert(name.into(), value.into());
+            assert!(Model::read(&source).is_err(), "{name}={value}");
+        }
+        for scale in ["auto", "page-fit", "page-width", "0.5", "2"] {
+            let mut source = attrs();
+            source.insert("scale".into(), scale.into());
+            assert!(Model::read(&source).is_ok(), "{scale}");
+        }
+    }
+
+    #[test]
+    fn invalid_annotation_geometry_is_rejected_before_native_publication() {
+        let valid = json!({"id":"a","page":1,"color":"yellow",
+            "bounding":{"x1":10,"y1":20,"x2":90,"y2":35,"w":600,"h":800},
+            "rects":[],"text":"Text","image":null});
+        for invalid in [
+            ("/page", json!(0)),
+            ("/color", json!("var(--foreground)")),
+            ("/bounding/w", json!(0)),
+            ("/bounding/h", json!(-1)),
+            ("/bounding/x2", json!(5)),
+            ("/bounding/y2", json!(1)),
+        ] {
+            let mut highlight = valid.clone();
+            *highlight.pointer_mut(invalid.0).unwrap() = invalid.1;
+            let mut source = attrs();
+            source.insert("hls".into(), json!([highlight]).to_string());
+            assert!(Model::read(&source).is_err(), "{}", invalid.0);
+        }
+    }
 }

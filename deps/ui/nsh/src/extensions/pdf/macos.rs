@@ -7,16 +7,17 @@ use nsh_platform_macos::{
     objc2_app_kit::{NSColor, NSView},
     objc2_foundation::{
         NSNotification, NSNotificationCenter, NSObjectProtocol, NSOperationQueue, NSRect, NSString,
-        NSURL, NSUUID,
+        NSURL,
     },
 };
+use objc2_foundation::NSUUID;
 use objc2_pdf_kit::{
     PDFAnnotation, PDFAnnotationSubtypeHighlight, PDFAnnotationSubtypeSquare, PDFBorder,
     PDFBorderStyle, PDFDisplayBox, PDFDisplayMode, PDFDocument, PDFView,
     PDFViewPageChangedNotification, PDFViewScaleChangedNotification,
     PDFViewSelectionChangedNotification,
 };
-use serde_json::{Map, Value, json};
+use serde_json::{Value, json};
 use std::{
     cell::{Cell, RefCell},
     collections::BTreeMap,
