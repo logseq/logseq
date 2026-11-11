@@ -40,12 +40,12 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libsqlite3-dev libffi-dev libgmp-dev \
+          sudo apt-get install -y libsqlite3-dev libffi-dev libgmp-dev libdbus-1-dev \
             libgtk-4-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
             libclang-dev pkg-config fonts-dejavu-core fonts-noto-cjk xvfb dbus-x11
       - name: macOS native development libraries
         if: runner.os == 'macOS'
-        run: brew install pkg-config sqlite3 libffi gmp
+        run: brew install pkg-config sqlite3 libffi gmp dylibbundler
       - uses: pnpm/action-setup@v4
         with:
           version: 10.33.0
@@ -75,6 +75,8 @@ jobs:
         run: pnpm install --frozen-lockfile
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: true
+      - name: Locked UI-local JavaScript dependencies
+        run: npm ci --prefix deps/ui --ignore-scripts
       - name: Actual worker and application OCaml dependencies
         run: |
           (cd deps/db-worker && sh scripts/install-opam-deps.sh)
@@ -83,7 +85,9 @@ jobs:
         run: rustup toolchain install 1.97.0 --profile minimal --component rustfmt,clippy
       - name: Actual native App formatting and strict compiler checks
         run: |
-          cargo fmt --manifest-path deps/ui/nsh/Cargo.toml --check
+          # This isolated app workspace has no nightly rustfmt configuration;
+          # dependency workspaces' formatter settings do not apply to it.
+          cargo +1.97.0 fmt --manifest-path deps/ui/nsh/Cargo.toml --check
           cargo clippy --locked --manifest-path deps/ui/nsh/Cargo.toml --all-targets -- -D warnings
       - name: Windows candidate source guards (not Windows qualification)
         run: python3 -m unittest discover -s deps/ui/nsh -p test_windows_dll_builder.py
