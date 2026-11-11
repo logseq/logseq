@@ -246,7 +246,7 @@ let test_shape_gated ~env () =
 let test_native_span_policy ~env () =
   env.install ();
   List.iter (fun (profile, nsh) ->
-    let session = S.mount ~profile ~initial:(M.create "a **b** and `code`")
+    let session = S.mount ~profile ~initial:(M.create "a **b** and \t  `code`")
       ~reducer:(fun model caret -> M.select model ~anchor:caret ~focus:caret)
       ~view:(fun _ctx source _send ->
         Lui_elements.column
@@ -262,6 +262,10 @@ let test_native_span_policy ~env () =
       let line = List.hd (named "ed-line") in
       let children () = DM.children session.S.tree line.DM.id in
       let before = List.map (fun node -> node.DM.id) (children ()) in
+      check "the actual editor Text line explicitly preserves whitespace"
+        (DM.string_prop line "white-space" = Some "pre-wrap");
+      check "run source retains tabs and consecutive spaces"
+        (List.exists (fun node -> DM.string_prop node "text" = Some " and \t  ") (children ()));
       check "the actual model emits code fragments" (named "ed-code" <> []);
       check "code runs have an explicit host typography policy"
         (List.for_all (fun node -> DM.string_prop node "font-size"
@@ -288,7 +292,7 @@ let test_native_span_policy ~env () =
       S.poll session;
       check "concealment retains keyed run nodes" (before=List.map (fun node -> node.DM.id) (children ()));
       check "host presentation policy never edits the source"
-        ((S.read_model session).M.source = "a **b** and `code`")))
+        ((S.read_model session).M.source = "a **b** and \t  `code`")))
     [({profile_os=WebOS;profile_host=WebHost},false)
     ;({profile_os=MacOS;profile_host=SwiftUIHost},false)
     ;({profile_os=MacOS;profile_host=NshHost},true)]
