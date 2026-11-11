@@ -112,6 +112,65 @@ fn mount_actual_application() -> Result<(), String> {
         Duration::from_secs(20),
         startup_body::ready,
     )?;
+    wait_for_chrome(
+        &mut app,
+        "left sidebar fills exactly one native pane",
+        Duration::from_secs(5),
+        startup_body::sidebar_ready,
+    )?;
+    let body =
+        startup_body::identity(&app.screen()).ok_or("qualified journal identity is missing")?;
+    // Resize and toggle through real public native input. The source graph,
+    // Journals region and main scroll must remain mounted, with a dated title
+    // still visible even if asynchronous page metadata repaints that text.
+    app.set_viewport(Size::new(px(1280.0), px(900.0)))?;
+    wait_for_chrome(
+        &mut app,
+        "native sidebar after viewport resize",
+        Duration::from_secs(10),
+        |screen| {
+            startup_body::window_width(screen, 1280.0)
+                && startup_body::sidebar_ready(screen)
+                && startup_body::ready(screen)
+        },
+    )?;
+    if startup_body::identity(&app.screen()) != Some(body) {
+        return Err("viewport resize remounted the journal body or main scroll".into());
+    }
+    app.press("role:button[Toggle left sidebar]")?;
+    wait_for_chrome(
+        &mut app,
+        "collapsed native sidebar retains journal body",
+        Duration::from_secs(10),
+        |screen| screen.count("id:left-sidebar") == Ok(0) && startup_body::ready(screen),
+    )?;
+    if startup_body::identity(&app.screen()) != Some(body) {
+        return Err("sidebar collapse remounted the journal body or main scroll".into());
+    }
+    app.press("role:button[Toggle left sidebar]")?;
+    wait_for_chrome(
+        &mut app,
+        "reopened single-owner native sidebar",
+        Duration::from_secs(10),
+        |screen| startup_body::sidebar_ready(screen) && startup_body::ready(screen),
+    )?;
+    if startup_body::identity(&app.screen()) != Some(body) {
+        return Err("sidebar reopening remounted the journal body or main scroll".into());
+    }
+    app.set_viewport(Size::new(px(1440.0), px(900.0)))?;
+    wait_for_chrome(
+        &mut app,
+        "restored native window geometry",
+        Duration::from_secs(10),
+        |screen| {
+            startup_body::window_width(screen, 1440.0)
+                && startup_body::sidebar_ready(screen)
+                && startup_body::ready(screen)
+        },
+    )?;
+    if startup_body::identity(&app.screen()) != Some(body) {
+        return Err("restoring viewport remounted the journal body or main scroll".into());
+    }
     // Headless owns and joins the engine thread on drop. The process boundary
     // also isolates OCaml's persistent worker from every other Rust test.
     drop(app);
@@ -210,7 +269,7 @@ fn run_child(
     }
     let mut child = command.spawn().map_err(|e| e.to_string())?;
     *process_group = Some(child.id());
-    let deadline = Instant::now() + Duration::from_secs(70);
+    let deadline = Instant::now() + Duration::from_secs(110);
     loop {
         if let Some(status) = child.try_wait().map_err(|e| e.to_string())? {
             return if status.success() {
@@ -222,7 +281,7 @@ fn run_child(
         if Instant::now() >= deadline {
             child.kill().map_err(|e| e.to_string())?;
             child.wait().map_err(|e| e.to_string())?;
-            return Err("actual Logseq startup exceeded the isolated 70-second deadline".into());
+            return Err("actual Logseq startup exceeded the isolated 110-second deadline".into());
         }
         thread::sleep(Duration::from_millis(20));
     }

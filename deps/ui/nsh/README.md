@@ -183,3 +183,27 @@ It accepts the application's dated title format rather than inventing a journal
 or overriding the model/date, and checks the title intersects the measured main
 viewport. A passing Headless gate still requires a separate background native
 capture/UX review; it does not prove AppKit pixels or a usable completed UI.
+
+## Native sidebar sizing ownership
+
+On NSH, the outer left ResizablePanelGroup alone owns sidebar width, capture and
+its native divider. The retained sidebar content fills that pane; it has no
+viewport-width child, fixed-position reveal, invisible shade or nested reveal
+split. Its inner content follows the native pane during a drag instead of pinning
+itself to the last persisted width. Opening a narrow NSH desktop window uses the
+same native pane rather than switching to the Web reveal overlay. The right
+sidebar's existing breakpoint and measured-content conversion remain unchanged.
+
+The left preference remains absolute points (`ls-left-sidebar-width-px`), while
+the right preference remains a fraction (`ls-right-sidebar-width`). Native close
+keeps the last nonzero saved size for reopening. No new size model, gesture
+controller or NSH fork is introduced. Other hosts retain their existing inert,
+small-window reveal/shade, handle options and animation behavior.
+
+The real application gate checks that the visible left sidebar matches its
+nearest native panel bounds and has no nested native split panes. It then resizes
+the viewport and closes/reopens the sidebar through public native input, checking
+that the Journals region and main Scroll retain their native identities while
+a dated title remains visible. This does
+not claim focused block-editor draft/IME qualification; those remain separate
+editor tests and native UX checks.

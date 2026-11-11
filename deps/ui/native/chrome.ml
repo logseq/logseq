@@ -296,34 +296,32 @@ let right_sidebar (ms : Model.t Signal.signal) =
              (row ~key:"rs-dock" ~min_height:0 ~grow:1. ~cross:`stretch
                 ~background:"muted" [Right_sidebar_view.render ms])]))) )
 
-(* A stable sidebar surface uses the same dock breakpoint and inner width
-   as Web. Its own split reveals the small-window panel without squeezing text. *)
-let left_sidebar (ms : Model.t Signal.signal) =
+(* The content keeps the same keys regardless of which host owns its width. *)
+let left_sidebar_inner (ms : Model.t Signal.signal) =
+  let st = Sidebar_state.ensure ms in
+  column ~key:"ls-inner" ~grow:1. ~min_width:0 ~min_height:0
+    ~background:"var(--left-sidebar-bg-color)" ~style_class:"left-sidebar-inner as-container"
+    [column ~key:"ls-wrap" ~grow:1. ~min_height:0 ~margin_top:4
+       [column ~key:"ls-head" ~gap:4 ~margin_bottom:4 ~style_class:"sidebar-header-container"
+          [Left_sidebar_view.graphs_selector st ms;Left_sidebar_view.nav_group ms st];
+        Left_sidebar_view.contents ms]]
+
+let left_sidebar_panel ?container_relative_frame inner =
+  row ~key:"ls-dock" ~grow:1. ~min_height:0 ~cross:`stretch
+    ?container_relative_frame
+    [inner;
+     box ~key:"ls-border" ~width:1 ~background:"var(--lx-gray-03, var(--ls-tertiary-background-color))" []]
+
+(* Other hosts keep their fixed small-window reveal and its independent shade. *)
+let legacy_left_sidebar (ms : Model.t Signal.signal) =
   let st=Sidebar_state.ensure ms in
   let viewport=Signal.value st.Sidebar_state.viewport_w in
-  (* Closed NSH panes are not painted or laid out. Native Split owns their
-     zero-width tracks; hiding the retained subtree also removes its inputs. *)
-  let availability element : t = fun context parent ->
-    if Lui_ui.host context = Lui_protocol.NshHost then
-      Ui_parts.string_prop Lui_protocol.DisplayValue
-        ~value:(reactive (fun (m : Model.t) -> if m.left_sidebar_open then "block" else "none") ms)
-        element context parent
-    else Ui_parts.bool_prop Lui_protocol.Inert
-      ~value:(reactive (fun (m : Model.t) -> not m.left_sidebar_open) ms)
-      element context parent
-  in
-  (* No titlebar row here — the window-level topbar owns nav controls so
-     they stay put while this pane's width animates. *)
-  let panel = row ~key:"ls-dock" ~grow:1. ~min_height:0 ~cross:`stretch
-    [column ~key:"ls-inner" ~grow:1. ~min_height:0
-       ~min_width:(reactive Sidebar_state.left_inner_width (Signal.value st.Sidebar_state.left_width) viewport)
-       ~max_width:(reactive Sidebar_state.left_inner_width (Signal.value st.Sidebar_state.left_width) viewport)
-       ~background:"var(--left-sidebar-bg-color)" ~style_class:"left-sidebar-inner as-container"
-       [column ~key:"ls-wrap" ~grow:1. ~min_height:0 ~margin_top:4
-          [column ~key:"ls-head" ~gap:4 ~margin_bottom:4 ~style_class:"sidebar-header-container"
-             [Left_sidebar_view.graphs_selector st ms;Left_sidebar_view.nav_group ms st];
-           Left_sidebar_view.contents ms]];
-     box ~key:"ls-border" ~width:1 ~background:"var(--lx-gray-03, var(--ls-tertiary-background-color))" []] in
+  let panel = left_sidebar_panel
+    (Ui_parts.int_prop Lui_protocol.MinWidth
+       ~value:(reactive Sidebar_state.left_inner_width (Signal.value st.Sidebar_state.left_width) viewport)
+       (Ui_parts.int_prop Lui_protocol.MaxWidth
+          ~value:(reactive Sidebar_state.left_inner_width (Signal.value st.Sidebar_state.left_width) viewport)
+          (left_sidebar_inner ms))) in
   let shade=Ui_parts.float_prop Lui_protocol.Opacity
     ~value:(reactive (fun (m : Model.t) width ->
       if m.left_sidebar_open && width<640. then (if m.theme_dark then 0.15 else 0.7) else 0.) ms viewport)
@@ -340,22 +338,35 @@ let left_sidebar (ms : Model.t Signal.signal) =
        (Ui_parts.int_prop Lui_protocol.MaxWidth
          ~value:(reactive (fun width -> if width<640. then int_of_float width else Sidebar_state.left_width_max) viewport)
         (Ui_components.with_props [Ui_components.Prop.width_viewport 1.;Ui_components.Prop.inset_top 0.;Ui_components.Prop.inset_left 0.]
-         (availability (box ~key:"left-sidebar" ~accessibility_identifier:"left-sidebar" ~container_relative_frame:`vertical
-            ~min_height:0 ~style_class:"cp__sidebar-left-layout"
-            [(fun context parent ->
-              let native = Lui_ui.host context = Lui_protocol.NshHost in
-              let pane child =
-                if native then Ui_components.with_props [Ui_components.Prop.min_width 0] child
-                else child
-              in
-              (split ~key:"sidebar-reveal" ~container_relative_frame:`both ~gap:0
-                 ?resize_handle_width:(if native then None else Some 0)
-                 ~first_width:(reactive (fun (m : Model.t) width window ->
-                   if window<640. then (if m.left_sidebar_open then window*.0.74 else 0.) else width)
-                   ms (Signal.value st.Sidebar_state.left_width) viewport)
-                 ?resize_duration:(if native then None else Some 300)
-                 ?resize_easing:(if native then None else Some `standard)
-                 (pane panel) (pane shade)) context parent)])))))))
+         (Ui_parts.bool_prop Lui_protocol.Inert
+            ~value:(reactive (fun (m : Model.t) -> not m.left_sidebar_open) ms)
+            (box ~key:"left-sidebar" ~accessibility_identifier:"left-sidebar" ~container_relative_frame:`vertical
+               ~min_height:0 ~style_class:"cp__sidebar-left-layout"
+               [split ~key:"sidebar-reveal" ~container_relative_frame:`both ~gap:0
+                  ~resize_handle_width:0
+                  ~first_width:(reactive (fun (m : Model.t) width window ->
+                    if window<640. then (if m.left_sidebar_open then window*.0.74 else 0.) else width)
+                    ms (Signal.value st.Sidebar_state.left_width) viewport)
+                  ~resize_duration:300 ~resize_easing:`standard panel shade])))))))
+
+(* Native Group owns the pane size, drag capture and handle. Its content fills
+   that pane; no viewport-sized reveal, hidden shade or second resize owner. *)
+let native_left_sidebar (ms : Model.t Signal.signal) =
+  Ui_parts.class_signal ms
+    (fun (m : Model.t) -> "cp__sidebar-left-layout" ^ if m.left_sidebar_open then " is-open" else "")
+    (Ui_parts.string_prop Lui_protocol.DisplayValue
+       ~value:(reactive (fun (m : Model.t) -> if m.left_sidebar_open then "block" else "none") ms)
+       (Ui_parts.int_prop Lui_protocol.MinWidth
+          ~value:(reactive (fun (m : Model.t) -> if m.left_sidebar_open then Sidebar_state.left_width_min else 0) ms)
+          (box ~key:"left-sidebar" ~accessibility_identifier:"left-sidebar"
+             ~container_relative_frame:`both ~max_width:Sidebar_state.left_width_max
+             ~min_height:0 ~style_class:"cp__sidebar-left-layout"
+             [left_sidebar_panel ~container_relative_frame:`both (left_sidebar_inner ms)])))
+
+let left_sidebar (ms : Model.t Signal.signal) : t =
+ fun context parent ->
+  (if Lui_ui.host context = Lui_protocol.NshHost then native_left_sidebar ms
+   else legacy_left_sidebar ms) context parent
 
 (* NSH owns native drag sizes and motion. Other hosts keep their existing
    controlled split geometry and transition options. *)
@@ -370,7 +381,9 @@ let left_split (ms : Model.t Signal.signal) (st : Sidebar_state.t)
     ~first_width:
       (reactive
          (fun (m : Model.t) width viewport ->
-           if Sidebar_state.left_docked m.Model.left_sidebar_open viewport then width else 0.)
+           let opened = if native then m.Model.left_sidebar_open
+             else Sidebar_state.left_docked m.Model.left_sidebar_open viewport in
+           if opened then width else 0.)
          ms (Signal.value st.Sidebar_state.left_width) (Signal.value st.Sidebar_state.viewport_w))
     ?resize_duration:(if native then None else Some 300)
     ?resize_easing:(if native then None else Some `standard)
