@@ -88,7 +88,17 @@ fn EditorSpans() -> impl IntoElement {
             },
         );
     }
-    record(renderer.clone(), identities);
+    let recording = renderer.clone();
+    on_key_with(
+        "f1",
+        KeyOptions {
+            when: nsh_core::keymap::When::Always,
+            ..Default::default()
+        },
+        move |_| {
+            record(recording.clone(), identities.clone());
+        },
+    );
     renderer.element()
 }
 fn line(app: &Headless) -> LayoutNode {
@@ -114,7 +124,10 @@ fn editor_delimiter_block_is_a_retained_native_span_and_code_inherits_live_paren
         ..EngineConfig::new(Root::of::<EditorSpans>())
     })
     .unwrap();
-    app.wait_for("id:editor-line").unwrap();
+    // A root ref can exist before its keyed descendants. Qualify the actual
+    // attributed content before recording the initial native identities.
+    app.wait_for("text:left **code").unwrap();
+    app.press_key("f1").unwrap();
     let first = line(&app);
     let text = first.text.unwrap().text;
     assert_eq!(text.text, "left **code");
