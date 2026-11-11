@@ -2,7 +2,7 @@
   (:require [clojure.string :as string]
             [electron.deeplink :as deeplink]
             [electron.handler :as handler]
-            [electron.utils :refer [send-to-renderer send-to-focused-renderer] :as utils]
+            [electron.utils :refer [send-to-renderer] :as utils]
             [electron.window :as win]))
 
 (defn get-URL-decoded-params
@@ -58,7 +58,8 @@
 (defn- x-callback-url-handler
   "win - a window used for fallback (main window is preferred)"
   [^js win ^js/URL parsed-url]
-  (let [action (.-pathname parsed-url)]
+  (let [action (.-pathname parsed-url)
+        window (or (utils/get-focused-window) win)]
     (cond
       ;; url:     (string) Page url
       ;; title:   (string) Page title
@@ -67,27 +68,26 @@
       ;; append:  (bool)   Append to the end of the page, default to false(current editing position)
       (= action "/quickCapture")
       (let [[url title content page append] (get-URL-decoded-params parsed-url ["url" "title" "content" "page" "append"])]
-        (send-to-focused-renderer "quickCapture" {:url url
+        (send-when-loaded! window "quickCapture" {:url url
                                                   :title title
                                                   :content content
                                                   :page page
                                                   :append (if (nil? append)
                                                             append
-                                                            (= append "true"))}
-                                  win))
+                                                            (= append "true"))}))
 
       (= action "/invokeCommand")
       (let [[action payload] (get-URL-decoded-params parsed-url ["action" "payload"])]
-        (send-to-focused-renderer "invokeCommand" {:action action
-                                                   :payload payload} win))
+        (send-when-loaded! window "invokeCommand" {:action action
+                                                   :payload payload}))
 
       :else
-      (send-to-focused-renderer "notification" {:type "error"
+      (send-when-loaded! window "notification" {:type "error"
                                                 :payload (str "Unimplemented x-callback-url action: `"
                                                               action
                                                               "`.")
                                                 :i18n-key :electron/unimplemented-callback
-                                                :i18n-args [action]} win))))
+                                                :i18n-args [action]}))))
 
 (defn logseq-url-handler
   "Open a resolved protocol destination in the appropriate window."
@@ -98,6 +98,6 @@
       "graph" (local-url-handler window target false)
       "new-window" (local-url-handler window target true)
       "x-callback-url" (x-callback-url-handler window parsed-url)
-      "handbook" (send-to-renderer window :handbook
-                                   {:key (some-> (.-pathname parsed-url) (string/replace-first #"^[\/]+" ""))
-                                    :args (some-> (.-searchParams parsed-url) (js/Object.fromEntries))}))))
+      "handbook" (send-when-loaded! window :handbook
+                                      {:key (some-> (.-pathname parsed-url) (string/replace-first #"^[\/]+" ""))
+                                       :args (some-> (.-searchParams parsed-url) (js/Object.fromEntries))}))))

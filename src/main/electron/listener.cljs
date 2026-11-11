@@ -25,6 +25,19 @@
   [k f]
   (js/window.apis.on k (fn [data] (f data) nil)))
 
+(defonce ^:private *deeplink-complete (atom state/app-ready-promise))
+
+(defn- listen-for-deeplink!
+  [channel handle!]
+  (safe-api-call channel
+                 (fn [data]
+                   (swap! *deeplink-complete
+                          (fn [previous]
+                            (-> (p/let [_ previous
+                                        result (handle! data)]
+                                  result)
+                                (p/catch #(log/error :deeplink/action-failed %))))))))
+
 (defn- <redirect-when-exists!
   [{:keys [page-name block-id]}]
   (let [repo (state/get-current-repo)]
@@ -44,18 +57,17 @@
 (defn- <open-graph!
   [data]
   (let [{:keys [graph-name i18n-key i18n-args] :as target} (bean/->clj data)]
-    (-> (p/let [_ state/app-ready-promise]
-          (if i18n-key
-            (notification/show! (apply i18n/t (keyword i18n-key) i18n-args) :error false)
-            (p/let [switch-result (when (not= graph-name (state/get-current-repo))
-                                   (state/pub-event! [:graph/switch graph-name]))
-                    ;; Dispatch resolves with the handler promise, which must also complete.
-                    _ switch-result]
-              (when (= graph-name (state/get-current-repo))
-                (<redirect-when-exists! target)))))
-        (p/catch (fn [error]
-                   (log/error :deeplink/navigation-failed error)
-                   (notification/show! (i18n/t :graph/build-error) :error false))))))
+    (if i18n-key
+      (notification/show! (apply i18n/t (keyword i18n-key) i18n-args) :error false)
+      (-> (p/let [switch-result (when (not= graph-name (state/get-current-repo))
+                                  (state/pub-event! [:graph/switch graph-name]))
+                  ;; Dispatch resolves with the handler promise, which must also complete.
+                  _ switch-result]
+            (when (= graph-name (state/get-current-repo))
+              (<redirect-when-exists! target)))
+          (p/catch (fn [error]
+                     (log/error :deeplink/navigation-failed error)
+                     (notification/show! (i18n/t :graph/build-error) :error false)))))))
 
 (defn ^:large-vars/cleanup-todo listen-to-electron!
   []
@@ -111,13 +123,13 @@
                  (fn [code]
                    (user/login-callback code)))
 
-  (safe-api-call "quickCapture"
-                 (fn [args]
-                   (state/pub-event! [:editor/quick-capture args])))
+  (listen-for-deeplink! "quickCapture"
+                      (fn [args]
+                        (state/pub-event! [:editor/quick-capture args])))
 
-  (safe-api-call "invokeCommand"
-                 (fn [args]
-                   (state/pub-event! [:editor/invoke-command args])))
+  (listen-for-deeplink! "invokeCommand"
+                      (fn [args]
+                        (state/pub-event! [:editor/invoke-command args])))
 
   (safe-api-call "openNewWindowOfGraph"
                  ;; Handle open new window in renderer, until the destination graph doesn't rely on setting local storage
@@ -125,7 +137,7 @@
                  (fn [repo]
                    (ui-handler/open-new-window-or-tab! repo)))
 
-  (safe-api-call "openGraph" <open-graph!)
+  (listen-for-deeplink! "openGraph" <open-graph!)
 
   (safe-api-call "invokeLogseqAPI"
                  (fn [^js data]
@@ -158,10 +170,10 @@
                  (fn [^js data]
                    (state/set-state! :electron/server (bean/->clj data))))
 
-  (safe-api-call "handbook"
-                 (fn [^js data]
-                   (when-let [k (and data (.-key data))]
-                     (state/open-handbook-pane! k)))))
+  (listen-for-deeplink! "handbook"
+                      (fn [^js data]
+                        (when-let [k (and data (.-key data))]
+                          (state/open-handbook-pane! k)))))
 
 (defn listen!
   []

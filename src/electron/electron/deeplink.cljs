@@ -34,12 +34,15 @@
         (catch :default _
           invalid)))))
 
-(defn startup-deeplink-url
-  "Cold-start deeplink source of truth.
-
-  macOS delivers the URL via open-url (possibly before ready). Windows/Linux
-  pass it on argv. `pending-url` is any URL stashed from an early open-url."
-  [pending-url argv mac?]
-  (or pending-url
-      (when-not mac?
-        (find-deeplink-url (rest argv)))))
+(defn startup-deeplink-urls
+  "Keep startup actions in arrival order, taking the last of consecutive graph navigations."
+  [pending-urls argv mac?]
+  (let [argv-url (when-not mac? (find-deeplink-url (rest argv)))
+        graph-url? #(and % (re-find #"^logseq://graph(?:[/?#]|$)" %))]
+    (reduce (fn [urls url]
+              (conj (if (and (graph-url? url) (graph-url? (peek urls)))
+                      (pop urls)
+                      urls)
+                    url))
+            (if argv-url [argv-url] [])
+            pending-urls)))

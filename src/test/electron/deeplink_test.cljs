@@ -21,11 +21,19 @@
     (is (= "x-callback-url"
            (.-host (:parsed-url (deeplink/parse-url "logseq://x-callback-url/quickCapture")))))))
 
-(deftest startup-deeplink-url-test
-  (doseq [[pending argv mac? expected]
-          [["logseq://graph/Atlas" ["Logseq" "logseq://graph/Other"] true "logseq://graph/Atlas"]
-           [nil ["Logseq" "logseq://graph/Other"] true nil]
-           [nil ["Logseq" "--flag" "logseq://graph/Atlas" "logseq://graph/Other"] false "logseq://graph/Atlas"]
-           ["logseq://graph/Pending" ["Logseq" "logseq://graph/Argv"] false "logseq://graph/Pending"]
-           [nil ["Logseq" "--flag" "/path/to/file"] false nil]]]
-    (is (= expected (deeplink/startup-deeplink-url pending argv mac?)))))
+(deftest startup-deeplink-urls-test
+  (let [first-url "logseq://graph/First"
+        last-url "logseq://graph/Last"
+        capture "logseq://x-callback-url/quickCapture"
+        window "logseq://new-window/First"
+        argv ["Logseq" "--flag" first-url last-url]]
+    (doseq [[pending mac? expected]
+            [[[] false [first-url]]
+             [[] true []]
+             [[last-url] true [last-url]]
+             [[last-url] false [last-url]]
+             [["logseq://graph?page=Overview"] false ["logseq://graph?page=Overview"]]
+             [[capture capture window window last-url] false
+              [first-url capture capture window window last-url]]]]
+      (is (= expected (deeplink/startup-deeplink-urls pending argv mac?))))
+    (is (empty? (deeplink/startup-deeplink-urls [] ["Logseq" "/path/to/file"] false)))))
