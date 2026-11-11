@@ -73,9 +73,9 @@ async fn target(reference: &Value, renderer: &Renderer) -> Result<Option<Target>
         // A service can follow the creating patch before that native commit.
         // Wait once for mounting; never poll or redirect the identifier later.
         next_frame().await;
-        if !renderer
+        if renderer
             .node_snapshot(node.id)
-            .is_some_and(|live| live.incarnation == node.incarnation)
+            .is_none_or(|live| live.incarnation != node.incarnation)
         {
             return Ok(None);
         }
@@ -105,7 +105,9 @@ fn reply(
             measurement.frame.size.width.0,
             measurement.frame.size.height.0,
         );
-        if ![left, top, width, height]
+        let right = left + width;
+        let bottom = top + height;
+        if ![left, top, width, height, right, bottom]
             .iter()
             .all(|value| value.is_finite())
             || width < 0.0
@@ -114,7 +116,7 @@ fn reply(
             return Err("native measurement has invalid geometry".into());
         }
         payload["nodeId"] = json!(target.node.id);
-        payload["rect"] = json!({"left":left,"top":top,"right":left+width,"bottom":top+height,"width":width,"height":height});
+        payload["rect"] = json!({"left":left,"top":top,"right":right,"bottom":bottom,"width":width,"height":height});
     }
     Ok(PlatformEvent {
         operation: "node-rect".into(),
@@ -194,7 +196,7 @@ async fn scroll_top(target: &Target, top: f32, renderer: &Renderer) -> Result<()
     let _owner = WatchOwner(owner);
     // Measurement reaches the same native commit as the public initial scroll
     // observation. No permanent watcher, timer, offset cache or idle poll remains.
-    target.reference.measure().await;
+    let _ = target.reference.measure().await;
     if !target.current(renderer) {
         return Ok(());
     }
