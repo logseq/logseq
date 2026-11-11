@@ -18,3 +18,14 @@ manager, custom paint layer or text document.
 No extra animations, sounds, entrances or transitions are introduced. Actual
 light/dark appearance, focus indication and IME behavior must be reviewed in the
 running application; headless tests only establish event and ownership behavior.
+
+## IME qualification boundary
+
+The public headless driver qualifies native preedit updates/cancellation and an
+explicit UTF-8 committed edit. Its hardware-key dispatcher does not reproduce a
+platform input method consuming Return while marked text is active. The query
+editor's hardware Return during active IME composition therefore remains
+unqualified by these tests; it must be exercised in the actual macOS, Windows
+and Linux native input methods. The preedit/committed-input assertions remain
+active and verify that cancelled marked text does not become source or produce
+a duplicate committed edit.

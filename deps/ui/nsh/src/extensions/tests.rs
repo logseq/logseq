@@ -164,8 +164,21 @@ fn source_rebinding_replaces_native_editor_but_plain_authoritative_updates_do_no
 #[test]
 fn readonly_editor_preserves_text_and_emits_no_input() {
     let (mut app, events) = start(false, true);
-    assert!(app.type_text("id:lui-1", "forbidden").is_err());
-    app.wait_for("text:initial").unwrap();
+    let before = native(&app);
+    let text_before = app
+        .screen()
+        .texts()
+        .into_iter()
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
+    // A delivered edit may be refused without a driver error. Verify the native
+    // document and application events, rather than the command's transport result.
+    let _ = app.type_text("id:lui-1", "forbidden");
+    assert_eq!(native(&app), before);
+    assert_eq!(
+        app.screen().texts(),
+        text_before.iter().map(String::as_str).collect::<Vec<_>>()
+    );
     assert!(
         !events
             .lock()
@@ -219,8 +232,9 @@ fn focused_query_retains_draft_when_evaluation_snapshot_changes() {
 }
 
 #[test]
-fn native_composition_is_not_forwarded_as_committed_query_input_or_enter() {
+fn native_preedit_cancel_and_utf8_commit_preserve_the_query_document() {
     let (mut app, events) = start(true, false);
+    let before = native(&app);
     app.compose("id:lui-1", "ni").unwrap();
     assert!(
         !events
@@ -229,12 +243,40 @@ fn native_composition_is_not_forwarded_as_committed_query_input_or_enter() {
             .iter()
             .any(|event| event["name"] == "input")
     );
-    app.press_key("enter").unwrap();
+    app.compose("id:lui-1", "").unwrap();
+    app.wait_for("text:initial").unwrap();
     assert!(
         !events
             .lock()
             .unwrap()
             .iter()
+            .any(|event| event["name"] == "input")
+    );
+    events.lock().unwrap().clear();
+    app.type_text("id:lui-1", "你😀").unwrap();
+    let emitted = events.lock().unwrap();
+    let inputs = emitted
+        .iter()
+        .filter(|event| event["name"] == "input")
+        .collect::<Vec<_>>();
+    assert_eq!(
+        inputs.len(),
+        1,
+        "a committed edit must be forwarded exactly once"
+    );
+    let value = inputs[0]["value"].as_str().unwrap().to_owned();
+    assert_eq!(value.matches("你😀").count(), 1);
+    assert_eq!(
+        value.replace("你😀", ""),
+        "initial",
+        "cancelled preedit leaked into committed source"
+    );
+    assert!(
+        !emitted
+            .iter()
             .any(|event| event.get("key") == Some(&Value::from("Enter")))
     );
+    drop(emitted);
+    app.wait_for(&format!("text:{value}")).unwrap();
+    assert_eq!(native(&app), before);
 }

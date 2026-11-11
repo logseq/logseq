@@ -152,7 +152,9 @@ fn native_sink(context: ExtensionContext, block: String, read: SnapshotReader) -
     let selection_current = current.clone();
     let composition_current = current.clone();
     let focus_current = current.clone();
+    let test_id = format!("lui-{}", context.node.get_untracked().id);
     input()
+        .test_id(&test_id)
         .value(move || value.get())
         .selected_range(move || range.get())
         .readonly(move || !ready.get())
