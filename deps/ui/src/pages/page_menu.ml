@@ -30,7 +30,18 @@ let public_item uuid : t = fun ctx parent ->
     if !alive && Runtime.repo () = graph then
       Runtime.signal_set value (Some (Wire.get data "logseq.property/publishing-public?" = Some (Wire.Bool true)));
     Js.Promise.resolve ());
-  (reactive (function
+  (if Lui_ui.host ctx = Lui_protocol.NshHost then
+     Menu_item.el ~key:"public"
+       ~label:(reactive (fun public ->
+         I18n.t (if public = Some true then "page/make-private" else "page/make-public"))
+         (Signal.value value))
+       ~disabled:(reactive Option.is_none (Signal.value value))
+       ~on_click:(fun () -> match Runtime.signal_get value with
+         | None -> ()
+         | Some public ->
+             Runtime.send (Action.Page_menu_set None);
+             ignore (Page_ops.set_public uuid (not public))) ()
+   else reactive (function
     | None -> column []
     | Some public -> item "public" (I18n.t (if public then "page/make-private" else "page/make-public"))
         (fun () -> Runtime.send (Action.Page_menu_set None);
@@ -190,11 +201,17 @@ let user_item () : Lui_elements.t =
   let maskedv = (Signal.value masked) in
   (* e2e requires div[role='menuitem'] — role/tabindex ride data_attrs;
      data-menu-tail keeps it out of the open-time initial highlight *)
-  box ~key:"acct-user" ~style_class:"ui__dropdown-menu-item"
-    ~data_attrs:
-      [ ("style", "width:100%")
-      ; ("role", "menuitem"); ("tabindex", "-1"); ("data-menu-tail", "") ]
-    [ Ui_components.with_props
+  let account children =
+    if Lui_ui.host ctx = Lui_protocol.NshHost then
+      Ui_parts.string_prop Lui_protocol.AccessibilityLabel ~value:username
+        (menu_item ~key:"acct-user"
+           ~style_class:"ui__dropdown-menu-item" children)
+    else box ~key:"acct-user" ~style_class:"ui__dropdown-menu-item"
+      ~data_attrs:
+        [ ("style", "width:100%")
+        ; ("role", "menuitem"); ("tabindex", "-1"); ("data-menu-tail", "") ] children
+  in
+  account [ Ui_components.with_props
         [ Ui_components.Prop.position `relative ]
         (column ~key:"u-span"
         [ text ~key:"u-name" ~value:username []

@@ -58,7 +58,7 @@ let search_btn ?(key = "search-btn") () =
     ~label:(I18n.t "nav/search") (fun () -> Cmdk_state.open_latest ())
 
 (* The shared menu owns this trigger and follows its retained bounds. *)
-let dots_btn : t =
+let legacy_dots_btn : t =
  fun context parent ->
   (icon_btn ~key:"dots-btn" ~acc:"toolbar-dots-btn" ~icon_name:"dots"
     ~style_class:"toolbar-dots-btn"
@@ -72,6 +72,28 @@ let dots_btn : t =
           Runtime.send
             (Action.Page_menu_set (Some (x, 48., 48., true, None)))))
   ) context parent
+
+(* Reconciliation keeps the trigger and native Menu owner keyed while refreshing
+   this bounded action list from the existing model notification. *)
+let dots_btn (ms : Model.t Signal.signal) : t =
+ fun context parent ->
+  if Lui_ui.host context <> Lui_protocol.NshHost then legacy_dots_btn context parent
+  else
+    (reactive ~equal:( == )
+      (fun (m : Model.t) ->
+        let items = match Page_menu.resolve_menu_page m None with
+          | Some page -> Page_menu.page_items page
+              @ [Page_menu.separator "pg-app"] @ Page_menu.global_items ()
+          | None -> Page_menu.global_items () in
+        Ui_components.chrome_button
+          (Ui_components.button ~key:"dots-btn" ~variant:`ghost ~size:`icon
+            ~width:32 ~height:32 ~main:`center ~cross:`center
+            ~accessibility_identifier:"toolbar-dots-btn"
+            ~style_class:"toolbar-dots-btn" ~label:(I18n.t "header/more")
+            [Icons.icon ~size:20. "dots";
+             context_menu ~key:"page-menu" ~width:256
+               ~style_class:"ui__dropdown-menu-content ls-dots-menu" items])) ms)
+      context parent
 
 let home_btn ms =
   icon_btn ~key:"home-btn" ~acc:"home-btn" ~icon_name:"home"
@@ -198,7 +220,7 @@ let topbar (ms : Model.t Signal.signal) : t =
             [ rtc_item ms
             ; home_item ms
             ; back_and_forward ()
-            ; dots_btn
+            ; dots_btn ms
             ; right_toggle_btn ms ]) ]
 
 let performance_bar_height = 29
