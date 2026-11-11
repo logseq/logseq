@@ -56,9 +56,9 @@
            (is (= ["imported"] imports) "the db.sqlite entry is imported")
            (is (= #{"a.png" "b.png"} (set writes)))
            (is (= [[:graph/importing :sqlite-zip]
-                   [:graph/importing-state {:total 2 :current-idx 0 :current-page "Assets"}]
-                   [:graph/importing-state {:total 2 :current-idx 1 :current-page "Assets"}]
-                   [:graph/importing-state {:total 2 :current-idx 2 :current-page "Assets"}]
+                   [:graph/importing-state {:total 2 :current-idx 0 :step :assets}]
+                   [:graph/importing-state {:total 2 :current-idx 1 :step :assets}]
+                   [:graph/importing-state {:total 2 :current-idx 2 :step :assets}]
                    [:graph/importing nil]
                    [:graph/importing-state nil]]
                   states)
