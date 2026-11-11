@@ -15,11 +15,6 @@
             [logseq.graph-parser.db-input :as db-input]
             [logseq.graph-parser.property :as gp-property]))
 
-(defn math-block-formula
-  "Returns the formula of a single display math block."
-  [title]
-  (db-input/math-block-formula title))
-
 (defn extract-blocks
   "Wrapper around logseq.graph-parser.block/extract-blocks that adds in system state
 and handles unexpected failure."

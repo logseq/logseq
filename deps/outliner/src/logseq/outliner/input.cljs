@@ -26,13 +26,13 @@
   [conn refs ast tags]
   (let [names (into #{} (keep #(gp-block/get-page-reference % :markdown))
                     (tree-seq coll? seq ast))
-        parents (into #{} (keep #(get-in % [:block/namespace :block/name])) refs)]
+        parent-names (into #{} (keep #(get-in % [:block/namespace :block/name])) refs)]
     (->> refs
          ;; File parsing also emits namespace ancestors. The DB editor
          ;; references the selected leaf rather than these generated parents.
          (remove (fn [ref]
                    (and (map? ref) (:block/type ref)
-                        (contains? parents (:block/name ref))
+                        (contains? parent-names (:block/name ref))
                         (not (contains? names (:block/title ref))))))
          (mapv (fn [ref]
                  (cond
@@ -140,18 +140,24 @@
   "Resolves input on an isolated copy; downstream transaction hooks are not forecast."
   [conn ops options]
   (let [preview (ldb/temp-conn-from-db @conn)
-        before (set (d/q '[:find [?e ...] :where [?e :block/name]] @conn))
-        page! (fn [name]
+        before @conn
+        named-pages (atom #{})
+        page! (fn [page-name]
                 (let [matches (map #(d/entity @preview (:e %))
                                    (d/datoms @preview :avet :block/name
-                                             (common-util/page-name-sanity-lc name)))]
+                                             (common-util/page-name-sanity-lc page-name)))]
                   ;; Match live name materialization: explicit property
                   ;; lookups cannot implicitly restore an all-recycled name.
                   (when (and (seq matches) (every? ldb/recycled? matches))
-                    (throw (ex-info "page is recycled" {:block/name name})))
-                  (let [[_ id] (outliner-page/create! preview name {:split-namespace? true})]
+                    (throw (ex-info "page is recycled" {:block/name page-name})))
+                  (let [[_ id] (outliner-page/create! preview page-name {:split-namespace? true})]
                     (d/entity @preview [:block/uuid id]))))
         named-lookup? (fn [x] (and (vector? x) (= :block/name (first x))))]
+    (d/listen! preview ::preview-pages
+               (fn [{:keys [tx-data]}]
+                 (doseq [datom tx-data
+                         :when (and (:added datom) (= :block/name (:a datom)))]
+                   (swap! named-pages conj (:e datom)))))
     (try
       (let [ops (mapv (fn [[op args :as entry]]
                         (let [entry (if (and (= :logseq.outliner/insert-blocks-input op) (named-lookup? (second args)))
@@ -162,13 +168,16 @@
                                          entry)))
                       ops)]
         (apply-ops! preview ops options)
-        {:would-create-pages (->> (d/q '[:find [?e ...] :where [?e :block/name]] @preview)
-                                 (remove before)
+        {:would-create-pages (->> @named-pages
+                                 (remove #(:block/name (d/entity before %)))
+                                 (filter #(:block/name (d/entity @preview %)))
                                  sort
                                  (map #(ldb/get-title-with-parents (d/entity @preview %)))
                                  distinct
                                  vec)})
-      (finally (reset! preview nil)))))
+      (finally
+        (d/unlisten! preview ::preview-pages)
+        (reset! preview nil)))))
 
 (defn apply-ops!
   "Applies canonical operations or parses raw content in the same atomic batch.

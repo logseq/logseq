@@ -6,7 +6,7 @@ const exec = require('node:util').promisify(execFile);
 const os = require('node:os');
 const test = require('node:test');
 const repo = path.resolve(__dirname, '../..');
-const transit = require(path.join(repo, 'node_modules/transit-js'));
+const transit = require(path.join(repo, 'cli/node_modules/transit-js'));
 
 test('CLI metadata writes preserve named links, backlinks and recurring journal refs', async t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'logseq-cli-metadata-refs-'));
@@ -143,13 +143,25 @@ test('CLI metadata writes preserve named links, backlinks and recurring journal 
     await command('graph', 'validate');
   }
   t.after(async () => {
-    await command('server', 'stop');
-    const logs = fs.readdirSync(root, { recursive: true }).filter(name => /db-worker-node-.*\.log$/.test(name));
-    const errors = logs.flatMap(name => fs.readFileSync(path.join(root, name), 'utf8')
-      .split('\n').filter(line => /ERROR|Exception|invalid-data/.test(line)));
-    t.diagnostic(`Checked ${logs.length} worker log(s): ${errors.length} error line(s)`);
-    for (const line of errors) t.diagnostic(line);
-    fs.rmSync(root, { recursive: true, force: true });
+    let teardownError;
+    try {
+      await command('server', 'stop');
+      const logs = fs.readdirSync(root, { recursive: true }).filter(name => /db-worker-node-.*\.log$/.test(name));
+      const errors = logs.flatMap(name => fs.readFileSync(path.join(root, name), 'utf8')
+        .split('\n').filter(line => /ERROR|Exception|invalid-data/.test(line)));
+      t.diagnostic(`Checked ${logs.length} worker log(s): ${errors.length} error line(s)`);
+      for (const line of errors) t.diagnostic(line);
+    } catch (error) {
+      teardownError = error;
+      throw error;
+    } finally {
+      try {
+        fs.rmSync(root, { recursive: true, force: true });
+      } catch (cleanupError) {
+        if (teardownError) throw new AggregateError([teardownError, cleanupError], 'Teardown and directory cleanup failed', { cause: teardownError });
+        throw cleanupError;
+      }
+    }
   });
   await main();
   t.diagnostic(`${report.stages.length} stages, ${report.checks} reference and backlink checks`);

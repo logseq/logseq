@@ -2042,6 +2042,70 @@ let () =
             fail_promise
               (Printf.sprintf "expected three invoke requests, got %d" !step)));
 
+  List.iter
+    (fun (selector, message, expected_code) ->
+      test_promise
+        ("upsert block " ^ selector ^ " reports worker failure: " ^ message)
+        (fun () ->
+          let requests = ref 0 in
+          let server =
+            create_server (fun[@u] req res ->
+                let body = ref "" in
+                req_set_encoding req "utf8";
+                req_on_data req "data" (fun[@u] chunk -> body := !body ^ chunk);
+                req_on_end req "end" (fun[@u] () ->
+                    incr requests;
+                    if Js.String.includes ~search:"thread-api/pull" !body then
+                      write_json res 200
+                        (json_response
+                           "[\"^ \
+                            \",\"~:db/id\",233,\"~:block/uuid\",\"~u00000000-0000-4000-8000-000000000233\"]")
+                    else if
+                      Js.String.includes ~search:"thread-api/apply-outliner-ops"
+                        !body
+                    then write_json res 500 (error_response message)
+                    else write_json res 400 (error_response !body)))
+          in
+          with_server server (fun base_url ->
+              let* output =
+                run_cli_p
+                  ~env:[| ("LOGSEQ_CLI_BASE_URL", base_url) |]
+                  [|
+                    "--graph";
+                    "alpha";
+                    "--output";
+                    "json";
+                    "upsert";
+                    "block";
+                    selector;
+                    "233";
+                    "--content";
+                    "updated after concurrent delete";
+                  |]
+              in
+              if output.code = 0 then
+                fail_test "worker failure must fail update";
+              if expected_code <> "" then (
+                expect_named_contains "concurrent deletion error code"
+                  output.stdout
+                  ("\"code\":\"" ^ expected_code ^ "\"");
+                expect_named_contains "concurrent deletion reason" output.stdout
+                  message)
+              else (
+                expect_named_contains "unrelated worker failure" output.stderr
+                  message;
+                expect_named_not_contains "not a deletion race" output.stdout
+                  "source-not-found");
+              if !requests <> 2 then
+                fail_test "update must not retry worker failure";
+              Js.Promise.resolve pass)))
+    [
+      ("--id", "Block source does not exist", "source-not-found");
+      ("--id", "unexpected storage failure", "");
+      ("--target-id", "Block target does not exist", "target-not-found");
+      ("--target-id", "unexpected storage failure", "");
+    ];
+
   test_promise "upsert block update resolves tag names from tag list" (fun () ->
       let step = ref 0 in
       let captured_apply_body = ref None in

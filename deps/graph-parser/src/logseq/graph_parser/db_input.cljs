@@ -80,7 +80,7 @@
   | `:user-config` | Graph settings passed to extraction. |
   | `:date-formatter` | Journal title format. |
   | `:extract-blocks` | Optional extraction wrapper, used by Desktop error reporting. |"
-  [{:block/keys [uuid title format] :as block} options]
+  [{:block/keys [title format] block-uuid :block/uuid :as block} options]
   (when-not (string/blank? title)
     (let [block (dissoc block :block/pre-block?)
           format (or format :markdown)
@@ -96,7 +96,7 @@
                   true
                   (dissoc :block/format))
           block (dissoc block :block.temp/ast-body :block/level)]
-      (if uuid (assoc block :block/uuid uuid) block))))
+      (if block-uuid (assoc block :block/uuid block-uuid) block))))
 
 (defn- use-cached-refs
   [refs block cached-refs]
@@ -139,8 +139,8 @@
     [:block/uuid (second ref)]
 
     (map? ref)
-    (if-let [uuid (:block/uuid ref)]
-      [:block/uuid uuid]
+    (if-let [block-uuid (:block/uuid ref)]
+      [:block/uuid block-uuid]
       ref)
 
     :else

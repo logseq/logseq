@@ -777,13 +777,21 @@ let execute_ops mode invoke_config action source_uuid target_uuid =
                     (Edn_util.map_vec
                        (Vec.of_array [| (kw "result", Edn_util.nil) |]))))
           else
-            bind (apply_outliner_ops invoke_config action.repo ops)
-              (fun result ->
-                pure
-                  (Cli_result.ok ~command:Command_id.Upsert_block mode
-                     (Raw
-                        (Edn_util.map_vec
-                           (Vec.of_array [| (kw "result", result) |]))))))
+            catch
+              (bind (apply_outliner_ops invoke_config action.repo ops)
+                 (fun result ->
+                   pure
+                     (Cli_result.ok ~command:Command_id.Upsert_block mode
+                        (Raw
+                           (Edn_util.map_vec
+                              (Vec.of_array [| (kw "result", result) |]))))))
+              (function
+                | Failure message when message = "Block source does not exist"
+                  ->
+                    pure
+                      (Cli_result.error ~command:Command_id.Upsert_block mode
+                         (Error.make Error.Source_not_found message))
+                | exn -> error exn))
 
 let resolve_optional_target_uuid invoke_config action =
   let open Cli_effect in

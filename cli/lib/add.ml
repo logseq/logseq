@@ -1343,7 +1343,7 @@ let materialize_name_lookups invoke_config repo ~target_lookup ops =
                ( rewrite_name_lookups ~target:target_lookup ids ops,
                  created_uuids () ))))
 
-let execute_add_block ~extra_ops ?(dry_run = false) action config mode =
+let execute_add_block_request ~extra_ops ?(dry_run = false) action config mode =
   let open Cli_effect in
   bind (Server_runtime.ensure_server config action.repo ~create_empty_db:false)
     (function
@@ -1483,3 +1483,13 @@ let execute_add_block ~extra_ops ?(dry_run = false) action config mode =
                                                ~command:
                                                  Command_id.Upsert_block mode
                                                (Raw (result_ids ids))))))))))
+
+let execute_add_block ~extra_ops ?(dry_run = false) action config mode =
+  Cli_effect.catch
+    (execute_add_block_request ~extra_ops ~dry_run action config mode)
+    (function
+      | Failure message when message = "Block target does not exist" ->
+          Cli_effect.pure
+            (Cli_result.error ~command:Command_id.Upsert_block mode
+               (Error.make Error.Target_not_found message))
+      | exn -> Cli_effect.error exn)

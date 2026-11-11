@@ -73,6 +73,27 @@
           (is (= before @conn))
           (is (nil? (d/entity @conn [:block/uuid id]))))))))
 
+(deftest preview-reports-only-surviving-new-pages
+  (let [{:keys [conn id alpha]} (fixture)
+        before @conn
+        temporary-id (random-uuid)
+        extra-id (random-uuid)]
+    (with-pipeline
+      (fn []
+        (is (= [] (get-in (call! conn [[:logseq.outliner/preview-ops [[]]]])
+                         [:result :would-create-pages])))
+        (let [response (call! conn
+                              [[:logseq.outliner/preview-ops
+                                [[[:logseq.outliner/save-block-input
+                                   [{:block/uuid id :block/title "[[Alpha]] [[New/Child]] [[New/Child]]"} {}]]]]]]
+                              {:additional-tx [{:block/uuid temporary-id :block/name "temporary" :block/title "Temporary"}
+                                               [:db/retractEntity [:block/uuid temporary-id]]
+                                               {:block/uuid extra-id :block/name "extra" :block/title "Extra"}
+                                               [:db/add [:block/uuid alpha] :block/title "Renamed Alpha"]]})]
+          (is (= #{"New" "New/Child" "Extra"}
+                 (set (get-in response [:result :would-create-pages])))))
+        (is (= before @conn))))))
+
 (deftest generic-content-path-retains-existing-transaction-options
   (doseq [raw? [false true]]
     (let [{:keys [conn id alpha]} (fixture)
