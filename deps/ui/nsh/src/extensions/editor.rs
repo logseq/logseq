@@ -9,7 +9,7 @@ use super::string;
 use lui_nsh::{
     app::ApplicationRuntime, extensions::ExtensionContext, runtime::EditorSnapshot, store::Node,
 };
-use nsh_core::{keymap::When, prelude::*};
+use nsh_core::{element::input, keymap::When, prelude::*};
 use serde_json::{Map, Value, json};
 use std::{
     cell::{Cell, RefCell},
