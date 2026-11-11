@@ -107,9 +107,26 @@
 
 (def ^:private pull-reply-timeout-ms
   "A pull whose reply has not come after this long, on a socket that stays open, is
-  taken as lost: the next pull from the same t is sent instead of being dropped as a
-  duplicate. Without it a reply lost on an open socket stopped sync until a restart."
+  taken as lost: it is sent again by its own timer, and the next pull from the same t
+  is sent instead of being dropped as a duplicate. Without it a reply lost on an open
+  socket stopped sync until a restart."
   30000)
+
+(declare request-pull!)
+
+(defn- schedule-pull-reply-check!
+  "Sends the pull from `since` again when its reply has not come `pull-reply-timeout-ms`
+  after `sent-at`, also on a graph where no later `changed` arrives to trigger it."
+  [client since sent-at]
+  (let [timer (js/setTimeout
+               (fn []
+                 (when (and (= since (some-> (:pending-pull-since client) deref))
+                            (= sent-at (some-> (:pending-pull-sent-at client) deref)))
+                   (request-pull! client since)))
+               pull-reply-timeout-ms)]
+    ;; In node the check must not keep the worker process alive.
+    (when (fn? (some-> timer .-unref))
+      (.unref timer))))
 
 (defn- request-pull!
   [client since]
@@ -126,7 +143,9 @@
                                (>= (- now @*sent-at) pull-reply-timeout-ms))]
              (when (or (nil? pending) (< since pending) expired?)
                (reset! *pending since)
-               (some-> *sent-at (reset! now))
+               (when *sent-at
+                 (reset! *sent-at now)
+                 (schedule-pull-reply-check! client since now))
                (send! (:ws client) {:type "pull" :since since})))
            (send! (:ws client) {:type "pull" :since since})))))))
 
