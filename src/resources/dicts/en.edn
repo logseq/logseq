@@ -481,6 +481,7 @@
  :date.nlp/tomorrow "Tomorrow"
  :date.nlp/yesterday "Yesterday"
 
+ :deeplink/invalid-link-error "Failed to open link. The URL or graph identifier is invalid."
  :deeplink/open-block-error "Open link failed. Block-id `{1}` doesn't exist in the graph."
  :deeplink/open-graph-error "Open graph failed. Graph `{1}` doesn't exist."
  :deeplink/open-page-error "Open link failed. Page `{1}` doesn't exist in the graph."

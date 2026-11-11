@@ -16,6 +16,7 @@
             [frontend.persist-db :as persist-db]
             [frontend.state :as state]
             [frontend.ui :as ui]
+            [lambdaisland.glogi :as log]
             [promesa.core :as p]))
 
 (defn- safe-api-call
@@ -23,6 +24,38 @@
   window crash."
   [k f]
   (js/window.apis.on k (fn [data] (f data) nil)))
+
+(defn- <redirect-when-exists!
+  [{:keys [page-name block-id]}]
+  (let [repo (state/get-current-repo)]
+    (cond
+      page-name
+      (p/let [page (db-async/<get-block repo page-name {:children? false})]
+        (when (and page (= repo (state/get-current-repo)))
+          (route-handler/redirect-to-page! page-name {:block-id block-id})))
+
+      block-id
+      (p/let [block (db-async/<get-block repo block-id {:children? false})]
+        (when (= repo (state/get-current-repo))
+          (if block
+            (route-handler/redirect-to-page! block-id)
+            (notification/show! (i18n/t :electron/block-not-exist block-id) :error false)))))))
+
+(defn- <open-graph!
+  [data]
+  (let [{:keys [graph-name i18n-key i18n-args] :as target} (bean/->clj data)]
+    (-> (p/let [_ state/app-ready-promise]
+          (if i18n-key
+            (notification/show! (apply i18n/t (keyword i18n-key) i18n-args) :error false)
+            (p/let [switch-result (when (not= graph-name (state/get-current-repo))
+                                   (state/pub-event! [:graph/switch graph-name]))
+                    ;; Dispatch resolves with the handler promise, which must also complete.
+                    _ switch-result]
+              (when (= graph-name (state/get-current-repo))
+                (<redirect-when-exists! target)))))
+        (p/catch (fn [error]
+                   (log/error :deeplink/navigation-failed error)
+                   (notification/show! (i18n/t :graph/build-error) :error false))))))
 
 (defn ^:large-vars/cleanup-todo listen-to-electron!
   []
@@ -63,23 +96,8 @@
                      (route-handler/redirect! payload))))
 
   (safe-api-call "redirectWhenExists"
-                 ;;  Redirect to the given page or block when the provided page or block exists.
-                 ;;  Either :page-name or :block-id is required.
-                 ;;  :page-name : the title of the page.
-                 ;;  :block-id : uuid.
                  (fn [data]
-                   (let [{:keys [page-name block-id]} (bean/->clj data)]
-                     (cond
-                       page-name
-                       (p/let [page (db-async/<get-block (state/get-current-repo) page-name {:children? false})]
-                         (when page
-                           (route-handler/redirect-to-page! page-name {:block-id block-id})))
-
-                       block-id
-                       (p/let [block (db-async/<get-block (state/get-current-repo) block-id {:children? false})]
-                         (if block
-                           (route-handler/redirect-to-page! block-id)
-                           (notification/show! (i18n/t :electron/block-not-exist block-id) :error false)))))))
+                   (<redirect-when-exists! (bean/->clj data))))
 
   (safe-api-call "foundInPage"
                  (fn [data]
@@ -107,11 +125,7 @@
                  (fn [repo]
                    (ui-handler/open-new-window-or-tab! repo)))
 
-  (safe-api-call "switchGraph"
-                 ;; logseq://graph/... when the graph is not already open in a window
-                 (fn [repo]
-                   (when repo
-                     (state/pub-event! [:graph/switch repo]))))
+  (safe-api-call "openGraph" <open-graph!)
 
   (safe-api-call "invokeLogseqAPI"
                  (fn [^js data]

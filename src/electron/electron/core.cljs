@@ -21,11 +21,12 @@
             [electron.release-warning :as release-warning]
             [electron.server :as server]
             [electron.updater :refer [init-updater] :as updater]
-            [electron.url :refer [logseq-url-handler]]
+            [electron.url :as url]
             [electron.utils :refer [*win mac? dev? get-win-from-sender
                                     decode-protected-assets-schema-path send-to-renderer]
              :as utils]
             [electron.window :as win]
+            [lambdaisland.glogi :as log]
             [logseq.publishing.export :as publish-export]
             [promesa.core :as p]))
 
@@ -54,18 +55,10 @@
                  :win    win}))
 
 (defn open-url-handler
-  "win - the main window instance (first renderer process)
-   url - the input URL"
-  [win url]
-  (logger/info "open-url" {:url url})
-  ;; https://github.com/electron-userland/electron-builder/issues/1552
-  ;; At macOS platform this is captured at 'open-url' event, we set it with deeplinkingUrl = url! (See // Protocol handler for osx)
-  ;; At win32 platform this is saved at process.argv together with other arguments. To get only the provided url, deeplinkingUrl = argv.slice(1). (See // Protocol handler for win32)
-  (when-let [parsed-url (try (js/URL. url)
-                             (catch :default e
-                               (logger/info "upon opening non-url" {:error e})))]
-    (when (= (str LSP_SCHEME ":") (.-protocol parsed-url))
-      (logseq-url-handler win parsed-url))))
+  "Resolve and open a protocol URL in the appropriate window."
+  [window protocol-url]
+  (log/info :deeplink/open-url protocol-url)
+  (url/logseq-url-handler window (url/resolve-url protocol-url)))
 
 (defn- register-default-protocol-client!
   "Register Logseq as the default handler for the custom protocol.
@@ -301,14 +294,8 @@
 
     :else
     (do (reset! *pending-open-url url)
-        (logger/info "open-url-pending" {:url url})
+        (log/info :deeplink/pending-url url)
         :pending)))
-
-(defn graph-name-from-deeplink-url
-  "Resolve `logseq://graph/<identifier>` to a full graph name, else nil."
-  [url]
-  (when-let [identifier (deeplink/graph-identifier-from-url url)]
-    (handler/get-graph-name identifier)))
 
 (defn startup-deeplink-url
   "Cold-start deeplink: macOS open-url may arrive before ready; Windows/Linux
@@ -327,14 +314,13 @@
          (note-open-url! url))))
 
 (defn- handle-deferred-deeplink!
-  "After the main window exists, handle any leftover protocol URL that was not
-   consumed as the startup graph (x-callback, new-window, page redirects, or a
-   late open-url that raced window creation)."
-  [win startup-url startup-graph]
-  (when-let [url (or (when (and startup-url (nil? startup-graph))
-                       startup-url)
-                     (take-pending-open-url!))]
-    (open-url-handler win url)))
+  [window startup-target]
+  (when startup-target
+    (if (:graph-name startup-target)
+      (url/open-graph! window startup-target)
+      (url/logseq-url-handler window startup-target)))
+  (when-let [pending-url (take-pending-open-url!)]
+    (open-url-handler window pending-url)))
 
 (defn- maybe-warn-wrong-release!
   []
@@ -438,11 +424,9 @@
              (p/then
               (fn [_]
                 (let [t0 (setup-interceptor! app')
-                      ;; Prefer opening the deeplink graph in the main window on
-                      ;; cold start instead of restoring last-used then opening
-                      ;; a second window (db-test #1520).
                       startup-url (startup-deeplink-url)
-                      startup-graph (graph-name-from-deeplink-url startup-url)
+                      startup-target (when startup-url (url/resolve-url startup-url))
+                      startup-graph (:graph-name startup-target)
                       ^js win (win/create-main-window!
                                win/MAIN_WINDOW_ENTRY
                                (when startup-graph {:graph startup-graph}))
@@ -455,7 +439,7 @@
                   (db/ensure-graphs-dir!)
                   (install-cli-launcher!)
 
-                  (handle-deferred-deeplink! win startup-url startup-graph)
+                  (handle-deferred-deeplink! win startup-target)
                   (maybe-warn-wrong-release!)
 
                   (vreset! *setup-fn

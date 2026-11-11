@@ -481,6 +481,7 @@
  :date.nlp/tomorrow "明天"
  :date.nlp/yesterday "昨天"
 
+ :deeplink/invalid-link-error "打开链接失败。链接或图谱标识符无效。"
  :deeplink/open-block-error "打开链接失败。块 ID `{1}` 不存在于当前图谱中。"
  :deeplink/open-graph-error "打开图谱失败。图谱 `{1}` 不存在。"
  :deeplink/open-page-error "打开链接失败。页面 `{1}` 不存在于当前图谱中。"

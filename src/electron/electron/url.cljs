@@ -1,13 +1,9 @@
 (ns electron.url
   (:require [clojure.string :as string]
+            [electron.deeplink :as deeplink]
             [electron.handler :as handler]
-            [electron.state :as state]
             [electron.utils :refer [send-to-renderer send-to-focused-renderer] :as utils]
-            [electron.window :as win]
-            [promesa.core :as p]))
-
-;; Keep same as main/frontend.util.url
-(def decode js/decodeURI)
+            [electron.window :as win]))
 
 (defn get-URL-decoded-params
   "Get decoded URL parameters from parsed js/URL.
@@ -21,55 +17,43 @@
              value))
          keys)))
 
-(defn graph-identifier-error-handler
-  [graph-identifier]
-  (if (not-empty graph-identifier)
-    (send-to-renderer "notification" {:type "error"
-                                      :payload (str "Failed to open link. Cannot match graph identifier `" graph-identifier "` to any linked graph.")
-                                      :i18n-key :electron/link-open-failed-no-graph
-                                      :i18n-args [graph-identifier]})
-    (send-to-renderer "notification" {:type "error"
-                                      :payload "Failed to open link. Missing graph identifier after `logseq://graph/`."
-                                      :i18n-key :electron/link-open-failed-missing-graph})))
+(defn resolve-url
+  "Resolve a protocol URL to a known graph, action, or translated link error."
+  [url]
+  (let [{:keys [parsed-url graph-identifier i18n-key] :as target} (deeplink/parse-url url)]
+    (cond
+      i18n-key target
+      graph-identifier
+      (if-let [graph-name (handler/get-graph-name graph-identifier)]
+        (assoc target :graph-name graph-name)
+        {:i18n-key :electron/link-open-failed-no-graph :i18n-args [graph-identifier]})
+      (contains? #{"x-callback-url" "handbook"} (.-host parsed-url)) target
+      :else {:i18n-key :electron/link-open-failed-no-target :i18n-args [(.-host parsed-url)]})))
 
-(defn local-url-handler
-  "Given a URL with `graph identifier` as path, `page` (optional) and `block-id`
-   (optional) as parameters, open the local graphs accordingly.
-   `graph identifier` is the name of the graph to open, e.g. `lambda`
+(defn- send-when-loaded!
+  [^js window channel payload]
+  (let [web-contents (.-webContents window)
+        send! #(when-not (.isDestroyed window)
+                 (send-to-renderer window channel payload))]
+    (if (.isLoadingMainFrame web-contents)
+      (.once web-contents "did-finish-load" send!)
+      (send!))))
 
-   `logseq://graph/...` reuses an existing window on that graph when possible,
-   otherwise switches the target window's graph in place. Use
-   `logseq://new-window/...` (`force-new-window?`) to open another window."
-  [^js win parsed-url force-new-window?]
-  (let [graph-identifier (decode (string/replace (.-pathname parsed-url) "/" ""))
-        [page-name block-id file] (get-URL-decoded-params parsed-url ["page" "block-id" "file"])
-        graph-name (when graph-identifier (handler/get-graph-name graph-identifier))]
-    (if graph-name
-      (p/let [window-on-graph (first (win/get-graph-all-windows (utils/get-graph-dir graph-name)))]
-          ;; TODO: allow open new window on specific page, without waiting for `graph ready` ipc then redirect to that page
-        (let [redirect-f (when (or page-name block-id file)
-                           (fn [win' graph-name']
-                             (when (= graph-name graph-name')
-                               (send-to-renderer win' "redirectWhenExists" {:page-name page-name
-                                                                            :block-id block-id
-                                                                            :file file}))))]
-          (cond
-            window-on-graph
-            (do (win/switch-to-window! window-on-graph)
-                (when redirect-f
-                  (redirect-f window-on-graph graph-name)))
+(defn open-graph!
+  "Deliver a resolved graph destination or link error after renderer listeners load."
+  [window target]
+  (send-when-loaded! window "openGraph"
+                     (select-keys target [:graph-name :page-name :block-id :i18n-key :i18n-args])))
 
-            force-new-window?
-            (do (when redirect-f
-                  (state/set-state! :window/once-graph-ready redirect-f))
-                (send-to-renderer win "openNewWindowOfGraph" graph-name))
-
-            :else
-            (do (when redirect-f
-                  (state/set-state! :window/once-graph-ready redirect-f))
-                (win/switch-to-window! win)
-                (send-to-renderer win "switchGraph" graph-name)))))
-      (graph-identifier-error-handler graph-identifier))))
+(defn- local-url-handler
+  [window target force-new-window?]
+  (let [graph-name (:graph-name target)
+        target-window (if force-new-window?
+                        (handler/open-new-window! graph-name)
+                        (or (first (win/get-graph-all-windows (utils/get-graph-dir graph-name)))
+                            window))]
+    (win/switch-to-window! target-window)
+    (open-graph! target-window target)))
 
 (defn- x-callback-url-handler
   "win - a window used for fallback (main window is preferred)"
@@ -106,29 +90,14 @@
                                                 :i18n-args [action]} win))))
 
 (defn logseq-url-handler
-  "win - the main window"
-  [^js win parsed-url]
-  (let [url-host (.-host parsed-url)] ;; return "" when no pathname provided
-    (cond
-      (= "x-callback-url" url-host)
-      (x-callback-url-handler win parsed-url)
-
-      ;; identifier of graph in local
-      (= "graph" url-host)
-      (local-url-handler win parsed-url false)
-
-      (= "new-window" url-host)
-      (local-url-handler win parsed-url true)
-
-      (= "handbook" url-host)
-      (send-to-renderer :handbook
-                        {:key  (some-> (.-pathname parsed-url) (string/replace-first #"^[\/]+" ""))
-                         :args (some-> (.-searchParams parsed-url) (js/Object.fromEntries))})
-
-      :else
-      (send-to-renderer :notification
-                        {:type    "error"
-                         :payload (str "Failed to open link. Cannot match `" url-host
-                                       "` to any target.")
-                         :i18n-key :electron/link-open-failed-no-target
-                         :i18n-args [url-host]}))))
+  "Open a resolved protocol destination in the appropriate window."
+  [window {:keys [parsed-url i18n-key] :as target}]
+  (if i18n-key
+    (open-graph! window target)
+    (case (.-host parsed-url)
+      "graph" (local-url-handler window target false)
+      "new-window" (local-url-handler window target true)
+      "x-callback-url" (x-callback-url-handler window parsed-url)
+      "handbook" (send-to-renderer window :handbook
+                                   {:key (some-> (.-pathname parsed-url) (string/replace-first #"^[\/]+" ""))
+                                    :args (some-> (.-searchParams parsed-url) (js/Object.fromEntries))}))))

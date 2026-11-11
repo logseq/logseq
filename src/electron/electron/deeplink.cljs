@@ -9,20 +9,30 @@
   [args]
   (some #(when (string/starts-with? % (str LSP_SCHEME ":")) %) args))
 
-(defn graph-identifier-from-url
-  "Return the graph identifier for `logseq://graph/<id>`, else nil."
+(defn parse-url
+  "Parse a protocol URL into a destination or a translated link error."
   [url]
-  (when (string? url)
-    (when-let [parsed-url (try (js/URL. url)
-                               (catch :default _
-                                 nil))]
-      (when (and (= (str LSP_SCHEME ":") (.-protocol parsed-url))
-                 (= "graph" (.-host parsed-url)))
-        (let [identifier (-> (.-pathname parsed-url)
-                             (string/replace #"^/+" "")
-                             js/decodeURI)]
-          (when-not (string/blank? identifier)
-            identifier))))))
+  (let [invalid {:i18n-key :deeplink/invalid-link-error}]
+    (if-not (string? url)
+      invalid
+      (try
+        (let [parsed-url (js/URL. url)]
+          (if-not (= (str LSP_SCHEME ":") (.-protocol parsed-url))
+            invalid
+            (if (contains? #{"graph" "new-window"} (.-host parsed-url))
+              (let [identifier (-> (.-pathname parsed-url)
+                                   (string/replace #"^/+" "")
+                                   js/decodeURIComponent)
+                    params (.-searchParams parsed-url)]
+                (if (string/blank? identifier)
+                  {:i18n-key :electron/link-open-failed-missing-graph}
+                  {:parsed-url parsed-url
+                   :graph-identifier identifier
+                   :page-name (.get params "page")
+                   :block-id (.get params "block-id")}))
+              {:parsed-url parsed-url})))
+        (catch :default _
+          invalid)))))
 
 (defn startup-deeplink-url
   "Cold-start deeplink source of truth.
