@@ -234,6 +234,7 @@
    :receive-queue (atom (p/resolved nil))
    :asset-queue (atom (p/resolved nil))
    :pending-pull-since (atom nil)
+   :pending-pull-sent-at (atom nil)
    :inflight (atom [])
    :upload-request (atom nil)
    :last-sync-error (atom nil)
