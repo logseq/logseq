@@ -113,9 +113,11 @@ pub(super) fn element(context: ExtensionContext) -> AnyElement {
         } else {
             AccessibilityRole::Button
         };
+        let disabled = context.clone();
         return host(
             context,
             nsh_base::button()
+                .disabled(move || attributes(&disabled).contains_key("disabled"))
                 .role(role)
                 .child(text(content))
                 .child(children),
@@ -170,10 +172,12 @@ fn input_for(context: ExtensionContext, kind: &str) -> AnyElement {
         let checked = context.clone();
         let mark = context.clone();
         let change = context.clone();
+        let disabled = context.clone();
         let owner = Owner::current();
         return host(
             context,
             nsh_base::checkbox()
+                .disabled(move || attributes(&disabled).contains_key("disabled"))
                 .checked(move || attributes(&checked).contains_key("checked"))
                 .on_change(move |checked: bool| {
                     emit_dom(&change, owner, "input", json!({"checked":checked}));
@@ -243,8 +247,10 @@ fn host<E: Element + Interactive>(context: ExtensionContext, element: E) -> AnyE
     let menu = context.clone();
     let focus = context.clone();
     let blur = context.clone();
+    let test_id = format!("lui-{}", context.node.get_untracked().id);
     element
         .element_ref(&context.reference)
+        .test_id(&test_id)
         .state_inline_style(move || {
             let node = style.node.get();
             let tag = &node.extension.as_ref().unwrap().identifier[7..];
@@ -252,11 +258,14 @@ fn host<E: Element + Interactive>(context: ExtensionContext, element: E) -> AnyE
                 .expect("validated native raw layout and application theme")
         })
         .disabled(move || attributes(&disabled).contains_key("disabled"))
-        .label(move || {
-            attributes(&label)
+        .optional_label(move || {
+            let attributes = attributes(&label);
+            let value = attributes
                 .get("aria-label")
+                .or_else(|| attributes.get("alt"))
                 .cloned()
-                .unwrap_or_else(|| string(&label, "accessibility-identifier"))
+                .unwrap_or_else(|| string(&label, "accessibility-identifier"));
+            (!value.is_empty()).then(|| SharedString::from(value))
         })
         .on_press(move |event: &PressEvent| {
             emit_dom(
