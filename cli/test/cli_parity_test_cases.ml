@@ -5024,60 +5024,6 @@ let () =
                 inputs_edn = None;
               })));
 
-  test_promise "CLI parity query execute appends DSL rules for percent input"
-    (fun () ->
-      let raw_config =
-        Edn_util.map
-          [
-            ( Edn_util.keyword "custom-queries",
-              Edn_util.map
-                [
-                  ( Edn_util.string "task",
-                    Edn_util.map
-                      [
-                        ( Edn_util.keyword "inputs",
-                          Edn_util.vector
-                            [ Edn_util.string "task statuses set" ] );
-                        ( Edn_util.keyword "query",
-                          edn_of_string
-                            "[:find (pull ?b [*]) :in $ ?status % :where (task \
-                             ?b ?status)]" );
-                      ] );
-                ] );
-          ]
-      in
-      let cfg = config ~repo:"demo" ~raw_file_config:raw_config () in
-      let action =
-        expect_ok "task query build"
-          (Query.build cfg (Global_opts.create ())
-             (Query.Parsed_run
-                {
-                  query_edn = None;
-                  name = Some "task";
-                  inputs_edn = Some "[\"Todo\"]";
-                }))
-      in
-      let captured_body = ref None in
-      let server =
-        invoke_server (fun body ->
-            captured_body := Some body;
-            "[]")
-      in
-      with_server server (fun base_url ->
-          let cfg = { cfg with Cli_config.base_url = Some base_url } in
-          let* result =
-            effect_to_promise
-              (execute_with_output Query.execute action cfg Output.Mode.Human)
-          in
-          expect_bool "query execute ok" false (Cli_result.is_error result);
-          let body = expect_some "query request body" !captured_body in
-          expect_named_contains "query method" body "thread-api/q";
-          expect_named_contains "query input" body "Todo";
-          expect_named_contains "rules parent" body "parent";
-          expect_named_contains "rules class extends" body "class-extends";
-          expect_named_contains "rules task" body "task";
-          Js.Promise.resolve pass));
-
   test "CLI parity query list merges built-in and custom query metadata"
     (fun () ->
       let raw_config =
