@@ -105,6 +105,12 @@
   [value context]
   (sync-transport/parse-transit fail-fast value context))
 
+(def ^:private pull-reply-timeout-ms
+  "A pull whose reply has not come after this long, on a socket that stays open, is
+  taken as lost: the next pull from the same t is sent instead of being dropped as a
+  duplicate. Without it a reply lost on an open socket stopped sync until a restart."
+  30000)
+
 (defn- request-pull!
   [client since]
   (when (and (:ws client) (ws-open? (:ws client)))
@@ -113,9 +119,14 @@
      (fn []
        (when (and (:ws client) (ws-open? (:ws client)))
          (if-let [*pending (:pending-pull-since client)]
-           (let [pending @*pending]
-             (when (or (nil? pending) (< since pending))
+           (let [pending @*pending
+                 *sent-at (:pending-pull-sent-at client)
+                 now (js/Date.now)
+                 expired? (and (some? pending) *sent-at (some? @*sent-at)
+                               (>= (- now @*sent-at) pull-reply-timeout-ms))]
+             (when (or (nil? pending) (< since pending) expired?)
                (reset! *pending since)
+               (some-> *sent-at (reset! now))
                (send! (:ws client) {:type "pull" :since since})))
            (send! (:ws client) {:type "pull" :since since})))))))
 
