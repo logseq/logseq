@@ -1483,8 +1483,7 @@ and icon_view ?(jump_target = true) ctx row : t =
    so inline values (links) keep inline layout and line-box height *)
 and block_value_wrap (inner : t) : t =
   Lui_elements.column ~min_width:0 ~grow:1. ~style_class:"property-block-container content"
-    [ Lui_elements.column ~min_width:0 ~grow:1. ~style_class:"ls-block"
-        ~transition:Ui_components.block_transition
+    [ Ui_components.block_motion @@ Lui_elements.column ~min_width:0 ~grow:1. ~style_class:"ls-block"
         [ Lui_elements.row ~gap:4 ~cross:`start ~grow:1.0 ~min_width:0
             ~style_class:"block-main-container"
             [ Lui_elements.row ~gap:0 ~cross:`center

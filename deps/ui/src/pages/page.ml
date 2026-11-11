@@ -549,8 +549,7 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
             (fun selected ->
               if S.String_set.mem uuid selected then "selected ls-block"
               else "ls-block")
-            (column ~key:"pt-block" ~padding_vertical:2
-               ~transition:Ui_components.block_transition
+            (Ui_components.block_motion @@ column ~key:"pt-block" ~padding_vertical:2
                ~accessibility_identifier:("ls-block-" ^ uuid)
                ~data_attrs:
               [ ("data-blockid", uuid); ("data-containerid", uuid)

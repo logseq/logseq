@@ -878,9 +878,8 @@ and row_el ~depth ~editable ~virtualize scope ~(library : bool)
   track_mounted_row ~scope b
     (with_editor_font
     (Ui_parts.class_signal (row_class_sig uuid blank embed b) Fun.id
-    (column ~key:("ls-" ^ scope ^ "-" ^ key)
+    (Ui_components.block_motion @@ column ~key:("ls-" ^ scope ^ "-" ^ key)
        ~accessibility_identifier:("ls-block-" ^ key)
-       ~transition:Ui_components.block_transition
        (* .ls-block.selected paints --ls-block-highlight-color on web
           (lui-core.css) — classes don't paint on native so the fill
           rides a typed background signal; the matching `rounded` is
@@ -937,9 +936,8 @@ and row_sig ~depth ~editable ~library ~virtualize scope
   (track_mounted_row ~scope b0
     (with_editor_font
     (Ui_parts.class_signal (row_class_sig_of bs) Fun.id
-    (column ~key:("ls-" ^ scope ^ "-" ^ key)
+    (Ui_components.block_motion @@ column ~key:("ls-" ^ scope ^ "-" ^ key)
        ~accessibility_identifier:("ls-block-" ^ key)
-       ~transition:Ui_components.block_transition
        ~corner_radius:4
        ~data_attrs_signal:(row_attrs_sig_of ~scope ~depth ~editable bs)
     [ reactive
@@ -1113,9 +1111,8 @@ and block_row_static ?(depth = 0) ?(library = false) (b : Model.block) : t =
   track_mounted_row ~scope:"ref" b
     (with_editor_font
     (Ui_parts.class_signal (row_class_sig uuid blank embed b) Fun.id
-    (column ~key:("rfs-" ^ key)
+    (Ui_components.block_motion @@ column ~key:("rfs-" ^ key)
        ~accessibility_identifier:("ls-block-" ^ key)
-       ~transition:Ui_components.block_transition
        ~data_attrs_signal:(row_attrs_sig ~scope:"ref" ~depth ~editable:false uuid b)
     [ row ~key:("main-" ^ key)
         ~style_class:"block-main-container" ~gap:4

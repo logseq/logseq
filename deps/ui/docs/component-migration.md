@@ -338,3 +338,18 @@ This is a visibility decision for panels that are already closed, not general
 NSH inert support: a visible-but-inert subtree remains explicitly unsupported
 by the backend. Applications must not remove inert from a visible surface to
 bypass capability validation.
+
+### NSH selectable-block motion timing
+
+The nine shared main/reference block, page-title, property-value and recycle-row
+producers now call `Ui_components.block_motion`. On NSH, transform and background
+changes share the explicit native block token, 200ms ease-out. Other hosts keep
+the previous transform 300ms ease and background-color 200ms
+cubic-bezier(0,1,0,1). The recipe binds the same node once and delegates property
+animation and reduced motion to the native backend.
+
+Use `Ui_components.block_motion (column ~key children)` for this semantic block
+recipe instead of `column ~transition:Ui_components.block_transition children`.
+The original string remains the non-NSH recipe. This is an application-level
+motion choice, not general support for multiple CSS transition timings in NSH;
+other authored incompatible combinations still fail capability validation.

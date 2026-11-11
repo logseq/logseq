@@ -38,6 +38,18 @@ let dialog_transition =
 let block_transition =
   "transform 0.3s ease, background-color 0.2s cubic-bezier(0, 1, 0, 1)"
 
+(* A native block uses one shared state-change timing. NSH owns the transition
+   and reduced-motion handling; other hosts retain their separate CSS timings. *)
+let native_block_transition =
+  "transform 200ms ease-out, background-color 200ms ease-out"
+
+let block_motion (element : t) : t =
+ fun context parent ->
+  Ui_parts.string_prop P.Transition
+    ~value:(if Lui_ui.host context = P.NshHost then native_block_transition
+            else block_transition)
+    element context parent
+
 let foldable_control ?key children : t =
   box ?key ~style_class:"ls-foldable-title-control block-control"
     ~width:22 ~height:22 ~padding:2 ~margin_top:1 ~margin_left:(-27) children

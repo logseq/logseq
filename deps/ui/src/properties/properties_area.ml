@@ -193,10 +193,9 @@ let value_cell ~(hover : bool Signal.state option) ctx row : t =
         | "node" | "checkbox" -> true
         | _ -> false)
   in
-  Lui_elements.row ~gap:4 ~cross:(if centered then `center else `start)
+  Ui_components.block_motion @@ Lui_elements.row ~gap:4 ~cross:(if centered then `center else `start)
     ~grow:1.0 ~main:`start ~min_width:0 ~min_height:28
     ~style_class:"ls-block property-value-container property-value-panel"
-    ~transition:Ui_components.block_transition
     ~padding_vertical:0
     ((if show_panel_bullet row || entity_value then
         [ Lui_elements.row ~key:"vpb" ~cross:`center ~margin_left:7 ~margin_right:(-7)
@@ -867,9 +866,8 @@ let bidi_area (p : Model.page) : t =
                                  , "display:flex;user-select:none;width:100%" )
                                ] []
                          ]
-                     ; row ~gap:4 ~cross:`center
+                     ; Ui_components.block_motion @@ row ~gap:4 ~cross:`center
                          ~style_class:"ls-block property-value-container"
-                         ~transition:Ui_components.block_transition
                          [ row ~gap:4 ~style_class:"property-value"
                              (List.map
                                 (fun e ->
