@@ -273,15 +273,6 @@ fn supported(operation: &str) -> bool {
     )
 }
 
-/// Called after the request's creating patches have been published. Any awaited
-/// native reply is checked against the captured canonical incarnation again.
-pub async fn handle(
-    operation: &str,
-    payload: &str,
-    renderer: &Renderer,
-) -> Result<Vec<PlatformEvent>, String> {
-    handle_inner(operation, payload, renderer, None).await
-}
 async fn handle_inner(
     operation: &str,
     payload: &str,
