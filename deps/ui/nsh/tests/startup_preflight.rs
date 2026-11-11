@@ -15,6 +15,8 @@ use std::{
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
+mod startup_body;
+
 const CHILD: &str = "LOGSEQ_NSH_STARTUP_PREFLIGHT_CHILD";
 const TEST: &str = "real_application_startup_preflight";
 
@@ -100,6 +102,16 @@ fn mount_actual_application() -> Result<(), String> {
                     .expect("fixed sidebar control selector")
         },
     )?;
+    eprintln!(
+        "Before journal-body wait:\n{}",
+        startup_body::diagnostic(&app.screen())
+    );
+    wait_for_chrome(
+        &mut app,
+        "visible dated journal in measured main split",
+        Duration::from_secs(20),
+        startup_body::ready,
+    )?;
     // Headless owns and joins the engine thread on drop. The process boundary
     // also isolates OCaml's persistent worker from every other Rust test.
     drop(app);
@@ -127,20 +139,7 @@ fn wait_for_chrome(
             ready(screen)
         }
     })
-    .map_err(|error| {
-        let layout = app
-            .screen()
-            .layout_nodes()
-            .into_iter()
-            .filter(|node| {
-                matches!(
-                    node.test_id.as_deref(),
-                    Some("nsh-right-split-space" | "head" | "app-container" | "lui-backend-error")
-                )
-            })
-            .collect::<Vec<_>>();
-        format!("{error}\nNative startup layout: {layout:#?}")
-    })?;
+    .map_err(|error| format!("{error}\n{}", startup_body::diagnostic(&app.screen())))?;
     match diagnostic.into_inner() {
         Some(message) => Err(format!("real Logseq backend startup diagnostic: {message}")),
         None => Ok(()),
@@ -211,7 +210,7 @@ fn run_child(
     }
     let mut child = command.spawn().map_err(|e| e.to_string())?;
     *process_group = Some(child.id());
-    let deadline = Instant::now() + Duration::from_secs(40);
+    let deadline = Instant::now() + Duration::from_secs(70);
     loop {
         if let Some(status) = child.try_wait().map_err(|e| e.to_string())? {
             return if status.success() {
@@ -223,7 +222,7 @@ fn run_child(
         if Instant::now() >= deadline {
             child.kill().map_err(|e| e.to_string())?;
             child.wait().map_err(|e| e.to_string())?;
-            return Err("actual Logseq startup exceeded the isolated 40-second deadline".into());
+            return Err("actual Logseq startup exceeded the isolated 70-second deadline".into());
         }
         thread::sleep(Duration::from_millis(20));
     }

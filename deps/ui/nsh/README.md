@@ -47,7 +47,11 @@ context injects an owner-local empty credential store: changing HOME alone
 would not isolate the OS keychain. The production runner always uses the native
 vault; no environment variable selects the in-memory test store.
 The test requires Demo/Journals and real
-Search/sidebar buttons and fails immediately when `lui-backend-error` appears.
+Search/sidebar buttons, then requires a visible dated journal title within the
+nonzero measured main split, its native main-content Scroll and Journals subtree.
+Sidebar labels or mounted empty containers cannot satisfy this body check. A
+bounded layout/text summary is emitted before the body wait and on failure; the
+gate fails immediately when `lui-backend-error` appears.
 Its engine and private worker processes are cleaned up after either outcome.
 
 The integration target requires `LUI_OCAML_LIBRARY`, `LOGSEQ_NATIVE_ASSET_DIR`
@@ -173,3 +177,9 @@ and the same native editor retained. This does not qualify a hardware IME commit
 or Return during marked text. The block-editor removal probe advances the fixture
 snapshot generation and verifies the native sink is gone before testing stale
 key handlers.
+
+Startup body qualification uses only public Headless text and layout evidence.
+It accepts the application's dated title format rather than inventing a journal
+or overriding the model/date, and checks the title intersects the measured main
+viewport. A passing Headless gate still requires a separate background native
+capture/UX review; it does not prove AppKit pixels or a usable completed UI.
