@@ -1116,12 +1116,6 @@ html.is-mobile .ls-block-content-indent {
     }
 }
 
-@container ls-block (max-width: 430px) {
-    .ls-properties-area {
-        display: none;
-    }
-}
-
 .ls-block h1,
 .editor-inner .h1.uniline-block {
   font-size: 2rem;
