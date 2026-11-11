@@ -7,9 +7,10 @@
   first; redo transacts them as recorded; each keeps its own transaction's
   record for the next. Nothing can land between a change and its undo on
   such a graph, so this gives back the exact state before (after) the
-  change, whatever the operation. On a synced graph undo and redo replay
-  the entry's semantic inverse and forward ops, which a rebase can reapply
-  over remote changes."
+  change, whatever the operation. A page create is the exception (see
+  `replays-tx-datoms?`). On a synced graph undo and redo replay the entry's
+  semantic inverse and forward ops, which a rebase can reapply over remote
+  changes."
   (:require [datascript.core :as d]
             [frontend.worker.state :as worker-state]
             [frontend.worker.sync.client-op :as client-op]
@@ -284,11 +285,20 @@
   its client-op store has a remote graph id: a sync connection sets the id
   (`start!`, also when it matches the graph to a remote one by name), and a
   graph downloaded by an app version that did not set the flag has only the
-  id. A local graph keeps no client-op rows of its local transactions: its
-  undo entries carry `:tx-datoms` and read no row."
+  id. A local graph keeps no client-op rows of its local transactions but
+  page creates: their undo entries carry `:tx-datoms` and read no row."
   [repo db]
   (not (or (graph-remote-flag? db)
            (some? (client-op/get-graph-uuid repo)))))
+
+(defn replays-tx-datoms?
+  "True when undo and redo of a local transaction replay its tx datoms: on a
+  local graph, except a page create. Its undo recycles the page and redo
+  restores it, through the semantic ops of its client-op row, as on a synced
+  graph."
+  [repo db tx-meta]
+  (and (local-graph? repo db)
+       (not= :create-page (:outliner-op tx-meta))))
 
 (defn- recorded-datoms
   "DataScript's record of a transaction: its tx report's datoms as
@@ -439,9 +449,9 @@
   (when (nil? @*apply-history-action!)
     (reset! *apply-history-action! apply-history-action!))
   (let [{:keys [outliner-op local-tx?]} tx-meta
-        local-graph?' (local-graph? repo db-after)
+        replay-tx-datoms? (replays-tx-datoms? repo db-after tx-meta)
         {:db-sync/keys [forward-outliner-ops inverse-outliner-ops]}
-        (when-not local-graph?'
+        (when-not replay-tx-datoms?
           (pending-history-action-ops repo tx-id))]
     (when (and
            (true? local-tx?)
@@ -467,7 +477,7 @@
                           :retracted-ids retracted-ids
                           :db-sync/forward-outliner-ops forward-outliner-ops
                           :db-sync/inverse-outliner-ops inverse-outliner-ops}
-                   local-graph?'
+                   replay-tx-datoms?
                    (assoc :tx-datoms (recorded-datoms tx-data)))
             op (->> [(when editor-info [::record-editor-info editor-info])
                      [::db-transact data]]

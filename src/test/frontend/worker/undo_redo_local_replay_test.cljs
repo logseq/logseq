@@ -372,11 +372,10 @@
           (reset! ldb/*transact-pipeline-fn pipeline-before))))))
 
 (deftest local-graph-undo-of-page-create-after-undo-of-tag-change-with-pipeline-test
-  (testing "with the worker pipeline on, undo of a tag change stamps the pages tagged with it again, and undo of creating such a page still removes it"
+  (testing "with the worker pipeline on, undo of a tag change stamps the pages tagged with it again, and undo of creating such a page still recycles it"
     (let [conn (worker-state/get-datascript-conn test-repo)
           _ (seed-tags-and-properties! conn)
           movie (d/entity @conn :user.class/Movie)
-          root-id (:db/id (d/entity @conn :logseq.class/Root))
           page-title "undo tagged page"
           pipeline-before @ldb/*transact-pipeline-fn]
       (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
@@ -388,13 +387,14 @@
         (let [page-uuid (:block/uuid (db-test/find-page-by-title @conn page-title))]
           (apply-ops! conn [[:set-block-property [page-uuid :block/tags (:db/id movie)]]]
                       (local-tx-meta {:client-id "test-client"}))
-          (apply-ops! conn [[:set-block-property [(:block/uuid movie) :logseq.property.class/extends root-id]]]
+          ;; Removing Movie's parent tag gives it the Root tag as parent.
+          (apply-ops! conn [[:remove-block-property [(:block/uuid movie) :logseq.property.class/extends]]]
                       (local-tx-meta {:client-id "test-client"}))
           (let [results (vec (repeatedly 3 #(worker-undo-redo/undo test-repo)))]
             (is (every? map? results))
             (is (not-any? :refused? results)))
           (is (empty? (get @worker-undo-redo/*undo-ops test-repo)))
-          (is (nil? (d/entity @conn [:block/uuid page-uuid])))
+          (is (true? (ldb/recycled? (d/entity @conn [:block/uuid page-uuid]))))
           (is (= #{:user.class/Topic}
                  (idents (:logseq.property.class/extends (d/entity @conn :user.class/Movie))))))
         (finally
