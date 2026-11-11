@@ -391,6 +391,14 @@ mod tests {
     #[component]
     fn NativeDOM() -> impl IntoElement {
         let renderer = Renderer::new(|_, _| {});
+        let before_mount = Rc::new(RefCell::new(Some(
+            capture(
+                "measure-node",
+                r##"{"ref":{"#ref":"measured","measurement-id":71}}"##,
+                &renderer,
+            )
+            .unwrap(),
+        )));
         renderer
             .apply(patch(
                 1,
@@ -414,14 +422,12 @@ mod tests {
                     .child(text("Measure current"))
                     .on_press(move || {
                         let renderer = measuring.clone();
+                        let captured = before_mount
+                            .borrow_mut()
+                            .take()
+                            .expect("one initial measurement");
                         tasks.borrow_mut().push(spawn(async move {
-                            let events = handle(
-                                "measure-node",
-                                r##"{"ref":{"#ref":"measured","measurement-id":71}}"##,
-                                &renderer,
-                            )
-                            .await
-                            .unwrap();
+                            let events = execute(captured, &renderer).await.unwrap();
                             assert_eq!(events.len(), 1);
                             assert_eq!(events[0].operation, "node-rect");
                             let event: Value = serde_json::from_str(&events[0].payload).unwrap();
@@ -442,6 +448,12 @@ mod tests {
                         let node = retiring.node_snapshot(1).unwrap();
                         let reference = retiring.native_reference(1, node.incarnation).unwrap();
                         let target = Target { node, reference };
+                        let captured = capture(
+                            "measure-node",
+                            r##"{"ref":{"#ref":"measured","measurement-id":73}}"##,
+                            &retiring,
+                        )
+                        .unwrap();
                         let pending = reference.measure();
                         retiring
                             .apply(patch(
@@ -465,6 +477,15 @@ mod tests {
                             assert!(value["rect"].is_null());
                             assert!(value.get("nodeId").is_none());
                             assert_eq!(value["ref"], json!({"node-id":1,"measurement-id":72}));
+                            let deferred = execute(captured, &renderer).await.unwrap();
+                            let deferred: Value =
+                                serde_json::from_str(&deferred[0].payload).unwrap();
+                            assert!(deferred["rect"].is_null());
+                            assert!(deferred.get("nodeId").is_none());
+                            assert_eq!(
+                                deferred["ref"],
+                                json!({"#ref":"measured","measurement-id":73})
+                            );
                             status.set("Retired measurement rejected".into());
                         }));
                     }),
