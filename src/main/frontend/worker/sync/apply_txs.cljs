@@ -1955,10 +1955,11 @@
                                     {:apply-history-action! apply-history-action!})))
 
 (defn- enqueue-local-tx-aux
-  [repo {:keys [tx-data db-after db-before] :as tx-report}]
-  (if (worker-undo-redo/local-graph? repo db-after)
-    ;; no upload data is built for a graph that does not sync; a transaction
-    ;; of attributes sync ignores gets no undo entry, as on a synced graph
+  [repo {:keys [tx-data tx-meta db-after db-before] :as tx-report}]
+  (if (worker-undo-redo/replays-tx-datoms? repo db-after tx-meta)
+    ;; no upload data is built for a graph that does not sync, but for a page
+    ;; create, whose undo reads its row; a transaction of attributes sync
+    ;; ignores gets no undo entry, as on a synced graph
     (when (seq (remove-ignored-attrs tx-data))
       (record-local-graph-undo! repo tx-report))
     (let [normalized (normalize-tx-data db-after db-before tx-data)]

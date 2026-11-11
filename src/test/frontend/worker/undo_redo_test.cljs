@@ -732,9 +732,6 @@
     (worker-undo-redo/clear-history! test-repo)
     (let [conn (worker-state/get-datascript-conn test-repo)
           page-title "redo create page alpha"]
-      ;; The semantic inverse of create-page recycles the page. On a local
-      ;; graph undo removes it.
-      (mark-graph-synced! conn)
       (apply-ops! conn
                               [[:create-page [page-title {:redirect? false
                                                           :split-namespace? true
