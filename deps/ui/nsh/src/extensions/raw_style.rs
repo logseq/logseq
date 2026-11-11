@@ -27,21 +27,28 @@ pub(super) fn compile(
             Value::Number(number) => number.to_string(),
             _ => return Err(format!("unsupported raw style scalar for {}", key.name())),
         };
-        // Raw line-height is an absolute point length; NSH's bare numeric form
-        // is a multiplier, so retain the unit explicitly.
-        let encoded = if key == K::LineHeight && value.is_number() {
-            format!("{encoded}px")
-        } else {
-            encoded
-        };
-        let numeric = encoded
+        let encoded = encoded.trim();
+        // The pinned NSH dimension parser takes point lengths as numbers;
+        // strings are reserved for percentages, auto and intrinsic keywords.
+        // Raw markup deliberately also accepts CSS's px spelling.
+        let points = encoded.strip_suffix("px").unwrap_or(encoded).trim();
+        let numeric = points
             .parse::<f32>()
             .ok()
             .filter(|number| number.is_finite());
+        if let Some(percent) = encoded.strip_suffix('%')
+            && percent
+                .trim()
+                .parse::<f32>()
+                .ok()
+                .is_none_or(|number| !number.is_finite())
+        {
+            return Err(format!("raw {} requires a finite percentage", key.name()));
+        }
         let native = if let Some(number) = numeric {
             StyleValue::Number(number)
         } else {
-            StyleValue::Str(&encoded)
+            StyleValue::Str(encoded)
         };
         let parsed = key
             .parse_value(native)
@@ -176,4 +183,81 @@ pub(super) fn compile(
         }
     }
     Ok(Style::from_decls(declarations))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use lui_nsh::store::ExtensionNode;
+    use serde_json::json;
+
+    fn parse(properties: Value) -> Result<Style, String> {
+        let mut node = Node::default();
+        node.extension.get_or_insert(ExtensionNode {
+            identifier: "logseq-div".into(),
+            fingerprint: String::new(),
+            properties: properties.as_object().unwrap().clone(),
+        });
+        compile(&node, "div", |value| Ok(value.to_owned()))
+    }
+    fn native(key: K, value: StyleValue<'_>) -> Style {
+        Style::from_decls([StyleDecl::Set(key, key.parse_value(value).unwrap())])
+    }
+    #[test]
+    fn css_raw_point_lengths_percentages_auto_and_spacing_reach_native_layout() {
+        let style = parse(json!({"width":"240px", "height":"50%", "max-width":"auto",
+            "padding":"4px 8px", "padding-right":"12px", "line-height":24.0}))
+        .unwrap();
+        assert_eq!(
+            style.layout.size.width,
+            native(K::Width, StyleValue::Number(240.0))
+                .layout
+                .size
+                .width
+        );
+        assert_eq!(
+            style.layout.size.height,
+            native(K::Height, StyleValue::Str("50%")).layout.size.height
+        );
+        assert_eq!(
+            style.layout.max_size.width,
+            native(K::MaxWidth, StyleValue::Str("auto"))
+                .layout
+                .max_size
+                .width
+        );
+        assert_eq!(
+            style.layout.padding.top,
+            native(K::PaddingTop, StyleValue::Number(4.0))
+                .layout
+                .padding
+                .top
+        );
+        assert_eq!(
+            style.layout.padding.right,
+            native(K::PaddingRight, StyleValue::Number(12.0))
+                .layout
+                .padding
+                .right
+        );
+        assert_eq!(
+            style.layout.padding.left,
+            native(K::PaddingLeft, StyleValue::Number(8.0))
+                .layout
+                .padding
+                .left
+        );
+        assert_eq!(
+            style.text.line_height,
+            native(K::LineHeight, StyleValue::Number(24.0))
+                .text
+                .line_height
+        );
+    }
+    #[test]
+    fn unsupported_units_and_nonfinite_dimensions_fail_before_mount() {
+        for value in ["240rem", "NaN%", "inf%", "1e100px", "wide"] {
+            assert!(parse(json!({"width":value})).is_err(), "{value}");
+        }
+    }
 }
