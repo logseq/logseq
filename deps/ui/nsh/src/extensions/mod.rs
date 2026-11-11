@@ -1,5 +1,7 @@
 //! Native implementations of the application's canonical extension schemas.
 mod codemirror;
+mod raw;
+mod raw_style;
 
 use lui_nsh::extensions::{ExtensionBuilder, ExtensionContext, Schema};
 
@@ -15,6 +17,22 @@ pub fn register_codemirror(
     builder
         .register(schema, codemirror::element)?
         .validate("logseq-codemirror", codemirror::validate)
+}
+
+/// Register a canonical raw-markup schema, including its pure capability checks.
+pub fn register_raw(builder: ExtensionBuilder, schema: Schema) -> Result<ExtensionBuilder, String> {
+    if !schema.identifier.starts_with("logseq-")
+        || matches!(
+            schema.identifier.as_str(),
+            "logseq-editor" | "logseq-codemirror"
+        )
+    {
+        return Err("raw registration requires a canonical logseq markup schema".into());
+    }
+    let identifier = schema.identifier.clone();
+    builder
+        .register(schema, raw::element)?
+        .validate(&identifier, raw::validate)
 }
 
 fn string(context: &ExtensionContext, name: &str) -> String {
