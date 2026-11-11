@@ -191,17 +191,30 @@ mod tests {
     use lui_nsh::store::ExtensionNode;
     use serde_json::json;
 
-    fn parse(properties: Value) -> Result<Style, String> {
+    // Element Style intentionally exposes declarations rather than native fields.
+    // Compile only produces declarations, so lower them through their public
+    // apply API and inspect the public native style consumed by the layout engine.
+    fn lower(inline: Style) -> nsh_core::Style {
+        let mut native = nsh_core::Style::default();
+        for declaration in inline.decls() {
+            declaration.apply(&mut native).unwrap();
+        }
+        native
+    }
+    fn parse(properties: Value) -> Result<nsh_core::Style, String> {
         let mut node = Node::default();
         node.extension.get_or_insert(ExtensionNode {
             identifier: "logseq-div".into(),
             fingerprint: String::new(),
             properties: properties.as_object().unwrap().clone(),
         });
-        compile(&node, "div", |value| Ok(value.to_owned()))
+        compile(&node, "div", |value| Ok(value.to_owned())).map(lower)
     }
-    fn native(key: K, value: StyleValue<'_>) -> Style {
-        Style::from_decls([StyleDecl::Set(key, key.parse_value(value).unwrap())])
+    fn native(key: K, value: StyleValue<'_>) -> nsh_core::Style {
+        lower(Style::from_decls([StyleDecl::Set(
+            key,
+            key.parse_value(value).unwrap(),
+        )]))
     }
     #[test]
     fn css_raw_point_lengths_percentages_auto_and_spacing_reach_native_layout() {
