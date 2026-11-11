@@ -179,7 +179,7 @@
         (d/unlisten! preview ::preview-pages)
         (reset! preview nil)))))
 
-(defn apply-ops!
+(defn ^:api apply-ops!
   "Applies canonical operations or parses raw content in the same atomic batch.
 
   A sole `:logseq.outliner/preview-ops` request evaluates its batch on a storage-disabled copy.

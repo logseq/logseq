@@ -3361,8 +3361,7 @@
           classes-tx' (concat classes-tx retract-page-tags-tx)
           custom-status-tx @(:custom-status-tx tx-options)
           main-tx-start (when log-fn (import-profile/now-ms))
-          tx' (prepend-unresolved-block-lookups
-               @conn
+          tx' (prepend-unresolved-block-lookups @conn
                (build-file-import-main-tx pages-tx'' page-properties-tx property-page-properties-tx
                                           classes-tx classes-tx' custom-status-tx blocks-tx))
           _ (log-phase-ms! log-fn :main-tx main-tx-start {:file file :tx-count (count tx')})
