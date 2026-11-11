@@ -1,0 +1,66 @@
+# Logseq NSH desktop host
+
+This Rust host loads Logseq's native OCaml application through its seven-argument
+bridge. It uses the app's exported extension schemas and keeps OCaml, application
+services and input dispatch on the existing ordered application pump. Graph View
+rendering is excluded from this migration; graph/database features remain.
+
+## Build and run
+
+Install the repository's OCaml 5.5.1 opam switch, Rust 1.97.0, Python 3, Node.js,
+a C compiler and the target's NSH native development libraries. Then run from the
+Logseq repository:
+
+```sh
+bash deps/ui/nsh/build.sh
+bash deps/ui/nsh/run.sh
+```
+
+`build.sh` prints the executable path on stdout and sends build diagnostics to
+stderr. `run.sh` builds, verifies its receipt, sets the OCaml library and resource
+paths, then replaces itself with the native host. `LUI_SOURCE_ROOT` selects the
+OCaml LUI checkout (default: `../lui` beside the Logseq checkout); Cargo's path
+dependency selects the Rust LUI package. The receipt records both actual paths,
+even when they differ. `OPAMSWITCH`, `RUSTUP_TOOLCHAIN`, `CARGO_BUILD_JOBS`,
+`NODE_BINARY` and `PYTHON_BINARY` can override the corresponding tools/settings.
+
+The script currently implements native macOS and Linux builds. Windows DLL,
+signing and packaged launch qualification are separate work; the presence of a
+Windows Rust entry does not qualify those steps. This script does not build the
+maintained LUI Apple/iOS, Android or Web backends.
+
+## Safe native publication and build receipts
+
+The executable, OCaml shared library and private DB worker are published with
+same-filesystem atomic replacement. The build never truncates an executable or
+dylib that an existing process may still have mapped. Running applications and
+their worker processes are left alone; a new launch uses the new files.
+
+Every successful build writes `logseq-nsh.lui-build.json` through LUI's existing
+`tooling/lui_build_receipt.mjs` API. It covers the executable digest; actual OCaml
+library and installed resources/worker; app Rust sources, Cargo files and schemas;
+OCaml native/shared source scopes and generators; dictionaries, icons and fonts;
+and the actual compiled LUI Rust source package plus OCaml LUI sources. Rust's
+manifest path comes from Cargo's compiler-artifact record. The input scan uses
+explicit source/resource scopes rather than repository roots, build directories,
+Cargo target trees or generated NSH runner caches. New files inside a source
+scope also make the receipt stale.
+
+`run.sh` refuses an invalid receipt. Other LUI tooling can verify the same file:
+
+```sh
+node ../lui/tooling/lui_build_receipt.mjs check \
+  --artifact deps/ui/_build/nsh/logseq-nsh
+```
+
+Build receipts detect changes after publication; they do not replace native
+launch, signing, updater or visual qualification. Source files must remain stable
+while a build is running.
+
+## Background agent use
+
+The macOS host supports `LUI_AGENT_BACKGROUND=1` without activating its window.
+Use the LUI agent CLI against its loopback listener for application interaction
+and in-process content screenshots. Screenshots capture app content; system menus
+and separately composited surfaces are outside that capture. These operations do
+not require unlocking the Mac or turning its display on.
