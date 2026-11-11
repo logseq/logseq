@@ -291,7 +291,8 @@ fn request(port: u16, method: &str, path: &str) -> Result<String, String> {
 }
 fn stop_owned_workers(root: &Path) -> Result<(), String> {
     let deadline = Instant::now() + Duration::from_secs(4);
-    let expected = serde_json::to_string(&root.to_string_lossy()).map_err(|e| e.to_string())?;
+    let expected = fs::canonicalize(root)
+        .map_err(|error| format!("cannot resolve isolated graph root: {error}"))?;
     loop {
         let registry = fs::read_to_string(root.join("server-list")).unwrap_or_default();
         let mut active = false;
@@ -309,9 +310,21 @@ fn stop_owned_workers(root: &Path) -> Result<(), String> {
             if !health.starts_with("HTTP/1.1 200") && !health.starts_with("HTTP/1.1 503") {
                 return Err("private worker returned an invalid health response".into());
             }
-            if !health.contains(&format!("\"root-dir\":{expected}"))
-                && !health.contains(&format!("\"root-dir\": {expected}"))
-            {
+            let (_, body) = health
+                .split_once("\r\n\r\n")
+                .ok_or("private worker health response has no body")?;
+            let health: serde_json::Value = serde_json::from_str(body)
+                .map_err(|error| format!("invalid private worker health JSON: {error}"))?;
+            let actual = health
+                .get("storage")
+                .and_then(|storage| storage.get("root"))
+                .and_then(serde_json::Value::as_str)
+                .ok_or("private worker health response has no storage.root")?;
+            let actual = fs::canonicalize(actual)
+                .map_err(|error| format!("cannot resolve worker graph root: {error}"))?;
+            // macOS /var and /private/var can identify the same private root.
+            // Compare filesystem identity, never a prefix or a JSON substring.
+            if actual != expected {
                 return Err("refusing cleanup of a daemon outside the isolated graph root".into());
             }
             active = true;
