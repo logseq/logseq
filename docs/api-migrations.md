@@ -91,3 +91,28 @@ again before replying. For example, the Journal shell's
 `dom_measure_rect "nsh-right-split-space"` can resolve while the Mac remains
 locked, allowing its model-owned content split to mount. No timer, synthetic
 frame, window activation or fabricated rectangle is used.
+
+### NSH raw images resolve OCaml-owned graph resources
+
+The existing ordered `resource-context` host message now installs typed,
+application-owned graph metadata instead of storing unused JSON. Its required
+`graph`, `graph-dir` and `asset-dir` fields retain their existing native contract:
+open graph roots are absolute; closing a graph clears both roots. Unknown or
+malformed metadata fails explicitly before it can replace the current context.
+
+Raw `logseq-img` nodes use this context to resolve graph-relative `src` values.
+`assets/image.png`, `./assets/image.png` and `../assets/image.png` refer to the
+published asset directory. Other relative sources stay beneath the published
+graph directory; encoded path traversal, absolute/protocol-relative relative
+references, malformed escapes and unsupported URL schemes are rejected.
+A `data-asset-file="image.png"` identity takes precedence over an old retained
+`src`, so changing graph context resolves the same authored filename beneath
+the new graph's assets. Closing the graph clears that source synchronously.
+
+Absolute files, local file URLs, image data URLs and credential-free HTTP(S)
+URLs continue through the existing native Image loader. Direct URLs do not
+subscribe to graph metadata. This adds no second decoder, image byte cache,
+filesystem I/O or selector tree. Existing typed asset Images already use the
+absolute paths supplied by OCaml's Asset_store; this change does not invent a
+new canonical Image property or wire ordinal. PDF viewing is a separate native
+extension and is not represented by an image placeholder.

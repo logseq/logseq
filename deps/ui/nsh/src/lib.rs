@@ -53,6 +53,7 @@ pub fn App(props: AppProps) -> impl IntoElement {
     } else {
         services::Services::new(icons, themes)
     };
+    provide_context(services.resources());
     provide_context(ApplicationServices::new(move |request, renderer| {
         let services = services.clone();
         Box::pin(async move { services.handle(request, renderer).await })

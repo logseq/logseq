@@ -2,6 +2,7 @@
 mod clipboard;
 mod dom;
 mod menu;
+pub(crate) mod resources;
 mod secrets;
 
 use clipboard::ClipboardService;
@@ -19,10 +20,7 @@ use nsh_core::{
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
-use std::{
-    cell::{Cell, RefCell},
-    rc::Rc,
-};
+use std::{cell::Cell, rc::Rc};
 
 pub struct Services {
     icons: IconRegistry,
@@ -31,7 +29,7 @@ pub struct Services {
     credentials: secrets::CredentialStore,
     connected: Cell<bool>,
     closing: Cell<bool>,
-    resource_context: RefCell<Option<Value>>,
+    resources: resources::Resources,
 }
 impl Services {
     pub fn new(icons: IconRegistry, themes: ThemeRegistry) -> Rc<Self> {
@@ -52,8 +50,11 @@ impl Services {
             credentials,
             connected: Cell::new(false),
             closing: Cell::new(false),
-            resource_context: RefCell::new(None),
+            resources: resources::Resources::new(),
         })
+    }
+    pub(crate) fn resources(&self) -> resources::Resources {
+        self.resources
     }
     fn connect(self: &Rc<Self>, renderer: &Renderer) -> Result<ApplicationEvents, String> {
         let events =
@@ -147,12 +148,7 @@ impl Services {
                     .await
             }
             "resource-context" => {
-                let context: Value = serde_json::from_str(&request.payload)
-                    .map_err(|error| format!("resource-context: {error}"))?;
-                if !context.is_object() {
-                    return Err("resource-context requires an object".into());
-                }
-                self.resource_context.replace(Some(context));
+                self.resources.install(&request.payload)?;
                 Ok(Vec::new())
             }
             "window-close" => {

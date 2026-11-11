@@ -29,6 +29,12 @@ pub(super) fn validate(node: &Node) -> Result<(), String> {
         }
     }
     let attrs = raw_style::attrs(node)?;
+    if tag == "img" {
+        crate::services::resources::validate_source(
+            attrs.get("src").map(String::as_str).unwrap_or(""),
+            attrs.get("data-asset-file").map(String::as_str),
+        )?;
+    }
     if tag == "input"
         && !matches!(
             attrs.get("type").map(String::as_str),
@@ -90,10 +96,18 @@ pub(super) fn element(context: ExtensionContext) -> AnyElement {
     }
     if tag == "img" {
         let source = context.clone();
+        let resources = use_context::<crate::services::resources::Resources>();
         return host(
             context,
             image(move || {
-                ImageSrc::from(attributes(&source).get("src").cloned().unwrap_or_default())
+                let attrs = attributes(&source);
+                let url = attrs.get("src").map(String::as_str).unwrap_or("");
+                match resources {
+                    Some(resources) => resources
+                        .source(url, attrs.get("data-asset-file").map(String::as_str))
+                        .expect("validated native image source"),
+                    None => ImageSrc::from(url.to_owned()),
+                }
             }),
         );
     }
