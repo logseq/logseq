@@ -42,6 +42,7 @@ struct State {
     updating: Cell<bool>,
     annotations: RefCell<Vec<Retained<PDFAnnotation>>>,
     needs_annotations: Cell<bool>,
+    needs_reveal: Cell<bool>,
 }
 impl Component {
     fn new(context: ComponentContext) -> Self {
@@ -62,6 +63,7 @@ impl Component {
             updating: Cell::new(false),
             annotations: RefCell::new(Vec::new()),
             needs_annotations: Cell::new(true),
+            needs_reveal: Cell::new(false),
         });
         let mut observers = Vec::new();
         // Each callback is restricted to this main-thread PDFView and delivered
@@ -95,6 +97,7 @@ impl Component {
                         state.updating.set(true);
                         state.apply_scale();
                         state.render_highlights();
+                        state.reveal_pending();
                         state.updating.set(false);
                     }
                 }
@@ -196,7 +199,10 @@ impl State {
         self.emit("error", json!({"message":message}));
     }
     fn apply(&self, previous: Option<&Model>, model: &Model) -> Result<(), String> {
-        let changed = previous.is_none_or(|previous| previous.path != model.path);
+        let changed = previous.is_none_or(|previous| previous.path != model.path)
+            // A failed native load must remain an error on later prop updates,
+            // rather than treating a missing document as successfully mounted.
+            || unsafe { self.view.document().is_none() };
         // SAFETY: all PDFKit objects are retained and used on AppKit's thread.
         unsafe {
             if changed {
@@ -252,17 +258,14 @@ impl State {
             self.needs_annotations.set(true);
             self.render_highlights();
         }
-        if !model.reference.is_empty()
-            && previous.is_none_or(|previous| previous.reference != model.reference)
+        if changed
+            || previous.is_none_or(|previous| {
+                previous.reference != model.reference || previous.highlights != model.highlights
+            })
         {
-            if let Some(highlight) = model
-                .highlights
-                .iter()
-                .find(|highlight| highlight.id == model.reference)
-            {
-                self.reveal(highlight);
-            }
+            self.needs_reveal.set(!model.reference.is_empty());
         }
+        self.reveal_pending();
         Ok(())
     }
     fn apply_scale(&self) {
@@ -277,11 +280,18 @@ impl State {
                 "auto" | "page-fit" => self.view.setAutoScales(true),
                 "page-width" => {
                     if let Some(page) = self.view.currentPage() {
-                        let width = page.boundsForBox(PDFDisplayBox::CropBox).size.width;
+                        // PDFView's public conversion includes page rotation and
+                        // the current zoom; raw crop-box width does not.
+                        let width = self
+                            .view
+                            .convertRect_fromPage(page.boundsForBox(PDFDisplayBox::CropBox), &page)
+                            .size
+                            .width;
                         if width > 0.0 && self.view.bounds().size.width > 0.0 {
+                            let factor =
+                                self.view.scaleFactor() * self.view.bounds().size.width / width;
                             self.view.setAutoScales(false);
-                            self.view
-                                .setScaleFactor(self.view.bounds().size.width / width);
+                            self.view.setScaleFactor(factor);
                         }
                     }
                 }
@@ -490,25 +500,43 @@ impl State {
             self.needs_annotations.set(false);
         }
     }
-    fn reveal(&self, highlight: &Highlight) {
+    fn reveal_pending(&self) {
+        if !self.needs_reveal.replace(false) {
+            return;
+        }
+        let model = self.model.borrow().as_ref().cloned();
+        if let Some(model) = model
+            && let Some(highlight) = model
+                .highlights
+                .iter()
+                .find(|highlight| highlight.id == model.reference)
+        {
+            // One deferred request, retried by PDFView's own frame change;
+            // no display-link wait, timer or repeated per-frame data scan.
+            self.needs_reveal.set(!self.reveal(highlight));
+        }
+    }
+    fn reveal(&self, highlight: &Highlight) -> bool {
         unsafe {
-            if let Some(document) = self.view.document() {
-                if let Some(page) = document.pageAtIndex(highlight.page - 1) {
-                    self.view.goToPage(&page);
-                    let viewport = self
-                        .view
-                        .convertRect_fromPage(page.boundsForBox(PDFDisplayBox::CropBox), &page);
-                    if viewport.size.width > 0.0 && viewport.size.height > 0.0 {
-                        self.view.goToRect_onPage(
-                            self.view.convertRect_toPage(
-                                self.native_rect(&highlight.bounding, viewport),
-                                &page,
-                            ),
+            if let Some(document) = self.view.document()
+                && let Some(page) = document.pageAtIndex(highlight.page - 1)
+            {
+                self.view.goToPage(&page);
+                let viewport = self
+                    .view
+                    .convertRect_fromPage(page.boundsForBox(PDFDisplayBox::CropBox), &page);
+                if viewport.size.width > 0.0 && viewport.size.height > 0.0 {
+                    self.view.goToRect_onPage(
+                        self.view.convertRect_toPage(
+                            self.native_rect(&highlight.bounding, viewport),
                             &page,
-                        );
-                    }
+                        ),
+                        &page,
+                    );
+                    return true;
                 }
             }
         }
+        false
     }
 }

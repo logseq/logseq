@@ -161,11 +161,13 @@ is a desktop presentation difference from a web popup at the selected text.
 
 For example, an existing local PDF asset opens without changing its `path`,
 `page`, `scale` or `hls` attributes. `auto`/`page-fit` use native automatic fitting;
-`page-width` follows the native view width, and positive numeric factors remain
-explicit scales. A text selection alone does not persist a highlight: choosing
+`page-width` follows the native view width through PDFKit's page transform,
+including page rotation, and positive numeric factors remain explicit scales. A text selection alone does not persist a highlight: choosing
 Highlight emits the existing `pdf-hl-add` shape with a native UUID and normalized
 page rectangles. Existing model-owned highlights are projected as PDFKit
-annotations and referenced highlights can be revealed. The provider does not
+annotations and referenced highlights can be revealed. An initial `ref_hl`
+request waits for the native view's first usable bounds through its own frame
+notification, without a timer or display-link dependency. The provider does not
 write annotation changes into a second document store.
 
 This is an initial real provider, not complete PDF parity. Area-drag PNG capture,
