@@ -1,7 +1,7 @@
 //! User-authored raw markup. Application controls remain typed LUI components.
 use super::{raw_style, string};
 use lui_nsh::{extensions::ExtensionContext, store::Node};
-use nsh_core::{keymap::Modifiers, prelude::*};
+use nsh_core::{element::ImageSrc, keymap::Modifiers, prelude::*};
 use serde_json::{Map, Value, json};
 
 pub(super) fn validate(node: &Node) -> Result<(), String> {
@@ -114,13 +114,26 @@ pub(super) fn element(context: ExtensionContext) -> AnyElement {
             AccessibilityRole::Button
         };
         let disabled = context.clone();
-        return host(
+        let label_context = context.clone();
+        let activation = context.clone();
+        let owner = Owner::current();
+        return component(
             context,
-            nsh_base::button()
-                .disabled(move || attributes(&disabled).contains_key("disabled"))
-                .role(role)
-                .child(text(content))
-                .child(children),
+            nsh_base::Button::element(nsh_base::ButtonProps {
+                disabled: Prop::bind(move || attributes(&disabled).contains_key("disabled")),
+                role: Some(role).into(),
+                accessibility_label: Prop::bind(move || label(&label_context)),
+                ..nsh_base::ButtonProps::initial()
+            })
+            .on_event(move |event: &nsh_base::ButtonEvent| {
+                if matches!(event, nsh_base::ButtonEvent::Press) {
+                    // NSH's semantic event has no pointer details. A keyboard or
+                    // assistive activation is still an ordinary DOM click.
+                    emit_dom(&activation, owner, "click", json!({}));
+                }
+            })
+            .child(text(content))
+            .child(children),
         );
     }
     if matches!(
@@ -161,7 +174,7 @@ pub(super) fn element(context: ExtensionContext) -> AnyElement {
                 .h(px(1.0))
                 .w_full()
                 .bg(move || nsh_base::theme().border)
-                .role(AccessibilityRole::Separator),
+                .accessibility_elements_hidden(true),
         );
     }
     host(context, view().child(text(content)).child(children))
@@ -173,30 +186,37 @@ fn input_for(context: ExtensionContext, kind: &str) -> AnyElement {
         let mark = context.clone();
         let change = context.clone();
         let disabled = context.clone();
+        let label_context = context.clone();
         let owner = Owner::current();
-        return host(
+        return component(
             context,
-            nsh_base::checkbox()
-                .disabled(move || attributes(&disabled).contains_key("disabled"))
-                .checked(move || attributes(&checked).contains_key("checked"))
-                .on_change(move |checked: bool| {
-                    emit_dom(&change, owner, "input", json!({"checked":checked}));
-                    emit_dom(&change, owner, "change", json!({"checked":checked}));
-                })
-                .indicator(
-                    view()
-                        .w_4()
-                        .h_4()
-                        .border_1()
-                        .border_color(move || nsh_base::theme().border)
-                        .child(text(move || {
-                            if attributes(&mark).contains_key("checked") {
-                                "✓"
-                            } else {
-                                ""
-                            }
-                        })),
-                ),
+            nsh_base::Checkbox::element(nsh_base::CheckboxProps {
+                checked: Prop::bind(move || attributes(&checked).contains_key("checked")),
+                disabled: Prop::bind(move || attributes(&disabled).contains_key("disabled")),
+                accessibility_label: Prop::bind(move || label(&label_context)),
+                ..nsh_base::CheckboxProps::initial()
+            })
+            .on_event(move |event: &nsh_base::CheckboxEvent| {
+                let nsh_base::CheckboxEvent::Change(checked) = event;
+                emit_dom(&change, owner, "click", json!({}));
+                emit_dom(&change, owner, "input", json!({"checked":checked}));
+                emit_dom(&change, owner, "change", json!({"checked":checked}));
+            })
+            .fill(
+                "indicator",
+                view()
+                    .w_4()
+                    .h_4()
+                    .border_1()
+                    .border_color(move || nsh_base::theme().border)
+                    .child(text(move || {
+                        if attributes(&mark).contains_key("checked") {
+                            "✓"
+                        } else {
+                            ""
+                        }
+                    })),
+            ),
         );
     }
     let value = context.clone();
@@ -227,18 +247,47 @@ fn input_for(context: ExtensionContext, kind: &str) -> AnyElement {
                 emit_dom(&changed, owner, "input", json!({"value":value}));
                 emit_dom(&changed, owner, "change", json!({"value":value}));
             })
-            .on_submit(move || emit_dom(&submitted, owner, "submit", json!({}))),
+            .on_submit(move |value: &str| {
+                emit_dom(&submitted, owner, "submit", json!({"value":value}))
+            }),
     )
+}
+
+fn label(context: &ExtensionContext) -> Option<SharedString> {
+    let attrs = attributes(context);
+    let value = attrs
+        .get("aria-label")
+        .or_else(|| attrs.get("alt"))
+        .cloned()
+        .unwrap_or_else(|| string(context, "accessibility-identifier"));
+    (!value.is_empty()).then(|| value.into())
+}
+fn component<C: Component>(context: ExtensionContext, element: ComponentElement<C>) -> AnyElement {
+    let test_id = format!("lui-{}", context.node.get_untracked().id);
+    let reference = context.reference;
+    element
+        .element_ref(&reference)
+        .test_id(&test_id)
+        .state_inline_style(move || {
+            let node = context.node.get();
+            let tag = &node.extension.as_ref().unwrap().identifier[7..];
+            raw_style::compile(&node, tag, |value| context.resolve_text(value))
+                .expect("validated raw component styles and application theme")
+        })
+        .into_element()
 }
 
 fn attributes(context: &ExtensionContext) -> std::collections::BTreeMap<String, String> {
     raw_style::attrs(&context.node.get()).expect("raw attrs were validated before publication")
 }
-fn host<E: Element + Interactive>(context: ExtensionContext, element: E) -> AnyElement {
+fn host<E: Element + Interactive + Accessible>(
+    context: ExtensionContext,
+    element: E,
+) -> AnyElement {
     let owner = Owner::current();
     let style = context.clone();
     let disabled = context.clone();
-    let label = context.clone();
+    let label_context = context.clone();
     let click = context.clone();
     let down = context.clone();
     let up = context.clone();
@@ -258,15 +307,7 @@ fn host<E: Element + Interactive>(context: ExtensionContext, element: E) -> AnyE
                 .expect("validated native raw layout and application theme")
         })
         .disabled(move || attributes(&disabled).contains_key("disabled"))
-        .optional_label(move || {
-            let attributes = attributes(&label);
-            let value = attributes
-                .get("aria-label")
-                .or_else(|| attributes.get("alt"))
-                .cloned()
-                .unwrap_or_else(|| string(&label, "accessibility-identifier"));
-            (!value.is_empty()).then(|| SharedString::from(value))
-        })
+        .optional_label(move || label(&label_context))
         .on_press(move |event: &PressEvent| {
             emit_dom(
                 &click,

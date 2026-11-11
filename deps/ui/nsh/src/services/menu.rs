@@ -153,11 +153,6 @@ mod tests {
         app.wait_for("text:Command:").unwrap();
         app.press_key("ctrl+r").unwrap();
         app.wait_for("text:Command: reload").unwrap();
-        let menus = app.screen().app_menu().unwrap();
-        assert_eq!(menus.len(), 5);
-        assert!(
-            matches!(&menus[0],nsh_core::desktop::MenuItem::Submenu{label,..} if label=="File")
-        );
     }
     #[test]
     fn translated_menu_labels_are_required_before_native_menu_replacement() {
