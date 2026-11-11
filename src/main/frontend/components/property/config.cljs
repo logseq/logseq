@@ -755,22 +755,23 @@
    :block-right {:icon :layout-align-left :title (t :property/ui-position-block-right)}
    :block-below {:icon :layout-align-top :title (t :property/ui-position-block-below)}})
 
+(defn- configurable-ui-position?
+  [{:keys [db/ident logseq.property/type]}]
+  (and (not (contains? #{:logseq.property.class/extends :logseq.property.class/properties} ident))
+       (contains? #{:default :number :date :datetime :checkbox :url :node :asset} type)))
+
 (hsx/defc ui-position-sub-pane
-  [property {:keys [id set-sub-open! _ui-position]}]
-  (let [handle-select! (fn [^js e]
-                         (when-let [v (some-> (.-target e) (.-dataset) (.-value))]
+  [property {:keys [id set-sub-open!]}]
+  (let [select-position! (fn [position]
                            (db-property-handler/set-block-property!
-                            (:block/uuid property)
-                            :logseq.property/ui-position
-                            (keyword v))
+                            (:block/uuid property) :logseq.property/ui-position position)
                            (set-sub-open! false)
-                           (restore-root-highlight-item! id)))
-        item-props {:on-select handle-select!}]
+                           (restore-root-highlight-item! id))]
     [:div.ls-property-dropdown.ls-property-ui-position-sub-pane
-     (for [[k v] (position-labels)]
-       (let [item-props (assoc item-props :data-value k)]
-         (dropdown-editor-menuitem
-          (assoc v :item-props item-props))))]))
+     (for [[position option] (position-labels)]
+       (dropdown-editor-menuitem
+        (assoc option :item-props {:data-value position
+                                   :on-select (fn [_] (select-position! position))})))]))
 
 (defn property-type-label
   [property-type]
@@ -953,18 +954,12 @@
 
       (when (and (not= :logseq.property/enable-history? (:db/ident property))
                  (not special-built-in-prop?))
-        (let [property-type (:logseq.property/type property)
-              group' (->> [(when (and (not (contains? #{:logseq.property.class/extends :logseq.property.class/properties} (:db/ident property)))
-                                      (contains? #{:default :number :date :checkbox :node} property-type)
-                                      (not
-                                       (and (= :default property-type)
-                                            (empty? (:property/closed-values property))
-                                            (contains? #{nil :properties} (:logseq.property/ui-position property)))))
+        (let [group' (->> [(when (configurable-ui-position? property)
                              (let [position (:logseq.property/ui-position property)]
                                (dropdown-editor-menuitem {:icon :float-left :title (t :property/ui-position) :desc (some-> (position-labels) (get position) :title)
                                                           :item-props {:class "ui__position-trigger-item"}
                                                           :disabled? config/publishing?
-                                                          :submenu-content (fn [ops] (ui-position-sub-pane property (assoc ops :ui-position position)))})))
+                                                          :submenu-content (fn [ops] (ui-position-sub-pane property ops))})))
 
                            (when (not (contains? #{:logseq.property.class/extends :logseq.property.class/properties} (:db/ident property)))
                              (dropdown-editor-menuitem {:icon :eye-off :title (t :property/hide-by-default) :toggle-checked? (boolean (:logseq.property/hide? property))

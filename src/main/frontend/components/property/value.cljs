@@ -1003,6 +1003,17 @@
     (.preventDefault e)
     false))
 
+(defn- property-value-edit-button
+  [property on-click]
+  (when-not config/publishing?
+    [:button.property-value-edit-button.flex.items-center.shrink-0
+     {:type "button"
+      :aria-label (:block/title property)
+      :on-click (fn [e]
+                  (util/stop e)
+                  (on-click e))}
+     (ui/icon "edit" {:size 14})]))
+
 (hsx/defc date-picker
   [value {:keys [block property datetime? on-change on-delete del-btn? editing? multiple-values? other-position?
                  suppress-inline-edit-icon? property-position]
@@ -1091,7 +1102,10 @@
                              :suppress-inline-edit-icon? suppress-inline-edit-icon?})
 
             :else
-            (property-empty-btn-value nil {:property-position property-position}))])))))
+            (property-empty-btn-value nil {:property-position property-position}))
+          (when (and (contains? #{:block-left :block-right} property-position)
+                     (date-property-value-present? value))
+            (property-value-edit-button property open-popup!))])))))
 
 (hsx/defc property-value-date-picker
   [block property value opts]
@@ -1908,15 +1922,14 @@
               (inline-text {} :markdown value'))])))))
 
 (defn multiple-values-trigger-class
-  [{:keys [expanded? other-position? page-property?]}]
-  (str "flex flex-1 min-w-0 flex-row items-center gap-1 "
-       (if (and other-position? (not expanded?) (not page-property?))
-         "flex-nowrap multi-values-nowrap"
-         (str "flex-wrap " (when expanded? "multi-values-expanded")))))
+  [{:keys [expanded? property-position page-property?]}]
+  (if (and (= :block-below property-position) (not expanded?) (not page-property?))
+    "multi-values-nowrap"
+    "multi-values-wrap"))
 
 (defn multiple-value-item-class
-  [{:keys [expanded? other-position? page-property? show-popup!]}]
-  (when (and show-popup! other-position? (not expanded?) (not page-property?))
+  [{:keys [expanded? property-position page-property? show-popup!]}]
+  (when (and show-popup! (= :block-below property-position) (not expanded?) (not page-property?))
     "shrink-0"))
 
 (hsx/defc select-item
@@ -1981,6 +1994,25 @@
        :else
        (inline-text-cp (str value)))]))
 
+(defn- value-select-key-down!
+  [block property opts ^js e]
+  (let [trigger (.-currentTarget e)
+        trigger-focused? (identical? (.-target e) trigger)]
+    (case (util/ekey e)
+      (" " "Enter")
+      (if trigger-focused?
+        (do (util/stop e)
+            (.click trigger))
+        ;; Keep native link and button activation out of the global shortcuts.
+        (when (.closest (.-target e) "a[href], button")
+          (util/stop-propagation e)))
+
+      ("Backspace" "Delete")
+      (when trigger-focused?
+        (delete-block-property! block property opts))
+
+      nil)))
+
 (hsx/defc single-value-select
   [block property value select-opts {:keys [value-render popup-focus-trigger? popup-auto-focus-trigger?] :as opts}]
   (let [*el (hooks/use-ref nil)
@@ -2013,34 +2045,33 @@
     (if editing?
       (popup-content nil)
       (let [show! (fn [e]
-                    (util/stop e)
-                    (state/clear-selection!)
                     (let [target (when e (.-target e))]
-                      (when-not (or config/publishing?
-                                    (util/shift-key? e)
-                                    (util/meta-key? e)
-                                    (property-value-popup-blocked-link? target))
-                        (page-ref-cell-click
-                         {:entity (page-ref-entity-from-event-target target)
-                          :current-page (state/get-current-page)
-                          :open-popup! #(show-popup! target)}))))]
+                      (when-not (property-value-popup-blocked-link? target)
+                        (util/stop e)
+                        (state/clear-selection!)
+                        (when-not (or config/publishing?
+                                      (util/shift-key? e)
+                                      (util/meta-key? e))
+                          (page-ref-cell-click
+                           {:entity (page-ref-entity-from-event-target target)
+                            :current-page (state/get-current-page)
+                            :open-popup! #(show-popup! target)})))))]
         (shui/trigger-as
          (if (:other-position? opts) :div.jtrigger :div.jtrigger.flex.flex-1.w-full.cursor-pointer)
          {:ref *el
           :id trigger-id
           :tabIndex 0
           :on-click show!
-          :on-key-down (fn [e]
-                         (case (util/ekey e)
-                           ("Backspace" "Delete")
-                           (delete-block-property! block property opts)
-                           (" " "Enter")
-                           (do (some-> (hooks/deref *el) (.click))
-                               (util/stop e))
-                           nil))}
-         (if (string/blank? value)
-           (property-empty-text-value property opts)
-           (value-render)))))))
+          :on-key-down #(value-select-key-down! block property opts %)}
+         [:div.property-value-with-actions.flex.items-center.gap-1.min-w-0
+          (if (string/blank? value)
+            (property-empty-text-value property opts)
+            (value-render))
+          (when (:show-edit-button? opts)
+            (property-value-edit-button
+             property
+             (fn [_]
+               (show-popup! nil))))])))))
 
 (defn- property-value-inner
   [block property value {:keys [inline-text page-cp
@@ -2274,14 +2305,29 @@
    :error))
 
 (hsx/defc asset-value-content
-  [value]
+  [value {:keys [property-position]}]
   (let [asset-type (:logseq.property.asset/type value)
         image? (asset-image? asset-type)
+        [loaded-image set-loaded-image!] (hooks/use-state nil)
+        source-width (or (:logseq.property.asset/width value)
+                         (when (= (:uuid loaded-image) (:block/uuid value)) (:width loaded-image)))
+        source-height (or (:logseq.property.asset/height value)
+                          (when (= (:uuid loaded-image) (:block/uuid value)) (:height loaded-image)))
+        thumbnail-max-size 80
+        dimensions-known? (and (pos? (or source-width 0)) (pos? (or source-height 0)))
+        thumbnail-style (if dimensions-known?
+                          (let [scale (min 1 (/ thumbnail-max-size source-width) (/ thumbnail-max-size source-height))]
+                            {:width (* scale source-width) :height (* scale source-height)})
+                          {:width thumbnail-max-size :height thumbnail-max-size})
         video? (asset-video? asset-type)
         preview! (fn [e]
                    (when-not (asset-embedded-control-click? (.-target e))
                      (util/stop e)
-                     (state/pub-event! [:asset/show-preview value])))
+                     (state/pub-event! [:asset/show-preview
+                                      (cond-> value
+                                        dimensions-known?
+                                        (assoc :logseq.property.asset/width source-width
+                                               :logseq.property.asset/height source-height))])))
         preview-key! (fn [e]
                        (when (contains? #{" " "Enter"} (util/ekey e))
                          (preview! e)))]
@@ -2298,14 +2344,23 @@
         (if image?
           [:div.asset-value-thumb.flex-shrink-0.rounded.overflow-hidden.flex.items-center.justify-center
            {:class asset-thumb-fit-class
-            :style {:width 80 :height 80}
+            :style thumbnail-style
+            :onLoadCapture (fn [e]
+                             (let [image (.-target e)]
+                               (when (and (= "IMG" (.-tagName image))
+                                          (pos? (.-naturalWidth image))
+                                          (pos? (.-naturalHeight image)))
+                                 (set-loaded-image! {:uuid (:block/uuid value)
+                                                     :width (.-naturalWidth image)
+                                                     :height (.-naturalHeight image)}))))
             :role "button"
             :tabIndex 0
             :data-asset-preview-trigger true
             :onClickCapture preview!
             :on-key-down preview-key!}
            ^{:key (str "asset-cp-" (:block/uuid value))}
-           [:<> (asset-cp {:disable-resize? true} value)]]
+           [:<> (asset-cp {:disable-resize? true
+                          :property-position (or property-position :properties)} value)]]
           [:div.asset-value-thumb.flex-shrink-0.flex.items-center
            {:role "button"
             :tabIndex 0
@@ -2313,7 +2368,8 @@
             :onClickCapture preview!
             :on-key-down preview-key!}
            ^{:key (str "asset-cp-" (:block/uuid value))}
-           [:<> (asset-cp {:disable-resize? true} value)]])))))
+           [:<> (asset-cp {:disable-resize? true
+                          :property-position (or property-position :properties)} value)]])))))
 
 (defn- <select-assets!
   [block property many? selected-ids set-selected-ids! on-chosen assets]
@@ -2408,7 +2464,7 @@
         (when-let [asset-cp (state/get-component :block/asset-cp)]
           [:div.flex.items-center.justify-center.w-full.h-full
            {:class asset-thumb-fit-class}
-           (asset-cp {:disable-resize? true} asset)])
+           (asset-cp {:disable-resize? true :property-position :properties} asset)])
         [:div.flex.flex-col.items-center.justify-center.gap-1.opacity-70
          (ui/icon (asset-icon-for-type asset-type) {:size 40})
          [:span.text-xs.uppercase (or asset-type (t :asset/picker-fallback-type))]])]
@@ -2517,8 +2573,12 @@
                              (util/stop e))
                          nil))}
        (if (and value (:db/id value))
-         [:div.flex.items-center.gap-2.w-full.flex-wrap
-          (asset-value-content value)]
+         [:div.property-value-with-actions.flex.items-center.gap-2.w-full.flex-wrap
+          (asset-value-content value opts)
+          (property-value-edit-button
+           property
+           (fn [_]
+             (show-grid! (hooks/deref *el))))]
          [:div.w-full.cursor-pointer
           {:on-click show-grid-from-click!}
           (property-empty-text-value property opts)])))))
@@ -2530,6 +2590,9 @@
         batch? (batch-operation?)
         closed-values? (seq (:property/closed-values property))
         select-type?' (or (property-value-select-type? block property value*)
+                          (and (not= :logseq.property.publish/published-url (:db/ident property))
+                               (or (= :url type)
+                                   (and (= :default type) (:other-position? opts))))
                           (and editing? batch? (contains? #{:default :url :checkbox} type) (not closed-values?)))
         select-opts {:on-chosen on-chosen}
         empty-placeholder? (empty-placeholder-value? value*)
@@ -2575,6 +2638,7 @@
                                  select-opts
                                  (assoc opts
                                         :editing? editing?
+                                        :show-edit-button? true
                                         :value-render (fn [] (select-item property type select-value opts))))))
         (case type
           (:date :datetime)
@@ -2661,43 +2725,39 @@
                                                                    (content-fn opts target))
                                                                  {:as-dropdown? true :as-content? false
                                                                   :align "start" :auto-focus? true}))}))))]
-        [:div.multi-values.jtrigger
+        [:div.multi-values.property-value-with-actions.jtrigger
          {:tab-index "0"
           :ref *el
           :on-click show-popup!
-          :on-key-down (fn [^js e]
-                         (case (.-key e)
-                           (" " "Enter")
-                           (do (some-> (hooks/deref *el) (.click))
-                               (util/stop e))
-                           ("Backspace" "Delete")
-                           (delete-block-property! block property opts)
-                           :dune))
-          :class (multiple-values-trigger-class opts)}
-                 (let [items' (vec items)
-                       not-empty-value? (not= (map :db/ident items') [:logseq.property/empty-placeholder])]
-                   (if (and (seq items) not-empty-value?)
-                     (if (= type :asset)
-                       (for [item items']
-                         ^{:key (or (:block/uuid item) (str item))}
-                         [asset-value-content item])
-                       (concat
-                        (for [[idx item] (map-indexed vector items')]
-                          ^{:key (str "value-" (or (:block/uuid item) item) "-" idx)}
-                          [:<>
-                           [select-item property type item (assoc opts :show-popup! show-popup!)]
-                           (when (< idx (dec (count items')))
-                             [:span.opacity-50.-ml-1 ","])])
-                        (when date?
-                          [^{:key "empty-date-picker"}
-                           (property-value-date-picker block property nil {:toggle-fn toggle-fn})])))
-             (if date?
-               (property-value-date-picker block property nil {:toggle-fn toggle-fn})
-               (if (= type :asset)
-                 [:div.w-full.cursor-pointer
-                  {:on-click show-popup!}
-                  (property-empty-text-value property opts)]
-                 (property-empty-text-value property opts)))))]))))
+          :on-key-down #(value-select-key-down! block property opts %)
+          :class "flex items-start gap-1 min-w-0 max-w-full"}
+         [:div.multi-values-items
+          {:class (multiple-values-trigger-class opts)}
+          (let [items' (vec items)
+                not-empty-value? (not= (map :db/ident items') [:logseq.property/empty-placeholder])]
+            (if (and (seq items') not-empty-value?)
+              (if (= type :asset)
+                (for [item items']
+                  ^{:key (or (:block/uuid item) (str item))}
+                  [asset-value-content item opts])
+                (for [[idx item] (map-indexed vector items')]
+                  ^{:key (str "value-" (or (:block/uuid item) item) "-" idx)}
+                  [:<>
+                   [:span.multi-value-item
+                    [select-item property type item (assoc opts :show-popup! show-popup!)]
+                    (when (< idx (dec (count items')))
+                      [:span.multi-value-separator.opacity-50 "\u2060,"])]
+                   (when (< idx (dec (count items'))) " ")]))
+              (when-not date?
+                (if (= type :asset)
+                  [:div.w-full.cursor-pointer
+                   {:on-click show-popup!}
+                   (property-empty-text-value property opts)]
+                  (property-empty-text-value property opts)))))]
+         [:div.multi-values-actions
+          (when date?
+            (property-value-date-picker block property nil (assoc opts :toggle-fn toggle-fn)))
+          (property-value-edit-button property show-popup!)]]))))
 
 (hsx/defc multiple-values
   [block property opts]
@@ -2785,7 +2845,8 @@
                                                              (.closest ".ui__popover-content, .ui__dropdown-menu-content, .ui__context-menu-content"))
                                               (state/clear-selection!)))}
                         (cond
-                          (and multiple-values? (contains? #{:default :url} type) (not closed-values?) (not editing?))
+                          (and multiple-values? (= :default type) (not closed-values?)
+                               (not editing?) (not (:other-position? opts)))
                           (property-normal-block-value block property v opts)
 
                           multiple-values?
@@ -2800,9 +2861,9 @@
           (if show-tooltip?
             (shui/tooltip-provider
              (shui/tooltip
-              {:delay 1200}
               (shui/tooltip-trigger
-               {:onFocusCapture #(util/stop-propagation %)
+               {:delay 0
+                :onFocusCapture #(util/stop-propagation %)
                 :as-child true}
                value-cp)
               (shui/tooltip-portal

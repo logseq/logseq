@@ -215,7 +215,7 @@ html.is-native-ios {
 }
 
 .ls-page-blocks {
-  @apply min-h-[60px] overflow-hidden;
+  @apply min-h-[60px];
 }
 
 /* Recycle page only: reduce the gap between "Recycle" title and its description label.

@@ -3289,14 +3289,13 @@
 
 (defn- bottom-property-pill-cp
   [block property opts]
-  (let [many-node? (and (= :node (:logseq.property/type property))
-                        (= :db.cardinality/many (:db/cardinality property)))
+  (let [many? (= :db.cardinality/many (:db/cardinality property))
         property-value (get block (:db/ident property))
         empty-placeholder? (= :logseq.property/empty-placeholder (:db/ident property-value))
         has-value? (and (some? property-value) (not empty-placeholder?))]
     [:div.bottom-property-pill.bottom-property-pill-focusable
      {:key (str (:db/id block) "-" (:db/id property))
-      :class (util/classnames [{:bottom-property-pill-wrap many-node?}])
+      :class (util/classnames [{:bottom-property-pill-wrap many?}])
       :data-bottom-pill-focusable true
       :data-bottom-row-nav true
       :tab-index -1
@@ -3306,10 +3305,11 @@
     [:div.select-none ":"]]
    [:div {:class (util/classnames
                   ["bottom-property-content property-value-container"
-                   {:bottom-property-content-wrap many-node?}])
+                   {:bottom-property-content-wrap many?}])
           :style {:min-height 20}}
     (pv/property-value block property opts)
     (when (and has-value?
+               (not many?)
                (contains? #{:date :datetime} (:logseq.property/type property)))
       [:button.bottom-property-edit-icon.select-none
        {:type "button"
@@ -3490,7 +3490,7 @@
          show-hidden-properties-control?
          show-add-property-button?]
 
-        [:div.positioned-properties.flex.flex-row.gap-1.select-none.h-6.self-start
+        [:div.positioned-properties.flex.flex-row.flex-wrap.gap-1.select-none.min-h-6.self-start.min-w-0.max-w-full
          {:class (name position)}
          (for [property properties]
            ^{:key (str (:block/uuid block) "-" (:block/uuid property))}

@@ -1550,15 +1550,37 @@ html.is-mac {
 
 .positioned-properties {
   @apply text-sm;
+
+  .property-value-inner {
+    min-width: 0;
+    max-width: 100%;
+  }
+}
+
+.block-row:has(> .ls-block-right .positioned-properties.block-right) {
+  align-items: flex-start;
+}
+
+.block-row > .ls-block-right:has(.positioned-properties.block-right) {
+  min-width: 0;
+  max-width: 50%;
+
+  > div {
+    min-width: 0;
+    max-width: 100%;
+  }
+}
+
+.block-content-or-editor-wrap:has(> .positioned-properties.block-left) {
+  align-items: flex-start;
 }
 
 .positioned-properties.block-left {
+  @apply opacity-70 hover:opacity-100;
+  max-width: 50%;
+
   .asset-container {
     @apply max-w-[120px];
-  }
-
-  .block-title-wrap {
-    @apply hidden;
   }
 }
 
@@ -1567,11 +1589,7 @@ html.is-mac {
     @apply whitespace-nowrap;
   }
 
-  .block-title-wrap {
-    @apply overflow-hidden h-6 whitespace-nowrap text-ellipsis;
-  }
-
-  .jtrigger {
+  .jtrigger:not(.ui__checkbox) {
     @apply px-1;
   }
 }
@@ -1596,8 +1614,13 @@ html.is-mac {
     will-change: max-height;
   }
 
+  .bottom-properties-row[data-expanded="false"]:has(.property-value-inner[data-type=asset]) {
+    max-height: none;
+  }
+
   .bottom-properties-row[data-expanded="true"] {
     max-height: 24rem;
+    overflow-y: auto;
   }
 
   .bottom-properties-row[data-expanded="false"] .bottom-property-pill {
@@ -1639,6 +1662,16 @@ html.is-mac {
     @apply h-6;
   }
 
+  .bottom-property-pill:has(.property-value-inner[data-type=asset]) {
+    height: auto;
+    align-items: flex-start;
+    border-radius: 0.5rem;
+  }
+
+  .bottom-property-pill:has(.property-value-inner[data-type=asset])::after {
+    border-radius: inherit;
+  }
+
   .bottom-properties-row[data-expanded="true"] .bottom-property-pill {
     @apply h-auto max-w-full items-start;
   }
@@ -1673,6 +1706,7 @@ html.is-mac {
   }
 
   .bottom-property-content {
+    flex: 1 1 auto;
     @apply flex items-center gap-1 min-w-0 relative text-sm whitespace-nowrap overflow-hidden;
   }
 
@@ -1681,7 +1715,7 @@ html.is-mac {
   }
 
   .bottom-property-pill-wrap .multi-values.jtrigger {
-    @apply min-w-0 overflow-hidden whitespace-nowrap;
+    @apply min-w-0;
   }
 
   .bottom-property-content .property-value-inner[data-type="node"] .jtrigger:hover .page-ref,
