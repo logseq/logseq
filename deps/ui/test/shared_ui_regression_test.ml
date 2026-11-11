@@ -599,7 +599,66 @@ let native_header_menu_inputs () =
      "developer-mode", "true";
      "preferred-language", "\"zh-CN\""]
 
+let native_popup_alignment ~registry =
+  let previous_settings = !Settings_state.st
+  and previous_overlays = !Properties_state.view_overlays_state
+  and previous_generation = !Properties_state.overlay_generation
+  and previous_model = !Runtime.read_model and previous_flush = !Runtime.app_flush in
+  Fun.protect ~finally:(fun () ->
+    Settings_state.st:=previous_settings;
+    Properties_state.view_overlays_state:=previous_overlays;
+    Properties_state.overlay_generation:=previous_generation;
+    Runtime.read_model:=previous_model;Runtime.app_flush:=previous_flush) (fun () ->
+    List.iter (fun (profile, native) ->
+      Settings_state.st:=None;Properties_state.view_overlays_state:=None;
+      Runtime.read_model:=(fun () -> Model.initial);Runtime.app_flush:=(fun () -> ());
+      let session = S.mount ~registry ~profile ~initial:Model.initial
+        ~reducer:(fun model () -> model)
+        ~view:(fun context ms _ ->
+          let overlays = Properties_state.view_overlays_state_of context in
+          Properties_popup.open_at_key ~key:"alignment-picker"
+            ~cls:"alignment-picker" ~anchor_target:"alignment-trigger" ~right:true
+            ~x:80. ~y:100. (Lui_elements.text ~value:"Retained picker content" []);
+          let popup = match Runtime.signal_get overlays with
+            | [popup] -> popup.Properties_state.vo_view
+            | _ -> failwith "Alignment fixture requires exactly one popup" in
+          Lui_elements.column
+            [Lui_elements.button ~accessibility_identifier:"alignment-trigger" [];
+             Settings_page.appearance_body ms;popup]) () in
+      Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose session.S.app)) (fun () ->
+        let appearance = List.find (fun node -> class_has node "appearance-popup") (nodes session)
+        and picker = List.find (fun node -> class_has node "alignment-picker") (nodes session) in
+        let number node name value = Hashtbl.find_opt node.M.props name=Some (P.FloatValue value) in
+        check "Appearance uses native cross alignment only on NSH"
+          (number appearance "anchor-alignment-offset" (if native then 0. else -5.5));
+        check "right picker uses native cross alignment only on NSH"
+          (number picker "anchor-alignment-offset" (if native then 0. else -4.));
+        check "Appearance retains its existing trigger and primary alignment"
+          (M.string_prop appearance "anchor-target"=Some "toolbar-dots-btn"
+           && M.string_prop appearance "anchor"=Some "below"
+           && M.string_prop appearance "anchor-alignment"=Some "end"
+           && number appearance "anchor-offset" 0.);
+        check "right picker retains its existing trigger and primary spacing"
+          (M.string_prop picker "anchor-target"=Some "alignment-trigger"
+           && M.string_prop picker "anchor"=Some "right"
+           && M.string_prop picker "anchor-alignment"=Some "start"
+           && number picker "anchor-offset" (-4.));
+        check "alignment adaptation preserves dialog semantics"
+          (M.string_prop appearance "role"=Some "dialog"
+           && M.string_prop picker "role"=Some "dialog");
+        check "alignment adaptation retains picker content"
+          (List.exists (fun node -> M.string_prop node "text"=Some "Retained picker content")
+            (nodes session));
+        S.dismiss session picker.M.id;
+        check "aligned picker keeps its existing dismissal owner"
+          (Runtime.signal_get (Option.get !Properties_state.view_overlays_state)=[])))
+      [({P.profile_os=P.WebOS;P.profile_host=P.WebHost},false);
+       ({P.profile_os=P.IOS;P.profile_host=P.SwiftUIHost},false);
+       ({P.profile_os=P.AndroidOS;P.profile_host=P.KotlinHost},false);
+       ({P.profile_os=P.MacOS;P.profile_host=P.NshHost},true)])
+
 let run_views ~registry ~profile ~finish =
+  native_popup_alignment ~registry;
   native_header_menu_inputs ();
   standalone_inline_groups ~registry;
   selectable_block_motion ~registry;
