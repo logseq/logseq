@@ -214,6 +214,76 @@ fn mount_actual_application() -> Result<(), String> {
             return Err("dismissing More remounted its trigger or the journal body".into());
         }
     }
+    // Opening the menu alone does not qualify its deferred application branch.
+    // Use a short real viewport so Appearance must have a working scroll owner.
+    app.set_viewport(Size::new(px(1440.0), px(400.0)))?;
+    app.press("role:button[More]")?;
+    wait_for_chrome(
+        &mut app,
+        "Appearance action in the native More menu",
+        Duration::from_secs(10),
+        |screen| screen.matches("role:menuitem[Appearance]") == Ok(true),
+    )?;
+    app.press("role:menuitem[Appearance]")?;
+    let appearance_identity = |screen: &nsh_testing::Screen| {
+        screen
+            .layout_nodes()
+            .into_iter()
+            .find(|node| node.test_id.as_deref() == Some("appearance_settings"))
+            .map(|node| (node.id, node.bounds.origin.y.0))
+    };
+    wait_for_chrome(
+        &mut app,
+        "positive native Appearance content and bounded Scroll",
+        Duration::from_secs(10),
+        |screen| {
+            let nodes = screen.layout_nodes();
+            let measurable = |identifier| {
+                nodes.iter().find(|node| {
+                    node.test_id.as_deref() == Some(identifier)
+                        && !node.hidden
+                        && node.bounds.size.width.0 > 100.0
+                        && node.bounds.size.height.0 > 100.0
+                })
+            };
+            measurable("appearance_settings").is_some()
+                && measurable("appearance-scroll")
+                    .is_some_and(|scroll| scroll.bounds.size.height.0 <= 400.0 * 0.85 + 1.0)
+                && screen.shows("Font")
+        },
+    )?;
+    let (appearance, before_y) = appearance_identity(app.screen())
+        .ok_or("native Appearance content disappeared before scrolling")?;
+    app.scroll("id:appearance-scroll", px(1000.0))?;
+    wait_for_chrome(
+        &mut app,
+        "native Appearance scroll reveals its final settings row",
+        Duration::from_secs(10),
+        |screen| {
+            screen.shows("Accent color")
+                && appearance_identity(screen)
+                    .is_some_and(|(id, y)| id == appearance && y < before_y - 1.0)
+        },
+    )?;
+    app.press_key("escape")?;
+    wait_for_chrome(
+        &mut app,
+        "native Appearance Escape dismissal",
+        Duration::from_secs(10),
+        |screen| appearance_identity(screen).is_none(),
+    )?;
+    app.set_viewport(Size::new(px(1440.0), px(900.0)))?;
+    wait_for_chrome(
+        &mut app,
+        "journal body after native Appearance dismissal",
+        Duration::from_secs(10),
+        startup_body::ready,
+    )?;
+    if more_identity(app.screen()) != Some(more)
+        || startup_body::identity(app.screen()) != Some(body)
+    {
+        return Err("Appearance scrolling or dismissal remounted More or the journal body".into());
+    }
     // Headless owns and joins the engine thread on drop. The process boundary
     // also isolates OCaml's persistent worker from every other Rust test.
     drop(app);

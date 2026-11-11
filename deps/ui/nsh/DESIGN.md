@@ -55,3 +55,15 @@ animation timer, viewport positioning loop or secondary popup state is added.
 Verify light/dark, keyboard selection, Escape focus restoration and collision
 placement in the actual native app; the Headless startup gate proves the native
 composition and retained identities, not pixel quality.
+
+## Appearance scrolling
+
+The native Appearance popup keeps the shared surface chrome and native Popover
+entrance/exit policy. One vertical Scroll owns its retained settings column,
+with maximum height at 85% of the live viewport. It uses native scrolling and
+reduced-motion behavior, with no application scroll animation or timer. The
+actual startup gate opens Appearance from More in a short viewport, requires
+measurable content, scrolls to the final settings row, dismisses through native
+Escape and checks that the journal body and More trigger remain retained.
+Headless geometry and interaction checks do not replace light/dark native pixel
+review.

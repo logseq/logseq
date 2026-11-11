@@ -643,6 +643,25 @@ let native_popup_alignment ~registry =
            && M.string_prop picker "anchor"=Some "right"
            && M.string_prop picker "anchor-alignment"=Some "start"
            && number picker "anchor-offset" (-4.));
+        check "Appearance surface keeps CSS overflow only on non-NSH hosts"
+          (M.string_prop appearance "overflow"=(if native then None else Some "auto"));
+        let appearance_children = M.children session.S.tree appearance.M.id in
+        (if native then match appearance_children with
+         | [scroll] ->
+             check "native Appearance has one bounded vertical Scroll owner"
+               (scroll.M.kind="scroll"
+                && M.string_prop scroll "orientation"=Some "vertical"
+                && number scroll "max-height-viewport" 0.85);
+             check "native Appearance retains its settings column inside Scroll"
+               (match M.children session.S.tree scroll.M.id with
+                | [content] -> class_has content "cp__settings-appearance-dialog-inner"
+                | _ -> false)
+         | _ -> check "native Appearance has one bounded vertical Scroll owner" false
+         else check "non-NSH Appearance retains its direct settings column"
+           (match appearance_children with
+            | [content] -> content.M.kind="column"
+                && class_has content "cp__settings-appearance-dialog-inner"
+            | _ -> false));
         check "alignment adaptation preserves dialog semantics"
           (M.string_prop appearance "role"=Some "dialog"
            && M.string_prop picker "role"=Some "dialog");
