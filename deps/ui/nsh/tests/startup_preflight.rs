@@ -104,7 +104,7 @@ fn mount_actual_application() -> Result<(), String> {
     )?;
     eprintln!(
         "Before journal-body wait:\n{}",
-        startup_body::diagnostic(&app.screen())
+        startup_body::diagnostic(app.screen())
     );
     wait_for_chrome(
         &mut app,
@@ -139,7 +139,7 @@ fn wait_for_chrome(
             ready(screen)
         }
     })
-    .map_err(|error| format!("{error}\n{}", startup_body::diagnostic(&app.screen())))?;
+    .map_err(|error| format!("{error}\n{}", startup_body::diagnostic(app.screen())))?;
     match diagnostic.into_inner() {
         Some(message) => Err(format!("real Logseq backend startup diagnostic: {message}")),
         None => Ok(()),
