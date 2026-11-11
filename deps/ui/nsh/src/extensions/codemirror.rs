@@ -2,7 +2,7 @@
 //! NSH owns text editing, selection, undo, composition and syntax rendering.
 use super::{boolean, string};
 use lui_nsh::{extensions::ExtensionContext, store::Node};
-use nsh_base::editor::{Editor, EditorApi, editor};
+use nsh_base::editor::{Editor, EditorApi, EditorEvent, EditorProps};
 use nsh_core::{keymap::When, prelude::*};
 use serde_json::{Map, Value};
 
@@ -59,12 +59,6 @@ fn editor_for(context: ExtensionContext, source: Source) -> AnyElement {
     let value_source = source.clone();
     let language_context = context.clone();
     let label_context = context.clone();
-    let change_context = context.clone();
-    let change_source = source.clone();
-    let focus_context = context.clone();
-    let focus_source = source.clone();
-    let blur_context = context.clone();
-    let blur_source = source.clone();
     let keys_context = context.clone();
     let keys_source = source.clone();
     effect(move || {
@@ -96,56 +90,60 @@ fn editor_for(context: ExtensionContext, source: Source) -> AnyElement {
         }
     });
     let test_id = format!("lui-{}", context.node.get_untracked().id);
-    editor()
-        .default_value(initial)
-        .value(move || {
+    let events_context = context.clone();
+    let events_source = source.clone();
+    Editor::element(EditorProps {
+        default_value: Some(SharedString::from(initial)).into(),
+        value: Prop::bind(move || {
             // Query execution snapshots must not replace the draft being edited.
             if value_source.role == "query" && focused.get() {
                 None
             } else {
                 Some(SharedString::from(string(&value_context, "value")))
             }
-        })
-        .language(move || language(&string(&language_context, "lang")))
-        .read_only(move || read_only.get())
-        .auto_focus(source.role == "query" && !source.read_only(&context))
-        .line_numbers(source.role == "block")
-        .soft_wrap(true)
-        .min_rows(1_u32)
-        .accessibility_label(move || {
+        }),
+        language: Prop::bind(move || language(&string(&language_context, "lang"))),
+        read_only: Prop::bind(move || read_only.get()),
+        auto_focus: (source.role == "query" && !source.read_only(&context)).into(),
+        line_numbers: (source.role == "block").into(),
+        soft_wrap: true.into(),
+        min_rows: Some(1_u32).into(),
+        accessibility_label: Prop::bind(move || {
             let label = string(&label_context, "accessibility-identifier");
             (!label.is_empty()).then(|| SharedString::from(label))
-        })
-        .on_change(move |value: &SharedString| {
-            if owner.is_live() && Source::read(&change_context) == change_source {
-                emit(&change_context, "input", value, None);
-            }
-        })
-        .on_focus(move || {
-            if owner.is_live() && Source::read(&focus_context) == focus_source {
+        }),
+        ..EditorProps::initial()
+    })
+    .on_event(move |event: &EditorEvent| {
+        if !owner.is_live() || Source::read(&events_context) != events_source {
+            return;
+        }
+        match event {
+            EditorEvent::Change(value) => emit(&events_context, "input", value, None),
+            EditorEvent::Focus => {
                 focused.set(true);
-                if focus_source.role == "block"
+                if events_source.role == "block"
                     && let Some(api) = handle.api::<EditorApi>()
                 {
-                    emit(&focus_context, "focus", &api.value(), None);
+                    emit(&events_context, "focus", &api.value(), None);
                 }
             }
-        })
-        .on_blur(move || {
-            if owner.is_live() && Source::read(&blur_context) == blur_source {
+            EditorEvent::Blur => {
                 focused.set(false);
-                if blur_source.role == "block"
+                if events_source.role == "block"
                     && let Some(api) = handle.api::<EditorApi>()
                 {
-                    emit(&blur_context, "blur", &api.value(), None);
+                    emit(&events_context, "blur", &api.value(), None);
                 }
             }
-        })
-        .component_ref(&handle)
-        .element_ref(&context.reference)
-        .test_id(&test_id)
-        .w_full()
-        .into_element()
+            _ => {}
+        }
+    })
+    .component_ref(&handle)
+    .element_ref(&context.reference)
+    .test_id(&test_id)
+    .w_full()
+    .into_element()
 }
 
 fn language(name: &str) -> Option<SharedString> {
