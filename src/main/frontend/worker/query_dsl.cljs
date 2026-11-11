@@ -109,6 +109,10 @@
                              (journal-name (tc/from-date parsed)))
                             match)))))))
 
+;; Current DB when query is run
+(def ^:dynamic *current-db*
+  nil)
+
 (defn- ->journal-day-int [input]
   (let [input (string/lower-case (name input))]
     (cond
@@ -122,11 +126,13 @@
       (date-time-util/date->int (t/plus (t/today) (t/days 1)))
 
       (page-ref/page-ref? input)
-      (let [input (-> (page-ref/get-page-name input)
-                      (string/replace ":" "")
-                      (string/capitalize))]
-        (when (valid-journal-title? input)
-          (journal-title->int input)))
+      (let [page-name (page-ref/get-page-name input)]
+        (or (:block/journal-day (ldb/get-page *current-db* page-name))
+            (let [input (-> page-name
+                            (string/replace ":" "")
+                            (string/capitalize))]
+              (when (valid-journal-title? input)
+                (journal-title->int input)))))
 
       :else
       (let [duration (parse-long (subs input 0 (dec (count input))))
@@ -154,11 +160,15 @@
       (tc/to-long (t/plus (t/today) (t/days 1)))
 
       (page-ref/page-ref? input)
-      (let [input (-> (page-ref/get-page-name input)
-                      (string/replace ":" "")
-                      (string/capitalize))]
-        (when (valid-journal-title? input)
-          (journal-title->long input)))
+      (let [page-name (page-ref/get-page-name input)]
+        (or (some-> (ldb/get-page *current-db* page-name)
+                    :block/journal-day
+                    date-time-util/journal-day->ms)
+            (let [input (-> page-name
+                            (string/replace ":" "")
+                            (string/capitalize))]
+              (when (valid-journal-title? input)
+                (journal-title->long input)))))
 
       :else
       (let [duration (parse-long (subs input 0 (dec (count input))))
@@ -283,10 +293,6 @@
 ;; build-query fns
 ;; ===============
 
-;; Current DB when query is run
-(def ^:dynamic *current-db*
-  nil)
-
 (def get-timestamp-property shared-query-dsl/get-timestamp-property)
 
 (defn- build-journal-between-two-arg
@@ -326,14 +332,21 @@
     (= 4 (count e))
     (db-based-build-between-three-arg e)))
 
+(defn- ref-name->title
+  "Returns the :block/title of the page named `page-name` (a uuid or a title),
+  or `page-name` itself when no such page exists."
+  [page-name]
+  (or (:block/title (ldb/get-page *current-db* page-name))
+      page-name))
+
 (defn ->db-property-value
   "Parses property values for DB graphs"
   [k v]
   (let [v' (if (symbol? v) (str v) v)]
     (cond (string? v')
           (if (string/starts-with? v' "#")
-            (subs v' 1)
-            (or (page-ref/get-page-name v') v'))
+            (ref-name->title (subs v' 1))
+            (or (some-> (page-ref/get-page-name v') ref-name->title) v'))
           ;; Convert number pages to string
           (and (double? v) (= :node (:logseq.property/type (d/entity *current-db* k))))
           (str v)
@@ -460,7 +473,8 @@
 (defn- build-page
   [e]
   (let [page-name (page-ref/get-page-name! (str (first (rest e))))
-        page-name (common-util/page-name-sanity-lc page-name)]
+        page-name (or (:block/name (ldb/get-page *current-db* page-name))
+                      (common-util/page-name-sanity-lc page-name))]
     {:query (list 'page '?b page-name)
      :rules [:page]}))
 
