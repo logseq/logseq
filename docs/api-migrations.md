@@ -201,3 +201,20 @@ whole-model menu reconstruction; it requires the corresponding LUI PPX support
 for a direct projected reactive child source. Web/mobile menu producers remain
 unchanged. Storage-only changes still follow the application's existing model
 notification contract rather than introducing another invalidation mechanism.
+
+
+### NSH Appearance and right-side picker alignment
+
+On `NshHost`, the Appearance popover and `Properties_popup.open_anchored_right`
+use zero cross-axis alignment offset. NSH aligns each popup against its retained
+native trigger and applies its existing viewport collision policy. The
+Appearance popup's old -5.5pt correction and the right-side picker's -4pt
+cross-axis correction target the reference host's point-anchor/arrow geometry;
+Web and the maintained mobile hosts keep those values unchanged.
+
+For example, `Icon_picker.open_picker_with_opts ~opts:{sub=true; emoji_only=false}`
+still opens its dialog-role picker at the native trigger's right edge. Its
+existing primary-axis spacing, contents, close handle and dismissal owner are
+unchanged. This does not reinterpret externally anchored `role=menu` popovers
+as dialogs: property action menus and view menus using that shape remain an
+explicit separate NSH capability gap.

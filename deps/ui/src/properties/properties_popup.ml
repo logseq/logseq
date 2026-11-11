@@ -30,8 +30,12 @@ let open_at_key ~key ?(role = `dialog) ?(cls = "") ?padding ?anchor_target ?(rig
     | None -> Some (x, y), 0., 0.
     | Some _ -> None, (if right then -4. else 4.), (if right then -4. else 0.)
   in
-  let view =
-    Ui_components.with_props
+  let view : t = fun context parent ->
+    (* Native popup alignment uses the retained trigger's real bounds. *)
+    let anchor_alignment_offset =
+      if Lui_ui.host context = Lui_protocol.NshHost then 0.
+      else anchor_alignment_offset in
+    (Ui_components.with_props
       [ Ui_components.card_shadow
       ; Ui_components.Prop.font_size "1rem"
       ; Ui_components.Prop.line_height "1.5" ]
@@ -43,7 +47,7 @@ let open_at_key ~key ?(role = `dialog) ?(cls = "") ?padding ?anchor_target ?(rig
       ~available_height:(Float.max avail 120.)
       ~transition:Ui_components.popover_transition
       ~on_dismiss:(fun _ -> S.remove_view_overlay key)
-      [ content ])
+      [ content ])) context parent
   in
   if not (S.push_view_overlay_ctxfree ~key ~view ~on_escape:(fun () -> ()))
   then
