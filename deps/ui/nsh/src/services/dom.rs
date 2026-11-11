@@ -62,8 +62,19 @@ fn resolve(reference: &Value, renderer: &Renderer) -> Result<Option<Arc<Node>>, 
         .filter(|id| !id.is_empty())
         .and_then(|id| renderer.find_by_identifier(id)))
 }
-async fn target(reference: &Value, renderer: &Renderer) -> Result<Option<Target>, String> {
-    let Some(node) = resolve(reference, renderer)? else {
+async fn target(
+    reference: &Value,
+    known: Option<(u64, u64)>,
+    renderer: &Renderer,
+) -> Result<Option<Target>, String> {
+    let resolved = if let Some((id, incarnation)) = known {
+        renderer
+            .node_snapshot(id)
+            .filter(|node| node.incarnation == incarnation)
+    } else {
+        resolve(reference, renderer)?
+    };
+    let Some(node) = resolved else {
         return Ok(None);
     };
     let Some(mut native) = renderer.native_reference(node.id, node.incarnation) else {
@@ -211,14 +222,46 @@ async fn scroll_top(target: &Target, top: f32, renderer: &Renderer) -> Result<()
     Ok(())
 }
 
-/// Called after the request's creating patches have been published. Any awaited
-/// native reply is checked against the captured canonical incarnation again.
-pub async fn handle(
+/// An owned request deferred until its creating patches reach the native commit.
+/// Existing targets retain their incarnation even if their identifier is renamed.
+pub struct CapturedRequest {
+    operation: String,
+    payload: String,
+    known: Option<(u64, u64)>,
+}
+pub fn capture(
     operation: &str,
     payload: &str,
     renderer: &Renderer,
+) -> Result<CapturedRequest, String> {
+    if !supported(operation) {
+        return Err(format!(
+            "DOM operation {operation} is not implemented by the NSH host"
+        ));
+    }
+    let request = object(payload)?;
+    let reference = request.get("ref").unwrap_or(&Value::Null);
+    let known = resolve(reference, renderer)?.map(|node| (node.id, node.incarnation));
+    Ok(CapturedRequest {
+        operation: operation.into(),
+        payload: payload.into(),
+        known,
+    })
+}
+pub async fn execute(
+    request: CapturedRequest,
+    renderer: &Renderer,
 ) -> Result<Vec<PlatformEvent>, String> {
-    if !matches!(
+    handle_inner(
+        &request.operation,
+        &request.payload,
+        renderer,
+        request.known,
+    )
+    .await
+}
+fn supported(operation: &str) -> bool {
+    matches!(
         operation,
         "measure-node"
             | "focus"
@@ -227,7 +270,25 @@ pub async fn handle(
             | "set-scroll-top"
             | "scroll-into-view"
             | "scroll-to-node"
-    ) {
+    )
+}
+
+/// Called after the request's creating patches have been published. Any awaited
+/// native reply is checked against the captured canonical incarnation again.
+pub async fn handle(
+    operation: &str,
+    payload: &str,
+    renderer: &Renderer,
+) -> Result<Vec<PlatformEvent>, String> {
+    handle_inner(operation, payload, renderer, None).await
+}
+async fn handle_inner(
+    operation: &str,
+    payload: &str,
+    renderer: &Renderer,
+    known: Option<(u64, u64)>,
+) -> Result<Vec<PlatformEvent>, String> {
+    if !supported(operation) {
         return Err(format!(
             "DOM operation {operation} is not implemented by the NSH host"
         ));
@@ -251,7 +312,7 @@ pub async fn handle(
     } else {
         None
     };
-    let target = target(&reference, renderer).await?;
+    let target = target(&reference, known, renderer).await?;
     if operation == "measure-node" {
         let measurement = if let Some(target) = &target {
             target.reference.measure().await
