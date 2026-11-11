@@ -207,3 +207,48 @@ that the Journals region and main Scroll retain their native identities while
 a dated title remains visible. This does
 not claim focused block-editor draft/IME qualification; those remain separate
 editor tests and native UX checks.
+
+## Desktop commands and application archives
+
+The active repository commands are `pnpm ui:nsh:build`, `pnpm ui:nsh` and
+`pnpm ui:nsh:package`. MyGo command aliases and its old build/launch/package
+scripts are removed. The existing native OCaml object target and source-copy
+rules remain unchanged; the shared `native/` application and services continue
+to serve maintained backends.
+
+`ui:nsh:package` first uses the qualified native build, then copies its exact
+executable, OCaml library and receipt-owned resources into a relocatable bundle.
+An already built artifact can be selected explicitly:
+
+```sh
+pnpm ui:nsh:package --built-host "$PWD/deps/ui/_build/nsh/logseq-nsh"
+```
+
+The command refuses stale code/resources, unowned resource paths and source
+changes during packaging. Shared Resources outputs owned by other maintained
+backends are not copied. The launcher sets library, asset and private worker
+locations from its installed directory, independently of the working directory.
+The packager writes the archive plus `<archive>.lui-build.json` only after
+source verification; a package receipt hashes the final archive after native
+library relocation and signing.
+
+| Target | Archive | Layout |
+| --- | --- | --- |
+| macOS | `deps/ui/_build/packages/Logseq-NSH-darwin-{arm64,x64}-{version}.zip` | `Logseq NSH.app/Contents/MacOS/{Logseq,logseq-nsh}` and `Contents/Resources/` |
+| Linux | `deps/ui/_build/packages/Logseq-NSH-linux-{arm64,x64}-{version}.tar.gz` | `Logseq-NSH/bin/{logseq,logseq-nsh}` and `Resources/` |
+
+The archive version comes from `resources/package.json`. macOS uses
+`dylibbundler` to collect non-system libraries into `Contents/Frameworks`, signs
+nested native code and verifies the app signature. It defaults to an ad-hoc
+signature. Set `NSH_CODESIGN_IDENTITY` to an existing Developer ID identity to
+request distribution signing; set `NSH_NOTARY_PROFILE` to an existing notarytool
+keychain profile to request notarization and stapling. No credentials are
+created. These source paths require actual signing/notarization qualification
+before release claims. Linux archives use the target's native GTK/graphics and
+C runtime dependencies; they are not self-contained AppImages or installers.
+
+The separate NSH CI workflow owns native artifacts. Electron's release workflow
+has no MyGo selection and remains independent. This cutover does not implement
+Windows OCaml DLL packaging, an NSH release/update feed, native PDF annotation,
+or every raw markup/media widget. Passing the staged Headless startup gate is
+not an outside-checkout OS launch, IME, accessibility or update qualification.

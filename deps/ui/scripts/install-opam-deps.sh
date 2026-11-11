@@ -1,5 +1,5 @@
 #!/bin/sh
-# Minimal OCaml dependencies for the Web UI and MyGo application library.
+# Minimal OCaml dependencies for the Web UI and native OCaml application library.
 # Run after deps/db-worker/scripts/install-opam-deps.sh in the selected switch.
 set -eu
 # Set LUI_SOURCE to a local Git checkout when validating a LUI update.
@@ -8,7 +8,7 @@ set -eu
 if [ -n "${LUI_SOURCE:-}" ]; then
   opam pin add --kind=git -y -n lui "$LUI_SOURCE"
 else
-  opam pin add -y -n lui git+https://github.com/logseq/lui.git#2475de1e9fecf3c987b3d07617699dd90c21ec73
+  opam pin add -y -n lui git+https://github.com/logseq/lui.git#28fcb8d1595f0866ef3c1da448b3b2b6df650d7e
 fi
 opam pin add -y -n ocaml-signal git+https://github.com/logseq/ocaml-signal.git#02e18cdc5e0ad672aa223f638eaa3ba52fc9421e
 opam pin add -y -n rrbvec git+https://github.com/logseq/rrbvec.git#main
