@@ -32,6 +32,11 @@ if [[ $(uname -s) == Linux ]]; then
   system_archive_dir=$(dirname "$system_archive")
   export OCAMLPARAM="${OCAMLPARAM:-_},cclib=-L$system_archive_dir"
 fi
+publication_tool="$nsh_root/build_publication.mjs"
+cargo metadata --locked --format-version=1 --manifest-path "$nsh_root/Cargo.toml" \
+  > "$staging/cargo-metadata.json"
+"$node_bin" "$publication_tool" snapshot "$receipt_tool" "$repo_root" "$lui_source" \
+  "$staging/cargo-metadata.json" "$staging/sources.json"
 # Refuse stale canonical domains before compiling the application provider.
 # Regeneration is an explicit source change, so a new enum case cannot reuse an
 # old Rust contract that would hide its missing native implementation.
@@ -41,35 +46,32 @@ fi
   OCAMLPATH="$lui_source/_build/install/default/lib${OCAMLPATH:+:$OCAMLPATH}" \
   dune build native/native_embed.exe.o) >&2
 (cd "$repo_root/deps/db-worker" && opam exec --switch="$switch" -- dune build bin/main.exe) >&2
-mkdir -p "$output" "$resources/fonts" "$resources/img" "$resources/dicts"
-# Link away from the published inode. A running process may still map the
-# current dylib, executable or DB worker; overwriting a signed Mach-O kills it.
+staged_resources="$staging/Resources"
+mkdir -p "$staged_resources/fonts" "$staged_resources/img" "$staged_resources/dicts"
+# All candidate code and resources stay private until qualification succeeds.
 cc -o "$staging/$(basename "$library")" "$ui_root/_build/default/native/native_embed.exe.o" "${link_flags[@]}"
 ocaml_where=$(opam exec --switch="$switch" -- ocamlc -where)
 cc -I "$ocaml_where" -o "$staging/export-schemas" "$nsh_root/export_schemas.c" \
   "$ui_root/_build/default/native/native_embed.exe.o" -lpthread -lm
 "$staging/export-schemas" > "$staging/schemas.json"
-# Keep the canonical receipt reviewable. A change requires rebuilding this file,
-# rather than accepting guessed schema fingerprints in the Rust adapter.
+# A regenerated schema is reviewable source. The stability check below rejects
+# this build if it changed, so the next cached build compiles that exact receipt.
 if ! cmp -s "$staging/schemas.json" "$nsh_root/schemas.json"; then
   cp "$staging/schemas.json" "$nsh_root/schemas.json"
 fi
-cp "$ui_root/assets/"*.json "$resources/"
-cp "$ui_root/assets/fonts/"*.ttf "$resources/fonts/"
-cp -R "$repo_root/resources/img/." "$resources/img/"
-cp "$repo_root/resources/dicts/"*.edn "$resources/dicts/"
+cp "$ui_root/assets/"*.json "$staged_resources/"
+cp "$ui_root/assets/fonts/"*.ttf "$staged_resources/fonts/"
+cp -R "$repo_root/resources/img/." "$staged_resources/img/"
+cp "$repo_root/resources/dicts/"*.edn "$staged_resources/dicts/"
 cargo build --locked --manifest-path "$nsh_root/Cargo.toml" --message-format=json \
-  > "$output/cargo-build.jsonl"
-"$python_bin" - "$output/cargo-build.jsonl" "$output/logseq-nsh" \
-  "$staging/$(basename "$library")" "$library" \
-  "$repo_root/deps/db-worker/_build/default/bin/main.exe" "$resources/logseq-db-worker" \
+  > "$staging/cargo-build.jsonl"
+"$python_bin" - "$staging/cargo-build.jsonl" "$staging/logseq-nsh" \
+  "$repo_root/deps/db-worker/_build/default/bin/main.exe" "$staged_resources/logseq-db-worker" \
   "$staging/lui-rust-manifest" <<'BUILD_ARTIFACT'
 import json
-import os
 from pathlib import Path
 import shutil
 import sys
-import tempfile
 
 records = [json.loads(line) for line in Path(sys.argv[1]).read_text().splitlines()]
 artifacts = [record["executable"] for record in records
@@ -80,88 +82,58 @@ manifests = {record["manifest_path"] for record in records
              and record.get("target", {}).get("name") == "lui_nsh"}
 if len(artifacts) != 1 or len(manifests) != 1:
     raise SystemExit("Expected exactly one Logseq executable and compiled LUI Rust package")
+shutil.copy2(artifacts[0], sys.argv[2])
+shutil.copy2(sys.argv[3], sys.argv[4])
+Path(sys.argv[5]).write_text(next(iter(manifests)))
+BUILD_ARTIFACT
+"$node_bin" "$publication_tool" check "$staging/sources.json" "$staging/lui-rust-manifest"
+# The real application gate loads only the complete candidate set. No published
+# file or prior build receipt is changed when compilation or this gate fails.
+LUI_OCAML_LIBRARY="$staging/$(basename "$library")" \
+LOGSEQ_NATIVE_ASSET_DIR="$staged_resources" \
+LOGSEQ_DB_WORKER_BIN="$staged_resources/logseq-db-worker" \
+cargo test --locked --manifest-path "$nsh_root/Cargo.toml" \
+  --test startup_preflight -- --exact real_application_startup_preflight --nocapture >&2
+# Recheck sources after qualification and prepare the final-location receipt
+# from the tested staged bytes before any success-path publication starts.
+"$node_bin" "$publication_tool" receipt "$staging/sources.json" "$staging/lui-rust-manifest" \
+  "$staging/logseq-nsh" "$output/logseq-nsh" \
+  "$staging/$(basename "$library")" "$library" "$staged_resources" "$resources"
+"$python_bin" - "$staging/logseq-nsh" "$output/logseq-nsh" \
+  "$staging/$(basename "$library")" "$library" "$staged_resources" "$resources" <<'PUBLISH'
+import os
+from pathlib import Path
+import shutil
+import sys
+import tempfile
+
 
 def atomic_copy(source, destination):
     destination = Path(destination)
+    destination.parent.mkdir(parents=True, exist_ok=True)
     descriptor, temporary = tempfile.mkstemp(prefix=f".{destination.name}.", dir=destination.parent)
     os.close(descriptor)
     try:
-        # Preserve executable permissions, but never open the published inode
-        # for writing (including a symlink's existing target).
+        # Do not truncate mapped code, including a symlink's existing target.
         shutil.copy2(source, temporary)
         os.replace(temporary, destination)
     finally:
         Path(temporary).unlink(missing_ok=True)
 
-# Every replace stays within its destination filesystem. Existing mapped
-# inodes and the processes using them are left alone.
-os.replace(sys.argv[3], sys.argv[4])
-atomic_copy(sys.argv[5], sys.argv[6])
-atomic_copy(artifacts[0], sys.argv[2])
-Path(sys.argv[7]).write_text(next(iter(manifests)))
-BUILD_ARTIFACT
-# Qualify the actual OCaml application in a fresh headless process before
-# recording a successful build. This does not create or activate an OS window.
-LUI_OCAML_LIBRARY="$library" \
-LOGSEQ_NATIVE_ASSET_DIR="$resources" \
-LOGSEQ_DB_WORKER_BIN="$resources/logseq-db-worker" \
-cargo test --locked --manifest-path "$nsh_root/Cargo.toml" \
-  --test startup_preflight -- --exact real_application_startup_preflight --nocapture >&2
-"$node_bin" --input-type=module - "$receipt_tool" "$repo_root" "$lui_source" \
-  "$staging/lui-rust-manifest" "$output/logseq-nsh" "$library" "$resources" <<'BUILD_RECEIPT'
-import {execFileSync} from "node:child_process";
-import {existsSync, readFileSync} from "node:fs";
-import path from "node:path";
-import {pathToFileURL} from "node:url";
-const [tool, repo, ocamlLui, manifestFile, artifact, library, resources] = process.argv.slice(2);
-const {writeReceipt} = await import(pathToFileURL(tool).href);
-const rustManifest = readFileSync(manifestFile, "utf8");
-const rustPackage = path.dirname(rustManifest);
-const inputs = [];
-function add(file, optional = false) {
-  if (!existsSync(file)) {
-    if (optional) return;
-    throw new Error(`Missing native build receipt input: ${file}`);
-  }
-  inputs.push(path.resolve(file));
-}
-const app = (...segments) => path.join(repo, ...segments);
-// Source scopes only: never walk the repository root, _build, target,
-// node_modules or generated .nsh runner/cache trees.
-for (const scope of ["src", "native", "subs", "shims", "tools", "assets"]) add(app("deps/ui", scope));
-for (const file of ["dune-project", "dune-workspace"]) add(app("deps/ui", file), true);
-add(app("deps/ui/nsh/src")); add(app("deps/ui/nsh/tests"));
-for (const file of ["Cargo.toml", "Cargo.lock", "nsh.json", "schemas.json", "export_schemas.c", "build.sh", "run.sh"])
-  add(app("deps/ui/nsh", file));
-for (const scope of ["bin", "desktop", "lib", "runtime", "stubs", "vendor"]) add(app("deps/db-worker", scope));
-for (const file of ["dune-project", "dune-workspace", "logseq-db-worker.opam"]) add(app("deps/db-worker", file));
-add(app("resources/dicts")); add(app("resources/img")); add(app("resources/js/emoji-data.js"));
-for (const scope of ["src", "ppx", "platform/bridge"]) add(path.join(ocamlLui, scope));
-for (const file of ["dune-project", "dune-workspace", "lui.opam"]) add(path.join(ocamlLui, file), true);
-add(rustManifest); add(path.join(rustPackage, "src"));
-for (const file of ["Cargo.lock", "build.rs"]) add(path.join(rustPackage, file), true);
-add(tool); add(library); add(resources);
-// The OCaml and Rust LUI checkouts may differ. Both are recorded, and the
-// Rust path comes from Cargo's actual compiler artifact, not a guessed sibling.
-// Choose a non-Git ancestor so the existing receipt API's filesystem fallback
-// includes ignored runtime artifacts and external checkouts as well. It walks
-// only the explicit scopes above, not this common ancestor.
-let root = path.resolve(repo);
-while (!inputs.every(file => {
-  const relative = path.relative(root, file);
-  return relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
-})) root = path.dirname(root);
-for (;;) {
-  try { execFileSync("git", ["-C", root, "rev-parse", "--show-toplevel"], {stdio:"ignore"}); }
-  catch { break; }
-  const parent = path.dirname(root);
-  if (parent === root) throw new Error("Cannot choose an unambiguous receipt input root outside Git");
-  root = parent;
-}
-const quote = value => "'" + value.replaceAll("'", "'\"'\"'") + "'";
-const command = `LUI_SOURCE_ROOT=${quote(ocamlLui)} bash ${quote(app("deps/ui/nsh/build.sh"))}`;
-const receipt = writeReceipt({artifact, command, root,
-  inputs:[...new Set(inputs.map(file => path.relative(root, file)))].sort()});
-process.stderr.write(`lui build receipt: ${receipt}\n`);
-BUILD_RECEIPT
+
+source_resources, destination_resources = map(Path, sys.argv[5:7])
+files = {file.relative_to(source_resources) for file in source_resources.rglob("*") if file.is_file()}
+for relative in sorted(files):
+    atomic_copy(source_resources / relative, destination_resources / relative)
+# This directory contains only build-managed resources. Remove obsolete files
+# only on the qualified success path so the final receipt describes that set.
+for file in destination_resources.rglob("*"):
+    if file.is_file() and file.relative_to(destination_resources) not in files:
+        file.unlink()
+atomic_copy(sys.argv[3], sys.argv[4])
+atomic_copy(sys.argv[1], sys.argv[2])
+# Local publication is per-file atomic, not a multi-file transaction. Any copy
+# failure stops here without issuing a successful receipt for a partial set.
+atomic_copy(sys.argv[1] + ".lui-build.json", sys.argv[2] + ".lui-build.json")
+PUBLISH
 printf '%s\n' "$output/logseq-nsh"

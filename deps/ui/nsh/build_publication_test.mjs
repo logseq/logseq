@@ -1,0 +1,129 @@
+// Exercise the real publication script with fake compilers, never Cargo/Dune.
+import test from "node:test";
+import assert from "node:assert/strict";
+import {spawnSync} from "node:child_process";
+import {copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync} from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import {fileURLToPath, pathToFileURL} from "node:url";
+
+const source = path.dirname(fileURLToPath(import.meta.url));
+const receiptModule = path.resolve(process.env.LUI_SOURCE_ROOT ?? path.join(source, "../../../../lui"), "tooling/lui_build_receipt.mjs");
+function fixture() {
+  const temporary = mkdtempSync(path.join(os.tmpdir(), "logseq-publication-test-"));
+  const repo = path.join(temporary, "repo");
+  const lui = path.join(temporary, "lui");
+  const host = path.join(repo, "deps/ui/nsh");
+  const output = path.join(repo, "deps/ui/_build/nsh");
+  const resources = path.join(repo, "deps/ui/_build/Resources");
+  const tools = path.join(temporary, "tools");
+  const write = (file, contents, executable = false) => {
+    mkdirSync(path.dirname(file), {recursive:true});
+    writeFileSync(file, contents, executable ? {mode:0o755} : undefined);
+  };
+  for (const name of ["src", "native", "subs", "shims", "tools", "assets/fonts"])
+    mkdirSync(path.join(repo, "deps/ui", name), {recursive:true});
+  for (const name of ["bin", "desktop", "lib", "runtime", "stubs", "vendor"])
+    mkdirSync(path.join(repo, "deps/db-worker", name), {recursive:true});
+  for (const name of ["dune-project", "dune-workspace", "logseq-db-worker.opam"])
+    write(path.join(repo, "deps/db-worker", name), "source");
+  for (const file of ["Cargo.toml", "Cargo.lock", "nsh.json", "export_schemas.c", "run.sh", "src/lib.rs", "tests/startup_preflight.rs"])
+    write(path.join(host, file), "source");
+  write(path.join(host, "schemas.json"), "[]\n");
+  for (const file of ["assets/catalog.json", "assets/fonts/app.ttf"])
+    write(path.join(repo, "deps/ui", file), "new-resource");
+  write(path.join(repo, "resources/img/logo.svg"), "new-icon");
+  write(path.join(repo, "resources/dicts/en.edn"), "new-dict");
+  write(path.join(repo, "resources/js/emoji-data.js"), "emoji");
+  for (const name of ["src", "ppx", "platform/bridge"])
+    mkdirSync(path.join(lui, name), {recursive:true});
+  write(path.join(lui, "platform/nsh/Cargo.toml"), "manifest");
+  write(path.join(lui, "platform/nsh/src/lib.rs"), "rust-source");
+  write(path.join(lui, "platform/nsh/contract.json"), "{}");
+  write(path.join(lui, "platform/web/src/icons/check.svg"), "source-icon");
+  write(path.join(lui, "tooling/generate_nsh_contract.py"), "# fake canonical check\n");
+  write(path.join(lui, "tooling/lui_build_receipt.mjs"), readFileSync(receiptModule));
+  for (const file of ["build.sh", "build_publication.mjs"])
+    copyFileSync(path.join(source, file), path.join(host, file));
+  write(path.join(temporary, "candidate"), "new-executable", true);
+  write(path.join(repo, "deps/db-worker/_build/default/bin/main.exe"), "new-worker", true);
+  write(path.join(tools, "uname"), "#!/bin/sh\nprintf 'Linux\\n'\n", true);
+  write(path.join(tools, "opam"), "#!/bin/sh\ncase \"$*\" in *'ocamlc -where'*) printf '/tmp\\n';; esac\n", true);
+  write(path.join(tools, "cc"), `#!/usr/bin/env python3
+import pathlib,sys
+if sys.argv[1]=='-print-file-name=librt.a':
+ print('/tmp/librt.a'); sys.exit(0)
+out=pathlib.Path(sys.argv[sys.argv.index('-o')+1])
+if out.name=='export-schemas':
+ out.write_text("#!/usr/bin/env python3\\nprint('[]')\\n")
+ out.chmod(0o755)
+else: out.write_text('new-library')
+`, true);
+  write(path.join(tools, "cargo"), `#!/usr/bin/env python3
+import json,os,pathlib,sys
+root=pathlib.Path(os.environ['PUBLICATION_TEST_ROOT'])
+repo=root/'repo'; lui=root/'lui'
+if sys.argv[1]=='metadata':
+ print(json.dumps({'packages':[{'name':'lui-nsh','source':None,'manifest_path':str(lui/'platform/nsh/Cargo.toml')}]}))
+elif sys.argv[1]=='build':
+ if os.environ.get('PUBLICATION_FAILURE')=='source':
+  (lui/'platform/web/src/icons/check.svg').write_text('changed-during-build')
+ print(json.dumps({'reason':'compiler-artifact','executable':str(root/'candidate'),'target':{'name':'nsh-app-logseq'}}))
+ print(json.dumps({'reason':'compiler-artifact','manifest_path':str(lui/'platform/nsh/Cargo.toml'),'target':{'name':'lui_nsh'}}))
+elif sys.argv[1]=='test':
+ library=pathlib.Path(os.environ['LUI_OCAML_LIBRARY'])
+ resources=pathlib.Path(os.environ['LOGSEQ_NATIVE_ASSET_DIR'])
+ worker=pathlib.Path(os.environ['LOGSEQ_DB_WORKER_BIN'])
+ assert '.publication.' in str(library) and '.publication.' in str(resources)
+ assert library.read_text()=='new-library' and worker.read_text()=='new-worker'
+ assert (resources/'catalog.json').read_text()=='new-resource'
+ if os.environ.get('PUBLICATION_FAILURE')=='gate': sys.exit(7)
+ if os.environ.get('PUBLICATION_FAILURE')=='after-gate':
+  (lui/'platform/nsh/contract.json').write_text('changed-during-qualification')
+else: sys.exit('unexpected Cargo operation')
+`, true);
+  const old = new Map([
+    [path.join(output, "logseq-nsh"), "previous-executable"],
+    [path.join(output, "liblogseq_ui.so"), "previous-library"],
+    [path.join(output, "logseq-nsh.lui-build.json"), "previous-receipt"],
+    [path.join(resources, "old-resource.json"), "previous-resource"],
+    [path.join(resources, "logseq-db-worker"), "previous-worker"],
+  ]);
+  for (const [file, contents] of old) write(file, contents);
+  return {temporary, host, output, resources, old, run(failure = "") {
+    return spawnSync("bash", [path.join(host, "build.sh")], {encoding:"utf8", timeout:15000,
+      env:{...process.env, PATH:`${tools}${path.delimiter}${process.env.PATH}`,
+        LUI_SOURCE_ROOT:lui, PUBLICATION_TEST_ROOT:temporary, PUBLICATION_FAILURE:failure,
+        NODE_BINARY:process.execPath, PYTHON_BINARY:process.env.PYTHON_BINARY ?? "python3"}});
+  }};
+}
+for (const failure of ["gate", "source", "after-gate"]) {
+  test(`candidate ${failure} failure leaves the complete published set and receipt untouched`, () => {
+    const app = fixture();
+    try {
+      const result = app.run(failure);
+      assert.notEqual(result.status, 0, result.stdout + result.stderr);
+      if (failure !== "gate") assert.match(result.stderr, /sources changed during build/);
+      for (const [file, contents] of app.old) assert.equal(readFileSync(file, "utf8"), contents);
+      assert.equal(existsSync(path.join(app.resources, "catalog.json")), false);
+    } finally { rmSync(app.temporary, {recursive:true, force:true}); }
+  });
+}
+test("qualified publication preserves tested digests, removes stale resources and includes shared SVG sources", async () => {
+  const app = fixture();
+  try {
+    const result = app.run();
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    const artifact = path.join(app.output, "logseq-nsh");
+    assert.equal(readFileSync(artifact, "utf8"), "new-executable");
+    assert.equal(readFileSync(path.join(app.resources, "logseq-db-worker"), "utf8"), "new-worker");
+    assert.equal(existsSync(path.join(app.resources, "old-resource.json")), false);
+    const receipt = JSON.parse(readFileSync(artifact + ".lui-build.json", "utf8"));
+    assert.equal(receipt.artifact, artifact);
+    assert.ok(Object.keys(receipt.files).some(file => file.endsWith("platform/web/src/icons/check.svg")));
+    assert.ok(Object.keys(receipt.files).some(file => file.endsWith("platform/nsh/contract.json")));
+    assert.ok(Object.keys(receipt.files).every(file => !file.includes(".publication.")));
+    const {checkReceipt} = await import(pathToFileURL(receiptModule).href);
+    assert.equal(checkReceipt(artifact).fresh, true);
+  } finally { rmSync(app.temporary, {recursive:true, force:true}); }
+});

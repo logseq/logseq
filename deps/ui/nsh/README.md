@@ -60,17 +60,29 @@ IME, signing and update tests.
 
 ## Safe native publication and build receipts
 
-The executable, OCaml shared library and private DB worker are published with
-same-filesystem atomic replacement. The build never truncates an executable or
-dylib that an existing process may still have mapped. Running applications and
-their worker processes are left alone; a new launch uses the new files.
+Compilation stages the candidate executable, OCaml shared library, complete
+Resources directory and private DB worker under a temporary publication directory.
+The startup gate loads that staged library/resources/worker and mounts the same
+Rust App in its test executable; it does not launch the candidate OS executable.
+Compilation, preflight or source-stability failure leaves the published artifact
+set and its prior receipt untouched.
+
+Only a qualified candidate reaches publication. Resources and code use
+same-filesystem atomic file replacement, with the receipt replaced last; stale
+build-managed resource files are removed on this success path. The build never
+truncates mapped code or stops a running application. Local publication is not a
+multi-file transaction: an I/O failure partway through publication stops without
+a new successful receipt, and the old receipt will reject the partial set. This
+local build mechanism is separate from packaged whole-application installation.
 
 Every successful build writes `logseq-nsh.lui-build.json` through LUI's existing
 `tooling/lui_build_receipt.mjs` API. It covers the executable digest; actual OCaml
 library and installed resources/worker; app Rust sources, Cargo files and schemas;
 OCaml native/shared source scopes and generators; dictionaries, icons and fonts;
-and the actual compiled LUI Rust source package plus OCaml LUI sources. Rust's
-manifest path comes from Cargo's compiler-artifact record. The input scan uses
+and the actual compiled LUI Rust source package plus OCaml LUI sources. The Rust
+contract JSON and shared Web SVG files embedded by NSH are included. Cargo
+metadata selects the local Rust package before compilation, and the actual
+compiler-artifact manifest must match that selection. The input scan uses
 explicit source/resource scopes rather than repository roots, build directories,
 Cargo target trees or generated NSH runner caches. New files inside a source
 scope also make the receipt stale.
@@ -82,9 +94,20 @@ node ../lui/tooling/lui_build_receipt.mjs check \
   --artifact deps/ui/_build/nsh/logseq-nsh
 ```
 
-Build receipts detect changes after publication; they do not replace native
-launch, signing, updater or visual qualification. Source files must remain stable
-while a build is running.
+The existing receipt API snapshots explicit source inputs before compilation
+and rechecks them before and after qualification. Added, removed or changed
+inputs reject publication. Regenerating a changed canonical schemas.json is a
+source change too: review the update and rerun the cached build. Final receipt
+paths are relocated from tested staged bytes; a new source edit cannot be
+recorded as if it had been compiled. Receipts do not replace native launch,
+signing, updater or visual qualification.
+
+The publication regressions use fake toolchain commands and temporary files;
+they do not invoke Cargo, Dune or an OS application:
+
+```sh
+node --test deps/ui/nsh/build_publication_test.mjs
+```
 
 ## Background agent use
 
