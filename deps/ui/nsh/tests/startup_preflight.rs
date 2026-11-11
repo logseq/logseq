@@ -76,7 +76,17 @@ fn mount_actual_application() -> Result<(), String> {
     )?;
     // Model.initial follows ls-left-sidebar-open? and defaults to closed in
     // fresh state. Open it with the actual native control, not a model override.
-    app.press("role:button[Toggle left sidebar]")?;
+    app.press("role:button[Toggle left sidebar]")
+        .map_err(|error| {
+            let header = app
+                .screen()
+                .layout_nodes()
+                .into_iter()
+                .filter(|node| node.bounds.origin.y.0 < 120.0 && node.bounds.origin.x.0 < 500.0)
+                .take(40)
+                .collect::<Vec<_>>();
+            format!("{error}\nNative header layout: {header:#?}")
+        })?;
     wait_for_chrome(
         &mut app,
         "actual Demo/Journals sidebar",
@@ -108,15 +118,30 @@ fn wait_for_chrome(
     app.wait_until(what, timeout, |screen| {
         // Renderer::fail publishes this public test ID. A known backend/style
         // error terminates the wait immediately, rather than timing out.
-        if screen
-            .matches("id:lui-backend-error")
-            .expect("fixed backend diagnostic selector")
+        if let Some(error) = screen
+            .layout_nodes()
+            .into_iter()
+            .find(|node| node.test_id.as_deref() == Some("lui-backend-error"))
         {
-            *diagnostic.borrow_mut() = Some(screen.texts().join(" | "));
+            *diagnostic.borrow_mut() = Some(format!("{:?}", error.text));
             true
         } else {
             ready(screen)
         }
+    })
+    .map_err(|error| {
+        let layout = app
+            .screen()
+            .layout_nodes()
+            .into_iter()
+            .filter(|node| {
+                matches!(
+                    node.test_id.as_deref(),
+                    Some("nsh-right-split-space" | "head" | "app-container" | "lui-backend-error")
+                )
+            })
+            .collect::<Vec<_>>();
+        format!("{error}\nNative startup layout: {layout:#?}")
     })?;
     match diagnostic.into_inner() {
         Some(message) => Err(format!("real Logseq backend startup diagnostic: {message}")),
