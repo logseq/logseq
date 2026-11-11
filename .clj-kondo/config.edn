@@ -166,6 +166,7 @@
              logseq.db.frontend.property db-property
              logseq.db.frontend.property.build db-property-build
              logseq.db.frontend.property.type db-property-type
+             logseq.db.frontend.query db-query
              logseq.db.frontend.rules rules
              logseq.db.frontend.schema db-schema
              logseq.db.frontend.validate db-validate
