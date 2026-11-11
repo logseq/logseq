@@ -210,6 +210,15 @@ editor tests and native UX checks.
 
 ## Desktop commands and application archives
 
+The optional loopback LUI CLI endpoint now forwards semantic requests through
+the existing `Lui_agent.app_target` for the actual OCaml reducer. The seven-argument
+startup ABI is unchanged; `lui_ocaml_agent_utf8` is an additional optional export.
+Each request owns the existing application entry lock and publishes every queued
+batch before its reply. Use `hello` to inspect operations, then `find`, `prop`,
+`press` or `type` with the canonical LUI selectors. The native macOS screenshot
+command remains available without activation. Semantic actions do not qualify
+native hit testing, keyboard focus, IME or accessibility.
+
 The active repository commands are `pnpm ui:nsh:build`, `pnpm ui:nsh` and
 `pnpm ui:nsh:package`. MyGo command aliases and its old build/launch/package
 scripts are removed. The existing native OCaml object target and source-copy

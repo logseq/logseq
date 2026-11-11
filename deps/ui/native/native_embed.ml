@@ -908,6 +908,11 @@ module Ffi = struct
     let prevented, batches = document_event name json in
     prevented, encode_batches batches
   let root_node = root_node
+  let agent request =
+    with_entry_lock (fun () ->
+      let app = Option.get !current_app in
+      let reply = Lui_agent.handle (Lui_agent.app_target ~host:"logseq-native" app) request in
+      reply, encode_batches (take_patches_dbg "agent"))
   let editor_snapshot block_id =
     with_entry_lock (fun () ->
       match Editor_state.editing () with
@@ -956,6 +961,7 @@ let () =
   Callback.register "lui_ocaml_platform_event" Ffi.platform_event;
   Callback.register "lui_ocaml_dispose" Ffi.dispose;
   Callback.register "lui_ocaml_root_node" Ffi.root_node;
+  Callback.register "lui_ocaml_agent" Ffi.agent;
   Callback.register "lui_ocaml_editor_snapshot" Ffi.editor_snapshot;
   Callback.register "lui_ocaml_resync" Ffi.resync
 
