@@ -460,7 +460,8 @@ mod tests {
                                 2,
                                 json!([
                     {"op":"drop-node","id":1},{"op":"create-node","id":1,"kind":"box"},
-                    {"op":"set-prop","id":1,"property":"width","value":500}]),
+                    {"op":"set-prop","id":1,"property":"width","value":500},
+                    {"op":"set-prop","id":1,"property":"accessibility-identifier","value":"measured"}]),
                             ))
                             .unwrap();
                         retiring.set_root(1).unwrap();
