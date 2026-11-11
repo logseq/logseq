@@ -81,3 +81,13 @@ For example, the existing sidebar `~font_size:"var(--text-sm)"` now resolves fro
 its real `0.875rem` stylesheet source instead of failing native startup. No NSH
 fallback font size, new theme API or wire ordinal is introduced. Changing the
 pinned stylesheet's text scale changes the generated palette on the next build.
+
+### NSH DOM measurement completes with the display locked
+
+A DOM request that follows its target's creating patch waits once for the native
+commit, not for a display-link frame. The existing retained ElementRef then
+provides the real measurement, and the captured node incarnation is checked
+again before replying. For example, the Journal shell's
+`dom_measure_rect "nsh-right-split-space"` can resolve while the Mac remains
+locked, allowing its model-owned content split to mount. No timer, synthetic
+frame, window activation or fabricated rectangle is used.

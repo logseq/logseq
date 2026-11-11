@@ -82,8 +82,10 @@ async fn target(
     };
     if native.node().is_none() {
         // A service can follow the creating patch before that native commit.
-        // Wait once for mounting; never poll or redirect the identifier later.
-        next_frame().await;
+        // Wait once for mounting, including while the screen is locked. Native
+        // display frames can stop then; commits and measurement requests do not.
+        // Never poll or redirect the identifier to a later incarnation.
+        lui_nsh::app::wait_for_commit().await?;
         if renderer
             .node_snapshot(node.id)
             .is_none_or(|live| live.incarnation != node.incarnation)
