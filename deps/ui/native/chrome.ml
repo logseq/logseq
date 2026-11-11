@@ -203,20 +203,17 @@ let topbar (ms : Model.t Signal.signal) : t =
 
 let performance_bar_height = 29
 
-let performance_bar () : t = fun context parent ->
-  if Lui_ui.host context <> Lui_protocol.NshHost then
-  (column ~key:"native-performance-bar" ~accessibility_identifier:"native-performance-bar"
+let performance_bar () : t =
+  column ~key:"native-performance-bar" ~accessibility_identifier:"native-performance-bar"
     ~height:performance_bar_height ~min_height:performance_bar_height ~gap:0 ~cross:`stretch
     ~background:"var(--ls-primary-background-color)"
     [box ~key:"performance-rule" ~height:1 ~background:"var(--lx-gray-05, var(--ls-border-color))" [];
      Ui_components.native_performance
        ~label:(I18n.t "profiler.native/metrics-dialog-label")
        ~unavailable:(I18n.t "profiler.native/fps-unavailable-label")
-       ~format_fps:(I18n.t1 "profiler.native/fps-label") ()]) context parent
+       ~format_fps:(I18n.t1 "profiler.native/fps-label") ()]
 
-let performance_panel () : t = fun context parent ->
-  if Lui_ui.host context <> Lui_protocol.NshHost then
-    Host_metrics.panel () context parent
+let performance_panel () : t = Host_metrics.panel ()
 
 (* components/rtc/indicator.cljs — cloud status button + hidden rtc-tx
    element the e2e reads EDN from. Visible once the worker broadcasts
@@ -558,19 +555,20 @@ let not_found_page : t =
     ]
   ) context parent
 
-let shell_contents (ms : Model.t Signal.signal) : t =
+let shell_contents (ms : Model.t Signal.signal) : t = fun context parent ->
   let st = Sidebar_state.ensure ms in
-  stack ~key:"shell-content"
+  let native = Lui_ui.host context = Lui_protocol.NshHost in
+  (stack ~key:"shell-content"
     [ (* Devin-style chrome: fixed window titlebar above the dock
          splits. The leading controls remain mounted while the native
          panel groups resize underneath. *)
       column ~key:"app" ~accessibility_identifier:"app-container" ~grow:1. ~min_height:0 ~gap:0
-        [ topbar ms
-        ; row ~key:"panes" ~grow:1. ~min_height:0 ~cross:`stretch
-            [right_split ms st (left_split ms st (detail_column ms)) (right_sidebar ms);
-             Pdf.container_el ~key:"asc" ~id:"app-single-container";
-             performance_panel ()]
-        ; performance_bar () ]
+        ([ topbar ms
+         ; row ~key:"panes" ~grow:1. ~min_height:0 ~cross:`stretch
+             ([right_split ms st (left_split ms st (detail_column ms)) (right_sidebar ms);
+               Pdf.container_el ~key:"asc" ~id:"app-single-container"]
+              @ if native then [] else [performance_panel ()]) ]
+         @ if native then [] else [performance_bar ()])
     ; overlays ms
     ; help_area ms
     ; reactive ~equal:(fun (a : Model.t) (b : Model.t) ->
@@ -581,7 +579,7 @@ let shell_contents (ms : Model.t Signal.signal) : t =
               match m.route with
               | Model.Not_found _ -> not_found_page
               | _ -> spacer ~key:"nf-none" []) ms
-    ]
+    ]) context parent
 
 (* Reconcile the mounted interface after dictionary loading while retaining
    the reducer, graph worker, editor sessions and dock state. *)
