@@ -50,6 +50,55 @@
                  (p/catch (fn [error] (is nil (str error))))
                  (p/finally done))))))
 
+(defn- with-clock-and-timers
+  "Runs `(f *now *timers)` with js/Date.now reading `*now` and js/setTimeout recording
+  [callback ms] in `*timers` instead of scheduling; restores both when the promise settles."
+  [f]
+  (let [*now (atom 1000000)
+        *timers (atom [])
+        original-now js/Date.now
+        original-set-timeout js/setTimeout]
+    (set! js/Date.now (fn [] @*now))
+    (set! js/setTimeout (fn [callback ms] (swap! *timers conj [callback ms]) :timeout-id))
+    (p/finally (p/do (f *now *timers))
+               (fn []
+                 (set! js/Date.now original-now)
+                 (set! js/setTimeout original-set-timeout)))))
+
+(deftest an-unanswered-pull-is-sent-again-by-its-timer-test
+  (testing "with no later changed to trigger it, the pull is sent again 30 s after it went unanswered"
+    (async done
+           (let [*sent (atom [])
+                 client (client-with-pending-pull (capture-ws *sent) nil nil)]
+             (-> (with-clock-and-timers
+                   (fn [*now *timers]
+                     (p/let [_ (changed! client 12)]
+                       (is (= [{:type "pull" :since 10}] @*sent))
+                       (is (= [30000] (map second @*timers)) "the reply check is scheduled")
+                       (swap! *now + 30000)
+                       ((ffirst @*timers))
+                       (p/let [_ @(:send-queue client)]
+                         (is (= [{:type "pull" :since 10} {:type "pull" :since 10}] @*sent)
+                             "the timer resends the unanswered pull")))))
+                 (p/catch (fn [error] (is nil (str error))))
+                 (p/finally done))))))
+
+(deftest an-answered-pull-is-not-sent-again-by-its-timer-test
+  (testing "once pull/ok cleared the marker the timer sends nothing"
+    (async done
+           (let [*sent (atom [])
+                 client (client-with-pending-pull (capture-ws *sent) nil nil)]
+             (-> (with-clock-and-timers
+                   (fn [*now *timers]
+                     (p/let [_ (changed! client 12)]
+                       (reset! (:pending-pull-since client) nil)
+                       (swap! *now + 30000)
+                       ((ffirst @*timers))
+                       (p/let [_ @(:send-queue client)]
+                         (is (= [{:type "pull" :since 10}] @*sent))))))
+                 (p/catch (fn [error] (is nil (str error))))
+                 (p/finally done))))))
+
 (deftest a-pull-still-awaiting-its-reply-is-not-sent-twice-test
   (testing "within the timeout the pending pull still suppresses a duplicate"
     (async done
