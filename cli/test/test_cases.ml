@@ -1350,6 +1350,7 @@ let () =
             | 4
               when Js.String.includes ~search:"thread-api/apply-outliner-ops"
                      body ->
+                expect_named_contains "batch transaction label" body "~:apply-outliner-ops";
                 if
                   Js.String.includes ~search:"2026-02-10T08:00:00.000Z" body
                   || Js.String.includes ~search:"2026-02-12T18:00:00.000Z" body
@@ -1985,7 +1986,7 @@ let () =
             fail_promise
               (Printf.sprintf "expected four invoke requests, got %d" !step)));
 
-  test_promise "upsert block create sends page refs from block title" (fun () ->
+  test_promise "upsert block create delegates page ref parsing to worker" (fun () ->
       let step = ref 0 in
       let captured_apply_body = ref None in
       let server =
@@ -2034,9 +2035,8 @@ let () =
                 fail_test "missing captured apply body";
                 failwith "missing captured apply body"
           in
-          expect_named_contains "block refs attr" body "block/refs";
+          expect_named_contains "raw editor operation" body "logseq.outliner/insert-blocks-input";
           expect_named_contains "page ref title" body "bar_page";
-          expect_named_contains "page ref tag" body "logseq.class/Page";
           if !step = 3 then Js.Promise.resolve pass
           else
             fail_promise
@@ -2080,6 +2080,8 @@ let () =
                 "block";
                 "--id";
                 "233";
+                "--content";
+                "Updated [[Alpha]]";
                 "--update-tags";
                 "[\"Tag A\"]";
               |]
@@ -2093,6 +2095,8 @@ let () =
                 failwith "missing captured apply body"
           in
           expect_named_contains "batch tag set op" body "batch-set-property";
+          expect_named_contains "raw title operation" body "logseq.outliner/save-block-input";
+          expect_named_contains "batch transaction label" body "~:apply-outliner-ops";
           expect_named_contains "resolved tag id" body "200";
           if !step = 3 then Js.Promise.resolve pass
           else
@@ -2190,39 +2194,20 @@ let () =
                    && Js.String.includes ~search:"home" body ->
                 "[[\"^ \
                  \",\"~:db/id\",42,\"~:block/uuid\",\"11111111-1111-1111-1111-111111111111\",\"~:block/name\",\"home\"]]"
-            | 4 when Js.String.includes ~search:"thread-api/cli-list-tags" body
-              ->
-                "[[\"^ \
-                 \",\"~:db/id\",200,\"~:block/title\",\"Comments\"]]"
-            | 5
-              when Js.String.includes ~search:"thread-api/q" body
-                   && Js.String.includes ~search:"comments" body ->
-                (* #tags join block/refs as [:block/name] lookups — materialize
-                   resolves the existing tag entity. *)
-                "[\"^ \
-                 \",\"~:db/id\",200,\"~:block/uuid\",\"55555555-5555-4555-8555-555555555555\",\"~:block/name\",\"comments\"]"
-            | 6
+            | 4
               when Js.String.includes ~search:"thread-api/apply-outliner-ops"
                      body ->
-                if not (Js.String.includes ~search:"block/tags" body) then
-                  fail_test ("missing inline tag op: " ^ body);
-                if not (Js.String.includes ~search:"200" body) then
-                  fail_test ("missing resolved tag id: " ^ body);
+                expect_named_contains "raw editor operation" body "logseq.outliner/insert-blocks-input";
+                expect_named_contains "inline tag text" body "#Comments";
                 if not (Js.String.includes ~search:property_ident body) then
                   fail_test ("missing related property ident: " ^ body);
                 if not (Js.String.includes ~search:"88" body) then
                   fail_test ("missing resolved block ref id: " ^ body);
-                if
-                  not
-                    (Js.String.includes
-                       ~search:"55555555-5555-4555-8555-555555555555" body)
-                then
-                  fail_test ("missing tag entity in block/refs: " ^ body);
                 if Js.String.includes ~search:ref_uuid body then
                   fail_test
                     ("unresolved block uuid leaked into property op: " ^ body);
                 "[]"
-            | 7 when Js.String.includes ~search:"thread-api/pull" body ->
+            | 5 when Js.String.includes ~search:"thread-api/pull" body ->
                 "[\"^ \",\"~:db/id\",10]"
             | _ ->
                 fail_test
@@ -2248,10 +2233,10 @@ let () =
               |]
           in
           ignore (expect_cli_exit_zero "upsert block inline ref tags" output);
-          if !step = 7 then Js.Promise.resolve pass
+          if !step = 5 then Js.Promise.resolve pass
           else
             fail_promise
-              (Printf.sprintf "expected seven invoke requests, got %d" !step)));
+              (Printf.sprintf "expected five invoke requests, got %d" !step)));
 
   test_promise "upsert block create resolves date property values by page name"
     (fun () ->
@@ -2263,6 +2248,8 @@ let () =
         invoke_server (fun body ->
             let mark key = Hashtbl.replace seen key () in
             match () with
+            | _ when Js.String.includes ~search:"logseq.outliner/preview-ops" body ->
+                mark "preview"; "[]"
             | _
               when Js.String.includes ~search:"thread-api/q" body
                    && Js.String.includes ~search:"duedate" body ->
@@ -2285,6 +2272,7 @@ let () =
               when Js.String.includes ~search:"thread-api/apply-outliner-ops"
                      body ->
                 mark "apply";
+                expect_named_contains "batch transaction label" body "~:apply-outliner-ops";
                 if not (Js.String.includes ~search:property_ident body) then
                   fail_test ("missing duedate property ident: " ^ body);
                 if not (Js.String.includes ~search:"99" body) then
@@ -2319,10 +2307,10 @@ let () =
           in
           ignore
             (expect_cli_exit_zero "upsert block date property" output);
-          if Hashtbl.length seen = 5 then Js.Promise.resolve pass
+          if Hashtbl.length seen = 6 then Js.Promise.resolve pass
           else
             fail_promise
-              (Printf.sprintf "expected five invoke requests, got %d"
+              (Printf.sprintf "expected six invoke requests, got %d"
                  (Hashtbl.length seen))));
 
   test_promise "upsert block create coerces datetime property values to epoch ms"
@@ -2425,6 +2413,27 @@ let () =
               ("expected non-zero exit for invalid datetime: " ^ output.stdout
              ^ output.stderr)));
 
+  test_promise "upsert block rejects old workers before creating missing targets" (fun () ->
+      let created = ref 0 in
+      let preview_seen = ref false in
+      let server = invoke_server (fun body ->
+          if Js.String.includes ~search:"logseq.outliner/preview-ops" body then (
+            preview_seen := true;
+            failwith "unsupported input operation")
+          else if Js.String.includes ~search:"create-page" body then (
+            incr created;
+            failwith "must not create before checking worker")
+          else if Js.String.includes ~search:"thread-api/q" body then "[]"
+          else failwith "unsupported input operation") in
+      with_server server (fun base_url ->
+          let* output = run_cli_p ~env:[| ("LOGSEQ_CLI_BASE_URL", base_url) |]
+              [| "--graph"; "alpha"; "--output"; "json"; "upsert"; "block";
+                 "--target-page"; "MissingNamespace/Child"; "--content"; "[[Fresh]]" |] in
+          ignore (assert_true "old worker rejected" (output.code <> 0) "expected failure");
+          ignore (assert_true "capability request" !preview_seen "missing input preview capability check");
+          ignore (assert_true "no preflight writes" (!created = 0) "created pages before worker rejection");
+          Js.Promise.resolve pass));
+
   test_promise "upsert block keeps target page title case when creating" (fun () ->
       let step = ref 0 in
       let page_uuid = "33333333-3333-4333-8333-333333333333" in
@@ -2432,11 +2441,12 @@ let () =
         invoke_server (fun body ->
             incr step;
             match !step with
-            | (1 | 2)
+            | 2 when Js.String.includes ~search:"logseq.outliner/preview-ops" body -> "[]"
+            | (1 | 3)
               when Js.String.includes ~search:"thread-api/q" body
                    && Js.String.includes ~search:"my page" body ->
                 "[]"
-            | 3
+            | 4
               when Js.String.includes ~search:"thread-api/apply-outliner-ops"
                      body ->
                 if not (Js.String.includes ~search:"create-page" body) then
@@ -2445,11 +2455,11 @@ let () =
                   fail_test
                     ("create-page lost original title case: " ^ body);
                 "[null,\"~u" ^ page_uuid ^ "\"]"
-            | 4 when Js.String.includes ~search:"thread-api/pull" body ->
+            | 5 when Js.String.includes ~search:"thread-api/pull" body ->
                 "[\"^ \
                  \",\"~:db/id\",50,\"~:block/uuid\",\"~u" ^ page_uuid
                 ^ "\",\"~:block/name\",\"my page\"]"
-            | 5
+            | 6
               when Js.String.includes ~search:"thread-api/apply-outliner-ops"
                      body ->
                 if not (Js.String.includes ~search:"insert-blocks" body) then
@@ -2459,7 +2469,7 @@ let () =
                     ("insert target was not rewritten to created page uuid: "
                    ^ body);
                 "[]"
-            | 6 when Js.String.includes ~search:"thread-api/pull" body ->
+            | 7 when Js.String.includes ~search:"thread-api/pull" body ->
                 "[\"^ \",\"~:db/id\",10]"
             | _ ->
                 fail_test
@@ -2485,10 +2495,10 @@ let () =
           in
           ignore
             (expect_cli_exit_zero "upsert block created page title case" output);
-          if !step = 6 then Js.Promise.resolve pass
+          if !step = 7 then Js.Promise.resolve pass
           else
             fail_promise
-              (Printf.sprintf "expected six invoke requests, got %d" !step)));
+              (Printf.sprintf "expected seven invoke requests, got %d" !step)));
 
   test_promise "upsert block rolls back created pages when apply fails"
     (fun () ->
@@ -2500,6 +2510,8 @@ let () =
         invoke_server (fun body ->
             let mark key = Hashtbl.replace seen key () in
             match () with
+            | _ when Js.String.includes ~search:"logseq.outliner/preview-ops" body ->
+                mark "preview"; "[]"
             | _
               when Js.String.includes ~search:"thread-api/q" body
                    && Js.String.includes ~search:"db/valueType" body ->
@@ -2572,7 +2584,7 @@ let () =
             not (Hashtbl.mem seen key)
           in
           if
-            missing "create" || missing "apply-failed" || missing "orphan-query"
+            missing "preview" || missing "create" || missing "apply-failed" || missing "orphan-query"
             || missing "delete"
           then
             fail_promise
@@ -2642,7 +2654,7 @@ let () =
               (Printf.sprintf "expected three invoke requests, got %d"
                  (Hashtbl.length seen))));
 
-  test_promise "upsert block --content keeps hashtags literal" (fun () ->
+  test_promise "upsert block --content delegates hashtag parsing to worker" (fun () ->
       let seen = Hashtbl.create 4 in
       let server =
         invoke_server (fun body ->
@@ -2661,6 +2673,7 @@ let () =
               when Js.String.includes ~search:"thread-api/apply-outliner-ops"
                      body ->
                 mark "apply";
+                expect_named_contains "raw editor operation" body "logseq.outliner/insert-blocks-input";
                 if not (Js.String.includes ~search:"#RealTag" body) then
                   fail_test ("literal hashtag dropped from title: " ^ body);
                 if Js.String.includes ~search:"block/tags" body then

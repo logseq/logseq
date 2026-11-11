@@ -1398,7 +1398,10 @@ let lookup_of_tag = function
 let apply_outliner_ops config repo ops =
   Transport.thread_api_apply_outliner_ops config ~repo
     ~ops:(Edn_util.vector_t_vec ops)
-    ~options:(Edn_util.map_t_vec Vec.empty)
+    ~options:(Edn_util.map_t_vec
+      (if Vec.length ops > 1 then
+         Vec.singleton (kw "outliner-op", kw "apply-outliner-ops")
+       else Vec.empty))
 
 let create_tag_page config repo name =
   let op =
@@ -2686,7 +2689,7 @@ let save_block_title invoke_config repo uuid content =
     Edn_util.vector_vec
       (Vec.of_array
          [|
-           kw "save-block";
+           kw "logseq.outliner/save-block-input";
            Edn_util.vector_vec
              (Vec.of_array [| block; Edn_util.map_vec Vec.empty |]);
          |])
