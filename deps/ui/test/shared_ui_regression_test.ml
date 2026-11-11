@@ -444,7 +444,40 @@ let settings_date_format ~registry ~profile ~finish =
   in
   next [false, `None; true, `None; false, `Refresh; false, `Navigate]
 
+let standalone_inline_groups ~registry =
+  List.iter (fun (profile, native) ->
+    let session = S.mount ~registry ~profile ~initial:Model.initial
+      ~reducer:(fun model () -> model)
+      ~view:(fun _ _ _ ->
+        Lui_elements.row
+          [ Ui_parts.inline_flex_row
+              (Lui_elements.row ~key:"inline-existing" ~gap:4
+                 ~style_class:"test-inline-row"
+                 [Lui_elements.text ~value:"Existing row" []])
+          ; Ui_parts.inline_flex_group ~key:"inline-group"
+              ~style_class:"test-inline-group"
+              [Lui_elements.text ~value:"Standalone group" []]]) () in
+    Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose session.S.app))
+      (fun () ->
+        let existing = List.find (fun node -> class_has node "test-inline-row") (nodes session) in
+        let group = List.find (fun node -> class_has node "test-inline-group") (nodes session) in
+        check "standalone existing inline group retains its Row kind" (existing.M.kind="row");
+        check "standalone group uses a native Row only on NSH"
+          (group.M.kind=(if native then "row" else "box"));
+        List.iter (fun node ->
+          check "standalone inline groups preserve display on non-NSH hosts only"
+            (M.string_prop node "display"=(if native then None else Some "inline-flex")))
+          [existing;group];
+        check "standalone inline groups mount their children exactly once"
+          (List.length (List.filter (fun node ->
+            M.string_prop node "text"=Some "Existing row"
+            || M.string_prop node "text"=Some "Standalone group") (nodes session))=2)))
+    [({P.profile_os=P.WebOS;P.profile_host=P.WebHost},false)
+    ;({P.profile_os=P.MacOS;P.profile_host=P.SwiftUIHost},false)
+    ;({P.profile_os=P.MacOS;P.profile_host=P.NshHost},true)]
+
 let run_views ~registry ~profile ~finish =
+  standalone_inline_groups ~registry;
   table_resize_transaction ();
   table_range_selection ();
   grouped_table_selection ~registry ~profile;
