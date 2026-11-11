@@ -234,10 +234,10 @@ impl State {
                     .view
                     .currentPage()
                     .map(|page| document.indexForPage(&page) + 1);
-                if current != Some(model.page) {
-                    if let Some(page) = document.pageAtIndex(model.page - 1) {
-                        self.view.goToPage(&page);
-                    }
+                if current != Some(model.page)
+                    && let Some(page) = document.pageAtIndex(model.page - 1)
+                {
+                    self.view.goToPage(&page);
                 }
             }
             if model.theme == "light" {

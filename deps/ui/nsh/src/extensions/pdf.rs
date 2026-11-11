@@ -224,7 +224,7 @@ pub(super) fn element(context: ExtensionContext) -> AnyElement {
                 .p(px(8.0))
                 .rounded(px(6.0))
                 .bg(nsh_base::theme().background);
-            popup.style().clone().into()
+            nsh_core::element::Style::from(popup.style().clone()).into()
         },
         ..Default::default()
     })

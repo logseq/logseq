@@ -2289,6 +2289,7 @@ name = "lui-nsh"
 version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
+ "chrono",
  "dispatch2",
  "gdk-pixbuf",
  "libloading",
@@ -2513,6 +2514,8 @@ name = "nsh-app-logseq"
 version = "0.1.0"
 dependencies = [
  "arboard",
+ "block2",
+ "dispatch2",
  "env_logger",
  "keyring",
  "lui-nsh",
@@ -2523,6 +2526,8 @@ dependencies = [
  "nsh-platform-macos",
  "nsh-platform-windows",
  "nsh-testing",
+ "objc2-foundation",
+ "objc2-pdf-kit",
  "serde",
  "serde_json",
  "ureq",
@@ -2923,6 +2928,20 @@ dependencies = [
  "libc",
  "objc2",
  "objc2-core-foundation",
+]
+
+[[package]]
+name = "objc2-pdf-kit"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c14ed801ae810c6ba487cedd7616bb48f9a8e37940042f57e862538e2c7db117"
+dependencies = [
+ "bitflags 2.13.2",
+ "objc2",
+ "objc2-app-kit",
+ "objc2-core-foundation",
+ "objc2-core-graphics",
+ "objc2-foundation",
 ]
 
 [[package]]
