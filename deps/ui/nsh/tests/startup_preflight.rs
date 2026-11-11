@@ -9,8 +9,6 @@ use nsh_testing::Headless;
 use std::{
     cell::RefCell,
     fs::{self, File},
-    io::{Read, Write},
-    net::{SocketAddr, TcpStream},
     path::Path,
     process::{Command, Stdio},
     thread,
@@ -269,25 +267,29 @@ fn terminate_owned_group(_: Option<u32>) -> Result<(), String> {
     Ok(())
 }
 
-fn request(port: u16, method: &str, path: &str) -> Result<String, String> {
-    let address = SocketAddr::from(([127, 0, 0, 1], port));
-    let mut stream =
-        TcpStream::connect_timeout(&address, Duration::from_secs(1)).map_err(|e| e.to_string())?;
-    stream
-        .set_read_timeout(Some(Duration::from_secs(1)))
-        .map_err(|e| e.to_string())?;
-    stream
-        .set_write_timeout(Some(Duration::from_secs(1)))
-        .map_err(|e| e.to_string())?;
-    write!(stream,"{method} {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").map_err(|e|e.to_string())?;
-    let mut response = String::new();
-    // Some daemon transports leave the socket open briefly after res_end.
-    // A complete response received before that timeout is still inspectable.
-    let read = stream.read_to_string(&mut response);
-    if response.is_empty() {
-        read.map_err(|e| e.to_string())?;
+fn request(port: u16, method: &str, path: &str) -> Result<(u16, String), String> {
+    // Reuse the already-pinned HTTP client so chunked health responses are
+    // decoded before JSON parsing. Cleanup only contacts this loopback daemon.
+    let agent: ureq::Agent = ureq::Agent::config_builder()
+        .proxy(None)
+        .max_redirects(0)
+        .timeout_global(Some(Duration::from_secs(1)))
+        .http_status_as_error(false)
+        .build()
+        .into();
+    let uri = format!("http://127.0.0.1:{port}{path}");
+    let mut response = match method {
+        "GET" => agent.get(&uri).call(),
+        "POST" => agent.post(&uri).send_empty(),
+        _ => return Err("unsupported private worker request method".into()),
     }
-    Ok(response)
+    .map_err(|error| error.to_string())?;
+    let status = response.status().as_u16();
+    let body = response
+        .body_mut()
+        .read_to_string()
+        .map_err(|error| error.to_string())?;
+    Ok((status, body))
 }
 fn stop_owned_workers(root: &Path) -> Result<(), String> {
     let deadline = Instant::now() + Duration::from_secs(4);
@@ -304,16 +306,13 @@ fn stop_owned_workers(root: &Path) -> Result<(), String> {
             let port = fields[1]
                 .parse::<u16>()
                 .map_err(|_| "invalid private worker port")?;
-            let Ok(health) = request(port, "GET", "/healthz") else {
+            let Ok((status, body)) = request(port, "GET", "/healthz") else {
                 continue;
             };
-            if !health.starts_with("HTTP/1.1 200") && !health.starts_with("HTTP/1.1 503") {
+            if !matches!(status, 200 | 503) {
                 return Err("private worker returned an invalid health response".into());
             }
-            let (_, body) = health
-                .split_once("\r\n\r\n")
-                .ok_or("private worker health response has no body")?;
-            let health: serde_json::Value = serde_json::from_str(body)
+            let health: serde_json::Value = serde_json::from_str(&body)
                 .map_err(|error| format!("invalid private worker health JSON: {error}"))?;
             let actual = health
                 .get("storage")
@@ -328,8 +327,8 @@ fn stop_owned_workers(root: &Path) -> Result<(), String> {
                 return Err("refusing cleanup of a daemon outside the isolated graph root".into());
             }
             active = true;
-            let response = request(port, "POST", "/v1/shutdown")?;
-            if !response.starts_with("HTTP/1.1 200") {
+            let (status, _) = request(port, "POST", "/v1/shutdown")?;
+            if status != 200 {
                 return Err("private daemon refused shutdown".into());
             }
         }

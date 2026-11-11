@@ -2525,6 +2525,7 @@ dependencies = [
  "nsh-testing",
  "serde",
  "serde_json",
+ "ureq",
  "url",
 ]
 

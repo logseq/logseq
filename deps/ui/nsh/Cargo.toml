@@ -29,5 +29,6 @@ keyring = { version = "=3.6.3", default-features = false, features = ["windows-n
 nsh-platform-windows = { git = "https://github.com/logseq/nsh", rev = "bfa15d0c843c0d6f5bf3a2a230e8ca56b876b61c", default-features = false, features = ["editor", "highlight"] }
 
 [dev-dependencies]
+ureq = "=3.5.1"
 nsh-engine = { git = "https://github.com/logseq/nsh", rev = "bfa15d0c843c0d6f5bf3a2a230e8ca56b876b61c", default-features = false }
 nsh-testing = { git = "https://github.com/logseq/nsh", rev = "bfa15d0c843c0d6f5bf3a2a230e8ca56b876b61c", default-features = false }
