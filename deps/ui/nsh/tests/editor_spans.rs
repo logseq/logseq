@@ -15,7 +15,7 @@ struct Identities(Arc<Mutex<Vec<Vec<nsh_core::NodeId>>>>);
 fn batch(generation: u64, ops: Value) -> Batch {
     Batch::decode(&json!({"generation":generation,"ops":ops}).to_string()).unwrap()
 }
-fn record(renderer: Renderer, identities: Identities) {
+fn record(renderer: Renderer, identities: Arc<Identities>) {
     after_answer(move || {
         identities.0.lock().unwrap().push(
             (1..=4)
