@@ -187,6 +187,7 @@ fn EditorFixture() -> impl IntoElement {
         },
     );
     let clear = renderer.clone();
+    let clear_generation = generation.clone();
     on_key_with(
         "f3",
         KeyOptions {
@@ -194,7 +195,9 @@ fn EditorFixture() -> impl IntoElement {
             ..Default::default()
         },
         move |_| {
-            clear.replace(batch(0, json!([]))).unwrap();
+            let next = clear_generation.get() + 1;
+            clear.replace(batch(next, json!([]))).unwrap();
+            clear_generation.set(next);
         },
     );
     renderer.element()
@@ -293,6 +296,13 @@ fn native_preedit_cancel_is_not_committed_and_removed_sink_releases_its_keys() {
     assert!(!events.iter().any(|(name, _)| name == "insert"));
     drop(events);
     app.press_key("f3").unwrap();
+    assert!(
+        app.screen()
+            .layout_nodes()
+            .iter()
+            .all(|node| node.test_id.as_deref() != Some("lui-1")),
+        "the fixture must retire the native sink before probing stale key handlers"
+    );
     let before = fixture.events.lock().unwrap().len();
     app.press_key("enter").unwrap();
     assert_eq!(fixture.events.lock().unwrap().len(), before);

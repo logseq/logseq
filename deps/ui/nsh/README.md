@@ -89,3 +89,12 @@ Use the LUI agent CLI against its loopback listener for application interaction
 and in-process content screenshots. Screenshots capture app content; system menus
 and separately composited surfaces are outside that capture. These operations do
 not require unlocking the Mac or turning its display on.
+
+The editor unit probes distinguish driver actions: public Headless `type_text`
+delivers one native edit per Unicode character, while `paste` delivers one atomic
+UTF-8 edit. The CodeMirror cancellation probe requires exactly one input callback
+for an atomic multi-scalar paste, with cancelled preedit absent from the document
+and the same native editor retained. This does not qualify a hardware IME commit
+or Return during marked text. The block-editor removal probe advances the fixture
+snapshot generation and verifies the native sink is gone before testing stale
+key handlers.

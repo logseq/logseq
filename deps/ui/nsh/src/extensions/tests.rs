@@ -232,7 +232,7 @@ fn focused_query_retains_draft_when_evaluation_snapshot_changes() {
 }
 
 #[test]
-fn native_preedit_cancel_and_utf8_commit_preserve_the_query_document() {
+fn native_preedit_cancel_and_atomic_utf8_paste_preserve_the_query_document() {
     let (mut app, events) = start(true, false);
     let before = native(&app);
     app.compose("id:lui-1", "ni").unwrap();
@@ -253,7 +253,11 @@ fn native_preedit_cancel_and_utf8_commit_preserve_the_query_document() {
             .any(|event| event["name"] == "input")
     );
     events.lock().unwrap().clear();
-    app.type_text("id:lui-1", "你😀").unwrap();
+    // Headless type_text is one native edit per Unicode character. Paste is
+    // one atomic native edit, so exactly one input is required for both scalars.
+    let mut paste = nsh_core::PasteEvent::default();
+    paste.text = "你😀".into();
+    app.paste("id:lui-1", &paste).unwrap();
     let emitted = events.lock().unwrap();
     let inputs = emitted
         .iter()
@@ -262,14 +266,14 @@ fn native_preedit_cancel_and_utf8_commit_preserve_the_query_document() {
     assert_eq!(
         inputs.len(),
         1,
-        "a committed edit must be forwarded exactly once"
+        "one atomic native edit must be forwarded exactly once"
     );
     let value = inputs[0]["value"].as_str().unwrap().to_owned();
     assert_eq!(value.matches("你😀").count(), 1);
     assert_eq!(
         value.replace("你😀", ""),
         "initial",
-        "cancelled preedit leaked into committed source"
+        "cancelled preedit leaked into the atomic edit"
     );
     assert!(
         !emitted
