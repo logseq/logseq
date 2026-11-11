@@ -38,7 +38,8 @@
                              :build/closed-values [{:value "Charlie" :uuid (random-uuid)}
                                                    {:value "Alpha" :uuid (random-uuid) :icon icon}
                                                    {:value "Bravo" :uuid (random-uuid)}]}}})
-        class-id (:db/id (d/entity @conn :user.class/Topic))
+        ;; by title: master's 274eae1ffe derives a class's ident from its title, not from the :Topic build key
+        class-id (:db/id (db-test/find-page-by-title @conn "Topic"))
         view-id (create-view-id conn class-id)
         option {:view-feature-type :class-objects
                 :view-for-id class-id
