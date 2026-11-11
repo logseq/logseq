@@ -29,6 +29,25 @@ signing and packaged launch qualification are separate work; the presence of a
 Windows Rust entry does not qualify those steps. This script does not build the
 maintained LUI Apple/iOS, Android or Web backends.
 
+## Actual-application startup gate
+
+Before writing the build receipt or reporting success, `build.sh` runs
+`cargo test --test startup_preflight` with the newly built OCaml library,
+resources and private DB worker. One isolated child process mounts the actual
+`nsh_app_logseq::App` with public NSH Headless. Fresh home/state/graph directories
+keep user data separate; no agent listener, login daemon, OS window, screenshot
+or application activation is used. The test requires Demo/Journals and real
+Search/sidebar buttons and fails immediately when `lui-backend-error` appears.
+Its engine and private worker processes are cleaned up after either outcome.
+
+The integration target requires `LUI_OCAML_LIBRARY`, `LOGSEQ_NATIVE_ASSET_DIR`
+and `LOGSEQ_DB_WORKER_BIN`; missing inputs fail with a build instruction rather
+than silently skipping qualification. Ordinary `cargo test --lib` remains the
+fast unit-test path without loading the application library. A successful gate
+qualifies this production startup path and its encountered backend validation;
+it does not statically prove every conditional UI branch or replace native UX,
+IME, signing and update tests.
+
 ## Safe native publication and build receipts
 
 The executable, OCaml shared library and private DB worker are published with

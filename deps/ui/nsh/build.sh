@@ -96,6 +96,13 @@ atomic_copy(sys.argv[5], sys.argv[6])
 atomic_copy(artifacts[0], sys.argv[2])
 Path(sys.argv[7]).write_text(next(iter(manifests)))
 BUILD_ARTIFACT
+# Qualify the actual OCaml application in a fresh headless process before
+# recording a successful build. This does not create or activate an OS window.
+LUI_OCAML_LIBRARY="$library" \
+LOGSEQ_NATIVE_ASSET_DIR="$resources" \
+LOGSEQ_DB_WORKER_BIN="$resources/logseq-db-worker" \
+cargo test --locked --manifest-path "$nsh_root/Cargo.toml" \
+  --test startup_preflight -- --exact real_application_startup_preflight --nocapture >&2
 "$node_bin" --input-type=module - "$receipt_tool" "$repo_root" "$lui_source" \
   "$staging/lui-rust-manifest" "$output/logseq-nsh" "$library" "$resources" <<'BUILD_RECEIPT'
 import {execFileSync} from "node:child_process";
@@ -119,7 +126,7 @@ const app = (...segments) => path.join(repo, ...segments);
 // node_modules or generated .nsh runner/cache trees.
 for (const scope of ["src", "native", "subs", "shims", "tools", "assets"]) add(app("deps/ui", scope));
 for (const file of ["dune-project", "dune-workspace"]) add(app("deps/ui", file), true);
-add(app("deps/ui/nsh/src"));
+add(app("deps/ui/nsh/src")); add(app("deps/ui/nsh/tests"));
 for (const file of ["Cargo.toml", "Cargo.lock", "nsh.json", "schemas.json", "export_schemas.c", "build.sh", "run.sh"])
   add(app("deps/ui/nsh", file));
 for (const scope of ["bin", "desktop", "lib", "runtime", "stubs", "vendor"]) add(app("deps/db-worker", scope));
