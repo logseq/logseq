@@ -218,3 +218,19 @@ existing primary-axis spacing, contents, close handle and dismissal owner are
 unchanged. This does not reinterpret externally anchored `role=menu` popovers
 as dialogs: property action menus and view menus using that shape remain an
 explicit separate NSH capability gap.
+
+
+### Native Appearance has one explicit scrolling owner
+
+On `NshHost`, `Settings_page.appearance_body` now places its existing settings
+column inside a vertical canonical `Scroll`, bounded to 85% of the live native
+viewport height. Its popup reuses `menu_surface_chrome` for the same theme,
+padding, border and shadow, without the CSS surface's `overflow=auto`. Native
+Scroll owns clipping, scrolling and the retained content; no generic overflow
+value is translated into hidden or ignored.
+
+For example, native Appearance can retain all settings rows in a short window
+and scroll its contents through the native controller. Web/mobile continue
+using `menu_surface` and their existing surface overflow recipe. Other callers
+of `menu_surface`, including unsupported external role-menu producers, are
+unchanged; they are not admitted by this focused Appearance adaptation.

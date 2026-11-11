@@ -1427,8 +1427,23 @@ let appearance_rows ctx =
 let appearance_body ms : t =
  fun ctx parent ->
   S.ensure ctx;
+  let native = Lui_ui.host ctx = Lui_protocol.NshHost in
+  let content =
+    column ~key:"appearance_settings"
+      ~accessibility_identifier:"appearance_settings"
+      ~style_class:"cp__settings-appearance-dialog-inner" ~padding:20
+      [ reactive ~equal:same_config (fun _ _ ->
+          column ~key:"app-rows" ~gap:16 (appearance_rows ctx))
+          (S.signal ()) ms ] in
+  let content = if native then
+      Ui_components.with_props [Ui_components.Prop.max_height_viewport 0.85]
+        (scroll ~key:"appearance-scroll" ~orientation:`vertical ~min_height:0
+           ~accessibility_identifier:"appearance-scroll" [content])
+    else content in
+  let surface = if native then Ui_components.menu_surface_chrome
+    else Ui_components.menu_surface in
   let node =
-    Ui_components.menu_surface
+    surface
       (popover ~transition:Ui_components.popover_transition ~key:"appearance-wrap"
           ~anchor:`below ~anchor_target:"toolbar-dots-btn" ~anchor_alignment:`end_
           (* NSH aligns to the real trigger and owns collision placement. The
@@ -1440,15 +1455,6 @@ let appearance_body ms : t =
             Runtime.send (Action.Appearance_set false))
           ~style_class:"ui__dropdown-menu-content appearance-popup"
           ~min_width:192
-          [ column ~key:"appearance_settings"
-              ~accessibility_identifier:"appearance_settings"
-              ~style_class:"cp__settings-appearance-dialog-inner"
-              ~padding:20
-              [ reactive ~equal:same_config (fun _ _ ->
-                    (* cljs cp__settings-appearance-dialog-inner:
-                       flex-col gap-4 between the .it rows *)
-                    column ~key:"app-rows" ~gap:16 (appearance_rows ctx))
-                  (S.signal ()) ms ]
-          ])
+          [ content ])
   in
   node ctx parent

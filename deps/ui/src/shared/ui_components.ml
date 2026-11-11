@@ -1064,7 +1064,7 @@ let menu_item_chrome element =
 (* The lui-overlay .ui__dropdown-menu-content/.ui__select-content card
    spec as props — migrated dropdown/select popups carry this chrome so
    the compat class can be dropped. [cls] keeps app-semantic hooks. *)
-let menu_surface ?max_height element =
+let menu_surface_chrome ?max_height element =
   with_props
     [ Prop.collision_padding 5.
     ; Prop.gap 0
@@ -1080,9 +1080,13 @@ let menu_surface ?max_height element =
     ; Prop.foreground "inherit"
     ; Prop.border_color "hsl(var(--border))"
     ; Prop.border_width 1
-    ; Prop.corner_radius 6
-    ; Prop.overflow `auto ]
+    ; Prop.corner_radius 6 ]
     element
+
+(* Surface overflow belongs to the CSS host. A native caller that supplies an
+   explicit bounded Scroll uses the same chrome without a second scroll owner. *)
+let menu_surface ?max_height element =
+  with_props [Prop.overflow `auto] (menu_surface_chrome ?max_height element)
 
 let menu_card ~key ?(cls = "") ~anchor ~anchor_alignment ~on_dismiss
     ?max_height ?(data_attrs = []) items : t =
