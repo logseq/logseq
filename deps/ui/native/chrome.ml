@@ -274,24 +274,44 @@ let hidden_chrome (ms : Model.t Signal.signal) : t =
    closed). *)
 let right_sidebar (ms : Model.t Signal.signal) =
   let viewport=Signal.value (Sidebar_state.ensure ms).Sidebar_state.viewport_w in
+  let availability element : t = fun context parent ->
+    if Lui_ui.host context = Lui_protocol.NshHost then
+      Ui_parts.string_prop Lui_protocol.DisplayValue
+        ~value:(reactive (fun (m : Model.t) width ->
+          if m.right_sidebar_open && width>=640. then "block" else "none") ms viewport)
+        element context parent
+    else Ui_parts.bool_prop Lui_protocol.Inert
+      ~value:(reactive (fun (m : Model.t) width -> not m.right_sidebar_open || width<640.) ms viewport)
+      element context parent
+  in
   Ui_parts.class_signal ms
     (fun (m : Model.t) -> "cp__right-sidebar " ^ if m.right_sidebar_open then "open" else "closed")
     (Ui_parts.int_prop Lui_protocol.MinWidth
        ~value:(reactive (fun (m : Model.t) width -> if m.right_sidebar_open && width>=640. then 320 else 0) ms viewport)
      (Ui_parts.int_prop Lui_protocol.MaxWidth
        ~value:(reactive (fun width -> if width>=640. then int_of_float (width*.Sidebar_state.right_fraction_max) else 0) viewport)
-       (box ~key:"right-sidebar" ~accessibility_identifier:"right-sidebar" ~container_relative_frame:`both
-          ~inert:(reactive (fun (m : Model.t) width -> not m.right_sidebar_open || width<640.) ms viewport)
+       (availability (box ~key:"right-sidebar" ~accessibility_identifier:"right-sidebar" ~container_relative_frame:`both
           ~min_height:0 ~style_class:"cp__right-sidebar closed"
           [Ui_components.with_props [Ui_components.Prop.overflow `hidden]
              (row ~key:"rs-dock" ~min_height:0 ~grow:1. ~cross:`stretch
-                ~background:"muted" [Right_sidebar_view.render ms])])) )
+                ~background:"muted" [Right_sidebar_view.render ms])]))) )
 
 (* A stable sidebar surface uses the same dock breakpoint and inner width
    as Web. Its own split reveals the small-window panel without squeezing text. *)
 let left_sidebar (ms : Model.t Signal.signal) =
   let st=Sidebar_state.ensure ms in
   let viewport=Signal.value st.Sidebar_state.viewport_w in
+  (* Closed NSH panes are not painted or laid out. Native Split owns their
+     zero-width tracks; hiding the retained subtree also removes its inputs. *)
+  let availability element : t = fun context parent ->
+    if Lui_ui.host context = Lui_protocol.NshHost then
+      Ui_parts.string_prop Lui_protocol.DisplayValue
+        ~value:(reactive (fun (m : Model.t) -> if m.left_sidebar_open then "block" else "none") ms)
+        element context parent
+    else Ui_parts.bool_prop Lui_protocol.Inert
+      ~value:(reactive (fun (m : Model.t) -> not m.left_sidebar_open) ms)
+      element context parent
+  in
   (* No titlebar row here — the window-level topbar owns nav controls so
      they stay put while this pane's width animates. *)
   let panel = row ~key:"ls-dock" ~grow:1. ~min_height:0 ~cross:`stretch
@@ -320,8 +340,7 @@ let left_sidebar (ms : Model.t Signal.signal) =
        (Ui_parts.int_prop Lui_protocol.MaxWidth
          ~value:(reactive (fun width -> if width<640. then int_of_float width else Sidebar_state.left_width_max) viewport)
         (Ui_components.with_props [Ui_components.Prop.width_viewport 1.;Ui_components.Prop.inset_top 0.;Ui_components.Prop.inset_left 0.]
-         (box ~key:"left-sidebar" ~accessibility_identifier:"left-sidebar" ~container_relative_frame:`vertical
-            ~inert:(reactive (fun (m : Model.t) -> not m.left_sidebar_open) ms)
+         (availability (box ~key:"left-sidebar" ~accessibility_identifier:"left-sidebar" ~container_relative_frame:`vertical
             ~min_height:0 ~style_class:"cp__sidebar-left-layout"
             [(fun context parent ->
               let native = Lui_ui.host context = Lui_protocol.NshHost in
@@ -336,7 +355,7 @@ let left_sidebar (ms : Model.t Signal.signal) =
                    ms (Signal.value st.Sidebar_state.left_width) viewport)
                  ?resize_duration:(if native then None else Some 300)
                  ?resize_easing:(if native then None else Some `standard)
-                 (pane panel) (pane shade)) context parent)]))))))
+                 (pane panel) (pane shade)) context parent)])))))))
 
 (* NSH owns native drag sizes and motion. Other hosts keep their existing
    controlled split geometry and transition options. *)

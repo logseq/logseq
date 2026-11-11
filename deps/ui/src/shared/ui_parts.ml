@@ -69,6 +69,14 @@ let string_prop prop ?value ?value_signal (elem : t) : t =
   Option.iter (Lui_ui.string_property_signal context node prop) value_signal;
   node
 
+let bool_prop prop ?value ?value_signal (elem : t) : t =
+ fun context parent ->
+  let node = elem context parent in
+  ignore (standard_kind context node);
+  Option.iter (Lui_ui.bool_property context node prop) value;
+  Option.iter (Lui_ui.bool_property_signal context node prop) value_signal;
+  node
+
 (* These groups are standalone layout participants, not runs in a text flow.
    NSH uses its native Row; other hosts retain their existing inline flex box. *)
 let inline_flex_group ?key ?style_class children : t =

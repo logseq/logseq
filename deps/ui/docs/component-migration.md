@@ -320,3 +320,21 @@ threshold. Above it, NSH uses the existing Row's native layout; below it, the
 same retained Row has `display=none`. Web keeps inline-flex/none. These changes
 do not add general inline text-flow support to NSH; genuine mixed text runs
 must continue through a text-capable renderer.
+
+### NSH closed sidebar visibility
+
+The native chrome now binds closed sidebar panels to `display=none` on NSH,
+then restores `display=block` on the same retained node when opened. The right
+sidebar is also hidden below its existing 640-point breakpoint. The native
+Split continues to own the pane widths; this change does not replace its
+controller, recreate the sidebar or add a closing animation. Closed panes have
+no layout or visible input surface instead of retaining an off-screen active
+editor at zero track width.
+
+For these two native-chrome producers only, `inert=(not open)` is replaced on
+NSH by `display=(if open then block else none)`. SwiftUI and other non-NSH hosts
+retain their existing reactive inert binding, and the Web chrome is unchanged.
+This is a visibility decision for panels that are already closed, not general
+NSH inert support: a visible-but-inert subtree remains explicitly unsupported
+by the backend. Applications must not remove inert from a visible surface to
+bypass capability validation.
