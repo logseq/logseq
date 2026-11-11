@@ -299,62 +299,120 @@ pub async fn handle(
 mod tests {
     use super::*;
     use lui_nsh::wire::Batch;
-    use nsh_engine::{EngineConfig,Root};
+    use nsh_engine::{EngineConfig, Root};
     use nsh_testing::Headless;
 
     #[test]
     fn request_decoding_rejects_invalid_shapes_and_offsets_without_coercion() {
-        for invalid in ["null","[]","42","{",""] {assert!(object(invalid).is_err());}
-        assert!(object(r#"{"ref":{"#ref":"target","measurement-id":71}}"#).is_ok());
-        for invalid in [json!({}),json!({"start":-1}),json!({"start":1.0}),json!({"start":"1"}),json!({"start":4294967296_u64})] {
-            assert!(offset(invalid.as_object().unwrap(),"start").is_err());
+        for invalid in ["null", "[]", "42", "{", ""] {
+            assert!(object(invalid).is_err());
         }
-        assert_eq!(offset(json!({"start":4}).as_object().unwrap(),"start").unwrap(),4);
+        assert!(object(r##"{"ref":{"#ref":"target","measurement-id":71}}"##).is_ok());
+        for invalid in [
+            json!({}),
+            json!({"start":-1}),
+            json!({"start":1.0}),
+            json!({"start":"1"}),
+            json!({"start":4294967296_u64}),
+        ] {
+            assert!(offset(invalid.as_object().unwrap(), "start").is_err());
+        }
+        assert_eq!(
+            offset(json!({"start":4}).as_object().unwrap(), "start").unwrap(),
+            4
+        );
     }
-    fn patch(generation:u64,ops:Value)->Batch {Batch::decode(&json!({"generation":generation,"ops":ops}).to_string()).unwrap()}
+    fn patch(generation: u64, ops: Value) -> Batch {
+        Batch::decode(&json!({"generation":generation,"ops":ops}).to_string()).unwrap()
+    }
     #[component]
     fn NativeDOM() -> impl IntoElement {
-        let renderer=Renderer::new(|_,_|{});
-        renderer.apply(patch(1,json!([
+        let renderer = Renderer::new(|_, _| {});
+        renderer
+            .apply(patch(
+                1,
+                json!([
             {"op":"create-node","id":1,"kind":"box"},
             {"op":"set-prop","id":1,"property":"width","value":240.0},
             {"op":"set-prop","id":1,"property":"height","value":100.0},
-            {"op":"set-prop","id":1,"property":"accessibility-identifier","value":"measured"}]))).unwrap();renderer.set_root(1).unwrap();
-        let status=signal("Waiting".to_owned());
-        let measuring=renderer.clone();let retiring=renderer.clone();
-        view().child(renderer.element())
-            .child(nsh_base::button().child(text("Measure current")).on_press(move||{
-                let renderer=measuring.clone();
-                spawn(async move {
-                    let events=handle("measure-node",r#"{"ref":{"#ref":"measured","measurement-id":71}}"#,&renderer).await.unwrap();
-                    assert_eq!(events.len(),1);assert_eq!(events[0].operation,"node-rect");
-                    let event:Value=serde_json::from_str(&events[0].payload).unwrap();
-                    assert_eq!(event["ref"],json!({"#ref":"measured","measurement-id":71}));
-                    assert_eq!(event["nodeId"],1);assert_eq!(event["rect"]["width"],240.0);
-                    status.set("Measured current".into());
-                });
-            }))
-            .child(nsh_base::button().child(text("Measure retired")).on_press(move||{
-                let node=retiring.node_snapshot(1).unwrap();let reference=retiring.native_reference(1,node.incarnation).unwrap();
-                let target=Target{node,reference};let pending=reference.measure();
-                retiring.apply(patch(2,json!([
+            {"op":"set-prop","id":1,"property":"accessibility-identifier","value":"measured"}]),
+            ))
+            .unwrap();
+        renderer.set_root(1).unwrap();
+        let status = signal("Waiting".to_owned());
+        let measuring = renderer.clone();
+        let retiring = renderer.clone();
+        view()
+            .child(renderer.element())
+            .child(
+                nsh_base::button()
+                    .child(text("Measure current"))
+                    .on_press(move || {
+                        let renderer = measuring.clone();
+                        spawn(async move {
+                            let events = handle(
+                                "measure-node",
+                                r##"{"ref":{"#ref":"measured","measurement-id":71}}"##,
+                                &renderer,
+                            )
+                            .await
+                            .unwrap();
+                            assert_eq!(events.len(), 1);
+                            assert_eq!(events[0].operation, "node-rect");
+                            let event: Value = serde_json::from_str(&events[0].payload).unwrap();
+                            assert_eq!(
+                                event["ref"],
+                                json!({"#ref":"measured","measurement-id":71})
+                            );
+                            assert_eq!(event["nodeId"], 1);
+                            assert_eq!(event["rect"]["width"], 240.0);
+                            status.set("Measured current".into());
+                        });
+                    }),
+            )
+            .child(
+                nsh_base::button()
+                    .child(text("Measure retired"))
+                    .on_press(move || {
+                        let node = retiring.node_snapshot(1).unwrap();
+                        let reference = retiring.native_reference(1, node.incarnation).unwrap();
+                        let target = Target { node, reference };
+                        let pending = reference.measure();
+                        retiring
+                            .apply(patch(
+                                2,
+                                json!([
                     {"op":"drop-node","id":1},{"op":"create-node","id":1,"kind":"box"},
-                    {"op":"set-prop","id":1,"property":"width","value":500.0}]))).unwrap();retiring.set_root(1).unwrap();
-                let renderer=retiring.clone();
-                spawn(async move {
-                    let event=reply(json!({"node-id":1,"measurement-id":72}),Some(&target),pending.await,&renderer).unwrap();
-                    let value:Value=serde_json::from_str(&event.payload).unwrap();
-                    assert!(value["rect"].is_null());assert!(value.get("nodeId").is_none());
-                    assert_eq!(value["ref"],json!({"node-id":1,"measurement-id":72}));
-                    status.set("Retired measurement rejected".into());
-                });
-            }))
-            .child(text(move||status.get()))
+                    {"op":"set-prop","id":1,"property":"width","value":500.0}]),
+                            ))
+                            .unwrap();
+                        retiring.set_root(1).unwrap();
+                        let renderer = retiring.clone();
+                        spawn(async move {
+                            let event = reply(
+                                json!({"node-id":1,"measurement-id":72}),
+                                Some(&target),
+                                pending.await,
+                                &renderer,
+                            )
+                            .unwrap();
+                            let value: Value = serde_json::from_str(&event.payload).unwrap();
+                            assert!(value["rect"].is_null());
+                            assert!(value.get("nodeId").is_none());
+                            assert_eq!(value["ref"], json!({"node-id":1,"measurement-id":72}));
+                            status.set("Retired measurement rejected".into());
+                        });
+                    }),
+            )
+            .child(text(move || status.get()))
     }
     #[test]
     fn actual_native_measurement_echoes_identity_and_retired_reply_cannot_measure_replacement() {
-        let mut app=Headless::start(EngineConfig::new(Root::of::<NativeDOM>())).unwrap();
-        app.wait_for("id:measured").unwrap();app.press("Measure current").unwrap();app.wait_for("Measured current").unwrap();
-        app.press("Measure retired").unwrap();app.wait_for("Retired measurement rejected").unwrap();
+        let mut app = Headless::start(EngineConfig::new(Root::of::<NativeDOM>())).unwrap();
+        app.wait_for("id:measured").unwrap();
+        app.press("Measure current").unwrap();
+        app.wait_for("Measured current").unwrap();
+        app.press("Measure retired").unwrap();
+        app.wait_for("Retired measurement rejected").unwrap();
     }
 }
