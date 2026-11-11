@@ -52,6 +52,8 @@ fn ActualRawContract() -> impl IntoElement {
                 })
                 .unwrap()
                 .validate("logseq-div", raw::validate)
+                .unwrap()
+                .validate_themed("logseq-div", raw::validate_themed)
                 .unwrap();
         } else if schema.identifier.starts_with("logseq-") && schema.identifier != "logseq-editor" {
             builder = register_raw(builder, schema).unwrap();
