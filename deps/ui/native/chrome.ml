@@ -73,14 +73,15 @@ let legacy_dots_btn : t =
             (Action.Page_menu_set (Some (x, 48., 48., true, None)))))
   ) context parent
 
-(* Reconciliation keeps the trigger and native Menu owner keyed while refreshing
-   this bounded action list from the existing model notification. *)
+(* Project menu inputs before rebuilding: unrelated block edits must not repeat
+   the publishing-permission query. Stable keys retain the native Menu owner. *)
 let dots_btn (ms : Model.t Signal.signal) : t =
  fun context parent ->
   if Lui_ui.host context <> Lui_protocol.NshHost then legacy_dots_btn context parent
   else
-    (reactive ~equal:( == )
-      (fun (m : Model.t) ->
+    (reactive
+      (fun _inputs ->
+        let m = Signal.get ms in
         let items = match Page_menu.resolve_menu_page m None with
           | Some page -> Page_menu.page_items page
               @ [Page_menu.separator "pg-app"] @ Page_menu.global_items ()
@@ -91,7 +92,8 @@ let dots_btn (ms : Model.t Signal.signal) : t =
             ~accessibility_identifier:"toolbar-dots-btn"
             ~style_class:"toolbar-dots-btn" ~label:(I18n.t "header/more")
             [Icons.icon ~size:20. "dots";
-             context_menu ~key:"page-menu" items])) ms)
+             context_menu ~key:"page-menu" items]))
+      (reactive Page_menu.header_menu_inputs ms))
       context parent
 
 let home_btn ms =

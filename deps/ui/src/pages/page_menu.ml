@@ -420,6 +420,18 @@ let resolve_menu_page (m : Model.t) uuid =
           p.page_journal_day = Some (Dates.today_journal_day ()))
         m.journals
 
+(* Menu actions read page metadata, not editable block trees. Sampling existing
+   external inputs here refreshes them on the same model notifications; the
+   reactive source's normal equality suppresses unrelated subtree work. *)
+let header_menu_inputs (m : Model.t) =
+  let page = Option.map (fun (p : Model.page) ->
+      p.page_uuid, p.page_db_id, p.page_title, p.page_is_tag, p.page_is_property,
+      p.page_journal_day, p.page_internal, p.page_built_in)
+    (resolve_menu_page m None) in
+  m.repo, page, Ui_services.storage_get "id-token",
+  Ui_services.storage_get "developer-mode", I18n.current_lang (),
+  Ui_services.env_publishing (), Plugin_host.simple_commands_of_type "page-menu-item"
+
 (* stop overlay clicks from leaking to the dialog handler *)
 let dialog_view (m : Model.t) =
   match m.page_menu with

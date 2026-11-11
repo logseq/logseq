@@ -553,7 +553,54 @@ let foldable_retained_visibility ~registry =
     ;({P.profile_os=P.IOS;P.profile_host=P.SwiftUIHost},false)
     ;({P.profile_os=P.MacOS;P.profile_host=P.NshHost},true)]
 
+let native_header_menu_inputs () =
+  let page = Option.get (Decode.page_of_summary
+    (Wire.Map [Wire.kw "block/uuid", Wire.Uuid "native-more-page";
+               Wire.kw "block/title", Wire.String "Native menu fixture"])) in
+  let original = { Model.initial with repo=Some "native-menu-graph";
+    route_page=Some page } in
+  let inputs = Page_menu.header_menu_inputs original in
+  let edited = { page with
+    page_blocks=[Model.empty_block ~uuid:"edited" ~title:"Typed text" ~is_page:false];
+    page_linked_refs=[Model.empty_block ~uuid:"reference" ~title:"Reference" ~is_page:false];
+    page_parents=[Model.empty_block ~uuid:"parent" ~title:"Parent" ~is_page:false] } in
+  check "native More input projection excludes editable block/reference trees"
+    (inputs=Page_menu.header_menu_inputs { original with route_page=Some edited;
+      data_gen=original.data_gen+1 });
+  check "native More input projection excludes unrelated chrome state"
+    (inputs=Page_menu.header_menu_inputs { original with left_sidebar_open=true;
+      right_sidebar_open=true; theme_dark=true; editing_title=true });
+  List.iter (fun changed ->
+    check "native More refreshes changed page action metadata"
+      (inputs<>Page_menu.header_menu_inputs {original with route_page=Some changed}))
+    [{page with page_uuid=Some "another-page"};
+     {page with page_db_id=Some 456};
+     {page with page_title="Renamed page"};
+     {page with page_is_tag=not page.page_is_tag};
+     {page with page_is_property=not page.page_is_property};
+     {page with page_journal_day=Some 20990101};
+     {page with page_internal=not page.page_internal};
+     {page with page_built_in=not page.page_built_in}];
+  check "native More refreshes when the graph changes"
+    (inputs<>Page_menu.header_menu_inputs {original with repo=Some "another-graph"});
+  check "native More refreshes when its current page disappears"
+    (inputs<>Page_menu.header_menu_inputs {original with route_page=None});
+  List.iter (fun (name, value) ->
+    let previous = Platform.local_storage_get name in
+    Fun.protect ~finally:(fun () -> match previous with
+      | None -> Platform.local_storage_remove name
+      | Some value -> Platform.local_storage_set name value) (fun () ->
+        Platform.local_storage_remove name;
+        let before = Page_menu.header_menu_inputs original in
+        Platform.local_storage_set name value;
+        check "native More samples external menu inputs on model notifications"
+          (before<>Page_menu.header_menu_inputs original)))
+    ["id-token", "native-menu-auth-fixture";
+     "developer-mode", "true";
+     "preferred-language", "\"zh-CN\""]
+
 let run_views ~registry ~profile ~finish =
+  native_header_menu_inputs ();
   standalone_inline_groups ~registry;
   selectable_block_motion ~registry;
   foldable_retained_visibility ~registry;

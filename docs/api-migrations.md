@@ -184,3 +184,20 @@ fork is changed. The new PDFKit crate is target-macOS only. Native document
 opening and parsing follow PDFKit's own load path on the AppKit thread; large
 file latency still requires native qualification. No extra file loader, image
 cache, polling loop or focus manager is introduced.
+
+### Native More filters model updates through menu inputs
+
+`Chrome.dots_btn` now uses a projected `reactive` source containing the resolved
+page's action metadata, graph identity, current authentication/developer/locale
+values, publishing mode and plugin commands. These external values are sampled
+on existing model notifications, as before; this adds no separate auth listener
+or menu store. Updating a block's content, references, caret or sidebar state
+leaves that projection equal, so it does not rebuild menu rows or repeat the
+publishing-permission query. Page/action metadata changes still refresh the
+existing keyed trigger/menu without changing their native identities.
+
+For example, `reactive render (reactive Page_menu.header_menu_inputs ms)` replaces
+whole-model menu reconstruction; it requires the corresponding LUI PPX support
+for a direct projected reactive child source. Web/mobile menu producers remain
+unchanged. Storage-only changes still follow the application's existing model
+notification contract rather than introducing another invalidation mechanism.
