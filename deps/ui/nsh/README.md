@@ -82,7 +82,9 @@ Every successful build writes `logseq-nsh.lui-build.json` through LUI's existing
 library and installed resources/worker; app Rust sources, Cargo files and schemas;
 OCaml native/shared source scopes and generators; dictionaries, icons and fonts;
 and the actual compiled LUI Rust source package plus OCaml LUI sources. The Rust
-contract JSON and shared Web SVG files embedded by NSH are included. Cargo
+contract JSON and shared Web SVG files embedded by NSH are included. Theme inputs
+include authored CSS, native generators, the package lock and the pinned Tailwind
+typography stylesheet. Cargo
 metadata selects the local Rust package before compilation, and the actual
 compiler-artifact manifest must match that selection. The input scan uses
 explicit source/resource scopes rather than repository roots, build directories,

@@ -35,6 +35,8 @@ function fixture() {
   write(path.join(repo, "resources/img/logo.svg"), "new-icon");
   write(path.join(repo, "resources/dicts/en.edn"), "new-dict");
   write(path.join(repo, "resources/js/emoji-data.js"), "emoji");
+  for (const file of ["resources/css/theme/base.css", "package.json", "pnpm-lock.yaml", "resources/package.json", "scripts/generate-ui-theme.mjs", "scripts/generate-ui-radix.mjs", "node_modules/tailwindcss/theme.css"])
+    write(path.join(repo, file), "theme-source");
   for (const name of ["src", "ppx", "platform/bridge"])
     mkdirSync(path.join(lui, name), {recursive:true});
   write(path.join(lui, "platform/nsh/Cargo.toml"), "manifest");
@@ -126,6 +128,8 @@ test("qualified publication preserves shared outputs, retires owned resources an
     assert.ok(!receipt.ownedResources.includes("apple-unrelated-resource.json"));
     assert.ok(Object.keys(receipt.files).some(file => file.endsWith("platform/web/src/icons/check.svg")));
     assert.ok(Object.keys(receipt.files).some(file => file.endsWith("platform/nsh/contract.json")));
+    for (const source of ["resources/css/theme/base.css", "scripts/generate-ui-theme.mjs", "node_modules/tailwindcss/theme.css", "pnpm-lock.yaml"])
+      assert.ok(Object.keys(receipt.files).some(file => file.endsWith(source)), source);
     assert.ok(Object.keys(receipt.files).every(file => !file.includes(".publication.")));
     const {checkReceipt} = await import(pathToFileURL(receiptModule).href);
     assert.equal(checkReceipt(artifact).fresh, true);

@@ -29,6 +29,9 @@ function sourceInputs(repo, ocamlLui, rustManifest, tool) {
   for (const scope of ["bin", "desktop", "lib", "runtime", "stubs", "vendor"]) add(app("deps/db-worker", scope));
   for (const file of ["dune-project", "dune-workspace", "logseq-db-worker.opam"]) add(app("deps/db-worker", file));
   add(app("resources/dicts")); add(app("resources/img")); add(app("resources/js/emoji-data.js"));
+  add(app("resources/css"));
+  for (const file of ["package.json", "pnpm-lock.yaml", "resources/package.json", "scripts/generate-ui-theme.mjs", "scripts/generate-ui-radix.mjs", "node_modules/tailwindcss/theme.css"])
+    add(app(file));
   for (const scope of ["src", "ppx", "platform/bridge"]) add(path.join(ocamlLui, scope));
   for (const file of ["dune-project", "dune-workspace", "lui.opam"]) add(path.join(ocamlLui, file), true);
   const rustPackage = path.dirname(rustManifest);
