@@ -506,9 +506,60 @@ let selectable_block_motion ~registry =
     ;({P.profile_os=P.IOS;P.profile_host=P.SwiftUIHost},false)
     ;({P.profile_os=P.MacOS;P.profile_host=P.NshHost},true)]
 
+let foldable_retained_visibility ~registry =
+  List.iter (fun (profile, native) ->
+    let instance = ref None in
+    let session = S.mount ~registry ~profile ~initial:Model.initial
+      ~reducer:(fun model () -> model)
+      ~view:(fun context _ _ ->
+        let inst = Views_state.make ~sched:context.Lui_ui.ui_scheduler
+          ~kind:Views_state.KAllPages ~feature:"foldable-visibility-fixture" ~owner:Wire.Nil in
+        instance := Some inst;
+        Lui_elements.column
+          [Views_table.foldable inst ~key:"foldable-visibility"
+             ~title:(Lui_elements.text ~value:"Fixture header" [])
+             ~body:(Lui_elements.textarea ~text:"Retained edit" [])
+          ;Page.foldable_content "static-foldable" (Lui_elements.text ~value:"Static body" [])]) () in
+    Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose session.S.app))
+      (fun () ->
+        let inst = Option.get !instance in
+        let content () = List.find (fun node ->
+          class_has node "ls-foldable-content"
+          && List.exists (fun child -> class_has child "ls-foldable-content-inner")
+            (M.children session.S.tree node.M.id)) (nodes session) in
+        let control () = List.find (fun node -> class_has node "ls-foldable-title-control") (nodes session) in
+        let editor () = List.find (fun node -> node.M.kind="textarea") (nodes session) in
+        let parent_id = (content ()).M.id and editor_id = (editor ()).M.id in
+        let count = List.length (nodes session) in
+        let expect collapsed =
+          check "foldable uses the existing controlled collapse state"
+            (Views_state.Sset.mem "foldable-visibility" (Views_state.get inst).collapsed_groups=collapsed);
+          check "NSH foldable content binds native visibility only"
+            (M.string_prop (content ()) "display"=
+              (if native then Some (if collapsed then "none" else "block") else None));
+          check "non-NSH foldable content preserves its grid transition"
+            (M.string_prop (content ()) "transition"=
+              (if native then None else Some "grid-template-rows 0.2s ease-in-out"));
+          check "folding preserves the content, editor and whole retained tree"
+            ((content ()).M.id=parent_id && (editor ()).M.id=editor_id
+             && M.string_prop (editor ()) "text"=Some "Retained edit"
+             && List.length (nodes session)=count)
+        in
+        expect false;
+        S.press session (control ()).M.id;
+        S.flush session;
+        expect true;
+        S.press session (control ()).M.id;
+        S.flush session;
+        expect false))
+    [({P.profile_os=P.WebOS;P.profile_host=P.WebHost},false)
+    ;({P.profile_os=P.IOS;P.profile_host=P.SwiftUIHost},false)
+    ;({P.profile_os=P.MacOS;P.profile_host=P.NshHost},true)]
+
 let run_views ~registry ~profile ~finish =
   standalone_inline_groups ~registry;
   selectable_block_motion ~registry;
+  foldable_retained_visibility ~registry;
   table_resize_transaction ();
   table_range_selection ();
   grouped_table_selection ~registry ~profile;
