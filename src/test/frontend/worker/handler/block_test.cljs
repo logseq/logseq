@@ -863,6 +863,15 @@
         (is (= [[open-grandchild-uuid "a0"]]
                (get-in children [open-child-uuid :items])))))))
 
+(deftest open-children-tree-returns-nil-for-a-missing-parent-test
+  (let [conn (db-test/create-conn)
+        missing-uuid (random-uuid)]
+    (is (nil? (block-handler/open-children-tree @conn missing-uuid))
+        "Render-snapshot fetches for a just-deleted parent must not throw.")
+    (is (thrown-with-msg? js/Error
+                          #"Invalid direct-children parent UUID"
+                          (block-handler/open-children-tree @conn "not-a-uuid")))))
+
 (deftest direct-children-membership-defaults-missing-parent-transaction-id-test
   (when-let [direct-children-membership
              (direct-children-membership-api)]

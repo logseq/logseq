@@ -214,9 +214,11 @@
         (block-slot basis-rev block)))
 
     :children
-    (let [tx-id (require-revision! :block/tx-id (:tx-id wire))
-          items (child-items! key (:items wire))]
-      (ready-slot basis-rev (mapv first items) {:tx-id tx-id :items items}))
+    (if (:missing? wire)
+      {:rev basis-rev :snapshot {:status :missing}}
+      (let [tx-id (require-revision! :block/tx-id (:tx-id wire))
+            items (child-items! key (:items wire))]
+        (ready-slot basis-rev (mapv first items) {:tx-id tx-id :items items})))
 
     :resource
     (let [{:keys [keys all?] :as watch} (:watch wire)]
@@ -525,15 +527,20 @@
                store blocks)
         store (reduce-kv
                (fn [store block-uuid tombstone]
-                 (let [slot-key [:block block-uuid]
-                       tombstone-rev (require-revision! :rev (:rev tombstone))]
+                 (let [block-slot-key [:block block-uuid]
+                       children-slot-key [:children block-uuid]
+                       tombstone-rev (require-revision! :rev (:rev tombstone))
+                       missing-slot {:rev rev :snapshot {:status :missing}}]
                    (when-not (= rev tombstone-rev)
                      (throw (ex-info "Tombstone revision does not match delta"
                                      {:block-uuid block-uuid})))
-                   (if (or (store-slot store slot-key) (mounted? slot-key))
-                     (record-delta-slot store changed slot-key
-                                        {:rev rev :snapshot {:status :missing}})
-                     store)))
+                   (cond-> store
+                     (or (store-slot store block-slot-key)
+                         (mounted? block-slot-key))
+                     (record-delta-slot changed block-slot-key missing-slot)
+                     (or (store-slot store children-slot-key)
+                         (mounted? children-slot-key))
+                     (record-delta-slot changed children-slot-key missing-slot))))
                store deleted)
         store (reduce-kv
                (fn [store parent-uuid {:keys [base-rev upsert]
@@ -561,7 +568,8 @@
                        (record-delta-slot store changed slot-key
                                           (children-slot rev parent-tx-id items)))
 
-                     (mounted? slot-key)
+                     (and (mounted? slot-key)
+                          (not= :missing (get-in current [:snapshot :status])))
                      (do (vswap! reload conj slot-key)
                          (assoc-in store [:slots slot-key]
                                    {:rev rev :stale? true}))
