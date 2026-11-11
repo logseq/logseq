@@ -203,15 +203,20 @@ let topbar (ms : Model.t Signal.signal) : t =
 
 let performance_bar_height = 29
 
-let performance_bar () =
-  column ~key:"native-performance-bar" ~accessibility_identifier:"native-performance-bar"
+let performance_bar () : t = fun context parent ->
+  if Lui_ui.host context <> Lui_protocol.NshHost then
+  (column ~key:"native-performance-bar" ~accessibility_identifier:"native-performance-bar"
     ~height:performance_bar_height ~min_height:performance_bar_height ~gap:0 ~cross:`stretch
     ~background:"var(--ls-primary-background-color)"
     [box ~key:"performance-rule" ~height:1 ~background:"var(--lx-gray-05, var(--ls-border-color))" [];
      Ui_components.native_performance
        ~label:(I18n.t "profiler.native/metrics-dialog-label")
        ~unavailable:(I18n.t "profiler.native/fps-unavailable-label")
-       ~format_fps:(I18n.t1 "profiler.native/fps-label") ()]
+       ~format_fps:(I18n.t1 "profiler.native/fps-label") ()]) context parent
+
+let performance_panel () : t = fun context parent ->
+  if Lui_ui.host context <> Lui_protocol.NshHost then
+    Host_metrics.panel () context parent
 
 (* components/rtc/indicator.cljs — cloud status button + hidden rtc-tx
    element the e2e reads EDN from. Visible once the worker broadcasts
@@ -321,38 +326,90 @@ let left_sidebar (ms : Model.t Signal.signal) =
          (box ~key:"left-sidebar" ~accessibility_identifier:"left-sidebar" ~container_relative_frame:`vertical
             ~inert:(reactive (fun (m : Model.t) -> not m.left_sidebar_open) ms)
             ~min_height:0 ~style_class:"cp__sidebar-left-layout"
-            [split ~key:"sidebar-reveal" ~container_relative_frame:`both ~resize_handle_width:0 ~gap:0
-               ~first_width:(reactive (fun (m : Model.t) width window ->
-                 if window<640. then (if m.left_sidebar_open then window*.0.74 else 0.) else width)
-                 ms (Signal.value st.Sidebar_state.left_width) viewport)
-               ~resize_duration:300 ~resize_easing:`standard panel shade]))))))
+            [(fun context parent ->
+              let native = Lui_ui.host context = Lui_protocol.NshHost in
+              let pane child =
+                if native then Ui_components.with_props [Ui_components.Prop.min_width 0] child
+                else child
+              in
+              (split ~key:"sidebar-reveal" ~container_relative_frame:`both ~gap:0
+                 ?resize_handle_width:(if native then None else Some 0)
+                 ~first_width:(reactive (fun (m : Model.t) width window ->
+                   if window<640. then (if m.left_sidebar_open then window*.0.74 else 0.) else width)
+                   ms (Signal.value st.Sidebar_state.left_width) viewport)
+                 ?resize_duration:(if native then None else Some 300)
+                 ?resize_easing:(if native then None else Some `standard)
+                 (pane panel) (pane shade)) context parent)]))))))
 
-(* The host advances transitions; shared state owns the pane widths. *)
+(* NSH owns native drag sizes and motion. Other hosts keep their existing
+   controlled split geometry and transition options. *)
 let left_split (ms : Model.t Signal.signal) (st : Sidebar_state.t)
     (content : t) : t =
-  split ~key:"left-split" ~grow:1.
-    ~gap:0 ~resize_handle_width:3 ~resize_handle_offset:0.5
+ fun context parent ->
+  let native = Lui_ui.host context = Lui_protocol.NshHost in
+  (split ~key:"left-split" ~grow:1. ~gap:0
+    ?min_width:(if native then Some 0 else None)
+    ?resize_handle_width:(if native then None else Some 3)
+    ?resize_handle_offset:(if native then None else Some 0.5)
     ~first_width:
       (reactive
          (fun (m : Model.t) width viewport ->
            if Sidebar_state.left_docked m.Model.left_sidebar_open viewport then width else 0.)
          ms (Signal.value st.Sidebar_state.left_width) (Signal.value st.Sidebar_state.viewport_w))
-    ~resize_duration:300 ~resize_easing:`standard
-    ~on_resize:(Sidebar_state.on_left_split_resize st)
-    (left_sidebar ms) content
+    ?resize_duration:(if native then None else Some 300)
+    ?resize_easing:(if native then None else Some `standard)
+    ~on_resize:(if native then Sidebar_state.on_native_left_split_resize st
+                else Sidebar_state.on_left_split_resize st)
+    (left_sidebar ms) content) context parent
 
 let right_split (ms : Model.t Signal.signal) (st : Sidebar_state.t)
     (first : t) (second : t) : t =
-  split ~key:"right-split" ~grow:1.
-    ~gap:0 ~resize_handle_width:3 ~resize_handle_offset:2.5
-    ~value:
-      (reactive
-         (fun (m : Model.t) fraction viewport ->
-           if m.Model.right_sidebar_open && viewport>=640. then 1. -. fraction else 1.)
-         ms (Signal.value st.Sidebar_state.right_fraction) (Signal.value st.Sidebar_state.viewport_w))
-    ~resize_duration:300 ~resize_easing:`standard
-    ~on_resize:(Sidebar_state.on_right_split_resize st)
-    first second
+ fun context parent ->
+  if Lui_ui.host context = Lui_protocol.NshHost then begin
+    let width, refresh = Sidebar_state.native_right_geometry
+      ~scheduler:context.Lui_ui.ui_scheduler ~scope:context.Lui_ui.ui_scope
+      ~measure:Ui_services.dom_measure_rect in
+    let scheduled = ref false in
+    let request _ = Signal.schedule_once context.Lui_ui.ui_scheduler scheduled
+      (fun () -> refresh ()) in
+    (* These subscriptions trigger I/O; reactive owns the actual view props. *)
+    List.iter (fun subscription -> ignore (Signal.own context.Lui_ui.ui_scope subscription))
+      [ Signal.subscribe ~emit_initial:false (Signal.value st.Sidebar_state.viewport_w) request
+      ; Signal.subscribe ~emit_initial:false (Pdf.asset_signal context) request
+      ; Signal.subscribe ~emit_initial:false (Pdf.view_signal context) request ];
+    (column ~key:"right-split-space" ~accessibility_identifier:"nsh-right-split-space"
+       ~width:0 ~grow:1. ~min_width:0 ~min_height:0
+       ~on_appear:(fun _ -> refresh ())
+       [if_ ~test:(reactive (function
+           | Ui_effect.Loading -> false
+           | Ui_effect.Ready _ -> true
+           | Ui_effect.Failed error -> raise error) width)
+          (split ~key:"right-split" ~grow:1. ~gap:0 ~min_height:0
+             ~first_width:(reactive
+               (fun measured (m : Model.t) fraction viewport ->
+                 match measured with
+                 | Ui_effect.Ready available ->
+                     if m.Model.right_sidebar_open && viewport>=640.
+                     then available *. (1. -. fraction) else available
+                 | Ui_effect.Loading -> invalid_arg "Native split mounted before measurement"
+                 | Ui_effect.Failed error -> raise error)
+               width ms (Signal.value st.Sidebar_state.right_fraction) (Signal.value st.Sidebar_state.viewport_w))
+             ~on_resize:(fun event ->
+               refresh ~after:(fun available_width ->
+                 Sidebar_state.on_native_right_split_resize ~available_width st event) ())
+             first second)]) context parent
+  end
+  else
+    (split ~key:"right-split" ~grow:1.
+       ~gap:0 ~resize_handle_width:3 ~resize_handle_offset:2.5
+       ~value:
+         (reactive
+            (fun (m : Model.t) fraction viewport ->
+              if m.Model.right_sidebar_open && viewport>=640. then 1. -. fraction else 1.)
+            ms (Signal.value st.Sidebar_state.right_fraction) (Signal.value st.Sidebar_state.viewport_w))
+       ~resize_duration:300 ~resize_easing:`standard
+       ~on_resize:(Sidebar_state.on_right_split_resize st)
+       first second) context parent
 
 (* #main-content-container scroll — the detail column's page area.
    The split's second pane wraps this in the titlebar column below. *)
@@ -461,11 +518,12 @@ let help_menu_popup ~open_handbook () : t =
   Right_sidebar_view.help_menu ~close
     ~open_handbook ~open_bug_report:(fun () -> Ui_services.nav_set_hash "#/bug-report") ()
 
-let help_area (ms : Model.t Signal.signal) : t =
-  Handbook.host ~controls:(fun open_handbook close_handbook -> Logseq_el.fragment
+let help_area (ms : Model.t Signal.signal) : t = fun context parent ->
+  let bar_height = if Lui_ui.host context = Lui_protocol.NshHost then 0 else performance_bar_height in
+  (Handbook.host ~controls:(fun open_handbook close_handbook -> Logseq_el.fragment
     [ Ui_components.with_props
             [Ui_components.Prop.position `absolute;Ui_components.Prop.inset_right 32.;
-             Ui_components.Prop.inset_bottom (float_of_int (16+performance_bar_height))]
+             Ui_components.Prop.inset_bottom (float_of_int (16+bar_height))]
             (Right_sidebar_view.help_trigger ~on_press:(fun () ->
                close_handbook ();Runtime.send Action.Help_toggle;Runtime.flush ()) ())
     ; reactive ~equal:(fun (a : Model.t) (b : Model.t) -> a.help_open = b.help_open) (fun (m : Model.t) ->
@@ -475,7 +533,7 @@ let help_area (ms : Model.t Signal.signal) : t =
                click on the positioner) *)
             box ~key:"help-open" [ help_menu_popup ~open_handbook () ]
           else spacer ~key:"help-closed" []) ms
-    ]) ()
+    ]) ()) context parent
 
 (* cljs page.cljs not-found: replaces the whole app chrome. Rendered
    as a fixed overlay (remounting the whole app tree inside a dyn
@@ -504,14 +562,14 @@ let shell_contents (ms : Model.t Signal.signal) : t =
   let st = Sidebar_state.ensure ms in
   stack ~key:"shell-content"
     [ (* Devin-style chrome: fixed window titlebar above the dock
-         splits. Sidebar/content panes animate width underneath; the
-         leading controls never remount or translate with the dock. *)
+         splits. The leading controls remain mounted while the native
+         panel groups resize underneath. *)
       column ~key:"app" ~accessibility_identifier:"app-container" ~grow:1. ~min_height:0 ~gap:0
         [ topbar ms
         ; row ~key:"panes" ~grow:1. ~min_height:0 ~cross:`stretch
             [right_split ms st (left_split ms st (detail_column ms)) (right_sidebar ms);
              Pdf.container_el ~key:"asc" ~id:"app-single-container";
-             Host_metrics.panel ()]
+             performance_panel ()]
         ; performance_bar () ]
     ; overlays ms
     ; help_area ms

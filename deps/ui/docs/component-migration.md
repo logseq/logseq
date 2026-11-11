@@ -249,3 +249,53 @@ Per migration package (one directory):
 2. zero `dom`/`Logseq_dom` references (`rg "dom ~"` returns nothing)
 3. web visual spot-check (style_class preserved; unchanged CSS means
    parity holds automatically)
+
+## NSH native sidebar policy
+
+For `NshHost`, the native chrome now uses the LUI Split backed directly by NSH's
+ResizablePanelGroup and ResizablePanels. It does not author the former 3-point
+capture bands, offsets or 300ms split transitions. NSH owns capture, native local
+resize state, default handle geometry and motion. The Web and other native-host
+branches keep their existing split options and callbacks.
+
+The left dock continues to save absolute widths under
+`ls-left-sidebar-width-px`. The right dock continues to save its fraction under
+`ls-right-sidebar-width`; its NSH Split requests an absolute first-panel size
+and converts the native absolute completion back using the **measured content
+width**, rather than the window width. For example, in an 800-point content host,
+a first panel ending at 480 points saves a right fraction of 0.4, even when the
+window is 1000 points wide. A positive completed native expansion opens the
+corresponding application sidebar. A native close preserves the last nonzero
+stored size so the toggle can restore it.
+
+The right Split's real flexible host is measured through the existing
+`dom_measure_rect` / `measure-node` / `node-rect` service. Its first Split mounts
+only after a genuine measurement arrives; later measurements update props on the
+retained panes. One pending request is retired on replacement or scope disposal,
+and late replies cannot change a newer instance. Window and PDF geometry changes
+request coalesced measurements without polling. A resize completion requests
+fresh geometry before updating persistence. The PDF viewer remains in the layout;
+its active sibling can consume space, which is why viewport arithmetic is
+insufficient. The native below 640-point reveal retains its existing breakpoint,
+fixed sidebar and shade; explicit zero pane minima let the native panel close.
+Mobile and Web continue to use their existing paths.
+
+NSH omits the former Go telemetry bar, panel and toggle because their provider
+consumes `go_heap_bytes`, `go_runtime_bytes` and other MyGo-only samples. NSH
+requests to invoke that provider reject explicitly. Other hosts retain the dev
+tool. No product content or PDF view is hidden to simplify sidebar width math.
+
+Native startup host code 6 now selects `NshHost`, and native extension schemas
+include that host for macOS, Linux and Windows. This declares profile identity;
+it does **not** implement the NSH extension widgets or services. The current
+Logseq bridge exports a different seven-argument startup ABI from LUI's generic
+three-argument desktop bridge and lacks other required exports. The NSH loader,
+platform-service port (including measurement), and native extension rendering
+remain separate blocking work. This source adapter does not establish that the
+Logseq application can launch on NSH.
+
+Source regressions are added to the existing sidebar drive for pixel/fraction
+persistence, open/close restoration, actual-content units, replacement cancellation
+and disposed-owner replies. No Dune file is changed. The implementation agent ran
+source checks only; compilation, execution and real desktop qualification remain
+with the main session after the bridge and service boundaries are ported.

@@ -45,6 +45,13 @@ let enqueue_batch batch =
 
 let current_app : (Model.t, Action.t) Lui_app.reducer_app option ref = ref None
 
+let require_go_metrics () =
+  match !current_app with
+  | Some app when (Lui_app.runtime app).Lui_runtime.runtime_backend.backend_profile.profile_host
+                  = Lui_protocol.NshHost ->
+      invalid_arg "Go presentation telemetry is unavailable on NSH"
+  | _ -> ()
+
 (* ---------- document queries over the LUI extension tree ----------
 
    Element snapshots carry the same shape the Swift LogseqDOMSnapshot
@@ -417,6 +424,7 @@ let initialize_unlocked platform_code host_code (payload : string) =
     | 1 -> Lui_protocol.WebHost
     | 2 -> Lui_protocol.SwiftUIHost
     | 4 -> Lui_protocol.KotlinHost
+    | 6 -> Lui_protocol.NshHost
     | _ -> Lui_protocol.GenericHost
   in
   let backend =
@@ -763,9 +771,9 @@ let platform_event payload =
             | None -> ())
         | _ -> ())
       else if name = "native-performance-toggle" then
-        Host.enqueue (fun () -> Host_metrics.toggle (); Runtime.flush ())
+        Host.enqueue (fun () -> require_go_metrics (); Host_metrics.toggle (); Runtime.flush ())
       else if name = "mygo-performance" then
-        Host.enqueue (fun () -> Host_metrics.note_host json; Runtime.flush ())
+        Host.enqueue (fun () -> require_go_metrics (); Host_metrics.note_host json; Runtime.flush ())
       else if name = "node-rect" then (
         if Dom_ext.note_node_rect json then
           Host.enqueue Editor_actions.focus_pending)

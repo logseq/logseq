@@ -74,6 +74,9 @@ let native_profiles =
   ; { Lui_protocol.profile_os = WindowsOS
     ; Lui_protocol.profile_host = GenericHost
     }
+  ; profile MacOS NshHost
+  ; profile LinuxOS NshHost
+  ; profile WindowsOS NshHost
   ]
 
 (* --- schema — same event vocabulary, with native key metadata --------- *)

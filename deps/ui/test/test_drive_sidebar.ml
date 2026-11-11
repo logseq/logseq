@@ -118,6 +118,85 @@ let pointer_reorder ~finish () =
           Runtime.send Action.Toggle_right_sidebar;
         finish ())))
 
+let native_sidebar_resize_units () =
+  let st = Option.get (Sidebar_state.current ()) in
+  let viewport = Runtime.signal_get st.viewport_w in
+  let left = Runtime.signal_get st.left_width in
+  let right = Runtime.signal_get st.right_fraction in
+  let model = Runtime.model () in
+  let keys = [Sidebar_state.left_width_key; "ls-right-sidebar-width"; "ls-left-sidebar-open?"] in
+  let storage = List.map (fun key -> key, Ui_services.storage_get key) keys in
+  let set_open desired current action = if desired <> current then Runtime.send action in
+  Fun.protect ~finally:(fun () ->
+    Runtime.signal_set st.viewport_w viewport;
+    Runtime.signal_set st.left_width left;
+    Runtime.signal_set st.right_fraction right;
+    set_open model.Model.left_sidebar_open (Runtime.model ()).Model.left_sidebar_open Action.Toggle_left_sidebar;
+    set_open model.Model.right_sidebar_open (Runtime.model ()).Model.right_sidebar_open Action.Toggle_right_sidebar;
+    List.iter (fun (key, value) -> match value with
+      | Some value -> Ui_services.storage_set key value
+      | None -> Ui_services.storage_remove key) storage;
+    Runtime.flush ()) (fun () ->
+    Runtime.signal_set st.viewport_w 1000.;
+    Sidebar_state.on_native_left_split_resize st (Lui_protocol.ValueChanged (0, 330.));
+    Runtime.flush ();
+    check "native left resize opens and persists absolute points"
+      ((Runtime.model ()).Model.left_sidebar_open
+       && Runtime.signal_get st.left_width = 330.
+       && Ui_services.storage_get Sidebar_state.left_width_key = Some "330");
+    Sidebar_state.on_native_left_split_resize st (Lui_protocol.ValueChanged (0, 0.));
+    Runtime.flush ();
+    check "native left close keeps its saved nonzero width"
+      (not (Runtime.model ()).Model.left_sidebar_open && Runtime.signal_get st.left_width = 330.);
+    Sidebar_state.on_native_right_split_resize ~available_width:800. st
+      (Lui_protocol.ValueChanged (0, 480.));
+    Runtime.flush ();
+    check "native right resize uses measured content instead of the window"
+      ((Runtime.model ()).Model.right_sidebar_open
+       && abs_float (Runtime.signal_get st.right_fraction -. 0.4) < 0.000001
+       && Ui_services.storage_get "ls-right-sidebar-width" = Some "0.4");
+    Sidebar_state.on_native_right_split_resize ~available_width:800. st
+      (Lui_protocol.ValueChanged (0, 800.));
+    Runtime.flush ();
+    check "native right close keeps the persisted fraction"
+      (not (Runtime.model ()).Model.right_sidebar_open
+       && abs_float (Runtime.signal_get st.right_fraction -. 0.4) < 0.000001);
+    let rejected = try
+      Sidebar_state.on_native_right_split_resize ~available_width:0. st
+        (Lui_protocol.ValueChanged (0, 480.)); false
+      with Invalid_argument _ -> true in
+    check "native resize rejects absent geometry instead of assuming window width" rejected)
+
+let native_sidebar_geometry ~finish () =
+  let scheduler = Signal.scheduler () in
+  let scope = Signal.scope "native-sidebar-geometry-test" in
+  let cancelled = ref 0 and replies = ref [] in
+  let measure identifier =
+    check "native measurement targets its retained content host" (identifier = "nsh-right-split-space");
+    Ui_task.create ~cancel:(fun () -> incr cancelled) (fun ~resolve ~reject:_ ->
+      replies := !replies @ [resolve]) in
+  let width, refresh = Sidebar_state.native_right_geometry ~scheduler ~scope ~measure in
+  let after_tasks run =
+    let barrier = Ui_task.bind (Ui_task.resolve ()) (fun () -> Ui_task.resolve ()) in
+    ignore (Ui_task.bind barrier (fun () -> run (); Ui_task.resolve ())) in
+  refresh ();
+  refresh ();
+  check "new native geometry cancels the superseded request" (!cancelled = 1);
+  (List.nth !replies 0) (0., 0., 100., 400.);
+  (List.nth !replies 1) (0., 0., 800., 400.);
+  after_tasks (fun () ->
+    Signal.stabilize scheduler;
+    check "late geometry cannot overwrite the latest content width"
+      (match Signal.get width with Ui_effect.Ready width -> width = 800. | _ -> false);
+    let delivered = ref false in
+    refresh ~after:(fun _ -> delivered := true) ();
+    Signal.dispose_scope scope;
+    (List.nth !replies 2) (0., 0., 700., 400.);
+    after_tasks (fun () ->
+      check "disposed sidebar cancels measurement and ignores a queued reply"
+        (!cancelled = 2 && not !delivered);
+      finish ()))
+
 let run ~finish =
   (* The recording host tests preferences and remounts without a bundler.
      Supply a loaded dictionary instead of relying on a swallowed loader error. *)
@@ -142,4 +221,5 @@ let run ~finish =
   check "reopening a dock does not resurrect its old menu"
     (Runtime.signal_get st.open_menu = "");
   if not was_open then toggle ();
-  pointer_reorder ~finish ()
+  native_sidebar_resize_units ();
+  native_sidebar_geometry ~finish:(fun () -> pointer_reorder ~finish ()) ()

@@ -35,6 +35,9 @@ let native_profiles =
   ; { Lui_protocol.profile_os = WindowsOS
     ; Lui_protocol.profile_host = GenericHost
     }
+  ; profile MacOS NshHost
+  ; profile LinuxOS NshHost
+  ; profile WindowsOS NshHost
   ]
 
 (* tags the UI emits; each becomes a "logseq-<tag>" extension component *)

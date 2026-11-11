@@ -173,6 +173,69 @@ let on_right_split_resize st ev =
       store_fraction "ls-right-sidebar-width" f
   | _ -> ()
 
+(* NSH drag completion uses absolute points. Closing a native pane keeps
+   its last nonzero saved size so the toggle can restore it. *)
+let on_native_left_split_resize st = function
+  | Lui_protocol.ValueChanged (_, width) as event ->
+      let opened = width > 0. in
+      if opened then on_left_split_resize st event;
+      if (Runtime.model ()).Model.left_sidebar_open <> opened then
+        Runtime.send Action.Toggle_left_sidebar
+  | _ -> ()
+
+let on_native_right_split_resize ~available_width st = function
+  | Lui_protocol.ValueChanged (node, first_width) ->
+      if available_width <= 0. || not (Float.is_finite available_width) then
+        invalid_arg "Native sidebar resize requires a positive content width";
+      let opened = first_width < available_width in
+      if opened then on_right_split_resize st
+        (Lui_protocol.ValueChanged (node, first_width /. available_width));
+      if (Runtime.model ()).Model.right_sidebar_open <> opened then
+        Runtime.send Action.Toggle_right_sidebar
+  | _ -> ()
+
+(* This owns one outstanding host measurement, not a timer or layout
+   model. A new request or disposed owner retires an older completion. *)
+let native_right_geometry ~scheduler ~scope ~measure =
+  let width = Signal.state scheduler Ui_effect.Loading in
+  let source = Signal.own_signal scope (Signal.value width) in
+  let requests = Ui_effect.request () in
+  let pending = ref None in
+  let live = ref true in
+  Signal.on_dispose scope (fun () ->
+    live := false;
+    ignore (Ui_effect.issue requests);
+    Option.iter Ui_task.cancel !pending;
+    pending := None);
+  let refresh ?after () =
+    if !live then begin
+      let revision = Ui_effect.issue requests in
+      Option.iter Ui_task.cancel !pending;
+      let task = measure "nsh-right-split-space" in
+      pending := Some task;
+      let current () = !live && Ui_effect.is_current requests revision in
+      let completed = Ui_task.bind task (fun (_, _, measured, _) ->
+        if current () then begin
+          pending := None;
+          if measured < 0. || not (Float.is_finite measured) then
+            invalid_arg "Invalid native sidebar content measurement";
+          Signal.set width (Ui_effect.Ready measured);
+          (* A zero-sized/minimized host cannot originate a current resize. *)
+          if measured > 0. then Option.iter (fun notify -> notify measured) after;
+          Ui_services.request_flush ()
+        end;
+        Ui_task.resolve ()) in
+      ignore (Ui_task.catch completed (fun error ->
+        if current () && error <> Ui_task.Cancelled then begin
+          pending := None;
+          Signal.set width (Ui_effect.Failed error);
+          Ui_services.request_flush ()
+        end;
+        Ui_task.resolve ()))
+    end
+  in
+  source, refresh
+
 (* below 640px the left pane leaves grid flow (position:fixed overlay),
    so the docked split fraction must collapse or the empty track would
    still hold space *)
