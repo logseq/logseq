@@ -13,8 +13,18 @@ use nsh_core::prelude::*;
 
 /// Supply through `EngineConfig::context` for headless startup qualification.
 /// The app then owns a fresh in-memory credential store, never the OS keychain.
-/// The native runner provides no environment switch for this test dependency.
+/// The native runner can select the same store through an explicit App prop,
+/// never an environment switch for credentials.
 pub struct StartupPreflight;
+
+/// Initialization options shared by the native runner and default Headless root.
+#[derive(Clone, PartialEq, Props)]
+pub struct AppProps {
+    /// Use an owner-local empty credential store for an explicit qualification
+    /// launch. Read once at mount; ordinary app launches always default to false.
+    #[prop(default)]
+    pub startup_preflight: Prop<bool>,
+}
 
 #[native_module("logseq/native")]
 fn native(registry: &mut Registry) {
@@ -23,7 +33,7 @@ fn native(registry: &mut Registry) {
 
 /// Shared application root for the native runner and public NSH tests.
 #[component]
-pub fn App() -> impl IntoElement {
+pub fn App(props: AppProps) -> impl IntoElement {
     let icons = IconRegistry::new();
     let themes = ThemeRegistry::new();
     provide_context(icons);
@@ -36,7 +46,9 @@ pub fn App() -> impl IntoElement {
             Err(error) => eprintln!("Logseq native theme: {error}"),
         },
     );
-    let services = if engine_context::<StartupPreflight>().is_some() {
+    let services = if props.startup_preflight.get_untracked()
+        || engine_context::<StartupPreflight>().is_some()
+    {
         services::Services::isolated(icons, themes)
     } else {
         services::Services::new(icons, themes)
@@ -96,4 +108,16 @@ fn library_path() -> String {
         .join(filename)
         .to_string_lossy()
         .into_owned()
+}
+
+#[cfg(test)]
+mod qualification_tests {
+    use super::*;
+
+    #[test]
+    fn default_app_props_keep_the_existing_headless_root_constructor() {
+        // The public constructor requires AppProps: Default. No engine, OCaml
+        // worker or native credential provider starts during this compile probe.
+        let _root = nsh_core::element::Root::of::<App>();
+    }
 }

@@ -115,6 +115,48 @@ node --test deps/ui/nsh/build_publication_test.mjs
 
 ## Background agent use
 
+The native runner accepts `--startup-preflight <absolute-private-root>` for an
+explicit qualification launch. Public `Root::new` passes `AppProps.startup_preflight`
+to the actual App; it defaults to false, and `Root::of::<App>()` still uses the
+ordinary native credential store unless Headless supplies its existing explicit
+`StartupPreflight` engine marker. The flag and the marker select the same
+owner-local empty credential implementation. Credentials are never selected by
+an environment fallback, and this initialization-only prop does not change the
+running app's store reactively.
+
+The flag requires HOME, LOGSEQ_ROOT_DIR, LOGSEQ_GRAPHS_DIR and LOGSEQ_UI_STATE_DIR
+to name existing directories below its private root, plus
+`LOGSEQ_NO_LOGIN_DAEMON=1`. Public native AppOptions put NSH storage and disk cache
+under that root too. Ordinary launch storage/cache defaults remain native; the
+native application metadata consistently identifies `com.logseq.logseq` on all
+desktop platforms. Graph and persisted UI-state paths retain their existing
+application contracts.
+
+Build first under the normal toolchain home. For a background macOS qualification
+launch, create a private state root and invoke the resulting executable directly:
+
+```sh
+native_host=$(bash deps/ui/nsh/build.sh)
+native_output=$(dirname "$native_host")
+qualification_root=$(mktemp -d "${TMPDIR:-/tmp}/logseq-nsh-qualification.XXXXXX")
+mkdir -p "$qualification_root/home" "$qualification_root/root" \
+  "$qualification_root/graphs" "$qualification_root/state"
+env HOME="$qualification_root/home" \
+  LOGSEQ_ROOT_DIR="$qualification_root/root" \
+  LOGSEQ_GRAPHS_DIR="$qualification_root/graphs" \
+  LOGSEQ_UI_STATE_DIR="$qualification_root/state" \
+  LOGSEQ_NO_LOGIN_DAEMON=1 LUI_AGENT_BACKGROUND=1 \
+  LUI_OCAML_LIBRARY="$native_output/liblogseq_ui.dylib" \
+  LOGSEQ_NATIVE_ASSET_DIR="$native_output/../Resources" \
+  LOGSEQ_DB_WORKER_BIN="$native_output/../Resources/logseq-db-worker" \
+  "$native_host" --startup-preflight "$qualification_root"
+```
+
+Stop that process and its private worker before removing the qualification root.
+The existing background option keeps the app nonactive; this invocation does not
+request screen unlocking or display wake. Set the existing loopback agent address
+explicitly when agent interaction is needed.
+
 The macOS host supports `LUI_AGENT_BACKGROUND=1` without activating its window.
 Use the LUI agent CLI against its loopback listener for application interaction
 and in-process content screenshots. Screenshots capture app content; system menus
