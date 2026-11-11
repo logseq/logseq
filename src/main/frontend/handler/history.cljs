@@ -1,5 +1,6 @@
 (ns ^:no-doc frontend.handler.history
-  (:require [frontend.handler.editor :as editor]
+  (:require [clojure.string :as string]
+            [frontend.handler.editor :as editor]
             [frontend.handler.route :as route-handler]
             [frontend.persist-db.browser :as db-browser]
             [frontend.state :as state]
@@ -63,6 +64,34 @@
         (state/set-state! :history/paused? false)
         restore-result))))
 
+(defn- apply-held-editing-title!
+  "Applies the editing block's title that the pipeline held back while the
+  undo/redo was in flight, when the cursor restore left the editor on that block
+  with another text (the restore went elsewhere or did not run)."
+  []
+  (let [[block-uuid title] (state/get-state :history/held-editing-title)]
+    (state/set-state! :history/held-editing-title nil)
+    (when (and block-uuid
+               (= block-uuid (:block/uuid (state/get-edit-block)))
+               (not= (string/trim (or (state/get-edit-content) ""))
+                     (string/trim title)))
+      (state/set-edit-content! title))))
+
+(defn- <history-request-and-restore!
+  "Runs the worker's undo or redo and restores the cursor. While it runs the
+  pipeline holds back the editing block's new title, so the text and the cursor
+  land together in the restore instead of the text first and the cursor later."
+  [*last-request request-f]
+  (state/set-state! :history/held-editing-title nil)
+  (state/set-state! :history/request-pending? true)
+  (-> (p/do!
+       (reset! *last-request (request-f))
+       (p/let [result @*last-request]
+         (restore-cursor-and-state! result)))
+      (p/finally (fn []
+                   (state/set-state! :history/request-pending? false)
+                   (apply-held-editing-title!)))))
+
 (defn- <editor-key-landed
   "Settles when the Enter or Backspace/Delete join still running, if any, has
   landed and moved the editor. Before that the editor still names the block
@@ -87,9 +116,9 @@
           (state/set-state! [:editor/last-replace-ref-content-tx repo] nil)
           (editor/save-current-block!)
           (state/clear-editor-action!)
-          (reset! *last-request (state/<invoke-db-worker :thread-api/undo-redo-undo repo))
-          (p/let [result @*last-request]
-            (restore-cursor-and-state! result))))))))
+          (<history-request-and-restore!
+           *last-request
+           #(state/<invoke-db-worker :thread-api/undo-redo-undo repo))))))))
 (defonce undo! (debounce undo-aux! 20))
 
 (let [*last-request (atom nil)]
@@ -105,7 +134,7 @@
           (<editor-key-landed)
           (editor/save-current-block!)
           (state/clear-editor-action!)
-          (reset! *last-request (state/<invoke-db-worker :thread-api/undo-redo-redo repo))
-          (p/let [result @*last-request]
-            (restore-cursor-and-state! result))))))))
+          (<history-request-and-restore!
+           *last-request
+           #(state/<invoke-db-worker :thread-api/undo-redo-redo repo))))))))
 (defonce redo! (debounce redo-aux! 20))

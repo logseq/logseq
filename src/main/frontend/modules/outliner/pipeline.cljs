@@ -13,7 +13,14 @@
       (let [editing-title (state/get-edit-content)]
         (when (not= (string/trim (or editing-title ""))
                     (string/trim title))
-          (state/set-edit-content! title))))))
+          (if (state/get-state :history/request-pending?)
+            ;; Our own undo/redo is in flight: its cursor restore sets the text and
+            ;; the cursor together. Setting the text here first puts the cursor at
+            ;; the end, and the restore that lands later moves it again, over
+            ;; whatever the user selected or typed in between. The history handler
+            ;; applies this title afterwards if the restore left another text.
+            (state/set-state! :history/held-editing-title [editing-block-uuid title])
+            (state/set-edit-content! title)))))))
 
 (defn- current-page-deleted?
   [current-page deleted]
