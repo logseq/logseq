@@ -354,7 +354,7 @@
   "animate-in fade-in-0 zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2")
 
 (def ^:private tooltip-transition-class
-  popup-transition-class)
+  "animate-in fade-in-0")
 
 (def ^:private overlay-transition-class
   "animate-in fade-in-0")
@@ -984,13 +984,11 @@
                                              (prop props "portalProps"))
            positioner-props (merge-object-props! (copy-named-props props positioner-prop-names)
                                                  (prop props "positionerProps"))
-           popup-props (with-class-props props (cn "ui__tooltip-content z-50 rounded-md border bg-popover px-3 py-1.5 text-xs text-popover-foreground shadow-md" tooltip-transition-class) nil)
+           popup-props (with-class-props props (cn "ui__tooltip-content flex max-h-[var(--available-height)] flex-col z-50 rounded-md border bg-popover px-3 py-1.5 text-xs text-popover-foreground shadow-md" tooltip-transition-class) nil)
            children (prop props "children")]
        (set-prop! positioner-props "style"
                   (merge-object-props! #js {:zIndex 99999} (prop positioner-props "style")))
        (apply-default-collision-avoidance! positioner-props)
-       (set-prop! popup-props "style"
-                  (merge-object-props! #js {} popup-scroll-style (prop popup-props "style")))
        (set-prop! popup-props "data-state" "open")
        (adapt-focus-props! popup-props)
        (clean-radix-popup-props! popup-props)
@@ -1006,9 +1004,9 @@
          TooltipPositionerPart positioner-props
          (react/createElement
           TooltipPopupPart popup-props
-          children
+          (react/createElement "div" #js {:className "min-h-0 overflow-y-auto"} children)
           (react/createElement TooltipArrowPart
-                               #js {:className "ui__tooltip-arrow h-2 w-2 rotate-45 border bg-popover data-[side=top]:-bottom-1 data-[side=bottom]:-top-1 data-[side=left]:-right-1 data-[side=right]:-left-1"}))))))))
+                               #js {:className "ui__tooltip-arrow h-2 w-2 rotate-45 border-0 bg-popover data-[side=top]:border-r data-[side=top]:border-b data-[side=bottom]:border-t data-[side=bottom]:border-l data-[side=left]:border-t data-[side=left]:border-r data-[side=right]:border-b data-[side=right]:border-l data-[side=top]:-bottom-1 data-[side=bottom]:-top-1 data-[side=left]:-right-1 data-[side=right]:-left-1"}))))))))
 (def TooltipProvider TooltipProviderPart)
 (def TooltipArrow (forward-part TooltipArrowPart nil))
 
