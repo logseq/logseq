@@ -409,8 +409,7 @@ let rec keymap_binding ~key (b : Keymap_data.binding) =
      shortcut cells flow as direct children of the action wrap *)
     box ~key ~style_class:"ls-dc" ~display:`contents
       [
-        box ~key:(key ^ "w") ~style_class:"shui-shortcut-wrap"
-          ~display:`inline_flex
+        Ui_parts.inline_flex_group ~key:(key ^ "w") ~style_class:"shui-shortcut-wrap"
           [
             row ~key:(key ^ "d") ~cross:`center
               ~data_attrs:[ ("data-shortcut-binding", b.data) ]

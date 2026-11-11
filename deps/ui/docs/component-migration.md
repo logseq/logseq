@@ -299,3 +299,24 @@ persistence, open/close restoration, actual-content units, replacement cancellat
 and disposed-owner replies. No Dune file is changed. The implementation agent ran
 source checks only; compilation, execution and real desktop qualification remain
 with the main session after the bridge and service boundaries are ported.
+
+### NSH standalone inline-flex groups
+
+NSH renders standalone horizontal groups with its native Row. The sidebar
+shortcut hint, table tag chip, settings shortcut group and flashcard selector do
+not participate in an inline text flow, so their NSH producers now use the Row
+layout without authoring CSS `display=inline-flex`. Web and maintained non-NSH
+hosts retain the existing inline-flex element and display property.
+
+Use `Ui_parts.inline_flex_row (row ~gap:4 children)` for an existing standalone
+Row that should keep inline-flex display on other hosts. Use
+`Ui_parts.inline_flex_group ~key children` when replacing a standalone
+`box ~key ~display:\`inline_flex children`: it mounts a Row on NSH and preserves
+the previous Box elsewhere. Both paths mount each child once and preserve its
+keys and ordinary property bindings.
+
+The command palette's responsive action hints retain the 768-point visibility
+threshold. Above it, NSH uses the existing Row's native layout; below it, the
+same retained Row has `display=none`. Web keeps inline-flex/none. These changes
+do not add general inline text-flow support to NSH; genuine mixed text runs
+must continue through a text-capable renderer.

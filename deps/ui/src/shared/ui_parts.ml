@@ -69,6 +69,23 @@ let string_prop prop ?value ?value_signal (elem : t) : t =
   Option.iter (Lui_ui.string_property_signal context node prop) value_signal;
   node
 
+(* These groups are standalone layout participants, not runs in a text flow.
+   NSH uses its native Row; other hosts retain their existing inline flex box. *)
+let inline_flex_group ?key ?style_class children : t =
+ fun context parent ->
+  if Lui_ui.host context = Lui_protocol.NshHost then
+    row ?key ?style_class children context parent
+  else box ?key ?style_class ~display:`inline_flex children context parent
+
+let inline_flex_row (elem : t) : t =
+ fun context parent ->
+  let node = elem context parent in
+  if standard_kind context node <> Lui_protocol.Row then
+    invalid_arg "Ui_parts.inline_flex_row requires a standalone Row";
+  if Lui_ui.host context <> Lui_protocol.NshHost then
+    Lui_ui.string_property context node Lui_protocol.DisplayValue "inline-flex";
+  node
+
 (* Float props on kinds without constructor arguments use the same
    static/signal pair as element constructors, including reactive sugar. *)
 let float_prop prop ?value ?value_signal (elem : t) : t =

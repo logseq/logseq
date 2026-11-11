@@ -649,7 +649,10 @@ let cmdk_hints_group ~key children : t =
   let viewport=Ui_services.viewport_width_signal ~scheduler:ctx.Lui_ui.ui_scheduler
     ~scope:ctx.Lui_ui.ui_scope in
   Ui_parts.string_prop P.DisplayValue
-    ~value:(reactive (fun width -> if width>=768. then "inline-flex" else "none") viewport)
+    ~value:(reactive (fun width ->
+      if width < 768. then "none"
+      else if Lui_ui.host ctx = P.NshHost then "block"
+      else "inline-flex") viewport)
     (with_props [ Prop.position `relative; Prop.inset_right (-6.) ]
       (row ~key ~cross:`stretch ~gap:8 children)) ctx parent
 

@@ -467,9 +467,9 @@ let prop_cell ~blk (c : V.column) : t =
               @ [ (let tuuid =
                    Option.value (Wr.ref_uuid x) ~default:""
                  in
-                 row ~cross:`center ~gap:4 ~padding_vertical:2
+                 Ui_parts.inline_flex_row
+                  (row ~cross:`center ~gap:4 ~padding_vertical:2
                    ~padding_horizontal:6 ~corner_radius:6
-                   ~display:`inline_flex
                    ~style_class:"select-item block-tag"
                    ~data_attrs:
                      ([ ("data-tag-title", t_) ]
@@ -484,7 +484,7 @@ let prop_cell ~blk (c : V.column) : t =
                           @ if tuuid <> ""
                             then [ ("data-uuid", tuuid) ]
                             else [])
-                       []) ]) ]
+                       []) ])) ]
             else
               (if i > 0 then [ text ~value:"," [] ] else [])
               @ [ box

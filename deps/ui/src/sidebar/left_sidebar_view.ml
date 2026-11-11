@@ -340,8 +340,9 @@ let menu_host st =
 let shortcut_hint hov binding =
   let keys = String.split_on_char ' ' binding in
   row ~key:("sc-" ^ binding) ~cross:`center
-    [ row ~key:"wrap" ~style_class:"keyboard-shortcut" ~cross:`center
-        ~display:`inline_flex ~gap:2 ~margin_left:4 ~margin_right:8
+    [ Ui_parts.inline_flex_row
+       (row ~key:"wrap" ~style_class:"keyboard-shortcut" ~cross:`center
+        ~gap:2 ~margin_left:4 ~margin_right:8
         ~opacity_signal:
           (Signal.map (fun h -> if h then 1. else 0.) (Signal.value hov))
         [ Ui_components.shortcut_separate ~key:"sep" ~glow:false
@@ -350,7 +351,7 @@ let shortcut_hint hov binding =
                  Ui_components.keycap ~key:("k" ^ string_of_int i)
                    ~boxed:true ~glow:true ~min_slot:20
                    ~value:((String.uppercase_ascii k)))
-               keys) ] ]
+               keys) ]) ]
 
 (* cljs sidebar-item: wrapper div gets the nav class (+ `active`), the
    inner `a.item` also gets `active` when the route matches *)

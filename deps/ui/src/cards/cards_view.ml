@@ -47,8 +47,7 @@ let selector_row st =
     ~height:32 ~gap:8
     [ Ui_components.with_props
         [ Ui_components.Prop.position `relative ]
-        (box ~key:"combo" ~style_class:"ls-cards-select"
-           ~display:`inline_flex
+        (Ui_parts.inline_flex_group ~key:"combo" ~style_class:"ls-cards-select"
         [ (* cljs shui/select-trigger: the select kind already renders
              role=combobox + its own ::after chevron on web and a native
              picker on the native host — no icon child needed *)
