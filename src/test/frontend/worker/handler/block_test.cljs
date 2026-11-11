@@ -870,7 +870,10 @@
         "Render-snapshot fetches for a just-deleted parent must not throw.")
     (is (thrown-with-msg? js/Error
                           #"Invalid direct-children parent UUID"
-                          (block-handler/open-children-tree @conn "not-a-uuid")))))
+                          (block-handler/open-children-tree @conn "not-a-uuid")))
+    (is (thrown-with-msg? js/Error
+                          #"Missing block-tree root"
+                          (block-handler/open-block-tree @conn missing-uuid)))))
 
 (deftest direct-children-membership-defaults-missing-parent-transaction-id-test
   (when-let [direct-children-membership

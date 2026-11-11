@@ -479,6 +479,31 @@
   [rev tx-id items]
   (ready-slot rev (mapv first items) {:tx-id tx-id :items items}))
 
+(defn- missing-snapshot?
+  [slot]
+  (= :missing (get-in slot [:snapshot :status])))
+
+(defn- refresh-missing-children
+  "A restored parent must not keep a tombstoned [:children] slot. Reload if
+   the subscription is still mounted; otherwise drop the warm entry so the
+   next mount loads membership instead of replaying the tombstone."
+  [store reload rev parent-uuid]
+  (let [slot-key [:children parent-uuid]
+        current (store-slot store slot-key)]
+    (cond
+      (not (missing-snapshot? current))
+      store
+
+      (mounted? slot-key)
+      (do (vswap! reload conj slot-key)
+          (assoc-in store [:slots slot-key]
+                    {:rev rev :stale? true}))
+
+      current
+      (update store :warm cache/evict slot-key)
+
+      :else store)))
+
 (defn- patch-items
   [parent-uuid items removed upsert]
   (let [removed (set (child-items! parent-uuid removed))
@@ -562,14 +587,16 @@
                        (record-delta-slot store changed slot-key
                                           (children-slot rev (:tx-id current) items)))
 
-                     (and (nil? current) parent-tx-id
-                          (contains? inserted parent-uuid))
+                     (and parent-tx-id
+                          (or (and (nil? current)
+                                   (contains? inserted parent-uuid))
+                              (missing-snapshot? current)))
                      (let [items (patch-items parent-uuid [] removed upsert)]
                        (record-delta-slot store changed slot-key
                                           (children-slot rev parent-tx-id items)))
 
                      (and (mounted? slot-key)
-                          (not= :missing (get-in current [:snapshot :status])))
+                          (not (contains? deleted parent-uuid)))
                      (do (vswap! reload conj slot-key)
                          (assoc-in store [:slots slot-key]
                                    {:rev rev :stale? true}))
@@ -579,6 +606,13 @@
 
                      :else store)))
                store children)
+        store (reduce
+               (fn [store parent-uuid]
+                 (if (contains? deleted parent-uuid)
+                   store
+                   (refresh-missing-children store reload rev parent-uuid)))
+               store
+               (keys blocks))
         store (reduce
                (fn [store slot-key]
                  (let [slot (get-in store [:slots slot-key])

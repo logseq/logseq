@@ -412,7 +412,9 @@
 
 (defn open-block-tree
   [db root-uuid]
-  (let [children (or (open-children-tree db root-uuid) {})
+  (let [children (or (open-children-tree db root-uuid)
+                     (fail-render-read! "Missing block-tree root"
+                                        {:root-uuid root-uuid}))
         block-uuids (into #{root-uuid}
                           (mapcat (fn [{:keys [items]}] (map first items)))
                           (vals children))

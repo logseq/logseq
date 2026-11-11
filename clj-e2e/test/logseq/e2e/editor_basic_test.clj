@@ -57,19 +57,28 @@
     @dialog*))
 
 (defn- page-console-logs
+  ([]
+   (page-console-logs 0))
+  ([offset]
+   (->> @custom-report/*pw-page->console-logs*
+        vals
+        (apply concat)
+        (drop offset)
+        (map str))))
+
+(defn- console-log-count
   []
-  (->> @custom-report/*pw-page->console-logs*
-       vals
-       (apply concat)
-       (map str)))
+  (count (page-console-logs)))
 
 (defn- assert-app-did-not-crash!
-  []
-  (assert/assert-is-hidden (util/get-by-text "Something went wrong" false))
-  (is (not-any? #(string/includes? % "Missing direct-children parent")
-                (page-console-logs))
-      (str "Worker must not throw Missing direct-children parent: "
-           (pr-str (page-console-logs)))))
+  ([]
+   (assert-app-did-not-crash! 0))
+  ([log-offset]
+   (assert/assert-is-hidden (util/get-by-text "Something went wrong" false))
+   (let [logs (page-console-logs log-offset)]
+     (is (not-any? #(string/includes? % "Missing direct-children parent") logs)
+         (str "Worker must not throw Missing direct-children parent: "
+              (pr-str logs))))))
 
 (defn- create-invalid-advanced-query!
   []
@@ -121,15 +130,16 @@
 
 (deftest recycle-delete-invalid-advanced-query-does-not-crash-app-test
   (testing "permanently deleting a page with an invalid advanced query stays on Recycle"
-    (let [page-name (str "recycle-invalid-query-" (random-uuid))]
+    (let [page-name (str "recycle-invalid-query-" (random-uuid))
+          log-offset (console-log-count)]
       (p/new-page page-name)
       (create-invalid-advanced-query!)
-      (assert-app-did-not-crash!)
+      (assert-app-did-not-crash! log-offset)
       (assert/assert-is-visible (util/get-by-text "Query error:" false))
       (util/refresh-until-graph-loaded)
       (p/goto-page page-name)
       (util/refresh-until-graph-loaded)
-      (assert-app-did-not-crash!)
+      (assert-app-did-not-crash! log-offset)
       (p/delete-page page-name)
       (open-recycle!)
       (let [root (recycle-root page-name)
@@ -141,12 +151,12 @@
         ;; Query resources debounce reloads by 2s; wait past that so a
         ;; leftover snapshot fetch cannot crash the app after the row is gone.
         (util/wait-timeout 2500)
-        (assert-app-did-not-crash!)
+        (assert-app-did-not-crash! log-offset)
         (assert/assert-is-visible ".ls-recycle-page-content")
         (assert/assert-have-count root 0)
         (w/wait-for-not-visible
          (loc/filter ".ui__toast.success" :has-text page-name))
-        (assert-app-did-not-crash!)
+        (assert-app-did-not-crash! log-offset)
         (custom-report/screenshot (w/get-page) "recycle-invalid-query-after-delete")))))
 
 (defn- open-block-context-menu!
