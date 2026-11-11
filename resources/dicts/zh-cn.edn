@@ -1263,6 +1263,7 @@
  :pdf/find-results "{1} / {2} 个匹配（\"{3}\"）"
  :pdf/generic-error "错误：{1}\n{2}\n请确认 PDF 文件资源。"
  :pdf/highlight-mode "高亮模式"
+ :pdf/highlight-selection "高亮选中文本"
  :pdf/highlights "高亮"
  :pdf/hl-block-colored "颜色标识高亮块"
  :pdf/linked-ref "转到注解"

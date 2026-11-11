@@ -31,6 +31,13 @@ fn native(registry: &mut Registry) {
     registry.register::<App>();
 }
 
+/// Makes the PDF provider available in NSH-generated native/package runners.
+#[cfg(target_os = "macos")]
+#[native_components(macos)]
+fn components(components: &nsh_platform_macos::Components) {
+    extensions::register_pdf(components);
+}
+
 /// Shared application root for the native runner and public NSH tests.
 #[component]
 pub fn App(props: AppProps) -> impl IntoElement {

@@ -103,8 +103,23 @@ let hl_json image_paths (hl : Model.hl) : J.t =
 
 let bool_str b = if b then "true" else "false"
 
+let viewer_labels () =
+  J.stringify (J.object_list
+    (List.map (fun (name, key) -> name, J.string (I18n.t key))
+      [ "close", "ui/close"
+      ; "previous", "command.pdf/previous-page"
+      ; "next", "command.pdf/next-page"
+      ; "zoom-in", "pdf/zoom-in"
+      ; "zoom-out", "pdf/zoom-out"
+      ; "fit", "pdf/auto-fit"
+      ; "highlight", "pdf/highlight-selection"
+      ; "copy", "pdf/copy-text"
+      ; "annotations", "pdf/annotations-page"
+      ; "error", "pdf/generic-error" ]))
+
 let attrs_of_view (v : view) : (string * string) list =
-  [ "path", v.asset.Model.pdf_url
+  [ "labels", viewer_labels ()
+  ; "path", v.asset.Model.pdf_url
   ; "identity", v.asset.Model.pdf_identity
   ; "asset_key", v.asset.Model.pdf_key
   ; "repo", v.repo
@@ -421,7 +436,7 @@ let viewer_el : Lui_elements.t =
               (Logseq_el.attrs_signal view_s (fun vo ->
                    match vo with
                    | Some v -> attrs_of_view v
-                   | None -> [ "path", a.Model.pdf_url ]))
+                   | None -> [ "path", a.Model.pdf_url; "labels", viewer_labels () ]))
             [])) (asset_signal context))
     context parent
 

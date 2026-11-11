@@ -1266,6 +1266,7 @@
  :pdf/find-results "{1} of {2} matches (\"{3}\")"
  :pdf/generic-error "Error: {1}\n{2}\nPlease confirm with pdf file resource."
  :pdf/highlight-mode "Highlight mode"
+ :pdf/highlight-selection "Highlight selection"
  :pdf/highlights "Highlights"
  :pdf/hl-block-colored "Colored label for highlight block"
  :pdf/linked-ref "Linked references"

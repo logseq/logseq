@@ -35,9 +35,17 @@ fn main() -> impl std::process::Termination {
         startup_preflight: startup_preflight.into(),
     })
     .app_id(APP_ID);
+    #[cfg(target_os = "macos")]
+    let components = {
+        let components = platform::Components::default();
+        nsh_app_logseq::extensions::register_pdf(&components);
+        components
+    };
     std::process::Termination::report(platform::run_app(
         platform::AppSource::Rust(root),
         platform::AppOptions {
+            #[cfg(target_os = "macos")]
+            components,
             title: "Logseq".to_owned(),
             app_id: APP_ID.to_owned(),
             size: (1440, 900),

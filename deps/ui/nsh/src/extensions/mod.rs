@@ -1,6 +1,7 @@
 //! Native implementations of the application's canonical extension schemas.
 mod codemirror;
 mod editor;
+mod pdf;
 mod raw;
 mod raw_style;
 
@@ -29,6 +30,12 @@ pub fn register_raw(builder: ExtensionBuilder, schema: Schema) -> Result<Extensi
         )
     {
         return Err("raw registration requires a canonical logseq markup schema".into());
+    }
+    if schema.identifier == "logseq-pdf" {
+        return builder
+            .register(schema, pdf::element)?
+            .validate("logseq-pdf", pdf::validate)?
+            .validate_themed("logseq-pdf", pdf::validate_themed);
     }
     let identifier = schema.identifier.clone();
     builder
@@ -68,3 +75,7 @@ mod tests;
 
 #[cfg(test)]
 mod raw_tests;
+
+/// Registers the actual PDFKit host before the native AppView is constructed.
+#[cfg(target_os = "macos")]
+pub use pdf::register as register_pdf;

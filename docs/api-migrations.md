@@ -142,3 +142,43 @@ anchored role-menu popovers remain unsupported, including separate property and
 view menus; this change qualifies only the header producer. The actual app
 startup gate now opens More, requires Settings and Appearance, dismisses using
 native Escape, reopens, and verifies trigger/journal-body identities.
+
+### macOS NSH PDF uses the real PDFKit native view
+
+`logseq-pdf` now has an app-owned macOS PDFKit provider registered through NSH's
+public NativeComponent interface. The existing OCaml model remains the owner of
+page/scale preferences and highlight persistence. PDFKit owns the actual document,
+text selection, copying, native scrolling and keyboard behavior. The existing
+`repo`/`identity`/`instance` envelope is preserved on page, scale, close, annotation
+navigation and explicit selection-highlight actions; retired document events are
+checked against the current envelope before dispatch.
+
+The native toolbar uses NSH Button/Toolbar/Popover controllers. Existing PDF
+labels, plus `pdf/highlight-selection`, are translated by OCaml and carried in a
+`labels` JSON attribute for both initial loading and ready props. Automatic
+selection actions use the native popover at its Highlight trigger. This placement
+is a desktop presentation difference from a web popup at the selected text.
+
+For example, an existing local PDF asset opens without changing its `path`,
+`page`, `scale` or `hls` attributes. `auto`/`page-fit` use native automatic fitting;
+`page-width` follows the native view width, and positive numeric factors remain
+explicit scales. A text selection alone does not persist a highlight: choosing
+Highlight emits the existing `pdf-hl-add` shape with a native UUID and normalized
+page rectangles. Existing model-owned highlights are projected as PDFKit
+annotations and referenced highlights can be revealed. The provider does not
+write annotation changes into a second document store.
+
+This is an initial real provider, not complete PDF parity. Area-drag PNG capture,
+persistent highlight mode and warm/dark paper recoloring fail explicit admission
+rather than being ignored. Password-protected/unreadable documents show a real
+load error; password entry is not implemented. Local absolute paths/file URLs
+are supported; remote document URLs require an explicit provider path. Annotation
+recolor/delete/reference-copy controls and outline/search UI remain unresolved
+rather than being reported as completed callbacks. Linux and Windows still
+reject the PDF extension before native publication until real providers exist.
+
+No Dune rule, generic bridge ABI, maintained mobile PDF implementation or NSH
+fork is changed. The new PDFKit crate is target-macOS only. Native document
+opening and parsing follow PDFKit's own load path on the AppKit thread; large
+file latency still requires native qualification. No extra file loader, image
+cache, polling loop or focus manager is introduced.
