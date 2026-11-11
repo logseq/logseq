@@ -93,10 +93,8 @@
         (p/do!
          (editor-handler/escape-editing)
          (when (not= page (state/get-current-page))
-           (page-handler/<create! page {:redirect? redirect-page?}))
-        ;; Or else this will clear the newly inserted content
-         (js/setTimeout #(editor-handler/api-insert-new-block! content {:page page
-                                                                        :edit-block? true
-                                                                        :replace-empty-target? true})
-                        100))))
+           (page-handler/<create! page {:redirect? redirect-page? :edit? false}))
+         (editor-handler/api-insert-new-block! content {:page page
+                                                        :edit-block? true
+                                                        :replace-empty-target? true}))))
     (notification/show! (t :journal/parse-date-to-name-error) :error))))
