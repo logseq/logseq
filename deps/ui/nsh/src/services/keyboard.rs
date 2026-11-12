@@ -307,9 +307,17 @@ fn install(
             if editor.is_some() && editor_owns(stroke) {
                 continue;
             }
+            // Catalog sequences are flattened for the native matcher. Their
+            // printable strokes must remain native text while an editor owns
+            // focus; consuming a prefix cannot be undone by OCaml later.
             add(
                 stroke,
-                if editor.is_some() {
+                if editor.is_some()
+                    && !(matches!(stroke.key, Key::Char(_))
+                        && !stroke.modifiers.cmd
+                        && !stroke.modifiers.ctrl
+                        && !stroke.modifiers.alt)
+                {
                     2
                 } else if binding.scope == "global-non-editing-only" {
                     0
@@ -683,6 +691,121 @@ mod tests {
             "palette and selection deduplicate Escape"
         );
         assert_eq!(observed.0.lock().unwrap()[0]["owner"], json!("bridge"));
+    }
+
+    // These are the actual default catalog strokes and scopes, pinned by
+    // the companion native OCaml assertion against Keymap_data itself.
+    fn text_catalog_snapshot() -> String {
+        json!({"revision":1,"palette":false,"capture":false,
+            "palette-copy-reference":false,"block-selection":false,"bindings":[
+                {"stroke":"t","command":"editor/toggle-number-list","scope":"global-prevent-default"},
+                {"stroke":"n","command":"editor/toggle-number-list","scope":"global-prevent-default"},
+                {"stroke":"p","command":"editor/add-property-deadline","scope":"global-non-editing-only"},
+                {"stroke":"d","command":"editor/add-property-deadline","scope":"global-non-editing-only"},
+                {"stroke":"mod+k","command":"go/search","scope":"global-prevent-default"},
+                {"stroke":"alt+shift+g","command":"graph/open","scope":"editor-global"}
+            ]}).to_string()
+    }
+
+    #[component]
+    fn CatalogEditorProbe() -> impl IntoElement {
+        let observed = engine_context::<Observed>().unwrap();
+        let keyboard = GlobalKeyboard::mount();
+        let output = observed.0.clone();
+        keyboard.send.set(Some(Rc::new(move |value| {
+            output.lock().unwrap().push(json!({"key":value}));
+        })));
+        keyboard.replace(&text_catalog_snapshot()).unwrap();
+        let value = signal(String::new());
+        let ready = signal(true);
+        let composing = signal(false);
+        let reference = element_ref();
+        let changes = observed.0.clone();
+        view().w(px(400.0)).h(px(100.0)).child(
+            nsh_core::element::input()
+                .test_id("native-catalog-editor")
+                .element_ref(&reference)
+                .value(move || value.get())
+                .on_focus(move || {
+                    let node = u64::from(reference.node().expect("mounted catalog editor"));
+                    keyboard.focus_editor(node, 1, ready, composing, Rc::new(|| {}));
+                })
+                .on_blur(move || {
+                    if let Some(node) = reference.node() {
+                        keyboard.blur_editor(u64::from(node), 1);
+                    }
+                })
+                .on_composition_change(move |event: &Composition| composing.set(event.composing))
+                .on_change(move |text: &str| {
+                    value.set(text.to_owned());
+                    changes.lock().unwrap().push(json!({"input":text}));
+                }),
+        )
+    }
+
+    #[test]
+    fn actual_catalog_prefixes_preserve_native_editor_text_and_event_order() {
+        let observed = Observed(Arc::new(Mutex::new(Vec::new())));
+        let mut config = EngineConfig::new(Root::of::<CatalogEditorProbe>());
+        config.context = EngineContext::default().with(observed.clone());
+        config.environment.os = nsh_core::platform::Os::MacOs;
+        let mut app = Headless::start(config).unwrap();
+        // Acquire the real native Input once. Every subsequent character goes
+        // through the keyboard matcher without type_text reacquiring focus.
+        app.type_text("id:native-catalog-editor", "").unwrap();
+        observed.0.lock().unwrap().clear();
+        for key in ["d", "r", "a", "f", "t", "n", "p", "你"] {
+            app.press_key(key).unwrap();
+        }
+        assert_eq!(
+            app.screen().input_text("id:native-catalog-editor").unwrap(),
+            Some("draftnp你")
+        );
+        assert_eq!(
+            observed.0.lock().unwrap().as_slice(),
+            [
+                json!({"input":"d"}),
+                json!({"input":"dr"}),
+                json!({"input":"dra"}),
+                json!({"input":"draf"}),
+                json!({"input":"draft"}),
+                json!({"input":"draftn"}),
+                json!({"input":"draftnp"}),
+                json!({"input":"draftnp你"})
+            ],
+            "flattened command prefixes must not steal, duplicate or reorder native text"
+        );
+        app.compose("id:native-catalog-editor", "中文").unwrap();
+        assert_eq!(
+            app.screen().input_text("id:native-catalog-editor").unwrap(),
+            Some("draftnp你中文")
+        );
+        observed.0.lock().unwrap().clear();
+        app.press_key("meta+k").unwrap();
+        let events = observed.0.lock().unwrap();
+        assert_eq!(
+            events.len(),
+            1,
+            "modified global commands still have one dispatcher"
+        );
+        assert_eq!(events[0]["key"]["key"], json!("k"));
+        assert_eq!(events[0]["key"]["metaKey"], json!(true));
+        drop(events);
+        observed.0.lock().unwrap().clear();
+        app.press_key("alt+shift+g").unwrap();
+        let events = observed.0.lock().unwrap();
+        assert_eq!(
+            events.len(),
+            1,
+            "configured Option commands keep their existing ownership"
+        );
+        assert_eq!(events[0]["key"]["key"], json!("g"));
+        assert_eq!(events[0]["key"]["altKey"], json!(true));
+        assert_eq!(events[0]["key"]["shiftKey"], json!(true));
+        assert_eq!(
+            app.screen().input_text("id:native-catalog-editor").unwrap(),
+            Some("draftnp你中文")
+        );
     }
 
     #[test]

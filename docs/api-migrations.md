@@ -2201,3 +2201,23 @@ clears the remaining selection once the native overlay has retired. Palette and
 keyboard-capture contexts reuse their existing deduplicated Escape path. Keep
 producer and consumer together when updating the application-private snapshot;
 there is no new LUI public wire field or downstream component parameter.
+
+
+### Printable native shortcut prefixes preserve editor text
+
+The native application keymap retains `When::Auto` for printable strokes without
+Command/Control/Option modifiers even while the custom block editor owns focus. The
+catalog's multi-stroke defaults are flattened into native registrations, so
+`editor/toggle-number-list` (`t n`, `global-prevent-default`) previously installed
+plain `t` and `n` as `When::Always` while editing. The native platform consumed
+those characters before the text view; OCaml only observed an incomplete
+command prefix and could not restore the text. Typing `draft` could become
+`draf` through the actual AppKit keyboard path.
+
+Plain and Shift character input now stays with the focused native editor.
+Configured Command/Control/Option shortcuts, explicit keyboard capture and palette navigation keep
+their existing ownership. Nonediting catalog sequences continue to dispatch;
+there is no SDK change, extra input buffer, per-character delay or synthetic
+replay. Web/Apple/Android registrations and user shortcut defaults are unchanged.
+The focused native Input still owns composition, while its existing composing
+signal suspends application bindings. Downstream callers need no API migration.

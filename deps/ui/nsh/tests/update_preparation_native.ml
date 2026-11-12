@@ -360,6 +360,19 @@ let sparse_feedback_materializes_while_held_through_actual_ffi () =
       (Update_admission.finish_release gate "8"))
 
 let editor_keyboard_capture_order () =
+  check "native text ownership regression uses the actual numbered-list catalog scope"
+    (Keymap_data.command_handler "editor/toggle-number-list" = Some "global-prevent-default");
+  check "native text ownership regression uses the actual printable catalog sequence"
+    (match Keymap_data.default_shortcut "editor/toggle-number-list" with
+     | Commands_data.Binds keys -> List.mem "t n" keys
+     | _ -> false);
+  check "property prefix commands retain their actual nonediting catalog scope"
+    (Keymap_data.command_handler "editor/add-property-deadline" = Some "global-non-editing-only");
+  check "configured Option shortcut remains a modified catalog command"
+    (Keymap_data.command_handler "graph/open" = Some "editor-global"
+     && match Keymap_data.default_shortcut "graph/open" with
+        | Commands_data.Binds keys -> List.mem "alt+shift+g" keys
+        | _ -> false);
   let original_capture = Hashtbl.find_opt Platform.capture_listeners "keydown" in
   let restore () =
     (match original_capture with
