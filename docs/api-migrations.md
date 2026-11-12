@@ -1498,3 +1498,26 @@ The native admission runner now accepts `--ppx /absolute/path/to/ppx.exe` for
 its reactive view fixture, matching the existing virtual-row runner. Without
 that option it uses the installed `lui.ppx` package. It invokes no Dune rules
 and continues to link the actual already-built native application archives.
+## Native literal preflight follows immutable local aliases
+
+The actual-target typedtree pass now follows immutable literal bindings by
+compiler identifier, including strings, polymorphic variants, literal tuples
+and options. For example, both `let size = "invalid" in Prop.font_size size`
+and `let size = Some "invalid" in Lui_elements.text ?font_size:size []` reach
+the existing public encoders and the actual NSH style validator. An immutable
+`"auto"` or `` `auto`` alias cannot bypass the native Scroll-owner check.
+Local shadowing and backend branch selection retain their compiler identities;
+Web-only values behind a proven host branch remain valid.
+
+The pass evaluates no application function, dereferences no mutable storage,
+and does not execute signals. Literal syntax expansion is bounded to 512 nodes, including substituted aliases,
+so large generated data bindings do not impose unbounded preflight expansion;
+values outside that analysis remain deferred to the runtime boundary. Constant
+analysis does not add a second presentation grammar.
+
+Source-capture diagnostics now count deferred property calls and constructor
+calls containing unresolved arguments, with separate optional/required argument
+counts. Unknown optional values are no longer silently dropped from the coverage
+report. Known arguments on the same constructor are still checked through its
+real encoder; a constructor requiring unknown mandatory arguments remains deferred.
+These counts describe captured syntax, not exhaustive UI or dynamic-value coverage.

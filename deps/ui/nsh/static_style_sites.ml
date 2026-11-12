@@ -5,6 +5,10 @@ open Typedtree
 
 let probes = ref []
 let dynamic = ref 0
+let dynamic_properties = ref 0
+let dynamic_optional_arguments = ref 0
+let dynamic_required_arguments = ref 0
+let constants = Hashtbl.create 128
 let known = Hashtbl.create 128
 let key = function Path.Pident id -> Ident.unique_name id | path -> Path.name path
 let name expression = match expression.exp_desc with
@@ -39,28 +43,66 @@ let rec boolean expression = match expression.exp_desc with
         | Some true,_|_,Some true -> Some true | Some false,Some false -> Some false | _ -> None)
     | _ -> None)
   | _ -> None
-let bind binding = match binding.vb_pat.pat_desc,boolean binding.vb_expr with
-  | Tpat_var (id,_,_),Some value -> Hashtbl.replace known (Ident.unique_name id) value
+(* Only immutable literal syntax is substituted. No user function is run and
+   references, arrays, records, signals and arbitrary expressions stay dynamic. *)
+let rec all_known transform = function
+  | [] -> Some []
+  | value::remaining -> Option.bind (transform value) (fun value ->
+      Option.map (fun remaining -> value::remaining) (all_known transform remaining))
+let max_literal_nodes = 512
+let rec literal_with_budget remaining expression =
+  let literal = literal_with_budget remaining in
+  let with_desc exp_desc = Some {expression with exp_desc} in
+  if !remaining = 0 then None else begin
+  decr remaining;
+  match expression.exp_desc with
+  | Texp_ident (path,_,_) ->
+      Option.bind (Hashtbl.find_opt constants (key path)) (fun (value,nodes) ->
+        if nodes - 1 > !remaining then None
+        else (remaining := !remaining - (nodes - 1); Some value))
+  | Texp_constant _ -> Some expression
+  | Texp_construct (name,description,values)
+      when List.mem description.Data_types.cstr_name ["true";"false";"Some";"None";"[]";"::";"()"] ->
+      Option.bind (all_known literal values) (fun values ->
+        with_desc (Texp_construct (name,description,values)))
+  | Texp_variant (_,None) -> Some expression
+  | Texp_variant (label,Some value) -> Option.bind (literal value) (fun value ->
+      with_desc (Texp_variant (label,Some value)))
+  | Texp_tuple values ->
+      Option.bind (all_known (fun (label,value) ->
+        Option.map (fun value -> label,value) (literal value)) values) (fun values ->
+          with_desc (Texp_tuple values))
+  | Texp_apply (fn,arguments)
+      when List.exists (standard fn) ["~-";"~-.";"~+";"~+."] ->
+      Option.bind (all_known (function
+        | label,Arg value -> Option.map (fun value -> label,Arg value) (literal value)
+        | _,Omitted _ -> None) arguments) (fun arguments ->
+          with_desc (Texp_apply (fn,arguments)))
+  | _ -> None
+  end
+let resolve_literal expression =
+  let remaining=ref max_literal_nodes in
+  Option.map (fun value -> value,max_literal_nodes - !remaining)
+    (literal_with_budget remaining expression)
+let literal expression = Option.map fst (resolve_literal expression)
+let bind binding = match binding.vb_pat.pat_desc with
+  | Tpat_var (id,_,_) ->
+      Option.iter (fun value -> Hashtbl.replace known (Ident.unique_name id) value)
+        (boolean binding.vb_expr);
+      Option.iter (fun value -> Hashtbl.replace constants (Ident.unique_name id) value)
+        (resolve_literal binding.vb_expr)
   | _ -> ()
-let rec literal expression = match expression.exp_desc with
-  | Texp_constant _ -> true
-  | Texp_construct (_,description,values) ->
-      List.mem description.Data_types.cstr_name ["true";"false";"Some";"None";"[]";"::";"()"]
-      && List.for_all literal values
-  | Texp_variant (_,value) -> Option.fold ~none:true ~some:literal value
-  | Texp_tuple values -> List.for_all (fun (_,value) -> literal value) values
-  | Texp_apply (fn,arguments) ->
-      List.mem (last (name fn)) ["~-";"~-.";"~+";"~+."] && List.for_all literal (args arguments)
-  | _ -> false
 let code expression = Format.asprintf "%a" Pprintast.expression (Untypeast.untype_expression expression)
 let location expression = let p=expression.exp_loc.loc_start in
   Printf.sprintf "%s:%d:%d" p.pos_fname p.pos_lnum (p.pos_cnum-p.pos_bol+1)
 let property_helper name = String.starts_with ~prefix:"Ui_parts.Prop." name
 let property expression =
   let call = match expression.exp_desc with
-    | Texp_apply (fn,arguments) when property_helper (name fn)
-        && List.for_all literal (args arguments) ->
-        Some (name fn ^ " " ^ String.concat " " (List.map (fun value -> "(" ^ code value ^ ")") (args arguments)))
+    | Texp_apply (fn,arguments) when property_helper (name fn) ->
+        (match all_known literal (args arguments) with
+         | Some values -> Some (name fn ^ " " ^ String.concat " "
+             (List.map (fun value -> "(" ^ code value ^ ")") values))
+         | None -> incr dynamic_properties; None)
     | Texp_ident _ when property_helper (name expression) ->
         (match Types.get_desc expression.exp_type with Types.Tconstr (_,[],_) -> Some (name expression) | _ -> None)
     | _ -> None in
@@ -75,16 +117,27 @@ let element expression = match expression.exp_desc with
         | Types.Tarrow _ -> true
         | _ -> false in
       if children && result then begin
-        let required = ref true in
+        let required = ref true and deferred = ref false in
         let labels = List.filter_map (function
-          | Optional label,Arg ({exp_desc=Texp_construct (_,description,[value]);_})
-            when description.Data_types.cstr_name="Some" && literal value -> Some ("~" ^ label ^ ":(" ^ code value ^ ")")
-          | Labelled label,Arg value when literal value -> Some ("~" ^ label ^ ":(" ^ code value ^ ")")
-          | Labelled _,_ -> required:=false; None
+          | Optional label,Arg argument ->
+              (match literal argument with
+               | Some {exp_desc=Texp_construct (_,description,[value]);_}
+                   when description.Data_types.cstr_name="Some" ->
+                   Some ("~" ^ label ^ ":(" ^ code value ^ ")")
+               | Some {exp_desc=Texp_construct (_,description,[]);_}
+                   when description.Data_types.cstr_name="None" -> None
+               | _ -> deferred:=true; incr dynamic_optional_arguments; None)
+          | Labelled label,Arg argument ->
+              (match literal argument with
+               | Some value -> Some ("~" ^ label ^ ":(" ^ code value ^ ")")
+               | None -> required:=false; deferred:=true;
+                   incr dynamic_required_arguments; None)
+          | Labelled _,Omitted _ ->
+              required:=false; deferred:=true; incr dynamic_required_arguments; None
           | _ -> None) arguments in
+        if !deferred then incr dynamic;
         if !required then probes := Printf.sprintf "element %S (%s %s []);" (location expression)
           (name fn) (String.concat " " labels) :: !probes
-        else incr dynamic
       end
   | _ -> ()
 
@@ -136,6 +189,7 @@ let rec iterator = {Tast_iterator.default_iterator with
 
 let inspect filename =
   Hashtbl.clear known;
+  Hashtbl.clear constants;
   let info=Cmt_format.read_cmt filename in
   let absolute path = if Filename.is_relative path then Filename.concat info.cmt_builddir path else path in
   Load_path.init ~auto_include:Load_path.no_auto_include
@@ -165,5 +219,6 @@ let () =
   done;
   if not targets_only then begin
     Printf.printf "let () =\n%s\nfinish ();;\n" (String.concat "\n" (List.rev !probes));
-    Printf.eprintf "Native style source capture: %d literal calls; %d constructor calls require dynamic values\n%!" (List.length !probes) !dynamic
+    Printf.eprintf "Native style source capture: %d literal calls; %d property calls deferred; %d constructor calls contain deferred arguments (%d optional, %d required)\n%!"
+      (List.length !probes) !dynamic_properties !dynamic !dynamic_optional_arguments !dynamic_required_arguments
   end
