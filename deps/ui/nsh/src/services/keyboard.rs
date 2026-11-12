@@ -808,8 +808,8 @@ mod tests {
         // ModK belongs to the real block editor's local conduit, absent
         // from this raw Input probe. Move-blocks is the catalog's genuine
         // application-owned modified shortcut while that editor has focus.
-        assert!(editor_owns(parse("mod+k").unwrap()));
-        assert!(!editor_owns(parse("mod+shift+m").unwrap()));
+        assert!(editor_owns(Keystroke::parse_with("mod+k", true).unwrap()));
+        assert!(!editor_owns(Keystroke::parse_with("mod+shift+m", true).unwrap()));
         app.press_key("meta+shift+m").unwrap();
         let events = observed.0.lock().unwrap();
         assert_eq!(
