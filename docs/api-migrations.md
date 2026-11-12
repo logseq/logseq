@@ -1,6 +1,24 @@
 # API migrations
 
 
+## Windows installation qualification boundary
+
+The Windows CI now compiles the real worker admission fixture and exercises the
+actual Inno installer with private target/profile paths: active-worker refusal,
+independent worker lifetime, fresh installation, real installed-host/worker
+startup refusal during installation, interrupted repair, legacy refusal and
+removal admission. The existing native save-abort, task/service and 1k/100k row
+contracts also run after the actual build with installed `lui.ppx`. Local source
+checks are not substituted for these required native results.
+
+Inno captures WinAPI error codes through its public `DLLGetLastError` helper so
+script/argument marshalling cannot replace the checked native error value. No
+process-close or restart fallback is enabled. Protocol v1 remains conservatively
+machine-global; it has not been relabeled as SID-scoped or multi-user qualified.
+No SID helper exists in the inspected stock Inno/NSH public interfaces, so a new
+security-sensitive identity implementation is deferred for explicit review.
+
+
 ## Windows manual installation admission
 
 The actual Windows host and native DB-worker now register shared process-lifetime

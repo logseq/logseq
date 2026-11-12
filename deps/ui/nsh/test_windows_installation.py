@@ -53,6 +53,7 @@ class InstallationAdmissionTests(unittest.TestCase):
         self.assertNotIn('CloseApplications=force',code)
         self.assertNotIn('RmShutdown',code)
         self.assertIn('AppMutex='+package.ACTIVE,code)
+        self.assertIn('DLLGetLastError',code)
         self.assertIn('Result := AcquireAdmission;',code)
         self.assertIn('not ProtocolMarker',code)
         self.assertIn('NonemptyDirectory',code)

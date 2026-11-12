@@ -647,3 +647,43 @@ before application startup, require setup/removal to refuse an active fixture
 without replacing files, then qualify fresh install and interrupted repair with
 all processes inactive. These OS/installer results are not established by the
 source/model tests or synthetic PE packaging tests.
+
+
+### Native Windows installation qualification in CI
+
+The Windows workflow compiles `windows_installation.ml` against the actual
+worker's `node_process_stubs.c` in a task-owned temporary directory, then runs
+`qualify_windows_installer.py` against the actual ZIP and compiled Inno setup.
+The driver uses two copies of the native fixture to prove independent lifetime
+across executable paths; a remaining worker must still refuse installation after
+the first process exits. It also requires refusal before writing any target,
+fresh private install, both installed binaries refusing startup during an
+installer, interrupted-marker refusal and successful repair, legacy-target
+refusal, and active-worker removal refusal followed by inactive removal.
+
+All installation targets, profiles, graphs and state paths are private temporary
+directories. Only stdin-blocking fixture processes created by this driver are
+controlled; no foreign/shared service daemon is terminated. Fixture dependencies are collected with the same explicit-root PE closure
+helper; fixture and installed host/worker probes use only Windows/System32 in PATH and require the actual admission error,
+not an arbitrary process failure. Source receipts/sidecar/installer digests are
+checked before setup, and all installed payload bytes are compared with the
+actual ZIP. JSON evidence and per-phase logs are preserved under
+`_build/nsh-ci/installer-admission`. These remote tests are required and have not
+been run locally by the source implementation. They do not establish a visible
+App window, real signing trust or a graph-saving N-to-N+1 upgrade.
+
+The same job runs the existing native update-preparation/save-abort and 1k/100k
+row harnesses after the actual build, plus the shared task/service contracts.
+The row harness uses the installed `lui.ppx` package by default; no generated
+Dune driver path is hardcoded. The shared compiler package recipe remains owned
+by the application build and must retain its `lui`/`digestif.c` requirements.
+
+Current admission protocol v1 deliberately uses fixed Global product names.
+Default object ACLs may conservatively refuse another Windows user's concurrent
+startup/installation; it does not claim multi-user isolation. Source inspection
+of the stock Inno [6.7.1 script-function table](https://github.com/jrsoftware/issrc/blob/is-6_7_1/Projects/Src/Shared.ScriptFunc.pas)
+and documented constants found no current-user-SID helper; NSH exposes no SID helper either. Deriving an installer
+SID would currently add pointer/string marshalling or a helper/WMI/PowerShell
+launch to the admission path. No such fallback or false SID/v2 marker is added.
+A future SID-scoped Global protocol requires a reviewed common identity seam and
+a version/marker transition before ordinary multi-user concurrency is claimed.

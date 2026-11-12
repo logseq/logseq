@@ -177,6 +177,18 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Qualified Windows application receipt is stale' }
           Copy-Item "$binary.lui-build.json" _build/nsh-ci/actual-app.lui-build.json
           Copy-Item deps/ui/_build/nsh-windows/Resources/windows-dependencies.json _build/nsh-ci/
+      - name: Real native save cancellation and production bounded row contracts
+        run: |
+          $contractsLog = Join-Path $env:GITHUB_WORKSPACE '_build/nsh-ci/activity-contracts.log'
+          Push-Location deps/ui
+          try {
+            opam exec -- dune runtest test/contracts 2>&1 | Tee-Object $contractsLog
+            if ($LASTEXITCODE -ne 0) { throw 'Actual cross-platform task/service contract tests failed' }
+          } finally { Pop-Location }
+          opam exec -- python deps/ui/nsh/run_update_preparation_native.py 2>&1 | Tee-Object _build/nsh-ci/save-abort-contracts.log
+          if ($LASTEXITCODE -ne 0) { throw 'Actual native save cancellation contract failed' }
+          opam exec -- python deps/ui/nsh/run_virtual_rows_native.py 2>&1 | Tee-Object _build/nsh-ci/production-virtual-rows.log
+          if ($LASTEXITCODE -ne 0) { throw 'Actual native bounded row contract failed' }
       - name: Package the actual Windows App ZIP and unsigned Inno installer
         run: |
           $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6/ISCC.exe'
@@ -188,6 +200,27 @@ jobs:
           if ($archives.Count -ne 1) { throw 'Expected exactly one actual Windows update archive' }
           node deps/ui/scripts/package-nsh.mjs check-release-windows $archives[0].FullName $env:LUI_SOURCE_ROOT
           if ($LASTEXITCODE -ne 0) { throw 'Final Windows archive/installer/sidecar receipt failed' }
+      - name: Compile real worker admission and exercise the actual Inno installer
+        run: |
+          $fixture = Join-Path $env:RUNNER_TEMP 'logseq-nsh-installation-admission'
+          New-Item -ItemType Directory -Force $fixture | Out-Null
+          Copy-Item deps/db-worker/runtime/native/node_process_stubs.c $fixture
+          Copy-Item deps/ui/nsh/tests/fixtures/windows_installation.ml $fixture
+          Push-Location $fixture
+          try {
+            opam exec -- ocamlfind ocamlopt -thread -package 'unix,threads.posix' -linkpkg `
+              node_process_stubs.c windows_installation.ml -o installation-fixture.exe
+            if ($LASTEXITCODE -ne 0) { throw 'Real native worker admission fixture compilation failed' }
+          } finally { Pop-Location }
+          $archives = @(Get-ChildItem _build/nsh-ci/packages -Filter '*.zip')
+          if ($archives.Count -ne 1) { throw 'Expected one actual installer/ZIP release' }
+          $tools = Get-Content _build/nsh-ci/windows-toolchain.json -Raw | ConvertFrom-Json
+          $arguments = @('deps/ui/nsh/qualify_windows_installer.py', '--archive', $archives[0].FullName,
+            '--fixture', (Join-Path $fixture 'installation-fixture.exe'),
+            '--evidence', '_build/nsh-ci/installer-admission', '--dumpbin', $tools.dumpbin)
+          foreach ($root in $tools.dllRoots) { $arguments += @('--dll-root', $root) }
+          python @arguments 2>&1 | Tee-Object _build/nsh-ci/installer-admission-driver.log
+          if ($LASTEXITCODE -ne 0) { throw 'Actual Inno admission/install/refusal/repair qualification failed' }
       - name: Preserve actual Windows build and startup evidence
         if: always()
         uses: actions/upload-artifact@v4

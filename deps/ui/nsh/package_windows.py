@@ -88,8 +88,6 @@ function WinOpenMutex(Access: Cardinal; Inherit: Integer; Name: String): THandle
   external 'OpenMutexW@kernel32.dll stdcall';
 function WinCloseHandle(Handle: THandle): Integer;
   external 'CloseHandle@kernel32.dll stdcall';
-function WinLastError: Cardinal;
-  external 'GetLastError@kernel32.dll stdcall';
 procedure WinSetLastError(Error: Cardinal);
   external 'SetLastError@kernel32.dll stdcall';
 function AcquireAdmission: Boolean;
@@ -97,7 +95,7 @@ var Error: Cardinal;
 begin
   WinSetLastError(0);
   Admission := WinCreateMutex(0, 0, '@INSTALLER@');
-  Error := WinLastError;
+  Error := DLLGetLastError;
   Result := (Admission <> 0) and (Error <> 183);
   if not Result then begin
     if Admission <> 0 then WinCloseHandle(Admission);
@@ -109,7 +107,7 @@ function ApplicationInactive: Boolean;
 var Active: THandle; Error: Cardinal;
 begin
   Active := WinOpenMutex($00100000, 0, '@ACTIVE@');
-  Error := WinLastError;
+  Error := DLLGetLastError;
   Result := (Active = 0) and (Error = 2);
   if Active <> 0 then WinCloseHandle(Active);
 end;
