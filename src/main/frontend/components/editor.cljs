@@ -212,6 +212,13 @@
         (set-exact-page! nil)
         (set-matched-pages! classes)))
     (p/let [block (db-async/<get-block (state/get-current-repo) q {:children? false})
+            ;; <get-block does not carry :block/alias-source-page-class?, so ask
+            ;; the worker whether this page is an alias of a tag.
+            alias-source (when (and db-tag? (:db/id block))
+                           (db-async/<get-alias-source-page (state/get-current-repo) (:db/id block)))
+            block (cond-> block
+                    (entity/class? alias-source)
+                    (assoc :block/alias-source-page-class? true))
             result (if db-tag?
                      (p/let [classes (editor-handler/get-matched-classes q)]
                        (if (and (entity/internal-page? block)

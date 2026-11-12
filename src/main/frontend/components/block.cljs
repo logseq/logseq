@@ -147,7 +147,9 @@
     ["Complex" m]
     (let [{:keys [link protocol]} m]
       (if (= protocol "file")
-        link
+        ;; `link` is the URL path (`%20` for a space), but callers treat the
+        ;; result as a native path and encode it again for assets:// URLs.
+        (common-util/safe-decode-uri-component link)
         (str protocol "://" link)))))
 
 (defn open-lightbox!
