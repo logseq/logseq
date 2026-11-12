@@ -198,6 +198,7 @@ def trusted_feed(private, allow):
             pass
     server = None
     thread = None
+    started = False
     try:
         trust.prepare()
         server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
@@ -207,14 +208,30 @@ def trusted_feed(private, allow):
         server.socket = context.wrap_socket(server.socket, server_side=True, do_handshake_on_connect=False)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
+        started = True
         yield f"https://127.0.0.1:{server.server_port}/latest.json", files, mode, requests
     finally:
+        errors = []
+        def close_owned(action, *arguments, **options):
+            try:
+                action(*arguments, **options)
+            except Exception as error:
+                errors.append(error)
         if server is not None:
-            server.shutdown()
-            server.server_close()
-        if thread is not None:
-            thread.join(timeout=5)
-        trust.close()
+            # BaseServer.shutdown waits for serve_forever's completion event;
+            # calling it before a successful thread start can wait forever.
+            if started:
+                close_owned(server.shutdown)
+            close_owned(server.server_close)
+        if started:
+            close_owned(thread.join, timeout=5)
+            if thread.is_alive():
+                errors.append(RuntimeError("Owned HTTPS listener did not finish during cleanup"))
+        # Never let an earlier socket/thread cleanup error bypass our exact CA
+        # cleanup. Preserve every ordinary cleanup failure as a failing result.
+        close_owned(trust.close)
+        if errors:
+            raise ExceptionGroup("Could not completely close owned HTTPS qualification resources", errors)
 
 
 def package(source, host, url, key, output, lui):

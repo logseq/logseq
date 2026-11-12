@@ -764,7 +764,10 @@ The driver retains its unreaped session leader until task-owned group cleanup.
 It validates HTTP receipts after the HTTPS server has joined its bounded request
 threads. `qualified=true` is written only after task-owned process and CA cleanup
 and the final authored-source check succeed; a cleanup failure preserves a
-failing receipt even if the runtime assertions had already passed.
+failing receipt even if the runtime assertions had already passed. Failed TLS
+setup or listener-thread startup closes the unstarted server without calling
+`shutdown` on a loop that never ran. Socket/thread cleanup failures still attempt
+the exact owned CA cleanup and report all cleanup errors.
 
 This source gate must pass before calling the candidate installed update path
 qualified. It does not prove hardware typing/IME, pixel parity, distribution

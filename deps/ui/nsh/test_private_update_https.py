@@ -33,6 +33,52 @@ class DisposableTrustTests(unittest.TestCase):
         GATE.begin_tls_request(connection)
         self.assertEqual(connection.method_calls, [call.settimeout(15), call.do_handshake()])
 
+    def test_tls_setup_failure_closes_socket_and_trust_without_shutdown_of_unstarted_server(self):
+        server, trust, context = Mock(), Mock(), Mock()
+        context.load_cert_chain.side_effect = RuntimeError("TLS setup failed")
+        with patch.object(GATE, "OwnedTrust", return_value=trust), \
+                patch.object(GATE, "ThreadingHTTPServer", return_value=server), \
+                patch.object(GATE.ssl, "SSLContext", return_value=context), \
+                patch.object(GATE.threading, "Thread") as thread:
+            with self.assertRaisesRegex(RuntimeError, "TLS setup failed"):
+                with GATE.trusted_feed(Path("/private/owned-ci-case"), True):
+                    self.fail("failed TLS setup cannot expose a ready feed")
+            thread.assert_not_called()
+        server.shutdown.assert_not_called()
+        server.server_close.assert_called_once_with()
+        trust.close.assert_called_once_with()
+
+    def test_thread_start_failure_does_not_wait_for_an_unstarted_listener_or_skip_trust_cleanup(self):
+        server, trust, context, thread = Mock(), Mock(), Mock(), Mock()
+        thread.start.side_effect = RuntimeError("thread start failed")
+        with patch.object(GATE, "OwnedTrust", return_value=trust), \
+                patch.object(GATE, "ThreadingHTTPServer", return_value=server), \
+                patch.object(GATE.ssl, "SSLContext", return_value=context), \
+                patch.object(GATE.threading, "Thread", return_value=thread):
+            with self.assertRaisesRegex(RuntimeError, "thread start failed"):
+                with GATE.trusted_feed(Path("/private/owned-ci-case"), True):
+                    self.fail("failed listener cannot expose a ready feed")
+        server.shutdown.assert_not_called()
+        server.server_close.assert_called_once_with()
+        thread.join.assert_not_called()
+        trust.close.assert_called_once_with()
+
+    def test_server_cleanup_failure_still_closes_owned_trust_and_refuses_success(self):
+        server, trust, context, thread = Mock(), Mock(), Mock(), Mock()
+        thread.is_alive.return_value = False
+        server.server_close.side_effect = RuntimeError("server close failed")
+        with patch.object(GATE, "OwnedTrust", return_value=trust), \
+                patch.object(GATE, "ThreadingHTTPServer", return_value=server), \
+                patch.object(GATE.ssl, "SSLContext", return_value=context), \
+                patch.object(GATE.threading, "Thread", return_value=thread):
+            with self.assertRaises(ExceptionGroup) as caught:
+                with GATE.trusted_feed(Path("/private/owned-ci-case"), True):
+                    pass
+        self.assertEqual([str(error) for error in caught.exception.exceptions], ["server close failed"])
+        server.shutdown.assert_called_once_with()
+        thread.join.assert_called_once_with(timeout=5)
+        trust.close.assert_called_once_with()
+
     def test_developer_and_self_hosted_contexts_cannot_mutate_trust(self):
         for environment, allow in (({}, True),
                 ({"CI":"true", "GITHUB_ACTIONS":"true", "RUNNER_ENVIRONMENT":"self-hosted"}, True),
