@@ -981,7 +981,7 @@ let native_settings_route_links () =
     on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
   let app=Lui_app.create_with_extensions backend registry
     {Model.initial with repo=Some "route-link-contract"}
-    (fun model () -> model)
+    (fun model (_ : Action.t) -> model)
     (fun context _ _ ->
       Settings_state.ensure context;
       Lui_elements.column [Settings_page.general_pane ~modal:false context;
@@ -1028,6 +1028,61 @@ let native_settings_route_links () =
         (Platform.location_hash ()="#/settings"))
       ["#/file/logseq%2Fconfig.edn";"#/file/logseq%2Fcustom.css";"#/page/faded-route"])
 
+let native_point_property_scroll () =
+  let previous_app = !Native_embed.current_app in
+  let width=Host.inner_width () and height=Host.inner_height () in
+  let selected=ref (-1) in
+  let backend : Lui_protocol.backend={
+    backend_profile=Lui_protocol.profile Lui_protocol.MacOS Lui_protocol.NshHost;
+    apply_batch=(fun _ -> true)} in
+  Host.set_window_size 800. 600.;
+  let app=Lui_app.create backend Model.initial (fun model (_ : Action.t) -> model)
+    (fun _ _ _ -> Properties_dialog.point_popup ~x:40. ~y:160.
+      (Lui_elements.column ~accessibility_identifier:"point-rich-body"
+        (List.init 200 (fun index ->
+          Lui_elements.button ~key:(string_of_int index)
+            ~accessibility_identifier:("point-item-" ^ string_of_int index)
+            ~text:(string_of_int index) ~height:28
+            ~on_press:(fun _ -> selected:=index) [])))) in
+  Fun.protect ~finally:(fun () ->
+    ignore (Lui_app.dispose app);Native_embed.current_app:=previous_app;
+    Host.set_window_size width height) (fun () ->
+    Native_embed.current_app:=Some app;
+    ignore (Lui_app.start app);ignore (Lui_app.flush app);
+    let runtime=Lui_app.runtime app in
+    let find_kind kind=Hashtbl.fold (fun node current found ->
+      if current=kind then Some node else found) runtime.Lui_runtime.mounted_nodes None |> Option.get in
+    let find identifier=Hashtbl.fold (fun node props found ->
+      if Lui_protocol.Property_map.find_opt Lui_protocol.AccessibilityIdentifier props
+        =Some (Lui_protocol.StringValue identifier) then Some node else found)
+      runtime.Lui_runtime.runtime_properties None |> Option.get in
+    let owner=find_kind Lui_protocol.Scroll and popup=find_kind Lui_protocol.Popover in
+    let body=find "point-rich-body" and last=find "point-item-199" in
+    let property node prop=Lui_protocol.Property_map.find_opt prop
+      (Hashtbl.find runtime.Lui_runtime.runtime_properties node) in
+    check "long point property body has an actual bounded native Scroll owner"
+      (Hashtbl.find runtime.Lui_runtime.runtime_parents owner=popup
+       && property owner Lui_protocol.MaxHeight=Some (Lui_protocol.IntValue 432));
+    check "long property content stays unbounded inside its native Scroll"
+      (property body Lui_protocol.MaxHeight=None
+       && property body Lui_protocol.MaxHeightViewport=None);
+    ignore (Native_embed.press_ex last 0);
+    check "point property content retains its mounted action handlers" (!selected=199);
+    Host.set_window_size 800. 360.;
+    Platform.emit_event "resize" (Js.Json.object_list []);
+    ignore (Lui_app.flush app);
+    check "point property viewport follows height-only resize without replacing content"
+      (find_kind Lui_protocol.Scroll=owner && find "point-rich-body"=body
+       && find "point-item-199"=last
+       && property owner Lui_protocol.MaxHeight=Some (Lui_protocol.IntValue 192)
+       && property popup Lui_protocol.AvailableHeight=Some (Lui_protocol.FloatValue 192.));
+    Host.set_window_size 800. 120.;
+    Platform.emit_event "resize" (Js.Json.object_list []);
+    ignore (Lui_app.flush app);
+    check "native point property bounds remain valid when its anchor exceeds the viewport"
+      (property owner Lui_protocol.MaxHeight=Some (Lui_protocol.IntValue 0)
+       && property popup Lui_protocol.AvailableHeight=Some (Lui_protocol.FloatValue 0.)))
+
 let () =
   let owner = Thread.id (Thread.self ()) in
   let assert_owner () =
@@ -1041,6 +1096,7 @@ let () =
   native_platform_exception_reporting ();
   Editor_clipboard_native.async_file_read_keeps_the_application_owner_responsive ();
   native_settings_route_links ();
+  native_point_property_scroll ();
   native_entry_admission ();
   editor_keyboard_capture_order ();
   native_worker_admission ();

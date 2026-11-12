@@ -1320,3 +1320,20 @@ existing width signal for calculated native bounds. It publishes actual viewport
 height on resize and disposes its listener/signal with the supplied scope. For
 example, a native Scroll height can bind through
 `Ui_parts.int_prop Lui_protocol.HeightValue ~value:(reactive calculate viewport)`.
+
+
+## Native point-anchored property dialogs scroll their rich body
+
+The point-anchored property workflow now places its existing body inside a real
+NSH Scroll owner. Its height follows the same available room below the anchor
+(viewport height minus anchor y minus eight pixels), including height-only window
+resizes. The inner body remains unbounded and retains its canonical node identity;
+only the Scroll and surface bounds change. Native available room clamps to zero
+when the anchor is below the resized viewport, preserving the nonnegative wire
+contract. Other hosts retain their existing surface and body.
+
+`Properties_dialog.point_popup ~x ~y body` is the common application composition
+used by the real workflow and its long-body native contract fixture. That fixture
+checks owner structure, mounted actions and resize retention; a semantic action
+on an offscreen row does not qualify native scrolling or physical hit testing.
+Those require the native engine/window flow against a fresh release.

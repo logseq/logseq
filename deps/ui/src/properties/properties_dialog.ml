@@ -643,6 +643,28 @@ let dialog_content ?compact_width ~phase d : t =
        | Node_tags prop -> node_tags_view d prop
        | Value_edit prop -> value_edit_view d prop]) phase
 
+(* A point-positioned rich dialog needs its own native viewport. The content
+   stays unbounded inside the Scroll, while the surface retains placement. *)
+let point_popup ~x ~y body : t =
+ fun context parent ->
+  let surface height body =
+    popover ~key:"prop-pop" ~at:(x,y) ~style_class:"ui__popover-content"
+      ~available_height:height ~data_attrs:["role","dialog"]
+      ~transition:Ui_components.popover_transition
+      ~on_dismiss:(fun _ -> close ()) [body] in
+  if Lui_ui.host context<>Lui_protocol.NshHost then
+    surface (Ui_services.dom_viewport_height () -. y -. 8.) body context parent
+  else
+    let viewport=Ui_services.viewport_height_signal
+      ~scheduler:context.Lui_ui.ui_scheduler ~scope:context.Lui_ui.ui_scope in
+    let available height=max 0. (height -. y -. 8.) in
+    let body=Ui_parts.int_prop Lui_protocol.MaxHeight
+      ~value:(reactive (fun height -> int_of_float (available height)) viewport)
+      (Ui_components.scroll_body body) in
+    Ui_parts.float_prop Lui_protocol.AvailableHeight
+      ~value:(reactive available viewport)
+      (surface (available (Ui_services.dom_viewport_height ())) body) context parent
+
 (* the dialog rendered inside .cp__overlays: with an anchor point it
    is the anchored ui__popover-content dropdown master uses (title
    actions, properties-area buttons); without one it stays a centered
@@ -666,17 +688,9 @@ let view : t =
             match d.d_placement with
             | Trigger _ -> assert false
             | Point (x, y) ->
-                popover ~key:"prop-pop" ~at:(x, y)
-                  ~style_class:"ui__popover-content"
-                  ~available_height:
-                    (Ui_services.dom_viewport_height () -. y -. 8.)
-                  ~data_attrs:[ ("role", "dialog") ]
-                  ~transition:Ui_components.popover_transition
-                  ~on_dismiss:(fun _ -> close ())
-                  [ box ~key:"prop-body"
-                      ~style_class:"ls-property-dialog"
-                      [ dialog_content ~compact_width:232 ~phase d ]
-                  ]
+                point_popup ~x ~y
+                  (box ~key:"prop-body" ~style_class:"ls-property-dialog"
+                     [dialog_content ~compact_width:232 ~phase d])
             | Centered ->
                 Ui_components.dialog ~text:(I18n.t "property/add-or-change")
                   ~style_class:"ls-property-dialog"
