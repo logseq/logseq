@@ -2303,3 +2303,34 @@ cannot restore the cleared filter. Disposed owners cannot update a replacement
 picker. No new LUI callback, worker operation or component parameter is added.
 Master's explicit library add-pages opt-out belongs to its separate picker path
 and is unchanged.
+
+## Scalar property drafts across property-area refreshes
+
+A property-area refresh that changes another row now restores an active scalar
+field's unsaved buffer instead of reinitializing it from persisted text. The
+existing single active-editor owner captures the repo, surface, block UUID and
+property ident; no additional draft registry or cache is introduced. Rebuilt
+views adopt that edit and its stable text-field key. Retired view callbacks
+cannot submit or clear the adopted draft.
+
+```text
+Stored string: original
+User types: unsaved draft
+Worker refreshes a sibling property
+Active field: unsaved draft
+Cancel, then reopen: original
+```
+
+An authoritative change to the edited source resets the controlled buffer to
+that new stored value, matching master's persisted-value effect. Source identity
+includes property/type/value identity and displayed text. The field stays in
+editing mode with its existing key, while callbacks captured for the old source
+lose authority. The same UUID/property in another repo or surface cannot adopt
+the origin draft; a new edit must be opened there explicitly. Ordinary number
+submission and string cancellation retain their established behavior.
+
+The native regression uses the actual property-area read/refresh branch and
+`Native_embed` text/dismiss/press entry points, including cancel/reopen and a
+repo change. It does not itself establish AppKit first-responder behavior during
+a live worker refresh; that UI interaction remains a separate native gate until
+executed.

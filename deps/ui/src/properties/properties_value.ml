@@ -59,36 +59,89 @@ let take_pending_edit ~block_uuid ~ident =
 (* The row whose inline editor is open and its in-progress buffer.
    Persists across refresh_all re-renders like cljs' edit-block state
    (cljs edits at most one block at a time); cleared on commit/cancel. *)
-let active_editor : (string * string * string) option ref = ref None
+type scalar_source =
+  { source_kind : string
+  ; source_ref : string option
+  ; source_property : string option
+  ; source_text : string
+  }
+
+type active_edit =
+  { edit_repo : string
+  ; edit_owner : string * string * string
+  ; edit_source : scalar_source
+  ; field_id : string
+  ; mutable edit_buffer : string
+  ; mutable edit_mount : bool ref option
+  }
+
+let active_editor : active_edit option ref = ref None
 
 let row_key ctx row =
   let ident = D.row_ident row |> Option.value ~default:"" in
-  (ctx.block_uuid, ident)
+  (ctx.owner_key, ctx.block_uuid, ident)
+
+let scalar_source row =
+  let row = D.row_with_effective_value row in
+  let value = D.row_value row in
+  let source_kind = D.row_type row in
+  let source_text =
+    if List.mem source_kind ["number"; "string"] then
+      if D.value_empty_p value then "" else D.value_display value
+    else D.ref_title value
+  in
+  { source_kind; source_text
+  ; source_property = D.entity_uuid_of (D.row_prop row)
+  ; source_ref = Option.bind (D.getf row "value") D.ref_uuid }
+
+let same_edit_owner ctx row edit =
+  edit.edit_repo = Runtime.repo () && edit.edit_owner = row_key ctx row
+
+let owned_edit edit =
+  edit.edit_repo = Runtime.repo ()
+  && match !active_editor with Some current -> current == edit | None -> false
 
 let add_active_edit ctx row =
-  let block_uuid, ident = row_key ctx row in
-  active_editor := Some (block_uuid, ident, "")
+  let source = scalar_source row in
+  let owner = row_key ctx row in
+  let owner_key, block_uuid, ident = owner in
+  active_editor := Some
+    { edit_repo = Runtime.repo (); edit_owner = owner; edit_source = source
+    ; edit_buffer = source.source_text; edit_mount = None
+    ; field_id = "property-scalar-" ^ owner_key ^ "-" ^ block_uuid
+        ^ "-" ^ ident ^ "-" ^ Properties_popup.next_key () }
+
+let restore_active_edit ctx row =
+  match !active_editor with
+  | Some edit when same_edit_owner ctx row edit ->
+      let source = scalar_source row in
+      if source = edit.edit_source then Some edit
+      else
+        (* Authoritative source replacement resets the draft like master's
+           string-value effect, while preserving the focused field identity. *)
+        let replacement = {edit with edit_source = source; edit_buffer = source.source_text} in
+        active_editor := Some replacement;
+        Some replacement
+  | _ -> None
 
 let clear_active_edit ctx row =
   match !active_editor with
-  | Some (buuid, ident, _) when (buuid, ident) = row_key ctx row ->
-      active_editor := None
+  | Some edit when same_edit_owner ctx row edit -> active_editor := None
   | _ -> ()
 
 let has_active_edit ctx row =
   match !active_editor with
-  | Some (buuid, ident, _) -> (buuid, ident) = row_key ctx row
+  | Some edit -> same_edit_owner ctx row edit
   | None -> false
 
 let edit_buffer ctx row =
   match !active_editor with
-  | Some (buuid, ident, buf) when (buuid, ident) = row_key ctx row -> buf
+  | Some edit when same_edit_owner ctx row edit -> edit.edit_buffer
   | _ -> ""
 
 let set_edit_buffer ctx row buf =
   match !active_editor with
-  | Some (buuid, ident, _) when (buuid, ident) = row_key ctx row ->
-      active_editor := Some (buuid, ident, buf)
+  | Some edit when same_edit_owner ctx row edit -> edit.edit_buffer <- buf
   | _ -> ()
 
 (* commit thunk of the currently open editor — bound inside
@@ -502,23 +555,28 @@ let value_button ~text ~on_press : t =
 let scalar_edit_cell ?(jump_target = true) ctx row : t =
  fun context parent ->
   let sched = context.Lui_ui.ui_scheduler in
+  let mounted = ref true in
+  Signal.on_unmount context.Lui_ui.ui_scope (fun () -> mounted := false);
   let ident = D.row_ident row |> Option.value ~default:"" in
-  let row' = D.row_with_effective_value row in
-  let value = D.row_value row' in
-  let scalar = List.mem (D.row_type row') ["number"; "string"] in
-  let initial =
-    if scalar then (if D.value_empty_p value then "" else D.value_display value)
-    else D.ref_title value
-  in
+  let initial = (scalar_source row).source_text in
+  let restored = restore_active_edit ctx row in
+  let owner = ref restored in
+  let adopt edit = edit.edit_mount <- Some mounted in
+  Option.iter adopt restored;
+  let owns_edit () = !mounted && Option.fold ~none:false ~some:(fun edit ->
+    owned_edit edit && match edit.edit_mount with
+    | Some current -> current == mounted
+    | None -> false) !owner in
   let editing =
     Signal.state sched
       ((take_pending_edit ~block_uuid:ctx.block_uuid ~ident
-        || has_active_edit ctx row)
+        || Option.is_some restored)
        && Editor_state.editing () = None)
   in
-  let buffer = Signal.state sched initial in
+  let buffer = Signal.state sched
+    (if Option.is_some restored then edit_buffer ctx row else initial) in
   let commit save =
-    if not (Runtime.signal_get editing) then ()
+    if not (owns_edit ()) || not (Runtime.signal_get editing) then ()
     else (
       let v = Runtime.signal_get buffer in
       clear_active_edit ctx row;
@@ -528,13 +586,18 @@ let scalar_edit_cell ?(jump_target = true) ctx row : t =
   let open_editor ~steal () =
     !close_editor ();
     add_active_edit ctx row;
+    owner := !active_editor;
+    Option.iter adopt !owner;
     set_edit_buffer ctx row (Runtime.signal_get buffer);
     Runtime.signal_set editing true;
     close_editor := (fun () -> commit true);
     if steal then !(Editor_state.close_block_editor) ()
   in
   if Runtime.signal_get editing then (
-    add_active_edit ctx row;
+    if Option.is_none restored then (
+      add_active_edit ctx row;
+      owner := !active_editor;
+      Option.iter adopt !owner);
     close_editor := (fun () -> commit true));
   (column ~gap:0 ~grow:1.0
      [ if_ ~test:(Logseq_el.own context (Signal.map (fun e -> not e) (Signal.value editing)))
@@ -544,10 +607,9 @@ let scalar_edit_cell ?(jump_target = true) ctx row : t =
      ; if_ ~test:(Signal.value editing)
          (fun edit_context edit_parent ->
           let live = ref true in
-          let field_id = "property-scalar-" ^ ctx.owner_key ^ "-" ^ ctx.block_uuid
-            ^ "-" ^ ident ^ "-" ^ Properties_popup.next_key () in
+          let field_id = (Option.get !owner).field_id in
           let on_key (ev : Ui_services.ev) =
-            if !live && Runtime.signal_get editing && has_active_edit ctx row
+            if !live && Runtime.signal_get editing && owns_edit ()
                && ev.key = Some "Escape"
                && not (ev.composing || ev.repeat || ev.default_prevented
                  || ev.shift || ev.ctrl || ev.meta || ev.alt)
@@ -569,13 +631,13 @@ let scalar_edit_cell ?(jump_target = true) ctx row : t =
           let off = (Ui_services.get ()).dom.subscribe_window_event "keydown" on_key in
           Signal.on_unmount edit_context.Lui_ui.ui_scope (fun () -> live := false);
           Signal.on_dispose edit_context.Lui_ui.ui_scope off;
-          (Ui_components.text_field ~height:28 ~padding_vertical:0
+          (Ui_components.text_field ~key:field_id ~height:28 ~padding_vertical:0
             ~autofocus:true ~submit_on_blur:true
             ~accessibility_identifier:field_id
             ~text:(reactive Fun.id (Signal.value buffer))
             ~on_input:(fun ev ->
               match ev with
-              | Lui_protocol.TextChanged (_, t) ->
+              | Lui_protocol.TextChanged (_, t) when !live && owns_edit () ->
                   Signal.set buffer t;
                   set_edit_buffer ctx row t
               | _ -> ())
@@ -583,7 +645,7 @@ let scalar_edit_cell ?(jump_target = true) ctx row : t =
             ?on_dismiss:(if Lui_ui.host edit_context = Lui_protocol.NshHost
                 && D.row_type row = "string" then
               Some (fun _ ->
-                if !live && Runtime.signal_get editing && has_active_edit ctx row
+                if !live && Runtime.signal_get editing && owns_edit ()
                    && not (S.overlay_open ()) then (
                   Signal.set buffer initial;
                   commit false))
