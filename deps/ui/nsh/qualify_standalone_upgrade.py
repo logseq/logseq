@@ -198,8 +198,13 @@ def open_settings(helper, agent, deadline, version):
         wait_for("real Settings menu item", deadline, lambda:
             agent.request(op="find", selector="kind:menu-item&text:Settings").get("nodes"))
         native_press(agent, "kind:menu-item&text:Settings")
-    wait_for("Settings loaded OCaml version", deadline, lambda:
-        agent.request(op="find", selector=CHECK).get("nodes") and has_text(helper, agent, version))
+    def loaded_and_ready():
+        current = nodes(helper, agent)
+        checks = [node for node in current if node.get("props", {}).get("accessibility-identifier")
+                  == "settings-check-for-updates"]
+        return (len(checks) == 1 and checks[0].get("props", {}).get("disabled") is not True
+                and any(node.get("props", {}).get("text") == version for node in current))
+    wait_for("Settings loaded OCaml version and idle configured update action", deadline, loaded_and_ready)
     return {"loadedOcamlVersion": version, "source": "Settings Version.app / compiled Version_gen.app"}
 
 
@@ -270,6 +275,16 @@ def qualify(args):
     runner = https.require_disposable_ci(args.allow_disposable_ci_trust)
     for name in ("n1_source", "n1_host", "n2_source", "n2_host", "lui_source", "pinned_cli"):
         setattr(args, name, getattr(args, name).resolve(strict=True))
+    versions = [json.loads((source / "resources/package.json").read_text(encoding="utf-8"))["version"]
+                for source in (args.n1_source, args.n2_source)]
+    https.run(["node", "-e", "const s=require('semver'); if(s.valid(process.argv[1])!==process.argv[1] || "
+               "s.valid(process.argv[2])!==process.argv[2] || !s.lt(process.argv[1],process.argv[2])) "
+               "throw Error('Authored N2 canonical version must be greater than N1');", *versions],
+              directory=args.n1_source)
+    revisions = [https.run(["git", "rev-parse", "HEAD"], directory=source)
+                 for source in (args.n1_source, args.n2_source)]
+    if revisions[0] == revisions[1]:
+        raise ValueError("N1 and N2 must be distinct authored source revisions")
     args.evidence = args.evidence.resolve()
     args.evidence.parent.mkdir(parents=True, exist_ok=True)
     private = Path(tempfile.mkdtemp(prefix="logseq-standalone-upgrade-", dir=runner)).resolve()
@@ -277,6 +292,7 @@ def qualify(args):
     if any(private.is_relative_to(source) for source in (args.n1_source, args.n2_source, args.lui_source)):
         raise ValueError("Private installation and working directory must be outside every checkout")
     result = {"qualified": False, "platform": "macos", "privateRoot": str(private),
+              "authoredSourceRevisions": revisions,
               "evidenceBoundary": "actual-standalone-app-public-https-update",
               "windowsAndLinux": "unqualified", "hardwareInputAndVisualParity": "unqualified"}
     logs = args.evidence.parent / (args.evidence.stem + "-logs")
@@ -300,6 +316,8 @@ def qualify(args):
             old = https.extract(archives[0], private / "installation")
             expected = https.code_markers(https.extract(archives[1], private / "expected-n2"))
             previous = https.code_markers(old)
+            if [previous["application"]["version"], expected["application"]["version"]] != versions:
+                raise ValueError("Packaged release versions differ from their authored source revisions")
             if (previous["application"]["version"] == expected["application"]["version"]
                     or previous["hostSha256"] == expected["hostSha256"]
                     or previous["ocamlSha256"] == expected["ocamlSha256"]):
