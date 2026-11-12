@@ -17,6 +17,15 @@
 
 open Lui_elements
 
+let titlebar_height = 48
+
+(* The pane's existing surface paints this band, so its boundary follows the
+   native resize owner without a second measurement or width calculation. *)
+let titlebar_band side =
+  spacer ~key:(side ^ "-titlebar-band")
+    ~accessibility_identifier:(side ^ "-titlebar-band")
+    ~height:titlebar_height ~min_height:titlebar_height ~grow:0. []
+
 (* the web twin mounts #skip-to-main (a11y skip link, CSS-hidden until
    :focus) — dropped here: the native host has no tab-focus reveal
    and the button
@@ -209,9 +218,8 @@ let leading_controls () =
 let topbar (ms : Model.t Signal.signal) : t =
   row ~key:"head" ~accessibility_identifier:"head"
       ~style_class:"cp__header" ~cross:`center ~main:`space_between
-      ~height:48 ~min_height:48
-      (* left-sidebar-bg-color stays on the dock only — the window header
-         spans content too and must not carry that strip. *)
+      ~height:titlebar_height ~min_height:titlebar_height
+      ~background:"transparent"
       ~data_attrs:[ ("data-window-titlebar", "true") ]
       [ leading_toolbar ~key:"head-leading" ~state:ms
           ~controls:leading_controls
@@ -307,6 +315,13 @@ let right_sidebar (ms : Model.t Signal.signal) =
       ~value:(reactive (fun (m : Model.t) width -> not m.right_sidebar_open || width<640.) ms viewport)
       element context parent
   in
+  let dock : t = fun context parent ->
+    (if Lui_ui.host context = Lui_protocol.NshHost then
+       column ~key:"rs-dock" ~min_height:0 ~grow:1. ~cross:`stretch
+         ~background:"var(--lx-gray-02, var(--ls-secondary-background-color))"
+         [titlebar_band "right-sidebar"; Right_sidebar_view.render ms]
+     else row ~key:"rs-dock" ~min_height:0 ~grow:1. ~cross:`stretch
+         ~background:"muted" [Right_sidebar_view.render ms]) context parent in
   Ui_parts.class_signal ms
     (fun (m : Model.t) -> "cp__right-sidebar " ^ if m.right_sidebar_open then "open" else "closed")
     (Ui_parts.int_prop Lui_protocol.MinWidth
@@ -316,18 +331,18 @@ let right_sidebar (ms : Model.t Signal.signal) =
        (availability (box ~key:"right-sidebar" ~accessibility_identifier:"right-sidebar" ~container_relative_frame:`both
           ~min_height:0 ~style_class:"cp__right-sidebar closed"
           [Ui_components.with_props [Ui_components.Prop.overflow `hidden]
-             (row ~key:"rs-dock" ~min_height:0 ~grow:1. ~cross:`stretch
-                ~background:"muted" [Right_sidebar_view.render ms])]))) )
+             dock]))) )
 
 (* The content keeps the same keys regardless of which host owns its width. *)
-let left_sidebar_inner (ms : Model.t Signal.signal) =
+let left_sidebar_inner ?(titlebar = false) (ms : Model.t Signal.signal) =
   let st = Sidebar_state.ensure ms in
   column ~key:"ls-inner" ~grow:1. ~min_width:0 ~min_height:0
     ~background:"var(--left-sidebar-bg-color)" ~style_class:"left-sidebar-inner as-container"
+    ((if titlebar then [titlebar_band "left-sidebar"] else []) @
     [column ~key:"ls-wrap" ~grow:1. ~min_height:0 ~margin_top:4
        [column ~key:"ls-head" ~gap:4 ~margin_bottom:4 ~style_class:"sidebar-header-container"
           [Left_sidebar_view.graphs_selector st ms;Left_sidebar_view.nav_group ms st];
-        Left_sidebar_view.contents ms]]
+        Left_sidebar_view.contents ms]])
 
 let left_sidebar_panel ?container_relative_frame inner =
   row ~key:"ls-dock" ~grow:1. ~min_height:0 ~cross:`stretch
@@ -384,7 +399,8 @@ let native_left_sidebar (ms : Model.t Signal.signal) =
           (box ~key:"left-sidebar" ~accessibility_identifier:"left-sidebar"
              ~container_relative_frame:`both ~max_width:Sidebar_state.left_width_max
              ~min_height:0 ~style_class:"cp__sidebar-left-layout"
-             [left_sidebar_panel ~container_relative_frame:`both (left_sidebar_inner ms)])))
+             [left_sidebar_panel ~container_relative_frame:`both
+                (left_sidebar_inner ~titlebar:true ms)])))
 
 let left_sidebar (ms : Model.t Signal.signal) : t =
  fun context parent ->
@@ -497,18 +513,19 @@ let main_scroll (ms : Model.t Signal.signal) : t =
 (* NavigationSplitView detail column — the left dock split's second
    pane is page scroll only. The window-level topbar sits above the
    split so header controls do not travel with the dock animation. *)
-let detail_column (ms : Model.t Signal.signal) : t =
+let detail_column ?(titlebar = false) (ms : Model.t Signal.signal) : t =
   Ui_parts.class_signal ms
     (fun (m : Model.t) ->
       if m.left_sidebar_open then "is-left-sidebar-open" else "")
     (column ~key:"left-container"
        ~accessibility_identifier:"left-container" ~grow:1.
        ~min_height:0
+       ((if titlebar then [titlebar_band "main-content"] else []) @
        [ (* invisible logseq-dom carrier: hosts forward
             document events through this extension node *)
          Logseq_el.carrier
        ; hidden_chrome ms
-       ; main_scroll ms ])
+       ; main_scroll ms ]))
 
 (* Overlay layer — cmdk palette, popups (autocomplete/slash/context
    menus), dialogs and toasts mount here (single shared container;
@@ -613,17 +630,27 @@ let not_found_page : t =
 let shell_contents (ms : Model.t Signal.signal) : t = fun context parent ->
   let st = Sidebar_state.ensure ms in
   let native = Lui_ui.host context = Lui_protocol.NshHost in
+  let panes =
+    row ~key:"panes" ~grow:1. ~min_height:0 ~cross:`stretch
+      ([right_split ms st (left_split ms st (detail_column ~titlebar:native ms)) (right_sidebar ms);
+        (if native then
+           column ~key:"pdf-titlebar-column" ~min_height:0
+             ~grow:(reactive (fun asset -> if Option.is_some asset then 1. else 0.)
+               (Pdf.asset_signal context))
+             [titlebar_band "pdf"; Pdf.container_el ~key:"asc" ~id:"app-single-container"]
+         else Pdf.container_el ~key:"asc" ~id:"app-single-container")]
+       @ if native then [] else [performance_panel ()]) in
+  let workspace =
+    if native then
+      (* Keep the topbar first in logical/keyboard order. Its fixed height in
+         the shared grid cell anchors it at the top; z-index changes paint
+         order only. The one set of controls never moves between pane owners. *)
+      stack ~key:"app" ~accessibility_identifier:"app-container" ~grow:1. ~min_height:0
+        [Ui_components.with_props [Ui_components.Prop.z_index 1] (topbar ms); panes]
+    else column ~key:"app" ~accessibility_identifier:"app-container" ~grow:1. ~min_height:0 ~gap:0
+      [topbar ms; panes; performance_bar ()] in
   (stack ~key:"shell-content"
-    [ (* Devin-style chrome: fixed window titlebar above the dock
-         splits. The leading controls remain mounted while the native
-         panel groups resize underneath. *)
-      column ~key:"app" ~accessibility_identifier:"app-container" ~grow:1. ~min_height:0 ~gap:0
-        ([ topbar ms
-         ; row ~key:"panes" ~grow:1. ~min_height:0 ~cross:`stretch
-             ([right_split ms st (left_split ms st (detail_column ms)) (right_sidebar ms);
-               Pdf.container_el ~key:"asc" ~id:"app-single-container"]
-              @ if native then [] else [performance_panel ()]) ]
-         @ if native then [] else [performance_bar ()])
+    [ workspace
     ; overlays ms
     ; help_area ms
     ; reactive ~equal:(fun (a : Model.t) (b : Model.t) ->

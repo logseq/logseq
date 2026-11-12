@@ -729,3 +729,18 @@ with retained row IDs passes those IDs in `pins`, rather than sending a public
 `VisibleRange` event as a substitute. Windows and Unix candidate builders now
 require the export before startup qualification or publication. No startup
 signature, wire property ordinal, mobile backend, or shared-worker API changes.
+
+## NSH window header follows native sidebar surfaces
+
+The native Logseq window now uses the existing resizable pane surfaces behind
+its fixed 48-point header. An open left sidebar extends
+`--left-sidebar-bg-color` to its header portion; an open right sidebar extends
+`--lx-gray-02` (falling back to `--ls-secondary-background-color`) to its header
+portion. These are the same live theme tokens as the corresponding sidebar
+bodies, in light and dark appearances. Closing or resizing either pane uses the
+existing native split owner, without a second header width calculation.
+
+The single transparent header remains first in logical keyboard order and is
+painted above the pane bands. Its controls keep their existing keys and global
+positions. Page and PDF bodies reserve the same 48-point top space as before.
+Web and maintained Apple/Android chrome retain their existing layout.
