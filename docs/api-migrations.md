@@ -2528,7 +2528,8 @@ the row checkbox, create a focus timer, or look up a replacement by identifier.
 
 ```ocaml
 let on_close = Views_table.capture_cell_return context table
-  ~row_uuid ~column:"block/title" in
+  ~row_uuid ~column:"block/title"
+  (Ui_services.dom_by_id (Views_table.cell_id table row_uuid "block/title")) in
 Table_title_editor.show ~anchor ~column_width ~on_close block
 ```
 

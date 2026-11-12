@@ -375,9 +375,8 @@ let title_action ~is_mac = function
 
 (* Keep the originating element handle, not an identifier that a replacement
    view can reuse while the editor's save is pending. *)
-let capture_cell_return context inst ~row_uuid ~column =
+let capture_cell_return context inst ~row_uuid ~column cell =
   let current = V.current_view inst in
-  let cell = Ui_services.dom_by_id (cell_id inst row_uuid column) in
   fun () ->
     if Ui_effect.alive context.Lui_ui.ui_scope && current () then
       match cell with
@@ -440,7 +439,8 @@ let title_cell inst ~row_uuid ~blk (c : V.column) : t =
                      | Open_sidebar -> open_row_sidebar row_uuid
                      | Edit_title ->
                          let on_close = capture_cell_return context inst
-                           ~row_uuid ~column:c.V.c_id in
+                           ~row_uuid ~column:c.V.c_id
+                           (Ui_services.dom_by_id (cell_id inst row_uuid c.V.c_id)) in
                          Table_title_editor.show ~anchor ~on_close
                            ~column_width:(column_width (V.get inst) c)
                            {(Decode.block_of_wire blk) with Model.block_uuid=Some row_uuid})

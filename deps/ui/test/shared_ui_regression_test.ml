@@ -1125,24 +1125,21 @@ let table_title_completion ~registry ~profile =
        other,Views_table.Edit_title;16,Views_table.Edit_title];
     check "An ordinary semantic title press keeps the editor path"
       (Views_table.title_action ~is_mac (P.Press 1) = Views_table.Edit_title)) [false;true];
-  let services = Ui_services.get () in
   let previous_model = !Runtime.read_model and previous_flush = !Runtime.app_flush
   and previous_active = !Table_title_editor.active
   and previous_sources = !Editor_state.extra_sources
   and previous_editor = !Editor_state.st in
   let current = ref {Model.initial with repo=Some "table-return-origin"} in
-  let connected = ref true and focuses = ref 0 and replacements = ref 0 and lookups = ref 0 in
+  let connected = ref true and focuses = ref 0 and replacements = ref 0 in
   let original = {(Ui_dom_web.el_of (Stub_dom.make_element "div")) with
     Ui_services.connected=(fun () -> !connected);focus=(fun () -> incr focuses)} in
   let replacement = {original with Ui_services.focus=(fun () -> incr replacements)} in
   let resolved = ref original in
-  Ui_services.installed := Some {services with dom={services.dom with
-    by_id=(fun _ -> incr lookups;Some !resolved)}};
   Runtime.read_model := (fun () -> !current);
   Runtime.app_flush := (fun () -> ());
   Editor_state.st := None;
   Fun.protect ~finally:(fun () ->
-    Ui_services.installed := Some services;Runtime.read_model:=previous_model;
+    Runtime.read_model:=previous_model;
     Runtime.app_flush:=previous_flush;Table_title_editor.active:=previous_active;
     Editor_state.extra_sources:=previous_sources;Editor_state.st:=previous_editor) (fun () ->
     let inst = ref None and capture = ref (fun () -> ()) in
@@ -1155,7 +1152,7 @@ let table_title_completion ~registry ~profile =
         V.set table {(V.empty_vstate ()) with V.view_uuid="origin-view"};
         inst:=Some table;
         capture:=Views_table.capture_cell_return context table
-          ~row_uuid:"table-row" ~column:"block/title";
+          ~row_uuid:"table-row" ~column:"block/title" (Some !resolved);
         Lui_elements.column []) () in
     let table = Option.get !inst in
     let complete callback =
@@ -1173,7 +1170,7 @@ let table_title_completion ~registry ~profile =
       resolved:=replacement;connected:=false;
       complete !capture;
       check "A disconnected cell cannot focus a same-identifier replacement"
-        (!focuses=1 && !replacements=0 && !lookups=1);
+        (!focuses=1 && !replacements=0);
       connected:=true;
       V.update table (fun state -> {state with V.view_uuid="replacement-view"});
       complete !capture;
