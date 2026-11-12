@@ -117,8 +117,8 @@ The engine candidate also supplies logical character-range selection and area
 PNG encoding. Selection copies characters by index and obtains rectangles from
 PDFium's `segments_subset(start, count)`; it never calls a rectangle's text
 extractor to assemble the copied text. Unmapped Unicode is an explicit selection
-error, not invented replacement text. Search-hit output identifies the query and
-native match rectangles; it does not mislabel rectangle-extracted text as an
+error, not invented replacement text. Search-hit output carries native match rectangles; the search request
+identifies the query once, without duplicating it in every hit; it does not mislabel rectangle-extracted text as an
 exact logical match. The private probe checks that selecting the authored marker
 copies exactly that marker and returns highlight rectangles.
 
@@ -129,3 +129,47 @@ private probe decodes those bytes and compares all pixels against the selected
 lower-page crop. The OCaml `pdf-hl-area` persistence/ref owner is unchanged and
 is not yet connected by the native viewport. These are semantic-layer candidates,
 not passing integration or user-interaction results.
+
+## Owner worker candidate
+
+`portable/worker.rs` owns one thread and one lexical document scope. Finite
+selection/area/outline work is bounded to eight pending jobs; viewport work
+coalesces to one latest request. Search replaces obsolete pending searches and
+checks its revision between pages. Viewport results check both document epoch
+and render revision. Closing invalidates pending work; no callback after stop
+can authorize a result for a replacement document. The widget must independently
+check the captured epoch again when applying a queued UI completion.
+
+The worker caches at most three owned page-text snapshots and 64 MiB of glyph
+storage, keyed by page and render width. Scrolling another tile of the same page
+does not re-extract every character. Geometry uses stack-local four-corner
+conversion rather than allocating a vector per glyph. Character-count budgets
+are checked before the wrapper allocates its character-index collection. PDFium's
+public limited-render-image-cache flag is enabled; this does not establish a
+hard process/native-engine memory limit.
+
+Ordinary close emits `Closed` only after the document and its retained file-backed
+reader have dropped. The explicit probe checks the exact private file is held
+while Opened and released when Closed: `/proc/self/fd` on Linux, exclusive-share
+read open on Windows. It reopens with a new epoch, refuses old-epoch work, closes
+again, then joins the exact owned thread and checks file release once more.
+The Windows probe accepts only ERROR_SHARING_VIOLATION as evidence of a held file;
+unrelated errors cannot become a passing release assertion.
+
+Forced widget disposal signals stop and rejects results immediately, but does
+not join a blocking PDFium call on the UI thread. The exact worker retains every
+PDF object until that call returns and the document drops. The normal native
+close control must await Closed before emitting the existing application
+`pdf-close`; forced-disposal shutdown/retention remains a real-platform gate.
+No generic reaper or global worker registry is introduced.
+
+The GTK completion wake must use an explicitly attached one-shot GLib source,
+not MainContext::invoke: upstream documents that invoke runs inline when the
+context is unowned, which is unsuitable for upgrading a SendWeakRef after loop
+shutdown. The pending source must be owner-fenced and destroyed on disposal.
+Windows already exposes thread-safe ComponentContext::redraw. Native hosts,
+continuous page layout/selection, all master reader controls and native text
+accessibility remain in progress; this candidate is not enabled in App startup.
+
+Primary lifecycle references: [Rust Windows share mode](https://doc.rust-lang.org/std/os/windows/fs/trait.OpenOptionsExt.html#tymethod.share_mode),
+[Linux proc filesystem](https://www.kernel.org/doc/html/latest/filesystems/proc.html).

@@ -60,7 +60,6 @@ pub struct PageText {
 pub struct SearchHit {
     pub page: usize,
     pub bounds: Vec<Bounds>,
-    pub query: String,
 }
 #[derive(Clone, Debug, Serialize)]
 pub struct Selection {
@@ -185,7 +184,8 @@ fn configuration(page: &PdfPage<'_>, width: i32) -> Result<(PdfRenderConfig, i32
     Ok((
         PdfRenderConfig::new()
             .set_fixed_size(width, height)
-            .set_format(PdfBitmapFormat::BGRA),
+            .set_format(PdfBitmapFormat::BGRA)
+            .limit_render_image_cache_size(true),
         height,
     ))
 }
@@ -200,16 +200,20 @@ fn bounds(
         (rectangle.right(), rectangle.bottom()),
         (rectangle.left(), rectangle.bottom()),
     ];
-    let mut points = Vec::with_capacity(4);
+    let mut result = Bounds {
+        x1: f64::INFINITY,
+        y1: f64::INFINITY,
+        x2: f64::NEG_INFINITY,
+        y2: f64::NEG_INFINITY,
+    };
     for (x, y) in corners {
-        points.push(page.points_to_pixels(x, y, config)?);
+        let (x, y) = page.points_to_pixels(x, y, config)?;
+        result.x1 = result.x1.min(f64::from(x));
+        result.x2 = result.x2.max(f64::from(x));
+        result.y1 = result.y1.min(f64::from(y));
+        result.y2 = result.y2.max(f64::from(y));
     }
-    Ok(Bounds {
-        x1: f64::from(points.iter().map(|point| point.0).min().unwrap()),
-        y1: f64::from(points.iter().map(|point| point.1).min().unwrap()),
-        x2: f64::from(points.iter().map(|point| point.0).max().unwrap()),
-        y2: f64::from(points.iter().map(|point| point.1).max().unwrap()),
-    })
+    Ok(result)
 }
 
 pub fn raster(
@@ -254,12 +258,12 @@ pub fn page_text(document: &PdfDocument<'_>, number: usize, width: i32) -> Resul
     let page = page(document, number)?;
     let (config, height) = configuration(&page, width)?;
     let text = page.text()?;
-    let chars = text.chars();
-    if chars.len() > MAX_GLYPHS {
+    if usize::try_from(text.len()).map_or(true, |length| length > MAX_GLYPHS) {
         return Err(Error::Failure(
             "PDF page text exceeds the owned snapshot budget".into(),
         ));
     }
+    let chars = text.chars();
     let mut glyphs = Vec::with_capacity(chars.len());
     for character in chars.iter() {
         let unicode = character.unicode_char();
@@ -292,11 +296,11 @@ pub fn search(
     match_case: bool,
     whole_word: bool,
 ) -> Result<Vec<SearchHit>, Error> {
-    let page = page(document, number)?;
-    let (config, _) = configuration(&page, width)?;
     if query.is_empty() {
         return Ok(Vec::new());
     }
+    let page = page(document, number)?;
+    let (config, _) = configuration(&page, width)?;
     let text = page.text()?;
     let options = PdfSearchOptions::new()
         .match_case(match_case)
@@ -316,7 +320,6 @@ pub fn search(
         hits.push(SearchHit {
             page: number,
             bounds: rectangles,
-            query: query.to_owned(),
         });
     }
     Ok(hits)
@@ -334,6 +337,11 @@ pub fn selection(
     let page = page(document, number)?;
     let (config, height) = configuration(&page, width)?;
     let page_text = page.text()?;
+    if usize::try_from(page_text.len()).map_or(true, |length| length > MAX_GLYPHS) {
+        return Err(Error::Failure(
+            "PDF selection page exceeds the owned text budget".into(),
+        ));
+    }
     let chars = page_text.chars();
     if start >= end || end > chars.len() || end - start > MAX_GLYPHS {
         return Err(Error::Failure(

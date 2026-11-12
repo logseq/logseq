@@ -2,6 +2,9 @@
 #[cfg(any(target_os = "linux", target_os = "windows"))]
 #[path = "../src/extensions/pdf/portable/engine.rs"]
 mod engine;
+#[cfg(any(target_os = "linux", target_os = "windows"))]
+#[path = "../src/extensions/pdf/portable/worker.rs"]
+mod worker;
 
 #[cfg(any(target_os = "linux", target_os = "windows"))]
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -164,9 +167,203 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     )?;
     println!(
         "{}",
-        serde_json::json!({"engineProbe": result, "packagedPathProjection": packaged})
+        serde_json::json!({"engineProbe": result, "packagedPathProjection": packaged,
+            "workerProbe": worker_probe(std::path::Path::new(&library), std::path::Path::new(&document), expected, password)?})
     );
     Ok(())
+}
+
+#[cfg(any(target_os = "linux", target_os = "windows"))]
+fn worker_probe(
+    library: &std::path::Path,
+    document: &std::path::Path,
+    marker: &str,
+    password: Option<&str>,
+) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+    let (sender, receiver) = std::sync::mpsc::channel();
+    let worker = worker::Worker::new(library.to_owned(), move |event| {
+        let _ = sender.send(event);
+    })?;
+    let epoch = worker.open(document.to_owned(), password.map(str::to_owned))?;
+    let opened = worker_event(&receiver, epoch, "opened")?;
+    if !private_file_open(document)? {
+        return Err("worker Opened did not retain its exact document file".into());
+    }
+    let height = opened["first"]["height"]
+        .as_f64()
+        .ok_or("missing page height")?;
+    let width = opened["first"]["width"]
+        .as_f64()
+        .ok_or("missing page width")?;
+    let tile = engine::Tile {
+        x: 0,
+        y: 0,
+        width: 512,
+        height: (512.0 * height / width).round() as i32,
+    };
+    worker.viewport(worker::Viewport {
+        epoch,
+        revision: 1,
+        page: 1,
+        width: 512,
+        tile,
+    })?;
+    let viewport = worker_event(&receiver, epoch, "viewport")?;
+    let glyphs = viewport["text"]["glyphs"]
+        .as_array()
+        .ok_or("worker omitted glyph geometry")?;
+    let indexed: Vec<_> = glyphs
+        .iter()
+        .filter_map(|glyph| {
+            Some((
+                glyph["index"].as_u64()? as usize,
+                glyph["unicode"].as_str()?.chars().next()?,
+            ))
+        })
+        .collect();
+    let expected: Vec<char> = marker.chars().collect();
+    let start = indexed
+        .windows(expected.len())
+        .position(|window| {
+            window
+                .iter()
+                .zip(&expected)
+                .all(|(actual, expected)| actual.1 == *expected)
+        })
+        .ok_or("worker text marker was not found")?;
+    worker.select(
+        epoch,
+        1,
+        512,
+        indexed[start].0,
+        indexed[start + expected.len() - 1].0 + 1,
+    )?;
+    let selection = worker_event(&receiver, epoch, "selected")?;
+    if selection["selection"]["text"] != marker {
+        return Err("worker copied another logical range".into());
+    }
+    worker.area(epoch, 1, 512, tile)?;
+    let area = worker_event(&receiver, epoch, "area")?;
+    worker.search(epoch, marker.to_owned(), 512, true, false)?;
+    let search = worker_event(&receiver, epoch, "search")?;
+    if search["hits"].as_array().is_none_or(Vec::is_empty) {
+        return Err("worker search lost its text marker".into());
+    }
+    worker.outline(epoch)?;
+    let outline = worker_event(&receiver, epoch, "outline")?;
+    worker.close(epoch)?;
+    let closed = worker_event(&receiver, epoch, "closed")?;
+    if private_file_open(document)? {
+        return Err("worker Closed preceded actual document-file release".into());
+    }
+    if worker.select(epoch, 1, 512, 0, 1).is_ok() {
+        return Err("closing worker admitted another selection".into());
+    }
+    let reopened = worker.open(document.to_owned(), password.map(str::to_owned))?;
+    if reopened <= epoch || worker.area(epoch, 1, 512, tile).is_ok() {
+        return Err("replacement document accepted a retired epoch".into());
+    }
+    worker_event(&receiver, reopened, "opened")?;
+    worker.close(reopened)?;
+    worker_event(&receiver, reopened, "closed")?;
+    worker
+        .shutdown()
+        .join()
+        .map_err(|_| "exact owned PDF worker thread panicked")?;
+    if private_file_open(document)? {
+        return Err("worker thread exit retained the document file".into());
+    }
+    Ok(
+        serde_json::json!({"opened": opened, "viewport": viewport, "selection": selection,
+        "area": area, "search": search, "outline": outline, "closed": closed,
+        "replacementEpoch": reopened, "fileReleased": true, "ownedThreadExited": true}),
+    )
+}
+
+#[cfg(any(target_os = "linux", target_os = "windows"))]
+fn worker_event(
+    receiver: &std::sync::mpsc::Receiver<worker::Event>,
+    epoch: u64,
+    expected: &str,
+) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+    loop {
+        let event =
+            receiver.recv_timeout(deadline.saturating_duration_since(std::time::Instant::now()))?;
+        if event.epoch() != epoch {
+            continue;
+        }
+        let value = match event {
+            worker::Event::Failed { message, .. } => return Err(message.into()),
+            worker::Event::PasswordRequired { .. } => {
+                return Err("worker requires the private fixture password".into());
+            }
+            worker::Event::Opened { pages, first, .. } => {
+                serde_json::json!({"kind":"opened","pages":pages,"first":first})
+            }
+            worker::Event::Viewport {
+                revision,
+                page,
+                raster,
+                text,
+                ..
+            } => {
+                serde_json::json!({"kind":"viewport","revision":revision,"page":page,"rasterBytes":raster.rgba.len(),"text":text.as_ref()})
+            }
+            worker::Event::Selected { selection, .. } => {
+                serde_json::json!({"kind":"selected","selection":selection})
+            }
+            worker::Event::Area {
+                page,
+                width,
+                tile,
+                png,
+                ..
+            } => serde_json::json!({"kind":"area","page":page,
+                "width":width,"tile":[tile.x,tile.y,tile.width,tile.height],"pngBytes":png.len()}),
+            worker::Event::Search {
+                revision,
+                query,
+                hits,
+                ..
+            } => serde_json::json!({"kind":"search","revision":revision,"query":query,"hits":hits}),
+            worker::Event::Outline { entries, .. } => {
+                serde_json::json!({"kind":"outline","entries":entries})
+            }
+            worker::Event::Closed { .. } => serde_json::json!({"kind":"closed"}),
+        };
+        if value["kind"] == expected {
+            return Ok(value);
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn private_file_open(document: &std::path::Path) -> Result<bool, std::io::Error> {
+    let document = document.canonicalize()?;
+    for entry in std::fs::read_dir("/proc/self/fd")? {
+        match std::fs::read_link(entry?.path()) {
+            Ok(target) if target == document => return Ok(true),
+            Ok(_) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error),
+        }
+    }
+    Ok(false)
+}
+#[cfg(target_os = "windows")]
+fn private_file_open(document: &std::path::Path) -> Result<bool, std::io::Error> {
+    use std::os::windows::fs::OpenOptionsExt;
+    match std::fs::OpenOptions::new()
+        .read(true)
+        .share_mode(0)
+        .open(document)
+    {
+        Ok(_) => Ok(false),
+        // Win32 ERROR_SHARING_VIOLATION: unrelated errors never prove closure.
+        Err(error) if error.raw_os_error() == Some(32) => Ok(true),
+        Err(error) => Err(error),
+    }
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "windows")))]
