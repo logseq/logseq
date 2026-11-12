@@ -241,3 +241,47 @@ virtualization, global retained-resource budgeting, progressive tile scheduling,
 controller/persistence wiring, complete master controls and real AT/interaction
 qualification. This page-surface candidate remains qualification-only and does
 not enable Linux/Windows PDF validation or replace the existing macOS provider.
+
+## Windows instance boundary proposed for review
+
+The pinned Windows NativeComponent public API accepts an owned child HWND and
+performs ordinary placement/clipping/adoption. Its Direct2D-only draw path has no
+public stateful TextPattern provider hook. NSH's own `access` module is private;
+it cannot be imported as an app helper. Public generated windows-rs COM interfaces
+and implementations are the available typed route for a reader TextPattern
+provider. No PDFium pointer or SDK-private handle needs to cross this boundary.
+
+The smaller window boundary uses CreateWindowExW with the built-in Unicode STATIC
+class, initially hidden, then SetWindowSubclass. This avoids a new window-class
+registry and GWLP_USERDATA. One exact Box<Registration> contains Rc<WindowState>;
+its pointer round-trips only through that callback's DWORD_PTR reference-data
+slot. SetWindowSubclass keys that slot by HWND, procedure and subclass ID and does
+not reference-count it. The wrapper must be !Send/!Sync through its Rc owner and
+create/install/dispatch/destroy on one UI thread. It never subclasses a foreign
+HWND, overwrites another callback's data, transmutes function pointers or casts a
+PDFium/COM handle to an unrelated type.
+
+The proposed callback immediately clones Rc<WindowState> from its own registered
+box, retaining no borrowed userdata reference across a handler call. Reentrant
+DestroyWindow can therefore retire the window and release registration without
+invalidating the outer handler's local state. At WM_NCDESTROY it removes only its
+own subclass, clears the shared HWND/liveness, and releases the registration box
+once; remaining OS messages use DefSubclassProc. A failed subclass installation
+reclaims the never-transferred registration before destroying the built-in
+window. A failed explicit destruction remains a failure; it cannot report a
+closed window or authorize worker/application release. This is ordinary Win32
+ABI instance-data interop, not an escape from Rust type/lifetime checks.
+
+Required private Windows gates before this boundary is enabled: real hidden
+window creation/close with one registration and handler drop; real parent-driven
+child destruction; repeated close after NCDESTROY; real destruction reentered
+from a dispatched custom message with the outer handler's state still alive;
+installation failure cleanup; no callback after retirement; and generated COM
+TextPattern/range lifetime queries after the native view/worker has closed.
+The whole reader additionally needs physical keyboard/pointer/wheel behavior,
+parent global-shortcut fallthrough, airspace/overlay clipping and packaged
+PDFium/CRT/data tests. No window/COM provider was created or tested for this note.
+
+Primary contracts: [SetWindowSubclass reference data, identity and thread restriction](https://learn.microsoft.com/en-us/windows/win32/api/commctrl/nf-commctrl-setwindowsubclass),
+[DefSubclassProc and the modern subclass chain](https://learn.microsoft.com/en-us/windows/win32/controls/subclassing-overview),
+[WM_NCDESTROY memory-release ordering](https://learn.microsoft.com/en-us/windows/win32/winmsg/wm-ncdestroy).
