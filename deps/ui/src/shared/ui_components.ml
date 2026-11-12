@@ -250,9 +250,17 @@ let header_right_sidebar_toggle element : t =
  fun ctx parent ->
   let viewport=Ui_services.viewport_width_signal ~scheduler:ctx.Lui_ui.ui_scheduler
     ~scope:ctx.Lui_ui.ui_scope in
-  Ui_parts.string_prop P.DisplayValue
-    ~value:(reactive (fun width -> if width>=640. then "contents" else "none") viewport)
-    (box ~key:"header-right-sidebar-toggle" [element]) ctx parent
+  let wrapper = box ~key:"header-right-sidebar-toggle" [element] in
+  (* NSH retains one native wrapper across the compact breakpoint. Switching
+     between contents and a physical view changes the mounted topology. *)
+  if Lui_ui.host ctx = P.NshHost then
+    Ui_parts.string_prop P.DisplayValue
+      ~value:(reactive (fun width -> if width>=640. then "block" else "none") viewport)
+      wrapper ctx parent
+  else
+    Ui_parts.string_prop P.DisplayValue
+      ~value:(reactive (fun width -> if width>=640. then "contents" else "none") viewport)
+      wrapper ctx parent
 
 (* Exactly one leading toolbar is interactive: the open sidebar owns it,
    otherwise the detail header does. Only the native host reserves traffic lights.

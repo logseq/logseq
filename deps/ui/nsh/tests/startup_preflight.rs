@@ -222,6 +222,29 @@ fn mount_actual_application(rows: Option<usize>) -> Result<(), String> {
     app.press_key("escape")?;
     let body =
         startup_body::identity(app.screen()).ok_or("qualified journal identity is missing")?;
+    // The header's compact breakpoint must hide the retained native wrapper,
+    // never switch between display:contents and a physical view after mount.
+    let right_toggle = app.screen().id("id:rs-toggle")?;
+    for width in [600.0, 640.0, 639.0, 1440.0] {
+        app.set_viewport(Size::new(px(width), px(900.0)))?;
+        wait_for_chrome(
+            &mut app,
+            &format!("retained right toggle at compact breakpoint {width}"),
+            Duration::from_secs(10),
+            |screen| {
+                startup_body::window_width(screen, width)
+                    && screen.layout_nodes().into_iter().any(|node| {
+                        node.id == right_toggle
+                            && node.hidden == (width < 640.0)
+                            && (node.hidden || (node.bounds.size.width.0 > 0.0
+                                && node.bounds.size.height.0 > 0.0))
+                    })
+            },
+        )?;
+    }
+    if startup_body::identity(app.screen()) != Some(body) {
+        return Err("compact header resize remounted the journal body or main scroll".into());
+    }
     // Resize and toggle through real public native input. The source graph,
     // Journals region and main scroll must remain mounted, with a dated title
     // still visible even if asynchronous page metadata repaints that text.

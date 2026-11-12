@@ -1,5 +1,15 @@
 # API migrations
 
+## NSH right sidebar header toggle retains its native wrapper on resize
+
+`Ui_components.header_right_sidebar_toggle` now uses `display=block` at widths
+of at least 640 points and `display=none` below that breakpoint on NSH. It retains
+the same wrapper and button while resizing, so a compact native window no longer
+rejects the change from a transparent contents anchor to a physical view. Web,
+Apple and Android retain their existing `contents`/`none` projection. The button's
+command, label and breakpoint are unchanged; downstream callers keep using
+`Ui_components.header_right_sidebar_toggle button` without migration.
+
 ## Desktop SDK and packaging CLI share an immutable source revision
 
 Native NSH dependencies now select
