@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Qualify the explicit stage-two protocol against an actual native DB worker.
+"""Qualify owned-worker protocol and preparation against actual native workers.
 
 Uses already-built app archives and an explicitly selected native worker. All
 storage, credentials and children belong to a fresh contained fixture process.
@@ -234,11 +234,18 @@ def compile_fixture(stage):
     bridge = stage / ("logseq_lui_bridge" + extension)
     subprocess.run([*prefix, "ocamlopt", "-c", "-o", str(bridge),
                     str(UI / "native/logseq_lui_bridge.c")], cwd=stage, check=True)
+    compiler = [*prefix, "ocamlfind", "ocamlopt", "-thread", "-package", PACKAGES, *includes]
+    # The executable's Dune interface deliberately hides Native_embed internals.
+    # Compile the real source, as in the native admission driver, to use its
+    # production lifecycle without adding a shipping inspection API.
+    embed = stage / "native_embed.cmx"
+    subprocess.run([*compiler, "-c", "-o", str(embed),
+                    str(UI / "native/native_embed.ml")], cwd=stage, check=True)
     source = stage / "owned_worker_update_native.ml"
     source.write_bytes((UI / "nsh/tests/owned_worker_update_native.ml").read_bytes())
     executable = stage / ("owned-worker-update.exe" if os.name == "nt" else "owned-worker-update")
-    subprocess.run([*prefix, "ocamlfind", "ocamlopt", "-thread", "-package", PACKAGES,
-                    *includes, "-linkall", "-linkpkg", *map(str, archives), str(source), str(bridge),
+    subprocess.run([*compiler, "-I", str(stage), "-linkall", "-linkpkg",
+                    *map(str, archives), str(embed), str(source), str(bridge),
                     "-o", str(executable)], cwd=stage, check=True)
     return executable
 
@@ -248,37 +255,73 @@ def digest(file):
         return hashlib.file_digest(content, "sha256").hexdigest()
 
 
+def qualify_case(executable, private, worker, mode, expected_events):
+    environment = private_environment(private, worker)
+    environment["LOGSEQ_TEST_WORKER_MODE"] = mode
+    deadline = time.monotonic() + 180
+    phases = []
+    with owned_fixture(executable, private, environment) as (process, messages):
+        for expected in expected_events:
+            line = messages.get(timeout=max(0.01, deadline - time.monotonic()))
+            if line is None:
+                raise RuntimeError("Private fixture exited without its expected lifecycle proof")
+            message = json.loads(line)
+            if message.get("event") != expected:
+                raise AssertionError(f"Expected {expected} lifecycle proof: {message}")
+            if mode == "protocol":
+                check_phase(private, environment, message, closed=expected in ("stopped", "closed"))
+            else:
+                workers = message.get("workers", [])
+                closed = {
+                    "coordinator-opened": [False, False], "coordinator-stopped": [True, True],
+                    "coordinator-restored": [False, False], "coordinator-partial-stopped": [True, False],
+                    "coordinator-partial-restored": [False, False], "coordinator-closed": [True, True],
+                }[expected]
+                if len(workers) != 2 or [worker["closed"] for worker in workers] != closed:
+                    raise AssertionError("Coordinator proof requires both exact worker lifecycle states")
+                for sample, is_closed in zip(workers, closed, strict=True):
+                    check_phase(private, environment, sample, closed=is_closed)
+                if phases and [sample["graph"] for sample in workers] != [sample["graph"] for sample in phases[0]["workers"]]:
+                    raise AssertionError("Coordinator restoration changed its captured private graph owners")
+            phases.append(message)
+            process.stdin.write("exit\n" if expected == expected_events[-1] else "continue\n")
+            process.stdin.flush()
+        if process.wait(timeout=10) != 0:
+            raise RuntimeError("Actual owned-worker fixture failed")
+    return phases
+
+
 def qualify(worker):
     worker = worker.resolve(strict=True)
     worker_hash = digest(worker)
     with tempfile.TemporaryDirectory(prefix="logseq-owned-worker-update-") as temporary:
         private = Path(temporary).resolve()
         executable = compile_fixture(private)
-        environment = private_environment(private, worker)
-        deadline = time.monotonic() + 90
-        phases = []
-        with owned_fixture(executable, private, environment) as (process, messages):
-            for expected in ("opened", "aborted", "stopped", "reopened", "closed"):
-                line = messages.get(timeout=max(0.01, deadline - time.monotonic()))
-                if line is None:
-                    raise RuntimeError("Private fixture exited without its expected lifecycle proof")
-                message = json.loads(line)
-                if message.get("event") != expected:
-                    raise AssertionError(f"Expected {expected} lifecycle proof: {message}")
-                check_phase(private, environment, message, closed=expected in ("stopped", "closed"))
-                phases.append(message)
-                process.stdin.write("exit\n" if expected == "closed" else "continue\n")
-                process.stdin.flush()
-            if process.wait(timeout=10) != 0:
-                raise RuntimeError("Actual owned-worker fixture failed")
+        protocol = qualify_case(executable, private / "protocol", worker, "protocol",
+                                ("opened", "aborted", "stopped", "reopened", "closed"))
+        coordinator = qualify_case(executable, private / "coordinator", worker, "coordinator",
+                                   ("coordinator-opened", "coordinator-stopped", "coordinator-restored",
+                                    "coordinator-partial-stopped", "coordinator-partial-restored", "coordinator-closed"))
+        instances = [[sample["instance"] for sample in phase["workers"]] for phase in coordinator]
+        if (instances[0] != instances[1] or instances[2] != instances[3]
+                or instances[4] != instances[5]
+                or any(before == after for before, after in zip(instances[0], instances[2], strict=True))
+                or instances[4][0] == instances[2][0] or instances[4][1] != instances[2][1]):
+            raise AssertionError("Actual full/partial rollback did not retain the expected exact worker generations")
         if digest(worker) != worker_hash:
             raise RuntimeError("The selected native worker changed during qualification")
-        return {"stage2Qualified": True, "installerEnabled": False, "platform": sys.platform,
+        return {"stage2Qualified": True, "coordinatorQualified": True,
+                "installerEnabled": False, "platform": sys.platform,
                 "worker": str(worker), "workerSha256": worker_hash,
                 "checks": ["actual-child-and-storage", "active-graph-ownership", "seal-refusal",
                            "abort-reopen", "SSE-does-not-block-stop", "exact-child-clean-exit",
-                           "runtime-closed", "SQLite-ownership-released", "durable-write-after-restart"],
-                "instances": [phases[0]["instance"], phases[3]["instance"]]}
+                           "runtime-closed", "SQLite-ownership-released", "durable-write-after-restart",
+                           "two-worker-production-lifecycle", "all-exits-before-prepared",
+                           "full-rollback-and-durable-reads", "partial-stop-cancellation",
+                           "exited-worker-replacement-and-live-worker-abort",
+                           "captured-transport-SSE-readiness-and-finite-probe"],
+                "instances": [protocol[0]["instance"], protocol[3]["instance"]],
+                "coordinatorInstances": instances}
 
 
 if __name__ == "__main__":

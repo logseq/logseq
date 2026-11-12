@@ -1,5 +1,31 @@
 # API migrations
 
+## Owned-worker qualification includes the actual two-worker preparation owner
+
+`nsh/run_owned_worker_update_native.py --worker <newly-built-native-worker>` now
+runs the existing single-worker protocol proof and a separate two-worker
+coordinator proof through the same contained fixture driver. Each case starts
+with fresh private storage, credentials, session and child ownership. The driver
+links the actual `Native_embed` lifecycle and app archives; it does not introduce
+an application flag, daemon endpoint or installation API.
+
+The coordinator case persists data in both graphs, uses a real active
+`Worker_client` transport with acknowledged SSE readiness, and checks both exact
+clean child exits before accepting `prepared: true`. Abort must restore both
+graphs, their durable data and the captured transport's SSE/probe before release.
+A second preparation is cancelled at the completion of the first actual worker
+stop: the first exact child has exited, the second remains sealed and alive, and
+no second stop may be dispatched. Rollback must replace only the exited child,
+abort the live worker's seal, and restore real finite RPC reads. The Python owner
+checks each graph's runtime record, SQLite lock, integrity and endpoint state at
+these explicit boundaries. It never infers exit from a protocol acknowledgement.
+
+The resulting JSON additionally reports `coordinatorQualified` and the observed
+`coordinatorInstances`; existing `stage2Qualified`, `instances` and installer
+fields remain available. This proves only the exercised normal and partial-stop
+cancellation paths when run successfully. Transport failure, retired-owner and
+relaunch qualification remain separate; installation still issues no lease.
+
 ## Abandoned update preparation accepts eventual successful recovery
 
 After an update preparation waiter is dropped, a failed matching `released`

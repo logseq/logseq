@@ -119,7 +119,7 @@ let stop request_id (worker : Daemon_client.update_worker) =
   check "Stopped worker no longer serves health"
     (Daemon_client.http_get ~port:worker.origin.port ~path:"/healthz"=None);
   update
-let run () =
+let initialize_fixture () =
   gate "start";
   let private_root = Sys.getenv "LOGSEQ_TEST_PRIVATE_ROOT" in
   List.iter (fun name -> check ("Fixture storage must remain private: " ^ name)
@@ -127,7 +127,8 @@ let run () =
     ["HOME";"LOGSEQ_ROOT_DIR";"LOGSEQ_GRAPHS_DIR";"LOGSEQ_UI_STATE_DIR"];
   check "Fixture cannot install a login-resident daemon" (Sys.getenv "LOGSEQ_NO_LOGIN_DAEMON"="1");
   check "Contained fixture begins without any inherited worker ownership"
-    (Hashtbl.length Daemon_client.spawned_children=0);
+    (Hashtbl.length Daemon_client.spawned_children=0)
+let run_protocol () =
   let repo = "logseq_db_owned_update_fixture" in
   let first = attach repo in
   check "Actual child uses the explicitly selected native worker"
@@ -215,8 +216,136 @@ let run () =
     (Hashtbl.length Daemon_client.spawned_children=2);
   event "closed" (metadata reopened);
   gate "exit"
+let child_status (worker : Daemon_client.update_worker) =
+  let child=Hashtbl.find Daemon_client.spawned_children worker.origin.instance in
+  Daemon_client.Child_process.poll child.process
+let assert_clean_exit worker =
+  check "Coordinator completion independently retains the exact child's clean exit"
+    (child_status worker=Some (Unix.WEXITED 0))
+let pair_event name workers =
+  event name ["workers", `List (List.map (fun (worker, closed) ->
+    `Assoc (("closed", `Bool closed)::metadata worker)) workers)]
+let durable_page worker repo =
+  ignore (invoke worker "thread-api/create-or-open-db" [Wire.String repo;Wire.Map []]);
+  let uuid=Host.random_uuid () and title="Durable coordinator fixture " ^ repo in
+  let now=Wire.Int64 (Int64.of_float (Unix.gettimeofday () *. 1000.)) in
+  let page=Wire.Map [Wire.Keyword "block/uuid",Wire.Uuid uuid;
+    Wire.Keyword "block/title",Wire.String title;
+    Wire.Keyword "block/name",Wire.String (String.lowercase_ascii title);
+    Wire.Keyword "block/tags",Wire.Set [Wire.Keyword "logseq.class/Page"];
+    Wire.Keyword "block/created-at",now;Wire.Keyword "block/updated-at",now] in
+  ignore (invoke worker "thread-api/transact"
+    [Wire.String repo;Wire.Array [page];Wire.Map [];Wire.Nil]);
+  let arguments=[Wire.String repo;Wire.Array [
+    Wire.String "[:find ?title . :in $ ?uuid :where [?e :block/uuid ?uuid] [?e :block/title ?title]]";
+    Wire.Uuid uuid]] in
+  let query worker=check "Actual worker retains its durable graph mutation"
+    (invoke worker "thread-api/q" arguments=Wire.String title) in
+  query worker;
+  query,arguments,title
+let run_coordinator () =
+  let app_owner=Thread.id (Thread.self ()) in
+  Platform.install_ui_services ~paints_caret:true
+    ~assert_owner:(fun () -> check "Coordinator callbacks remain on the fixture owner"
+      (Thread.id (Thread.self ())=app_owner))
+    ~request_flush:(fun () -> ()) ~dom:Ui_dom_native.ops
+    ~timers:Ui_dom_native.timers ~files:Ui_dom_native.files;
+  let repo_a="logseq_db_coordinator_a" and repo_b="logseq_db_coordinator_b" in
+  let first=attach repo_a and second=attach repo_b in
+  check "Two concurrent workers have distinct exact child instances"
+    (first.origin.instance<>second.origin.instance && child_status first=None && child_status second=None);
+  let query_a,args_a,title_a=durable_page first repo_a in
+  let query_b,_,_=durable_page second repo_b in
+  let client=Worker_client.create () in
+  ignore (await (Worker_client.invoke client "thread-api/create-or-open-db"
+    [Wire.String repo_a;Wire.Map []]));
+  await ((Worker_client.capture_restore_after_update client) ());
+  Runtime.worker:=Some client;
+  let original_sink=client.Worker_client.on_message in
+  let assert_active_read () =
+    check "The captured active transport keeps its original application message owner"
+      (client.Worker_client.on_message==original_sink);
+    check "The restored active transport supports a real finite graph read"
+      (await (Worker_client.invoke client "thread-api/q" args_a)=Wire.String title_a) in
+  assert_active_read ();
+  check "The actual held snapshot contains exactly the two private owned workers"
+    (List.length (await (Daemon_client.capture_update_workers ()))=2);
+  pair_event "coordinator-opened" [first,false;second,false];gate "continue";
+  let start ?partial id =
+    let owner=ref None and stops=ref [] in
+    let ready,resolve_ready,reject_ready=Js.Promise.pending () in
+    let released,resolve_released,reject_released=Js.Promise.pending () in
+    let scope=Ui_task.Activity.create () in
+    let production=Native_embed.update_worker_lifecycle () in
+    let workers=match partial with
+      | None -> production
+      | Some (before_a,before_b) ->
+          {production with capture=(fun ~request_id ->
+            let open Promise_ext in
+            let* workers=production.capture ~request_id in
+            Js.Promise.resolve (List.map (fun (worker : Update_preparation.worker) ->
+              {worker with stop=(fun () ->
+                check "Both real workers are sealed before the first stop dispatch"
+                  (List.for_all (fun sample -> fst (post sample "thread-api/list-db" [])=409)
+                    [before_a;before_b]);
+                let* ()=worker.stop () in
+                stops:=worker.key::!stops;
+                check "Cancellation boundary is after exactly one proven real stop"
+                  (List.length !stops=1);
+                assert_clean_exit before_a;
+                check "The second sealed child remains alive at the partial stop boundary"
+                  (child_status before_b=None);
+                pair_event "coordinator-partial-stopped" [before_a,true;before_b,false];
+                gate "continue";
+                Update_preparation.abort (Option.get !owner);
+                Js.Promise.resolve ())}) workers))} in
+    let preparation=Update_preparation.start ~workers ~gate:Update_admission.application ~scope
+      ~save:(fun ~current:_ -> Js.Promise.resolve ()) ~flush:(fun () -> ())
+      ~logical_idle:Native_embed.update_logical_idle
+      ~respond:(fun phase ok error -> match phase,ok with
+        | "prepared",true -> resolve_ready ()
+        | "prepared",false -> reject_ready (Failure error)
+        | "released",true -> resolve_released ()
+        | "released",false -> reject_released (Failure error)
+        | _ -> failwith "Unexpected native coordinator acknowledgement") id in
+    owner:=Some preparation;
+    preparation,scope,ready,released,stops in
+  let owner,scope,ready,released,_=start "10" in
+  await ready;assert_clean_exit first;assert_clean_exit second;
+  check "Ordinary active-client calls remain fenced after both exact exits"
+    (match (Worker_client.invoke client "thread-api/q" args_a).Js.Promise.state with
+     | Js.Promise.Rejected (Update_admission.Refused _) -> true | _ -> false);
+  pair_event "coordinator-stopped" [first,true;second,true];gate "continue";
+  Update_preparation.abort owner;await released;
+  Ui_task.Activity.close scope;
+  let restored_a=attach repo_a and restored_b=attach repo_b in
+  check "Full rollback replaces both exact exited children"
+    (restored_a.origin.instance<>first.origin.instance && restored_b.origin.instance<>second.origin.instance);
+  query_a restored_a;query_b restored_b;assert_active_read ();
+  pair_event "coordinator-restored" [restored_a,false;restored_b,false];gate "continue";
+  let _,scope,ready,released,stops=start ~partial:(restored_a,restored_b) "11" in
+  await released;Ui_task.Activity.close scope;
+  check "Partial-stop cancellation never acknowledges successful preparation"
+    (ready.Js.Promise.state=Js.Promise.Pending);
+  check "Partial-stop cancellation does not dispatch the second worker stop"
+    (!stops=[restored_a.storage]);
+  let final_a=attach repo_a and final_b=attach repo_b in
+  check "Partial rollback replaces only the exited child and aborts the live sealed child"
+    (final_a.origin.instance<>restored_a.origin.instance && final_b.origin=restored_b.origin
+     && child_status final_b=None);
+  query_a final_a;query_b final_b;assert_active_read ();
+  pair_event "coordinator-partial-restored" [final_a,false;final_b,false];gate "continue";
+  ignore (stop "12" final_a);ignore (stop "12" final_b);
+  assert_clean_exit final_a;assert_clean_exit final_b;
+  Runtime.worker:=None;
+  pair_event "coordinator-closed" [final_a,true;final_b,true];gate "exit"
 let () =
-  try run ()
+  try
+    initialize_fixture ();
+    (match Sys.getenv "LOGSEQ_TEST_WORKER_MODE" with
+     | "protocol" -> run_protocol ()
+     | "coordinator" -> run_coordinator ()
+     | _ -> failwith "Unknown contained owned-worker fixture mode")
   with error ->
     event "error" ["error", `String (Printexc.to_string error)];
     (* Keep the owning group leader alive until the driver controls its exact
