@@ -227,9 +227,17 @@ checkpoint and has not been remeasured for this newer application source.
 
 The stronger canonical picker unit case initially failed because its private
 services were absent, then because its full real view was created without the
-application extension registry. That test remains open pending its corrected
-typed initialization and rerun; passing actual native color interaction does
-not convert this unit target into a passing result. A separate LUI regression
-also investigates source-factory replacement independently of the application's
-paint-only color repair. Native table focus/navigation, date-flow interaction,
-all-platform packaging, signing and installed updates remain incomplete.
+complete application extension registry. It now uses the production registration
+sequence (`Logseq_el`, `Logseq_codemirror`, `Logseq_editor`), with no placeholder
+extensions. The whole native virtual-row target passed at `8fce049a20` plus that
+two-line registration repair, including 1k/100k sparse rows, complete Emoji/icons,
+retained interaction, color/window identity and pagination. Evidence:
+`/tmp/logseq-current-picker-native-complete-registry.log`.
+
+A separate LUI regression investigates source-factory replacement independently
+of the application's paint-only color repair. Its isolated Headless case passed;
+the corresponding AppKit case remains open. Native table focus/navigation,
+date-flow interaction, all-platform packaging, signing and installed updates
+remain incomplete. The later natural-date service has passed shared compilation
+and 16,428 checks plus actual release startup, but its Rust parser's next-weekday
+behavior differs from frozen master and its semantic regression remains red.
