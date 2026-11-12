@@ -1,12 +1,7 @@
-(* Native twin of virt/virt_list.ml — emits every row as a real child
-   (children spine identical to the web backend / master) and lets the
-   SwiftUI LazyVStack virtualize at render time: views materialize only
-   when scrolled into view, the same model as logseq/chat.
-
-   The data-virt-count attribute selects the lazy column path on the
-   host side; the last child's onAppear fires a "virt-end" dom-event
-   which drives [on_end] pagination (journals scroll-back; a no-op on
-   fixed-size lists). *)
+(* Native twin of virt/virt_list.ml. NSH uses the canonical bounded row
+   source with the surrounding Scroll as its viewport. The older native
+   hosts retain their child spine and data-virt-count/virt-end lazy-mount
+   contract, including SwiftUI LazyVStack behavior. *)
 
 open Lui_elements
 module D = Logseq_el
@@ -259,11 +254,8 @@ let list ?(scroll_parent_id = "main-content-container") ?(overscan = 5)
       ctx parent
     end
 
-(* Signal-driven row stream: same [ls-virt-list] shell but children are
-   a keyed collection, so a splice republishes only the touched rows —
-   on this backend every row is a real child anyway, so diffing per row
-   is what keeps outliner ops cheap on huge pages (a single-block edit
-   must not re-emit the whole stream). *)
+(* Signal-driven row stream. NSH mounts a bounded keyed window; the
+   older native host branches retain their existing lazy child spine. *)
 let rows_sig ~key ~cmp ~mount ?(on_end = fun () -> ())
     ?(initial_rows = -1) ?overscan ~estimate_size
     (source : 'a list Signal.signal) : t =
