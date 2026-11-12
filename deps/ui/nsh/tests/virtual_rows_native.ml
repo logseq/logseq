@@ -221,7 +221,14 @@ let test_picker_grid label data () =
     check (label ^ " renders precisely the requested seven grid rows")
       (controls () = 63);
     let cell = identified runtime (item_key (103 * 9 + 4)) in
-    let row = Hashtbl.find runtime.runtime_parents cell in
+    (* The host pins the canonical direct child of the virtual list, not
+       the nested grid that happens to parent an individual button. *)
+    let rec row_owner node =
+      let parent = Hashtbl.find runtime.runtime_parents node in
+      if Lui_runtime.canonical_node runtime parent
+         = Lui_runtime.canonical_node runtime list
+      then node else row_owner parent in
+    let row = row_owner cell in
     window 101 108;
     check (label ^ " preserves overlapping cell identity during scrolling")
       (identified runtime (item_key (103 * 9 + 4)) = cell);
