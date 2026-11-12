@@ -21,6 +21,7 @@ let pending_batches : Lui_protocol.patch_batch Queue.t = Queue.create ()
    batch stream. *)
 let entry_lock = Mutex.create ()
 let entry_owner : int option ref = ref None
+let activity_scope : Ui_task.Activity.t option ref = ref None
 
 let assert_entry_owner () =
   if !entry_owner <> Some (Thread.id (Thread.self ())) then
@@ -29,7 +30,10 @@ let assert_entry_owner () =
 let with_entry_lock f =
   Mutex.lock entry_lock;
   entry_owner := Some (Thread.id (Thread.self ()));
-  match f () with
+  let run () = match !activity_scope with
+    | Some scope -> Ui_task.Activity.within scope f
+    | None -> f () in
+  match run () with
   | x -> entry_owner := None; Mutex.unlock entry_lock; x
   | exception e -> entry_owner := None; Mutex.unlock entry_lock; raise e
 
@@ -533,6 +537,9 @@ let initialize_unlocked platform_code host_code (payload : string) =
   take_patches ()
 
 let initialize platform_code host_code payload =
+  Option.iter Ui_task.Activity.close !activity_scope;
+  Update_admission.reset Update_admission.application;
+  activity_scope := (if host_code = 6 then Some (Ui_task.Activity.create ()) else None);
   with_entry_lock (fun () -> initialize_unlocked platform_code host_code payload)
 
 (* NOTE: never Queue.clear pending_batches at entry — a systhread yield
@@ -541,6 +548,7 @@ let initialize platform_code host_code payload =
    skip a wire generation, which the host rejects as invalidBatch. *)
 let dispatch_lui (event : Lui_protocol.event) =
   with_entry_lock (fun () ->
+      Update_admission.require_input Update_admission.application "ordinary-ui";
       let t0 = perf_ms () in
       (match !current_app with
        | Some app ->
@@ -638,6 +646,7 @@ let scroll_edges node at_start at_end =
 
 let extension_event node identifier name values =
   with_entry_lock (fun () ->
+      Update_admission.require_input Update_admission.application "extension-ui";
       let t0 = perf_ms () in
       (match !current_app with
        | Some app -> (
@@ -701,6 +710,67 @@ let rec prepare_window_close () =
     Worker_client.await_idle ()
   end
 
+let update_id body =
+  match Yojson.Safe.from_string body with
+  | `Assoc [ ("id", `String id) ] -> Update_admission.validate_id id; id
+  | _ -> invalid_arg "Update preparation requires exactly one string id"
+
+let update_result id phase ok error =
+  platform_request ("update-preparation-result\n" ^ Yojson.Safe.to_string
+    (`Assoc [ "id", `String id; "phase", `String phase;
+              "ok", `Bool ok; "error", `String error ]))
+
+let after_mailbox () =
+  Js.Promise.make (fun ~resolve ~reject:_ -> Host.after_drain (fun () -> resolve ()))
+
+let rec save_for_update id =
+  let open Promise_ext in
+  let* () = prepare_window_close () in
+  let worker_epoch = Worker_client.activity_epoch () in
+  let mailbox_epoch = Host.activity_epoch () in
+  let observed_epoch = Option.map (fun scope -> (Ui_task.Activity.snapshot scope).epoch) !activity_scope in
+  let* () = after_mailbox () in
+  if not (Update_admission.current Update_admission.application id) then
+    Js.Promise.resolve ()
+  else begin
+    (* Flush queued reactive/model work before observing a stable save boundary.
+       Native measurement and service completions continue through the same pump. *)
+    Option.iter (fun app ->
+      match !activity_scope with
+      | Some scope -> Ui_task.Activity.within scope (fun () -> ignore (Lui_app.flush app))
+      | None -> ignore (Lui_app.flush app)) !current_app;
+    let outstanding = match !activity_scope with
+      | Some scope -> (Ui_task.Activity.snapshot scope).pending <> 0
+      | None -> true in
+    if outstanding then
+      Js.Promise.reject (Failure "Application still has pending asynchronous work")
+    else if worker_epoch <> Worker_client.activity_epoch ()
+       || mailbox_epoch <> Host.activity_epoch ()
+       || observed_epoch <> Option.map (fun scope -> (Ui_task.Activity.snapshot scope).epoch) !activity_scope
+       || not (Worker_client.idle ()) || !Editor_state.structure_pending
+       || Option.is_some !Outliner_ops.pending_save
+    then save_for_update id
+    else
+      match !activity_scope with
+      | Some scope when (Ui_task.Activity.snapshot scope).pending = 0 ->
+          if Update_admission.seal Update_admission.application id then
+            update_result id "prepared" true "";
+          Js.Promise.resolve ()
+      | Some _ ->
+          Js.Promise.reject (Failure "Application still has pending asynchronous work")
+      | None -> Js.Promise.reject (Failure "Update preparation requires the NSH application owner")
+  end
+
+let start_update_preparation id =
+  if Option.is_none !activity_scope then
+    invalid_arg "Update preparation requires the NSH application owner";
+  Update_admission.begin_prepare Update_admission.application id;
+  Host.enqueue (fun () -> Ui_task.Activity.without (fun () ->
+    ignore (save_for_update id |> Js.Promise.catch (fun error ->
+      if Update_admission.current Update_admission.application id then
+        update_result id "prepared" false (Printexc.to_string error);
+      Js.Promise.resolve ()))))
+
 let platform_event payload =
   (* Swift -> OCaml event channel (window resize, appearance change,
      dom-op results, menu commands). Payload is "name\njson". *)
@@ -713,7 +783,18 @@ let platform_event payload =
       let json =
         try Js.Json.parseExn body with _ -> Js.Json.JObject []
       in
-      if name = "keychain-result" then
+      if name = "update-prepare" then start_update_preparation (update_id body)
+      else if name = "update-abort" then begin
+        let id = update_id body in
+        let released = Update_admission.release Update_admission.application id in
+        update_result id "released" released
+          (if released then "" else "Update preparation request is not current")
+      end
+      else if name = "application-menu-command" then
+        Host.enqueue (fun () ->
+          Update_admission.require_input Update_admission.application "application-menu";
+          Platform.emit_event name json)
+      else if name = "keychain-result" then
         let json = try Yojson.Safe.from_string body
           with Yojson.Json_error _ -> invalid_arg "Invalid keychain result encoding" in
         Platform.note_keychain_result json
@@ -721,6 +802,7 @@ let platform_event payload =
         Platform.note_clipboard_write (Yojson.Safe.from_string body)
       else if name = "window-close-request" then
         Host.enqueue (fun () ->
+          Update_admission.require_input Update_admission.application "window-close";
           let result ok error =
             platform_request ("window-close-result\n" ^ Yojson.Safe.to_string
               (`Assoc [ "ok", `Bool ok; "error", `String error ])) in
@@ -799,6 +881,7 @@ let platform_event payload =
 
 let document_event name payload =
   with_entry_lock (fun () ->
+    Update_admission.require_input Update_admission.application "document-ui";
     Platform.emit_event name (Js.Json.parseExn payload);
     let prevented = !Platform.default_prevented in
     (match !current_app with
@@ -808,6 +891,7 @@ let document_event name payload =
 
 let keyboard_event node payload values =
   with_entry_lock (fun () ->
+    Update_admission.require_input Update_admission.application "editor-keyboard";
     (* Document and conduit dispatch form one input transaction. Async
        completions must not remount the target between those phases. *)
     Platform.emit_event "keydown" (Js.Json.parseExn payload);
@@ -837,6 +921,9 @@ let dispose () =
          invalidate_stale_snapshots (Lui_app.runtime app);
          current_app := None
      | None -> ());
+    Option.iter Ui_task.Activity.close !activity_scope;
+    activity_scope := None;
+    Update_admission.reset Update_admission.application;
     take_patches ())
 
 let root_node () =
@@ -912,7 +999,11 @@ module Ffi = struct
   let agent request =
     with_entry_lock (fun () ->
       let app = Option.get !current_app in
-      let reply = Lui_agent.handle (Lui_agent.app_target ~host:"logseq-native" app) request in
+      let target = Lui_agent.app_target ~host:"logseq-native" app in
+      let dispatch event =
+        Update_admission.require_input Update_admission.application "semantic-agent";
+        target.dispatch event in
+      let reply = Lui_agent.handle { target with dispatch } request in
       reply, encode_batches (take_patches_dbg "agent"))
   let editor_snapshot block_id =
     with_entry_lock (fun () ->

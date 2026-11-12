@@ -89,7 +89,7 @@ let run_invoke t name args =
 let pending_calls : (int, Wire.t Js.Promise.t) Hashtbl.t = Hashtbl.create 16
 let next_call = ref 0
 
-let invoke t name args =
+let invoke_admitted t name args =
   let id = !next_call in
   incr next_call;
   let p = run_invoke t name args in
@@ -101,6 +101,14 @@ let invoke t name args =
           Hashtbl.remove pending_calls id;
           Js.Promise.resolve ()));
   p
+
+let invoke t name args =
+  match Update_admission.require_worker Update_admission.application name with
+  | () -> invoke_admitted t name args
+  | exception error -> Js.Promise.reject error
+
+let activity_epoch () = !next_call
+let idle () = Hashtbl.length pending_calls = 0
 
 let rec await_idle () =
   let pending = Hashtbl.fold (fun _ p ps -> p :: ps) pending_calls [] in

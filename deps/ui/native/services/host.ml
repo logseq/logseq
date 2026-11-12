@@ -6,15 +6,30 @@
 
 let queue : (unit -> unit) Queue.t = Queue.create ()
 let lock = Mutex.create ()
+let drain_tail : (unit -> unit) Queue.t = Queue.create ()
+let activity = ref 0
+let activity_epoch () =
+  Mutex.lock lock;
+  let epoch = !activity in
+  Mutex.unlock lock;
+  epoch
 
 (* set by native_embed to the wakeup closure the host gives us *)
 let wakeup_cb : (unit -> unit) ref = ref (fun () -> ())
 
 let set_wakeup f = wakeup_cb := f
 
+(* A one-shot mailbox barrier, not a timer or a display-frame request. *)
+let after_drain fn =
+  Mutex.lock lock;
+  Queue.add fn drain_tail;
+  Mutex.unlock lock;
+  !wakeup_cb ()
+
 let enqueue (fn : unit -> unit) : unit =
   Mutex.lock lock;
   Queue.push fn queue;
+  incr activity;
   Mutex.unlock lock;
   !wakeup_cb ()
 
@@ -23,15 +38,22 @@ let drain () : unit =
   let rec loop () =
     Mutex.lock lock;
     let next =
-      if Queue.is_empty queue then None else Some (Queue.pop queue)
+      if not (Queue.is_empty queue) then Some (true, Queue.pop queue)
+      else if not (Queue.is_empty drain_tail) then Some (false, Queue.pop drain_tail)
+      else None
     in
     Mutex.unlock lock;
     match next with
-    | Some fn ->
+    | Some (ordinary, fn) ->
         (try fn ()
          with e ->
            prerr_endline
              ("[host] task raised: " ^ Printexc.to_string e));
+        if ordinary then begin
+          Mutex.lock lock;
+          incr activity;
+          Mutex.unlock lock
+        end;
         loop ()
     | None -> ()
   in

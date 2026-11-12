@@ -719,7 +719,7 @@ type transport =
   ; mutable repo : string
   ; mutable sse : sse_state option
   ; mutable sink : string -> Wire.t -> unit
-  ; pending : (string * Wire.t list) Queue.t
+  ; pending : (string * Wire.t list * (unit -> unit) option) Queue.t
   ; dead : string Js.Promise.t
   }
 
@@ -866,9 +866,13 @@ let flush_pending (t : transport) : unit Js.Promise.t =
   let rec loop () =
     if Queue.is_empty t.pending then Js.Promise.resolve ()
     else
-      let name, args = Queue.take t.pending in
-      let* _ = post_invoke t.base_url name args in
-      loop ()
+      let name, args, finish = Queue.take t.pending in
+      Js.Promise.then_ (fun _ ->
+        Option.iter (fun finish -> finish ()) finish;
+        loop ()) (post_invoke t.base_url name args)
+      |> Js.Promise.catch (fun error ->
+           Option.iter (fun finish -> finish ()) finish;
+           Js.Promise.reject error)
   in
   loop ()
 
@@ -903,7 +907,7 @@ let invoke (t : transport) (name : string) (args : Wire.t list) :
       | _ -> Js.Promise.reject (Failure "create-or-open-db: bad args"))
   | _ ->
       if t.base_url = "" then (
-        Queue.add (name, args) t.pending;
+        Queue.add (name, args, Ui_task.Activity.begin_work ()) t.pending;
         Js.Promise.resolve Wire.Nil)
       else post_invoke t.base_url name args
 
@@ -913,7 +917,7 @@ let create_transport () : transport =
   ; sse = None
   ; sink = (fun _ _ -> ())
   ; pending = Queue.create ()
-  ; dead = Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())
+  ; dead = Js.Promise.liveness ()
   }
 
 let is_electron () = true

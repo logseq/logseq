@@ -486,3 +486,36 @@ socketpair environments fail honestly rather than falling back to an unsafe
 pipe. Actual Windows CI now compiles and runs the real Host source to exercise
 initialization, delayed/zero timers, cancellation, wake bursts and mailbox drain;
 this source change alone is not a passed Windows runtime qualification.
+
+
+### Native update preparation admission and save boundary
+
+The NSH application bridge accepts correlated `update-prepare` and `update-abort`
+platform events with exactly `{ "id": "<positive decimal request id>" }`. Its
+ordered service response is `update-preparation-result`, carrying `id`, `phase`
+(`prepared` or `released`), `ok` and `error`. IDs must increase within the current
+application owner. Only a matching abort releases a reservation; a repeated
+matching release is idempotent, and an older abort cannot release a newer save.
+Web/mobile default admission and their wire ordinals are unchanged.
+
+Preparation rejects new ordinary, extension/editor, document/keyboard and
+semantic-agent mutations while retaining the existing pump, service completions
+and read-only agent queries. It reuses `prepare_window_close` to settle structural
+editing, commit the live buffer, flush pending saves and await this app's worker
+calls, without closing a window or stopping the shared daemon. A Host mailbox
+barrier drains callbacks enqueued by accepted callbacks, then reactive flush,
+worker/activity/mailbox epochs and app-owned finite-work counts are checked.
+Unknown outstanding work explicitly refuses preparation; it is not awaited
+indefinitely or misreported as a completed save boundary. Native Promise
+continuations preserve their app observation context; transport liveness is
+explicitly excluded from finite work. Pre-attachment buffered daemon invokes
+participate in the same observation until their actual dispatch completes.
+
+While the matching reservation is held, new native worker invocations reject
+through the existing Promise error path with typed `Update_admission.Refused`;
+there is no deferred-write queue or new worker. Abort resumes ordinary admission.
+This fence covers application/model mutations, not an invented inherited NSH
+`disabled` state. Native controller-local UI state is not certified frozen.
+Worker artifact identity/compatibility, shared-consumer ownership and safe
+relaunch remain separate requirements; this save boundary issues no installation
+lease and does not qualify whole-application upgrading.

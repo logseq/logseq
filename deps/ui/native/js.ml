@@ -186,14 +186,20 @@
     type 'a t =
       { mutable state : 'a state
       ; mutable callbacks : ('a state -> unit) list
+      ; finish_activity : (unit -> unit) option
       }
 
-    let new_pending () = { state = Pending; callbacks = [] }
+    let new_pending () =
+      { state = Pending; callbacks = []; finish_activity = Ui_task.Activity.begin_work () }
+
+    let add_callback t callback =
+      t.callbacks <- Ui_task.Activity.capture callback :: t.callbacks
 
     let settle t st =
       match t.state with
       | Pending ->
           t.state <- st;
+          Option.iter (fun finish -> finish ()) t.finish_activity;
           let cbs = List.rev t.callbacks in
           t.callbacks <- [];
           List.iter (fun cb -> cb st) cbs
@@ -205,8 +211,8 @@
       , (fun v -> settle t (Resolved v))
       , (fun e -> settle t (Rejected e)) )
 
-    let resolve v = { state = Resolved v; callbacks = [] }
-    let reject e = { state = Rejected e; callbacks = [] }
+    let resolve v = { state = Resolved v; callbacks = []; finish_activity = None }
+    let reject e = { state = Rejected e; callbacks = []; finish_activity = None }
     let unsafe_settle t v = settle t (Resolved v)
     let unsafe_reject t e = settle t (Rejected e)
 
@@ -214,6 +220,10 @@
       let t = new_pending () in
       f ~resolve:(unsafe_settle t) ~reject:(unsafe_reject t);
       t
+
+    (* A transport's never-settling liveness promise is not finite application
+       work. Its callbacks still retain their own observation context. *)
+    let liveness () = Ui_task.Activity.without new_pending
 
     let chain (t : 'a t) (on_resolved : 'a -> 'b t)
         (on_rejected : error -> 'b t) : 'b t =
@@ -231,11 +241,11 @@
         in
         (match r.state with
          | Pending ->
-             r.callbacks <- (fun st' -> settle out st') :: r.callbacks
+             add_callback r (fun st' -> settle out st')
          | st' -> settle out st')
       in
       (match t.state with
-       | Pending -> t.callbacks <- cont :: t.callbacks
+       | Pending -> add_callback t cont
        | st -> cont st);
       out
 
@@ -252,7 +262,7 @@
           (fun i p ->
             match p.state with
             | Pending ->
-                p.callbacks <-
+                add_callback p
                   (fun st ->
                     match st with
                     | Resolved v ->
@@ -263,7 +273,6 @@
                             (Resolved (Array.map Option.get results))
                     | Rejected e -> settle out (Rejected e)
                     | Pending -> ())
-                  :: p.callbacks
             | Resolved v ->
                 results.(i) <- Some v;
                 decr remaining
@@ -288,7 +297,7 @@
         (fun p ->
           match p.state with
           | Pending ->
-              p.callbacks <- (fun st -> settle out st) :: p.callbacks
+              add_callback p (fun st -> settle out st)
           | st -> settle out st)
         arr;
       out
