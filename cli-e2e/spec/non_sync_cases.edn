@@ -522,8 +522,8 @@
     "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page Beta >/dev/null"
     "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert block --graph {{graph-arg}} --target-page Home --content 'Note on [[Alpha]] and [[Beta]]' >/dev/null"],
    :cmds
-   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert block --graph {{graph-arg}} --id \"$({{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json query --graph {{graph-arg}} --query '[:find ?e . :where [?e :block/title \"Note on [[Alpha]] and [[Beta]]\"]]' | python3 -c 'import sys,json; print(json.load(sys.stdin)[\"data\"][\"result\"])')\" --content 'Updated note on [[Alpha]]' >/dev/null"
-    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json query --graph {{graph-arg}} --query '[:find [?t ...] :where [?e :block/title \"Updated note on [[Alpha]]\"] [?e :block/refs ?r] [?r :block/title ?t]]'"],
+   ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert block --graph {{graph-arg}} --id \"$({{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json query --graph {{graph-arg}} --query '[:find ?e . :where [?p :block/name \"home\"] [?e :block/page ?p]]' | python3 -c 'import sys,json; print(json.load(sys.stdin)[\"data\"][\"result\"])')\" --content 'Updated note on [[Alpha]]' >/dev/null"
+    "{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json query --graph {{graph-arg}} --query '[:find [?t ...] :where [?p :block/name \"home\"] [?e :block/page ?p] [?e :block/refs ?r] [?r :block/title ?t]]'"],
    :expect
    {:exit 0,
     :stdout-json-paths
