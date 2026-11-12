@@ -14,8 +14,7 @@ const APP_ID: &str = "com.logseq.logseq";
 
 #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
 fn main() -> impl std::process::Termination {
-    env_logger::init();
-    let qualification = match qualification(std::env::args_os().skip(1).collect(), |name| {
+    let launch = match launch(std::env::args_os().skip(1).collect(), |name| {
         std::env::var_os(name)
     }) {
         Ok(qualification) => qualification,
@@ -24,6 +23,19 @@ fn main() -> impl std::process::Termination {
             return std::process::ExitCode::FAILURE;
         }
     };
+    let qualification = match launch {
+        Launch::ValidateUpdateConfig(path) => {
+            return match validate_update_config(&path) {
+                Ok(()) => std::process::ExitCode::SUCCESS,
+                Err(error) => {
+                    eprintln!("Logseq update configuration: {error}");
+                    std::process::ExitCode::FAILURE
+                }
+            };
+        }
+        Launch::Application(qualification) => qualification,
+    };
+    env_logger::init();
     let startup_preflight = qualification.is_some();
     let data_dir = qualification.as_ref().map(|root| root.join("nsh-data"));
     let cache = qualification
@@ -56,6 +68,46 @@ fn main() -> impl std::process::Termination {
             ..Default::default()
         },
     ))
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+#[derive(Debug, PartialEq, Eq)]
+enum Launch {
+    Application(Option<std::path::PathBuf>),
+    ValidateUpdateConfig(std::path::PathBuf),
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+fn launch(
+    arguments: Vec<std::ffi::OsString>,
+    environment: impl Fn(&str) -> Option<std::ffi::OsString>,
+) -> Result<Launch, String> {
+    if arguments
+        .first()
+        .is_some_and(|flag| flag == "--validate-update-config")
+    {
+        if arguments.len() != 2 {
+            return Err("expected --validate-update-config <configuration-file>".into());
+        }
+        return Ok(Launch::ValidateUpdateConfig(arguments[1].clone().into()));
+    }
+    qualification(arguments, environment).map(Launch::Application)
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+fn validate_update_config(path: &std::path::Path) -> Result<(), String> {
+    use std::io::Read;
+    const LIMIT: u64 = 1 << 20;
+    let mut bytes = Vec::new();
+    std::fs::File::open(path)
+        .map_err(|error| error.to_string())?
+        .take(LIMIT + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|error| error.to_string())?;
+    if bytes.len() as u64 > LIMIT {
+        return Err("configuration exceeds 1 MiB".into());
+    }
+    lui_nsh::update::validate_configuration(&bytes).map_err(|error| error.to_string())
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
@@ -114,7 +166,7 @@ compile_error!(
     any(target_os = "linux", target_os = "macos", target_os = "windows")
 ))]
 mod tests {
-    use super::qualification;
+    use super::{Launch, launch, qualification, validate_update_config};
     use std::{collections::BTreeMap, ffi::OsString, path::PathBuf};
 
     struct Fixture {
@@ -167,6 +219,42 @@ mod tests {
             .unwrap(),
             None
         );
+    }
+
+    #[test]
+    fn update_validation_selects_no_application_or_qualification_environment() {
+        assert_eq!(
+            launch(
+                vec!["--validate-update-config".into(), "config.json".into()],
+                |_| panic!("validation must not inspect launch environment")
+            )
+            .unwrap(),
+            Launch::ValidateUpdateConfig("config.json".into())
+        );
+        assert!(launch(vec!["--validate-update-config".into()], |_| None).is_err());
+        assert!(
+            launch(
+                vec!["--validate-update-config".into(), "a".into(), "b".into()],
+                |_| None
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn update_validation_checks_real_bytes_and_bounds_before_launch() {
+        let fixture = Fixture::new();
+        let file = fixture.root.join("update.json");
+        std::fs::write(&file, br#"{"id":"com.logseq.logseq","version":"2.0.2","url":"https://updates.example.test/latest.json","publicKey":"iojj3XQJ8ZX9UtstPLpdcspnCb8dlBIb83SIAbQPb1w="}"#).unwrap();
+        validate_update_config(&file).unwrap();
+        std::fs::write(
+            &file,
+            br#"{"id":"com.logseq.logseq","version":"2.0.2","github":"logseq/logseq"}"#,
+        )
+        .unwrap();
+        assert!(validate_update_config(&file).is_err());
+        std::fs::write(&file, vec![b' '; (1 << 20) + 1]).unwrap();
+        assert!(validate_update_config(&file).unwrap_err().contains("1 MiB"));
     }
 
     #[test]

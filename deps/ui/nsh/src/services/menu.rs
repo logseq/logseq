@@ -2,7 +2,7 @@
 //! NSH owns platform edit/window/application roles and shortcut dispatch.
 use lui_nsh::{
     app::ApplicationEvents,
-    desktop_updates::{UpdateActions, UpdateLabels},
+    desktop_updates::{InstallPreparation, UpdateActions, UpdateLabels, UpdateLifecycle},
     runtime::PlatformEvent,
 };
 use nsh_core::{
@@ -28,6 +28,8 @@ struct Labels {
     help: String,
     reload: String,
     updates: UpdateLabels,
+    #[serde(rename = "installation-unavailable-description")]
+    installation_unavailable_description: String,
 }
 impl Labels {
     fn parse(payload: &str) -> Result<Self, String> {
@@ -42,6 +44,7 @@ impl Labels {
             &labels.window,
             &labels.help,
             &labels.reload,
+            &labels.installation_unavailable_description,
         ]
         .into_iter()
         .any(|label| label.trim().is_empty())
@@ -73,8 +76,8 @@ pub struct ApplicationMenu {
 }
 impl ApplicationMenu {
     pub fn mount() -> Self {
-        let updates = UpdateActions::installed();
         let installed = signal(None::<Installed>);
+        let updates = UpdateActions::installed(Rc::new(InstallationUnavailable { installed }));
         effect(move || {
             if let Some(current) = installed.get() {
                 let contribution = updates.menu_items(current.labels.updates.clone());
@@ -111,6 +114,22 @@ impl ApplicationMenu {
         });
         self.installed.set(Some(Installed { labels, command }));
         Ok(())
+    }
+}
+
+// Actual installation remains closed until the application supplies a verified
+// save/quiesce, worker-ownership and relaunch lifecycle. Checks and downloads
+// still use the existing updater; this policy never issues an installation lease.
+struct InstallationUnavailable {
+    installed: Signal<Option<Installed>>,
+}
+impl UpdateLifecycle for InstallationUnavailable {
+    fn prepare(&self) -> InstallPreparation {
+        let current = self
+            .installed
+            .get_untracked()
+            .expect("update actions require installed translated menu labels");
+        Box::pin(async move { Err(current.labels.installation_unavailable_description) })
     }
 }
 
@@ -189,7 +208,9 @@ mod tests {
 
     fn labels() -> String {
         json!({"toggle-left-sidebar":"Toggle sidebar","documentation":"Documentation",
-            "file":"File","edit":"Edit","view":"View","window":"Window","help":"Help","reload":"Reload","updates":{"menu-check":"Check for Updates…",
+            "file":"File","edit":"Edit","view":"View","window":"Window","help":"Help","reload":"Reload",
+            "installation-unavailable-description":"This update cannot be installed until Logseq can safely save and restart.",
+            "updates":{"menu-check":"Check for Updates…",
             "menu-install":"Install and Restart…",
             "menu-checking":"Checking for Updates…",
             "menu-downloading":"Downloading Update…",
@@ -246,7 +267,44 @@ mod tests {
         assert!(Labels::parse(&invalid_update.to_string()).is_err());
         invalid_update["updates"] = serde_json::Value::Null;
         assert!(Labels::parse(&invalid_update.to_string()).is_err());
+        let mut unavailable: serde_json::Value = serde_json::from_str(&labels()).unwrap();
+        unavailable["installation-unavailable-description"] = "".into();
+        assert!(Labels::parse(&unavailable.to_string()).is_err());
+        unavailable
+            .as_object_mut()
+            .unwrap()
+            .remove("installation-unavailable-description");
+        assert!(Labels::parse(&unavailable.to_string()).is_err());
         payload.as_object_mut().unwrap().remove("reload");
         assert!(Labels::parse(&payload.to_string()).is_err());
+    }
+
+    #[component]
+    fn UnavailableInstallationFixture() -> impl IntoElement {
+        let mut labels = Labels::parse(&labels()).unwrap();
+        labels.installation_unavailable_description = "无法安全安装更新".into();
+        let lifecycle = InstallationUnavailable {
+            installed: signal(Some(Installed {
+                labels,
+                command: Rc::new(|_| ()),
+            })),
+        };
+        let result = signal(String::new());
+        spawn(async move {
+            match lifecycle.prepare().await {
+                Err(message) => result.set(message),
+                Ok(_) => panic!("unqualified application installation must not issue a lease"),
+            }
+        });
+        text(move || result.get())
+    }
+
+    #[test]
+    fn unqualified_installation_returns_the_current_translated_explanation() {
+        let mut app = Headless::start(EngineConfig::new(
+            Root::of::<UnavailableInstallationFixture>(),
+        ))
+        .unwrap();
+        app.wait_for("text:无法安全安装更新").unwrap();
     }
 }

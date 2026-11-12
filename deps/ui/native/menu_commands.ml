@@ -44,7 +44,11 @@ let refresh_labels () =
     ; "help", Js.Json.JString (I18n.t "desktop.menu/help-label")
     ; "reload", Js.Json.JString (I18n.t "desktop.menu/reload-label") ]
   in
-  let labels = if !updater_enabled then labels @ ["updates", updater_labels ()] else labels in
+  let labels = if !updater_enabled then
+      labels @ [ "updates", updater_labels ()
+               ; "installation-unavailable-description", Js.Json.JString
+                   (I18n.t "updater.dialog/installation-unavailable-description") ]
+    else labels in
   !Host.host_op "application-menu-labels"
     (Js.Json.stringify (Js.Json.JObject labels))
 

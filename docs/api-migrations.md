@@ -356,13 +356,17 @@ Without installed `nsh/assets/nsh-updater.json`, the contribution is empty and
 creates no update cache, worker or network request. No production manifest URL
 or signing key is supplied by this change. An explicitly configured installation
 still uses LUI's existing whole-application root/configuration/signature checks.
-Checks/downloads are user initiated, installation requires the existing explicit
-confirmation, and restart follows successful installation only. Owner disposal
+Checks/downloads are user initiated. A confirmed installation also requires the
+application-owned lifecycle lease now required by the LUI constructor. Actual
+Logseq currently refuses that lease with a translated explanation: save/quiesce,
+shared worker ownership and isolated relaunch remain unqualified. Consequently
+this integration cannot install or restart the application yet. Owner disposal
 cancels pending work and makes retired callbacks inert.
 
 The NSH-only `application-menu-labels` payload now requires a complete nested
 `updates` object matching LUI `UpdateLabels`, including `{version}` and `{notes}`
-placeholders. For example, `updates.menu-check` is the translated label for
+placeholders, and a nonempty `installation-unavailable-description` for the
+application's current installation gate. For example, `updates.menu-check` is the translated label for
 checking updates; `updates.version-notes` is a full translated description with
 both placeholders, substituted by the existing workflow. Empty/malformed labels
 are rejected before menu replacement. The OCaml native host configures this
@@ -374,3 +378,22 @@ Real Logseq feed/install qualification remains pending an explicitly supplied
 feed and public key. Existing generic updater tests do not qualify a Logseq
 production feed, and an archive without updater configuration remains a normal
 manual-install package.
+
+
+### Validate release update configuration before application startup
+
+The actual NSH host accepts `--validate-update-config FILE`. It reads at most
+1 MiB, validates those exact bytes with LUI's canonical signed whole-application
+configuration parser, and exits before logger, native window, OCaml library,
+credentials, updater cache or worker initialization. Exit zero means syntax and
+configuration policy passed; it does not qualify the feed, signatures, archives,
+installed application, data saving or restart. Missing files, malformed arguments,
+oversized input and invalid configuration fail with a nonzero exit.
+
+For example, the packager runs
+`deps/ui/_build/nsh/logseq-nsh --validate-update-config STAGED/nsh-updater.json`
+after writing the optional configuration and before signing. Supply both
+`--update-url HTTPS-URL` and `--update-public-key FILE` to the packager; omitted
+options preserve a manual-install package without update metadata or network
+activity. Ordinary application launch and the explicit private
+`--startup-preflight ROOT` mode keep their existing credential/storage rules.
