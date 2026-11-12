@@ -366,15 +366,23 @@ mod tests {
                 Ok(())
             }
         }));
-        let schema: Schema =
-            serde_json::from_str::<Vec<Schema>>(include_str!("../../schemas.json"))
-                .unwrap()
-                .into_iter()
-                .find(|schema| schema.identifier == "logseq-audio")
-                .unwrap();
-        let fingerprint = schema.fingerprint.clone();
-        let registry = super::super::register_raw(Extensions::builder(), schema)
+        let schemas: Vec<Schema> =
+            serde_json::from_str(include_str!("../../schemas.json")).unwrap();
+        let fingerprint = schemas
+            .iter()
+            .find(|schema| schema.identifier == "logseq-audio")
             .unwrap()
+            .fingerprint
+            .clone();
+        let mut builder = Extensions::builder();
+        for schema in schemas {
+            builder = match schema.identifier.as_str() {
+                "logseq-codemirror" => super::super::register_codemirror(builder, schema).unwrap(),
+                "logseq-editor" => super::super::register_editor(builder, schema).unwrap(),
+                _ => super::super::register_raw(builder, schema).unwrap(),
+            };
+        }
+        let registry = builder
             .freeze(Profile {
                 os: "macos".into(),
                 host: "nsh".into(),

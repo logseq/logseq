@@ -1,5 +1,5 @@
 //! Admission uses schemas exported by the actual linked OCaml application.
-use crate::extensions::{raw, register_codemirror, register_raw};
+use crate::extensions::{raw, register_codemirror, register_editor, register_raw};
 use lui_nsh::{
     extensions::{ExtensionEmitter, Extensions, Profile, Schema},
     render::{Event, Renderer},
@@ -34,22 +34,35 @@ fn ManagedAssets() -> impl IntoElement {
     let captured = Rc::new(RefCell::new(
         None::<(lui_nsh::extensions::ExtensionContext, Owner)>,
     ));
-    let capture = captured.clone();
-    let schema = schemas()
-        .into_iter()
+    let schemas = schemas();
+    let fingerprint = schemas
+        .iter()
         .find(|schema| schema.identifier == "logseq-a")
-        .unwrap();
-    let fingerprint = schema.fingerprint.clone();
-    let registry = Extensions::builder()
-        .register(schema, move |context| {
-            *capture.borrow_mut() = Some((context.clone(), Owner::current()));
-            raw::element(context)
-        })
         .unwrap()
-        .validate("logseq-a", raw::validate)
-        .unwrap()
-        .validate_themed("logseq-a", raw::validate_themed)
-        .unwrap()
+        .fingerprint
+        .clone();
+    let mut builder = Extensions::builder();
+    for schema in schemas {
+        builder = match schema.identifier.as_str() {
+            "logseq-a" => {
+                let capture = captured.clone();
+                builder
+                    .register(schema, move |context| {
+                        *capture.borrow_mut() = Some((context.clone(), Owner::current()));
+                        raw::element(context)
+                    })
+                    .unwrap()
+                    .validate("logseq-a", raw::validate)
+                    .unwrap()
+                    .validate_themed("logseq-a", raw::validate_themed)
+                    .unwrap()
+            }
+            "logseq-codemirror" => register_codemirror(builder, schema).unwrap(),
+            "logseq-editor" => register_editor(builder, schema).unwrap(),
+            _ => register_raw(builder, schema).unwrap(),
+        };
+    }
+    let registry = builder
         .freeze(Profile {
             os: "macos".into(),
             host: "nsh".into(),
