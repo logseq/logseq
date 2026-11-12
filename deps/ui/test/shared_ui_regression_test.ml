@@ -1148,12 +1148,12 @@ let table_column_ownership ~registry ~profile =
         let inst=V.make ~sched:context.Lui_ui.ui_scheduler
           ~kind:(V.KTagPage "column-owner") ~feature:"class-objects" ~owner:(Wire.Uuid "column-owner") in
         instance:=Some inst;
+        let blocks=Hashtbl.create 1 in
+        Hashtbl.add blocks uuid block;
         V.set inst {(V.empty_vstate ()) with V.columns=[select;notes];loading=false;
-          selected=V.Sset.singleton uuid};
-        Lui_elements.column [reactive (fun columns -> Lui_elements.column
-          [Views_table.table_header inst columns;
-           Views_table.row_el inst columns ~row_uuid:uuid ~blk:block])
-          (reactive (fun (state:V.vstate) -> state.V.columns) (Views_table.sig_of inst))]) () in
+          blocks;selected=V.Sset.singleton uuid;
+          data=Views_wire.VFlat {rows=[uuid];count=1;previews=Hashtbl.create 1;qprops=[]}};
+        Views_view.body_el inst) () in
     Runtime.app_flush:=(fun () -> S.flush session);
     Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose session.S.app)) (fun () ->
       let inst=Option.get !instance in
