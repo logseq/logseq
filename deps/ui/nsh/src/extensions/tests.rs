@@ -33,6 +33,7 @@ type Events = Arc<Mutex<Vec<serde_json::Map<String, Value>>>>;
 struct Fixture {
     query: bool,
     readonly: bool,
+    horizontal_parent: bool,
     events: Events,
 }
 #[component]
@@ -70,7 +71,27 @@ fn CodeMirrorFixture() -> impl IntoElement {
         {"op":"set-extension-prop","id":1,"property":"lang","value":"edn"},
         {"op":"set-extension-prop","id":1,"property":"read-only","value":fixture.readonly}
     ]))).unwrap();
-    renderer.set_root(1).unwrap();
+    // Render.code_block places its extension directly in a grow Row. Keep
+    // that canonical parent rather than relying on the outer fixture's
+    // column/stretch to size a component whose own root is a keyed region.
+    let root = if fixture.horizontal_parent {
+        renderer
+            .apply(batch(
+                2,
+                json!([
+                    {"op":"create-node","id":2,"kind":"row"},
+                    {"op":"set-prop","id":2,"property":"grow","value":1.0},
+                    {"op":"set-prop","id":2,"property":"style-class","value":"code-editor"},
+                    {"op":"insert-child","parent":2,"child":1,"index":0}
+                ]),
+            ))
+            .unwrap();
+        generation.set(2);
+        2
+    } else {
+        1
+    };
+    renderer.set_root(root).unwrap();
     let action_renderer = renderer.clone();
     let action = move |label: &'static str, properties: Value| {
         let renderer = action_renderer.clone();
@@ -102,11 +123,15 @@ fn CodeMirrorFixture() -> impl IntoElement {
         .child(action("Change language", json!({"lang":"rust"})))
 }
 fn start(query: bool, readonly: bool) -> (Headless, Events) {
+    start_with_parent(query, readonly, false)
+}
+fn start_with_parent(query: bool, readonly: bool, horizontal_parent: bool) -> (Headless, Events) {
     let events = Arc::new(Mutex::new(Vec::new()));
     let mut config = EngineConfig {
         context: EngineContext::default().with(Fixture {
             query,
             readonly,
+            horizontal_parent,
             events: events.clone(),
         }),
         ..EngineConfig::new(Root::of::<CodeMirrorFixture>())
@@ -124,6 +149,38 @@ fn native(app: &Headless) -> nsh_core::NodeId {
         .find(|node| node.test_id.as_deref() == Some("lui-1"))
         .unwrap()
         .id
+}
+
+#[test]
+fn code_editor_fills_its_actual_canonical_row_parent_and_accepts_input() {
+    let (mut app, events) = start_with_parent(false, false, true);
+    let root = app
+        .screen()
+        .layout_nodes()
+        .into_iter()
+        .find(|node| node.test_id.as_deref() == Some("lui-1"))
+        .expect("the actual native Editor root must be materialized inside its code-editor Row");
+    assert!(
+        root.bounds.size.width.0 > 600.0,
+        "the Editor must fill its 640pt production Row, got {:?}",
+        root.bounds
+    );
+    assert!(
+        root.bounds.size.height.0 >= 20.0,
+        "min_rows must keep a real editable row"
+    );
+    app.type_text("id:lui-1", " row edit").unwrap();
+    assert!(events.lock().unwrap().iter().any(|event| {
+        event["name"] == "input"
+            && event["value"]
+                .as_str()
+                .is_some_and(|value| value.contains(" row edit"))
+    }));
+    assert_eq!(
+        native(&app),
+        root.id,
+        "parent sizing must not remount the Editor on controlled echo"
+    );
 }
 
 #[test]
