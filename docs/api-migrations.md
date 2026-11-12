@@ -52,6 +52,22 @@ runtime through an optional entrypoint-installed hook; maintained JavaScript
 health responses do not call the native GC.
 
 
+## Native document data uses application state
+
+Native `Ui_services.dom_body ()` and `dom_root ()` now read, set and remove
+`data-*` attributes through the existing document/application-state channel.
+For example, the shared router's
+`(Ui_services.dom_body ()).set_attr "data-page" title` publishes
+`ui-state.data.page`, and settings publishes `ui-state.data.settings-tab`.
+Subsequent attribute reads return the same value; removing an attribute removes
+its document-state entry. Web continues to use its actual DOM attributes.
+
+No native element `set-attr` capability is added: node attributes that affect
+rendering, accessibility or editing must still use their typed owner. Arbitrary
+non-data document attributes retain their existing strict host validation.
+Downstream applications can retain document `data-*` calls; rendering state must
+continue to use typed LUI props instead of document CSS selectors on native.
+
 ## Windows installation qualification boundary
 
 Manual installation now distinguishes a verified absent/empty target from a

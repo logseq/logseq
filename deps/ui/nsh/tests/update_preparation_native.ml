@@ -486,6 +486,77 @@ let native_outliner_content_events () =
         end))
       Lui_protocol.[MacOS,NshHost,true;IOS,SwiftUIHost,false;AndroidOS,KotlinHost,false])
 
+let native_route_document_data () =
+  let prior_worker = !Runtime.worker and prior_model = !Runtime.read_model
+  and prior_send = !Runtime.app_send and prior_host = !Host.host_op
+  and prior_request = !Platform.host_request and prior_route = !Router.loaded_route
+  and prior_generation = !Runtime.load_gen and prior_init = !Editor_state.on_init
+  and prior_zoom = !Editor_actions.pending_zoom in
+  let prior_overrides = Hashtbl.copy Editor_state.display_overrides in
+  let requests = ref [] and loaded = ref None and failed = ref false in
+  let title = "Native route metadata" in
+  let route = Model.Page title in
+  let model = {Model.initial with repo=Some "native-route";route} in
+  let restore_data key value = match value with
+    | Some value -> Hashtbl.replace Platform.doc_data key value
+    | None -> Hashtbl.remove Platform.doc_data key in
+  let prior_page = Hashtbl.find_opt Platform.doc_data "page"
+  and prior_settings = Hashtbl.find_opt Platform.doc_data "settings-tab" in
+  Fun.protect ~finally:(fun () ->
+    Runtime.worker := prior_worker; Runtime.read_model := prior_model;
+    Runtime.app_send := prior_send; Host.host_op := prior_host;
+    Platform.host_request := prior_request; Router.loaded_route := prior_route;
+    Runtime.load_gen := prior_generation; Editor_state.on_init := prior_init;
+    Editor_actions.pending_zoom := prior_zoom;
+    Hashtbl.clear Editor_state.display_overrides;
+    Hashtbl.iter (Hashtbl.replace Editor_state.display_overrides) prior_overrides;
+    restore_data "page" prior_page; restore_data "settings-tab" prior_settings) (fun () ->
+    Host.set_host_op (fun operation _ -> failwith ("Unexpected native DOM request: " ^ operation));
+    Platform.host_request := (fun request -> requests := request :: !requests);
+    Runtime.read_model := (fun () -> model);
+    Runtime.app_send := (fun action ->
+      (match action with
+       | Action.Page_loaded page -> loaded := Some page
+       | Action.Page_load_failed -> failed := true
+       | _ -> ()); true);
+    Runtime.worker := Some {
+      Worker_client.invoke_fn = (fun name _ -> Js.Promise.resolve (match name with
+        | "thread-api/get-page-route-info" -> Wire.kw_map ["block/title",Wire.String title]
+        | "thread-api/get-page-blocks-tree" -> Wire.Array []
+        | "thread-api/get-case-page" -> Wire.Map []
+        | _ -> failwith ("Unexpected route endpoint: " ^ name)));
+      on_message=(fun _ _ -> ());dead=Js.Promise.liveness ()};
+    Router.loaded_route := None;
+    ignore (Router.load_page_ref route (Wire.String title));
+    Host.drain ();
+    check "actual native page route commits without unsupported set-attr"
+      (not !failed && Option.map (fun page -> page.Model.page_title) !loaded=Some title);
+    let body = Ui_services.dom_body () in
+    check "native document adapters retain their owned snapshot identity"
+      (Ui_dom_native.token_el body=Dom_ext.document_el);
+    check "route metadata remains readable through a fresh native body handle"
+      (body.Ui_services.attr "data-page"=Some title);
+    body.Ui_services.set_attr "data-settings-tab" "editor";
+    check "native document handles share application metadata"
+      ((Ui_services.dom_root ()).Ui_services.attr "data-settings-tab"=Some "editor");
+    check "document changes use the existing ui-state channel"
+      (List.exists (fun request -> match String.split_on_char '\n' request with
+        | "ui-state" :: payload ->
+            (match Yojson.Safe.from_string (String.concat "\n" payload) with
+             | `Assoc fields -> (match List.assoc_opt "data" fields with
+                | Some (`Assoc data) -> List.assoc_opt "page" data=Some (`String title)
+                    && List.assoc_opt "settings-tab" data=Some (`String "editor")
+                | _ -> false)
+             | _ -> false)
+        | _ -> false) !requests);
+    body.Ui_services.rm_attr "data-settings-tab";
+    check "removal retires native document metadata"
+      ((Ui_services.dom_body ()).Ui_services.attr "data-settings-tab"=None);
+    check "native semantic attributes still require their actual owner"
+      (match body.Ui_services.set_attr "contenteditable" "true" with
+       | () -> false
+       | exception Failure message -> message="Unexpected native DOM request: dom-op"))
+
 let () =
   let owner = Thread.id (Thread.self ()) in
   Ui_task.install { enqueue = Host.enqueue;
@@ -502,4 +573,5 @@ let () =
   opaque_logical_save_does_not_release_or_self_poll_at_zero_activity ();
   sparse_feedback_materializes_while_held_through_actual_ffi ();
   native_outliner_content_events ();
+  native_route_document_data ();
   print_endline "PASS real native save/abort/worker/timer races and post-release draft safety"

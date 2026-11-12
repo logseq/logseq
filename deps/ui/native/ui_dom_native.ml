@@ -185,6 +185,30 @@ let rec el_of (e : Js.Json.t) : Ui_services.el =
   token_register result e;
   result
 
+(* Document data belongs to the existing application-state channel. There is
+   no native body node whose props can be changed by a DOM mutation. Keep
+   shared route/settings metadata readable without dispatching set-attr. *)
+let document_element () : Ui_services.el =
+  let element = el_of Dom_ext.document_el in
+  let data_name name =
+    if String.length name > 5 && String.starts_with ~prefix:"data-" name
+    then Some (String.sub name 5 (String.length name - 5))
+    else None
+  in
+  let result = { element with
+    attr = (fun name -> match data_name name with
+      | Some key -> Hashtbl.find_opt Platform.doc_data key
+      | None -> element.attr name)
+  ; set_attr = (fun name value -> match data_name name with
+      | Some key -> Platform.document_set_data key value
+      | None -> element.set_attr name value)
+  ; rm_attr = (fun name -> match data_name name with
+      | Some key -> Platform.body_rm_data key
+      | None -> element.rm_attr name)
+  } in
+  token_register result Dom_ext.document_el;
+  result
+
 let ev_of (e : Js.Json.t) : Ui_services.ev =
   let clipboard=clipboard_data e in
   let files =
@@ -315,8 +339,8 @@ let ops : Ui_services.dom =
       (fun _ _ -> None)
       (* no hit-test on this host — the capability gap the contract
          documents *)
-  ; doc_root = (fun () -> el_of Dom_ext.document_el)
-  ; body = (fun () -> el_of Dom_ext.document_el)
+  ; doc_root = document_element
+  ; body = document_element
   ; viewport_width = Host.inner_width
   ; viewport_height = Host.inner_height
   ; document_visible =
