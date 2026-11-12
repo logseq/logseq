@@ -1,5 +1,15 @@
 # API migrations
 
+## Desktop SDK and packaging CLI share an immutable source revision
+
+Native NSH dependencies now select
+`adc186db7213f3ccd1eacaa836cc721e9779fd14` from `logseq/nsh`, matching LUI's
+selected SDK source. This revision fixes native packaging's unintended development
+feature union without changing the UI runtime APIs. Build and package must retain
+identical generated manifests and lock files; delivery still rejects drift.
+Existing application calls need no migration. Native package, signing and update
+qualification remains separate from adopting the pin.
+
 ## NSH worker process origin is an update prerequisite
 
 New native DB workers spawned by the current NSH application receive
