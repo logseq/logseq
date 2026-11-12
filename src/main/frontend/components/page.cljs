@@ -307,8 +307,8 @@
        (t :property/set-property)))]])
 
 (hsx/defc db-page-title
-  [page {:keys [sidebar? journals? container-id tag-dialog? display-title block-metadata-ready?]}]
-  (let [with-actions? (not config/publishing?)]
+  [page {:keys [sidebar? journals? container-id tag-dialog? display-title block-metadata-ready? preview?]}]
+  (let [with-actions? (not (or config/publishing? preview?))]
     [:div.ls-page-title.flex.flex-1.w-full.content.items-start.title
      {:class "title"
       "data-testid" "page title"
@@ -522,6 +522,7 @@
                   (db-page-title page
                                  {:sidebar? sidebar?
                                   :journals? journals?
+                                  :preview? preview?
                                   :container-id container-id
                                   :display-title page-display-title
                                   :tag-dialog? tag-dialog?

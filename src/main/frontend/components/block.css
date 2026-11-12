@@ -1116,12 +1116,6 @@ html.is-mobile .ls-block-content-indent {
     }
 }
 
-@container ls-block (max-width: 430px) {
-    .ls-properties-area {
-        display: none;
-    }
-}
-
 .ls-block h1,
 .editor-inner .h1.uniline-block {
   font-size: 2rem;
@@ -1639,8 +1633,14 @@ html.is-mac {
     @apply h-6;
   }
 
+  /* rounded-full on a multi-line pill is a half-height-radius ellipse that clips the key at the top left. */
   .bottom-properties-row[data-expanded="true"] .bottom-property-pill {
     @apply h-auto max-w-full items-start;
+    border-radius: 12px;
+  }
+
+  .bottom-properties-row[data-expanded="true"] .bottom-property-pill::after {
+    border-radius: 12px;
   }
 
   .bottom-properties-row[data-expanded="true"] .bottom-property-content {

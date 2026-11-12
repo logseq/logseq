@@ -404,7 +404,13 @@ body, #root {
     margin-top: 0px;
 }
 
+/* The mobile app hides the properties area of narrow blocks outside its page view.
+   It lives here, not in block.css, so the web build shows block properties at any width. */
 @container ls-block (max-width: 430px) {
+    .ls-properties-area {
+        display: none;
+    }
+
     .ls-mobile-page .ls-properties-area {
         display: initial;
     }

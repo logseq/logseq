@@ -96,23 +96,18 @@
     @apply block min-w-0 max-w-full overflow-hidden text-ellipsis whitespace-nowrap;
   }
 
+  /* items-center: the key cell centres its 20px line in a 28px box, so a 20px value line has to be centred in the same 28px. */
   .property-value-panel.ls-block.property-value-container {
-    @apply flex flex-row items-start gap-1 w-full;
+    @apply flex flex-row items-center gap-1 w-full;
     min-width: 0;
     flex-shrink: 1;
     min-height: 28px;
   }
 
-  .property-pair.property-panel-row.property-panel-row-empty .property-value-panel.ls-block.property-value-container {
-    @apply items-center;
-  }
-
-  .property-pair.property-panel-row[data-property-type=node] .property-value-panel.ls-block.property-value-container,
   .property-pair.property-panel-row[data-property-type=node] .property-value.property-value-panel-inner {
     @apply items-center;
   }
 
-  .property-pair.property-panel-row[data-property-type=checkbox] .property-value-panel.ls-block.property-value-container,
   .property-pair.property-panel-row[data-property-type=checkbox] .property-value.property-value-panel-inner {
     @apply items-center;
   }
