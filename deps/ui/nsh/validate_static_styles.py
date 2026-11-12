@@ -76,6 +76,7 @@ def validate(executable: Path, *, cmts=None):
         generated = stage / "probe.ml"
         with generated.open("wb") as output:
             output.write((UI / "nsh/static_style_probe.ml").read_bytes())
+            output.flush()
             command([extractor, *inputs], cwd=UI / "_build/default", stdout=output)
         probe = stage / ("probe" + suffix)
         extension = subprocess.check_output([*prefix, "ocamlopt", "-config-var", "ext_obj"], text=True).strip()
