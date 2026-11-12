@@ -1,5 +1,24 @@
 # API migrations
 
+## Native pointer bridge qualification
+
+The actual Logseq bridge now exports byte-length `lui_ocaml_press_detail_utf8`,
+`lui_ocaml_pointer_down_utf8`, `lui_ocaml_pointer_up_utf8`,
+`lui_ocaml_pointer_move_utf8`, `lui_ocaml_pointer_cancel_utf8`, and
+`lui_ocaml_context_menu_press_utf8`. Their trailing arguments are
+`const char *target_class, int32_t class_length`, with the length measured in
+UTF-8 bytes. Existing C-string exports remain for maintained hosts; rebuild the
+actual native OCaml library when updating NSH artifacts. Native pointer events
+must not reuse a library exposing only the C-string forms.
+
+The actual application build now requires its complete NSH bridge capability
+set before compilation and probes every generated macro export on the staged
+library before startup or publication. Omitting one required UTF-8 export fails
+qualification, rather than waiting for the user's first pointer interaction.
+Invalid negative lengths and nonempty null buffers are rejected. Pointer
+arguments and callback results are rooted across OCaml allocation and dispatch;
+embedded NULs in target classes retain their original byte length.
+
 ## Native heap diagnostics
 
 The opt-in native UI agent now advertises `gc-stats` in its `hello.ops`.

@@ -45,6 +45,35 @@ class WindowsDllGuards(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "typed Logseq service ABI"):
             builder.bridge_exports(source)
 
+    def test_all_pointer_macro_exports_are_probed_as_byte_length_functions(self):
+        source = (builder.UI / "native/logseq_lui_bridge.c").read_text(encoding="utf-8")
+        exports = builder.bridge_exports(source)
+        for name in ("press_detail", "pointer_down", "pointer_up", "pointer_move",
+                     "pointer_cancel", "context_menu_press"):
+            symbol = "lui_ocaml_" + name
+            with self.subTest(symbol=symbol):
+                self.assertIn(symbol, exports)
+                self.assertIn(symbol + "_utf8", exports)
+                without = source.replace("LUI_POINTER_DETAIL_EXPORT(" + symbol + ")", "")
+                with self.assertRaisesRegex(ValueError, symbol + "_utf8"):
+                    builder.bridge_exports(without)
+
+    def test_legacy_macro_definition_is_rejected_before_compilation(self):
+        source = (builder.UI / "native/logseq_lui_bridge.c").read_text(encoding="utf-8")
+        source = source.replace("LUI_EXPORT int32_t c_name##_utf8(",
+                                "static int32_t omitted_utf8(")
+        with self.assertRaisesRegex(ValueError, "pointer macro must export byte-length"):
+            builder.bridge_exports(source)
+
+    def test_c_string_only_pointer_macros_cannot_pass_the_nsh_contract(self):
+        source = (builder.UI / "native/logseq_lui_bridge.c").read_text(encoding="utf-8")
+        # A maintained C-string function is insufficient for the NSH pointer ABI.
+        symbol = "lui_ocaml_pointer_down"
+        source = source.replace("LUI_POINTER_DETAIL_EXPORT(" + symbol + ")",
+                                "LUI_EXPORT int32_t " + symbol + "(void) {}")
+        with self.assertRaisesRegex(ValueError, symbol + "_utf8"):
+            builder.bridge_exports(source)
+
     def test_worker_handle_boundary_preserves_error_codes_and_releases_its_owned_handle(self):
         source = (builder.UI / "native/logseq_lui_bridge.c").read_text(encoding="utf-8")
         boundary = source.split("CAMLprim value caml_logseq_worker_process_id", 1)[1].split(
@@ -95,9 +124,7 @@ class SchemaExportPlumbing(unittest.TestCase):
                 (native / "native_embed.ml").write_text("compiled entry fixture")
                 (native / "logseq_lui_bridge.c").write_text(
                     "\n".join(f"LUI_EXPORT int {name}(void) {{}}" for name in
-                        ["lui_ocaml_start", "lui_ocaml_pump", "lui_ocaml_platform_event",
-                         "lui_ocaml_editor_snapshot_utf8", "lui_ocaml_extension_event_utf8",
-                         "lui_ocaml_virtual_window"]))
+                        sorted(builder.NSH_REQUIRED_EXPORTS)))
                 for archive in builder.ARCHIVES:
                     file = ui / "_build/default" / archive
                     file.parent.mkdir(parents=True, exist_ok=True)

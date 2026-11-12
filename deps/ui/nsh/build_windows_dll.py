@@ -52,19 +52,55 @@ def native_config():
     return config
 
 
+# Actual application contract, including optional generic-LUI capabilities that
+# this application publishes and uses. Keep these required at build time rather
+# than deferring a missing pointer export until the first real native press.
+NSH_REQUIRED_EXPORTS = frozenset({
+    "lui_ocaml_start", "lui_ocaml_register_current_thread", "lui_ocaml_stop",
+    "lui_ocaml_resync", "lui_ocaml_root_node", "lui_ocaml_pump",
+    "lui_ocaml_platform_event", "lui_ocaml_agent_utf8",
+    "lui_ocaml_editor_snapshot_utf8", "lui_ocaml_extension_event_utf8",
+    "lui_ocaml_document_event_utf8", "lui_ocaml_virtual_window",
+    "lui_ocaml_press_ex", "lui_ocaml_long_press", "lui_ocaml_double_press",
+    "lui_ocaml_pointer_enter", "lui_ocaml_pointer_leave",
+    "lui_ocaml_text_changed_utf8", "lui_ocaml_submit", "lui_ocaml_dismiss",
+    "lui_ocaml_navigate_previous", "lui_ocaml_navigate_next",
+    "lui_ocaml_navigation_key_utf8", "lui_ocaml_toggle_changed",
+    "lui_ocaml_toggle_changed_detail", "lui_ocaml_slider_changed",
+    "lui_ocaml_appear", "lui_ocaml_load", "lui_ocaml_radio_changed",
+    "lui_ocaml_picked_utf8", "lui_ocaml_scroll_completed",
+    "lui_ocaml_scroll_edges", "lui_ocaml_visible_range",
+    *(f"lui_ocaml_{name}_utf8" for name in (
+        "press_detail", "pointer_down", "pointer_up", "pointer_move",
+        "pointer_cancel", "context_menu_press")),
+})
+
+
 def bridge_exports(source):
-    exports = sorted(set(re.findall(r"LUI_EXPORT\s+\w+\s+(lui_ocaml_\w+)\s*\(", source)))
-    required = {"lui_ocaml_start", "lui_ocaml_pump", "lui_ocaml_platform_event",
-                "lui_ocaml_editor_snapshot_utf8", "lui_ocaml_extension_event_utf8",
-                "lui_ocaml_virtual_window"}
-    if not required.issubset(exports):
-        raise ValueError("The application source is missing its typed Logseq service ABI")
-    return exports
+    source = re.sub(r"/\*.*?\*/|//[^\n]*", "", source, flags=re.DOTALL)
+    exports = set(re.findall(r"LUI_EXPORT\s+\w+\s+(lui_ocaml_\w+)\s*\(", source))
+    # This app's single, explicit export macro emits both typed byte-length and
+    # maintained C-string functions. Ignore its parameterized definition and
+    # inventory each concrete invocation before probing the actual library.
+    invocations = re.findall(r"^LUI_POINTER_DETAIL_EXPORT\((lui_ocaml_\w+)\)\s*$",
+                             source, flags=re.MULTILINE)
+    if invocations and "LUI_EXPORT int32_t c_name##_utf8(" not in source:
+        raise ValueError("The application source is missing its typed Logseq service ABI: "
+                         "pointer macro must export byte-length UTF-8 functions")
+    for name in invocations:
+        exports.update((name, name + "_utf8"))
+    missing = NSH_REQUIRED_EXPORTS - exports
+    if missing:
+        raise ValueError("The application source is missing its typed Logseq service ABI: "
+                         + ", ".join(sorted(missing)))
+    return sorted(exports)
 
 
 def build(output, *, environment=None):
     config = native_config()
     run = partial(execute, environment=environment)
+    bridge = UI / "native/logseq_lui_bridge.c"
+    exports = bridge_exports(bridge.read_text(encoding="utf-8"))
     # Build only libraries. The Unix native_embed executable object's _pic
     # runtime flag is deliberately not involved in this native DLL route.
     run(["opam", "exec", "--", "dune", "build", *ARCHIVES])
@@ -72,8 +108,6 @@ def build(output, *, environment=None):
     output.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix=".candidate-", dir=output) as temporary:
         stage = Path(temporary)
-        bridge = UI / "native/logseq_lui_bridge.c"
-        exports = bridge_exports(bridge.read_text(encoding="utf-8"))
         c_object = stage / ("logseq_lui_bridge" + config["ext_obj"])
         run(["opam", "exec", "--", "ocamlopt", "-c", "-o", c_object, bridge], cwd=stage)
         includes = []

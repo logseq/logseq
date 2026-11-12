@@ -57,6 +57,14 @@ cargo metadata --locked --format-version=1 --manifest-path "$nsh_root/Cargo.toml
 # Regeneration is an explicit source change, so a new enum case cannot reuse an
 # old Rust contract that would hide its missing native implementation.
 (cd "$lui_source" && OPAMSWITCH="$switch" "$python_bin" tooling/generate_nsh_contract.py --check) >&2
+# Validate the application-specific ABI before invoking native compilers.
+"$python_bin" - "$nsh_root" "$ui_root/native/logseq_lui_bridge.c" <<'BRIDGE_SOURCE'
+from pathlib import Path
+import sys
+sys.path.insert(0, sys.argv[1])
+from build_windows_dll import bridge_exports
+bridge_exports(Path(sys.argv[2]).read_text(encoding="utf-8"))
+BRIDGE_SOURCE
 (cd "$lui_source" && opam exec --switch="$switch" -- dune build @install) >&2
 (cd "$ui_root" && opam exec --switch="$switch" -- env \
   OCAMLPATH="$lui_source/_build/install/default/lib${OCAMLPATH:+:$OCAMLPATH}" \
