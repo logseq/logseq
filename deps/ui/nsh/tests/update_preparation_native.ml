@@ -1257,6 +1257,108 @@ let native_cmdk_controlled_input () =
     check "maintained native hosts keep their existing imperative input mirror"
       (List.exists (fun (name,_) -> name="set-value") !requests))
 
+let native_menu_scope_retention () =
+  let previous_model = !Runtime.read_model and previous_flush = !Runtime.app_flush
+  and previous_schedule = !Runtime.schedule_flush and previous_worker = !Runtime.worker
+  and previous_sidebar = !Sidebar_state.st_ref and previous_sidebar_model = !Sidebar_state.model_signal
+  and previous_hash = !Platform.hash_ref and previous_lp_context = !Sidebar_state.lp_ctx in
+  let page uuid title = Option.get (Decode.page_of_summary (Wire.Map [
+    Wire.Keyword "block/uuid",Wire.Uuid uuid;Wire.Keyword "block/title",Wire.String title])) in
+  let first=page "11111111-1111-4111-8111-111111111111" "First favorite"
+  and second=page "22222222-2222-4222-8222-222222222222" "Second favorite" in
+  let initial={Model.initial with repo=Some "menu-scope-a";
+    repos=["menu-scope-a";"menu-scope-b"];route_page=Some first} in
+  let app_ref=ref None and sidebar=ref None in
+  let published=Hashtbl.create 32 in
+  let publications=ref 0 in
+  let backend : Lui_protocol.backend={
+    backend_profile=Lui_protocol.profile Lui_protocol.MacOS Lui_protocol.NshHost;
+    apply_batch=(fun _ ->
+      incr publications;
+      Option.iter (fun app ->
+        let runtime=Lui_app.runtime app in
+        Hashtbl.iter (fun node kind -> if kind=Lui_protocol.Button then (
+          let attached=List.exists (fun child ->
+            Hashtbl.find_opt runtime.Lui_runtime.mounted_nodes child=Some Lui_protocol.ContextMenu)
+            (Lui_runtime.children runtime node) in
+          (match Hashtbl.find_opt published node with
+           | Some previous when previous<>attached -> failwith (Printf.sprintf
+               "Actual native menu publication changed retained Button %d from %b to %b"
+               node previous attached)
+           | _ -> ());
+          Hashtbl.replace published node attached)) runtime.Lui_runtime.mounted_nodes) !app_ref;
+      true)} in
+  let registry=Lui_extension.registry () in
+  Logseq_el.register_all registry;
+  Logseq_codemirror.register registry;Logseq_editor.register registry;
+  Runtime.worker:=Some {Worker_client.invoke_fn=(fun _ _ -> Js.Promise.resolve Wire.Nil);
+    on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
+  let app=Lui_app.create_with_extensions backend registry initial (fun _ next -> next)
+    (fun context model _ ->
+      let state value=Signal.state context.Lui_ui.ui_scheduler value in
+      let st : Sidebar_state.t={favorites=state [first;second];home_page=state None;
+        favorite_drop=state None;recents=state [];nav_checked=state [];nav_tag_titles=state [];
+        items=state [];open_menu=state "";groups_collapsed=state [];left_width=state 246.;
+        right_fraction=state 0.3;viewport_w=state 1440.} in
+      sidebar:=Some st;Sidebar_state.st_ref:=Some st;Sidebar_state.model_signal:=Some model;
+      Lui_elements.column [Left_sidebar_view.graphs_selector st model;
+        Chrome.dots_btn model;Left_sidebar_view.favorites_group st;
+        Lui_elements.text_field ~key:"menu-retained-editor"
+          ~accessibility_identifier:"menu-retained-editor" ~text:"kept editor" []]) in
+  app_ref:=Some app;
+  Fun.protect ~finally:(fun () ->
+    ignore (Lui_app.dispose app);Runtime.read_model:=previous_model;
+    Runtime.app_flush:=previous_flush;Runtime.schedule_flush:=previous_schedule;
+    Runtime.worker:=previous_worker;Sidebar_state.st_ref:=previous_sidebar;
+    Sidebar_state.model_signal:=previous_sidebar_model;Sidebar_state.lp_ctx:=previous_lp_context;
+    Platform.hash_ref:=previous_hash) (fun () ->
+    Runtime.read_model:=(fun () -> Lui_app.model app);
+    Runtime.app_flush:=(fun () -> ignore (Lui_app.flush app));
+    Runtime.schedule_flush:=Host.enqueue;
+    ignore (Lui_app.start app);ignore (Lui_app.flush app);Host.drain ();
+    let runtime=Lui_app.runtime app in
+    let named identifier=Hashtbl.fold (fun node props found ->
+      if Lui_protocol.Property_map.find_opt Lui_protocol.AccessibilityIdentifier props
+        =Some (Lui_protocol.StringValue identifier) then Some node else found)
+      runtime.Lui_runtime.runtime_properties None |> Option.get in
+    let attachment node=match List.filter (fun child ->
+      Hashtbl.find_opt runtime.Lui_runtime.mounted_nodes child=Some Lui_protocol.ContextMenu)
+      (Lui_runtime.children runtime node) with
+      | [menu] -> menu
+      | _ -> failwith "Actual native trigger must retain exactly one direct Menu" in
+    let graph=named "graphs-selector-trigger" and more=named "toolbar-dots-btn"
+    and editor=named "menu-retained-editor" in
+    let graph_menu=attachment graph and more_menu=attachment more in
+    let favorite_menus ()=Hashtbl.fold (fun node props found ->
+      if Lui_protocol.Property_map.find_opt Lui_protocol.AccessibilityLabel props
+          =Some (Lui_protocol.StringValue (I18n.t "ui/show-more")) then
+        (node,attachment node)::found else found) runtime.Lui_runtime.runtime_properties []
+      |> List.sort compare in
+    let favorite_ids=favorite_menus () in
+    List.iter (fun model ->
+      ignore (Lui_app.send app model);ignore (Lui_app.flush app);Host.drain ();
+      check "actual graph and More updates retain trigger, menu and editor identities"
+        (named "graphs-selector-trigger"=graph && attachment graph=graph_menu
+         && named "toolbar-dots-btn"=more && attachment more=more_menu
+         && named "menu-retained-editor"=editor))
+      [{initial with repo=Some "menu-scope-b";repos=List.rev initial.repos};
+       {initial with route=Model.Page "Second favorite";route_page=Some second};
+       {initial with route_page=Some {first with page_title="Renamed favorite"}};
+       {initial with route=Model.All_pages;route_page=None};initial];
+    let st=Option.get !sidebar in
+    List.iter (fun favorites ->
+      Signal.set st.Sidebar_state.favorites favorites;
+      ignore (Lui_app.flush app);Host.drain ();
+      check "Favorites reorder and metadata changes retain their Buttons and Menu scopes"
+        (favorite_menus ()=favorite_ids))
+      [[second;first];[{second with page_title="Renamed second"};first];[first;second]];
+    let action=Hashtbl.fold (fun node key found ->
+      if key="qa-all" then Some node else found) runtime.Lui_runtime.runtime_reload_keys None |> Option.get in
+    ignore (Lui_app.dispatch_event app (Lui_protocol.Press action));
+    check "retained graph action still owns its handler after prior scopes retire"
+      (String.starts_with ~prefix:"#/graphs" (Platform.location_hash ()));
+    check "native menu invariant was inspected across actual publications" (!publications>5))
+
 let () =
   let owner = Thread.id (Thread.self ()) in
   let assert_owner () =
@@ -1291,5 +1393,6 @@ let () =
   native_add_button_events_reach_the_shared_document_owner ();
   native_block_click_mounts_shared_editor ();
   native_graph_menu_contract ();
+  native_menu_scope_retention ();
   native_favorite_menu_contract ();
   print_endline "PASS real native save/abort/worker/timer races and post-release draft safety"
