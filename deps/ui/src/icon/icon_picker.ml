@@ -159,6 +159,57 @@ let preset_colors =
   [ Some "#6e7b8b"; Some "#5e69d2"; Some "#00b5ed"; Some "#00b55b"
   ; Some "#f2be00"; Some "#e47a00"; Some "#f38e81"; Some "#fb434c"; None ]
 
+let item_key = function
+  | Emoji_item (id, _) -> "e-" ^ id
+  | Tabler_item (display, _) -> "t-" ^ icon_id display
+
+let chunks n xs =
+  let rec split acc remaining = function
+    | rest when remaining = 0 -> List.rev acc, rest
+    | [] -> List.rev acc, []
+    | item :: rest -> split (item :: acc) (remaining - 1) rest
+  in
+  let rec collect acc = function
+    | [] -> List.rev acc
+    | rest ->
+        let row, rest = split [] n rest in
+        collect (row :: acc) rest
+  in
+  collect [] xs
+
+(* The existing Scroll owns the viewport. NSH requests bounded nine-cell
+   rows from its canonical source; the other hosts retain their lazy groups. *)
+let grid_rows ~label ~render (items : item list) : t =
+  let rows = chunks 9 items in
+  let render_row cells =
+    grid ~columns:9 ~gap:0 ~min_width:0 ~padding_vertical:4
+      (List.map render cells)
+  in
+  let native : t = fun context parent ->
+    (Virt_list.list ~overscan:5 ~estimate_size:(fun _ -> 44.)
+       ~list_class:"icon-picker-rows"
+       ~key_of:(fun cells -> item_key (List.hd cells))
+       ~render:render_row (Array.of_list rows)) context parent
+  in
+  let legacy : t = fun context parent ->
+    let eager_rows = 8 and group_rows = 6 in
+    let rec split remaining acc = function
+      | rest when remaining = 0 -> List.rev acc, rest
+      | [] -> List.rev acc, []
+      | row :: rest -> split (remaining - 1) (row :: acc) rest
+    in
+    let eager, rest = split eager_rows [] (List.map render_row rows) in
+    let groups = List.mapi (fun index group ->
+      let key = Printf.sprintf "ig-%s-%d" label index in
+      Lazy_children.lazy_children ~key ~uuid:key
+        ~min_height:(44. *. float_of_int (List.length group))
+        ~render:(fun () -> column ~gap:0 group)) (chunks group_rows rest)
+    in
+    (column ~gap:0 (eager @ groups)) context parent
+  in
+  fun context parent ->
+    (if Lui_ui.host context = P.NshHost then native else legacy) context parent
+
 let picker_view ~(del : bool) ~(emoji_only : bool)
     ~(on_chosen : choice -> unit) ~(close : unit -> unit) : t =
  fun context parent ->
@@ -251,73 +302,31 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
              ~style_class:("ui__icon ti ls-icon-" ^ display) [])
   in
 
-  let rec chunks n xs =
-    match xs with
-    | [] -> []
-    | _ -> (
-        let rec split acc i rest =
-          match i, rest with
-          | 0, _ | _, [] -> (List.rev acc, rest)
-          | _, x :: tl -> split (x :: acc) (i - 1) tl
-        in
-        match split [] n xs with
-        | row, rest -> row :: chunks n rest)
-  in
-
-  (* Windowed grid: the first [eager_rows] rows mount immediately; the
-     rest mount in groups of [group_rows] behind Lazy_children
-     placeholders sized to the group height, so the ~6200-icon table
-     only mounts what scrolls near the viewport instead of being
-     truncated. Row = 36px cell + 2x4px vertical padding. *)
-  let row_h = 44. and eager_rows = 8 and group_rows = 6 in
-  let grid_rows label items =
-    let rows =
-      List.map
-        (fun r -> grid ~columns:9 ~gap:0 ~min_width:0 ~padding_vertical:4 r)
-        (chunks 9 items)
-    in
-    let rec split i acc = function
-      | [] -> (List.rev acc, [])
-      | rest when i = 0 -> (List.rev acc, rest)
-      | x :: tl -> split (i - 1) (x :: acc) tl
-    in
-    let eager, rest = split eager_rows [] rows in
-    let groups = chunks group_rows rest in
-    eager
-    @ List.mapi
-        (fun i grp ->
-          let key = Printf.sprintf "ig-%s-%d" label i in
-          Lazy_children.lazy_children ~key ~uuid:key
-            ~min_height:(row_h *. float_of_int (List.length grp))
-            ~render:(fun () -> column ~gap:0 grp))
-        groups
-  in
-
   (* items are chunked into rows of 9: the web fallback relied on
      flex-wrap, which the native layout engine ignores — a single
      unwrapped row shrink-compresses every cell to a few px *)
-  let pane_section label (items : t list) : t =
+  let pane_section label (items : item list) : t =
     column ~padding_horizontal:8 ~min_width:0
       [ box ~style_class:"hd"
           [ text ~as_:`Strong ~style_class:"ls-ep-section-title" ~value:label
               ~font_size:"0.75rem" ~font_weight:500
               ~foreground:"hsl(var(--muted-foreground))"
               [] ]
-      ; column ~gap:0 (grid_rows label items) ]
+      ; grid_rows ~label ~render:item_btn items ]
   in
 
-  let used_item_btns () : t list =
+  let used_picker_items () : item list =
     used_items ()
     |> List.map (fun (typ, id, name) ->
-           if typ = "emoji" then item_btn (Emoji_item (id, name))
+           if typ = "emoji" then Emoji_item (id, name)
            else
              match
                List.find_opt
                  (fun (d, _) -> icon_id d = id)
                  (icon_items ())
              with
-             | Some (d, k) -> item_btn (Tabler_item (d, k))
-             | None -> item_btn (Tabler_item (name, Icons.kebab name)))
+             | Some (d, k) -> Tabler_item (d, k)
+             | None -> Tabler_item (name, Icons.kebab name))
   in
 
   let set_tab t =
@@ -368,7 +377,7 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
     if String.trim s.q = "" then (
       match s.tab with
       | Tab_all ->
-          let used = used_item_btns () in
+          let used = used_picker_items () in
           column ~gap:4
             [ Ui_components.with_props [Ui_components.Prop.padding_bottom 40] (column
                 ((if used = [] then []
@@ -379,13 +388,13 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
                       (I.tf "icon/emojis-count"
                          [ string_of_int (Emoji_mart.emoji_count ()) ])
                       (List.map
-                         (fun (id, n) -> item_btn (Emoji_item (id, n)))
+                         (fun (id, n) -> Emoji_item (id, n))
                          (take 32 (Emoji_mart.all_emojis ())))
                   ; pane_section
                       (I.tf "icon/icons-count"
                          [ string_of_int (List.length (icon_items ())) ])
                       (List.map
-                         (fun (d, k) -> item_btn (Tabler_item (d, k)))
+                         (fun (d, k) -> Tabler_item (d, k))
                          (take 48 (icon_items ()))) ])) ]
       | Tab_emoji ->
           (* cljs emojis-cp renders its own flex-1 flex-col gap-1 div
@@ -393,7 +402,7 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
           let used =
             used_items ()
             |> List.filter (fun (t, _, _) -> t = "emoji")
-            |> List.map (fun (_, id, name) -> item_btn (Emoji_item (id, name)))
+            |> List.map (fun (_, id, name) -> Emoji_item (id, name))
           in
           column ~gap:4
             [ column ~gap:4
@@ -405,17 +414,17 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
                       (I.tf "icon/emojis-count"
                          [ string_of_int (Emoji_mart.emoji_count ()) ])
                       (List.map
-                         (fun (id, n) -> item_btn (Emoji_item (id, n)))
+                         (fun (id, n) -> Emoji_item (id, n))
                          (Emoji_mart.all_emojis ())) ]) ]
       | Tab_icon ->
           (* the unfiltered table is ~6200 icons: pane_section windows
-             the grid (lazy row groups) instead of capping it *)
+             the complete grid instead of capping it *)
           column ~gap:4
             [ pane_section
                 (I.tf "icon/icons-count"
                    [ string_of_int (List.length (icon_items ())) ])
                 (List.map
-                   (fun (d, k) -> item_btn (Tabler_item (d, k)))
+                   (fun (d, k) -> Tabler_item (d, k))
                    (icon_items ())) ])
     else
       let icons =
@@ -431,7 +440,7 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
          else
            [ pane_section
                (I.tf "icon/matched-count" [ string_of_int (List.length items) ])
-               (List.map item_btn items) ])
+               items ])
   in
 
   let tabs =

@@ -1,5 +1,29 @@
 # API migrations
 
+## Native icon and Emoji picker rows use the canonical viewport
+
+NSH icon and Emoji picker sections now feed nine-cell, 44px rows into the
+existing `Virt_list.list` adapter. The surrounding picker `Scroll` remains the
+viewport owner. NSH mounts only its requested rows and interaction pins; it no
+longer eagerly constructs and mounts the complete generated icon or Emoji
+collection through the legacy `Lazy_children` path. The complete datasets stay
+available, including the last partial row, and the existing item keys, choice
+callbacks, search limit, tab/category sections and color-preset behavior remain
+in use. Web and maintained mobile hosts retain the existing eight eager rows
+and six-row lazy groups. No caller or stored graph data migration is needed.
+
+For other application grids already inside a `Scroll`, pass row data to the
+existing `Virt_list.list ~key_of ~render ~estimate_size` adapter rather than
+putting every rendered cell behind `Lazy_children`. Keep row keys derived from
+item identity and let the native host supply `VirtualWindow` feedback; do not
+add a second scroll controller or item cache.
+
+The native virtual-row regression links the production grid builder and counts
+actual mounted buttons and cell render calls for 1,000 items and each complete
+generated dataset. It exercises middle/end windows, overlapping cell identity,
+interaction pins and selecting the last item without truncation. These retained
+runtime tests do not qualify platform geometry or physical keyboard navigation.
+
 ## Native application links use the delegated click controller
 
 Internal page references, tags, timestamps and block controls retain their

@@ -176,10 +176,93 @@ let test_array_list () =
     check "repeated activation of the same key receives a fresh token"
       (integer runtime list ScrollToken = 2))
 
+(* Exercise the same grid builder the production picker uses, including both
+   complete generated datasets. Count real mounted controls and render calls. *)
+let test_picker_grid label data () =
+  let chosen = ref None and rendered = ref 0 in
+  let backend = {
+    backend_profile = profile MacOS NshHost;
+    apply_batch = (fun _ -> true)
+  } in
+  let view _ _ _ =
+    scroll ~height:176 ~width:400
+      [Icon_picker.grid_rows ~label ~render:(fun item ->
+        incr rendered;
+        let key = Icon_picker.item_key item in
+        button ~accessibility_identifier:key ~text:key ~width:36 ~height:36
+          ~on_press:(fun _ -> chosen := Some key) []) (Array.to_list data)] in
+  let app = Lui_app.create backend () (fun () () -> ()) view in
+  Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app)) (fun () ->
+    ignore (Lui_app.start app);
+    ignore (Lui_app.flush app);
+    let runtime = Lui_app.runtime app in
+    let list = find runtime (fun _ kind -> kind = VirtualList) in
+    let count = Array.length data in
+    let rows = (count + 8) / 9 in
+    let controls () = Hashtbl.fold (fun _ kind count ->
+      if kind = Button then count + 1 else count) runtime.mounted_nodes 0 in
+    let bounded () =
+      check (label ^ " mounts only a bounded set of actual picker buttons")
+        (controls () <= 126 && Hashtbl.length runtime.mounted_nodes < 512) in
+    check (label ^ " keeps every generated item in the canonical row source")
+      (integer runtime list VirtualTotalCount = rows);
+    check (label ^ " borrows its enclosing picker Scroll")
+      (property runtime list VirtualViewport = Some (StringValue "parent"));
+    check (label ^ " does not eagerly construct every picker cell")
+      (!rendered = controls () && !rendered <= 126);
+    bounded ();
+    let window ?(pins = []) first last =
+      ignore (Lui_app.dispatch_event app
+        (VirtualWindow (list, integer runtime list VirtualGeneration, first, last, pins)));
+      ignore (Lui_app.flush app);
+      bounded () in
+    let item_key index = Icon_picker.item_key data.(index) in
+    window 100 107;
+    check (label ^ " renders precisely the requested seven grid rows")
+      (controls () = 63);
+    let cell = identified runtime (item_key (103 * 9 + 4)) in
+    let row = Hashtbl.find runtime.runtime_parents cell in
+    window 101 108;
+    check (label ^ " preserves overlapping cell identity during scrolling")
+      (identified runtime (item_key (103 * 9 + 4)) = cell);
+    ignore (Lui_app.dispatch_event app (Press cell));
+    ignore (Lui_app.flush app);
+    check (label ^ " keeps the selected item identity after scrolling")
+      (!chosen = Some (item_key (103 * 9 + 4)));
+    window ~pins:[row] (rows - 2) rows;
+    check (label ^ " retains the host-pinned interaction row")
+      (identified runtime (item_key (103 * 9 + 4)) = cell);
+    window (rows - 2) rows;
+    check (label ^ " retires cells when their unpinned row leaves the viewport")
+      (not (Hashtbl.mem runtime.mounted_nodes cell));
+    let last = identified runtime (item_key (count - 1)) in
+    ignore (Lui_app.dispatch_event app (Press last));
+    ignore (Lui_app.flush app);
+    check (label ^ " reaches and activates the final item without truncation")
+      (!chosen = Some (item_key (count - 1)));
+    window 0 3;
+    check (label ^ " returns to the first items without retaining old windows")
+      (controls () = 27
+       && property runtime (identified runtime (item_key 0)) TextValue
+          = Some (StringValue (item_key 0))))
+
+let test_picker_grids () =
+  let emojis = Emoji_mart.all_emojis () |> List.map (fun (id, name) ->
+    Icon_picker.Emoji_item (id, name)) |> Array.of_list in
+  let icons = Icon_picker.icon_items () |> List.map (fun (display, kebab) ->
+    Icon_picker.Tabler_item (display, kebab)) |> Array.of_list in
+  check "native Emoji and icon fixtures each exceed 1k items"
+    (Array.length emojis > 1_000 && Array.length icons > 1_000);
+  List.iter (fun (label, data) ->
+    test_picker_grid (label ^ " 1k") (Array.sub data 0 1_000) ();
+    test_picker_grid (label ^ " complete") data ())
+    ["Emoji", emojis; "Icon", icons]
+
 let () =
   test_rows_sig ~lazy_children:false 1_000 ();
   test_rows_sig ~lazy_children:false 100_000 ();
   test_rows_sig ~lazy_children:true 1_000 ();
   test_rows_sig ~lazy_children:true 100_000 ();
   test_array_list ();
-  print_endline "Production native Virt_list/Lazy_children: bounded 1k/100k, edit, reorder, pin and pagination passed"
+  test_picker_grids ();
+  print_endline "Production native virtual rows and picker grids: bounded 1k/100k, complete Emoji/icons, retained interactions and pagination passed"
