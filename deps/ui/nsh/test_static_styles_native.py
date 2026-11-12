@@ -76,7 +76,7 @@ class NativeStyleCompileTests(unittest.TestCase):
 
     def test_reactive_constructor_contents_transition_fails_before_launch(self):
         self.check_fixture('''let value visible =
-  Lui_elements.box ~display:(reactive (fun show -> if show then `contents else `none) visible) []
+  Lui_elements.column ~display:(reactive (fun show -> if show then `contents else `none) visible) []
 ''', ppx=True, rejected=True, source_rejected=True,
             expected_diagnostic="NSH reactive display can change between contents and a physical display")
 
@@ -87,7 +87,7 @@ let value visible =
     ~value:(reactive (fun show -> if show then "block" else "none") visible)
     (Lui_elements.box [])
 let constructor visible =
-  Lui_elements.box ~display:(reactive (fun show -> if show then `block else `none) visible) []
+  Lui_elements.column ~display:(reactive (fun show -> if show then `block else `none) visible) []
 let fixed visible =
   Ui_parts.string_prop Lui_protocol.DisplayValue
     ~value:(reactive (fun _ -> "contents") visible) (Lui_elements.box [])
