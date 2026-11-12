@@ -55,12 +55,13 @@ pub fn App(props: AppProps) -> impl IntoElement {
             Err(error) => eprintln!("Logseq native theme: {error}"),
         },
     );
+    let application_menu = services::ApplicationMenu::mount();
     let services = if props.startup_preflight.get_untracked()
         || engine_context::<StartupPreflight>().is_some()
     {
-        services::Services::isolated(icons, themes)
+        services::Services::isolated(icons, themes, application_menu)
     } else {
-        services::Services::new(icons, themes)
+        services::Services::new(icons, themes, application_menu)
     };
     provide_context(services.resources());
     provide_context(ApplicationServices::new(move |request, renderer| {

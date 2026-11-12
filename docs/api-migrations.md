@@ -302,3 +302,35 @@ calling application activation, synthetic input or display-power APIs. No other
 application is inspected or unhidden. Ordinary launches and non-macOS hosts
 are unchanged; screenshot capture itself remains read-only and continues to
 reject an invisible window.
+
+
+### NSH Logseq retains its application menu when enabling installed updates
+
+The NSH application now mounts one `lui_nsh::desktop_updates::UpdateActions`
+inside its existing application/menu owner. Optional installed updater metadata
+adds actions to the macOS Logseq menu or the Linux/Windows File menu. Native
+Edit/Window roles and OCaml-owned business commands remain in that same menu;
+there is no second `DesktopApp`, updater worker, installer or polling loop.
+
+Without installed `nsh/assets/nsh-updater.json`, the contribution is empty and
+creates no update cache, worker or network request. No production manifest URL
+or signing key is supplied by this change. An explicitly configured installation
+still uses LUI's existing whole-application root/configuration/signature checks.
+Checks/downloads are user initiated, installation requires the existing explicit
+confirmation, and restart follows successful installation only. Owner disposal
+cancels pending work and makes retired callbacks inert.
+
+The NSH-only `application-menu-labels` payload now requires a complete nested
+`updates` object matching LUI `UpdateLabels`, including `{version}` and `{notes}`
+placeholders. For example, `updates.menu-check` is the translated label for
+checking updates; `updates.version-notes` is a full translated description with
+both placeholders, substituted by the existing workflow. Empty/malformed labels
+are rejected before menu replacement. The OCaml native host configures this
+payload before the initial app render, and I18n refreshes update the same owner.
+Generic Apple/mobile native hosts retain their previous menu payload; no UI
+component, ordinal, mobile build path or Dune rule changes.
+
+Real Logseq feed/install qualification remains pending an explicitly supplied
+feed and public key. Existing generic updater tests do not qualify a Logseq
+production feed, and an archive without updater configuration remains a normal
+manual-install package.

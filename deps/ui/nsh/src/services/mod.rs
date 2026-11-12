@@ -13,6 +13,7 @@ use lui_nsh::{
     render::Renderer,
     runtime::{PlatformEvent, PlatformRequest},
 };
+pub(crate) use menu::ApplicationMenu;
 use nsh_core::{
     desktop::WindowAttributes,
     element::desktop::{current_window, title_bar},
@@ -30,18 +31,20 @@ pub struct Services {
     connected: Cell<bool>,
     closing: Cell<bool>,
     resources: resources::Resources,
+    menu: ApplicationMenu,
 }
 impl Services {
-    pub fn new(icons: IconRegistry, themes: ThemeRegistry) -> Rc<Self> {
-        Self::with_credentials(icons, themes, secrets::CredentialStore::Native)
+    pub fn new(icons: IconRegistry, themes: ThemeRegistry, menu: ApplicationMenu) -> Rc<Self> {
+        Self::with_credentials(icons, themes, secrets::CredentialStore::Native, menu)
     }
-    pub fn isolated(icons: IconRegistry, themes: ThemeRegistry) -> Rc<Self> {
-        Self::with_credentials(icons, themes, secrets::CredentialStore::isolated())
+    pub fn isolated(icons: IconRegistry, themes: ThemeRegistry, menu: ApplicationMenu) -> Rc<Self> {
+        Self::with_credentials(icons, themes, secrets::CredentialStore::isolated(), menu)
     }
     fn with_credentials(
         icons: IconRegistry,
         themes: ThemeRegistry,
         credentials: secrets::CredentialStore,
+        menu: ApplicationMenu,
     ) -> Rc<Self> {
         Rc::new(Self {
             icons,
@@ -51,6 +54,7 @@ impl Services {
             connected: Cell::new(false),
             closing: Cell::new(false),
             resources: resources::Resources::new(),
+            menu,
         })
     }
     pub(crate) fn resources(&self) -> resources::Resources {
@@ -134,7 +138,7 @@ impl Services {
                 Ok(Vec::new())
             }
             "application-menu-labels" => {
-                menu::install(&request.payload, events)?;
+                self.menu.install(&request.payload, events)?;
                 Ok(Vec::new())
             }
             "clipboard" | "clipboard-write" | "clipboard-read" | "open-url" => {

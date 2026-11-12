@@ -510,6 +510,7 @@ let initialize_unlocked platform_code host_code (payload : string) =
   (* Platform's request channel ("<op>\n<payload>") shares the same wire
      as Host's — clipboard-write, ui-state, etc. *)
   Platform.host_request := platform_request;
+  Menu_commands.configure ~updates:(host_kind = Lui_protocol.NshHost);
   let t0 = perf_ms () in
   ignore (Lui_app.start app);
   ignore (Lui_app.flush app);

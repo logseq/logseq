@@ -1,6 +1,10 @@
 //! The application's native menu. OCaml owns translated labels and business commands;
 //! NSH owns platform edit/window/application roles and shortcut dispatch.
-use lui_nsh::{app::ApplicationEvents, runtime::PlatformEvent};
+use lui_nsh::{
+    app::ApplicationEvents,
+    desktop_updates::{UpdateActions, UpdateLabels},
+    runtime::PlatformEvent,
+};
 use nsh_core::{
     desktop::MenuRole,
     element::desktop::{MenuItem, set_application_menu},
@@ -11,7 +15,7 @@ use serde::Deserialize;
 use serde_json::json;
 use std::rc::Rc;
 
-#[derive(Clone, Deserialize)]
+#[derive(Clone, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Labels {
     #[serde(rename = "toggle-left-sidebar")]
@@ -23,6 +27,7 @@ struct Labels {
     window: String,
     help: String,
     reload: String,
+    updates: UpdateLabels,
 }
 impl Labels {
     fn parse(payload: &str) -> Result<Self, String> {
@@ -43,43 +48,96 @@ impl Labels {
         {
             return Err("application menu requires nonempty translated labels".into());
         }
+        labels.updates.validate()?;
         Ok(labels)
     }
 }
 
-pub fn install(payload: &str, events: ApplicationEvents) -> Result<(), String> {
-    let labels = Labels::parse(payload)?;
-    let command = Rc::new(move |name: &'static str| {
-        if let Err(error) = events.send(PlatformEvent {
-            operation: "application-menu-command".into(),
-            payload: json!({"detail":{"command":name}}).to_string(),
-        }) {
-            eprintln!("application menu {name}: {error}");
+#[derive(Clone)]
+struct Installed {
+    labels: Labels,
+    command: Command,
+}
+impl PartialEq for Installed {
+    fn eq(&self, other: &Self) -> bool {
+        self.labels == other.labels && Rc::ptr_eq(&self.command, &other.command)
+    }
+}
+
+/// One application menu owner. Update phases contribute to this same menu;
+/// no second controller, worker, menu owner or polling loop is mounted.
+#[derive(Clone, Copy)]
+pub struct ApplicationMenu {
+    owner: Owner,
+    installed: Signal<Option<Installed>>,
+}
+impl ApplicationMenu {
+    pub fn mount() -> Self {
+        let updates = UpdateActions::installed();
+        let installed = signal(None::<Installed>);
+        effect(move || {
+            if let Some(current) = installed.get() {
+                let contribution = updates.menu_items(current.labels.updates.clone());
+                set_application_menu(items(
+                    current.labels,
+                    os() == Os::MacOs,
+                    current.command,
+                    contribution,
+                ));
+            }
+        });
+        cleanup(|| set_application_menu(None));
+        Self {
+            owner: Owner::current(),
+            installed,
         }
-    });
-    set_application_menu(items(labels, os() == Os::MacOs, command));
-    Ok(())
+    }
+    pub fn install(&self, payload: &str, events: ApplicationEvents) -> Result<(), String> {
+        if !self.owner.is_live() {
+            return Err("application menu owner is retired".into());
+        }
+        let labels = Labels::parse(payload)?;
+        let owner = self.owner;
+        let command = Rc::new(move |name: &'static str| {
+            if !owner.is_live() {
+                return;
+            }
+            if let Err(error) = events.send(PlatformEvent {
+                operation: "application-menu-command".into(),
+                payload: json!({"detail":{"command":name}}).to_string(),
+            }) {
+                eprintln!("application menu {name}: {error}");
+            }
+        });
+        self.installed.set(Some(Installed { labels, command }));
+        Ok(())
+    }
 }
 
 type Command = Rc<dyn Fn(&'static str)>;
-fn items(labels: Labels, mac: bool, command: Command) -> Vec<MenuItem> {
+fn items(labels: Labels, mac: bool, command: Command, mut updates: Vec<MenuItem>) -> Vec<MenuItem> {
     let mut menus = Vec::with_capacity(6);
     if mac {
-        menus.push(MenuItem::submenu(
-            "Logseq",
-            [
-                MenuItem::role(MenuRole::About),
-                MenuItem::separator(),
-                MenuItem::role(MenuRole::Hide),
-                MenuItem::role(MenuRole::HideOthers),
-                MenuItem::role(MenuRole::ShowAll),
-                MenuItem::separator(),
-                MenuItem::role(MenuRole::Quit),
-            ],
-        ));
+        let mut application = vec![MenuItem::role(MenuRole::About), MenuItem::separator()];
+        if !updates.is_empty() {
+            application.append(&mut updates);
+            application.push(MenuItem::separator());
+        }
+        application.extend([
+            MenuItem::role(MenuRole::Hide),
+            MenuItem::role(MenuRole::HideOthers),
+            MenuItem::role(MenuRole::ShowAll),
+            MenuItem::separator(),
+            MenuItem::role(MenuRole::Quit),
+        ]);
+        menus.push(MenuItem::submenu("Logseq", application));
     }
     let mut file = vec![MenuItem::role(MenuRole::Close)];
     if !mac {
+        if !updates.is_empty() {
+            file.push(MenuItem::separator());
+            file.append(&mut updates);
+        }
         file.extend([MenuItem::separator(), MenuItem::role(MenuRole::Quit)]);
     }
     menus.push(MenuItem::submenu(labels.file, file));
@@ -131,7 +189,28 @@ mod tests {
 
     fn labels() -> String {
         json!({"toggle-left-sidebar":"Toggle sidebar","documentation":"Documentation",
-            "file":"File","edit":"Edit","view":"View","window":"Window","help":"Help","reload":"Reload"}).to_string()
+            "file":"File","edit":"Edit","view":"View","window":"Window","help":"Help","reload":"Reload","updates":{"menu-check":"Check for Updates…",
+            "menu-install":"Install and Restart…",
+            "menu-checking":"Checking for Updates…",
+            "menu-downloading":"Downloading Update…",
+            "menu-prompt":"Update Available…",
+            "menu-installing":"Installing Update…",
+            "menu-cancelling":"Cancelling Update…",
+            "menu-cancel":"Cancel Update",
+            "menu-unavailable":"Updates Unavailable…",
+            "current-title":"You're Up to Date",
+            "current-description":"The latest version is installed.",
+            "done":"OK",
+            "available-title":"Update Available",
+            "version-available":"Version {version} is available.",
+            "version-notes":"Version {version} is available.\n\n{notes}",
+            "later":"Later",
+            "download":"Download",
+            "open-download":"Open Download Page",
+            "ready-title":"Update Ready",
+            "ready-description":"The app will close and restart with the new version.",
+            "install":"Install and Restart",
+            "error-title":"Update Could Not Be Completed"}}).to_string()
     }
     #[component]
     fn MenuFixture() -> impl IntoElement {
@@ -140,6 +219,7 @@ mod tests {
             Labels::parse(&labels()).unwrap(),
             false,
             Rc::new(move |name| command.set(name.into())),
+            Vec::new(),
         ));
         cleanup(|| set_application_menu(None));
         text(move || format!("Command: {}", command.get()))
@@ -161,6 +241,11 @@ mod tests {
         assert!(Labels::parse(&payload.to_string()).is_err());
         payload["file"] = "文件".into();
         assert!(Labels::parse(&payload.to_string()).is_ok());
+        let mut invalid_update: serde_json::Value = serde_json::from_str(&labels()).unwrap();
+        invalid_update["updates"]["version-notes"] = "Missing required parameters".into();
+        assert!(Labels::parse(&invalid_update.to_string()).is_err());
+        invalid_update["updates"] = serde_json::Value::Null;
+        assert!(Labels::parse(&invalid_update.to_string()).is_err());
         payload.as_object_mut().unwrap().remove("reload");
         assert!(Labels::parse(&payload.to_string()).is_err());
     }
