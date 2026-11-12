@@ -330,7 +330,7 @@ let native_repos_menu_items st model =
     Menu_item.el ~key ~label:(t label) ~icon:(Icons.name_ref icon)
       ~on_click:(fun () -> close (); act ()) () in
   List.map local_item local @ List.map remote_item remote
-  @ (if local=[] && remote=[] then [] else [Menu_item.separator ~key:"qa-separator"])
+  @ (if local=[] && remote=[] then [] else [Menu_item.separator ~mv:4 ~mh:(-4) ~key:"qa-separator"])
   @ [action "qa-new" "graph/create-db" "database-plus"
        (fun () -> Dialogs_state.open_ "new-graph");
      action "qa-imp" "import/notes" "database-import"
