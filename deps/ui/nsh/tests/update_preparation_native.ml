@@ -1258,6 +1258,7 @@ let native_cmdk_controlled_input () =
       (List.exists (fun (name,_) -> name="set-value") !requests))
 
 let native_menu_scope_retention () =
+  let open Lui_elements in
   let previous_model = !Runtime.read_model and previous_flush = !Runtime.app_flush
   and previous_schedule = !Runtime.schedule_flush and previous_worker = !Runtime.worker
   and previous_sidebar = !Sidebar_state.st_ref and previous_sidebar_model = !Sidebar_state.model_signal
@@ -1268,7 +1269,8 @@ let native_menu_scope_retention () =
   and second=page "22222222-2222-4222-8222-222222222222" "Second favorite" in
   let initial={Model.initial with repo=Some "menu-scope-a";
     repos=["menu-scope-a";"menu-scope-b"];route_page=Some first} in
-  let app_ref=ref None and sidebar=ref None in
+  let app_ref=ref None and sidebar=ref None and toolbar_shape=ref None
+  and view_instance=ref None in
   let published=Hashtbl.create 32 in
   let publications=ref 0 in
   let backend : Lui_protocol.backend={
@@ -1301,8 +1303,18 @@ let native_menu_scope_retention () =
         items=state [];open_menu=state "";groups_collapsed=state [];left_width=state 246.;
         right_fraction=state 0.3;viewport_w=state 1440.} in
       sidebar:=Some st;Sidebar_state.st_ref:=Some st;Sidebar_state.model_signal:=Some model;
+      let shape=state false in
+      toolbar_shape:=Some shape;
+      let inst=Views_state.make ~sched:context.Lui_ui.ui_scheduler
+        ~kind:Views_state.KAllPages ~feature:"retained-menu" ~owner:Wire.Nil in
+      view_instance:=Some inst;
       Lui_elements.column [Left_sidebar_view.graphs_selector st model;
         Chrome.dots_btn model;Left_sidebar_view.favorites_group st;
+        reactive (fun leading ->
+          Lui_elements.row ((if leading then
+            [Views_head.action_button ~label:"Leading fixture action" []] else [])
+            @ [Views_head.display_type_el inst;Views_head.more_actions_el inst]))
+          (Signal.value shape);
         Lui_elements.text_field ~key:"menu-retained-editor"
           ~accessibility_identifier:"menu-retained-editor" ~text:"kept editor" []]) in
   app_ref:=Some app;
@@ -1330,11 +1342,19 @@ let native_menu_scope_retention () =
     and editor=named "menu-retained-editor" in
     let graph_menu=attachment graph and more_menu=attachment more in
     let favorite_menus ()=Hashtbl.fold (fun node props found ->
-      if Lui_protocol.Property_map.find_opt Lui_protocol.AccessibilityLabel props
-          =Some (Lui_protocol.StringValue (I18n.t "ui/show-more")) then
+      if Lui_protocol.Property_map.find_opt Lui_protocol.StyleClass props
+          =Some (Lui_protocol.StringValue "sidebar-page-actions ui__button") then
         (node,attachment node)::found else found) runtime.Lui_runtime.runtime_properties []
       |> List.sort compare in
     let favorite_ids=favorite_menus () in
+    let display_id="vtype-" ^ string_of_int (Option.get !view_instance).Views_state.id in
+    let display=named display_id in
+    let display_menu=attachment display in
+    List.iter (fun leading ->
+      Signal.set (Option.get !toolbar_shape) leading;
+      ignore (Lui_app.flush app);Host.drain ();
+      check "actual view-type trigger retains its identity when neighboring actions shift"
+        (named display_id=display && attachment display=display_menu)) [true;false;true;false];
     List.iter (fun model ->
       ignore (Lui_app.send app model);ignore (Lui_app.flush app);Host.drain ();
       check "actual graph and More updates retain trigger, menu and editor identities"

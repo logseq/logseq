@@ -24,8 +24,8 @@ let sig_of (inst : V.inst) : V.vstate Signal.signal =
 let refresh inst = (V.ops ()).V.o_refresh inst
 let icon_el = Views_table.icon_el
 
-let action_button ?(extra = "") ~label ?accessibility_identifier ?on_press children : t =
-  Ui_components.button ~variant:`ghost ~size:`sm ~label ~style_class:extra
+let action_button ?key ?(extra = "") ~label ?accessibility_identifier ?on_press children : t =
+  Ui_components.button ?key ~variant:`ghost ~size:`sm ~label ~style_class:extra
     ~width:24 ~min_width:24 ~height:24 ~min_height:24 ~padding:0
     ~main:`center ~cross:`center ~foreground:"hsl(var(--muted-foreground))"
     ?accessibility_identifier ?on_press children
@@ -680,7 +680,7 @@ let display_type_el inst : t =
             ~selected:(reactive (fun (s : V.vstate) -> s.V.display_type=dt) (sig_of inst))
             ~on_press:(fun _ -> set dt) []) choices)]
     else [] in
-  (action_button
+  (action_button ~key:wrap_id
     ~accessibility_identifier:wrap_id
     ~label:(I.t "property.built-in/view-type") ?on_press
     (icon ~point_size:18

@@ -18,3 +18,21 @@ primary build owner can serialize admission work. The runtime attachment failure
 is not considered resolved until its reproduction and the updated admission
 checks pass. The companion renderer diagnostic records only bounded structural
 identifiers and transition direction; it contains no graph titles or user text.
+
+## Semantic trigger keys
+
+The view-type Menu used an unkeyed `action_button`. LUI intentionally reconciles
+unkeyed children by position and component kind. Inserting an ordinary Button
+before that trigger inside a rebuilt toolbar could therefore transfer the old
+menu-bearing Button identity to the ordinary action and the ordinary action's
+identity to the Menu trigger. Accessibility identifiers do not establish
+reconciliation keys.
+
+`Views_head.action_button` now forwards an optional key, and the view-type
+trigger supplies its existing per-instance `vtype-<id>` identifier as that key.
+Favorites/Recent menu Buttons likewise receive the row's stable semantic key.
+No native trigger is forcibly remounted: the same action keeps its controller
+when neighboring actions move. The native regression inserts/removes an ordinary
+actual view action before `Views_head.display_type_el` and checks every
+publication and the retained Menu identity. Renderer attachment validation is
+unchanged. Runtime confirmation remains owned by the serialized build runner.

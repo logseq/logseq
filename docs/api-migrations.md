@@ -1473,3 +1473,23 @@ materialization and resolved body bounds, drags the native Scroll to the final
 source row, and activates its last item. This complements the recording-host
 window tests; it does not substitute for AppKit raster/input or release RSS
 measurement. No caller or graph data migration is required.
+## Preserve semantic native Menu trigger identity
+
+`Views_head.action_button` accepts an optional `?key` and forwards it to the
+canonical Button. Existing callers remain source compatible on every backend.
+The view-type action uses its per-view `vtype-<id>` key, and Favorites/Recent
+menu actions use their owning row key. This preserves the same trigger and Menu
+controller across sibling insertion, reorder and metadata changes. It does not
+change Menu opening, dismissal or event semantics.
+
+When rebuilding a toolbar whose ordinary and menu-bearing Buttons can change
+positions, identify each action semantically:
+
+```ocaml
+Views_head.action_button ~key:"export" ~label:(I18n.t "view/export-edn")
+  ~on_press:(fun _ -> export ()) []
+```
+
+An `accessibility_identifier` remains an accessibility/automation identifier;
+it does not replace the reconciliation key. The dynamic NSH boundary still
+rejects changing a retained trigger's native attachment mode.

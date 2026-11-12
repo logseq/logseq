@@ -769,7 +769,7 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key : t =
             ; ( Ui_components.Prop.hover_background "transparent" )
             ; ( Ui_components.Prop.hover_foreground "hsl(var(--secondary-foreground))" )
             ; ( Ui_components.Prop.focus_shadow "0 0 0 2px hsl(var(--ring))" ) ]
-            (Ui_components.button ~variant:`ghost ~size:`icon
+            (Ui_components.button ~key:(key ^ "-menu-trigger") ~variant:`ghost ~size:`icon
                ~label:(t "ui/show-more")
                ~width:28 ~height:28 ~padding_vertical:4 ~corner_radius:4
                ~padding_horizontal:6
