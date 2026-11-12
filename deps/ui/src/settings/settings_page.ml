@@ -160,6 +160,13 @@ type accent_palette =
 
 type accent_swatch = No_accent | Logseq_accent | Palette of accent_palette
 
+type swatch_level = Step6 | Step7 | Step9
+
+let swatch_suffix = function
+  | Step6 -> "06"
+  | Step7 -> "07"
+  | Step9 -> "09"
+
 let palette_name = function
   | Tomato -> "tomato" | Red -> "red" | Crimson -> "crimson" | Pink -> "pink"
   | Plum -> "plum" | Purple -> "purple" | Violet -> "violet" | Indigo -> "indigo"
@@ -183,18 +190,19 @@ let color_label = function
   | Palette palette -> T.t ("color/" ^ palette_name palette)
 
 let swatch_color swatch level =
+  let suffix = swatch_suffix level in
   match swatch with
   | No_accent -> "hsl(var(--foreground))"
-  | Logseq_accent -> "var(--rx-logseq-" ^ level ^ ")"
-  | Palette palette -> "var(--rx-" ^ palette_name palette ^ "-" ^ level ^ ")"
+  | Logseq_accent -> "var(--rx-logseq-" ^ suffix ^ ")"
+  | Palette palette -> "var(--rx-" ^ palette_name palette ^ "-" ^ suffix ^ ")"
 
 let swatch_background = function
   | No_accent -> "transparent"
-  | (Logseq_accent | Palette _) as swatch -> swatch_color swatch "09"
+  | (Logseq_accent | Palette _) as swatch -> swatch_color swatch Step9
 
 let swatch_hover_background = function
   | No_accent -> "hsl(var(--accent))"
-  | (Logseq_accent | Palette _) as swatch -> swatch_color swatch "09"
+  | (Logseq_accent | Palette _) as swatch -> swatch_color swatch Step9
 
 (* cljs settings.cljs accent-color-row: 20px rounded-full button at
    opacity .5 (1 when active), 1px/4px outline in rx-06/07, inner 8px
@@ -202,7 +210,7 @@ let swatch_hover_background = function
 let accent_swatch ~key ~current color =
   let active = accent_name color = current and none = color = No_accent in
   let outline = "0 0 0 " ^ (if active then "4px " else "1px ")
-    ^ swatch_color color (if active then "07" else "06") in
+    ^ swatch_color color (if active then Step7 else Step6) in
   row ~key ~height:20 ~main:`start ~cross:`center
     ~opacity:(if active then 1. else 0.5)
     [ Ui_components.with_props
@@ -225,7 +233,7 @@ let accent_swatch ~key ~current color =
             ~width:(if none then 12 else 8) ~height:(if none then 2 else 8)
             ~corner_radius:9999
             ~background:
-              (if none then "#b91c1c" else swatch_color color "07")
+              (if none then "#b91c1c" else swatch_color color Step7)
             []
         ])
     ]
