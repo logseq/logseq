@@ -224,3 +224,56 @@ cells from 15/689 rows, and every closed sample had zero canonical picker nodes,
 cells or row lists. No screenshots or forced collections were introduced. This
 short run supports bounded initial materialization and canonical retirement; it
 does not establish long-term leak freedom or native wheel-scroll correctness.
+
+### Follow-up native input and final release sample
+
+Application `69a6380a17`, LUI `645edbd4` and NSH `adc186d` passed the full
+release publisher, including exact persisted final choices and a new geometry
+check requiring the Journal icon action to fit inside its virtual cell and list.
+The native header also passed resizing through 600, 640, 639 and 1440 points
+without changing the retained Journal/main-scroll identities.
+
+The actual AppKit test exposed a second, independent problem: the title toolbar
+started about 18 points above its virtual cell. The native Stack clipped its
+painting and hit region. Title hover correctly changed opacity to one, but
+moving onto the clipped action left the title and hid it again. NSH Journal
+pages now reserve the existing 20-point toolbar offset inside each cell, taking
+that space from the existing bottom padding. Opposite margins on the list
+wrapper retain the title position and total scroll extent. Other backends and
+ordinary pages keep their previous layout.
+
+The isolated AppKit test then passed title hover, actual mouse press to open the
+picker, both complete tabs, and positive/negative native wheel gestures. The
+first source cell retired after scrolling down and returned after scrolling up;
+mounted button counts remained bounded. A separate repeat passed with no agent
+polling and no screenshots. These are synthetic events delivered through the
+private AppKit window, not physical hardware input. The mixed development test
+host is not used for release-memory measurements.
+
+A separate Rust-only published release process produced the following clean
+sample, with no concurrent compiler/test run, screenshots or forced collection:
+
+| Phase | Frontend physical footprint, MiB | Worker physical footprint, MiB | Approximate combined footprint, MiB | Mounted picker cells |
+| --- | ---: | ---: | ---: | ---: |
+| About 10 seconds after launch | 97.7 | 39.5 | 137.2 | 0 |
+| First Emojis tab | 121.9 | 39.5 | 161.4 | 135 |
+| First Icons tab | 130.6 | 39.5 | 170.1 | 135 |
+| Second Emojis tab | 130.7 | 39.5 | 170.2 | 135 |
+| Second Icons tab | 131.9 | 39.5 | 171.4 | 135 |
+
+The baseline frontend scan began 10.014 seconds after process launch; worker
+scans follow within approximately one second, so the sum is approximate rather
+than an atomic process-family snapshot. The frontend peak was 133.7 MiB.
+The complete sources contained 1,870 emoji and 6,200 icons, with 15 mounted rows
+out of 208/689 source rows. OCaml major-heap capacity ranged from 6,182,000 to
+10,262,192 bytes during the tab samples; its minor-heap limit was 16,777,216
+bytes. Capacity and limit are not live-object memory. The physical-footprint
+columns include the processes' native allocations and resident OCaml memory.
+
+The successful sample and exact artifact hashes are preserved under ignored
+`deps/ui/_build/nsh-picker-final-memory/final-release-x0jf9pxv/`; `complete.json`
+records all five phases and `cleanup.json` records no errors. Only this private
+frontend/worker group was stopped; the normally installed user session remained
+open. The native-input run is retained in `/tmp/logseq-picker-native-wheel-clean.log`
+and its private evidence directory `logseq-picker-wheel.Ip8cXA`. These results do
+not qualify long-term leak freedom, physical input devices or distribution signing.
