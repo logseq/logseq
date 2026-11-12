@@ -555,7 +555,14 @@ mod tests {
             )
             .child(when(popup, move || {
                 let output = popup_output.clone();
+                let outside = popup_output.clone();
+                // Match LUI's actual Popover: both native dismissal paths
+                // belong to this retained surface, not to the global keymap.
                 overlay()
+                    .on_press_outside(move |_: &nsh_core::geometry::Point<Points>| {
+                        outside.lock().unwrap().push(json!({"owner":"outside"}));
+                        popup.set(false);
+                    })
                     .on_cancel(move || {
                         output.lock().unwrap().push(json!({"owner":"popover"}));
                         popup.set(false);

@@ -277,3 +277,39 @@ frontend/worker group was stopped; the normally installed user session remained
 open. The native-input run is retained in `/tmp/logseq-picker-native-wheel-clean.log`
 and its private evidence directory `logseq-picker-wheel.Ip8cXA`. These results do
 not qualify long-term leak freedom, physical input devices or distribution signing.
+
+### Cancel-only SDK overlay retirement remains unresolved
+
+A focused native-engine selection-Escape regression exposed a separate SDK
+boundary at the pinned NSH revision. In the cancel-only overlay variant,
+`/tmp/logseq-native-selection-escape-trace-fixed.log` records a keymap containing
+both the selection binding (`2147483648`, nonediting) and the overlay binding
+(`4294967295`). After Cancel removes the overlay content, no replacement keymap
+is emitted; the next Escape does not reach the selection binding. This is not a
+passing AppKit or production-application qualification.
+
+Source proof: `nsh-core/src/core/overlay.rs:438` returns early when the overlay,
+watched-pointer and hint lists are empty, without considering the retained
+`cancel`/`hint_escape` flags. Releasing the last cancel-only overlay removes it
+from the overlay list at line 319. The normal listener synchronization at line
+581 would clear `cancel` and dirty the keymap, but the early return skips it.
+No SDK source or dependency pin is changed by this report.
+
+The production selection Popover listens to both `on_press_outside` and
+`on_cancel` (`LUI platform/nsh/src/controls.rs:377–381`). Its watched-pointer
+list forces the retirement synchronization, so the application regression now
+models both real dismissal paths while retaining the exact requirement that
+first Escape dismisses the overlay and second Escape reaches selection once.
+The reduced cancel-only case remains a separate known SDK issue, not a fixed or
+qualified path.
+
+Provider audit also found real potential exposure: LUI's notification stack
+reuses `nsh_base::ToastStack`; `nsh-base/src/toast/stack.rs:313–322` creates a
+zero-size cancel-only overlay while notifications exist. The last notification
+can therefore encounter the same condition when no other watched overlay is
+present. Canonical Sheet reuses a cancel-only native panel in
+`nsh-base/src/sheet.rs:134–154`; no current Logseq desktop Sheet call was found.
+Desktop context-menu roots retain a PressOutside listener, and their submenus
+remain under that root. Dialog uses native Modal RequestClose rather than this
+Overlay Cancel path. Toast/Sheet retirement requires a separate focused proof
+and a scoped dependency decision; this audit does not claim those paths pass.
