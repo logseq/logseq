@@ -323,3 +323,56 @@ successful tiles/searches: a source-side check cannot retract a result already
 queued before a new scroll/search. The private probe reports the captured scope
 on failure. Real overlapping-scroll/search error presentation remains a native
 controller gate; this source change does not claim that unimplemented UI gate.
+
+## Windows TextPattern implementation plan
+
+The public generated API provides IRawElementProviderSimple, ITextProvider,
+ITextRangeProvider and a read-only IValueProvider. DocumentRange must include the
+whole logical document, including text outside the current viewport. GetText
+uses logical order; GetSelection and visible ranges are independent. Selection
+and text changes require native UIA notifications. Unsupported attributes use
+UIA's reserved value, not invented metadata. These requirements rule out treating
+a bitmap label or the currently rendered page as the document text stream.
+
+A bounded portable Unicode document model will hold code points, real page spans
+and UAX #29 grapheme/word boundaries, separate from the bounded visible glyph
+geometry. The engine owner must build it incrementally off the UI thread before
+publishing it atomically. Providers must never synchronously open/extract a PDF
+or allocate all page glyph geometry. Page boundaries are explicit form-feed
+separators in this accessible text stream. Unsupported paragraph/format units
+use the next supported larger unit, rather than inventing PDF paragraphs/styles.
+
+The window owner binds one exact HWND and document epoch. COM objects hold Weak
+references to that owner, plus their captured epoch; retained clients cannot
+retain a document, bitmap, worker or UI callback after disposal. Provider/range
+implementations explicitly opt out of the windows-rs macro's default agility
+(`Agile = false`) and request UIA COM threading. The existing NSH Windows runner
+initializes the UI OLE apartment. Each entry checks its creating thread before
+upgrading a Weak owner. Peer range operations use public checked
+Interface::cast_object_ref, so unrelated/foreign range implementations return a
+typed argument error without interpreting their object layout.
+
+Selection/scroll callbacks receive typed logical ranges. No mutable state borrow
+survives a callback. The provider checks owner epoch/liveness again afterwards;
+reentrant close/replacement cannot acknowledge selection on a new document.
+The exact HWND subclass will notify its handler once on retirement, including
+parent-driven NCDESTROY. That notification invalidates the UIA owner, clears
+text/geometry/callbacks, and disconnects the cached provider. SAFEARRAY wrappers
+own partially built arrays and transfer them only on success; VT_UNKNOWN insertion
+uses the documented interface pointer with AddRef, without an extra pointer
+indirection or interface-handle reinterpretation.
+
+Authored gates will cover Unicode/surrogates/combining characters, page/document
+ranges, range normalization/movement, exact same-owner comparisons, native text
+and selection event paths, malformed ranges, stale epoch/provider/range objects,
+explicit and parent-driven disposal, reentrant selection retirement, and bounded
+snapshot inputs. Actual screen-reader/cross-process COM marshaling, displayed
+geometry/scrolling, worker-built whole-document text and packaged reader parity
+remain required Windows qualification gates; source tests alone cannot prove them.
+
+Primary contracts: [Text/TextRange conventions](https://learn.microsoft.com/en-us/windows/win32/winauto/uiauto-implementingtextandtextrange),
+[GetText logical order and length](https://learn.microsoft.com/en-us/windows/win32/api/uiautomationcore/nf-uiautomationcore-itextrangeprovider-gettext),
+[SAFEARRAY interface ownership](https://learn.microsoft.com/en-us/windows/win32/api/oleauto/nf-oleauto-safearrayputelement).
+The exact local generated definitions reviewed are windows 0.62.2
+UI/Accessibility ITextProvider_Impl and ITextRangeProvider_Impl, windows-core
+0.62.2 Interface::cast_object_ref, and windows-implement 0.60.2's Agile option.

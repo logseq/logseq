@@ -8,6 +8,9 @@ mod gtk_completion;
 #[cfg(all(target_os = "linux", test))]
 #[path = "../src/extensions/pdf/portable/gtk_page.rs"]
 mod gtk_page;
+#[cfg(all(any(target_os = "linux", target_os = "windows"), test))]
+#[path = "../src/extensions/pdf/portable/text.rs"]
+mod text;
 #[cfg(any(target_os = "linux", target_os = "windows"))]
 #[path = "../src/extensions/pdf/portable/worker.rs"]
 mod worker;
