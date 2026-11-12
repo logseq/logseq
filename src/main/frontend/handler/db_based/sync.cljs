@@ -3,6 +3,7 @@
   (:require [clojure.string :as string]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
+            [frontend.db.persist :as db-persist]
             [frontend.handler.notification :as notification]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.user :as user-handler]
@@ -219,7 +220,7 @@
       (seq config/COGNITO-CLIENT-ID)
       (assoc :auth/oauth-client-id config/COGNITO-CLIENT-ID))))
 
-(defn- <sync-auth-state-to-db-worker!
+(defn <sync-auth-state-to-db-worker!
   []
   (p/let [_ (user-handler/<ensure-id&access-token!)
           payload (sync-app-state-payload)]
@@ -303,6 +304,31 @@
                             :graph-uuid graph-uuid
                             :base base})))))
 
+(defn- <local-graph-exists?
+  "Asks the persistence layer (disk on desktop, OPFS in the browser) whether
+  `graph` already exists. The in-memory repo list can lag behind another window
+  or the CLI creating the graph. When the lookup fails, answers true so that the
+  caller never deletes a graph it cannot show it created."
+  [graph]
+  (-> (p/let [graphs (db-persist/get-all-graphs)]
+        (let [graph-key (string/lower-case graph)]
+          (boolean (some #(= graph-key (some-> (:name %) string/lower-case))
+                         graphs))))
+      (p/catch (fn [error]
+                 (log/error :db-sync/check-local-graph-exists-failed
+                            {:graph graph
+                             :error error})
+                 true))))
+
+(defn- <remove-failed-download-graph!
+  [graph]
+  (-> (p/do! (db-persist/delete-graph! graph))
+      (p/catch (fn [error]
+                 (log/error :db-sync/remove-failed-download-graph-failed
+                            {:graph graph
+                             :error error})
+                 nil))))
+
 (defn <rtc-download-graph!
   ([graph-name graph-uuid]
    (<rtc-download-graph! graph-name graph-uuid true))
@@ -317,13 +343,17 @@
                    :graph-uuid graph-uuid
                    :message "Preparing graph snapshot download"}])
        (let [graph-e2ee? (normalize-graph-e2ee? graph-e2ee?)
-             base (http-base)]
+             base (http-base)
+             graph (str config/db-version-prefix graph-name)
+             incomplete-graph? (atom false)]
          (-> (if (and graph-uuid base)
                (p/let [_ (user-handler/<ensure-id&access-token!)
-                       graph (str config/db-version-prefix graph-name)
+                       graph-existed? (<local-graph-exists? graph)
+                       _ (reset! incomplete-graph? (not graph-existed?))
                        _ (<ensure-download-runtime-bound! graph)
                        _ (state/<invoke-db-worker :thread-api/db-sync-download-graph-by-id
                                                  graph graph-uuid graph-e2ee?)
+                       _ (reset! incomplete-graph? false)
                        _ (when (util/electron?)
                            (state/<invoke-db-worker :thread-api/db-sync-download-missing-assets
                                                    graph graph-uuid))]
@@ -333,7 +363,10 @@
                                      :graph-uuid graph-uuid
                                      :base base})))
              (p/catch (fn [error]
-                        (throw error)))
+                        (p/do!
+                         (when @incomplete-graph?
+                           (<remove-failed-download-graph! graph))
+                         (throw error))))
              (p/finally
                (fn []
                  (state/set-state! :rtc/downloading-graph-uuid nil)))))))))
