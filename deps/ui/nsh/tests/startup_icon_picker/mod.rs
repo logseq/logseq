@@ -106,19 +106,18 @@ fn current_body(
                     return false;
                 }
             };
-            if let Some(retired) = retired {
-                if scroll == retired
+            if let Some(retired) = retired
+                && (scroll == retired
                     || nodes(&tree)
                         .into_iter()
                         .any(|node| selector(node).as_deref() == Ok(retired))
                     || screen
                         .layout_nodes()
                         .into_iter()
-                        .any(|node| node.test_id.as_deref() == retired.strip_prefix("id:"))
-                {
-                    *pending.borrow_mut() = format!("previous picker body {retired} is still live");
-                    return false;
-                }
+                        .any(|node| node.test_id.as_deref() == retired.strip_prefix("id:")))
+            {
+                *pending.borrow_mut() = format!("previous picker body {retired} is still live");
+                return false;
             }
             if let Err(error) = native_viewport(screen, &scroll) {
                 *pending.borrow_mut() = error;
