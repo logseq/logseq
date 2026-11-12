@@ -559,3 +559,34 @@ snapshot because new work can arrive before it runs. This supplies a bounded
 wake-up for one application-owned save coordinator, without polling, a registry
 or a queue of deferred invokes. Observation does not change task cancellation,
 completion order or existing Web/mobile scheduling behavior.
+
+
+### Abort waits for the actual save chain and its accepted descendants
+
+A native `update-abort` now records `Aborting` intent instead of reopening input.
+`released: true` is emitted only after the actual preparation promise settles,
+all observed accepted descendants finish, and the mailbox/reactive boundary is
+stable. Cancellation checks precede later property-editor, editor-buffer and
+pending-save mutation boundaries. An abort during the initial worker wait cannot
+later commit an old draft after admission has reopened. A failed request also
+waits for still-pending sibling work before acknowledgement.
+
+Actual saving runs inside the application work scope; only direct no-output
+promise observers and coordinator bookkeeping are excluded. Native one-shot
+Host timers remain observed through firing/cancellation and capture their
+creation context, including detached save refreshes. Recurring interval waits
+are explicitly liveness; their executing callbacks and finite descendants remain
+observed. A queued cancelled zero-delay timer releases its work exactly once.
+The existing sleeping timer worker is reused.
+
+`Ui_task.Activity.when_idle` now accepts optional `after_epoch` for observing the
+next real activity boundary without repeatedly reporting the same zero count.
+One owned coordinator coalesces idle notifications onto the existing mailbox tail;
+there is no polling timer or overwritten observer. Remaining structural state,
+pending saves or deferred save-ready closures prevent release even at zero
+observable activity. Such an opaque state is reported and remains fenced until
+real observed work resolves it; it is never treated as proof of quiescence.
+
+The actual application still aborts and awaits release before returning its
+translated installation-unavailable explanation. No installation lease, daemon
+termination or relaunch is enabled by this change.

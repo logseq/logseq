@@ -40,14 +40,20 @@ let native_entry_admission () =
     (match Yojson.Safe.from_string query with
      | `Assoc fields -> List.assoc_opt "ok" fields = Some (`Bool true)
      | _ -> false);
+  Update_admission.finish_save gate "1";
   check "matching preparation seals" (Update_admission.seal gate "1");
-  check "matching abort releases" (Update_admission.release gate "1");
-  check "release acknowledgement is idempotent" (Update_admission.release gate "1");
+  check "abort only records intent" (Update_admission.request_abort gate "1" = `Pending);
+  refused "still aborting" (fun () -> Update_admission.require_input gate "still aborting");
+  check "drained coordinator releases" (Update_admission.finish_release gate "1");
+  check "release acknowledgement is idempotent" (Update_admission.request_abort gate "1" = `Released);
   Update_admission.begin_prepare gate "2";
-  check "old abort cannot release a newer reservation" (not (Update_admission.release gate "1"));
+  check "old abort cannot release a newer reservation" (Update_admission.request_abort gate "1" = `Stale);
   check "old completion cannot seal a newer reservation" (not (Update_admission.seal gate "1"));
   check "new reservation remains current" (Update_admission.current gate "2");
-  check "current abort releases" (Update_admission.release gate "2");
+  check "current abort records intent" (Update_admission.request_abort gate "2" = `Pending);
+  check "unfinished save cannot release" (not (Update_admission.finish_release gate "2"));
+  Update_admission.finish_save gate "2";
+  check "current completed abort releases" (Update_admission.finish_release gate "2");
   ignore (Native_embed.press id);
   check "abort resumes the existing retained handler" (!presses = 2);
   ignore (Lui_app.dispose app);
@@ -65,13 +71,15 @@ let native_worker_admission () =
   ignore (Worker_client.invoke worker "thread-api/apply-outliner-ops" []);
   check "save/drain calls remain admitted while preparing" (!invokes = 1);
   check "worker is idle before seal" (Worker_client.idle ());
+  Update_admission.finish_save gate "3";
   check "worker preparation seals" (Update_admission.seal gate "3");
   let rejected = Worker_client.invoke worker "thread-api/apply-outliner-ops" [] in
   check "late background write is rejected before the actual provider"
     (match rejected.Js.Promise.state with
      | Js.Promise.Rejected (Update_admission.Refused _) -> !invokes = 1
      | _ -> false);
-  ignore (Update_admission.release gate "3");
+  ignore (Update_admission.request_abort gate "3");
+  ignore (Update_admission.finish_release gate "3");
   ignore (Worker_client.invoke worker "thread-api/apply-outliner-ops" []);
   check "release resumes ordinary worker admission" (!invokes = 2)
 
@@ -100,9 +108,161 @@ let promise_observation () =
   check "observing preserves native synchronous promise settlement"
     (!completed && (Ui_task.Activity.snapshot scope).pending = 0)
 
+let deferred_worker () =
+  let pending = Queue.create () in
+  let worker : Worker_client.t = {
+    invoke_fn = (fun name _ ->
+      let promise, resolve, reject = Js.Promise.pending () in
+      Queue.add (name, resolve, reject) pending;
+      promise);
+    on_message = (fun _ _ -> ());
+    dead = Js.Promise.liveness ()
+  } in
+  worker, pending
+
+let start_actual_save scope id responses =
+  Update_preparation.start ~gate:Update_admission.application ~scope
+    ~save:(fun ~current -> Native_embed.prepare_window_close ~current ())
+    ~flush:(fun () -> ()) ~logical_idle:Native_embed.update_logical_idle
+    ~respond:(fun phase ok error -> responses := (phase, ok, error) :: !responses) id
+
+let abort_waits_for_initial_worker_and_skips_later_mutation_boundaries () =
+  let scope = Ui_task.Activity.create () in
+  let worker, pending = deferred_worker () in
+  ignore (Ui_task.Activity.within scope (fun () -> Worker_client.invoke worker "old write" []));
+  let _, resolve, _ = Queue.take pending in
+  let old_close = !Editor_state.close_property_editor in
+  let closes = ref 0 and draft = ref "old draft" and responses = ref [] in
+  Editor_state.close_property_editor := (fun () -> incr closes; draft := "old callback overwrite");
+  Fun.protect ~finally:(fun () -> Editor_state.close_property_editor := old_close) (fun () ->
+    let owner = start_actual_save scope "4" responses in
+    Host.drain ();
+    Update_preparation.abort owner;
+    Host.drain ();
+    check "abort cannot acknowledge while the initial accepted write is pending" (!responses = []);
+    refused "input stays fenced" (fun () -> Update_admission.require_input Update_admission.application "input stays fenced");
+    check "pending abort has not run a later property commit" (!closes = 0);
+    resolve Wire.Nil;
+    Host.drain ();
+    check "matching release occurs only after the accepted I/O settles"
+      (!responses = ["released", true, ""]);
+    check "cancelled save cannot enter later mutation boundaries" (!closes = 0);
+    draft := "later user draft";
+    Host.drain ();
+    check "old save cannot overwrite a draft after release" (!draft = "later user draft"))
+
+let rejected_worker_still_waits_for_accepted_sibling () =
+  let scope = Ui_task.Activity.create () in
+  let worker, pending = deferred_worker () in
+  Ui_task.Activity.within scope (fun () ->
+    ignore (Worker_client.invoke worker "first" []);
+    ignore (Worker_client.invoke worker "sibling" []));
+  let _, _, reject = Queue.take pending in
+  let _, resolve, _ = Queue.take pending in
+  let responses = ref [] in
+  let owner = start_actual_save scope "5" responses in
+  Host.drain ();
+  Update_preparation.abort owner;
+  reject (Failure "first write failed");
+  Host.drain ();
+  check "Promise.all first failure cannot release while a sibling is pending" (!responses = []);
+  refused "sibling pending" (fun () -> Update_admission.require_input Update_admission.application "sibling pending");
+  resolve Wire.Nil;
+  Host.drain ();
+  check "all accepted siblings finish before release" (!responses = ["released", true, ""])
+
+let abort_waits_for_detached_save_timer_and_its_model_continuation () =
+  let scope = Ui_task.Activity.create () in
+  let worker, pending = deferred_worker () in
+  let old_close = !Editor_state.close_property_editor in
+  let draft = ref "old draft" and responses = ref [] and at_release = ref None in
+  Editor_state.close_property_editor := (fun () ->
+    ignore (Host.set_timeout (fun () ->
+      ignore (Js.Promise.then_ (fun _ ->
+        draft := "accepted save descendant";
+        Js.Promise.resolve ())
+        (Worker_client.invoke worker "detached refresh" []))) 0));
+  Fun.protect ~finally:(fun () -> Editor_state.close_property_editor := old_close) (fun () ->
+    let owner = Update_preparation.start ~gate:Update_admission.application ~scope
+      ~save:(fun ~current -> Native_embed.prepare_window_close ~current ())
+      ~flush:(fun () -> ()) ~logical_idle:Native_embed.update_logical_idle
+      ~respond:(fun phase ok error ->
+        if phase = "released" then at_release := Some !draft;
+        responses := (phase, ok, error) :: !responses) "6" in
+    Host.drain ();
+    check "real save's detached timer/worker prevents premature Prepared" (!responses = []);
+    check "detached callback reached actual worker invoke" (Queue.length pending = 1);
+    Update_preparation.abort owner;
+    Host.drain ();
+    check "abort stays fenced while detached descendant is pending" (!responses = []);
+    refused "detached work pending" (fun () -> Update_admission.require_input Update_admission.application "detached work pending");
+    let _, resolve, _ = Queue.take pending in
+    resolve Wire.Nil;
+    Host.drain ();
+    check "descendant model callback happens BEFORE the release acknowledgement"
+      (!at_release = Some "accepted save descendant" && !responses = ["released", true, ""]);
+    draft := "new draft after release";
+    resolve Wire.Nil;
+    Host.drain ();
+    check "settled old descendant cannot later overwrite the new draft" (!draft = "new draft after release"))
+
+let finite_timer_observation_and_cancel_race () =
+  let scope = Ui_task.Activity.create () in
+  let fired = ref 0 in
+  let id = Ui_task.Activity.within scope (fun () -> Host.set_timeout (fun () -> incr fired) 0) in
+  check "one-shot timer is counted until fire or cancellation" ((Ui_task.Activity.snapshot scope).pending = 1);
+  Host.clear_timeout id;
+  check "cancellation releases timer work immediately" ((Ui_task.Activity.snapshot scope).pending = 0);
+  Host.drain ();
+  check "queued cancelled timer neither runs nor releases twice" (!fired = 0 && (Ui_task.Activity.snapshot scope).pending = 0);
+  let finish = ref None in
+  ignore (Ui_task.Activity.within scope (fun () -> Host.set_timeout ~observe:false (fun () ->
+    let _, resolve, _ = Js.Promise.pending () in finish := Some resolve) 0));
+  check "known recurring wait is classified as liveness" ((Ui_task.Activity.snapshot scope).pending = 0);
+  Host.drain ();
+  check "liveness callback still observes its actual finite work" ((Ui_task.Activity.snapshot scope).pending = 1);
+  Option.get !finish ();
+  check "liveness child work settles normally" ((Ui_task.Activity.snapshot scope).pending = 0)
+
+let opaque_logical_save_does_not_release_or_self_poll_at_zero_activity () =
+  let scope = Ui_task.Activity.create () in
+  let old_ready = !Outliner_ops.pending_save_ready in
+  let draft = ref "old draft" and responses = ref [] in
+  Outliner_ops.pending_save_ready := Some (fun () -> draft := "old ready callback");
+  Fun.protect ~finally:(fun () -> Outliner_ops.pending_save_ready := old_ready) (fun () ->
+    let owner = start_actual_save scope "7" responses in
+    Host.drain ();
+    Update_preparation.abort owner;
+    Host.drain ();
+    check "opaque accepted logical save cannot receive Released"
+      (not (List.exists (fun (phase, _, _) -> phase = "released") !responses));
+    refused "logical save pending" (fun () -> Update_admission.require_input Update_admission.application "logical save pending");
+    let epoch = Host.activity_epoch () in
+    Host.drain (); Host.drain ();
+    check "zero-count logical save does not create a self-poll loop" (Host.activity_epoch () = epoch);
+    Ui_task.Activity.within scope (fun () ->
+      let _, resolve, _ = Js.Promise.pending () in
+      Outliner_ops.pending_save_ready := None;
+      resolve ());
+    Host.drain ();
+    check "real subsequent observed work permits the matching release"
+      (List.exists (fun (phase, ok, _) -> phase = "released" && ok) !responses);
+    draft := "new draft after logical release";
+    Outliner_ops.resume_pending_save ();
+    check "released admission has no old logical callback to replay"
+      (!draft = "new draft after logical release"))
+
 let () =
+  let owner = Thread.id (Thread.self ()) in
+  Ui_task.install { enqueue = Host.enqueue;
+    assert_owner = (fun () -> check "native callbacks stay on their app owner" (Thread.id (Thread.self ()) = owner)) };
   native_entry_admission ();
   native_worker_admission ();
   ordered_mailbox_barrier ();
   promise_observation ();
-  print_endline "PASS actual native admission, worker rejection, mailbox order and finite-work observation"
+  abort_waits_for_initial_worker_and_skips_later_mutation_boundaries ();
+  rejected_worker_still_waits_for_accepted_sibling ();
+  abort_waits_for_detached_save_timer_and_its_model_continuation ();
+  finite_timer_observation_and_cancel_race ();
+  opaque_logical_save_does_not_release_or_self_poll_at_zero_activity ();
+  print_endline "PASS real native save/abort/worker/timer races and post-release draft safety"

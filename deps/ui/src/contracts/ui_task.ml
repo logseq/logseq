@@ -20,6 +20,7 @@ module Activity = struct
     callback : unit -> unit;
     mutable active : bool;
     mutable queued : bool;
+    after_epoch : int option;
   }
   type t = {
     mutable pending : int;
@@ -57,7 +58,8 @@ module Activity = struct
   let notify_idle scope =
     match scope.idle with
     | Some listener when scope.live && scope.pending = 0
-        && listener.active && not listener.queued ->
+        && listener.active && not listener.queued
+        && Option.fold ~none:true ~some:(fun epoch -> epoch <> scope.epoch) listener.after_epoch ->
         listener.queued <- true;
         (scheduler ()).enqueue (fun () ->
           if listener.active && scope.live then begin
@@ -65,10 +67,10 @@ module Activity = struct
             listener.callback ()
           end)
     | None | Some _ -> ()
-  let when_idle scope callback =
+  let when_idle ?after_epoch scope callback =
     if not scope.live then invalid_arg "Cannot observe a closed activity scope";
     if Option.is_some scope.idle then invalid_arg "Activity scope already has an idle observer";
-    let listener = { callback = capture callback; active = true; queued = false } in
+    let listener = { callback = capture callback; active = true; queued = false; after_epoch } in
     scope.idle <- Some listener;
     notify_idle scope;
     fun () -> cancel_listener scope listener

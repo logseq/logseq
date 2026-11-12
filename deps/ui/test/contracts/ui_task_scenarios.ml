@@ -245,12 +245,21 @@ let run ~enqueue ~drain ~set_owner () =
         cancel ();
         drain ();
         check "cancelling an already queued idle observer is effective" (!notifications = 1);
+        let cancel = Ui_task.Activity.when_idle
+          ~after_epoch:(Ui_task.Activity.snapshot activity).epoch activity
+          (fun () -> incr notifications) in
+        drain ();
+        check "an already-idle epoch does not self-notify" (!notifications = 1);
+        ignore (Ui_task.Activity.within activity (fun () -> Ui_task.resolve ()));
+        drain ();
+        check "real subsequent activity wakes the owned observer once" (!notifications = 2);
+        cancel ();
         let cancel = Ui_task.Activity.when_idle activity (fun () -> incr notifications) in
         Ui_task.Activity.close activity;
         drain ();
         cancel ();
         check "owner close suppresses queued observation without cancelling tasks"
-          (!notifications = 1 && (Ui_task.Activity.snapshot activity).pending = 0));
+          (!notifications = 2 && (Ui_task.Activity.snapshot activity).pending = 0));
       "creation exceptions reject asynchronously", (fun () ->
         let received = ref None in
         let task = Ui_task.create (fun ~resolve:_ ~reject:_ -> failwith "request startup failed") in

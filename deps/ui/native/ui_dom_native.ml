@@ -351,7 +351,10 @@ let timers : Ui_services.timers =
         (* no setInterval in the host table — chain self-rescheduling
            timeouts, same cadence *)
         let id = ref (-1) in
-        let rec tick () = id := Host.set_timeout (fun () -> f (); tick ()) ms in
+        let rec tick () =
+          (* This recurring wait is liveness, not a finite save descendant.
+             The callback still captures the app scope, so its actual work is observed. *)
+          id := Host.set_timeout ~observe:false (fun () -> f (); tick ()) ms in
         tick ();
         !id)
   ; clear_interval = (fun id -> Host.clear_timeout id)

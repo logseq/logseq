@@ -249,6 +249,17 @@
        | st -> cont st);
       out
 
+    (* Observe settlement without creating an output promise. Bookkeeping
+       observers must not become work that waits for its own completion. *)
+    let observe f t =
+      let callback = function
+        | Resolved value -> f (Ok value)
+        | Rejected error -> f (Error error)
+        | Pending -> () in
+      match t.state with
+      | Pending -> add_callback t callback
+      | state -> callback state
+
     let then_ f t = chain t f reject
     let catch f t = chain t resolve f
 

@@ -22,6 +22,7 @@ let pending_batches : Lui_protocol.patch_batch Queue.t = Queue.create ()
 let entry_lock = Mutex.create ()
 let entry_owner : int option ref = ref None
 let activity_scope : Ui_task.Activity.t option ref = ref None
+let update_preparation : Update_preparation.t option ref = ref None
 
 let assert_entry_owner () =
   if !entry_owner <> Some (Thread.id (Thread.self ())) then
@@ -537,6 +538,8 @@ let initialize_unlocked platform_code host_code (payload : string) =
   take_patches ()
 
 let initialize platform_code host_code payload =
+  Option.iter Update_preparation.close !update_preparation;
+  update_preparation := None;
   Option.iter Ui_task.Activity.close !activity_scope;
   Update_admission.reset Update_admission.application;
   activity_scope := (if host_code = 6 then Some (Ui_task.Activity.create ()) else None);
@@ -548,7 +551,10 @@ let initialize platform_code host_code payload =
    skip a wire generation, which the host rejects as invalidBatch. *)
 let dispatch_lui (event : Lui_protocol.event) =
   with_entry_lock (fun () ->
-      Update_admission.require_input Update_admission.application "ordinary-ui";
+      (match event with
+       | Lui_protocol.Appear _ | Lui_protocol.Load _ | Lui_protocol.VisibleRange _
+       | Lui_protocol.ScrollCompleted _ | Lui_protocol.Picked _ -> ()
+       | _ -> Update_admission.require_input Update_admission.application "ordinary-ui");
       let t0 = perf_ms () in
       (match !current_app with
        | Some app ->
@@ -690,22 +696,30 @@ let pump () =
       perf_mark "pump.total" t0;
       out)
 
-let rec prepare_window_close () =
+let rec prepare_window_close ?(current = fun () -> true) () =
   let open Promise_ext in
+  let check () = if not (current ()) then raise Update_preparation.Cancelled in
   let* () = Worker_client.await_idle () in
+  check ();
   if !Editor_state.structure_pending then begin
     let waiting = Js.Promise.make (fun ~resolve ~reject:_ ->
       ignore (Host.set_timeout (fun () -> resolve ()) 16)) in
     let* () = waiting in
-    prepare_window_close ()
+    check ();
+    prepare_window_close ~current ()
   end else begin
+    check ();
     !(Editor_state.close_property_editor) ();
     let* () = Worker_client.await_idle () in
+    check ();
     let* () =
       match Editor_state.editing () with
-      | Some e -> Editor_actions.commit_result e.uuid (Editor_actions.live_buffer e.uuid)
+      | Some e ->
+          check ();
+          Editor_actions.commit_result e.uuid (Editor_actions.live_buffer e.uuid)
       | None -> Js.Promise.resolve ()
     in
+    check ();
     let* () = Outliner_ops.flush_pending_save () in
     Worker_client.await_idle ()
   end
@@ -720,56 +734,31 @@ let update_result id phase ok error =
     (`Assoc [ "id", `String id; "phase", `String phase;
               "ok", `Bool ok; "error", `String error ]))
 
-let after_mailbox () =
-  Js.Promise.make (fun ~resolve ~reject:_ -> Host.after_drain (fun () -> resolve ()))
-
-let rec save_for_update id =
-  let open Promise_ext in
-  let* () = prepare_window_close () in
-  let worker_epoch = Worker_client.activity_epoch () in
-  let mailbox_epoch = Host.activity_epoch () in
-  let observed_epoch = Option.map (fun scope -> (Ui_task.Activity.snapshot scope).epoch) !activity_scope in
-  let* () = after_mailbox () in
-  if not (Update_admission.current Update_admission.application id) then
-    Js.Promise.resolve ()
-  else begin
-    (* Flush queued reactive/model work before observing a stable save boundary.
-       Native measurement and service completions continue through the same pump. *)
-    Option.iter (fun app ->
-      match !activity_scope with
-      | Some scope -> Ui_task.Activity.within scope (fun () -> ignore (Lui_app.flush app))
-      | None -> ignore (Lui_app.flush app)) !current_app;
-    let outstanding = match !activity_scope with
-      | Some scope -> (Ui_task.Activity.snapshot scope).pending <> 0
-      | None -> true in
-    if outstanding then
-      Js.Promise.reject (Failure "Application still has pending asynchronous work")
-    else if worker_epoch <> Worker_client.activity_epoch ()
-       || mailbox_epoch <> Host.activity_epoch ()
-       || observed_epoch <> Option.map (fun scope -> (Ui_task.Activity.snapshot scope).epoch) !activity_scope
-       || not (Worker_client.idle ()) || !Editor_state.structure_pending
-       || Option.is_some !Outliner_ops.pending_save
-    then save_for_update id
-    else
-      match !activity_scope with
-      | Some scope when (Ui_task.Activity.snapshot scope).pending = 0 ->
-          if Update_admission.seal Update_admission.application id then
-            update_result id "prepared" true "";
-          Js.Promise.resolve ()
-      | Some _ ->
-          Js.Promise.reject (Failure "Application still has pending asynchronous work")
-      | None -> Js.Promise.reject (Failure "Update preparation requires the NSH application owner")
-  end
+let update_logical_idle () =
+  not !Editor_state.structure_pending
+  && Option.is_none !Outliner_ops.pending_save
+  && Option.is_none !Outliner_ops.pending_save_ready
 
 let start_update_preparation id =
-  if Option.is_none !activity_scope then
-    invalid_arg "Update preparation requires the NSH application owner";
-  Update_admission.begin_prepare Update_admission.application id;
-  Host.enqueue (fun () -> Ui_task.Activity.without (fun () ->
-    ignore (save_for_update id |> Js.Promise.catch (fun error ->
-      if Update_admission.current Update_admission.application id then
-        update_result id "prepared" false (Printexc.to_string error);
-      Js.Promise.resolve ()))))
+  let scope = match !activity_scope with
+    | Some scope -> scope
+    | None -> invalid_arg "Update preparation requires the NSH application owner" in
+  let preparation = Update_preparation.start
+      ~gate:Update_admission.application ~scope
+      ~save:(fun ~current -> prepare_window_close ~current ())
+      ~flush:(fun () -> Option.iter (fun app -> ignore (Lui_app.flush app)) !current_app)
+      ~logical_idle:update_logical_idle
+      ~respond:(fun phase ok error -> update_result id phase ok error) id in
+  update_preparation := Some preparation
+
+let abort_update_preparation id =
+  match !update_preparation with
+  | Some preparation when preparation.Update_preparation.id = id -> Update_preparation.abort preparation
+  | Some _ | None ->
+      (match Update_admission.request_abort Update_admission.application id with
+       | `Released -> update_result id "released" true ""
+       | `Pending -> invalid_arg "Update preparation owner is missing"
+       | `Stale -> update_result id "released" false "Update preparation request is not current")
 
 let platform_event payload =
   (* Swift -> OCaml event channel (window resize, appearance change,
@@ -784,12 +773,7 @@ let platform_event payload =
         try Js.Json.parseExn body with _ -> Js.Json.JObject []
       in
       if name = "update-prepare" then start_update_preparation (update_id body)
-      else if name = "update-abort" then begin
-        let id = update_id body in
-        let released = Update_admission.release Update_admission.application id in
-        update_result id "released" released
-          (if released then "" else "Update preparation request is not current")
-      end
+      else if name = "update-abort" then abort_update_preparation (update_id body)
       else if name = "application-menu-command" then
         Host.enqueue (fun () ->
           Update_admission.require_input Update_admission.application "application-menu";
@@ -921,6 +905,8 @@ let dispose () =
          invalidate_stale_snapshots (Lui_app.runtime app);
          current_app := None
      | None -> ());
+    Option.iter Update_preparation.close !update_preparation;
+    update_preparation := None;
     Option.iter Ui_task.Activity.close !activity_scope;
     activity_scope := None;
     Update_admission.reset Update_admission.application;

@@ -47,8 +47,10 @@ module Activity : sig
   (** One cancellable idle notification through the existing scheduler. At most
       one observer is installed per scope; a duplicate registration is rejected.
       New work may arrive before the callback runs, so the callback must recheck
-      the snapshot. Cancellation/close suppresses even a queued notification. *)
-  val when_idle : t -> (unit -> unit) -> (unit -> unit)
+      the snapshot. [after_epoch] waits for subsequent observed activity instead
+      of reporting an already-idle snapshot. Cancellation/close suppresses even a
+      queued notification. *)
+  val when_idle : ?after_epoch:int -> t -> (unit -> unit) -> (unit -> unit)
 
   (** Stop observing newly created work; existing completion hooks still work. *)
   val close : t -> unit

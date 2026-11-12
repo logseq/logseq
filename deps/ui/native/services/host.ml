@@ -68,7 +68,11 @@ module Timer_deadlines = Set.Make (struct
     if order=0 then Int.compare id_a id_b else order
 end)
 
-type timer = { deadline : float; callback : unit -> unit }
+type timer = {
+  deadline : float;
+  callback : unit -> unit;
+  finish_activity : (unit -> unit) option;
+}
 let timer_next = ref 0
 let timers : (int, timer) Hashtbl.t = Hashtbl.create 16
 let deadlines = ref Timer_deadlines.empty
@@ -95,15 +99,28 @@ let run_timer id () =
   let timer = Hashtbl.find_opt timers id in
   Hashtbl.remove timers id;
   Mutex.unlock timers_lock;
-  Option.iter (fun timer -> timer.callback ()) timer
+  Option.iter (fun timer ->
+    match timer.finish_activity with
+    | None -> timer.callback ()
+    | Some finish -> Fun.protect ~finally:finish timer.callback) timer
 
-let set_timeout (f : unit -> unit) (ms : int) : int =
+let set_timeout ?(observe = true) (f : unit -> unit) (ms : int) : int =
   if ms < 0 then invalid_arg "Native timer delay must be nonnegative";
   let deadline = timer_time () +. float_of_int ms /. 1000. in
   Mutex.lock timers_lock;
   incr timer_next;
   let id = !timer_next in
-  Hashtbl.add timers id {deadline; callback=f};
+  Hashtbl.add timers id {
+    deadline;
+    callback = (if observe then Ui_task.Activity.capture f else
+      Ui_task.Activity.capture (fun () ->
+        (* Recurring waits are liveness, but their executing callback is finite
+           work and may publish model state or start observed descendants. *)
+        match Ui_task.Activity.begin_work () with
+        | None -> f ()
+        | Some finish -> Fun.protect ~finally:finish f));
+    finish_activity = (if observe then Ui_task.Activity.begin_work () else None)
+  };
   if ms > 0 then deadlines := Timer_deadlines.add (deadline,id) !deadlines;
   Mutex.unlock timers_lock;
   if ms=0 then enqueue (run_timer id) else notify_timers ();
@@ -116,7 +133,9 @@ let clear_timeout id =
     Hashtbl.remove timers id;
     deadlines := Timer_deadlines.remove (timer.deadline,id) !deadlines) timer;
   Mutex.unlock timers_lock;
-  if Option.is_some timer then notify_timers ()
+  Option.iter (fun timer ->
+    Option.iter (fun finish -> finish ()) timer.finish_activity;
+    notify_timers ()) timer
 
 (* One sleeping worker serves every delayed timer. Its wake pipe interrupts
    the current deadline when a timer is inserted or cancelled. *)
@@ -142,6 +161,7 @@ let timer_loop () =
     if ready <> [] then begin
       Mutex.lock lock;
       List.iter (fun id -> Queue.push (run_timer id) queue) ready;
+      activity := !activity + List.length ready;
       Mutex.unlock lock;
       !wakeup_cb ()
     end;
