@@ -33,6 +33,31 @@ let pressable ~on_press (elem : t) : t =
   register_press context node on_press;
   node
 
+(* In-app anchors use the existing delegated click controller on NSH. Its
+   typed Link remains the sole native press owner; other backends keep their
+   existing document event delivery. *)
+let delegated_link (elem : t) : t =
+ fun context parent ->
+  let node = elem context parent in
+  if Lui_ui.host context = Lui_protocol.NshHost then begin
+    if standard_kind context node <> Lui_protocol.Link then
+      invalid_arg "Ui_parts.delegated_link requires a Link";
+    enable context node Lui_protocol.PressEnabled;
+    register_press context node (fun event ->
+      let modifiers = match event with
+        | Lui_protocol.PressModifiers (_, modifiers) -> modifiers
+        | Lui_protocol.Press _ -> 0
+        | _ -> invalid_arg "Delegated Link received a non-press event" in
+      Ui_services.dom_emit_json "click"
+        (Json.stringify (Json.Object
+          [ "nodeId", Json.Number (float_of_int node)
+          ; "button", Json.Number 0.; "buttons", Json.Number 0.
+          ; "ctrlKey", Json.Bool (modifiers land 1 <> 0)
+          ; "shiftKey", Json.Bool (modifiers land 2 <> 0)
+          ; "metaKey", Json.Bool (modifiers land 4 <> 0) ])))
+  end;
+  node
+
 (* reactive style_class — kinds take only a static ~style_class, so bind
    StyleClass on the mounted node (same wrap pattern as pressable) *)
 let class_signal source f (elem : t) : t =

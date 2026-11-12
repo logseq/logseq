@@ -304,7 +304,7 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
         ; Ui_components.Prop.user_select `none
         ; Ui_components.Prop.opacity 0.4
         ; Ui_components.Prop.pressed_opacity 0.3 ]
-        (link ~key:("ctrl-" ^ uuid) ~style_class:"block-control"
+        (Ui_parts.delegated_link (link ~key:("ctrl-" ^ uuid) ~style_class:"block-control"
            ~url:"#" ~target:`self_ ~min_width:22 ~min_height:22
            ~padding:2 ~margin_top:1
            ~accessibility_identifier:("control-" ^ uuid)
@@ -343,7 +343,7 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
                              ~point_size:13 [])
                        cs ])
             ])
-        ])
+        ]))
     ; row ~key:("blw-" ^ uuid) ~style_class:"bullet-link-wrap" ~cross:`center
         ~margin_left:(if order_list then -3 else 0)
         ~foreground:"var(--ls-primary-text-color)"
@@ -624,14 +624,14 @@ let tag_chip ~key ~owner_uuid ~tag ~tuuid ~ident ~dbid : t =
                    [ Ui_components.Prop.font_size "0.875rem"
                    ; Ui_components.Prop.font_weight 400
                    ; Ui_components.Prop.user_select `none ]
-                   (link ~key:("th-" ^ key)
+                   (Ui_parts.delegated_link (link ~key:("th-" ^ key)
                       ~url:"#" ~target:`self_
                       ~style_class:"hash-symbol"
                       ~foreground:
                         "var(--lx-accent-11, var(--ls-tag-text-color))"
                       ~text:"#"
                       ~on_pointer_enter:enter ~on_pointer_leave:leave
-                      []))
+                      [])))
             ; (if priv || Ui_services.env_publishing () then Logseq_el.nothing
                else
                  (* the 'x' press needs a pressable kind — link is not one,
@@ -666,7 +666,7 @@ let tag_chip ~key ~owner_uuid ~tag ~tuuid ~ident ~dbid : t =
             ; Ui_components.Prop.font_size "0.875rem"
             ; Ui_components.Prop.font_weight 400
             ; Ui_components.Prop.position `relative ]
-            (link ~key:("ta-" ^ key)
+            (Ui_parts.delegated_link (link ~key:("ta-" ^ key)
                ~url:"#" ~target:`self_
                ~style_class:"tag"
                ~on_pointer_enter:enter ~on_pointer_leave:leave
@@ -680,7 +680,7 @@ let tag_chip ~key ~owner_uuid ~tag ~tuuid ~ident ~dbid : t =
             [ text ~key:"ts" ~value:tag ~white_space:"nowrap"
                 ~foreground:"var(--lx-accent-11, var(--ls-tag-text-color))"
                 ~on_pointer_enter:enter ~on_pointer_leave:leave
-                [] ])
+                [] ]))
         ] ]))
       context parent
 

@@ -107,14 +107,14 @@ let page_link ~(tag : bool) ?label ?uuid_sig name =
   | None ->
       (* cljs anchors carry the label as a bare text child *)
       hover
-        (link ~url:"#" ~target:`self_ ~style_class:cls
+        (Ui_parts.delegated_link (link ~url:"#" ~target:`self_ ~style_class:cls
            ~data_attrs:(base @ tag_style)
-           ~foreground:fg ~text:txt [])
+           ~foreground:fg ~text:txt []))
   | Some u_sig ->
       (* cljs sets :data-uuid on the anchor once the page entity resolves;
          attrs apply is replace-semantic so emit the whole set *)
       hover
-        (link ~url:"#" ~target:`self_ ~style_class:cls ~text:txt
+        (Ui_parts.delegated_link (link ~url:"#" ~target:`self_ ~style_class:cls ~text:txt
            ~foreground:fg
            ~data_attrs:
           (reactive
@@ -122,7 +122,7 @@ let page_link ~(tag : bool) ?label ?uuid_sig name =
                tag_style
                @ if u = "" then base else ("data-uuid", u) :: base)
              u_sig)
-           [])
+           []))
 
 (* ---- pull memoization ----
    Every [[name]]/uuid anchor used to fire its own thread-api/pull per
@@ -432,11 +432,11 @@ let block_ref_anchor uuid : t =
   in
   Ui_components.with_props
     [ Ui_components.Prop.position `relative ]
-    (link ~url:"#" ~target:`self_ ~style_class:"page-ref"
+    (Ui_parts.delegated_link (link ~url:"#" ~target:`self_ ~style_class:"page-ref"
        ~foreground:"var(--lx-accent-11, var(--ls-link-text-color))"
        ~data_attrs:[ ("data-ref", uuid); ("tabindex", "0") ]
        ~text:(reactive (fun meta -> meta.title) (Signal.value st))
-       [] )
+       [] ))
     context parent
 
 let block_ref uuid =
@@ -520,7 +520,7 @@ let timestamp_el seconds : t =
   Ui_components.with_props
     [ ( Ui_components.Prop.hover_foreground
           "var(--lx-accent-12, var(--ls-link-text-hover-color))" ) ]
-    (link ~url:"#" ~target:`self_ ~style_class:"youtube-timestamp"
+    (Ui_parts.delegated_link (link ~url:"#" ~target:`self_ ~style_class:"youtube-timestamp"
        ~foreground:"var(--lx-accent-11, var(--ls-link-text-color))"
        ~data_attrs:
       [ ( "style"
@@ -531,7 +531,7 @@ let timestamp_el seconds : t =
         [ icon ~name:(`app "youtube-timestamp-icon") [] ]
     ; text ~key:"ytl" ~style_class:"youtube-timestamp-label"
         ~value:(seconds_display seconds)
-        [] ])
+        [] ]))
     context parent
 
 (* emphasis is a logseq-<tag> host, not text ~as_: its children are the
@@ -1510,11 +1510,11 @@ and resolved_ref ~refs ~self uuid : t =
       else if title = uuid then
         Ui_components.with_props
           [ Ui_components.Prop.position `relative ]
-          (link ~url:"#" ~target:`self_
+          (Ui_parts.delegated_link (link ~url:"#" ~target:`self_
              ~style_class:"page-ref broken"
              ~data_attrs:[ ("data-uuid", uuid); ("tabindex", "0")
                          ; ("draggable", "true") ]
-             ~text:("[[" ^ uuid ^ "]]") [])
+             ~text:("[[" ^ uuid ^ "]]") []))
       else
         (* .page-reference:hover in lui-core.css carries the hover bg;
            a typed HoverBackground prop cannot reach a dom node *)
@@ -1530,7 +1530,7 @@ and resolved_ref ~refs ~self uuid : t =
                        "var(--lx-accent-11, \
                         var(--ls-link-text-hover-color))" )
                  ; Ui_components.Prop.position `relative ]
-                 (link ~url:"#" ~target:`self_
+                 (Ui_parts.delegated_link (link ~url:"#" ~target:`self_
                     ~style_class:"page-ref"
                     ~foreground:
                       "var(--lx-accent-11, var(--ls-link-text-color))"
@@ -1541,7 +1541,7 @@ and resolved_ref ~refs ~self uuid : t =
                     (if is_page then [ text ~value:title [] ]
                      else [ row ~display:`contents
                               (if is_math then [ katex_el ~block:false ~display:false (first_line title) ]
-                               else parse ~refs:child_refs ~self:uuid (first_line title)) ])))
+                               else parse ~refs:child_refs ~self:uuid (first_line title)) ]))))
           ; bracket "]]" ]))
     (Signal.value st))
     context parent
@@ -1556,14 +1556,14 @@ and resolved_tag_ref ~refs ~self uuid : t =
   let title_sig = (Signal.value st) in
   (Ui_components.with_props
      [ Ui_components.Prop.position `relative ]
-     (link ~url:"#" ~target:`self_ ~style_class:"tag"
+     (Ui_parts.delegated_link (link ~url:"#" ~target:`self_ ~style_class:"tag"
     ~data_attrs:
       (reactive
          (fun { title = n; _ } ->
            [ ("data-uuid", uuid); ("tabindex", "0")
            ; ("data-ref", String.lowercase_ascii n) ])
          title_sig)
-    [ text ~value:(reactive (fun meta -> "#" ^ meta.title) title_sig) [] ]))
+    [ text ~value:(reactive (fun meta -> "#" ^ meta.title) title_sig) [] ])))
     context parent
 
 and macro_el ~refs ~self body =

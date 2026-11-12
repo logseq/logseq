@@ -556,6 +556,63 @@ let native_route_document_data () =
       (match body.Ui_services.set_attr "contenteditable" "true" with
        | () -> false
        | exception Failure message -> message="Unexpected native DOM request: dom-op"))
+let persisted_journal_hash_links_delegate_through_the_native_owner () =
+  let backend : Lui_protocol.backend = {
+    backend_profile = Lui_protocol.profile Lui_protocol.MacOS Lui_protocol.NshHost;
+    apply_batch = (fun _ -> true)
+  } in
+  let registry = Lui_extension.registry () in
+  Logseq_el.register registry;
+  let block = Model.empty_block ~uuid:"persisted-journal-link"
+    ~title:"Persisted [[Page]] #tag" ~is_page:false in
+  let app = Lui_app.create_with_extensions backend registry Model.initial
+    (fun model (_ : Action.t) -> model)
+    (fun context _ _ ->
+      Editor_state.ensure context;
+      Lui_elements.column ~style_class:"ls-block"
+        ~data_attrs:["data-blockid","persisted-journal-link";"data-cid","main"]
+        [Tree.content_el "persisted-journal-link" block]) in
+  let previous_app = !Native_embed.current_app in
+  let previous_target = !Platform.event_target_of in
+  let previous_clicks = Hashtbl.find_opt Platform.window_listeners "click" in
+  Native_embed.current_app := Some app;
+  Fun.protect ~finally:(fun () ->
+    ignore (Lui_app.dispose app);
+    Native_embed.current_app := previous_app;
+    Platform.event_target_of := previous_target;
+    match previous_clicks with
+    | Some listeners -> Hashtbl.replace Platform.window_listeners "click" listeners
+    | None -> Hashtbl.remove Platform.window_listeners "click") (fun () ->
+    ignore (Lui_app.start app); ignore (Lui_app.flush app);
+    let runtime = Lui_app.runtime app in
+    let links = Hashtbl.fold (fun node kind acc ->
+      if kind = Lui_protocol.Link then node :: acc else acc)
+      runtime.Lui_runtime.mounted_nodes [] in
+    check "persisted Journal body contains real page/tag Link nodes" (links <> []);
+    List.iter (fun node ->
+      let properties = Hashtbl.find runtime.Lui_runtime.runtime_properties node in
+      check "every internal hash Link opts into the application press path"
+        (Lui_protocol.Property_map.find_opt Lui_protocol.PressEnabled properties
+         = Some (Lui_protocol.BoolValue true))) links;
+    Platform.event_target_of := (fun node -> Some (Native_embed.ext_snapshot runtime node));
+    let observed = ref [] in
+    Hashtbl.replace Platform.window_listeners "click" [fun event ->
+      Platform.request_prevent ();
+      observed := event :: !observed];
+    let node = List.hd links in
+    Platform.last_click_ms := 0.;
+    ignore (Native_embed.press_ex node 2);
+    check "one native Shift activation reaches the existing delegated controller"
+      (match !observed with
+       | [Js.Json.JObject fields] ->
+           List.assoc_opt "nodeId" fields = Some (Js.Json.JNumber (float_of_int node))
+           && List.assoc_opt "shiftKey" fields = Some (Js.Json.JBool true)
+           && (match List.assoc_opt "target" fields with
+               | Some target -> Dom_ext.get_attribute target "href" = Some "#"
+               | None -> false)
+       | _ -> false);
+    check "delegated navigation retains the same mounted Link"
+      (Hashtbl.mem runtime.Lui_runtime.mounted_nodes node))
 
 let () =
   let owner = Thread.id (Thread.self ()) in
@@ -574,4 +631,5 @@ let () =
   sparse_feedback_materializes_while_held_through_actual_ffi ();
   native_outliner_content_events ();
   native_route_document_data ();
+  persisted_journal_hash_links_delegate_through_the_native_owner ();
   print_endline "PASS real native save/abort/worker/timer races and post-release draft safety"

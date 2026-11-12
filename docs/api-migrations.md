@@ -1,5 +1,23 @@
 # API migrations
 
+## Native application links use the delegated click controller
+
+Internal page references, tags, timestamps and block controls retain their
+`href="#"` metadata for the application's existing delegated click selectors.
+They now explicitly register their canonical Link press callback on NSH through
+`Ui_parts.delegated_link`. It forwards the retained node and actual
+Control/Shift/Command modifiers to the existing document click controller once.
+NSH remains the only hit-test, keyboard and disabled-state owner. Web and the
+maintained mobile hosts keep their existing event delivery.
+
+This is an application adapter, not permission for arbitrary relative system
+URLs. LUI continues rejecting a relative Link without an authored application
+callback. Other application links using a delegated route controller should use
+`Ui_parts.delegated_link (Lui_elements.link ~url:"#" ... [])`; external URL links
+and links with explicit action callbacks keep their existing constructor calls.
+The matching NSH backend must transport native Link detail to the existing
+`PressModifiers` callback to retain Shift sidebar navigation.
+
 ## Native pointer bridge qualification
 
 The actual Logseq bridge now exports byte-length `lui_ocaml_press_detail_utf8`,
