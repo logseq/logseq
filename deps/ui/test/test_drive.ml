@@ -1126,7 +1126,7 @@ let ent_for uuid : W.t =
           ; kw "block/title", W.String ("Row " ^ uuid)
           ]
 
-let blocks_response = function
+let blocks_response ~origin = function
   | Some (W.Array reqs) ->
       W.List
         (List.map
@@ -1137,7 +1137,11 @@ let blocks_response = function
                | _ -> "?"
              in
              W.Map
-               [ W.Keyword "block", ent_for u
+               [ W.Keyword "block",
+                   (if u="u-graph-scope" then W.Map [
+                      W.Keyword "block/uuid",W.Uuid u;
+                      W.Keyword "block/title",W.String origin]
+                    else ent_for u)
                ; W.Keyword "children", W.Array []
                ])
            reqs)
@@ -1175,7 +1179,10 @@ let worker_handler name args : W.t =
   | "thread-api/get-ent-tags" -> W.List []
   | "thread-api/get-contents-blocks" -> W.List []
   | "thread-api/pull-many" -> W.List []
-  | "thread-api/get-blocks" -> blocks_response (List.nth_opt args 1)
+  | "thread-api/get-blocks" ->
+      let origin=match List.nth_opt args 0 with Some (W.String repo) -> repo
+        | _ -> failwith "property read fixture requires an explicit graph" in
+      blocks_response ~origin (List.nth_opt args 1)
   | "thread-api/get-all-properties" -> W.List []
   | "thread-api/get-render-snapshots" ->
       snapshot_response (List.nth_opt args 1)
@@ -2056,17 +2063,18 @@ let props_host () : (Model.t, Action.t) Shared_scenarios_props.host =
   ; ops_log = (fun () -> List.map props_op_str !props_ops_log)
   ; invoke_log = (fun () -> List.rev !props_invoke_log)
   ; clear_logs =
-      (fun () -> props_ops_log := []; props_invoke_log := [])
+      (fun () -> props_ops_log := []; props_invoke_log := []; props_resolved := [])
   ; after = props_after
   ; set_repo = (fun r -> props_repo := r)
   ; request_block_data =
-      (fun ~uuid ->
+      (fun ~label ~uuid ->
         ignore
           (Js.Promise.then_
              (fun w ->
-               props_resolved := (uuid, w) :: !props_resolved;
+               props_resolved := (label, w) :: !props_resolved;
                Js.Promise.resolve ())
              (Properties_data.block_render_data uuid)))
+  ; resolved_block_data = (fun () -> !props_resolved)
   ; flush_pending = Properties_data.flush_render_data
   ; positioned_rows = Properties_data.positioned_rows
   ; split_display = Properties_data.split_display

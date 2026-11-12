@@ -33,7 +33,8 @@ type ('m, 'a) host =
        synchronous on native; write-path effects settle inside them *)
     after : int -> (unit -> unit) -> unit
   ; (* D.block_render_data uuid — resolution captured entry-side *)
-    request_block_data : uuid:string -> unit
+    request_block_data : label:string -> uuid:string -> unit
+  ; resolved_block_data : unit -> (string * W.t) list
   ; (* run the pending batch flush now (D.flush_render_data) *)
     flush_pending : unit -> unit
   ; (* real delegates *)
@@ -235,16 +236,29 @@ let ordering h =
 let graph_switch h =
   h.clear_logs ();
   h.set_repo "graph-a";
-  (* issue a batched render-data request, then switch graphs before the
-     batch flushes — the request must bind the LIVE repo, not the one
-     captured when it was enqueued *)
-  h.request_block_data ~uuid:"u-stale";
+  (* A queued read belongs to its enqueueing graph even when the deferred
+     flush runs after a switch. Duplicate UUIDs still share one batch item. *)
+  h.request_block_data ~label:"origin" ~uuid:"u-graph-scope";
+  h.request_block_data ~label:"origin-duplicate" ~uuid:"u-graph-scope";
   h.set_repo "graph-b";
   h.flush_pending ();
-  h.check "batched get-blocks binds live repo"
-    (has_invoke h "get-blocks@graph-b");
-  h.check "no stale-repo request fired"
-    (not (has_invoke h "get-blocks@graph-a"))
+  h.check "batched get-blocks retains its enqueueing graph"
+    (has_invoke h "get-blocks@graph-a");
+  h.check "switching graphs does not retarget an origin request"
+    (not (has_invoke h "get-blocks@graph-b"));
+  h.request_block_data ~label:"destination" ~uuid:"u-graph-scope";
+  h.flush_pending ();
+  let requests repo = List.filter (fun entry -> entry="thread-api/get-blocks@" ^ repo)
+    (h.invoke_log ()) in
+  h.check "each separately enqueued graph has one deduplicated property read"
+    (List.length (requests "graph-a")=1 && List.length (requests "graph-b")=1);
+  h.after 5 (fun () ->
+    let source label = Option.bind (List.assoc_opt label (h.resolved_block_data ()))
+      (fun block -> Option.bind (W.get block "block/title") W.as_string) in
+    h.check "origin callers receive only their captured graph's block result"
+      (source "origin"=Some "graph-a" && source "origin-duplicate"=Some "graph-a");
+    h.check "the same UUID in the destination receives its own graph's result"
+      (source "destination"=Some "graph-b"))
 
 let all h =
   scalar_edits h;
