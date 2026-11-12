@@ -94,9 +94,11 @@
         (is (= (set (map :db/id (worker-property/get-all-classes db {:except-private-tags? false})))
                (set (map :db/id (:initial-choices (data-for {:db/ident :user.property/cls
                                                              :logseq.property/type :class}))))))
+        ;; The picker reads structured children of the property's own classes
+        ;; (here Topic); a class-typed property picks from the class options.
         (is (contains? (:structured-children-by-class-id
-                        (data-for {:db/ident :user.property/cls
-                                   :logseq.property/type :class}))
+                        (data-for {:db/ident :user.property/other
+                                   :logseq.property/type :node}))
                        topic-id))))))
 
 ;; Fails if, in `broad-scoped-node-property?`, `=` becomes `not=`.
