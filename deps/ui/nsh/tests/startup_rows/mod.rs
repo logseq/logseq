@@ -46,6 +46,8 @@ impl Jump {
     }
 }
 
+mod editor;
+
 const PREFIX: &str = "NSH bounded row ";
 const MAX_TREE: u64 = 32 * 1024 * 1024;
 // A 900pt viewport of short single-line blocks plus overscan. The bounds are
@@ -360,6 +362,12 @@ impl Measurements {
         let baseline = self.baseline;
         let logical = logical(&self.agent.tree()?)?;
         let native = app.screen().layout_nodes();
+        if let Some(error) = native
+            .iter()
+            .find(|node| node.test_id.as_deref() == Some("lui-backend-error"))
+        {
+            return Err(format!("backend failure during {stage}: {:?}", error.text));
+        }
         if logical.rows.len() > MAX_ROWS
             || logical.nodes > baseline.0 + MAX_ADDED_NODES
             || native.len() > baseline.1 + MAX_ADDED_NODES
@@ -520,6 +528,7 @@ pub(super) fn qualify(app: &mut Headless, jump: &Jump, count: usize) -> Result<(
         json!({"stage":"seed-and-render","sourceCount":count,
         "worker":seeded,"totalMs":started.elapsed().as_secs_f64()*1000.})
     );
+    editor::qualify(app, &measurements.agent)?;
     measurements.sample(app, count, "journal-initial")?;
     far_and_back(
         app,
