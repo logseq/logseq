@@ -123,7 +123,7 @@ fn ManagedAssets() -> impl IntoElement {
             disable.apply(patch(2,json!([{"op":"set-extension-prop","id":1,"property":"attrs","value":attrs.to_string()}]))).unwrap();
         }))
         .child(nsh_base::button().child(text("Retire asset")).on_press(move || {
-            retire.apply(patch(3,json!([{"op":"detach-subtree","id":1}]))).unwrap();
+            retire.apply(patch(2,json!([{"op":"detach-subtree","id":1}]))).unwrap();
         }))
         .child(nsh_base::button().child(text("Try retained asset")).on_press(move || {
             let captured=captured.borrow(); let (context,owner)=captured.as_ref().unwrap();
