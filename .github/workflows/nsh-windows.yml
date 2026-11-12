@@ -24,7 +24,7 @@ env:
 jobs:
   native-application:
     name: Actual Windows App, private worker and native HANDLE boundary
-    runs-on: windows-latest
+    runs-on: windows-2022
     timeout-minutes: 180
     defaults:
       run:
@@ -64,6 +64,12 @@ jobs:
           if ($LASTEXITCODE -ne 0 -or $actual -ne $env:LUI_REF) { throw 'LUI source revision mismatch' }
           "LUI_SOURCE=$lui" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "LUI_SOURCE_ROOT=$lui" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      # Initialize supported VS 2022 before locked Node native addons compile.
+      # Keep Cargo/link steps in PowerShell so GNU link cannot shadow MSVC.
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+          vsversion: '2022'
       - name: Root stylesheet and native generator dependencies
         run: pnpm install --frozen-lockfile
         env:
@@ -75,11 +81,6 @@ jobs:
         run: |
           (cd deps/db-worker && sh scripts/install-opam-deps.sh)
           (cd deps/ui && sh scripts/install-opam-deps.sh)
-      # Keep native Cargo/link steps in PowerShell: Git Bash prepends GNU link,
-      # which otherwise shadows the MSVC linker configured by this action.
-      - uses: ilammy/msvc-dev-cmd@v1
-        with:
-          arch: x64
       - name: Install the pinned native Rust toolchain
         run: rustup toolchain install 1.97.0 --profile minimal --component rustfmt,clippy
       - name: Resolve explicit native toolchain and redistributable roots
