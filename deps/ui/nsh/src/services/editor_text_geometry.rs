@@ -546,18 +546,32 @@ impl Layout {
                     let TextGeometryResult::Lines(visual) = &line.layout.result else {
                         return Err("native line query returned a different result".into());
                     };
-                    for range in visual {
-                        let (Some(a), Some(b)) = (
-                            line.source_offset(range.start, false),
-                            line.source_offset(range.end, false),
-                        ) else {
+                    let (Some(first), Some(last)) = (line.runs.first(), line.runs.last()) else {
+                        return Ok(None);
+                    };
+                    if visual.is_empty()
+                        || ranges
+                            .last()
+                            .is_some_and(|&(_, previous)| first.source.first < previous)
+                    {
+                        return Ok(None);
+                    }
+                    // Visual starts determine the source partition cuts. Include
+                    // hidden markup and spaces omitted at a native line edge in
+                    // an adjacent partition, so the shared editor receives full
+                    // source coverage. Hit testing still skips hidden runs.
+                    let mut start = first.source.first;
+                    for next in visual.iter().skip(1) {
+                        let Some(end) = line.source_offset(next.start, false) else {
                             return Ok(None);
                         };
-                        if a > b || ranges.last().is_some_and(|&(_, previous)| a < previous) {
+                        if end < start || end > last.source.last {
                             return Ok(None);
                         }
-                        ranges.push((a, b));
+                        ranges.push((start, end));
+                        start = end;
                     }
+                    ranges.push((start, last.source.last));
                 }
                 payload["ranges"] = json!(
                     ranges
@@ -617,3 +631,7 @@ pub(super) async fn execute(
 #[cfg(test)]
 #[path = "editor_text_geometry_tests.rs"]
 mod tests;
+
+#[cfg(all(test, target_os = "macos"))]
+#[path = "editor_text_geometry_partition_tests.rs"]
+mod partition_tests;

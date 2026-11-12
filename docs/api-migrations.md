@@ -1054,3 +1054,20 @@ No application API changes are required. Existing caret and selection rectangles
 remain relative to the editor's root-view origin; caret replies include `ox`/`oy`
 for viewport popup anchoring. NSH's page scale is included when projecting text
 content coordinates into this space.
+
+## NSH visual-line source coverage (2026-11-12)
+
+Native `line-ranges` replies now partition each logical line's complete source
+range at the committed text engine's visual-line starts. Hidden Markdown
+markers and spaces omitted at a visual edge belong to an adjacent source
+partition. For example, a wrapped `**long wrapped text** suffix` with the
+caret outside the bold span returns a first range starting at byte `0`,
+including the hidden opening marker, rather than starting at byte `2` and
+being rejected by the shared editor's source-coverage check. The final range
+ends at the logical line's source end; consecutive visual ranges are contiguous.
+
+The wire shape remains `{"block-id":"<uuid>","geometry-epoch":0,"ranges":"0,12;12,34"}`
+with UTF-8 byte offsets (illustrative boundaries; actual cuts come from native
+layout). Hit tests still skip hidden markup, and caret/selection queries retain
+their existing behavior. No application migration or maintained-host change is
+required.
