@@ -17,6 +17,7 @@
             [frontend.util.entity :as entity]
             [goog.object :as gobj]
             [logseq.api.block :as api-block]
+            [logseq.api.db-based.util :as api-util]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.graph-parser.text :as text]
@@ -89,6 +90,55 @@
     (p/let [block (<get-block (:block/uuid new-block))]
       (sdk-utils/result->js block))))
 
+(defn create-embed
+  [parent-uuid target-uuid]
+  (when-not (common-util/uuid-string? parent-uuid)
+    (throw (js/Error. "parent_uuid must be a UUID")))
+  (when-not (common-util/uuid-string? target-uuid)
+    (throw (js/Error. "target_uuid must be a UUID")))
+  (let [repo (state/get-current-repo)]
+    (when-not repo
+      (throw (js/Error. "No graph is open")))
+    (p/let [parent (db-async/<get-block repo parent-uuid {:children? false})
+            target (db-async/<get-block repo target-uuid {:children? false})]
+      (let [parent-id (:db/id parent)
+            target-id (:db/id target)
+            parent-page (:block/page parent)
+            parent-page-id (if (map? parent-page) (:db/id parent-page) parent-page)
+            error (cond
+                    (nil? parent) (str "No entity exists with exact UUID " parent-uuid)
+                    (nil? target) (str "No entity exists with exact UUID " target-uuid)
+                    (ldb/recycled? parent) "Cannot create an embed under a recycled parent"
+                    (ldb/recycled? target) "Cannot embed a recycled target"
+                    (or (entity/property? parent)
+                        (not (or (entity/page? parent) (:block/page parent))))
+                    "parent_uuid must identify a page or block"
+                    (or (entity/property? target)
+                        (not (or (entity/page? target) (:block/page target))))
+                    "target_uuid must identify a page or block"
+                    (= parent-id target-id) "An embed cannot target its own parent")]
+        (if error
+          (p/rejected (js/Error. error))
+          (p/let [ancestors (db-async/<get-block-parents repo parent-id 1000)]
+            (cond
+              (>= (count ancestors) 1000)
+              (p/rejected (js/Error. "Parent ancestry exceeds the embed cycle-check limit"))
+
+              (or (= target-id parent-page-id)
+                  (some #(= target-id (:db/id %)) ancestors))
+              (p/rejected (js/Error. "Cannot embed an ancestor of the parent; this would create a render cycle"))
+
+              :else
+              (p/let [embed (editor-handler/api-insert-new-block!
+                             ""
+                             {:block-uuid parent-uuid
+                              :sibling? false
+                              :edit-block? false
+                              :other-attrs {:block/link target-id}})]
+                (if (:block/uuid embed)
+                  (sdk-utils/result->js embed)
+                  (p/rejected (js/Error. "Embed insertion did not return a block UUID")))))))))))
+
 
 (defn update-block
   [this block content opts]
@@ -115,6 +165,19 @@
                    prop' (some-> prop
                                  (assoc :type (:logseq.property/type prop)))]
              (sdk-utils/result->js prop'))))
+
+(defn get-properties-by-title [title]
+  (let [repo (state/get-current-repo)]
+    (p/let [properties (db-async/<q repo
+                                    {:transact-db? false}
+                                    '[:find [(pull ?property [:db/ident :block/title :logseq.property/type]) ...]
+                                      :in $ ?title
+                                      :where
+                                      [?property :block/title ?title]
+                                      [?property :block/tags ?class]
+                                      [?class :db/ident :logseq.class/Property]]
+                                    title)]
+      (sdk-utils/result->js properties))))
 
 (defn ->cardinality
   [input]
@@ -329,6 +392,920 @@
              (when (entity/class? tag)
                (sdk-utils/result->js tag)))))
 
+(defn get-tag-users [tag-uuid]
+  (let [repo (state/get-current-repo)
+        tag-uuid (sdk-utils/uuid-or-throw-error tag-uuid)]
+    (p/let [users (db-async/<q repo {}
+                               '[:find [(pull ?holder [:block/uuid :block/title :block/name
+                                                       :block/page {:block/link [:db/id :block/uuid :block/title :block/name]}]) ...]
+                                 :in $ ?tag-uuid
+                                 :where [?tag :block/uuid ?tag-uuid]
+                                 [?holder :block/tags ?tag]]
+                               tag-uuid)]
+      (sdk-utils/result->js (api-util/with-embed-info-tree users)))))
+
+(declare <inspect-page-query inspect-page-structural-property?)
+
+(defn- include-metadata? [method options]
+  (let [options (if (undefined? options) #js {} options)]
+    (when-not (and options (object? options) (not (array? options))
+                   (every? #{"include_metadata"} (js/Object.keys options))
+                   (or (undefined? (aget options "include_metadata"))
+                       (boolean? (aget options "include_metadata"))))
+      (throw (js/Error. (str method " options must contain only an optional boolean include_metadata"))))
+    (true? (aget options "include_metadata"))))
+
+(defn get-backlinks
+  ([target-uuid] (get-backlinks target-uuid #js {}))
+  ([target-uuid options]
+  (when-not (util/uuid-string? target-uuid)
+    (throw (js/Error. "target_uuid must be a UUID")))
+  (let [metadata? (include-metadata? "getBacklinks" options)
+        repo (state/get-current-repo)
+        target-uuid* (sdk-utils/uuid-or-throw-error target-uuid)]
+    (p/let [target-id (<inspect-page-query
+                       repo
+                       "[:find ?target . :in $ ?uuid :where [?target :block/uuid ?uuid]]"
+                       target-uuid*)
+            refs (if target-id
+                   (<inspect-page-query
+                    repo
+                    "[:find [(pull ?entity [:block/uuid :block/title :block/name :block/page {:block/link [:db/id :block/uuid :block/title :block/name]}]) ...] :in $ ?target :where [?entity :block/refs ?target]]"
+                    target-id)
+                   [])
+            tagged (if target-id
+                     (<inspect-page-query
+                      repo
+                      "[:find [(pull ?entity [:block/uuid :block/title :block/name :block/page {:block/link [:db/id :block/uuid :block/title :block/name]}]) ...] :in $ ?target :where [?entity :block/tags ?target]]"
+                      target-id)
+                     [])
+            property-class (<inspect-page-query
+                            repo
+                            "[:find ?class . :where [?class :db/ident :logseq.class/Property]]")
+            value-rows (if target-id
+                         (<inspect-page-query
+                          repo
+                          (str "[:find (pull ?entity [:block/uuid :block/title :block/name "
+                               (when metadata? ":logseq.property.view/feature-type ")
+                               ":block/page {:block/link [:db/id :block/uuid :block/title :block/name]}]) (pull ?property [:db/ident :block/title]) :in $ ?target ?class :where [?property :block/tags ?class] [?property :db/ident ?attribute] [?entity ?attribute ?target]]")
+                          target-id property-class)
+                         [])]
+      (let [property-values (->> value-rows
+                                 (remove #(inspect-page-structural-property? (second %)))
+                                 (mapv (fn [[holder property]]
+                                         {:holder (if metadata?
+                                                    (let [feature (keyword ":logseq.property.view/feature-type")]
+                                                      (-> holder
+                                                          (dissoc feature)
+                                                          (assoc :view_feature (some-> (get holder feature) str
+                                                                                     (string/replace-first #"^:" "")))))
+                                                    holder)
+                                          :property property})))
+            total (+ (count refs) (count tagged) (count property-values))]
+        (bean/->js
+         (sdk-utils/normalize-keyword-for-json
+          {:target_uuid target-uuid
+           :total total
+           :refs refs
+           :tagged tagged
+           :property_values property-values
+           :diagnostic (if (pos? total)
+                         (str (count refs) " reference(s), "
+                              (count tagged) " tag holder(s), "
+                              (count property-values) " property value(s).")
+                         "Nothing refers to this entity.")}
+          false)))))))
+
+(defn get-title-holders [title]
+  (let [repo (state/get-current-repo)
+        query "[:find [(pull ?entity [:block/uuid :block/title :block/name :db/ident :block/tags :logseq.property/deleted-at {:block/tags [:db/ident]}]) ...] :in $ ?title :where [?entity :block/title ?title]]"]
+    (p/let [entities (db-async/<q repo {:transact-db? false}
+                                  (cljs.reader/read-string query)
+                                  title)]
+      (bean/->js (sdk-utils/normalize-keyword-for-json entities false)))))
+
+(defn get-title-inventory []
+  (let [repo (state/get-current-repo)]
+    (p/let [page-class (db-async/<q repo {} '[:find ?class . :where [?class :db/ident :logseq.class/Page]])
+            tag-class (db-async/<q repo {} '[:find ?class . :where [?class :db/ident :logseq.class/Tag]])
+            entities (db-async/<q
+                      repo
+                      {:transact-db? false}
+                      '[:find [(pull ?entity [:db/id :block/uuid :block/title :block/name
+                                              :logseq.property/deleted-at {:block/tags [:db/id]}]) ...]
+                        :in $ [?class ...]
+                        :where [?entity :block/tags ?class]]
+                      [page-class tag-class])]
+      (bean/->js
+       (mapv (fn [entity]
+               (let [tag-ids (set (map :db/id (:block/tags entity)))]
+                 {:id (:db/id entity)
+                  :uuid (str (:block/uuid entity))
+                  :title (:block/title entity)
+                  :kind (if (contains? tag-ids tag-class) "tag" "page")
+                  :recycled (some? (:logseq.property/deleted-at entity))}))
+             entities)))))
+
+(defn get-journal-candidates []
+  (let [repo (state/get-current-repo)]
+    (p/let [journals (db-async/<q
+                      repo
+                      {:transact-db? false}
+                      '[:find [(pull ?page [:db/id :block/uuid :block/name :block/title :block/journal-day]) ...]
+                        :where [?page :block/journal-day _]])]
+      (bean/->js (sdk-utils/normalize-keyword-for-json journals false)))))
+
+(defn list-recycled []
+  (let [repo (state/get-current-repo)]
+    (p/let [entities (db-async/<q
+                      repo
+                      {:transact-db? false}
+                      '[:find [(pull ?entity [:block/uuid :block/name :block/title
+                                              :logseq.property/deleted-at {:block/link [:db/id :block/uuid :block/title :block/name]}]) ...]
+                        :where [?entity :logseq.property/deleted-at _]])]
+      (bean/->js (sdk-utils/normalize-keyword-for-json (api-util/with-embed-info-tree entities) false)))))
+
+(defn get-status-rows []
+  (let [repo (state/get-current-repo)]
+    (p/let [rows (db-async/<q
+                  repo
+                  {:transact-db? false}
+                  '[:find (pull ?entity [:block/uuid :block/title :block/name :block/page {:block/link [:db/id :block/uuid :block/title :block/name]}])
+                    (pull ?value [:db/ident :block/title])
+                    :where [?entity :logseq.property/status ?value]])]
+      (bean/->js (sdk-utils/normalize-keyword-for-json (api-util/with-embed-info-tree rows) false)))))
+
+(defn get-closed-values
+  ([] (get-closed-values #js {}))
+  ([options]
+   (let [metadata? (include-metadata? "getClosedValues" options)
+         repo (state/get-current-repo)
+         query (if metadata?
+                   '[:find (pull ?property [:db/ident :block/title :db/valueType])
+                     (pull ?value [:db/id :db/ident :block/title :block/order :logseq.property/deleted-at])
+                     :where [?value :block/closed-value-property ?property]]
+                   '[:find (pull ?property [:db/ident :block/title])
+                     (pull ?value [:db/ident :block/title :block/order])
+                     :where [?value :block/closed-value-property ?property]])]
+       (p/let [rows (db-async/<q repo {:transact-db? false} query)]
+         (bean/->js (sdk-utils/normalize-keyword-for-json rows false))))))
+
+(defn get-orphan-tags
+  ([] (get-orphan-tags #js {}))
+  ([options]
+  (let [metadata? (include-metadata? "getOrphanTags" options)
+        repo (state/get-current-repo)]
+    (p/let [tag-class (db-async/<q repo {}
+                                   '[:find ?class .
+                                     :where [?class :db/ident :logseq.class/Tag]])
+            tags (db-async/<q
+                  repo
+                  {:transact-db? false}
+                  '[:find [(pull ?tag ?pattern) ...]
+                    :in $ [?class ...] ?pattern
+                    :where
+                    [?tag :block/tags ?class]
+                    (not-join [?tag]
+                              [?holder :block/tags ?tag])]
+                  [tag-class]
+                  (cond-> [:db/id :db/ident :block/uuid :block/title]
+                    metadata? (conj :logseq.property/built-in?)))]
+      (bean/->js
+       (sdk-utils/normalize-keyword-for-json
+        (mapv #(cond-> (dissoc % :logseq.property/built-in?)
+                 metadata? (assoc :built_in (boolean (:logseq.property/built-in? %))))
+              tags)
+        false))))))
+
+(def ^:private orphan-property-ident-pattern
+  #"(?i):[a-z][\w.-]*/[\w.?!+-]+")
+
+(defn get-orphan-properties
+  ([] (get-orphan-properties #js {}))
+  ([options]
+  (let [metadata? (include-metadata? "getOrphanProperties" options)
+        repo (state/get-current-repo)]
+    (p/let [properties (db-async/<get-all-properties repo {})
+            used-idents (db-async/<q
+                         repo
+                         {:transact-db? false}
+                         '[:find [?ident ...]
+                           :where [_ ?ident _]])
+            used-idents (set used-idents)
+            orphans (into []
+                          (keep (fn [property]
+                                  (let [ident (:db/ident property)
+                                        type (:logseq.property/type property)]
+                                    (when (and (keyword? ident)
+                                               (re-matches orphan-property-ident-pattern (str ident))
+                                               (not (contains? used-idents ident)))
+                                      (cond-> {:ident (str ident)
+                                               :title (:block/title property)
+                                               :type (if (keyword? type) (name type) type)}
+                                        metadata? (assoc :built_in (boolean (:logseq.property/built-in? property)))))))
+                                properties))]
+      (bean/->js (sdk-utils/normalize-keyword-for-json orphans false))))))
+
+(defn list-assets []
+  (let [repo (state/get-current-repo)]
+    (when-not repo
+      (throw (js/Error. "No graph is open")))
+    (p/let [assets (db-async/<q
+                    repo
+                    {:transact-db? false}
+                    '[:find [(pull ?asset [:block/uuid :block/title
+                                           :logseq.property.asset/type :logseq.property.asset/size
+                                           :logseq.property.asset/checksum :logseq.property.asset/external-url
+                                           :logseq.property.asset/external-file-name]) ...]
+                      :where
+                      [?class :db/ident :logseq.class/Asset]
+                      [?asset :block/tags ?class]
+                      (not [?asset :logseq.property/deleted-at _])])]
+      (bean/->js
+       (mapv (fn [asset]
+               {:uuid (str (:block/uuid asset))
+                :title (:block/title asset)
+                :type (:logseq.property.asset/type asset)
+                :size (:logseq.property.asset/size asset)
+                :checksum (:logseq.property.asset/checksum asset)
+                :external_url (:logseq.property.asset/external-url asset)
+                :external_file_name (:logseq.property.asset/external-file-name asset)})
+             (sort-by #(str (:block/uuid %)) assets))))))
+
+(def ^:private property-users-ident-pattern
+  #"(?i):[a-z][\w.-]*/[\w.?!+-]+")
+
+(defn get-property-users [property-ident]
+  (let [ident (when (string? property-ident)
+                (string/trim property-ident))]
+    (when-not (and ident (re-matches property-users-ident-pattern ident))
+      (throw (js/Error. "Expected an exact namespaced property ident such as :plugin.property.my_plugin/Effort, not a title or a UUID")))
+    (let [repo (state/get-current-repo)
+          query (str "[:find (pull ?holder [:db/id :block/uuid :block/title "
+                     ":block/name {:block/page [:db/id :block/uuid :block/title]} "
+                     "{:block/link [:db/id :block/uuid :block/title :block/name]}]) "
+                     "?value :where [?holder " ident " ?value]]")]
+      (p/let [rows (db-async/<q
+                    repo
+                    {:transact-db? false}
+                    (cljs.reader/read-string query))
+              entity-ids (->> rows
+                              (map second)
+                              (filter #(and (number? %) (not (boolean? %))))
+                              set)
+              resolved (if (seq entity-ids)
+                         (db-async/<q
+                          repo
+                          {:transact-db? false}
+                          '[:find [(pull ?e [:db/id :db/ident :block/title
+                                             :logseq.property/value]) ...]
+                            :in $ [?e ...]
+                            :where [?e ?a _]]
+                          (vec entity-ids))
+                         [])
+              resolved-by-id (into {} (map (juxt :db/id identity) resolved))
+              users (mapv (fn [[holder value]]
+                            {:holder holder
+                             :value value
+                             :value_entity (when (and (number? value)
+                                                      (not (boolean? value)))
+                                             (get resolved-by-id value))})
+                          rows)]
+        (bean/->js (sdk-utils/normalize-keyword-for-json (api-util/with-embed-info-tree users) false))))))
+
+(def ^:private inspect-page-details
+  #{"page" "blocks" "tags" "properties" "declared" "all"})
+
+(def ^:private inspect-page-structural-properties
+  #{"parent" "page" "order" "title" "name" "uuid" "ident"
+    "content" "full-title" "raw-title" "refs" "path-refs" "link"
+    "tx-id" "created-at" "updated-at" "format" "collapsed?"
+    "journal-day" "journal?" "left"})
+
+(defn- inspect-page-field [entity field]
+  (or (get entity field)
+      (case field
+        :id (:db/id entity)
+        :uuid (:block/uuid entity)
+        :name (:block/name entity)
+        :title (:block/title entity)
+        :page (:block/page entity)
+        :_parent (:block/_parent entity)
+        nil)))
+
+(defn- inspect-page-query-rows [result]
+  (if (and (= 1 (count result)) (vector? (first result)))
+    (first result)
+    result))
+
+(defn- inspect-page-structural-property? [property]
+  (let [ident (or (:ident property) (:db/ident property))
+        bare (some-> ident (string/replace-first #"^:" ""))]
+    (or (and bare (or (string/starts-with? bare "block/")
+                      (string/starts-with? bare "db/")))
+        (and bare
+             (not (string/includes? bare "/"))
+             (contains? inspect-page-structural-properties bare)))))
+
+(defn- <inspect-page-query [repo query & inputs]
+  (p/let [result (apply db-async/<q
+                        repo
+                        {:transact-db? false}
+                        (cljs.reader/read-string query)
+                        inputs)]
+    (-> result
+        (sdk-utils/normalize-keyword-for-json false)
+        bean/->js
+        (js->clj :keywordize-keys true)
+        api-util/with-embed-info-tree)))
+
+(defn- <inspect-page-block-uuids [repo page-uuid]
+  (let [tree-query "[:find (pull ?root [:db/id :block/uuid :block/title :block/name :block/order {:block/link [:db/id :block/uuid :block/title :block/name]} {:block/parent [:db/id :block/uuid]} {:block/page [:db/id :block/uuid]} {:block/_parent ...}]) . :in $ ?uuid :where [?root :block/uuid ?uuid]]"]
+    (p/let [root (<inspect-page-query repo tree-query page-uuid)]
+      (when-not root
+        (throw (js/Error. (str "No entity exists with exact UUID " page-uuid))))
+      (when-not (or (:name root) (:block/name root))
+        (throw (js/Error. "UUID identifies a block, not a page")))
+      (letfn [(descendants [node]
+                (mapcat (fn [child]
+                          (cons (dissoc child :_parent :block/_parent)
+                                (descendants child)))
+                        (or (:_parent node) (:block/_parent node) [])))]
+        (mapv #(assoc % :page_uuid (str page-uuid))
+              (sort-by #(str (or (:order %) (:block/order %)))
+                       (descendants root)))))))
+
+(defn inspect-page [page-uuid detail]
+  (let [detail (or detail "page")]
+    (when-not (util/uuid-string? page-uuid)
+      (throw (js/Error. "page_uuid must be a UUID")))
+    (when-not (contains? inspect-page-details detail)
+      (throw (js/Error. "detail must be one of: page, blocks, tags, properties, declared, all")))
+    (let [repo (state/get-current-repo)
+          page-uuid (sdk-utils/uuid-or-throw-error page-uuid)
+          page-query "[:find (pull ?entity [*]) . :in $ ?uuid :where [?entity :block/uuid ?uuid]]"]
+      (p/let [page (<inspect-page-query repo page-query page-uuid)]
+        (cond
+          (nil? page)
+          #js {:found false :page_uuid (str page-uuid) :page nil}
+
+          (not (inspect-page-field page :name))
+          #js {:found false :page_uuid (str page-uuid) :page nil
+               :reason "target is a block, not a page"}
+
+          :else
+          (let [page-id (inspect-page-field page :id)
+                with-blocks? (contains? #{"blocks" "all"} detail)
+                with-tags? (contains? #{"tags" "all"} detail)
+                with-properties? (contains? #{"properties" "all"} detail)
+                with-declared? (contains? #{"declared" "all"} detail)]
+            (p/let [blocks (when with-blocks?
+                             (<inspect-page-block-uuids repo page-uuid))
+                    tags-result (when with-tags?
+                                  (<inspect-page-query
+                                   repo
+                                   "[:find [(pull ?holder [:db/id :block/uuid :block/title :block/name {:block/tags [:db/id :db/ident :block/title]}]) ...] :in $ ?page :where (or-join [?page ?holder] [(identity ?page) ?holder] [?holder :block/page ?page]) [?holder :block/tags _]]"
+                                   page-id))
+                    property-class (when with-properties?
+                                     (<inspect-page-query
+                                      repo
+                                      "[:find ?class . :where [?class :db/ident :logseq.class/Property]]"))
+                    property-rows-result (when with-properties?
+                                           (<inspect-page-query
+                                            repo
+                                            "[:find (pull ?prop [:db/id :db/ident :block/title]) (pull ?holder [:db/id :block/uuid :block/title :block/name]) ?value :in $ ?page ?class :where (or-join [?page ?holder] [(identity ?page) ?holder] [?holder :block/page ?page]) [?prop :block/tags ?class] [?prop :db/ident ?attr] [?holder ?attr ?value]]"
+                                            page-id property-class))
+                    declared-result (when with-declared?
+                                      (<inspect-page-query
+                                       repo
+                                       "[:find (pull ?class [:db/ident :block/title]) (pull ?prop [:db/id :db/ident :block/uuid :block/title :logseq.property/type]) :in $ ?page :where [?page :block/tags ?class] [?class :logseq.property.class/properties ?prop]]"
+                                       page-id))
+                    tags (when with-tags?
+                           (inspect-page-query-rows tags-result))
+                    properties (if with-properties?
+                                 (let [rows (filterv #(and (vector? %) (= 3 (count %))
+                                                           (not (inspect-page-structural-property? (first %))))
+                                                     (js->clj property-rows-result :keywordize-keys true))
+                                       entity-ids (->> rows
+                                                       (keep #(nth % 2))
+                                                       (filter #(and (number? %) (not (boolean? %))))
+                                                       set)
+                                       resolved-query "[:find [(pull ?e [:db/id :db/ident :block/title :logseq.property/value]) ...] :in $ [?e ...] :where [?e ?a _]]"]
+                                   (p/let [resolved-result (if (seq entity-ids)
+                                                             (<inspect-page-query repo resolved-query (vec entity-ids))
+                                                             [])
+                                           resolved (into {}
+                                                          (keep (fn [entity]
+                                                                  (let [id (inspect-page-field entity :id)]
+                                                                    (when (some? id) [id entity]))))
+                                                          (inspect-page-query-rows resolved-result))]
+                                     (mapv (fn [[property holder value]]
+                                             {:property property
+                                              :holder holder
+                                              :value value
+                                              :value_entity (when (and (number? value)
+                                                                       (not (boolean? value)))
+                                                              (get resolved value))})
+                                           rows)))
+                                 nil)
+                    declared (when with-declared?
+                               (mapv (fn [[class property]]
+                                       {:class class :property property})
+                                     (js->clj declared-result :keywordize-keys true)))]
+              (bean/->js
+               (cond-> {:found true :page_uuid (str page-uuid) :page page}
+                 with-blocks? (assoc :blocks blocks)
+                 with-tags? (assoc :tags tags)
+                 with-properties? (assoc :properties properties)
+                 with-declared? (assoc :declared_properties declared))))))))))
+
+(defn- page-stats-subtree [tree root-id]
+  (let [own (atom 0)
+        nested (atom 0)
+        orphans (atom 0)]
+    (letfn [(walk [node expected-page]
+              (doseq [child (or (inspect-page-field node :_parent) [])]
+                (let [child-id (inspect-page-field child :id)
+                      page (inspect-page-field child :page)
+                      page-id (if (map? page) (inspect-page-field page :id) page)]
+                  (if (inspect-page-field child :name)
+                    (do
+                      (swap! nested inc)
+                      (walk child child-id))
+                    (do
+                      (if (= page-id expected-page)
+                        (swap! own inc)
+                        (swap! orphans inc))
+                      (walk child expected-page))))))]
+      (walk tree root-id)
+      {:own @own :nested @nested :orphans @orphans})))
+
+(defn get-page-stats [page-uuid]
+  (when-not (util/uuid-string? page-uuid)
+    (throw (js/Error. "page_uuid must be a UUID")))
+  (let [repo (state/get-current-repo)
+        page-uuid* (sdk-utils/uuid-or-throw-error page-uuid)]
+    (p/let [page (<inspect-page-query
+                  repo
+                  "[:find (pull ?entity [*]) . :in $ ?uuid :where [?entity :block/uuid ?uuid]]"
+                  page-uuid*)]
+      (when-not page
+        (throw (js/Error. (str "No entity exists with exact UUID " page-uuid))))
+      (when-not (inspect-page-field page :name)
+        (throw (js/Error. "UUID identifies a block, not a page")))
+      (let [page-id (inspect-page-field page :id)
+            property-values-query "[:find (pull ?prop [:db/ident]) ?e :in $ ?target ?class :where [?prop :block/tags ?class] [?prop :db/ident ?attr] [?e ?attr ?target]]"]
+        (p/let [tree (<inspect-page-query
+                      repo
+                      "[:find (pull ?root [:db/id :block/uuid :block/title :block/name {:block/page [:db/id]} {:block/_parent ...}]) . :in $ ?uuid :where [?root :block/uuid ?uuid]]"
+                      page-uuid*)
+                aliases-by (<inspect-page-query
+                            repo
+                            "[:find [(pull ?holder [:db/id :block/uuid :block/title :block/name]) ...] :in $ ?target :where (or-join [?holder ?target] [?holder :logseq.property/alias ?target] [?holder :block/alias ?target])]"
+                            page-id)
+                aliases (<inspect-page-query
+                         repo
+                         "[:find [(pull ?alias [:db/id :block/uuid :block/title :block/name]) ...] :in $ ?page :where (or-join [?page ?alias] [?page :logseq.property/alias ?alias] [?page :block/alias ?alias])]"
+                         page-id)
+                by-page (<inspect-page-query
+                         repo
+                         "[:find (count ?b) . :in $ ?page :where [?b :block/page ?page]]"
+                         page-id)
+                empty-count (<inspect-page-query
+                             repo
+                             "[:find (count ?b) . :in $ ?page :where [?b :block/page ?page] [?b :block/title \"\"] (not [?b :block/link _])]"
+                             page-id)
+                refs (<inspect-page-query
+                      repo
+                      "[:find (count ?e) . :in $ ?target :where [?e :block/refs ?target]]"
+                      page-id)
+                tag-holders (<inspect-page-query
+                             repo
+                             "[:find (count ?e) . :in $ ?target :where [?e :block/tags ?target]]"
+                             page-id)
+                property-class (<inspect-page-query
+                                repo
+                                "[:find ?class . :where [?class :db/ident :logseq.class/Property]]")
+                property-rows (<inspect-page-query
+                               repo property-values-query page-id property-class)]
+          (let [{:keys [own nested orphans]} (page-stats-subtree tree page-id)
+                aliases (inspect-page-query-rows aliases)
+                aliased-by (inspect-page-query-rows aliases-by)
+                alias-uuids (vec (keep #(inspect-page-field % :uuid) aliases))
+                alias-of (vec (keep #(inspect-page-field % :uuid) aliased-by))
+                by-page (if (number? by-page) by-page 0)
+                empty-count (if (number? empty-count) empty-count 0)
+                refs (if (number? refs) refs 0)
+                tag-holders (if (number? tag-holders) tag-holders 0)
+                property-values (count (remove #(inspect-page-structural-property? (first %))
+                                               property-rows))
+                counts-note (str (- by-page empty-count) " block(s) with content, "
+                                 by-page " own block(s) including " empty-count " empty, "
+                                 nested " nested page(s), "
+                                 (+ refs tag-holders property-values) " inbound reference(s)"
+                                 (when (pos? orphans)
+                                   (str ", " orphans " ORPHANED block(s)"))
+                                 (when (pos? empty-count)
+                                   ". content_blocks is the figure to pair with the reference count when judging whether a page is empty; own_blocks counts the empty block createPage seeds and so is never 0 on a page that was created through this API"))
+                alias-note (when (or (seq alias-of) (seq alias-uuids))
+                             (str "ALIAS RELATION: this page "
+                                  (string/join " and "
+                                               (remove nil? [(when (seq alias-of)
+                                                               (str "is an alias of " (count alias-of) " page(s)"))
+                                                             (when (seq alias-uuids)
+                                                               (str "declares " (count alias-uuids) " alias(es)"))]))
+                                  ". Deleting either side breaks resolution, and `alias` is a built-in property outside this server's writable namespace, so it cannot be restored afterwards. An empty page in an alias relation is NOT a dead stub."
+                                  (when (> (count alias-of) 1)
+                                    " More than one page claims this one as an alias, which is itself irregular -- read both before touching either.")))
+                diagnostic (str (string/replace counts-note #"\.?$" ".")
+                                (when alias-note (str " " alias-note)))]
+            (bean/->js
+             {:page_uuid page-uuid
+              :title (inspect-page-field page :title)
+              :own_blocks by-page
+              :empty_blocks empty-count
+              :content_blocks (- by-page empty-count)
+              :subtree_blocks (+ own nested orphans)
+              :nested_pages nested
+              :true_orphans orphans
+              :refs refs
+              :tag_holders tag-holders
+              :property_values property-values
+              :is_alias_of (first alias-of)
+              :aliases alias-uuids
+              :diagnostic diagnostic})))))))
+
+(def ^:private entity-search-limits
+  {:max_rows 1000 :max_bytes 65536 :max_filter_nodes 32 :max_filter_depth 4})
+
+(def ^:private entity-search-fields
+  #{"uuid" "title" "page_uuid" "page_title" "parent_uuid" "recycled" "aliases" "matched_names" "built_in"})
+
+(defn- require-search-keys!
+  [value allowed]
+  (when-not (and (map? value) (every? allowed (keys value)))
+    (throw (js/Error. "findEntities received an invalid object or unknown fields"))))
+
+(defn- validate-entity-filter!
+  [node kind depth nodes]
+  (when (or (> depth (:max_filter_depth entity-search-limits))
+            (> (vswap! nodes inc) (:max_filter_nodes entity-search-limits)))
+    (throw (js/Error. "findEntities filter complexity exceeds the allowed limit")))
+  (require-search-keys! node #{:all :any :field :op :value})
+  (cond
+    (or (contains? node :all) (contains? node :any))
+    (let [operator (if (contains? node :all) :all :any)
+          children (get node operator)]
+      (when-not (and (= #{operator} (set (keys node))) (vector? children) (seq children))
+        (throw (js/Error. "findEntities all/any requires a non-empty filter array")))
+      (doseq [child children]
+        (validate-entity-filter! child kind (inc depth) nodes)))
+
+    (= "title" (:field node))
+    (when-not
+     (if (= "empty" (:op node))
+       (= #{:field :op} (set (keys node)))
+       (and (= #{:field :op :value} (set (keys node)))
+            (contains? #{"equals" "contains" "starts_with"} (:op node))
+            (string? (:value node)) (<= (count (:value node)) 1024)
+            (or (= "equals" (:op node)) (not (empty? (:value node))))))
+      (throw (js/Error. "findEntities title requires empty, equals, contains or starts_with with a bounded literal")))
+
+    (= "position" (:field node))
+    (when-not (and (= "block" kind) (= "eq" (:op node))
+                   (= "first_outline_child" (:value node))
+                   (= #{:field :op :value} (set (keys node))))
+      (throw (js/Error. "findEntities position supports first_outline_child for blocks only")))
+
+    (contains? #{"has_children" "has_link"} (:field node))
+    (when-not (and (= "eq" (:op node)) (boolean? (:value node))
+                   (= #{:field :op :value} (set (keys node))))
+      (throw (js/Error. "findEntities structural filters require eq and a boolean")))
+
+    :else
+    (throw (js/Error. "findEntities does not support this filter field"))))
+
+(defn- validate-entity-search
+  [options]
+  (require-search-keys! options #{:kind :state :name_source :page_uuid :where :select :output :limit :cursor})
+  (let [{:keys [kind state name_source output limit select cursor page_uuid where]
+         :or {state "live" name_source "title" output "rows" limit 50 select ["uuid" "title" "page_uuid"]}} options]
+    (when-not (and (contains? #{"page" "block"} kind)
+                   (contains? #{"live" "recycled" "all"} state)
+                   (contains? #{"rows" "count"} output)
+                   (integer? limit) (<= 1 limit (:max_rows entity-search-limits))
+                   (vector? select) (seq select) (every? entity-search-fields select)
+                   (= (count select) (count (distinct select))))
+      (throw (js/Error. "findEntities has invalid kind, state, output, select or limit")))
+    (when-not (and (contains? #{"title" "alias" "both"} name_source)
+                   (or (= "page" kind)
+                       (and (= "title" name_source) (not (some #{"aliases"} select)))))
+      (throw (js/Error. "findEntities alias matching and aliases selection are only valid for pages")))
+    (when (contains? options :page_uuid)
+      (when-not (and (= "block" kind) (util/uuid-string? page_uuid))
+        (throw (js/Error. "findEntities page_uuid must be a UUID and is only valid for blocks"))))
+    (when (contains? options :where)
+      (validate-entity-filter! where kind 0 (volatile! 0)))
+    (when (contains? options :cursor)
+      (require-search-keys! cursor #{:after_id :basis_rev :fingerprint})
+      (when-not (and (= "rows" output) (= 3 (count cursor))
+                     (integer? (:after_id cursor)) (pos? (:after_id cursor))
+                     (integer? (:basis_rev cursor)) (integer? (:fingerprint cursor)))
+        (throw (js/Error. "findEntities cursor is invalid or was supplied for count output"))))
+    (assoc options :state state :name_source name_source :output output :limit limit :select select)))
+
+(def ^:private entity-search-rules
+  '[[(page-like ?e)
+     [?e :block/tags ?class]
+     [?class :db/ident ?ident]
+     [(contains? #{:logseq.class/Page :logseq.class/Journal :logseq.class/Tag :logseq.class/Property} ?ident)]]
+    [(recycled ?e) [?e :logseq.property/deleted-at]]
+    [(recycled ?e) [?e :block/parent ?parent] (recycled ?parent)]
+    [(recycled ?e) [?e :block/page ?page] [?page :logseq.property/deleted-at]]
+    [(entity-name ?e ?name ?source) [(identity ?e) ?name] [(ground "title") ?source]]
+    [(entity-name ?e ?name ?source) [?e :logseq.property/alias ?name] [(ground "alias") ?source]]
+    [(entity-name ?e ?name ?source) [?e :block/alias ?name] [(ground "alias") ?source]]
+    [(outline-child ?e ?page)
+     [?e :block/parent ?page] [?e :block/page] [?e :block/uuid] [?e :block/order]
+     (not (page-like ?e))
+     (not [?e :logseq.property/created-from-property])
+     (not [?e :logseq.property.view/feature-type])]])
+
+(defn- entity-filter-query
+  [node parameters]
+  (cond
+    (:all node) (cons 'and (mapv #(entity-filter-query % parameters) (:all node)))
+    (:any node)
+    (let [start (count @parameters)
+          children (mapv #(entity-filter-query % parameters) (:any node))
+          inputs (map first (subvec @parameters start))]
+      (list* 'or-join (into '[?e ?title ?page] inputs) children))
+
+    :else
+    (case (:field node)
+      "title"
+      (if (= "empty" (:op node))
+        '[(= ?title "")]
+        (let [parameter (symbol (str "?literal" (count @parameters)))
+              predicate (case (:op node)
+                          "equals" '= "contains" 'clojure.string/includes? "starts_with" 'clojure.string/starts-with?)]
+          (swap! parameters conj [parameter (:value node)])
+          [(list predicate '?title parameter)]))
+      "position"
+      '(and (outline-child ?e ?page) [?e :block/order ?order]
+            (not-join [?page ?order]
+                      (outline-child ?other ?page) [?other :block/order ?other-order]
+                      [(compare ?other-order ?order) ?comparison] [(neg? ?comparison)])
+            (not-join [?e ?page ?order]
+                      (outline-child ?other ?page) [?other :block/order ?order] [(< ?other ?e)]))
+      "has_children" (if (:value node)
+                       '(not (not-join [?e] [?child :block/parent ?e]))
+                       '(not-join [?e] [?child :block/parent ?e]))
+      "has_link" (if (:value node) '[?e :block/link] '(not [?e :block/link])))))
+
+(defn- entity-search-query
+  [{:keys [kind state name_source where page_uuid output limit cursor]}]
+  (let [parameters (atom [])
+        filter-clause (when where (entity-filter-query where parameters))
+        clauses (concat
+                 '[[?e :block/uuid] [?e :block/title] [(> ?e ?after)]]
+                 (if (= "page" kind)
+                   '[[?e :block/tags ?class] [?class :db/ident :logseq.class/Page] [(identity ?e) ?page]]
+                   '[[?e :block/page ?page] (not (page-like ?e))])
+                 (case state "live" '[(not (recycled ?e))] "recycled" '[(recycled ?e)] "all" [])
+                 (if (= "title" name_source)
+                   '[[(identity ?e) ?name] [(ground "title") ?source]]
+                   (concat '[(entity-name ?e ?name ?source)]
+                           (when (= "alias" name_source) '[[(= ?source "alias")]])))
+                 '[[?name :block/uuid] [?name :block/title ?title]]
+                 (when (= "live" state) '[(not (recycled ?name))])
+                 (when page_uuid '[[?page :block/uuid ?page-uuid]])
+                 (when filter-clause [filter-clause]))
+        inputs (concat ['$ '% '?after] (when page_uuid ['?page-uuid]) (map first @parameters))
+        values (vec (concat [entity-search-rules (or (:after_id cursor) 0)]
+                            (when page_uuid [(uuid page_uuid)]) (map second @parameters)))]
+    {:query (vec (concat [:find (if (= "count" output) '(count ?e) '(min ?take ?e)) '. :in]
+                         inputs (when (= "rows" output) ['?take]) [:where] clauses))
+     :inputs (cond-> values (= "rows" output) (conj (inc limit)))
+     :names-query (vec (concat '[:find ?e (pull ?name [:block/uuid :block/title]) ?source ?recycled :in]
+                               inputs '[[?e ...]] [:where] clauses
+                               '[(or-join [?name ?recycled]
+                                          (and (recycled ?name) [(ground true) ?recycled])
+                                          (and (not (recycled ?name)) [(ground false) ?recycled]))]))
+     :names-inputs values}))
+
+(defn- <entity-search-names
+  [repo options ids]
+  (let [{:keys [names-query names-inputs]} (entity-search-query options)]
+    (p/let [rows (apply db-async/<q repo {:transact-db? false} names-query (conj names-inputs ids))]
+      (reduce (fn [result [id entity source recycled?]]
+                (update result id (fnil conj [])
+                        {:uuid (str (:block/uuid entity)) :title (:block/title entity)
+                         :source source :recycled recycled?}))
+              {} rows))))
+
+(defn- entity-search-selector
+  [kind select]
+  (let [fields (set select)
+        page-fields (cond-> [:block/uuid]
+                      (fields "page_title") (conj :block/title))]
+    (cond-> [:db/id :block/uuid]
+      (or (fields "title") (and (= "page" kind) (fields "page_title"))) (conj :block/title)
+      (and (= "block" kind) (or (fields "page_uuid") (fields "page_title"))) (conj {:block/page page-fields})
+      (fields "built_in") (conj :logseq.property/built-in?)
+      (fields "parent_uuid") (conj {:block/parent [:block/uuid]}))))
+
+(defn- project-search-entity
+  [kind select aliases matched-names [entity recycled?]]
+  (let [page (if (= "page" kind) entity (:block/page entity))]
+    (into {}
+          (map (fn [field]
+                 [(keyword field)
+                  (case field
+                    "uuid" (str (:block/uuid entity))
+                    "title" (:block/title entity)
+                    "page_uuid" (some-> page :block/uuid str)
+                    "page_title" (:block/title page)
+                    "parent_uuid" (some-> entity :block/parent :block/uuid str)
+                    "aliases" (->> (get aliases (:db/id entity))
+                                   (sort-by :uuid) (mapv #(dissoc % :source)))
+                    "matched_names" (vec (sort-by (juxt :source :uuid) (get matched-names (:db/id entity))))
+                    "built_in" (boolean (:logseq.property/built-in? entity))
+                    "recycled" recycled?)]))
+          select)))
+
+(defn- <entity-search-result
+  [{:keys [kind output select cursor]} basis-rev fingerprint rows more? aliases matched-names]
+  (let [envelope (fn [matches after-id truncated? count]
+                   {:output output :matches matches :count count :count_is_exact (= "count" output)
+                    :truncated truncated?
+                    :next_cursor (when truncated?
+                                   {:after_id after-id :basis_rev basis-rev :fingerprint fingerprint})
+                    :limits entity-search-limits})
+        byte-count (fn [value]
+                     (.-length (.encode (js/TextEncoder.) (js/JSON.stringify (bean/->js value)))))]
+    (if (= "count" output)
+      (p/resolved (envelope [] nil false rows))
+      (loop [remaining rows matches [] after-id (or (:after_id cursor) 0)]
+        (if-let [row (first remaining)]
+          (let [next-matches (conj matches (project-search-entity kind select aliases matched-names row))
+                next-id (:db/id (first row))
+                candidate (envelope next-matches next-id (boolean (or more? (next remaining))) (count next-matches))]
+            (if (> (byte-count candidate) (:max_bytes entity-search-limits))
+              (if (empty? matches)
+                (p/rejected (js/Error. "findEntities selected entity exceeds the response limit; select fewer fields"))
+                (p/resolved (envelope matches after-id true (count matches))))
+              (recur (next remaining) next-matches next-id)))
+          (p/resolved (envelope matches after-id more? (count matches))))))))
+
+(defn find-entities
+  "Structured read-only lookup using existing API queries; limits bound output, not DB execution."
+  [options]
+  (let [{:keys [kind output limit select cursor page_uuid] :as options}
+        (validate-entity-search (bean/->clj options))
+        repo (state/get-current-repo)
+        fingerprint (hash [repo (dissoc options :cursor :limit)])
+        {:keys [query inputs]} (entity-search-query options)]
+    (when-not repo (throw (js/Error. "No graph is open")))
+    (p/let [basis-rev (db-async/<q repo {:transact-db? false}
+                                 '[:find ?rev . :in $ :where [(get $ :max-tx) ?rev]])
+            _ (when (and cursor
+                         (or (not= basis-rev (:basis_rev cursor)) (not= fingerprint (:fingerprint cursor))))
+                (p/rejected (js/Error. "findEntities cursor is stale or belongs to another graph/search; restart without a cursor")))
+            page (when page_uuid
+                   (db-async/<q repo {:transact-db? false}
+                                '[:find ?page . :in $ ?uuid :where
+                                  [?page :block/uuid ?uuid] [?page :block/tags ?class]
+                                  [?class :db/ident :logseq.class/Page]]
+                                (uuid page_uuid)))
+            _ (when (and page_uuid (nil? page))
+                (p/rejected (js/Error. "findEntities page_uuid must identify an existing Page-class page")))
+            found (apply db-async/<q repo {:transact-db? false} query inputs)
+            rows (when (and (= "rows" output) (seq found))
+                   (db-async/<q
+                    repo {:transact-db? false}
+                    [:find (list 'pull '?e (entity-search-selector kind select)) '?recycled
+                     :in '$ '% '[?e ...] :where
+                     '(or-join [?e ?recycled]
+                               (and (recycled ?e) [(ground true) ?recycled])
+                               (and (not (recycled ?e)) [(ground false) ?recycled]))]
+                    entity-search-rules (vec (take limit found))))
+            ids (mapv (comp :db/id first) rows)
+            aliases (when (and (seq ids) (some #{"aliases"} select))
+                      (<entity-search-names repo (assoc options :name_source "alias" :where nil) ids))
+            matched-names (when (and (seq ids) (some #{"matched_names"} select))
+                            (<entity-search-names repo options ids))
+            final-rev (db-async/<q repo {:transact-db? false}
+                                 '[:find ?rev . :in $ :where [(get $ :max-tx) ?rev]])
+            _ (when (not= basis-rev final-rev)
+                (p/rejected (js/Error. "findEntities graph changed during the lookup; restart without a cursor")))
+            result (<entity-search-result options basis-rev fingerprint
+                                          (if (= "count" output)
+                                            (if (nil? found) 0 found)
+                                            (sort-by #(get-in % [0 :db/id]) rows))
+                                          (and (= "rows" output) (> (count found) limit))
+                                          aliases matched-names)]
+      (bean/->js result))))
+
+(defn list-embeds [options]
+  (let [{:keys [page_uuid target_uuid limit] :or {limit 100}} (js->clj options :keywordize-keys true)
+        repo (state/get-current-repo)]
+    (doseq [entity-uuid (remove nil? [page_uuid target_uuid])]
+      (when-not (util/uuid-string? entity-uuid)
+        (throw (js/Error. "Embed filters must be UUIDs"))))
+    (when-not (and (integer? limit) (<= 1 limit 1000))
+      (throw (js/Error. "limit must be an integer between 1 and 1000")))
+    (when-not repo (throw (js/Error. "No graph is open")))
+    (let [query (str "[:find [(pull ?embed [:db/id :block/uuid :block/title :block/order "
+                     "{:block/parent [:db/id :block/uuid]} {:block/page [:db/id :block/uuid]} "
+                     "{:block/link [:db/id :block/uuid :block/title :block/name]}]) ...] :in $"
+                     (when page_uuid " ?page-uuid") (when target_uuid " ?target-uuid")
+                     " :where [?embed :block/link ?target] [?embed :block/page ?page]"
+                     " (not [?embed :logseq.property/deleted-at _])"
+                     " (not [?page :logseq.property/deleted-at _])"
+                     (when page_uuid " [?page :block/uuid ?page-uuid]")
+                     (when target_uuid " [?target :block/uuid ?target-uuid]") "]")
+          inputs (map sdk-utils/uuid-or-throw-error (remove nil? [page_uuid target_uuid]))]
+      (p/let [rows (apply <inspect-page-query repo query inputs)
+              embeds (sort-by :uuid rows)]
+        (bean/->js {:embeds (vec (take limit embeds))
+                    :count (min limit (count embeds))
+                    :truncated (> (count embeds) limit)})))))
+
+(defn get-page-block-uuids [page-uuid]
+  (when-not (util/uuid-string? page-uuid)
+    (throw (js/Error. "page_uuid must be a UUID")))
+  (let [repo (state/get-current-repo)
+        page-uuid* (sdk-utils/uuid-or-throw-error page-uuid)
+        tree-query "[:find (pull ?root [:db/id :block/uuid :block/title :block/name :block/order {:block/link [:db/id :block/uuid :block/title :block/name]} {:block/parent [:db/id :block/uuid]} {:block/page [:db/id :block/uuid]} {:block/_parent ...}]) . :in $ ?uuid :where [?root :block/uuid ?uuid]]"]
+    (p/let [root (<inspect-page-query repo tree-query page-uuid*)]
+      (when-not root
+        (throw (js/Error. (str "No entity exists with exact UUID " page-uuid))))
+      (when-not (inspect-page-field root :name)
+        (throw (js/Error. "UUID identifies a block, not a page")))
+      (letfn [(descendants [node]
+                (mapcat (fn [child]
+                          (cons (dissoc child :_parent)
+                                (descendants child)))
+                        (or (:_parent node) [])))]
+        (bean/->js
+         (mapv #(assoc % :page_uuid page-uuid)
+               (sort-by #(str (:order %)) (descendants root))))))))
+
+(defn- page-block-tree-result [block-uuid root max-depth max-nodes]
+  (cond
+    (nil? root)
+    {:found false :block_uuid block-uuid :block nil :node_count 0 :truncated false}
+
+    (:name root)
+    {:found false :block_uuid block-uuid :block nil :node_count 0 :truncated false
+     :reason "target is a page, not a block"}
+
+    :else
+    (let [count* (atom 0)
+          truncated* (atom false)
+          visited* (atom #{})]
+      (letfn [(build [node depth]
+                (when (contains? @visited* (:uuid node))
+                  (throw (js/Error. "Block hierarchy contains a cycle")))
+                (swap! visited* conj (:uuid node))
+                (swap! count* inc)
+                (let [children (sort-by #(str (:order %)) (:_parent node))
+                      node' (dissoc node :_parent)]
+                  (if (or (>= depth max-depth)
+                          (>= @count* max-nodes))
+                    (do
+                      (when (seq children) (reset! truncated* true))
+                      (assoc node' :children []))
+                    (assoc node' :children
+                           (reduce (fn [built child]
+                                     (if (< @count* max-nodes)
+                                       (conj built (build child (inc depth)))
+                                       (do
+                                         (reset! truncated* true)
+                                         (reduced built))))
+                                   [] children)))))]
+        {:found true
+         :block_uuid block-uuid
+         :block (build root 0)
+         :node_count @count*
+         :truncated @truncated*}))))
+
+(defn get-block-tree [block-uuid max-depth max-nodes]
+  (when-not (util/uuid-string? block-uuid)
+    (throw (js/Error. "block_uuid must be a UUID")))
+  (when-not (and (number? max-depth) (js/Number.isInteger max-depth)
+                 (<= 0 max-depth 100))
+    (throw (js/Error. "max_depth must be an integer between 0 and 100")))
+  (when-not (and (number? max-nodes) (js/Number.isInteger max-nodes)
+                 (<= 1 max-nodes 1000))
+    (throw (js/Error. "max_nodes must be an integer between 1 and 1000")))
+  (let [repo (state/get-current-repo)
+        block-uuid* (sdk-utils/uuid-or-throw-error block-uuid)
+        tree-query "[:find (pull ?root [:db/id :block/uuid :block/title :block/name :block/order {:block/link [:db/id :block/uuid :block/title :block/name]} {:block/parent [:db/id :block/uuid]} {:block/page [:db/id :block/uuid]} {:block/_parent ...}]) . :in $ ?uuid :where [?root :block/uuid ?uuid]]"]
+    (p/let [root (<inspect-page-query repo tree-query block-uuid*)]
+      (bean/->js (page-block-tree-result block-uuid root max-depth max-nodes)))))
+
 (defn get-tags-by-name [name]
   (p/let [tags (get-tags name)]
     (sdk-utils/result->js tags)))
@@ -369,8 +1346,10 @@
              (when-not (entity/class? tag)
                (throw (ex-info (str "Not a tag: " tag-id)
                                {:tag (pr-str tag)})))
-             (when (and tag block)
-               (db-page-handler/add-tag repo (:db/id block) tag)))))
+             (when block
+               (p/let [_ (db-page-handler/add-tag repo (:db/id block) tag)
+                       updated-block (db-async/<get-block repo (:db/id block))]
+                 (sdk-utils/result->js updated-block))))))
 
 (defn remove-block-tag [id-or-name tag-id]
   (this-as this

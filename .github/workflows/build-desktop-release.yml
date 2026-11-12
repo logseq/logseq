@@ -202,7 +202,7 @@ jobs:
         working-directory: ./static
 
       - name: Upload Sentry Sourcemaps (beta only)
-        # if: ${{ github.repository == 'logseq/logseq' && github.event_name == 'workflow_dispatch' && github.event.inputs.build-target == 'beta' }}
+        if: ${{ github.repository == 'logseq/logseq' && github.event_name == 'workflow_dispatch' && github.event.inputs.build-target == 'beta' }}
         run: |
           curl -sL https://sentry.io/get-cli/ | SENTRY_CLI_VERSION=2.58.4 bash
           release_name="logseq@${{ steps.ref.outputs.version }}"
@@ -222,6 +222,7 @@ jobs:
             static
             deps/graph-lifecycle
             sidecar
+            scripts/electron-builder-unsigned.mjs
           include-hidden-files: true
 
   build-linux-x64:
@@ -381,6 +382,7 @@ jobs:
         working-directory: ./static
 
       - name: Build/Release Electron app
+        if: ${{ github.repository == 'logseq/logseq' }}
         shell: pwsh
         run: |
           $signCfg = @'
@@ -404,6 +406,11 @@ jobs:
           AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
           AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
           AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+
+      - name: Build unsigned Electron app
+        if: ${{ github.repository != 'logseq/logseq' }}
+        run: pnpm electron:make-unsigned
+        working-directory: ./static
 
       - name: Verify packaged embedding sidecar
         run: |
@@ -459,6 +466,7 @@ jobs:
         working-directory: ./static
 
       - name: Build/Release Electron app
+        if: ${{ github.repository == 'logseq/logseq' }}
         shell: pwsh
         run: |
           $signCfg = @'
@@ -482,6 +490,11 @@ jobs:
           AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
           AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
           AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+
+      - name: Build unsigned Electron app for arm64
+        if: ${{ github.repository != 'logseq/logseq' }}
+        run: node ../scripts/electron-builder-unsigned.mjs --win nsis zip --arm64
+        working-directory: ./static
 
       - name: Verify packaged embedding sidecar
         run: |
@@ -562,12 +575,18 @@ jobs:
       #     key: ${{ runner.os }}-node-modules
 
       - name: Build/Release Electron App for x64
+        if: ${{ github.repository == 'logseq/logseq' }}
         run: pnpm install --frozen-lockfile && pnpm rebuild:all && pnpm electron:make
         working-directory: ./static
         env:
           APPLE_ID: ${{ secrets.APPLE_ID_EMAIL }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+      - name: Build unsigned Electron App for x64
+        if: ${{ github.repository != 'logseq/logseq' }}
+        run: pnpm install --frozen-lockfile && pnpm rebuild:all && pnpm electron:make-unsigned
+        working-directory: ./static
 
       - name: Verify packaged embedding sidecar
         run: test -f static/dist/mac/Logseq.app/Contents/Resources/sidecar/embedding_server.py
@@ -589,7 +608,7 @@ jobs:
 
   build-macos-arm64:
     needs: [ compile-cljs ]
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - name: Download The Static Asset
         uses: actions/download-artifact@v4
@@ -649,12 +668,18 @@ jobs:
         working-directory: ./static
 
       - name: Build/Release Electron App for arm64
+        if: ${{ github.repository == 'logseq/logseq' }}
         run: pnpm electron:make-macos-arm64
         working-directory: ./static
         env:
           APPLE_ID: ${{ secrets.APPLE_ID_EMAIL }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+      - name: Build unsigned Electron App for arm64
+        if: ${{ github.repository != 'logseq/logseq' }}
+        run: node ../scripts/electron-builder-unsigned.mjs --mac dmg zip --arm64
+        working-directory: ./static
 
       - name: Verify packaged embedding sidecar
         run: test -f static/dist/mac-arm64/Logseq.app/Contents/Resources/sidecar/embedding_server.py
