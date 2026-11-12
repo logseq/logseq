@@ -18,9 +18,11 @@ mod macos {
     use nsh_core::prelude::*;
     use nsh_platform_macos::{
         self as platform,
-        objc2::{MainThreadMarker, rc::Retained},
-        objc2_app_kit::{NSApplication, NSView},
-        objc2_foundation::NSRange,
+        objc2::{MainThreadMarker, rc::Retained, runtime::AnyObject},
+        objc2_app_kit::{
+            NSApplication, NSBitmapImageFileType, NSBitmapImageRepPropertyKey, NSView,
+        },
+        objc2_foundation::{NSDictionary, NSRange},
     };
     use objc2_pdf_kit::{PDFDisplayBox, PDFView};
     use serde_json::{Value, json};
@@ -72,7 +74,11 @@ mod macos {
 
     impl Flow {
         async fn capture(&self, name: &str) -> Result<(), String> {
-            let drawing = inspect(Inspection::Drawing).await?;
+            let own_view = self.directory.join(format!(
+                "{}-own-view.png",
+                name.strip_suffix(".png").unwrap_or(name)
+            ));
+            let drawing = inspect(Inspection::Drawing { own_view }).await?;
             let capture = lui_nsh::native_capture::screenshot().await?;
             std::fs::write(self.directory.join(name), capture.png)
                 .map_err(|error| error.to_string())?;
@@ -365,7 +371,9 @@ mod macos {
             fit: bool,
         },
         Selection,
-        Drawing,
+        Drawing {
+            own_view: PathBuf,
+        },
     }
     type MainReply = Arc<Mutex<(Option<Result<Value, String>>, Option<Waker>)>>;
 
@@ -432,7 +440,7 @@ mod macos {
                 "actual PDF document does not contain two pages",
             )?;
             match action {
-                Inspection::Drawing => {
+                Inspection::Drawing { own_view } => {
                     let before = drawing_state(&view);
                     // Public AppKit drawing only: never substitute PDFPage's
                     // image/draw methods or change native layer hosting.
@@ -446,7 +454,10 @@ mod macos {
                         document.display();
                     }
                     view.display();
+                    let own_view_cache = cache_pdf_view(&view, &own_view)?;
+                    let layers = layer_tree(&view)?;
                     Ok(json!({"before":before,"after":drawing_state(&view),
+                        "ownViewCache":own_view_cache,"pdfLayers":layers,
                         "preparation":["PDFView.layoutDocumentView","NSView.layoutSubtreeIfNeeded","NSView.display"],
                         "displayTickWait":false,"substitutedPageImage":false}))
                 }
@@ -511,6 +522,66 @@ mod macos {
                 }
             }
         }
+    }
+
+    fn cache_pdf_view(view: &PDFView, path: &Path) -> Result<Value, String> {
+        let bounds = view.bounds();
+        let bitmap = view
+            .bitmapImageRepForCachingDisplayInRect(bounds)
+            .ok_or("could not allocate actual PDFView content cache")?;
+        view.cacheDisplayInRect_toBitmapImageRep(bounds, &bitmap);
+        let properties = NSDictionary::<NSBitmapImageRepPropertyKey, AnyObject>::new();
+        // SAFETY: the real PDFView is cached on its AppKit main thread. This
+        // is the view hierarchy, never PDFPage drawing or a replacement image.
+        let png = unsafe {
+            bitmap.representationUsingType_properties(NSBitmapImageFileType::PNG, &properties)
+        }
+        .ok_or("could not encode actual PDFView cache")?
+        .to_vec();
+        std::fs::write(path, png).map_err(|error| error.to_string())?;
+        Ok(
+            json!({"file":path,"width":bitmap.pixelsWide(),"height":bitmap.pixelsHigh(),
+            "captureSource":"own-pdf-view-cache","pixelQualification":"unqualified"}),
+        )
+    }
+
+    fn layer_tree(view: &PDFView) -> Result<Value, String> {
+        // Only public runtime/CA getters, on the main queue. Reading a class
+        // name does not call any private PDFKit method or change layer hosting.
+        let mut pending = view
+            .layer()
+            .into_iter()
+            .map(|layer| (None, layer))
+            .collect::<Vec<_>>();
+        let mut layers = Vec::new();
+        while let Some((parent, layer)) = pending.pop() {
+            require(
+                layers.len() < 4096,
+                "own PDF layer inspection exceeded its bound",
+            )?;
+            let index = layers.len();
+            let classes = std::iter::successors(Some(layer.class()), |class| class.superclass())
+                .map(|class| class.name().to_string_lossy().into_owned())
+                .collect::<Vec<_>>();
+            let bounds = layer.bounds();
+            // SAFETY: retained layers belong to this PDFView and are read on
+            // its main queue. The contents are only inspected, never replaced.
+            let contents = unsafe { layer.contents() }
+                .map(|contents| contents.class().name().to_string_lossy().into_owned());
+            layers.push(json!({"index":index,"parent":parent,
+                "isTiledLayer":classes.iter().any(|name|name=="CATiledLayer"),
+                "classes":classes,"hidden":layer.isHidden(),"opacity":layer.opacity(),
+                "masksToBounds":layer.masksToBounds(),"hasMask":layer.mask().is_some(),
+                "bounds":{"x":bounds.origin.x,"y":bounds.origin.y,
+                    "width":bounds.size.width,"height":bounds.size.height},
+                "needsDisplay":layer.needsDisplay(),"drawsAsynchronously":layer.drawsAsynchronously(),
+                "contentsScale":layer.contentsScale(),"contentsClass":contents}));
+            if let Some(children) = unsafe { layer.sublayers() } {
+                pending.extend(children.iter().map(|layer| (Some(index), layer)));
+            }
+        }
+        Ok(json!({"layers":layers,
+            "contentsReadIsNotTileReadinessProof":true,"layerMutation":false}))
     }
 
     fn rectangle(rect: platform::objc2_foundation::NSRect) -> Value {
