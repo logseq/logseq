@@ -1,8 +1,10 @@
 (ns logseq.outliner.orphaned-pages-test
-  "An edit that drops a block's last reference to an empty page deletes that
-   page. (In a DB graph every page's :block/properties holds its :block/tags,
-   so this needs the compiled app's entities; the outliner library's nbb run
-   does not compute :block/properties.)"
+  "An edit that drops a block's last reference to a page keeps that page, as
+   master's CLI case block-update-page-refs pins (a page created on its own and
+   then linked and unlinked keeps its uuid). (In a DB graph every page's
+   :block/properties holds its :block/tags, so this needs the compiled app's
+   entities; the outliner library's nbb run does not compute
+   :block/properties.)"
   (:require [cljs.test :refer [deftest is testing]]
             [datascript.core :as d]
             [logseq.db.test.helper :as db-test]
@@ -35,12 +37,12 @@
     {:kept (d/entity @conn [:block/uuid kept-uuid])
      :dropped (d/entity @conn [:block/uuid dropped-uuid])}))
 
-(deftest an-edit-deletes-the-empty-page-it-no-longer-references
+(deftest an-edit-keeps-the-empty-page-it-no-longer-references
   (let [{:keys [kept dropped]} (edit-away-from-dropped nil)]
     (testing "the page still referenced stays"
       (is (some? kept)))
-    (testing "the empty page no longer referenced is deleted"
-      (is (nil? dropped)))))
+    (testing "the empty page no longer referenced stays too"
+      (is (some? dropped)))))
 
 (deftest a-save-without-a-title-keeps-the-pages-the-block-references
   (let [page-uuid (random-uuid)
