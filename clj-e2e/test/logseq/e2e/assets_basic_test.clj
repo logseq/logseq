@@ -9,6 +9,7 @@
    [logseq.e2e.util :as util]
    [wally.main :as w])
   (:import
+   (java.io File)
    (java.nio.file Paths)
    (java.util.function Consumer)))
 
@@ -20,6 +21,13 @@
   (-> (Paths/get (str "../" relative-path) (into-array String []))
       (.toAbsolutePath)
       (.normalize)))
+
+(defn- temp-txt-asset
+  [contents]
+  (let [file (File/createTempFile "logseq-e2e-notes-" ".txt")]
+    (.deleteOnExit file)
+    (spit file contents)
+    (.toPath file)))
 
 (deftest image-upload-lightbox-and-resize-test
   (testing "uploaded images create stable asset blocks and retain resized metadata"
@@ -101,3 +109,41 @@
         (assert/assert-is-visible (w/get-by-text "Are you sure you want to delete this image?"))
         (w/click (w/get-by-text "Confirm"))
         (assert/assert-have-count ".ls-page-blocks .asset-container img" 0)))))
+
+(deftest non-media-asset-upload-and-reuse-test
+  (testing "txt assets render as clickable links and re-upload inserts a reference"
+    (let [page (w/get-page)
+          txt-file (temp-txt-asset (str "logseq e2e notes " (random-uuid)))
+          chooser-handler (reify Consumer
+                            (accept [_ chooser]
+                              (.setFiles chooser
+                                         (into-array java.nio.file.Path [txt-file]))))]
+      (.onFileChooser page chooser-handler)
+      (b/new-block "")
+      (util/input-command "Upload an asset")
+      (util/exit-edit)
+      (assert/assert-have-count ".ls-page-blocks a.asset-ref" 1)
+      (let [link (.first (w/-query ".ls-page-blocks a.asset-ref"))]
+        (is (not (string/blank? (.getAttribute link "href"))))
+        (is (string/ends-with? (or (.getAttribute link "download")
+                                   (.innerText link))
+                               ".txt")))
+      (b/new-block "")
+      (w/eval-js
+       "contents => {
+          const transfer = new DataTransfer();
+          const file = new File([contents], 'notes.txt', {type: 'text/plain'});
+          transfer.items.add(file);
+          transfer.items.add(file);
+          document.querySelector('.editor-wrapper textarea').dispatchEvent(
+            new DragEvent('drop', {bubbles: true, cancelable: true, dataTransfer: transfer}));
+        }"
+       (slurp (.toFile txt-file)))
+      (.waitForFunction page
+                        "() => document.querySelector('.editor-wrapper textarea')?.value.startsWith('[[')"
+                        nil)
+      (util/exit-edit)
+      (assert/assert-have-count ".ls-page-blocks a.asset-ref" 3)
+      (w/refresh)
+      (assert/assert-have-count ".ls-page-blocks a.asset-ref" 3)
+      (.offFileChooser page chooser-handler))))

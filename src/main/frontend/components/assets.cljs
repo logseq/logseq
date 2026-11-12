@@ -239,7 +239,8 @@
                                       (notification/show! (str e)))]
                      (if create?
                        (-> (do (set-saving? true)
-                               (editor-assets/db-based-save-assets! repo [{:title title :src src}]))
+                               (editor-assets/db-based-save-assets! repo [{:title title :src src}]
+                                                                    :save-only? true))
                            (p/then (fn [res]
                                      (when-let [asset-block (some-> (seq res) (first))]
                                        (when on-saved (on-saved asset-block)))))
