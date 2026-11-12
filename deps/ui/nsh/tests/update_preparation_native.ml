@@ -1192,6 +1192,79 @@ let native_point_property_scroll () =
       (property owner Lui_protocol.MaxHeight=Some (Lui_protocol.IntValue 0)
        && property popup Lui_protocol.AvailableHeight=Some (Lui_protocol.FloatValue 0.)))
 
+let native_wide_reading_column () =
+  let previous_settings= !Settings_state.st and previous_sidebar= !Sidebar_state.st_ref
+  and previous_sidebar_model= !Sidebar_state.model_signal
+  and previous_model= !Runtime.read_model and previous_app= !Native_embed.current_app
+  and previous_provider= !Dom_ext.doc_elements_provider and previous_host= !Host.host_op
+  and previous_wide=Ui_services.storage_get "wide-mode" in
+  let requests=ref [] in
+  Fun.protect ~finally:(fun () ->
+    Settings_state.st:=previous_settings;Sidebar_state.st_ref:=previous_sidebar;
+    Sidebar_state.model_signal:=previous_sidebar_model;Runtime.read_model:=previous_model;
+    Native_embed.current_app:=previous_app;Dom_ext.doc_elements_provider:=previous_provider;
+    Host.host_op:=previous_host;
+    match previous_wide with
+    | Some value -> Ui_services.storage_set "wide-mode" value
+    | None -> Ui_services.storage_remove "wide-mode") (fun () ->
+    List.iter (fun (os,host) -> List.iter (fun (saved,expected) ->
+      Settings_state.st:=None;Sidebar_state.st_ref:=None;
+      (match saved with
+       | Some value -> Ui_services.storage_set "wide-mode" value
+       | None -> Ui_services.storage_remove "wide-mode");
+      let backend : Lui_protocol.backend={
+        backend_profile=Lui_protocol.profile os host;
+        apply_batch=(fun _ -> true)} in
+      let app=Lui_app.create backend Model.initial (fun _ model -> model)
+        (fun context model _ ->
+          let state value=Signal.state context.Lui_ui.ui_scheduler value in
+          Sidebar_state.st_ref:=Some {Sidebar_state.favorites=state [];home_page=state None;
+            favorite_drop=state None;recents=state [];nav_checked=state [];nav_tag_titles=state [];
+            items=state [];open_menu=state "";groups_collapsed=state [];left_width=state 246.;
+            right_fraction=state 0.3;viewport_w=state 1920.};
+          Sidebar_state.model_signal:=Some model;
+          Lui_elements.column ~accessibility_identifier:"app-container-wrapper"
+            [Chrome.main_scroll model]) in
+      Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app)) (fun () ->
+        Native_embed.current_app:=Some app;
+        Dom_ext.doc_elements_provider:=Native_embed.collect_elements;
+        Runtime.read_model:=(fun () -> Lui_app.model app);
+        Host.set_host_op (fun name payload ->
+          let name=if name="dom-op" then
+            String.sub payload 0 (String.index payload '\n') else name in
+          requests:=name::!requests);
+        ignore (Lui_app.start app);ignore (Lui_app.flush app);
+        let runtime=Lui_app.runtime app in
+        let column ()=Hashtbl.fold (fun node props found ->
+          if Lui_protocol.Property_map.find_opt Lui_protocol.StyleClass props
+            =Some (Lui_protocol.StringValue "cp__sidebar-main-content") then Some node else found)
+          runtime.Lui_runtime.runtime_properties None |> Option.get in
+        let retained=column () in
+        let width ()=Lui_protocol.Property_map.find_opt Lui_protocol.MaxWidth
+          (Hashtbl.find runtime.Lui_runtime.runtime_properties (column ())) in
+        let expected_width wide=Lui_protocol.IntValue
+          (if wide then Ui_theme.reading_width_wide_default else Ui_theme.reading_width_default) in
+        check "native reading width restores raw and quoted preferences before boot"
+          (Settings_state.wide_mode ()=expected && width ()=Some (expected_width expected));
+        List.iter (fun wide ->
+          Settings_state.toggle_wide_mode ();ignore (Lui_app.flush app);
+          check "native wide mode updates its retained reading column through typed state"
+            (column ()=retained && Settings_state.wide_mode ()=wide
+             && width ()=Some (expected_width wide));
+          check "wide mode persists the existing quoted storage representation"
+            (Ui_services.storage_get "wide-mode"=Some (if wide then "\"true\"" else "\"false\"")))
+          [not expected;expected];
+        ignore (Lui_app.send app {Model.initial with route=Model.All_pages});
+        ignore (Lui_app.flush app);
+        check "All pages retains its full-width native layout independently of wide mode"
+          (column ()=retained && width ()=Some (Lui_protocol.IntValue 1920));
+        check "wide mode never sends unsupported class mutation requests"
+          (not (List.exists (fun name -> name="class-add" || name="class-remove") !requests))))
+      [None,false;Some "true",true;Some "\"true\"",true;
+       Some "false",false;Some "\"false\"",false;Some "invalid",false])
+      [Lui_protocol.MacOS,Lui_protocol.NshHost;Lui_protocol.MacOS,Lui_protocol.GenericHost;
+       Lui_protocol.IOS,Lui_protocol.SwiftUIHost;Lui_protocol.AndroidOS,Lui_protocol.KotlinHost])
+
 let native_popup_placement_contract () =
   let previous_overlays = !Properties_state.view_overlays_state
   and previous_generation = !Properties_state.overlay_generation
@@ -1581,6 +1654,7 @@ let () =
   native_settings_route_links ();
   native_cmdk_controlled_input ();
   native_point_property_scroll ();
+  native_wide_reading_column ();
   native_popup_placement_contract ();
   native_controlled_field_resets ();
   native_entry_admission ();

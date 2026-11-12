@@ -476,8 +476,11 @@ let right_split (ms : Model.t Signal.signal) (st : Sidebar_state.t)
 (* #main-content-container scroll — the detail column's page area.
    The split's second pane wraps this in the titlebar column below. *)
 let main_scroll (ms : Model.t Signal.signal) : t =
+ fun context parent ->
+  Settings_state.ensure context;
+  let preferences = Settings_state.signal () in
   let st = Sidebar_state.ensure ms in
-  scroll ~key:"main-content" ~orientation:`vertical ~grow:1. ~min_height:0
+  (scroll ~key:"main-content" ~orientation:`vertical ~grow:1. ~min_height:0
     ~padding_horizontal:16 ~padding_vertical:32
     ~accessibility_identifier:"main-content-container"
     ~style_class:"scrollbar-spacing"
@@ -488,10 +491,13 @@ let main_scroll (ms : Model.t Signal.signal) : t =
         [ column ~key:"main-inner" ~grow:1. ~min_width:0
             ~style_class:"cp__sidebar-main-content"
             ~max_width:(reactive
-              (fun (m : Model.t) viewport_width ->
+              (fun (m : Model.t) viewport_width preferences ->
                 match m.route with
                 | Model.All_pages -> int_of_float viewport_width
-                | _ -> 960) ms (Signal.value st.Sidebar_state.viewport_w))
+                | _ ->
+                    if preferences.Settings_state.wide_mode then Ui_theme.reading_width_wide_default
+                    else Ui_theme.reading_width_default)
+              ms (Signal.value st.Sidebar_state.viewport_w) preferences)
             ~data_attrs:(reactive (fun (m : Model.t) ->
               [ ("data-is-margin-less-pages", "false");
                 ("data-is-full-width", string_of_bool (m.route = Model.All_pages)) ]) ms)
@@ -502,7 +508,7 @@ let main_scroll (ms : Model.t Signal.signal) : t =
                     (fun (m : Model.t) ->
                       match m.route with
                       | Model.Journals | Model.Home -> spacer ~key:"content-end" []
-                      | _ -> spacer ~key:"content-end" ~height:120 []) ms ] ] ] ]
+                      | _ -> spacer ~key:"content-end" ~height:120 []) ms ] ] ] ]) context parent
 
 (* NavigationSplitView detail column — the left dock split's second
    pane is page scroll only. The window-level topbar sits above the
@@ -665,6 +671,8 @@ let shell_contents (ms : Model.t Signal.signal) : t = fun context parent ->
    the reducer, graph worker, editor sessions and dock state. *)
 let shell (ms : Model.t Signal.signal) : t =
  fun context parent ->
+  Settings_state.ensure context;
+  let preferences = Settings_state.signal () in
   let revision = Signal.state context.Lui_ui.ui_scheduler 0 in
   let refresh () =
     Menu_commands.refresh_labels ();
@@ -677,15 +685,16 @@ let shell (ms : Model.t Signal.signal) : t =
     | Some current when current == refresh -> Platform_native.document_refresh := None
     | _ -> ());
   let body =
-    Ui_parts.class_signal ms
-      (fun (m : Model.t) ->
-        "theme-container-inner ls-hl-colored"
-        ^ if m.left_sidebar_open then " ls-left-sidebar-open" else "")
       (* Keep inherited theme props on the stable root. The inner stack
          reconciles its shell and overlay children on a locale change. *)
-      (Ui_components.with_props
+      Ui_components.with_props
          [ Ui_components.Prop.height_viewport 1. ]
          (stack ~key:"wrapper" ~accessibility_identifier:"app-container-wrapper"
-            [ reactive (fun _ -> shell_contents ms) (Signal.value revision) ]))
+            ~style_class:(reactive (fun (m : Model.t) preferences ->
+              "theme-container-inner ls-hl-colored"
+              ^ (if m.left_sidebar_open then " ls-left-sidebar-open" else "")
+              ^ (if preferences.Settings_state.wide_mode then " ls-wide-mode" else ""))
+              ms preferences)
+            [ reactive (fun _ -> shell_contents ms) (Signal.value revision) ])
   in
   body context parent

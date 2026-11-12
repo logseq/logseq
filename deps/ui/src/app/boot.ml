@@ -6,7 +6,7 @@ open Promise_ext
 let demo_graph = "Demo"
 
 (* e2e contract: html lang reflects preferred-language storage key.
-   Theme/accent/font/wide-mode mirror cljs theme.cljs container effects;
+   Theme/accent/font mirror cljs theme.cljs container effects;
    storage keys use cljs `(name key)` semantics (namespace stripped). *)
 let apply_storage_env () =
   Keymap_data.reload_shortcuts ();
@@ -43,16 +43,7 @@ let apply_storage_env () =
                   (if g then "true" else "false")
             | _ -> ())
        | _ -> ())
-   | None -> ());
-  let wide =
-    match Ui_services.storage_get "wide-mode" with
-    | Some v -> Ui_services.storage_unquote v = "true" || v = "true"
-    | None -> false
-  in
-  if wide then
-    match Ui_services.dom_query "#app-container-wrapper" with
-    | Some el -> el.Ui_services.add_class "ls-wide-mode"
-    | None -> ()
+   | None -> ())
 
 (* pick the graph to open (cljs graph/resolve-startup-repo): the repo a
    deep link's ?graph-id= resolves to (via ls-graphs-metadata), else the

@@ -1,5 +1,29 @@
 # API migrations
 
+## Wide mode is a mounted preference with declarative layout
+
+`Settings_state.t` now includes `wide_mode`, initialized by `ensure` from the
+existing `wide-mode` storage key. Raw and EDN-quoted booleans retain their
+previous meaning; absent or unrecognized values use the existing false default.
+Use `Settings_state.initial` when constructing a complete settings record, and
+read the live preference through `Settings_state.wide_mode ()`.
+
+`Settings_state.set_wide_mode true` and `toggle_wide_mode ()` persist the same
+quoted boolean and update the mounted owner. Both shells bind their retained
+root's `ls-wide-mode` class from that state. Web keeps the existing CSS selectors
+and overridable `--ls-main-content-max-width[-wide]` variables. Native Chrome
+updates the retained reading column through typed `MaxWidth`, using the central
+classic defaults 960/1440; All Pages keeps its existing full-width policy.
+Apple/iOS, Android and Generic native paths use the same preference behavior.
+
+The setter and saved-preference boot no longer send DOM class-add/remove
+requests. A setting applied before shell construction remains supported through
+storage initialization. Downstream code that changes a live preference should
+call the setter rather than only writing the storage key and relying on an
+unrelated model publication to refresh the class. Custom CSS dimension overrides
+remain a Web capability: native's prior fixed 960-point width did not support
+them, and this correction does not introduce native custom-dimension parity.
+
 ## Anonymous property popup anchors use point placement
 
 `Properties_popup.open_from_anchor` now constructs mutually exclusive placement

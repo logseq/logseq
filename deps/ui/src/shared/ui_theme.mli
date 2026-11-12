@@ -20,6 +20,11 @@ type mode =
   | Light
   | Dark
 
+(** Native reading-column defaults, matching the classic theme's normal and
+    wide CSS dimensions. Custom CSS dimensions remain owned by Web. *)
+val reading_width_default : int
+val reading_width_wide_default : int
+
 (** Semantic color roles for one mode. Values are CSS color literals. *)
 type colors = {
   background : string;

@@ -64,7 +64,11 @@ def run() -> None:
         subprocess.run([*compiler, *ppx_arguments, "-I", str(stage), "-linkall", "-linkpkg",
                         *map(str, archives), str(embed), str(geometry), str(clipboard), str(source), str(event_probe),
                         "-o", str(executable)], cwd=stage, check=True)
-        result = subprocess.run([str(executable)], cwd=stage, check=False, timeout=30,
+        # Preference fixtures exercise the actual native storage provider without
+        # reading or rewriting the developer's installed application state.
+        environment = os.environ.copy()
+        environment["LOGSEQ_UI_STATE_DIR"] = str(stage / "state")
+        result = subprocess.run([str(executable)], cwd=stage, env=environment, check=False, timeout=30,
                                 capture_output=True, text=True)
         print(result.stdout, end="")
         print(result.stderr, end="", file=sys.stderr)

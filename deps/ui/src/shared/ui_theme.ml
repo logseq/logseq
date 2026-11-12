@@ -5,6 +5,11 @@ type mode =
   | Light
   | Dark
 
+(* Classic theme defaults from vars-classic.css. Native dimensions currently
+   consume typed point values; Web retains its overridable CSS variables. *)
+let reading_width_default = 960
+let reading_width_wide_default = 1440
+
 type colors = {
   background : string;
   background_raised : string;

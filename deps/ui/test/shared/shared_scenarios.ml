@@ -127,6 +127,8 @@ let settings h =
   S.toggle (h.session ()) switch.M.id (not before);
   h.flush ();
   h.check "wide mode changes visibly through the switch" (checked (wide_switch h) <> before);
+  h.check "wide mode updates its owning shell class without a model publication"
+    (exists_class h "ls-wide-mode" = not before);
   h.check "wide mode preference persists"
     (h.storage_get "wide-mode" = Some (if before then "\"false\"" else "\"true\""));
   h.close_settings ();
@@ -136,8 +138,12 @@ let settings h =
   h.flush ();
   select_editor h;
   h.check "wide mode survives settings remount" (checked (wide_switch h) <> before);
+  h.check "wide mode shell class survives settings remount"
+    (exists_class h "ls-wide-mode" = not before);
   S.toggle (h.session ()) (wide_switch h).M.id before;
   h.flush ();
+  h.check "restoring wide mode restores its owning shell class"
+    (exists_class h "ls-wide-mode" = before);
   h.close_settings ();
   h.flush ()
 

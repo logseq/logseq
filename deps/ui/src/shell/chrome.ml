@@ -1142,27 +1142,22 @@ let not_found_page : t =
 (* cljs container.cljs: the wrapper's state classes all have CSS
    consumers — :not(.ls-left-sidebar-open) collapses .cp__header > .l's
    sidebar-width reservation, .ls-wide-mode widens the content column,
-   .ls-hl-colored restyles pdf block highlights. The storage-backed
-   flags are re-read on each publish so the live DOM toggles in
-   Settings_state (wide-mode) and Pdf_state (hl-colored) stay in sync. *)
+   .ls-hl-colored restyles pdf block highlights. Wide mode is owned by the
+   mounted settings preference; the class preserves Web's CSS variable widths. *)
 
 let shell (ms : Model.t Signal.signal) : t =
+ fun context parent ->
+  Settings_state.ensure context;
+  let preferences = Settings_state.signal () in
   let st = Sidebar_state.ensure ms in
-  Ui_parts.class_signal ms
-    (fun (m : Model.t) ->
-      let wide_mode =
-        match Ui_services.storage_get "wide-mode" with
-        | Some v -> Ui_services.storage_unquote v = "true" || v = "true"
-        | None -> false
-      in
-      "theme-container-inner"
-      ^ (if m.left_sidebar_open then " ls-left-sidebar-open" else "")
-      ^ (if wide_mode then " ls-wide-mode" else "")
-      ^ (if Pdf_state.hl_colored () then " ls-hl-colored" else ""))
     (Ui_components.with_props [Ui_components.Prop.height_viewport 1.]
      (stack ~key:"wrapper" ~accessibility_identifier:"app-container-wrapper"
        ~min_height:0
-       ~style_class:"theme-container-inner"
+       ~style_class:(reactive (fun (m : Model.t) preferences ->
+         "theme-container-inner"
+         ^ (if m.left_sidebar_open then " ls-left-sidebar-open" else "")
+         ^ (if preferences.Settings_state.wide_mode then " ls-wide-mode" else "")
+         ^ (if Pdf_state.hl_colored () then " ls-hl-colored" else "")) ms preferences)
        [ skip_to_main
     ; row ~key:"app" ~accessibility_identifier:"app-container" ~grow:1. ~min_height:0
         [ right_split ms st
@@ -1196,4 +1191,4 @@ let shell (ms : Model.t Signal.signal) : t =
               | Model.Not_found _ -> not_found_page
               | _ -> spacer ~key:"route-none" [])
             ms
-       ]))
+       ])) context parent

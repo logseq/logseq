@@ -94,6 +94,30 @@ pub(super) fn qualify(app: &mut Headless) -> Result<(), String> {
         )?;
         agent.tree()?;
     }
+    for width in [1440_u64, 960] {
+        app.press_key("t")?;
+        app.press_key("w")?;
+        let failure = RefCell::new(None);
+        wait_for_chrome(
+            app,
+            "native T W updates the retained reading width",
+            Duration::from_secs(10),
+            |_| match agent.tree() {
+                Ok(tree) => any_node(&tree, |node| {
+                    node.pointer("/props/style-class").and_then(Value::as_str)
+                        == Some("cp__sidebar-main-content")
+                        && node.pointer("/props/max-width").and_then(Value::as_u64) == Some(width)
+                }),
+                Err(error) => {
+                    *failure.borrow_mut() = Some(error);
+                    true
+                }
+            },
+        )?;
+        if let Some(error) = failure.into_inner() {
+            return Err(error);
+        }
+    }
     app.press_key(&format!("{modifier}+k"))?;
     palette(
         app,

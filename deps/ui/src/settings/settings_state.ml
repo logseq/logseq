@@ -11,6 +11,7 @@ type t =
   ; date_format : string
   ; date_format_saving : bool
   ; tick : int
+  ; wide_mode : bool
   ; highlight_recent : bool
   ; recent_days : int
   ; recent_blocks : Recent_blocks.t
@@ -22,6 +23,7 @@ let initial =
   ; date_format = "MMM do, yyyy"
   ; date_format_saving = false
   ; tick = 0
+  ; wide_mode = false
   ; highlight_recent = false
   ; recent_days = 3
   ; recent_blocks = Recent_blocks.empty
@@ -32,12 +34,23 @@ include State_cell.Make (struct
   let name = "settings"
 end)
 
+(* Storage uses the existing raw and EDN-quoted boolean representations. *)
+let storage_bool key ~default =
+  match Ui_services.storage_get key with
+  | Some "true" | Some "\"true\"" -> true
+  | Some "false" | Some "\"false\"" -> false
+  | Some _ | None -> default
+
+let storage_set_bool key b =
+  Ui_services.storage_set key (if b then "\"true\"" else "\"false\"")
+
 let ensure ctx =
   if not (ready ()) then begin
     let recent_days = match Ui_services.storage_get "highlight-recent-days" with
       | Some value -> int_of_string (Ui_services.storage_unquote value)
       | None -> 3 in
-    mount ctx {initial with recent_days}
+    let wide_mode = storage_bool "wide-mode" ~default:false in
+    mount ctx {initial with recent_days;wide_mode}
   end
 
 (* Data publications advance the model revision without ending settings. *)
@@ -238,19 +251,6 @@ let set_home_page name k =
 
 (* ---- storage-backed prefs ---- *)
 
-(* cljs storage/get reads values with reader/read-string and storage/set
-   writes pr-str, so cljs-written booleans appear quoted ("true"/"false");
-   accept both quoted and raw forms. *)
-let storage_bool key ~default =
-  match Ui_services.storage_get key with
-  | Some "true" | Some "\"true\"" -> true
-  | Some "false" | Some "\"false\"" -> false
-  | Some _ -> default
-  | None -> default
-
-let storage_set_bool key b =
-  Ui_services.storage_set key (if b then "\"true\"" else "\"false\"")
-
 let document_mode () = storage_bool "mode?" ~default:false
 
 let toggle_document_mode () =
@@ -298,19 +298,19 @@ let refresh_recent uuids =
     end;
     Js.Promise.resolve ())
 
-(* cljs ui-handler/toggle-wide-mode!: storage + ls-wide-mode on
-   main#app-container-wrapper *)
+let wide_mode () =
+  if ready () then (value ()).wide_mode
+  else storage_bool "wide-mode" ~default:false
+
+(* Both shells consume the mounted preference declaratively. A command before
+   shell construction only needs to persist the value that ensure will load. *)
 let set_wide_mode on =
   storage_set_bool "wide-mode" on;
-  poke ();
-  match Ui_services.dom_query "#app-container-wrapper" with
-  | Some el ->
-      (if on then el.Ui_services.add_class else el.Ui_services.remove_class)
-        "ls-wide-mode"
-  | None -> ()
+  if ready () then set (fun state ->
+    {state with wide_mode=on;tick=state.tick+1})
 
 let toggle_wide_mode () =
-  set_wide_mode (not (storage_bool "wide-mode" ~default:false))
+  set_wide_mode (not (wide_mode ()))
 
 let set_shortcut_tooltip on =
   storage_set_bool "shortcut-tooltip?" on;
