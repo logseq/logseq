@@ -105,6 +105,29 @@
   [value context]
   (sync-transport/parse-transit fail-fast value context))
 
+(def ^:private pull-reply-timeout-ms
+  "A pull whose reply has not come after this long, on a socket that stays open, is
+  taken as lost: it is sent again by its own timer, and the next pull from the same t
+  is sent instead of being dropped as a duplicate. Without it a reply lost on an open
+  socket stopped sync until a restart."
+  30000)
+
+(declare request-pull!)
+
+(defn- schedule-pull-reply-check!
+  "Sends the pull from `since` again when its reply has not come `pull-reply-timeout-ms`
+  after `sent-at`, also on a graph where no later `changed` arrives to trigger it."
+  [client since sent-at]
+  (let [timer (js/setTimeout
+               (fn []
+                 (when (and (= since (some-> (:pending-pull-since client) deref))
+                            (= sent-at (some-> (:pending-pull-sent-at client) deref)))
+                   (request-pull! client since)))
+               pull-reply-timeout-ms)]
+    ;; In node the check must not keep the worker process alive.
+    (when (fn? (some-> timer .-unref))
+      (.unref timer))))
+
 (defn- request-pull!
   [client since]
   (when (and (:ws client) (ws-open? (:ws client)))
@@ -113,9 +136,16 @@
      (fn []
        (when (and (:ws client) (ws-open? (:ws client)))
          (if-let [*pending (:pending-pull-since client)]
-           (let [pending @*pending]
-             (when (or (nil? pending) (< since pending))
+           (let [pending @*pending
+                 *sent-at (:pending-pull-sent-at client)
+                 now (js/Date.now)
+                 expired? (and (some? pending) *sent-at (some? @*sent-at)
+                               (>= (- now @*sent-at) pull-reply-timeout-ms))]
+             (when (or (nil? pending) (< since pending) expired?)
                (reset! *pending since)
+               (when *sent-at
+                 (reset! *sent-at now)
+                 (schedule-pull-reply-check! client since now))
                (send! (:ws client) {:type "pull" :since since})))
            (send! (:ws client) {:type "pull" :since since})))))))
 
@@ -156,6 +186,24 @@
                                       :remote-checksum remote-checksum})]
             (sync-log-state/rtc-log :rtc.log/checksum-mismatch mismatch-data)
             (log/warn :db-sync/checksum-mismatch mismatch-data)))))))
+
+(def ^:private retryable-reject-flush-delay-ms 1000)
+
+(defn- retryable-tx-reject?
+  "A reject the server sends for a transient failure: the rejected txs are
+  still valid and must stay in the outbox to be sent again."
+  [message]
+  (or (true? (:retryable message))
+      (= "snapshot upload in progress" (:reason message))))
+
+(defn- retry-after-tx-reject!
+  "Keeps the rejected txs pending and sends them again: after a pull when the
+  server's t moved past ours, else after a delay."
+  [repo client remote-tx local-tx]
+  (if (and (number? remote-tx) (> remote-tx local-tx))
+    (request-pull! client local-tx)
+    (js/setTimeout #(sync-apply/enqueue-flush-pending! repo client)
+                   retryable-reject-flush-delay-ms)))
 
 (defn- handle-tx-reject!
   [repo client message local-tx]
@@ -207,19 +255,28 @@
                             (seq missing-block-uuids) (assoc :missing-block-uuids (vec missing-block-uuids))
                             (contains? message :error-detail) (assoc :error-detail (:error-detail message))
                             (some? data) (assoc :data data))]
-        (if (or (contains? message :success-tx-ids)
-                (contains? message :failed-tx-id))
+        (if (retryable-tx-reject? message)
           (do
             (sync-apply/mark-pending-txs-false! repo successful-tx-ids)
-            (when failed-tx-id
-              (sync-apply/rollback-and-mark-failed-txs! repo [failed-tx-id])))
-          ;; Backward compatibility for older servers without per-tx reject metadata.
-          (sync-apply/rollback-and-mark-failed-txs! repo inflight))
-        (reset! (:inflight client) [])
-        (broadcast-rtc-state! client)
-        (sync-log-state/rtc-log :rtc.log/tx-rejected rejected-data)
-        (fail-fast :db-sync/tx-rejected
-                   rejected-data)))))
+            (reset! (:inflight client) [])
+            (broadcast-rtc-state! client)
+            (sync-log-state/rtc-log :rtc.log/tx-rejected rejected-data)
+            (log/warn :db-sync/tx-rejected-retryable rejected-data)
+            (retry-after-tx-reject! repo client remote-tx local-tx))
+          (do
+            (if (or (contains? message :success-tx-ids)
+                    (contains? message :failed-tx-id))
+              (do
+                (sync-apply/mark-pending-txs-false! repo successful-tx-ids)
+                (when failed-tx-id
+                  (sync-apply/rollback-and-mark-failed-txs! repo [failed-tx-id])))
+              ;; Backward compatibility for older servers without per-tx reject metadata.
+              (sync-apply/rollback-and-mark-failed-txs! repo inflight))
+            (reset! (:inflight client) [])
+            (broadcast-rtc-state! client)
+            (sync-log-state/rtc-log :rtc.log/tx-rejected rejected-data)
+            (fail-fast :db-sync/tx-rejected
+                       rejected-data)))))))
 
 (defn- handle-hello!
   [repo client local-tx remote-tx remote-checksum]
@@ -343,9 +400,10 @@
       (require-non-negative remote-tx {:repo repo :type "pull/ok"})
       (require-seq txs {:repo repo :type "pull/ok" :field :txs})
       (let [remote-txs (mapv (fn [data]
-                               {:t (:t data)
-                                :outliner-op (:outliner-op data)
-                                :tx-data (parse-transit (:tx data) {:repo repo :type "pull/ok"})})
+                               (cond-> {:t (:t data)
+                                        :outliner-op (:outliner-op data)
+                                        :tx-data (parse-transit (:tx data) {:repo repo :type "pull/ok"})}
+                                 (:tx-id data) (assoc :tx-id (:tx-id data))))
                              txs)]
         ;; (log/info ::handle-pull-remote-txs-count {:count (count remote-txs)})
         (when (seq remote-txs)

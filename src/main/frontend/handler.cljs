@@ -17,6 +17,7 @@
             [frontend.error :as error]
             [frontend.handler.command-palette :as command-palette]
             [frontend.handler.e2ee]
+            [frontend.handler.editor :as editor-handler]
             [frontend.handler.events :as events]
             [frontend.handler.events.export]
             [frontend.handler.events.rtc]
@@ -94,6 +95,12 @@
   []
   (js/window.addEventListener "online" handle-connection-change)
   (js/window.addEventListener "offline" handle-connection-change))
+
+(defn- set-editor-save-when-hidden!
+  []
+  (js/document.addEventListener "visibilitychange"
+                                #(editor-handler/save-current-block-when-hidden!
+                                  (.-visibilityState js/document))))
 
 (defn- register-components-fns!
   []
@@ -194,6 +201,7 @@
                      _ (when target-repo
                          (apply-url-target-route! url-target))]
                (set-network-watcher!)
+               (set-editor-save-when-hidden!)
                (when (mobile-util/native-platform?)
                  (state/restore-mobile-theme!)))))
           (p/catch (fn [e]
