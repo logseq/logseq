@@ -619,6 +619,50 @@ let routed_link_ownership ~registry =
      ({P.profile_os=P.IOS;P.profile_host=P.SwiftUIHost},false);
      ({P.profile_os=P.MacOS;P.profile_host=P.NshHost},true)]
 
+let native_property_plugin_scroll_owners ~registry =
+  List.iter (fun (profile, native) ->
+    let session=S.mount ~registry ~profile ~initial:() ~reducer:(fun () () -> ())
+      ~view:(fun _ _ _ -> Lui_elements.column
+        [Properties_value.closed_value_popup ~on_dismiss:(fun _ -> ())
+           (Lui_elements.column ~accessibility_identifier:"closed-value-body"
+              [Lui_elements.text ~value:"Property chooser content" []]);
+         Plugins_view.list_wrap ~key:"plugin-scroll-fixture"
+           [Lui_elements.text ~value:"Plugin card" []]]) () in
+    Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose session.S.app)) (fun () ->
+      let plugin=List.find (fun node -> class_has node "cp__plugins-item-lists") (nodes session) in
+      check "plugin list chooses a native Scroll only on NSH"
+        (plugin.M.kind=(if native then "scroll" else "column"));
+      check "plugin viewport cap remains on its scroll owner"
+        (Hashtbl.find_opt plugin.M.props "max-height-viewport"=Some (P.FloatValue 0.8));
+      let popup=List.find (fun node -> class_has node "ls-property-select-popup") (nodes session) in
+      let children=M.children session.S.tree popup.M.id in
+      if native then (
+        check "native closed-value popup has an explicit bounded Scroll child"
+          (match children with [owner] -> owner.M.kind="scroll"
+            && Hashtbl.find_opt owner.M.props "max-height-viewport"=Some (P.FloatValue 1.)
+          | _ -> false);
+        check "native popup content remains unbounded inside its Scroll"
+          (List.for_all (fun node -> if M.string_prop node "accessibility-identifier"
+              =Some "closed-value-body" then
+              not (Hashtbl.mem node.M.props "max-height")
+              && not (Hashtbl.mem node.M.props "max-height-viewport") else true) (nodes session));
+        check "native plugin height preserves the viewport-minus-toolbar bound"
+          (Hashtbl.find_opt plugin.M.props "height"=Some
+            (P.IntValue (max 0 (int_of_float (Ui_services.dom_viewport_height ())-320))));
+        check "native plugin list keeps one unbounded content column"
+          (match M.children session.S.tree plugin.M.id with [body] ->
+            body.M.kind="column" && not (Hashtbl.mem body.M.props "max-height-viewport")
+            | _ -> false))
+      else (
+        check "other hosts preserve their original popup body"
+          (match children with [body] -> body.M.kind="column" | _ -> false);
+        check "other hosts preserve CSS overflow on the popup surface"
+          (M.string_prop popup "overflow"=Some "auto"))))
+    [({P.profile_os=P.WebOS;P.profile_host=P.WebHost},false);
+     ({P.profile_os=P.IOS;P.profile_host=P.SwiftUIHost},false);
+     ({P.profile_os=P.AndroidOS;P.profile_host=P.KotlinHost},false);
+     ({P.profile_os=P.MacOS;P.profile_host=P.NshHost},true)]
+
 let native_header_menu_inputs () =
   let page = Option.get (Decode.page_of_summary
     (Wire.Map [Wire.kw "block/uuid", Wire.Uuid "native-more-page";
@@ -1077,6 +1121,7 @@ let run_views ~registry ~profile ~finish =
   native_popup_alignment ~registry;
   graph_menu_trigger_ownership ~registry;
   routed_link_ownership ~registry;
+  native_property_plugin_scroll_owners ~registry;
   native_header_menu_inputs ();
   standalone_inline_groups ~registry;
   selectable_block_motion ~registry;

@@ -737,12 +737,17 @@ let trigger ~key ?margin_left ~remove ~target make_button : t =
      ; reactive ~equal:(==)
          (fun current -> match current with
            | Some d when d.d_placement = Trigger key ->
-               with_phase d (fun phase -> Ui_components.with_props
-                 [Ui_components.Prop.overflow `auto; Ui_components.card_shadow]
+               with_phase d (fun phase ->
+                 let height p = if date_phase p then
+                     max 0 (int_of_float (Ui_services.dom_viewport_height ())-16)
+                   else 288 in
+                 let body=Ui_components.scroll_body (dialog_content ~compact_width:224 ~phase d) in
+                 let body=if Lui_ui.host context=Lui_protocol.NshHost then
+                     Ui_parts.int_prop Lui_protocol.MaxHeight ~value:(reactive height phase) body
+                   else body in
+                 Ui_components.css_scroll (Ui_components.with_props [Ui_components.card_shadow]
                  (Ui_parts.int_prop Lui_protocol.MaxHeight
-                    ~value:(reactive (fun p ->
-                      if date_phase p then max 0 (int_of_float (Ui_services.dom_viewport_height ())-16)
-                      else 288) phase)
+                    ~value:(reactive height phase)
                   (popover ~anchor:`below ~anchor_offset:0.
                     ~padding:0 ~border_width:1
                     ~corner_radius:6 ~background:"hsl(var(--popover))"
@@ -751,7 +756,7 @@ let trigger ~key ?margin_left ~remove ~target make_button : t =
                     ~style_class:"ui__popover-content ls-property-dialog"
                     ~data_attrs:["role","dialog"]
                     ~transition:Ui_components.popover_transition
-                    ~on_dismiss:(fun _ -> close ()) [dialog_content ~compact_width:224 ~phase d])))
+                    ~on_dismiss:(fun _ -> close ()) [body]))))
            | _ -> column ~gap:0 [])
          (Signal.value state)
      ]) context parent

@@ -532,6 +532,13 @@ let viewport_width_signal ~scheduler ~scope =
     request_flush ()) in
   Signal.on_dispose scope (fun () -> cancel (); Signal.dispose_signal (Signal.value width));
   Signal.value width
+let viewport_height_signal ~scheduler ~scope =
+  let height = Signal.state scheduler ((get ()).dom.viewport_height ()) in
+  let cancel = (get ()).dom.subscribe_window_event "resize" (fun _ ->
+    Signal.set height ((get ()).dom.viewport_height ());
+    request_flush ()) in
+  Signal.on_dispose scope (fun () -> cancel (); Signal.dispose_signal (Signal.value height));
+  Signal.value height
 let dom_query sel = (get ()).dom.query sel
 let dom_query_all sel = (get ()).dom.query_all sel
 let dom_by_id id = (get ()).dom.by_id id

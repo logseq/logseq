@@ -1294,3 +1294,21 @@ Native alert-dialog cards use that bounded Scroll composition. Right-sidebar
 header actions use a horizontal Scroll on NSH; Web keeps its CSS row. Favorites
 and Recent contents borrow the native sidebar's existing Scroll instead of
 adding another CSS overflow owner. Their other hosts retain the original styles.
+
+## Property pickers and plugin panes have native Scroll owners
+
+On NSH, closed-value property pickers, date pickers, trigger-owned property dialogs,
+plugin lists and plugin settings use explicit native Scroll nodes. Their content
+remains unbounded inside the owner. The closed-value picker retains its viewport
+height cap; date pickers retain viewport height minus 16; compact property phases
+retain 288 pixels and date phases their existing viewport bound. Plugin settings
+retain the 30–70 percent viewport limits. Plugin lists retain both the 80 percent
+cap and the viewport-minus-320-pixel toolbar height.
+
+CSS, Apple and Android paths keep their original bodies and CSS overflow behavior.
+No application should replace unsupported CSS overflow with content clipping.
+`Ui_services.viewport_height_signal ~scheduler ~scope` is available beside the
+existing width signal for calculated native bounds. It publishes actual viewport
+height on resize and disposes its listener/signal with the supplied scope. For
+example, a native Scroll height can bind through
+`Ui_parts.int_prop Lui_protocol.HeightValue ~value:(reactive calculate viewport)`.

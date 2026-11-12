@@ -101,22 +101,25 @@ let empty_item key =
         ~font_size:"0.875rem" ~value:(t "plugin/empty") []
     ]
 
-(* height/overflow stay on the data_attrs style channel — calc() clamps
-   and overflow-y have no typed-prop form; max-height rides
-   MaxHeightViewport *)
-let list_wrap ~key children =
-  Ui_components.with_props
-    [ Ui_components.Prop.max_height_viewport 0.8 ]
-    (column ~key ~style_class:"cp__plugins-item-lists"
-       ~data_attrs:
-         [ "style", "height: calc(100vh - 320px); overflow-y: auto" ]
-       (if children = [] then [ empty_item (key ^ "-empty") ]
-        else
-          [ (* cljs .cp__plugins-item-lists-inner is a wrapping card grid —
-               the grid kind's fixed columns give equal-width cells *)
-            grid ~key:(key ^ "-in")
-              ~style_class:"cp__plugins-item-lists-inner" ~columns:3
-              ~gap:12 children ]))
+(* Native lists use a real Scroll at the same viewport-minus-toolbar height;
+   CSS hosts retain their existing calculated height and overflow behavior. *)
+let list_wrap ~key children : t =
+ fun context parent ->
+  let native=Lui_ui.host context=Lui_protocol.NshHost in
+  let list=Ui_components.with_props [Ui_components.Prop.max_height_viewport 0.8]
+    (Ui_components.scroll_column ~key ~style_class:"cp__plugins-item-lists"
+       ?min_height:(if native then Some 0 else None)
+       ~data_attrs:(if native then [] else
+         ["style", "height: calc(100vh - 320px); overflow-y: auto"])
+       (if children=[] then [empty_item (key ^ "-empty")]
+        else [grid ~key:(key ^ "-in") ~style_class:"cp__plugins-item-lists-inner"
+                ~columns:3 ~gap:12 children])) in
+  (if native then
+     let viewport=Ui_services.viewport_height_signal
+       ~scheduler:context.Lui_ui.ui_scheduler ~scope:context.Lui_ui.ui_scope in
+     Ui_parts.int_prop Lui_protocol.HeightValue
+       ~value:(reactive (fun height -> max 0 (int_of_float height-320)) viewport) list
+   else list) context parent
 
 (* ---------- marketplace card ---------- *)
 
@@ -818,9 +821,10 @@ let settings_body (_ms : Model.t Signal.signal) : t =
                 ; Ui_components.with_props
                     [ ( Ui_components.Prop.min_height_viewport 0.3 )
                     ; ( Ui_components.Prop.max_height_viewport 0.7 ) ]
-                    (column ~key:"in"
+                    (Ui_components.scroll_column ~key:"in"
                        ~style_class:"cp__plugins-settings-inner" ~gap:8
-                       ~data_attrs:[ "style", "overflow-y: auto" ]
+                       ~data_attrs:(if Lui_ui.host ctx=Lui_protocol.NshHost then []
+                         else ["style", "overflow-y: auto"])
                        ( box ~key:"ef"
                            [ text ~key:"a" ~style_class:"ls-pl-link"
                                ~font_size:"0.875rem"

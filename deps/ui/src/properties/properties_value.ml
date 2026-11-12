@@ -469,15 +469,16 @@ let open_value_picker anchor_id build =
 
 (* Closed values share a searchable property chooser on both hosts. *)
 let closed_value_popup ~on_dismiss content =
-  Ui_components.with_props
+  Ui_components.css_scroll (Ui_components.with_props
     [Ui_components.card_shadow;Ui_components.Prop.max_width_viewport 1.;
-     Ui_components.Prop.max_height_viewport 1.;Ui_components.Prop.overflow `auto]
+     Ui_components.Prop.max_height_viewport 1.]
     (popover ~role:`dialog ~anchor:`below ~anchor_alignment:`start
        ~anchor_offset:(-3.) ~min_width:226 ~padding:0
        ~background:"hsl(var(--popover))" ~foreground:"hsl(var(--popover-foreground))"
        ~border_color:"hsl(var(--border))" ~border_width:1 ~corner_radius:6
        ~style_class:"ui__popover-content ls-property-select-popup"
-       ~transition:Ui_components.popover_transition ~on_dismiss [content])
+       ~transition:Ui_components.popover_transition ~on_dismiss
+       [Ui_components.scroll_body ~max_height_viewport:1. content]))
 
 (* helper: ghost-button value cell — [text] = display label.
    .pv-scalar lets the stylesheet collapse the default 36px button
@@ -938,22 +939,23 @@ let date_picker_pop ~anchor_target ctx ~ident ~is_datetime ~value ~on_dismiss : 
   Signal.on_dispose context.Lui_ui.ui_scope (fun () -> alive := false);
   let dismiss = on_dismiss in
   let on_dismiss () = if !alive then (alive := false; dismiss ()) in
-  (Ui_components.with_props [Ui_components.Prop.overflow `auto;Ui_components.card_shadow]
+  let height=max 0 (int_of_float (Ui_services.dom_viewport_height ())-16) in
+  (Ui_components.css_scroll (Ui_components.with_props [Ui_components.card_shadow]
   (popover ~anchor:`below ~anchor_target ~anchor_alignment:`start ~anchor_offset:4.
-    ~max_height:(max 0 (int_of_float (Ui_services.dom_viewport_height ())-16))
+    ~max_height:height
     ~background:"hsl(var(--popover))"
     ~foreground:"hsl(var(--popover-foreground))" ~border_width:1
     ~border_color:"hsl(var(--border))" ~corner_radius:6
     ~transition:Ui_components.popover_transition
     ~on_dismiss:(fun _ -> on_dismiss ())
-    [date_picker_content ctx ~ident ~is_datetime ~value
+    [Ui_components.scroll_body ~max_height:height (date_picker_content ctx ~ident ~is_datetime ~value
        ~on_value:(fun value -> set_scalar ctx ~ident ~value)
        ~on_clear:(fun () ->
          ignore (let* _ = D.set_block_property ~block_uuid:ctx.block_uuid ~ident
            ~value:(W.Keyword "logseq.property/empty-placeholder") in
            S.refresh_all ();
            on_dismiss ();
-           Js.Promise.resolve ())) ~on_dismiss])) context parent
+           Js.Promise.resolve ())) ~on_dismiss)]))) context parent
 
 let date_view ?(jump_target = true) ?(bottom_pill = false) ?raw_value
     ~(hover : bool Signal.state option) ctx row : t =
