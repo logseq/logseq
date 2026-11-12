@@ -43,6 +43,7 @@ class WindowsPackageTests(unittest.TestCase):
         self.output = self.root / 'packages'
         self.calls = []
         self.failure = None
+        self.protocol_calls = []
         for name in ['package-nsh.mjs', 'package-nsh.sh', 'launch-nsh.sh']:
             self.copy(REAL_REPO / 'deps/ui/scripts' / name, self.helper.parent / name)
         self.copy(REAL_REPO / 'deps/ui/nsh/package_windows.py', self.repo / 'deps/ui/nsh/package_windows.py')
@@ -113,12 +114,22 @@ value.ownedCode=['native.dll'];fs.writeFileSync(receipt,JSON.stringify(value));'
         return ''
 
     def execute(self, command, **kwargs):
+        if len(command)==2 and command[1]=='--installation-admission-protocol':
+            self.protocol_calls.append(Path(command[0]))
+            return ('unsupported' if self.failure=='old-worker' and Path(command[0]).name=='logseq-db-worker.exe'
+                    else packager.PROTOCOL) + '\n'
         if str(command[0]) == str(self.iscc):
             self.calls.append(list(map(str,command)))
             stage = Path(str(command[2])[2:])
             script = Path(command[-1]).read_text()
             self.assertIn('PrivilegesRequired=lowest',script)
             self.assertNotIn('UninstallDelete',script)
+            self.assertIn('CloseApplications=no',script)
+            self.assertNotIn('CloseApplications=force',script)
+            self.assertIn('RestartApplications=no',script)
+            self.assertIn('AppMutex='+packager.ACTIVE,script)
+            self.assertIn('GetSHA256OfFile(FileName)',script)
+            self.assertIn('InitializeUninstall',script)
             name = next(line.split('=',1)[1] for line in script.splitlines() if line.startswith('OutputBaseFilename='))
             self.write(stage / (name+'.exe'),b'fake installer includes signed candidate')
             return None
@@ -139,7 +150,7 @@ value.ownedCode=['native.dll'];fs.writeFileSync(receipt,JSON.stringify(value));'
         archive=self.package()
         with zipfile.ZipFile(archive) as file:
             names=set(file.namelist())
-            for name in ['logseq-nsh.exe','native.dll','Resources/logseq_ui.dll','Resources/logseq-db-worker.exe','Resources/ocaml.dll','Resources/dicts/en.edn','nsh/app.json']:
+            for name in ['logseq-nsh.exe','native.dll','Resources/logseq_ui.dll','Resources/logseq-db-worker.exe','Resources/ocaml.dll','Resources/dicts/en.edn','nsh/app.json','nsh/installation-admission-v1']:
                 self.assertIn('Logseq-NSH/'+name,names)
             self.assertNotIn('Logseq-NSH/Resources/other-backend.txt',names)
         receipt=json.loads(Path(str(archive)+'.lui-build.json').read_text())
@@ -168,6 +179,13 @@ value.ownedCode=['native.dll'];fs.writeFileSync(receipt,JSON.stringify(value));'
         with self.assertRaisesRegex(ValueError,'must not be empty'):
             self.package()
         self.assertFalse(self.output.exists())
+
+    def test_old_worker_cannot_receive_an_installer_admission_marker(self):
+        self.failure='old-worker'
+        with self.assertRaisesRegex(ValueError,'must support'):
+            self.package()
+        self.assertEqual(list(self.output.iterdir()),[])
+        self.assertEqual(len(self.protocol_calls),2)
 
     def test_existing_release_is_never_overwritten(self):
         archive=self.package()

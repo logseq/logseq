@@ -1,6 +1,34 @@
 # API migrations
 
 
+## Windows manual installation admission
+
+The actual Windows host and native DB-worker now register shared process-lifetime
+activity before App/graph startup and refuse startup while an installer/remover
+is present. Worker presence remains after its originating UI exits and applies
+across executable paths/versions implementing this protocol. Named-object
+failures refuse admission. Maintained Web/Apple/mobile and native POSIX worker
+execution retain their existing behavior.
+
+The pure Windows `--installation-admission-protocol` flag returns
+`com.logseq.logseq.nsh-installation-admission-v1` without opening application or
+worker services. Packaging requires the exact capability from both qualified
+binaries before stamping `nsh/installation-admission-v1`. Inno uses the matching
+AppMutex and opposing register-before-check order, with automatic close/restart
+disabled. It never force-kills or takes ownership of a shared DB daemon.
+
+A nonempty legacy target without admission metadata is refused rather than
+certified safe. Stop/remove that older installation or choose a fresh empty
+target. This does not attest to arbitrary older workers outside the target or
+replace worker-version/update-preparation checks. Before replacement/removal,
+`.nsh-installing` blocks the actual host/worker from reopening incomplete code;
+all final installed payload hashes must match before setup clears it. Interrupted
+protocol-aware targets can be repaired by re-running setup. User graph/state/
+cache paths remain untouched. Raw ZIP overwrite while processes are active is
+not an admitted update procedure. Actual Windows/Inno qualification remains
+required; local source/model tests do not prove native installer safety.
+
+
 ## Actual Windows whole-app package layout
 
 `deps/ui/nsh/package_windows.py` packages the qualified native Windows App into

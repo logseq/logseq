@@ -7,6 +7,17 @@
    settles. Completion may run on another thread; no OS mutex stays
    owned across that asynchronous boundary. *)
 
+(* Refuse before opening a graph or accepting requests. Workers deliberately
+   outlive UI instances and therefore own their own installation presence. *)
+let () =
+  if Sys.os_type = "Win32" then begin
+    if Array.length Sys.argv = 2 && Sys.argv.(1) = "--installation-admission-protocol" then begin
+      print_endline (Node_process.installation_protocol ());
+      exit 0
+    end;
+    Node_process.installation_admission ()
+  end
+
 module E = Db_worker_effect
 
 let invoke_mu = Mutex.create ()

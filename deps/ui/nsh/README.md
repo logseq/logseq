@@ -576,3 +576,74 @@ Inno/signing subprocesses. They prove payload inclusion, ownership/freshness,
 final-code hashing and publication/signing order, not Windows executable
 loading, real Authenticode trust, installer execution or packaged native UX.
 Those remain remote/production qualification gates.
+
+
+### Windows installer admission and interrupted installation
+
+Manual setup/removal does not force-close or restart Logseq or its shared native
+DB workers: `CloseApplications=no`, `RestartApplications=no`, no shutdown API and
+no post-install app launch. Public NSH single-instance forwarding covers only its
+UI window and therefore cannot establish this worker/file-replacement boundary.
+
+The actual Windows host registers a process-lifetime named activity mutex before
+opening the platform App; the native worker registers independently before
+opening any graph/request server. Workers deliberately outlive UI instances.
+Their shared product namespace therefore continues to refuse installation after
+the UI closes, including a worker started by another protocol-aware app version
+or from another executable path. The fixed kernel objects are not a process
+registry, polling loop or new worker controller. No graph/state/cache path is
+changed. Other operating systems do not register these Windows objects.
+
+Each runtime first registers activity and then checks the installer mutex. The
+installer first registers its mutex and then checks activity; either ordering of
+a concurrent launch/install refuses one side. Access/check failures refuse
+admission too. Inno's built-in `AppMutex` supplies its standard running-app check,
+with the same checked guard repeated before file changes and during uninstall.
+`SetupMutex` alone is insufficient: Inno checks AppMutex before creating that
+mutex. Runtime/installer handles last until their respective processes exit.
+
+Before producing any ZIP/installer marker, packaging invokes the pure
+`--installation-admission-protocol` flag on BOTH qualified actual binaries. They
+must return `com.logseq.logseq.nsh-installation-admission-v1`; otherwise packaging
+fails. The flag returns only capability identity; it does not mount the App or open
+the worker daemon, graph, credential store or updater. The resulting
+`nsh/installation-admission-v1` is bound by the release metadata receipt.
+
+A nonempty existing target without that marker is refused for in-place
+installation. Stop its processes and remove the old installation, or choose a
+new empty target. This does not pretend that older/foreign workers already
+implement the mutex: legacy workers outside the target may remain alive, their
+files and databases are not modified, and worker-version compatibility remains
+a separate update-preparation requirement. Raw ZIP extraction over a running
+installation is not a qualified upgrade procedure.
+
+Before changing files the installer creates `.nsh-installing`. The host and
+Resources worker refuse startup while it exists. Inno verifies every installed
+payload file against the final archive's SHA-256 before deleting the marker.
+Cancellation, ignored copy errors, verification failure or interrupted setup
+therefore cannot reopen a partially replaced installation as usable. Re-running
+setup can repair an interrupted target that carries this protocol marker. The
+same admission applies to removal; partial removal keeps the marker when host
+or worker code remains. User data directories are never removal targets.
+
+The local tests cover all six register/check interleavings, shared identity,
+source ordering, old-worker capability rejection and packaging guards. Native
+Windows/Inno execution remains required. To compile the additional real worker
+primitive fixture without Dune edits, copy
+`deps/db-worker/runtime/native/node_process_stubs.c` and
+`deps/ui/nsh/tests/fixtures/windows_installation.ml` to a task-owned temporary
+directory, then run:
+
+```powershell
+opam exec -- ocamlfind ocamlopt -thread -package 'unix,threads.posix' -linkpkg `
+  node_process_stubs.c windows_installation.ml -o windows-installation.exe
+```
+
+The fixture prints `ACTIVE` after registration and keeps presence while waiting
+on stdin. Two processes from separate copied executable paths must both hold
+presence; closing only one stdin must not release the other. A native regression
+must also hold the installer mutex and require both real binaries to fail
+before application startup, require setup/removal to refuse an active fixture
+without replacing files, then qualify fresh install and interrupted repair with
+all processes inactive. These OS/installer results are not established by the
+source/model tests or synthetic PE packaging tests.

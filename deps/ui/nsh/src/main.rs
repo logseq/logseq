@@ -2,6 +2,9 @@
 
 #![cfg_attr(target_os = "windows", windows_subsystem = "windows")]
 
+#[cfg(target_os = "windows")]
+mod installation;
+
 #[cfg(target_os = "linux")]
 use nsh_platform_linux as platform;
 #[cfg(target_os = "macos")]
@@ -24,6 +27,11 @@ fn main() -> impl std::process::Termination {
         }
     };
     let qualification = match launch {
+        #[cfg(target_os = "windows")]
+        Launch::InstallationAdmission => {
+            println!("{}", installation::PROTOCOL);
+            return std::process::ExitCode::SUCCESS;
+        }
         Launch::ValidateUpdateConfig(path) => {
             return match validate_update_config(&path) {
                 Ok(()) => std::process::ExitCode::SUCCESS,
@@ -35,6 +43,11 @@ fn main() -> impl std::process::Termination {
         }
         Launch::Application(qualification) => qualification,
     };
+    #[cfg(target_os = "windows")]
+    if let Err(error) = installation::register() {
+        eprintln!("Logseq installation admission: {error}");
+        return std::process::ExitCode::FAILURE;
+    }
     env_logger::init();
     let startup_preflight = qualification.is_some();
     let data_dir = qualification.as_ref().map(|root| root.join("nsh-data"));
@@ -73,6 +86,8 @@ fn main() -> impl std::process::Termination {
 #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
 #[derive(Debug, PartialEq, Eq)]
 enum Launch {
+    #[cfg(target_os = "windows")]
+    InstallationAdmission,
     Application(Option<std::path::PathBuf>),
     ValidateUpdateConfig(std::path::PathBuf),
 }
@@ -82,6 +97,17 @@ fn launch(
     arguments: Vec<std::ffi::OsString>,
     environment: impl Fn(&str) -> Option<std::ffi::OsString>,
 ) -> Result<Launch, String> {
+    #[cfg(target_os = "windows")]
+    if arguments
+        .first()
+        .is_some_and(|flag| flag == "--installation-admission-protocol")
+    {
+        return if arguments.len() == 1 {
+            Ok(Launch::InstallationAdmission)
+        } else {
+            Err("expected --installation-admission-protocol without arguments".into())
+        };
+    }
     if arguments
         .first()
         .is_some_and(|flag| flag == "--validate-update-config")
@@ -300,6 +326,29 @@ mod tests {
                 .cloned())
             .unwrap_err()
             .contains("LOGSEQ_NO_LOGIN_DAEMON")
+        );
+    }
+}
+
+#[cfg(all(test, target_os = "windows"))]
+mod installation_protocol_tests {
+    use super::{Launch, launch};
+
+    #[test]
+    fn pure_installation_capability_does_not_read_application_environment() {
+        assert_eq!(
+            launch(
+                vec!["--installation-admission-protocol".into()],
+                |_| panic!("the capability probe must not initialize application state"),
+            ),
+            Ok(Launch::InstallationAdmission)
+        );
+        assert!(
+            launch(
+                vec!["--installation-admission-protocol".into(), "extra".into()],
+                |_| panic!("invalid capability arguments must not read environment"),
+            )
+            .is_err()
         );
     }
 }
