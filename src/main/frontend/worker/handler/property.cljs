@@ -90,7 +90,19 @@
         ;; Serialized property maps may omit attrs, so read the type from the
         ;; db; only :node values stand in for another node.
         node-type? (= :node (:logseq.property/type
-                             (d/entity db [:db/ident (:db/ident property)])))]
+                             (d/entity db [:db/ident (:db/ident property)])))
+        ;; Choices share a few tags; summarize each tag once per call instead
+        ;; of once per choice, which took seconds on graphs with thousands of
+        ;; values (logseq/db-test#1522)
+        tag-summary (memoize #(worker-plain/attribute-value->plain db :block/tags %))
+        choice-value (fn [entity]
+                       (let [m (worker-plain/entity-forward-map
+                                db entity
+                                {:properties [:db/ident :block/uuid :block/alias]})
+                             tag-ids (map :v (d/datoms db :eavt (:db/id entity) :block/tags))]
+                         (cond-> m
+                           (seq tag-ids)
+                           (assoc :block/tags (mapv tag-summary tag-ids)))))]
     (mapv
      (fn [choice]
        (let [original-id (get-in choice [:value :db/id])
@@ -103,9 +115,7 @@
                                 (d/entity db))]
          (cond-> (assoc choice :value
                         (cond->
-                         (worker-plain/entity-forward-map
-                          db entity
-                          {:properties [:db/ident :block/uuid :block/tags :block/alias]})
+                         (choice-value entity)
                           (seq (:block/_alias entity))
                           (assoc :block/alias-source-page-id
                                  (:db/id (first (:block/_alias entity))))))
@@ -152,10 +162,15 @@
                            (and class? tag-class)
                            (conj tag-class))
         extends-property? (= (:db/ident property) :logseq.property.class/extends)
-        class-ids (->> (concat all-classes classes [(when extends-property? block)])
-                       (keep :db/id)
-                       distinct)
-        structured-children-by-class-id (->> class-ids
+        scope-class-ids (->> (concat classes [(when extends-property? block)])
+                             (keep :db/id)
+                             distinct)
+        class-ids (distinct (concat (keep :db/id all-classes) scope-class-ids))
+        ;; The picker reads descendants only of the property's classes and of
+        ;; the tag whose Extends is edited. One query per class of the graph
+        ;; made opening the picker slow on graphs with many tags
+        ;; (logseq/db-test#1522)
+        structured-children-by-class-id (->> scope-class-ids
                                              (map (fn [class-id]
                                                     [class-id (db-class/get-structured-children db class-id)]))
                                              (into {}))
