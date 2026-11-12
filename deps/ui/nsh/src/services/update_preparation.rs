@@ -205,7 +205,7 @@ struct Reservation {
 }
 impl Drop for Reservation {
     fn drop(&mut self) {
-        if self.active {
+        if self.active && !self.preparation.closed.get() {
             {
                 let mut slot = self.preparation.pending.borrow_mut();
                 if let Some(pending) = slot.as_mut().filter(|pending| pending.id == self.id) {
@@ -373,5 +373,17 @@ mod tests {
         let mut future = preparation.refuse_after_save(send, "unavailable".into());
         expect_refused(&mut future, "application preparation owner retired");
         assert!(events.borrow().is_empty());
+    }
+    #[test]
+    fn retired_owner_does_not_send_abort_from_a_dropped_waiter() {
+        let (preparation, send, events) = fixture();
+        let mut future = preparation.refuse_after_save(send, "unavailable".into());
+        assert!(poll(&mut future).is_pending());
+        assert_eq!(events.borrow().len(), 1);
+        preparation.close();
+        drop(future);
+        assert_eq!(events.borrow().len(), 1);
+        assert_eq!(events.borrow()[0].operation, "update-prepare");
+        assert!(!preparation.active());
     }
 }

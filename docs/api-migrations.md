@@ -15,6 +15,13 @@ Live waiters still reject duplicate responses. Request identity, phase checks,
 old-response handling and the requirement for a successful release proof remain
 unchanged. This does not enable installation or grant an install lease.
 
+Retiring the Rust preparation owner also retires its cleanup sender: dropping an
+old waiter after `Preparation.close` sends no late `update-abort` into its former
+application channel. A live cancelled owner still sends abort and requires the
+matching successful release proof. This is owner retirement, not evidence that
+native workers have recovered; the native coordinator retains its own fence
+whenever shutdown or restoration remains unproven.
+
 ## Native update rollback restores exact worker and transport owners
 
 The native coordinator can capture a deterministic owned-worker snapshot with
