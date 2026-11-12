@@ -71,30 +71,29 @@ fn ManagedAssets() -> impl IntoElement {
     let click_action = signal(0_u8);
     let click_graph = roots("different");
     let renderer = Renderer::with_extensions(registry, move |event, renderer| {
-        if let Event::Extension { name, values, .. } = event {
-            if name == "dom-event"
-                && values.get("name").and_then(|value| value.as_str()) == Some("click")
-            {
-                match click_action.get_untracked() {
-                    1 => held.set(true),
-                    2 => resources.install(&click_graph).unwrap(),
-                    3 => renderer
-                        .apply(patch(2, json!([{"op":"detach-subtree","id":1}])))
-                        .unwrap(),
-                    4 => {
-                        let mut attrs =
-                            super::raw_style::attrs(&renderer.node_snapshot(1).unwrap()).unwrap();
-                        attrs.insert("title".into(), "Updated tooltip".into());
-                        renderer
-                            .apply(patch(
-                                2,
-                                json!([{"op":"set-extension-prop","id":1,
+        if let Event::Extension { name, values, .. } = event
+            && name == "dom-event"
+            && values.get("name").and_then(|value| value.as_str()) == Some("click")
+        {
+            match click_action.get_untracked() {
+                1 => held.set(true),
+                2 => resources.install(&click_graph).unwrap(),
+                3 => renderer
+                    .apply(patch(2, json!([{"op":"detach-subtree","id":1}])))
+                    .unwrap(),
+                4 => {
+                    let mut attrs =
+                        super::raw_style::attrs(&renderer.node_snapshot(1).unwrap()).unwrap();
+                    attrs.insert("title".into(), "Updated tooltip".into());
+                    renderer
+                        .apply(patch(
+                            2,
+                            json!([{"op":"set-extension-prop","id":1,
                             "property":"attrs","value":serde_json::to_string(&attrs).unwrap()}]),
-                            ))
-                            .unwrap();
-                    }
-                    _ => {}
+                        ))
+                        .unwrap();
                 }
+                _ => {}
             }
         }
     });

@@ -195,19 +195,20 @@ fn player(
         ..Default::default()
     })
     .on_event(move |event: &nsh_base::ButtonEvent| {
-        if matches!(event, nsh_base::ButtonEvent::Press) && toggle_admitted() {
-            if let Some(player) = toggle_handle.borrow().as_ref() {
-                if playing.get_untracked() {
-                    player.pause();
-                } else {
-                    if duration.get_untracked() > 0.0
-                        && position.get_untracked() >= duration.get_untracked()
-                    {
-                        player.seek(Duration::ZERO);
-                    }
-                    loading.set(true);
-                    player.play();
+        if matches!(event, nsh_base::ButtonEvent::Press)
+            && toggle_admitted()
+            && let Some(player) = toggle_handle.borrow().as_ref()
+        {
+            if playing.get_untracked() {
+                player.pause();
+            } else {
+                if duration.get_untracked() > 0.0
+                    && position.get_untracked() >= duration.get_untracked()
+                {
+                    player.seek(Duration::ZERO);
                 }
+                loading.set(true);
+                player.play();
             }
         }
     })
@@ -230,14 +231,13 @@ fn player(
     })
     .test_id("native-audio-seek")
     .on_event(move |event: &nsh_base::SliderEvent| {
-        if let nsh_base::SliderEvent::Change(value) = event {
-            if seek_admitted() {
-                if let Some(player) = seek_handle.borrow().as_ref() {
-                    player.seek(Duration::from_secs_f64(
-                        value.start().clamp(0.0, duration.get_untracked()),
-                    ));
-                }
-            }
+        if let nsh_base::SliderEvent::Change(value) = event
+            && seek_admitted()
+            && let Some(player) = seek_handle.borrow().as_ref()
+        {
+            player.seek(Duration::from_secs_f64(
+                value.start().clamp(0.0, duration.get_untracked()),
+            ));
         }
     });
     let volume_handle = handle;
@@ -251,16 +251,15 @@ fn player(
     })
     .test_id("native-audio-volume")
     .on_event(move |event: &nsh_base::SliderEvent| {
-        if let nsh_base::SliderEvent::Change(value) = event {
-            if admitted() {
-                if let Some(player) = volume_handle.borrow().as_ref() {
-                    let next = value.start().clamp(0.0, 1.0);
-                    volume.set(next);
-                    let mut settings = player.settings();
-                    settings.volume = next as f32;
-                    player.set_settings(settings);
-                }
-            }
+        if let nsh_base::SliderEvent::Change(value) = event
+            && admitted()
+            && let Some(player) = volume_handle.borrow().as_ref()
+        {
+            let next = value.start().clamp(0.0, 1.0);
+            volume.set(next);
+            let mut settings = player.settings();
+            settings.volume = next as f32;
+            player.set_settings(settings);
         }
     });
     let style = context.clone();
@@ -420,18 +419,17 @@ mod tests {
             json!({"graph":"different","graph-dir":fixture.root,"asset-dir":fixture.root})
                 .to_string();
         let renderer = Renderer::with_extensions(registry, move |event, renderer| {
-            if let lui_nsh::render::Event::Extension { name, values, .. } = event {
-                if name == "dom-event"
-                    && values.get("name").and_then(|value| value.as_str()) == Some("click")
-                {
-                    match click_action.get_untracked() {
-                        1 => held.set(true),
-                        2 => resources.install(&click_graph).unwrap(),
-                        3 => renderer
-                            .apply(batch(2, json!([{"op":"detach-subtree","id":1}])))
-                            .unwrap(),
-                        _ => {}
-                    }
+            if let lui_nsh::render::Event::Extension { name, values, .. } = event
+                && name == "dom-event"
+                && values.get("name").and_then(|value| value.as_str()) == Some("click")
+            {
+                match click_action.get_untracked() {
+                    1 => held.set(true),
+                    2 => resources.install(&click_graph).unwrap(),
+                    3 => renderer
+                        .apply(batch(2, json!([{"op":"detach-subtree","id":1}])))
+                        .unwrap(),
+                    _ => {}
                 }
             }
         });

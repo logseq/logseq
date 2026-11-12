@@ -518,18 +518,18 @@ fn activate_asset(
                 }
             }
         };
-        if let Err(error) = result {
-            if owner.is_live() {
-                if let Some(events) = events {
-                    if let Err(error) = events.send(PlatformEvent {
-                        operation: "platform-error".into(),
-                        payload: json!({"operation":"open-asset","message":error}).to_string(),
-                    }) {
-                        eprintln!("managed asset completion: {error}");
-                    }
-                } else {
-                    eprintln!("managed asset open: {error}");
+        if let Err(error) = result
+            && owner.is_live()
+        {
+            if let Some(events) = events {
+                if let Err(error) = events.send(PlatformEvent {
+                    operation: "platform-error".into(),
+                    payload: json!({"operation":"open-asset","message":error}).to_string(),
+                }) {
+                    eprintln!("managed asset completion: {error}");
                 }
+            } else {
+                eprintln!("managed asset open: {error}");
             }
         }
     });
