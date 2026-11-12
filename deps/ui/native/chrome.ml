@@ -215,11 +215,11 @@ let leading_toolbar ~key ~state ~controls : t =
 let leading_controls () =
   [ left_menu_btn (); search_btn () ]
 
-let topbar (ms : Model.t Signal.signal) : t =
+let topbar ?background (ms : Model.t Signal.signal) : t =
   row ~key:"head" ~accessibility_identifier:"head"
       ~style_class:"cp__header" ~cross:`center ~main:`space_between
       ~height:titlebar_height ~min_height:titlebar_height
-      ~background:"transparent"
+      ?background
       ~data_attrs:[ ("data-window-titlebar", "true") ]
       [ leading_toolbar ~key:"head-leading" ~state:ms
           ~controls:leading_controls
@@ -646,7 +646,8 @@ let shell_contents (ms : Model.t Signal.signal) : t = fun context parent ->
          the shared grid cell anchors it at the top; z-index changes paint
          order only. The one set of controls never moves between pane owners. *)
       stack ~key:"app" ~accessibility_identifier:"app-container" ~grow:1. ~min_height:0
-        [Ui_components.with_props [Ui_components.Prop.z_index 1] (topbar ms); panes]
+        [Ui_components.with_props [Ui_components.Prop.z_index 1]
+           (topbar ~background:"transparent" ms); panes]
     else column ~key:"app" ~accessibility_identifier:"app-container" ~grow:1. ~min_height:0 ~gap:0
       [topbar ms; panes; performance_bar ()] in
   (stack ~key:"shell-content"
