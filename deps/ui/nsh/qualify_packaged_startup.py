@@ -176,6 +176,42 @@ def wait_journal_body(agent, helper, deadline):
     raise RuntimeError("Actual dated journal body did not become natively visible before the deadline")
 
 
+
+def open_sidebar_layout_ready(replies):
+    if any(visible_native_bounds(reply) is None for reply in replies.values()):
+        return False
+    main, sidebar, contents = (replies[name]["diagnostics"] for name in ("main", "sidebar", "contents"))
+    viewport = main["viewport"]
+    if sidebar["viewport"] != viewport or contents["viewport"] != viewport:
+        return False
+    body, shell, inner = (item["contentBounds"] for item in (main, sidebar, contents))
+    # The content column retains its authored width during the split's opening
+    # transition. Matching only the narrow animated shell would accept a clipped
+    # sidebar. One AppKit point allows the existing border/rounding difference.
+    def close(left, right):
+        return math.isclose(left, right, rel_tol=0, abs_tol=1.0)
+
+    return (close(shell[0], viewport[0])
+            and close(body[0], shell[0] + shell[2])
+            and close(body[0], inner[0] + inner[2])
+            and close(body[0] + body[2], viewport[0] + viewport[2]))
+
+
+def wait_open_sidebar_layout(agent, deadline):
+    selectors = {
+        "main": "prop:accessibility-identifier=main-content-container",
+        "sidebar": "prop:accessibility-identifier=left-sidebar",
+        "contents": "prop:accessibility-identifier=left-sidebar-scroll",
+    }
+    while time.monotonic() < deadline:
+        replies = {name: agent.request(op="native-bounds", selector=selector)
+                   for name, selector in selectors.items()}
+        if open_sidebar_layout_ready(replies):
+            return replies
+        time.sleep(min(0.05, max(0, deadline - time.monotonic())))
+    raise RuntimeError("Packaged open sidebar did not reach its native content layout before capture")
+
+
 def native_press(agent, selector):
     reply = agent.request(op="native-press", selector=selector)
     if reply.get("handled") is not True or reply.get("activation") != "native-controller":
@@ -239,6 +275,7 @@ def background_native(application, private, logs, deadline):
                 (logs / "journal-tree.json").write_text(json.dumps(tree, indent=2) + "\n", encoding="utf-8")
                 subtree, result["journalBody"] = wait_journal_body(agent, helper, deadline)
                 (logs / "journal-body-tree.json").write_text(json.dumps(subtree, indent=2) + "\n", encoding="utf-8")
+                result["openSidebarLayout"] = wait_open_sidebar_layout(agent, deadline)
                 result["screenshots"] = [save_png(agent.request(op="screenshot"), logs / "journal.png")]
                 graph_trigger = "prop:accessibility-identifier=graphs-selector-trigger"
                 graph_item = "kind:menu-item&text:Create db graph"

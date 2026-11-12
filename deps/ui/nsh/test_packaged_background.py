@@ -128,6 +128,32 @@ class PackagedBackgroundTests(unittest.TestCase):
                     QUALIFIER.wait_journal_body(Fixture(), helper, 1)
                 replies[selector] = previous
 
+    def test_journal_capture_waits_for_full_sidebar_geometry_not_a_visible_strip(self):
+        def layout(main, sidebar, contents):
+            return {name: self.native_bounds(rect) for name, rect in
+                    (("main", main), ("sidebar", sidebar), ("contents", contents))}
+
+        final = layout([246, 0, 1194, 852], [0, 0, 246, 900], [0, 0, 245, 700])
+        self.assertTrue(QUALIFIER.open_sidebar_layout_ready(final))
+        # Both the sidebar shell and main pane have moved to 28pt, while the
+        # actual sidebar contents still need 245pt. A visible strip is not ready.
+        strip = layout([28, 0, 1412, 852], [0, 0, 28, 900], [0, 0, 245, 700])
+        self.assertFalse(QUALIFIER.open_sidebar_layout_ready(strip))
+        self.assertTrue(QUALIFIER.open_sidebar_layout_ready(
+            layout([320, 0, 1120, 852], [0, 0, 320, 900], [0, 0, 319, 700])))
+        for value in (
+                layout([28, 0, 1194, 852], [0, 0, 246, 900], [0, 0, 245, 700]),
+                layout([246, 0, 1400, 852], [0, 0, 246, 900], [0, 0, 245, 700])):
+            with self.subTest(value=value):
+                self.assertFalse(QUALIFIER.open_sidebar_layout_ready(value))
+        for name in ("main", "sidebar", "contents"):
+            for change in ({"ancestryTruncated": True}, {"present": False},
+                           {"windowVisible": False}, {"viewport": [0, 0, 1200, 900]}):
+                broken = layout([246, 0, 1194, 852], [0, 0, 246, 900], [0, 0, 245, 700])
+                broken[name]["diagnostics"].update(change)
+                with self.subTest(name=name, change=change):
+                    self.assertFalse(QUALIFIER.open_sidebar_layout_ready(broken))
+
     def test_png_evidence_rejects_mismatched_dimensions_or_non_app_content(self):
         # A complete one-pixel PNG exercises evidence validation, not an app flow.
         png = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j89sAAAAASUVORK5CYII=")

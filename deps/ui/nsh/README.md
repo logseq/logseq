@@ -425,6 +425,13 @@ The existing `native-bounds` operation must also prove positive intersecting
 AppKit bounds for the main Scroll, Journals region and dated title, with a visible
 window and complete unhidden, nontransparent ancestry. These native replies are
 retained in `journalBody.nativeBounds`; semantic nodes alone cannot qualify startup.
+Before `journal.png`, the gate additionally waits for actual open-sidebar layout:
+the main pane meets the sidebar shell and its full content column, and the main
+right edge reaches the same native viewport's right edge. This uses current
+bounds, including the authored content width while its shell animates, rather
+than a fixed sidebar width or animation sleep. The replies are saved as
+`openSidebarLayout`. A visible strip during opening cannot qualify that capture;
+this condition still does not establish full animation, pixel or UX parity.
 The flow rejects a `hello.backend_error` renderer diagnostic,
 captures real app content, activates the native More/Appearance controllers and requires the actual
 startup log to report `active=false, hidden=false`.
