@@ -956,7 +956,7 @@ let native_primitive_unit_results () =
     bridge_adversarial_callbacks false;
     Host.set_wakeup previous_wakeup;
     Host.drain ();
-    Host.set_titlebar_left previous_left;
+    Host.set_titlebar_left (float_of_int previous_left);
     Callback.register "lui_ocaml_platform_event" Native_embed.Ffi.platform_event) (fun () ->
     Host.set_wakeup Native_embed.wakeup;
     Callback.register "lui_ocaml_platform_event" Native_embed.Ffi.platform_event;
@@ -1192,6 +1192,71 @@ let native_point_property_scroll () =
       (property owner Lui_protocol.MaxHeight=Some (Lui_protocol.IntValue 0)
        && property popup Lui_protocol.AvailableHeight=Some (Lui_protocol.FloatValue 0.)))
 
+let native_cmdk_controlled_input () =
+  let previous_app = !Native_embed.current_app
+  and previous_provider = !Dom_ext.doc_elements_provider
+  and previous_host = !Host.host_op in
+  let state = ref None and services = ref None and requests = ref [] in
+  let backend : Lui_protocol.backend = {
+    backend_profile=Lui_protocol.profile Lui_protocol.MacOS Lui_protocol.NshHost;
+    apply_batch=(fun _ -> true)} in
+  let app=Lui_app.create backend Model.initial (fun model (_ : Action.t) -> model)
+    (fun context _ _ ->
+      let svs=Cmdk_host.services ~host:(Lui_ui.host context) () in
+      let st=Cmdk_state.make ~register:false context.Lui_ui.ui_scheduler svs in
+      services:=Some svs;state:=Some st;
+      Cmdk_view.input_row svs st) in
+  Fun.protect ~finally:(fun () ->
+    ignore (Lui_app.dispose app);Native_embed.current_app:=previous_app;
+    Dom_ext.doc_elements_provider:=previous_provider;Host.host_op:=previous_host) (fun () ->
+    Native_embed.current_app:=Some app;
+    Dom_ext.doc_elements_provider:=Native_embed.collect_elements;
+    Host.set_host_op (fun name payload ->
+      let operation,body = if name="dom-op" then
+        let boundary=String.index payload '\n' in
+        String.sub payload 0 boundary,
+        String.sub payload (boundary+1) (String.length payload-boundary-1)
+      else name,payload in
+      requests:=(operation,body)::!requests);
+    ignore (Lui_app.start app);ignore (Lui_app.flush app);
+    let st=Option.get !state and svs=Option.get !services in
+    let runtime=Lui_app.runtime app in
+    let input=Hashtbl.fold (fun node kind found ->
+      if kind=Lui_protocol.Input then Some node else found)
+      runtime.Lui_runtime.mounted_nodes None |> Option.get in
+    let text () = Lui_protocol.Property_map.find_opt Lui_protocol.TextValue
+      (Hashtbl.find runtime.Lui_runtime.runtime_properties input) in
+    let query={js|中😀|js} in
+    Cmdk_state.set_in st (fun view -> {view with input=query});
+    svs.Cmdk_services.set_input_value query;
+    ignore (Lui_app.flush app);
+    check "native search query is rendered through its actual controlled input"
+      (text ()=Some (Lui_protocol.StringValue query));
+    svs.Cmdk_services.focus_input_init query;
+    let deadline=Unix.gettimeofday () +. 1. in
+    while not (List.exists (fun (name,_) -> name="set-selection-range") !requests)
+          && Unix.gettimeofday () < deadline do
+      Thread.delay 0.002;Host.drain ()
+    done;
+    check "native search restore focuses its original mounted input"
+      (List.exists (fun (name,_) -> name="focus") !requests);
+    check "restored Unicode search selects UTF-16 units instead of bytes"
+      (List.exists (fun (name,payload) -> name="set-selection-range"
+        && (let json=Yojson.Safe.from_string payload in
+            Yojson.Safe.Util.member "end" json=`Int 3)) !requests);
+    Cmdk_state.set_in st (fun view -> {view with input=""});
+    svs.Cmdk_services.set_input_value "";
+    ignore (Lui_app.flush app);
+    check "native search clearing updates the same controlled input"
+      (text ()=Some (Lui_protocol.StringValue "")
+       && Hashtbl.mem runtime.Lui_runtime.mounted_nodes input);
+    check "native search restore and clearing never send unsupported DOM set-value"
+      (not (List.exists (fun (name,_) -> name="set-value") !requests));
+    let legacy=Cmdk_host.services ~host:Lui_protocol.GenericHost () in
+    legacy.Cmdk_services.set_input_value "legacy mirror";
+    check "maintained native hosts keep their existing imperative input mirror"
+      (List.exists (fun (name,_) -> name="set-value") !requests))
+
 let () =
   let owner = Thread.id (Thread.self ()) in
   let assert_owner () =
@@ -1206,6 +1271,7 @@ let () =
   native_primitive_unit_results ();
   Editor_clipboard_native.async_file_read_keeps_the_application_owner_responsive ();
   native_settings_route_links ();
+  native_cmdk_controlled_input ();
   native_point_property_scroll ();
   native_entry_admission ();
   editor_keyboard_capture_order ();

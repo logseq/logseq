@@ -63,7 +63,8 @@ let with_sidebar f =
   | Some sst -> f sst
   | None -> ()
 
-let services : unit -> Svs.t =
+let services ?(host = Lui_protocol.WebHost) : unit -> Svs.t =
+  let _ = host in
  fun () ->
   { Svs.publishing = Ui_services.env_publishing
   ; is_mac = Ui_services.env_is_mac

@@ -686,7 +686,10 @@ let item_body st idx (it : Sidebar_state.item) =
         ~data_attrs:[ ("style", "padding-top:8px") ]
         [ box ~key:("cmdkb-" ^ it.key)
             ~style_class:"cp__cmdk__block rounded-md"
-            [ Cmdk_view.sidebar ~services:(Cmdk_host.services ()) ~query:it.title ]
+            [ (fun context parent ->
+                Cmdk_view.sidebar
+                  ~services:(Cmdk_host.services ~host:(Lui_ui.host context) ())
+                  ~query:it.title context parent) ]
         ]
   | "shortcut-settings" ->
       column ~key:("body-" ^ it.key)

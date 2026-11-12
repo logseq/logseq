@@ -1439,3 +1439,19 @@ Inspection still fails when a requested native typedtree is missing. It never
 substitutes Melange output, scans stale object directories or skips an archive
 unit. Regression helpers supplied with an already compiled `cmts` fixture use
 that fixture directly and do not rebuild unrelated archive typedtrees.
+
+## NSH command-palette input follows its controlled state
+
+The command-palette adapter now accepts its actual `host` when creating
+services; native Chrome and sidebar search supply their mounted profile. NSH query restore, clearing and filter changes use the existing
+`Cmdk_state` signal already bound to the retained Input. They no longer send the
+redundant imperative DOM `set-value` operation. Generic/Apple native hosts retain
+their existing mirror. For example, the native Chrome creates services with
+`Cmdk_host.services ~host:(Lui_ui.host context) ()`.
+
+Restored queries still focus and select their contents. Native selection lengths
+now count UTF-16 units, so `中😀` selects three units rather than seven UTF-8 bytes.
+The compiled native regression mounts the production input row, restores and
+clears that query, checks retained identity and actual focus/selection requests,
+and rejects any NSH `set-value` request. This is not a general no-op for imperative
+DOM setters; other callers still require their own authoritative input owners.

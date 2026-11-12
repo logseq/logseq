@@ -59,7 +59,14 @@ let with_sidebar f =
   | Some sst -> f sst
   | None -> ()
 
-let services : unit -> Svs.t =
+(* Native selections use UTF-16 offsets, including restored non-ASCII queries. *)
+let utf16_length text =
+  String.fold_left (fun units character ->
+    let byte = Char.code character in
+    if byte land 0xc0 = 0x80 then units
+    else units + (if byte land 0xf8 = 0xf0 then 2 else 1)) 0 text
+
+let services ?(host = Lui_protocol.GenericHost) : unit -> Svs.t =
  fun () ->
   { Svs.publishing = Platform.publishing
   ; is_mac = Platform.is_mac
@@ -120,9 +127,12 @@ let services : unit -> Svs.t =
   ; scroll_to_top = Router.scroll_to_top
   ; set_input_value =
       (fun v ->
-        match Ui_services.dom_query ".cp__cmdk-search-input" with
-        | Some el -> el.Ui_services.set_value v
-        | None -> ())
+        (* Cmdk_state already changed the controlled input signal. Other native
+           hosts retain their imperative mirror; NSH consumes that signal once. *)
+        if host <> Lui_protocol.NshHost then
+          match Ui_services.dom_query ".cp__cmdk-search-input" with
+          | Some el -> el.Ui_services.set_value v
+          | None -> ())
   ; focus_search_input =
       (fun () ->
         match Ui_services.dom_query ".cp__cmdk-search-input" with
@@ -135,8 +145,8 @@ let services : unit -> Svs.t =
           | Some el ->
               el.Ui_services.focus ();
               if q <> "" then (
-                el.Ui_services.set_value q;
-                el.Ui_services.set_selection_range 0 (String.length q))
+                if host <> Lui_protocol.NshHost then el.Ui_services.set_value q;
+                el.Ui_services.set_selection_range 0 (utf16_length q))
           | None ->
               if tries > 0 then
                 ignore

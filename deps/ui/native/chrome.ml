@@ -541,7 +541,10 @@ let overlays (ms : Model.t Signal.signal) =
     [ (* Extension fragments mount inside a standard container. *)
       Ui_components.overlay_typography
         (box ~key:"overlays-wrap" ~grow:1.
-        [ Cmdk_view.render ~services:(Cmdk_host.services ()) ms
+        [ (fun context parent ->
+            Cmdk_view.render
+              ~services:(Cmdk_host.services ~host:(Lui_ui.host context) ())
+              ms context parent)
     ; Popups_view.render ms
     ; Left_sidebar_view.menus ms
     ; Dialogs_view.render ms
