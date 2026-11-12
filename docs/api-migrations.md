@@ -17,6 +17,25 @@ again after measurement. A press that itself opens preparation or dismisses its
 view remains accepted. The controller's response does not acknowledge completion
 of any later application action. Web, Apple/iOS and Android click behavior and
 request payloads are unchanged.
+## NSH outliner rows forward native movement to the document controllers
+
+Each mounted block's main Row now owns one NSH-only `pointermove` and
+`pointercancel` bridge to the existing shared block-selection and bullet-drag
+controllers. Descendant controls keep their Down, Up and click owners; movement
+is not registered again on the content column or bullet. Web, Apple/iOS and
+Android keep their existing document input routes.
+
+This requires the corresponding LUI NSH movement correction: Move button -1
+means no held mouse button and maps to document `buttons = 0`; primary 0 maps
+to 1, middle 1 to 4, secondary 2 to 2, back 3 to 8 and forward 4 to 16. Rebuild
+the host and native application library together. Coordinates, modifiers and
+the retained main-row target remain attached to each movement.
+
+For example, holding the primary mouse button while moving between rendered
+block rows can now reach `Block_selection.pointermove`; ordinary hover is not
+reported as a held primary drag. This bridge does not add pointer capture,
+retarget release events across views, or establish complete native drag/drop
+parity. Those behaviors require separate controller and native-window evidence.
 
 ## Wide mode is a mounted preference with declarative layout
 

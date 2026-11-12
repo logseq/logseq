@@ -5,12 +5,7 @@
 
 open Lui_elements
 
-(* Native containers opt into the shared document event pipeline explicitly.
-   Web and Apple already supply document pointer events from their host. *)
-let native_document_pointer_handlers context =
-  if Lui_ui.host context <> Lui_protocol.NshHost then None, None, None
-  else
-    let emit name node (detail : Lui_protocol.pointer_detail) buttons =
+let emit_native_document_pointer name node (detail : Lui_protocol.pointer_detail) buttons =
       Ui_services.dom_emit_json name
         (Json.stringify (Json.Object
           [ "nodeId", Json.Number (float_of_int node)
@@ -19,7 +14,14 @@ let native_document_pointer_handlers context =
           ; "buttons", Json.Number (float_of_int buttons)
           ; "ctrlKey", Json.Bool (detail.modifiers land 1 <> 0)
           ; "shiftKey", Json.Bool (detail.modifiers land 2 <> 0)
-          ; "metaKey", Json.Bool (detail.modifiers land 4 <> 0) ])) in
+          ; "metaKey", Json.Bool (detail.modifiers land 4 <> 0) ]))
+
+(* Native containers opt into the shared document event pipeline explicitly.
+   Web and Apple already supply document pointer events from their host. *)
+let native_document_pointer_handlers context =
+  if Lui_ui.host context <> Lui_protocol.NshHost then None, None, None
+  else
+    let emit = emit_native_document_pointer in
     let down = function
       | Lui_protocol.PointerDown (node, detail) ->
           let buttons = if detail.button = 0 then 1 else if detail.button = 2 then 2 else 4 in
@@ -33,6 +35,25 @@ let native_document_pointer_handlers context =
       | Lui_protocol.PressDetail (node, detail) -> emit "click" node detail 0
       | _ -> () in
     Some down, Some up, Some press
+
+(* One main Row per block receives native mouse movement over its descendants.
+   Descendant controls retain their existing press-phase owners; they must not
+   also install this bridge or bubbling would duplicate document movement. *)
+let native_document_motion_handlers context =
+  if Lui_ui.host context <> Lui_protocol.NshHost then None, None
+  else
+    let move = function
+      | Lui_protocol.PointerMove (node, detail) ->
+          let buttons = match detail.Lui_protocol.button with
+            | -1 -> 0 | 0 -> 1 | 1 -> 4 | 2 -> 2 | 3 -> 8 | 4 -> 16
+            | _ -> invalid_arg "Invalid native held pointer button" in
+          emit_native_document_pointer "pointermove" node detail buttons
+      | _ -> () in
+    let cancel = function
+      | Lui_protocol.PointerCancel (node, detail) ->
+          emit_native_document_pointer "pointercancel" node detail 0
+      | _ -> () in
+    Some move, Some cancel
 
 
 (* Wrap adapters dereference the node kind: on dom/extension nodes

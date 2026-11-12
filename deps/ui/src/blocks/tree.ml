@@ -772,12 +772,16 @@ let rec block_row
 (* the .block-main-container subtree — everything inside .ls-block
    except the children container *)
 and row_main ~editable ~library scope (b : Model.block) : t =
+ fun context parent ->
+  let on_pointer_move, on_pointer_cancel =
+    Ui_parts.native_document_motion_handlers context in
   let uuid = Option.value b.block_uuid ~default:"" in
   let key = block_key b in
   (* data-has-heading feeds block.css selectors — rides ~data_attrs *)
   let content =
   row ~key:("main-" ^ key)
       ~style_class:"block-main-container" ~gap:4 ~min_height:24
+      ?on_pointer_move ?on_pointer_cancel
         ~data_attrs:
           ((match block_heading_lvl b with
             | Some lvl -> [ ("data-has-heading", string_of_int lvl) ]
@@ -842,7 +846,7 @@ and row_main ~editable ~library scope (b : Model.block) : t =
             ]
         ]
   in
-  if not (Ui_services.env_native_drag ()) then content
+  (if not (Ui_services.env_native_drag ()) then content
   else
     let indicator zone offset edge =
       if_
@@ -864,7 +868,7 @@ and row_main ~editable ~library scope (b : Model.block) : t =
          ; indicator "top" 20. (Ui_components.Prop.inset_top 0.)
          ; indicator "sibling" 20. (Ui_components.Prop.inset_bottom 0.)
          ; indicator "nested" 48. (Ui_components.Prop.inset_bottom 0.)
-         ])
+         ])) context parent
 
 and row_el ~depth ~editable ~virtualize scope ~(library : bool)
     (b : Model.block) : t =

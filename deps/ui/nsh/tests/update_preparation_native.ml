@@ -464,7 +464,11 @@ let native_outliner_content_events () =
           Lui_elements.column ~style_class:"ls-block"
           ~data_attrs:["data-blockid","native-content";"data-cid","main"]
           [ Tree.content_el "native-content" block
-          ; Tree.control_wrap ~scope:"main" ~library:false "native-content" block ]) in
+          ; Tree.control_wrap ~scope:"main" ~library:false "native-content" block
+          ; Lui_elements.column ~key:"motion-fixture" ~style_class:"ls-block"
+              ~data_attrs:["data-blockid","native-motion";"data-cid","main"]
+              [Tree.row_main ~editable:false ~library:false "main"
+                (Model.empty_block ~uuid:"native-motion" ~title:"Motion target" ~is_page:false)] ]) in
       Native_embed.current_app := Some app;
       Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app)) (fun () ->
         ignore (Lui_app.start app); ignore (Lui_app.flush app);
@@ -483,6 +487,41 @@ let native_outliner_content_events () =
         check "only NSH bullets register their native activation owner"
           ((Lui_protocol.Property_map.find_opt Lui_protocol.PointerEnabled bullet_properties
            = Some (Lui_protocol.BoolValue true)) = native);
+        let motion=Hashtbl.fold (fun node key found ->
+          if key="main-native-motion" then Some node else found)
+          runtime.Lui_runtime.runtime_reload_keys None |> Option.get in
+        let motion_props=Hashtbl.find runtime.Lui_runtime.runtime_properties motion in
+        check "only NSH main rows register the shared document motion owner"
+          ((Lui_protocol.Property_map.find_opt Lui_protocol.PointerEnabled motion_props
+            =Some (Lui_protocol.BoolValue true))=native);
+        recorded:=[];
+        List.iter (fun (button,buttons) ->
+          let before=List.length !recorded in
+          ignore (Native_embed.pointer_move motion 53. 71. 7 button "");
+          check "one canonical main-row movement produces one document movement"
+            (List.length !recorded=before+(if native then 1 else 0));
+          if native then (
+            let name,payload=List.hd (List.rev !recorded) in
+            check "native movement preserves its row, coordinates, modifiers and held buttons"
+              (name="pointermove" && match payload with
+               | Js.Json.JObject fields ->
+                   List.assoc_opt "nodeId" fields=Some (Js.Json.JNumber (float_of_int motion))
+                   && List.assoc_opt "clientX" fields=Some (Js.Json.JNumber 53.)
+                   && List.assoc_opt "clientY" fields=Some (Js.Json.JNumber 71.)
+                   && List.assoc_opt "button" fields=Some (Js.Json.JNumber (float_of_int button))
+                   && List.assoc_opt "buttons" fields=Some (Js.Json.JNumber (float_of_int buttons))
+                   && List.assoc_opt "ctrlKey" fields=Some (Js.Json.boolean true)
+                   && List.assoc_opt "shiftKey" fields=Some (Js.Json.boolean true)
+                   && List.assoc_opt "metaKey" fields=Some (Js.Json.boolean true)
+               | _ -> false))) [-1,0;0,1;1,4;2,2;3,8;4,16];
+        let before=List.length !recorded in
+        ignore (Native_embed.pointer_cancel motion 53. 71. 0 0 "");
+        check "native cancellation reaches the document once without a held button"
+          (List.length !recorded=before+(if native then 1 else 0)
+           && (not native || match List.hd (List.rev !recorded) with
+               | "pointercancel",Js.Json.JObject fields ->
+                   List.assoc_opt "buttons" fields=Some (Js.Json.JNumber 0.)
+               | _ -> false));
         if native then begin
           Platform.event_target_of := (fun node -> Some (Native_embed.ext_snapshot runtime node));
           Hashtbl.replace Platform.capture_listeners "pointerdown"
