@@ -422,7 +422,7 @@ let write_output ~format ~path ~data =
       | _ -> Error (unsupported_output_format format)
     in
     Cli_effect.pure result
-  with exn -> Cli_effect.pure (Error (Error.exception_error exn))
+  with exn -> Cli_effect.pure (Error (File_error.of_exn ~path exn))
 
 let read_input ~format ~path =
   let format = normalize_format format in
@@ -436,4 +436,4 @@ let read_input ~format ~path =
       | _ -> Error (unsupported_input_format format)
     in
     Cli_effect.pure result
-  with exn -> Cli_effect.pure (Error (Error.exception_error exn))
+  with exn -> Cli_effect.pure (Error (File_error.of_exn ~path exn))

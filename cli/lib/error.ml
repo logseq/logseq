@@ -302,7 +302,7 @@ let missing_target message = make Missing_target message
 let unknown_command message = make Unknown_command message
 
 let exception_error ?context exn =
-  make ?context Exception (Printexc.to_string exn)
+  make ?context Exception (Exn_message.to_string exn)
 
 let map f = function Ok x -> Ok (f x) | Error e -> Error e
 let bind x f = match x with Ok v -> f v | Error e -> Error e
