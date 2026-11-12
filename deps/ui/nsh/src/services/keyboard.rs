@@ -750,6 +750,7 @@ mod tests {
         config.context = EngineContext::default().with(observed.clone());
         config.environment.os = nsh_core::platform::Os::MacOs;
         let mut app = Headless::start(config).unwrap();
+        app.wait_for("id:native-catalog-editor").unwrap();
         // Acquire the real native Input once. Every subsequent character goes
         // through the keyboard matcher without type_text reacquiring focus.
         app.type_text("id:native-catalog-editor", "").unwrap();
