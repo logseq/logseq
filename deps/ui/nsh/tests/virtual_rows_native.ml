@@ -265,7 +265,30 @@ let test_picker_grids () =
     test_picker_grid (label ^ " complete") data ())
     ["Emoji", emojis; "Icon", icons]
 
-let test_picker_viewport_ownership () =
+let with_picker_services run =
+  let previous = !Ui_services.installed in
+  Fun.protect ~finally:(fun () -> Ui_services.installed:=previous) (fun () ->
+    Ui_services.installed:=None;
+    (* Reuse the native suite's typed service shape, then isolate every picker
+       preference before mounting. No system storage or native DOM is queried. *)
+    Platform.install_ui_services ~paints_caret:false ~assert_owner:(fun () -> ())
+      ~request_flush:(fun () -> ()) ~dom:Ui_dom_native.ops
+      ~timers:Ui_dom_native.timers ~files:Ui_dom_native.files;
+    let base=Ui_services.get () in
+    let values=Hashtbl.create 8 in
+    let services : Ui_services.t={base with
+      storage={get=Hashtbl.find_opt values;set=Hashtbl.replace values;remove=Hashtbl.remove values};
+      native_performance=None;
+      theme={mode=(fun () -> "light");system_default=(fun () -> true);
+        prefers_dark=(fun () -> false);set_system_pref=(fun _ -> ());set_theme_pref=(fun _ -> ());
+        apply_dataset=(fun _ -> ());apply_classes=(fun _ -> ());apply_snapshot=(fun _ -> ())};
+      doc={set_lang=(fun _ -> ());preferred_lang=(fun () -> "en");set_lang_pref=(fun _ -> ());
+        set_data=(fun _ _ -> ());rm_data=(fun _ -> ());set_title=(fun _ -> ());reload=(fun () -> ())};
+      dom={base.dom with query=(fun _ -> None)}} in
+    Ui_services.installed:=Some services;
+    run ())
+
+let test_picker_viewport_ownership () = with_picker_services (fun () ->
   let backend = {backend_profile=profile MacOS NshHost; apply_batch=(fun _ -> true)} in
   let app = Lui_app.create backend () (fun () () -> ()) (fun _ _ _ ->
     Icon_picker.picker_view ~del:true ~emoji_only:false
@@ -338,7 +361,7 @@ let test_picker_viewport_ownership () =
     send (Press preset);
     check "native far-down color edit retains the Scroll and search owner"
       (body ()=color_body && input ()=field);
-    ignore (far_window ()))
+    ignore (far_window ())))
 
 let () =
   test_rows_sig ~lazy_children:false 1_000 ();
