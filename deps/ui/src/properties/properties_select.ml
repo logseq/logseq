@@ -84,14 +84,22 @@ let view ~placeholder ?(compact = false) ?(show_empty_result = true) ?(new_case_
     let s = Runtime.signal_get st in
     visible_items ~items ~filter:s.q ~searched:s.searched ~new_option ~new_case_sensitive
   in
+  let choose on_choose =
+    if Ui_effect.alive context.Lui_ui.ui_scope then begin
+      ignore (Ui_effect.issue request);
+      let state = Runtime.signal_get st in
+      Runtime.signal_set st { state with q = ""; searched = None; active = 0 };
+      on_choose ()
+    end
+  in
   let pick () =
     let vis = visible () in
     if vis = [] then (
       match on_enter_text, String.trim (Runtime.signal_get st).q with
-      | Some f, t when t <> "" -> f t
+      | Some f, t when t <> "" -> choose (fun () -> f t)
       | _ -> ())
     else
-      (List.nth vis (Runtime.signal_get st).active).on_choose ()
+      choose (List.nth vis (Runtime.signal_get st).active).on_choose
   in
   let select index =
     let s = Runtime.signal_get st in
@@ -143,7 +151,7 @@ let view ~placeholder ?(compact = false) ?(show_empty_result = true) ?(new_case_
                (List.mapi
               (fun index it ->
                  let title = if it.it_new then I18n.t1 "select/new-option" it.it_title else it.it_title in
-                 let on_press _ = it.on_choose () in
+                 let on_press _ = choose it.on_choose in
                  Ui_components.with_props
                    [Ui_components.Prop.hover_background highlight_background;
                     Ui_components.Prop.hover_foreground "var(--ls-secondary-text-color, hsl(var(--popover-foreground)))"]

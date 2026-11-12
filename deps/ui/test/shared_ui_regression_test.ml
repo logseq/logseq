@@ -2439,6 +2439,35 @@ let run_views ~registry ~profile ~finish =
     S.submit selector input.M.id;
     check "property selector empty results do not choose a stale item" (!chosen=["Gamma";"Beta"]);
     ignore (Lui_app.dispose selector.S.app)) [false;true];
+  List.iter (fun compact ->
+    let chosen = ref [] in
+    let selector = mount (fun _ context parent ->
+      let selected = Signal.state context.Lui_ui.ui_scheduler [] in
+      let items = List.map (fun title -> Properties_select.item ~key:title title (fun () ->
+        chosen:=title::!chosen;
+        let prior = Runtime.signal_get selected in
+        Runtime.signal_set selected
+          (if List.mem title prior then List.filter ((<>) title) prior else title::prior)))
+        ["Alpha";"Beta";"Gamma"] in
+      Properties_select.view ~placeholder:"Multiple fixture" ~compact
+        ~selected_keys:(Signal.value selected) items context parent) in
+    let input = List.find (fun n -> n.M.kind="text-field") (nodes selector) in
+    let keys () = nodes selector |> List.filter (fun n -> n.M.kind="list-item")
+      |> List.filter_map (fun n -> M.string_prop n "key") |> List.sort String.compare in
+    List.iter (fun (query,keyboard) ->
+      S.text_changed selector input.M.id query;
+      check "filtered multi-picker has the intended result" (keys ()=[query]);
+      if keyboard then S.submit selector input.M.id
+      else S.press selector (List.find (fun n -> n.M.kind="list-item") (nodes selector)).M.id;
+      check "every accepted multi-choice clears its filter and restores all options"
+        (keys ()=["Alpha";"Beta";"Gamma"]
+         && List.exists (fun n -> n.M.id=input.M.id && M.string_prop n "text"=Some "") (nodes selector)))
+      ["Alpha",true;"Beta",false;"Alpha",false;"Gamma",true];
+    check "retained multi-picker accepts consecutive keyboard and pointer choices exactly once"
+      (!chosen=["Gamma";"Alpha";"Beta";"Alpha"]);
+    check "clearing a filter retains the multi-picker's selected values"
+      (List.length (List.filter (fun n -> n.M.kind="icon") (nodes selector))=2);
+    ignore (Lui_app.dispose selector.S.app)) [false;true];
   let entered = ref [] in
   let raw = mount (fun _ -> Properties_select.view ~placeholder:"Raw fixture"
     ~on_enter_text:(Some (fun value -> entered:=value::!entered)) []) in
@@ -2447,7 +2476,10 @@ let run_views ~registry ~profile ~finish =
   S.text_changed raw field.M.id "  free text  ";
   navigate raw field (P.NavigateNext field.M.id);
   S.submit raw field.M.id;
+  S.submit raw field.M.id;
   check "property selector raw entry trims text and ignores blank submits" (!entered=["free text"]);
+  check "accepted raw entry clears its retained input"
+    (List.exists (fun n -> n.M.id=field.M.id && M.string_prop n "text"=Some "") (nodes raw));
   ignore (Lui_app.dispose raw.S.app);
   let fresh = mount (fun _ -> Properties_select.view ~placeholder:"New fixture"
     ~new_option:(fun value -> entered:=value::!entered)
@@ -2459,17 +2491,19 @@ let run_views ~registry ~profile ~finish =
   ignore (Lui_app.dispose fresh.S.app);
   let async_selection_check done_ =
     let pending = ref [] in
+    let chosen = ref [] in
+    let option title = Properties_select.item title (fun () -> chosen:=title::!chosen) in
     let search q = Js.Promise.make (fun ~resolve ~reject:_ ->
       pending:= !pending @ [q,resolve]) in
     let selector = mount (fun _ -> Properties_select.view ~placeholder:"Async fixture"
-      ~on_search:(Some search) [Properties_select.item "Alpha" (fun () -> ())]) in
+      ~on_search:(Some search) [option "Alpha"]) in
     let input = List.find (fun n -> n.M.kind="text-field") (nodes selector) in
     let titles () = nodes selector |> List.filter (fun n -> n.M.kind="list-item")
       |> List.filter_map (fun n -> M.string_prop n "key") |> List.sort String.compare in
     List.iter (S.text_changed selector input.M.id) ["A";"B";"A"];
     let resolve index title =
       let callback = snd (List.nth !pending index) in
-      callback [Properties_select.item title (fun () -> ())] [@u] in
+      callback [option title] [@u] in
     resolve 0 "Stale A";resolve 1 "Stale B";
     ignore (Js.Promise.then_ (fun () ->
       S.flush selector;
@@ -2482,12 +2516,40 @@ let run_views ~registry ~profile ~finish =
         check "property selector async results start selected"
           (M.string_prop row "background"=
             Some "var(--lx-gray-04, var(--ls-menu-hover-color, hsl(var(--secondary))))");
-        S.text_changed selector input.M.id "B";
-        ignore (Lui_app.dispose selector.S.app);
-        resolve 3 "Disposed";
+        S.submit selector input.M.id;
+        check "choosing an async result clears both searched results and the query"
+          (titles ()=["Alpha"] && !chosen=["Fresh"]
+           && List.exists (fun n -> n.M.id=input.M.id && M.string_prop n "text"=Some "") (nodes selector));
+        S.text_changed selector input.M.id "Alpha";
+        S.submit selector input.M.id;
+        resolve 3 "Stale Enter";
         Js.Promise.then_ (fun () ->
-          check "property selector ignores async completion after disposal" (nodes selector=[]);
-          done_ ();Js.Promise.resolve ()) (Js.Promise.resolve ())) (Js.Promise.resolve ()))
+          S.flush selector;
+          check "keyboard choice retires the pending search without another choice"
+            (titles ()=["Alpha"] && !chosen=["Alpha";"Fresh"]
+             && List.exists (fun n -> n.M.id=input.M.id && M.string_prop n "text"=Some "") (nodes selector));
+          S.text_changed selector input.M.id "Alpha";
+          S.press selector (List.find (fun n -> n.M.kind="list-item") (nodes selector)).M.id;
+          resolve 4 "Stale Pointer";
+          Js.Promise.then_ (fun () ->
+            S.flush selector;
+            check "pointer choice retires the pending search without restoring its old filter"
+              (titles ()=["Alpha"] && !chosen=["Alpha";"Alpha";"Fresh"]
+               && List.exists (fun n -> n.M.id=input.M.id && M.string_prop n "text"=Some "") (nodes selector));
+            S.text_changed selector input.M.id "Alpha";
+            ignore (Lui_app.dispose selector.S.app);
+            let successor = mount (fun _ -> Properties_select.view ~placeholder:"Successor fixture"
+              [option "Successor"]) in
+            resolve 5 "Disposed";
+            Js.Promise.then_ (fun () ->
+              S.flush successor;
+              check "disposed search owner cannot populate its successor or choose another value"
+                (nodes selector=[] && !chosen=["Alpha";"Alpha";"Fresh"]
+                 && List.filter_map (fun n -> if n.M.kind="list-item" then M.string_prop n "key" else None)
+                      (nodes successor)=["Successor"]);
+              ignore (Lui_app.dispose successor.S.app);
+              done_ ();Js.Promise.resolve ()) (Js.Promise.resolve ())) (Js.Promise.resolve ()))
+          (Js.Promise.resolve ())) (Js.Promise.resolve ()))
       (Js.Promise.resolve ()))
   in
   let previous_sidebar = !Sidebar_state.st_ref
