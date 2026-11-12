@@ -1493,3 +1493,8 @@ Views_head.action_button ~key:"export" ~label:(I18n.t "view/export-edn")
 An `accessibility_identifier` remains an accessibility/automation identifier;
 it does not replace the reconciliation key. The dynamic NSH boundary still
 rejects changing a retained trigger's native attachment mode.
+
+The native admission runner now accepts `--ppx /absolute/path/to/ppx.exe` for
+its reactive view fixture, matching the existing virtual-row runner. Without
+that option it uses the installed `lui.ppx` package. It invokes no Dune rules
+and continues to link the actual already-built native application archives.

@@ -7,8 +7,10 @@ interface intentionally hides its internals. Temporary artifacts are discarded.
 """
 from __future__ import annotations
 
+import argparse
 import os
 from pathlib import Path
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -17,6 +19,11 @@ from build_windows_dll import ARCHIVES, PACKAGES, UI
 
 
 def run() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--ppx", type=Path,
+                        help="Existing native lui.ppx driver (default: installed lui.ppx package)")
+    args = parser.parse_args()
+    driver = args.ppx.resolve(strict=True) if args.ppx else None
     archives = [UI / "_build/default" / archive for archive in ARCHIVES]
     if missing := [str(archive) for archive in archives if not archive.is_file()]:
         raise SystemExit("Build the actual native application archives first: " + ", ".join(missing))
@@ -32,7 +39,13 @@ def run() -> None:
         objects = UI / "_build/default" / relative.parent / f".{relative.stem}.objs"
         for kind in ("byte", "native"):
             includes.extend(("-I", str(objects / kind)))
-    compiler = [*prefix, "ocamlfind", "ocamlopt", "-thread", "-package", PACKAGES, *includes]
+    packages = PACKAGES if driver else PACKAGES + ",lui.ppx"
+    compiler = [*prefix, "ocamlfind", "ocamlopt", "-thread", "-package", packages, *includes]
+    ppx_arguments = []
+    if driver:
+        ppx_command = [str(driver), "--as-ppx"]
+        ppx = subprocess.list2cmdline(ppx_command) if os.name == "nt" else shlex.join(ppx_command)
+        ppx_arguments = ["-ppx", ppx]
     with tempfile.TemporaryDirectory(prefix="logseq-update-admission-") as temporary:
         stage = Path(temporary)
         event_probe = stage / ("platform_event_exception" + extension)
@@ -48,7 +61,7 @@ def run() -> None:
         source = stage / "update_preparation_native.ml"
         source.write_bytes((UI / "nsh/tests/update_preparation_native.ml").read_bytes())
         executable = stage / ("admission.exe" if os.name == "nt" else "admission")
-        subprocess.run([*compiler, "-I", str(stage), "-linkall", "-linkpkg",
+        subprocess.run([*compiler, *ppx_arguments, "-I", str(stage), "-linkall", "-linkpkg",
                         *map(str, archives), str(embed), str(geometry), str(clipboard), str(source), str(event_probe),
                         "-o", str(executable)], cwd=stage, check=True)
         result = subprocess.run([str(executable)], cwd=stage, check=False, timeout=30,
