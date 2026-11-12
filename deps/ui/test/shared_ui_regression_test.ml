@@ -1192,18 +1192,18 @@ let table_title_completion ~registry ~profile =
     check "Disposing the originating title owner retires its focus callback" (!focuses=1))
 
 let calendar_invalid_input ~registry ~profile =
-  let previous_send = !Runtime.app_send and previous_flush = !Runtime.app_flush in
+  let previous_flush = !Runtime.app_flush in
   let warnings = ref [] and picked = ref [] and dismissed = ref 0 in
-  Runtime.app_send := (function
-    | Action.Toast_push toast -> warnings:=toast :: !warnings;true
-    | _ -> false);
   Fun.protect ~finally:(fun () ->
-    Runtime.app_send:=previous_send;Runtime.app_flush:=previous_flush) (fun () ->
+    Runtime.app_flush:=previous_flush) (fun () ->
     List.iter (fun datetime ->
       warnings:=[];picked:=[];dismissed:=0;
       let session = S.mount ~registry ~profile ~initial:Model.initial
         ~reducer:(fun model () -> model)
-        ~view:(fun _ _ _ -> Lui_elements.column
+        ~view:(fun context _ _ ->
+          Ui_services.dom_subscribe_document_event ~scope:context.Lui_ui.ui_scope "ls:toast"
+            (fun event -> warnings:=(event.Ui_services.detail "msg",event.Ui_services.detail "cls") :: !warnings);
+          Lui_elements.column
           [Lui_elements.button ~accessibility_identifier:"warning-calendar-anchor" [];
            Lui_elements.popover ~anchor:`below ~anchor_target:"warning-calendar-anchor"
              ~accessibility_identifier:"warning-calendar-popup"
@@ -1227,8 +1227,8 @@ let calendar_invalid_input ~registry ~profile =
           S.submit session input.M.id;
           check "Invalid nonempty calendar submission emits the existing translated warning once"
             (List.length !warnings=before+1 && match !warnings with
-             | toast::_ -> toast.Model.toast_kind="warning"
-                 && toast.Model.toast_text=I18n.tf "date/invalid-date-warning" [value]
+             | (message,kind)::_ -> kind=Some "warning"
+                 && message=Some (I18n.tf "date/invalid-date-warning" [value])
              | [] -> false);
           check "Invalid calendar submission preserves the picker and its input identity"
             (!picked=[] && !dismissed=0 && List.exists (fun node -> node.M.id=input.M.id) (nodes session)))

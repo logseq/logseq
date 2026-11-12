@@ -1418,7 +1418,16 @@ let calendar ?initial ?(datetime=false) ?(initial_focus_day=false) ?on_clear
         if datetime then commit value
         else let f=Dates.fields value in publish f.year f.month f.day 0 0
     | None when value <> "" ->
-        Toast.warning (I18n.tf "date/invalid-date-warning" [value])
+        let template = translate "date/invalid-date-warning" in
+        let message = Buffer.create (String.length template + String.length value) in
+        let rec append index =
+          if index < String.length template then
+            if index + 3 <= String.length template && String.sub template index 3 = "{1}" then
+              (Buffer.add_string message value;append (index + 3))
+            else (Buffer.add_char message template.[index];append (index + 1)) in
+        append 0;
+        Ui_services.dom_dispatch_json "ls:toast"
+          (Json.Object ["msg",Json.String (Buffer.contents message);"cls",Json.String "warning"])
     | None -> ()
   in
   (with_props

@@ -2543,8 +2543,9 @@ parity or alter the maintained Web/mobile backends' event contracts.
 ## Calendar invalid text feedback
 
 Submitting nonempty invalid text in the shared calendar now emits the existing
-`date/invalid-date-warning` notification through `Toast.warning`, as the editor's
-date popup already does. The calendar keeps its selected date, input identity
+`date/invalid-date-warning` notification through the existing `ls:toast` document
+event (`msg` and `cls="warning"`), handled by the application's notification
+owner. It uses the calendar's existing translation callback. The calendar keeps its selected date, input identity
 and open state; no property/filter write is issued. Empty or whitespace-only
 submission remains silent, and cancelling an unsubmitted draft does not warn.
 Valid dates keep the existing selection behavior on every maintained backend.
