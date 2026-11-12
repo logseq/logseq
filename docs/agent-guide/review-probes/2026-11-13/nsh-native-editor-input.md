@@ -69,7 +69,12 @@ callback, and that a nonediting Escape command lacked the direct-key cleanup
 branch. The popover gap is the stronger explanation for the default native
 binding; both corrections require separate verification. Earlier actual
 drag qualification passed inside reordering and outside cancellation, but this
-combined run did not reach those steps.
+combined run did not reach those steps. A subsequent independent current-artifact
+`BLOCK_CASE=drag` run passed in 9.0 seconds:
+`/tmp/logseq-current-native-block-drag.log`, private `logseq-native-block.1p8Yza`.
+It proved persisted sibling reordering and outside-window cancellation without
+an unintended editor or data move. This does not remove the combined flow's
+selection failure or qualify held-Alt reference insertion.
 
 ## Test-tool limitation and remaining gates
 
