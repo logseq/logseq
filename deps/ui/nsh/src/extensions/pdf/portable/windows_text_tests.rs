@@ -251,14 +251,43 @@ fn retained_provider_and_range_do_not_keep_replaced_or_closed_document_alive() {
         "New\u{c}Document"
     );
     let current_doc = Arc::downgrade(host.state.document.borrow().as_ref().unwrap());
-    host.close().unwrap();
-    assert!(current_doc.upgrade().is_none());
+    host.replace_document("Latest PDF".into(), 9, document("Latest", "Text"))
+        .unwrap();
+    assert!(
+        current_doc.upgrade().is_none(),
+        "repeated native disconnect releases the replaced logical snapshot"
+    );
     assert_code(
         unsafe { current_range.GetText(-1) },
         UIA_E_ELEMENTNOTAVAILABLE,
     );
     assert_code(
         unsafe { current_provider.GetPropertyValue(UIA_NamePropertyId) },
+        UIA_E_ELEMENTNOTAVAILABLE,
+    );
+    let latest_provider = host.provider().unwrap();
+    let latest_range = unsafe { text(&latest_provider).DocumentRange() }.unwrap();
+    assert_eq!(
+        String::try_from(unsafe { latest_range.GetText(-1) }.unwrap()).unwrap(),
+        "Latest\u{c}Text"
+    );
+    let latest_doc = Arc::downgrade(host.state.document.borrow().as_ref().unwrap());
+    host.close().unwrap();
+    assert!(latest_doc.upgrade().is_none());
+    assert_code(
+        unsafe { current_range.GetText(-1) },
+        UIA_E_ELEMENTNOTAVAILABLE,
+    );
+    assert_code(
+        unsafe { current_provider.GetPropertyValue(UIA_NamePropertyId) },
+        UIA_E_ELEMENTNOTAVAILABLE,
+    );
+    assert_code(
+        unsafe { latest_range.GetText(-1) },
+        UIA_E_ELEMENTNOTAVAILABLE,
+    );
+    assert_code(
+        unsafe { latest_provider.GetPropertyValue(UIA_NamePropertyId) },
         UIA_E_ELEMENTNOTAVAILABLE,
     );
     drop(host);

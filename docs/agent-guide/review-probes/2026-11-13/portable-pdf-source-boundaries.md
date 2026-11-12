@@ -127,3 +127,17 @@ identify the actual failed call. Each replacement disconnect/notification now
 retains the native HRESULT and adds its exact operation to the error. This
 diagnostic change does not suppress errors or alter ownership assertions. The
 actual failing boundary and subsequent Windows engine load still need evidence.
+
+The diagnostic run 43311573401 at 770805773a confirmed the failing call was
+disconnecting the previous provider. Replacement had already advanced its
+epoch, causing the old provider's own queries to report unavailability to UIA.
+The correction disconnects while the old document is valid, blocks new provider
+publication and mutation callbacks during that call, then checks the exact
+owner/epoch and mutation serial before publishing the new document. No native
+HRESULT is ignored. The real lifetime test now performs two replacements while
+retaining both generations of external provider/range objects.
+
+The publication guard follows the
+[Microsoft disconnect reentrancy contract](https://learn.microsoft.com/en-us/windows/win32/api/uiautomationcoreapi/nf-uiautomationcoreapi-uiadisconnectprovider):
+an application must not return the disconnecting provider from a reentrant
+WM_GETOBJECT. A passing rerun is still required before claiming this repair.

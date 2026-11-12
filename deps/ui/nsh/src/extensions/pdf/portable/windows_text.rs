@@ -65,6 +65,7 @@ impl Default for Scene {
 struct State {
     thread: u32,
     live: Cell<bool>,
+    disconnecting: Cell<bool>,
     enabled: Cell<bool>,
     hwnd: Cell<Option<HWND>>,
     epoch: Cell<u64>,
@@ -119,6 +120,7 @@ impl TextHost {
             // SAFETY: immutable owner-thread identity query.
             thread: unsafe { GetCurrentThreadId() },
             live: Cell::new(true),
+            disconnecting: Cell::new(false),
             enabled: Cell::new(true),
             hwnd: Cell::new(None),
             epoch: Cell::new(epoch),
@@ -218,29 +220,28 @@ impl TextHost {
         epoch: u64,
         document: Arc<Document>,
     ) -> Result<()> {
-        self.state.check(self.state.epoch.get())?;
-        if epoch <= self.state.epoch.get() || label.len() > 64 * 1024 {
+        let previous_epoch = self.state.epoch.get();
+        self.state.check(previous_epoch)?;
+        if self.state.disconnecting.get() {
+            return Err(invalid_operation());
+        }
+        if epoch <= previous_epoch || label.len() > 64 * 1024 {
             return Err(argument());
         }
-        self.state.advance()?;
+        let serial = self.state.advance()?;
+        // UIA queries the old provider while disconnecting it. Keep its exact
+        // epoch/document valid until that call returns, but do not republish it
+        // to a reentrant WM_GETOBJECT or admit provider mutation callbacks.
+        self.state.disconnect_previous(previous_epoch)?;
+        if self.state.serial.get() != serial {
+            return Err(invalid_operation());
+        }
         self.state.epoch.set(epoch);
         let previous_label = self.state.label.replace(label);
         self.state.scene_revision.set(0);
         let previous_document = self.state.document.replace(Some(document));
         *self.state.scene.borrow_mut() = Scene::default();
         self.state.selection.set((0, 0));
-        let previous = self.state.provider.borrow_mut().take();
-        if let Some(previous) = previous {
-            // SAFETY: disconnect this exact cached old COM provider only.
-            unsafe {
-                UiaDisconnectProvider(&previous).map_err(|error| {
-                    Error::new(
-                        error.code(),
-                        format!("disconnect previous PDF provider: {error}"),
-                    )
-                })?;
-            }
-        }
         let provider = self.state.provider()?;
         // SAFETY: notify for the newly published complete logical text stream.
         unsafe {
@@ -327,6 +328,9 @@ impl State {
     }
     fn provider(self: &Rc<Self>) -> Result<IRawElementProviderSimple> {
         self.check(self.epoch.get())?;
+        if self.disconnecting.get() {
+            return Err(invalid_operation());
+        }
         if let Some(provider) = self.provider.borrow().as_ref() {
             return Ok(provider.clone());
         }
@@ -336,6 +340,28 @@ impl State {
         .into();
         *self.provider.borrow_mut() = Some(provider.clone());
         Ok(provider)
+    }
+    fn disconnect_previous(self: &Rc<Self>, epoch: u64) -> Result<()> {
+        self.check(epoch)?;
+        if self.disconnecting.replace(true) {
+            return Err(invalid_operation());
+        }
+        let previous = self.provider.borrow_mut().take();
+        // SAFETY: exact old provider, still on its live owner epoch; the cache
+        // and publication guard prevent returning it from WM_GETOBJECT.
+        let result = previous.map_or(Ok(()), |previous| unsafe {
+            UiaDisconnectProvider(&previous).map_err(|error| {
+                Error::new(
+                    error.code(),
+                    format!("disconnect previous PDF provider: {error}"),
+                )
+            })
+        });
+        self.disconnecting.set(false);
+        result?;
+        // Native COM may reenter and close the exact window while disconnecting.
+        // A retired owner cannot publish the requested replacement afterwards.
+        self.check(epoch)
     }
     fn selection_event(self: &Rc<Self>) -> Result<()> {
         let cached = self.provider.borrow().clone();
@@ -367,6 +393,9 @@ impl State {
     }
     fn dispatch(self: &Rc<Self>, epoch: u64, command: Command) -> Result<()> {
         self.check(epoch)?;
+        if self.disconnecting.get() {
+            return Err(invalid_operation());
+        }
         if !self.enabled.get() {
             return Err(not_enabled());
         }
