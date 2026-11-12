@@ -743,6 +743,61 @@ let () =
         remove_tree root;
         fail_test (Printexc.to_string exn));
 
+  Array.iter
+    (fun (name, argv) ->
+      test ("repeated graph options preserve graphs: " ^ name) (fun () ->
+          let root = temp_dir "logseq-cli-repeated-graph-" in
+          let graph_file graph =
+            Node.Path.join [| root; "graphs"; graph; "db.sqlite" |]
+          in
+          try
+            Array.iter
+              (fun graph ->
+                mkdir_p (Node.Path.join [| root; "graphs"; graph |]);
+                write_file (graph_file graph) ("data-" ^ graph))
+              [| "a"; "b" |];
+            let result =
+              spawn_cli
+                (Array.append [| "--root-dir"; root; "--output"; "json" |] argv)
+            in
+            ignore (expect_exit_non_zero name result);
+            expect_named_contains "error code" result##stdout "invalid-options";
+            expect_named_contains "option name" result##stdout "--graph";
+            expect_named_contains "error message" result##stdout
+              "only be specified once";
+            Array.iter
+              (fun graph ->
+                if not (Node.Fs.existsSync (graph_file graph)) then
+                  fail_test (name ^ ": removed graph " ^ graph);
+                if read_file (graph_file graph) <> "data-" ^ graph then
+                  fail_test (name ^ ": modified graph " ^ graph))
+              [| "a"; "b" |];
+            remove_tree root
+          with exn ->
+            remove_tree root;
+            fail_test (Printexc.to_string exn)))
+    [|
+      ("short", [| "-g"; "a"; "graph"; "remove"; "-g"; "b" |]);
+      ("same value", [| "-g"; "a"; "graph"; "remove"; "-g"; "a" |]);
+      ("mixed aliases", [| "-g"; "a"; "graph"; "remove"; "--graph"; "b" |]);
+      ("equals", [| "--graph=a"; "graph"; "remove"; "--graph=b" |]);
+      ("missing value", [| "-g"; "--graph=a"; "graph"; "remove" |]);
+      ( "import",
+        [|
+          "-g=a";
+          "graph";
+          "import";
+          "--graph=b";
+          "--type";
+          "edn";
+          "--input";
+          "missing.edn";
+        |] );
+      ("read command", [| "-g=a"; "graph"; "list"; "--graph=b" |]);
+      ("version", [| "-g=a"; "--graph=a"; "--version" |]);
+      ("help", [| "-g=a"; "--graph=a"; "graph"; "remove"; "--help" |]);
+    |];
+
   test "graph commands require explicit unicode graph names" (fun () ->
       let root = temp_dir "logseq-cli-graph-unicode-" in
       let graph = decode_uri_component "%E5%95%8A%E5%95%8A%E5%95%8A%E5%95%8A" in

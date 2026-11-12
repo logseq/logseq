@@ -1747,6 +1747,33 @@ let () =
       | Some (Output.Mode.Packed Output.Mode.Json) -> pass
       | _ -> fail_test "expected later json output mode");
 
+  Array.iter
+    (fun (name, argv) ->
+      test ("CLI parity parse rejects repeated graph options: " ^ name)
+        (fun () -> expect_parse_error_code name ":invalid-options" argv))
+    [|
+      ("short", [| "-g"; "a"; "graph"; "remove"; "-g"; "b" |]);
+      ("long", [| "--graph"; "a"; "graph"; "list"; "--graph"; "b" |]);
+      ("same value", [| "-g"; "a"; "graph"; "remove"; "-g"; "a" |]);
+      ("mixed aliases", [| "-g"; "a"; "graph"; "info"; "--graph"; "b" |]);
+      ("reverse aliases", [| "--graph"; "a"; "graph"; "list"; "-g"; "b" |]);
+      ("equals", [| "--graph=a"; "graph"; "remove"; "--graph=b" |]);
+      ("short equals", [| "-g=a"; "graph"; "remove"; "--graph=b" |]);
+      ("missing first value", [| "-g"; "--graph=a"; "graph"; "list" |]);
+      ("missing last value", [| "-g"; "a"; "graph"; "list"; "--graph" |]);
+      ("three occurrences", [| "-g=a"; "--graph=a"; "-g=a"; "graph"; "list" |]);
+      ("version", [| "-g=a"; "--graph=a"; "--version" |]);
+    |];
+
+  test "CLI parity parse does not count graph arguments after the terminator"
+    (fun () ->
+      let request =
+        expect_parse_ok "graph after terminator"
+          [| "-g"; "demo"; "upsert"; "block"; "--"; "--graph=content" |]
+      in
+      expect_equal "single graph" "demo"
+        (graph_text (expect_some "graph" request.globals.graph)));
+
   test "CLI parity parse supports list page filters and validation" (fun () ->
       let request =
         expect_parse_ok "list page parse"

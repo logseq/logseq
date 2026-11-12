@@ -286,30 +286,35 @@ let parse_args : type marker.
     (raw_argv, marker) state ->
     (parsed_argv, not_final) state Error.build_result =
  fun app (Raw_argv_state input) ->
-  let input =
-    match input.stdin with
-    | Some _ -> input
-    | None when stdin_required_for_show_id input.argv ->
-        { input with stdin = Some (read_stdin_all ()) }
-    | None -> input
-  in
   let options, positional = parse_tokens input.argv in
   let mode = output_mode_of_options options in
-  let help =
-    if option_present "version" options then None
-    else help_group app.registry options positional
-  in
-  match help with
-  | Some group ->
-      Command_registry.render_help ~group app.registry
-      |> set_pending_message_output mode;
-      Error (Error.unknown_command "")
-  | None -> (
-      match parse_request app input with
-      | Ok request -> Ok (Parsed_argv_state (input, request))
-      | Error err ->
-          set_pending_error_output mode err;
-          Error err)
+  match Cli_parse.validate_graph_option options with
+  | Error err ->
+      set_pending_error_output mode err;
+      Error err
+  | Ok () -> (
+      let input =
+        match input.stdin with
+        | Some _ -> input
+        | None when stdin_required_for_show_id input.argv ->
+            { input with stdin = Some (read_stdin_all ()) }
+        | None -> input
+      in
+      let help =
+        if option_present "version" options then None
+        else help_group app.registry options positional
+      in
+      match help with
+      | Some group ->
+          Command_registry.render_help ~group app.registry
+          |> set_pending_message_output mode;
+          Error (Error.unknown_command "")
+      | None -> (
+          match parse_request app input with
+          | Ok request -> Ok (Parsed_argv_state (input, request))
+          | Error err ->
+              set_pending_error_output mode err;
+              Error err))
 
 let resolve_request_config app request input =
   Cli_config.resolve ~defaults:app.defaults ~env:(env_lookup input.env)
