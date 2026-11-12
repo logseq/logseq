@@ -1,7 +1,7 @@
 //! Complete production picker datasets, driven by actual native Scroll demand.
 //! These are native-engine checks; AppKit raster/input qualification is separate.
 use super::{Duration, Headless, startup_rows::Agent, wait_for_chrome};
-use nsh_core::prelude::{point, px};
+use nsh_core::prelude::px;
 use serde_json::Value;
 use std::cell::RefCell;
 
@@ -115,8 +115,10 @@ fn open(app: &mut Headless, agent: &Agent) -> Result<(), String> {
         })
         .ok_or("actual Journal has no icon action")?;
     let action = selector(action)?;
+    eprintln!("BEGIN actual picker icon action: {action}");
     app.hover(&action)?;
     app.press(&action)?;
+    eprintln!("DONE actual picker icon action");
     let failure = RefCell::new(None);
     wait_for_chrome(
         app,
@@ -140,7 +142,9 @@ pub(super) fn qualify(app: &mut Headless) -> Result<(), String> {
     let agent = Agent::discover()?;
     for (tab, minimum_rows) in [("Emojis", 100), ("Icons", 500)] {
         open(app, &agent)?;
+        eprintln!("BEGIN actual complete {tab} tab activation");
         app.press(tab)?;
+        eprintln!("DONE actual complete {tab} tab activation");
         let failure = RefCell::new(None);
         wait_for_chrome(
             app,
@@ -183,9 +187,13 @@ pub(super) fn qualify(app: &mut Headless) -> Result<(), String> {
             .find(|node| class(node, "bd"))
             .ok_or("picker lost its body Scroll")?;
         let scroll = selector(scroll)?;
-        // A real controller drag reaches the native Scroll's content end in a
-        // bounded number of input steps. No synthetic VirtualWindow is sent.
-        app.drag(&scroll, point(px(0.0), px(-1_000_000.0)))?;
+        // The public Scroll step clamps its target to the native content end
+        // before advancing frames. A raw million-point drag would generate
+        // 100,000 gesture frames, even after reaching that end. This case uses
+        // a manual engine clock; no synthetic VirtualWindow is sent.
+        eprintln!("BEGIN actual complete {tab} Scroll: rows={count}, owner={scroll}");
+        app.scroll(&scroll, px(count as f32 * 44.0 + 408.0))?;
+        eprintln!("DONE actual complete {tab} Scroll");
         let failure = RefCell::new(None);
         wait_for_chrome(
             app,

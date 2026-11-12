@@ -108,6 +108,11 @@ fn mount_actual_application(rows: Option<usize>) -> Result<(), String> {
     if let Some(jump) = &jump {
         config.context = config.context.with(jump.clone());
     }
+    if std::env::var(startup_surfaces::CASE_ENV).as_deref() == Ok("icon-picker") {
+        // Full-dataset scrolling proves viewport/materialization behavior,
+        // not elapsed performance. Skip wall-clock waits between native frames.
+        config.clock = nsh_engine::Clock::manual(SystemTime::now());
+    }
     config.viewport = Size::new(px(1440.0), px(900.0));
     config.environment.idiom = Idiom::Desktop;
     config.environment.os = if cfg!(target_os = "macos") {
