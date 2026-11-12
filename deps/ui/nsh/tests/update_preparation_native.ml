@@ -1192,6 +1192,63 @@ let native_point_property_scroll () =
       (property owner Lui_protocol.MaxHeight=Some (Lui_protocol.IntValue 0)
        && property popup Lui_protocol.AvailableHeight=Some (Lui_protocol.FloatValue 0.)))
 
+let native_popup_placement_contract () =
+  let previous_overlays = !Properties_state.view_overlays_state
+  and previous_generation = !Properties_state.overlay_generation
+  and previous_flush = !Runtime.app_flush in
+  Fun.protect ~finally:(fun () ->
+    Properties_state.view_overlays_state:=previous_overlays;
+    Properties_state.overlay_generation:=previous_generation;
+    Runtime.app_flush:=previous_flush) (fun () ->
+    List.iter (fun host ->
+      List.iter (fun (retained,right) ->
+        Properties_state.view_overlays_state:=None;
+        Runtime.app_flush:=(fun () -> ());
+        let backend : Lui_protocol.backend={
+          backend_profile=Lui_protocol.profile Lui_protocol.MacOS host;
+          apply_batch=(fun _ -> true)} in
+        let app=Lui_app.create backend Model.initial (fun model () -> model)
+          (fun context _ _ ->
+            let overlays=Properties_state.view_overlays_state_of context in
+            let anchor={ (Ui_services.dom_body ()) with
+              Ui_services.attr=(fun name ->
+                if retained && name="id" then Some "popup-placement-trigger" else None);
+              rect=(fun () -> 80.,100.,24.,12.);
+              rect_pending=(fun () -> false)} in
+            ignore (Properties_popup.open_from_anchor ~right anchor
+              (Lui_elements.text ~value:"Placement regression" []));
+            let popup=match Runtime.signal_get overlays with
+              | [popup] -> popup.Properties_state.vo_view
+              | _ -> failwith "Placement fixture requires one popup" in
+            Lui_elements.column
+              [Lui_elements.button ~accessibility_identifier:"popup-placement-trigger" [];
+               popup]) in
+        Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app)) (fun () ->
+          ignore (Lui_app.start app);ignore (Lui_app.flush app);
+          let runtime=Lui_app.runtime app in
+          let popup=Hashtbl.fold (fun node kind found ->
+            if kind=Lui_protocol.Popover then Some node else found)
+            runtime.Lui_runtime.mounted_nodes None |> Option.get in
+          let props=Hashtbl.find runtime.Lui_runtime.runtime_properties popup in
+          let property prop=Lui_protocol.Property_map.find_opt prop props in
+          let has prop=Lui_protocol.Property_map.mem prop props in
+          check "actual anonymous and retained popup branches satisfy the canonical contract"
+            (Lui_protocol.node_properties_supported Lui_protocol.Popover props);
+          if retained then
+            check "retained popup uses only its trigger's element placement"
+              (property Lui_protocol.AnchorTarget=Some (Lui_protocol.StringValue "popup-placement-trigger")
+               && property Lui_protocol.AnchorValue=Some (Lui_protocol.StringValue (if right then "right" else "below"))
+               && not (has Lui_protocol.PopupX || has Lui_protocol.PopupY))
+          else
+            check "anonymous popup uses only its measured point placement"
+              (property Lui_protocol.PopupX=Some (Lui_protocol.FloatValue (if right then 100. else 80.))
+               && property Lui_protocol.PopupY=Some (Lui_protocol.FloatValue (if right then 96. else 116.))
+               && not (List.exists has [Lui_protocol.AnchorValue;Lui_protocol.AnchorTarget;
+                   Lui_protocol.AnchorAlignmentValue;Lui_protocol.AnchorOffset;
+                   Lui_protocol.AnchorAlignmentOffset]))))
+        [false,false;false,true;true,false;true,true])
+      [Lui_protocol.NshHost;Lui_protocol.GenericHost])
+
 let native_cmdk_controlled_input () =
   let previous_app = !Native_embed.current_app
   and previous_provider = !Dom_ext.doc_elements_provider
@@ -1494,6 +1551,7 @@ let () =
   native_settings_route_links ();
   native_cmdk_controlled_input ();
   native_point_property_scroll ();
+  native_popup_placement_contract ();
   native_controlled_field_resets ();
   native_entry_admission ();
   editor_keyboard_capture_order ();

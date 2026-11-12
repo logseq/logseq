@@ -25,29 +25,37 @@ let open_at_key ~key ?(role = `dialog) ?(cls = "") ?padding ?anchor_target ?(rig
   (* cap at the space left below the anchor so long menus scroll instead
      of overflowing the viewport (radix's available-height behaviour) *)
   let avail = Ui_services.dom_viewport_height () -. y -. 8. in
-  let at, anchor_offset, anchor_alignment_offset =
-    match anchor_target with
-    | None -> Some (x, y), 0., 0.
-    | Some _ -> None, (if right then -4. else 4.), (if right then -4. else 0.)
-  in
   let view : t = fun context parent ->
     (* Native popup alignment uses the retained trigger's real bounds. *)
     let anchor_alignment_offset =
       if Lui_ui.host context = Lui_protocol.NshHost then 0.
-      else anchor_alignment_offset in
+      else if right then -4. else 0. in
+    let on_dismiss _ = S.remove_view_overlay key in
+    let popup = match anchor_target with
+      | None ->
+          (* Point placement and element placement are exclusive contracts.
+             An anonymous anchor supplies only its resolved coordinates. *)
+          popover ~key ~role ~at:(x, y) ~style_class:cls ?padding
+            ~available_height:(Float.max avail 120.)
+            ~transition:Ui_components.popover_transition ~on_dismiss [content]
+      | Some anchor_target ->
+          popover ~key ~role ~anchor_target ~style_class:cls
+            ~anchor:(if right then `right else `below)
+            ~anchor_alignment:`start ~anchor_offset:(if right then -4. else 4.)
+            ~anchor_alignment_offset ?padding
+            ~available_height:(Float.max avail 120.)
+            ~transition:Ui_components.popover_transition ~on_dismiss [content]
+    in
     (Ui_components.with_props
       [ Ui_components.card_shadow
       ; Ui_components.Prop.font_size "1rem"
-      ; Ui_components.Prop.line_height "1.5" ]
-    (popover ~key ~role ?at ?anchor_target ~anchor:(if right then `right else `below)
-      ~anchor_alignment:`start ~anchor_offset ~anchor_alignment_offset ~style_class:cls
-      ?padding ~background:"hsl(var(--popover))"
-      ~foreground:"hsl(var(--popover-foreground))"
-      ~border_color:"hsl(var(--border))" ~border_width:1 ~corner_radius:6
-      ~available_height:(Float.max avail 120.)
-      ~transition:Ui_components.popover_transition
-      ~on_dismiss:(fun _ -> S.remove_view_overlay key)
-      [ content ])) context parent
+      ; Ui_components.Prop.line_height "1.5"
+      ; Ui_components.Prop.background "hsl(var(--popover))"
+      ; Ui_components.Prop.foreground "hsl(var(--popover-foreground))"
+      ; Ui_components.Prop.border_color "hsl(var(--border))"
+      ; Ui_components.Prop.border_width 1
+      ; Ui_components.Prop.corner_radius 6 ]
+      popup) context parent
   in
   if not (S.push_view_overlay_ctxfree ~key ~view ~on_escape:(fun () -> ()))
   then

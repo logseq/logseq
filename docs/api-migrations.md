@@ -1,5 +1,20 @@
 # API migrations
 
+## Anonymous property popup anchors use point placement
+
+`Properties_popup.open_from_anchor` now constructs mutually exclusive placement
+branches. Anchors with a retained identifier continue to use `anchor-target`,
+side, alignment and offsets. An anonymous anchor uses only the measured popup
+coordinates, including the existing below/right coordinate adjustment. Point
+placement no longer also emits element-anchor properties, which the canonical
+contract correctly rejects.
+
+For example, selecting a page emoji and reopening its icon picker can create an
+anonymous `.ls-page-icon` anchor. That picker now reopens through the valid point
+branch. No caller signatures or event payloads change, and the same correction
+applies to NSH, Apple/iOS, Android and Web. Callers with a live retained anchor
+should continue supplying its identifier for native anchor tracking.
+
 ## Closing an already closed command palette leaves search persistence unchanged
 
 Only an open command-palette session now persists its search state and cancels
