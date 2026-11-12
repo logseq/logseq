@@ -67,11 +67,6 @@
  :account/upgrade-plan "Upgrade plan"
  :account/username "Username"
 
- :asset.audio/loading "Loading audio…"
- :asset.audio/pause "Pause audio"
- :asset.audio/play "Play audio"
- :asset.audio/seek "Audio position"
- :asset.audio/volume "Audio volume"
  :asset/acceptable-file-extensions "Acceptable file extensions"
  :asset/add-assets "Add assets"
  :asset/add-directory "Add directory"
@@ -119,6 +114,12 @@
  :asset/title-label "Asset title:"
  :asset/transfer-placeholder "{1} asset..."
  :asset/uploading "Uploading"
+
+ :asset.audio/loading "Loading audio…"
+ :asset.audio/pause "Pause audio"
+ :asset.audio/play "Play audio"
+ :asset.audio/seek "Audio position"
+ :asset.audio/volume "Audio volume"
 
  :block/click-to-fix-query "Click to fix query: {1}"
  :block/copy-ref "Copy block ref"
