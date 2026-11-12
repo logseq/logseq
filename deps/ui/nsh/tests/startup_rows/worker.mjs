@@ -40,11 +40,21 @@ async function apply(op, args) {
 }
 async function countChildren(page) {
   assert.match(page, /^[0-9a-f-]{36}$/);
-  const query = `[:find (count ?b) . :where [?p :block/uuid #uuid "${page}"] [?b :block/parent ?p] [?b :block/uuid ?u]]`;
+  // Datascript emits no aggregate row for an empty group (scalar nil).
+  // Use its relation form: an explicit empty Transit set proves zero matching
+  // children; a missing connection still returns nil and must fail this check.
+  const query = `[:find (count ?b) :where [?p :block/uuid #uuid "${page}"] [?b :block/parent ?p] [?b :block/uuid ?u]]`;
   // endpoint_db.q applies the query and any bindings from one inputs vector.
-  const count = await invoke("thread-api/q", [spec.repo, [query]]);
-  assert.ok(Number.isSafeInteger(count) && count >= 0, "worker query returns an exact child count");
-  return count;
+  const relation = await invoke("thread-api/q", [spec.repo, [query]]);
+  const received = () => transit.writer("json").write(relation).slice(0, 1024);
+  assert.ok(transit.isSet(relation) && relation.size <= 1,
+    `worker count query must return a zero/one-row Transit relation; received ${received()}`);
+  if (relation.size === 0) return 0;
+  let row;
+  relation.forEach((value) => { row = value; });
+  assert.ok(Array.isArray(row) && row.length === 1 && Number.isSafeInteger(row[0]) && row[0] >= 0,
+    `worker count relation must contain one exact nonnegative integer; received ${received()}`);
+  return row[0];
 }
 const started = performance.now();
 let result;
