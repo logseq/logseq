@@ -1,5 +1,7 @@
 //! The real Logseq OCaml application rendered by the NSH desktop backend.
 pub mod extensions;
+mod fonts;
+pub use fonts::with_bundled_fonts;
 mod services;
 
 use lui_nsh::{

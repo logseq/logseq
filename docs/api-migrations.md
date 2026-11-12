@@ -1,5 +1,19 @@
 # API migrations
 
+## NSH uses the bundled Inter faces before its first layout
+
+The native runner and its actual startup qualification now register the existing
+bundled Inter Regular, Light, Medium, Semibold, Bold and italic faces through
+NSH `Root::font` before rendering. Naming Inter in theme tokens previously fell
+back to a system font on machines without an installed Inter family; copying
+font files into Resources alone did not register them.
+
+No caller theme change is needed. A theme naming Inter now resolves the same
+application faces without requiring OS-wide font installation. Applications
+embedding the Logseq Rust root should apply `with_bundled_fonts(root)` to their
+root as the standalone runner does. Maintained Apple/iOS, Android and Web font
+loading is unchanged.
+
 ## NSH block bullets reach the shared outline controller
 
 Displayed block bullets now opt into the same native pointer/document bridge as

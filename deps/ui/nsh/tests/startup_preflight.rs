@@ -78,11 +78,12 @@ fn require_artifacts() -> Result<(), String> {
 
 fn mount_actual_application(rows: Option<usize>) -> Result<(), String> {
     let jump = rows.map(|_| startup_rows::Jump::default());
-    let mut config = EngineConfig::new(if rows.is_some() {
+    let root = if rows.is_some() {
         Root::of::<startup_rows::RowsApp>()
     } else {
         Root::of::<nsh_app_logseq::App>()
-    });
+    };
+    let mut config = EngineConfig::new(nsh_app_logseq::with_bundled_fonts(root));
     config.context = EngineContext::default().with(nsh_app_logseq::StartupPreflight);
     if let Some(jump) = &jump {
         config.context = config.context.with(jump.clone());

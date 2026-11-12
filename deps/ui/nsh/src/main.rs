@@ -56,10 +56,13 @@ fn main() -> impl std::process::Termination {
         .map_or_else(Default::default, |root| {
             platform::CacheOptions::at(platform::CacheLocation::Dir(root.join("nsh-cache")))
         });
-    let root = platform::Root::new::<nsh_app_logseq::App>(move || nsh_app_logseq::AppProps {
-        startup_preflight: startup_preflight.into(),
-    })
-    .app_id(APP_ID);
+    let root =
+        nsh_app_logseq::with_bundled_fonts(platform::Root::new::<nsh_app_logseq::App>(move || {
+            nsh_app_logseq::AppProps {
+                startup_preflight: startup_preflight.into(),
+            }
+        }))
+        .app_id(APP_ID);
     #[cfg(target_os = "macos")]
     let components = {
         let components = platform::Components::default();

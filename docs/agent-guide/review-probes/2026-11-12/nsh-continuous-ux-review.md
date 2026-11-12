@@ -42,6 +42,7 @@ installed. This report records implementation and qualification evidence directl
 | UX-003 | P1 | Graph and action menus | Current user screenshot reports externally anchored menu popovers rejected by the backend. | Separate menu workstream owns repair and real open-menu regression; visible native recheck pending. |
 | UX-004 | P1 | Initial block editing | The legacy global 60ms click filter dropped unrelated NSH clicks. Active-host policy now bypasses it for NSH. | Parent rebuilt release archives and reports compiled native admission passes, including actual shared editor mounting and focus emission. Actual native click/type and raster verification pending. |
 | UX-006 | P1 | Bullet activation and outline drag | The retained bullet had no NSH pointer/press owner, while the shared outline controller expects its `dot-<uuid>` target. Native content forwards no move/cancel events; release targeting and capture require actual native semantics. | Bullet activation bridge prepared and native event regression added. Move/cancel, capture and drop qualification remain pending. |
+| UX-007 | P2 | Chrome and editor font metrics | Native theme tokens name Inter, but the native runner did not register the bundled faces. Existing Resources/fonts files alone do not affect native shaping. | Runner and real startup qualification now use NSH Root::font for the existing nine faces before first layout. Native raster/metrics verification pending. |
 | UX-005 | P2 | Wrapped rich-text caret | Native hit affinity must preserve the side of a soft-wrap boundary. | Separate geometry workstream owns implementation; actual native verification pending. |
 
 ## UX-001 implementation
@@ -58,3 +59,16 @@ and original `.block-add-button`/parent-page target. It does not claim worker
 persistence or AppKit hit testing. Required next evidence is a real native empty
 Journal click that inserts a block, focuses its editor, accepts typing, and remains
 persisted after leaving and revisiting the page.
+
+## Production browser baseline
+
+An isolated headless Chrome session reached the current Demo Journal and opened
+its left sidebar and search through actual browser controls. The 1440x900 CSS
+viewport at 2x scale produced `reference-sidebar.png`, `reference-search.png` and
+`reference-measures.json` in the ignored `deps/ui/_build/nsh-ux-review/` folder.
+The observed header is 48px high, sidebar including divider is 246px wide,
+navigation rows are 32px high with 14px medium Inter text, and the Journal title
+uses 36px Inter with 54px line height. The empty-page add row has a real 28px box
+and 0.5 resting opacity. Graph View is intentionally excluded when comparing
+vertical positions. Native historical chrome is broadly similar; font raster and
+the absent empty-page bullet need fresh native verification, not a parity claim.
