@@ -107,10 +107,19 @@
 (defn- remove-orphaned-page-refs!
   [db {db-id :db/id} txs-state old-refs new-refs]
   (when (not= old-refs new-refs)
-    (let [new-refs (set (map (fn [ref]
+    (let [;; A ref kept as a lookup ([:block/uuid id], or a map with only the
+          ;; uuid, as a `[[uuid]]` link in the saved title gives) still refs
+          ;; its page: read its name from the db, or the page is taken as
+          ;; dropped and retracted as an orphan in the same save that links it.
+          ref-entity (fn [ref]
+                       (cond
+                         (:db/id ref) (d/entity db (:db/id ref))
+                         (and (vector? ref) (= :block/uuid (first ref))) (d/entity db ref)
+                         (uuid? (:block/uuid ref)) (d/entity db [:block/uuid (:block/uuid ref)])))
+          new-refs (set (map (fn [ref]
                                (or (:block/name ref)
-                                   (and (:db/id ref)
-                                        (:block/name (d/entity db (:db/id ref)))))) new-refs))
+                                   (:block/name (ref-entity ref))))
+                             new-refs))
           old-pages (->> (keep :db/id old-refs)
                          (d/pull-many db '[*])
                          (remove (fn [e] (contains? new-refs (:block/name e))))
