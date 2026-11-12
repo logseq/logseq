@@ -273,6 +273,30 @@ export const getCopiedBlocksFromMemory = (text) => {
   return copiedBlocksMemoryCache.blocks
 }
 
+// Runs the clipboard writes in order until one succeeds. A write can be
+// refused by a rejected promise or by a synchronous throw (Firefox refuses the
+// non-standard "web application/logseq" type), so both move on to the next
+// attempt. Rejects with the last error when every attempt failed.
+const writeClipboardWithFallback = (attempts) => {
+  const [attempt, ...remaining] = attempts
+  let written
+  try {
+    written = Promise.resolve(attempt())
+  } catch (e) {
+    written = Promise.reject(e)
+  }
+  return written.then(() => {
+    /* success */
+  }, e => {
+    if (remaining.length === 0) {
+      console.error("Clipboard write failed:", e)
+      throw e
+    }
+    console.debug("Clipboard write refused, retrying with a simpler format:", e)
+    return writeClipboardWithFallback(remaining)
+  })
+}
+
 export const writeClipboard = ({text, html, blocks}, ownerWindow) => {
   const navigator = (ownerWindow || window).navigator
   const textBlob = new Blob([text], {
@@ -281,51 +305,35 @@ export const writeClipboard = ({text, html, blocks}, ownerWindow) => {
   copiedBlocksMemoryCache.text = text
   copiedBlocksMemoryCache.blocks = blocks || null
 
-  // Write right away, within the user's click: Safari refuses a clipboard
-  // write that waits for another promise first, and Firefox and Safari have
-  // no `clipboard-write` permission to query. A refused write rejects and
-  // is logged below.
-  {
-    let promise_written = null
-    if (typeof ClipboardItem !== "undefined") {
-      let data = [new ClipboardItem({
-        ["text/plain"]: textBlob
-      })]
-      if (html) {
-        const richBlob = new Blob([html], {
-          type: "text/html"
-        })
-        data = [new ClipboardItem({
-          ["text/plain"]: textBlob,
-          ["text/html"]: richBlob
-        })]
-      }
-      if (blocks) {
-        const blocksBlob = new Blob([blocks], {
-          type: "application/logseq"
-        })
-        const clipboardItemData = {
-          ["text/plain"]: textBlob,
-          ["web application/logseq"]: blocksBlob
-        }
-        if (html) {
-          clipboardItemData["text/html"] = new Blob([html], {
-            type: "text/html"
-          })
-        }
-        data = [new ClipboardItem(clipboardItemData)]
-      }
-      promise_written = navigator.clipboard.write(data)
-    } else {
-      console.debug("Degraded copy without `ClipboardItem` support:", text)
-      promise_written = navigator.clipboard.writeText(text)
-    }
-    return promise_written.then(() => {
-      /* success */
-    }).catch(e => {
-      console.log(e, "fail")
+  const standardItemData = {
+    ["text/plain"]: textBlob
+  }
+  if (html) {
+    standardItemData["text/html"] = new Blob([html], {
+      type: "text/html"
     })
   }
+
+  // Richest format first, plain text last. The first attempt starts right
+  // away, within the user's click: Safari refuses a clipboard write that waits
+  // for another promise first, and Firefox and Safari have no
+  // `clipboard-write` permission to query.
+  const attempts = []
+  if (typeof ClipboardItem !== "undefined") {
+    if (blocks) {
+      attempts.push(() => navigator.clipboard.write([new ClipboardItem({
+        ...standardItemData,
+        ["web application/logseq"]: new Blob([blocks], {
+          type: "application/logseq"
+        })
+      })]))
+    }
+    attempts.push(() => navigator.clipboard.write([new ClipboardItem(standardItemData)]))
+  } else {
+    console.debug("Degraded copy without `ClipboardItem` support:", text)
+  }
+  attempts.push(() => navigator.clipboard.writeText(text))
+  return writeClipboardWithFallback(attempts)
 }
 
 export const toPosixPath = (input) => {
