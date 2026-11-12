@@ -36,22 +36,32 @@ let run () =
     Pdf_state.create_today_journal := prior_journal; Pdf_state.current := prior_current)
     (fun () ->
       Pdf.install ();
+      Pdf_state.current := None;
       ignore (Lui_app.start app); ignore (Lui_app.flush app);
       let runtime = Lui_app.runtime app in
-      let button = Hashtbl.fold (fun id kind found ->
-        if kind=Lui_protocol.Text then Some id else found)
-        runtime.Lui_runtime.mounted_nodes None |> Option.get in
-      ignore (Lui_app.dispatch_event app (Lui_protocol.Press button));
+      let pressable = Hashtbl.fold (fun id properties found ->
+        if Lui_protocol.Property_map.find_opt Lui_protocol.PressEnabled properties
+          =Some (Lui_protocol.BoolValue true)
+          && Hashtbl.mem runtime.Lui_runtime.event_handlers id then id::found else found)
+        runtime.Lui_runtime.runtime_properties [] in
+      let button=match pressable with [node] -> node
+        | _ -> failwith "inline PDF must own exactly one retained press handler" in
+      let press () =
+        check "inline PDF's actual retained node accepts its canonical press"
+          (Lui_app.dispatch_event app (Lui_protocol.Press button));
+        (* Runtime dispatch queues owner effects; flush before observing state. *)
+        ignore (Lui_app.flush app) in
+      press ();
       check "actual native PDF install opens inline documents without inventing an asset entity"
         (match !Pdf_state.current with
          | Some asset -> asset.Model.pdf_url=path && asset.pdf_block_uuid=None
          | None -> false);
       Pdf_state.current := None;
       current_model := {Model.initial with repo=Some "different-graph"};
-      ignore (Lui_app.dispatch_event app (Lui_protocol.Press button));
+      press ();
       check "retained inline PDF presses cannot open against a different graph"
         (!Pdf_state.current=None);
       current_model := Model.initial;
-      ignore (Lui_app.dispatch_event app (Lui_protocol.Press button));
+      press ();
       check "closed graphs do not open retained inline PDF links" (!Pdf_state.current=None));
   print_endline "PASS actual native inline PDF opener and local asset path ownership"
