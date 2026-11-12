@@ -143,10 +143,19 @@ impl Agent {
         let transcript = std::env::var_os("LOGSEQ_NSH_PROBE_TRANSCRIPT")
             .ok_or("qualification transcript path missing")?;
         let log = fs::read_to_string(transcript).map_err(|error| error.to_string())?;
-        let address = log
+        const MARKER: &str = "lui-agent listening on ";
+        // libtest can put its test-name prefix on the same stdout/stderr line.
+        // Require one real announcement; do not guess a port or pick one of
+        // multiple servers when qualification owns exactly one application.
+        if log.matches(MARKER).count() != 1 {
+            return Err("expected exactly one owned LUI agent address announcement".into());
+        }
+        let announced = log.split_once(MARKER).expect("counted address marker").1;
+        let address = announced
             .lines()
-            .find_map(|line| line.strip_prefix("lui-agent listening on "))
-            .ok_or("the actual application's opted-in LUI agent did not announce its address")?
+            .next()
+            .ok_or("empty LUI agent announcement")?
+            .trim()
             .parse::<SocketAddr>()
             .map_err(|error| error.to_string())?;
         if !address.ip().is_loopback() || address.port() == 0 {
