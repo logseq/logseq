@@ -10,7 +10,7 @@ import {fileURLToPath, pathToFileURL} from "node:url";
 const source = path.dirname(fileURLToPath(import.meta.url));
 const receiptModule = path.resolve(process.env.LUI_SOURCE_ROOT ?? path.join(source, "../../../../lui"), "tooling/lui_build_receipt.mjs");
 function fixture() {
-  const temporary = mkdtempSync(path.join(os.tmpdir(), "logseq-publication-test-"));
+  const temporary = mkdtempSync(path.join(os.tmpdir(), "logseq-publication test-"));
   const repo = path.join(temporary, "repo");
   const lui = path.join(temporary, "lui");
   const host = path.join(repo, "deps/ui/nsh");
@@ -51,6 +51,18 @@ def load(candidate):
  if os.environ.get('PUBLICATION_FAILURE')!='abi': library.lui_ocaml_virtual_window=object()
  return library
 ctypes.CDLL=load
+`);
+  // These compiler/target guards have separate actual-provider coverage. The
+  // shell fixture records their real invocation boundaries without compiling.
+  write(path.join(host, "validate_primitive_signatures.py"), `import os,pathlib
+with (pathlib.Path(os.environ['PUBLICATION_TEST_ROOT'])/'calls').open('a') as stream:
+ stream.write('primitive-signatures\\n')
+`);
+  write(path.join(host, "validate_static_styles.py"), `import os,pathlib,sys
+candidate=pathlib.Path(sys.argv[1])
+assert '.publication.' in str(candidate) and candidate.read_text()=='new-executable'
+with (pathlib.Path(os.environ['PUBLICATION_TEST_ROOT'])/'calls').open('a') as stream:
+ stream.write('static-styles\\n')
 `);
   for (const file of ["assets/catalog.json", "assets/fonts/app.ttf"])
     write(path.join(repo, "deps/ui", file), "new-resource");
@@ -126,11 +138,28 @@ else: sys.exit('unexpected Cargo operation')
   return {temporary, repo, lui, host, output, resources, old,
     calls:() => existsSync(path.join(temporary, "calls")) ? readFileSync(path.join(temporary, "calls"), "utf8").trim().split("\n") : [],
     run(failure = "", arguments_ = []) {
-    return spawnSync("bash", [path.join(host, "build.sh"), ...arguments_], {encoding:"utf8", timeout:15000,
+    // Qualify macOS against its supported system Bash 3.2 even when PATH
+    // contains Homebrew Bash. Linux keeps the runner's installed Bash.
+    return spawnSync(process.platform === "darwin" ? "/bin/bash" : "bash", [path.join(host, "build.sh"), ...arguments_], {encoding:"utf8", timeout:15000,
       env:{...process.env, PATH:`${tools}${path.delimiter}${process.env.PATH}`,
         LUI_SOURCE_ROOT:lui, PUBLICATION_TEST_ROOT:temporary, PUBLICATION_FAILURE:failure,
         NODE_BINARY:process.execPath, PYTHON_BINARY:process.env.PYTHON_BINARY ?? "python3"}});
   }};
+}
+function assertCargoArguments(app, profile) {
+  const calls = readFileSync(path.join(app.temporary, "profiles.jsonl"), "utf8").trim().split("\n").map(JSON.parse);
+  assert.ok(calls.some(call => call.tool === "opam" && call.args.includes("dune")));
+  assert.ok(calls.every(call => call.dune === profile));
+  const common = [...(profile === "release" ? ["--release"] : []),
+    "--locked", "--manifest-path", path.join(app.host, "Cargo.toml")];
+  for (const [operation, trailing] of [
+    ["build", ["--message-format=json-render-diagnostics"]],
+    ["test", ["--test", "startup_preflight", "--", "--exact", "real_application_startup_preflight", "--nocapture"]],
+  ]) {
+    const matches = calls.filter(call => call.tool === "cargo" && call.args[0] === operation);
+    assert.equal(matches.length, 1, operation);
+    assert.deepEqual(matches[0].args, [operation, ...common, ...trailing]);
+  }
 }
 for (const failure of ["abi", "gate", "source", "after-gate"]) {
   test(`candidate ${failure} failure leaves the complete published set and receipt untouched`, () => {
@@ -140,7 +169,7 @@ for (const failure of ["abi", "gate", "source", "after-gate"]) {
       assert.notEqual(result.status, 0, result.stdout + result.stderr);
       if (failure === "abi") {
         assert.match(result.stderr, /missing exports: lui_ocaml_virtual_window/);
-        assert.deepEqual(app.calls(), ["abi-source", "abi-source", "abi-load"]);
+        assert.deepEqual(app.calls(), ["abi-source", "primitive-signatures", "abi-source", "abi-load"]);
       } else if (failure !== "gate") assert.match(result.stderr, /sources changed during build/);
       for (const [file, contents] of app.old) assert.equal(readFileSync(file, "utf8"), contents);
       assert.equal(existsSync(path.join(app.resources, "catalog.json")), false);
@@ -152,7 +181,8 @@ test("qualified publication preserves shared outputs, retires owned resources an
   try {
     const result = app.run();
     assert.equal(result.status, 0, result.stdout + result.stderr);
-    assert.deepEqual(app.calls(), ["abi-source", "abi-source", "abi-load", "schemas", "gate"]);
+    assertCargoArguments(app, "dev");
+    assert.deepEqual(app.calls(), ["abi-source", "primitive-signatures", "abi-source", "abi-load", "schemas", "static-styles", "gate"]);
     const artifact = path.join(app.output, "logseq-nsh");
     assert.equal(readFileSync(artifact, "utf8"), "new-executable");
     assert.equal(readFileSync(path.join(app.resources, "logseq-db-worker"), "utf8"), "new-worker");
@@ -241,11 +271,20 @@ test("release qualification uses both optimized toolchains and preserves develop
     assert.equal(receipt.buildProfile, "release");
     assert.equal(receipt.duneProfile, "release");
     assert.match(receipt.command, / --release$/);
-    const calls = readFileSync(path.join(app.temporary, "profiles.jsonl"), "utf8").trim().split("\n").map(JSON.parse);
-    assert.ok(calls.some(call => call.tool === "opam" && call.args.includes("dune")));
-    assert.ok(calls.every(call => call.dune === "release"));
-    for (const operation of ["build", "test"])
-      assert.ok(calls.some(call => call.tool === "cargo" && call.args[0] === operation && call.args.includes("--release")), operation);
+    assertCargoArguments(app, "release");
     for (const [file, contents] of app.old) assert.equal(readFileSync(file, "utf8"), contents);
   } finally { rmSync(app.temporary, {recursive:true, force:true}); }
 });
+
+for (const arguments_ of [[""], ["--debug"], ["--release", "extra"]]) {
+  test(`invalid build arguments fail before invoking any tool: ${JSON.stringify(arguments_)}`, () => {
+    const app = fixture();
+    try {
+      const result = app.run("", arguments_);
+      assert.notEqual(result.status, 0);
+      assert.match(result.stderr, /Usage: build\.sh \[--release\]/);
+      assert.equal(existsSync(path.join(app.temporary, "profiles.jsonl")), false);
+      for (const [file, contents] of app.old) assert.equal(readFileSync(file, "utf8"), contents);
+    } finally { rmSync(app.temporary, {recursive:true, force:true}); }
+  });
+}

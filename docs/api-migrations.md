@@ -1,5 +1,15 @@
 # API migrations
 
+## Native build arguments retain system Bash 3.2 support
+
+`deps/ui/nsh/build.sh` now keeps the shared Cargo argument vector nonempty under
+`set -u`. The default development build and explicit `--release` retain their
+existing profiles, output directories and exact Cargo build/test arguments;
+manifest paths containing spaces remain one argument. An explicit empty string
+or unsupported input argument still fails before build tooling. The publication plumbing fixture
+uses macOS `/bin/bash` explicitly and checks both complete argument vectors;
+it models compilers and does not replace the actual native qualification gate.
+
 ## Owned-worker qualification includes the actual two-worker preparation owner
 
 `nsh/run_owned_worker_update_native.py --worker <newly-built-native-worker>` now
