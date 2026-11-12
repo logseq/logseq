@@ -51,6 +51,22 @@
         day (js/parseInt (subs s 6))]
     (js/Date. year month day)))
 
+(defn local-datetime->ms
+  "Converts a local wall-clock date and time into epoch milliseconds using the
+  runtime's timezone. Returns nil when the fields do not name a real local
+  time: an impossible date such as Feb 30, or a time skipped by a DST
+  spring-forward. A time repeated by a DST fall-back resolves to its first
+  occurrence."
+  [year month day hour minute sec]
+  (let [date (js/Date. year (dec month) day hour minute sec)]
+    (when (and (= year (.getFullYear date))
+               (= month (inc (.getMonth date)))
+               (= day (.getDate date))
+               (= hour (.getHours date))
+               (= minute (.getMinutes date))
+               (= sec (.getSeconds date)))
+      (.getTime date))))
+
 (defn int->journal-title
   [day date-formatter]
   (when day
