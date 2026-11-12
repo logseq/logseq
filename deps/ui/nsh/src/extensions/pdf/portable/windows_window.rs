@@ -19,6 +19,8 @@ use std::{cell::Cell, rc::Rc};
 const SUBCLASS_ID: usize = 1;
 pub trait Handler {
     fn message(&self, hwnd: HWND, message: u32, wparam: WPARAM, lparam: LPARAM) -> Option<LRESULT>;
+    /// Called once before close or when an adopted parent destroys this HWND.
+    fn retired(&self) {}
 }
 struct State {
     thread: u32,
@@ -35,6 +37,13 @@ enum Transfer {
 struct Registration {
     state: Rc<State>,
     transfer: Cell<Transfer>,
+}
+impl State {
+    fn retire(&self) {
+        if self.live.replace(false) {
+            self.handler.retired();
+        }
+    }
 }
 /// Rc makes this owner !Send/!Sync. The public native-component host may borrow
 /// its HWND for adoption, but cannot transfer instance-data ownership.
@@ -90,17 +99,19 @@ impl OwnedWindow {
     /// Retire before worker/provider disposal. Unknown late OS messages keep
     /// following the ordinary subclass chain without calling the retired owner.
     pub fn retire(&self) {
-        self.0.live.set(false);
+        let state = self.0.clone();
+        state.retire();
     }
     pub fn close(&self) -> Result<()> {
+        let state = self.0.clone();
         // SAFETY: query only. Rc prevents moving this owner to another thread.
         assert_eq!(
-            self.0.thread,
+            state.thread,
             unsafe { GetCurrentThreadId() },
             "reader HWND belongs to its creating UI thread"
         );
-        self.retire();
-        let Some(hwnd) = self.hwnd() else {
+        state.retire();
+        let Some(hwnd) = state.hwnd.get() else {
             return Ok(());
         };
         // SAFETY: exact current owned HWND; WM_NCDESTROY clears its state and
@@ -108,7 +119,7 @@ impl OwnedWindow {
         unsafe {
             DestroyWindow(hwnd)?;
         }
-        if self.hwnd().is_some() {
+        if state.hwnd.get().is_some() {
             return Err(Error::new(
                 E_FAIL,
                 "reader destruction did not retire its exact subclass",
@@ -173,8 +184,8 @@ unsafe extern "system" fn window_proc(
         (registration.state.clone(), transfer)
     };
     if message == WM_NCDESTROY {
-        state.live.set(false);
         state.hwnd.set(None);
+        state.retire();
         // SAFETY: remove the exact callback before releasing its transferred
         // box. During installation its caller still owns the box instead. No
         // Rust reference into either box survives this point.
@@ -342,5 +353,39 @@ mod tests {
         );
         drop(window);
         assert_eq!(drops.get(), 1);
+    }
+    #[test]
+    fn retirement_hook_runs_once_even_when_it_reenters_real_destruction() {
+        struct RetireProbe {
+            hwnd: Rc<Cell<Option<HWND>>>,
+            retired: Rc<Cell<usize>>,
+        }
+        impl Handler for RetireProbe {
+            fn message(&self, _: HWND, _: u32, _: WPARAM, _: LPARAM) -> Option<LRESULT> {
+                None
+            }
+            fn retired(&self) {
+                self.retired.set(self.retired.get() + 1);
+                if let Some(hwnd) = self.hwnd.take() {
+                    // SAFETY: this test's exact same-thread owned window.
+                    unsafe {
+                        DestroyWindow(hwnd).unwrap();
+                    }
+                }
+            }
+        }
+        let retired = Rc::new(Cell::new(0));
+        let hwnd = Rc::new(Cell::new(None));
+        let window = OwnedWindow::new(RetireProbe {
+            hwnd: hwnd.clone(),
+            retired: retired.clone(),
+        })
+        .unwrap();
+        hwnd.set(window.hwnd());
+        window.close().unwrap();
+        window.retire();
+        assert!(window.hwnd().is_none());
+        assert_eq!(retired.get(), 1);
+        assert_eq!(Rc::strong_count(&window.0), 1);
     }
 }

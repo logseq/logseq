@@ -376,3 +376,11 @@ Primary contracts: [Text/TextRange conventions](https://learn.microsoft.com/en-u
 The exact local generated definitions reviewed are windows 0.62.2
 UI/Accessibility ITextProvider_Impl and ITextRangeProvider_Impl, windows-core
 0.62.2 Interface::cast_object_ref, and windows-implement 0.60.2's Agile option.
+
+The HWND boundary now has one exact `Handler::retired` notification. It runs once
+when close retires the owner or parent-driven NCDESTROY retires the child, before
+external provider/data teardown. Close retains its Rc state across the callback
+and reads no owner-window memory afterwards, so a retirement hook may reenter
+actual DestroyWindow safely. An additional real hidden-window test exercises
+that ordering and the single notification/registration release. No native test
+was executed for this source-only follow-up.
