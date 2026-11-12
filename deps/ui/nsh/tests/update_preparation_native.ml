@@ -916,6 +916,27 @@ let native_favorite_menu_contract () =
     check "native Menu dismissal clears the Favorites row's open appearance"
       (Runtime.signal_get (Option.get !sidebar).Sidebar_state.open_menu=""))
 
+external bridge_platform_event : string -> int = "caml_logseq_test_platform_event"
+
+let native_platform_exception_reporting () =
+  let previous_control = Gc.get () in
+  let calls = ref 0 in
+  Fun.protect ~finally:(fun () ->
+    Gc.set previous_control;
+    Callback.register "lui_ocaml_platform_event" Native_embed.Ffi.platform_event) (fun () ->
+    Gc.set {previous_control with minor_heap_size=4096};
+    Callback.register "lui_ocaml_platform_event" (fun payload ->
+      incr calls;
+      let allocated = Array.init 1024 (fun i -> String.make 128 (Char.chr (65+i mod 26))) in
+      Gc.full_major ();
+      if payload="raise-platform-event" then
+        failwith (String.concat "" ["platform-event-callback-";"regression"])
+      else ignore (Sys.opaque_identity allocated));
+    check "actual platform-event ABI reports a callback exception without crashing"
+      (bridge_platform_event "raise-platform-event"=0);
+    check "actual platform-event ABI remains callable after the exception"
+      (bridge_platform_event "accept-platform-event"=1 && !calls=2))
+
 let () =
   let owner = Thread.id (Thread.self ()) in
   let assert_owner () =
@@ -926,6 +947,7 @@ let () =
   Platform.install_ui_services ~paints_caret:true ~assert_owner
     ~request_flush:(fun () -> ()) ~dom ~timers:Ui_dom_native.timers ~files:Ui_dom_native.files;
   Editor_clipboard_native.run ();
+  native_platform_exception_reporting ();
   native_entry_admission ();
   editor_keyboard_capture_order ();
   native_worker_admission ();

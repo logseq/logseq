@@ -10,6 +10,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 
 from build_windows_dll import ARCHIVES, PACKAGES, UI
@@ -37,6 +38,9 @@ def run() -> None:
         bridge = stage / ("logseq_lui_bridge" + extension)
         subprocess.run([*prefix, "ocamlopt", "-c", "-o", str(bridge),
                         str(UI / "native/logseq_lui_bridge.c")], cwd=stage, check=True)
+        event_probe = stage / ("platform_event_exception" + extension)
+        subprocess.run([*prefix, "ocamlopt", "-c", "-o", str(event_probe),
+                        str(UI / "nsh/tests/platform_event_exception.c")], cwd=stage, check=True)
         embed = stage / "native_embed.cmx"
         subprocess.run([*compiler, "-c", "-o", str(embed),
                         str(UI / "native/native_embed.ml")], cwd=stage, check=True)
@@ -48,9 +52,17 @@ def run() -> None:
         source.write_bytes((UI / "nsh/tests/update_preparation_native.ml").read_bytes())
         executable = stage / ("admission.exe" if os.name == "nt" else "admission")
         subprocess.run([*compiler, "-I", str(stage), "-linkall", "-linkpkg",
-                        *map(str, archives), str(embed), str(geometry), str(clipboard), str(source), str(bridge),
+                        *map(str, archives), str(embed), str(geometry), str(clipboard), str(source), str(bridge), str(event_probe),
                         "-o", str(executable)], cwd=stage, check=True)
-        subprocess.run([str(executable)], cwd=stage, check=True, timeout=30)
+        result = subprocess.run([str(executable)], cwd=stage, check=False, timeout=30,
+                                capture_output=True, text=True)
+        print(result.stdout, end="")
+        print(result.stderr, end="", file=sys.stderr)
+        result.check_returncode()
+        expected = ('OCaml exception in lui_ocaml_platform_event: '
+                    'Failure("platform-event-callback-regression")')
+        if expected not in result.stderr:
+            raise RuntimeError("Actual platform-event exception diagnostic was not retained")
 
 
 if __name__ == "__main__":

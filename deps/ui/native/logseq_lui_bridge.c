@@ -135,11 +135,17 @@ static void startup_preserving_host_signals(char **arguments) {
 }
 #endif
 
-static void report_ocaml_exception(const char *where, value result) {
-  char *message = caml_format_exception(Extract_exception(result));
+static void report_ocaml_exception_value(const char *where, value exception) {
+  CAMLparam1(exception);
+  char *message = caml_format_exception(exception);
   fprintf(stderr, "logseq_lui_bridge: OCaml exception in %s: %s\n", where,
-          message);
+          message != NULL ? message : "exception diagnostic allocation failed");
   caml_stat_free(message);
+  CAMLreturn0;
+}
+
+static void report_ocaml_exception(const char *where, value result) {
+  report_ocaml_exception_value(where, Extract_exception(result));
 }
 
 static int emit_patch(const char *where, value result) {
@@ -621,13 +627,17 @@ LUI_EXPORT int32_t lui_ocaml_platform_event(const char *data,
   const value *handler = caml_named_value("lui_ocaml_platform_event");
   if (handler != NULL && data != NULL) {
     CAMLparam0();
-    CAMLlocal2(payload_value, callback_result);
+    CAMLlocal2(payload_value, exception);
     payload_value = copy_bytes(data, length);
-    callback_result = caml_callback_exn(*handler, payload_value);
-    if (Is_exception_result(callback_result))
-      report_ocaml_exception("lui_ocaml_platform_event", callback_result);
-    else
+    /* An encoded exceptional value is not a valid GC root. Decode it
+       immediately, before registering it or doing diagnostic work. */
+    value outcome = caml_callback_exn(*handler, payload_value);
+    if (Is_exception_result(outcome)) {
+      exception = Extract_exception(outcome);
+      report_ocaml_exception_value("lui_ocaml_platform_event", exception);
+    } else {
       result = 1;
+    }
     CAMLdrop;
   }
   caml_enter_blocking_section();
