@@ -2077,6 +2077,7 @@ let native_scalar_draft_area_refresh () =
   and previous_flush= !Runtime.app_flush and previous_send= !Runtime.app_send
   and previous_worker= !Runtime.worker
   and previous_editing= !Editor_state.st and previous_fields= !Editor_state.field_sigs_opt
+  and previous_settings= !Settings_state.st
   and previous_repo= !Subs_state.current_repo and previous_graph= !Subs_state.current_graph_uuid
   and previous_active= !Properties_value.active_editor and previous_pending= !Properties_value.pending_edit
   and previous_close= !Properties_value.close_editor
@@ -2113,7 +2114,8 @@ let native_scalar_draft_area_refresh () =
   Hashtbl.remove Properties_state.areas key;
   Hashtbl.remove Properties_state.areas sibling_key;
   Properties_data.rd_pending:=[];Properties_data.rd_scheduled:=false;
-  Editor_state.st:=None;Editor_state.field_sigs_opt:=None;Properties_value.active_editor:=None;
+  Editor_state.st:=None;Editor_state.field_sigs_opt:=None;Settings_state.st:=None;
+  Properties_value.active_editor:=None;
   Properties_state.overlays:=[];Properties_state.view_overlays_state:=None;
   Runtime.read_model:=(fun () -> !model);
   Runtime.worker:=Some {Worker_client.invoke_fn=(fun method_ args ->
@@ -2138,6 +2140,7 @@ let native_scalar_draft_area_refresh () =
     Runtime.read_model:=previous_model;Runtime.app_flush:=previous_flush;Runtime.app_send:=previous_send;
     Runtime.worker:=previous_worker;
     Editor_state.st:=previous_editing;Editor_state.field_sigs_opt:=previous_fields;
+    Settings_state.st:=previous_settings;
     Subs_state.current_repo:=previous_repo;Subs_state.current_graph_uuid:=previous_graph;
     Properties_value.active_editor:=previous_active;
     Properties_value.pending_edit:=previous_pending;Properties_value.close_editor:=previous_close;
@@ -2266,7 +2269,8 @@ let native_scalar_draft_area_refresh () =
     replaced_close ();settle ();
     check "origin close cannot save into or clear the destination owner"
       (field ()=Some destination && !writes=0);
-    ignore (Native_embed.dismiss destination);settle ())
+    ignore (Native_embed.dismiss destination);settle ();
+    print_endline "PASS native graph-owned property region, draft refresh, overlapping reads and stale callbacks")
 
 let native_property_batch_repo_ownership () =
   let previous_model= !Runtime.read_model and previous_worker= !Runtime.worker
@@ -2299,7 +2303,8 @@ let native_property_batch_repo_ownership () =
     check "identical UUIDs receive only their originating graph's result"
       (List.assoc_opt "origin" !results=Some (Wire.String "batch-origin")
        && List.assoc_opt "origin-duplicate" !results=Some (Wire.String "batch-origin")
-       && List.assoc_opt "destination" !results=Some (Wire.String "batch-destination")))
+       && List.assoc_opt "destination" !results=Some (Wire.String "batch-destination"));
+    print_endline "PASS native deferred property batches retain captured graph ownership")
 
 let native_file_request_lifetimes () =
   let previous_host= !Host.host_op and previous_nsh= !Browser_ui.native_dialogs in
