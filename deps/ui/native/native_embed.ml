@@ -64,19 +64,38 @@ let () =
 let last_native_keymap :
     ((Model.t, Action.t) Lui_app.reducer_app * int * bool * bool * bool) option ref = ref None
 
+(* A palette view is immutable. Idle drains must not flatten its complete
+   result groups just to re-read the highlighted item's copy context. *)
+let last_native_palette_view : (Cmdk_state.view * bool) option ref = ref None
+
+let native_palette_context () =
+  match !Cmdk_state.latest_st with
+  | Some state ->
+      let view = Cmdk_state.get state in
+      if not view.Cmdk_state.open_ then begin
+        last_native_palette_view := None;
+        false, false
+      end else begin
+        let copy = match !last_native_palette_view with
+          | Some (previous, copy) when previous == view -> copy
+          | _ ->
+              let copy = match Cmdk_state.item_at view view.Cmdk_state.hl with
+                | Some {Cmdk_state.act=(Cmdk_state.Open_page _ | Cmdk_state.Open_block _);_} -> true
+                | _ -> false in
+              last_native_palette_view := Some (view, copy);
+              copy in
+        true, copy
+      end
+  | None ->
+      last_native_palette_view := None;
+      false, false
+
 let () = publish_native_keymap := (fun () ->
   match !current_app with
   | Some app when (Lui_app.runtime app).Lui_runtime.runtime_backend.backend_profile.profile_host
                   = Lui_protocol.NshHost ->
       let revision = Keymap_data.revision () in
-      let palette, copy_reference = match !Cmdk_state.latest_st with
-        | Some state ->
-            let view = Cmdk_state.get state in
-            let copy = match Cmdk_state.item_at view view.Cmdk_state.hl with
-              | Some {Cmdk_state.act=(Cmdk_state.Open_page _ | Cmdk_state.Open_block _);_} -> true
-              | _ -> false in
-            view.Cmdk_state.open_, copy
-        | None -> false, false in
+      let palette, copy_reference = native_palette_context () in
       let capture = Keyboard_capture.active () in
       let unchanged = match !last_native_keymap with
         | Some (owner, previous, p, c, copy) ->
@@ -458,6 +477,7 @@ let perf_mark name t0 =
 
 let initialize_unlocked platform_code host_code (payload : string) =
   last_native_keymap := None;
+  last_native_palette_view := None;
   let paints_caret =
     match Yojson.Safe.from_string payload with
     | `Assoc [ ("paintsCaret", `Bool value) ] -> value
@@ -1022,6 +1042,7 @@ let dispose () =
   with_entry_lock (fun () ->
     Editor_actions.cancel_clipboard_actions ();
     last_native_keymap := None;
+    last_native_palette_view := None;
     Platform.cancel_clipboard_writes ();
     Platform.cancel_keychain_requests ();
     Host.set_host_op Host.disconnected;
