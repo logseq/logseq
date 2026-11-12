@@ -1,7 +1,8 @@
 //! The application's native menu. OCaml owns translated labels and business commands;
 //! NSH owns platform edit/window/application roles and shortcut dispatch.
+use super::update_preparation::{Preparation, SendEvent};
 use lui_nsh::{
-    app::ApplicationEvents,
+    app::{ApplicationEvents, ApplicationMutations},
     desktop_updates::{InstallPreparation, UpdateActions, UpdateLabels, UpdateLifecycle},
     runtime::PlatformEvent,
 };
@@ -60,6 +61,7 @@ impl Labels {
 struct Installed {
     labels: Labels,
     command: Command,
+    send: SendEvent,
 }
 impl PartialEq for Installed {
     fn eq(&self, other: &Self) -> bool {
@@ -69,15 +71,35 @@ impl PartialEq for Installed {
 
 /// One application menu owner. Update phases contribute to this same menu;
 /// no second controller, worker, menu owner or polling loop is mounted.
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub struct ApplicationMenu {
     owner: Owner,
     installed: Signal<Option<Installed>>,
+    preparation: Rc<Preparation>,
 }
 impl ApplicationMenu {
     pub fn mount() -> Self {
         let installed = signal(None::<Installed>);
-        let updates = UpdateActions::installed(Rc::new(InstallationUnavailable { installed }));
+        let owner = Owner::current();
+        let preparing = signal(false);
+        let preparation = Rc::new(Preparation::new(move |active| {
+            if owner.is_live() {
+                preparing.set(active);
+            }
+        }));
+        provide_context(ApplicationMutations::new(move || {
+            if preparing.get() {
+                Err("application update preparation is active".into())
+            } else {
+                Ok(())
+            }
+        }));
+        let cleanup_preparation = preparation.clone();
+        cleanup(move || cleanup_preparation.close());
+        let updates = UpdateActions::installed(Rc::new(InstallationUnavailable {
+            installed,
+            preparation: preparation.clone(),
+        }));
         effect(move || {
             if let Some(current) = installed.get() {
                 let contribution = updates.menu_items(current.labels.updates.clone());
@@ -86,6 +108,7 @@ impl ApplicationMenu {
                     os() == Os::MacOs,
                     current.command,
                     contribution,
+                    preparing.get(),
                 ));
             }
         });
@@ -93,7 +116,11 @@ impl ApplicationMenu {
         Self {
             owner: Owner::current(),
             installed,
+            preparation,
         }
+    }
+    pub(super) fn preparation_result(&self, payload: &str) -> Result<(), String> {
+        self.preparation.response(payload)
     }
     pub fn install(&self, payload: &str, events: ApplicationEvents) -> Result<(), String> {
         if !self.owner.is_live() {
@@ -101,27 +128,36 @@ impl ApplicationMenu {
         }
         let labels = Labels::parse(payload)?;
         let owner = self.owner;
+        let preparation = self.preparation.clone();
+        let send: SendEvent = Rc::new(move |event| events.send(event));
+        let command_events = send.clone();
         let command = Rc::new(move |name: &'static str| {
-            if !owner.is_live() {
+            if !owner.is_live() || preparation.active() {
                 return;
             }
-            if let Err(error) = events.send(PlatformEvent {
+            if let Err(error) = command_events(PlatformEvent {
                 operation: "application-menu-command".into(),
                 payload: json!({"detail":{"command":name}}).to_string(),
             }) {
                 eprintln!("application menu {name}: {error}");
             }
         });
-        self.installed.set(Some(Installed { labels, command }));
+        self.installed.set(Some(Installed {
+            labels,
+            command,
+            send,
+        }));
         Ok(())
     }
 }
 
 // Actual installation remains closed until the application supplies a verified
 // save/quiesce, worker-ownership and relaunch lifecycle. Checks and downloads
-// still use the existing updater; this policy never issues an installation lease.
+// still use the existing updater; even a successful save is explicitly released
+// and acknowledged before refusal. This policy never issues an installation lease.
 struct InstallationUnavailable {
     installed: Signal<Option<Installed>>,
+    preparation: Rc<Preparation>,
 }
 impl UpdateLifecycle for InstallationUnavailable {
     fn prepare(&self) -> InstallPreparation {
@@ -129,47 +165,63 @@ impl UpdateLifecycle for InstallationUnavailable {
             .installed
             .get_untracked()
             .expect("update actions require installed translated menu labels");
-        Box::pin(async move { Err(current.labels.installation_unavailable_description) })
+        self.preparation.refuse_after_save(
+            current.send,
+            current.labels.installation_unavailable_description,
+        )
     }
 }
 
 type Command = Rc<dyn Fn(&'static str)>;
-fn items(labels: Labels, mac: bool, command: Command, mut updates: Vec<MenuItem>) -> Vec<MenuItem> {
+fn items(
+    labels: Labels,
+    mac: bool,
+    command: Command,
+    mut updates: Vec<MenuItem>,
+    preparing: bool,
+) -> Vec<MenuItem> {
+    if preparing {
+        updates = updates
+            .into_iter()
+            .map(|item| item.disabled(true))
+            .collect();
+    }
+    let role = |role| MenuItem::role(role).disabled(preparing);
     let mut menus = Vec::with_capacity(6);
     if mac {
-        let mut application = vec![MenuItem::role(MenuRole::About), MenuItem::separator()];
+        let mut application = vec![role(MenuRole::About), MenuItem::separator()];
         if !updates.is_empty() {
             application.append(&mut updates);
             application.push(MenuItem::separator());
         }
         application.extend([
-            MenuItem::role(MenuRole::Hide),
-            MenuItem::role(MenuRole::HideOthers),
-            MenuItem::role(MenuRole::ShowAll),
+            role(MenuRole::Hide),
+            role(MenuRole::HideOthers),
+            role(MenuRole::ShowAll),
             MenuItem::separator(),
-            MenuItem::role(MenuRole::Quit),
+            role(MenuRole::Quit),
         ]);
         menus.push(MenuItem::submenu("Logseq", application));
     }
-    let mut file = vec![MenuItem::role(MenuRole::Close)];
+    let mut file = vec![role(MenuRole::Close)];
     if !mac {
         if !updates.is_empty() {
             file.push(MenuItem::separator());
             file.append(&mut updates);
         }
-        file.extend([MenuItem::separator(), MenuItem::role(MenuRole::Quit)]);
+        file.extend([MenuItem::separator(), role(MenuRole::Quit)]);
     }
     menus.push(MenuItem::submenu(labels.file, file));
     menus.push(MenuItem::submenu(
         labels.edit,
         [
-            MenuItem::role(MenuRole::Undo),
-            MenuItem::role(MenuRole::Redo),
+            role(MenuRole::Undo),
+            role(MenuRole::Redo),
             MenuItem::separator(),
-            MenuItem::role(MenuRole::Cut),
-            MenuItem::role(MenuRole::Copy),
-            MenuItem::role(MenuRole::Paste),
-            MenuItem::role(MenuRole::SelectAll),
+            role(MenuRole::Cut),
+            role(MenuRole::Copy),
+            role(MenuRole::Paste),
+            role(MenuRole::SelectAll),
         ],
     ));
     let reload = command.clone();
@@ -178,26 +230,30 @@ fn items(labels: Labels, mac: bool, command: Command, mut updates: Vec<MenuItem>
         labels.view,
         [
             MenuItem::new(labels.reload)
+                .disabled(preparing)
                 .shortcut("mod+r")
                 .on_select(move || reload("reload")),
-            MenuItem::role(MenuRole::ToggleFullScreen),
+            role(MenuRole::ToggleFullScreen),
             MenuItem::separator(),
             MenuItem::new(labels.toggle_left_sidebar)
+                .disabled(preparing)
                 .on_select(move || sidebar("toggle-left-sidebar")),
         ],
     ));
     menus.push(MenuItem::submenu(
         labels.window,
-        [
-            MenuItem::role(MenuRole::Minimize),
-            MenuItem::role(MenuRole::Zoom),
-        ],
+        [role(MenuRole::Minimize), role(MenuRole::Zoom)],
     ));
     menus.push(MenuItem::submenu(
         labels.help,
-        [MenuItem::new(labels.documentation).on_select(move || command("documentation"))],
+        [MenuItem::new(labels.documentation)
+            .disabled(preparing)
+            .on_select(move || command("documentation"))],
     ));
     menus
+        .into_iter()
+        .map(|menu| menu.disabled(preparing))
+        .collect()
 }
 
 #[cfg(test)]
@@ -241,6 +297,7 @@ mod tests {
             false,
             Rc::new(move |name| command.set(name.into())),
             Vec::new(),
+            false,
         ));
         cleanup(|| set_application_menu(None));
         text(move || format!("Command: {}", command.get()))
@@ -283,11 +340,22 @@ mod tests {
     fn UnavailableInstallationFixture() -> impl IntoElement {
         let mut labels = Labels::parse(&labels()).unwrap();
         labels.installation_unavailable_description = "无法安全安装更新".into();
+        let preparation = Rc::new(Preparation::new(|_| {}));
+        let answer = preparation.clone();
         let lifecycle = InstallationUnavailable {
             installed: signal(Some(Installed {
                 labels,
                 command: Rc::new(|_| ()),
+                send: Rc::new(move |event| {
+                    let request: serde_json::Value = serde_json::from_str(&event.payload).unwrap();
+                    answer.response(&json!({
+                        "id":request["id"],
+                        "phase":if event.operation == "update-prepare" { "prepared" } else { "released" },
+                        "ok":true,"error":""
+                    }).to_string())
+                }),
             })),
+            preparation,
         };
         let result = signal(String::new());
         spawn(async move {

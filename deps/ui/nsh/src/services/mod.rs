@@ -4,6 +4,7 @@ mod dom;
 mod menu;
 pub(crate) mod resources;
 mod secrets;
+mod update_preparation;
 
 use clipboard::ClipboardService;
 use lui_nsh::{
@@ -135,6 +136,10 @@ impl Services {
                 }
                 self.themes
                     .set_mode(state.data.get("theme").map(String::as_str).unwrap_or(""))?;
+                Ok(Vec::new())
+            }
+            "update-preparation-result" => {
+                self.menu.preparation_result(&request.payload)?;
                 Ok(Vec::new())
             }
             "application-menu-labels" => {

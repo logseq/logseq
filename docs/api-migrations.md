@@ -519,3 +519,31 @@ This fence covers application/model mutations, not an invented inherited NSH
 Worker artifact identity/compatibility, shared-consumer ownership and safe
 relaunch remain separate requirements; this save boundary issues no installation
 lease and does not qualify whole-application upgrading.
+
+
+### Logseq updater saves, explicitly releases, then remains unavailable
+
+The actual NSH application menu now requests the correlated native save boundary
+through its existing `ApplicationEvents` capability after final update
+confirmation. Its one application-owned preparation record rejects new model and
+agent mutations, and the same native menu owner temporarily disables its actual
+role/command items (including Edit roles). It creates no second updater, event
+pump or worker. Missing installed update configuration still creates no updater
+worker, feed request or preparation event.
+
+The policy **always** sends `update-abort` and waits for the matching `released`
+acknowledgement before returning the translated
+`updater.dialog/installation-unavailable-description`. Save failures are logged
+as diagnostics and also remain unavailable. No successful preparation returns an
+`InstallLease`, so this increment cannot dispatch installation or relaunch.
+Cancelling the preparation future sends the matching abort but keeps admission
+closed until its acknowledgement; a stale earlier completion cannot release a
+newer reservation. A failed abort transport does not pretend to release the
+native fence. Owner cleanup retires the request; late issued replies are inert.
+
+This exercises saving and safe release while the installation feature remains
+explicitly unqualified. Shared-daemon artifact identity/compatibility, consumer
+ownership and argv/credential/background-preserving relaunch are still open.
+Controller-local native portal interaction is not certified frozen by a root
+`disabled` property, which NSH does not inherit; the durable model/worker fence
+and explicit native-agent admission remain necessary independent protections.
