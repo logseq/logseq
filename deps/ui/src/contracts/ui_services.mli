@@ -414,6 +414,7 @@ val dom_on_document_event : ?capture:bool -> string -> (ev -> unit) -> unit
 val dom_subscribe_document_event : scope:Signal.scope -> ?capture:bool -> string -> (ev -> unit) -> unit
 val dom_on_window_event : string -> (ev -> unit) -> unit
 val viewport_width_signal : scheduler:Signal.scheduler -> scope:Signal.scope -> float Signal.signal
+val viewport_height_signal : scheduler:Signal.scheduler -> scope:Signal.scope -> float Signal.signal
 val dom_query : string -> el option
 val dom_query_all : string -> el list
 val dom_by_id : string -> el option
