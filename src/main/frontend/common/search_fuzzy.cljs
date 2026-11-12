@@ -67,9 +67,6 @@
                         (<= 0 (.indexOf original-s query))
                         MAX-STRING-LENGTH
 
-                        (<= 0 (.indexOf original-s query))
-                        (- MAX-STRING-LENGTH 0.1)
-
                         :else
                         0)
                       (if (empty? s) 1 0))
