@@ -72,3 +72,31 @@ uses 36px Inter with 54px line height. The empty-page add row has a real 28px bo
 and 0.5 resting opacity. Graph View is intentionally excluded when comparing
 vertical positions. Native historical chrome is broadly similar; font raster and
 the absent empty-page bullet need fresh native verification, not a parity claim.
+
+## UX-008: complete icon picker tabs consume excessive memory and cannot scroll
+
+The user reproduced an immediate increase to approximately 1 GB after switching
+to Emojis or Icons. That is user evidence, not an independently sampled release
+RSS measurement. Read-only process inspection after this report found no running
+installed frontend, so a new coordinated native session is required for RSS and
+AppKit screenshots. The remaining worker was left untouched.
+
+The production picker already passes complete datasets to canonical virtual rows,
+but its growing body Scroll had an automatic height basis inside a finite 408px
+shrink-to-fit popup. This leaves the viewport dependent on the full intrinsic
+virtual content extent. The correction sets the body height basis and minimum to
+zero while retaining its existing flex growth and single native Scroll owner.
+The datasets, item keys, picker choice callbacks and maintained backend behavior
+remain unchanged. Native-engine verification must establish whether this correction
+fully resolves the observed issue before a runtime or memory fix is claimed.
+
+The required actual-application startup matrix now includes an independent
+`icon-picker` child. It opens the production Journal icon action, changes both
+tabs, verifies a positive finite native body height and bounded mounted cells,
+drags the real native Scroll to the complete source's final row, activates the
+last item, and waits for the Journal icon to be persisted. It does not manually
+supply `VirtualWindow` events, truncate generated datasets, or replace the picker
+with a test-only view. The earlier recording-host row tests remain useful for
+source semantics but do not prove native viewport ownership. Compilation and this
+new native-engine case are pending the parent's serialized build; native raster,
+scroll-wheel behavior and release physical-footprint comparison remain pending.
