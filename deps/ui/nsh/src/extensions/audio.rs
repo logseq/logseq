@@ -435,13 +435,16 @@ mod tests {
     fn native_audio_controls_stream_events_and_close_the_owned_player() {
         let wave = Wave::new();
         let start = || {
-            let mut app = Headless::start(EngineConfig {
+            let mut config = EngineConfig {
                 context: EngineContext::default().with(Fixture {
                     root: wave.0.clone(),
                 }),
                 ..EngineConfig::new(Root::of::<AudioAssets>())
-            })
-            .unwrap();
+            };
+            // Desktop Tab order includes buttons and slider thumbs; the
+            // default phone environment does not enable that traversal.
+            config.environment.os = nsh_core::platform::Os::MacOs;
+            let mut app = Headless::start(config).unwrap();
             app.wait_for("audio-ready").unwrap();
             app
         };
@@ -456,7 +459,12 @@ mod tests {
             !opened.iter().any(|call| call.command == "resume"),
             "mount never autoplays"
         );
-        app.press("label:Play audio").unwrap();
+        // A Headless press is a touch tap, not a desktop focus request.
+        // Begin at the first real Tab stop and activate Play by keyboard so
+        // the next Tab reaches the seek thumb, then the volume thumb.
+        app.wait_for("label:Play audio").unwrap();
+        app.press_key("tab").unwrap();
+        app.press_key("space").unwrap();
         app.wait_for("0:00 / 1:00").unwrap();
         assert!(
             app.audio_calls()

@@ -107,7 +107,12 @@ fn ManagedAssets() -> impl IntoElement {
 fn managed_asset_activation_uses_native_open_path_and_rejects_stale_or_held_views() {
     use nsh_core::file_dialog::FileRequest;
     let start = || {
-        let mut app = Headless::start(EngineConfig::new(Root::of::<ManagedAssets>())).unwrap();
+        let mut config = EngineConfig::new(Root::of::<ManagedAssets>());
+        config.environment.os = nsh_core::platform::Os::MacOs;
+        let mut app = Headless::start(config).unwrap();
+        // Headless defaults to no desktop file service. This public mock also
+        // records OpenPath without opening or changing the requested file.
+        app.on_pick_paths(Vec::new()).unwrap();
         app.wait_for("asset-ready").unwrap();
         app
     };
