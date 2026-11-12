@@ -38,6 +38,7 @@ pub struct Services {
     resources: resources::Resources,
     menu: ApplicationMenu,
     keyboard: keyboard::GlobalKeyboard,
+    admission: ApplicationMutations,
 }
 impl Services {
     pub fn new(icons: IconRegistry, themes: ThemeRegistry, menu: ApplicationMenu) -> Rc<Self> {
@@ -63,6 +64,7 @@ impl Services {
             menu,
             keyboard: use_context::<keyboard::GlobalKeyboard>()
                 .expect("application keyboard owner"),
+            admission: use_context::<ApplicationMutations>().expect("application mutation owner"),
         })
     }
     pub(crate) fn resources(&self) -> resources::Resources {
@@ -123,13 +125,13 @@ impl Services {
                 .split_once('\n')
                 .ok_or("dom-op requires an operation separator")?;
             if let Some(request) = files::capture(operation, payload)? {
-                let admission = use_context::<ApplicationMutations>()
-                    .ok_or("native file service requires the application mutation owner")?;
+                let admission = self.admission.clone();
                 return Ok(ServiceResponse::AfterCommit(Box::pin(async move {
                     Ok(files::execute(request, admission).await)
                 })));
             }
-            let captured = dom::capture(operation, payload, &renderer)?;
+            let captured =
+                dom::capture(operation, payload, &renderer, Some(self.admission.clone()))?;
             return Ok(ServiceResponse::AfterCommit(Box::pin(async move {
                 dom::execute(captured, &renderer).await
             })));

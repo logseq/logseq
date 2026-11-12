@@ -1413,6 +1413,63 @@ let native_cmdk_controlled_input () =
            && node "scroller" <> node "row"
        | _ -> false))
 
+let native_click_producers () =
+  let previous_app = !Native_embed.current_app
+  and previous_provider = !Dom_ext.doc_elements_provider
+  and previous_subtree = !Dom_ext.subtree_elements_provider
+  and previous_host = !Host.host_op
+  and previous_model = !Runtime.read_model
+  and previous_flush = !Runtime.app_flush
+  and previous_reply = !Comments_ops.reply_focus_request in
+  let key = ref None and requests = ref [] and activated = ref 0 in
+  let initial=Model.initial in
+  Runtime.read_model:=(fun () -> initial);
+  Comments_ops.reply_focus_request:=None;
+  let backend : Lui_protocol.backend = {
+    backend_profile=Lui_protocol.profile Lui_protocol.MacOS Lui_protocol.NshHost;
+    apply_batch=(fun _ -> true)} in
+  let app=Lui_app.create backend initial (fun model (_ : Action.t) -> model)
+    (fun _ _ _ -> Lui_elements.column
+      [ Lui_elements.column ~accessibility_identifier:"area-native-click-comments"
+          [Comments_view.add_box ~scope:"main" "native-click-comments"]
+      ; Views_popup.menu_level ~pid:987 ~cls:""
+          ~register:(fun handler -> key:=Some handler)
+          [Views_popup.MItem ("Native keyboard action",fun () -> incr activated)] ]) in
+  Fun.protect ~finally:(fun () ->
+    ignore (Lui_app.dispose app);Native_embed.current_app:=previous_app;
+    Dom_ext.doc_elements_provider:=previous_provider;
+    Dom_ext.subtree_elements_provider:=previous_subtree;
+    Host.host_op:=previous_host;Runtime.read_model:=previous_model;
+    Runtime.app_flush:=previous_flush;Comments_ops.reply_focus_request:=previous_reply) (fun () ->
+    Native_embed.current_app:=Some app;
+    Runtime.read_model:=(fun () -> Lui_app.model app);
+    Runtime.app_flush:=(fun () -> ignore (Lui_app.flush app));
+    Dom_ext.doc_elements_provider:=Native_embed.collect_elements;
+    Dom_ext.subtree_elements_provider:=Native_embed.collect_subtree;
+    Host.set_host_op (fun name payload -> if name="dom-op" then
+      let boundary=String.index payload '\n' in
+      requests:=(String.sub payload 0 boundary,
+        String.sub payload (boundary+1) (String.length payload-boundary-1))::!requests);
+    ignore (Lui_app.start app);ignore (Lui_app.flush app);
+    Comments_ops.reveal "native-click-comments";
+    let handle=Option.get !key in
+    List.iter (fun key -> handle (Ui_dom_native.ev_of
+      (Js.Json.object_list ["key",Js.Json.string key]))) ["ArrowDown";"Enter"];
+    let runtime=Lui_app.runtime app in
+    let clicks=List.filter_map (fun (name,payload) -> if name="click" then
+      Some Yojson.Safe.Util.(Yojson.Safe.from_string payload |> member "ref" |> member "node-id" |> to_int)
+      else None) (List.rev !requests) in
+    check "actual Comments and popup keyboard owners request native controller activation once"
+      (match clicks with
+       | [reply;menu] ->
+           let props node=Hashtbl.find runtime.Lui_runtime.runtime_properties node in
+           Lui_protocol.Property_map.find_opt Lui_protocol.StyleClass (props reply)
+             =Some (Lui_protocol.StringValue "ls-comment-reply-placeholder")
+           && Lui_protocol.Property_map.find_opt Lui_protocol.AccessibilityIdentifier (props menu)
+             =Some (Lui_protocol.StringValue "vp987-i0")
+       | _ -> false);
+    check "native click producers do not also dispatch duplicate semantic presses" (!activated=0))
+
 let native_menu_scope_retention () =
   let open Lui_elements in
   let previous_model = !Runtime.read_model and previous_flush = !Runtime.app_flush
@@ -1729,6 +1786,7 @@ let () =
   Editor_clipboard_native.async_file_read_keeps_the_application_owner_responsive ();
   native_settings_route_links ();
   native_cmdk_controlled_input ();
+  native_click_producers ();
   native_point_property_scroll ();
   native_wide_reading_column ();
   native_popup_placement_contract ();

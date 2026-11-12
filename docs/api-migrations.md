@@ -1,5 +1,23 @@
 # API migrations
 
+## Native element clicks activate the retained NSH controller
+
+The native `click` service used by comment-reply reveal and popup keyboard
+activation now calls the shared LUI `Renderer::activate_native` capability.
+It captures the original node incarnation and the application's mutation guard
+before deferring native layout, then uses the existing NSH controller once.
+Missing, retired, disabled, hidden, pointer-excluded or unhandled targets return
+an error. The host never follows a reused wire ID or also dispatches a second
+OCaml Press event.
+
+Existing calls such as `placeholder.Ui_services.click ()` remain valid and keep
+their `{ "ref": ... }` request. The host retains the application mutation guard
+from its mounted service owner; preparation is checked before activation and
+again after measurement. A press that itself opens preparation or dismisses its
+view remains accepted. The controller's response does not acknowledge completion
+of any later application action. Web, Apple/iOS and Android click behavior and
+request payloads are unchanged.
+
 ## Wide mode is a mounted preference with declarative layout
 
 `Settings_state.t` now includes `wide_mode`, initialized by `ensure` from the

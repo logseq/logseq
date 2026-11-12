@@ -1,7 +1,7 @@
 //! DOM service capabilities over retained native references, never a shadow document.
 //! `set-value` and custom Editor selection require their authoritative typed owners;
 //! native InsertText is a user edit and is deliberately not a substitute.
-use lui_nsh::{render::Renderer, runtime::PlatformEvent, store::Node};
+use lui_nsh::{app::ApplicationMutations, render::Renderer, runtime::PlatformEvent, store::Node};
 use nsh_core::{
     RevealOptions, ScrollAlignment,
     element::ElementRef,
@@ -362,6 +362,10 @@ async fn scroll_row(
 /// An owned request deferred until its creating patches reach the native commit.
 /// Existing targets retain their incarnation even if their identifier is renamed.
 pub enum CapturedRequest {
+    Click {
+        node: (u64, u64),
+        admission: Option<ApplicationMutations>,
+    },
     ScrollRow {
         scroller: (u64, u64),
         row: (u64, u64),
@@ -377,7 +381,22 @@ pub fn capture(
     operation: &str,
     payload: &str,
     renderer: &Renderer,
+    admission: Option<ApplicationMutations>,
 ) -> Result<CapturedRequest, String> {
+    if operation == "click" {
+        let request = object(payload)?;
+        let node = resolve(
+            request
+                .get("ref")
+                .ok_or("native click requires a target ref")?,
+            renderer,
+        )?
+        .ok_or("native click target is missing or retired")?;
+        return Ok(CapturedRequest::Click {
+            node: (node.id, node.incarnation),
+            admission,
+        });
+    }
     if operation == "scroll-row-into-view" {
         let request = object(payload)?;
         let resolve_field = |name| -> Result<Arc<Node>, String> {
@@ -420,6 +439,19 @@ pub async fn execute(
     renderer: &Renderer,
 ) -> Result<Vec<PlatformEvent>, String> {
     match request {
+        CapturedRequest::Click {
+            node: (id, incarnation),
+            admission,
+        } => {
+            if renderer
+                .activate_native(id, incarnation, admission.as_ref())
+                .await?
+            {
+                Ok(Vec::new())
+            } else {
+                Err("native click target has no accepting controller".into())
+            }
+        }
         CapturedRequest::ScrollRow { scroller, row } => scroll_row(scroller, row, renderer).await,
         CapturedRequest::Node {
             operation,
@@ -524,8 +556,16 @@ async fn handle_inner(
 mod tests {
     use super::*;
     use lui_nsh::wire::Batch;
-    use nsh_engine::{EngineConfig, Root};
+    use nsh_engine::{EngineConfig, EngineContext, Root};
     use nsh_testing::Headless;
+
+    fn capture(
+        operation: &str,
+        payload: &str,
+        renderer: &Renderer,
+    ) -> Result<CapturedRequest, String> {
+        super::capture(operation, payload, renderer, None)
+    }
 
     #[test]
     fn request_decoding_rejects_invalid_shapes_and_offsets_without_coercion() {
@@ -794,5 +834,141 @@ mod tests {
         app.press("Reject replacement").unwrap();
         app.wait_for("Replacement rejected").unwrap();
         app.wait_for("Offsets: 540, 0").unwrap();
+    }
+
+    #[derive(Clone, Copy, PartialEq)]
+    enum ClickMode {
+        Live,
+        Disabled,
+        Hidden,
+        PointerExcluded,
+        Reused,
+        Preparing,
+        PreparesOnPress,
+        DismissesOnPress,
+    }
+
+    #[component]
+    fn NativeClick() -> impl IntoElement {
+        let mode = engine_context::<ClickMode>().unwrap_or(ClickMode::Live);
+        let allowed = signal(mode != ClickMode::Preparing);
+        let count = signal(0_u32);
+        let renderer = Renderer::new(move |event, renderer| {
+            if matches!(event, lui_nsh::render::Event::Press(2)) {
+                count.update(|count| *count += 1);
+                if mode == ClickMode::PreparesOnPress {
+                    allowed.set(false);
+                }
+                if mode == ClickMode::DismissesOnPress {
+                    renderer
+                        .apply(patch(
+                            2,
+                            json!([
+                                {"op":"remove-child","parent":1,"child":2},
+                                {"op":"drop-node","id":2}
+                            ]),
+                        ))
+                        .unwrap();
+                }
+            }
+        });
+        renderer.apply(patch(1, json!([
+            {"op":"create-node","id":1,"kind":"box"},
+            {"op":"set-prop","id":1,"property":"display","value":if mode==ClickMode::Hidden {"none"} else {"block"}},
+            {"op":"set-prop","id":1,"property":"pointer-enabled","value":mode!=ClickMode::PointerExcluded},
+            {"op":"create-node","id":2,"kind":"button"},
+            {"op":"set-prop","id":2,"property":"text","value":"Domain action"},
+            {"op":"set-prop","id":2,"property":"width","value":200},
+            {"op":"set-prop","id":2,"property":"height","value":40},
+            {"op":"set-prop","id":2,"property":"press-enabled","value":true},
+            {"op":"set-prop","id":2,"property":"enabled","value":mode!=ClickMode::Disabled},
+            {"op":"insert-child","parent":1,"child":2,"index":0}
+        ]))).unwrap();
+        renderer.set_root(1).unwrap();
+        assert!(capture("click", r#"{"ref":{"node-id":999}}"#, &renderer).is_err());
+        let admission = ApplicationMutations::new(move || {
+            if allowed.get_untracked() {
+                Ok(())
+            } else {
+                Err("application preparation is active".into())
+            }
+        });
+        let request = super::capture(
+            "click",
+            r#"{"ref":{"node-id":2}}"#,
+            &renderer,
+            Some(admission),
+        )
+        .unwrap();
+        if mode == ClickMode::Reused {
+            renderer
+                .apply(patch(
+                    2,
+                    json!([
+                        {"op":"remove-child","parent":1,"child":2},
+                        {"op":"drop-node","id":2},
+                        {"op":"create-node","id":2,"kind":"button"},
+                        {"op":"set-prop","id":2,"property":"text","value":"Replacement action"},
+                        {"op":"set-prop","id":2,"property":"press-enabled","value":true},
+                        {"op":"insert-child","parent":1,"child":2,"index":0}
+                    ]),
+                ))
+                .unwrap();
+        }
+        let status = signal("Waiting for native click".to_owned());
+        let activating = renderer.clone();
+        spawn(async move {
+            lui_nsh::app::wait_for_commit().await.unwrap();
+            status.set(match execute(request, &activating).await {
+                Ok(events) => {
+                    assert!(events.is_empty());
+                    "Accepted native click".into()
+                }
+                Err(error) => {
+                    eprintln!("expected native click rejection: {error}");
+                    "Rejected native click".into()
+                }
+            });
+        });
+        view()
+            .child(renderer.element())
+            .child(text(move || status.get()))
+            .child(text(move || format!("Domain activations: {}", count.get())))
+    }
+
+    #[test]
+    fn native_click_uses_one_controller_and_accepts_its_own_dismissal_or_preparation() {
+        for mode in [
+            ClickMode::Live,
+            ClickMode::PreparesOnPress,
+            ClickMode::DismissesOnPress,
+        ] {
+            let mut app = Headless::start(EngineConfig {
+                context: EngineContext::default().with(mode),
+                ..EngineConfig::new(Root::of::<NativeClick>())
+            })
+            .unwrap();
+            app.wait_for("Accepted native click").unwrap();
+            app.wait_for("Domain activations: 1").unwrap();
+        }
+    }
+
+    #[test]
+    fn native_click_rejects_disabled_hidden_pointer_excluded_reused_and_fenced_targets() {
+        for mode in [
+            ClickMode::Disabled,
+            ClickMode::Hidden,
+            ClickMode::PointerExcluded,
+            ClickMode::Reused,
+            ClickMode::Preparing,
+        ] {
+            let mut app = Headless::start(EngineConfig {
+                context: EngineContext::default().with(mode),
+                ..EngineConfig::new(Root::of::<NativeClick>())
+            })
+            .unwrap();
+            app.wait_for("Rejected native click").unwrap();
+            app.wait_for("Domain activations: 0").unwrap();
+        }
     }
 }
