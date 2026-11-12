@@ -386,8 +386,8 @@ let cmdk_search_input ~key ?placeholder ?placeholder_signal
     (input ~key ~style_class:"cp__cmdk-search-input" ~grow:1.
        ~margin:1 ~min_height:0 ~min_width:256 ~padding:12 ~background:"transparent"
        ~foreground:
-         "var(--lx-gray-12, var(--ls-primary-text-color, \
-          var(--lui-c-foreground)))"
+         ("var(--lx-gray-12, var(--ls-primary-text-color, "
+          ^ Option.get (Ui_theme.semantic_color_var "foreground") ^ "))")
        ?placeholder ?placeholder_signal ~text_signal:text ~on_input [])
 
 (* Results scroller — viewport-bounded like the cljs 65dvh block; owns
@@ -530,7 +530,8 @@ let cmdk_main_text ~key children =
   text ~key ~as_:`Span ~style_class:"cp__cmdk-item-main-text"
     ~font_weight:500 ~line_clamp:2 ~overflow:"hidden" ~min_width:0
     ~foreground:
-      "var(--lx-gray-12, var(--ls-primary-text-color, var(--lui-c-foreground)))"
+      ("var(--lx-gray-12, var(--ls-primary-text-color, "
+       ^ Option.get (Ui_theme.semantic_color_var "foreground") ^ "))")
     children
 
 let cmdk_info_text ~key children =
@@ -705,8 +706,8 @@ let cmdk_hints_row ~key children =
 let cmdk_hints_label ~key ~value : t =
   text ~key ~font_weight:500 ~value
     ~foreground:
-      "var(--lx-gray-12, var(--ls-primary-text-color, \
-       var(--lui-c-foreground)))"
+      ("var(--lx-gray-12, var(--ls-primary-text-color, "
+       ^ Option.get (Ui_theme.semantic_color_var "foreground") ^ "))")
     []
 
 (* The tip line brightens on hover (own hover channel). *)
@@ -1222,7 +1223,9 @@ let alert_dialog_overlay ~key children =
     (column ~key ~grow:1. ~main:`center ~cross:`center
        ~style_class:"ui__alert-dialog-overlay"
        ~background:
-         "color-mix(in oklab, var(--lui-c-background) 80%, transparent)"
+         ("color-mix(in oklab, "
+          ^ Option.get (Ui_theme.semantic_color_var "background")
+          ^ " 80%, transparent)")
        children)
 
 let alert_dialog_content ~key ~data_attrs children : t =
@@ -1239,7 +1242,8 @@ let alert_dialog_content ~key ~data_attrs children : t =
             rgb(0 0 0 / 0.1)" ) ]
     (scroll_column ~key ~gap:16 ~padding:24 ~min_width:0 ~max_width:512 ~corner_radius:8
        ~border_width:1 ~border_color:"hsl(var(--border))"
-       ~background:"var(--ls-primary-background-color, var(--lui-c-background))"
+       ~background:("var(--ls-primary-background-color, "
+         ^ Option.get (Ui_theme.semantic_color_var "background") ^ ")")
        ~style_class:"ui__alert-dialog-content"
        ~data_attrs children)) ctx parent
 

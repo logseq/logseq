@@ -1281,8 +1281,60 @@ let table_title_completion ~registry ~profile =
     !capture ();
     check "Disposing the originating title owner retires its focus callback" (!focuses=1))
 
+let published_chrome_palette ~registry ~profile =
+  let session=S.mount ~registry ~profile ~initial:"" ~reducer:(fun value () -> value)
+    ~view:(fun _ input _ -> Lui_elements.column
+      [Ui_components.cmdk_search_input ~key:"palette-search" ~text_signal:input ~on_text:(fun _ -> ()) ();
+       Ui_components.cmdk_main_text ~key:"palette-result" [Lui_elements.text ~value:"Palette result" []];
+       Ui_components.cmdk_hints_label ~key:"palette-hint" ~value:"Palette hint";
+       Ui_components.alert_dialog_overlay ~key:"palette-overlay"
+         [Ui_components.alert_dialog_content ~key:"palette-dialog" ~data_attrs:[] []]]) () in
+  Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose session.S.app)) (fun () ->
+    List.iter (fun mode ->
+      let palette=Ui_theme.css_palette mode ~accent:"logseq" in
+      let variables=Ui_theme_vars.resolve_layers
+        ~root:palette.Ui_theme.root ~body:palette.Ui_theme.body
+        ~application:palette.Ui_theme.application
+        ~overrides:(Ui_theme.snapshot mode).Ui_theme.vars in
+      let lookup name =
+        if List.mem name ["--lx-gray-12";"--ls-primary-text-color";"--ls-primary-background-color"]
+        then None else Hashtbl.find_opt variables name in
+      List.iter (fun node -> List.iter (fun property ->
+        Option.iter (fun value ->
+          check "Command and dialog chrome resolve published role fallbacks in both themes"
+            (Option.is_some (Ui_theme_vars.substitute lookup value)))
+          (M.string_prop node property)) ["foreground";"background"])
+        (nodes session)) [Ui_theme.Light;Ui_theme.Dark])
+
 let calendar_invalid_input ~registry ~profile ~finish =
   let previous_flush = !Runtime.app_flush in
+  let rendered_warning message =
+    let toast = {Model.toast_id=7;toast_text=message;toast_kind="warning";
+      toast_key=None;toast_code=None} in
+    let notification=S.mount ~registry ~profile
+      ~initial:{Model.initial with toasts=[toast]} ~reducer:Update.update
+      ~view:(fun _ model _ -> Toasts_view.render model) () in
+    Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose notification.S.app)) (fun () ->
+      check "Malformed-date warning mounts the real notification and its message"
+        (List.exists (fun node -> node.M.kind="toast" && class_has node "warning"
+          && M.string_prop node "accessibility-label"=Some message) (nodes notification));
+      check "Malformed-date warning retains its actual dismiss control"
+        (List.exists (fun node -> node.M.kind="button"
+          && button_label node=Some (I18n.t "ui/close")) (nodes notification));
+      List.iter (fun mode ->
+        let palette=Ui_theme.css_palette mode ~accent:"logseq" in
+        let variables=Ui_theme_vars.resolve_layers
+          ~root:palette.Ui_theme.root ~body:palette.Ui_theme.body
+          ~application:palette.Ui_theme.application
+          ~overrides:(Ui_theme.snapshot mode).Ui_theme.vars in
+        List.iter (fun node -> List.iter (fun property ->
+          Option.iter (fun value ->
+            check "Every actual malformed-date warning color resolves in both application themes"
+              (Option.is_some (Ui_theme_vars.substitute (Hashtbl.find_opt variables) value)))
+            (M.string_prop node property))
+          ["foreground";"background";"hover-foreground";"hover-background"])
+          (nodes notification)) [Ui_theme.Light;Ui_theme.Dark])
+  in
   let rec next = function
     | [] -> Runtime.app_flush:=previous_flush;finish ()
     | datetime::rest ->
@@ -1327,6 +1379,7 @@ let calendar_invalid_input ~registry ~profile ~finish =
                | [] -> false);
             check "Invalid calendar submission preserves the picker and its input identity"
               (!picked=[] && !dismissed=0 && List.exists (fun node -> node.M.id=input.M.id) (nodes session));
+            rendered_warning (I18n.tf "date/invalid-date-warning" [value]);
             invalid_dates values);
           S.text_changed session input.M.id value;S.submit session input.M.id
       | [] ->
@@ -1347,6 +1400,7 @@ let calendar_invalid_input ~registry ~profile ~finish =
   in next [false;true]
 
 let run_views ~registry ~profile ~finish =
+  published_chrome_palette ~registry ~profile;
   table_column_ownership ~registry ~profile;
   table_title_completion ~registry ~profile;
   sidebar_favorite_rows ~registry ~profile;

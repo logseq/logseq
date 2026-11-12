@@ -2723,6 +2723,27 @@ tests and native OCaml request/calendar ownership regressions accompany the
 source. The release build, lockfile resolution and actual native interaction
 remain separate qualification steps.
 
+## Warning toast controls use the published foreground role
+
+Toast dismiss controls now derive their half-opacity color from
+`Ui_theme.semantic_color_var "foreground"`, which is owned by the application
+palette. The former private `--lui-c-foreground` reference was not published to
+native theme scopes and could abort NSH rendering when a malformed calendar date
+produced a warning.
+Warnings retain their message, dismissal and duration behavior. Applications do
+not need to define a compatibility token or change their calendar calls; for
+example, submitting `2023-02-29` can display the existing invalid-date warning
+while preserving the input and stored value. The actual warning toast's authored
+colors are checked against both light and dark application palettes.
+
+The same typed-property correction covers CmdK input/result/hint foreground
+fallbacks and alert-dialog overlay/content backgrounds. The existing Web-only
+`--lui-c-*` aliases and stylesheet rules remain valid CSS-local declarations;
+native projected props now use the application palette's published foreground
+and background roles. Regression checks exercise the fallback path when the
+higher-level text/background aliases are absent, without supplying a new alias
+or masking missing role definitions.
+
 ## Table columns retain their semantic owners during schema updates
 
 Table header and row-cell owners now use stable keys derived from canonical

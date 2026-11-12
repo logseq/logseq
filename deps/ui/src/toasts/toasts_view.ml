@@ -66,8 +66,9 @@ let toast_item (t : Model.toast) : t =
                (Ui_components.button ~key:"ti-close" ~variant:`ghost ~size:`icon
                    ~width:32 ~height:32 ~corner_radius:6
                    ~foreground:
-                     "color-mix(in oklab, var(--lui-c-foreground) 50%, \
-                      transparent)"
+                     ("color-mix(in oklab, "
+                      ^ Option.get (Ui_theme.semantic_color_var "foreground")
+                      ^ " 50%, transparent)")
                    ~label:(I18n.t "ui/close")
                    ~on_press:(fun _ -> Toast.dismiss t.toast_id)
                    ~icon:(`app "x") [])
