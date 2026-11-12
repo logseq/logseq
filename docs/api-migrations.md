@@ -1568,6 +1568,13 @@ draft or disposed owner is preserved. The DOM-oriented `Comments_ops.submit`
 facade remains available for existing non-NSH consumers and keeps its behavior;
 no global native DOM setter or extra draft registry is introduced.
 
+The authored `native/comments.ml` reply box implements this contract separately
+from `src/blocks/comments.ml`; the native target does not copy that shared view.
+Its NSH field binds TextValue to its scoped draft, and its submit callback clears
+through that owner. Apple/iOS and other native hosts retain their prior field
+and submission behavior. The calendar target does copy `editor_commands.ml`,
+so its NSH controlled frequency field uses the shared implementation.
+
 The actual native admission fixture exercises invalid/valid frequency commits,
 external frequency updates, concurrent comment drafts, successful clearing and
 post-disposal completion. Source preparation does not establish that the

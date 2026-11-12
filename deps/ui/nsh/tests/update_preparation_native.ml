@@ -1383,13 +1383,14 @@ let native_menu_scope_retention () =
 let native_controlled_field_resets () =
   let previous_model= !Runtime.read_model and previous_flush= !Runtime.app_flush
   and previous_schedule= !Runtime.schedule_flush and previous_worker= !Runtime.worker
+  and previous_host= !Host.host_op
   and previous_popup= !Editor_commands.active and previous_popup_signal= !Editor_commands.popup_vs in
   let repeat : Editor_commands.repeat={prop_id=1;repeated=true;freq=2;unit_id=1;
     unit_choices=[];rtype_id=1;rtype_choices=[];when_id=1;when_choices=[]} in
   let popup : Editor_commands.popup={kind=Cal_insert "";uuid="frequency-reset-owner";
     from=0;cy=2026;cm=11;cd=12;hour=0;tmin=0;x=0.;y=0.;menu=None;rpt=Some repeat} in
   Editor_commands.active:=Some popup;Editor_commands.popup_vs:=None;
-  let pending=ref None and writes=ref 0 in
+  let pending=ref None and writes=ref 0 and dom_operations=ref [] in
   Runtime.worker:=Some {Worker_client.invoke_fn=(fun method_ _ ->
     if method_="thread-api/apply-outliner-ops" then (
       incr writes;
@@ -1403,7 +1404,7 @@ let native_controlled_field_resets () =
   let initial={Model.initial with repo=Some "field-reset-owner"} in
   Runtime.read_model:=(fun () -> initial);
   let app=Lui_app.create backend initial
-    (fun model () -> model)
+    (fun model (_ : Action.t) -> model)
     (fun context _ _ ->
       let ps=Signal.value (Editor_commands.popup_vs_of context) in
       Lui_elements.column [Editor_commands.freq_input ps;Comments.add_box "legacy-comment"]) in
@@ -1411,9 +1412,16 @@ let native_controlled_field_resets () =
     Option.iter (fun resolve -> resolve Wire.Nil) !pending;
     ignore (Lui_app.dispose app);Runtime.read_model:=previous_model;
     Runtime.app_flush:=previous_flush;Runtime.schedule_flush:=previous_schedule;
+    Host.host_op:=previous_host;
     Runtime.worker:=previous_worker;Editor_commands.active:=previous_popup;
     Editor_commands.popup_vs:=previous_popup_signal) (fun () ->
     Runtime.read_model:=(fun () -> Lui_app.model app);
+    Host.set_host_op (fun operation payload ->
+      if operation="dom-op" then begin
+        let boundary=String.index payload '\n' in
+        dom_operations:=String.sub payload 0 boundary :: !dom_operations
+      end;
+      previous_host operation payload);
     Runtime.app_flush:=(fun () -> ignore (Lui_app.flush app));
     Runtime.schedule_flush:=Host.enqueue;
     ignore (Lui_app.start app);ignore (Lui_app.flush app);
@@ -1421,7 +1429,9 @@ let native_controlled_field_resets () =
     let named identifier=Hashtbl.fold (fun node props found ->
       if Lui_protocol.Property_map.find_opt Lui_protocol.AccessibilityIdentifier props
         =Some (Lui_protocol.StringValue identifier) then Some node else found)
-      runtime.Lui_runtime.runtime_properties None |> Option.get in
+      runtime.Lui_runtime.runtime_properties None |> function
+      | Some node -> node
+      | None -> failwith ("actual native controlled field is missing: " ^ identifier) in
     let frequency=named "calendar-repeat-frequency"
     and comment=named "comment-reply-legacy-comment" in
     let comment_submit=Hashtbl.fold (fun node key found ->
@@ -1463,7 +1473,10 @@ let native_controlled_field_resets () =
     let after_disposal= !publications in
     settle ();
     check "a detached comment owner does not publish an asynchronous field reset"
-      (!publications=after_disposal))
+      (!publications=after_disposal);
+    check "actual native calendar and comment fields never emit imperative DOM setters"
+      (not (List.exists (fun operation ->
+        operation="set-value" || operation="set-text-content") !dom_operations)))
 
 let () =
   let owner = Thread.id (Thread.self ()) in
