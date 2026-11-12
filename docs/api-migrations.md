@@ -270,3 +270,19 @@ and scroll its contents through the native controller. Web/mobile continue
 using `menu_surface` and their existing surface overflow recipe. Other callers
 of `menu_surface`, including unsupported external role-menu producers, are
 unchanged; they are not admitted by this focused Appearance adaptation.
+
+
+### Native view-type actions use an attached Menu
+
+On `NshHost`, `Views_head.display_type_el` keeps its real styled Button and
+permanently attaches a canonical ContextMenu with Table, List and Gallery
+MenuItems. NSH owns opening, arrow navigation, activation, dismissal and focus
+restoration. The current display type is reflected through the existing view
+state in each item's checked presentation and the retained trigger icon.
+
+For example, choosing Gallery still updates the same view state, calls
+`Views_state.persist_display_type`, then refreshes the view. This path no longer
+creates an externally anchored `Views_popup.show_menu` entry on NSH. Web and the
+maintained mobile hosts retain that existing popup path and callbacks. No
+property configuration forms, inline rename editors or external role-menu
+capability are replaced or claimed by this focused three-action conversion.

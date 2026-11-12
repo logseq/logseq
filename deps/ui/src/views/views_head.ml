@@ -24,11 +24,11 @@ let sig_of (inst : V.inst) : V.vstate Signal.signal =
 let refresh inst = (V.ops ()).V.o_refresh inst
 let icon_el = Views_table.icon_el
 
-let action_button ?(extra = "") ~label ?accessibility_identifier ~on_press children : t =
+let action_button ?(extra = "") ~label ?accessibility_identifier ?on_press children : t =
   Ui_components.button ~variant:`ghost ~size:`sm ~label ~style_class:extra
     ~width:24 ~min_width:24 ~height:24 ~min_height:24 ~padding:0
     ~main:`center ~cross:`center ~foreground:"hsl(var(--muted-foreground))"
-    ?accessibility_identifier ~on_press children
+    ?accessibility_identifier ?on_press children
 
 let ghost_btn ?(extra = "") ~title_ icon_name ~on_click : t =
   action_button ~extra ~label:title_ ~on_press:(fun _ -> on_click ())
@@ -659,29 +659,35 @@ let more_actions_el inst : t =
 let display_type_el inst : t =
  fun ctx parent ->
   let wrap_id = "vtype-" ^ string_of_int inst.V.id in
-  action_button
+  let choices = ["table","property.view-type/table";
+    "list","property.view-type/list";"gallery","property.view-type/gallery"] in
+  let set dt =
+    V.update inst (fun s -> { s with V.display_type = dt });
+    V.persist_display_type inst;
+    refresh inst in
+  let native = Lui_ui.host ctx = L.NshHost in
+  let on_press = if native then None else Some (fun _ ->
+    match Ui_services.dom_by_id wrap_id with
+    | Some anchor ->
+        ignore (P.show_menu ~anchor ~align_end:true
+          (List.map (fun (dt,label) -> P.MItem (I.t label, fun () -> set dt)) choices))
+    | None -> ()) in
+  let menu = if native then
+      [context_menu ~key:"view-type-menu"
+        (List.map (fun (dt,label) ->
+          menu_item ~key:dt ~text:(I.t label)
+            ~accessibility_identifier:(wrap_id ^ "-" ^ dt)
+            ~selected:(reactive (fun (s : V.vstate) -> s.V.display_type=dt) (sig_of inst))
+            ~on_press:(fun _ -> set dt) []) choices)]
+    else [] in
+  (action_button
     ~accessibility_identifier:wrap_id
-    ~label:(I.t "property.built-in/view-type")
-    ~on_press:(fun _ ->
-      match Ui_services.dom_by_id wrap_id with
-      | Some anchor ->
-          let set dt =
-            V.update inst (fun s -> { s with V.display_type = dt });
-            V.persist_display_type inst;
-            refresh inst
-          in
-          ignore
-            (P.show_menu ~anchor ~align_end:true
-               [ P.MItem ((I.t "property.view-type/table"), fun () -> set "table")
-               ; P.MItem ((I.t "property.view-type/list"), fun () -> set "list")
-               ; P.MItem ((I.t "property.view-type/gallery"), fun () -> set "gallery") ])
-      | None -> ())
-    [ icon ~point_size:18
-        ~name:(reactive (fun (s : V.vstate) ->
-          Icons.name_ref (match s.V.display_type with
-            | "list" -> "list" | "gallery" -> "layout-grid" | _ -> "table"))
-          (sig_of inst)) [] ]
-    ctx parent
+    ~label:(I.t "property.built-in/view-type") ?on_press
+    (icon ~point_size:18
+      ~name:(reactive (fun (s : V.vstate) ->
+        Icons.name_ref (match s.V.display_type with
+          | "list" -> "list" | "gallery" -> "layout-grid" | _ -> "table"))
+        (sig_of inst)) [] :: menu)) ctx parent
 
 (* ---------- search ---------- *)
 
