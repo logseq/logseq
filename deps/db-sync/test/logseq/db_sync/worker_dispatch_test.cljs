@@ -792,3 +792,214 @@
                (p/catch (fn [error]
                           (is false (str error))
                           (done)))))))
+
+(defn- b64url-encode [obj]
+  (-> (js/btoa (js/JSON.stringify obj))
+      (string/replace "+" "-")
+      (string/replace "/" "_")
+      (string/replace #"=+$" "")))
+
+(defn- test-jwt [claims]
+  (str "x." (b64url-encode claims) ".y"))
+
+(deftest sync-route-rejects-third-party-oauth-scope-token-test
+  (async done
+         (let [forwarded (atom [])
+               request (js/Request. "http://localhost/sync/graph-1/pull"
+                                    #js {:method "GET"
+                                         :headers #js {"authorization"
+                                                       (str "Bearer "
+                                                            (test-jwt #js {"sub" "user-1"
+                                                                           "scope" "logseq/read"}))}})
+               env #js {"LOGSEQ_SYNC_DO" (capturing-do-namespace forwarded)}]
+           ;; No auth redefs: the token is rejected on its own claims, before
+           ;; any verification or graph access lookup.
+           (-> (p/let [response (dispatch/handle-worker-fetch request env)
+                       body (json-body response)]
+                 (is (= 403 (.-status response)))
+                 (is (= "insufficient scope" (:error body)))
+                 (is (empty? @forwarded)))
+               (p/then (fn [] (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
+(deftest sync-route-rejects-third-party-client-id-token-test
+  (async done
+         (let [forwarded (atom [])
+               request (js/Request. "http://localhost/sync/graph-1/pull"
+                                    #js {:method "GET"
+                                         :headers #js {"authorization"
+                                                       (str "Bearer "
+                                                            (test-jwt #js {"sub" "user-1"
+                                                                           "client_id" "chatgpt-client"}))}})
+               env #js {"COGNITO_CLIENT_ID" "app-client"
+                        "COGNITO_CLIENT_IDS" "chatgpt-client,other-client"
+                        "LOGSEQ_SYNC_DO" (capturing-do-namespace forwarded)}]
+           (-> (p/with-redefs [index-handler/graph-access-response
+                               (fn [_ _ _] (p/resolved (ok-json-response)))]
+                 (p/let [response (dispatch/handle-worker-fetch request env)
+                         body (json-body response)]
+                   (is (= 403 (.-status response)))
+                   (is (= "insufficient scope" (:error body)))
+                   (is (empty? @forwarded))))
+               (p/then (fn [] (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
+(deftest sync-route-still-forwards-app-and-pat-tokens-test
+  (async done
+         (let [app-forwarded (atom [])
+               pat-forwarded (atom [])
+               app-request (js/Request. "http://localhost/sync/graph-1/pull"
+                                        #js {:method "GET"
+                                             :headers #js {"authorization"
+                                                           (str "Bearer "
+                                                                (test-jwt #js {"sub" "user-1"
+                                                                               "client_id" "app-client"}))}})
+               pat-request (js/Request. "http://localhost/sync/graph-1/pull"
+                                        #js {:method "GET"
+                                             :headers #js {"authorization" "Bearer logseq_pat_sync"}})]
+           (-> (p/with-redefs [index-handler/graph-access-response
+                               (fn [_ _ _] (p/resolved (ok-json-response)))]
+                 (p/let [app-response (dispatch/handle-worker-fetch
+                                       app-request
+                                       #js {"COGNITO_CLIENT_ID" "app-client"
+                                            "COGNITO_CLIENT_IDS" "chatgpt-client"
+                                            "LOGSEQ_SYNC_DO" (capturing-do-namespace app-forwarded)})
+                         pat-response (dispatch/handle-worker-fetch
+                                       pat-request
+                                       #js {"LOGSEQ_SYNC_DO" (capturing-do-namespace pat-forwarded)})]
+                   (is (= 200 (.-status app-response)))
+                   (is (= 1 (count @app-forwarded)))
+                   (is (= 200 (.-status pat-response)))
+                   (is (= 1 (count @pat-forwarded)))))
+               (p/then (fn [] (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
+(deftest assets-route-rejects-third-party-oauth-token-test
+  (async done
+         (let [forwarded (atom [])
+               request (js/Request. "http://localhost/assets/graph-1/asset-1.png"
+                                    #js {:method "GET"
+                                         :headers #js {"authorization"
+                                                       (str "Bearer "
+                                                            (test-jwt #js {"sub" "user-1"
+                                                                           "scope" "logseq/read"}))}})
+               env #js {"LOGSEQ_SYNC_DO" (capturing-do-namespace forwarded)}]
+           (-> (p/let [response (dispatch/handle-worker-fetch request env)
+                       body (json-body response)]
+                 (is (= 403 (.-status response)))
+                 (is (= "insufficient scope" (:error body))))
+               (p/then (fn [] (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
+(deftest sync-route-hides-admin-reset-without-admin-token-test
+  (async done
+         (let [forwarded (atom [])
+               request (js/Request. "http://localhost/sync/graph-1/admin/reset"
+                                    #js {:method "DELETE"})
+               env #js {"LOGSEQ_SYNC_DO" (capturing-do-namespace forwarded)}]
+           (-> (p/let [response (dispatch/handle-worker-fetch request env)
+                       body (json-body response)]
+                 (is (= 404 (.-status response)))
+                 (is (= "not found" (:error body)))
+                 (is (empty? @forwarded)))
+               (p/then (fn [] (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
+(deftest sync-route-hides-internal-tails-test
+  (async done
+         (let [forwarded (atom [])
+               request (js/Request. "http://localhost/sync/graph-1/internal/close-sockets?user-id=bob"
+                                    #js {:method "POST"})
+               env #js {"LOGSEQ_SYNC_DO" (capturing-do-namespace forwarded)}]
+           (-> (p/let [response (dispatch/handle-worker-fetch request env)]
+                 (is (= 404 (.-status response)))
+                 (is (empty? @forwarded)))
+               (p/then (fn [] (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
+(deftest graphs-route-rejects-third-party-oauth-token-test
+  (async done
+         (let [request (js/Request. "http://localhost/graphs"
+                                    #js {:method "GET"
+                                         :headers #js {"authorization" "Bearer semantic-token"}})
+               env #js {"DB" #js {}}]
+           (-> (p/with-redefs [auth/semantic-auth-claims
+                               (fn [_ _] (p/resolved #js {"sub" "user-1" "scope" "logseq/read"}))]
+                 (p/let [response (dispatch/handle-worker-fetch request env)
+                         body (json-body response)]
+                   (is (= 403 (.-status response)))
+                   (is (= "insufficient scope" (:error body)))))
+               (p/then (fn [] (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
+(deftest graphs-route-rejects-pat-like-claims-only-through-pat-rules-test
+  (async done
+         ;; PAT claims carry a scope but also a pat_id: they must not be
+         ;; rejected as third-party tokens (their own gate applies instead).
+         (let [request (js/Request. "http://localhost/graphs"
+                                    #js {:method "GET"
+                                         :headers #js {"authorization" "Bearer logseq_pat_tokens"}})
+               env #js {"DB" #js {}}]
+           (-> (p/with-redefs [auth/semantic-auth-claims
+                               (fn [_ _] (p/resolved #js {"sub" "user-1"
+                                                          "scope" "logseq/read"
+                                                          "pat_id" "pat-1"
+                                                          "pat_graph_id" "graph-1"}))]
+                 (p/let [response (dispatch/handle-worker-fetch request env)
+                         body (json-body response)]
+                   (is (= 403 (.-status response)))
+                   (is (= "forbidden" (:error body)))))
+               (p/then (fn [] (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
+(deftest pat-route-rejects-third-party-oauth-token-test
+  (async done
+         (let [request (js/Request. "http://localhost/api/v1/personal-access-tokens"
+                                    #js {:method "POST"
+                                         :headers #js {"authorization" "Bearer semantic-token"
+                                                       "content-type" "application/json"}
+                                         :body "{}"})
+               env #js {"DB" #js {}}]
+           (-> (p/with-redefs [auth/auth-claims
+                               (fn [_ _] (p/resolved #js {"sub" "user-1" "scope" "logseq/read"}))]
+                 (p/let [response (dispatch/handle-worker-fetch request env)
+                         body (json-body response)]
+                   (is (= 403 (.-status response)))
+                   (is (= "insufficient scope" (:error body)))))
+               (p/then (fn [] (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
+(deftest malformed-bearer-token-gets-plain-unauthorized-test
+  (async done
+         (let [request (js/Request. "http://localhost/graphs"
+                                    #js {:method "GET"
+                                         :headers #js {"authorization" "Bearer !.e30.x"}})
+               env #js {"DB" #js {}}]
+           ;; No redefs: a token that breaks verification must surface as a
+           ;; plain 401, not as a 500 carrying internal error details.
+           (-> (p/let [response (dispatch/handle-worker-fetch request env)
+                       body (json-body response)]
+                 (is (= 401 (.-status response)))
+                 (is (= {:error "unauthorized"} body)))
+               (p/then (fn [] (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))

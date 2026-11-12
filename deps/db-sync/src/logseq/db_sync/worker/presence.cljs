@@ -11,12 +11,16 @@
           username (or (aget claims "preferred_username")
                        (aget claims "cognito:username")
                        (aget claims "username"))
-          name (aget claims "name")]
+          name (aget claims "name")
+          exp (aget claims "exp")]
       (when (string? user-id)
         (cond-> {:user-id user-id}
           (string? email) (assoc :email email)
           (string? username) (assoc :username username)
-          (string? name) (assoc :name name))))))
+          (string? name) (assoc :name name)
+          ;; Kept with the presence so an expired token can be detected on the
+          ;; next message instead of keeping the socket alive indefinitely.
+          (number? exp) (assoc :exp exp))))))
 
 (defn attachment->user
   [attachment]

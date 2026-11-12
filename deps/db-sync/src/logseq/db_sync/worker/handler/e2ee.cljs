@@ -1,6 +1,7 @@
 (ns logseq.db-sync.worker.handler.e2ee
   "Semantic API crypto helpers using the graph's canonical AES-GCM packages."
-  (:require [logseq.db :as ldb]
+  (:require [lambdaisland.glogi :as log]
+            [logseq.db :as ldb]
             [logseq.db-sync.common :as common]
             [logseq.db-sync.index :as index]
             [logseq.db-sync.worker.http :as http]
@@ -85,7 +86,8 @@
               (p/all (mapv #(<encrypt-text-aes aes-key %) texts)))
             (p/then (fn [texts'] (http/json-response nil {:texts texts'})))
             (p/catch (fn [error]
-                       (http/bad-request (or (ex-message error) "encrypt failed")))))))
+                       (log/warn :db-sync/e2ee-encrypt-failed {:error error})
+                       (http/bad-request "encrypt failed"))))))
 
     :semantic/e2ee-decrypt
     (p/let [body (<read-body request)

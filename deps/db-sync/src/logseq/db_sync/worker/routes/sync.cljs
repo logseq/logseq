@@ -9,7 +9,9 @@
    ["/snapshot/stream" {:methods {"GET" :sync/snapshot-stream}}]
    ["/admin/reset" {:methods {"DELETE" :sync/admin-reset}}]
    ["/tx/batch" {:methods {"POST" :sync/tx-batch}}]
-   ["/snapshot/upload" {:methods {"POST" :sync/snapshot-upload}}]])
+   ["/snapshot/upload" {:methods {"POST" :sync/snapshot-upload}}]
+   ;; DO-internal: the public dispatchers block `/internal/*` tails.
+   ["/internal/close-sockets" {:methods {"POST" :sync/close-sockets}}]])
 
 (def ^:private router
   (r/router route-data))

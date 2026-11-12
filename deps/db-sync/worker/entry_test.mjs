@@ -94,6 +94,24 @@ test("Code Mode always forwards base64 assets as a raw body", () => {
   assert.equal(semanticRequestBody(options, url), "AQIDBA==");
 });
 
+test("Code Mode rejects paths that escape /api/v1/ after URL resolution", () => {
+  // `new URL` resolves `/..`, so the check must run on the resolved pathname,
+  // not on the raw string.
+  for (const path of [
+    "/api/v1/../../sync/graph-1/admin/reset",
+    "/api/v1/../graphs",
+    "/api/v1/..\\..\\sync",
+    "/sync/graph-1/pull",
+    "//evil.example/api/v1/graphs",
+  ]) {
+    assert.throws(
+      () => semanticRequestUrl({ method: "GET", path }, "https://staging.example/mcp"),
+      /Only Logseq server API paths are allowed/,
+      path,
+    );
+  }
+});
+
 test("ChatGPT tool descriptors declare titles, impact, and per-tool auth", () => {
   const descriptors = chatGptToolDescriptors();
   const search = descriptors.find((tool) => tool.name === "search");
