@@ -875,7 +875,6 @@ let graphs_selector st (ms : Model.t Signal.signal) : t =
         [ Ui_components.with_props
             [ Ui_components.Prop.position `relative
             ; Ui_components.Prop.overflow `hidden
-            ; Ui_components.Prop.padding_right 16
             ; Ui_components.Prop.opacity 0.9
             ; Ui_components.Prop.hover_opacity 0.9
             ; Ui_components.Prop.hover_background "var(--lx-gray-04)"
@@ -884,7 +883,7 @@ let graphs_selector st (ms : Model.t Signal.signal) : t =
             (Ui_components.button ~key:"gsel-a" ~variant:`ghost ~grow:1. ~height:32
                ~label:(t "graph.switch/select-prompt")
                ~foreground:"hsl(var(--foreground))"
-               ~main:`start ~cross:`center
+               ~main:`space_between ~cross:`center
                ~padding_horizontal:4 ~padding_vertical:4 ~corner_radius:4
                ~style_class:"item"
                ~data_attrs:(reactive (fun menu _model ->
@@ -911,19 +910,19 @@ let graphs_selector st (ms : Model.t Signal.signal) : t =
                   ; Ui_components.with_props
                       [ Ui_components.Prop.overflow `hidden
                       ; Ui_components.Prop.padding_left 4
-                      ; Ui_components.Prop.padding_right 16
                       ; Ui_components.Prop.min_width 0 ]
                       (text ~key:"gsel-n"
                           ~white_space:"nowrap" ~text_overflow:"ellipsis"
                           ~font_weight:500 ~font_size:"var(--text-sm)"
                           ~line_height:"1.25rem"
                           ~value:(reactive name_of ms) ~grow:1. [])
+                  (* All three parts share the actual content row's center.
+                     An absolute chevron would instead depend on which native
+                     component owns the containing block and its padding. *)
                   ; Ui_components.with_props
-                          [ Ui_components.Prop.position `absolute
-                          ; Ui_components.Prop.inset_right 4.
-                          ; Ui_components.Prop.inset_top 8.
-                          ; Ui_components.Prop.width 16
+                          [ Ui_components.Prop.width 16
                           ; Ui_components.Prop.height 16
+                          ; Ui_components.Prop.grow 0.
                           ; Ui_components.Prop.margin_right 0
                           ; Ui_components.Prop.opacity 0.4 ]
                           (icon_ ~size:18 "selector") ])

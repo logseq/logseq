@@ -744,3 +744,12 @@ The single transparent header remains first in logical keyboard order and is
 painted above the pane bands. Its controls keep their existing keys and global
 positions. Page and PDF bodies reserve the same 48-point top space as before.
 Web and maintained Apple/Android chrome retain their existing layout.
+
+## Graph selector uses one aligned content row
+
+The shared graph-switch button now lays out its graph icon, growing name and
+selector chevron in the same centered row. The chevron participates in normal
+flow instead of using coordinates relative to an assumed button containing
+block. The old padding reserved for that absolute icon is removed; the name
+still truncates with an ellipsis. Existing keys, labels, handlers and menu
+ownership are unchanged across native and Web hosts.
