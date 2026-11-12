@@ -37,8 +37,8 @@ let toast_item (t : Model.toast) : t =
        ~label:t.toast_text
        ~on_dismiss:(fun _ -> Toast.dismiss t.toast_id)
        ~style_class:kind
-       [ overlay ~key:"ti-content"
-           [ row ~key:"ti-body" ~gap:8 ~padding_horizontal:12
+       [ overlay ~key:"ti-content" ~grow:1. ~min_width:0
+           [ row ~key:"ti-body" ~min_width:0 ~gap:8 ~padding_horizontal:12
                ~padding_vertical:8 ~cross:`start
                [ icon ~key:"ti-icon" ~name:(toast_icon kind)
                    ~width:20 ~height:20
@@ -48,7 +48,7 @@ let toast_item (t : Model.toast) : t =
                    ; Ui_components.Prop.line_height "1.25rem"
                    ; Ui_components.Prop.opacity 0.9 ]
                    (match t.toast_code with
-                    | None -> text ~key:"ti-desc" ~grow:1.
+                    | None -> text ~key:"ti-desc" ~grow:1. ~min_width:0
                       ~foreground:"var(--ls-primary-text-color)"
                       ~value:t.toast_text []
                     | Some code ->
@@ -58,7 +58,7 @@ let toast_item (t : Model.toast) : t =
                         let copy = Ui_components.button ~variant:`default ~size:`sm
                             ~text:(I18n.t "ui/copy-to-clipboard")
                             ~on_press:(fun _ -> Ui_services.clipboard_copy code.code_text) [] in
-                        column ~key:"ti-code" ~grow:1. ~gap:12
+                        column ~key:"ti-code" ~grow:1. ~min_width:0 ~gap:12
                           (if code.code_copy_first then [copy; content] else [content; copy]))
                ; spacer ~width:20 []
                ]

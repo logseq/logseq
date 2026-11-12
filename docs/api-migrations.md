@@ -44,6 +44,17 @@ is required. The actual native producer regression checks every choice and its
 Scroll ancestry; real NSH wheel, activation, persisted language and editor history
 remain separate application qualification gates.
 
+## Toast content stays within the native toast card
+
+The shared toast content overlay now grows into the existing toast's available
+width and permits its body/message or code column to shrink. Long notification
+text wraps within that width instead of giving the overlay an intrinsic width
+larger than its card and pushing the complete 32-by-32 close target beyond the
+right border. No fixed content width, new component or extra scroll owner is
+introduced. The existing NSH Toast/ToastStack, viewport placement, timeout,
+hover/focus pause, dismissal and retained notification identity are unchanged.
+Downstream callers use the same toast API on all maintained backends.
+
 ## NSH code editors fill their horizontal parent
 
 The native CodeMirror adapter now explicitly sizes its retained root to the
