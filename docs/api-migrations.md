@@ -18,6 +18,18 @@ existing Headless gate and maintained Web, Apple/iOS and Android paths are
 unchanged. This does not assert pixel parity or hardware input and does not
 require activating the application or making its window key.
 
+## NSH click activation is never time-coalesced
+
+The native document event bridge now selects click coalescing from the active
+application backend profile. NSH emits one activation per native press, so it
+delivers every click, including two controls activated within 60ms and repeated
+activation of the same control. The Apple host retains the legacy duplicate
+monitor/control coalescing behavior. Web and Android paths are unchanged.
+
+No application API migration is required. For example, clicking a page link and
+immediately clicking a block now reaches both delegated handlers on NSH; the
+second click no longer silently disappears in the legacy 60ms window.
+
 ## Native icon and Emoji picker rows use the canonical viewport
 
 NSH icon and Emoji picker sections now feed nine-cell, 44px rows into the

@@ -283,6 +283,10 @@ let event_listed events name =
    a human double-click. *)
 let last_click_ms = ref (-1.)
 
+(* Only hosts with the legacy monitor and control activation pair need this.
+   The embed supplies the active application profile, including test apps. *)
+let coalesce_duplicate_clicks : (unit -> bool) ref = ref (fun () -> true)
+
 (* the web drives block drags through dnd-kit sensors; here the gesture
    is driven by editor_keys' mousedown/mousemove/click listeners *)
 let native_drag () = true
@@ -299,7 +303,8 @@ let css_transform_icons () = false
 let emit_event name payload =
   default_prevented := false;
   let now = date_now_ms () in
-  if name = "click" && now -. !last_click_ms < 60. then
+  if name = "click" && !coalesce_duplicate_clicks ()
+     && now -. !last_click_ms < 60. then
     ()
   else begin
   if name = "click" then last_click_ms := now;

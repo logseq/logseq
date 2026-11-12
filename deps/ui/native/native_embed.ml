@@ -50,6 +50,14 @@ let enqueue_batch batch =
 
 let current_app : (Model.t, Action.t) Lui_app.reducer_app option ref = ref None
 
+let () =
+  Platform.coalesce_duplicate_clicks := (fun () ->
+    match !current_app with
+    | Some app ->
+        (Lui_app.runtime app).Lui_runtime.runtime_backend.backend_profile.profile_host
+        <> Lui_protocol.NshHost
+    | None -> true)
+
 let require_go_metrics () =
   match !current_app with
   | Some app when (Lui_app.runtime app).Lui_runtime.runtime_backend.backend_profile.profile_host

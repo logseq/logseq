@@ -619,6 +619,46 @@ let persisted_journal_hash_links_delegate_through_the_native_owner () =
     check "delegated navigation retains the same mounted Link"
       (Hashtbl.mem runtime.Lui_runtime.mounted_nodes node))
 
+let native_click_delivery_follows_the_active_host_profile () =
+  let previous_app = !Native_embed.current_app
+  and previous_clicks = Hashtbl.find_opt Platform.capture_listeners "click"
+  and previous_ms = !Platform.last_click_ms in
+  let observed = ref [] in
+  let run host =
+    let backend : Lui_protocol.backend = {
+      backend_profile = Lui_protocol.profile Lui_protocol.MacOS host;
+      apply_batch = (fun _ -> true) } in
+    let app = Lui_app.create backend Model.initial
+      (fun model (_ : Action.t) -> model)
+      (fun _ _ _ -> Lui_elements.column []) in
+    Native_embed.current_app := Some app;
+    Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app)) (fun () ->
+      ignore (Lui_app.start app); ignore (Lui_app.flush app);
+      observed := [];
+      Hashtbl.replace Platform.capture_listeners "click" [fun event ->
+        observed := event :: !observed];
+      let emit node = Platform.emit_event "click"
+        (Js.Json.object_list ["nodeId", Js.Json.number (float_of_int node)]) in
+      (* A future stamp deterministically exercises the coalescing window
+         without relying on wall-clock speed or sleeping between events. *)
+      Platform.last_click_ms := max_float;
+      emit 101; emit 102; emit 102;
+      !observed) in
+  Fun.protect ~finally:(fun () ->
+    Native_embed.current_app := previous_app;
+    Platform.last_click_ms := previous_ms;
+    match previous_clicks with
+    | Some listeners -> Hashtbl.replace Platform.capture_listeners "click" listeners
+    | None -> Hashtbl.remove Platform.capture_listeners "click") (fun () ->
+    let events = run Lui_protocol.NshHost in
+    let nodes = List.rev_map (function
+      | Js.Json.JObject fields -> List.assoc_opt "nodeId" fields
+      | _ -> None) events in
+    check "NSH delivers rapid clicks across controls and on the same control"
+      (nodes = List.map (fun node -> Some (Js.Json.number (float_of_int node))) [101;102;102]);
+    check "Apple retains its legacy monitor duplicate coalescing"
+      (run Lui_protocol.SwiftUIHost = []))
+
 let native_block_click_mounts_shared_editor () =
   let prior_model = !Runtime.read_model and prior_flush = !Runtime.app_flush
   and prior_host = !Host.host_op and prior_target = !Platform.event_target_of
@@ -716,5 +756,6 @@ let () =
   native_outliner_content_events ();
   native_route_document_data ();
   persisted_journal_hash_links_delegate_through_the_native_owner ();
+  native_click_delivery_follows_the_active_host_profile ();
   native_block_click_mounts_shared_editor ();
   print_endline "PASS real native save/abort/worker/timer races and post-release draft safety"
