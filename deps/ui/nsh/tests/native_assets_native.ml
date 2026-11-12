@@ -17,6 +17,8 @@ let render_asset_kinds () =
     (Asset_dom.asset_kind ~ext:"webm" ~title:"Audio-recording"=Asset_dom.Audio);
   let registry=Lui_extension.registry () in
   Logseq_el.register_all registry;
+  Logseq_codemirror.register registry;
+  Logseq_editor.register registry;
   let backend : Lui_protocol.backend = {
     backend_profile=Lui_protocol.profile Lui_protocol.MacOS Lui_protocol.NshHost;
     apply_batch=(fun _ -> true)} in
