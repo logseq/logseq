@@ -744,7 +744,7 @@ let find_in_page_submit ~registry =
     let session = S.mount ~registry ~profile ~initial ~reducer:Find.update
       ~view:(fun _ state send ->
         Cmdk_view.Find_in_page.view ~i18n:I18n.t ~state
-          ~dispatch:(fun action -> actions := action :: !actions; send action) ()) () in
+          ~dispatch:(fun action -> actions := action :: !actions; ignore (send action)) ()) () in
     Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose session.S.app)) (fun () ->
       let query () = List.find (fun node ->
         M.string_prop node "accessibility-identifier"=Some "find-in-page-query")
