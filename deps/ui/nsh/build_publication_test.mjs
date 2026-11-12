@@ -72,7 +72,12 @@ ctypes.CDLL=load
   write(path.join(temporary, "candidate"), "new-executable", true);
   write(path.join(repo, "deps/db-worker/_build/default/bin/main.exe"), "new-worker", true);
   write(path.join(tools, "uname"), "#!/bin/sh\nprintf 'Linux\\n'\n", true);
-  write(path.join(tools, "opam"), "#!/bin/sh\ncase \"$*\" in *'ocamlc -where'*) printf '/tmp\\n';; esac\n", true);
+  write(path.join(tools, "opam"), `#!/usr/bin/env python3
+import json,os,pathlib,sys
+with (pathlib.Path(os.environ['PUBLICATION_TEST_ROOT'])/'profiles.jsonl').open('a') as stream:
+ stream.write(json.dumps({'tool':'opam','args':sys.argv[1:],'dune':os.environ.get('DUNE_PROFILE')})+'\\n')
+if 'ocamlc' in sys.argv and '-where' in sys.argv: print('/tmp')
+`, true);
   write(path.join(tools, "cc"), `#!/usr/bin/env python3
 import os,pathlib,sys
 if sys.argv[1]=='-print-file-name=librt.a':
@@ -87,6 +92,8 @@ else: out.write_text('new-library')
 import json,os,pathlib,sys
 root=pathlib.Path(os.environ['PUBLICATION_TEST_ROOT'])
 repo=root/'repo'; lui=root/'lui'
+with (root/'profiles.jsonl').open('a') as stream:
+ stream.write(json.dumps({'tool':'cargo','args':sys.argv[1:],'dune':os.environ.get('DUNE_PROFILE')})+'\\n')
 if sys.argv[1]=='metadata':
  print(json.dumps({'packages':[{'name':'lui-nsh','source':None,'manifest_path':str(lui/'platform/nsh/Cargo.toml')}]}))
 elif sys.argv[1]=='build':
@@ -118,8 +125,8 @@ else: sys.exit('unexpected Cargo operation')
   for (const [file, contents] of old) write(file, contents);
   return {temporary, repo, lui, host, output, resources, old,
     calls:() => existsSync(path.join(temporary, "calls")) ? readFileSync(path.join(temporary, "calls"), "utf8").trim().split("\n") : [],
-    run(failure = "") {
-    return spawnSync("bash", [path.join(host, "build.sh")], {encoding:"utf8", timeout:15000,
+    run(failure = "", arguments_ = []) {
+    return spawnSync("bash", [path.join(host, "build.sh"), ...arguments_], {encoding:"utf8", timeout:15000,
       env:{...process.env, PATH:`${tools}${path.delimiter}${process.env.PATH}`,
         LUI_SOURCE_ROOT:lui, PUBLICATION_TEST_ROOT:temporary, PUBLICATION_FAILURE:failure,
         NODE_BINARY:process.execPath, PYTHON_BINARY:process.env.PYTHON_BINARY ?? "python3"}});
@@ -219,5 +226,26 @@ test("Windows receipt binds scoped build scripts, command and installed root DLL
     result = run("receipt", snapshot, manifest, artifact, installed, library, finalLibrary, resources, finalResources, extra);
     assert.notEqual(result.status, 0);
     assert.match(result.stderr, /inside its final application root/);
+  } finally { rmSync(app.temporary, {recursive:true, force:true}); }
+});
+
+
+test("release qualification uses both optimized toolchains and preserves development artifacts", () => {
+  const app = fixture();
+  try {
+    const result = app.run("", ["--release"]);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    const artifact = path.join(app.repo, "deps/ui/_build/nsh-release/bin/logseq-nsh");
+    assert.equal(result.stdout.trim(), artifact);
+    const receipt = JSON.parse(readFileSync(artifact + ".lui-build.json", "utf8"));
+    assert.equal(receipt.buildProfile, "release");
+    assert.equal(receipt.duneProfile, "release");
+    assert.match(receipt.command, / --release$/);
+    const calls = readFileSync(path.join(app.temporary, "profiles.jsonl"), "utf8").trim().split("\n").map(JSON.parse);
+    assert.ok(calls.some(call => call.tool === "opam" && call.args.includes("dune")));
+    assert.ok(calls.every(call => call.dune === "release"));
+    for (const operation of ["build", "test"])
+      assert.ok(calls.some(call => call.tool === "cargo" && call.args[0] === operation && call.args.includes("--release")), operation);
+    for (const [file, contents] of app.old) assert.equal(readFileSync(file, "utf8"), contents);
   } finally { rmSync(app.temporary, {recursive:true, force:true}); }
 });
