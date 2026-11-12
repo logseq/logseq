@@ -835,11 +835,26 @@ and its initialization marker stands in for work that must follow `Startup`.
 Unix restart behavior and its PID-preserving `exec` path are unchanged. Actual
 Windows CI execution is required; source review alone does not qualify it.
 
-## Manual disposable macOS workflow
+## Disposable macOS qualification workflow
 
-`.github/workflows/nsh-standalone-upgrade.yml` runs only by manual dispatch on
-GitHub-hosted `macos-26` runners. After publishing/registering the workflow,
-dispatch the exact reviewed application branch or commit, for example:
+`.github/workflows/nsh-standalone-upgrade.yml` runs on GitHub-hosted `macos-26`
+runners. PRs targeting `refactor/lui` trigger initial qualification when they
+change this workflow, its shared setup action, or its upgrade/HTTPS/source
+preparation helpers and guard tests. This permits actual qualification before
+the new workflow has been registered on the repository's default `master`
+branch. GitHub requires a default-branch workflow for initial
+[manual dispatch registration](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#workflow_dispatch);
+an unregistered workflow's API `404` is not an executed qualification attempt.
+No default-branch edit or draft-PR status change is part of this gate.
+
+Both required jobs explicitly check out and verify the exact PR head SHA before
+setup, rather than testing GitHub's generated merge commit. Their authored
+source snapshots record that same head as the common base. For manual dispatch,
+both jobs use the selected ref's immutable event SHA. Require both results for
+that exact source head; results from an older head do not qualify a later push.
+
+Manual dispatch remains available after workflow registration. Select the
+reviewed application branch or tag, for example:
 
 ```sh
 gh workflow run nsh-standalone-upgrade.yml --repo logseq/logseq --ref feat/nsh-host
