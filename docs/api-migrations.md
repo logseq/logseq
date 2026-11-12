@@ -1195,9 +1195,10 @@ IME composition. Native paste supplies its event-time plain text, HTML, captured
 image bytes and copied local-file URLs to the existing `logseq-editor` `dom-event`
 channel as a document `paste` event. `nodeId` identifies the retained editor sink;
 `clipboardData` uses the existing native file snapshot shape (`data-b64` for
-captured bytes, `path` for local files). Actual file metadata is read for copied
-local files; their contents remain lazy and use the existing file channel.
-Malformed URLs, inaccessible files and directories are rejected explicitly.
+captured bytes, `path` for local files). Copied local-file paths are dispatched immediately without filesystem access;
+their bytes are read off the application owner through the existing native file
+channel when the upload asks. Malformed URLs are rejected before dispatch;
+unreadable paths fail explicitly through that file channel.
 No clipboard re-read, shadow document, alternate block parser or clipboard cache
 is introduced. The shared controller continues to own internal tree paste,
 HTML-to-Markdown conversion, paragraph splitting and asset uploads. Input's
@@ -1217,3 +1218,23 @@ behavior and require a reviewed public seam before claiming full clipboard UX
 parity. Native paste from those menus does use `on_paste`. The added retained
 Input, native facade and actual shared-copy regressions do not qualify hardware
 clipboard actions, IME combinations or platform file access on all desktops.
+
+
+## File snapshot sizes can be unknown until an asynchronous read
+
+`Ui_services.file.file_size` and the size element of `clipboard_files` are now
+`float option`: `Some size` records known event-time metadata, and `None` means
+an unread native path supplied no size snapshot. Diagnostic JSON represents the
+latter as `null`. Web `File` and captured-image metadata remain known; adapter
+records migrate from `file_size = n` to `file_size = Some n`. Code that needs an
+exact persisted size must read `file_binary ()` and use the returned byte length,
+as asset uploads and database backup decisions now do. Unknown size is never
+represented by zero and never triggers a synchronous filesystem metadata query.
+
+Native `Browser_ui.file_buffer` reads paths and decodes captured binary data on
+a file worker, then settles its existing Promise through the application Host
+mailbox. There is no new input queue, clipboard cache or delayed paste event.
+The shared paste/upload activation captures its existing graph, route and editor
+owner immediately; subsequent typing stays in order and the existing upload
+checks use the current buffer when the file completes. Ending that activation
+still prevents a stale upload from mutating a different editor or graph.

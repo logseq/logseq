@@ -40,7 +40,7 @@ let run () =
   check "Clipboard inspection preserves item kinds and MIME types"
     (snapshot.clipboard_items=["string","text/plain";"file","image/png"]);
   check "Clipboard inspection retains file metadata without reading contents"
-    (snapshot.clipboard_files=["attachment.png","image/png",12.]);
+    (snapshot.clipboard_files=["attachment.png","image/png",Some 12.]);
   check "Non-clipboard events expose an empty inspection"
     ((Ui_dom_web.ev_of (Js.Json.object_ (Js.Dict.empty ()))).Ui_services.clipboard_snapshot ()=
      Ui_services.empty_clipboard_snapshot);
@@ -48,7 +48,7 @@ let run () =
       let ev = Ui_dom_web.ev_of (event channel false) in
       check (channel ^ " retains an array-like FileList")
         (match ev.Ui_services.files with
-         | [ f ] -> f.file_name = "attachment.png" && f.file_size = 12.
+         | [ f ] -> f.file_name = "attachment.png" && f.file_size = Some 12.
          | _ -> false)) [ "clipboardData"; "dataTransfer" ];
   let raw = event "dataTransfer" true in
   Editor_keys.on_file_dragover (Ui_dom_web.ev_of raw);

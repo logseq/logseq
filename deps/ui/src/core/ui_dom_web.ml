@@ -274,7 +274,7 @@ let file_of_json (f : Js.Json.t) : Ui_services.file =
          | _ -> failwith "Directory-relative file path is missing its root")
   in
   { Ui_services.file_name = Web_dom.file_name f
-  ; file_size = Web_dom.file_size f
+  ; file_size = Some (Web_dom.file_size f)
   ; file_relative_path = relative_path
   ; file_last_modified =
       Option.bind (j_field f "lastModified") Js.Json.decodeNumber
@@ -415,7 +415,7 @@ let inspect_clipboard data () =
   {Ui_services.clipboard_formats=List.map (fun value ->
      let mime=string value in mime,cd_get data mime) (entries "types");
    clipboard_items=List.map (fun item -> field "kind" item,field "type" item) (entries "items");
-   clipboard_files=List.map (fun file -> field "name" file,field "type" file,num file "size")
+   clipboard_files=List.map (fun file -> field "name" file,field "type" file,Some (num file "size"))
      (entries "files")}
 
 let ev_of (e : Js.Json.t) : Ui_services.ev =

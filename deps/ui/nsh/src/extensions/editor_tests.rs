@@ -541,31 +541,55 @@ fn native_clipboard_chords_reach_shared_copy_cut_and_single_block_paste_commands
 }
 
 #[test]
-fn pasted_local_files_keep_real_metadata_and_existing_path_snapshot_shape() {
-    let path = std::env::temp_dir().join(format!(
-        "logseq-paste-{}-{}.txt",
-        std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
-    ));
-    std::fs::write(&path, b"actual clipboard file").unwrap();
+fn pasted_file_urls_preserve_unknown_size_without_reading_the_file() {
+    // The target need not exist when the paste event is dispatched. A path
+    // snapshot resolves through the existing asynchronous native file channel.
+    let path = std::env::temp_dir().join("logseq-paste-not-read-yet 中文.txt");
     let mut content = nsh_core::PasteEvent::default();
     content
         .uris
         .push(url::Url::from_file_path(&path).unwrap().to_string());
-    let answer = clipboard::payload(3, &content);
-    std::fs::remove_file(&path).unwrap();
-    let answer = answer.unwrap();
-    assert_eq!(answer["clipboardData"]["files"][0]["size"], 21);
+    let answer = clipboard::payload(3, &content).unwrap();
+    assert!(answer["clipboardData"]["files"][0].get("size").is_none());
     assert_eq!(
         answer["clipboardData"]["files"][0]["path"],
         path.to_str().unwrap()
+    );
+    assert_eq!(
+        answer["clipboardData"]["files"][0]["name"],
+        "logseq-paste-not-read-yet 中文.txt"
     );
     assert_eq!(answer["clipboardData"]["types"], json!(["Files"]));
     content.uris = vec!["https://example.org/file.txt".into()];
     assert!(clipboard::payload(3, &content).is_err());
     content.uris = vec!["relative.txt".into()];
     assert!(clipboard::payload(3, &content).is_err());
+}
+
+#[test]
+fn copied_file_paste_is_dispatched_before_following_native_typing() {
+    let (mut app, fixture) = start();
+    app.type_text("id:lui-1", "").unwrap();
+    let mut content = nsh_core::PasteEvent::default();
+    let path = std::env::temp_dir().join("logseq-paste-lazy-file.txt");
+    content
+        .uris
+        .push(url::Url::from_file_path(path).unwrap().to_string());
+    fixture.events.lock().unwrap().clear();
+    app.paste("id:lui-1", &content).unwrap();
+    app.type_text("id:lui-1", "X").unwrap();
+    let events = fixture.events.lock().unwrap();
+    let paste = events
+        .iter()
+        .position(|(name, fields)| name == "dom-event" && fields["name"] == "paste")
+        .unwrap();
+    let typing = events
+        .iter()
+        .position(|(name, fields)| name == "insert" && fields["text"] == "X")
+        .unwrap();
+    assert!(
+        paste < typing,
+        "metadata I/O must not defer the shared paste activation past later input"
+    );
+    assert_eq!(fixture.model.lock().unwrap().source, "A😀中zX");
 }

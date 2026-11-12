@@ -68,7 +68,7 @@ let snapshot_json (snapshot : Ui_services.clipboard_snapshot) =
   Json.Object [
     "items",array (fun (kind,mime) -> Json.Object ["kind",Json.String kind;"type",Json.String mime]) snapshot.clipboard_items;
     "types",array (fun (mime,data) -> Json.Object ["type",Json.String mime;"data",Json.String data]) snapshot.clipboard_formats;
-    "files",array (fun (name,mime,size) -> Json.Object ["name",Json.String name;"type",Json.String mime;"size",Json.Number size]) snapshot.clipboard_files]
+    "files",array (fun (name,mime,size) -> Json.Object ["name",Json.String name;"type",Json.String mime;"size",(match size with Some size -> Json.Number size | None -> Json.Null)]) snapshot.clipboard_files]
 
 let control key action =
   Ui_components.button ~variant:`primary ~size:`sm ~label:(t key) ~text:(t key)

@@ -827,7 +827,16 @@ let native_block_click_mounts_shared_editor () =
     requests := [];
     copy ();
     check "native collapsed copy keeps the shared block-reference policy"
-      (List.mem ("clipboard","[[" ^ uuid ^ "]]") !requests))
+      (List.mem ("clipboard","[[" ^ uuid ^ "]]") !requests);
+    let upload = Option.get (Editor_actions.capture_asset_upload ()) in
+    Editor_actions.update_model uuid (fun model -> Edit_model.insert_text model "typed after paste ");
+    ignore (Lui_app.flush app);
+    check "an accepted file paste retains its owner while later typing proceeds"
+      (Editor_actions.asset_upload_current upload);
+    Editor_state.set (fun state -> {state with Editor_state.editing=None});
+    ignore (Lui_app.flush app);
+    check "ending the editor activation rejects a late file upload"
+      (not (Editor_actions.asset_upload_current upload)))
 
 let native_graph_menu_contract () =
   let backend : Lui_protocol.backend = {
@@ -956,6 +965,7 @@ let () =
     ~request_flush:(fun () -> ()) ~dom ~timers:Ui_dom_native.timers ~files:Ui_dom_native.files;
   Editor_clipboard_native.run ();
   native_platform_exception_reporting ();
+  Editor_clipboard_native.async_file_read_keeps_the_application_owner_responsive ();
   native_entry_admission ();
   editor_keyboard_capture_order ();
   native_worker_admission ();

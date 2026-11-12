@@ -336,7 +336,7 @@ let backup_now () : [ `unchanged | `written | `err ] Ui_task.t =
              if fbin = data then Ui_task.resolve `unchanged
              else
                let$ () =
-                 if f.Ui_services.file_size > 0. then
+                 if String.length fbin > 0 then
                    fh.Ui_services.fh_move backups
                      (Printf.sprintf "%.0f.db.sqlite"
                         (Ui_services.time_now ()))

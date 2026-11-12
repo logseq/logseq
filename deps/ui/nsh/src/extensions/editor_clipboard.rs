@@ -26,12 +26,9 @@ pub(super) fn payload(node: u64, content: &PasteEvent) -> Result<Value, String> 
             .file_name()
             .and_then(|name| name.to_str())
             .ok_or("pasted file requires a UTF-8 filename")?;
-        let metadata =
-            std::fs::metadata(&path).map_err(|error| format!("pasted file metadata: {error}"))?;
-        if !metadata.is_file() {
-            return Err("pasted file must be a regular file".into());
-        }
-        files.push(json!({"name":name,"path":path,"type":"","size":metadata.len()}));
+        // A file URL has no size snapshot. Preserve that absence; the existing
+        // native file channel reads it asynchronously when the upload asks.
+        files.push(json!({"name":name,"path":path,"type":""}));
     }
     let mut types = Vec::new();
     let mut items = Vec::new();

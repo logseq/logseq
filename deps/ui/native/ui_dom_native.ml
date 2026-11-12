@@ -128,7 +128,7 @@ let inspect_clipboard data () =
      let mime=Option.get (Js.Json.decodeString value) in mime,clipboard_value data mime) (entries "types");
    clipboard_items=List.map (fun item -> field "kind" item,field "type" item) (entries "items");
    clipboard_files=List.map (fun file -> field "name" file,
-     Option.value (jstr "type" file) ~default:"",jnum "size" file) (entries "files")}
+     Option.value (jstr "type" file) ~default:"",Option.bind (jfield "size" file) Js.Json.decodeNumber) (entries "files")}
 
 let rec el_of (e : Js.Json.t) : Ui_services.el =
   let result = { Ui_services.token = next_token ()

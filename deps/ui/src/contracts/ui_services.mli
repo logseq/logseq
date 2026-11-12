@@ -144,7 +144,9 @@ type timers = {
 
 type file = {
   file_name : string;
-  file_size : float;
+  (* Known snapshot size only; a native path may be unread and unknown.
+     Consumers that already read bytes must use their actual byte length. *)
+  file_size : float option;
   (* Inside the selected directory, '/'-separated, without the root name,
      absolute prefixes, empty segments, '.' or '..'. Single files use None. *)
   file_relative_path : string option;
@@ -238,7 +240,7 @@ type el = {
 type clipboard_snapshot = {
   clipboard_formats : (string * string) list;
   clipboard_items : (string * string) list;
-  clipboard_files : (string * string * float) list;
+  clipboard_files : (string * string * float option) list;
 }
 
 val empty_clipboard_snapshot : clipboard_snapshot

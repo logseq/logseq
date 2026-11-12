@@ -3274,7 +3274,6 @@ let save_one_asset upload pfs ~first
   let repo = upload.upload_repo in
   let name = f.Ui_services.file_name in
   let ext = file_ext name in
-  let size = int_of_float f.Ui_services.file_size in
   let uuid =
     match (first, upload.upload_empty) with
     | true, true -> upload.upload_target
@@ -3286,6 +3285,7 @@ let save_one_asset upload pfs ~first
     Js.Promise.resolve None
   end else
   let* bin = Subs_state.promise_of_task (f.Ui_services.file_binary ()) in
+  let size = String.length bin in
   check_asset_upload upload;
   let u8 = u8_of_binary bin in
   let* checksum = Platform.sha256_hex u8 in

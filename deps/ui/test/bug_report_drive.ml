@@ -96,7 +96,7 @@ let run ~finish =
       let event=Ui_dom_web.ev_of (Ui_dom_web_regression_test.clipboard_event ()) in
       let snapshot={Ui_services.clipboard_formats=["text/plain",source;"text/html","<b>rich</b>";
         "application/x-custom","opaque"];clipboard_items=["string","text/plain";"file","image/png"];
-        clipboard_files=["attachment.png","image/png",12.]} in
+        clipboard_files=["attachment.png","image/png",Some 12.]} in
       let prevented=ref false and stopped=ref false in
       Editor_keys.on_paste {event with Ui_services.clipboard_snapshot=(fun () -> snapshot);
         prevent_default=(fun () -> prevented:=true);stop_immediate=(fun () -> stopped:=true)};

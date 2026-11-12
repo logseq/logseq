@@ -125,24 +125,32 @@ let file_name (f : Js.Json.t) : string =
   | Some s -> s
   | None -> ""
 
-let file_size (f : Js.Json.t) : float =
-  Option.value (Dom_ext.num_prop "size" f) ~default:0.
+let file_size (f : Js.Json.t) : float option = Dom_ext.num_prop "size" f
 
-let file_buffer (f : Js.Json.t) : Js.Typed_array.Uint8Array.t Js.Promise.t =
-  try
-    let data =
-      match Dom_ext.str_prop "data-b64" f with
-      | Some data -> Transit.base64_decode data
-      | None ->
-          (match Dom_ext.str_prop "path" f with
-           | Some path ->
-               let ic = open_in_bin path in
-               Fun.protect ~finally:(fun () -> close_in_noerr ic)
-                 (fun () -> In_channel.input_all ic)
-           | None -> failwith "File snapshot has neither bytes nor a host path")
-    in
-    Js.Promise.resolve (Bytes.of_string data)
-  with error ->
-    Ui_services.log_error_message
-      ("read file " ^ file_name f ^ ": " ^ Printexc.to_string error);
-    Js.Promise.reject error
+let read_file_snapshot (f : Js.Json.t) =
+  match Dom_ext.str_prop "data-b64" f with
+  | Some data -> Transit.base64_decode data
+  | None ->
+      (match Dom_ext.str_prop "path" f with
+       | Some path ->
+           let ic = open_in_bin path in
+           Fun.protect ~finally:(fun () -> close_in_noerr ic)
+             (fun () -> In_channel.input_all ic)
+       | None -> failwith "File snapshot has neither bytes nor a host path")
+
+(* Use the existing native file Promise/mailbox channel. Reading a copied path
+   or decoding captured bytes must not block either the native input callback
+   or the OCaml application owner. Completion is posted onto that owner. *)
+let read_snapshot_async read (f : Js.Json.t) : Js.Typed_array.Uint8Array.t Js.Promise.t =
+  Js.Promise.make (fun ~resolve ~reject ->
+    try ignore (Thread.create (fun () ->
+      let result = try Ok (Bytes.of_string (read f)) with error -> Error error in
+      Host.enqueue (fun () -> match result with
+        | Ok payload -> resolve payload
+        | Error error ->
+            Ui_services.log_error_message
+              ("read file " ^ file_name f ^ ": " ^ Printexc.to_string error);
+            reject error)) ())
+    with error -> reject error)
+
+let file_buffer f = read_snapshot_async read_file_snapshot f
