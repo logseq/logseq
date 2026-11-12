@@ -954,6 +954,80 @@ let native_platform_exception_reporting () =
     check "actual platform handler preserves its original rejection after OCaml logging"
       (bridge_platform_event "window-titlebar\n{}"=0))
 
+let native_settings_route_links () =
+  let previous_app = !Native_embed.current_app and previous_settings = !Settings_state.st
+  and previous_model = !Runtime.read_model and previous_flush = !Runtime.app_flush
+  and previous_worker = !Runtime.worker and previous_target = !Platform.event_target_of
+  and previous_default = !Platform.post_dispatch_hook
+  and previous_elements = !Dom_ext.doc_elements_provider
+  and previous_subtree = !Dom_ext.subtree_elements_provider
+  and previous_hash = !Platform.hash_ref and previous_back = !Platform.back_stack
+  and previous_forward = !Platform.fwd_stack and previous_changes = !Platform.hash_change_fns
+  and previous_coalescing = !Platform.coalesce_duplicate_clicks in
+  let captures=Hashtbl.find_opt Platform.capture_listeners "click"
+  and listeners=Hashtbl.find_opt Platform.window_listeners "click" in
+  let restore table previous = match previous with
+    | Some value -> Hashtbl.replace table "click" value
+    | None -> Hashtbl.remove table "click" in
+  let backend : Lui_protocol.backend = {
+    backend_profile=Lui_protocol.profile Lui_protocol.MacOS Lui_protocol.NshHost;
+    apply_batch=(fun _ -> true)} in
+  let registry=Lui_extension.registry () in
+  Logseq_el.register_all registry;
+  Logseq_codemirror.register registry;Logseq_editor.register registry;
+  Settings_state.st:=None;
+  Runtime.worker:=Some {Worker_client.invoke_fn=(fun _ _ ->
+    Js.Promise.make (fun ~resolve:_ ~reject:_ -> ()));
+    on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
+  let app=Lui_app.create_with_extensions backend registry
+    {Model.initial with repo=Some "route-link-contract"}
+    (fun model () -> model)
+    (fun context _ _ ->
+      Settings_state.ensure context;
+      Lui_elements.column [Settings_page.general_pane ~modal:false context;
+        Ui_components.faded_link ~key:"routed-faded" ~url:"#/page/faded-route" ~text:"Routed fixture" ()]) in
+  Fun.protect ~finally:(fun () ->
+    ignore (Lui_app.dispose app);Native_embed.current_app:=previous_app;
+    Settings_state.st:=previous_settings;Runtime.read_model:=previous_model;
+    Runtime.app_flush:=previous_flush;Runtime.worker:=previous_worker;
+    Platform.event_target_of:=previous_target;Platform.post_dispatch_hook:=previous_default;
+    Dom_ext.doc_elements_provider:=previous_elements;Dom_ext.subtree_elements_provider:=previous_subtree;
+    Platform.hash_ref:=previous_hash;Platform.back_stack:=previous_back;
+    Platform.fwd_stack:=previous_forward;Platform.hash_change_fns:=previous_changes;
+    Platform.coalesce_duplicate_clicks:=previous_coalescing;
+    restore Platform.capture_listeners captures;restore Platform.window_listeners listeners) (fun () ->
+    Native_embed.current_app:=Some app;
+    Runtime.read_model:=(fun () -> Lui_app.model app);
+    Runtime.app_flush:=(fun () -> ignore (Lui_app.flush app));
+    Dom_ext.doc_elements_provider:=Native_embed.collect_elements;
+    Dom_ext.subtree_elements_provider:=Native_embed.collect_subtree;
+    let runtime=Lui_app.runtime app in
+    Platform.event_target_of:=(fun node -> Some (Native_embed.ext_snapshot runtime node));
+    Platform.post_dispatch_hook:=Dom_ext.default_event;
+    Platform.coalesce_duplicate_clicks:=(fun () -> false);
+    Hashtbl.remove Platform.capture_listeners "click";
+    Hashtbl.remove Platform.window_listeners "click";
+    let observed=ref [] in
+    Platform.hash_change_fns:=[fun () -> observed:=Platform.location_hash ()::!observed];
+    ignore (Lui_app.start app);ignore (Lui_app.flush app);
+    List.iter (fun href ->
+      let node=Hashtbl.fold (fun node props found ->
+        if Lui_protocol.Property_map.find_opt Lui_protocol.UrlValue props
+          =Some (Lui_protocol.StringValue href) then Some node else found)
+        runtime.Lui_runtime.runtime_properties None |> Option.get in
+      let props=Hashtbl.find runtime.Lui_runtime.runtime_properties node in
+      check "actual Settings hash Links declare the application press owner before rendering"
+        (Lui_protocol.Property_map.find_opt Lui_protocol.PressEnabled props
+         =Some (Lui_protocol.BoolValue true));
+      Platform.hash_ref:="#/settings";Platform.back_stack:=[];Platform.fwd_stack:=[];
+      ignore (Native_embed.press_ex node 0);
+      check "actual native Settings Link follows the existing hashchange route controller"
+        (Platform.location_hash ()=href && List.hd !observed=href);
+      Platform.history_back ();
+      check "native Settings Link participates in the existing navigation history"
+        (Platform.location_hash ()="#/settings"))
+      ["#/file/logseq%2Fconfig.edn";"#/file/logseq%2Fcustom.css";"#/page/faded-route"])
+
 let () =
   let owner = Thread.id (Thread.self ()) in
   let assert_owner () =
@@ -966,6 +1040,7 @@ let () =
   Editor_clipboard_native.run ();
   native_platform_exception_reporting ();
   Editor_clipboard_native.async_file_read_keeps_the_application_owner_responsive ();
+  native_settings_route_links ();
   native_entry_admission ();
   editor_keyboard_capture_order ();
   native_worker_admission ();

@@ -1238,3 +1238,22 @@ The shared paste/upload activation captures its existing graph, route and editor
 owner immediately; subsequent typing stays in order and the existing upload
 checks use the current buffer when the file completes. Ending that activation
 still prevents a stale upload from mutating a different editor or graph.
+
+
+## Native application route Links opt into the existing click controller
+
+Shared Settings edit Links, property date/reference Links, table reference-group
+headers, publishing navigation and breadcrumb Links now explicitly reuse
+`Ui_parts.delegated_link` on NSH. Generic faded Links and markup URL helpers use
+`Ui_parts.routed_link ~url`, which opts in only for `#/` application routes.
+This keeps their authored href and forwards native activation modifiers through
+the existing document click/default-action controller; that controller already
+updates native hash navigation and history. Bare `#` delegated action Links keep
+their existing explicit handler. Web, Apple and Android retain host click delivery.
+
+Application helpers should use, for example,
+`Ui_parts.routed_link ~url (Lui_elements.link ~url ~text [])` when a destination
+may be an application hash or an external URL. A relative external destination
+such as `assets/readme.md` receives no application press handler and remains
+subject to the NSH URL boundary validation. The backend does not accept arbitrary
+relative URLs or invent their navigation behavior.

@@ -734,8 +734,8 @@ let header (ms : Model.t Signal.signal) =
   if Ui_services.env_publishing () then
     row ~accessibility_identifier:"head" ~style_class:"cp__header"
       ~gap:12 ~cross:`center
-      [ link ~url:"#/" ~target:`self_ ~text:(I18n.t "nav/home") []
-      ; link ~url:"#/all-pages" ~target:`self_ ~text:(I18n.t "nav.all-pages/label") []
+      [ Ui_parts.delegated_link (link ~url:"#/" ~target:`self_ ~text:(I18n.t "nav/home") [])
+      ; Ui_parts.delegated_link (link ~url:"#/all-pages" ~target:`self_ ~text:(I18n.t "nav.all-pages/label") [])
       ; search_button () ]
   else
   (* resolved: cljs's inline fontSize:50 on .cp__header is dropped —
@@ -779,8 +779,9 @@ let header (ms : Model.t Signal.signal) =
                          && p.Model.page_parents <> []
                          && not (Page.is_block_route p) ->
                       let item key ~href ~text =
-                        link ~key ~style_class:"breadcrumb-item"
-                          ~url:href ~target:`self_ ~text []
+                        Ui_parts.routed_link ~url:href
+                          (link ~key ~style_class:"breadcrumb-item"
+                             ~url:href ~target:`self_ ~text [])
                       in
                       row ~key:"head-bc" ~style_class:"breadcrumb" ~cross:`center ~min_width:0
                         (List.mapi

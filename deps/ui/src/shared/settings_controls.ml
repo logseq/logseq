@@ -173,7 +173,7 @@ let edit_link_row ~key ~label ~button ~href ?(min_height = 28) () =
               [ Ui_components.Prop.font_size "0.875rem"
               ; Ui_components.Prop.font_weight 500
               ; Ui_components.Prop.line_height "1.25rem" ]
-              (link ~key:(key ^ "-a")
+              (Ui_parts.routed_link ~url:href (link ~key:(key ^ "-a")
                  ~style_class:( btn_cls ~variant:`Solid ~size:`Sm ())
                  ~url:href ~target:`self_ ~text:button
                  ~background:"hsl(var(--primary) / 0.9)"
@@ -181,7 +181,7 @@ let edit_link_row ~key ~label ~button ~href ?(min_height = 28) () =
                  ~height:28 ~padding_horizontal:12 ~padding_vertical:4
                  ~corner_radius:4
                  ~data_attrs:[ "style", "text-decoration:none" ]
-                 [])
+                 []))
           ]
       ]
     ()

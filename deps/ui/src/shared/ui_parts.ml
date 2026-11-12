@@ -88,6 +88,12 @@ let delegated_link (elem : t) : t =
   end;
   node
 
+(* Route Links opt into the existing native document/default-action pipeline.
+   Other URL classes keep backend validation and platform URL opening. *)
+let routed_link ~url (element : t) : t =
+  if String.starts_with ~prefix:"#/" url then delegated_link element
+  else element
+
 (* reactive style_class — kinds take only a static ~style_class, so bind
    StyleClass on the mounted node (same wrap pattern as pressable) *)
 let class_signal source f (elem : t) : t =

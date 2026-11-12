@@ -601,6 +601,24 @@ let graph_menu_trigger_ownership ~registry =
      ({P.profile_os=P.IOS;P.profile_host=P.SwiftUIHost},false);
      ({P.profile_os=P.MacOS;P.profile_host=P.NshHost},true)]
 
+let routed_link_ownership ~registry =
+  List.iter (fun (profile, native) ->
+    let session=S.mount ~registry ~profile ~initial:() ~reducer:(fun () () -> ())
+      ~view:(fun _ _ _ -> Lui_elements.column
+        (List.mapi (fun i url ->
+          Ui_components.faded_link ~key:(string_of_int i) ~url ~text:url ())
+          ["#/file/logseq%2Fconfig.edn";"#/page/route-fixture";
+           "https://docs.logseq.com/";"assets/relative.md"])) () in
+    Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose session.S.app)) (fun () ->
+      List.iter (fun node -> if node.M.kind="link" then
+        let url=Option.get (M.string_prop node "url") in
+        check "only NSH application hash routes gain the shared native press owner"
+          ((Hashtbl.find_opt node.M.props "press-enabled"=Some (P.BoolValue true))
+           = (native && String.starts_with ~prefix:"#/" url))) (nodes session)))
+    [({P.profile_os=P.WebOS;P.profile_host=P.WebHost},false);
+     ({P.profile_os=P.IOS;P.profile_host=P.SwiftUIHost},false);
+     ({P.profile_os=P.MacOS;P.profile_host=P.NshHost},true)]
+
 let native_header_menu_inputs () =
   let page = Option.get (Decode.page_of_summary
     (Wire.Map [Wire.kw "block/uuid", Wire.Uuid "native-more-page";
@@ -1058,6 +1076,7 @@ let run_views ~registry ~profile ~finish =
   accent_swatch_palettes ~registry;
   native_popup_alignment ~registry;
   graph_menu_trigger_ownership ~registry;
+  routed_link_ownership ~registry;
   native_header_menu_inputs ();
   standalone_inline_groups ~registry;
   selectable_block_motion ~registry;

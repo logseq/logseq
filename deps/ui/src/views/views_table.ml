@@ -1673,12 +1673,12 @@ let ref_grouped_list_lines inst (s : V.vstate)
                 let header =
                   ref_header inst ~key
                     ~title:
-                      (link
+                      (Ui_parts.delegated_link (link
                          ~url:
                            ("#/page/"
                             ^ Ui_services.uri_encode_component pname)
                          ~target:`self_ ~style_class:"page-ref" ~text:pname
-                         [])
+                         []))
                 in
                 if V.Sset.mem key s.V.collapsed_groups then [ header ]
                 else header :: List.map (block_line s) rows)
@@ -1743,12 +1743,12 @@ let render_list inst s : t =
                     foldable inst
                       ~key:("g" ^ string_of_int i ^ "-" ^ string_of_int j)
                       ~title:
-                        (link
+                        (Ui_parts.delegated_link (link
                            ~url:
                              ("#/page/"
                               ^ Ui_services.uri_encode_component pname)
                            ~target:`self_ ~style_class:"page-ref"
-                           ~text:pname [])
+                           ~text:pname []))
                       ~body:
                         (box ~margin_left:(-8) ~margin_top:4
                            [ list_stream

@@ -1017,13 +1017,13 @@ let date_view ?(jump_target = true) ?(bottom_pill = false) ?raw_value
            | Some (y, m, d) ->
                (* cljs datetime-value renders the journal page-ref —
                   the text navigates, the pencil opens the picker *)
-               link ~style_class:"page-ref"
+               Ui_parts.delegated_link (link ~style_class:"page-ref"
                  ~url:
                    ("#/page/"
                    ^ Ui_services.uri_encode_component
                        (Dates.journal_title_ymd ~y ~m ~d))
                  ~target:`self_
-                 ~text:(date_display (D.row_type row) value) []
+                 ~text:(date_display (D.row_type row) value) [])
            | None ->
                value_button
                  ~text:(date_display (D.row_type row) value)
@@ -1054,7 +1054,7 @@ let many_dates_view ~jump_target ~hover ctx row : t =
       let label = date_display ty value in
       (if index = 0 then [] else [text ~value:"," ~foreground:"var(--lx-gray-09)" []])
       @ [match D.ref_uuid value with
-         | Some uuid -> link ~url:("#/page/" ^ uuid) ~target:`self_ ~text:label []
+         | Some uuid -> Ui_parts.delegated_link (link ~url:("#/page/" ^ uuid) ~target:`self_ ~text:label [])
          | None -> text ~value:label []])
       (List.mapi (fun index value -> index, value) values)
       @ [date_view ~jump_target ~hover ctx (D.row_with_value row W.Nil)])
@@ -1392,8 +1392,8 @@ let rec view ?(jump_target = true) ?(positioned = false) ?(table_view = false)
       | W.Set values | W.List values | W.Array values ->
           Lui_elements.row ~gap:6 (List.map display values)
       | W.Map _ -> (match D.ref_uuid value with
-          | Some uuid -> link ~url:("#/page/" ^ uuid) ~target:`self_
-              ~text:(D.ref_title value) []
+          | Some uuid -> Ui_parts.delegated_link (link ~url:("#/page/" ^ uuid) ~target:`self_
+              ~text:(D.ref_title value) [])
           | None -> Logseq_el.fragment (Render_inline.parse (D.value_display value)))
       | _ -> Logseq_el.fragment (Render_inline.parse (D.value_display value))
     in
@@ -1512,6 +1512,6 @@ and url_view ~jump_target ctx row : t =
     (Ui_components.with_props
          [ Ui_components.Prop.text_decoration "none";
            Ui_components.Prop.white_space `normal; Ui_components.Prop.min_width 0 ]
-         (link ~url ~target:`blank ~style_class:"external-link"
+         (Ui_parts.routed_link ~url (link ~url ~target:`blank ~style_class:"external-link"
          ~data_attrs:[ ("data-type", "url") ]
-         ~text:url []))
+         ~text:url [])))

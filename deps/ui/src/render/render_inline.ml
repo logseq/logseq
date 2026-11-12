@@ -419,8 +419,9 @@ let name_uuid_state context name =
 let external_link href label_els =
   Ui_components.with_props
     [ Ui_components.Prop.text_decoration "none" ]
-    (link ~url:href ~target:`blank ~style_class:"external-link"
-       label_els)
+    (Ui_parts.routed_link ~url:href
+       (link ~url:href ~target:`blank ~style_class:"external-link"
+          label_els))
 
 (* ((uuid)) (deprecated form) / #[[uuid]] -> resolved block title via
    thread-api/pull — lazy: the anchor mounts empty and fills when the
