@@ -725,6 +725,15 @@ and unchanged tracked files. The gate samples them again after native/HTTPS
 cleanup; dirty authored versions or a concurrent checkout change cannot produce
 a passing receipt.
 
+Manifest signing first runs the actual App packager's `check-release` command,
+which validates the archive receipt, source inputs, release-sidecar digest and
+release identity. The pinned LUI delivery helper verifies the NSH CLI's immutable
+source revision and executable receipt; only then does that CLI's public
+`update-manifest` command sign the actual archive using its recorded sidecar.
+The App receipt is checked again after signing. This composes the existing two
+owners without pretending the App archive is a generic LUI delivery package or
+creating a synthetic Cargo manifest/delivery receipt.
+
 Run only on a disposable **GitHub-hosted macOS runner**, after the normal
 release/receipt gates for both authored source revisions:
 

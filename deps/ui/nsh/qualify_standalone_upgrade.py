@@ -364,9 +364,8 @@ def qualify(args):
                         for role, source, host in (("n1", args.n1_source, args.n1_host),
                                                   ("n2", args.n2_source, args.n2_host))]
             manifest = private / "manifest"
-            https.run([sys.executable, args.lui_source / "tooling/nsh_delivery.py", "manifest", archives[1],
-                       "--app", str(archives[1]) + ".release", "--cli-directory", args.pinned_cli,
-                       "--key", secret, "--output", manifest])
+            https.signed_app_manifest(args.n2_source, archives[1], args.lui_source,
+                                      args.pinned_cli, secret, manifest)
             files.update({"/latest.json": manifest / "latest.json", "/latest.json.sig": manifest / "latest.json.sig",
                           "/" + archives[1].name: archives[1], "archive": archives[1]})
             old = https.extract(archives[0], private / "installation")

@@ -12,6 +12,57 @@ SPEC.loader.exec_module(GATE)
 
 
 class DisposableTrustTests(unittest.TestCase):
+    def test_actual_app_receipt_precedes_exact_pinned_cli_signing_and_is_rechecked(self):
+        source, archive, lui, cli_directory, key, output = map(Path, (
+            "/owned/n2", "/owned/N2.zip", "/owned/lui", "/owned/cli", "/owned/key", "/owned/manifest"))
+        delivery, specification = Mock(), Mock()
+        delivery.verified_cli.return_value = (cli_directory / "nsh", {"verified": True})
+        pinned = {"repository": "https://github.com/logseq/nsh", "revision": "a" * 40}
+        delivery.pinned_source.return_value = pinned
+        owner = Mock()
+        with patch.object(GATE.importlib.util, "spec_from_file_location", return_value=specification), \
+                patch.object(GATE.importlib.util, "module_from_spec", return_value=delivery), \
+                patch.object(GATE, "run") as run:
+            owner.attach_mock(run, "command")
+            owner.attach_mock(delivery.verified_cli, "verified_cli")
+            GATE.signed_app_manifest(source, archive, lui, cli_directory, key, output)
+        delivery.pinned_source.assert_called_once_with(source / "deps/ui/nsh")
+        specification.loader.exec_module.assert_called_once_with(delivery)
+        check = ["node", source / "deps/ui/scripts/package-nsh.mjs", "check-release", archive]
+        calls = owner.mock_calls
+        self.assertEqual(calls[0].args[0], check)
+        self.assertEqual(calls[0].kwargs["environment"]["LUI_SOURCE_ROOT"], str(lui))
+        self.assertEqual(calls[1], call.verified_cli(cli_directory, pinned))
+        self.assertEqual(calls[2], call.command([cli_directory / "nsh", "update-manifest", archive,
+            "--entry", Path(str(archive) + ".release"), "--key", key, "-o", output], directory=source))
+        self.assertEqual(calls[3].args[0], check)
+
+    def test_bad_actual_app_receipt_never_loads_or_invokes_a_signer(self):
+        with patch.object(GATE, "run", side_effect=RuntimeError("stale actual App receipt")) as run, \
+                patch.object(GATE.importlib.util, "spec_from_file_location") as load:
+            with self.assertRaisesRegex(RuntimeError, "stale actual App receipt"):
+                GATE.signed_app_manifest(*map(Path, ("/n2", "/N2.zip", "/lui", "/cli", "/key", "/manifest")))
+        self.assertEqual(run.call_count, 1)
+        load.assert_not_called()
+
+    def test_unverified_cli_or_post_sign_archive_change_cannot_pass(self):
+        inputs = tuple(map(Path, ("/n2", "/N2.zip", "/lui", "/cli", "/key", "/manifest")))
+        delivery = Mock()
+        delivery.verified_cli.side_effect = RuntimeError("changed pinned CLI")
+        with patch.object(GATE.importlib.util, "spec_from_file_location"), \
+                patch.object(GATE.importlib.util, "module_from_spec", return_value=delivery), \
+                patch.object(GATE, "run") as run:
+            with self.assertRaisesRegex(RuntimeError, "changed pinned CLI"):
+                GATE.signed_app_manifest(*inputs)
+            self.assertEqual(run.call_count, 1)
+            delivery.verified_cli.side_effect = None
+            delivery.verified_cli.return_value = (Path("/cli/nsh"), {})
+            run.reset_mock()
+            run.side_effect = ["", "", RuntimeError("archive changed after signing")]
+            with self.assertRaisesRegex(RuntimeError, "archive changed after signing"):
+                GATE.signed_app_manifest(*inputs)
+            self.assertEqual(run.call_count, 3)
+
     def test_cached_ready_retry_cannot_download_the_archive_twice(self):
         def request(path, complete=True):
             return {"case":"later", "path":path, "complete":complete}

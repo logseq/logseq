@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 import hashlib
+import importlib.util
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import os
@@ -244,6 +245,29 @@ def package(source, host, url, key, output, lui):
                          "--update-public-key", key], environment=environment)).resolve(strict=True)
     return Path(run(["bash", source / "deps/ui/scripts/package-nsh.sh", "--built-host", host,
                      "--update-url", url, "--update-public-key", key], environment=environment)).resolve(strict=True)
+
+
+def signed_app_manifest(source, archive, lui, cli_directory, key, output):
+    """Compose the actual App receipt owner with the pinned public NSH signer.
+
+    LUI's generic package manifest command requires its own Cargo application
+    and delivery receipt. An App archive instead belongs to package-nsh.mjs;
+    never manufacture a generic application/receipt to satisfy that command.
+    """
+    environment = dict(os.environ, LUI_SOURCE_ROOT=str(lui))
+    check = ["node", source / "deps/ui/scripts/package-nsh.mjs", "check-release", archive]
+    run(check, environment=environment)
+    specification = importlib.util.spec_from_file_location(
+        "logseq_upgrade_delivery", lui / "tooling/nsh_delivery.py")
+    delivery = importlib.util.module_from_spec(specification)
+    specification.loader.exec_module(delivery)
+    pinned = delivery.pinned_source(source / "deps/ui/nsh")
+    cli, _ = delivery.verified_cli(cli_directory, pinned)
+    run([cli, "update-manifest", archive, "--entry", Path(str(archive) + ".release"),
+         "--key", key, "-o", output], directory=source)
+    # The signer reads the final archive and sidecar. A concurrent byte/source
+    # change must still fail this attempt rather than bless mixed inputs.
+    run(check, environment=environment)
 
 
 def extract(archive, destination):
