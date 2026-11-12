@@ -117,7 +117,8 @@ let stop request_id (worker : Daemon_client.update_worker) =
   check "Only independently proven clean child exit completes stop"
     (Daemon_client.Worker_update.phase update=Daemon_client.Worker_exited);
   check "Stopped worker no longer serves health"
-    (Daemon_client.http_get ~port:worker.origin.port ~path:"/healthz"=None)
+    (Daemon_client.http_get ~port:worker.origin.port ~path:"/healthz"=None);
+  update
 let run () =
   gate "start";
   let private_root = Sys.getenv "LOGSEQ_TEST_PRIVATE_ROOT" in
@@ -165,19 +166,36 @@ let run () =
   event "aborted" (metadata first);
   gate "continue";
   check "SSE liveness remains active immediately before stop" (not (Atomic.get stream));
-  stop "2" first;
+  let stopped = stop "2" first in
   assert_stream_closed stream;
   event "stopped" (metadata first);
   gate "continue";
-  ignore (await (Daemon_client.ipc [Wire.String "releaseDbWorkerRuntime"; Wire.String repo]));
+  let old_base = Hashtbl.find Daemon_client.attached first.storage in
+  Hashtbl.replace Daemon_client.attached first.storage "http://127.0.0.1:1";
+  (try
+     await (Daemon_client.Worker_update.restore_exited stopped);
+     failwith "Restoration must not overwrite a newer attachment"
+   with Failure message -> check "a changed attachment refuses before restarting a child"
+     (message="Worker restoration would replace a different attachment"));
+  check "refused restoration leaves the conflicting endpoint intact"
+    (Hashtbl.find Daemon_client.attached first.storage="http://127.0.0.1:1"
+     && Hashtbl.length Daemon_client.spawned_children=1);
+  Hashtbl.replace Daemon_client.attached first.storage old_base;
+  await (Daemon_client.Worker_update.restore_exited stopped);
   let reopened = attach repo in
+  await (Daemon_client.Worker_update.restore_exited stopped);
+  check "repeating restoration verifies the exact replacement without another child"
+    (Hashtbl.length Daemon_client.spawned_children=2);
+  let snapshot = await (Daemon_client.capture_update_workers ()) in
+  check "captured update workers expose the ready replacement origin"
+    (List.exists (fun (worker : Daemon_client.update_worker) -> worker.origin=reopened.origin) snapshot);
   check "Durability probe starts a new actual child instance"
     (reopened.origin.instance<>first.origin.instance);
   check "The finite graph mutation survives stop and a fresh worker process"
     (query reopened=Wire.String title);
   event "reopened" (metadata reopened);
   gate "continue";
-  stop "3" reopened;
+  ignore (stop "3" reopened);
   check "Only the two deliberately spawned worker instances exist in this fixture"
     (Hashtbl.length Daemon_client.spawned_children=2);
   event "closed" (metadata reopened);

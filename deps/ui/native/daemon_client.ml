@@ -543,7 +543,7 @@ let verify_update_workers ~fetch snapshot =
             inspect_update_worker ~key ~origin body
         | _ -> failwith ("Update preparation cannot verify the current worker: " ^ repo)) snapshot
 
-let require_update_owned_workers () =
+let capture_update_workers () =
   let promise, resolve, reject = Js.Promise.pending () in
   ignore (Thread.create (fun () ->
     try
@@ -552,11 +552,16 @@ let require_update_owned_workers () =
         Fun.protect ~finally:(fun () -> Mutex.unlock attach_mu) (fun () ->
           Hashtbl.iter (fun _ child ->
             if child.origin=None then failwith "An owned worker has not completed attachment") spawned_children;
-          Hashtbl.fold (fun key origin acc -> (key, origin) :: acc) update_workers []) in
-      ignore (verify_update_workers ~fetch:http_get snapshot);
-      Host.enqueue (fun () -> resolve ())
+          Hashtbl.fold (fun key origin acc -> (key, origin) :: acc) update_workers []
+          |> List.sort (fun (left, _) (right, _) -> Stdlib.compare left right)) in
+      let workers = verify_update_workers ~fetch:http_get snapshot in
+      Host.enqueue (fun () -> resolve workers)
     with error -> Host.enqueue (fun () -> reject error)) ());
   promise
+
+let require_update_owned_workers () =
+  let* _ = capture_update_workers () in
+  Js.Promise.resolve ()
 
 (* ---------- graph listing ---------- *)
 
@@ -873,12 +878,14 @@ module Worker_update : sig
   val seal : t -> unit Js.Promise.t
   val abort : t -> unit Js.Promise.t
   val stop : t -> unit Js.Promise.t
+  val restore_exited : t -> unit Js.Promise.t
 end = struct
   type t = {
     worker : update_worker;
     process : Child_process.t;
     request_id : string;
     phase : worker_update_phase Atomic.t;
+    restored : worker_origin option Atomic.t;
   }
   let phase update = Atomic.get update.phase
   let background action =
@@ -897,7 +904,7 @@ end = struct
         match Hashtbl.find_opt spawned_children worker.origin.instance with
         | Some child when child.origin=Some worker.origin -> child.process
         | _ -> failwith "Update shutdown requires the exact captured child, never a reused PID") in
-    {worker; process; request_id; phase=Atomic.make Worker_initial})
+    {worker; process; request_id; phase=Atomic.make Worker_initial; restored=Atomic.make None})
   let exchange update allowed next =
     let rec change () =
       let current = phase update in
@@ -945,43 +952,107 @@ end = struct
       request update "stop" "stopping";
       Child_process.await_clean_exit ~timeout:30. update.process;
       Atomic.set update.phase Worker_exited)
+  let restore_exited update = background (fun () ->
+    (match phase update with
+     | Worker_exited | Worker_stopping | Worker_uncertain (Stop_worker, _) -> ()
+     | _ -> failwith "Worker restoration requires a captured stopped child");
+    (* A lost management acknowledgement cannot replace exact child proof. *)
+    Child_process.await_clean_exit ~timeout:30. update.process;
+    Atomic.set update.phase Worker_exited;
+    Mutex.lock attach_mu;
+    Fun.protect ~finally:(fun () -> Mutex.unlock attach_mu) (fun () ->
+      let worker = update.worker in
+      let _, _, _, repo = worker.storage in
+      if attachment_key repo <> worker.storage then
+        failwith "Worker restoration storage changed";
+      match Atomic.get update.restored with
+      | Some origin ->
+          if Hashtbl.find_opt update_workers worker.storage <> Some (Some origin)
+             || Hashtbl.find_opt attached worker.storage <>
+                  Some (Printf.sprintf "http://127.0.0.1:%d" origin.port)
+          then failwith "Restored worker origin changed";
+          (match http_get ~port:origin.port ~path:"/healthz" with
+           | Some (200, body) -> ignore (inspect_update_worker ~key:worker.storage ~origin body)
+           | _ -> failwith "Restored worker no longer proves readiness")
+      | None ->
+      if Hashtbl.find_opt update_workers worker.storage <> Some (Some worker.origin) then
+        failwith "Worker restoration would replace a different origin";
+      (match Hashtbl.find_opt spawned_children worker.origin.instance with
+       | Some child when child.process == update.process && child.origin=Some worker.origin -> ()
+       | _ -> failwith "Worker restoration lost its exact captured child");
+      let previous_base = Printf.sprintf "http://127.0.0.1:%d" worker.origin.port in
+      (match Hashtbl.find_opt attached worker.storage with
+       | None -> ()
+       | Some base when base=previous_base -> ()
+       | Some _ -> failwith "Worker restoration would replace a different attachment");
+      (* Never adopt another client's replacement. Use the same owned spawning
+         path as normal attachment, under its existing serialization lock. *)
+      if Option.is_some (find_live_daemon worker.storage) then
+        failwith "Worker restoration found an externally replaced endpoint";
+      Hashtbl.remove attached worker.storage;
+      let base = spawn_daemon repo in
+      let origin = match Hashtbl.find_opt update_workers worker.storage with
+        | Some (Some origin) when origin.instance<>worker.origin.instance -> origin
+        | _ -> failwith "Restored worker has no fresh captured origin" in
+      (match http_get ~port:origin.port ~path:"/healthz" with
+       | Some (200, body) -> ignore (inspect_update_worker ~key:worker.storage ~origin body)
+       | _ -> failwith "Restored worker did not prove ready storage");
+      Hashtbl.replace attached worker.storage base;
+      Atomic.set update.restored (Some origin)))
 end
 
 let http_get_stream ~(host : string) ~(port : int) ~(path : string)
-    ~(on_line : string -> unit) ~(alive : unit -> bool) : unit =
-  let addr = Unix.ADDR_INET (Unix.inet_addr_of_string host, port) in
-  let fd = Unix.socket Unix.PF_INET Unix.SOCK_STREAM 0 in
-  (try
-     Unix.connect fd addr;
-     let oc = Unix.out_channel_of_descr fd in
-     Printf.fprintf oc
-       "GET %s HTTP/1.1\r\nHost: %s:%d\r\nAccept: \
-        text/event-stream\r\n%s\r\n"
-       path host port app_session_header;
-     flush oc;
-     let ic = Unix.in_channel_of_descr fd in
-     (* consume status + headers *)
-     let rec skip_headers () =
-       let line = input_line ic in
-       if line <> "" && line <> "\r" then skip_headers ()
-     in
-     ignore (input_line ic);
-     skip_headers ();
-     while alive () do
-       match input_line ic with
-       | line -> on_line line
-       | exception End_of_file -> raise Exit
-       | exception _ -> raise Exit
-     done
-   with Exit -> ()
-  | e ->
-      prerr_endline
-        ("[daemon] SSE stream ended: " ^ Printexc.to_string e));
-  (try Unix.close fd with _ -> ())
+    ~(on_line : string -> unit) ~(alive : unit -> bool)
+    ~(on_ready : unit -> unit) ~(on_socket : Unix.file_descr -> unit)
+    ~(on_socket_closed : unit -> unit) : (unit, exn) result =
+  let fd = Unix.socket ~cloexec:true Unix.PF_INET Unix.SOCK_STREAM 0 in
+  let input = Unix.in_channel_of_descr fd in
+  Fun.protect ~finally:(fun () -> on_socket_closed (); close_in_noerr input) (fun () ->
+    try
+      on_socket fd;
+      if not (alive ()) then failwith "Native event stream owner retired";
+      Unix.setsockopt_float fd Unix.SO_RCVTIMEO 5.;
+      Unix.setsockopt_float fd Unix.SO_SNDTIMEO 5.;
+      Unix.connect fd (Unix.ADDR_INET (Unix.inet_addr_of_string host, port));
+      let request = Printf.sprintf
+        "GET %s HTTP/1.1\r\nHost: %s:%d\r\nAccept: text/event-stream\r\n%s\r\n"
+        path host port app_session_header in
+      let rec write offset = if offset<String.length request then
+        match Unix.write_substring fd request offset (String.length request-offset) with
+        | 0 -> failwith "Native event stream closed while writing"
+        | count -> write (offset+count)
+        | exception Unix.Unix_error (Unix.EINTR, _, _) -> write offset in
+      write 0;
+      (match String.split_on_char ' ' (input_line input) with
+       | _ :: "200" :: _ -> ()
+       | _ -> failwith "Native event stream did not acknowledge HTTP 200");
+      let rec headers stream =
+        match String.trim (input_line input) |> String.lowercase_ascii with
+        | "" -> stream
+        | header -> headers (stream || header="content-type: text/event-stream") in
+      if not (headers false) then failwith "Native endpoint did not acknowledge an event stream";
+      (* Only the finite handshake has a deadline; an idle event stream is
+         liveness, not pending preparation work or a recurring timer. *)
+      Unix.setsockopt_float fd Unix.SO_RCVTIMEO 0.;
+      on_ready ();
+      (try while alive () do on_line (input_line input) done with End_of_file -> ());
+      Ok ()
+    with error -> Error error)
 
 (* ---------- transport ---------- *)
 
-type sse_state = { mutable stop : bool }
+type sse_state = {
+  mutable stop : bool;
+  closed : bool Atomic.t;
+  socket_lock : Mutex.t;
+  mutable socket : Unix.file_descr option;
+}
+let cancel_stream state =
+  state.stop <- true;
+  Mutex.lock state.socket_lock;
+  Fun.protect ~finally:(fun () -> Mutex.unlock state.socket_lock) (fun () ->
+    Option.iter (fun fd -> try Unix.shutdown fd Unix.SHUTDOWN_ALL with Unix.Unix_error _ -> ())
+      state.socket)
 
 type transport =
   { mutable base_url : string
@@ -1000,7 +1071,7 @@ let json_field (name : string) (j : Js.Json.t) : Js.Json.t option =
       | None -> None)
   | _ -> None
 
-let post_invoke (base_url : string) (name : string) (args : Wire.t list)
+let post_invoke ?(timeout = None) (base_url : string) (name : string) (args : Wire.t list)
     : Wire.t Js.Promise.t =
   let p, resolve, reject = Js.Promise.pending () in
   (* host:port from base-url like http://127.0.0.1:PORT *)
@@ -1026,7 +1097,7 @@ let post_invoke (base_url : string) (name : string) (args : Wire.t list)
     (Thread.create
        (fun () ->
          try
-           let _status, resp = http_post ~host ~port ~path:"/v1/invoke" ~body in
+           let _status, resp = http_post_with_timeout ~timeout ~host ~port ~path:"/v1/invoke" ~body in
            boot_mark ("invoke " ^ name ^ " done");
            let j = Js.Json.parseExn resp in
            let ok =
@@ -1069,8 +1140,16 @@ let post_invoke (base_url : string) (name : string) (args : Wire.t list)
 (* SSE: lines "data: {json}"; payload is a transit string carrying
    [<kw> ...]. *)
 let sse_thread (t : transport) (host : string) (port : int)
-    (state : sse_state) : unit =
-  http_get_stream ~host ~port ~path:"/v1/events"
+    (state : sse_state) ~on_ready ~on_closed : unit =
+  let on_socket fd =
+    Mutex.lock state.socket_lock;
+    state.socket <- Some fd;
+    Mutex.unlock state.socket_lock in
+  let on_socket_closed () =
+    Mutex.lock state.socket_lock;
+    state.socket <- None;
+    Mutex.unlock state.socket_lock in
+  let result = http_get_stream ~host ~port ~path:"/v1/events" ~on_ready ~on_socket ~on_socket_closed
     ~alive:(fun () -> not state.stop)
     ~on_line:(fun line ->
       let line = String.trim line in
@@ -1093,14 +1172,18 @@ let sse_thread (t : transport) (host : string) (port : int)
                        | _ -> Wire.Array rest
                      in
                      let sink = t.sink in
-                     Host.enqueue (fun () -> sink kind payload)
+                     Host.enqueue (fun () ->
+                       if not state.stop && Option.exists (fun current -> current == state) t.sse
+                       then sink kind payload)
                  | _ -> ())
              | None -> ())
-         | None -> ()))
+         | None -> ())) in
+  Atomic.set state.closed true;
+  on_closed result
 
-let attach (t : transport) (repo : string) (base_url : string) : unit =
+let attach_ready (t : transport) (repo : string) (base_url : string) : unit Js.Promise.t =
   (match t.sse with
-   | Some s -> s.stop <- true
+   | Some s -> cancel_stream s
    | None -> ());
   let host, port =
     match
@@ -1113,12 +1196,74 @@ let attach (t : transport) (repo : string) (base_url : string) : unit =
         | _ -> ("127.0.0.1", 0))
     | _ -> ("127.0.0.1", 0)
   in
-  let state = { stop = false } in
+  let state = { stop = false; closed = Atomic.make false;
+                socket_lock = Mutex.create (); socket = None } in
+  let ready, resolve, reject = Js.Promise.pending () in
+  let settled = Atomic.make false in
+  let on_ready () =
+    if Atomic.compare_and_set settled false true then Host.enqueue resolve in
+  let on_closed result =
+    if Atomic.compare_and_set settled false true then
+      Host.enqueue (fun () -> reject (match result with Error error -> error
+        | Ok () -> Failure "Native event stream closed before readiness"))
+    else match result with
+      | Ok () -> ()
+      | Error error -> prerr_endline ("[daemon] SSE stream ended: " ^ Printexc.to_string error) in
   t.sse <- Some state;
   t.base_url <- base_url;
   t.repo <- repo;
   boot_mark ("sse attach " ^ repo);
-  ignore (Thread.create (fun () -> sse_thread t host port state) ())
+  ignore (Thread.create (fun () -> sse_thread t host port state ~on_ready ~on_closed) ());
+  ready
+
+let attach t repo base_url = ignore (attach_ready t repo base_url)
+
+let rebind_transport_ready (t : transport) repo base =
+  let ready = attach_ready t repo base in
+  let expected_stream = t.sse in
+  let* () = ready in
+  let* _ = post_invoke ~timeout:(Some 5.) base "thread-api/create-or-open-db"
+    [Wire.String repo; Wire.Map []] in
+  match expected_stream, t.sse with
+  | Some expected, Some current when expected == current && t.repo=repo && t.base_url=base
+      && not expected.stop && not (Atomic.get expected.closed) -> Js.Promise.resolve ()
+  | _ -> Js.Promise.reject (Failure "Restored worker event stream is no longer live")
+
+(* Capture the current transport before any worker stop. Restore only that
+   owner; an unrelated graph switch must never be rebound by a late abort. *)
+let capture_restore_transport (t : transport) =
+  let repo = t.repo in
+  let expected_base = ref t.base_url and expected_stream = ref t.sse in
+  let complete = ref false in
+  let same_owner () =
+    t.repo=repo && t.base_url= !expected_base
+    && (match !expected_stream, t.sse with
+        | None, None -> true
+        | Some left, Some right -> left == right
+        | _ -> false) in
+  let live_stream () = match t.sse with
+    | Some state -> not state.stop && not (Atomic.get state.closed)
+    | None -> false in
+  fun () ->
+    if not (same_owner ()) then
+      Js.Promise.reject (Failure "Worker restoration transport owner changed")
+    else if repo="" || (!complete && live_stream ()) then Js.Promise.resolve ()
+    else
+      let* endpoint = ipc [Wire.String "db-worker-runtime"; Wire.String repo; Wire.Map []] in
+      if not (same_owner ()) then
+        Js.Promise.reject (Failure "Worker restoration transport owner changed during attachment")
+      else
+        let restored_base = match Wire.map_get_string endpoint "base-url" with
+          | Some value when value<>"" -> value
+          | _ -> failwith "Restored worker omitted its endpoint" in
+        let restoring = rebind_transport_ready t repo restored_base in
+        expected_base := t.base_url;
+        expected_stream := t.sse;
+        let* () = restoring in
+        if same_owner () && live_stream () then begin
+          complete := true;
+          Js.Promise.resolve ()
+        end else Js.Promise.reject (Failure "Restored worker event stream is no longer live")
 
 let list_graphs () : Wire.t Js.Promise.t =
   let* graphs = ipc [ Wire.String "getGraphs" ] in

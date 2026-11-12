@@ -10,6 +10,7 @@ type t =
   { invoke_fn : string -> Wire.t list -> Wire.t Js.Promise.t
   ; mutable on_message : message_handler
   ; dead : string Js.Promise.t
+  ; capture_restore_fn : unit -> (unit -> unit Js.Promise.t)
   }
 
 (* renderer-side api registry the worker calls back through
@@ -131,11 +132,15 @@ let create () =
     { invoke_fn = (fun name args -> Daemon_client.invoke tr name args)
     ; on_message = (fun _ _ -> ())
     ; dead = tr.Daemon_client.dead
+    ; capture_restore_fn = (fun () -> Daemon_client.capture_restore_transport tr)
     }
   in
   tr.Daemon_client.sink <-
     (fun kind payload -> t.on_message kind payload);
   t
+
+(* Called by the one update owner before stopping its captured workers. *)
+let capture_restore_after_update t = t.capture_restore_fn ()
 
 let json_field (name : string) (data : Js.Json.t) : Js.Json.t option =
   match data with

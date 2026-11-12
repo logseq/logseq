@@ -95,7 +95,7 @@ let native_worker_admission () =
   let worker : Worker_client.t = {
     invoke_fn = (fun _ _ -> incr invokes; Js.Promise.resolve Wire.Nil);
     on_message = (fun _ _ -> ());
-    dead = Js.Promise.liveness ()
+    dead = Js.Promise.liveness (); capture_restore_fn=(fun () -> fun () -> Js.Promise.resolve ())
   } in
   let gate = Update_admission.application in
   Update_admission.begin_prepare gate "3";
@@ -147,7 +147,7 @@ let deferred_worker () =
       Queue.add (name, resolve, reject) pending;
       promise);
     on_message = (fun _ _ -> ());
-    dead = Js.Promise.liveness ()
+    dead = Js.Promise.liveness (); capture_restore_fn=(fun () -> fun () -> Js.Promise.resolve ())
   } in
   worker, pending
 
@@ -477,7 +477,7 @@ let native_outliner_content_events () =
         else (
           unexpected_reads:=method_::!unexpected_reads;
           Js.Promise.reject (Failure ("Unexpected native row fixture read: " ^ method_))));
-        on_message=(fun _ _ -> ());dead=Js.Promise.liveness ()};
+        on_message=(fun _ _ -> ());dead=Js.Promise.liveness (); capture_restore_fn=(fun () -> fun () -> Js.Promise.resolve ())};
       Runtime.read_model:=(fun () -> model);
       let block = Model.empty_block ~uuid:"native-content" ~title:"Content target" ~is_page:false in
       let app = Lui_app.create_with_extensions backend registry model
@@ -635,7 +635,7 @@ let native_route_document_data () =
         | "thread-api/get-page-blocks-tree" -> Wire.Array []
         | "thread-api/get-case-page" -> Wire.Map []
         | _ -> failwith ("Unexpected route endpoint: " ^ name)));
-      on_message=(fun _ _ -> ());dead=Js.Promise.liveness ()};
+      on_message=(fun _ _ -> ());dead=Js.Promise.liveness (); capture_restore_fn=(fun () -> fun () -> Js.Promise.resolve ())};
     Router.loaded_route := None;
     ignore (Router.load_page_ref route (Wire.String title));
     Host.drain ();
@@ -670,7 +670,7 @@ let persisted_journal_hash_links_delegate_through_the_native_owner () =
   let previous_worker = !Runtime.worker in
   Runtime.worker := Some {
     Worker_client.invoke_fn = (fun _ _ -> Js.Promise.resolve Wire.Nil);
-    on_message = (fun _ _ -> ()); dead = Js.Promise.liveness () };
+    on_message = (fun _ _ -> ()); dead = Js.Promise.liveness (); capture_restore_fn=(fun () -> fun () -> Js.Promise.resolve ()) };
   let backend : Lui_protocol.backend = {
     backend_profile = Lui_protocol.profile Lui_protocol.MacOS Lui_protocol.NshHost;
     apply_batch = (fun _ -> true)
@@ -991,7 +991,8 @@ let native_favorite_menu_contract () =
     Runtime.app_flush:=(fun () -> ignore (Lui_app.flush app));
     Runtime.worker:=Some {Worker_client.invoke_fn=(fun _ _ ->
       Js.Promise.make (fun ~resolve:_ ~reject:_ -> ()));
-      on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
+      on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ());
+      capture_restore_fn=(fun () -> fun () -> Js.Promise.resolve ())};
     ignore (Lui_app.start app);ignore (Lui_app.flush app);
     let runtime=Lui_app.runtime app in
     let button=Hashtbl.fold (fun node props found ->
@@ -1112,7 +1113,8 @@ let native_settings_route_links () =
   Settings_state.st:=None;
   Runtime.worker:=Some {Worker_client.invoke_fn=(fun _ _ ->
     Js.Promise.make (fun ~resolve:_ ~reject:_ -> ()));
-    on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
+    on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ());
+      capture_restore_fn=(fun () -> fun () -> Js.Promise.resolve ())};
   let app=Lui_app.create_with_extensions backend registry
     {Model.initial with repo=Some "route-link-contract"}
     (fun model (_ : Action.t) -> model)
@@ -1597,7 +1599,7 @@ let native_menu_scope_retention () =
   Logseq_el.register_all registry;
   Logseq_codemirror.register registry;Logseq_editor.register registry;
   Runtime.worker:=Some {Worker_client.invoke_fn=(fun _ _ -> Js.Promise.resolve Wire.Nil);
-    on_message=(fun _ _ -> ());dead=Js.Promise.liveness ()};
+    on_message=(fun _ _ -> ());dead=Js.Promise.liveness (); capture_restore_fn=(fun () -> fun () -> Js.Promise.resolve ())};
   Runtime.read_model:=(fun () -> initial);
   let app=Lui_app.create_with_extensions backend registry initial (fun _ next -> next)
     (fun context model _ ->
@@ -1778,7 +1780,7 @@ let native_controlled_field_resets () =
       incr writes;
       Js.Promise.make (fun ~resolve ~reject:_ -> pending:=Some resolve))
     else Js.Promise.resolve Wire.Nil);
-    on_message=(fun _ _ -> ());dead=Js.Promise.liveness ()};
+    on_message=(fun _ _ -> ());dead=Js.Promise.liveness (); capture_restore_fn=(fun () -> fun () -> Js.Promise.resolve ())};
   let publications=ref 0 in
   let backend : Lui_protocol.backend={
     backend_profile=Lui_protocol.profile Lui_protocol.MacOS Lui_protocol.NshHost;
@@ -1859,6 +1861,102 @@ let native_controlled_field_resets () =
     check "actual native calendar and comment fields never emit imperative DOM setters"
       (not (List.exists (fun operation ->
         operation="set-value" || operation="set-text-content") !dom_operations)))
+
+let native_transport_restore_readiness () =
+  let seconds () = Int64.to_float (Mtime_clock.elapsed_ns ()) *. 1e-9 in
+  let pump_until label ready =
+    let deadline = seconds () +. 5. in
+    while not (ready ()) do
+      Host.drain ();
+      if seconds () >= deadline then failwith label;
+      Thread.delay 0.002
+    done;
+    Host.drain () in
+  let await promise =
+    pump_until "Native transport fixture timed out" (fun () ->
+      match promise.Js.Promise.state with Js.Promise.Pending -> false | _ -> true);
+    match promise.Js.Promise.state with
+    | Js.Promise.Resolved value -> value
+    | Js.Promise.Rejected error -> raise error
+    | Js.Promise.Pending -> assert false in
+  let listener = Unix.socket ~cloexec:true Unix.PF_INET Unix.SOCK_STREAM 0 in
+  Unix.bind listener (Unix.ADDR_INET (Unix.inet_addr_loopback,0));
+  Unix.listen listener 4;
+  let port = match Unix.getsockname listener with Unix.ADDR_INET (_,port) -> port
+    | _ -> failwith "Native transport fixture has no TCP port" in
+  let base = Printf.sprintf "http://127.0.0.1:%d" port in
+  let allow_headers = Atomic.make true and allow_probe = Atomic.make false in
+  let streams = Atomic.make 0 and closed = Atomic.make 0 and probes = Atomic.make 0 in
+  let errors = Atomic.make None in
+  let pause gate = while not (Atomic.get gate) do Thread.delay 0.002 done in
+  let serve fd =
+    let input = Unix.in_channel_of_descr fd in
+    let output = Unix.out_channel_of_descr fd in
+    Fun.protect ~finally:(fun () -> close_in_noerr input) (fun () ->
+      try
+        let first = input_line input in
+        let rec headers length =
+          let line = String.trim (input_line input) in
+          if line="" then length
+          else if String.starts_with ~prefix:"content-length:" (String.lowercase_ascii line) then
+            headers (String.sub line 15 (String.length line-15) |> String.trim |> int_of_string)
+          else headers length in
+        let length = headers 0 in
+        if String.starts_with ~prefix:"GET /v1/events " first then begin
+          ignore (Atomic.fetch_and_add streams 1);
+          pause allow_headers;
+          output_string output "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\n\r\n";
+          flush output;
+          (try while true do ignore (input_char input) done with End_of_file -> ());
+          ignore (Atomic.fetch_and_add closed 1)
+        end else begin
+          ignore (really_input_string input length);
+          ignore (Atomic.fetch_and_add probes 1);
+          pause allow_probe;
+          let body = Yojson.Safe.to_string (`Assoc ["ok",`Bool true;
+            "resultTransit",`String (Transit.to_string Wire.Nil)]) in
+          Printf.fprintf output "HTTP/1.1 200 OK\r\nContent-Length: %d\r\nConnection: close\r\n\r\n%s"
+            (String.length body) body;
+          flush output
+        end
+      with error -> Atomic.set errors (Some error)) in
+  let server = Thread.create (fun () ->
+    try for _ = 1 to 3 do
+      let fd,_ = Unix.accept listener in ignore (Thread.create serve fd)
+    done with error -> Atomic.set errors (Some error)) () in
+  let transport = Daemon_client.create_transport () in
+  Fun.protect ~finally:(fun () ->
+    Atomic.set allow_headers true;Atomic.set allow_probe true;
+    Option.iter Daemon_client.cancel_stream transport.Daemon_client.sse;
+    Unix.close listener) (fun () ->
+    await (Daemon_client.attach_ready transport "restore-fixture" base);
+    let first = Option.get transport.sse in
+    Atomic.set allow_headers false;
+    let restoring = Daemon_client.rebind_transport_ready transport "restore-fixture" base in
+    pump_until "Same-port stream replacement did not begin" (fun () -> Atomic.get streams=2);
+    check "same URL replaces and closes the old SSE owner"
+      (first.stop && transport.base_url=base && Option.get transport.sse != first);
+    check "restoration stays pending before actual SSE headers"
+      (restoring.Js.Promise.state=Js.Promise.Pending && Atomic.get probes=0);
+    Atomic.set allow_headers true;
+    pump_until "Finite restoration probe was not sent" (fun () -> Atomic.get probes=1);
+    check "SSE readiness alone does not acknowledge restoration"
+      (restoring.Js.Promise.state=Js.Promise.Pending);
+    Atomic.set allow_probe true;
+    await restoring;
+    pump_until "Retired SSE stream remained connected" (fun () -> Atomic.get closed>=1);
+    check "the restored stream remains live after its finite probe"
+      (not (Atomic.get (Option.get transport.sse).closed));
+    let captured = Daemon_client.capture_restore_transport transport in
+    transport.repo <- "another-owner";
+    (match (captured ()).Js.Promise.state with
+     | Js.Promise.Rejected _ -> ()
+     | _ -> failwith "A captured restore must reject an unrelated transport owner");
+    let empty = Daemon_client.create_transport () in
+    await ((Daemon_client.capture_restore_transport empty) ());
+    check "an empty transport never starts a stream or a probe" (Atomic.get streams=2 && Atomic.get probes=1);
+    Thread.join server;
+    Option.iter raise (Atomic.get errors))
 
 let native_owned_child_exit_proof () =
   List.iter (fun (code, fail_registration) ->
@@ -1996,6 +2094,7 @@ let () =
   native_worker_admission ();
   native_worker_update_identity ();
   native_owned_child_exit_proof ();
+  native_transport_restore_readiness ();
   ordered_mailbox_barrier ();
   promise_observation ();
   abort_waits_for_initial_worker_and_skips_later_mutation_boundaries ();

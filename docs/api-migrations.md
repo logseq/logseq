@@ -1,5 +1,33 @@
 # API migrations
 
+## Native update rollback restores exact worker and transport owners
+
+The native coordinator can capture a deterministic owned-worker snapshot with
+`Daemon_client.capture_update_workers ()`. The previous
+`require_update_owned_workers ()` remains a unit-returning compatibility wrapper.
+Unfinished child tokens, reused workers and shared workers still refuse capture.
+
+`Daemon_client.Worker_update.restore_exited handle` restores only the handle's
+captured storage and child after independently proving clean exit. A lost stop
+acknowledgement remains insufficient; the exact retained child token must produce
+`WEXITED 0`. Conflicting origins or attachments are preserved and rejected. A
+successful retry verifies its recorded replacement instead of spawning again.
+
+Before stopping workers, capture
+`let resume = Worker_client.capture_restore_after_update worker`. On rollback,
+`resume ()` rebinds that client's existing transport, including when its endpoint
+URL/port is unchanged. It waits for acknowledged SSE headers and a bounded finite
+`create-or-open-db` response. Empty transports complete without starting SSE;
+changes to the captured transport owner refuse restoration. Retired streams are
+closed through their own socket and their queued messages are ignored. Native
+fake clients constructing `Worker_client.t` records must additionally supply
+`capture_restore_fn = (fun () -> fun () -> Js.Promise.resolve ())`.
+
+These narrow hooks do not reopen input admission, reconstruct application/editor
+state, issue installation leases or enable installation. The existing update
+owner must keep both worker and application admission closed until restoration
+and its usual activity/mailbox drain are acknowledged.
+
 ## NSH journal title actions stay inside their native virtual cell
 
 NSH journal rows reserve the existing 20-point title-action offset inside each
