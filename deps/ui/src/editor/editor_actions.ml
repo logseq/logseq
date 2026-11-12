@@ -1949,46 +1949,83 @@ let dragged_block_uuids src =
     else []
   else if S.find src <> None then [ src ] else []
 
-let can_drop_dragged_block src tgt =
+(* Master counts the selected blocks before pruning their selected descendants. *)
+let dragging_single_block src =
+  let selected = S.selected () in
+  not (S.String_set.mem src selected)
+  || S.String_set.equal selected (S.String_set.singleton src)
+
+let can_drop_dragged_block ?(alt = false) src tgt =
   let selected = S.selected () in
   let sources =
     if S.String_set.mem src selected then selected else S.String_set.singleton src
   in
   S.find src <> None && S.find tgt <> None
-  && not (S.String_set.mem tgt sources || has_drag_source_parent sources tgt)
+  && (if alt && dragging_single_block src then src <> tgt
+      else not (S.String_set.mem tgt sources || has_drag_source_parent sources tgt))
+
+let drop_parent_uuid tgt =
+  match S.find_parent tgt with
+  | Some (Some parent, _) -> parent.Model.block_uuid
+  | Some (None, _) ->
+      let model = Runtime.model () in
+      (match model.Model.route_page with
+       | Some page -> page.Model.page_uuid
+       | None -> List.find_map (fun (page : Model.page) ->
+           if List.exists (fun (block : Model.block) -> block.block_uuid = Some tgt)
+               page.page_blocks then page.page_uuid else None) model.journals)
+  | None -> None
+
+let reference_drop_insert ~uuid ~source ~target move_to =
+  let block = Ops.block_map ~title:("[[" ^ source ^ "]]") uuid in
+  match move_to with
+  | "top" ->
+      (* Insert before the target, including a non-first sibling supplied by
+         a domain caller. Native top-zone hit testing admits the first only. *)
+      (match S.find_parent target with
+       | Some (parent, index) when index > 0 ->
+           let siblings = match parent with
+             | Some parent -> S.children_of parent
+             | None -> S.blocks_in_scope (S.interaction_scope ()) in
+           Option.bind (List.nth_opt siblings (index - 1)) (fun previous ->
+             Option.map (fun target -> Ops.insert_blocks [block] target ~sibling:true)
+               previous.Model.block_uuid)
+       | _ -> Option.map (fun target -> Ops.insert_blocks [block] target ~sibling:false)
+           (drop_parent_uuid target))
+  | "nested" -> Some (Ops.insert_blocks ~bottom:true [block] target ~sibling:false)
+  | _ -> Some (Ops.insert_blocks [block] target ~sibling:true)
 
 (* cljs dnd/move-blocks: :top -> first child of the target's parent (page
    when top-level); :nested -> first child of target; :sibling -> after
    target *)
-let drop_dragged_block src tgt move_to =
-  if not (can_drop_dragged_block src tgt) then ()
+let drop_dragged_block ?(alt = false) src tgt move_to =
+  if not (can_drop_dragged_block ~alt src tgt) then ()
+  else if alt && dragging_single_block src then (
+    let uuid = Ui_services.env_random_uuid () in
+    match reference_drop_insert ~uuid ~source:src ~target:tgt move_to with
+    | None -> ()
+    | Some insert ->
+        let restore = S.editing () and scope = S.selection_scope () in
+        let context = action_context () in
+        let p =
+          let* save_ops = match restore with
+            | Some editing when not (S.is_draft editing) ->
+                let buffer = Ops.trim_title editing.S.uuid (live_buffer editing.S.uuid) in
+                if buffer = model_title editing.S.uuid then Js.Promise.resolve []
+                else let* save = Ops.save_block_parsed editing.S.uuid buffer in
+                  Js.Promise.resolve [save]
+            | _ -> Js.Promise.resolve [] in
+          if context <> action_context () then Js.Promise.resolve ()
+          else Ops.apply_and_refresh ~opts:(Ops.op_opts "insert-blocks") (save_ops @ [insert])
+        in
+        run_structure ~restore p (fun () ->
+          enter_edit ~scope uuid (String.length (model_title uuid))))
   else
     let sources = dragged_block_uuids src in
     if sources = [] then () else
     match move_to with
     | "top" -> (
-        let parent_uuid =
-          match S.find_parent tgt with
-          | Some (Some p, _) -> p.Model.block_uuid
-          | Some (None, _) -> (
-              (* top-level block: the parent is the containing page —
-                 journals views keep their pages in model.journals
-                 instead of route_page *)
-              match (Runtime.model ()).Model.route_page with
-              | Some page -> page.Model.page_uuid
-              | None ->
-                  List.find_map
-                    (fun (p : Model.page) ->
-                      if
-                        List.exists
-                          (fun (b : Model.block) ->
-                            b.Model.block_uuid = Some tgt)
-                          p.Model.page_blocks
-                      then p.Model.page_uuid
-                      else None)
-                    (Runtime.model ()).Model.journals)
-          | None -> None
-        in
+        let parent_uuid = drop_parent_uuid tgt in
         match parent_uuid with
         | Some pu ->
             ignore

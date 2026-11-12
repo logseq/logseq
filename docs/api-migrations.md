@@ -10,6 +10,37 @@ or unsupported input argument still fails before build tooling. The publication 
 uses macOS `/bin/bash` explicitly and checks both complete argument vectors;
 it models compilers and does not replace the actual native qualification gate.
 
+## Native Alt drag inserts a single-block reference
+
+The native outliner now reads Alt from the accepted primary pointer release.
+Dragging one block with Alt inserts a new block titled `[[source-uuid]]`, keeps
+the source in place, and enters the new block's editor after the ordinary
+structural refresh. An existing dirty editor is committed first through the
+existing save path. The sibling zone inserts after the target, the top zone
+inserts before it, and the nested zone appends after its existing children.
+This follows `frontend.handler.dnd/move-blocks` and `api-insert-new-block!` at
+the frozen comparison source `29fd2edd`.
+
+The single-block decision counts selection membership before pruning selected
+descendants. For example, selecting a parent and its child and releasing with
+Alt still moves the parent tree; it does not insert a reference. A single
+reference can be inserted into the source's descendant because it creates no
+structural move cycle. Self-targets and readonly native targets remain refused.
+Ordinary moves retain their ancestor and selected-target restrictions.
+
+The shared `Editor_actions.can_drop_dragged_block` and `drop_dragged_block`
+helpers accept optional `~alt:true`; omitted arguments retain their previous
+move behavior. The native document controller supplies `ev.alt` for target
+admission and the final action. Existing Web/mobile callers omit the argument
+and keep their current behavior. No pointer wire fields or modifier mask bits
+change in this migration.
+
+The native action regression projects release events through `Ui_dom_native`
+and the actual native drag controller, then checks the worker operation and
+one-shot click suppression. It does not claim physical held-Alt input or
+persisted database qualification; the public macOS test driver still lacks
+held-key support.
+
 ## Owned-worker qualification includes the actual two-worker preparation owner
 
 `nsh/run_owned_worker_update_native.py --worker <newly-built-native-worker>` now

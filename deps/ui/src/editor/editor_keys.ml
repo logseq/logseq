@@ -1509,7 +1509,7 @@ let native_drag_target ev src =
     match closest ".ls-block" (ev.Ui_services.target) with
     | Some el -> (
         match el.Ui_services.attr "data-blockid" with
-        | Some t when A.can_drop_dragged_block src t ->
+        | Some t when A.can_drop_dragged_block ~alt:ev.Ui_services.alt src t ->
             let left, top, width, height = el.Ui_services.rect () in
             if el.Ui_services.rect_pending () || width <= 0. || height <= 0.
             then None
@@ -1556,7 +1556,7 @@ let on_native_pointerup ev =
           drag_state := next;
           publish_drag ();
           Option.iter (fun (source, target, zone) ->
-            A.drop_dragged_block source target (Drag.zone_name zone)) drop
+            A.drop_dragged_block ~alt:ev.Ui_services.alt source target (Drag.zone_name zone)) drop
 
 let consume_drag_click () =
   let next, suppress = Drag.consume_click !drag_state in

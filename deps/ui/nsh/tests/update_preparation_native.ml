@@ -1088,6 +1088,147 @@ external bridge_adversarial_callbacks : bool -> unit = "caml_logseq_test_adversa
 
 external bridge_press_modifiers : int -> int -> int = "caml_logseq_test_press_modifiers"
 
+let native_alt_reference_drop_actions () =
+  let module S = Editor_state in
+  let prior_model = !Runtime.read_model and prior_worker = !Runtime.worker
+  and prior_flush = !Runtime.app_flush and prior_state = !S.st
+  and prior_drag = !Editor_keys.drag_state and prior_structure = !S.structure_pending
+  and prior_owner = !Editor_actions.structure_owner in
+  let source = "00000000-0000-4000-8000-000000000001"
+  and child = "00000000-0000-4000-8000-000000000002"
+  and target = "00000000-0000-4000-8000-000000000003"
+  and page_uuid = "00000000-0000-4000-8000-000000000004" in
+  let make uuid title = Model.empty_block ~uuid ~title ~is_page:false in
+  let source_block = { (make source "Source stays") with
+    Model.block_children=[make child "Source child"] } in
+  let target_block = { (make target "Target stays") with
+    Model.block_children=[make "existing-child" "Existing child"] } in
+  let page = Option.get (Decode.page_of_summary (Wire.Map [
+    Wire.Keyword "block/title",Wire.String "Alt reference drop";
+    Wire.Keyword "block/uuid",Wire.Uuid page_uuid])) in
+  let page = {page with Model.page_blocks=[source_block;target_block]} in
+  let model = {Model.initial with repo=Some "native-alt-drop";
+    route=Model.Page page.page_title;route_page=Some page} in
+  let live_model = ref model and pending = ref [] in
+  let writes = ref [] in
+  Fun.protect ~finally:(fun () ->
+    live_model:=Model.initial;
+    List.iter (fun resolve -> resolve Wire.Nil) !pending;
+    Host.drain ();
+    Runtime.read_model:=prior_model;Runtime.worker:=prior_worker;
+    Runtime.app_flush:=prior_flush;S.st:=prior_state;
+    Editor_keys.drag_state:=prior_drag;S.structure_pending:=prior_structure;
+    Editor_actions.structure_owner:=prior_owner) (fun () ->
+    Runtime.read_model:=(fun () -> !live_model);
+    Runtime.app_flush:=(fun () -> ());
+    Runtime.worker:=Some {Worker_client.invoke_fn=(fun method_ args ->
+      if method_<>"thread-api/apply-outliner-ops" then
+        failwith ("Unexpected native drop fixture read: " ^ method_);
+      (match args with
+       | [_;Wire.Array operations;_] -> writes:=operations :: !writes
+       | _ -> failwith "Invalid native drop worker arguments");
+      Js.Promise.make (fun ~resolve ~reject:_ -> pending:=resolve :: !pending));
+      on_message=(fun _ _ -> ());dead=Js.Promise.liveness ();
+      capture_restore_fn=(fun () -> fun () -> Js.Promise.resolve ())};
+    let release ?editing ~alt ~selected ~source:dragged ~target:hit ~x ~y ~readonly () =
+      live_model:=model;writes:=[];pending:=[];
+      S.st:=Some (Signal.state (Signal.scheduler ())
+        {S.initial with selected=S.String_set.of_list selected;editing});
+      let context=Editor_keys.drag_context () in
+      Editor_keys.drag_state:=Block_drag.move ~context ~x:10. ~y:0. ~target:None
+        (Block_drag.arm ~context ~source:dragged ~x:0. ~y:0.);
+      let row=Js.Json.object_list ["class",Js.Json.string "ls-block";
+        "attrs",Js.Json.object_list ["data-blockid",Js.Json.string hit;
+          "data-editable",Js.Json.string (if readonly then "false" else "true")];
+        "rect",Js.Json.object_list ["left",Js.Json.number 0.;"top",Js.Json.number 0.;
+          "width",Js.Json.number 200.;"height",Js.Json.number 60.]] in
+      let event=Ui_dom_native.ev_of (Js.Json.object_list ["target",row;
+        "clientX",Js.Json.number x;"clientY",Js.Json.number y;
+        "button",Js.Json.number 0.;"altKey",Js.Json.boolean alt]) in
+      Editor_keys.on_native_pointerup event;
+      Host.drain ();
+      let operations=List.concat_map Fun.id (List.rev !writes) in
+      check "native drop leaves the source and its child in the current model"
+        (S.find source=Some source_block && S.find child<>None);
+      check "native drop release keeps its follow-up click suppressed"
+        (Editor_keys.consume_drag_click () && not (Editor_keys.consume_drag_click ()));
+      (* Retire the fixture context before resolving its recorded transaction;
+         no invented refresh response stands in for persisted worker data. *)
+      live_model:=Model.initial;
+      List.iter (fun resolve -> resolve Wire.Nil) !pending;
+      pending:=[];Host.drain ();
+      operations
+    in
+    let reference label target sibling bottom operations =
+      check label (match operations with
+        | [operation] -> (match Wire.elems operation with
+          | [Wire.Keyword "insert-blocks";Wire.Array [Wire.List [block];Wire.Uuid actual;opts]] ->
+              actual=target && Wire.get opts "sibling?"=Some (Wire.Bool sibling)
+              && Wire.get opts "bottom?"=Some (Wire.Bool bottom)
+              && Wire.map_get_string block "block/title"=Some ("[[" ^ source ^ "]]")
+              && Wire.get block "block/refs"=Some (Wire.List [
+                Wire.Array [Wire.Keyword "block/uuid";Wire.Uuid source]])
+              && (match Wire.map_get_uuid block "block/uuid" with
+                  | Some uuid -> uuid<>source && uuid<>target
+                  | None -> false)
+          | _ -> false)
+        | _ -> false)
+    in
+    reference "native Alt release inserts a new sibling reference without moving the source"
+      target true false
+      (release ~alt:true ~selected:[source] ~source ~target ~x:20. ~y:40. ~readonly:false ());
+    reference "native Alt nested release appends a reference after existing children"
+      target false true
+      (release ~alt:true ~selected:[source] ~source ~target ~x:75. ~y:40. ~readonly:false ());
+    reference "native Alt reference may target a source descendant without a move cycle"
+      child true false
+      (release ~alt:true ~selected:[source] ~source ~target:child ~x:20. ~y:40. ~readonly:false ());
+    (* The dragged later sibling lands at the first block's actual top edge. *)
+    let top = release ~alt:true ~selected:[target] ~source:target ~target:source
+      ~x:20. ~y:10. ~readonly:false () in
+    check "native Alt top release inserts before the first target at the page parent"
+      (match top with
+       | [operation] -> (match Wire.elems operation with
+          | [Wire.Keyword "insert-blocks";Wire.Array [Wire.List [block];Wire.Uuid parent;opts]] ->
+              parent=page_uuid && Wire.get opts "sibling?"=Some (Wire.Bool false)
+              && Wire.get opts "bottom?"=Some (Wire.Bool false)
+              && Wire.map_get_string block "block/title"=Some ("[[" ^ target ^ "]]")
+          | _ -> false)
+       | _ -> false);
+    List.iter (fun (label,alt,selected) ->
+      let operations=release ~alt ~selected ~source ~target ~x:20. ~y:40. ~readonly:false () in
+      check label (match operations with
+        | [operation] -> (match Wire.elems operation with
+          | [Wire.Keyword "move-blocks";Wire.Array [Wire.List [Wire.Uuid uuid];Wire.Uuid actual;opts]] ->
+              uuid=source && actual=target && Wire.get opts "sibling?"=Some (Wire.Bool true)
+          | _ -> false)
+        | _ -> false))
+      ["ordinary native release still moves the selected block",false,[source];
+       "Alt with parent and child selected still moves one pruned root",true,[source;child]];
+    check "native Alt release onto the source itself performs no write"
+      (release ~alt:true ~selected:[source] ~source ~target:source ~x:20. ~y:40. ~readonly:false ()=[]);
+    check "native Alt preserves the target readonly guard"
+      (release ~alt:true ~selected:[source] ~source ~target ~x:20. ~y:40. ~readonly:true ()=[]);
+    check "ordinary native release still rejects moving into a source descendant"
+      (release ~alt:false ~selected:[source] ~source ~target:child ~x:75. ~y:40. ~readonly:false ()=[]);
+    check "unresolved multi-selection cannot become an Alt single-reference drop"
+      (release ~alt:true ~selected:[source;"unresolved"] ~source ~target
+        ~x:20. ~y:40. ~readonly:false ()=[]);
+    let dirty=S.mk_editing ~uuid:source ~scope:"main" ~base:"Source stays"
+      ~buffer:"Dirty source stays" () in
+    let operations=release ~editing:dirty ~alt:true ~selected:[source] ~source ~target
+      ~x:20. ~y:40. ~readonly:false () in
+    check "native Alt saves an existing dirty editor before inserting the reference"
+      (match operations with
+       | save :: insert :: [] -> (match Wire.elems save with
+          | [Wire.Keyword "save-block";Wire.Array [block;_]] ->
+              Wire.map_get_uuid block "block/uuid"=Some source
+              && Wire.map_get_string block "block/title"=Some "Dirty source stays"
+              && (match Wire.elems insert with
+                  | [Wire.Keyword "insert-blocks";_] -> true | _ -> false)
+          | _ -> false)
+       | _ -> false))
+
 let native_alt_mask_through_actual_ffi () =
   let previous_app= !Native_embed.current_app and received=ref None in
   let backend : Lui_protocol.backend={
@@ -2175,6 +2316,7 @@ let () =
   native_platform_exception_reporting ();
   native_primitive_unit_results ();
   native_alt_mask_through_actual_ffi ();
+  native_alt_reference_drop_actions ();
   Editor_clipboard_native.async_file_read_keeps_the_application_owner_responsive ();
   native_settings_route_links ();
   native_cmdk_controlled_input ();
