@@ -1861,7 +1861,7 @@ let native_controlled_field_resets () =
         operation="set-value" || operation="set-text-content") !dom_operations)))
 
 let native_owned_child_exit_proof () =
-  List.iter (fun code ->
+  List.iter (fun (code, fail_registration) ->
     let executable, arguments =
       if Sys.os_type="Win32" then
         let executable = Filename.concat (Sys.getenv "SystemRoot")
@@ -1872,10 +1872,20 @@ let native_owned_child_exit_proof () =
     let read_end, write_end = Unix.pipe ~cloexec:true () in
     let null = Unix.openfile (if Sys.os_type="Win32" then "NUL" else "/dev/null")
       [Unix.O_WRONLY] 0 in
+    let registered = ref None in
     let pid, child = Fun.protect ~finally:(fun () -> Unix.close read_end; Unix.close null)
-      (fun () -> Daemon_client.Child_process.spawn executable arguments (Unix.environment ())
-        read_end null null) in
-    check "actual child process ID is positive" (pid>0);
+      (fun () ->
+        try
+          let pid, child = Daemon_client.Child_process.spawn ~on_created:(fun child ->
+            registered := Some child;
+            if fail_registration then failwith "private-child-registration-probe")
+            executable arguments (Unix.environment ()) read_end null null in
+          Some pid, child
+        with Failure message when fail_registration && message="private-child-registration-probe" ->
+          None, Option.get !registered) in
+    Option.iter (fun pid -> check "actual child process ID is positive" (pid>0)) pid;
+    check "the opaque child remains available even when startup publication raises before OS-PID lookup"
+      (Option.is_some !registered && (Option.is_none pid = fail_registration));
     let output = Unix.out_channel_of_descr write_end in
     let sent = ref false in
     let finish () = if not !sent then begin
@@ -1897,7 +1907,7 @@ let native_owned_child_exit_proof () =
         match Daemon_client.Child_process.await_clean_exit ~timeout:5. child with
         | () -> failwith "Nonzero child exit must not certify clean shutdown"
         | exception Failure message -> check "nonzero exit is explicitly refused"
-            (message="Owned worker exited unsuccessfully: 7"))) [0;7]
+            (message="Owned worker exited unsuccessfully: 7"))) [0,false;7,false;0,true]
 
 let native_worker_update_identity () =
   let key = ("/store", "/store/graphs", "/store/lifecycle", "logseq_db_origin") in

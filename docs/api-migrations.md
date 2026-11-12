@@ -12,6 +12,42 @@ actions at the cell boundary. Web, Apple, Android and ordinary page routes retai
 their existing spacing. No application call changes; continue using the same
 journal and title-action components.
 
+## Owned-child startup preserves failed attachment identity
+
+The native client now registers each opaque child token immediately after
+`Unix.create_process_env`, before querying its OS PID. If PID lookup or later
+attachment fails, that token remains tracked with an unproven origin. Update
+preparation refuses it, and another child is not spawned for the same canonical
+storage/repo while that startup remains unproven. Normal reuse can still attach
+a subsequently ready daemon for editing; reuse does not promote an unknown
+origin into update authority. There is no generic process reaper or PID-based
+cleanup. The original Windows handle stays owned until exact waiting consumes
+it or the parent process exits.
+
+For example, retrying a failed startup does not create a second unknown worker
+for that graph. A clean application restart provides a fresh session; existing
+persistent daemons remain subject to the normal external/shared update refusal.
+The constructor's `on_created` publication callback receives only the opaque
+new-child token, so a bounded failure fixture can retain and reap its own gated
+child even if publication raises before the OS-PID lookup.
+
+`nsh/run_owned_worker_update_native.py --worker <newly-built-native-worker>`
+adds an explicit stage-two qualification driver over the actual app archives,
+current C bridge and selected native worker. Its new fixture process uses fresh
+private HOME, credentials, graph and lifecycle paths, with login-daemon creation
+disabled. Containment is established before the stdin startup gate: a new POSIX
+session or an unnamed Windows kill-on-close Job assigned through the exact new
+process HANDLE. Cleanup controls only those newly created processes.
+
+The fixture performs a real finite page mutation, verifies it, opens a real SSE
+stream, seals and proves later work is refused, then aborts and proves normal
+work resumes. A fresh request seals/stops the same worker and independently
+awaits its exact clean child exit. A second actual worker reopens the private
+graph and reads the durable mutation before its own sealed stop. The Python
+driver also checks held/released SQLite ownership, ready/closed runtime records,
+SQLite integrity and endpoint closure. This is opt-in test tooling; it adds no
+shipping startup flag or control plane and enables no installation lease.
+
 ## Explicit owned-worker seal and shutdown capability remains disabled for installation
 
 Native workers carrying the NSH process-origin descriptor now support

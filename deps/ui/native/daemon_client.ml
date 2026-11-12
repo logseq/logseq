@@ -21,7 +21,7 @@ external worker_process_id : int -> int = "caml_logseq_worker_process_id"
    process HANDLE on Windows. It is never reconstructed from a registry PID. *)
 module Child_process : sig
   type t
-  val spawn : string -> string array -> string array ->
+  val spawn : ?on_created:(t -> unit) -> string -> string array -> string array ->
     Unix.file_descr -> Unix.file_descr -> Unix.file_descr -> int * t
   val poll : t -> Unix.process_status option
   val await_clean_exit : timeout:float -> t -> unit
@@ -29,11 +29,15 @@ end = struct
   type state = Waiting | Exited of Unix.process_status | Unknown of exn
   type t = { wait_identity : int; mutex : Mutex.t; mutable state : state }
   external process_os_id : int -> int = "caml_logseq_worker_process_id_retained"
-  let spawn executable arguments environment input_fd output_fd error_fd =
+  let spawn ?(on_created=fun _ -> ()) executable arguments environment input_fd output_fd error_fd =
     let wait_identity = Unix.create_process_env executable arguments environment input_fd output_fd error_fd in
+    let child = { wait_identity; mutex=Mutex.create (); state=Waiting } in
+    (* Publish the exact token before the fallible OS-PID lookup. A failed
+       startup remains owned and unqualified rather than losing its handle. *)
+    on_created child;
     let pid = process_os_id wait_identity in
     if pid <= 0 then invalid_arg "Invalid actual child process identity";
-    pid, { wait_identity; mutex=Mutex.create (); state=Waiting }
+    pid, child
   let poll child =
     Mutex.lock child.mutex;
     Fun.protect ~finally:(fun () -> Mutex.unlock child.mutex) (fun () ->
@@ -289,6 +293,7 @@ let update_workers :
 
 type spawned_child = {
   process : Child_process.t;
+  storage : string * string * string * string;
   mutable origin : worker_origin option;
 }
 let spawned_children : (string, spawned_child) Hashtbl.t = Hashtbl.create 4
@@ -322,6 +327,10 @@ let spawn_daemon (repo : string) : string =
   boot_mark ("spawn_daemon " ^ repo);
   mkdir_p (root_dir ());
   mkdir_p (graphs_dir ());
+  let storage = attachment_key repo in
+  Hashtbl.iter (fun _ child ->
+    if child.storage=storage && child.origin=None then
+      failwith "An earlier owned worker startup is unproven; refusing another spawn") spawned_children;
   ensure_graph_created repo;
   let bin = Unix.realpath (daemon_bin ()) in
   let instance = new_uuid () in
@@ -336,9 +345,10 @@ let spawn_daemon (repo : string) : string =
   let devnull =
     Unix.openfile (if Sys.os_type = "Win32" then "NUL" else "/dev/null")
       [ Unix.O_RDONLY ] 0 in
-  let pid, process =
+  let pid, _ =
     Fun.protect ~finally:(fun () -> Unix.close devnull; Unix.close log_fd) (fun () ->
-    Child_process.spawn bin
+    Child_process.spawn ~on_created:(fun process ->
+      Hashtbl.add spawned_children instance {process; storage; origin=None}) bin
       [| bin
        ; "--root-dir"
        ; root_dir ()
@@ -351,8 +361,7 @@ let spawn_daemon (repo : string) : string =
       (worker_environment ~session:app_session ~instance)
       devnull log_fd log_fd)
   in
-  let spawned = { process; origin=None } in
-  Hashtbl.add spawned_children instance spawned;
+  let spawned = Hashtbl.find spawned_children instance in
   (* poll server-list for our pid *)
   let deadline = Unix.gettimeofday () +. 15. in
   let rec poll () =
@@ -488,7 +497,7 @@ let attach_mu = Mutex.create ()
 
 (* A sampled prerequisite only. Stage two must atomically seal ownership and
    prove final worker shutdown before any installation lease can be issued. *)
-let inspect_update_worker ~key ~(origin : worker_origin) body =
+let inspect_update_worker ~key ~(origin : worker_origin) body : update_worker =
   let root, graphs, lifecycle, repo = key in
   let fail detail = failwith ("Update preparation requires this application's unshared worker: " ^ detail) in
   let fields = match Yojson.Safe.from_string body with
@@ -878,7 +887,7 @@ end = struct
       try let value = action () in Host.enqueue (fun () -> resolve value)
       with error -> Host.enqueue (fun () -> reject error)) ());
     promise
-  let create ~request_id worker = background (fun () ->
+  let create ~request_id (worker : update_worker) = background (fun () ->
     Update_admission.validate_id request_id;
     let process =
       Mutex.lock attach_mu;
