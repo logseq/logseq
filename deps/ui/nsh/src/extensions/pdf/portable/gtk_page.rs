@@ -1,7 +1,9 @@
 //! Typed GTK page surface: pixels and native AccessibleText share one logical
 //! character snapshot. This widget never owns or calls a PDFium handle.
 use super::engine::{Bounds, Error, PageText, Raster, Tile};
-use nsh_platform_linux::gtk::{self, gdk, glib, graphene, prelude::*, subclass::prelude::*};
+use nsh_platform_linux::gtk4::{
+    self as gtk, gdk, glib, graphene, prelude::*, subclass::prelude::*,
+};
 use std::{
     cell::{Cell, RefCell},
     rc::Rc,

@@ -85,3 +85,13 @@ prove Unicode-map-error handling. Sources:
 4228a3028a → 4f7bff217a → d3e2052674 → 559b3a0b07 → 15fea7b02b →
 85bf8e29cb → d5866861a5 → 89aa22e77e → b67445f079 → 5aa27221ab →
 02dfd75fd9 → f2343ddd10.
+
+## First actual Linux compile result
+
+Run 43300130927, job 131468776921, reached the real Xvfb PDF test target and
+failed compilation: the pinned SDK exports `gtk4`, while the two candidate GTK
+modules incorrectly imported `gtk`. The source correction uses that actual
+public `gtk4` re-export, locally naming it `gtk` for the widget types. Missing
+subclass traits/PageView diagnostics in that log cascade from this import.
+No test or native engine result is inferred from this failure, and no local
+compiler/test was run for the correction; the same target requires another CI run.

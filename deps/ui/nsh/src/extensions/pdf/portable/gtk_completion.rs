@@ -2,7 +2,7 @@
 //! MainContext::invoke is deliberately unsuitable: it may run inline when the
 //! context is unowned, including after its GTK loop has stopped.
 use super::worker::Event;
-use nsh_platform_linux::gtk::{gio, glib, prelude::*};
+use nsh_platform_linux::gtk4::{gio, glib, prelude::*};
 use std::{
     collections::VecDeque,
     sync::{Arc, Condvar, Mutex, Weak},
