@@ -719,7 +719,11 @@ action and LUI's actual native-sheet agent operations. It does not manufacture a
 version, rebuild code, invoke a test-only update shortcut or replace production
 TLS/signature verification. `Version.app` is compiled from `Version_gen.app`;
 its generator re-reads `resources/package.json` on every UI build. A metadata
-file change without distinct actual Rust and OCaml binaries is rejected.
+file change without distinct actual Rust and OCaml binaries is rejected. Both
+App source checkouts and the selected LUI checkout must have exact commit HEADs
+and unchanged tracked files. The gate samples them again after native/HTTPS
+cleanup; dirty authored versions or a concurrent checkout change cannot produce
+a passing receipt.
 
 Run only on a disposable **GitHub-hosted macOS runner**, after the normal
 release/receipt gates for both authored source revisions:
@@ -742,7 +746,8 @@ configuration/authentication variables, creates private credentials/storage with
 `--startup-preflight`, and launches the extracted executable outside all
 checkouts. Private graph, installation, native log, agent transcript, original
 archive receipts, signed manifest and partial failure evidence remain under the
-runner's temporary/evidence directories for artifact collection.
+runner's temporary/evidence directories for artifact collection. Evidence paths
+must also stay below the owned runner temporary root and outside the checkouts.
 
 The gate creates a real journal block through the existing canonical editor
 extension/reducer, then uses the actual Settings Check for updates controller
@@ -752,9 +757,14 @@ and app-owned Unix exec together. It requires the same main PID to load the new
 compiled Rust marker and the new Settings `Version.app`, installed code hashes
 to match N2, the old owned worker PID to disappear, and a new child worker with
 new session/instance identity, the installed worker executable and the same
-private storage to serve the durable journal data in N2. GET-only worker health
+private storage/repo identity to display the original durable block UUID and
+content in N2. GET-only worker health
 inspection deliberately does not make the worker a foreign/shared consumer.
 The driver retains its unreaped session leader until task-owned group cleanup.
+It validates HTTP receipts after the HTTPS server has joined its bounded request
+threads. `qualified=true` is written only after task-owned process and CA cleanup
+and the final authored-source check succeed; a cleanup failure preserves a
+failing receipt even if the runtime assertions had already passed.
 
 This source gate must pass before calling the candidate installed update path
 qualified. It does not prove hardware typing/IME, pixel parity, distribution

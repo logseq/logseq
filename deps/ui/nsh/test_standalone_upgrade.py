@@ -1,4 +1,5 @@
 """Pure ownership/proof guard cases; no native app, HTTPS or trust mutation."""
+from contextlib import contextmanager
 import importlib.util
 import json
 from pathlib import Path
@@ -62,6 +63,69 @@ class StandaloneUpgradeTests(unittest.TestCase):
         self.assertEqual(proof["dialog"]["token"], "fresh")
         self.assertEqual(agent.request.call_args_list[-1],
                          call(op="native-dialog-answer", token="fresh", button="Download"))
+
+    def test_dirty_authored_version_and_noncommit_head_are_rejected(self):
+        source = Path("/private/authored-source")
+        with patch.object(GATE.https, "run", side_effect=["a"*40, " M resources/package.json"]):
+            with self.assertRaisesRegex(ValueError, "unchanged tracked"):
+                GATE.source_snapshots([source])
+        with patch.object(GATE.https, "run", return_value="main"):
+            with self.assertRaisesRegex(ValueError, "exact authored commit"):
+                GATE.source_snapshots([source])
+        with patch.object(GATE.https, "run", side_effect=["a"*40, "", "b"*40, ""]):
+            first = GATE.source_snapshots([source])
+            second = GATE.source_snapshots([source])
+            self.assertNotEqual(first, second, "end-of-gate source snapshots detect checkout replacement")
+
+    def test_native_or_trust_cleanup_failure_cannot_leave_a_passing_receipt(self):
+        @contextmanager
+        def failing_cleanup():
+            yield
+            raise RuntimeError("owned cleanup failed")
+        with tempfile.TemporaryDirectory() as directory:
+            evidence = Path(directory) / "evidence.json"
+            result = {"qualified": False}
+            with self.assertRaisesRegex(RuntimeError, "owned cleanup failed"):
+                with GATE.proof_record(evidence, result):
+                    with failing_cleanup():
+                        result["runtimeValidated"] = True
+            saved = json.loads(evidence.read_text(encoding="utf-8"))
+            self.assertIs(saved["qualified"], False)
+            self.assertIs(saved["runtimeValidated"], True)
+            self.assertEqual(saved["error"], "owned cleanup failed")
+            result = {"qualified": False}
+            evidence.write_text(json.dumps({"qualified": True, "priorRun": True}), encoding="utf-8")
+            with GATE.proof_record(evidence, result):
+                self.assertIs(json.loads(evidence.read_text(encoding="utf-8"))["qualified"], False,
+                              "a new attempt clears a prior passing receipt before any owned actions")
+                self.assertIs(result["qualified"], False, "passing status waits for all owner scopes")
+                result["runtimeValidated"] = True
+            self.assertIs(json.loads(evidence.read_text(encoding="utf-8"))["qualified"], True)
+
+    def test_evidence_cannot_write_into_a_checkout_or_outside_owned_runner_root(self):
+        with tempfile.TemporaryDirectory() as directory:
+            runner = Path(directory).resolve()
+            source = runner / "source"
+            source.mkdir()
+            for evidence in (source/"receipt.json", runner.parent/"unowned.json", runner):
+                with self.subTest(evidence=evidence), self.assertRaisesRegex(ValueError, "outside checkouts"):
+                    GATE.evidence_path(evidence, runner, [source])
+            self.assertEqual(GATE.evidence_path(runner/"proof/receipt.json", runner, [source]),
+                             runner/"proof/receipt.json")
+
+    def test_durable_content_is_scoped_to_the_original_block_uuid(self):
+        helper = Mock()
+        helper.nodes.side_effect = lambda tree: tree["nodes"]
+        agent = Mock()
+        agent.request.side_effect = [{"nodes":[]}, {"nodes":[42]},
+            {"nodes":[{"props":{"text":"unrelated content"}}]}, {"nodes":[42]},
+            {"nodes":[{"props":{"text":"durable marker"}}]}]
+        block_id = "12345678-1234-4234-8234-123456789abc"
+        self.assertIs(GATE.persisted_block_visible(helper, agent, block_id, "durable marker"), False)
+        self.assertIs(GATE.persisted_block_visible(helper, agent, block_id, "durable marker"), False)
+        self.assertIs(GATE.persisted_block_visible(helper, agent, block_id, "durable marker"), True)
+        target = "prop:accessibility-identifier=block-content-"+block_id
+        self.assertEqual(agent.request.call_args_list[-1], call(op="tree", selector=target))
 
     def health(self, private):
         return {"pid":456, "port":23456, "status":"ready", "ticket":"ticket", "generation":"generation",

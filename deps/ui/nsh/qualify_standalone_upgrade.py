@@ -18,6 +18,7 @@ import json
 import os
 from pathlib import Path
 import platform
+import re
 import shutil
 import signal
 import socket
@@ -31,6 +32,44 @@ import private_update_https as https
 from qualify_packaged_startup import native_environment, save_png
 
 CHECK = "prop:accessibility-identifier=settings-check-for-updates"
+
+
+@contextmanager
+def proof_record(evidence, result):
+    # This scope encloses both native ownership and HTTPS/trust cleanup. A
+    # runtime success cannot become a passing receipt before those scopes exit.
+    result["qualified"] = False
+    evidence.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+    try:
+        yield
+    except BaseException as error:
+        result["qualified"] = False
+        result["error"] = str(error)
+        raise
+    else:
+        result["qualified"] = True
+    finally:
+        evidence.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+
+
+def source_snapshots(sources):
+    snapshots = []
+    for source in sources:
+        revision = https.run(["git", "rev-parse", "--verify", "HEAD^{commit}"], directory=source)
+        if re.fullmatch(r"[0-9a-f]{40}", revision) is None:
+            raise ValueError("Qualification requires an exact authored commit")
+        if https.run(["git", "status", "--porcelain", "--untracked-files=no"], directory=source):
+            raise ValueError("Qualification requires unchanged tracked authored sources")
+        snapshots.append({"root": str(source), "revision": revision})
+    return snapshots
+
+
+def evidence_path(path, runner, sources):
+    path = path.resolve()
+    if (path == runner or not path.is_relative_to(runner)
+            or any(path == source or path.is_relative_to(source) for source in sources)):
+        raise ValueError("Upgrade evidence must be outside checkouts beneath the owned runner temporary root")
+    return path
 
 
 def wait_for(description, deadline, sample):
@@ -165,6 +204,18 @@ def has_text(helper, agent, text):
     return any(node.get("props", {}).get("text") == text for node in nodes(helper, agent))
 
 
+def persisted_block_visible(helper, agent, block_id, text):
+    target = f"prop:accessibility-identifier=block-content-{block_id}"
+    found = agent.request(op="find", selector=target).get("nodes", [])
+    if not found:
+        return False
+    unique(found, "original persisted block display")
+    tree = agent.request(op="tree", selector=target)
+    if tree.get("backend_error"):
+        raise RuntimeError(f"Persisted block renderer failed: {tree['backend_error']}")
+    return any(node.get("props", {}).get("text") == text for node in helper.nodes(tree))
+
+
 def create_durable_block(helper, agent, deadline, text):
     def add_target():
         candidates = [node for node in nodes(helper, agent)
@@ -177,6 +228,9 @@ def create_durable_block(helper, agent, deadline, text):
         unique(found, "journal editor") if (found := [node for node in nodes(helper, agent)
             if node.get("kind") == "extension:logseq-editor"]) else None)
     target = selector(editor)
+    block_id = editor.get("props", {}).get("block-id")
+    if not isinstance(block_id, str) or str(uuid.UUID(block_id)) != block_id:
+        raise RuntimeError("Actual editor did not identify its canonical persisted block UUID")
     # Existing typed extension events exercise the real OCaml editor/reducer;
     # they are not hardware/IME evidence and never contact the worker as a
     # foreign consumer (which would deliberately make update ownership shared).
@@ -186,9 +240,9 @@ def create_durable_block(helper, agent, deadline, text):
     agent.request(op="ext", selector=target, identifier="logseq-editor", name="key",
                   fields=json.dumps({"key": "Escape"}))
     wait_for("saved journal display", deadline, lambda:
-        has_text(helper, agent, text) and not any(node.get("kind") == "extension:logseq-editor"
+        persisted_block_visible(helper, agent, block_id, text) and not any(node.get("kind") == "extension:logseq-editor"
                                                  for node in nodes(helper, agent)))
-    return {"text": text, "editorBlockId": editor.get("props", {}).get("block-id"),
+    return {"text": text, "editorBlockId": block_id,
             "inputBoundary": "canonical-editor-events"}
 
 
@@ -275,29 +329,31 @@ def qualify(args):
     runner = https.require_disposable_ci(args.allow_disposable_ci_trust)
     for name in ("n1_source", "n1_host", "n2_source", "n2_host", "lui_source", "pinned_cli"):
         setattr(args, name, getattr(args, name).resolve(strict=True))
-    versions = [json.loads((source / "resources/package.json").read_text(encoding="utf-8"))["version"]
-                for source in (args.n1_source, args.n2_source)]
+    sources = (args.n1_source, args.n2_source, args.lui_source)
+    snapshots = source_snapshots(sources)
+    versions = [json.loads(https.run(["git", "show", snapshot["revision"] + ":resources/package.json"],
+                                    directory=source))["version"]
+                for source, snapshot in zip(sources[:2], snapshots[:2], strict=True)]
     https.run(["node", "-e", "const s=require('semver'); if(s.valid(process.argv[1])!==process.argv[1] || "
                "s.valid(process.argv[2])!==process.argv[2] || !s.lt(process.argv[1],process.argv[2])) "
                "throw Error('Authored N2 canonical version must be greater than N1');", *versions],
               directory=args.n1_source)
-    revisions = [https.run(["git", "rev-parse", "HEAD"], directory=source)
-                 for source in (args.n1_source, args.n2_source)]
+    revisions = [snapshot["revision"] for snapshot in snapshots[:2]]
     if revisions[0] == revisions[1]:
         raise ValueError("N1 and N2 must be distinct authored source revisions")
-    args.evidence = args.evidence.resolve()
+    args.evidence = evidence_path(args.evidence, runner, sources)
     args.evidence.parent.mkdir(parents=True, exist_ok=True)
     private = Path(tempfile.mkdtemp(prefix="logseq-standalone-upgrade-", dir=runner)).resolve()
     private.chmod(0o700)
     if any(private.is_relative_to(source) for source in (args.n1_source, args.n2_source, args.lui_source)):
         raise ValueError("Private installation and working directory must be outside every checkout")
     result = {"qualified": False, "platform": "macos", "privateRoot": str(private),
-              "authoredSourceRevisions": revisions,
+              "authoredSources": snapshots,
               "evidenceBoundary": "actual-standalone-app-public-https-update",
               "windowsAndLinux": "unqualified", "hardwareInputAndVisualParity": "unqualified"}
     logs = args.evidence.parent / (args.evidence.stem + "-logs")
     logs.mkdir(exist_ok=True)
-    try:
+    with proof_record(args.evidence, result):
         public, secret = private / "public-key.txt", private / "secret-key.txt"
         public.write_text(https.PUBLIC + "\n", encoding="utf-8")
         secret.write_text(https.SECRET + "\n", encoding="utf-8")
@@ -374,26 +430,28 @@ def qualify(args):
                             or n2_worker["nsh-app-ownership"]["instance"] == n1_worker["nsh-app-ownership"]["instance"]
                             or n2_worker["nsh-app-ownership"]["session"] == n1_worker["nsh-app-ownership"]["session"]):
                         raise RuntimeError("N2 adopted a prior worker/application origin")
+                    if (n2_worker.get("repo") != n1_worker.get("repo")
+                            or n2_worker.get("storage") != n1_worker.get("storage")):
+                        raise RuntimeError("N2 worker changed the original graph/storage identity")
                     result["n2Worker"] = n2_worker
-                    wait_for("N2 actual durable journal content", deadline,
-                        lambda: has_text(helper, agent, result["durableBlock"]["text"]))
+                    wait_for("N2 original durable journal block UUID/content", deadline,
+                        lambda: persisted_block_visible(helper, agent,
+                            result["durableBlock"]["editorBlockId"], result["durableBlock"]["text"]))
                     result["n2Runtime"].update(open_settings(helper, agent, deadline,
                         expected["application"]["version"]))
                     result["screenshot"] = save_png(agent.request(op="screenshot"), logs / "installed-n2.png")
-                    https.verify_requests(requests, mode["case"], archives[1].name)
-                    result.update(qualified=True, requests=requests, sameProcessId=process.pid,
+                    result.update(runtimeValidated=True, sameProcessId=process.pid,
                                   oldWorkerExited=True, newWorkerOwnsDurableGraph=True)
                 finally:
                     if agent is not None:
                         agent.close()
-        return result
-    except BaseException as error:
-        result["error"] = str(error)
-        raise
-    finally:
-        # Preserve installation, graph, native log and every partial proof for
-        # review. The task-owned group is gone before the disposable CA closes.
-        args.evidence.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+        # server_close has now joined its bounded request threads. Validate
+        # complete HTTP evidence after that publication barrier, never by delay.
+        https.verify_requests(requests, mode["case"], archives[1].name)
+        result["requests"] = requests
+        if source_snapshots(sources) != snapshots:
+            raise ValueError("Authored qualification sources changed during the upgrade gate")
+    return result
 
 
 if __name__ == "__main__":
