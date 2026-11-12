@@ -654,6 +654,20 @@ let navigation_key node key shift =
 let scroll_edges node at_start at_end =
   dispatch_lui (Lui_protocol.ScrollEdges (node, at_start, at_end))
 
+let editor_keydown_payload node fields =
+  let string name = match Lui_protocol.String_map.find_opt name fields with
+    | Some (Lui_protocol.StringValue value) -> Js.Json.JString value
+    | _ -> Js.Json.JString "" in
+  let boolean name = match Lui_protocol.String_map.find_opt name fields with
+    | Some (Lui_protocol.BoolValue value) -> Js.Json.JBool value
+    | _ -> Js.Json.JBool false in
+  Js.Json.JObject
+    [ "nodeId", Js.Json.JNumber (float_of_int node)
+    ; "key", string "key"; "code", string "code"
+    ; "shiftKey", boolean "shift"; "altKey", boolean "alt"
+    ; "metaKey", boolean "meta"; "ctrlKey", boolean "ctrl"
+    ; "repeat", boolean "repeat"; "isComposing", Js.Json.JBool false ]
+
 let extension_event node identifier name values =
   with_entry_lock (fun () ->
       Update_admission.require_input Update_admission.application "extension-ui";
@@ -664,11 +678,20 @@ let extension_event node identifier name values =
              Lui_runtime.extension_identifier (Lui_app.runtime app) node
            with
            | Some expected_identifier when identifier = expected_identifier ->
-               ignore
-                 (Lui_app.dispatch_event app
-                    (Lui_protocol.ExtensionEvent
-                       (node, identifier, name,
-                        decode_extension_values values)));
+               let fields = decode_extension_values values in
+               let document_first = identifier = "logseq-editor" && name = "key"
+                 && (Lui_app.runtime app).Lui_runtime.runtime_backend.backend_profile.profile_host
+                    = Lui_protocol.NshHost in
+               (* The document capture phase and the editor conduit share this
+                  entry lock. A popup may consume the key or unmount its sink. *)
+               if document_first then
+                 Platform.emit_event "keydown" (editor_keydown_payload node fields);
+               if (not document_first || not !Platform.default_prevented)
+                  && Lui_runtime.extension_identifier (Lui_app.runtime app) node
+                     = Some identifier then
+                 ignore
+                   (Lui_app.dispatch_event app
+                      (Lui_protocol.ExtensionEvent (node, identifier, name, fields)));
                perf_mark "ext.dispatch" t0;
                let t1 = perf_ms () in
                ignore (Lui_app.flush app);
@@ -885,10 +908,11 @@ let keyboard_event node payload values =
     Platform.emit_event "keydown" (Js.Json.parseExn payload);
     Option.iter (fun app ->
       (match Lui_runtime.extension_identifier (Lui_app.runtime app) node with
-       | Some "logseq-editor" ->
+       | Some "logseq-editor" when not !Platform.default_prevented ->
          ignore (Lui_app.dispatch_event app
            (Lui_protocol.ExtensionEvent (node,"logseq-editor","key",
              decode_extension_values values)))
+       | Some "logseq-editor" -> ()
        | Some _ -> invalid_arg "Keyboard target is not an editor conduit"
        | None -> ());
       ignore (Lui_app.flush app)) !current_app;

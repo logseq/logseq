@@ -847,3 +847,22 @@ native insertion. Run metadata remains the existing offsets/kinds grammar.
 Rebuild producer and native host together and regenerate the extension schema
 receipt, since their schema fingerprints change. Web's scratch-input behavior
 and maintained mobile backends keep their existing editing owners.
+
+## NSH editor document capture and modifier keys
+
+The NSH block editor now sends command keys through the application's existing
+native document `keydown` capture phase before dispatching the same canonical
+editor `key` event. Capture and conduit dispatch share one application entry;
+preventing the default or removing the sink during capture suppresses the conduit
+event. Other hosts retain their existing event delivery. The editor uses its
+mounted LUI node as `nodeId`, so existing target selectors, autocomplete capture,
+and keyboard recording use the same ownership rules as Web.
+
+NSH modifier Enter and the existing shared editor formatting, selection, history,
+and readline commands now reach that route instead of mutating the native scratch
+buffer. For example, Mod+Enter cycles TODO through `Editor_commands`, and
+Shift+Enter follows the existing document-mode newline policy. Plain text and
+clipboard insertion remain on the native input. Applications must not emit a
+second `dom-event` keydown for an NSH editor `key` event; it is delivered by the
+native application entry. No LUI API parameter or schema changes are required for
+this ordering change.

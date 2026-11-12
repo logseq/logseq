@@ -359,11 +359,67 @@ let sparse_feedback_materializes_while_held_through_actual_ffi () =
     check "fixture releases only its matching settled preparation"
       (Update_admission.finish_release gate "8"))
 
+let editor_keyboard_capture_order () =
+  let original_capture = Hashtbl.find_opt Platform.capture_listeners "keydown" in
+  let restore () =
+    (match original_capture with
+     | Some listeners -> Hashtbl.replace Platform.capture_listeners "keydown" listeners
+     | None -> Hashtbl.remove Platform.capture_listeners "keydown");
+    Native_embed.current_app := None in
+  Fun.protect ~finally:restore (fun () ->
+    let observed = ref [] and consume = ref false and remove = ref false in
+    let backend : Lui_protocol.backend = {
+      backend_profile = Lui_protocol.profile Lui_protocol.MacOS Lui_protocol.NshHost;
+      apply_batch = (fun _ -> true)
+    } in
+    let registry = Lui_extension.registry () in
+    Lui_extension.register_component registry Logseq_editor.schema;
+    let app = Lui_app.create_with_extensions backend registry Model.initial
+      (fun model (_ : Action.t) -> model)
+      (fun _ _ _ context parent ->
+        let node = Lui_ui.extension context "logseq-editor" in
+        Lui_ui.extension_property context node "block-id" (Lui_protocol.StringValue "keyboard-fixture");
+        Lui_ui.on_event context node (function
+          | Lui_protocol.ExtensionEvent (_, _, "key", _) -> observed := !observed @ ["conduit"]
+          | _ -> ());
+        Option.iter (fun p -> Lui_ui.append context p node) parent;
+        node) in
+    Native_embed.current_app := Some app;
+    ignore (Lui_app.start app);
+    ignore (Lui_app.flush app);
+    let node = Lui_app.root_node app in
+    Hashtbl.replace Platform.capture_listeners "keydown" [(fun payload ->
+      Native_embed.assert_entry_owner ();
+      observed := !observed @ ["capture"];
+      check "native key capture preserves its mounted target and modifiers"
+        (match payload with
+         | Js.Json.JObject fields ->
+             List.assoc_opt "nodeId" fields = Some (Js.Json.JNumber (float_of_int node))
+             && List.assoc_opt "key" fields = Some (Js.Json.JString "Enter")
+             && List.assoc_opt "metaKey" fields = Some (Js.Json.JBool true)
+         | _ -> false);
+      if !consume then Platform.request_prevent ();
+      if !remove then ignore (Lui_app.dispose app))];
+    let key () = ignore (Native_embed.extension_event node "logseq-editor" "key"
+      {|{"key":"Enter","meta":true}|}) in
+    key ();
+    check "native document capture runs before exactly one conduit event"
+      (!observed = ["capture"; "conduit"]);
+    observed := []; consume := true;
+    key ();
+    check "a popup-consumed native key never reaches the editor" (!observed = ["capture"]);
+    observed := []; consume := false; remove := true;
+    key ();
+    check "a sink removed during capture never receives the key" (!observed = ["capture"]);
+    key ();
+    check "a retired sink cannot dispatch another document key" (!observed = ["capture"]))
+
 let () =
   let owner = Thread.id (Thread.self ()) in
   Ui_task.install { enqueue = Host.enqueue;
     assert_owner = (fun () -> check "native callbacks stay on their app owner" (Thread.id (Thread.self ()) = owner)) };
   native_entry_admission ();
+  editor_keyboard_capture_order ();
   native_worker_admission ();
   ordered_mailbox_barrier ();
   promise_observation ();

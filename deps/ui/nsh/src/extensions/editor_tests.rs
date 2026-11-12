@@ -344,6 +344,40 @@ fn structural_keys_are_model_events_and_do_not_also_edit_the_native_buffer() {
 }
 
 #[test]
+fn modified_enter_and_formatting_reach_the_model_without_native_text_mutation() {
+    let (mut app, fixture) = start();
+    app.type_text("id:lui-1", "").unwrap();
+    fixture.events.lock().unwrap().clear();
+    for chord in ["shift+enter", "cmd+enter", "ctrl+enter", "cmd+b", "ctrl+i"] {
+        app.press_key(chord).unwrap();
+    }
+    let events = fixture.events.lock().unwrap();
+    for (key, modifier) in [
+        ("Enter", "shift"),
+        ("Enter", "meta"),
+        ("Enter", "ctrl"),
+        ("b", "meta"),
+        ("i", "ctrl"),
+    ] {
+        assert_eq!(
+            events
+                .iter()
+                .filter(|(name, fields)| name == "key"
+                    && fields["key"] == key
+                    && fields[modifier] == true)
+                .count(),
+            1
+        );
+    }
+    assert!(
+        !events
+            .iter()
+            .any(|(name, _)| name == "insert" || name == "delete")
+    );
+    assert_eq!(fixture.model.lock().unwrap().source, "A😀中z");
+}
+
+#[test]
 fn same_length_authoritative_source_replacement_refreshes_the_retained_native_buffer() {
     let (mut app, fixture) = start();
     let before = native(&app);

@@ -396,11 +396,31 @@ fn bind_keys(
             ("tab", "Tab"),
             ("escape", "Escape"),
             ("enter", "Enter"),
+            ("a", "a"),
+            ("b", "b"),
+            ("d", "d"),
+            ("e", "e"),
+            ("f", "f"),
+            ("h", "h"),
+            ("i", "i"),
+            ("k", "k"),
+            ("l", "l"),
+            ("n", "n"),
+            ("p", "p"),
+            ("s", "s"),
+            ("t", "t"),
+            ("u", "u"),
+            ("w", "w"),
+            ("y", "y"),
+            ("z", "z"),
+            (";", ";"),
+            (",", ","),
+            (".", "."),
         ] {
             for mask in 0_u8..16 {
-                // Modified Enter belongs to the native insertion path. The model
-                // explicitly passes it; plain Enter is the block split command.
-                if key == "Enter" && mask != 0 {
+                // Plain text and clipboard insertion stay on the native input.
+                // The shared editor owns these modifier commands and Enter policy.
+                if key.len() == 1 && !matches!(mask, 4 | 5 | 8 | 9) {
                     continue;
                 }
                 let mut chord = String::new();
@@ -443,29 +463,6 @@ fn bind_keys(
                     },
                 );
             }
-        }
-        for chord in ["ctrl+a", "cmd+a"] {
-            let context = context.clone();
-            let state = state.clone();
-            let block = block.clone();
-            on_key_with(
-                chord,
-                KeyOptions {
-                    when: When::Always,
-                    for_focus: true,
-                    ..Default::default()
-                },
-                move |_| {
-                    if owner.is_live() && string(&context, "block-id") == block {
-                        state.borrow_mut().serial += 1;
-                        emit(
-                            &context,
-                            "key",
-                            json!({"key":"a","ctrl":chord=="ctrl+a","meta":chord=="cmd+a"}),
-                        );
-                    }
-                },
-            );
         }
     });
 }
