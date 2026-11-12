@@ -694,6 +694,7 @@ let enter_edit ?scope ?(submit_on_enter = false) uuid caret =
                 ; selection_scope = scope
                 ; selected = S.String_set.empty
                 ; anchor = None
+      ; selection_head = None
                 ; action_bar = false
                 });
             ignore (Ui_services.timers_timeout apply_focus 0));
@@ -757,6 +758,7 @@ let rec exit_edit ~select =
                   ; selected =
                       (if select then S.String_set.singleton e.uuid else st.selected)
                   ; anchor = (if select then Some e.uuid else st.anchor)
+                  ; selection_head = (if select then Some e.uuid else st.selection_head)
                     (* Escape selects the block without raising the action bar. *)
                   ; action_bar = false
                   });
@@ -896,7 +898,7 @@ let enter_draft ~uuid ~scope ~buffer ~(owner : S.draft_owner) =
             ~uuid ~scope ~buffer ~base:buffer () in
         S.set (fun st -> {st with S.editing = Some editing;
           selection_scope = scope; selected = S.String_set.empty;
-          anchor = None; action_bar = false});
+          anchor = None; selection_head = None; action_bar = false});
         arm_focus (make_focus_request ~owner:(scope, editing.S.epoch) uuid caret)
       end;
       Js.Promise.resolve ()
@@ -1599,70 +1601,40 @@ let range_between anchor head =
     anchor :: List.filteri (fun i _ -> i <= ih) uuids
   else []
 
-(* extend selection one visible step from the current head *)
+(* Keep the fixed anchor separate from the moving endpoint: reversing a
+   keyboard range shrinks it before crossing the anchor. Both endpoints
+   belong to the same outliner selection state, including virtual rows. *)
 let extend_selection up =
-  let sel = S.selected () in
-  match S.anchor () with
-  | None -> ()
-  | Some anchor -> (
-      let uuids = flat_uuids () in
-      let ordered = List.filter (fun u -> S.String_set.mem u sel) uuids in
-      let head =
-        match (up, ordered) with
-        | true, h :: _ -> Some h
-        | false, _ :: _ -> Some (List.nth ordered (List.length ordered - 1))
-        | _ -> None
+  let state = S.selection_state () in
+  match state.S.anchor, state.S.selection_head with
+  | Some anchor, Some head when S.String_set.mem head state.S.selected ->
+      let blocks = flat_uuids () in
+      let title =
+        if state.S.selection_scope <> "main" then None
+        else if anchor_is_page_title anchor then Some anchor
+        else if anchor_is_page_title head then Some head
+        else
+          Option.bind (Ui_services.dom_query ".ls-page-title .ls-block")
+            (fun row ->
+              Option.bind (row.Ui_services.attr "data-blockid")
+                (fun uuid -> if anchor_is_page_title uuid then Some uuid else None))
       in
-      match head with
-      | None -> (
-          (* only the title row selected: ArrowDown enters the block
-             list from the top *)
-          match (up, uuids) with
-          | false, first :: _ when anchor_is_page_title anchor ->
-              let range = range_between anchor first in
-              S.set (fun st ->
-                  { st with
-                    S.selected = S.String_set.of_list range
-                  ; anchor = Some anchor
-                  ; action_bar = true
-                  })
-          | _ -> ())
-      | Some h -> (
-          let nbr =
-            (if up
-             then S.prev_visible ~scope:(S.selection_scope ())
-             else S.next_visible ~scope:(S.selection_scope ()))
-              h
-          in
-          match nbr with
-          | None ->
-              (* head is the topmost flat block: cljs
-                 navigable-sibling-block treats .ls-page-title as a
-                 block, so shift+up past it conj's the title row into
-                 the selection *)
-              if up && S.selection_scope () = "main" then
-                (match Ui_services.dom_query ".ls-page-title .ls-block" with
-                 | Some tb -> (
-                     match tb.Ui_services.attr "data-blockid" with
-                     | Some t when not (S.String_set.mem t sel) ->
-                         S.set (fun st ->
-                             { st with
-                               S.selected = S.String_set.add t sel
-                             ; action_bar = true
-                             })
-                     | _ -> ())
-                 | None -> ())
-          | Some nb -> (
-              match nb.Model.block_uuid with
-              | None -> ()
-              | Some nu ->
-                  let range = range_between anchor nu in
-                  S.set (fun st ->
-                      { st with
-                        S.selected = S.String_set.of_list range
-                      ; anchor = Some anchor
-                      ; action_bar = true
-                      }))))
+      let visible = match title with Some uuid -> uuid :: blocks | None -> blocks in
+      let at = index_of visible head in
+      let next = at + (if up then -1 else 1) in
+      if at >= 0 && next >= 0 && next < List.length visible then begin
+        let head = List.nth visible next in
+        let anchor_at = index_of visible anchor in
+        if anchor_at >= 0 then begin
+          let lo, hi = min anchor_at next, max anchor_at next in
+          let range = List.filteri (fun i _ -> i >= lo && i <= hi) visible in
+          S.set (fun st -> { st with
+            S.selected = S.String_set.of_list range;
+            selection_head = Some head; action_bar = true });
+          !(S.scroll_key_into_view) head
+        end
+      end
+  | _ -> ()
 
 let select_single_in ~scope uuid =
   S.set (fun st ->
@@ -1670,6 +1642,7 @@ let select_single_in ~scope uuid =
         S.selected = S.String_set.singleton uuid
       ; selection_scope = scope
       ; anchor = Some uuid
+      ; selection_head = Some uuid
       ; action_bar = false
       })
 
@@ -1678,11 +1651,13 @@ let select_single uuid = select_single_in ~scope:(scope_of_uuid uuid) uuid
 let select_all () =
   match flat_uuids () with
   | [] -> ()
-  | first :: _ ->
+  | first :: rest ->
+      let head = List.fold_left (fun _ uuid -> uuid) first rest in
       S.set (fun st ->
           { st with
-            S.selected = S.String_set.of_list (flat_uuids ())
+            S.selected = S.String_set.of_list (first :: rest)
           ; anchor = Some first
+          ; selection_head = Some head
           ; action_bar = false
           })
 
@@ -1692,6 +1667,7 @@ let clear_selection ?scope () =
         S.selected = S.String_set.empty
       ; selection_scope = (match scope with Some scope -> scope | None -> st.selection_scope)
       ; anchor = None
+      ; selection_head = None
       ; action_bar = false
       })
 
@@ -1703,6 +1679,10 @@ let show_action_bar () =
 
 let hide_action_bar () =
   S.set (fun st -> { st with S.action_bar = false })
+
+let escape_selection () =
+  if (S.selection_state ()).S.action_bar then hide_action_bar ()
+  else clear_selection ()
 
 (* shift+arrow arriving during the pending-focus window replays here once
    focus lands: exit edit into selection, then extend one visible step *)
@@ -1726,24 +1706,21 @@ let select_parent () =
           | None -> select_all ())
       | _ -> select_all ())
   | [] -> select_all ()
-(* move selection up/down one block (single-block arrow nav in normal
-   mode, plain move for shift-extend callers) *)
+(* Plain arrows replace a range with the row beyond its directional edge;
+   modified selection arrows use [extend_selection] instead. *)
 let move_selection_focus up =
-  match S.selected () |> S.String_set.elements with
-  | [ cur ] -> (
+  let ordered = List.filter (fun uuid -> S.String_set.mem uuid (S.selected ()))
+      (flat_uuids ()) in
+  let edge = match (if up then ordered else List.rev ordered) with
+    | first :: _ -> Some first | [] -> None in
+  match edge with
+  | None -> ()
+  | Some cur ->
       let nb =
-        (if up
-         then S.prev_visible ~scope:(S.selection_scope ())
-         else S.next_visible ~scope:(S.selection_scope ()))
-          cur
-      in
-      match nb with
-      | Some b -> (
-          match b.Model.block_uuid with
-          | Some u -> select_single_in ~scope:(S.selection_scope ()) u
-          | None -> ())
-      | None -> ())
-  | _ -> ()
+        (if up then S.prev_visible ~scope:(S.selection_scope ())
+         else S.next_visible ~scope:(S.selection_scope ())) cur in
+      Option.iter (fun block ->
+        Option.iter (select_single_in ~scope:(S.selection_scope ())) block.Model.block_uuid) nb
 
 (* ---- block structure ops ---- *)
 
@@ -1902,7 +1879,8 @@ let delete_selected_uuids ~selected ~scope ~before uuids =
                   | _, current -> current
                 in
                 S.set (fun st -> {st with S.editing = editing;
-                   selected = S.String_set.empty; anchor = None; action_bar = false});
+                   selected = S.String_set.empty; anchor = None;
+                   selection_head = None; action_bar = false});
                 match editing with
                 | Some e -> request_focus e.S.uuid e.S.model.Edit_model.caret
                 | None -> ());
@@ -2134,14 +2112,17 @@ let cut_editing_text uuid =
             Outliner_ops.schedule_save uuid (live_buffer uuid))
   | _ -> Ui_task.reject Ui_task.Cancelled
 
-let write_selection_copy ~plain ~cut =
+let write_selection_copy ?(clear = false) ~plain ~cut () =
   let snapshot = selected_snapshot () in
   let before = S.history_cursor () in
-  let current = clipboard_action_current () in
   match selected_copy_blocks ~plain snapshot with
   | None | Some [] -> ()
   | Some blocks ->
       let text = selection_text ~plain blocks in
+      (* Toolbar Copy dismisses immediately, as master does. Capture the
+         resulting owner so its own cleanup does not cancel the write. *)
+      if clear then clear_selection ();
+      let current = clipboard_action_current () in
       ignore (write_clipboard_text ~current:(fun () -> current () &&
           List.for_all (fun block ->
             match block.Model.block_uuid with
@@ -2162,8 +2143,9 @@ let cut_block_text uuid =
         block.Model.block_title (fun () ->
           ignore (Ops.apply_and_refresh [ Ops.delete_blocks [ uuid ] ])))
 
-let copy_selection_text ?(plain = false) () = write_selection_copy ~plain ~cut:false
-let cut_selection_text () = write_selection_copy ~plain:false ~cut:true
+let copy_selection_text ?(plain = false) () = write_selection_copy ~plain ~cut:false ()
+let copy_selection_and_clear () = write_selection_copy ~clear:true ~plain:false ~cut:false ()
+let cut_selection_text () = write_selection_copy ~plain:false ~cut:true ()
 let cut_selection ev =
   ev.Ui_services.prevent_default ();
   cut_selection_text ()
@@ -2753,7 +2735,8 @@ let restore_history result =
                  S.with_model e (Edit_model.select e.S.model ~anchor ~focus:caret)
              | _ -> e in
            S.set (fun st -> { st with S.editing = Some e;
-             S.selected = S.String_set.empty; anchor = None; action_bar = false });
+             S.selected = S.String_set.empty; anchor = None;
+             selection_head = None; action_bar = false });
            request_focus uuid caret;
            Js.Promise.resolve ()
        | None ->
@@ -2764,9 +2747,14 @@ let restore_history result =
                    | _ -> invalid_arg "history selection must contain UUIDs") S.String_set.empty xs
              | _ -> invalid_arg "history cursor must contain editing or selection state" in
            let anchor = Wire.map_get_uuid cursor "selection-anchor" in
+           let selection_head = match Wire.map_get cursor "selection-head" with
+             | None -> anchor
+             | Some Wire.Nil -> None
+             | Some (Wire.Uuid uuid) when S.String_set.mem uuid selected -> Some uuid
+             | Some _ -> invalid_arg "history selection head must be a selected UUID" in
            let selection_scope = Option.get (Wire.map_get_string cursor "scope") in
            S.set (fun st -> { st with S.editing = None; selected; anchor;
-             selection_scope; action_bar = false });
+             selection_head; selection_scope; action_bar = false });
            Js.Promise.resolve ())
 
 let () = S.restore_history := restore_history

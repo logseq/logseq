@@ -317,6 +317,7 @@ and node ~model () : t =
                          ~key:"sbar" ~anchor_target:("ls-block-" ^ anchor)
                          ~anchor:`above ~anchor_alignment:`start
                          ~anchor_offset:8. ~style_class:"selection-action-bar"
+                         ~on_dismiss:(fun _ -> Editor_actions.hide_action_bar ())
                          ~data_attrs:[ ("data-keep-selection", "true") ]
                          [
                            Uc.action_bar_capsule ~key:"sbg"
@@ -365,7 +366,7 @@ and node ~model () : t =
                                          ~label:(I18n.t "ui/copy")
                                          ~text:(I18n.t "ui/copy")
                                          ~on_press:(fun _ ->
-                                           Editor_actions.copy_selection_text ())
+                                           Editor_actions.copy_selection_and_clear ())
                                          ();
                                        sbtn ~key:"sb-set"
                                          ~label:(I18n.t "property/set-property")

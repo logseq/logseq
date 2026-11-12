@@ -2126,3 +2126,32 @@ by an inline finish callback. Recovery retains rejection and cleanup semantics.
 There is no new timer, polling, focus control, wire operation or downstream API.
 Web retains its existing promise microtask behavior; Apple/iOS and Android
 backends remain maintained. Applications need no migration.
+
+
+### Outliner selection endpoints and toolbar dismissal
+
+Nonediting block selection now retains a fixed anchor and an explicit moving
+head in the existing outliner-scoped editor state. Repeated Shift+Up/Down and
+Alt+Up/Down extend the same range; reversing direction removes its moving edge
+before crossing the anchor. Collapsed descendants remain excluded. Plain arrows
+replace a range with the adjacent row beyond its directional edge. Selection
+entry, pointer ranges, editing entry and selection reset own both endpoints;
+applications must not carry a keyboard head into another outliner scope.
+
+Selection history cursors now include optional `selection-head` (selected UUID
+or nil) alongside `selection-anchor`. New cursors restore both endpoints; older
+cursors without this field restore the head to their saved anchor. For example,
+`{selection-anchor: A, selection-head: C, selected-blocks: [A, B, C]}` shrinks to
+`[A, B]` on Shift+Up after restoration. Dynamically supplied heads outside the
+saved selected set are rejected at the history boundary.
+
+The selection toolbar supplies the canonical popover `on_dismiss` callback.
+Escape first dismisses its bar, and the next nonediting Escape clears selection;
+`editor/escape-editing` follows the same rule when invoked outside editing.
+Toolbar Copy clears selection and dismisses immediately, matching the frozen
+master interaction. Clipboard success still requires the original write
+acknowledgement and current owner: failure or a newer selection cannot record a
+successful structured clipboard snapshot. Keyboard Copy keeps its selection.
+Downstream toolbar callers that need master behavior should invoke
+`Editor_actions.copy_selection_and_clear ()`; ordinary copy callers retain
+`Editor_actions.copy_selection_text ()`.

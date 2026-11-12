@@ -456,6 +456,8 @@ let wrapper_pointerdown _uuid ev =
     S.set (fun st ->
         { st with
           S.selected = S.String_set.empty
+        ; anchor = None
+        ; selection_head = None
         ; action_bar = false
         })
 

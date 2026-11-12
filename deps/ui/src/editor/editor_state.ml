@@ -84,7 +84,8 @@ type t =
   { editing : editing option
   ; selected : String_set.t
   ; selection_scope : string
-  ; anchor : string option (* selection focus end for shift-arrow *)
+  ; anchor : string option (* fixed endpoint in the current outliner scope *)
+  ; selection_head : string option (* moving endpoint, reset with the selection owner *)
   ; action_bar : bool
   ; collapsed : String_set.t
   ; expanded : String_set.t
@@ -107,6 +108,7 @@ let initial =
   ; selected = String_set.empty
   ; selection_scope = "main"
   ; anchor = None
+  ; selection_head = None
   ; action_bar = false
   ; collapsed = String_set.empty
   ; expanded = String_set.empty
@@ -470,6 +472,9 @@ let history_cursor () =
           (List.map (fun u -> Wire.Uuid u) (String_set.elements (selected ())))
       ; Wire.Keyword "selection-anchor",
           (match anchor () with Some u -> Wire.Uuid u | None -> Wire.Nil)
+      ; Wire.Keyword "selection-head",
+          (match (selection_state ()).selection_head with
+           | Some u -> Wire.Uuid u | None -> Wire.Nil)
       ]
 
 (* Captured before a source mutation and consumed by its scheduled save. *)

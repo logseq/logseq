@@ -819,11 +819,12 @@ let on_normal_key ev =
   | "ArrowUp" when alt && not shift ->
       (* editor/select-block-up *)
       ev.Ui_services.prevent_default ();
-      A.move_selection_focus true
+      A.extend_selection true
   | "ArrowDown" when alt && not shift ->
       (* editor/select-block-down *)
       ev.Ui_services.prevent_default ();
-      A.move_selection_focus false  | "ArrowUp" when (meta || alt) && shift ->
+      A.extend_selection false
+  | "ArrowUp" when (meta || alt) && shift ->
       ev.Ui_services.prevent_default ();
       A.move_blocks_up_down true
   | "ArrowDown" when (meta || alt) && shift ->
@@ -877,8 +878,8 @@ let on_normal_key ev =
   | "Escape" ->
       (* cljs: first Escape closes the action-bar popover, the next one
          clears the selection *)
-      if S.ready () && (S.value ()).S.action_bar then A.hide_action_bar ()
-      else A.clear_selection ()
+      ev.Ui_services.prevent_default ();
+      A.escape_selection ()
   | "?" ->
       (* cljs shift+/ (:ui/toggle-help, global-non-editing-only) toggles
          the help menu popup *)
@@ -1342,6 +1343,7 @@ let dispatch_command cid =
   | _, "editor/backspace" -> input "Backspace"
   | _, "editor/delete" -> input "Delete"
   | Some _, "editor/escape-editing" -> A.exit_edit ~select:true
+  | None, "editor/escape-editing" -> A.escape_selection ()
   | _, "editor/new-line" ->
       Option.iter (fun editing ->
           apply_input ?frame:!S.active_frame editing.S.uuid

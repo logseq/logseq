@@ -1059,12 +1059,86 @@ let test_queued_history_origin (h : host) =
         "queued redo follows its own refresh", A.redo, false;
         "queued redo never acquires the destination graph", A.redo, true ]
 
+(* The moving edge must survive reversals, while membership and endpoints
+   remain scoped to the current visible outliner, including collapsed rows. *)
+let test_keyboard_block_selection (h : host) =
+  let* () = settle h 40 in
+  stage_page h [ Test_check.block "b0" "before";
+    Test_check.block ~children:[Test_check.block "b2" "nested"] "b1" "parent";
+    Test_check.block "b3" "after"; Test_check.block "b4" "last" ];
+  S.set (fun st -> { st with S.editing = None; collapsed = S.String_set.empty;
+    collapsed_ui = S.String_set.empty; expanded = S.String_set.empty;
+    expanded_ui = S.String_set.empty });
+  let* () = h.wait_ms 25 in
+  let expect label uuids head =
+    check label (A.selected_uuids () = uuids
+      && (S.selection_state ()).S.selection_head = Some head) in
+  A.select_single "b1";
+  A.extend_selection false;
+  expect "Shift Down visits the expanded nested row" ["b1";"b2"] "b2";
+  A.extend_selection false;
+  expect "repeated Shift Down keeps the fixed anchor" ["b1";"b2";"b3"] "b3";
+  A.extend_selection true;
+  expect "reversing Shift Up shrinks from the moving edge" ["b1";"b2"] "b2";
+  A.extend_selection true;
+  expect "reversal shrinks back to its anchor" ["b1"] "b1";
+  A.extend_selection true;
+  expect "Shift Up crosses the original anchor" ["b0";"b1"] "b0";
+  A.extend_selection false;
+  expect "opposite reversal removes the upper moving edge" ["b1"] "b1";
+  A.select_single_in ~scope:"main" "p";
+  A.extend_selection true;
+  expect "the page-title upper boundary does not move" ["p"] "p";
+  A.extend_selection false;
+  expect "a title anchor extends into the first visible block" ["p";"b0"] "b0";
+  A.extend_selection true;
+  expect "reversal restores the title anchor without losing it" ["p"] "p";
+  A.select_single "b4";
+  A.extend_selection false;
+  expect "range extension at the last visible row is bounded" ["b4"] "b4";
+  A.select_single "b1";
+  S.set_collapsed ~scope:"main" "b1" true;
+  let* () = h.wait_ms 25 in
+  A.extend_selection false;
+  expect "range extension skips collapsed descendants" ["b1";"b3"] "b3";
+  A.move_selection_focus false;
+  expect "plain Down leaves a range from its lower edge" ["b4"] "b4";
+  A.select_single "b3";
+  Editor_keys.on_normal_key
+    { Ui_services.x=0.; y=0.; shift=false; meta=false; ctrl=false; alt=true;
+      composing=false; key=Some "ArrowUp"; key_char=None; buttons=0; button=0;
+      repeat=false; movement_x=0.; movement_y=0.; default_prevented=false;
+      target=None; touches=[]; detail=(fun _ -> None); detail_json=(fun _ -> None);
+      clipboard_get=(fun _ -> ""); clipboard_snapshot=(fun () -> Ui_services.empty_clipboard_snapshot);
+      clipboard_set=(fun _ _ -> ()); data_transfer_get=(fun _ -> ""); files=[];
+      has_files=false; prevent_default=(fun () -> ()); stop_propagation=(fun () -> ());
+      stop_immediate=(fun () -> ()) };
+  expect "Alt Up extends the range instead of moving a singleton" ["b1";"b3"] "b1";
+  Editor_keys.dispatch_command "editor/escape-editing";
+  check "first nonediting Escape dismisses the toolbar without losing the range"
+    (not (S.selection_state ()).S.action_bar && A.selected_uuids () = ["b1";"b3"]);
+  Editor_keys.dispatch_command "editor/escape-editing";
+  check "second nonediting Escape clears both endpoints without entering edit mode"
+    (S.String_set.is_empty (S.selected ()) && S.anchor () = None
+     && (S.selection_state ()).S.selection_head = None && S.editing () = None);
+  A.select_single_in ~scope:"rs-isolated" "b3";
+  check "a new outliner selection owns its moving endpoint"
+    (S.selection_scope () = "rs-isolated" && (S.selection_state ()).S.selection_head = Some "b3");
+  A.clear_selection ~scope:"main" ();
+  A.extend_selection false;
+  check "cleared selection cannot reuse another outliner's keyboard head"
+    (S.String_set.is_empty (S.selected ()) && (S.selection_state ()).S.selection_head = None);
+  S.set_collapsed ~scope:"main" "b1" false;
+  reset_editor ();
+  Js.Promise.resolve ()
+
 let test_delete_selection_history (h : host) =
   let* () = settle h 40 in
   stage_page h [ Test_check.block "b0" "previous";
                  Test_check.block "b1" "first"; Test_check.block "b2" "second" ];
   S.set (fun st -> { st with S.editing = None;
-      selected = S.String_set.of_list ["b1"; "b2"]; anchor = Some "b2" });
+      selected = S.String_set.of_list ["b1"; "b2"]; anchor = Some "b2";
+      selection_head = Some "b1" });
   let expected = S.history_cursor () in
   check "selection history records the range anchor"
     (W.map_get_uuid expected "selection-anchor" = Some "b2");
@@ -1084,7 +1158,9 @@ let test_delete_selection_history (h : host) =
   let* () = A.restore_history
       (W.Map [ W.Keyword "undo?", W.Bool true;
                W.Keyword "editor-cursors", W.List [expected] ]) in
-  check "undo restores the selected range anchor" ((S.read ()).anchor = Some "b2");
+  check "undo restores both selected range endpoints"
+    ((S.selection_state ()).anchor = Some "b2"
+     && (S.selection_state ()).selection_head = Some "b1");
   reset_editor ();
   Js.Promise.resolve ()
 
@@ -1153,6 +1229,7 @@ let async_stage (h : host) : unit Js.Promise.t =
   let* () = test_navigation_retires_dirty_editor h in
   let* () = test_history_after_navigation h in
   let* () = test_queued_history_origin h in
+  let* () = test_keyboard_block_selection h in
   let* () = test_delete_selection_history h in
   let* () = test_property_command_refresh h in
   h.restore saved;

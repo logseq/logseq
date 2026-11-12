@@ -1393,8 +1393,8 @@ let editor_action st cid : (unit -> unit) option =
   | "editor/select-all-blocks" -> Some (fun () -> st.svs.Svs.select_all ())
   | "editor/select-up" -> Some (fun () -> st.svs.Svs.extend_selection true)
   | "editor/select-down" -> Some (fun () -> st.svs.Svs.extend_selection false)
-  | "editor/select-block-up" -> Some (fun () -> st.svs.Svs.move_selection_focus true)
-  | "editor/select-block-down" -> Some (fun () -> st.svs.Svs.move_selection_focus false)
+  | "editor/select-block-up" -> Some (fun () -> st.svs.Svs.extend_selection true)
+  | "editor/select-block-down" -> Some (fun () -> st.svs.Svs.extend_selection false)
   | "editor/select-parent" ->
       Some
         (first_target (fun u ->

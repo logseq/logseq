@@ -826,7 +826,9 @@ let native_block_click_mounts_shared_editor () =
   and prior_state = !Editor_state.st and prior_fields = !Editor_state.field_sigs_opt
   and prior_pending = !Editor_state.pending_focus and prior_click = !Editor_state.click_point
   and prior_structure = !Editor_state.structure_pending
-  and prior_structure_owner = !Editor_actions.structure_owner in
+  and prior_structure_owner = !Editor_actions.structure_owner
+  and prior_clipboard = !Editor_state.clipboard
+  and prior_clipboard_text = !Editor_state.clipboard_text in
   let captures = List.map (fun name -> name, Hashtbl.find_opt Platform.capture_listeners name)
     ["pointerdown";"mousedown";"click";"copy"] in
   let requests = ref [] in
@@ -861,6 +863,8 @@ let native_block_click_mounts_shared_editor () =
     Editor_state.pending_focus := prior_pending; Editor_state.click_point := prior_click;
     Editor_state.structure_pending := prior_structure;
     Editor_actions.structure_owner := prior_structure_owner;
+    Editor_state.clipboard := prior_clipboard;
+    Editor_state.clipboard_text := prior_clipboard_text;
     Outliner_ops.cancel_pending_save ();
     List.iter (fun (name, previous) -> match previous with
       | Some listeners -> Hashtbl.replace Platform.capture_listeners name listeners
@@ -955,6 +959,50 @@ let native_block_click_mounts_shared_editor () =
     ignore (Lui_app.flush app);
     check "ending the editor activation rejects a late file upload"
       (not (Editor_actions.asset_upload_current upload));
+    (* Exercise the actual native clipboard request/ack facade. Dismissing
+       this toolbar is not itself a successful or cancelled clipboard write. *)
+    let begin_toolbar_copy () =
+      Editor_actions.select_single uuid;
+      Editor_actions.show_action_bar ();
+      requests := [];
+      Editor_state.clipboard_text := "previous clipboard";
+      Editor_actions.copy_selection_and_clear ();
+      check "toolbar Copy clears selection, both endpoints and the action bar immediately"
+        (Editor_state.String_set.is_empty (Editor_state.selected ())
+         && Editor_state.anchor () = None
+         && (Editor_state.selection_state ()).Editor_state.selection_head = None
+         && not (Editor_state.selection_state ()).Editor_state.action_bar);
+      let payload = List.find_map (fun (operation,payload) ->
+        if operation="clipboard-write" then Some (Yojson.Safe.from_string payload) else None)
+        !requests |> Option.get in
+      let fields = match payload with `Assoc fields -> fields | _ -> assert false in
+      let id = List.assoc "request-id" fields in
+      check "toolbar Copy writes the real selected source through the native facade"
+        (List.assoc "text" fields = `String "- A real editable block\n");
+      check "clipboard metadata waits for acknowledgement"
+        (!Editor_state.clipboard_text="previous clipboard");
+      id in
+    let acknowledge id result =
+      Platform_native.note_clipboard_write (`Assoc (("request-id",id)::result));
+      Host.drain ();
+      ignore (Lui_app.flush app) in
+    let id = begin_toolbar_copy () in
+    acknowledge id ["ok",`Bool true];
+    check "owned toolbar cleanup does not cancel a successful clipboard acknowledgement"
+      (!Editor_state.clipboard_text="- A real editable block\n");
+    let id = begin_toolbar_copy () in
+    Editor_actions.select_single uuid;
+    acknowledge id ["ok",`Bool true];
+    check "a late clipboard acknowledgement cannot acquire a newer selection"
+      (!Editor_state.clipboard_text="previous clipboard"
+       && Editor_state.selected ()=Editor_state.String_set.singleton uuid);
+    let id = begin_toolbar_copy () in
+    acknowledge id ["ok",`Bool false;"error",`String "expected fixture failure"];
+    check "clipboard failure keeps the master toolbar dismissal without recording success"
+      (!Editor_state.clipboard_text="previous clipboard"
+       && Editor_state.String_set.is_empty (Editor_state.selected ())
+       && not (Editor_state.selection_state ()).Editor_state.action_bar);
+
     let claim ?current_guard promise finish =
       Editor_actions.run_structure ?current_guard ~restore:None promise finish;
       snd (Option.get !Editor_actions.structure_owner) in

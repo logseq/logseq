@@ -56,7 +56,7 @@ let consume_suppress () =
 let set_anchor uuid =
   (* Signal.update stages the value until flush; a deferred anchor read in
      the IO callback must see it, so take the flushing path *)
-  S.set (fun st -> { st with S.anchor = Some uuid })
+  S.set (fun st -> { st with S.anchor = Some uuid; selection_head = Some uuid })
 
 (* cljs block-content mousedown modifiers run block-selection ops
    instead of arming the range drag or starting an edit; returns true
@@ -82,6 +82,7 @@ let modifier_select ev uuid =
                      List.fold_left
                        (fun s u -> S.String_set.add u s)
                        st.S.selected range;
+                   selection_head = Some uuid;
                    action_bar = true;
                  })
        | None -> ()
@@ -97,6 +98,7 @@ let modifier_select ev uuid =
              st with
              S.selected = sel;
              anchor = (if S.String_set.is_empty sel then None else Some uuid);
+             selection_head = (if S.String_set.is_empty sel then None else Some uuid);
              action_bar = not (S.String_set.is_empty sel);
            })
      else
@@ -110,6 +112,7 @@ let modifier_select ev uuid =
                  {
                    st with
                    S.selected = S.String_set.of_list range;
+                   selection_head = Some uuid;
                    action_bar = true;
                  })
            (* a stale/off-screen anchor yields no range — fall back to
@@ -144,6 +147,7 @@ let pointerdown ev =
                     S.selection_scope = scope;
                     selected = S.String_set.empty;
                     anchor = None;
+                    selection_head = None;
                     action_bar = false;
                   });
             (* the row's control band (collapse arrow, bullet) runs its
@@ -174,6 +178,7 @@ let pointermove ev =
                       {
                         st with
                         S.selected = S.String_set.of_list range;
+                        selection_head = Some uuid;
                         action_bar = false;
                       }))
             | _ -> ())
@@ -207,6 +212,7 @@ let extend_to uuid =
                 List.fold_left
                   (fun s u -> S.String_set.add u s)
                   st.S.selected range;
+              selection_head = Some uuid;
               action_bar = false;
             }))
   | None -> ()
