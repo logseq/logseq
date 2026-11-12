@@ -245,6 +245,7 @@ let empty_area_data =
    liveness (pruned when every anchor leaves the tree) *)
 type area =
   { a_app : Lui_runtime.application
+  ; a_repo : string
   ; mutable a_nodes : int list
   ; a_state : area_data Signal.state
   ; a_fetch : unit -> unit Js.Promise.t
@@ -271,18 +272,31 @@ let guarded (refresh : unit -> unit Js.Promise.t) =
 let area_state (context : Lui_ui.ui_context) ~key
     ~(fetch : (area_data -> unit) -> unit Js.Promise.t) :
     area_data Signal.state =
+  let repo = Runtime.repo () in
   match Hashtbl.find_opt areas key with
-  | Some a -> a.a_state
-  | None ->
-      let st =
-        Signal.state context.Lui_ui.ui_scheduler empty_area_data
-      in
-      let a =
+  | Some a when a.a_repo = repo && a.a_app == context.Lui_ui.ui_application ->
+      a.a_state
+  | _ ->
+      let st = Signal.state context.Lui_ui.ui_scheduler empty_area_data in
+      let request = Ui_effect.request () in
+      let rec a =
         { a_app = context.Lui_ui.ui_application
+        ; a_repo = repo
         ; a_nodes = []
         ; a_state = st
-        ; a_fetch =
-            (fun () -> fetch (fun d -> Runtime.signal_set st d))
+        ; a_fetch = (fun () ->
+            let current () =
+              Runtime.repo () = repo
+              && match Hashtbl.find_opt areas key with
+                 | Some owner -> owner == a
+                 | None -> false
+            in
+            if not (current ()) then Js.Promise.resolve ()
+            else
+              let ticket = Ui_effect.issue request in
+              fetch (fun data ->
+                if current () && Ui_effect.is_current request ticket then
+                  Runtime.signal_set st data))
         }
       in
       Hashtbl.replace areas key a;
@@ -295,17 +309,20 @@ let note_area_node ~key node =
   | Some a -> a.a_nodes <- node :: a.a_nodes
   | None -> ()
 
-let refresh_key key =
-  match Hashtbl.find_opt areas key with
-  | Some a -> ignore (guarded a.a_fetch)
-  | None -> ()
+(* A mounted context must never refresh a replacement area's same UUID. *)
+let capture_refresh key =
+  let owner = Hashtbl.find areas key in
+  fun () ->
+    match Hashtbl.find_opt areas key with
+    | Some current when current == owner -> ignore (guarded owner.a_fetch)
+    | _ -> ()
 
 let live_areas () =
   let dead =
     Hashtbl.fold
       (fun k a acc ->
         a.a_nodes <- List.filter (node_live a.a_app) a.a_nodes;
-        if a.a_nodes = [] then k :: acc else acc)
+        if a.a_repo <> Runtime.repo () || a.a_nodes = [] then k :: acc else acc)
       areas []
   in
   List.iter (Hashtbl.remove areas) dead;
@@ -328,7 +345,8 @@ let drop_row ~owner_uuid ~title =
   Hashtbl.iter
     (fun key a ->
       if
-        String.length key >= String.length suffix
+        a.a_repo = Runtime.repo ()
+        && String.length key >= String.length suffix
         && String.sub key (String.length key - String.length suffix)
              (String.length suffix)
            = suffix

@@ -9,6 +9,9 @@ open Model
 let effects (action : Action.t) : unit =
   match action with
   | Action.Boot_graph_ready (repo, _) ->
+      if !Subs_state.current_repo <> Some repo then (
+        Subs_state.clear_page_items ();
+        Subs_state.clear_journal_items ());
       !(Subs_state.on_navigate) ();
       Subs_state.current_repo := Some repo;
       Subs_state.current_graph_uuid := None;

@@ -1593,6 +1593,7 @@ let region (ms : Model.t Signal.signal) : t =
       else
       let shell =
         a.phase = b.phase
+        && a.repo = b.repo
         && a.route = b.route
         && a.page_missing = b.page_missing
         && page_key a.route_page = page_key b.route_page

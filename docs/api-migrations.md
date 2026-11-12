@@ -2394,3 +2394,41 @@ The native regression uses the actual property-area read/refresh branch and
 repo change. It does not itself establish AppKit first-responder behavior during
 a live worker refresh; that UI interaction remains a separate native gate until
 executed.
+
+
+## Property areas and route regions are graph-owned
+
+Route regions now include `Model.repo` in their structural identity. A
+`Boot_graph_ready` transition rebuilds a normal page or journal region even
+when the route, page UUID and page payload are identical. Diagnostic report
+routes retain their existing independent state. Graph changes also retire the
+existing subscribed page/journal item caches; ordinary same-graph navigation
+and property refreshes keep their existing ownership rules.
+
+Property areas reuse data only within the same graph and LUI application.
+Their refresh contexts capture the exact registered area, rather than looking
+up whichever area currently has the same UUID. Replies publish only to that
+area while its graph remains current, and only the latest request may publish.
+The guard deliberately does not use the global navigation revision: a valid
+retained sidebar read must survive navigation within the same graph. Batched
+block-property reads capture their graph when queued and retain one deduplicated
+worker request per graph if a switch occurs before the deferred flush.
+
+```text
+Graph A, block U: type an unsaved scalar draft
+Refresh another property in A: keep the draft and field identity
+Open graph B with the same route, block U and stored properties:
+  rebuild the region; do not adopt A's draft
+A's old refresh, response or close callback arrives:
+  do not refresh, overwrite or submit B's property editor
+Open B's scalar editor: start from B's stored source
+```
+
+No application migration or worker protocol change is required. Internal
+property context producers must construct their refresh callback after the
+area has registered: use `Properties_state.capture_refresh key`, not a late
+key-only lookup. The native entry regression mounts the real `Page.region`,
+uses `Update.apply` with `Boot_graph_ready`, and retains the same route and
+page payload without an artificial disposal or `Navigate_to`. It also retains
+same-graph dirty-buffer, authoritative-source and cancellation checks. Native
+OS graph-switch interaction remains a separate UI qualification.

@@ -2071,14 +2071,21 @@ let native_scalar_draft_area_refresh () =
   let key=Properties_area.block_key uuid in
   let previous_area=Hashtbl.find_opt Properties_state.areas key
   and previous_app= !Native_embed.current_app and previous_model= !Runtime.read_model
-  and previous_flush= !Runtime.app_flush and previous_worker= !Runtime.worker
-  and previous_editing= !Editor_state.st
+  and previous_flush= !Runtime.app_flush and previous_send= !Runtime.app_send
+  and previous_worker= !Runtime.worker
+  and previous_editing= !Editor_state.st and previous_fields= !Editor_state.field_sigs_opt
+  and previous_repo= !Subs_state.current_repo and previous_graph= !Subs_state.current_graph_uuid
   and previous_active= !Properties_value.active_editor and previous_pending= !Properties_value.pending_edit
   and previous_close= !Properties_value.close_editor
   and previous_overlays= !Properties_state.overlays
   and previous_view_overlays= !Properties_state.view_overlays_state
   and previous_rd= !Properties_data.rd_pending and previous_rd_scheduled= !Properties_data.rd_scheduled in
-  let model=ref {Model.initial with repo=Some "draft-origin"} in
+  let page=Option.get (Decode.page_of_summary
+    (Wire.Map [Wire.Keyword "block/title",Wire.String "Draft refresh"])) in
+  let page={page with Model.page_blocks=[Model.empty_block ~uuid
+    ~title:"Native property owner" ~is_page:false]} in
+  let model=ref {Model.initial with phase=Model.Ready;repo=Some "draft-origin";
+    route=Model.Page page.page_title;route_page=Some page} in
   let stored=ref "original" and sibling=ref false and reads=ref 0 and writes=ref 0 in
   let row ident kind title value=Wire.Map [Wire.Keyword "property-id",Wire.Keyword ident;
     Wire.Keyword "property",Wire.Map [Wire.Keyword "db/ident",Wire.Keyword ident;
@@ -2092,7 +2099,7 @@ let native_scalar_draft_area_refresh () =
           row "fixture/dirty-string" "string" "Dirty string" (Wire.String !stored);
           row "fixture/refresh-sibling" "checkbox" "Refresh sibling" (Wire.Bool !sibling)];
         Wire.Keyword "hidden-properties",Wire.Array []]]]] in
-  let context=Properties_area.block_ctx ~owner_key:("draft:panel:" ^ key) uuid key in
+  let hold_read=ref false and delayed_read=ref None in
   let registry=Lui_extension.registry () in
   Logseq_el.register_all registry;Logseq_codemirror.register registry;Logseq_editor.register registry;
   let backend : Lui_protocol.backend={backend_profile=Lui_protocol.profile Lui_protocol.MacOS Lui_protocol.NshHost;
@@ -2101,7 +2108,7 @@ let native_scalar_draft_area_refresh () =
      its ownership and worker first; never clear that newly registered area. *)
   Hashtbl.remove Properties_state.areas key;
   Properties_data.rd_pending:=[];Properties_data.rd_scheduled:=false;
-  Editor_state.st:=None;Properties_value.active_editor:=None;
+  Editor_state.st:=None;Editor_state.field_sigs_opt:=None;Properties_value.active_editor:=None;
   Properties_state.overlays:=[];Properties_state.view_overlays_state:=None;
   Runtime.read_model:=(fun () -> !model);
   Runtime.worker:=Some {Worker_client.invoke_fn=(fun method_ args ->
@@ -2109,7 +2116,9 @@ let native_scalar_draft_area_refresh () =
       incr reads;
       check "actual property area read carries the current captured repo"
         (List.hd args=Wire.String (Runtime.repo ()));
-      Js.Promise.resolve (response ()))
+      if !hold_read then Js.Promise.make (fun ~resolve ~reject:_ ->
+        delayed_read:=Some (fun value -> resolve value [@u]))
+      else Js.Promise.resolve (response ()))
     else (
       if method_="thread-api/apply-outliner-ops" then incr writes;
       Js.Promise.resolve Wire.Nil));
@@ -2117,18 +2126,22 @@ let native_scalar_draft_area_refresh () =
     capture_restore_fn=(fun () -> fun () -> Js.Promise.resolve ())};
   Properties_value.set_pending_edit ~block_uuid:uuid ~ident:"fixture/dirty-string";
   let app=Lui_app.create_with_extensions backend registry !model
-    (fun state (_ : Action.t) -> state)
-    (fun _ _ _ -> Properties_area.block_area ~scope:"draft" ~uuid) in
+    (fun state action -> let next=Update.apply state action in model:=next;next)
+    (fun context source _ -> Editor_state.ensure context;Page.region source) in
   Fun.protect ~finally:(fun () ->
     ignore (Lui_app.dispose app);Native_embed.current_app:=previous_app;
-    Runtime.read_model:=previous_model;Runtime.app_flush:=previous_flush;Runtime.worker:=previous_worker;
-    Editor_state.st:=previous_editing;Properties_value.active_editor:=previous_active;
+    Runtime.read_model:=previous_model;Runtime.app_flush:=previous_flush;Runtime.app_send:=previous_send;
+    Runtime.worker:=previous_worker;
+    Editor_state.st:=previous_editing;Editor_state.field_sigs_opt:=previous_fields;
+    Subs_state.current_repo:=previous_repo;Subs_state.current_graph_uuid:=previous_graph;
+    Properties_value.active_editor:=previous_active;
     Properties_value.pending_edit:=previous_pending;Properties_value.close_editor:=previous_close;
     Properties_state.overlays:=previous_overlays;Properties_state.view_overlays_state:=previous_view_overlays;
     Properties_data.rd_pending:=previous_rd;Properties_data.rd_scheduled:=previous_rd_scheduled;
     match previous_area with Some area -> Hashtbl.replace Properties_state.areas key area
       | None -> Hashtbl.remove Properties_state.areas key) (fun () ->
     Native_embed.current_app:=Some app;
+    Runtime.app_send:=(fun action -> Lui_app.send app action);
     Runtime.app_flush:=(fun () -> ignore (Lui_app.flush app));
     check "native property refresh fixture starts" (Lui_app.start app);
     let runtime=Lui_app.runtime app in
@@ -2156,6 +2169,7 @@ let native_scalar_draft_area_refresh () =
       check (snapshot "second publication") (Lui_app.flush app) in
     settle ();
     check (snapshot "initial get-blocks read") (!reads>0);
+    let context=Properties_area.block_ctx ~owner_key:("main:panel:" ^ key) uuid key in
     let field ()=Hashtbl.fold (fun node kind found ->
       if kind=Lui_protocol.TextField then Some node else found)
       runtime.Lui_runtime.mounted_nodes None in
@@ -2165,6 +2179,9 @@ let native_scalar_draft_area_refresh () =
     ignore (Native_embed.text_changed input "unsaved draft");
     let owner=require "active owner after initial native text" !Properties_value.active_editor in
     let old_close= !Properties_value.close_editor in
+    hold_read:=true;context.refresh ();Properties_data.flush_render_data ();Host.drain ();
+    let older_read=require "older same-graph request" !delayed_read in
+    hold_read:=false;
     sibling:=true;
     let before= !reads in
     context.refresh ();settle ();
@@ -2173,6 +2190,11 @@ let native_scalar_draft_area_refresh () =
     check "sibling worker refresh preserves the actual controlled draft and field identity"
       (refreshed=input && text refreshed=Some (Lui_protocol.StringValue "unsaved draft")
        && require "owner after sibling ctx.refresh" !Properties_value.active_editor == owner && !writes=0);
+    stored:="older same-graph reply";let older=response () in stored:="original";
+    older_read older;settle ();
+    check "a slower same-graph read cannot replace the latest source or dirty owner"
+      (field ()=Some refreshed && text refreshed=Some (Lui_protocol.StringValue "unsaved draft")
+       && require "owner after superseded same-graph reply" !Properties_value.active_editor == owner);
     old_close ();settle ();
     check "retired view close cannot commit or clear the adopted draft"
       (field ()=Some refreshed && Properties_value.edit_buffer context (row "fixture/dirty-string" "string" "Dirty string" (Wire.String !stored))="unsaved draft" && !writes=0);
@@ -2198,9 +2220,32 @@ let native_scalar_draft_area_refresh () =
     replaced_close ();settle ();
     check "old source close cannot overwrite a newer authoritative value"
       (field ()=Some replaced && !stored="external source" && !writes=0);
-    model:={!model with Model.repo=Some "draft-destination"};
-    context.refresh ();settle ();
+    let origin_area=require "origin area before graph transition"
+      (Hashtbl.find_opt Properties_state.areas key) in
+    hold_read:=true;context.refresh ();Properties_data.flush_render_data ();Host.drain ();
+    let finish_origin=require "captured origin read before graph transition" !delayed_read in
+    hold_read:=false;
+    check "actual Boot_graph_ready is accepted without changing the current route"
+      (Lui_app.send app (Action.Boot_graph_ready ("draft-destination",Wire.Map [])));
+    settle ();
+    check "same-route graph transition retains the identical page payload"
+      ((!model).Model.route=Model.Page page.page_title && (!model).route_page=Some page
+       && (!model).context_revision=1);
+    let destination_area=require "destination area after real region reconstruction"
+      (Hashtbl.find_opt Properties_state.areas key) in
+    check "the actual route region replaces the origin property area for the same UUID"
+      (destination_area != origin_area && destination_area.a_repo="draft-destination");
     check "the same UUID in another repo does not adopt the origin draft" (field ()=None && !writes=0);
+    let before= !reads in
+    context.refresh ();settle ();
+    check "a captured origin ctx.refresh cannot refresh a destination area with the same key"
+      (!reads=before);
+    stored:="stale origin result";let stale=response () in stored:="external source";
+    finish_origin stale;settle ();
+    check "an origin async response cannot overwrite destination property data"
+      (List.exists (fun r -> Properties_data.row_ident r=Some "fixture/dirty-string"
+         && Properties_data.value_display (Properties_data.row_value r)="external source")
+         (Runtime.signal_get destination_area.a_state).Properties_state.rows);
     let destination=open_value "new destination repo edit" in
     check "a fresh destination edit belongs only to the destination repo"
       ((require "destination active owner" !Properties_value.active_editor).Properties_value.edit_repo="draft-destination"
@@ -2209,6 +2254,39 @@ let native_scalar_draft_area_refresh () =
     check "origin close cannot save into or clear the destination owner"
       (field ()=Some destination && !writes=0);
     ignore (Native_embed.dismiss destination);settle ())
+
+let native_property_batch_repo_ownership () =
+  let previous_model= !Runtime.read_model and previous_worker= !Runtime.worker
+  and previous_pending= !Properties_data.rd_pending
+  and previous_scheduled= !Properties_data.rd_scheduled in
+  let origin=ref "batch-origin" and calls=ref [] and results=ref [] in
+  Fun.protect ~finally:(fun () ->
+    Runtime.read_model:=previous_model;Runtime.worker:=previous_worker;
+    Properties_data.rd_pending:=previous_pending;Properties_data.rd_scheduled:=previous_scheduled) (fun () ->
+    Properties_data.rd_pending:=[];Properties_data.rd_scheduled:=false;
+    Runtime.read_model:=(fun () -> {Model.initial with repo=Some !origin});
+    Runtime.worker:=Some {Worker_client.invoke_fn=(fun method_ args ->
+      check "queued property reads use the real get-blocks endpoint" (method_="thread-api/get-blocks");
+      let repo=match args with
+        | [Wire.String repo;Wire.Array [_]] -> repo
+        | _ -> failwith "a batch must capture its repo and deduplicate identical UUIDs" in
+      calls:=repo::!calls;
+      Js.Promise.resolve (Wire.Array [Wire.Map [Wire.String "id",Wire.Uuid "same-batch-uuid";
+        Wire.String "block",Wire.String repo]]));
+      on_message=(fun _ _ -> ());dead=Js.Promise.liveness ();
+      capture_restore_fn=(fun () -> fun () -> Js.Promise.resolve ())};
+    let enqueue label = ignore (Js.Promise.then_ (fun value ->
+      results:=(label,value)::!results;Js.Promise.resolve ())
+      (Properties_data.block_render_data "same-batch-uuid")) in
+    enqueue "origin";enqueue "origin-duplicate";
+    origin:="batch-destination";enqueue "destination";
+    Properties_data.flush_render_data ();Host.drain ();
+    check "a deferred batch keeps one deduplicated request per captured repo"
+      (List.sort String.compare !calls=["batch-destination";"batch-origin"]);
+    check "identical UUIDs receive only their originating graph's result"
+      (List.assoc_opt "origin" !results=Some (Wire.String "batch-origin")
+       && List.assoc_opt "origin-duplicate" !results=Some (Wire.String "batch-origin")
+       && List.assoc_opt "destination" !results=Some (Wire.String "batch-destination")))
 
 let native_file_request_lifetimes () =
   let previous_host= !Host.host_op and previous_nsh= !Browser_ui.native_dialogs in
@@ -2639,6 +2717,7 @@ let () =
   native_controlled_field_resets ();
   native_scalar_string_dismissal ();
   native_scalar_draft_area_refresh ();
+  native_property_batch_repo_ownership ();
   native_file_request_lifetimes ();
   native_entry_admission ();
   editor_keyboard_capture_order ();

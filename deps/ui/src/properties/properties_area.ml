@@ -423,7 +423,7 @@ let block_ctx ~owner_key uuid key : V.ctx =
   { owner_key
   ; block_uuid = uuid
   ; block_id = None
-  ; refresh = (fun () -> S.refresh_key key)
+  ; refresh = S.capture_refresh key
   ; is_page = false
   ; class_schema = false
   }
@@ -770,7 +770,7 @@ let page_ctx (p : Model.page) key uuid : V.ctx =
   { owner_key = key
   ; block_uuid = uuid
   ; block_id = p.Model.page_db_id
-  ; refresh = (fun () -> S.refresh_key key)
+  ; refresh = S.capture_refresh key
   ; is_page = true
   ; class_schema = false
   }
@@ -926,7 +926,7 @@ let sidebar_area ~uuid ~db_id ~title ~is_tag : t =
     { V.owner_key = key
     ; block_uuid = uuid
     ; block_id = db_id
-    ; refresh = (fun () -> S.refresh_key key)
+    ; refresh = S.capture_refresh key
     ; is_page = true
     ; class_schema = false
     }

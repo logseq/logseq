@@ -382,7 +382,7 @@ let entity_by_uuid uuid = entity (uuid_ref uuid)
    block.temp/positioned-properties. Every mounted .ls-block properties
    area calls this — batching callers in the same task into ONE request
    turns a page load's N+1 roundtrip storm into a single call. *)
-let rd_pending : (string * (W.t -> unit)) list ref = ref []
+let rd_pending : (string * string * (W.t -> unit)) list ref = ref []
 let rd_scheduled = ref false
 
 let rd_result_of_pair pair =
@@ -398,55 +398,54 @@ let rd_pair_uuid pair =
       | None -> W.as_string w)
   | None -> entity_uuid_of (rd_result_of_pair pair)
 
+let rd_flush_repo origin pending =
+  try
+    (let* w =
+       invoke "get-blocks"
+         [ W.String origin
+         ; W.Array
+             (List.map
+                (fun u ->
+                  W.Map
+                    [ (W.String "id", W.Uuid u)
+                    ; (W.String "opts",
+                       W.Map [ (W.Keyword "render-data?", W.Bool true) ]) ])
+                (List.sort_uniq String.compare (List.map fst pending)))
+         ]
+     in
+     let results = Hashtbl.create (List.length pending) in
+     List.iter (fun pair ->
+         Option.iter (fun uuid -> Hashtbl.replace results uuid (rd_result_of_pair pair))
+           (rd_pair_uuid pair)) (W.elems w);
+     List.iter
+       (fun (uuid, resolve) ->
+         resolve (Option.value (Hashtbl.find_opt results uuid) ~default:W.Nil))
+       pending;
+     Js.Promise.resolve ())
+    |> Js.Promise.catch (fun _ ->
+           Ui_services.log_error_message "[properties] render-data batch failed";
+           List.iter (fun (_, resolve) -> resolve W.Nil) pending;
+           Js.Promise.resolve ())
+    |> ignore
+  with _ ->
+    Ui_services.log_error_message "[properties] render-data batch failed";
+    List.iter (fun (_, resolve) -> resolve W.Nil) pending
+
 let rd_flush () =
   rd_scheduled := false;
   let pending = List.rev !rd_pending in
   rd_pending := [];
-  match pending with
-  | [] -> ()
-  | _ -> (
-      try
-        (let* w =
-         invoke "get-blocks"
-           [ repo ()
-           ; W.Array
-               (List.map
-                  (fun u ->
-                    W.Map
-                      [ (W.String "id", W.Uuid u)
-                      ; ( W.String "opts"
-                        , W.Map
-                            [ (W.Keyword "render-data?", W.Bool true) ]
-                        ) ])
-                  (List.sort_uniq String.compare (List.map fst pending)))
-           ]
-       in
-       let results =
-         List.filter_map
-           (fun pair ->
-             Option.map
-               (fun u -> (u, rd_result_of_pair pair))
-               (rd_pair_uuid pair))
-           (W.elems w)
-       in
-       List.iter
-         (fun (uuid, resolve) ->
-           resolve
-             (Option.value (List.assoc_opt uuid results) ~default:W.Nil))
-         pending;
-       Js.Promise.resolve ())
-       |> Js.Promise.catch (fun _ ->
-              Ui_services.log_error_message "[properties] render-data batch failed";
-              List.iter (fun (_, resolve) -> resolve W.Nil) pending;
-              Js.Promise.resolve ())
-       |> ignore
-      with _ ->
-        Ui_services.log_error_message "[properties] render-data batch failed";
-        List.iter (fun (_, resolve) -> resolve W.Nil) pending)
+  (* A graph switch may occur before this deferred flush. Keep batching
+     within each captured origin instead of reading the new current repo. *)
+  let batches = Hashtbl.create 2 in
+  List.iter (fun (origin, uuid, resolve) ->
+      let batch = Option.value (Hashtbl.find_opt batches origin) ~default:[] in
+      Hashtbl.replace batches origin ((uuid, resolve) :: batch)) pending;
+  Hashtbl.iter (fun origin batch -> rd_flush_repo origin (List.rev batch)) batches
 
 let block_render_data uuid =
   Js.Promise.make (fun ~resolve ~reject:_ ->
-      rd_pending := (uuid, (fun w -> resolve w [@u])) :: !rd_pending;
+      rd_pending := (Runtime.repo (), uuid, (fun w -> resolve w [@u])) :: !rd_pending;
       if not !rd_scheduled then (
         rd_scheduled := true;
         ignore (Ui_services.timers_timeout rd_flush 0)))
