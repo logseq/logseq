@@ -1184,6 +1184,35 @@ let run_views ~registry ~profile ~finish =
     if Hashtbl.find_opt input.M.props "navigate-enabled"=Some (P.BoolValue true)
     then S.dispatch selector event
   in
+  let datetime_ctx : Properties_value.ctx =
+    {owner_key="datetime-label";block_uuid="datetime-label-owner";block_id=Some 17;
+     refresh=(fun () -> ());is_page=false;class_schema=false} in
+  let timestamp hours minutes = Dates.make ~year:2026 ~month:11 ~day:10 ~hours ~minutes () in
+  let morning=Wire.Float (timestamp 9 7) in
+  List.iter (fun (kind,value,expected) ->
+    let row=Wire.Map [Wire.kw "property-id",Wire.kw "fixture/datetime";
+      Wire.kw "property",Wire.Map [Wire.kw "logseq.property/type",Wire.kw kind];
+      Wire.kw "value",value] in
+    let rendered=mount (fun _ ->
+      Properties_value.date_view ~jump_target:false ~hover:None datetime_ctx row) in
+    let clocks=nodes rendered |> List.filter (fun node ->
+      match M.string_prop node "text" with
+      | Some value -> String.length value=5 && value.[2]=':'
+      | None -> false) in
+    check "datetime pills retain master local HH:mm without adding midnight/date-only time"
+      (List.filter_map (fun node -> M.string_prop node "text") clocks=Option.to_list expected);
+    check "datetime clock text is independently nonselectable"
+      (List.for_all (fun node -> M.string_prop node "user-select"=Some "none") clocks);
+    check "datetime clock rendering preserves the date navigation link"
+      (List.exists (fun node -> node.M.kind="link" && M.string_prop node "url"=
+        Some ("#/page/" ^ Ui_services.uri_encode_component
+          (Dates.journal_title_ymd ~y:2026 ~m:11 ~d:10))) (nodes rendered));
+    ignore (Lui_app.dispose rendered.S.app))
+    ["datetime",morning,Some "09:07";
+     "datetime",Wire.Map [Wire.kw "logseq.property/value",morning],Some "09:07";
+     "datetime",Wire.Float (timestamp 23 59),Some "23:59";
+     "datetime",Wire.Float (timestamp 0 0),None;
+     "date",Wire.Map [Wire.kw "block/journal-day",Wire.Int 20261110],None];
   let calendar_structure session expected_label =
     let attrs n=Option.value (M.string_prop n "data-attrs") ~default:""
       |> P.data_attrs_decode in

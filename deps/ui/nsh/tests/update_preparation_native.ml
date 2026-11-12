@@ -1513,6 +1513,39 @@ let native_settings_route_links () =
       check "scoped native Link consumers receive modifiers and can prevent route defaults"
         (!shifted && Platform.location_hash ()="#/settings")))
 
+let native_datetime_value_labels () =
+  let timestamp hours minutes=Dates.make ~year:2026 ~month:11 ~day:10 ~hours ~minutes () in
+  let morning=Wire.Float (timestamp 9 7) in
+  List.iter (fun (kind,value,expected) ->
+    let row=Wire.Map [Wire.kw "property-id",Wire.kw "fixture/datetime";
+      Wire.kw "property",Wire.Map [Wire.kw "logseq.property/type",Wire.kw kind];
+      Wire.kw "value",value] in
+    let backend : Lui_protocol.backend={
+      backend_profile=Lui_protocol.profile Lui_protocol.MacOS Lui_protocol.NshHost;
+      apply_batch=(fun _ -> true)} in
+    let context : Properties_value.ctx={owner_key="native-datetime";
+      block_uuid="native-datetime-owner";block_id=Some 17;refresh=(fun () -> ());
+      is_page=false;class_schema=false} in
+    let app=Lui_app.create backend () (fun () () -> ()) (fun _ _ _ ->
+      Properties_value.date_view ~jump_target:false ~hover:None context row) in
+    Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app)) (fun () ->
+      ignore (Lui_app.start app);ignore (Lui_app.flush app);
+      let runtime=Lui_app.runtime app in
+      let clocks=Hashtbl.fold (fun _ props values ->
+        match Lui_protocol.Property_map.find_opt Lui_protocol.TextValue props with
+        | Some (Lui_protocol.StringValue value) when String.length value=5 && value.[2]=':' ->
+            check "native datetime clock uses the supported nonselectable text projection"
+              (Lui_protocol.Property_map.find_opt Lui_protocol.UserSelect props=
+                 Some (Lui_protocol.StringValue "none"));value::values
+        | _ -> values) runtime.Lui_runtime.runtime_properties [] in
+      check "actual NSH target retains master local datetime HH:mm semantics"
+        (clocks=Option.to_list expected)))
+    ["datetime",morning,Some "09:07";
+     "datetime",Wire.Map [Wire.kw "logseq.property/value",morning],Some "09:07";
+     "datetime",Wire.Float (timestamp 23 59),Some "23:59";
+     "datetime",Wire.Float (timestamp 0 0),None;
+     "date",Wire.Map [Wire.kw "block/journal-day",Wire.Int 20261110],None]
+
 let native_point_property_scroll () =
   let previous_app = !Native_embed.current_app in
   let width=Host.inner_width () and height=Host.inner_height () in
@@ -2727,6 +2760,7 @@ let () =
   native_alt_reference_drop_actions ();
   Editor_clipboard_native.async_file_read_keeps_the_application_owner_responsive ();
   native_settings_route_links ();
+  native_datetime_value_labels ();
   native_cmdk_controlled_input ();
   native_click_producers ();
   native_point_property_scroll ();

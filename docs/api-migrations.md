@@ -12,6 +12,20 @@ This is a shared-view identity/performance correction with no new parameter,
 wire event, imperative scroll, timer or artificial viewport feedback. Query and
 tab changes keep their explicit result-viewport reset behavior.
 
+## Datetime property pills retain their local time
+
+Numeric datetime values now show zero-padded local `HH:mm` beside the date link,
+matching master. Scalar values wrapped under `logseq.property/value` use the same
+projection. Date-only journal references and midnight datetime values do not gain
+a time label. The clock text is separate from the navigation link and is not
+selectable, preserving the master interaction.
+
+Formatting uses the existing host local-time fields; the stored epoch, timezone
+interpretation, calendar controls, edit/cancel callbacks and persistence path are
+unchanged. This adds no backend API or parameter and preserves maintained Web and
+mobile behavior through the shared view. No translation key is needed for the
+existing numeric 24-hour time format.
+
 ## Icon picker result viewports reset with the tab and query
 
 Changing the icon picker tab, editing its search query, or clearing search now

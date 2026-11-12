@@ -1100,6 +1100,13 @@ let date_view ?(jump_target = true) ?(bottom_pill = false) ?raw_value
                value_button
                  ~text:(date_display (D.row_type row) value)
                  ~on_press:(fun _ -> open_picker ())))
+     ; (match if is_datetime then ms_of_value value else None with
+        | Some ms ->
+            let fields=Ui_services.time_local_fields ms in
+            if fields.hours=0 && fields.minutes=0 then Logseq_el.nothing
+            else Ui_components.with_props [Ui_components.Prop.user_select `none]
+              (text ~value:(Printf.sprintf "%02d:%02d" fields.hours fields.minutes) [])
+        | None -> Logseq_el.nothing)
      ; (if (if bottom_pill then not has_pill_value else D.value_empty_p value)
         then Logseq_el.nothing
         else
