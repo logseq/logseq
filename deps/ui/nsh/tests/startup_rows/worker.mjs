@@ -41,7 +41,8 @@ async function apply(op, args) {
 async function countChildren(page) {
   assert.match(page, /^[0-9a-f-]{36}$/);
   const query = `[:find (count ?b) . :where [?p :block/uuid #uuid "${page}"] [?b :block/parent ?p] [?b :block/uuid ?u]]`;
-  const count = await invoke("thread-api/q", [spec.repo, query]);
+  // endpoint_db.q applies the query and any bindings from one inputs vector.
+  const count = await invoke("thread-api/q", [spec.repo, [query]]);
   assert.ok(Number.isSafeInteger(count) && count >= 0, "worker query returns an exact child count");
   return count;
 }
