@@ -105,6 +105,11 @@ jobs:
           printf '%s\n' "$binary" > _build/nsh-ci/binary.txt
           cp "$binary.lui-build.json" _build/nsh-ci/actual-app.lui-build.json
           printf 'LUI=%s\nLOGSEQ=%s\n' "$LUI_REF" "$(git rev-parse HEAD)" > _build/nsh-ci/revisions.txt
+      - name: Real native save cancellation and production bounded row contracts
+        run: |
+          (cd deps/ui && opam exec -- dune runtest test/contracts) 2>&1 | tee _build/nsh-ci/activity-contracts.log
+          python3 deps/ui/nsh/run_update_preparation_native.py 2>&1 | tee _build/nsh-ci/save-abort-contracts.log
+          python3 deps/ui/nsh/run_virtual_rows_native.py 2>&1 | tee _build/nsh-ci/production-virtual-rows.log
       - name: Package the qualified actual native host
         run: |
           archive=$(pnpm --silent ui:nsh:package --built-host "$PWD/deps/ui/_build/nsh/logseq-nsh" 2> >(tee _build/nsh-ci/package.log >&2))
