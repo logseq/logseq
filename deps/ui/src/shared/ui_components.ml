@@ -1413,9 +1413,13 @@ let calendar ?initial ?(datetime=false) ?(initial_focus_day=false) ?on_clear
       | _ ->
           Dates.parse value
     in
-    Option.iter (fun value ->
-      if datetime then commit value
-      else let f=Dates.fields value in publish f.year f.month f.day 0 0) parsed
+    match parsed with
+    | Some value ->
+        if datetime then commit value
+        else let f=Dates.fields value in publish f.year f.month f.day 0 0
+    | None when value <> "" ->
+        Toast.warning (I18n.tf "date/invalid-date-warning" [value])
+    | None -> ()
   in
   (with_props
      [ Prop.font_size "0.875rem"; Prop.line_height "1.25rem" ]

@@ -2539,3 +2539,16 @@ and disposed owners. These are application ownership checks, not AppKit
 first-responder qualification. Generic NSH container `NavigationKey` projection
 remains a separate backend gap; this change does not claim table arrow-key
 parity or alter the maintained Web/mobile backends' event contracts.
+
+## Calendar invalid text feedback
+
+Submitting nonempty invalid text in the shared calendar now emits the existing
+`date/invalid-date-warning` notification through `Toast.warning`, as the editor's
+date popup already does. The calendar keeps its selected date, input identity
+and open state; no property/filter write is issued. Empty or whitespace-only
+submission remains silent, and cancelling an unsubmitted draft does not warn.
+Valid dates keep the existing selection behavior on every maintained backend.
+
+No application API, translation key or worker contract changes. This feedback
+does not add natural-language parsing: native inputs such as `Next week` still
+need the separate parser integration and compatibility qualification.

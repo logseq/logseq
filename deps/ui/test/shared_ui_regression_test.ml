@@ -1191,7 +1191,64 @@ let table_title_completion ~registry ~profile =
     !capture ();
     check "Disposing the originating title owner retires its focus callback" (!focuses=1))
 
+let calendar_invalid_input ~registry ~profile =
+  let previous_send = !Runtime.app_send and previous_flush = !Runtime.app_flush in
+  let warnings = ref [] and picked = ref [] and dismissed = ref 0 in
+  Runtime.app_send := (function
+    | Action.Toast_push toast -> warnings:=toast :: !warnings;true
+    | _ -> false);
+  Fun.protect ~finally:(fun () ->
+    Runtime.app_send:=previous_send;Runtime.app_flush:=previous_flush) (fun () ->
+    List.iter (fun datetime ->
+      warnings:=[];picked:=[];dismissed:=0;
+      let session = S.mount ~registry ~profile ~initial:Model.initial
+        ~reducer:(fun model () -> model)
+        ~view:(fun _ _ _ -> Lui_elements.column
+          [Lui_elements.button ~accessibility_identifier:"warning-calendar-anchor" [];
+           Lui_elements.popover ~anchor:`below ~anchor_target:"warning-calendar-anchor"
+             ~accessibility_identifier:"warning-calendar-popup"
+             ~on_dismiss:(fun _ -> incr dismissed)
+             [Ui_components.calendar ~initial:(Dates.make ~year:2024 ~month:2 ~day:1 ())
+                ~datetime ~week_starts_on:0 ~month_label:I18n.calendar_month_label
+                ~day_label:I18n.calendar_day_label ~translate:I18n.t
+                ~on_pick:(fun value -> picked:=value :: !picked) ()]]) () in
+      Runtime.app_flush:=(fun () -> S.flush session);
+      Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose session.S.app)) (fun () ->
+        let input=List.find (fun node ->
+          M.string_prop node "accessibility-identifier"=Some "calendar-date-input") (nodes session) in
+        List.iter (fun value ->
+          S.text_changed session input.M.id value;
+          S.submit session input.M.id;
+          check "Empty calendar submission stays silent and does not select a date"
+            (!warnings=[] && !picked=[] && !dismissed=0)) ["";"   "];
+        List.iter (fun value ->
+          let before=List.length !warnings in
+          S.text_changed session input.M.id value;
+          S.submit session input.M.id;
+          check "Invalid nonempty calendar submission emits the existing translated warning once"
+            (List.length !warnings=before+1 && match !warnings with
+             | toast::_ -> toast.Model.toast_kind="warning"
+                 && toast.Model.toast_text=I18n.tf "date/invalid-date-warning" [value]
+             | [] -> false);
+          check "Invalid calendar submission preserves the picker and its input identity"
+            (!picked=[] && !dismissed=0 && List.exists (fun node -> node.M.id=input.M.id) (nodes session)))
+          ["2024-02-30";"not a date"];
+        let before=List.length !warnings in
+        S.text_changed session input.M.id "2024-02-29";
+        S.submit session input.M.id;
+        check "A valid leap date still selects once without an invalid-date warning"
+          (List.length !warnings=before && match !picked with
+           | [value] -> let f=Dates.fields value in f.year=2024 && f.month=2 && f.day=29
+           | _ -> false);
+        S.text_changed session input.M.id "unsubmitted invalid draft";
+        let popup=List.find (fun node ->
+          M.string_prop node "accessibility-identifier"=Some "warning-calendar-popup") (nodes session) in
+        S.dismiss session popup.M.id;
+        check "Cancelling an unsubmitted calendar draft does not warn or select again"
+          (!dismissed=1 && List.length !picked=1 && List.length !warnings=before))) [false;true])
+
 let run_views ~registry ~profile ~finish =
+  calendar_invalid_input ~registry ~profile;
   table_title_completion ~registry ~profile;
   sidebar_favorite_rows ~registry ~profile;
   native_view_type_menu ~registry;
