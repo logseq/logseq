@@ -109,31 +109,32 @@ A separate, nonactivated AppKit window used the release candidate from applicati
 `1bcfa19da4`, LUI `4849e6bf` and NSH
 `2635333e4cc0d3be8032c97f3a5e08d3685179c6`. It used a private Demo graph and native
 credentials/state, with an initial 10-second idle period. Tab changes used the
-host's `native-press` controller operation. No collection was forced. The figures
+host's `native-press` controller operation. A clean process ran the entire tab
+sequence without taking screenshots between samples; no collection was forced. The figures
 below are the frontend's macOS `vmmap -summary` physical footprint; they exclude
 the separate database worker. They are neither virtual address size nor the
 sum of mapped shared-library pages.
 
 | State | Physical footprint, MiB | Mounted picker cells | Mounted/source rows | OCaml major heap capacity, bytes |
 | --- | ---: | ---: | ---: | ---: |
-| Idle before picker | 95.2 | 0 | — | 6,195,352 |
-| First Emojis tab | 119.7 | 135 | 15/208 | 10,262,144 |
-| First Icons tab | 220.6 | 135 | 15/689 | 7,098,200 |
-| Second Emojis tab | 221.1 | 135 | 15/208 | 9,071,384 |
-| Second Icons tab | 222.6 | 135 | 15/689 | 6,247,424 |
+| Idle before picker | 87.3 | 0 | — | 6,283,040 |
+| First Emojis tab | 112.0 | 135 | 15/208 | 10,262,144 |
+| First Icons tab | 123.5 | 135 | 15/689 | 7,098,200 |
+| Second Emojis tab | 123.5 | 135 | 15/208 | 9,104,152 |
+| Second Icons tab | 124.6 | 135 | 15/689 | 6,214,656 |
 
 The current domain's minor-heap **limit** was 16,777,216 bytes throughout. This
 limit and the major heap's reserved capacity do not report live object size.
-The process peak reached 260.7 MiB during the sequence, which also captured
-screenshots. The four tab samples establish bounded initial row demand and no
+The process peak reached 126.4 MiB during this clean sequence. The four tab
+samples establish bounded initial row demand and no
 source-sized materialization in this candidate; they do not establish a steady
 state memory budget, freedom from leaks over many cycles, or native wheel-scroll
 correctness. The original reported 1 GB behavior was not reproduced in this
 sequence. The installed application has not been qualified against these bytes.
 
 Evidence is retained under the ignored application directory
-`deps/ui/_build/nsh-picker-diagnostic/`: `measurements.json`, per-state
-`*-summary.json` and `*-vmmap.txt`, `emojis.png`, `icons.png`, source snapshot
+`deps/ui/_build/nsh-picker-diagnostic/`: `clean-measurements.json`, per-state
+`clean-*-summary.json` and `clean-*-vmmap.txt`, `emojis.png`, `icons.png`, source snapshot
 `sources.json` and the actual Cargo compiler-artifact inventory. The directory's
 `diagnostic-only.json` explicitly records `qualified: false`; this is not a
 successful build publication receipt. Candidate SHA-256 values:
@@ -141,6 +142,17 @@ successful build publication receipt. Candidate SHA-256 values:
 - Host: `dc558885396a4ad7c3c7db0a7892646057c5f87a5aa432d4422a78c088a847af`.
 - OCaml library: `2413f5ac358057e95e33e7da0a3d63a0a1b165d43d7d10848f95000a3df055d8`.
 - Worker: `c49397ca24df1e96ec7183175088ffab67df5e281be1e260ef7178f2367ea20e`.
+
+The earlier screenshot-producing sequence is retained separately as
+`measurements.json` and unprefixed per-state summaries: 95.2 MiB baseline,
+119.7 MiB first Emojis, 220.6 MiB first Icons, 221.1 MiB second Emojis and
+222.6 MiB second Icons, with a 260.7 MiB peak. That sequence was confounded by
+image capture. Its first-Icons `vmmap` contains 90.0 MiB of dirty `Malloc Large
+(empty)` pages, absent from the corresponding clean sample. The controlled
+repeat therefore attributes most of that apparent 100 MiB tab increment to the
+capture sequence's allocator retention, rather than demonstrating an Icons or
+SVG-rendering regression. The screenshots remain visual evidence only; memory
+comparisons use the clean sequence above.
 
 An earlier foreground diagnostic was affected by concurrent interaction and
 remained on All; those samples were excluded from this comparison. Real wheel
