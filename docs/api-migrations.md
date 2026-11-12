@@ -2554,7 +2554,13 @@ No application API, translation key or worker contract changes. This feedback
 does not add natural-language parsing: native inputs such as `Next week` still
 need the separate parser integration and compatibility qualification.
 
-## Asynchronous English date parsing for desktop calendars
+## Candidate asynchronous English date parsing for desktop calendars
+
+The interim-backed candidate is not qualified for release. Its actual Rust
+comparison fails the reference application's next-weekday behavior; retain that
+failing expectation until the parser is replaced or a compatible engine is
+qualified. The task/ownership API described below is independent of that engine
+decision.
 
 `Ui_services.time` now requires
 `parse_natural : reference:float -> string -> float option Ui_task.t`.
@@ -2583,8 +2589,8 @@ into the shipping native application. The published interim archive inspected
 for this implementation has SHA-256
 `4711cb91b46a8f9d5b8dc20531c49c968fa7806e8016ddc8f9ef9b09e065bc1e`.
 Its public `parse_date_string` accepts an explicit reference and dialect; this
-application chooses US English, matching the default English parser used by
-the reference application. Native non-NSH hosts reject natural-language parsing
+candidate chooses US English. That dialect does not reproduce the reference
+application's next-weekday policy. Native non-NSH hosts reject natural-language parsing
 before emitting a host operation; structured-date fast paths remain usable.
 Their existing platform UI backends and mobile tools remain maintained.
 
@@ -2618,8 +2624,14 @@ No-match uses `date/invalid-date-warning`; a failed service uses the distinct
 `date/parse-service-error` error notification. Empty submission and cancellation
 remain silent.
 
-This is a bounded English parser, not complete `chrono-node` compatibility.
-Weekday dialect, inferred times and whole-input matching can differ. The
+This is a bounded English parser, not `chrono-node` compatibility. The actual
+comparison from Friday 2026-11-13 finds `next friday 8pm` resolving to that same
+day in interim, while pinned `chrono-node` 2.10.1 resolves Friday 2026-11-20.
+An absolute date without a time defaults to midnight in interim and noon in
+the reference. The test's former assumption that `9999 January` was invalid
+was itself incorrect; that is a valid absolute year, separate from the genuine
+next-weekday mismatch. Whole-input matching also differs from phrase extraction.
+No dialect switch or application keyword patch is accepted as a parity fix. The
 published 0.2.2 Chrono adapter resolves offsets at the target local date, rejects
 nonexistent local times and chooses the earlier instant for an ambiguous local
 time unless an explicit offset selects otherwise. Its published DST regression

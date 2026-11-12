@@ -383,3 +383,74 @@ The audit also ruled out a tempting false difference: closing a many-valued
 closed-choice popup after removing its final value is intentional in frozen
 master (`property/value.cljs:491–499`) and current
 `properties_value.ml:1269`. That close condition should remain.
+
+### Natural-language date engine decision: parity remains blocked
+
+The source review and root-run comparison retain the complete frozen-master
+behavior requirement. `/tmp/logseq-natural-date-rust-release.log` fails the
+next-Friday expectation; changing it to the candidate's same-day result would
+hide a real difference. Interim 0.2.2 only exposes US/UK dialects and returns a
+resolved datetime, not known/implied fields. The application's pinned
+chrono-node 2.10.1 instead implements week-relative weekday rules in
+`dist/cjs/calculation/weekdays.js` and implies hour 12 in `results.js:61`. A
+dialect switch cannot reproduce that complete policy. The candidate's midnight
+default is another datetime difference. `9999 January` is valid reference input;
+its incorrect invalid-input fixture must not be confused with the weekday bug.
+
+A bounded primary-source review found no qualified drop-in replacement:
+
+| Engine | Relevant public boundary | Decision |
+| --- | --- | --- |
+| chrono-english 0.2.1 | Generic Chrono timezone and captured base, US/UK dialect | Same grammar family; lacks the required field/default policy. |
+| dateparser 0.3.1 | Custom timezone and default time | Enumerated absolute formats, not the required relative grammar. |
+| natural-date-parser 0.1.3 | `DateParser` | Reads `Local::now` internally repeatedly instead of accepting one captured reference. |
+| rustling-ontology | Probabilistic time/entity grammar and training pipeline | Different semantics and a broad integration surface; not a small compatible replacement. |
+| chrono-node-rs 0.1.0 | Known/implied parsing components, tags and reference timezone | Closest grammar candidate, but hardcodes its system timezone to UTC. |
+
+The actual chrono-node-rs 0.1.0 archive was read without compiling it (SHA-256
+`40875bc70dba13430750d9be684dcd08046d8c2e1404a57cc82ae40ac49a24a5`).
+Its normal dependencies are fancy-regex and serde_json, and its MSRV is 1.85.
+It ports upstream 2.10.3, while this application's reference is 2.10.1; those
+versions require an explicit comparison. `ParsingOption` has only forward-date
+and abbreviation overrides. `ReferenceWithTimezone` stores one offset;
+`JsDate::local`, local getters/setters and `get_timezone_offset` assume UTC.
+`utc()` currently aliases `local()`. These are published implementation facts,
+not an executed compatibility result.
+
+Converting only final components to Chrono Local cannot repair every case.
+Source-derived counterexample to qualify in an isolated Node process with
+`TZ=America/Los_Angeles`: reference 2024-02-10 02:30 and input
+`in 1 month 1 day`. Upstream `calculation/duration.js` applies `setMonth` first,
+normalizing the March 10 gap to 03:30, then `setDate`, retaining 03:30 on March 11.
+The UTC port never encounters the intermediate gap. Its final components no
+longer retain the original duration operation sequence. Also, upstream
+`createRelativeFromReference` assigns a certain timezone offset for relative
+time expressions: certainty alone does not prove the user supplied a timezone.
+
+The smallest credible dependency direction is a reviewed, immutable fork of the
+chrono-node Rust port limited to its centralized local-date runtime. Preserve
+the grammar/refiners and all UTC primitives; add system-local construction,
+getters/setters, overflow normalization and per-instant offset behavior. A
+provider must supply JavaScript-compatible forward gap/earlier fold resolution;
+Jiff's public `try_system` and compatible resolution are candidates, with no
+UTC fallback on detection failure. This requires a dependency-scope decision,
+provider/range review and comparison tests, not an application keyword grammar.
+No fork, provider dependency or replacement implementation was created by this
+review.
+
+Required qualification includes all seven reference weekdays with this/next/last,
+inferred noon and explicit times, month-end/leap overflow, valid year 9999,
+invalid dates, phrase extraction, explicit offsets/abbreviations, local DST gaps
+and folds, mixed duration sequences through a gap, and cancelled/reordered host
+results. Run the frozen Node engine and candidate in separate timezone-controlled
+processes for UTC, Asia/Shanghai, America/Los_Angeles and Europe/Berlin; repeat
+the applicable platform gates on macOS, Windows and Linux. Runtime size, first
+parse cost and retained memory remain measurements, not assumptions. The owned
+asynchronous service can be kept while the unqualified parser is replaced.
+
+Primary references: [interim](https://docs.rs/interim/0.2.2/interim/),
+[chrono-english](https://docs.rs/chrono-english/0.2.1/chrono_english/),
+[dateparser](https://docs.rs/dateparser/0.3.1/dateparser/),
+[chrono-node-rs](https://docs.rs/chrono-node-rs/0.1.0/chrono_node/),
+[rustling-ontology](https://github.com/sonos/rustling-ontology), and
+[Jiff timezone API](https://docs.rs/jiff/0.2.38/jiff/tz/struct.TimeZone.html).
