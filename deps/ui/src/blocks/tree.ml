@@ -356,7 +356,7 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
           ]
         [ Ui_parts.class_signal cs
             (fun c -> bullet_cls ^ if c then " bullet-closed" else "")
-            (box ~key:("dotw-" ^ uuid)
+            (column ~key:("dotw-" ^ uuid)
                ?on_pointer_down ?on_pointer_up ?on_press_detail
                ~accessibility_identifier:("dot-" ^ uuid)
                ~main:`center ~cross:`center ~corner_radius:8
