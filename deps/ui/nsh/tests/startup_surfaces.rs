@@ -158,20 +158,14 @@ fn search_and_commands(app: &mut Headless, agent: &Agent) -> Result<(), String> 
         .ok_or("positive native search input was not captured")?;
     healthy(agent, "Search opened")?;
     app.type_text(&selector, "/")?;
-    wait_for_chrome(
-        app,
-        "actual search filters",
-        Duration::from_secs(10),
-        |screen| screen.shows("Search only commands"),
-    )?;
+    let filter = wait_for_owned_native(app, agent, "actual Commands filter action", |tree| {
+        selector_for_attribute(tree, "data-item-key", "filter-Search only commands", true)
+    })?;
     healthy(agent, "Search filter list")?;
-    app.press("text:Search only commands")?;
-    wait_for_chrome(
-        app,
-        "actual Commands result group",
-        Duration::from_secs(10),
-        |screen| screen.shows("Commands"),
-    )?;
+    app.press(&filter)?;
+    wait_for_owned_native(app, agent, "actual Commands result group", |tree| {
+        selector_for_attribute(tree, "data-cmdk-group-kind", "commands", false)
+    })?;
     healthy(agent, "Commands filter")?;
     app.press_key("escape")?;
     // Escape first clears a forced filter; a second Escape closes the palette.
@@ -352,4 +346,101 @@ pub(super) fn qualify_dialog(app: &mut Headless, name: &str) -> Result<(), Strin
         return Err(format!("dialog {name} retained its open model after close"));
     }
     Ok(())
+}
+
+fn selector_for_attribute(
+    tree: &Value,
+    key: &str,
+    expected: &str,
+    press: bool,
+) -> Result<String, String> {
+    let mut pending = tree
+        .get("nodes")
+        .and_then(Value::as_array)
+        .ok_or("actual tree has no nodes")?
+        .iter()
+        .collect::<Vec<_>>();
+    let mut found = None;
+    while let Some(node) = pending.pop() {
+        let matches = node
+            .pointer("/props/data-attrs")
+            .and_then(Value::as_str)
+            .is_some_and(|encoded| {
+                encoded
+                    .split('\u{1e}')
+                    .any(|record| record.split_once('\u{1f}') == Some((key, expected)))
+            });
+        if matches
+            && (!press
+                || node
+                    .pointer("/props/press-enabled")
+                    .and_then(Value::as_bool)
+                    == Some(true))
+        {
+            let id = node
+                .get("id")
+                .and_then(Value::as_u64)
+                .ok_or("actual action has no id")?;
+            let identifier = node
+                .pointer("/props/accessibility-identifier")
+                .and_then(Value::as_str)
+                .filter(|value| !value.is_empty())
+                .map(str::to_owned)
+                .unwrap_or_else(|| format!("lui-{id}"));
+            if found.replace(format!("id:{identifier}")).is_some() {
+                return Err(format!("{key}={expected} has multiple native owners"));
+            }
+        }
+        if let Some(children) = node.get("children").and_then(Value::as_array) {
+            pending.extend(children)
+        }
+    }
+    found.ok_or_else(|| format!("actual native owner for {key}={expected} is missing"))
+}
+
+fn wait_for_owned_native(
+    app: &mut Headless,
+    agent: &Agent,
+    step: &str,
+    resolve: impl Fn(&Value) -> Result<String, String>,
+) -> Result<String, String> {
+    let failure = RefCell::new(None::<String>);
+    let chosen = RefCell::new(None::<String>);
+    let last = RefCell::new(String::new());
+    let result = wait_for_chrome(app, step, Duration::from_secs(10), |screen| {
+        let tree = match agent.tree() {
+            Ok(tree) => tree,
+            Err(error) => {
+                *failure.borrow_mut() = Some(error);
+                return true;
+            }
+        };
+        let selector = match resolve(&tree) {
+            Ok(selector) => selector,
+            Err(error) => {
+                *last.borrow_mut() = error;
+                return false;
+            }
+        };
+        let native = screen
+            .layout_nodes()
+            .into_iter()
+            .find(|node| node.test_id.as_deref() == selector.strip_prefix("id:"));
+        *last.borrow_mut() = format!("{selector}: {native:#?}");
+        if native.is_some_and(|node| {
+            !node.hidden && node.bounds.size.width.0 > 0.0 && node.bounds.size.height.0 > 0.0
+        }) {
+            *chosen.borrow_mut() = Some(selector);
+            true
+        } else {
+            false
+        }
+    });
+    if let Some(error) = failure.into_inner() {
+        return Err(format!("{step}: {error}"));
+    }
+    result.map_err(|error| format!("{error}\n{}", last.into_inner()))?;
+    chosen
+        .into_inner()
+        .ok_or_else(|| format!("{step}: native owner was not captured"))
 }
