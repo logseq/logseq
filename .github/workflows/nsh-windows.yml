@@ -15,7 +15,7 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
-  LUI_REF: f9f5c9c06310571e52841b8033e17ffb08935408
+  LUI_REF: c754e0c57c61e829db90794d8bbeb58ef2d85e8f
   RUSTUP_TOOLCHAIN: 1.97.0
   CARGO_BUILD_JOBS: 2
   RUST_MIN_STACK: 268435456
