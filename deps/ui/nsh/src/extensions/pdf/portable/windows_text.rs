@@ -233,13 +233,23 @@ impl TextHost {
         if let Some(previous) = previous {
             // SAFETY: disconnect this exact cached old COM provider only.
             unsafe {
-                UiaDisconnectProvider(&previous)?;
+                UiaDisconnectProvider(&previous).map_err(|error| {
+                    Error::new(
+                        error.code(),
+                        format!("disconnect previous PDF provider: {error}"),
+                    )
+                })?;
             }
         }
         let provider = self.state.provider()?;
         // SAFETY: notify for the newly published complete logical text stream.
         unsafe {
-            UiaRaiseAutomationEvent(&provider, UIA_Text_TextChangedEventId)?;
+            UiaRaiseAutomationEvent(&provider, UIA_Text_TextChangedEventId).map_err(|error| {
+                Error::new(
+                    error.code(),
+                    format!("notify replacement PDF text: {error}"),
+                )
+            })?;
         }
         self.state.check(epoch)?;
         // Building full Value variants is necessary only for actual listeners;
@@ -259,7 +269,13 @@ impl TextHost {
                     UIA_ValueValuePropertyId,
                     &old_value,
                     &new_value,
-                )?;
+                )
+                .map_err(|error| {
+                    Error::new(
+                        error.code(),
+                        format!("notify replacement PDF value: {error}"),
+                    )
+                })?;
             }
             self.state.check(epoch)?;
             let current_label = self.state.label.borrow().clone();
@@ -270,7 +286,13 @@ impl TextHost {
                         UIA_NamePropertyId,
                         &VARIANT::from(previous_label.as_str()),
                         &VARIANT::from(current_label.as_str()),
-                    )?;
+                    )
+                    .map_err(|error| {
+                        Error::new(
+                            error.code(),
+                            format!("notify replacement PDF name: {error}"),
+                        )
+                    })?;
                 }
             }
         }

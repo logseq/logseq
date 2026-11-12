@@ -112,3 +112,18 @@ already captures `GetLastError`, so it constructs the HRESULT from that exact
 captured error instead of rereading thread state. No error is suppressed or
 replaced with success. The correction requires another native target run;
 Win32/UIA tests and the subsequent PDFium load step have not run yet.
+
+## First fast native runtime result
+
+Fast run 43309342263 at c77d9ff569 compiled both real native example targets.
+Linux passed all five GTK/completion/Unicode tests and the prepared PDFium
+engine/document/worker probe. The Xvfb run had no accessibility bus, so this is
+in-process AccessibleText evidence, not an AT-SPI client result.
+
+Windows passed thirteen of fourteen tests. Document replacement returned
+`UIA_E_ELEMENTNOTAVAILABLE` (`0x80040201`) before the retained-provider lifetime
+assertions; the generic system message describes subscribers and does not
+identify the actual failed call. Each replacement disconnect/notification now
+retains the native HRESULT and adds its exact operation to the error. This
+diagnostic change does not suppress errors or alter ownership assertions. The
+actual failing boundary and subsequent Windows engine load still need evidence.
