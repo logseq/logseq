@@ -41,6 +41,8 @@ fn components(components: &nsh_platform_macos::Components) {
 /// Shared application root for the native runner and public NSH tests.
 #[component]
 pub fn App(props: AppProps) -> impl IntoElement {
+    #[cfg(target_os = "macos")]
+    show_background_application();
     let icons = IconRegistry::new();
     let themes = ThemeRegistry::new();
     provide_context(icons);
@@ -80,6 +82,31 @@ pub fn App(props: AppProps) -> impl IntoElement {
             text(error).into_element()
         }
     }
+}
+
+/// A bundled background process can inherit AppKit's hidden application state.
+/// Restore only this app after its runner created the window, without activating.
+#[cfg(target_os = "macos")]
+fn show_background_application() {
+    if !std::env::var("LUI_AGENT_BACKGROUND").is_ok_and(|value| value == "1") {
+        return;
+    }
+    dispatch2::DispatchQueue::main().exec_async(|| {
+        use nsh_platform_macos::{
+            objc2::MainThreadMarker,
+            objc2_app_kit::{NSApplication, NSApplicationActivationPolicy},
+        };
+        let main = MainThreadMarker::new().expect("main-queue background launch");
+        let application = NSApplication::sharedApplication(main);
+        if application.activationPolicy() == NSApplicationActivationPolicy::Prohibited {
+            application.unhideWithoutActivation();
+            eprintln!(
+                "Logseq background window: active={}, hidden={}",
+                application.isActive(),
+                application.isHidden()
+            );
+        }
+    });
 }
 fn registrations() -> Result<Extensions, String> {
     let schemas: Vec<Schema> = serde_json::from_str(include_str!("../schemas.json"))

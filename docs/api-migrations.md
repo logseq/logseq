@@ -286,3 +286,19 @@ creates an externally anchored `Views_popup.show_menu` entry on NSH. Web and the
 maintained mobile hosts retain that existing popup path and callbacks. No
 property configuration forms, inline rename editors or external role-menu
 capability are replaced or claimed by this focused three-action conversion.
+
+### Bundled background qualification restores its own hidden application
+
+On macOS, explicitly setting `LUI_AGENT_BACKGROUND=1` still selects the native
+runner's Prohibited activation policy. After the runner creates its window, the
+application now requests `NSApplication.unhideWithoutActivation` on its own main
+queue, and only while that policy remains Prohibited. A bundled background
+process can otherwise retain AppKit's hidden state even though its engine and
+content bounds are ready, leaving no visible window for the CLI to capture.
+
+For example, a private `--startup-preflight` launch through the extracted
+`Contents/MacOS/Logseq` launcher can restore its own content window without
+calling application activation, synthetic input or display-power APIs. No other
+application is inspected or unhidden. Ordinary launches and non-macOS hosts
+are unchanged; screenshot capture itself remains read-only and continues to
+reject an invisible window.
