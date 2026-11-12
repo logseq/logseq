@@ -65,6 +65,15 @@ pub(super) fn qualify(app: &mut Headless, agent: &Agent) -> Result<(), String> {
     {
         return Err("native Input and shared rendered source disagree after click typing".into());
     }
+    // Restore the fixture through the same native editing path before exiting,
+    // so the existing production row/memory qualification keeps its seed data.
+    app.press_key("backspace")?;
+    wait_for_chrome(
+        app,
+        "native delete restores the shared source",
+        Duration::from_secs(20),
+        |screen| screen.input_text(&selector).ok().flatten() == Some(title(0).as_str()),
+    )?;
     app.press_key("escape")?;
     wait_for_chrome(
         app,
