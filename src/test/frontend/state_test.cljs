@@ -16,7 +16,6 @@
                    :selectionStart 2
                    :selectionEnd 2}
         editor-content (state/get-state :editor/content)
-        last-saved-cursor (state/get-state :editor/last-saved-cursor)
         watch-key (keyword (str "caret-pos-" block-id))
         observed-pos (atom nil)]
     (set! (.-setSelectionRange input)
@@ -44,8 +43,7 @@
        :final-pos (cursor/pos input)}
       (finally
         (rfx/unlisten! watch-key)
-        (state/set-state! :editor/content editor-content)
-        (state/set-state! :editor/last-saved-cursor last-saved-cursor)))))
+        (state/set-state! :editor/content editor-content)))))
 
 (deftest set-block-content-exposes-new-caret-before-content-change
   (testing "Caret before trailing page-reference brackets"
