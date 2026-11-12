@@ -449,6 +449,7 @@ let container_el ~key ~id : Lui_elements.t =
     context
 
 let install () =
+  Render_inline.pdf_link_press := Pdf_assets.open_pdf_link;
   Pdf_state.open_request :=
     (fun a ->
       incr load_generation;

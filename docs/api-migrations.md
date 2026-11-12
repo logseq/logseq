@@ -1,5 +1,26 @@
 # API migrations
 
+## Native inline PDF links use the installed document opener
+
+`![Report](../assets/report.pdf)` now reaches the native PDF extension through
+the existing `Render_inline.pdf_link_press` hook. Relative filenames and the
+`assets/`, `./assets/`, and `../assets/` prefixes resolve within the active graph's
+asset directory. URL path escapes decode once; absolute OS filenames remain
+literal. Local `file:` URLs are accepted, while remote hosts, traversal,
+malformed escapes, credentials, queries and fragments are rejected. HTTP(S)
+PDF documents still require a separate native download/reader implementation.
+
+The inline press captures its graph identity. Retained links cannot open after
+graph close or against a different graph. The hook type and Web opener remain
+unchanged; this adds the same stale-graph protection to Web inline presses.
+This wires document activation only: in-app PDF rendering remains macOS PDFKit;
+Linux and Windows PDF reader support is not supplied by this change.
+
+Qualification: `nsh/run_update_preparation_native.py` compiles a fixture against
+the actual native archives and dispatches the retained inline press, checking
+the resulting `Pdf_state` document and graph/path boundaries. It does not load
+a PDFKit view or claim visual PDF rendering qualification.
+
 ## Owned-worker qualification includes durable canonical native reference drops
 
 `nsh/run_owned_worker_update_native.py --worker <newly-built-native-worker>` adds

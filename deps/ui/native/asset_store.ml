@@ -17,6 +17,55 @@ let asset_path repo name =
   if repo = "" then invalid_arg "Graph assets require an open graph";
   Resource_native.asset_path ~asset_dir:(asset_dir repo) name
 
+(* Inline links name graph assets, or an explicitly absolute local document.
+   Decode URL paths once; ordinary absolute OS filenames remain literal. *)
+let local_asset_path ~repo source =
+  if repo = "" then invalid_arg "Graph assets require an open graph";
+  if source = "" || String.contains source '\000' || String.starts_with ~prefix:"//" source then
+    invalid_arg "Invalid local asset source";
+  if not (Filename.is_relative source) then source
+  else begin
+    let uri = Uri.of_string source in
+    let decode path =
+      let rec escapes i =
+        if i < String.length path then
+          if path.[i] = '%' then begin
+            let hex c = match c with '0'..'9' | 'a'..'f' | 'A'..'F' -> true | _ -> false in
+            if i + 2 >= String.length path || not (hex path.[i+1] && hex path.[i+2]) then
+              invalid_arg "Invalid local asset path escape";
+            escapes (i + 3)
+          end else escapes (i + 1)
+      in
+      escapes 0;
+      let path = Uri.pct_decode path in
+      if String.contains path '\000' then invalid_arg "Invalid local asset path";
+      path
+    in
+    if Uri.query uri <> [] || Uri.fragment uri <> None
+       || Uri.userinfo uri <> None || Uri.port uri <> None then
+      invalid_arg "Local asset links cannot contain credentials, query or fragment";
+    match Uri.scheme uri with
+    | Some "file" ->
+        if not (List.mem (Uri.host uri) [None; Some "localhost"]) then
+          invalid_arg "Local asset links cannot name a remote file host";
+        let path = decode (Uri.path uri) in
+        let path =
+          if Sys.win32 && String.length path > 3 && path.[0] = '/'
+             && path.[2] = ':' then String.sub path 1 (String.length path - 1)
+          else path in
+        Resource_native.absolute_root path
+    | Some _ -> invalid_arg "The native PDF viewer requires a local document"
+    | None ->
+        if Uri.host uri <> None then invalid_arg "Invalid graph asset host";
+        let path = decode source in
+        let path =
+          match List.find_opt (fun prefix -> String.starts_with ~prefix path)
+            ["../assets/"; "./assets/"; "assets/"] with
+          | Some prefix -> String.sub path (String.length prefix) (String.length path - String.length prefix)
+          | None -> path in
+        asset_path repo path
+  end
+
 let publish_resource_context ~repo =
   if repo = "" then Resource_native.publish ~repo ~graph_dir:"" ~asset_dir:""
   else

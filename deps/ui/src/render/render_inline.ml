@@ -464,7 +464,9 @@ let image_el ~src ~alt =
 let pdf_link_press : (src:string -> unit) ref = ref (fun ~src:_ -> ())
 
 let pdf_link_el ~src ~alt : t =
-  Ui_parts.pressable ~on_press:(fun _ -> !pdf_link_press ~src)
+  let repo = Runtime.repo () in
+  Ui_parts.pressable ~on_press:(fun _ ->
+    if repo <> "" && Runtime.repo () = repo then !pdf_link_press ~src)
     (text ~style_class:"is-pdf" ~value:alt [])
 
 (* inline <code>/<b>/<i>/<em>/<mark>/<del>/<u>/<s>/<sub>/<sup>/

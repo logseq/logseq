@@ -2384,6 +2384,7 @@ let () =
     ~request_flush:(fun () -> ()) ~dom ~timers:Ui_dom_native.timers ~files:Ui_dom_native.files;
   Update_worker_coordinator_native.run ();
   Editor_clipboard_native.run ();
+  Native_assets_native.run ();
   native_platform_exception_reporting ();
   native_primitive_unit_results ();
   native_alt_mask_through_actual_ffi ();

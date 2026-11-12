@@ -60,11 +60,13 @@ def run() -> None:
         geometry.write_bytes((UI / "nsh/tests/editor_geometry_affinity_native.ml").read_bytes())
         clipboard = stage / "editor_clipboard_native.ml"
         clipboard.write_bytes((UI / "nsh/tests/editor_clipboard_native.ml").read_bytes())
+        assets = stage / "native_assets_native.ml"
+        assets.write_bytes((UI / "nsh/tests/native_assets_native.ml").read_bytes())
         source = stage / "update_preparation_native.ml"
         source.write_bytes((UI / "nsh/tests/update_preparation_native.ml").read_bytes())
         executable = stage / ("admission.exe" if os.name == "nt" else "admission")
         subprocess.run([*compiler, *ppx_arguments, "-I", str(stage), "-linkall", "-linkpkg",
-                        *map(str, archives), str(embed), str(coordinator), str(geometry), str(clipboard), str(source), str(event_probe),
+                        *map(str, archives), str(embed), str(coordinator), str(geometry), str(clipboard), str(assets), str(source), str(event_probe),
                         "-o", str(executable)], cwd=stage, check=True)
         # Preference fixtures exercise the actual native storage provider without
         # reading or rewriting the developer's installed application state.

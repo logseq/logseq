@@ -41,6 +41,11 @@ let open_pdf_file ~uuid ~ext ~(b : Model.block) : unit =
        (inflate ~uuid:b.Model.block_uuid ~db_id:b.block_db_id
           ~external_url:b.Model.block_asset_url ~path))
 
+let open_pdf_link ~src =
+  let path = Asset_store.local_asset_path ~repo:(Runtime.repo ()) src in
+  Pdf_state.set_current
+    (Some (inflate ~uuid:None ~db_id:None ~external_url:None ~path))
+
 (* ---------- hl <-> wire ---------- *)
 
 let sc_rect_wire (r : Model.hl_rect) : W.t =
