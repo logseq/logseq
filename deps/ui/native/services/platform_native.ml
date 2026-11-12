@@ -21,6 +21,17 @@ let native_system =
 
 let is_mac () = native_system = "Darwin"
 
+let home_directory () =
+  match Sys.getenv_opt "HOME" with
+  | Some path when path <> "" -> path
+  | Some _ -> invalid_arg "HOME must not be empty"
+  | None when Sys.os_type = "Win32" ->
+      (match Sys.getenv_opt "USERPROFILE" with
+       | Some path when path <> "" -> path
+       | Some _ -> invalid_arg "USERPROFILE must not be empty"
+       | None -> failwith "USERPROFILE not set")
+  | None -> failwith "HOME not set"
+
 let packaged_resource_dir =
   Filename.concat (Filename.dirname Sys.executable_name)
     (if is_mac () then "../Resources" else "Resources")
@@ -83,6 +94,12 @@ let app_support_dir =
     match Sys.getenv_opt "LOGSEQ_UI_STATE_DIR" with
     | Some path when path <> "" -> path
     | Some _ -> invalid_arg "LOGSEQ_UI_STATE_DIR must not be empty"
+    | None when Sys.os_type = "Win32" ->
+        (match Sys.getenv_opt "APPDATA" with
+         | Some path when path <> "" && not (Filename.is_relative path) ->
+             Filename.concat path "logseq"
+         | Some _ -> invalid_arg "APPDATA must be an absolute nonempty directory"
+         | None -> failwith "APPDATA not set")
     | None when native_system = "Linux" ->
         let state_home =
           match Sys.getenv_opt "XDG_STATE_HOME" with
@@ -90,12 +107,12 @@ let app_support_dir =
               path
           | Some _ | None ->
               (* XDG ignores empty or relative base directories. *)
-              Filename.concat (Unix.getenv "HOME") ".local/state"
+              Filename.concat (home_directory ()) ".local/state"
         in
         Filename.concat state_home "logseq"
     | None ->
         Filename.concat
-          (Filename.concat (Unix.getenv "HOME") "Library")
+          (Filename.concat (home_directory ()) "Library")
           "Application Support/logseq"
   in
   fun () -> path
@@ -152,7 +169,7 @@ let legacy_auth_tokens () =
   else if state_exists () then []
   else
     read_legacy_auth_file
-      (Filename.concat (Filename.concat (Unix.getenv "HOME") "logseq") "auth.json")
+      (Filename.concat (Filename.concat (home_directory ()) "logseq") "auth.json")
 
 let rec mkdir_p path =
   if path <> "" && path <> "/" && not (Sys.file_exists path) then begin

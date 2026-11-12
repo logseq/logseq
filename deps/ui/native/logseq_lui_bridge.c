@@ -3,7 +3,12 @@
 #include <stdlib.h>
 #include <string.h>
 
-#if !defined(_WIN32)
+#if defined(_WIN32)
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#else
 #include <errno.h>
 #include <pthread.h>
 #include <signal.h>
@@ -31,6 +36,35 @@ typedef void (*logseq_platform_request_callback)(const char *data,
                                                  int32_t length);
 
 static int runtime_started = 0;
+
+/* OCaml 5.5.1 Unix.create_process returns a HANDLE as a pseudo-pid on Win32.
+   This consumes that owned handle; the daemon registry needs a real OS pid.
+   It never changes the meaning of Unix.waitpid/Unix.kill arguments. */
+CAMLprim value caml_logseq_worker_process_id(value child_process) {
+  CAMLparam1(child_process);
+#if defined(_WIN32)
+  HANDLE process = (HANDLE)(intnat)Long_val(child_process);
+  DWORD pid = GetProcessId(process);
+  DWORD pid_error = pid == 0 ? GetLastError() : ERROR_SUCCESS;
+  BOOL closed = CloseHandle(process);
+  DWORD close_error = closed ? ERROR_SUCCESS : GetLastError();
+  char message[160];
+  if (pid == 0) {
+    snprintf(message, sizeof(message),
+             "GetProcessId failed with Windows error %lu (CloseHandle error %lu)",
+             (unsigned long)pid_error, (unsigned long)close_error);
+    caml_failwith(message);
+  }
+  if (!closed) {
+    snprintf(message, sizeof(message), "CloseHandle failed with Windows error %lu",
+             (unsigned long)close_error);
+    caml_failwith(message);
+  }
+  CAMLreturn(Val_long(pid));
+#else
+  CAMLreturn(child_process);
+#endif
+}
 
 /* Read-only editor state; the caller copies the borrowed UTF-8 buffer. */
 LUI_EXPORT int32_t lui_ocaml_editor_snapshot_utf8(

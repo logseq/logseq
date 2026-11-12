@@ -1,5 +1,23 @@
 # API migrations
 
+## Native Windows application startup paths and worker identity
+
+When `HOME` is absent on native Windows, UI services and daemon paths now use
+`USERPROFILE`. The default native UI state directory is `%APPDATA%/logseq`,
+matching the platform roaming-data convention; `LOGSEQ_UI_STATE_DIR` still
+overrides it. Explicit empty home values and invalid Windows application-data
+paths fail instead of writing relative to the working directory. macOS/Linux
+state locations and Web/mobile backends are unchanged.
+
+Native Windows worker startup opens `NUL` instead of `/dev/null`. The process
+handle returned by OCaml 5.5.1 `Unix.create_process` is consumed at a local
+Windows boundary: public `GetProcessId` supplies the real OS pid for the existing
+worker registry, and `CloseHandle` releases the unused parent handle. Both
+Windows errors are checked and retain their numeric codes. No caller waits or
+signals through that discarded handle; existing worker health/shutdown owns
+its later lifecycle. POSIX pid behavior and the seven-argument Logseq startup
+ABI are unchanged. Actual Windows runtime qualification remains required.
+
 ## NSH update-compatible package identity and layout
 
 Actual Logseq packages now write canonical `nsh/app.json` metadata before

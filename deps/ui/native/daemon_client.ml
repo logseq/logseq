@@ -11,10 +11,11 @@ open Promise_ext
 
 (* ---------- paths ---------- *)
 
-let home () =
-  match Sys.getenv_opt "HOME" with
-  | Some h -> h
-  | None -> failwith "HOME not set"
+let home = Platform_native.home_directory
+
+(* Only consumes the Win32 process handle returned by Unix.create_process.
+   Registry and health messages use the child's real OS pid. *)
+external worker_process_id : int -> int = "caml_logseq_worker_process_id"
 
 let root_dir () =
   match Sys.getenv_opt "LOGSEQ_ROOT_DIR" with
@@ -255,8 +256,10 @@ let spawn_daemon (repo : string) : string =
     Unix.openfile log_path [ Unix.O_CREAT; Unix.O_WRONLY; Unix.O_APPEND ]
       0o644
   in
-  let devnull = Unix.openfile "/dev/null" [ Unix.O_RDONLY ] 0 in
-  let pid =
+  let devnull =
+    Unix.openfile (if Sys.os_type = "Win32" then "NUL" else "/dev/null")
+      [ Unix.O_RDONLY ] 0 in
+  let child_process =
     Unix.create_process bin
       [| bin
        ; "--root-dir"
@@ -271,6 +274,11 @@ let spawn_daemon (repo : string) : string =
   in
   Unix.close devnull;
   Unix.close log_fd;
+  (* No caller waits or signals through this handle: the worker's existing
+     registry/health/shutdown protocol owns its remaining lifecycle. *)
+  let pid =
+    if Sys.os_type = "Win32" then worker_process_id child_process
+    else child_process in
   (* poll server-list for our pid *)
   let deadline = Unix.gettimeofday () +. 15. in
   let rec poll () =

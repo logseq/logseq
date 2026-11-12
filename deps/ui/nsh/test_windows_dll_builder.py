@@ -35,6 +35,33 @@ class WindowsDllGuards(unittest.TestCase):
         self.assertIn("lui_ocaml_editor_snapshot_utf8", exports)
         self.assertNotIn("lui_ocaml_last_error", exports)
 
+    def test_worker_handle_boundary_preserves_error_codes_and_releases_its_owned_handle(self):
+        source = (builder.UI / "native/logseq_lui_bridge.c").read_text(encoding="utf-8")
+        boundary = source.split("CAMLprim value caml_logseq_worker_process_id", 1)[1].split(
+            "/* Read-only editor state", 1)[0]
+        self.assertIn("#if defined(_WIN32)", boundary)
+        self.assertLess(boundary.index("GetProcessId(process)"), boundary.index("GetLastError()"))
+        self.assertLess(boundary.index("DWORD pid_error"), boundary.index("CloseHandle(process)"))
+        self.assertIn("DWORD close_error = closed ? ERROR_SUCCESS : GetLastError()", boundary)
+        self.assertIn("if (pid == 0)", boundary)
+        self.assertIn("if (!closed)", boundary)
+        self.assertIn("CAMLreturn(Val_long(pid))", boundary)
+        self.assertIn("#else\n  CAMLreturn(child_process)", boundary)
+        daemon = (builder.UI / "native/daemon_client.ml").read_text(encoding="utf-8")
+        spawn = daemon.split("let spawn_daemon", 1)[1].split("(* ---------- daemon reuse", 1)[0]
+        self.assertIn('if Sys.os_type = "Win32" then "NUL" else "/dev/null"', spawn)
+        self.assertIn('if Sys.os_type = "Win32" then worker_process_id child_process', spawn)
+        self.assertNotRegex(spawn, r"Unix\.(?:waitpid|kill)\s")
+
+    def test_windows_default_home_and_state_do_not_require_a_posix_shell_home(self):
+        source = (builder.UI / "native/services/platform_native.ml").read_text(encoding="utf-8")
+        home = source.split("let home_directory ()", 1)[1].split("let packaged_resource_dir", 1)[0]
+        self.assertIn('Sys.os_type = "Win32"', home)
+        self.assertIn('Sys.getenv_opt "USERPROFILE"', home)
+        state = source.split("let app_support_dir =", 1)[1].split("let state_file", 1)[0]
+        self.assertIn('Sys.getenv_opt "APPDATA"', state)
+        self.assertLess(state.index('Sys.os_type = "Win32"'), state.index('native_system = "Linux"'))
+
 
 if __name__ == "__main__":
     unittest.main()
