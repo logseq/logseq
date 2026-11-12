@@ -2,7 +2,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {spawnSync} from "node:child_process";
-import {copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync} from "node:fs";
+import {copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync} from "node:fs";
 import {createRequire, syncBuiltinESMExports} from "node:module";
 import os from "node:os";
 import path from "node:path";
@@ -16,7 +16,7 @@ async function fixture({validator = false, platform = "linux"} = {}) {
   const root = realpathSync(mkdtempSync(path.join(os.tmpdir(), "logseq-nsh-package-")));
   const repo = path.join(root, "checkout");
   const output = path.join(repo, "deps/ui/_build/nsh");
-  const resources = path.join(repo, "deps/ui/_build/Resources");
+  const resources = platform === "windows" ? path.join(output, "Resources") : path.join(repo, "deps/ui/_build/Resources");
   const luiSource = path.join(root, "lui");
   const write = (file, content, executable = false) => {
     mkdirSync(path.dirname(file), {recursive:true});
@@ -26,18 +26,22 @@ async function fixture({validator = false, platform = "linux"} = {}) {
   mkdirSync(localScripts, {recursive:true});
   for (const file of ["package-nsh.mjs", "package-nsh.sh", "launch-nsh.sh"])
     copyFileSync(path.join(scripts, file), path.join(localScripts, file));
+  mkdirSync(path.join(repo, "deps/ui/nsh"), {recursive:true});
+  copyFileSync(path.join(scripts, "../nsh/package_windows.py"), path.join(repo, "deps/ui/nsh/package_windows.py"));
   write(path.join(repo, "resources/package.json"), JSON.stringify({version:"2.0.2"}));
   write(path.join(repo, "deps/ui/nsh/nsh.json"), JSON.stringify({name:"Logseq", id:"com.logseq.logseq", build:1}));
   write(path.join(repo, "package.json"), JSON.stringify({private:true}));
   write(path.join(repo, "pnpm-lock.yaml"), "qualified package lock");
   mkdirSync(path.join(repo, "node_modules"));
-  symlinkSync(path.dirname(require.resolve("semver/package.json")), path.join(repo, "node_modules/semver"), "dir");
+  cpSync(path.dirname(require.resolve("semver/package.json")), path.join(repo, "node_modules/semver"), {recursive:true});
   mkdirSync(path.join(luiSource, "tooling"), {recursive:true});
   copyFileSync(receiptSource, path.join(luiSource, "tooling/lui_build_receipt.mjs"));
   const api = await import(pathToFileURL(path.join(luiSource, "tooling/lui_build_receipt.mjs")).href);
   const helper = await import(pathToFileURL(path.join(localScripts, "package-nsh.mjs")).href);
-  const host = path.join(output, "logseq-nsh");
-  const library = path.join(output, platform === "macos" ? "liblogseq_ui.dylib" : "liblogseq_ui.so");
+  write(path.join(luiSource, "tooling/nsh_delivery.py"), "qualified LUI delivery hook source");
+  const host = path.join(output, platform === "windows" ? "logseq-nsh.exe" : "logseq-nsh");
+  const library = platform === "windows" ? path.join(resources, "logseq_ui.dll") : path.join(output, platform === "macos" ? "liblogseq_ui.dylib" : "liblogseq_ui.so");
+  const workerName = platform === "windows" ? "logseq-db-worker.exe" : "logseq-db-worker";
   const source = path.join(repo, "deps/ui/nsh/src/lib.rs");
   write(host, validator ? `#!${process.execPath}
 const fs = require("node:fs");
@@ -48,15 +52,31 @@ process.exit(config.publicKey === "fixture-public-key" ? 0 : 1);
 ` : "qualified native executable", true);
   write(library, "qualified OCaml library");
   write(source, "qualified application source");
-  write(path.join(resources, "logseq-db-worker"), "qualified native worker", true);
+  write(path.join(resources, workerName), "qualified native worker", true);
   write(path.join(resources, "fonts/app.ttf"), "qualified font");
   write(path.join(resources, "maintained-backend-output.txt"), "must not enter NSH archive");
   const relative = file => portable(path.relative(root, file));
-  const inputs = [library, path.dirname(source), path.join(resources, "logseq-db-worker"),
+  const inputs = [library, path.dirname(source), path.join(resources, workerName),
     path.join(resources, "fonts/app.ttf")].map(relative);
+  if (platform === "windows") {
+    for (const file of [path.join(output, "native.dll"), path.join(resources, "ocaml-dependency.dll")]) {
+      write(file, "qualified native dependency");
+      inputs.push(relative(file));
+    }
+  }
+  if (platform === "windows") {
+    const file = path.join(resources,"windows-dependencies.json");
+    write(file,JSON.stringify({files:["native.dll","Resources/ocaml-dependency.dll"].map(destination =>
+      ({destination,sha256:api.digestArtifact(path.join(output,destination))}))}));
+    inputs.push(relative(file));
+  }
   const receiptFile = api.writeReceipt({artifact:host, root, inputs, command:"build qualified app"});
   const receipt = JSON.parse(readFileSync(receiptFile, "utf8"));
-  receipt.ownedResources = ["logseq-db-worker", "fonts/app.ttf"];
+  receipt.ownedResources = [workerName, "fonts/app.ttf"];
+  if (platform === "windows") {
+    receipt.ownedResources.push("ocaml-dependency.dll","windows-dependencies.json");
+    receipt.ownedCode = ["native.dll"];
+  }
   writeFileSync(receiptFile, JSON.stringify(receipt));
   const bin = path.join(root, platform === "macos" ? "candidate/Logseq NSH.app/Contents/MacOS" : "candidate/Logseq-NSH");
   const destination = path.join(bin, platform === "macos" ? "../Resources" : "Resources");
@@ -152,7 +172,7 @@ test("invalid identity, versions, platforms and incomplete update options fail b
   const f = await fixture();
   try {
     const metadata = overrides => f.helper.releaseMetadata({...f.options, ...overrides});
-    for (const overrides of [{platform:"windows"},{arch:"arm64"},
+    for (const overrides of [{platform:"freebsd"},{platform:"windows",arch:"aarch64"},{arch:"arm64"},
       {updateUrl:"https://updates.example.invalid/latest.json"},{updateKey:"missing.pub"},
       {updateUrl:"http://updates.example.invalid/latest.json",updateKey:"missing.pub"},
       {updateUrl:"https://user:password@updates.example.invalid/latest.json",updateKey:"missing.pub"}])
@@ -298,4 +318,72 @@ console.log(JSON.stringify({library:process.env.LUI_OCAML_LIBRARY,assets:process
     assert.equal(path.resolve(actual.library), path.join(resources, process.platform === "darwin" ? "liblogseq_ui.dylib" : "liblogseq_ui.so"));
     assert.deepEqual(actual.args, ["--fixture", "Unicode 日本語"]);
   } finally { rmSync(root, {recursive:true, force:true}); }
+});
+
+
+test("Windows stages all qualified native code and binds final signed bytes plus installer", async () => {
+  const f = await fixture({platform:"windows"});
+  try {
+    await f.helper.stage(f.options);
+    for (const file of ["logseq-nsh.exe", "native.dll", "Resources/logseq_ui.dll", "Resources/logseq-db-worker.exe", "Resources/ocaml-dependency.dll"])
+      assert.equal(existsSync(path.join(f.options.bin, file)), true, file);
+    const before = JSON.parse(readFileSync(f.options.snapshot, "utf8"));
+    assert.equal(before.archiveName, "Logseq-NSH-2.0.2-windows-x86_64.zip");
+    const archive = path.join(f.root, "candidate", before.archiveName);
+    const finalArchive = path.join(f.root, "packages", before.archiveName);
+    const installer = archive.replace(/\.zip$/, "-setup.exe");
+    f.write(archive, "archive after all signatures");
+    f.write(installer, "signed installer fixture");
+    f.write(path.join(f.options.bin, "native.dll"), "signed root DLL fixture");
+    await f.helper.finish({snapshot:f.options.snapshot,archive,finalArchive,delivery:{signing:"authenticode",installer}});
+    const receipt = JSON.parse(readFileSync(`${archive}.lui-build.json`, "utf8"));
+    assert.equal(receipt.signing, "authenticode");
+    assert.equal(receipt.installedCodeSha256["native.dll"], f.api.digestArtifact(path.join(f.options.bin,"native.dll")));
+    assert.equal(Object.keys(receipt.installedCodeSha256).length, 5);
+    f.write(finalArchive, readFileSync(archive));
+    copyFileSync(`${archive}.lui-build.json`, `${finalArchive}.lui-build.json`);
+    f.write(finalArchive.replace(/\.zip$/, "-setup.exe"), readFileSync(installer));
+    f.write(`${finalArchive}.release/nsh.json`, readFileSync(path.join(path.dirname(f.options.snapshot),"release-config/nsh.json")));
+    assert.equal((await f.helper.checkRelease({archive:finalArchive,luiSource:f.options.luiSource})).platform,"windows-x86_64");
+    f.write(finalArchive.replace(/\.zip$/, "-setup.exe"), "tampered installer");
+    await assert.rejects(f.helper.checkRelease({archive:finalArchive,luiSource:f.options.luiSource}), /Installer/);
+  } finally { f.close(); }
+});
+
+test("Windows root dependency changes or unqualified ownership cannot enter a release", async () => {
+  const f = await fixture({platform:"windows"});
+  try {
+    await f.helper.stage(f.options);
+    const archive = path.join(f.root,"candidate/windows.zip");
+    f.write(archive,"candidate");
+    f.write(path.join(f.output,"native.dll"),"changed root DLL");
+    await assert.rejects(f.helper.finish({snapshot:f.options.snapshot,archive,finalArchive:archive,delivery:{signing:"unsigned"}}), /stale|changed/);
+    assert.equal(existsSync(`${archive}.lui-build.json`),false);
+  } finally { f.close(); }
+});
+
+test("Windows cannot copy a root DLL omitted from the qualified code inputs", async () => {
+  const f = await fixture({platform:"windows"});
+  try {
+    f.write(path.join(f.output,"foreign.dll"),"unqualified dependency");
+    const receipt = JSON.parse(readFileSync(f.receiptFile,"utf8"));
+    receipt.ownedCode.push("foreign.dll");
+    writeFileSync(f.receiptFile,JSON.stringify(receipt));
+    await assert.rejects(f.helper.stage(f.options), /Root DLL is not qualified/);
+    assert.equal(existsSync(path.join(f.options.bin,"foreign.dll")),false);
+  } finally { f.close(); }
+});
+
+
+test("Windows cannot omit a qualified root or Resources dependency from its owned payload", async () => {
+  for (const root of [true,false]) {
+    const f = await fixture({platform:"windows"});
+    try {
+      const receipt = JSON.parse(readFileSync(f.receiptFile,"utf8"));
+      if (root) receipt.ownedCode=[];
+      else receipt.ownedResources=receipt.ownedResources.filter(name=>name!=="ocaml-dependency.dll");
+      writeFileSync(f.receiptFile,JSON.stringify(receipt));
+      await assert.rejects(f.helper.stage(f.options), /DLL closure is incomplete/);
+    } finally { f.close(); }
+  }
 });

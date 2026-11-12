@@ -115,6 +115,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Windows build source regressions failed' }
           node --test --test-name-pattern="Windows receipt" deps/ui/nsh/build_publication_test.mjs
           if ($LASTEXITCODE -ne 0) { throw 'Application publication regressions failed' }
+          node --test --test-name-pattern="Windows" deps/ui/scripts/package-nsh.test.mjs
+          if ($LASTEXITCODE -ne 0) { throw 'Windows package ownership regressions failed' }
       - name: Native worker HANDLE ownership, OS pid and error codes
         run: |
           $handleLog = Join-Path $env:GITHUB_WORKSPACE '_build/nsh-ci/windows-handles.log'
@@ -175,6 +177,17 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Qualified Windows application receipt is stale' }
           Copy-Item "$binary.lui-build.json" _build/nsh-ci/actual-app.lui-build.json
           Copy-Item deps/ui/_build/nsh-windows/Resources/windows-dependencies.json _build/nsh-ci/
+      - name: Package the actual Windows App ZIP and unsigned Inno installer
+        run: |
+          $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6/ISCC.exe'
+          if (!(Test-Path $iscc -PathType Leaf)) { throw 'The runner must provide its documented Inno Setup 6 compiler' }
+          python deps/ui/nsh/package_windows.py --lui-source $env:LUI_SOURCE_ROOT --iscc $iscc `
+            --output _build/nsh-ci/packages 2>&1 | Tee-Object _build/nsh-ci/package-windows.log
+          if ($LASTEXITCODE -ne 0) { throw 'Actual Windows ZIP/installer packaging failed' }
+          $archives = @(Get-ChildItem _build/nsh-ci/packages -Filter '*.zip')
+          if ($archives.Count -ne 1) { throw 'Expected exactly one actual Windows update archive' }
+          node deps/ui/scripts/package-nsh.mjs check-release-windows $archives[0].FullName $env:LUI_SOURCE_ROOT
+          if ($LASTEXITCODE -ne 0) { throw 'Final Windows archive/installer/sidecar receipt failed' }
       - name: Preserve actual Windows build and startup evidence
         if: always()
         uses: actions/upload-artifact@v4

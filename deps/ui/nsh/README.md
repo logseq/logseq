@@ -309,8 +309,8 @@ before release claims. Linux archives use the target's native GTK/graphics and
 C runtime dependencies; they are not self-contained AppImages or installers.
 
 The separate NSH CI workflow owns native artifacts. Electron's release workflow
-has no MyGo selection and remains independent. This cutover does not implement
-Windows OCaml DLL packaging, a production NSH release/update feed, native PDF annotation,
+has no MyGo selection and remains independent. This cutover has not qualified
+Windows native installation, a production NSH release/update feed, native PDF annotation,
 or every raw markup/media widget. Passing the staged Headless startup gate is
 not an outside-checkout OS launch, IME, accessibility or update qualification.
 
@@ -474,8 +474,8 @@ resources, scoped Logseq/LUI source and shared SVG inputs; the resource
 
 The source/fake-toolchain regressions establish ordering, dependency collection,
 receipt relocation and failure isolation only. No real Windows compilation or
-startup has been established by those tests. Windows archive construction,
-outside-checkout native launch, Authenticode, whole-app upgrade and CI execution
+startup has been established by those tests. Windows archive/installer
+construction now has the source path below; outside-checkout native launch, Authenticode, whole-app upgrade and CI execution
 remain separate qualification work; the Unix packager does not silently produce
 a Windows archive.
 
@@ -513,5 +513,66 @@ CI preserves the compiler/explicit-root metadata, dependency provenance, build
 log and final source receipt. The new workflow is a qualification requirement,
 not a claim of a successful remote run. A green job establishes real Windows
 App/OCaml/private-worker Headless startup and the HANDLE fixture; native window
-launch, outside-checkout packaged launch, ZIP/Authenticode and upgrades remain
-separate gates. It never substitutes the generic LUI Todos bridge or package.
+launch, outside-checkout packaged launch, real ZIP/installer execution,
+Authenticode trust and upgrades remain separate gates. It never substitutes the
+generic LUI Todos bridge or package.
+
+
+### Actual Windows archives and installer
+
+After the real Windows builder qualifies the actual host, package that exact
+artifact without rebuilding a generic NSH runner:
+
+```powershell
+python deps/ui/nsh/package_windows.py --lui-source C:\src\lui `
+  --built-host C:\src\logseq\deps\ui\_build\nsh-windows\logseq-nsh.exe `
+  --iscc 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
+```
+
+The ZIP uses canonical `Logseq-NSH-<version>-windows-x86_64.zip` naming and contains
+one complete `Logseq-NSH` root: `logseq-nsh.exe`, qualified root DLLs, sibling
+`Resources` with the actual OCaml DLL/dependencies, private worker and all owned
+application assets, plus `nsh/app.json`. No launcher or checkout-dependent PATH
+is needed; actual executable-relative resource resolution remains authoritative.
+Version and optional whole-app update configuration use the same portable
+metadata helper as macOS/Linux. Without a real update URL and paired public-key
+file there is no updater asset/network configuration.
+
+Packaging reuses LUI's existing PE architecture validator, ZIP writer,
+`sign_windows`, `find_iscc` and `signtool sign/verify` hooks. To sign, supply
+`--windows-thumbprint <installed-certificate-thumbprint> --timestamp-url <HTTPS-URL>`
+and optionally `--signtool <tool>`. No certificate is created or supplied by the
+script. The default is explicitly `signing=unsigned`; failed or unavailable
+requested signing never falls back to unsigned publication. Nested DLLs/worker
+and the actual root executable are signed and verified before archive/installer
+construction; the installer is signed and verified separately. The ZIP's code
+entries are streamed and compared against their final signed candidate bytes.
+
+When Inno Setup is present (or explicitly required through `--iscc`), the
+application-specific script builds a per-user `-setup.exe` using the native
+NSH install conventions: stable AppId, complete recursive application files and
+Start menu identity. NSH's Inno generator is private to its CLI, so this small
+actual-host script describes only this payload; it does not rebuild a generated
+runner or copy a toolkit implementation. It retires only installed Resources,
+NSH metadata and old app-root DLLs. User APPDATA/LOCALAPPDATA, graphs, state and
+cache directories are not installation payloads and are not deleted. Without
+Inno, only the ZIP is produced. The Windows CI explicitly requires its documented
+Inno compiler, producing unsigned ZIP and installer for qualification.
+
+The final ZIP receipt binds scoped source/build inputs, shared signing-hook
+source, the release sidecar, final installed-code hashes and optional installer
+hash. The copied `windows-dependencies.json` hashes describe qualified build
+inputs before distribution signatures; `installedCodeSha256` records final
+packaged code after signatures. `check-release-windows <archive> <lui-checkout>`
+on `package-nsh.mjs` checks all of them, including the companion installer when present. A changed code
+source, signature verification failure, incomplete closure or existing release
+refuses publication. The qualified dependency-provenance map must agree with
+receipt ownership, so omitting a required root/Resources DLL is rejected. Archive, installer and sidecar publish before the receipt;
+this is per-file publication, not a whole-directory transaction. The installer
+is not an updater ZIP or a substitute for an authenticated release manifest.
+
+Local tests use synthetic PE headers, actual ZIP/receipt functions and fake
+Inno/signing subprocesses. They prove payload inclusion, ownership/freshness,
+final-code hashing and publication/signing order, not Windows executable
+loading, real Authenticode trust, installer execution or packaged native UX.
+Those remain remote/production qualification gates.

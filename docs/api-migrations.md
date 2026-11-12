@@ -1,5 +1,30 @@
 # API migrations
 
+
+## Actual Windows whole-app package layout
+
+`deps/ui/nsh/package_windows.py` packages the qualified native Windows App into
+`Logseq-NSH-<version>-windows-x86_64.zip`. The archive root contains the actual
+`logseq-nsh.exe`, qualified root DLLs, sibling `Resources` (OCaml, worker,
+dependencies/assets) and NSH app/update metadata. It preserves seven-argument
+startup and existing executable-relative resource/data paths. There is no
+Windows shell launcher or generic Todos/generated-runner substitution.
+
+The portable package helper accepts Windows x86_64 and copies `ownedCode` root
+DLLs alongside `ownedResources`, validating each against the build receipt. The
+ZIP receipt adds `signing`, final `installedCodeSha256` and optional companion
+`installer` name/hash. Existing macOS/Linux receipts remain compatible. Real
+certificate/timestamp options reuse LUI Authenticode hooks; absent credentials
+produce explicitly unsigned output. A failed requested signature never publishes
+an unsigned substitute. Optional Inno installation affects only application
+files, preserving user graphs/state/cache. Release checks bind the companion
+installer and source sidecar to the final archive receipt.
+
+This source checkpoint and its fake-toolchain tests do not qualify real Windows
+startup, signatures, installation or upgrades. The Windows CI now exercises the
+actual package path after its private App gate; a successful remote run remains
+required. Maintained Web/mobile/Apple paths are unchanged.
+
 ## Windows actual-app build publication
 
 `python deps/ui/nsh/build_windows.py --lui-source <checkout> --dumpbin <tool>
