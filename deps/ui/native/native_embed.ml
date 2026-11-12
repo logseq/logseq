@@ -488,7 +488,7 @@ let initialize_unlocked platform_code host_code (payload : string) =
   in
   Printexc.record_backtrace true;
   Daemon_client.start_prewarm ();
-  Platform.install_ui_services ~paints_caret ~nsh_updates:(host_code = 6) ~assert_owner:assert_entry_owner ~request_flush:Runtime.flush ~dom:Ui_dom_native.ops ~timers:Ui_dom_native.timers ~files:Ui_dom_native.files;
+  let () = Platform.install_ui_services ~paints_caret ~nsh_updates:(host_code = 6) ~assert_owner:assert_entry_owner ~request_flush:Runtime.flush ~dom:Ui_dom_native.ops ~timers:Ui_dom_native.timers ~files:Ui_dom_native.files in
   (match (I18n.init ()).Js.Promise.state with
    | Js.Promise.Resolved () -> ()
    | Js.Promise.Rejected error -> raise error

@@ -245,11 +245,11 @@ let durable_page worker repo =
   query,arguments,title
 let run_coordinator () =
   let app_owner=Thread.id (Thread.self ()) in
-  Platform.install_ui_services ~paints_caret:true
+  let () = Platform.install_ui_services ~paints_caret:true ~nsh_updates:true
     ~assert_owner:(fun () -> check "Coordinator callbacks remain on the fixture owner"
       (Thread.id (Thread.self ())=app_owner))
     ~request_flush:(fun () -> ()) ~dom:Ui_dom_native.ops
-    ~timers:Ui_dom_native.timers ~files:Ui_dom_native.files;
+    ~timers:Ui_dom_native.timers ~files:Ui_dom_native.files in
   let repo_a="logseq_db_coordinator_a" and repo_b="logseq_db_coordinator_b" in
   let first=attach repo_a and second=attach repo_b in
   check "Two concurrent workers have distinct exact child instances"
@@ -343,11 +343,11 @@ let run_outliner_drop () =
   let module S = Editor_state in
   let module Ops = Outliner_ops in
   let app_owner=Thread.id (Thread.self ()) in
-  Platform.install_ui_services ~paints_caret:true
+  let () = Platform.install_ui_services ~paints_caret:true ~nsh_updates:true
     ~assert_owner:(fun () -> check "Outliner callbacks remain on the contained app owner"
       (Thread.id (Thread.self ())=app_owner))
     ~request_flush:(fun () -> ()) ~dom:Ui_dom_native.ops
-    ~timers:Ui_dom_native.timers ~files:Ui_dom_native.files;
+    ~timers:Ui_dom_native.timers ~files:Ui_dom_native.files in
   let diagnostics=ref 0 in
   let host_requests=ref [] in
   Host.set_host_op (fun name payload -> host_requests:=(name,payload)::!host_requests);

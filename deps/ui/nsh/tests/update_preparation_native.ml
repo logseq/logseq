@@ -1373,6 +1373,76 @@ let native_platform_exception_reporting () =
     check "actual platform handler preserves its original rejection after OCaml logging"
       (bridge_platform_event "window-titlebar\n{}"=0))
 
+let native_updater_state_events () =
+  Host.drain ();
+  let updates = match Ui_services.desktop_updates () with
+    | Some updates -> updates
+    | None -> failwith "Native updater fixture requires the explicitly installed NSH capability" in
+  let previous_app = !Native_embed.current_app and previous_state = updates.current () in
+  let backend : Lui_protocol.backend = {
+    backend_profile = Lui_protocol.profile Lui_protocol.MacOS Lui_protocol.NshHost;
+    apply_batch = (fun _ -> true) } in
+  let model = { Model.initial with repo = Some "native-updater-owner"; route = Model.Settings } in
+  let create () = Lui_app.create backend model
+    (fun model (_ : Action.t) -> model)
+    (fun _ _ _ -> Lui_elements.box []) in
+  let first = create () and replacement = create () in
+  let seen = ref [] in
+  let unsubscribe = updates.subscribe (fun state -> seen := state :: !seen) in
+  let state configured busy : Ui_services.desktop_update_state = { configured; busy } in
+  let emit configured busy = Native_embed.platform_event
+    (Printf.sprintf "application-updater-state\n{\"configured\":%b,\"busy\":%b}" configured busy) in
+  Fun.protect ~finally:(fun () ->
+    Native_embed.current_app := None;
+    Host.drain ();
+    unsubscribe ();
+    Platform.update_desktop_updates previous_state;
+    ignore (Lui_app.dispose first); ignore (Lui_app.dispose replacement);
+    Native_embed.current_app := previous_app) (fun () ->
+    Platform.update_desktop_updates (state false false);
+    seen := [];
+    ignore (Lui_app.start first); ignore (Lui_app.flush first);
+    ignore (Lui_app.start replacement); ignore (Lui_app.flush replacement);
+    Native_embed.current_app := Some first;
+    emit true false;
+    check "actual native updater state waits for the app-owner mailbox"
+      (updates.current () = state false false && !seen = []);
+    Host.drain ();
+    check "actual native updater capability and notification publish after drain"
+      (updates.current () = state true false && !seen = [state true false]);
+    emit true true;
+    check "queued native busy state does not run inline"
+      (updates.current () = state true false && !seen = [state true false]);
+    Host.drain ();
+    check "the same actual app receives its queued busy transition"
+      (updates.current () = state true true && !seen = [state true true; state true false]);
+    emit false false;
+    Native_embed.current_app := Some replacement;
+    let first_model = Lui_app.model first and replacement_model = Lui_app.model replacement in
+    check "replacement updater test keeps graph and route identical but changes physical app owner"
+      (first != replacement && first_model.repo = replacement_model.repo
+       && first_model.route = replacement_model.route);
+    Host.drain ();
+    check "a queued old physical app owner cannot change updater state even on the same graph and route"
+      (updates.current () = state true true && List.length !seen = 2);
+    List.iter (fun body ->
+      (match Native_embed.platform_event ("application-updater-state\n" ^ body) with
+       | () -> failwith ("Malformed native updater booleans were admitted: " ^ body)
+       | exception Invalid_argument _ -> ());
+      Host.drain ();
+      check "malformed updater booleans neither enqueue a state change nor notify subscribers"
+        (updates.current () = state true true && List.length !seen = 2))
+      ["{\"configured\":true,\"busy\":\"false\"}";
+       "{\"configured\":0,\"busy\":true}";
+       "{\"configured\":true}"; "null"];
+    emit true false;
+    check "the replacement application's state is still queued"
+      (updates.current () = state true true);
+    Host.drain ();
+    check "the live replacement app can publish its own queued state"
+      (updates.current () = state true false && List.length !seen = 3));
+  print_endline "PASS actual native updater state: queued owner, physical replacement, malformed booleans"
+
 let native_settings_route_links () =
   let previous_app = !Native_embed.current_app and previous_settings = !Settings_state.st
   and previous_model = !Runtime.read_model and previous_flush = !Runtime.app_flush
@@ -2748,8 +2818,9 @@ let () =
   let dom = {Ui_dom_native.ops with Ui_services.emit_json = (fun name payload ->
     native_dom_events := !native_dom_events @ [name, Js.Json.parseExn payload];
     Ui_dom_native.ops.Ui_services.emit_json name payload)} in
-  Platform.install_ui_services ~paints_caret:true ~assert_owner
-    ~request_flush:(fun () -> ()) ~dom ~timers:Ui_dom_native.timers ~files:Ui_dom_native.files;
+  let () = Platform.install_ui_services ~paints_caret:true ~nsh_updates:true ~assert_owner
+    ~request_flush:(fun () -> ()) ~dom ~timers:Ui_dom_native.timers ~files:Ui_dom_native.files in
+  native_updater_state_events ();
   Update_worker_coordinator_native.run ();
   Editor_clipboard_native.run ();
   Native_assets_native.run ();
