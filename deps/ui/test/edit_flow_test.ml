@@ -1202,6 +1202,85 @@ let test_property_command_refresh (h : host) =
   run [ "status:Todo", "/todo keep typing";
         "heading:2", "/head keep typing" ]
 
+let test_property_remove_batch (h : host) =
+  let* () = settle h 40 in
+  let previous_worker = !Runtime.worker and previous_model = !Runtime.read_model
+  and previous_dialog = !Properties_dialog.current
+  and previous_signal = !Properties_dialog.current_sig
+  and previous_close = !Properties_dialog.current_on_close
+  and previous_properties = Runtime.hooks.refresh_property_areas
+  and previous_view = Runtime.hooks.refresh_after_ops in
+  let origin = { (h.snapshot ()) with Model.repo = Some h.repo } in
+  let model = ref origin in
+  let requests = ref [] and refreshed = ref [] and closed = ref 0 in
+  let rejected = ref false and complete = ref (fun () -> ()) in
+  Runtime.read_model := (fun () -> !model);
+  Runtime.hooks.refresh_property_areas := (fun () ->
+    refreshed := !refreshed @ ["properties"]; Ui_task.resolve ());
+  Runtime.hooks.refresh_after_ops := (fun () ->
+    refreshed := !refreshed @ ["view"]; Ui_task.resolve ());
+  Properties_dialog.current_sig := None;
+  let prop = W.Map [W.Keyword "db/ident",W.Keyword "fixture/remove"] in
+  let dialog uuid uuids : Properties_dialog.dlg_state =
+    { d_target={uuid;uuids;db_id=None;is_tag=false;title=""}; d_remove=true;
+      d_placement=Properties_dialog.Centered;d_phase=Properties_dialog.Prop_select;d_phase_sig=None } in
+  let make_current d =
+    Properties_dialog.current := Some d;
+    Properties_dialog.current_on_close := (fun () -> incr closed) in
+  Runtime.worker := Some { Worker_client.invoke_fn=(fun name args ->
+    if name = "thread-api/apply-outliner-ops" then begin
+      requests := args :: !requests;
+      if !rejected then h.reject_promise "expected batch validation rejection"
+      else Js.Promise.make (fun ~resolve ~reject:_ ->
+        complete := (fun () -> resolve (W.Map [W.Keyword "result",W.Nil]) [@u]))
+    end else Js.Promise.resolve W.Nil);
+    on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ()) };
+  let payload () = match !requests with
+    | [[W.String repo;W.Array [W.Array [W.Keyword "batch-remove-property";
+        W.Array [W.List [W.Uuid "b1";W.Uuid "b2"];W.Keyword "fixture/remove"]]];W.Map []]] -> repo = h.repo
+    | _ -> false in
+  let d = dialog "b1" ["b1";"b2"] in
+  make_current d;
+  let removing = Properties_dialog.remove_property d prop in
+  let* () = h.wait_ms 25 in
+  check "selected property removal issues one captured two-owner batch request" (payload ());
+  check "property removal keeps its dialog until the transaction acknowledges"
+    (!closed=0 && !refreshed=[] && !Properties_dialog.current=Some d);
+  !complete ();
+  let* () = removing in
+  check "one successful property transaction refreshes before closing its own dialog"
+    (!closed=1 && !refreshed=["properties";"view"] && !Properties_dialog.current=None);
+  requests:=[];refreshed:=[];closed:=0;rejected:=true;
+  let d = dialog "b1" ["b1";"b2"] in
+  make_current d;
+  let* failed = Properties_dialog.remove_property d prop
+    |> Js.Promise.then_ (fun () -> Js.Promise.resolve false)
+    |> Js.Promise.catch (fun _ -> Js.Promise.resolve true) in
+  check "batch rejection propagates without partial per-owner fallback"
+    (failed && payload () && !closed=0 && !refreshed=[] && !Properties_dialog.current=Some d);
+  requests:=[];refreshed:=[];closed:=0;rejected:=false;
+  let old = dialog "b1" ["b1";"b2"] in
+  make_current old;
+  let removing = Properties_dialog.remove_property old prop in
+  (* Change graphs before asynchronous request construction resolves. The
+     accepted command must retain its captured repo and owner list. *)
+  model := {origin with Model.repo=Some "destination-graph";
+    context_revision=origin.context_revision+1};
+  let newer = dialog "new-owner" [] in
+  make_current newer;
+  let* () = h.wait_ms 25 in
+  check "property removal cannot retarget a captured selection into another graph" (payload ());
+  !complete ();
+  let* () = removing in
+  check "old property completion neither refreshes the destination nor closes a newer dialog"
+    (!refreshed=[] && !closed=0 && !Properties_dialog.current=Some newer);
+  Runtime.worker:=previous_worker;Runtime.read_model:=previous_model;
+  Runtime.hooks.refresh_property_areas:=previous_properties;
+  Runtime.hooks.refresh_after_ops:=previous_view;
+  Properties_dialog.current:=previous_dialog;Properties_dialog.current_sig:=previous_signal;
+  Properties_dialog.current_on_close:=previous_close;
+  Js.Promise.resolve ()
+
 (* synchronous stage: pure-model checks that need no app drain *)
 let run (_h : host) =
   test_measure_deferred ();
@@ -1232,5 +1311,6 @@ let async_stage (h : host) : unit Js.Promise.t =
   let* () = test_keyboard_block_selection h in
   let* () = test_delete_selection_history h in
   let* () = test_property_command_refresh h in
+  let* () = test_property_remove_batch h in
   h.restore saved;
   Js.Promise.resolve ()

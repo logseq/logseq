@@ -161,11 +161,18 @@ let add_empty_text_block d prop =
   Js.Promise.resolve ())
   |> ignore
 
+let remove_property d prop =
+  let origin_repo = Runtime.repo () in
+  let block_uuids = owners d in
+  let* _ = D.batch_remove_property_for_repo ~origin_repo ~block_uuids
+      ~ident:(ident_of prop) in
+  (* The SDK awaits its context-owned property refresh before resolving. *)
+  close_current d;
+  Js.Promise.resolve ()
+
 (* chosen an existing property from the select *)
 let rec property_chosen d prop =
-  if d.d_remove then (
-    finish_write d (for_owners d (fun block_uuid ->
-      D.remove_block_property ~block_uuid ~ident:(ident_of prop))))
+  if d.d_remove then ignore (remove_property d prop)
   else if d.d_target.is_tag then (
     finish_write d (D.class_add_property ~class_uuid:d.d_target.uuid
          ~ident:(ident_of prop)))

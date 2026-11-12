@@ -479,6 +479,11 @@ let batch_set_property ~block_uuids ~ident ~value =
   apply "batch-set-property"
     [ uuid_list block_uuids; W.Keyword ident; value; W.Map [] ]
 
+(* One transaction owns the entire captured selection and its undo entry. *)
+let batch_remove_property_for_repo ~origin_repo ~block_uuids ~ident =
+  Sdk_util.apply_op_for_repo origin_repo "batch-remove-property"
+    [ uuid_list block_uuids; W.Keyword ident ]
+
 let batch_delete_property_value ~block_uuids ~ident ~value =
   apply "batch-delete-property-value"
     [ uuid_list block_uuids; W.Keyword ident; value ]

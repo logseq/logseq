@@ -2732,7 +2732,11 @@ let test_batch_remove_property () =
 
 (* (deftest batch-remove-property-rejects-private-built-in-entity ...) *)
 let test_batch_remove_property_rejects_private_built_in_entity () =
-  let conn = Db_test_util.create_conn () in
+  let conn = Db_test_util.create_conn_with_blocks
+    ~properties:["atomic-remove",Db_test_util.default_property]
+    ~pages_and_blocks:[{Db_test_util.page=Db_test_util.{default_page with pg_title=Some "atomic page"};
+      blocks=[Db_test_util.{default_block with b_title=Some "ordinary owner";
+        b_properties=["atomic-remove",Db_test_util.Str "keep me"]}]}] () in
   Db_test_util.transact_maps conn
     [ [ "db/ident", Db_test_util.Kw "logseq.property/empty-placeholder";
         "logseq.property/built-in?", Db_test_util.Bool true ];
@@ -2751,7 +2755,18 @@ let test_batch_remove_property_rejects_private_built_in_entity () =
     "can't be modified"
     (fun () ->
        Outliner_property.batch_remove_property conn [ Wire.Int placeholder_id ]
-         "logseq.property/description" ())
+         "logseq.property/description" ());
+  let ordinary () = match Db_test_util.find_block_by_content (db_of conn) "ordinary owner" with
+    | Some block -> block | None -> failwith "ordinary batch owner missing" in
+  let before = Ldb.value (ordinary ()) "user.property/atomic-remove" in
+  check "ordinary atomic-failure fixture starts with its property value" (Option.is_some before);
+  throws_with "batch removal validates every owner before changing an earlier ordinary owner"
+    "can't be modified" (fun () ->
+      Outliner_property.batch_remove_property conn
+        [Wire.Uuid (uuid_of (ordinary ()));Wire.Int placeholder_id]
+        "user.property/atomic-remove" ());
+  check "rejected mixed-owner batch keeps the earlier owner's original value"
+    (Ldb.value (ordinary ()) "user.property/atomic-remove" = before)
 
 (* (deftest add-existing-values-to-closed-values! ...) *)
 let test_add_existing_values_to_closed_values () =

@@ -2266,3 +2266,25 @@ public API does not expose cancellation; an authored callback fails the actual
 native preflight rather than being silently ignored. Other maintained backend
 branches are pruned according to the actual native target as before. Dynamic
 values retain provider validation.
+
+### Selected property removal uses one captured transaction
+
+The property dialog's remove workflow now submits one existing worker
+`batch-remove-property` operation for its captured selected UUID list. It
+previously sent one `remove-block-property` request per owner, creating multiple
+transactions/undo entries and allowing earlier owners to change before a later
+request failed. The worker validates the complete batch before mutation.
+
+`Properties_data.batch_remove_property_for_repo ~origin_repo ~block_uuids ~ident`
+uses the existing SDK origin-bound operation path. For example, removing `P`
+from `[A; B]` sends one request with `batch-remove-property [[A; B]; P]` to the
+captured graph, even if navigation happens while the request is constructed.
+The SDK awaits refresh only for the originating current context; completion
+closes only its own property dialog and cannot dismiss a newer workflow.
+Validation failure rejects the batch without a per-owner retry or a success
+refresh. Ordinary single-owner removal uses the same one-element batch.
+
+No worker wire operation or public LUI contract changes. Selection defaults,
+class-property handling and other property write workflows retain their
+existing behavior. The dedicated Task-view status-preservation option remains
+outside this change; this entry does not claim that separate master parity.
