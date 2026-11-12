@@ -1044,8 +1044,9 @@ module Ffi = struct
             then name else "unrecognized-operation"
         | _ -> "malformed-operation" in
       let message=Printexc.to_string error in
-      Printf.eprintf "logseq native: platform event %s failed: %.*s\n%!"
-        operation 1024 message;
+      let bounded=String.sub message 0 (min 1024 (String.length message)) in
+      Printf.eprintf "logseq native: platform event %s failed: %s\n%!"
+        operation bounded;
       Printexc.raise_with_backtrace error backtrace
   let document_event payload =
     let separator = String.index payload '\n' in
