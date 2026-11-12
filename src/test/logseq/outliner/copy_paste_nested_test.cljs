@@ -76,3 +76,30 @@
             pasted (first (filter :block/link siblings))]
         (is (some? pasted) "Pasted node should be a link node")
         (is (= (:db/id page-a) (:db/id (:block/link pasted))))))))
+
+(deftest cut-paste-into-page-title-inserts-under-page
+  (testing "Pasting cut blocks while editing a page's title targets the page
+            as a sibling (it has no children left); a page has no parent, so
+            the blocks go under the page instead of getting a nil parent."
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "page1"}
+                  :blocks [{:block/title "cut parent"
+                            :build/children [{:block/title "cut child"}]}]}])
+          page (ldb/get-page @conn "page1")
+          parent (db-test/find-block-by-content @conn "cut parent")
+          parent-uuid (:block/uuid parent)
+          copied (mapv clipboard-block
+                       (ldb/get-block-and-children @conn parent-uuid
+                                                   {:include-property-block? true}))]
+      (outliner-core/delete-blocks! conn [parent] {})
+      (is (empty? (outline-child-titles (d/entity @conn (:db/id page)))))
+      (outliner-core/insert-blocks! conn copied (d/entity @conn (:db/id page))
+                                    {:sibling? true
+                                     :keep-uuid? true
+                                     :outliner-op :paste})
+      (let [page' (d/entity @conn (:db/id page))
+            parent' (d/entity @conn [:block/uuid parent-uuid])]
+        (is (= ["cut parent"] (outline-child-titles page')))
+        (is (= (:db/id page) (:db/id (:block/parent parent'))))
+        (is (= (:db/id page) (:db/id (:block/page parent'))))
+        (is (= ["cut child"] (outline-child-titles parent')))))))

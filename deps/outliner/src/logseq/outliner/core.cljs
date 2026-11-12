@@ -282,11 +282,22 @@
                                                                   :class? class?
                                                                   :journal? (or (= "journal" (:block/type ref))
                                                                                 (contains? (ref-tag-idents ref)
-                                                                                           :logseq.class/Journal))})]
-          [(cond-> (assoc (select-keys ref [:block/title :block/name :block.temp/original-page-name])
-                          :block/uuid page-uuid)
-             class? (assoc :db/ident (or (some :db/ident tx-data)
-                                         (:db/ident (d/entity db [:block/uuid page-uuid])))))
+                                                                                           :logseq.class/Journal))})
+              ;; nil when create can't make the page a class, e.g. an existing journal
+              class-ident (when class?
+                            (or (some :db/ident tx-data)
+                                (:db/ident (d/entity db [:block/uuid page-uuid]))))
+              ;; create can resolve a name no page has to an existing journal, e.g. the bracketed
+              ;; "[[Nov 2nd, 2026]]" of "[[ [[Nov 2nd, 2026]]]]": keep the journal's own title and name,
+              ;; which are protected, or the ref's would be written over them
+              existing (when-let [e (d/entity db [:block/uuid page-uuid])]
+                         (when (ldb/journal? e) e))]
+          [(cond-> (if existing
+                     (merge (select-keys existing [:db/id :block/uuid :block/title :block/name])
+                            (select-keys ref [:block.temp/original-page-name]))
+                     (assoc (select-keys ref [:block/title :block/name :block.temp/original-page-name])
+                            :block/uuid page-uuid))
+             class-ident (assoc :db/ident class-ident))
            tx-data])))
     [ref nil]))
 
@@ -326,15 +337,66 @@
        (nil? (:db/ident ref'))
        (common-util/uuid-string? (or (:block/name ref') ""))))
 
-(defn- missing-uuid-ref?
+(defn- missing-block-lookup?
   "A [:block/uuid id] lookup whose entity doesn't exist and isn't created by
-  this transaction would fail the transaction, so it's dropped."
+  this transaction would fail the transaction."
+  [db created-uuids v]
+  (and (vector? v)
+       (= :block/uuid (first v))
+       (uuid? (second v))
+       (not (d/entity db [:block/uuid (second v)]))
+       (not (contains? created-uuids (second v)))))
+
+(defn- missing-uuid-ref?
+  "A ref that is a missing-block-lookup? is dropped."
   [db created-uuids [_ref ref' _tx-data]]
-  (and (vector? ref')
-       (= :block/uuid (first ref'))
-       (uuid? (second ref'))
-       (not (d/entity db [:block/uuid (second ref')]))
-       (not (contains? created-uuids (second ref')))))
+  (missing-block-lookup? db created-uuids ref'))
+
+(defn- drop-missing-block-lookups
+  "An inserted block can point at a block that no longer exists, e.g. a
+  clipboard copied before an undo removed a block it links to or references.
+  Its :block/link and :block/refs lookups of that block are dropped instead of
+  failing the insert. A missing property value still fails it, as
+  cut-paste-property-test pins, since dropping it would lose the value."
+  [db created-uuids block]
+  (let [missing? #(missing-block-lookup? db created-uuids %)]
+    (cond-> block
+      (missing? (:block/link block))
+      (dissoc :block/link)
+
+      (some missing? (:block/refs block))
+      (update :block/refs (fn [refs]
+                            (let [refs' (remove missing? refs)]
+                              (if (set? refs) (set refs') (vec refs'))))))))
+
+(defn- resolve-tags
+  "Point each tag at its resolved class ref. A new tag (no :db/id) whose ref
+  create couldn't make a class is dropped and its ref stays: :block/tags only
+  takes classes. E.g. an existing journal written as #[[Oct 25th, 2026]], or a
+  uuid-named tag like #[[<block uuid>]] whose ref becomes a broken ref."
+  [tags pairs tag-names]
+  (let [tag-refs (reduce (fn [m [_ref ref' _tx-data]]
+                           (if (:db/ident ref')
+                             (update m (:block/name ref') (fnil conj []) ref')
+                             m))
+                         {}
+                         pairs)
+        no-class-names (into #{}
+                             (keep (fn [[ref ref' _tx-data]]
+                                     (when (and (new-page-ref? ref)
+                                                (contains? tag-names (:block/name ref))
+                                                (nil? (:db/ident ref')))
+                                       (:block/name ref))))
+                             pairs)]
+    (into []
+          (comp (remove #(and (nil? (:db/id %))
+                              (contains? no-class-names (:block/name %))))
+                (map (fn [tag]
+                       (if-let [ref (matching-ref-for-tag tag (get tag-refs (:block/name tag)))]
+                         (merge (dissoc tag :block/type)
+                                (select-keys ref [:block/uuid :db/ident]))
+                         tag))))
+          tags)))
 
 (defn- resolve-page-refs
   ([db block]
@@ -354,18 +416,7 @@
            broken-pairs (filterv (comp broken-page-map? second) pairs)
            refs' (mapv second resolved-pairs)
            page-txs (mapcat #(nth % 2) resolved-pairs)
-           tag-refs (reduce (fn [m ref]
-                              (if (:db/ident ref)
-                                (update m (:block/name ref) (fnil conj []) ref)
-                                m))
-                            {}
-                            refs')
-           tags' (mapv (fn [tag]
-                         (if-let [ref (matching-ref-for-tag tag (get tag-refs (:block/name tag)))]
-                           (merge (dissoc tag :block/type)
-                                  (select-keys ref [:block/uuid :db/ident]))
-                           tag))
-                       (:block/tags block))
+           tags' (resolve-tags (:block/tags block) pairs tag-names)
            replacements (into (keep (fn [[ref ref' _tx-data]]
                                       (when (not= (:block/uuid ref) (:block/uuid ref'))
                                         [(:block/uuid ref) (:block/uuid ref')]))
@@ -896,9 +947,11 @@
                        :else
                        (throw (js/Error. (str "[insert-blocks] illegal lookup: " lookup ", block: " block)))))
         entries (build-insert-blocks-tx db target-block blocks uuids get-new-id opts)
-        blocks-tx (mapv first entries)]
+        page-txs (mapcat second entries)
+        created-uuids (into (set (vals uuids)) (keep #(when (map? %) (:block/uuid %))) page-txs)
+        blocks-tx (mapv #(some->> (first %) (drop-missing-block-lookups db created-uuids)) entries)]
     {:blocks-tx blocks-tx
-     :page-txs (mapcat second entries)
+     :page-txs page-txs
      :id->new-uuid id->new-uuid
      :uuid->new-uuid uuids}))
 
@@ -1155,6 +1208,10 @@
                   (remove ldb/asset?))
          [target-block sibling?] (get-target-block db blocks target-block opts)
          _ (assert (some? target-block) (str "Invalid target: " target-block))
+         ;; A target without a parent (a top-level page, e.g. the page whose
+         ;; title is being edited during a paste) has no siblings: insert
+         ;; under it instead of with a nil :block/parent.
+         sibling? (and sibling? (some? (:block/parent target-block)))
          blocks (if (and (= outliner-op :paste) (some ldb/asset? blocks))
                   (prepare-pasted-assets db blocks target-block sibling? keep-uuid?)
                   blocks)
@@ -1625,14 +1682,57 @@
       :else
       top-level-blocks)))
 
+(defn- move-pages
+  "The pages `nodes` are drawn on, and a `same-page?` that says whether a
+  move to `target` (as its sibling or child) stays on one of them."
+  [db nodes]
+  (let [;; the page a node is drawn on: a block's page, or for a nested page
+        ;; (no :block/page) the page it is nested in
+        node-page-id (fn [node]
+                       (let [node (d/entity db (:db/id node))]
+                         (or (:db/id (:block/page node))
+                             (:db/id (:block/parent node)))))
+        pages (set (map node-page-id nodes))
+        ;; where a node lands as a child or sibling of `target`
+        target-page-id (fn [target sibling?]
+                         (let [target (d/entity db (:db/id target))]
+                           (if (and (not sibling?)
+                                    (or (ldb/page? target) (:block/name target)))
+                             (:db/id target)
+                             (node-page-id target))))]
+    {:pages pages
+     :same-page? (fn [target sibling?]
+                   (contains? pages (target-page-id target sibling?)))}))
+
+(defn- move-blocks-up!
+  "Moves `blocks` up to `target` (as its sibling or child). A property value
+  moved up past the first value would go into its parent and become an
+  ordinary child, so the first value moves down after `blocks` instead, and
+  every value stays a value."
+  [conn blocks target sibling? opts]
+  (let [first-block (first blocks)]
+    (if (and (not sibling?)
+             (:logseq.property/created-from-property first-block))
+      (move-blocks conn [(ldb/get-left-sibling first-block)] (last blocks)
+                   (merge opts {:sibling? true :up? false}))
+      (move-blocks conn blocks target (merge opts {:sibling? sibling? :up? true})))))
+
 (defn- move-blocks-up-down
   "Move blocks up/down."
   [conn blocks up?]
   {:pre [(seq blocks) (boolean? up?)]}
   (let [db @conn
         top-level-blocks (page-order-top-level-blocks db blocks)
-        opts {:outliner-op :move-blocks-up-down}]
-    (if up?
+        opts {:outliner-op :move-blocks-up-down}
+        {:keys [pages same-page?]} (move-pages db top-level-blocks)]
+    (cond
+      ;; a move up or down stays in 1 page: its target comes from 1 end of
+      ;; the selection, so a selection over 2 pages would carry the blocks
+      ;; of 1 page into the other
+      (> (count pages) 1)
+      nil
+
+      up?
       (let [first-block (d/entity db (:db/id (first top-level-blocks)))
             first-block-parent (:block/parent first-block)
             first-block-left-sibling (ldb/get-left-sibling first-block)
@@ -1644,11 +1744,13 @@
         (when (and left-left
                    (not= (:db/id (:block/page first-block-parent))
                          (:db/id left-left))
+                   ;; never into another page, e.g. a nested page's sibling
+                   (same-page? left-left sibling?)
                    (not (and (:logseq.property/created-from-property first-block)
                              (nil? first-block-left-sibling))))
-          (move-blocks conn top-level-blocks left-left (merge opts {:sibling? sibling?
-                                                                    :up? up?}))))
+          (move-blocks-up! conn top-level-blocks left-left sibling? opts)))
 
+      :else
       (let [last-top-block (last top-level-blocks)
             last-top-block-right (ldb/get-right-sibling last-top-block)
             right (or
@@ -1658,6 +1760,7 @@
             sibling? (= (:db/id (:block/parent last-top-block))
                         (:db/id (:block/parent right)))]
         (when (and right
+                   (same-page? right sibling?)
                    (not (and (:logseq.property/created-from-property last-top-block)
                              (nil? last-top-block-right))))
           (move-blocks conn top-level-blocks right (merge opts {:sibling? sibling?
@@ -1704,17 +1807,20 @@
                                                               :indent? true}))))))
           (if parent-original
             (let [blocks' (take-while (fn [b]
-                                        (not= (:db/id (:block/parent b))
-                                              (:db/id (:block/parent parent))))
+                                        (= (:db/id (:block/parent b))
+                                           (:db/id parent)))
                                       top-level-blocks)]
               (move-blocks conn blocks' parent-original (merge opts {:outliner-op :indent-outdent-blocks
                                                                      :sibling? true
                                                                      :indent? false})))
 
             (when parent
+              ;; only the selected blocks under the first one's parent go out
+              ;; 1 level; a selected block already above that level (a
+              ;; selection over 2 levels) stays, never goes deeper
               (let [blocks' (take-while (fn [b]
-                                          (not= (:db/id (:block/parent b))
-                                                (:db/id (:block/parent parent))))
+                                          (= (:db/id (:block/parent b))
+                                             (:db/id parent)))
                                         top-level-blocks)
                     result (move-blocks conn blocks' parent (merge opts {:sibling? true}))]
                 (if logical-outdenting?
