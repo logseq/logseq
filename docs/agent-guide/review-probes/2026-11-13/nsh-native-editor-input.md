@@ -1,7 +1,37 @@
 # Actual native editor input and selection follow-up
 
-Status: native plain-block edit/save passed; the combined selection/drag flow
-remains incomplete. The installed developer application was not replaced.
+Status: the current native plain-block edit/save/selection/drag flow passed.
+The earlier failures below remain historical evidence. Other editor/module
+acceptance gates remain open. The installed application was not replaced.
+
+## Current complete block-flow follow-up
+
+The unchanged original AppKit scenario passed at application production revision
+`98fd20aa6d62a11aa06fc026c9fca12063488af4`, with LUI production sources equal
+to `58b7d39df9d69305c75f5a88474788ea86085a96` and NSH `adc186db`.
+Local LUI commits through `10fdb06b` change documentation only relative to that
+runtime revision. The complete fresh release publisher and actual startup gate
+passed in `/tmp/logseq-selection-complete-release.log`.
+
+The Rust executable SHA-256 is
+`d01f96a5542b918d74d3fb29bd92e87cd05cd5dc72cd8a697f91f86d7d1923fc`;
+the release OCaml library SHA-256 is
+`8a34ea0c948ffd5a965ddae93ac79b997c0ec3fdf3f1fa8379213c7e0775a467`.
+`/tmp/logseq-selection-routed-native-block-all.log` passed one test in 16.7
+seconds, using private `logseq-native-block.sPsub9`. It includes native click,
+Cmd+A, replacement input, durable save, Shift range selection, two Escape
+presses clearing action bar and selection, persisted sibling reorder and
+outside-window cancellation. The application remained inactive and its window
+non-key. It uses native driver input, not semantic activation or physical keys.
+
+The native keymap now admits Escape only for a nonediting block selection.
+Focused inputs keep ownership and topmost popover Cancel takes precedence;
+clearing selection removes the binding. Native FFI checks and 64 release Rust
+tests plus strict all-target Clippy passed. The shared selection changes pass
+16,329 Web checks and contract tests. The separate SDK cancel-only overlay
+retirement defect still affects other providers and is explicitly unresolved
+in `../2026-11-12/nsh-continuous-ux-review.md`; the actual selection popover uses
+both Cancel and PressOutside and does not take that SDK path.
 
 ## Exact implementation and build
 
