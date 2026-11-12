@@ -126,9 +126,21 @@ impl Sender {
     pub fn send(&self, mut event: Event) {
         let mut bytes = event_bytes(&event);
         if bytes > BYTE_BUDGET {
+            let (viewport_revision, search_revision) = match &event {
+                Event::Viewport { revision, .. } => (Some(*revision), None),
+                Event::Search { revision, .. } => (None, Some(*revision)),
+                Event::Failed {
+                    viewport_revision,
+                    search_revision,
+                    ..
+                } => (*viewport_revision, *search_revision),
+                _ => (None, None),
+            };
             event = Event::Failed {
                 epoch: event.epoch(),
                 message: "PDF completion exceeds its retained byte budget".into(),
+                viewport_revision,
+                search_revision,
             };
             bytes = event_bytes(&event);
         }

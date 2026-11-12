@@ -24,6 +24,8 @@ pub enum Event {
     Failed {
         epoch: u64,
         message: String,
+        viewport_revision: Option<u64>,
+        search_revision: Option<u64>,
     },
     Viewport {
         epoch: u64,
@@ -171,12 +173,24 @@ impl State {
         }
     }
     fn failure(&self, epoch: u64, error: Error, output: &dyn Fn(Event)) {
+        self.failure_for(epoch, error, None, None, output);
+    }
+    fn failure_for(
+        &self,
+        epoch: u64,
+        error: Error,
+        viewport_revision: Option<u64>,
+        search_revision: Option<u64>,
+        output: &dyn Fn(Event),
+    ) {
         self.emit(
             match error {
                 Error::Password => Event::PasswordRequired { epoch },
                 error => Event::Failed {
                     epoch,
                     message: error.to_string(),
+                    viewport_revision,
+                    search_revision,
                 },
             },
             output,
@@ -497,10 +511,34 @@ fn run(state: &State, library: &std::path::Path, output: &dyn Fn(Event)) {
                                 && state.current(epoch)
                                 && !state.closing.load(Ordering::Acquire) =>
                         {
+                            let viewport_revision = match &command {
+                                Command::Viewport(viewports) => {
+                                    viewports.first().map(|viewport| viewport.revision)
+                                }
+                                _ => None,
+                            };
+                            let search_revision = match &command {
+                                Command::Search { revision, .. } => Some(*revision),
+                                _ => None,
+                            };
                             if let Err(error) =
                                 execute(state, document, command, &mut text_cache, output)
                             {
-                                state.failure(epoch, error, output);
+                                // An obsolete engine failure cannot replace a
+                                // newer viewport/search with an error banner.
+                                if viewport_revision.is_none_or(|revision| {
+                                    state.revision.load(Ordering::Acquire) == revision
+                                }) && search_revision.is_none_or(|revision| {
+                                    state.search_revision.load(Ordering::Acquire) == revision
+                                }) {
+                                    state.failure_for(
+                                        epoch,
+                                        error,
+                                        viewport_revision,
+                                        search_revision,
+                                        output,
+                                    );
+                                }
                             }
                         }
                         _ => {}

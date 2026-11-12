@@ -354,7 +354,14 @@ fn worker_event(
             continue;
         }
         let value = match event {
-            worker::Event::Failed { message, .. } => return Err(message.into()),
+            worker::Event::Failed {
+                message,
+                viewport_revision,
+                search_revision,
+                ..
+            } => {
+                return Err(format!("{message} (viewport revision {viewport_revision:?}, search revision {search_revision:?})").into());
+            }
             worker::Event::PasswordRequired { .. } => {
                 return Err("worker requires the private fixture password".into());
             }

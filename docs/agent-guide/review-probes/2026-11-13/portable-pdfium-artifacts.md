@@ -314,3 +314,12 @@ and marks destruction but leaves the still caller-owned box for normal Rust
 drop. Only after successful installation, with no intervening native call, does
 Box::into_raw transfer reclamation to NCDESTROY. Thus a failed or reentrantly
 destroyed installation cannot reclaim the same registration twice.
+
+Worker error results now retain their viewport/search revision, and an engine
+failure from a superseded job is checked before publication. The GTK queue's
+oversized-result diagnostic preserves that same scope. The future reader
+controller must check these revisions again on UI delivery, as it does for
+successful tiles/searches: a source-side check cannot retract a result already
+queued before a new scroll/search. The private probe reports the captured scope
+on failure. Real overlapping-scroll/search error presentation remains a native
+controller gate; this source change does not claim that unimplemented UI gate.
