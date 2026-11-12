@@ -398,8 +398,13 @@ let ensure_action_graph_constraints config action =
 
 (* An exception that escapes a stage (for example a failed worker request) is
    reported like any other error, in the chosen output format, instead of
-   reaching `bin/main.ml` as a bare exception name on stderr. *)
+   reaching `bin/main.ml` as a bare exception name. Its message also goes to
+   stderr, where it went before, so a script reading stderr still sees it. *)
 let recover_stage ~on_error stage =
+  let on_error exn =
+    prerr_endline (Exn_message.to_string exn);
+    on_error exn
+  in
   try Cli_effect.catch (stage ()) on_error with exn -> on_error exn
 
 let pending_error_state ?command mode exn =
