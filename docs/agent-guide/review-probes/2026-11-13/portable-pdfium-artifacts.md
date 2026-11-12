@@ -204,3 +204,40 @@ epochs, preserve a fast new epoch, and reject late work after source destruction
 No compiler, test, GLib loop, engine or native app was executed for this batch.
 The actual GTK widget and Windows UIA host are still separate pending integration;
 these tests alone do not qualify native accessibility or physical interactions.
+
+## Typed GTK page surface candidate
+
+`gtk_page.rs` is a retained, typed GtkWidget subclass implementing the public
+GtkAccessibleText interface at the pinned NSH GTK 4.14 baseline. It owns no engine
+handle. Owned RGBA tiles become GdkMemoryTextures; logical PDF glyph indices,
+selection feedback, native text contents, caret and selection bounds share the
+same captured PageText. Native TextBuffer/TextIter supplies Unicode character,
+word and sentence operations, without introducing a second text-layout engine or
+ASCII word splitter. Native text is read-only. An unmapped PDF glyph is exposed
+as a replacement character for accessibility; the engine continues to reject an
+exact copy request containing unmapped Unicode, rather than inventing copied text.
+
+The widget fences document epoch, render revision, page and dimensions before
+accepting pixels/text. It bounds retained textures to eight/32 MiB and checks
+packed RGBA byte counts. Highlight overlays receive explicit native colors.
+Mouse drag selects logical glyph ranges in either direction rather than assuming
+left-to-right caret halves. Copy/select-all/word movement and range extension are
+native scoped key handlers; unrelated keys fall through. Disabled and retired
+widgets emit no actions. Callbacks are cloned outside mutable borrows, allowing
+synchronous owner retirement without retaining handlers or accepting a late tile.
+
+The private Linux example test target now includes one real-display GTK widget
+case (run under Xvfb in disposable Linux CI): multilingual contents and character
+offsets, exact logical glyph-index selection, native caret/selection queries,
+colored overlay admission, stale-render refusal, disabled actions and reentrant
+retirement. These are authored native-widget assertions, not physical pointer,
+screenshot or screen-reader qualification. No test/display/engine was executed
+for this source batch.
+
+AccessibleText extents/hit-test methods require GTK 4.16 and selection setters
+require GTK 4.22 in the reviewed safe binding. They are not called or claimed at
+the maintained 4.14 baseline. The outer native reader still needs continuous page
+virtualization, global retained-resource budgeting, progressive tile scheduling,
+controller/persistence wiring, complete master controls and real AT/interaction
+qualification. This page-surface candidate remains qualification-only and does
+not enable Linux/Windows PDF validation or replace the existing macOS provider.
