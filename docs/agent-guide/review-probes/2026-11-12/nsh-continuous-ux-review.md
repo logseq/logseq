@@ -313,3 +313,73 @@ Desktop context-menu roots retain a PressOutside listener, and their submenus
 remain under that root. Dialog uses native Modal RequestClose rather than this
 Overlay Cancel path. Toast/Sheet retirement requires a separate focused proof
 and a scoped dependency decision; this audit does not claim those paths pass.
+
+### Properties source audit: repeated choices and draft ownership
+
+This is a source-only audit against frozen master
+`29fd2edd015e12963742b985ce6d2311c074e09b`, not a GUI qualification.
+The current native host at `e1db7fbd8172b94dbade42b8b018bac65e675c1e`
+still has the same `properties_select.ml` and `properties_area.ml` as
+`a82cf24cd7`; the isolated audit tree is based on `f80b224175`.
+The native target compiles these shared property modules, rather than a Web-only
+replacement. The already assigned scalar-cancellation and atomic batch-removal
+work is excluded here.
+
+**Highest-value next fix: clear a retained picker's query after choosing.**
+Master `src/main/frontend/components/select.cljs:126` defaults
+`clear-input-on-chosen?` to true; its `choose-result!` at lines 196–200 resets the
+input atom before invoking the choice. The input component observes that empty
+atom and updates its controlled value at lines 69–73. Current
+`deps/ui/src/properties/properties_select.ml:87–94` invokes the active
+`on_choose` directly for Enter; the pointer handler at line 146 also invokes it
+directly. Neither path changes `st.q`, `searched`, or the outstanding search
+request. `properties_value.ml:1253–1269` and `1328–1343` deliberately retain
+many-value popups after ordinary additions/removals, so a query such as `al`
+remains in the actual field after choosing Alpha. The next choice still uses
+that filter instead of the empty query master's chooser supplies.
+
+The minimal correction is one application-owned choice function shared by the
+pointer and Submit paths: capture the intended item, invalidate the previous
+search ticket, reset controlled query/results/highlight, then invoke that item's
+existing callback. Retain the present LUI text field, list and popup; no new
+native widget, focus controller or search cache is necessary. A meaningful
+fixture should seed a many-value property with Alpha/Beta, type `al`, choose
+Alpha by Enter, assert the query becomes empty and Beta returns, then select
+Beta by pointer. A delayed search response for `al` must not reinstate the old
+filter. Verify the same popup remains mounted and the real worker contains
+both choices. This scenario has not been executed.
+
+**Native Enter focus needs a separate qualification.** The same chooser handles
+Enter with `text_field ~on_submit` (`properties_select.ml:200–226`), while
+NSH's current single-line policy retains native `BlurAndSubmit`
+(`LUI platform/nsh/src/inputs.rs:59–69`; pinned NSH
+`nsh-core/src/mount.rs:606–618` and `ops.rs:1458–1466`). Many-value callbacks keep
+the popup open. Consequently clearing its query alone does not establish that
+continuous keyboard entry remains possible after Enter. Extend the actual
+native fixture above by immediately typing the second query without a pointer
+click or focus helper. If focus is lost, prefer the public native Input's
+submit-without-blur behavior through a narrowly typed, explicitly opted-in LUI
+policy; preserve ordinary scalar Enter/blur defaults. Do not add an unconditional
+window key binding or refocus timer. This is an identified provider/default
+boundary requiring an interaction test, not a claim of completed keyboard QA.
+
+**Draft refresh ownership remains a focused risk.**
+`properties_value.ml:64–91` stores the active scalar buffer, but its `edit_buffer`
+reader has no callers. `scalar_edit_cell` at lines 513–519 restores the editing
+boolean from the active owner while always initializing its local buffer from
+persisted `initial`; lines 536–538 then overwrite the active buffer with an empty
+one. `properties_area.ml:440–464` and `800–825` rebuild the property-panel branch
+on area data changes. A refresh that actually remounts an active scalar field
+can therefore restore editing state without restoring its dirty text. Frozen
+master's `single-string-input` keeps the controlled draft in hook state and
+updates it only when persisted `string-value` changes
+(`property/value.cljs:1816–1845`). The smallest proof is an actual active-field
+fixture: type an unsaved draft, publish an unrelated property-row change,
+require the draft and its owner to survive, and then cancel without a write.
+Do not claim this is reproduced until that exact refresh path is exercised, and
+do not repair it by introducing a second global draft registry.
+
+The audit also ruled out a tempting false difference: closing a many-valued
+closed-choice popup after removing its final value is intentional in frozen
+master (`property/value.cljs:491–499`) and current
+`properties_value.ml:1269`. That close condition should remain.
