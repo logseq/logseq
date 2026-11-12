@@ -140,4 +140,25 @@ retaining both generations of external provider/range objects.
 The publication guard follows the
 [Microsoft disconnect reentrancy contract](https://learn.microsoft.com/en-us/windows/win32/api/uiautomationcoreapi/nf-uiautomationcoreapi-uiadisconnectprovider):
 an application must not return the disconnecting provider from a reentrant
-WM_GETOBJECT. A passing rerun is still required before claiming this repair.
+WM_GETOBJECT.
+
+## Passing actual native rerun
+
+[Run 43313388375](https://github.com/logseq/logseq/actions/runs/43313388375)
+at `2224cbc3c6d45ec5dbf168fac66ba801b2e72ad7` completed successfully on both
+native targets. Windows job `131514991776` passed all 14 Win32/UIA/Unicode
+tests, including the strengthened two-replacement retained-provider/range
+lifetime case, followed by the real prepared PDFium load, authored document and
+owned worker probe. Linux job `131514992254` passed its five native
+GTK/completion/Unicode tests and the prepared engine/document/worker probe.
+The workflow retained native logs, exact revisions, artifact/fixture receipts,
+license closure and engine output for both systems. No local engine artifact
+was loaded to infer these OS results.
+
+This closes the specific stale-epoch disconnect failure. It does not enable
+production portable PDF registration or establish whole-document text
+publication, assembled reader controls, annotations/references, physical input,
+AT-SPI/UIA client behavior, visual parity, continuous page virtualization or
+whole-application packaging/performance. The separate full Mac application job
+at `c74eeaf363` failed its isolated icon-picker deadline; that older failure is
+not relabeled as a PDF pass or covered by this narrower workflow.
