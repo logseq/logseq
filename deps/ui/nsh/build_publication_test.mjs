@@ -42,6 +42,10 @@ def bridge_exports(source):
  assert source=='fake-seven-argument-bridge-with-sparse-feedback'
  record('abi-source')
  return ['lui_ocaml_virtual_window']
+def validate_runtime_exports(source,metadata):
+ assert source=='fake-seven-argument-bridge-with-sparse-feedback'
+ assert len([p for p in metadata['packages'] if p['name']=='lui-nsh' and p['source'] is None])==1
+ record('abi-runtime')
 def load(candidate):
  candidate=pathlib.Path(candidate)
  assert '.publication.' in str(candidate) and candidate.read_text()=='new-library'
@@ -169,7 +173,7 @@ for (const failure of ["abi", "gate", "source", "after-gate"]) {
       assert.notEqual(result.status, 0, result.stdout + result.stderr);
       if (failure === "abi") {
         assert.match(result.stderr, /missing exports: lui_ocaml_virtual_window/);
-        assert.deepEqual(app.calls(), ["abi-source", "primitive-signatures", "abi-source", "abi-load"]);
+        assert.deepEqual(app.calls(), ["abi-source", "abi-runtime", "primitive-signatures", "abi-source", "abi-load"]);
       } else if (failure !== "gate") assert.match(result.stderr, /sources changed during build/);
       for (const [file, contents] of app.old) assert.equal(readFileSync(file, "utf8"), contents);
       assert.equal(existsSync(path.join(app.resources, "catalog.json")), false);
@@ -182,7 +186,7 @@ test("qualified publication preserves shared outputs, retires owned resources an
     const result = app.run();
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assertCargoArguments(app, "dev");
-    assert.deepEqual(app.calls(), ["abi-source", "primitive-signatures", "abi-source", "abi-load", "schemas", "static-styles", "gate"]);
+    assert.deepEqual(app.calls(), ["abi-source", "abi-runtime", "primitive-signatures", "abi-source", "abi-load", "schemas", "static-styles", "gate"]);
     const artifact = path.join(app.output, "logseq-nsh");
     assert.equal(readFileSync(artifact, "utf8"), "new-executable");
     assert.equal(readFileSync(path.join(app.resources, "logseq-db-worker"), "utf8"), "new-worker");

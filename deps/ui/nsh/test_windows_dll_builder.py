@@ -119,6 +119,63 @@ class WindowsDllGuards(unittest.TestCase):
         self.assertLess(state.index('Sys.os_type = "Win32"'), state.index('native_system = "Linux"'))
 
 
+class RuntimeEventAbiGuards(unittest.TestCase):
+    """Literal provider fixtures test build rejection, not Rust execution."""
+
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.root = Path(self.temporary.name)
+        self.provider = self.root / "selected/platform/nsh"
+        self.provider.mkdir(parents=True)
+        (self.provider / "src").mkdir()
+        (self.provider / "Cargo.toml").write_text("selected manifest")
+        self.runtime = self.provider / "src/runtime.rs"
+        self.runtime.write_text(
+            'let exports = Exports {\n focus: optional!("lui_ocaml_focus_within_changed"),\n};\n')
+        self.metadata = {"packages":[{"name":"lui-nsh", "source":None,
+            "manifest_path":str(self.provider / "Cargo.toml")}]}
+        self.bridge = (builder.UI / "native/logseq_lui_bridge.c").read_text(encoding="utf-8")
+
+    def tearDown(self):
+        self.temporary.cleanup()
+
+    def test_exact_cargo_provider_is_checked_without_generic_clock_driver(self):
+        self.metadata["packages"].append({"name":"lui-nsh", "source":"git+unselected",
+            "manifest_path":str(self.root / "must-not-read/Cargo.toml")})
+        driver = self.provider / "src/runtime/driver.rs"
+        driver.parent.mkdir()
+        driver.write_text('let tick = optional!("lui_ocaml_tick");\n')
+        self.assertEqual(builder.validate_runtime_exports(self.bridge, self.metadata),
+                         ["lui_ocaml_focus_within_changed"])
+
+    def test_new_optional_event_requires_inventory_review_before_compilation(self):
+        self.runtime.write_text('let exports = Exports {\n'
+            ' future: optional!("lui_ocaml_future_event"),\n};\n')
+        with self.assertRaisesRegex(ValueError, "required application inventory: lui_ocaml_future_event"):
+            builder.validate_runtime_exports(self.bridge, self.metadata)
+
+    def test_selected_provider_cannot_omit_an_existing_required_bridge_export(self):
+        bridge = self.bridge.replace("LUI_EXPORT int32_t lui_ocaml_focus_within_changed(",
+                                     "static int32_t omitted_focus(")
+        with self.assertRaisesRegex(ValueError, "lui_ocaml_focus_within_changed"):
+            builder.validate_runtime_exports(bridge, self.metadata)
+
+    def test_ambiguous_provider_is_not_replaced_by_a_neighbor_checkout(self):
+        self.metadata["packages"].append(dict(self.metadata["packages"][0]))
+        with self.assertRaisesRegex(ValueError, "exactly one local LUI"):
+            builder.validate_runtime_exports(self.bridge, self.metadata)
+
+    def test_changed_loader_shape_fails_closed_with_a_review_diagnostic(self):
+        for text in ('let exports = load_exports();',
+                     'let exports = Exports {\n focus: optional!(name),\n};',
+                     'let exports = Exports {\n focus: optional!(concat!("lui_", "focus")),\n};',
+                     'let exports = Exports {\n focus: { optional!("lui_ocaml_focus_within_changed") },\n};'):
+            with self.subTest(source=text):
+                self.runtime.write_text(text)
+                with self.assertRaisesRegex(ValueError, "loader shape changed; review"):
+                    builder.validate_runtime_exports(self.bridge, self.metadata)
+
+
 class SchemaExportPlumbing(unittest.TestCase):
     """Fake native tools test schema ordering/rollback, not OCaml compilation."""
 

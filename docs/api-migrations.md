@@ -20,6 +20,14 @@ build failure, rather than a first-focus runtime diagnostic. Generic LUI
 libraries still retain their optional capability contract; this requirement
 belongs to the actual Logseq application that authors these handlers.
 
+Full native publishers also compare this inventory against the optional event
+exports loaded by the exact `lui-nsh` package selected in their locked Cargo
+metadata. A future optional event symbol therefore requires an explicit bridge
+inventory review before application compilation, even if no startup view happens
+to exercise it. The bounded literal `Exports` loader shape is checked fail-closed
+with a review diagnostic; generic clock/startup drivers remain separate. The
+existing candidate-library symbol check still verifies the compiled artifact.
+
 ## NSH code editors fill their horizontal parent
 
 The native CodeMirror adapter now explicitly sizes its retained root to the

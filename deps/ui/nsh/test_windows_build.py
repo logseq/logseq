@@ -42,6 +42,10 @@ class BuildTests(unittest.TestCase):
             "toolchain/native.dll":"native runtime",
         }.items():
             self.write(self.root / name, text)
+        self.write(self.lui / "platform/nsh/src/runtime.rs",
+                   'let exports = Exports {\n focus: optional!("lui_ocaml_focus_within_changed"),\n};\n')
+        self.write(self.ui / "native/logseq_lui_bridge.c",
+                   (builder.ocaml.UI / "native/logseq_lui_bridge.c").read_text(encoding="utf-8"))
         self.old = {
             "logseq-nsh.exe":"previous host",
             "Resources/logseq_ui.dll":"previous OCaml",
@@ -75,7 +79,8 @@ class BuildTests(unittest.TestCase):
         command = list(map(str, command))
         self.commands.append(command)
         if command[:2] == ["cargo", "metadata"]:
-            return "{}"
+            return json.dumps({"packages":[{"name":"lui-nsh", "source":None,
+                "manifest_path":str(self.lui / "platform/nsh/Cargo.toml")}]})
         if command[:2] == ["cargo", "build"]:
             self.assertTrue(self.schemas_exported, "Rust compiled before real schema export")
             return "\n".join(map(json.dumps, [

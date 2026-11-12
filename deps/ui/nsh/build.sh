@@ -60,12 +60,14 @@ cargo metadata --locked --format-version=1 --manifest-path "$nsh_root/Cargo.toml
 # old Rust contract that would hide its missing native implementation.
 (cd "$lui_source" && OPAMSWITCH="$switch" "$python_bin" tooling/generate_nsh_contract.py --check) >&2
 # Validate the application-specific ABI before invoking native compilers.
-"$python_bin" - "$nsh_root" "$ui_root/native/logseq_lui_bridge.c" <<'BRIDGE_SOURCE'
+"$python_bin" - "$nsh_root" "$ui_root/native/logseq_lui_bridge.c" "$staging/cargo-metadata.json" <<'BRIDGE_SOURCE'
 from pathlib import Path
-import sys
+import json, sys
 sys.path.insert(0, sys.argv[1])
-from build_windows_dll import bridge_exports
-bridge_exports(Path(sys.argv[2]).read_text(encoding="utf-8"))
+from build_windows_dll import bridge_exports, validate_runtime_exports
+source = Path(sys.argv[2]).read_text(encoding="utf-8")
+bridge_exports(source)
+validate_runtime_exports(source, json.loads(Path(sys.argv[3]).read_text(encoding="utf-8")))
 BRIDGE_SOURCE
 OPAMSWITCH="$switch" "$python_bin" "$nsh_root/validate_primitive_signatures.py" >&2
 (cd "$lui_source" && opam exec --switch="$switch" -- dune build @install) >&2

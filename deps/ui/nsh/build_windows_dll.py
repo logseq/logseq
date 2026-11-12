@@ -97,6 +97,51 @@ def bridge_exports(source):
     return sorted(exports)
 
 
+def validate_runtime_exports(source, metadata):
+    """Check the event ABI from the actual Cargo-selected LUI provider.
+
+    This intentionally accepts only the runtime's bounded literal Exports
+    initializer. A changed loader shape requires reviewing this build guard;
+    the separate generic/logseq startup drivers are not event capabilities.
+    """
+    providers = [package for package in metadata.get("packages", [])
+                 if package.get("name") == "lui-nsh" and package.get("source") is None]
+    if len(providers) != 1:
+        raise ValueError("Expected exactly one local LUI Rust package for the event ABI guard")
+    manifest = Path(providers[0]["manifest_path"]).resolve(strict=True)
+    runtime = manifest.parent / "src/runtime.rs"
+    text = runtime.read_text(encoding="utf-8")
+    starts = list(re.finditer(r"\blet\s+exports\s*=\s*Exports\s*\{", text))
+    error = "LUI event ABI loader shape changed; review the bounded Exports build guard"
+    if len(starts) != 1:
+        raise ValueError(error)
+    tail = text[starts[0].end():]
+    end = re.search(r"\n\s*\};", tail)
+    if end is None:
+        raise ValueError(error)
+    body = re.sub(r"/\*.*?\*/|//[^\n]*", "", tail[:end.start()], flags=re.DOTALL)
+    if "{" in body or "}" in body:
+        raise ValueError(error)
+    calls = re.findall(r"\boptional\s*!\s*\(([^()]*)\)", body)
+    if not calls or len(calls) != len(re.findall(r"\boptional\s*!", body)):
+        raise ValueError(error)
+    requested = set()
+    for argument in calls:
+        symbol = re.fullmatch(r'\s*"(lui_ocaml_\w+)"\s*', argument)
+        if symbol is None:
+            raise ValueError(error)
+        requested.add(symbol[1])
+    missing = requested - NSH_REQUIRED_EXPORTS
+    if missing:
+        raise ValueError("Cargo-selected LUI event ABI is missing from the required application inventory: "
+                         + ", ".join(sorted(missing)))
+    exports = set(bridge_exports(source))
+    if missing := requested - exports:
+        raise ValueError("Cargo-selected LUI event ABI is missing application exports: "
+                         + ", ".join(sorted(missing)))
+    return sorted(requested)
+
+
 def build(output, *, environment=None):
     config = native_config()
     run = partial(execute, environment=environment)

@@ -124,6 +124,8 @@ def build(*, output, lui_source, dll_roots, dumpbin):
             rebuild.extend(("--dll-root", Path(root).resolve()))
         execute([node, publication, "snapshot", tool, REPO, lui_source, metadata, snapshot,
                  subprocess.list2cmdline(list(map(str, rebuild)))], environment=environment)
+        ocaml.validate_runtime_exports((UI / "native/logseq_lui_bridge.c").read_text(encoding="utf-8"),
+                                       json.loads(metadata.read_text(encoding="utf-8")))
         execute([sys.executable, lui_source / "tooling/generate_nsh_contract.py", "--check"],
                 cwd=lui_source, environment=environment)
         execute(["opam", "exec", "--", "dune", "build", "@install"], cwd=lui_source, environment=environment)
