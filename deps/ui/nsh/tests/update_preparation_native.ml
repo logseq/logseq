@@ -1164,6 +1164,8 @@ external bridge_adversarial_callbacks : bool -> unit = "caml_logseq_test_adversa
 
 external bridge_press_modifiers : int -> int -> int = "caml_logseq_test_press_modifiers"
 
+external bridge_focus_within : int -> bool -> int = "caml_logseq_test_focus_within"
+
 let native_alt_reference_drop_actions () =
   let module S = Editor_state in
   let prior_model = !Runtime.read_model and prior_worker = !Runtime.worker
@@ -1322,6 +1324,31 @@ let native_alt_mask_through_actual_ffi () =
     let node=Lui_app.root_node app in
     check "actual native C/OCaml ABI preserves Alt alongside all existing mask bits"
       (bridge_press_modifiers node 31=1 && !received=Some 31))
+
+let native_focus_within_through_actual_ffi () =
+  let previous_app= !Native_embed.current_app and received=ref [] in
+  let backend : Lui_protocol.backend={
+    backend_profile=Lui_protocol.profile Lui_protocol.MacOS Lui_protocol.NshHost;
+    apply_batch=(fun _ -> true)} in
+  let app=Lui_app.create backend Model.initial (fun model (_ : Action.t) -> model)
+    (fun _ _ _ -> Lui_elements.row
+      ~on_focus_within:(fun within -> received:=within :: !received)
+      [Lui_elements.input ~text:"Native focus owner" []]) in
+  Fun.protect ~finally:(fun () ->
+    ignore (Lui_app.dispose app);Native_embed.current_app:=previous_app) (fun () ->
+    Native_embed.current_app:=Some app;
+    ignore (Lui_app.start app);ignore (Lui_app.flush app);
+    let node=Lui_app.root_node app in
+    Gc.full_major ();
+    check "actual native focus ABI dispatches typed focus entry to its retained owner"
+      (bridge_focus_within node true=1 && !received=[true]);
+    Gc.full_major ();
+    check "actual native focus ABI preserves focus loss instead of treating it as entry"
+      (bridge_focus_within node false=1 && !received=[false;true]);
+    ignore (Lui_app.dispose app);
+    ignore (bridge_focus_within node true);
+    check "actual native focus ABI cannot invoke a disposed owner's handler"
+      (!received=[false;true]))
 
 let native_primitive_unit_results () =
   let previous_wakeup = !Host.wakeup_cb and previous_left = !Host.titlebar_left in
@@ -2828,6 +2855,7 @@ let () =
   native_platform_exception_reporting ();
   native_primitive_unit_results ();
   native_alt_mask_through_actual_ffi ();
+  native_focus_within_through_actual_ffi ();
   native_alt_reference_drop_actions ();
   Editor_clipboard_native.async_file_read_keeps_the_application_owner_responsive ();
   native_settings_route_links ();

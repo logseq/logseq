@@ -421,6 +421,19 @@ LUI_EXPORT int32_t lui_ocaml_pointer_leave(int64_t node) {
   return dispatch_long("lui_ocaml_pointer_leave", node);
 }
 
+LUI_EXPORT int32_t lui_ocaml_focus_within_changed(int64_t node, int32_t within) {
+  int result = 0;
+  caml_leave_blocking_section();
+  const value *dispatch = caml_named_value("lui_ocaml_focus_within_changed");
+  if (dispatch != NULL) {
+    result = emit_patch("lui_ocaml_focus_within_changed",
+                        caml_callback2_exn(*dispatch, Val_long(node),
+                                           Val_bool(within != 0)));
+  }
+  caml_enter_blocking_section();
+  return result;
+}
+
 LUI_EXPORT int32_t lui_ocaml_toggle_changed(int64_t node, int32_t checked) {
   int result = 0;
   caml_leave_blocking_section();

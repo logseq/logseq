@@ -66,3 +66,13 @@ CAMLprim value caml_logseq_test_press_modifiers(value node, value modifiers) {
   caml_leave_blocking_section();
   CAMLreturn(Val_int(accepted));
 }
+
+CAMLprim value caml_logseq_test_focus_within(value node, value within) {
+  CAMLparam2(node, within);
+  int64_t target = Long_val(node);
+  int32_t focused = Bool_val(within);
+  caml_enter_blocking_section();
+  int32_t accepted = lui_ocaml_focus_within_changed(target, focused);
+  caml_leave_blocking_section();
+  CAMLreturn(Val_int(accepted));
+}

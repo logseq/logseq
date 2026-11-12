@@ -719,6 +719,9 @@ let radio_changed node = dispatch_lui (Lui_protocol.Change node)
 let slider_changed node value =
   dispatch_lui (Lui_protocol.ValueChanged (node, value))
 
+let focus_within_changed node within =
+  dispatch_lui (Lui_protocol.FocusWithinChanged (node, within))
+
 let scroll_completed node token outcome =
   dispatch_lui (Lui_protocol.ScrollCompleted (node, token, outcome))
 
@@ -1175,6 +1178,7 @@ module Ffi = struct
   let toggle_changed_detail node checked modifiers = encode_batches (toggle_changed_detail node checked modifiers)
   let radio_changed node = encode_batches (radio_changed node)
   let slider_changed node value = encode_batches (slider_changed node value)
+  let focus_within_changed node within = encode_batches (focus_within_changed node within)
   let scroll_completed node token outcome = encode_batches (scroll_completed node token outcome)
   let visible_range node first last = encode_batches (visible_range node first last)
   let virtual_window node generation first last pins =
@@ -1318,6 +1322,7 @@ let () =
   Callback.register "lui_ocaml_toggle_changed_detail" Ffi.toggle_changed_detail;
   Callback.register "lui_ocaml_radio_changed" Ffi.radio_changed;
   Callback.register "lui_ocaml_slider_changed" Ffi.slider_changed;
+  Callback.register "lui_ocaml_focus_within_changed" Ffi.focus_within_changed;
   Callback.register "lui_ocaml_scroll_completed" Ffi.scroll_completed;
   Callback.register "lui_ocaml_visible_range" Ffi.visible_range;
   Callback.register "lui_ocaml_virtual_window" Ffi.virtual_window;

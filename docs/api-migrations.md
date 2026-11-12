@@ -1,5 +1,17 @@
 # API migrations
 
+## The native application forwards container focus-within events
+
+The actual Logseq OCaml bridge now exports the existing LUI
+`lui_ocaml_focus_within_changed(int64_t node, int32_t within)` ABI and registers
+its matching typed callback. Standard `row`, `column` and `box`
+`on_focus_within` handlers receive both entry and loss through the existing
+application dispatch, update-admission and patch channel. For example, leaving
+the calendar year input invokes its retained owner's loss handler so an
+unfinished draft restores the accepted year. A disposed owner never receives
+the callback. No view argument, event ordinal, queue or maintained backend API
+changes.
+
 ## NSH code editors fill their horizontal parent
 
 The native CodeMirror adapter now explicitly sizes its retained root to the
