@@ -28,6 +28,22 @@ to exercise it. The bounded literal `Exports` loader shape is checked fail-close
 with a review diagnostic; generic clock/startup drivers remain separate. The
 existing candidate-library symbol check still verifies the compiled artifact.
 
+## Native code language choices scroll inside their popup
+
+The native code language picker now uses the existing `Ui_components.scroll_body`
+helper around its choices. On NSH, the retained Popover already caps available
+height; its Scroll child makes all 31 choices reachable when that cap clips the
+list. For example, Rust can be scrolled into view before activating its original
+MenuItem. No extra fixed height, duplicated menu actions or global popup policy
+is introduced.
+
+The existing toolbar, UUID-specific selection callback, popup dismissal and code
+editor identity are unchanged. Other native backends keep the same body through
+the helper, and Web keeps its existing picker. No constructor or wire migration
+is required. The actual native producer regression checks every choice and its
+Scroll ancestry; real NSH wheel, activation, persisted language and editor history
+remain separate application qualification gates.
+
 ## NSH code editors fill their horizontal parent
 
 The native CodeMirror adapter now explicitly sizes its retained root to the

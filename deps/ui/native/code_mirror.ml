@@ -71,16 +71,17 @@ let open_lang_picker uuid =
   with
   | Some anchor ->
       let menu =
-        column ~gap:0
-          (List.map
-             (fun name ->
-               menu_item ~text:name
-                 ~data_attrs:[ ("data-lang", name) ]
-                 ~on_press:(fun _ ->
-                   pick_lang uuid name;
-                   Properties_state.close_overlays ())
-                 [])
-             languages)
+        Ui_components.scroll_body
+          (column ~gap:0
+             (List.map
+                (fun name ->
+                  menu_item ~text:name
+                    ~data_attrs:[ ("data-lang", name) ]
+                    ~on_press:(fun _ ->
+                      pick_lang uuid name;
+                      Properties_state.close_overlays ())
+                    [])
+                languages))
       in
       ignore
         (Properties_popup.open_anchored ~cls:"ls-code-lang-picker"
