@@ -371,15 +371,45 @@ mod tests {
     use super::*;
 
     fn attrs() -> BTreeMap<String, String> {
+        let path = std::env::temp_dir()
+            .join("logseq-pdf-contract")
+            .join("Unicode 文档.pdf");
         BTreeMap::from([
             (
                 "path".into(),
-                "/private/Graph/assets/Unicode 文档.pdf".into(),
+                path.to_str().expect("test path must be UTF-8").into(),
             ),
             ("repo".into(), "private-graph".into()),
             ("identity".into(), "document-a".into()),
             ("instance".into(), "mounted-a".into()),
         ])
+    }
+
+    #[test]
+    fn native_pdf_accepts_absolute_os_paths_and_their_file_urls() {
+        let mut source = attrs();
+        let path = source["path"].clone();
+        assert!(Path::new(&path).is_absolute());
+        assert_eq!(Model::read(&source).unwrap().path, path);
+        let file_url = url::Url::from_file_path(&path).unwrap().to_string();
+        source.insert("path".into(), file_url.clone());
+        assert_eq!(Model::read(&source).unwrap().path, file_url);
+        for relative in ["", "book.pdf", "./assets/book.pdf", "../assets/book.pdf"] {
+            source.insert("path".into(), relative.into());
+            assert!(Model::read(&source).is_err(), "{relative}");
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn native_pdf_rejects_windows_drive_relative_and_rooted_only_paths() {
+        let mut source = attrs();
+        source.insert("path".into(), r"C:\Graph files\Unicode 文档.pdf".into());
+        assert!(Model::read(&source).is_ok());
+        for relative in [r"C:book.pdf", r"\Graph\book.pdf", "/Graph/book.pdf"] {
+            source.insert("path".into(), relative.into());
+            assert!(Model::read(&source).is_err(), "{relative}");
+        }
     }
 
     #[test]

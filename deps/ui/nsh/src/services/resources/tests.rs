@@ -19,7 +19,8 @@ fn published_asset_roots_and_encoded_names_have_one_resolution_policy() {
     let root = std::env::temp_dir().join("logseq-image-policy");
     let graph = Graph::parse(&context("graph A", &root)).unwrap().unwrap();
     let asset = root
-        .join("stored-assets/图 image.png")
+        .join("stored-assets")
+        .join("图 image.png")
         .to_string_lossy()
         .into_owned();
     for source in [
@@ -31,11 +32,11 @@ fn published_asset_roots_and_encoded_names_have_one_resolution_policy() {
     }
     assert_eq!(
         resolved(&graph, "notes/./image.png", None),
-        root.join("notes/image.png").to_string_lossy()
+        root.join("notes").join("image.png").to_string_lossy()
     );
     assert_eq!(
         resolved(&graph, "notes/a/../image.png", None),
-        root.join("notes/image.png").to_string_lossy()
+        root.join("notes").join("image.png").to_string_lossy()
     );
     assert_eq!(
         resolved(&graph, "/stale/other-graph.png", Some("图 image.png")),
@@ -46,6 +47,25 @@ fn published_asset_roots_and_encoded_names_have_one_resolution_policy() {
         "data:image/png;base64,AAAA",
     ] {
         assert_eq!(resolved(&graph, source, None), source);
+    }
+}
+
+#[cfg(target_os = "windows")]
+#[test]
+fn windows_absolute_and_rooted_only_paths_remain_distinct() {
+    let absolute = r"C:\Graph files\图 image.png";
+    assert!(validate_source(absolute, None).is_ok());
+    let graph = Graph::parse(&context("windows", Path::new(r"C:\Graph files")))
+        .unwrap()
+        .unwrap();
+    assert_eq!(resolved(&graph, absolute, None), absolute);
+    for source in [
+        r"C:image.png",
+        r"\Graph files\image.png",
+        "/Graph/image.png",
+    ] {
+        assert!(validate_source(source, None).is_err(), "{source}");
+        assert!(Graph::parse(&context("windows", Path::new(source))).is_err());
     }
 }
 
@@ -143,12 +163,14 @@ fn GraphSwitch() -> impl IntoElement {
     );
     let first = fixture
         .first
-        .join("stored-assets/same.png")
+        .join("stored-assets")
+        .join("same.png")
         .to_string_lossy()
         .into_owned();
     let second = fixture
         .second
-        .join("stored-assets/same.png")
+        .join("stored-assets")
+        .join("same.png")
         .to_string_lossy()
         .into_owned();
     let seen = fixture.seen.clone();
@@ -195,7 +217,7 @@ fn graph_switch_and_close_update_the_existing_native_image_source() {
     let logo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../resources/img/logo.png");
     for graph in [&fixture.first, &fixture.second] {
         std::fs::create_dir_all(graph.join("stored-assets")).unwrap();
-        std::fs::copy(&logo, graph.join("stored-assets/same.png")).unwrap();
+        std::fs::copy(&logo, graph.join("stored-assets").join("same.png")).unwrap();
     }
     let mut config = EngineConfig::new(Root::of::<GraphSwitch>());
     config.context = EngineContext::default().with(fixture.clone());
