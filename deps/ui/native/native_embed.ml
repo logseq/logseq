@@ -846,17 +846,54 @@ let update_logical_idle () =
   && Option.is_none !Outliner_ops.pending_save
   && Option.is_none !Outliner_ops.pending_save_ready
 
+let update_worker_lifecycle () : Update_preparation.workers =
+  let resume = ref None in
+  let capture ~request_id =
+    let open Promise_ext in
+    (* Capture the existing transport under the held save checkpoint, never
+       whichever graph or worker may exist later during restoration. *)
+    resume := Some (match !Runtime.worker with
+      | None -> (fun () -> Js.Promise.resolve ())
+      | Some worker -> Worker_client.capture_restore_after_update worker);
+    let* samples = Daemon_client.capture_update_workers () in
+    let rec create captured = function
+      | [] -> Js.Promise.resolve (List.rev captured)
+      | sample::rest ->
+          let* handle = Daemon_client.Worker_update.create ~request_id sample in
+          let recover () =
+            match Daemon_client.Worker_update.phase handle with
+            | Daemon_client.Worker_initial | Daemon_client.Worker_released -> Js.Promise.resolve ()
+            | Daemon_client.Worker_sealed
+            | Daemon_client.Worker_uncertain (Daemon_client.Seal_worker, _)
+            | Daemon_client.Worker_uncertain (Daemon_client.Abort_worker, _) ->
+                Daemon_client.Worker_update.abort handle
+            | Daemon_client.Worker_exited | Daemon_client.Worker_stopping
+            | Daemon_client.Worker_uncertain (Daemon_client.Stop_worker, _) ->
+                Daemon_client.Worker_update.restore_exited handle
+            | Daemon_client.Worker_sealing | Daemon_client.Worker_aborting ->
+                Js.Promise.reject (Failure "Worker operation has not settled before recovery") in
+          let worker : Update_preparation.worker = {
+            key=sample.Daemon_client.storage;
+            seal=(fun () -> Daemon_client.Worker_update.seal handle);
+            stop=(fun () -> Daemon_client.Worker_update.stop handle);
+            recover } in
+          create (worker::captured) rest in
+    create [] samples in
+  { capture; resume=(fun () -> match !resume with
+      | Some captured -> captured ()
+      | None -> Js.Promise.reject (Failure "Update recovery has no captured application transport")) }
+
 let start_update_preparation id =
   let scope = match !activity_scope with
     | Some scope -> scope
     | None -> invalid_arg "Update preparation requires the NSH application owner" in
-  let preparation = Update_preparation.start
+  let preparation = Update_preparation.start ~workers:(update_worker_lifecycle ())
       ~gate:Update_admission.application ~scope
       ~save:(fun ~current ->
         let open Promise_ext in
         let* () = prepare_window_close ~current () in
         if not (current ()) then Js.Promise.reject Update_preparation.Cancelled
-        else Daemon_client.require_update_owned_workers ())
+        else Js.Promise.resolve ())
       ~flush:(fun () -> Option.iter (fun app -> ignore (Lui_app.flush app)) !current_app)
       ~logical_idle:update_logical_idle
       ~respond:(fun phase ok error -> update_result id phase ok error) id in

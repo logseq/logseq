@@ -22,6 +22,56 @@ matching successful release proof. This is owner retirement, not evidence that
 native workers have recovered; the native coordinator retains its own fence
 whenever shutdown or restoration remains unproven.
 
+## Native update preparation coordinates all owned workers under one owner
+
+The NSH `update-prepare` bridge now runs the exact worker lifecycle after the
+existing editor save and finite activity/mailbox barrier. It holds ordinary
+application and worker admission, captures the owned-worker snapshot and the
+existing active transport, sorts canonical storage keys, and seals **all**
+workers before stopping **any** worker. `prepared: true` requires every exact
+child's clean exit and another barrier; shared, reused, unknown or mismatched
+workers refuse preparation without acquiring installation authority.
+
+Cancellation is intent until the current worker action settles. The same
+preparation owner then aborts live sealed workers and restores independently
+verified exited workers through their captured handles. Restoration/probe
+failure on one worker does not skip recovery of the others. Successful recoveries
+are retained; a matching later abort retries only failed recovery/readiness work.
+The original active transport is rebound through its captured same-repo closure,
+including confirmed SSE readiness and a finite graph probe. Only after those
+operations and nested activity/mailbox/model callbacks settle does the bridge
+emit matching `released: true` and reopen admission. Failure emits
+`released: false` and remains fenced.
+
+For example, if workers A and B both seal, A exits, and cancellation arrives
+while B stops, the owner first waits for B's operation. It restores every proven
+exit and aborts any still-sealed worker; it never interprets an HTTP dispatch
+acknowledgement as exit proof. A failed restoration of B can be retried without
+repeating A's successful replacement or adopting a new graph/transport owner.
+Normal worker calls remain refused during post-seal `Aborting`; the pre-seal save
+path still admits its already accepted finite descendants.
+
+Native admission now has a monotonic local reservation epoch. Retiring a
+preparation prevents its callbacks from dispatching more stops or acknowledging
+a newer reservation with the same decimal ID. Reset refuses while a real worker
+seal/stop/restoration remains unproven; it never silently clears that fence.
+A pre-seal/capture-only reset can retire its epoch because no remote worker state
+has changed. These local callback guards are not a new wire incarnation token;
+wire IDs and their application event-pump ownership remain unchanged.
+
+`Update_preparation.start` accepts an optional native worker lifecycle. Existing
+save-only callers omit it and retain their save/drain behavior. The actual NSH
+bridge opts in; one preparation record owns the worker sequence, cancellation,
+recovery and final release. There is no extra pump, worker registry or timer.
+Owner-retirement/crash recovery that cannot prove restoration remains a held
+failure; it is not qualified as an automatic application restart path.
+
+The Rust menu still uses `refuse_after_save` and never issues an `InstallLease`.
+Its final refusal now follows the actual worker recovery/released acknowledgement.
+Unconfigured update feeds still perform no preparation or worker operations.
+Whole-application installation remains disabled pending end-to-end multi-worker
+partial rollback, owner retirement and relaunch qualification.
+
 ## Native update rollback restores exact worker and transport owners
 
 The native coordinator can capture a deterministic owned-worker snapshot with
@@ -160,10 +210,10 @@ exit leaves the client uncertain; an uncertain stop cannot abort or release.
 Transport failure during seal or abort can only be resolved by a matching abort
 acknowledgement, including a tombstone for a seal that never arrived.
 
-**Normal update preparation does not invoke these management operations, and
-installation still issues no `InstallLease`.** Whole-application restoration after
-partial stop, final abort/released coordination, relaunch policy and end-to-end
-qualification remain prerequisites before enabling them. Unconfigured updates
+Normal NSH preparation now invokes these management operations through the
+single owner described above. **Installation still issues no `InstallLease`.**
+Multi-worker partial rollback, owner-retirement/relaunch behavior and end-to-end
+qualification remain prerequisites before enabling whole-application installation. Unconfigured updates
 still do not create an updater, network operation or preparation event.
 
 ## NSH right sidebar header toggle retains its native wrapper on resize

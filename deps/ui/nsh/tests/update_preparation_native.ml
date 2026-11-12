@@ -2102,6 +2102,7 @@ let () =
     Ui_dom_native.ops.Ui_services.emit_json name payload)} in
   Platform.install_ui_services ~paints_caret:true ~assert_owner
     ~request_flush:(fun () -> ()) ~dom ~timers:Ui_dom_native.timers ~files:Ui_dom_native.files;
+  Update_worker_coordinator_native.run ();
   Editor_clipboard_native.run ();
   native_platform_exception_reporting ();
   native_primitive_unit_results ();
