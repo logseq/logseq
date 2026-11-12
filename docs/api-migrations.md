@@ -830,3 +830,20 @@ pnpm --silent ui:nsh:package --built-host "$host"
 returned release executable with its own adjacent library and sibling Resources,
 or launch its qualified package. A release profile does not itself establish
 memory or performance budgets.
+
+## Authoritative native block-editor source and selection revisions
+
+The `logseq-editor` extension now admits optional integer `source-version` and
+`anchor` metadata in both native and Web schemas. The shared edit surface emits
+its existing `Edit_model.version` and the source selection anchor (or caret for
+a collapsed selection). This metadata does not copy the document or introduce
+a second revision owner. The native Input still reads the authoritative source
+and directed selection through the existing serialized snapshot query.
+
+A same-length replacement such as `A😀中z` → `B😀文z` now refreshes the retained
+native buffer even when caret, composition and run offsets are unchanged.
+Changing only the anchor also updates the actual selected range before the next
+native insertion. Run metadata remains the existing offsets/kinds grammar.
+Rebuild producer and native host together and regenerate the extension schema
+receipt, since their schema fingerprints change. Web's scratch-input behavior
+and maintained mobile backends keep their existing editing owners.

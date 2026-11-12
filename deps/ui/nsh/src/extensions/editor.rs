@@ -26,6 +26,8 @@ struct Revision {
     block: String,
     runs: String,
     caret: i64,
+    anchor: i64,
+    source_version: i64,
     composition: String,
     focus: u64,
 }
@@ -36,6 +38,14 @@ impl Revision {
             runs: string(context, "runs"),
             caret: context
                 .property("caret")
+                .and_then(|v| v.as_i64())
+                .unwrap_or(0),
+            anchor: context
+                .property("anchor")
+                .and_then(|v| v.as_i64())
+                .unwrap_or(0),
+            source_version: context
+                .property("source-version")
                 .and_then(|v| v.as_i64())
                 .unwrap_or(0),
             composition: string(context, "composition"),
@@ -64,12 +74,14 @@ pub(super) fn validate(node: &Node) -> Result<(), String> {
     {
         return Err("logseq-editor requires a nonempty block-id".into());
     }
-    if properties
-        .get("caret")
-        .and_then(Value::as_i64)
-        .is_some_and(|offset| offset < 0)
-    {
-        return Err("logseq-editor caret must be a nonnegative byte offset".into());
+    for name in ["caret", "anchor", "source-version"] {
+        if properties
+            .get(name)
+            .and_then(Value::as_i64)
+            .is_some_and(|value| value < 0)
+        {
+            return Err(format!("logseq-editor {name} must be nonnegative"));
+        }
     }
     if let Some(composition) = properties.get("composition").and_then(Value::as_str)
         && !composition.is_empty()

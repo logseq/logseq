@@ -89,6 +89,8 @@ let schema =
     [ Lui_extension.property "block-id" Lui_extension.StringScalar true
         None
     ; Lui_extension.property "caret" Lui_extension.IntScalar false None
+    ; Lui_extension.property "anchor" Lui_extension.IntScalar false None
+    ; Lui_extension.property "source-version" Lui_extension.IntScalar false None
     ; Lui_extension.property "composition" Lui_extension.StringScalar
         false None
     ; Lui_extension.property "runs" Lui_extension.StringScalar false None

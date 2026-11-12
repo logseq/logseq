@@ -11,7 +11,10 @@ use nsh_testing::Headless;
 use serde_json::json;
 use std::{
     cell::Cell,
-    sync::{Arc, Mutex},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicUsize, Ordering},
+    },
 };
 
 #[test]
@@ -77,12 +80,15 @@ type RecordedEvents = Arc<Mutex<Vec<(String, Map<String, Value>)>>>;
 struct Fixture {
     events: RecordedEvents,
     model: Arc<Mutex<EditorSnapshot>>,
+    queries: Arc<AtomicUsize>,
 }
 #[component]
 fn EditorFixture() -> impl IntoElement {
     let fixture = engine_context::<Fixture>().unwrap();
     let model = fixture.model.clone();
+    let queries = fixture.queries.clone();
     let reader: SnapshotReader = Rc::new(move |_| {
+        queries.fetch_add(1, Ordering::SeqCst);
         let snapshot = model.lock().unwrap().clone();
         Box::pin(async move { Ok(Some(snapshot)) })
     });
@@ -99,6 +105,8 @@ fn EditorFixture() -> impl IntoElement {
         })
         .unwrap();
     let generation = Rc::new(Cell::new(1_u64));
+    let source_version = Rc::new(Cell::new(0_u64));
+    let observed_version = source_version.clone();
     let events = fixture.events.clone();
     let model = fixture.model.clone();
     let event_generation = generation.clone();
@@ -106,6 +114,7 @@ fn EditorFixture() -> impl IntoElement {
         if let Event::Extension { name, values, .. } = event {
             events.lock().unwrap().push((name.clone(), values.clone()));
             let mut model = model.lock().unwrap();
+            let previous_source = model.source.clone();
             match name.as_str() {
                 "pointer" => {
                     let offset = values["offset"].as_u64().unwrap() as usize;
@@ -135,6 +144,11 @@ fn EditorFixture() -> impl IntoElement {
             }
             let next = event_generation.get() + 1;
             let caret = model.caret;
+            let anchor = model.anchor;
+            if model.source != previous_source {
+                observed_version.set(observed_version.get() + 1);
+            }
+            let source_version = observed_version.get();
             // Vary runs as the real model does without reconstructing source from it.
             let runs = format!("0,{},p", model.source.len());
             drop(model);
@@ -143,6 +157,8 @@ fn EditorFixture() -> impl IntoElement {
                     next,
                     json!([
                         {"op":"set-extension-prop","id":1,"property":"caret","value":caret},
+                        {"op":"set-extension-prop","id":1,"property":"anchor","value":anchor},
+                        {"op":"set-extension-prop","id":1,"property":"source-version","value":source_version},
                         {"op":"set-extension-prop","id":1,"property":"runs","value":runs}
                     ]),
                 ))
@@ -155,6 +171,8 @@ fn EditorFixture() -> impl IntoElement {
         {"op":"set-extension-prop","id":1,"property":"block-id","value":"block-1"},
         {"op":"set-extension-prop","id":1,"property":"runs","value":"0,9,p"},
         {"op":"set-extension-prop","id":1,"property":"caret","value":9},
+        {"op":"set-extension-prop","id":1,"property":"anchor","value":9},
+        {"op":"set-extension-prop","id":1,"property":"source-version","value":0},
         {"op":"set-extension-prop","id":1,"property":"accessibility-identifier","value":"edit-block-1"}
     ]))).unwrap();
     renderer.set_root(1).unwrap();
@@ -200,6 +218,48 @@ fn EditorFixture() -> impl IntoElement {
             clear_generation.set(next);
         },
     );
+    let same_length = renderer.clone();
+    let same_length_generation = generation.clone();
+    let remote = fixture.model.clone();
+    on_key_with(
+        "f4",
+        KeyOptions {
+            when: When::Always,
+            ..Default::default()
+        },
+        move |_| {
+            remote.lock().unwrap().source = "B😀文z".into();
+            source_version.set(source_version.get() + 1);
+            let next = same_length_generation.get() + 1;
+            same_length.apply(batch(next, json!([
+            {"op":"set-extension-prop","id":1,"property":"source-version","value":source_version.get()}
+        ]))).unwrap();
+            same_length_generation.set(next);
+        },
+    );
+    let anchor_only = renderer.clone();
+    let anchor_generation = generation.clone();
+    let remote = fixture.model.clone();
+    on_key_with(
+        "f5",
+        KeyOptions {
+            when: When::Always,
+            ..Default::default()
+        },
+        move |_| {
+            remote.lock().unwrap().anchor = 1;
+            let next = anchor_generation.get() + 1;
+            anchor_only
+                .apply(batch(
+                    next,
+                    json!([
+                        {"op":"set-extension-prop","id":1,"property":"anchor","value":1}
+                    ]),
+                ))
+                .unwrap();
+            anchor_generation.set(next);
+        },
+    );
     renderer.element()
 }
 fn start() -> (Headless, Fixture) {
@@ -210,6 +270,7 @@ fn start() -> (Headless, Fixture) {
             anchor: 9,
             caret: 9,
         })),
+        queries: Arc::new(AtomicUsize::new(0)),
     };
     let mut config = EngineConfig {
         context: EngineContext::default().with(fixture.clone()),
@@ -280,6 +341,36 @@ fn structural_keys_are_model_events_and_do_not_also_edit_the_native_buffer() {
             .any(|(name, _)| name == "insert" || name == "delete")
     );
     assert_eq!(fixture.model.lock().unwrap().source, "A😀中z");
+}
+
+#[test]
+fn same_length_authoritative_source_replacement_refreshes_the_retained_native_buffer() {
+    let (mut app, fixture) = start();
+    let before = native(&app);
+    app.press_key("f4").unwrap();
+    app.wait_for("text:B😀文z").unwrap();
+    assert_eq!(native(&app), before);
+    app.type_text("id:lui-1", "!").unwrap();
+    assert_eq!(fixture.model.lock().unwrap().source, "B😀文z!");
+    assert_eq!(native(&app), before);
+}
+
+#[test]
+fn anchor_only_authoritative_selection_replaces_the_actual_native_selected_range() {
+    let (mut app, fixture) = start();
+    app.type_text("id:lui-1", "").unwrap();
+    let before = native(&app);
+    let queries = fixture.queries.load(Ordering::SeqCst);
+    app.press_key("f5").unwrap();
+    app.wait_until(
+        "anchor-only authoritative snapshot",
+        std::time::Duration::from_secs(2),
+        |_| fixture.queries.load(Ordering::SeqCst) > queries,
+    )
+    .unwrap();
+    app.type_text("id:lui-1", "X").unwrap();
+    assert_eq!(fixture.model.lock().unwrap().source, "AX");
+    assert_eq!(native(&app), before);
 }
 #[test]
 fn native_preedit_cancel_is_not_committed_and_removed_sink_releases_its_keys() {
