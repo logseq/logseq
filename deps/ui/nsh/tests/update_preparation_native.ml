@@ -1774,6 +1774,79 @@ let native_wide_reading_column () =
       [Lui_protocol.MacOS,Lui_protocol.NshHost;Lui_protocol.MacOS,Lui_protocol.GenericHost;
        Lui_protocol.IOS,Lui_protocol.SwiftUIHost;Lui_protocol.AndroidOS,Lui_protocol.KotlinHost])
 
+let native_code_language_popup_scroll () =
+  let previous_app = !Native_embed.current_app
+  and previous_provider = !Dom_ext.doc_elements_provider
+  and previous_subtree = !Dom_ext.subtree_elements_provider
+  and previous_overlays = !Properties_state.view_overlays_state
+  and previous_generation = !Properties_state.overlay_generation
+  and previous_flush = !Runtime.app_flush in
+  Fun.protect ~finally:(fun () ->
+    Native_embed.current_app := previous_app;
+    Dom_ext.doc_elements_provider := previous_provider;
+    Dom_ext.subtree_elements_provider := previous_subtree;
+    Properties_state.view_overlays_state := previous_overlays;
+    Properties_state.overlay_generation := previous_generation;
+    Runtime.app_flush := previous_flush) (fun () ->
+    List.iter (fun host ->
+      Properties_state.view_overlays_state := None;
+      let uuid = "23456789-1234-4abc-8def-000000000000" in
+      let identifier = "code-language-" ^ uuid in
+      let backend : Lui_protocol.backend = {
+        backend_profile=Lui_protocol.profile Lui_protocol.MacOS host;
+        apply_batch=(fun _ -> true) } in
+      let app=Lui_app.create backend Model.initial (fun model (_ : Action.t) -> model)
+        (fun context _ _ ->
+          let overlays=Properties_state.view_overlays context in
+          Lui_elements.column
+            [Lui_elements.column ~accessibility_identifier:("ls-block-" ^ uuid)
+               [Render.code_block_actions ~self:uuid "plaintext"];
+             reactive (fun entries -> Lui_elements.column
+               (List.map (fun (entry : Properties_state.view_overlay) -> entry.vo_view) entries))
+               overlays]) in
+      let measured = ref None in
+      Fun.protect ~finally:(fun () ->
+        Option.iter (fun node -> Native_embed.platform_event ("node-rect\n" ^
+          Js.Json.stringify (Js.Json.object_list ["nodeId",Js.Json.number (float_of_int node)]))) !measured;
+        ignore (Lui_app.dispose app)) (fun () ->
+        Native_embed.current_app := Some app;
+        Dom_ext.doc_elements_provider := Native_embed.collect_elements;
+        Dom_ext.subtree_elements_provider := Native_embed.collect_subtree;
+        Runtime.app_flush := (fun () -> ignore (Lui_app.flush app));
+        ignore (Lui_app.start app); ignore (Lui_app.flush app);
+        let runtime=Lui_app.runtime app in
+        let trigger=Hashtbl.fold (fun node props found ->
+          if Lui_protocol.Property_map.find_opt Lui_protocol.AccessibilityIdentifier props
+            =Some (Lui_protocol.StringValue identifier) then Some node else found)
+          runtime.Lui_runtime.runtime_properties None |> Option.get in
+        measured := Some trigger;
+        Native_embed.platform_event ("node-rect\n" ^ Js.Json.stringify (Js.Json.object_list
+          ["nodeId",Js.Json.number (float_of_int trigger);
+           "rect",Js.Json.object_list ["left",Js.Json.number 80.;"top",Js.Json.number 100.;
+             "width",Js.Json.number 120.;"height",Js.Json.number 28.]]));
+        ignore (Lui_app.dispatch_event app (Lui_protocol.Press trigger));
+        ignore (Lui_app.flush app);
+        let items=Hashtbl.fold (fun node kind found ->
+          if kind=Lui_protocol.MenuItem then node::found else found) runtime.Lui_runtime.mounted_nodes [] in
+        let label node = match Lui_protocol.Property_map.find_opt Lui_protocol.TextValue
+          (Hashtbl.find runtime.Lui_runtime.runtime_properties node) with
+          | Some (Lui_protocol.StringValue value) -> value
+          | _ -> failwith "Code language action has no label" in
+        check "actual native language popup preserves every offered action"
+          (List.sort String.compare (List.map label items)=List.sort String.compare Code_mirror.languages);
+        let rust=List.find (fun node -> label node="rust") items in
+        let rec scrolls_until_popup node count =
+          match Hashtbl.find runtime.Lui_runtime.mounted_nodes node with
+          | Lui_protocol.Popover -> count
+          | kind ->
+              let parent=Hashtbl.find runtime.Lui_runtime.runtime_parents node in
+              scrolls_until_popup parent (count + if kind=Lui_protocol.Scroll then 1 else 0) in
+        check "Rust has exactly the native popup Scroll owner, with other native hosts unchanged"
+          (scrolls_until_popup rust 0=(if host=Lui_protocol.NshHost then 1 else 0));
+        check "scroll wrapping preserves the actual Rust activation handler"
+          (Hashtbl.mem runtime.Lui_runtime.event_handlers rust)))
+      [Lui_protocol.NshHost; Lui_protocol.SwiftUIHost])
+
 let native_popup_placement_contract () =
   let previous_overlays = !Properties_state.view_overlays_state
   and previous_generation = !Properties_state.overlay_generation
@@ -2864,6 +2937,7 @@ let () =
   native_click_producers ();
   native_point_property_scroll ();
   native_wide_reading_column ();
+  native_code_language_popup_scroll ();
   native_popup_placement_contract ();
   native_controlled_field_resets ();
   native_scalar_string_dismissal ();
