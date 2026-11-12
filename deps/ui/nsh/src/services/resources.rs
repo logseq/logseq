@@ -151,6 +151,44 @@ pub(crate) fn validate_source(source: &str, asset: Option<&str>) -> Result<(), S
     classify(source, asset).map(|_| ())
 }
 
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum AssetLocation {
+    Path(PathBuf),
+    Url(String),
+}
+fn asset_location(source: Source) -> Result<AssetLocation, String> {
+    let Source::Direct(source) = source else {
+        return Err("managed asset location was not resolved".into());
+    };
+    if Path::new(&source).is_absolute() {
+        return Ok(AssetLocation::Path(source.into()));
+    }
+    let url = url::Url::parse(&source).map_err(|_| "invalid managed asset URL")?;
+    match url.scheme() {
+        "file" => url
+            .to_file_path()
+            .map(AssetLocation::Path)
+            .map_err(|_| "invalid managed local asset URL".into()),
+        "http" | "https" => Ok(AssetLocation::Url(source)),
+        _ => Err("managed asset links require a local file or HTTP(S) URL".into()),
+    }
+}
+
+pub(crate) fn validate_asset_link(
+    graph: &str,
+    source: &str,
+    asset: Option<&str>,
+) -> Result<(), String> {
+    if graph.is_empty() || graph.contains('\0') {
+        return Err("managed asset links require their graph identity".into());
+    }
+    let source = classify(source, asset)?;
+    if matches!(source, Source::Direct(_)) {
+        asset_location(source)?;
+    }
+    Ok(())
+}
+
 /// One app-owned signal; only graph-relative image bindings read it.
 #[derive(Clone, Copy)]
 pub(crate) struct Resources(Signal<Option<Graph>>);
@@ -176,6 +214,24 @@ impl Resources {
             Some(graph) => graph.resolve(source).map(ImageSrc::from),
             None => Ok(ImageSrc::from("")),
         }
+    }
+    /// Resolve only against the graph captured by the asset view. A retained
+    /// link cannot redirect to a later graph, even when its filename repeats.
+    pub(crate) fn asset_link(
+        &self,
+        graph: &str,
+        source: &str,
+        asset: Option<&str>,
+    ) -> Result<Option<AssetLocation>, String> {
+        validate_asset_link(graph, source, asset)?;
+        let Some(current) = self
+            .0
+            .get_untracked()
+            .filter(|current| current.graph == graph)
+        else {
+            return Ok(None);
+        };
+        asset_location(Source::Direct(current.resolve(classify(source, asset)?)?)).map(Some)
     }
 }
 

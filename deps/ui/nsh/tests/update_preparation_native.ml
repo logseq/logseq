@@ -2602,6 +2602,7 @@ let () =
   Update_worker_coordinator_native.run ();
   Editor_clipboard_native.run ();
   Native_assets_native.run ();
+  Native_assets_native.render_asset_kinds ();
   native_platform_exception_reporting ();
   native_primitive_unit_results ();
   native_alt_mask_through_actual_ffi ();

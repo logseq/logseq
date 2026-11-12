@@ -1,5 +1,58 @@
 let check label condition = if not condition then failwith label
 
+let render_asset_kinds () =
+  let previous_model = !Runtime.read_model in
+  let repo="native-asset-kinds" in
+  Runtime.read_model := (fun () -> {Model.initial with repo=Some repo});
+  let block uuid ext title = Decode.block_of_wire (Wire.Map [
+    Wire.Keyword "block/uuid",Wire.Uuid uuid;
+    Wire.Keyword "block/title",Wire.String title;
+    Wire.Keyword "logseq.property.asset/type",Wire.String ext]) in
+  let image=block "image" "PNG" "Photo"
+  and video=block "video" "mp4" "Movie"
+  and document=block "document" "txt" "Notes"
+  and pdf=block "pdf" "pdf" "Report" in
+  check "native media classification recognizes recorded webm audio"
+    (Asset_dom.asset_kind ~ext:"webm" ~title:"Audio-recording"=Asset_dom.Audio);
+  let registry=Lui_extension.registry () in
+  Logseq_el.register_all registry;
+  let backend : Lui_protocol.backend = {
+    backend_profile=Lui_protocol.profile Lui_protocol.MacOS Lui_protocol.NshHost;
+    apply_batch=(fun _ -> true)} in
+  let app=Lui_app.create_with_extensions backend registry () (fun () () -> ())
+    (fun _ _ _ -> Lui_elements.column [Asset_dom.block_view "image" image;
+      Asset_dom.block_view "video" video; Asset_dom.block_view "document" document;
+      Asset_dom.block_view "pdf" pdf]) in
+  Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app); Runtime.read_model:=previous_model)
+    (fun () ->
+      ignore (Lui_app.start app); ignore (Lui_app.flush app);
+      let runtime=Lui_app.runtime app in
+      let kind_count kind = Hashtbl.fold (fun _ actual count ->
+        if actual=kind then count+1 else count) runtime.Lui_runtime.mounted_nodes 0 in
+      check "actual native asset views emit only image assets as Image"
+        (kind_count Lui_protocol.Image=1);
+      check "actual native video uses the typed media surface"
+        (kind_count Lui_protocol.MediaSurface=1);
+      Hashtbl.iter (fun node kind -> if kind=Lui_protocol.MediaSurface then
+        check "video source is the current graph's actual asset path"
+          (Lui_protocol.Property_map.find_opt Lui_protocol.UrlValue
+            (Hashtbl.find runtime.Lui_runtime.runtime_properties node)
+            =Some (Lui_protocol.StringValue (Asset_store.asset_path repo "video.mp4"))))
+        runtime.Lui_runtime.mounted_nodes;
+      let links=Hashtbl.fold (fun node identifier found ->
+        if identifier="logseq-a" then node::found else found)
+        runtime.Lui_runtime.runtime_extension_nodes [] in
+      check "generic native assets mount one managed link, not an image" (List.length links=1);
+      let properties=Hashtbl.find runtime.Lui_runtime.runtime_extension_properties (List.hd links) in
+      let string name = match Lui_protocol.String_map.find_opt name properties with
+        | Some (Lui_protocol.StringValue value) -> value
+        | _ -> failwith ("missing native asset extension property: " ^ name) in
+      let attrs=Yojson.Safe.from_string (string "attrs") in
+      check "managed file activation carries exact captured graph and filename"
+        (Yojson.Safe.Util.member "data-asset-graph" attrs=`String repo
+         && Yojson.Safe.Util.member "data-asset-file" attrs=`String "document.txt");
+      check "managed asset label uses the user-facing title" (string "text"="Notes.txt"))
+
 let run () =
   let repo = "native-inline-pdf" in
   let path = Asset_store.asset_path repo "图 report.pdf" in

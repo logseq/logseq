@@ -162,22 +162,67 @@ let retry_pending () = ()
 let asset_source file =
   Asset_store.asset_path (Runtime.repo ()) file
 
-let file_cell_el (w : Wire.t) : Lui_elements.t =
-  let uuid = Option.value (Wire.map_get_uuid w "block/uuid") ~default:"" in
-  let ext =
-    Option.value
-      (Wire.map_get_string w "logseq.property.asset/type") ~default:""
-  in
+let image_exts =
+  [ "gif"; "svg"; "jpeg"; "ico"; "png"; "jpg"; "bmp"; "webp"; "avif";
+    "cr2"; "jxl"; "heic" ]
+
+let video_exts = [ "mp4"; "webm"; "mov"; "flv"; "avi"; "mkv" ]
+let audio_exts = [ "mp3"; "ogg"; "mpeg"; "wav"; "m4a"; "flac"; "wma"; "aac" ]
+
+type asset_kind = Image | Pdf | Video | Audio | File
+
+let asset_kind ~ext ~title =
+  let ext = String.lowercase_ascii ext in
+  if List.mem ext image_exts then Image
+  else if ext = "pdf" then Pdf
+  else if List.mem ext audio_exts
+    || (ext = "webm" && Str_util.starts_with title "Audio-") then Audio
+  else if List.mem ext video_exts then Video
+  else File
+
+let file_label ~file (b : Model.block) =
+  if b.Model.block_title = "" then file
+  else
+    let ext = Option.value b.Model.block_asset_type ~default:"" in
+    if ext = "" then b.Model.block_title else b.Model.block_title ^ "." ^ ext
+
+let managed_file_link ~repo ~file ~source ~external_url ~label =
+  let identity = ["data-asset-graph",repo; "href",source] in
+  Logseq_el.el ~tag:"a" ~style_class:"asset-ref" ~text:label
+    ~attrs:(if external_url then identity else ("data-asset-file",file)::identity) []
+
+let asset_leaf ~compact uuid (b : Model.block) =
+  let repo = Runtime.repo () in
+  let ext = Option.value b.Model.block_asset_type ~default:"" in
   let file = uuid ^ "." ^ ext in
-  Lui_elements.box ~style_class:"block-content" ~max_height:30
-    [ Lui_elements.image ~url:(asset_source file) ~alt:file ~max_height:30 [] ]
+  let external_url, source = match b.Model.block_asset_url with
+    | Some url when url <> "" -> true,url
+    | _ -> false,Asset_store.asset_path repo file in
+  let label = file_label ~file b in
+  match asset_kind ~ext ~title:b.Model.block_title with
+  | Image -> Lui_elements.image ~key:("asset-image-" ^ uuid) ~url:source ~alt:label
+      ~max_height:(if compact then 30 else 800) []
+  | Pdf -> Ui_parts.pressable ~on_press:(fun _ ->
+      if repo <> "" && Runtime.repo () = repo then Pdf_assets.open_pdf_file ~uuid ~ext ~b)
+      (Lui_elements.text ~key:("asset-link-" ^ uuid) ~style_class:"is-pdf" ~value:label [])
+  | Video when not compact ->
+      Lui_elements.media_surface ~key:("asset-video-" ^ uuid) ~url:source ~label
+        ~width:640 ~height:360 ~max_width:800 []
+  | Audio -> Lui_elements.image ~key:("asset-image-" ^ uuid) ~url:source ~alt:label
+      ~max_height:(if compact then 30 else 800) []
+  | Video | File -> managed_file_link ~repo ~file ~source ~external_url ~label
+
+let file_cell_el (w : Wire.t) : Lui_elements.t =
+  let block = Decode.block_of_wire w in
+  match block.Model.block_uuid with
+  | None -> Lui_elements.spacer []
+  | Some uuid -> Lui_elements.box ~style_class:"block-content" ~max_height:30
+      [asset_leaf ~compact:true uuid block]
 
 let gallery_cover ~width ~height (value : W.t) : Lui_elements.t =
   let block = Decode.block_of_wire value in
   match block.Model.block_uuid, block.Model.block_asset_type with
-  | Some uuid, Some ext when List.mem ext
-      ["gif"; "svg"; "jpeg"; "ico"; "png"; "jpg"; "bmp"; "webp"; "avif";
-       "cr2"; "jxl"; "heic"] ->
+  | Some uuid, Some ext when List.mem (String.lowercase_ascii ext) image_exts ->
       let file = uuid ^ "." ^ ext in
       let source = match block.Model.block_asset_url with
         | Some url when url <> "" -> url
@@ -189,36 +234,9 @@ let gallery_cover ~width ~height (value : W.t) : Lui_elements.t =
    inline via the asset extension tag — nothing to lightbox *)
 let preview_images (_items : Wire.t list) : unit = ()
 
-(* minimal asset render — the asset extension tag carries the block
-   uuid + stored file path so the Swift renderer can resolve it *)
 let block_view uuid (b : Model.block) : Lui_elements.t =
-  let ext = Option.value b.Model.block_asset_type ~default:"" in
-  let is_pdf = ext = "pdf" in
-  (* TODO(component): the logseq-div extension element + its
-     click event carry the native asset-resolution contract — the
-     attrs could ride ~data_attrs but the extension tag itself has no
-     kind equivalent *)
-  Logseq_el.el ~key:("asset-" ^ uuid) ~tag:"div"
-    ~style_class:
-      "asset-container"
-    ~attrs:
-      [ ("data-asset-uuid", uuid); ("data-asset-type", ext) ]
-    ~events:(if is_pdf then "click" else "")
-    ~on_dom_event:(fun name _ ->
-      if name = "click" && is_pdf then
-        Pdf_assets.open_pdf_file ~uuid ~ext ~b)
-    [ (if is_pdf then
-         Lui_elements.text ~key:("asset-link-" ^ uuid)
-           ~value:(uuid ^ "." ^ ext) []
-       else
-         let file = uuid ^ "." ^ ext in
-         let source =
-           match b.Model.block_asset_url with
-           | Some url when url <> "" -> url
-           | _ -> asset_source file
-         in
-         Lui_elements.image ~key:("asset-image-" ^ uuid) ~url:source ~alt:file
-           ~max_height:800 []) ]
+  Lui_elements.box ~key:("asset-" ^ uuid) ~style_class:"asset-container"
+    [asset_leaf ~compact:false uuid b]
 
 let content_view = block_view
 

@@ -15,6 +15,29 @@ fn resolved(graph: &Graph, source: &str, asset: Option<&str>) -> String {
 }
 
 #[test]
+fn managed_asset_links_share_root_validation_but_never_open_image_data() {
+    assert!(validate_asset_link("graph", "", Some("report.txt")).is_ok());
+    assert!(validate_asset_link("graph", "https://example.invalid/report.txt", None).is_ok());
+    for (graph, source, asset) in [
+        ("", "/tmp/report.txt", None),
+        ("graph", "data:image/png;base64,AAAA", None),
+        ("graph", "javascript:alert(1)", None),
+        (
+            "graph",
+            "https://user:secret@example.invalid/report.txt",
+            None,
+        ),
+        ("graph", "../../outside.txt", None),
+        ("graph", "", Some("../outside.txt")),
+    ] {
+        assert!(
+            validate_asset_link(graph, source, asset).is_err(),
+            "{source}"
+        );
+    }
+}
+
+#[test]
 fn published_asset_roots_and_encoded_names_have_one_resolution_policy() {
     let root = std::env::temp_dir().join("logseq-image-policy");
     let graph = Graph::parse(&context("graph A", &root)).unwrap().unwrap();

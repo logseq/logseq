@@ -1,5 +1,28 @@
 # API migrations
 
+## Native asset views distinguish image, video, PDF and generic files
+
+Native asset blocks and file cells classify the stored extension without case
+sensitivity. Image assets keep the image loader; video blocks now use the typed
+`media_surface` and NSH's native video controls. PDF labels retain their in-app
+document opener and capture graph identity. Generic files display the asset
+title and extension instead of attempting to decode the file as an image.
+
+Generic activation is restricted to canonical `logseq-a` elements carrying
+`data-asset-graph` plus either `data-asset-file` or an explicit validated source.
+For example, `data-asset-graph="graph-id" data-asset-file="uuid.txt"` resolves
+through the existing resource owner and calls NSH `open_path`; explicit HTTP(S)
+sources use `open_url`. This does not grant default navigation to arbitrary raw
+anchors. Closed/different graphs, disabled links, update quiescence and retired
+element incarnations cannot issue an open request. Platform failures use the
+existing `platform-error` completion channel. No new OCaml request queue is added.
+
+The native archive fixture checks emitted Image/MediaSurface/managed-link kinds,
+source ownership and labels. Headless tests inspect actual native OpenPath
+commands and refusal boundaries. Actual video decoding, playback and visual
+layout remain separate platform qualification; audio playback is a separate
+native factory change.
+
 ## Native inline PDF links use the installed document opener
 
 `![Report](../assets/report.pdf)` now reaches the native PDF extension through

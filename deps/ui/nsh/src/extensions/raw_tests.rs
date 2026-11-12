@@ -11,6 +11,125 @@ use nsh_testing::Headless;
 use serde_json::{Value, json};
 use std::{cell::RefCell, rc::Rc, sync::Arc};
 
+#[component]
+fn ManagedAssets() -> impl IntoElement {
+    use crate::services::resources::Resources;
+    use lui_nsh::app::ApplicationMutations;
+    let resources = Resources::new();
+    let base = std::env::temp_dir().join("logseq-managed-asset-policy");
+    let roots = |graph: &str| {
+        json!({"graph":graph,"graph-dir":base,"asset-dir":base.join("assets")}).to_string()
+    };
+    resources.install(&roots("original")).unwrap();
+    provide_context(resources);
+    let held = signal(false);
+    provide_context(ApplicationMutations::new(move || {
+        if held.get_untracked() {
+            Err("held for update".into())
+        } else {
+            Ok(())
+        }
+    }));
+    let admission = use_context::<ApplicationMutations>().unwrap();
+    let captured = Rc::new(RefCell::new(
+        None::<(lui_nsh::extensions::ExtensionContext, Owner)>,
+    ));
+    let capture = captured.clone();
+    let schema = schemas()
+        .into_iter()
+        .find(|schema| schema.identifier == "logseq-a")
+        .unwrap();
+    let fingerprint = schema.fingerprint.clone();
+    let registry = Extensions::builder()
+        .register(schema, move |context| {
+            *capture.borrow_mut() = Some((context.clone(), Owner::current()));
+            raw::element(context)
+        })
+        .unwrap()
+        .validate("logseq-a", raw::validate)
+        .unwrap()
+        .validate_themed("logseq-a", raw::validate_themed)
+        .unwrap()
+        .freeze(Profile {
+            os: "macos".into(),
+            host: "nsh".into(),
+        })
+        .unwrap();
+    let renderer = Renderer::with_extensions(registry, |_, _| {});
+    let attrs = json!({"data-asset-graph":"original","data-asset-file":"图 report.txt","href":"/stale/graph/report.txt"});
+    renderer
+        .apply(patch(
+            1,
+            json!([
+                {"op":"create-extension","id":1,"identifier":"logseq-a","fingerprint":fingerprint},
+                {"op":"set-extension-prop","id":1,"property":"text","value":"Report"},
+                {"op":"set-extension-prop","id":1,"property":"attrs","value":attrs.to_string()}
+            ]),
+        ))
+        .unwrap();
+    renderer.set_root(1).unwrap();
+    let disable = renderer.clone();
+    let retire = renderer.clone();
+    let switched = roots("different");
+    view().child(renderer.element())
+        .child(nsh_base::button().child(text("Hold assets")).on_press(move || held.set(true)))
+        .child(nsh_base::button().child(text("Release assets")).on_press(move || held.set(false)))
+        .child(nsh_base::button().child(text("Switch asset graph")).on_press(move || resources.install(&switched).unwrap()))
+        .child(nsh_base::button().child(text("Close asset graph")).on_press(move || resources.install(r#"{"graph":"","graph-dir":"","asset-dir":""}"#).unwrap()))
+        .child(nsh_base::button().child(text("Disable asset")).on_press(move || {
+            let mut attrs=attrs.clone(); attrs["disabled"]=json!("");
+            disable.apply(patch(2,json!([{"op":"set-extension-prop","id":1,"property":"attrs","value":attrs.to_string()}]))).unwrap();
+        }))
+        .child(nsh_base::button().child(text("Retire asset")).on_press(move || {
+            retire.apply(patch(3,json!([{"op":"detach-subtree","id":1}]))).unwrap();
+        }))
+        .child(nsh_base::button().child(text("Try retained asset")).on_press(move || {
+            let captured=captured.borrow(); let (context,owner)=captured.as_ref().unwrap();
+            raw::activate_asset(context,*owner,Some(&admission),Some(resources),None);
+        }))
+        .child(text("asset-ready"))
+}
+
+#[test]
+fn managed_asset_activation_uses_native_open_path_and_rejects_stale_or_held_views() {
+    use nsh_core::file_dialog::FileRequest;
+    let start = || {
+        let mut app = Headless::start(EngineConfig::new(Root::of::<ManagedAssets>())).unwrap();
+        app.wait_for("asset-ready").unwrap();
+        app
+    };
+    let mut app = start();
+    app.press("Report").unwrap();
+    app.wait_for("asset-ready").unwrap();
+    assert_eq!(
+        app.screen().file_requests(),
+        &[FileRequest::OpenPath(
+            std::env::temp_dir().join("logseq-managed-asset-policy/assets/图 report.txt")
+        )]
+    );
+    app.press("Hold assets").unwrap();
+    app.press("Report").unwrap();
+    assert_eq!(app.screen().file_requests().len(), 1);
+    app.press("Release assets").unwrap();
+    app.press("Report").unwrap();
+    assert_eq!(app.screen().file_requests().len(), 2);
+    app.press("Switch asset graph").unwrap();
+    app.press("Report").unwrap();
+    assert_eq!(app.screen().file_requests().len(), 2);
+    app.press("Close asset graph").unwrap();
+    app.press("Report").unwrap();
+    assert_eq!(app.screen().file_requests().len(), 2);
+
+    let mut app = start();
+    app.press("Disable asset").unwrap();
+    app.press("Try retained asset").unwrap();
+    assert!(app.screen().file_requests().is_empty());
+    let mut app = start();
+    app.press("Retire asset").unwrap();
+    app.press("Try retained asset").unwrap();
+    assert!(app.screen().file_requests().is_empty());
+}
+
 fn schemas() -> Vec<Schema> {
     serde_json::from_str(include_str!("../../schemas.json")).unwrap()
 }

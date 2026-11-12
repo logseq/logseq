@@ -1,7 +1,9 @@
 //! User-authored raw markup. Application controls remain typed LUI components.
 use super::{raw_style, string};
 use lui_nsh::{
+    app::{ApplicationEvents, ApplicationMutations},
     extensions::{ExtensionContext, ExtensionStyle},
+    runtime::PlatformEvent,
     store::Node,
 };
 use nsh_core::{element::ImageSrc, keymap::Modifiers, prelude::*};
@@ -32,6 +34,16 @@ pub(super) fn validate(node: &Node) -> Result<(), String> {
     if tag == "img" {
         crate::services::resources::validate_source(
             attrs.get("src").map(String::as_str).unwrap_or(""),
+            attrs.get("data-asset-file").map(String::as_str),
+        )?;
+    }
+    if let Some(graph) = attrs.get("data-asset-graph") {
+        if tag != "a" {
+            return Err("managed asset activation requires a link".into());
+        }
+        crate::services::resources::validate_asset_link(
+            graph,
+            attrs.get("href").map(String::as_str).unwrap_or(""),
             attrs.get("data-asset-file").map(String::as_str),
         )?;
     }
@@ -142,6 +154,9 @@ pub(super) fn element(context: ExtensionContext) -> AnyElement {
         let label_context = context.clone();
         let activation = context.clone();
         let owner = Owner::current();
+        let admission = use_context::<ApplicationMutations>();
+        let resources = use_context::<crate::services::resources::Resources>();
+        let events = use_context::<ApplicationEvents>();
         return component(
             context,
             nsh_base::Button::element(nsh_base::ButtonProps {
@@ -152,6 +167,16 @@ pub(super) fn element(context: ExtensionContext) -> AnyElement {
             })
             .on_event(move |event: &nsh_base::ButtonEvent| {
                 if matches!(event, nsh_base::ButtonEvent::Press) {
+                    if attributes(&activation).contains_key("data-asset-graph") {
+                        activate_asset(
+                            &activation,
+                            owner,
+                            admission.as_ref(),
+                            resources,
+                            events.clone(),
+                        );
+                        return;
+                    }
                     // NSH's semantic event has no pointer details. A keyboard or
                     // assistive activation is still an ordinary DOM click.
                     emit_dom(&activation, owner, "click", json!({}));
@@ -384,8 +409,11 @@ fn pointer(point: Point<Points>, modifiers: Modifiers) -> Value {
     json!({"clientX":point.x.0,"clientY":point.y.0,"button":0,"buttons":0,"shiftKey":modifiers.shift,"altKey":modifiers.alt,"metaKey":modifiers.cmd,"ctrlKey":modifiers.ctrl})
 }
 fn emit_dom(context: &ExtensionContext, owner: Owner, name: &str, payload: Value) {
+    try_emit_dom(context, owner, name, payload);
+}
+fn try_emit_dom(context: &ExtensionContext, owner: Owner, name: &str, payload: Value) -> bool {
     if !owner.is_live() {
-        return;
+        return false;
     }
     let mut payload = payload
         .as_object()
@@ -398,5 +426,74 @@ fn emit_dom(context: &ExtensionContext, owner: Owner, name: &str, payload: Value
     context
         .emitter
         .try_emit("dom-event", values)
-        .expect("native raw event matches canonical schema");
+        .expect("native raw event matches canonical schema")
+}
+
+fn activate_asset(
+    context: &ExtensionContext,
+    owner: Owner,
+    admission: Option<&ApplicationMutations>,
+    resources: Option<crate::services::resources::Resources>,
+    events: Option<ApplicationEvents>,
+) {
+    let attrs = attributes(context);
+    if !owner.is_live()
+        || attrs.contains_key("disabled")
+        || admission.is_none_or(|admission| admission.check().is_err())
+    {
+        return;
+    }
+    let location = resources
+        .expect("managed assets require the application resource owner")
+        .asset_link(
+            &attrs["data-asset-graph"],
+            attrs.get("href").map(String::as_str).unwrap_or(""),
+            attrs.get("data-asset-file").map(String::as_str),
+        )
+        .expect("managed asset link was validated before publication");
+    let Some(location) = location else {
+        return;
+    };
+    // The existing emitter checks the exact retained incarnation synchronously.
+    // No asynchronous work or path request is admitted for a retired element.
+    if !try_emit_dom(context, owner, "click", json!({})) {
+        return;
+    }
+    use crate::services::resources::AssetLocation;
+    enum OpenRequest {
+        Path(nsh_core::element::Answer<Result<(), String>>),
+        Url(nsh_core::element::Answer<bool>),
+    }
+    // Submit while the same synchronous admission/graph/incarnation proof is
+    // still current. Only the platform completion is asynchronous.
+    let request = match location {
+        AssetLocation::Path(path) => OpenRequest::Path(open_path(path)),
+        AssetLocation::Url(url) => OpenRequest::Url(open_url(url)),
+    };
+    spawn(async move {
+        let result = match request {
+            OpenRequest::Path(answer) => answer.await,
+            OpenRequest::Url(answer) => {
+                if answer.await {
+                    Ok(())
+                } else {
+                    Err("the native host did not open the asset URL".into())
+                }
+            }
+        };
+        if let Err(error) = result {
+            if owner.is_live() {
+                if let Some(events) = events {
+                    if let Err(error) = events.send(PlatformEvent {
+                        operation: "platform-error".into(),
+                        payload: json!({"operation":"open-asset","message":error}).to_string(),
+                    }) {
+                        eprintln!("managed asset completion: {error}");
+                    }
+                } else {
+                    eprintln!("managed asset open: {error}");
+                }
+            }
+        }
+    });
 }
