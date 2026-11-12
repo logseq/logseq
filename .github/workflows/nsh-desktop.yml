@@ -15,7 +15,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  LUI_REF: 693f09f3bb10f5d1ff927d894f6fb7305e42ceef
+  LUI_REF: 50f0101e9d2fe0c456887bdc2c955006dccad37a
   RUSTUP_TOOLCHAIN: 1.97.0
   CARGO_BUILD_JOBS: 2
   # Keep the platform's final signed/native bytes; the macOS archive stripper
