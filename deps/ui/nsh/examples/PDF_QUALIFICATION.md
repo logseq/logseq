@@ -18,3 +18,22 @@ The second actual run remained blank after explicit layout/display. Its PDFView 
 The harness now saves `*-own-view.png` by caching the actual PDFView separately from the application content cache. It also reads a bounded tree of public CALayer metadata: class ancestry, tiled-layer membership, bounds, visibility, opacity and contents presence. It never changes the layers. Compare both captures: text in the own-view image but absent from the app image would isolate an ancestor capture/composition issue. Both images remaining blank with valid layout must retain the explicit capture limitation rather than claim either pixel success or broken product text.
 
 The local Apple SDK headers are primary evidence for the remaining distinction: `PDFKit/PDFView.h:314–319` identifies the document view and automatic layout; `QuartzCore/CATiledLayer.h:6–24` describes asynchronously supplied tiles and future updates, and prohibits replacing tiled contents; `QuartzCore/CALayer.h:557–564` warns that `renderInContext` is not the complete compositor. A null public layer contents value is not proof that its internal tile store is empty. This diagnostic neither waits for a display update nor uses `renderInContext`, direct PDF page drawing, a thumbnail or a substituted image.
+
+## Run 3: API checks pass; both content caches remain blank
+
+Evidence: `/tmp/logseq-nsh-pdf-qualification-20261112-run3/result.json` and its PNGs. Root reported strict Clippy and all nine real native API checks passed. Visual inspection confirmed that both `pdf-initial.png` (application content) and `pdf-initial-own-view.png` (the actual PDFView alone) are blank white. This comparison does not isolate an NSH ancestor-host defect.
+
+Both capture stages report an inactive application, a visible but fully occluded window (`occlusionState = 8192`, no public Visible bit), and a nonhidden 900×700 PDFView. The bounded public layer observations were:
+
+| Observation | Initial capture | Highlight capture |
+| --- | ---: | ---: |
+| Layers inspected | 77 | 78 |
+| `PDFPageLayer` objects | 2 | 2 |
+| `PDFPageLayerTile` objects | 10 | 4 |
+| Page tiles with `IOSurface` contents | 5 | 4 |
+| `CAPortalLayer` objects | 2 | 2 |
+| Class ancestry matching `CATiledLayer` | 0 | 0 |
+
+Every observed page, page-tile and portal layer was nonhidden, had nonzero opacity and had no pending display flag. These are runtime class-name observations, not calls to private PDFKit APIs. In particular, the earlier general CATiledLayer explanation is not a confirmed implementation diagnosis: this run exposed PDFKit page tiles and portal layers, not CATiledLayer ancestry.
+
+Existing IOSurface tile contents alongside blank AppKit caches are consistent with a content-cache/composition limitation; they do not prove readable tile pixels, a broken document, or a product foreground-rendering failure. No layer contents were replaced and no alternate compositor or PDF page image was used. Keep `qualificationScope = native-api-checks` and `appContentPixels.status = unqualified`. Page display, full toolbar behavior and OCaml persistence still require independent evidence.
