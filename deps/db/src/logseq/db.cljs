@@ -633,9 +633,7 @@
                                  ;; a/b/c might be deleted but a/b/c/d still exists (for backward compatibility)
                                 (not (and (string/includes? name' "/")
                                           (not (journal? page))))
-                                ;; every page's properties hold its :block/tags
-                                ;; (Page, Journal): only other properties keep it
-                                (empty? (dissoc (:block/properties page) :block/tags))
+                                (not (:block/properties page))
                                 page))))
                          pages)
                         (remove false?)
