@@ -241,6 +241,7 @@ pub(super) fn qualify(app: &mut Headless) -> Result<(), String> {
 /// deferred body in the same publication attempt, rather than masking the rest.
 pub(super) const CASE_ENV: &str = "LOGSEQ_NSH_CONDITIONAL_SURFACE";
 pub(super) const DIALOG_CASES: &[&str] = &[
+    "icon-picker",
     "new-graph",
     "login",
     "import",
@@ -290,6 +291,9 @@ fn selector_for_class(tree: &Value, class: &str) -> Result<String, String> {
 }
 
 pub(super) fn qualify_dialog(app: &mut Headless, name: &str) -> Result<(), String> {
+    if name == "icon-picker" {
+        return super::startup_icon_picker::qualify(app);
+    }
     if !DIALOG_CASES.contains(&name) {
         return Err(format!("unknown conditional native dialog {name}"));
     }

@@ -16,6 +16,7 @@ use std::{
 };
 
 mod startup_body;
+mod startup_icon_picker;
 mod startup_keyboard;
 mod startup_rows;
 mod startup_surfaces;

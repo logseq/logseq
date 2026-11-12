@@ -550,7 +550,11 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
              sv ]
      ; Ui_parts.class_signal sv
          (fun s -> "bd " ^ tab_name s.tab)
+         (* A shrink-to-fit popup must not use the grid's intrinsic height as
+            its flex basis. The Scroll receives only the space left by the
+            two header rows; Parent lists borrow this finite viewport. *)
          (scroll ~key:"bd" ~orientation:`vertical ~grow:1.
+            ~height:0 ~min_height:0
             ~padding_horizontal:4 ~padding_vertical:4
             [ column ~min_width:0
                 [ reactive

@@ -1455,3 +1455,21 @@ The compiled native regression mounts the production input row, restores and
 clears that query, checks retained identity and actual focus/selection requests,
 and rejects any NSH `set-value` request. This is not a general no-op for imperative
 DOM setters; other callers still require their own authoritative input owners.
+
+## Bound the native icon picker body before requesting virtual rows
+
+The 408px picker now gives its growing body Scroll a zero height basis and
+zero minimum height. Its existing Scroll remains the sole viewport owner; the
+complete Emoji and icon sources remain available. Intrinsic virtual content
+extent must not set the height of a Scroll inside a shrink-to-fit popup. Other
+backends retain the same header/body allocation and item choice behavior.
+
+For similar finite popups, use `scroll ~grow:1. ~height:0 ~min_height:0` under
+the finite-height column rather than allowing the full source extent to become
+the body's intrinsic minimum. Do not truncate the source or add a second
+viewport/cache. The required actual-application native preflight now opens the
+Journal icon action, switches to both complete datasets, checks bounded
+materialization and resolved body bounds, drags the native Scroll to the final
+source row, and activates its last item. This complements the recording-host
+window tests; it does not substitute for AppKit raster/input or release RSS
+measurement. No caller or graph data migration is required.
