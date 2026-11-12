@@ -64,6 +64,14 @@
                      stmt)]
     (.run stmt)))
 
+(defn <d1-batch
+  [^js db statements]
+  (p/let [prepared (mapv (fn [[sql-str & args]]
+                          (let [stmt (.prepare db sql-str)]
+                            (.apply (.-bind stmt) stmt (to-array args))))
+                        statements)]
+    (.batch db (to-array prepared))))
+
 (defn- with-session-db [^js db session-mode]
   (let [with-session (.-withSession db)]
     (if (fn? with-session)

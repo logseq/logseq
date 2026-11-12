@@ -339,7 +339,7 @@
            {"201" (entity-response "AssetResponse" "The created asset block")}
            {})))
 
-(defn openapi-document [issuer]
+(defn openapi-document [origin]
   {:openapi "3.1.0"
    :info {:title "Logseq Server API" :version "1.0.0"}
    :servers [{:url "/"}]
@@ -417,8 +417,8 @@
     :securitySchemes
     {:oauth {:type "oauth2"
              :flows {:authorizationCode
-                     {:authorizationUrl (str issuer "/oauth2/authorize")
-                      :tokenUrl (str issuer "/oauth2/token")
+                     {:authorizationUrl (str origin "/oauth/authorize")
+                      :tokenUrl (str origin "/oauth/token")
                       :scopes {:logseq/read "Read pages and blocks"
                                :logseq/write "Create and edit pages and blocks"}}}}}}
    :paths

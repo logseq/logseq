@@ -2,6 +2,8 @@
 logseq.db-sync.node.entry/main
 ;; API (CLI entrypoint)
 logseq.db-sync.node.show-checksum/main
+;; API (CLI entrypoint for the tasks app demo)
+logseq.db-sync.node.tasks-demo-seed/main
 ;; API
 logseq.db-sync.order/fix-duplicate-orders!
 ;; testing
