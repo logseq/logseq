@@ -4,9 +4,10 @@ import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import { mkdirSync, writeFileSync, appendFileSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 
-const repoRoot = resolve(new URL("..", import.meta.url).pathname);
+const repoRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const require = createRequire(import.meta.url);
 const transit = require(require.resolve("transit-js", { paths: [resolve(repoRoot, "cli")] }));
 const transitWriter = transit.writer("json");
@@ -3048,7 +3049,7 @@ async function main() {
 }
 
 function isMainModule() {
-  return process.argv[1] && resolve(process.argv[1]) === resolve(new URL(import.meta.url).pathname);
+  return process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url));
 }
 
 if (isMainModule()) {

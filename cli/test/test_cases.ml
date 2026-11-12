@@ -3893,8 +3893,8 @@ let () =
         Node.Path.join [| current_dirname; "fake_codex.js" |]
       in
       write_file codex_bin
-        ("#!/bin/sh\nexec " ^ Node.Process.argv.(0) ^ " " ^ fake_codex_js
-       ^ " \"$@\"\n");
+        ("#!/bin/sh\nexec " ^ Filename.quote Node.Process.argv.(0) ^ " "
+       ^ Filename.quote fake_codex_js ^ " \"$@\"\n");
       chmod_sync codex_bin 0o755;
       write_file config_path
         (edn_map
