@@ -1,5 +1,29 @@
 # API migrations
 
+## Windows actual-app build publication
+
+`python deps/ui/nsh/build_windows.py --lui-source <checkout> --dumpbin <tool>
+--dll-root <trusted-directory>` adds a native Windows x86_64 build path, separate
+from the Unix build script. It preserves the actual Logseq seven-argument ABI,
+worker/service channel and application resource contract. The typed OCaml schema
+export is checked before Rust compilation. Required native imports are collected
+from explicit trusted directories, not the development PATH; system Windows
+libraries/API sets remain system dependencies.
+
+The success layout is `_build/nsh-windows/logseq-nsh.exe` with sibling `Resources`
+and required executable-adjacent DLLs. The existing actual-App startup preflight
+must pass using the completed private candidate with a clean Windows PATH before
+any published code/resource changes. Source or dependency changes reject
+publication. The success receipt is written last and now optionally records
+`ownedCode` for backend-owned root DLLs alongside `ownedResources`; unrelated
+files are not retired. Individual file replacement remains atomic, not the whole
+application set. Existing Unix receipts without `ownedCode` remain compatible.
+
+This is a source build/qualification recipe, not evidence that Windows startup,
+packaged launch, signing or upgrades have run. No feed, key, dependency version,
+mobile backend or application wire behavior changes. See the NSH README's
+complete Windows recipe and current qualification boundary.
+
 ## Native Windows application startup paths and worker identity
 
 When `HOME` is absent on native Windows, UI services and daemon paths now use

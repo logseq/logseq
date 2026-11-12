@@ -1,5 +1,7 @@
 """Source guards only; these do not qualify Windows compilation or startup."""
 import importlib.util
+import json
+import tempfile
 from pathlib import Path
 import unittest
 from unittest.mock import patch
@@ -61,6 +63,62 @@ class WindowsDllGuards(unittest.TestCase):
         state = source.split("let app_support_dir =", 1)[1].split("let state_file", 1)[0]
         self.assertIn('Sys.getenv_opt "APPDATA"', state)
         self.assertLess(state.index('Sys.os_type = "Win32"'), state.index('native_system = "Linux"'))
+
+
+class SchemaExportPlumbing(unittest.TestCase):
+    """Fake native tools test schema ordering/rollback, not OCaml compilation."""
+
+    def test_exported_schema_matches_before_candidate_receipt_and_mismatch_preserves_old(self):
+        for matches in (False, True):
+            with self.subTest(matches=matches), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary).resolve()
+                ui = root / "deps/ui"
+                output = ui / "_build/candidate"
+                output.mkdir(parents=True)
+                target = output / "logseq_ui.dll"
+                target.write_text("previous DLL")
+                module = ui / "nsh/build_windows_dll.py"
+                module.parent.mkdir(parents=True)
+                module.write_text("builder fixture")
+                schemas = [{"identifier":"real-export-fixture", "fingerprint":"exact"}]
+                (module.parent / "schemas.json").write_text(json.dumps(schemas))
+                native = ui / "native"
+                native.mkdir()
+                (native / "native_embed.ml").write_text("compiled entry fixture")
+                (native / "logseq_lui_bridge.c").write_text(
+                    "\n".join(f"LUI_EXPORT int {name}(void) {{}}" for name in
+                        ["lui_ocaml_start", "lui_ocaml_pump", "lui_ocaml_platform_event",
+                         "lui_ocaml_editor_snapshot_utf8", "lui_ocaml_extension_event_utf8"]))
+                for archive in builder.ARCHIVES:
+                    file = ui / "_build/default" / archive
+                    file.parent.mkdir(parents=True, exist_ok=True)
+                    file.write_text("compiled archive fixture")
+                exported = []
+                def execute(command, **kwargs):
+                    command = list(map(str, command))
+                    if command[0].endswith("export_schemas.exe"):
+                        source = Path(command[0]).with_suffix(".ml").read_text()
+                        self.assertEqual(source, "let () = print_endline (Native_embed.extension_schemas ())\n")
+                        exported.append(True)
+                        return json.dumps(schemas if matches else [])
+                    if "-o" in command:
+                        Path(command[command.index("-o") + 1]).write_text("compiled candidate")
+                config = {"version":"5.5.1", "ext_obj":".obj"}
+                with patch.multiple(builder, UI=ui, REPO=root, __file__=str(module)), \
+                     patch.object(builder, 'native_config', return_value=config), \
+                     patch.object(builder, 'execute', side_effect=execute):
+                    if matches:
+                        self.assertEqual(builder.build(output), target)
+                        self.assertEqual(target.read_text(), "compiled candidate")
+                        receipt = json.loads((output / "ocaml-toolchain.json").read_text())
+                        self.assertIn("schemasSha256", receipt)
+                        self.assertEqual(json.loads((output / "schemas.json").read_text()), schemas)
+                    else:
+                        with self.assertRaisesRegex(ValueError, "compiled Windows schemas differ"):
+                            builder.build(output)
+                        self.assertEqual(target.read_text(), "previous DLL")
+                        self.assertFalse((output / "ocaml-toolchain.json").exists())
+                self.assertEqual(exported, [True])
 
 
 if __name__ == "__main__":

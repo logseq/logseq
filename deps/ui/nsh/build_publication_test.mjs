@@ -93,7 +93,7 @@ else: sys.exit('unexpected Cargo operation')
     [path.join(resources, "logseq-db-worker"), "previous-worker"],
   ]);
   for (const [file, contents] of old) write(file, contents);
-  return {temporary, host, output, resources, old, run(failure = "") {
+  return {temporary, repo, lui, host, output, resources, old, run(failure = "") {
     return spawnSync("bash", [path.join(host, "build.sh")], {encoding:"utf8", timeout:15000,
       env:{...process.env, PATH:`${tools}${path.delimiter}${process.env.PATH}`,
         LUI_SOURCE_ROOT:lui, PUBLICATION_TEST_ROOT:temporary, PUBLICATION_FAILURE:failure,
@@ -133,5 +133,62 @@ test("qualified publication preserves shared outputs, retires owned resources an
     assert.ok(Object.keys(receipt.files).every(file => !file.includes(".publication.")));
     const {checkReceipt} = await import(pathToFileURL(receiptModule).href);
     assert.equal(checkReceipt(artifact).fresh, true);
+  } finally { rmSync(app.temporary, {recursive:true, force:true}); }
+});
+
+// Use the actual receipt implementation for Windows relocation; fake bytes
+// establish bookkeeping only, not PE loading or Windows startup.
+test("Windows receipt binds scoped build scripts, command and installed root DLLs", async () => {
+  const app = fixture();
+  try {
+    for (const name of ["build_windows.py", "build_windows_dll.py", "windows_dependencies.py"])
+      writeFileSync(path.join(app.host, name), "windows-build-source");
+    const candidate = path.join(app.output, ".windows-candidate");
+    const resources = path.join(candidate, "Resources");
+    mkdirSync(resources, {recursive:true});
+    const artifact = path.join(candidate, "logseq-nsh.exe");
+    const installed = path.join(app.output, "logseq-nsh.exe");
+    const library = path.join(resources, "logseq_ui.dll");
+    const runtime = path.join(candidate, "native.dll");
+    writeFileSync(artifact, "qualified-host");
+    writeFileSync(library, "qualified-ocaml");
+    writeFileSync(runtime, "qualified-runtime");
+    const metadata = path.join(app.temporary, "metadata.json");
+    const manifest = path.join(app.temporary, "manifest.txt");
+    const snapshot = path.join(app.temporary, "snapshot.json");
+    const extra = path.join(app.temporary, "extra.json");
+    const rustManifest = path.join(app.lui, "platform/nsh/Cargo.toml");
+    writeFileSync(metadata, JSON.stringify({packages:[{name:"lui-nsh",source:null,manifest_path:rustManifest}]}));
+    writeFileSync(manifest, rustManifest);
+    const run = (...args) => spawnSync(process.execPath, [path.join(app.host, "build_publication.mjs"), ...args], {encoding:"utf8"});
+    const command = "py -3 build_windows.py --dll-root C:\\trusted";
+    let result = run("snapshot", path.join(app.lui, "tooling/lui_build_receipt.mjs"), app.repo, app.lui, metadata, snapshot, command);
+    assert.equal(result.status, 0, result.stderr);
+    const finalResources = path.join(app.output, "Resources");
+    mkdirSync(finalResources, {recursive:true});
+    const finalLibrary = path.join(finalResources, "logseq_ui.dll");
+    const finalRuntime = path.join(app.output, "native.dll");
+    writeFileSync(extra, JSON.stringify([{source:runtime,target:finalRuntime}]));
+    result = run("receipt", snapshot, manifest, artifact, installed, library, finalLibrary, resources, finalResources, extra);
+    assert.equal(result.status, 0, result.stderr);
+    const receipt = JSON.parse(readFileSync(artifact + ".lui-build.json", "utf8"));
+    assert.equal(receipt.command, command);
+    assert.deepEqual(receipt.ownedCode, ["native.dll"]);
+    assert.deepEqual(receipt.ownedResources, ["logseq_ui.dll"]);
+    for (const name of ["build_windows.py", "build_windows_dll.py", "windows_dependencies.py"])
+      assert.ok(Object.keys(receipt.files).some(file => file.endsWith(name)), name);
+    assert.ok(Object.keys(receipt.files).every(file => !file.includes(".windows-candidate")));
+    copyFileSync(artifact, installed);
+    copyFileSync(library, finalLibrary);
+    copyFileSync(runtime, finalRuntime);
+    copyFileSync(artifact + ".lui-build.json", installed + ".lui-build.json");
+    const {checkReceipt} = await import(pathToFileURL(receiptModule).href);
+    assert.equal(checkReceipt(installed).fresh, true);
+    writeFileSync(finalRuntime, "unqualified-runtime");
+    assert.equal(checkReceipt(installed).fresh, false);
+    writeFileSync(extra, JSON.stringify([{source:runtime,target:path.join(app.temporary, "escaped.dll")}]));
+    result = run("receipt", snapshot, manifest, artifact, installed, library, finalLibrary, resources, finalResources, extra);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /inside its final application root/);
   } finally { rmSync(app.temporary, {recursive:true, force:true}); }
 });

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+from functools import partial
 import json
 import os
 from pathlib import Path
@@ -32,9 +33,9 @@ PACKAGES = ",".join((
 ))
 
 
-def execute(command, *, cwd=UI, capture=False):
-    result = subprocess.run(list(map(str, command)), cwd=cwd, check=True, text=True,
-                            stdout=subprocess.PIPE if capture else sys.stderr)
+def execute(command, *, cwd=UI, capture=False, environment=None):
+    result = subprocess.run(list(map(str, command)), cwd=cwd, check=True, text=True, encoding="utf-8",
+                            stdout=subprocess.PIPE if capture else sys.stderr, env=environment)
     return result.stdout.strip() if capture else None
 
 
@@ -60,11 +61,12 @@ def bridge_exports(source):
     return exports
 
 
-def build(output):
+def build(output, *, environment=None):
     config = native_config()
+    run = partial(execute, environment=environment)
     # Build only libraries. The Unix native_embed executable object's _pic
     # runtime flag is deliberately not involved in this native DLL route.
-    execute(["opam", "exec", "--", "dune", "build", *ARCHIVES])
+    run(["opam", "exec", "--", "dune", "build", *ARCHIVES])
     output = output.resolve()
     output.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix=".candidate-", dir=output) as temporary:
@@ -72,7 +74,7 @@ def build(output):
         bridge = UI / "native/logseq_lui_bridge.c"
         exports = bridge_exports(bridge.read_text(encoding="utf-8"))
         c_object = stage / ("logseq_lui_bridge" + config["ext_obj"])
-        execute(["opam", "exec", "--", "ocamlopt", "-c", "-o", c_object, bridge], cwd=stage)
+        run(["opam", "exec", "--", "ocamlopt", "-c", "-o", c_object, bridge], cwd=stage)
         includes = []
         for archive in ARCHIVES:
             archive = Path(archive)
@@ -81,22 +83,38 @@ def build(output):
                 includes.extend(("-I", objects / kind))
         compiler = ["opam", "exec", "--", "ocamlfind", "ocamlopt", "-thread", "-package", PACKAGES, *includes]
         embed = stage / "native_embed.cmx"
-        execute([*compiler, "-c", "-o", embed, UI / "native/native_embed.ml"], cwd=stage)
+        run([*compiler, "-c", "-o", embed, UI / "native/native_embed.ml"], cwd=stage)
         library = stage / "logseq_ui.dll"
-        execute([*compiler, "-linkall", "-linkpkg",
+        run([*compiler, "-linkall", "-linkpkg",
                  *(UI / "_build/default" / archive for archive in ARCHIVES), embed, c_object,
                  "-output-complete-obj", "-o", library], cwd=stage)
+        # Reuse the typed OCaml exporter from the same compiled module; unlike
+        # the Unix object route, this needs no _pic object or external C linker.
+        schema_source = stage / "export_schemas.ml"
+        schema_source.write_text("let () = print_endline (Native_embed.extension_schemas ())\n",
+                                 encoding="utf-8")
+        schema_program = stage / "export_schemas.exe"
+        run([*compiler, "-linkall", "-linkpkg",
+                 *(UI / "_build/default" / archive for archive in ARCHIVES),
+                 embed, c_object, schema_source, "-o", schema_program], cwd=stage)
+        schemas = json.loads(run([schema_program], cwd=stage, capture=True))
+        expected = json.loads((UI / "nsh/schemas.json").read_text(encoding="utf-8"))
+        if schemas != expected:
+            raise ValueError("The actual compiled Windows schemas differ from nsh/schemas.json; regenerate and qualify the source receipt")
+        schema_file = stage / "schemas.json"
+        schema_file.write_text(json.dumps(schemas, indent=2) + "\n", encoding="utf-8")
         # A child checks PE dependencies/exports and exits before the candidate
         # DLL is renamed. Windows locks a loaded DLL. No lui_ocaml_* is called;
         # loader/CRT initializers may run, as with any native library load.
         probe = "import ctypes,json,sys; lib=ctypes.CDLL(sys.argv[1]); names=json.loads(sys.argv[2]); missing=[name for name in names if not hasattr(lib,name)]; assert not missing, missing"
-        execute(["opam", "exec", "--", sys.executable, "-c", probe, library, json.dumps(exports)], cwd=stage)
+        run(["opam", "exec", "--", sys.executable, "-c", probe, library, json.dumps(exports)], cwd=stage)
         target = output / library.name
         digest = hashlib.sha256(library.read_bytes()).hexdigest()
         receipt = {
             "qualification": "candidate DLL load and exports only; actual worker, application startup and package remain unqualified",
             "bridge": "Logseq seven-argument startup with ordered host-service channel",
             "compiler": config, "exports": exports, "artifactSha256": digest,
+            "schemasSha256": hashlib.sha256(schema_file.read_bytes()).hexdigest(),
             "sources": {str(path.relative_to(REPO)): hashlib.sha256(path.read_bytes()).hexdigest()
                         for path in (Path(__file__).resolve(), bridge, UI / "native/native_embed.ml")},
             "archiveSha256": {archive: hashlib.sha256((UI / "_build/default" / archive).read_bytes()).hexdigest()
@@ -105,6 +123,7 @@ def build(output):
         receipt_file = stage / "ocaml-toolchain.json"
         receipt_file.write_text(json.dumps(receipt, indent=2) + "\n", encoding="utf-8")
         os.replace(library, target)
+        os.replace(schema_file, output / schema_file.name)
         os.replace(receipt_file, output / receipt_file.name)
         return target
 

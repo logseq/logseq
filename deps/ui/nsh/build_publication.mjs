@@ -26,6 +26,8 @@ function sourceInputs(repo, ocamlLui, rustManifest, tool) {
   add(app("deps/ui/nsh/src")); add(app("deps/ui/nsh/tests"));
   for (const file of ["Cargo.toml", "Cargo.lock", "nsh.json", "schemas.json", "export_schemas.c", "build.sh", "run.sh", "build_publication.mjs"])
     add(app("deps/ui/nsh", file));
+  for (const file of ["build_windows.py", "build_windows_dll.py", "windows_dependencies.py"])
+    add(app("deps/ui/nsh", file), true);
   for (const scope of ["bin", "desktop", "lib", "runtime", "stubs", "vendor"]) add(app("deps/db-worker", scope));
   for (const file of ["dune-project", "dune-workspace", "logseq-db-worker.opam"]) add(app("deps/db-worker", file));
   add(app("resources/dicts")); add(app("resources/img")); add(app("resources/js/emoji-data.js"));
@@ -68,7 +70,7 @@ async function check(snapshot, compiledManifest) {
 async function main() {
   const [operation, ...args] = process.argv.slice(2);
   if (operation === "snapshot") {
-    const [tool, repo, ocamlLui, metadataFile, output] = args;
+    const [tool, repo, ocamlLui, metadataFile, output, command] = args;
     const packages = read(metadataFile).packages.filter(pkg => pkg.name === "lui-nsh" && pkg.source == null);
     if (packages.length !== 1) throw new Error("Expected exactly one local LUI Rust package in Cargo metadata");
     const rustManifest = packages[0].manifest_path;
@@ -76,24 +78,35 @@ async function main() {
     const scope = sourceInputs(repo, ocamlLui, rustManifest, tool);
     const quote = value => "'" + value.replaceAll("'", "'\"'\"'") + "'";
     const snapshot = {...scope, tool, rustManifest,
-      command:`LUI_SOURCE_ROOT=${quote(ocamlLui)} bash ${quote(path.join(repo, "deps/ui/nsh/build.sh"))}`,
+      command:command ?? `LUI_SOURCE_ROOT=${quote(ocamlLui)} bash ${quote(path.join(repo, "deps/ui/nsh/build.sh"))}`,
       files:api.digestInputs(scope.root, scope.inputs)};
     writeFileSync(output, JSON.stringify(snapshot));
   } else if (operation === "check") {
     await check(read(args[0]), args[1]);
   } else if (operation === "receipt") {
-    const [snapshotFile, manifestFile, artifact, finalArtifact, library, finalLibrary, resources, finalResources] = args;
+    const [snapshotFile, manifestFile, artifact, finalArtifact, library, finalLibrary, resources, finalResources, extraFile] = args;
+    const extraCode = extraFile ? read(extraFile) : [];
+    for (const item of extraCode) {
+      if (typeof item.source !== "string" || typeof item.target !== "string"
+          || !path.isAbsolute(item.source) || !path.isAbsolute(item.target)
+          || !within(path.dirname(artifact), item.source)
+          || !within(path.dirname(finalArtifact), item.target)
+          || !item.source.toLowerCase().endsWith(".dll") || !item.target.toLowerCase().endsWith(".dll"))
+        throw new Error("Extra native code must be a candidate DLL mapped inside its final application root");
+    }
     const snapshot = read(snapshotFile);
     const api = await check(snapshot, manifestFile);
     const resourceInputs = api.listInputs(snapshot.root, [portable(path.relative(snapshot.root, resources))]);
-    const stagedInputs = [portable(path.relative(snapshot.root, library)), ...resourceInputs];
+    const stagedInputs = [portable(path.relative(snapshot.root, library)), ...resourceInputs,
+      ...extraCode.map(item => portable(path.relative(snapshot.root, item.source)))];
     const receiptFile = api.writeReceipt({artifact, command:snapshot.command, root:snapshot.root,
       inputs:[...snapshot.inputs, ...stagedInputs]});
     const receipt = read(receiptFile);
     const sourceFiles = Object.fromEntries(Object.entries(receipt.files).filter(([name]) =>
-      ![library, resources].some(directory => within(directory, path.join(snapshot.root, name)))));
+      ![library, resources, ...extraCode.map(item => item.source)].some(directory => within(directory, path.join(snapshot.root, name)))));
     sameFiles(snapshot.files, sourceFiles);
-    const locations = [[artifact, finalArtifact], [library, finalLibrary], [resources, finalResources]];
+    const locations = [[artifact, finalArtifact], [library, finalLibrary], [resources, finalResources],
+      ...extraCode.map(item => [item.source, item.target])];
     const relocate = file => {
       for (const [source, target] of locations) {
         if (within(source, file)) return path.join(target, path.relative(source, file));
@@ -102,6 +115,7 @@ async function main() {
     };
     receipt.artifact = path.resolve(finalArtifact);
     receipt.ownedResources = resourceInputs.map(file => portable(path.relative(resources, path.resolve(snapshot.root, file))));
+    if (extraCode.length) receipt.ownedCode = extraCode.map(item => portable(path.relative(path.dirname(finalArtifact), item.target)));
     receipt.inputs = receipt.inputs.map(file => portable(path.relative(snapshot.root, relocate(path.resolve(snapshot.root, file)))));
     receipt.files = Object.fromEntries(Object.entries(receipt.files).map(([file, hash]) =>
       [portable(path.relative(snapshot.root, relocate(path.resolve(snapshot.root, file)))), hash]));

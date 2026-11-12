@@ -24,9 +24,9 @@ dependency selects the Rust LUI package. The receipt records both actual paths,
 even when they differ. `OPAMSWITCH`, `RUSTUP_TOOLCHAIN`, `CARGO_BUILD_JOBS`,
 `NODE_BINARY` and `PYTHON_BINARY` can override the corresponding tools/settings.
 
-The script currently implements native macOS and Linux builds. Windows DLL,
-signing and packaged launch qualification are separate work; the presence of a
-Windows Rust entry does not qualify those steps. This script does not build the
+The shell script implements native macOS and Linux builds. The separate native
+Windows source recipe is documented below; Windows compilation, signing and
+packaged launch still require real runner qualification. This script does not build the
 maintained LUI Apple/iOS, Android or Web backends.
 
 ## Actual-application startup gate
@@ -81,7 +81,7 @@ multi-file transaction: an I/O failure partway through publication stops without
 a new successful receipt, and the old receipt will reject the partial set. This
 local build mechanism is separate from packaged whole-application installation.
 
-Every successful build writes `logseq-nsh.lui-build.json` through LUI's existing
+Every successful Unix build writes `logseq-nsh.lui-build.json` through LUI's existing
 `tooling/lui_build_receipt.mjs` API. It covers the executable digest; actual OCaml
 library and installed resources/worker; app Rust sources, Cargo files and schemas;
 OCaml native/shared source scopes and generators; dictionaries, icons and fonts;
@@ -334,7 +334,10 @@ function is called by that probe. Loader/CRT initializers may run.
 The candidate and `ocaml-toolchain.json` are written beneath
 `deps/ui/_build/nsh-windows-candidate`, separate from the qualified application
 publication directory. The receipt records compiler settings, exports, candidate
-bytes and the actual four compiled archive digests. Its named source digests are
+bytes, exported schema digest and the actual four compiled archive digests. The
+same compiled `Native_embed.extension_schemas ()` is exported by a standalone
+native OCaml program and compared semantically with tracked `schemas.json` before
+Rust compilation. A mismatch fails without publishing the DLL. Its named source digests are
 limited to the builder and bridge/entry sources; they are not a full application
 build-freshness receipt. Windows compile/load execution still requires a real
 runner. The private DB worker, its SQLite/native dependencies, complete resources,
@@ -420,3 +423,58 @@ capture/controller activation does not establish pixel/UX parity, hardware
 input, focus or IME behavior. No application activation, unlock or display-power
 operation is performed. The optional mode requires actual macOS and never
 silently falls back to Headless.
+
+
+## Complete Windows application build candidate
+
+The native Windows x86_64 source path now has a thin orchestrator. Use the same
+OCaml 5.5.1 switch and actual UI/DB-worker dependencies as the DLL recipe, Rust
+1.97.0, Python 3.11+, Node.js and the x64 Visual Studio DUMPBIN tool. From an
+initialized native toolchain shell, supply the actual flat directories containing
+the MinGW/OCaml and/or Visual C++ redistributable DLLs required by that toolchain:
+
+```powershell
+python deps/ui/nsh/build_windows.py --lui-source C:\src\lui `
+  --dumpbin C:\tools\VC\bin\Hostx64\x64\dumpbin.exe `
+  --dll-root C:\tools\opam-native-dlls --dll-root C:\tools\vc-redist-x64
+```
+
+These paths are examples, not downloaded or selected toolchains. The script
+refuses non-native/foreign-architecture OCaml configurations. It reuses the
+existing libraries, seven-argument bridge and worker Dune target without changing
+Dune files. It exports and checks the real OCaml extension schemas before
+compiling Rust, then assembles a private candidate with the host, actual OCaml
+DLL, worker and complete fonts/catalog/dictionary/image resources.
+
+[DUMPBIN /IMPORTS](https://learn.microsoft.com/en-us/cpp/build/reference/imports-dumpbin?view=msvc-170)
+provides ordinary and delay-import dependencies. Every collected code file must
+be PE x86_64. The dependency closure uses only explicit `--dll-root` directories,
+rejects ambiguous same-name bytes and records source/destination SHA-256 digests.
+Windows System32 libraries and API-set contracts remain operating-system
+dependencies; Visual C++ runtime DLLs still require explicit redistributable
+roots even if installed on the builder. It copies dependencies beside each
+executable or Resources DLL rather than relying on the opam/build PATH. This
+covers PE imports, not arbitrary application-chosen dynamic plugin filenames.
+
+Before publication, the compiled `startup_preflight` executable runs the real App
+with the staged seven-argument DLL, private worker/resources and its existing
+isolated credential/graph policy. Its PATH contains only Windows/System32 and
+Windows, and the orchestrator bounds it to 240 seconds. This is the actual app
+Headless gate, not a generic Todos substitute or OS window/IME qualification.
+
+Only a successful gate followed by unchanged source/toolchain-DLL checks can
+publish `deps/ui/_build/nsh-windows/logseq-nsh.exe`, sibling `Resources`, and
+required root DLLs. Publication replaces individual files atomically and writes
+`logseq-nsh.exe.lui-build.json` last; it is not a multi-file installation
+transaction. A failed gate or changed inputs leave the previous qualified set
+untouched. Obsolete files are removed only if named by this backend's preceding
+receipt. Unrelated resources remain. The receipt binds actual staged code and
+resources, scoped Logseq/LUI source and shared SVG inputs; the resource
+`windows-dependencies.json` also records the trusted DLL provenance.
+
+The source/fake-toolchain regressions establish ordering, dependency collection,
+receipt relocation and failure isolation only. No real Windows compilation or
+startup has been established by those tests. Windows archive construction,
+outside-checkout native launch, Authenticode, whole-app upgrade and CI execution
+remain separate qualification work; the Unix packager does not silently produce
+a Windows archive.
