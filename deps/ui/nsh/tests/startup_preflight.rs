@@ -236,8 +236,9 @@ fn mount_actual_application(rows: Option<usize>) -> Result<(), String> {
                     && screen.layout_nodes().into_iter().any(|node| {
                         node.id == right_toggle
                             && node.hidden == (width < 640.0)
-                            && (node.hidden || (node.bounds.size.width.0 > 0.0
-                                && node.bounds.size.height.0 > 0.0))
+                            && (node.hidden
+                                || (node.bounds.size.width.0 > 0.0
+                                    && node.bounds.size.height.0 > 0.0))
                     })
             },
         )?;

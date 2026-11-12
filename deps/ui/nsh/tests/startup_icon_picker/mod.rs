@@ -213,21 +213,30 @@ fn require_title_action_inside_cell(
     tree: &Value,
     action: &Value,
 ) -> Result<(), String> {
-    let action_id = action.get("id").and_then(Value::as_u64)
+    let action_id = action
+        .get("id")
+        .and_then(Value::as_u64)
         .ok_or("title action has no semantic identity")?;
     let layout = app.screen().layout_nodes();
     let native_bounds = |node: &Value| {
         let id = app.screen().id(&selector(node)?)?;
-        layout.iter().find(|node| node.id == id).map(|node| node.bounds)
+        layout
+            .iter()
+            .find(|node| node.id == id)
+            .map(|node| node.bounds)
             .ok_or_else(|| "title action owner has no native layout".to_owned())
     };
     let action_bounds = native_bounds(action)?;
     for name in ["journal-item", "ls-virt-list"] {
-        let owner = nodes(tree).into_iter().find(|node| {
-            class(node, name) && nodes(node).into_iter().any(|child| {
-                child.get("id").and_then(Value::as_u64) == Some(action_id)
+        let owner = nodes(tree)
+            .into_iter()
+            .find(|node| {
+                class(node, name)
+                    && nodes(node)
+                        .into_iter()
+                        .any(|child| child.get("id").and_then(Value::as_u64) == Some(action_id))
             })
-        }).ok_or_else(|| format!("title action has no {name} owner"))?;
+            .ok_or_else(|| format!("title action has no {name} owner"))?;
         let bounds = native_bounds(owner)?;
         // The native parent List clips its cells. Overflow visibility on a
         // descendant cannot make an out-of-cell toolbar paint or take input.
@@ -238,7 +247,9 @@ fn require_title_action_inside_cell(
             || action_bounds.origin.y.0 + action_bounds.size.height.0
                 > bounds.origin.y.0 + bounds.size.height.0 + 0.5
         {
-            return Err(format!("Journal title action {action_bounds:?} escapes {name} {bounds:?}"));
+            return Err(format!(
+                "Journal title action {action_bounds:?} escapes {name} {bounds:?}"
+            ));
         }
     }
     Ok(())
@@ -263,7 +274,11 @@ fn open(app: &mut Headless, agent: &Agent) -> Result<(), String> {
             })
         })
         .ok_or("actual Journal has no icon action")?;
-    if action.pointer("/props/accessibility-label").and_then(Value::as_str) == Some("Add icon") {
+    if action
+        .pointer("/props/accessibility-label")
+        .and_then(Value::as_str)
+        == Some("Add icon")
+    {
         require_title_action_inside_cell(app, &tree, action)?;
     }
     let action = selector(action)?;

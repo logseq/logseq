@@ -1,7 +1,7 @@
 use super::*;
 use lui_nsh::{
-    render::Renderer,
     extensions::{Extensions, Profile, Schema},
+    render::Renderer,
     wire::Batch,
 };
 use nsh_core::prelude::*;
