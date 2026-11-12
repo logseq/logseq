@@ -431,6 +431,38 @@
 
     (import-second-time-assertions conn conn2 "page1" original-data {:skip-updated-at? true})))
 
+(deftest import-class-and-property-pages-when-they-exist-with-different-uuids
+  (let [class-uuid (random-uuid)
+        property-uuid (random-uuid)
+        original-data
+        {:classes {:user.class/C1 {:block/uuid class-uuid
+                                   :build/keep-uuid? true}}
+         :properties {:user.property/p1 {:logseq.property/type :default
+                                         :block/uuid property-uuid
+                                         :build/keep-uuid? true}}
+         :pages-and-blocks [{:page {:block/uuid class-uuid}
+                             :blocks [{:block/title "class block"}]}
+                            {:page {:block/uuid property-uuid}
+                             :blocks [{:block/title "property block"}]}]}
+        conn (db-test/create-conn-with-blocks (assoc original-data :build-existing-tx? true))
+        ;; The class and property exist but have different uuids e.g. from an earlier import
+        ;; that didn't keep uuids
+        conn2 (db-test/create-conn-with-blocks {:classes {:user.class/C1 {}}
+                                                :properties {:user.property/p1 {:logseq.property/type :default}}})
+        _ (export-page-and-import-to-another-graph conn conn2 "C1")
+        _ (export-page-and-import-to-another-graph conn conn2 "p1")
+        block-titles (fn [ident] (set (map :block/title (:block/_page (d/entity @conn2 ident)))))]
+
+    (is (not= class-uuid (:block/uuid (d/entity @conn2 :user.class/C1))))
+    (is (= #{"class block"} (block-titles :user.class/C1))
+        "Blocks are imported to the existing class page")
+    (is (= #{"property block"} (block-titles :user.property/p1))
+        "Blocks are imported to the existing property page")
+    (is (nil? (d/entity @conn2 [:block/uuid class-uuid]))
+        "No page is created with the exported class uuid")
+    (is (nil? (d/entity @conn2 [:block/uuid property-uuid]))
+        "No page is created with the exported property uuid")))
+
 (deftest import-journal-page
   (let [original-data
         {:pages-and-blocks
@@ -1258,6 +1290,35 @@
     (is (= (count original-property-history)
            (count (d/datoms (:db valid-result) :avet :logseq.property.history/block)))
         "Original property history datoms are imported")))
+
+(deftest graph-datom-import-through-ldb-transact-keeps-property-history
+  (let [original-data
+        {:properties {:user.property/num {:logseq.property/type :number}}
+         :pages-and-blocks [{:page {:block/title "page1"}
+                             :blocks [{:block/title "num block"
+                                       :build/properties {:user.property/num 44}}]}]}
+        conn (db-test/create-conn-with-import-map original-data)
+        num-block (db-test/find-block-by-content @conn "num block")
+        _ (d/transact! conn [{:block/uuid (random-uuid)
+                              :block/created-at (common-util/time-ms)
+                              :logseq.property.history/block [:block/uuid (:block/uuid num-block)]
+                              :logseq.property.history/property :user.property/num
+                              :logseq.property.history/scalar-value 44}])
+        export-map (sqlite-export/build-export @conn {:export-type :graph})
+        ;; The worker's :thread-api/import-edn builds the import against a different
+        ;; graph, validates it and transacts it with ldb/transact!. The target graph
+        ;; already has content, as a graph that was used or just created by the app does,
+        ;; so its entity ids overlap the ids in the export
+        conn2 (db-test/create-conn-with-import-map
+               {:pages-and-blocks [{:page {:block/title "target page"}
+                                    :blocks (mapv #(hash-map :block/title (str "target block " %)) (range 20))}]})
+        txs (sqlite-export/build-import export-map @conn2 {})
+        validation (sqlite-export/validate-import-txs txs @conn2)
+        _ (assert (not (:error validation)) "Import txs are valid")
+        _ (ldb/transact! conn2 (:tx-data validation) {::sqlite-export/imported-data? true})]
+    (is (= 1 (count (d/datoms @conn :avet :logseq.property.history/block))))
+    (is (= 1 (count (d/datoms @conn2 :avet :logseq.property.history/block)))
+        "Property history is imported when transacting with ldb/transact!")))
 
 ;; When a built-in property appears in :build/class-properties alongside
 ;; user-defined properties, the per-class order must survive a round-trip

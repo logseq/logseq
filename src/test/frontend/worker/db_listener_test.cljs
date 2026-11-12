@@ -94,6 +94,34 @@
          {:tx-meta tx-meta :tx-data [:tx]}))
       (is (zero? @calls) (str tx-meta)))))
 
+(defn- <search-sync-count
+  "Resolves to how many times the search index was synced for a tx with `tx-meta`"
+  [tx-meta]
+  (let [calls (atom 0)]
+    (p/let [_ (p/with-redefs [search/sync-search-indice
+                              (fn [& _]
+                                (swap! calls inc)
+                                {})]
+                ((get-method db-listener/listen-db-changes :search)
+                 :search
+                 {:repo "repo"}
+                 {:tx-meta tx-meta :tx-data [:tx]}))]
+      @calls)))
+
+(deftest db-listener-syncs-search-for-edn-import-into-existing-graph-test
+  (async done
+    (-> (p/let [existing-graph-count (<search-sync-count {:outliner-op :batch-import-edn
+                                                          :logseq.db.sqlite.export/imported-data? true})
+                new-graph-count (<search-sync-count {:outliner-op :batch-import-edn
+                                                     :import-db? true
+                                                     :logseq.db.sqlite.export/imported-data? true})]
+          (is (= 1 existing-graph-count)
+              "Search is synced when importing EDN into an existing graph")
+          (is (= 0 new-graph-count)
+              "Search is not synced when importing EDN to create a graph"))
+        (p/catch (fn [error] (is false (str error))))
+        (p/finally done))))
+
 (deftest db-listener-persists-local-tx-before-broadcasting-ui-refresh-test
   (let [conn (db-test/create-conn)
         calls (atom [])]

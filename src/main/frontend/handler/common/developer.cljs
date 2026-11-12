@@ -77,9 +77,10 @@
     (notification/show! (t :block/not-found-warning) :warning)))
 
 (defn ^:export show-page-data []
-  (if-let [page-id (page-util/get-current-page-id)]
-    (show-entity-data page-id)
-    (notification/show! (t :page/not-found-warning) :warning)))
+  (p/let [page-id (page-util/<get-current-page-id)]
+    (if page-id
+      (show-entity-data page-id)
+      (notification/show! (t :page/not-found-warning) :warning))))
 
 (defn ^:export validate-db []
   (state/<invoke-db-worker :thread-api/validate-db (state/get-current-repo)))
