@@ -1,5 +1,19 @@
 # API migrations
 
+## Closing an already closed command palette leaves search persistence unchanged
+
+Only an open command-palette session now persists its search state and cancels
+that session's pending requests. Repeating `Cmdk_state.close` while the palette
+is closed is inert. Previously a global command such as T L could save the
+forced Commands filter left behind by a nonpersisting command-palette session.
+Opening Search afterward then incorrectly searched only commands.
+
+For example, open Commands with Cmd/Ctrl+Shift+P, close it, toggle a sidebar
+with T L, and reopen Search with Cmd/Ctrl+K. Search now restores the last real
+search query and filter. Downstream callers can keep calling `close` before
+global command actions; no API or event payload changes are required. The
+correction applies to the shared state on NSH, Apple/iOS, Android and Web.
+
 ## NSH global shortcuts use the effective shared keymap
 
 The native runner now installs one application-owned native keymap from the

@@ -3,21 +3,13 @@ use super::{Duration, Headless, startup_body, startup_rows::Agent, wait_for_chro
 use serde_json::Value;
 use std::cell::RefCell;
 
-fn has_input(tree: &Value) -> bool {
+fn any_node(tree: &Value, predicate: impl Fn(&Value) -> bool) -> bool {
     let Some(roots) = tree.get("nodes").and_then(Value::as_array) else {
         return false;
     };
     let mut pending = roots.iter().collect::<Vec<_>>();
     while let Some(node) = pending.pop() {
-        if node
-            .pointer("/props/style-class")
-            .and_then(Value::as_str)
-            .is_some_and(|classes| {
-                classes
-                    .split_whitespace()
-                    .any(|name| name == "cp__cmdk-search-input")
-            })
-        {
+        if predicate(node) {
             return true;
         }
         if let Some(children) = node.get("children").and_then(Value::as_array) {
@@ -25,6 +17,17 @@ fn has_input(tree: &Value) -> bool {
         }
     }
     false
+}
+fn has_input(tree: &Value) -> bool {
+    any_node(tree, |node| {
+        node.pointer("/props/style-class")
+            .and_then(Value::as_str)
+            .is_some_and(|classes| {
+                classes
+                    .split_whitespace()
+                    .any(|name| name == "cp__cmdk-search-input")
+            })
+    })
 }
 fn palette(app: &mut Headless, agent: &Agent, open: bool, step: &str) -> Result<(), String> {
     let failure = RefCell::new(None);
@@ -91,6 +94,25 @@ pub(super) fn qualify(app: &mut Headless) -> Result<(), String> {
         )?;
         agent.tree()?;
     }
+    app.press_key(&format!("{modifier}+k"))?;
+    palette(
+        app,
+        &agent,
+        true,
+        "native Search reopens after closed global commands",
+    )?;
+    if any_node(&agent.tree()?, |node| {
+        node.pointer("/props/text").and_then(Value::as_str) == Some("Search only:")
+    }) {
+        return Err("closed global commands persisted the forced command-palette filter".into());
+    }
+    app.press_key(&format!("{modifier}+k"))?;
+    palette(
+        app,
+        &agent,
+        false,
+        "native Search closes without a forced filter",
+    )?;
     eprintln!("PASS actual native global keyboard shortcuts, palette toggles and sequences");
     Ok(())
 }

@@ -1081,15 +1081,16 @@ let open_palette ?(move = false) st =
   svs.Svs.focus_input_init q
 
 let close st =
-  ignore (Ui_effect.issue st.req);
-  ignore (Ui_effect.issue st.recents_req);
   let v = get st in
-  (* cljs persist-cmdk-query-state! runs on unmount and every committed
-     action; move mode is outside the default context. A command-palette
-     session (persist = false) must not overwrite the last real search
-     with its forced Commands filter. *)
-  if v.persist && not v.move_mode then save_last_search st.svs v;
-  set_in st (fun v -> { v with open_ = false; persist = true })
+  if v.open_ then begin
+    ignore (Ui_effect.issue st.req);
+    ignore (Ui_effect.issue st.recents_req);
+    (* Global commands also call close while the palette is already closed.
+       Only a live session owns persistence: a second close must not save the
+       forced Commands filter left by a non-persisting command session. *)
+    if v.persist && not v.move_mode then save_last_search st.svs v;
+    set_in st (fun v -> { v with open_ = false; persist = true })
+  end
 
 let clear_filter st =
   set_in st (fun v -> { v with filter = None });

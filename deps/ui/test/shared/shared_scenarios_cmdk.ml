@@ -296,6 +296,14 @@ let command_palette_filter_does_not_stick
      | Some s ->
          contains "\"seeded-pages\"" s && not (contains "\"commands\"" s)
      | None -> false);
+  let saved_search = h.storage_get "ls-cmdk-last-search" in
+  List.iter (fun command ->
+    h.command command;
+    h.flush ();
+    h.H.check "a global command on a closed palette cannot repersist its forced filter"
+      (h.storage_get "ls-cmdk-last-search" = saved_search))
+    ["ui/toggle-left-sidebar";"ui/toggle-left-sidebar";
+     "ui/toggle-right-sidebar";"ui/toggle-right-sidebar"];
   open_palette h;
   h.H.check "cmd-k searches everything after the command palette"
     (H.exists_class h "cp__cmdk__modal" && not (search_only ()));
