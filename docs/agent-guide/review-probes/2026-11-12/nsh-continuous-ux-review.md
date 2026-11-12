@@ -38,10 +38,10 @@ installed. This report records implementation and qualification evidence directl
 | ID | Priority | Surface | Evidence and expected behavior | State |
 | --- | --- | --- | --- | --- |
 | UX-001 | P1 | Empty and trailing add-block row | `Add_button.el` relied on document clicks without opting into NSH pointer/press events. Master `page.cljs/add-button-inner` activates insertion directly. NSH must route a real native activation through the existing shared append handler, retaining page and container scope. | Source fix prepared; native event regression added; compilation and actual visible app verification pending. |
-| UX-002 | P1 | Editor clipboard | `extensions/editor.rs` deliberately leaves C/V/X to the native Input; no native clipboard document events reach shared `Editor_keys` copy/cut/paste handlers. Plain text conduit behavior does not establish structured block, HTML, image/file or multiline outline paste parity. | Confirmed source gap; implementation and native qualification pending. |
+| UX-002 | P1 | Editor clipboard | The original missing route has been replaced: `extensions/editor.rs` now emits shared copy/cut document events and uses the native PasteEvent payload adapter. | Source and native regression coverage exist; complete native keyboard/context-menu and structured clipboard UX qualification remains open. |
 | UX-003 | P1 | Graph and action menus | Current user screenshot reports externally anchored menu popovers rejected by the backend. | Separate menu workstream owns repair and real open-menu regression; visible native recheck pending. |
 | UX-004 | P1 | Initial block editing | The legacy global 60ms click filter dropped unrelated NSH clicks. Active-host policy now bypasses it for NSH. | Parent rebuilt release archives and reports compiled native admission passes, including actual shared editor mounting and focus emission. Actual native click/type and raster verification pending. |
-| UX-006 | P1 | Bullet activation and outline drag | The retained bullet had no NSH pointer/press owner, while the shared outline controller expects its `dot-<uuid>` target. Native content forwards no move/cancel events; release targeting and capture require actual native semantics. | Bullet activation bridge prepared and native event regression added. Move/cancel, capture and drop qualification remain pending. |
+| UX-006 | P1 | Bullet activation and outline drag | Bullet activation now preserves its `dot-<uuid>` document target. A newly prepared main-row motion bridge supplies the missing move/cancel route and distinguishes hover from a held button. | Source and focused regressions prepared; compilation, native held-mouse movement, capture and drop qualification remain pending. |
 | UX-007 | P2 | Chrome and editor font metrics | Native theme tokens name Inter, but the native runner did not register the bundled faces. Existing Resources/fonts files alone do not affect native shaping. | Runner and real startup qualification now use NSH Root::font for the existing nine faces before first layout. Native raster/metrics verification pending. |
 | UX-005 | P2 | Wrapped rich-text caret | Native hit affinity must preserve the side of a soft-wrap boundary. | Separate geometry workstream owns implementation; actual native verification pending. |
 
@@ -59,6 +59,31 @@ and original `.block-add-button`/parent-page target. It does not claim worker
 persistence or AppKit hit testing. Required next evidence is a real native empty
 Journal click that inserts a block, focuses its editor, accepts typing, and remains
 persisted after leaving and revisiting the page.
+
+### Source review of the remaining native drag boundary
+
+This pass used frozen master `29fd2edd015e12963742b985ce6d2311c074e09b`,
+especially `block.cljs/block-content-on-pointer-down`, `select-on-hover?` and
+bullet drag handlers. It did not operate the installed app or the locked display.
+The native target copies `src/blocks/tree.ml` and `src/editor/block_selection.ml`
+through `native/dune`, but uses its own stub `native/block_dnd.ml`; the Web
+`src/dnd/block_dnd.ml` manager does not provide native fallback behavior.
+
+The prepared bridge installs motion on each `Tree.row_main` Row, whose public
+constructor accepts move/cancel callbacks. Content columns and bullet controls
+keep their existing press owners. The native admission fixture exercises that
+actual row producer for NSH, SwiftUI and Kotlin profiles. The LUI regression
+uses real Headless hover; held-button conversion also uses the public native
+MouseEvent shape. Neither test proves a held hardware mouse drag across rows.
+
+Two concrete boundaries remain: NSH currently accepts LUI `PointerCapture` but
+has no renderer consumer, and `Editor_keys.on_native_pointerup` resolves a drop
+target from the release event's target. Native press release can remain attached
+to the origin view. The existing NSH public `claim_touches`, `keep_touches` and
+responder callbacks provide a capture candidate without a fork, but their
+TouchPoint target is the press origin and Scroll negotiation must be respected.
+Capture, target resolution and cancellation therefore need their own actual
+controller test before drag/drop parity is claimed.
 
 ## Production browser baseline
 
