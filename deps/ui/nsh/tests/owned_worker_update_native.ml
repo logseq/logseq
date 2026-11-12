@@ -339,12 +339,239 @@ let run_coordinator () =
   assert_clean_exit final_a;assert_clean_exit final_b;
   Runtime.worker:=None;
   pair_event "coordinator-closed" [final_a,true;final_b,true];gate "exit"
+let run_outliner_drop () =
+  let module S = Editor_state in
+  let module Ops = Outliner_ops in
+  let app_owner=Thread.id (Thread.self ()) in
+  Platform.install_ui_services ~paints_caret:true
+    ~assert_owner:(fun () -> check "Outliner callbacks remain on the contained app owner"
+      (Thread.id (Thread.self ())=app_owner))
+    ~request_flush:(fun () -> ()) ~dom:Ui_dom_native.ops
+    ~timers:Ui_dom_native.timers ~files:Ui_dom_native.files;
+  let diagnostics=ref 0 in
+  let host_requests=ref [] in
+  Host.set_host_op (fun name payload -> host_requests:=(name,payload)::!host_requests);
+  let repo="logseq_db_owned_alt_drop" in
+  let transport=Worker_client.create () and operations=ref [] in
+  let client={transport with Worker_client.invoke_fn=(fun method_ arguments ->
+    if method_="thread-api/apply-outliner-ops" then
+      (match arguments with
+       | [_;Wire.Array ops;_] -> operations:=ops::!operations
+       | _ -> failwith "Outliner fixture saw malformed actual worker operations");
+    transport.Worker_client.invoke_fn method_ arguments)} in
+  let call name arguments=await (Worker_client.invoke client name arguments) in
+  Runtime.worker:=Some client;
+  ignore (call "thread-api/create-or-open-db" [Wire.String repo;Wire.Map []]);
+  let first=attach repo in
+  check "Native drop fixture owns the exact selected worker executable"
+    (first.origin.executable=Unix.realpath (Sys.getenv "LOGSEQ_DB_WORKER_BIN"));
+  let page_uuid=Host.random_uuid () and source=Host.random_uuid ()
+  and target=Host.random_uuid () and last=Host.random_uuid ()
+  and source_child=Host.random_uuid () and target_child=Host.random_uuid () in
+  let title="Owned native Alt-reference drops" in
+  let now=Wire.Int64 (Int64.of_float (Unix.gettimeofday () *. 1000.)) in
+  let page_wire=Wire.Map [Wire.Keyword "block/uuid",Wire.Uuid page_uuid;
+    Wire.Keyword "block/title",Wire.String title;
+    Wire.Keyword "block/name",Wire.String (String.lowercase_ascii title);
+    Wire.Keyword "block/tags",Wire.Set [Wire.Keyword "logseq.class/Page"];
+    Wire.Keyword "block/created-at",now;Wire.Keyword "block/updated-at",now] in
+  ignore (call "thread-api/transact" [Wire.String repo;Wire.Array [page_wire];Wire.Map [];Wire.Nil]);
+  let seed operation=ignore (call "thread-api/apply-outliner-ops"
+    [Wire.String repo;Wire.Array [operation];Wire.Map []]) in
+  seed (Ops.insert_blocks [Ops.block_map ~title:"Source stays" source;
+    Ops.block_map ~title:"Target stays" target;Ops.block_map ~title:"Last stays" last]
+    page_uuid ~sibling:false);
+  seed (Ops.insert_blocks [Ops.block_map ~title:"Source child stays" source_child]
+    source ~sibling:false);
+  seed (Ops.insert_blocks [Ops.block_map ~title:"Existing target child" target_child]
+    target ~sibling:false);
+  let query ()=call "thread-api/q" [Wire.String repo;Wire.Array [Wire.String
+    "[:find ?uuid ?title ?order ?parent :where [?b :block/uuid ?uuid] [?b :block/title ?title] [?b :block/order ?order] [?b :block/parent ?p] [?p :block/uuid ?parent]]"]] in
+  let rows ()=Wire.elems (query ()) |> List.map (fun row ->
+    match Wire.elems row with
+    | [Wire.Uuid uuid;Wire.String text;Wire.String order;Wire.Uuid parent] -> uuid,text,order,parent
+    | _ -> failwith ("Unexpected persisted outliner row: " ^ Transit.to_string row)) in
+  let children rows parent=List.filter (fun (_,_,_,actual) -> actual=parent) rows
+    |> List.sort (fun (_,_,left,_) (_,_,right,_) -> String.compare left right)
+    |> List.map (fun (uuid,_,_,_) -> uuid) in
+  let base_page=Option.get (Decode.page_of_summary page_wire) in
+  let initial_tree=call "thread-api/get-page-blocks-tree"
+    [Wire.String repo;Wire.page_ref page_uuid;Wire.Nil] in
+  let page={base_page with Model.page_blocks=Decode.blocks_of_wire initial_tree} in
+  let initial={Model.initial with repo=Some repo;phase=Model.Ready;
+    route=Model.Page title;route_page=Some page} in
+  let os=if Sys.os_type="Win32" then Lui_protocol.WindowsOS
+    else if Platform_native.is_mac () then Lui_protocol.MacOS else Lui_protocol.LinuxOS in
+  let backend : Lui_protocol.backend={
+    backend_profile=Lui_protocol.profile os Lui_protocol.NshHost;
+    apply_batch=(fun _ -> true)} in
+  let registry=Lui_extension.registry () in
+  Logseq_el.register_all registry;Logseq_codemirror.register registry;Logseq_editor.register registry;
+  let refreshed=Hashtbl.create 8 and editor_owners=ref [] and refreshes=ref 0 in
+  let rec note_blocks blocks=List.iter (fun (block : Model.block) ->
+    Option.iter (fun uuid -> Hashtbl.replace refreshed uuid ()) block.block_uuid;
+    note_blocks block.block_children) blocks in
+  let app=Lui_app.create_with_extensions backend registry initial
+    (fun model (action : Action.t) ->
+      (match action with
+       | Action.Page_loaded page -> incr refreshes;note_blocks page.Model.page_blocks
+       | Action.Page_load_failed -> failwith "Actual outliner refresh failed"
+       | Action.Toast_push toast when toast.Model.toast_kind="error" -> incr diagnostics
+       | _ -> ());
+      Update.apply model action)
+    (fun context model_source _ ->
+      S.ensure context;Settings_state.ensure context;
+      Lui_elements.column [Lui_elements.keyed
+        ~source:(reactive (fun model -> match model.Model.route_page with
+          | Some page -> page.Model.page_blocks | None -> []) model_source)
+        ~key:(fun (block : Model.block) -> Option.get block.block_uuid)
+        ~cmp:String.compare ~mount:(Tree.block_row_sig ~scope:"main")]) in
+  let flush ()=
+    ignore (Lui_app.flush app);
+    (match S.editing () with
+     | Some editing when not (List.mem editing.S.uuid [source;target;last;source_child;target_child]) ->
+         check "A new reference editor belongs to the real refreshed page"
+           (Hashtbl.mem refreshed editing.S.uuid && S.find editing.S.uuid<>None);
+         let runtime=Lui_app.runtime app in
+         check "The refreshed reference mounts exactly its real native editor conduit"
+           (Hashtbl.fold (fun node identifier count ->
+             if identifier="logseq-editor"
+                && Native_embed.ext_prop_string
+                  (Hashtbl.find runtime.Lui_runtime.runtime_extension_properties node)
+                  "block-id"=Some editing.S.uuid
+             then count+1 else count) runtime.Lui_runtime.runtime_extension_nodes 0=1);
+         editor_owners:=editing.S.uuid::!editor_owners
+     | _ -> ()) in
+  Native_embed.current_app:=Some app;
+  Runtime.read_model:=(fun () -> Lui_app.model app);
+  Runtime.app_send:=(fun action -> let changed=Lui_app.send app action in flush ();changed);
+  Runtime.app_flush:=flush;Runtime.schedule_flush:=Host.enqueue;
+  Dom_ext.doc_elements_provider:=Native_embed.collect_elements;
+  Dom_ext.subtree_elements_provider:=Native_embed.collect_subtree;
+  let runtime=Lui_app.runtime app in
+  Platform.event_target_of:=(fun node -> Some (Native_embed.ext_snapshot runtime node));
+  Editor_keys.install_once ();
+  ignore (Lui_app.start app);flush ();
+  await ((Worker_client.capture_restore_after_update client) ());
+  check "Canonical fixture still has exactly one owned application-session worker"
+    (List.length (await (Daemon_client.capture_update_workers ()))=1);
+  event "outliner-opened" (metadata first);gate "continue";
+  let wait label predicate=
+    let deadline=seconds () +. 45. in
+    let rec next ()=Host.drain ();flush ();
+      if not (predicate ()) then (
+        if seconds ()>=deadline then failwith ("Outliner fixture timed out: " ^ label);
+        Thread.delay 0.005;next ()) in next () in
+  let snapshot selector uuid=Native_embed.collect_elements () |> List.find (fun element ->
+    Dom_ext.get_attribute element "data-blockid"=Some uuid
+    && Dom_ext.closest element selector=Some element) in
+  let dispatch name target x y buttons alt=
+    let fields=match target with Js.Json.JObject fields -> fields
+      | _ -> failwith "Native outliner target is not an element snapshot" in
+    (* Authored fixture geometry qualifies canonical dispatch, not an NSH hit test. *)
+    let target=Js.Json.object_list (("rect",Js.Json.object_list [
+      "left",Js.Json.number 0.;"top",Js.Json.number 0.;
+      "width",Js.Json.number 200.;"height",Js.Json.number 60.])::fields) in
+    ignore (Native_embed.document_event name (Js.Json.stringify (Js.Json.object_list [
+      "target",target;"clientX",Js.Json.number x;"clientY",Js.Json.number y;
+      "button",Js.Json.number 0.;"buttons",Js.Json.number buttons;"altKey",Js.Json.boolean alt]))) in
+  let references=ref [] and expected_source=ref "Source stays" in
+  let drop ?dirty label dragged hit x y=
+    let before=rows () in
+    S.set (fun state -> {state with editing=None;selected=S.String_set.empty;anchor=None});flush ();
+    let bullet=snapshot ".bullet-container" dragged in
+    dispatch "mousedown" bullet 0. 0. 1. false;
+    dispatch "pointermove" (snapshot ".ls-block" hit) x y 1. false;
+    check "Actual native document movement activates the source gesture"
+      (Option.map fst (Block_drag.preview !Editor_keys.drag_state)=Some dragged);
+    Option.iter (fun text ->
+      S.set (fun state -> {state with editing=Some (S.mk_editing ~uuid:source ~scope:"main"
+        ~base:!expected_source ~buffer:text ())});flush ();expected_source:=text) dirty;
+    operations:=[];
+    let refresh_before= !refreshes in
+    dispatch "pointerup" (snapshot ".ls-block" hit) x y 0. true;
+    wait label (fun () -> not !S.structure_pending && match S.editing () with
+      | Some editing -> not (List.exists (fun (uuid,_,_,_) -> uuid=editing.S.uuid) before)
+      | None -> false);
+    let inserted=Option.get (S.editing ()) in
+    check "A canonical reference release refreshes before entering its new native editor"
+      (!refreshes>refresh_before && List.mem inserted.S.uuid !editor_owners);
+    let after=rows () in
+    let added=List.filter (fun (uuid,_,_,_) ->
+      not (List.exists (fun (previous,_,_,_) -> previous=uuid) before)) after in
+    check "Reference release persists exactly one new UUID and the canonical reference title"
+      (match added with [(uuid,text,_,_)] -> uuid=inserted.S.uuid && text="[[" ^ dragged ^ "]]"
+       | _ -> false);
+    let refs=call "thread-api/q" [Wire.String repo;Wire.Array [Wire.String
+      "[:find ?ref :in $ ?uuid :where [?b :block/uuid ?uuid] [?b :block/refs ?r] [?r :block/uuid ?ref]]";
+      Wire.Uuid inserted.S.uuid]] in
+    check "Inserted reference persists its actual block/refs edge"
+      ((Wire.elems refs |> List.map Wire.elems) = [[Wire.Uuid dragged]]);
+    check "Source and its original child remain in their original parents"
+      (List.exists (fun (uuid,text,_,parent) -> uuid=source && text= !expected_source && parent=page_uuid) after
+       && children after source=[source_child]);
+    check "Native reference release consumes its follow-up click exactly once"
+      (Editor_keys.consume_drag_click () && not (Editor_keys.consume_drag_click ()));
+    check "Real worker refresh produces no application error diagnostic"
+      (!diagnostics=0 && not (List.exists (fun toast -> toast.Model.toast_kind="error")
+        (Runtime.model ()).Model.toasts));
+    references:=(inserted.S.uuid,dragged)::!references;
+    inserted.S.uuid,after
+  in
+  let sibling,after=drop "after-target" source target 20. 40. in
+  check "Sibling reference is durably inserted after the target"
+    (children after page_uuid=[source;target;sibling;last]);
+  let before,after=drop "before-first-target" last source 20. 10. in
+  check "Top reference is durably inserted before the first target"
+    (children after page_uuid=[before;source;target;sibling;last]);
+  let nested,after=drop "append-child" source target 75. 40. in
+  check "Nested reference is durably appended after the existing target child"
+    (children after target=[target_child;nested]);
+  let dirty,after=drop ~dirty:"Dirty source stays" "dirty-save" source last 20. 40. in
+  check "Dirty source saves before the same real reference insertion transaction"
+    (match List.rev !operations with
+     | [[save;insert]] -> (match Wire.elems save,Wire.elems insert with
+         | [Wire.Keyword "save-block";_],[Wire.Keyword "insert-blocks";_] -> true | _ -> false)
+     | _ -> false);
+  check "Dirty save preserves all earlier top/sibling/nested placements"
+    (children after page_uuid=[before;source;target;sibling;last;dirty]
+     && children after target=[target_child;nested]);
+  let persisted=List.sort Stdlib.compare after in
+  let cases=["after-target";"before-first-target";"append-child";"dirty-save"] in
+  check "Completed drops retain exactly the same owned application-session worker"
+    (match await (Daemon_client.capture_update_workers ()) with
+     | [worker] -> worker.Daemon_client.origin=first.origin | _ -> false);
+  check "Canonical native fixture records its host commands without fabricating replies"
+    (!host_requests<>[]);
+  ignore (Lui_app.dispose app);Native_embed.current_app:=None;
+  Runtime.app_flush:=(fun () -> ());
+  event "outliner-dropped" (("cases",`List (List.map (fun name -> `String name) cases))
+    ::("recordedHostCommands",`Int (List.length !host_requests))::metadata first);
+  gate "continue";
+  let stopped=stop "20" first in
+  event "outliner-stopped" (metadata first);gate "continue";
+  await (Daemon_client.Worker_update.restore_exited stopped);
+  let reopened=attach repo in
+  await ((Worker_client.capture_restore_after_update client) ());
+  check "Actual native drop persistence survives a fresh exact worker instance"
+    (reopened.origin.instance<>first.origin.instance && List.sort Stdlib.compare (rows ())=persisted);
+  check "Reopened client retains all actual reference edges" (List.for_all (fun (uuid,source) ->
+    let refs=call "thread-api/q" [Wire.String repo;Wire.Array [Wire.String
+      "[:find ?ref :in $ ?uuid :where [?b :block/uuid ?uuid] [?b :block/refs ?r] [?r :block/uuid ?ref]]";
+      Wire.Uuid uuid]] in (Wire.elems refs |> List.map Wire.elems) = [[Wire.Uuid source]]) !references);
+  event "outliner-reopened" (metadata reopened);gate "continue";
+  ignore (stop "21" reopened);assert_clean_exit reopened;
+  check "Real native drop and restart leave no application error diagnostics" (!diagnostics=0);
+  Runtime.worker:=None;
+  event "outliner-closed" (metadata reopened);gate "exit"
+
 let () =
   try
     initialize_fixture ();
     (match Sys.getenv "LOGSEQ_TEST_WORKER_MODE" with
      | "protocol" -> run_protocol ()
      | "coordinator" -> run_coordinator ()
+     | "outliner" -> run_outliner_drop ()
      | _ -> failwith "Unknown contained owned-worker fixture mode")
   with error ->
     event "error" ["error", `String (Printexc.to_string error)];

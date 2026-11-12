@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-"""Qualify owned-worker protocol and preparation against actual native workers.
+"""Qualify owned-worker preparation and canonical native drops against real workers.
 
 Uses already-built app archives and an explicitly selected native worker. All
 storage, credentials and children belong to a fresh contained fixture process.
 No Dune, shipping startup flag, installed app, signing or installer is involved.
+The outliner case uses canonical events and fixture geometry, not physical Alt
+or an NSH platform hit test. Its database operations use the real app session.
 """
 from __future__ import annotations
 
@@ -234,7 +236,7 @@ def compile_fixture(stage):
     bridge = stage / ("logseq_lui_bridge" + extension)
     subprocess.run([*prefix, "ocamlopt", "-c", "-o", str(bridge),
                     str(UI / "native/logseq_lui_bridge.c")], cwd=stage, check=True)
-    compiler = [*prefix, "ocamlfind", "ocamlopt", "-thread", "-package", PACKAGES, *includes]
+    compiler = [*prefix, "ocamlfind", "ocamlopt", "-thread", "-package", PACKAGES + ",lui.ppx", *includes]
     # The executable's Dune interface deliberately hides Native_embed internals.
     # Compile the real source, as in the native admission driver, to use its
     # production lifecycle without adding a shipping inspection API.
@@ -268,8 +270,9 @@ def qualify_case(executable, private, worker, mode, expected_events):
             message = json.loads(line)
             if message.get("event") != expected:
                 raise AssertionError(f"Expected {expected} lifecycle proof: {message}")
-            if mode == "protocol":
-                check_phase(private, environment, message, closed=expected in ("stopped", "closed"))
+            if mode in ("protocol", "outliner"):
+                check_phase(private, environment, message,
+                            closed=expected in ("stopped", "closed", "outliner-stopped", "outliner-closed"))
             else:
                 workers = message.get("workers", [])
                 closed = {
@@ -302,6 +305,18 @@ def qualify(worker):
         coordinator = qualify_case(executable, private / "coordinator", worker, "coordinator",
                                    ("coordinator-opened", "coordinator-stopped", "coordinator-restored",
                                     "coordinator-partial-stopped", "coordinator-partial-restored", "coordinator-closed"))
+        outliner = qualify_case(executable, private / "outliner", worker, "outliner",
+                                ("outliner-opened", "outliner-dropped", "outliner-stopped",
+                                 "outliner-reopened", "outliner-closed"))
+        outliner_cases = ["after-target", "before-first-target", "append-child", "dirty-save"]
+        if (outliner[1].get("cases") != outliner_cases
+                or not isinstance(outliner[1].get("recordedHostCommands"), int)
+                or outliner[1]["recordedHostCommands"] <= 0
+                or outliner[0]["instance"] != outliner[2]["instance"]
+                or outliner[3]["instance"] != outliner[4]["instance"]
+                or outliner[0]["instance"] == outliner[3]["instance"]
+                or any(phase["graph"] != outliner[0]["graph"] for phase in outliner)):
+            raise AssertionError("Canonical native drops require every case and one exact durable worker replacement")
         instances = [[sample["instance"] for sample in phase["workers"]] for phase in coordinator]
         if (instances[0] != instances[1] or instances[2] != instances[3]
                 or instances[4] != instances[5]
@@ -310,7 +325,7 @@ def qualify(worker):
             raise AssertionError("Actual full/partial rollback did not retain the expected exact worker generations")
         if digest(worker) != worker_hash:
             raise RuntimeError("The selected native worker changed during qualification")
-        return {"stage2Qualified": True, "coordinatorQualified": True,
+        return {"stage2Qualified": True, "coordinatorQualified": True, "outlinerDropQualified": True,
                 "installerEnabled": False, "platform": sys.platform,
                 "worker": str(worker), "workerSha256": worker_hash,
                 "checks": ["actual-child-and-storage", "active-graph-ownership", "seal-refusal",
@@ -319,8 +334,13 @@ def qualify(worker):
                            "two-worker-production-lifecycle", "all-exits-before-prepared",
                            "full-rollback-and-durable-reads", "partial-stop-cancellation",
                            "exited-worker-replacement-and-live-worker-abort",
-                           "captured-transport-SSE-readiness-and-finite-probe"],
+                           "captured-transport-SSE-readiness-and-finite-probe",
+                           "canonical-native-Alt-reference-controller-to-database",
+                           "reference-zone-order-and-source-retention", "dirty-save-before-reference-insert",
+                           "reference-editor-after-canonical-refresh", "reference-durability-after-worker-restart"],
                 "instances": [protocol[0]["instance"], protocol[3]["instance"]],
+                "outlinerInstances": [outliner[0]["instance"], outliner[3]["instance"]],
+                "outlinerCases": outliner_cases, "outlinerInput": "canonical-events-with-fixture-geometry",
                 "coordinatorInstances": instances}
 
 

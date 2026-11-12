@@ -1,5 +1,32 @@
 # API migrations
 
+## Owned-worker qualification includes durable canonical native reference drops
+
+`nsh/run_owned_worker_update_native.py --worker <newly-built-native-worker>` adds
+an `outliner` case to its existing contained protocol and coordinator cases.
+The case creates a real `Worker_client` and uses its application-session
+transport for every seed, mutation and database query. It mounts the shared
+keyed outliner/editor views in a recording native backend and dispatches
+canonical document down/move/up events through `Native_embed` and the existing
+native drag controller. Row geometry is authored fixture data; host commands
+are recorded without fabricated replies. This does not qualify NSH hit testing,
+native focus, physical dragging or physically held Alt.
+
+A successful run proves a fresh reference UUID and actual `block/refs` edge,
+source/child retention, before/after/append-child ordering, and a dirty source
+save preceding the insertion in the actual worker operation vector. The new
+editor conduit must mount only after the inserted block arrives through the
+real canonical refresh. The native view scope then retires, the exact worker
+is cleanly stopped and replaced, and the same client verifies every persisted
+row/order/parent/title and reference edge again. Application error toasts
+and failed refreshes reject the case. No shipping inspection API or test flag
+is added to the application.
+
+The JSON result adds `outlinerDropQualified`, `outlinerInstances`,
+`outlinerCases` and `outlinerInput: "canonical-events-with-fixture-geometry"`.
+Existing protocol, coordinator and installer fields retain their meanings;
+the new fields describe only the contained case when its assertions pass.
+
 ## Native build arguments retain system Bash 3.2 support
 
 `deps/ui/nsh/build.sh` now keeps the shared Cargo argument vector nonempty under
