@@ -1,5 +1,16 @@
 # API migrations
 
+## NSH remote gallery covers
+
+URL-backed gallery covers use NSH's existing native Image loader with eager
+loading. NSH does not have a browser document Referer and the producer omits the
+browser-only `referrer_policy` prop. Web, Apple and Android keep the existing
+`loading=lazy` and `referrer_policy=no_referrer` parameters. URLs, decorative
+alt text, cover dimensions and retained image identity are unchanged. This
+producer correction does not add a loader, transport or cache. Recording
+coverage checks emitted props; HTTP headers and native image decode require
+separate real-runner qualification.
+
 ## Find-in-page single-line submission
 
 The find-in-page query uses TextField's standard Enter submission through

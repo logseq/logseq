@@ -1811,6 +1811,14 @@ let gallery_asset_cover inst ~width ~height value : t =
       (box ~width ~height [reactive (fun entity ->
         Asset_dom.gallery_cover ~width ~height entity) (Signal.value resolved)]) context parent
 
+let gallery_remote_cover ~url ~width ~height : t =
+ fun context parent ->
+  let native = Lui_ui.host context = L.NshHost in
+  image ~url ~alt:"" ~width ~height
+    ~loading:(if native then `eager else `lazy_)
+    ?referrer_policy:(if native then None else Some `no_referrer)
+    [] context parent
+
 let gallery_card inst (row_uuid, blk) : t =
   let dimensions (s : V.vstate) = Wr.gallery_dimensions s.V.view_ent in
   let selected (s : V.vstate) = V.table_row_selected s row_uuid in
@@ -1838,9 +1846,8 @@ let gallery_card inst (row_uuid, blk) : t =
               (match List.find_opt (fun c -> c.V.c_id = ident && c.V.c_type = "url") s.V.columns with
                | Some column ->
                    (match gallery_remote_url (cell_value blk column) with
-                    | Some url -> [image ~url ~alt:"" ~width
-                        ~height:(max 32 (height * 3 / 5))
-                        ~loading:`lazy_ ~referrer_policy:`no_referrer []]
+                    | Some url -> [gallery_remote_cover ~url ~width
+                        ~height:(max 32 (height * 3 / 5))]
                     | None -> [])
                | None ->
                    let value = if ident = "block/uuid" then blk

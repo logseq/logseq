@@ -773,7 +773,51 @@ let find_in_page_submit ~registry =
      {P.profile_os=P.AndroidOS;P.profile_host=P.KotlinHost};
      {P.profile_os=P.MacOS;P.profile_host=P.NshHost}]
 
+let gallery_remote_cover_policy ~registry =
+  let module V = Views_state in
+  let url = "https://images.example.org/gallery-cover.png" in
+  let block = Wire.Map
+    [Wire.kw "block/uuid",Wire.Uuid "gallery-remote-row";
+     Wire.kw "block/title",Wire.String "Remote cover";
+     Wire.kw "fixture/cover",Wire.String url] in
+  List.iter (fun (profile, native) ->
+    let instance = ref None in
+    let session = S.mount ~registry ~profile ~initial:Model.initial
+      ~reducer:(fun model () -> model)
+      ~view:(fun context _ _ ->
+        let inst = V.make ~sched:context.Lui_ui.ui_scheduler
+          ~kind:V.KAllPages ~feature:"query-result" ~owner:Wire.Nil in
+        instance := Some inst;
+        V.set inst {(V.empty_vstate ()) with loading=false;
+          columns=[Views_table.title_column ();
+            Views_table.builtin_column "fixture/cover" "Cover" "url" ()]};
+        Views_table.gallery_card inst ("gallery-remote-row",block)) () in
+    Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose session.S.app)) (fun () ->
+      let image () = List.find (fun node -> node.M.kind="image") (nodes session) in
+      let image_id = (image ()).M.id in
+      check "actual gallery URL cover preserves its remote source and decorative alt"
+        (M.string_prop (image ()) "url"=Some url
+         && M.string_prop (image ()) "alt"=Some "");
+      check "actual gallery URL cover keeps its authored dimensions"
+        (Hashtbl.find_opt (image ()).M.props "width"=Some (P.FloatValue 220.)
+         && Hashtbl.find_opt (image ()).M.props "height"=Some (P.FloatValue 192.));
+      check "only NSH gallery covers select the native eager loading policy"
+        (M.string_prop (image ()) "loading"=Some (if native then "eager" else "lazy"));
+      check "NSH has no page Referer policy prop while other hosts retain no-referrer"
+        (M.string_prop (image ()) "referrer-policy"=
+          (if native then None else Some "no-referrer"));
+      V.update (Option.get !instance) (fun state ->
+        {state with selected=V.Sset.singleton "gallery-remote-row"});
+      S.flush session;
+      check "gallery selection retains the existing remote image node and source"
+        ((image ()).M.id=image_id && M.string_prop (image ()) "url"=Some url)))
+    [({P.profile_os=P.WebOS;P.profile_host=P.WebHost},false);
+     ({P.profile_os=P.IOS;P.profile_host=P.SwiftUIHost},false);
+     ({P.profile_os=P.AndroidOS;P.profile_host=P.KotlinHost},false);
+     ({P.profile_os=P.MacOS;P.profile_host=P.NshHost},true)]
+
 let run_views ~registry ~profile ~finish =
+  gallery_remote_cover_policy ~registry;
   find_in_page_submit ~registry;
   accent_swatch_palettes ~registry;
   native_popup_alignment ~registry;
