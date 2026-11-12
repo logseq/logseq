@@ -3,7 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {spawnSync} from "node:child_process";
 import {copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync} from "node:fs";
-import {createRequire} from "node:module";
+import {createRequire, syncBuiltinESMExports} from "node:module";
 import os from "node:os";
 import path from "node:path";
 import {fileURLToPath, pathToFileURL} from "node:url";
@@ -194,6 +194,59 @@ test("Linux cannot stage the old bin-only update replacement root", async () => 
   try {
     await assert.rejects(f.helper.stage({...f.options,bin:path.join(f.options.bin,"bin")}), /complete native application root/);
   } finally { f.close(); }
+});
+
+test("release validation binds the sidecar to final archive bytes and canonical archive naming", async () => {
+  const f = await fixture();
+  try {
+    await f.helper.stage(f.options);
+    const name = JSON.parse(readFileSync(f.options.snapshot, "utf8")).archiveName;
+    const archive = path.join(f.root, "candidate", name);
+    const finalArchive = path.join(f.root, "packages", name);
+    f.write(archive, "final archive");
+    await f.helper.finish({snapshot:f.options.snapshot,archive,finalArchive});
+    f.write(finalArchive, readFileSync(archive));
+    copyFileSync(`${archive}.lui-build.json`, `${finalArchive}.lui-build.json`);
+    const config = `${finalArchive}.release/nsh.json`;
+    const configuration = readFileSync(path.join(path.dirname(f.options.snapshot), "release-config/nsh.json"));
+    f.write(config, configuration);
+    const checked = await f.helper.checkRelease({archive:finalArchive,luiSource:f.options.luiSource});
+    assert.equal(checked.configuration, config);
+    assert.equal(checked.platform, "linux-x86_64");
+    f.write(config, JSON.stringify({...JSON.parse(configuration),version:"2.0.3"}));
+    assert.equal(f.api.checkReceipt(finalArchive).fresh, true, "generic artifact checks do not validate a release sidecar");
+    await assert.rejects(f.helper.checkRelease({archive:finalArchive,luiSource:f.options.luiSource}), /sidecar/);
+    f.write(config, configuration);
+    const renamed = path.join(f.root, "packages", "old-version-last-linux-x64-2.0.2.tar.gz");
+    f.write(renamed, readFileSync(finalArchive));
+    copyFileSync(`${finalArchive}.lui-build.json`, `${renamed}.lui-build.json`);
+    f.write(`${renamed}.release/nsh.json`, configuration);
+    await assert.rejects(f.helper.checkRelease({archive:renamed,luiSource:f.options.luiSource}), /archive name/);
+  } finally { f.close(); }
+});
+
+test("a late receipt publication error cannot leave a successful generic receipt", async () => {
+  const f = await fixture();
+  const fs = require("node:fs");
+  const write = fs.writeFileSync;
+  try {
+    await f.helper.stage(f.options);
+    const archive = path.join(f.root, "candidate/archive.tar.gz");
+    f.write(archive, "final archive");
+    const receipt = `${archive}.lui-build.json`;
+    fs.writeFileSync = (target, ...args) => {
+      if (target === receipt) throw new Error("fixture late receipt write failure");
+      return write(target, ...args);
+    };
+    syncBuiltinESMExports();
+    await assert.rejects(f.helper.finish({snapshot:f.options.snapshot,archive,
+      finalArchive:path.join(f.root,"release.tar.gz")}), /late receipt write/);
+    assert.equal(existsSync(receipt), false);
+  } finally {
+    fs.writeFileSync = write;
+    syncBuiltinESMExports();
+    f.close();
+  }
 });
 
 test("resource ownership cannot escape the qualified Resources directory", async () => {

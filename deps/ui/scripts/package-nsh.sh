@@ -94,9 +94,13 @@ else
   tar -czf "$candidate" -C "$stage" Logseq-NSH
 fi
 "$node_bin" "$helper" finish "$stage/snapshot.json" "$candidate" "$archive"
+mkdir "$candidate.release"
+cp "$stage/release-config/nsh.json" "$candidate.release/nsh.json"
+LUI_SOURCE_ROOT="$lui_source" "$node_bin" "$helper" check-release "$candidate" >&2
 mv -f "$candidate" "$archive"
-mv -f "$candidate.lui-build.json" "$archive.lui-build.json"
 release_config="$archive.release"
 mkdir -p "$release_config"
-mv -f "$stage/release-config/nsh.json" "$release_config/nsh.json"
+mv -f "$candidate.release/nsh.json" "$release_config/nsh.json"
+# Publish the receipt last: consumers validate both archive and sidecar bytes.
+mv -f "$candidate.lui-build.json" "$archive.lui-build.json"
 printf '%s\n' "$archive"

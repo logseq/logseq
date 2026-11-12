@@ -280,7 +280,21 @@ release version and optional updater settings. It can be passed to the pinned
 NSH CLI's `update-manifest --entry <archive>.release` after all target archives
 are finalized. This sidecar contains public release metadata, never the signing
 secret. The archive receipt records its hash and the installed updater-config
-hash when present. Archive names now use NSH's version/OS/architecture order;
+hash when present. Before invoking the manifest CLI from the build checkout,
+validate both final artifacts:
+
+```sh
+node deps/ui/scripts/package-nsh.mjs check-release "$archive"
+```
+
+A generic archive freshness check does not inspect this separate sidecar. The
+release check also binds its identity and canonical archive name to the receipt.
+Packaging checks the complete candidate before publishing and publishes the
+receipt after both archive and sidecar. Local publication remains per-file,
+not a multi-file transaction. The pinned NSH manifest CLI itself does not read
+these application receipts; release automation must retain this check and must
+only publish manifest/signature outputs when the CLI exits successfully.
+Archive names now use NSH's version/OS/architecture order;
 consumers of the old version-last names must update their artifact selection.
 This packaging stage does not establish actual upgrade/restart qualification.
 

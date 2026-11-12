@@ -1,7 +1,7 @@
 // Package only a qualified artifact and the resources owned by its receipt.
 import {createHash} from "node:crypto";
 import {spawnSync} from "node:child_process";
-import {chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync} from "node:fs";
+import {chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync} from "node:fs";
 import path from "node:path";
 import {fileURLToPath, pathToFileURL} from "node:url";
 import semver from "semver";
@@ -153,14 +153,39 @@ export async function finish({snapshot, archive, finalArchive}) {
   const quote = value => "'" + value.replaceAll("'", "'\"'\"'") + "'";
   const receiptFile = api.writeReceipt({artifact:archive, root:before.root, inputs:before.inputs,
     command:`cd ${quote(repo)} && pnpm ui:nsh:package`});
-  const receipt = read(receiptFile);
-  unchanged(before.files, receipt.files);
-  receipt.artifact = path.resolve(finalArchive);
-  receipt.application = before.application;
-  receipt.platform = `${before.platform}-${before.arch}`;
-  receipt.updateConfigurationSha256 = before.metadata.find(file => portable(file.path).endsWith("/assets/nsh-updater.json"))?.sha256 ?? null;
-  receipt.releaseConfigurationSha256 = before.metadata.find(file => portable(file.path).endsWith("/release-config/nsh.json")).sha256;
-  writeFileSync(receiptFile, JSON.stringify(receipt, null, 1) + "\n");
+  try {
+    const receipt = read(receiptFile);
+    unchanged(before.files, receipt.files);
+    receipt.artifact = path.resolve(finalArchive);
+    receipt.application = before.application;
+    receipt.platform = `${before.platform}-${before.arch}`;
+    receipt.updateConfigurationSha256 = before.metadata.find(file => portable(file.path).endsWith("/assets/nsh-updater.json"))?.sha256 ?? null;
+    receipt.releaseConfigurationSha256 = before.metadata.find(file => portable(file.path).endsWith("/release-config/nsh.json")).sha256;
+    writeFileSync(receiptFile, JSON.stringify(receipt, null, 1) + "\n");
+  } catch (error) {
+    rmSync(receiptFile, {force:true});
+    throw error;
+  }
+}
+export async function checkRelease({archive, luiSource}) {
+  const api = await receiptApi(luiSource);
+  const check = api.checkReceipt(archive);
+  if (!check.fresh) throw new Error(check.message);
+  const receipt = read(api.receiptPath(archive));
+  const configuration = path.join(`${archive}.release`, "nsh.json");
+  if (!receipt.releaseConfigurationSha256
+      || api.digestArtifact(configuration) !== receipt.releaseConfigurationSha256)
+    throw new Error("The release sidecar does not match its final archive receipt");
+  const config = read(configuration);
+  if (["name", "id", "version", "build"].some(field => config[field] !== receipt.application?.[field]))
+    throw new Error("The release sidecar identity differs from its archive");
+  if (!/^(macos|linux)-(aarch64|x86_64)$/.test(receipt.platform ?? ""))
+    throw new Error("The release receipt has an unsupported platform");
+  const extension = receipt.platform?.startsWith("macos-") ? "zip" : "tar.gz";
+  if (path.basename(archive) !== `Logseq-NSH-${config.version}-${receipt.platform}.${extension}`)
+    throw new Error("The release archive name differs from its recorded version/platform");
+  return {archive:path.resolve(archive), configuration:path.resolve(configuration),
+    application:receipt.application, platform:receipt.platform};
 }
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const [mode, ...args] = process.argv.slice(2);
@@ -174,5 +199,8 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   } else if (mode === "finish" && args.length === 3) {
     const [snapshot, archive, finalArchive] = args;
     await finish({snapshot, archive, finalArchive});
-  } else throw new Error("Expected stage or finish package arguments");
+  } else if (mode === "check-release" && args.length === 1) {
+    const luiSource = path.resolve(process.env.LUI_SOURCE_ROOT ?? path.join(repo, "../lui"));
+    console.log(JSON.stringify(await checkRelease({archive:args[0], luiSource})));
+  } else throw new Error("Expected stage, finish or check-release package arguments");
 }

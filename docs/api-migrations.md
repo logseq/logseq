@@ -23,7 +23,13 @@ from `Logseq-NSH-linux-x64-2.0.2.tar.gz` to
 `Logseq-NSH-2.0.2-linux-x86_64.tar.gz` (macOS uses `macos` and `aarch64` or
 `x86_64`). Update artifact consumers accordingly. `<archive>.release/nsh.json`
 provides the matching release version and public configuration to the pinned
-NSH CLI manifest generator.
+NSH CLI manifest generator. Before manifest generation from the build checkout,
+run `node deps/ui/scripts/package-nsh.mjs check-release "$archive"`: this checks
+archive freshness, sidecar hash/identity and canonical archive naming. Generic
+archive freshness alone does not validate an adjacent sidecar. Packaging now
+publishes the receipt last, after archive and sidecar, and removes a candidate
+receipt when its final metadata write fails. Publication is per-file rather
+than a multi-file transaction.
 
 No update source is configured by default. Packaging accepts the paired
 `--update-url HTTPS-URL --update-public-key FILE` options; the qualified host
