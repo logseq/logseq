@@ -1,0 +1,161 @@
+name: Private NSH PDF native feedback
+
+on:
+  pull_request:
+    branches: ['refactor/lui']
+    paths:
+      - '.github/workflows/nsh-pdf-native.yml'
+      - 'deps/ui/nsh/Cargo.toml'
+      - 'deps/ui/nsh/Cargo.lock'
+      - 'deps/ui/nsh/examples/pdfium_engine_probe.rs'
+      - 'deps/ui/nsh/src/extensions/pdf/portable/**'
+      - 'deps/ui/nsh/pdfium-artifacts.json'
+      - 'deps/ui/nsh/prepare_pdf*.py'
+      - 'deps/ui/nsh/test_prepare_pdf*.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: logseq-nsh-pdf-native-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  LUI_REF: 961107c7c071b04551587b39cc7cdd16f738c07a
+  RUSTUP_TOOLCHAIN: 1.97.0
+  CARGO_BUILD_JOBS: 2
+  RUST_MIN_STACK: 268435456
+  PYTHONUTF8: 1
+
+jobs:
+  portable-pdf:
+    name: Private PDF native feedback (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Checkout the exact Rust LUI provider beside Logseq on Linux
+        if: runner.os == 'Linux'
+        run: |
+          lui_source="$(dirname "$GITHUB_WORKSPACE")/lui"
+          git clone --no-checkout https://github.com/logseq/lui.git "$lui_source"
+          git -C "$lui_source" checkout --detach "$LUI_REF"
+          test "$(git -C "$lui_source" rev-parse HEAD)" = "$LUI_REF"
+      - name: Checkout the exact Rust LUI provider beside Logseq on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $lui = Join-Path (Split-Path $env:GITHUB_WORKSPACE -Parent) 'lui'
+          git clone --no-checkout https://github.com/logseq/lui.git $lui
+          if ($LASTEXITCODE -ne 0) { throw 'LUI checkout failed' }
+          git -C $lui checkout --detach $env:LUI_REF
+          if ($LASTEXITCODE -ne 0) { throw 'Immutable LUI revision checkout failed' }
+          $actual = git -C $lui rev-parse HEAD
+          if ($LASTEXITCODE -ne 0 -or $actual -ne $env:LUI_REF) { throw 'LUI source revision mismatch' }
+      - name: Record exact source revisions
+        run: |
+          mkdir -p _build/nsh-pdf-native
+          printf 'LUI=%s\nLOGSEQ=%s\n' "$LUI_REF" "$(git rev-parse HEAD)" \
+            > _build/nsh-pdf-native/revisions.txt
+      - name: Linux native libraries and private virtual display
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libdbus-1-dev libgtk-4-dev \
+            libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+            libclang-dev pkg-config fonts-dejavu-core fonts-noto-cjk xvfb dbus-x11
+      - uses: ilammy/msvc-dev-cmd@v1
+        if: runner.os == 'Windows'
+        with:
+          arch: x64
+          vsversion: '2022'
+      - name: Pin the actual Visual C++ linker
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if (!$env:VCToolsInstallDir) { throw 'MSVC did not provide VCToolsInstallDir' }
+          $msvcBin = Join-Path $env:VCToolsInstallDir 'bin/Hostx64/x64'
+          $linker = (Resolve-Path (Join-Path $msvcBin 'link.exe') -ErrorAction Stop).Path
+          "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER=$linker" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Install the pinned native Rust toolchain
+        run: rustup toolchain install 1.97.0 --profile minimal
+      - name: Private authored PDF and pinned artifact source guards
+        run: |
+          python -m unittest discover -s deps/ui/nsh -p 'test_prepare_pdf*.py' \
+            2>&1 | tee _build/nsh-pdf-native/source-guards.log
+      - name: Actual GTK page and owner-context tests under Xvfb
+        if: runner.os == 'Linux'
+        run: |
+          xvfb-run -a dbus-run-session -- env GDK_BACKEND=x11 \
+            cargo test --locked --manifest-path deps/ui/nsh/Cargo.toml \
+              --example pdfium_engine_probe -- --test-threads=1 \
+            2>&1 | tee _build/nsh-pdf-native/native-widget-tests.log
+      - name: Actual Win32 ownership and STA text provider tests
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          # The actual provider tests own OleInitialize/OleUninitialize on their
+          # test thread; changing the PowerShell apartment is not that proof.
+          cargo test --locked --manifest-path deps/ui/nsh/Cargo.toml --example pdfium_engine_probe -- --test-threads=1 `
+            2>&1 | Tee-Object _build/nsh-pdf-native/native-widget-tests.log
+          if ($LASTEXITCODE -ne 0) { throw 'Actual Win32 PDF window/provider tests failed' }
+      - name: Actual Linux pinned engine and owned document worker
+        if: runner.os == 'Linux'
+        run: |
+          private_pdf=$(mktemp -d "$RUNNER_TEMP/logseq-pdf-native.XXXXXX")
+          trap 'rm -rf -- "$private_pdf"' EXIT
+          python deps/ui/nsh/prepare_pdfium.py --target linux-x64 \
+            --output "$private_pdf/engine" > _build/nsh-pdf-native/preparation.json
+          cp "$private_pdf/engine/receipt.json" _build/nsh-pdf-native/engine-receipt.json
+          cp "$private_pdf/engine/LICENSE" "$private_pdf/engine/args.gn" _build/nsh-pdf-native/
+          cp -R "$private_pdf/engine/licenses" _build/nsh-pdf-native/
+          python deps/ui/nsh/prepare_pdf_probe.py --output "$private_pdf/fixture" \
+            > _build/nsh-pdf-native/fixture-receipt.json
+          cargo run --locked --manifest-path deps/ui/nsh/Cargo.toml \
+            --example pdfium_engine_probe -- "$private_pdf/engine/libpdfium.so" \
+            "$private_pdf/fixture/original.pdf" 'Original page one' \
+            > _build/nsh-pdf-native/engine-probe.json \
+            2> _build/nsh-pdf-native/engine-probe.stderr.log
+      - name: Actual Windows pinned engine and owned document worker
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $privatePdf = Join-Path $env:RUNNER_TEMP ('logseq-pdf-native-' + [guid]::NewGuid())
+          New-Item -ItemType Directory $privatePdf -ErrorAction Stop | Out-Null
+          try {
+            $engine = Join-Path $privatePdf 'engine'
+            $fixture = Join-Path $privatePdf 'fixture'
+            python deps/ui/nsh/prepare_pdfium.py --target win-x64 --output $engine `
+              > _build/nsh-pdf-native/preparation.json
+            if ($LASTEXITCODE -ne 0) { throw 'Pinned PDFium artifact preparation failed' }
+            Copy-Item (Join-Path $engine 'receipt.json') _build/nsh-pdf-native/engine-receipt.json
+            Copy-Item (Join-Path $engine 'LICENSE') _build/nsh-pdf-native/
+            Copy-Item (Join-Path $engine 'args.gn') _build/nsh-pdf-native/
+            Copy-Item -Recurse (Join-Path $engine 'licenses') _build/nsh-pdf-native/
+            python deps/ui/nsh/prepare_pdf_probe.py --output $fixture > _build/nsh-pdf-native/fixture-receipt.json
+            if ($LASTEXITCODE -ne 0) { throw 'Private authored PDF generation failed' }
+            cargo run --locked --manifest-path deps/ui/nsh/Cargo.toml --example pdfium_engine_probe -- `
+              (Join-Path $engine 'pdfium.dll') (Join-Path $fixture 'original.pdf') 'Original page one' `
+              > _build/nsh-pdf-native/engine-probe.json 2> _build/nsh-pdf-native/engine-probe.stderr.log
+            if ($LASTEXITCODE -ne 0) { throw 'Actual PDFium load/document/worker qualification failed' }
+          } finally {
+            Remove-Item -LiteralPath $privatePdf -Recurse -Force
+          }
+      - name: Preserve native PDF feedback and exact engine receipts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: private-nsh-pdf-native-${{ matrix.os }}
+          path: _build/nsh-pdf-native/
+          if-no-files-found: error
