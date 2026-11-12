@@ -191,6 +191,14 @@ let managed_file_link ~repo ~file ~source ~external_url ~label =
   Logseq_el.el ~tag:"a" ~style_class:"asset-ref" ~text:label
     ~attrs:(if external_url then identity else ("data-asset-file",file)::identity) []
 
+let audio_labels () =
+  Yojson.Safe.to_string (`Assoc [
+    "play",`String (I18n.t "asset.audio/play");
+    "pause",`String (I18n.t "asset.audio/pause");
+    "seek",`String (I18n.t "asset.audio/seek");
+    "volume",`String (I18n.t "asset.audio/volume");
+    "loading",`String (I18n.t "asset.audio/loading")])
+
 let asset_leaf ~compact uuid (b : Model.block) =
   let repo = Runtime.repo () in
   let ext = Option.value b.Model.block_asset_type ~default:"" in
@@ -208,16 +216,23 @@ let asset_leaf ~compact uuid (b : Model.block) =
   | Video when not compact ->
       Lui_elements.media_surface ~key:("asset-video-" ^ uuid) ~url:source ~label
         ~width:640 ~height:360 ~max_width:800 []
-  | Audio -> Lui_elements.image ~key:("asset-image-" ^ uuid) ~url:source ~alt:label
-      ~max_height:(if compact then 30 else 800) []
+  | Audio ->
+      let identity=["data-asset-graph",repo; "src",source;
+        "labels",audio_labels (); "aria-label",label; "controls",""] in
+      Logseq_el.el ~key:("asset-audio-" ^ uuid) ~tag:"audio"
+        ~attrs:(if external_url then identity else ("data-asset-file",file)::identity) []
   | Video | File -> managed_file_link ~repo ~file ~source ~external_url ~label
 
 let file_cell_el (w : Wire.t) : Lui_elements.t =
   let block = Decode.block_of_wire w in
   match block.Model.block_uuid with
   | None -> Lui_elements.spacer []
-  | Some uuid -> Lui_elements.box ~style_class:"block-content" ~max_height:30
-      [asset_leaf ~compact:true uuid block]
+  | Some uuid ->
+      let ext=Option.value block.Model.block_asset_type ~default:"" in
+      if asset_kind ~ext ~title:block.Model.block_title=Audio then
+        Lui_elements.box ~style_class:"block-content" [asset_leaf ~compact:true uuid block]
+      else Lui_elements.box ~style_class:"block-content" ~max_height:30
+        [asset_leaf ~compact:true uuid block]
 
 let gallery_cover ~width ~height (value : W.t) : Lui_elements.t =
   let block = Decode.block_of_wire value in

@@ -1,5 +1,33 @@
 # API migrations
 
+## Native audio assets use the platform streaming player
+
+The canonical `logseq-audio` extension now owns a public NSH `AudioPlayer`.
+Audio files and recorded `Audio-*` WebM blocks no longer render as images or
+open an external player. The native controls provide play/pause, keyboard and
+pointer seeking, volume, elapsed/total time, buffering and platform error text.
+Audio cells retain the controls' intrinsic height rather than clipping them to
+the image thumbnail's 30px limit. New control labels use `asset.audio/*` keys.
+
+The source uses the same `data-asset-graph` and optional `data-asset-file`
+resource contract as managed files, plus `src` and a JSON `labels` object with
+`play`, `pause`, `seek`, `volume` and `loading`. Local filenames resolve through
+the existing resource owner; remote sources require HTTP(S). Arbitrary schemes,
+missing labels and autoplay are rejected during actual target admission.
+
+Playback starts only on user activation. Control requests obey disabled state,
+application quiescence, exact retained incarnation, captured graph and source.
+Graph close, source replacement and view disposal retire the owned player.
+Progress is driven by the platform event stream; idle players do not poll,
+load or autoplay, and this adds no OCaml request queue or media cache.
+
+The native archive fixture checks the real emitted audio factory. A contained
+Headless fixture authors its own tiny PCM WAV and inspects public AudioCall
+commands for source ownership, play/pause, seek, volume and close, with actual
+stream events driving progress/end state. Headless uses NSH's fake audio backend
+and does not qualify real decoding, sound output or native OS playback. Those
+results and visual layout remain separate platform qualification.
+
 ## Native asset views distinguish image, video, PDF and generic files
 
 Native asset blocks and file cells classify the stored extension without case

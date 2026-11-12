@@ -339,6 +339,7 @@ always_used_key_patterns = [
   # Consumed by the OCaml web UI (deps/ui), outside cljs scan scope.
   "^:account/sign-in-error$",
   "^:asset/invalid-ext-error$",
+  "^:asset\\.audio/(loading|pause|play|seek|volume)$",
   "^:editor/link-label-placeholder$",
   "^:editor/link-url-placeholder$",
   "^:editor/redo-error$",

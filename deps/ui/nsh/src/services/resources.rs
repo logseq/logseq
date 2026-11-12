@@ -224,11 +224,7 @@ impl Resources {
         asset: Option<&str>,
     ) -> Result<Option<AssetLocation>, String> {
         validate_asset_link(graph, source, asset)?;
-        let Some(current) = self
-            .0
-            .get_untracked()
-            .filter(|current| current.graph == graph)
-        else {
+        let Some(current) = self.0.get().filter(|current| current.graph == graph) else {
             return Ok(None);
         };
         asset_location(Source::Direct(current.resolve(classify(source, asset)?)?)).map(Some)

@@ -67,6 +67,11 @@
  :account/upgrade-plan "Upgrade plan"
  :account/username "Username"
 
+ :asset.audio/loading "Loading audio…"
+ :asset.audio/pause "Pause audio"
+ :asset.audio/play "Play audio"
+ :asset.audio/seek "Audio position"
+ :asset.audio/volume "Audio volume"
  :asset/acceptable-file-extensions "Acceptable file extensions"
  :asset/add-assets "Add assets"
  :asset/add-directory "Add directory"

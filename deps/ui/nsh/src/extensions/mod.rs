@@ -1,4 +1,5 @@
 //! Native implementations of the application's canonical extension schemas.
+mod audio;
 mod codemirror;
 mod editor;
 mod pdf;
@@ -36,6 +37,12 @@ pub fn register_raw(builder: ExtensionBuilder, schema: Schema) -> Result<Extensi
             .register(schema, pdf::element)?
             .validate("logseq-pdf", pdf::validate)?
             .validate_themed("logseq-pdf", pdf::validate_themed);
+    }
+    if schema.identifier == "logseq-audio" {
+        return builder
+            .register(schema, audio::element)?
+            .validate("logseq-audio", audio::validate)?
+            .validate_themed("logseq-audio", raw::validate_themed);
     }
     let identifier = schema.identifier.clone();
     builder

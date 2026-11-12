@@ -411,7 +411,12 @@ fn pointer(point: Point<Points>, modifiers: Modifiers) -> Value {
 fn emit_dom(context: &ExtensionContext, owner: Owner, name: &str, payload: Value) {
     try_emit_dom(context, owner, name, payload);
 }
-fn try_emit_dom(context: &ExtensionContext, owner: Owner, name: &str, payload: Value) -> bool {
+pub(super) fn try_emit_dom(
+    context: &ExtensionContext,
+    owner: Owner,
+    name: &str,
+    payload: Value,
+) -> bool {
     if !owner.is_live() {
         return false;
     }

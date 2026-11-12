@@ -11,7 +11,8 @@ let render_asset_kinds () =
   let image=block "image" "PNG" "Photo"
   and video=block "video" "mp4" "Movie"
   and document=block "document" "txt" "Notes"
-  and pdf=block "pdf" "pdf" "Report" in
+  and pdf=block "pdf" "pdf" "Report"
+  and audio=block "audio" "webm" "Audio-recording" in
   check "native media classification recognizes recorded webm audio"
     (Asset_dom.asset_kind ~ext:"webm" ~title:"Audio-recording"=Asset_dom.Audio);
   let registry=Lui_extension.registry () in
@@ -22,7 +23,7 @@ let render_asset_kinds () =
   let app=Lui_app.create_with_extensions backend registry () (fun () () -> ())
     (fun _ _ _ -> Lui_elements.column [Asset_dom.block_view "image" image;
       Asset_dom.block_view "video" video; Asset_dom.block_view "document" document;
-      Asset_dom.block_view "pdf" pdf]) in
+      Asset_dom.block_view "pdf" pdf; Asset_dom.block_view "audio" audio]) in
   Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app); Runtime.read_model:=previous_model)
     (fun () ->
       ignore (Lui_app.start app); ignore (Lui_app.flush app);
@@ -33,6 +34,9 @@ let render_asset_kinds () =
         (kind_count Lui_protocol.Image=1);
       check "actual native video uses the typed media surface"
         (kind_count Lui_protocol.MediaSurface=1);
+      check "recorded native webm mounts the actual audio factory, not an image or external link"
+        (Hashtbl.fold (fun _ identifier count -> if identifier="logseq-audio" then count+1 else count)
+          runtime.Lui_runtime.runtime_extension_nodes 0=1);
       Hashtbl.iter (fun node kind -> if kind=Lui_protocol.MediaSurface then
         check "video source is the current graph's actual asset path"
           (Lui_protocol.Property_map.find_opt Lui_protocol.UrlValue
