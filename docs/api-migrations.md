@@ -1,5 +1,32 @@
 # API migrations
 
+## NSH update-compatible package identity and layout
+
+Actual Logseq packages now write canonical `nsh/app.json` metadata before
+signing. The entire Linux `Logseq-NSH` directory is the installation unit:
+`logseq` and `logseq-nsh` move from `bin/` to its root alongside `Resources/`.
+Installed native resource lookup must use `../Resources` on macOS and
+`Resources` relative to the executable on Linux/Windows. Web and mobile paths
+are unchanged. External scripts that ran `Logseq-NSH/bin/logseq` must now run
+`Logseq-NSH/logseq`.
+
+Release version comes only from `resources/package.json`; development
+`deps/ui/nsh/nsh.json` no longer has a separate version. Archive names change
+from `Logseq-NSH-linux-x64-2.0.2.tar.gz` to
+`Logseq-NSH-2.0.2-linux-x86_64.tar.gz` (macOS uses `macos` and `aarch64` or
+`x86_64`). Update artifact consumers accordingly. `<archive>.release/nsh.json`
+provides the matching release version and public configuration to the pinned
+NSH CLI manifest generator.
+
+No update source is configured by default. Packaging accepts the paired
+`--update-url HTTPS-URL --update-public-key FILE` options; the qualified host
+validates the generated whole-app configuration through NSH/LUI before the
+packager embeds `nsh/assets/nsh-updater.json`. Missing/mismatched options or
+invalid configuration fail the package. An unconfigured package omits the asset
+and creates no updater worker or request when bootstrapped. Metadata and public
+key source changes during packaging prevent a final receipt. This adds no
+TSX/UI-only update path and makes no actual N-to-N+1 qualification claim.
+
 ## NSH remote gallery covers
 
 Remote gallery classification now passes the URL and prefix to the existing

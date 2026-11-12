@@ -1,10 +1,9 @@
 #!/bin/sh
 set -eu
 bin_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
-resources="$bin_dir/../Resources"
 case "$(uname -s)" in
-  Darwin) library="$resources/liblogseq_ui.dylib" ;;
-  Linux) library="$resources/liblogseq_ui.so" ;;
+  Darwin) resources="$bin_dir/../Resources"; library="$resources/liblogseq_ui.dylib" ;;
+  Linux) resources="$bin_dir/Resources"; library="$resources/liblogseq_ui.so" ;;
   *) printf 'This desktop archive requires macOS or Linux.\n' >&2; exit 1 ;;
 esac
 export LUI_OCAML_LIBRARY="$library"

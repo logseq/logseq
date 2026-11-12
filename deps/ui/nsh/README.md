@@ -243,10 +243,43 @@ library relocation and signing.
 
 | Target | Archive | Layout |
 | --- | --- | --- |
-| macOS | `deps/ui/_build/packages/Logseq-NSH-darwin-{arm64,x64}-{version}.zip` | `Logseq NSH.app/Contents/MacOS/{Logseq,logseq-nsh}` and `Contents/Resources/` |
-| Linux | `deps/ui/_build/packages/Logseq-NSH-linux-{arm64,x64}-{version}.tar.gz` | `Logseq-NSH/bin/{logseq,logseq-nsh}` and `Resources/` |
+| macOS | `deps/ui/_build/packages/Logseq-NSH-{version}-macos-{aarch64,x86_64}.zip` | `Logseq NSH.app/Contents/MacOS/{Logseq,logseq-nsh}` and `Contents/Resources/` |
+| Linux | `deps/ui/_build/packages/Logseq-NSH-{version}-linux-{aarch64,x86_64}.tar.gz` | `Logseq-NSH/{logseq,logseq-nsh}` and `Resources/` |
 
-The archive version comes from `resources/package.json`. macOS uses
+The installed version, archive name and generated release configuration all
+come from `resources/package.json`; the development `nsh.json` no longer carries
+a separate version. Metadata is written before signing at
+`Contents/Resources/nsh/app.json` on macOS and `nsh/app.json` at the Linux app
+root. Linux replaces the complete app directory, including its sibling
+`Resources/` library, worker and assets, instead of only the old `bin/` directory.
+
+Updates are absent by default. To embed an existing release source and public
+key, pass both explicit options:
+
+```sh
+pnpm ui:nsh:package --built-host "$PWD/deps/ui/_build/nsh/logseq-nsh" \
+  --update-url "$LOGSEQ_UPDATE_MANIFEST_URL" \
+  --update-public-key "$LOGSEQ_UPDATE_PUBLIC_KEY_FILE"
+```
+
+These variables stand for release-owner inputs, not built-in defaults. The URL
+must be HTTPS without credentials or a fragment. The qualified host's pure
+`--validate-update-config` mode validates the generated configuration through
+NSH/LUI before signing; it starts no UI, updater worker, cache or request.
+Without both options, no `nsh/assets/nsh-updater.json` is created. The public key
+file and generated metadata are checked again before the final archive receipt.
+Do not pass a signing secret as the public-key file.
+
+Each archive has an adjacent `<archive>.release/nsh.json` containing that exact
+release version and optional updater settings. It can be passed to the pinned
+NSH CLI's `update-manifest --entry <archive>.release` after all target archives
+are finalized. This sidecar contains public release metadata, never the signing
+secret. The archive receipt records its hash and the installed updater-config
+hash when present. Archive names now use NSH's version/OS/architecture order;
+consumers of the old version-last names must update their artifact selection.
+This packaging stage does not establish actual upgrade/restart qualification.
+
+macOS uses
 `dylibbundler` to collect non-system libraries into `Contents/Frameworks`, signs
 nested native code and verifies the app signature. It defaults to an ad-hoc
 signature. Set `NSH_CODESIGN_IDENTITY` to an existing Developer ID identity to
@@ -258,7 +291,7 @@ C runtime dependencies; they are not self-contained AppImages or installers.
 
 The separate NSH CI workflow owns native artifacts. Electron's release workflow
 has no MyGo selection and remains independent. This cutover does not implement
-Windows OCaml DLL packaging, an NSH release/update feed, native PDF annotation,
+Windows OCaml DLL packaging, a production NSH release/update feed, native PDF annotation,
 or every raw markup/media widget. Passing the staged Headless startup gate is
 not an outside-checkout OS launch, IME, accessibility or update qualification.
 

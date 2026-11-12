@@ -5,48 +5,52 @@ repo_root=$(cd "$ui_root/../.." && pwd)
 node_bin="${NODE_BINARY:-node}"
 lui_source=$(cd "${LUI_SOURCE_ROOT:-$repo_root/../lui}" && pwd -P)
 host=""
+update_url=""
+update_key=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --built-host) [[ $# -ge 2 ]] || { printf 'Missing --built-host path.\n' >&2; exit 1; }; host="$2"; shift 2 ;;
+    --update-url) [[ $# -ge 2 ]] || { printf 'Missing --update-url.\n' >&2; exit 1; }; update_url="$2"; shift 2 ;;
+    --update-public-key) [[ $# -ge 2 ]] || { printf 'Missing --update-public-key.\n' >&2; exit 1; }; update_key="$2"; shift 2 ;;
     --) shift ;;
-    *) printf 'Usage: package-nsh.sh [--built-host qualified-executable]\n' >&2; exit 1 ;;
+    *) printf 'Usage: package-nsh.sh [--built-host qualified-executable] [--update-url HTTPS-URL --update-public-key FILE]\n' >&2; exit 1 ;;
   esac
 done
 if [[ -z $host ]]; then host=$(bash "$ui_root/nsh/build.sh"); fi
 host=$(cd "$(dirname "$host")" && printf '%s/%s' "$PWD" "$(basename "$host")")
-version=$("$node_bin" -p 'require(process.argv[1]).version' "$repo_root/resources/package.json")
 arch=$(uname -m)
-case "$arch" in arm64|aarch64) arch=arm64 ;; x86_64|amd64) arch=x64 ;; *) printf 'Unsupported desktop architecture.\n' >&2; exit 1 ;; esac
+case "$arch" in arm64|aarch64) arch=aarch64 ;; x86_64|amd64) arch=x86_64 ;; *) printf 'Unsupported desktop architecture.\n' >&2; exit 1 ;; esac
 packages="$ui_root/_build/packages"
 mkdir -p "$packages"
 stage=$(mktemp -d "$packages/.nsh-package.XXXXXX")
 trap 'rm -rf "$stage"' EXIT
 case "$(uname -s)" in
   Darwin)
-    platform=darwin
+    platform=macos
     app="$stage/Logseq NSH.app"
     bin="$app/Contents/MacOS"
     resources="$app/Contents/Resources"
     library=liblogseq_ui.dylib
     launcher=Logseq
-    extension=zip
     ;;
   Linux)
     platform=linux
     app="$stage/Logseq-NSH"
-    bin="$app/bin"
+    bin="$app"
     resources="$app/Resources"
     library=liblogseq_ui.so
     launcher=logseq
-    extension=tar.gz
     [[ -z ${NSH_CODESIGN_IDENTITY:-}${NSH_NOTARY_PROFILE:-} ]] || { printf 'Apple signing options require macOS.\n' >&2; exit 1; }
     ;;
   *) printf 'NSH application archives currently support macOS and Linux.\n' >&2; exit 1 ;;
 esac
 helper="$ui_root/scripts/package-nsh.mjs"
 "$node_bin" "$helper" stage "$host" "$(dirname "$host")/$library" \
-  "$(dirname "$host")/../Resources" "$bin" "$resources" "$stage/snapshot.json" "$lui_source" "$launcher"
-if [[ $platform == darwin ]]; then
+  "$(dirname "$host")/../Resources" "$bin" "$resources" "$stage/snapshot.json" "$lui_source" "$launcher" \
+  "$platform" "$arch" "$update_url" "$update_key"
+version=$("$node_bin" -p 'require(process.argv[1]).application.version' "$stage/snapshot.json")
+archive_name=$("$node_bin" -p 'require(process.argv[1]).archiveName' "$stage/snapshot.json")
+if [[ $platform == macos ]]; then
   command -v dylibbundler >/dev/null
   "$node_bin" - "$app/Contents/Info.plist" "$version" <<'PLIST'
 const fs = require("node:fs");
@@ -75,9 +79,9 @@ PLIST
   codesign "${sign[@]}" "$app" >&2
   codesign --verify --deep --strict "$app" >&2
 fi
-archive="$packages/Logseq-NSH-$platform-$arch-$version.$extension"
+archive="$packages/$archive_name"
 candidate="$stage/$(basename "$archive")"
-if [[ $platform == darwin ]]; then
+if [[ $platform == macos ]]; then
   ditto -c -k --sequesterRsrc --keepParent "$app" "$candidate"
   if [[ -n ${NSH_NOTARY_PROFILE:-} ]]; then
     [[ $identity != - ]] || { printf 'Notarization requires NSH_CODESIGN_IDENTITY.\n' >&2; exit 1; }
@@ -92,4 +96,7 @@ fi
 "$node_bin" "$helper" finish "$stage/snapshot.json" "$candidate" "$archive"
 mv -f "$candidate" "$archive"
 mv -f "$candidate.lui-build.json" "$archive.lui-build.json"
+release_config="$archive.release"
+mkdir -p "$release_config"
+mv -f "$stage/release-config/nsh.json" "$release_config/nsh.json"
 printf '%s\n' "$archive"
