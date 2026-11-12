@@ -2432,3 +2432,11 @@ uses `Update.apply` with `Boot_graph_ready`, and retains the same route and
 page payload without an artificial disposal or `Navigate_to`. It also retains
 same-graph dirty-buffer, authoritative-source and cancellation checks. Native
 OS graph-switch interaction remains a separate UI qualification.
+
+
+The native latest-request regression uses two actually mounted block property
+areas. Its first held read contains one UUID; a subsequent refresh of both
+areas produces a distinct two-UUID batch. This preserves the native worker's
+intentional identical-read coalescing while exercising an actual overlapping
+request shape. An identical in-flight batch is not expected to increment the
+underlying worker request count.

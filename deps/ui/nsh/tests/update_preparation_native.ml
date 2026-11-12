@@ -2069,6 +2069,9 @@ let native_scalar_string_dismissal () =
 let native_scalar_draft_area_refresh () =
   let uuid="draft-refresh-owner" in
   let key=Properties_area.block_key uuid in
+  let sibling_uuid="draft-refresh-batch-sibling" in
+  let sibling_key=Properties_area.block_key sibling_uuid in
+  let previous_sibling_area=Hashtbl.find_opt Properties_state.areas sibling_key in
   let previous_area=Hashtbl.find_opt Properties_state.areas key
   and previous_app= !Native_embed.current_app and previous_model= !Runtime.read_model
   and previous_flush= !Runtime.app_flush and previous_send= !Runtime.app_send
@@ -2083,7 +2086,8 @@ let native_scalar_draft_area_refresh () =
   let page=Option.get (Decode.page_of_summary
     (Wire.Map [Wire.Keyword "block/title",Wire.String "Draft refresh"])) in
   let page={page with Model.page_blocks=[Model.empty_block ~uuid
-    ~title:"Native property owner" ~is_page:false]} in
+    ~title:"Native property owner" ~is_page:false;
+    Model.empty_block ~uuid:sibling_uuid ~title:"Second mounted property area" ~is_page:false]} in
   let model=ref {Model.initial with phase=Model.Ready;repo=Some "draft-origin";
     route=Model.Page page.page_title;route_page=Some page} in
   let stored=ref "original" and sibling=ref false and reads=ref 0 and writes=ref 0 in
@@ -2107,6 +2111,7 @@ let native_scalar_draft_area_refresh () =
   (* create evaluates the real area view and queues its first read. Install
      its ownership and worker first; never clear that newly registered area. *)
   Hashtbl.remove Properties_state.areas key;
+  Hashtbl.remove Properties_state.areas sibling_key;
   Properties_data.rd_pending:=[];Properties_data.rd_scheduled:=false;
   Editor_state.st:=None;Editor_state.field_sigs_opt:=None;Properties_value.active_editor:=None;
   Properties_state.overlays:=[];Properties_state.view_overlays_state:=None;
@@ -2138,6 +2143,9 @@ let native_scalar_draft_area_refresh () =
     Properties_value.pending_edit:=previous_pending;Properties_value.close_editor:=previous_close;
     Properties_state.overlays:=previous_overlays;Properties_state.view_overlays_state:=previous_view_overlays;
     Properties_data.rd_pending:=previous_rd;Properties_data.rd_scheduled:=previous_rd_scheduled;
+    (match previous_sibling_area with
+     | Some area -> Hashtbl.replace Properties_state.areas sibling_key area
+     | None -> Hashtbl.remove Properties_state.areas sibling_key);
     match previous_area with Some area -> Hashtbl.replace Properties_state.areas key area
       | None -> Hashtbl.remove Properties_state.areas key) (fun () ->
     Native_embed.current_app:=Some app;
@@ -2170,6 +2178,8 @@ let native_scalar_draft_area_refresh () =
     settle ();
     check (snapshot "initial get-blocks read") (!reads>0);
     let context=Properties_area.block_ctx ~owner_key:("main:panel:" ^ key) uuid key in
+    let sibling_context=Properties_area.block_ctx
+      ~owner_key:("main:panel:" ^ sibling_key) sibling_uuid sibling_key in
     let field ()=Hashtbl.fold (fun node kind found ->
       if kind=Lui_protocol.TextField then Some node else found)
       runtime.Lui_runtime.mounted_nodes None in
@@ -2184,8 +2194,11 @@ let native_scalar_draft_area_refresh () =
     hold_read:=false;
     sibling:=true;
     let before= !reads in
-    context.refresh ();settle ();
-    check "the real ctx.refresh refetches and republishes its native property area" (!reads>before);
+    (* Identical in-flight get-blocks requests are deliberately coalesced by
+       Worker_client. A simultaneous refresh of another actually mounted area
+       produces a distinct batch, so these two real reads can finish out of order. *)
+    context.refresh ();sibling_context.refresh ();settle ();
+    check (snapshot ("sibling ctx.refresh after read count " ^ string_of_int before)) (!reads>before);
     let refreshed=require "field after sibling ctx.refresh" (field ()) in
     check "sibling worker refresh preserves the actual controlled draft and field identity"
       (refreshed=input && text refreshed=Some (Lui_protocol.StringValue "unsaved draft")
