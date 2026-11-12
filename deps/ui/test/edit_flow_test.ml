@@ -508,6 +508,67 @@ let test_queued_input (h : host) =
   reset_editor ();
   Js.Promise.resolve ()
 
+let test_structure_completion_ownership (h : host) =
+  let* () = settle h 40 in
+  stage_page h [ Test_check.block "b1" "hello" ];
+  set_editing ~uuid:"b1" ~buffer:"hello" ~caret:5 ~base:"hello";
+  install_worker ~repo:h.repo h;
+  let claim ?current_guard promise finish =
+    A.run_structure ?current_guard ~restore:(S.editing ()) promise finish;
+    snd (Option.get !A.structure_owner)
+  in
+  let finished = ref 0 in
+  let complete = claim (Js.Promise.resolve ()) (fun () -> incr finished) in
+  if h.native then check "an already-resolved native structure releases inline"
+    (not !S.structure_pending && !finished=1);
+  let* () = complete in
+  check "resolved structure settles its stable completion after finish"
+    (not !S.structure_pending && !finished=1);
+  let refreshed = ref 0 and cleaned = ref 0 in
+  let guard : A.structure_guard = {
+    structure_current=(fun () -> true);structure_owned=(fun () -> true);
+    structure_refresh=(fun () -> incr refreshed;Js.Promise.resolve ());
+    structure_finish=(fun () -> incr cleaned) } in
+  let rejected = h.reject_promise "expected structure rejection"
+    |> Js.Promise.then_ (fun _ -> Js.Promise.resolve ()) in
+  let complete = claim ~current_guard:guard rejected (fun () -> check "failed structure cannot finish successfully" false) in
+  let* rejected = (let* () = complete in Js.Promise.resolve false)
+    |> Js.Promise.catch (fun _ -> Js.Promise.resolve true) in
+  check "immediate rejection recovers and releases the exact owner"
+    (rejected && not !S.structure_pending && !refreshed=1 && !cleaned=1);
+  let release_old = ref (fun () -> ()) and release_new = ref (fun () -> ()) in
+  let old = Js.Promise.make (fun ~resolve ~reject:_ -> release_old := (fun () -> resolve () [@u])) in
+  let newer = Js.Promise.make (fun ~resolve ~reject:_ -> release_new := (fun () -> resolve () [@u])) in
+  let old_finished = ref false and new_finished = ref false in
+  let old_complete = claim old (fun () -> old_finished:=true) in
+  let new_complete = claim newer (fun () -> new_finished:=true) in
+  !release_old ();
+  let* () = old_complete in
+  check "an older completion cannot release or replace a newer structure owner"
+    (!S.structure_pending && not !old_finished && not !new_finished
+     && snd (Option.get !A.structure_owner) == new_complete);
+  !release_new ();
+  let* () = new_complete in
+  check "the current operation alone releases the gate" (not !S.structure_pending && !new_finished);
+  let release_nested = ref (fun () -> ()) in
+  let nested = Js.Promise.make (fun ~resolve ~reject:_ -> release_nested := (fun () -> resolve () [@u])) in
+  let nested_completion = ref None and inline_outer = ref None in
+  A.run_structure ~restore:(S.editing ()) (Js.Promise.resolve ()) (fun () ->
+    inline_outer := Some (snd (Option.get !A.structure_owner));
+    nested_completion := Some (claim nested (fun () -> ())));
+  let outer = match !inline_outer with
+    | Some completion -> completion
+    | None -> snd (Option.get !A.structure_owner) in
+  let* () = outer in
+  let nested_complete = Option.get !nested_completion in
+  check "inline finish can create a new owner without the old tail clobbering it"
+    (!S.structure_pending && snd (Option.get !A.structure_owner) == nested_complete);
+  !release_nested ();
+  let* () = nested_complete in
+  check "the nested operation settles without a polling timer" (not !S.structure_pending);
+  reset_editor ();
+  Js.Promise.resolve ()
+
 let test_failed_apply_keeps_base (h : host) =
   let* () = settle h 40 in
   stage_page h [ Test_check.block "b1" "hello" ];
@@ -1075,6 +1136,7 @@ let async_stage (h : host) : unit Js.Promise.t =
   let* () = test_embed_persists_erased_buffer h in
   let* () = test_pending_save_order h in
   let* () = test_queued_input h in
+  let* () = test_structure_completion_ownership h in
   let* () = test_failed_apply_keeps_base h in
   let* () = test_resync_clean_dirty h in
   let* () = test_undo_redo_resync h in

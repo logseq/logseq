@@ -2067,3 +2067,21 @@ change `ToggleChangedDetail`, whose distinct Alt=8 mask remains unchanged.
 Web/mobile document event producers retain their existing modifier booleans.
 This bridge change alone does not enable native block dragging or qualify
 physical Alt-key continuity during an AppKit drag.
+
+
+## Structural editor completion owns the input gate before native callbacks
+
+Opening an editor whose title is already available now releases the structural
+input gate as soon as that operation finishes. Native promises may invoke
+continuations synchronously; the operation now installs its exact owner and
+stable completion promise before registering success or recovery callbacks.
+Previously an already-resolved title could finish before it owned the gate,
+leaving native Command+A and text input queued indefinitely.
+
+The same owner continues to protect deferred worker operations. Accepted editor
+input replays in order after the current operation completes; an older
+completion cannot release or overwrite a newer operation, including one started
+by an inline finish callback. Recovery retains rejection and cleanup semantics.
+There is no new timer, polling, focus control, wire operation or downstream API.
+Web retains its existing promise microtask behavior; Apple/iOS and Android
+backends remain maintained. Applications need no migration.

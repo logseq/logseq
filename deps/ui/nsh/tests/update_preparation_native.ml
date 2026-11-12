@@ -824,7 +824,9 @@ let native_block_click_mounts_shared_editor () =
   and prior_elements = !Dom_ext.doc_elements_provider
   and prior_subtree = !Dom_ext.subtree_elements_provider
   and prior_state = !Editor_state.st and prior_fields = !Editor_state.field_sigs_opt
-  and prior_pending = !Editor_state.pending_focus and prior_click = !Editor_state.click_point in
+  and prior_pending = !Editor_state.pending_focus and prior_click = !Editor_state.click_point
+  and prior_structure = !Editor_state.structure_pending
+  and prior_structure_owner = !Editor_actions.structure_owner in
   let captures = List.map (fun name -> name, Hashtbl.find_opt Platform.capture_listeners name)
     ["pointerdown";"mousedown";"click";"copy"] in
   let requests = ref [] in
@@ -857,6 +859,9 @@ let native_block_click_mounts_shared_editor () =
     Dom_ext.subtree_elements_provider := prior_subtree;
     Editor_state.st := prior_state; Editor_state.field_sigs_opt := prior_fields;
     Editor_state.pending_focus := prior_pending; Editor_state.click_point := prior_click;
+    Editor_state.structure_pending := prior_structure;
+    Editor_actions.structure_owner := prior_structure_owner;
+    Outliner_ops.cancel_pending_save ();
     List.iter (fun (name, previous) -> match previous with
       | Some listeners -> Hashtbl.replace Platform.capture_listeners name listeners
       | None -> Hashtbl.remove Platform.capture_listeners name) captures) (fun () ->
@@ -895,6 +900,36 @@ let native_block_click_mounts_shared_editor () =
     let sink = Hashtbl.fold (fun id identifier found ->
       if identifier="logseq-editor" then Some id else found)
       runtime.Lui_runtime.runtime_extension_nodes None |> Option.get in
+    check "an immediately resolved native title releases its exact structure owner"
+      (not !Editor_state.structure_pending);
+    (* This fixture has no native geometry service. The click above proves
+       mounting; the ordered conduit case below isolates structure completion
+       from its separate initial-click geometry request. *)
+    Editor_actions.cancel_pending_focus ();
+    let release = ref (fun () -> ()) in
+    let pending = Js.Promise.make (fun ~resolve ~reject:_ ->
+        release := (fun () -> resolve () [@u])) in
+    let editing = Option.get (Editor_state.editing ()) in
+    Editor_actions.run_structure ~restore:(Some editing) pending (fun () -> ());
+    check "a pending native structure operation retains its input gate"
+      !Editor_state.structure_pending;
+    ignore (Native_embed.extension_event sink "logseq-editor" "key" {|{"key":"a","meta":true}|});
+    ignore (Native_embed.extension_event sink "logseq-editor" "insert" {|{"text":"x"}|});
+    check "actual native conduit input queues behind the current structure owner"
+      (!Editor_state.pending_edit_real=2
+       && (Option.get (Editor_state.editing ())).Editor_state.buffer=editing.Editor_state.buffer);
+    !release ();
+    ignore (Lui_app.flush app);
+    let edited = Option.get (Editor_state.editing ()) in
+    check "structure completion replays queued native select-all then insert exactly once"
+      (not !Editor_state.structure_pending && !Editor_state.pending_edit_real=0
+       && Queue.is_empty Editor_state.pending_edit_actions && edited.Editor_state.buffer="x"
+       && edited.Editor_state.epoch == editing.Editor_state.epoch);
+    check "native structure completion retains the mounted editor sink identity"
+      (Hashtbl.find_opt runtime.Lui_runtime.runtime_extension_nodes sink=Some "logseq-editor");
+    Outliner_ops.cancel_pending_save ();
+    Editor_actions.update_model uuid (fun _ -> editing.Editor_state.model);
+    ignore (Lui_app.flush app);
     let copy () = ignore (Native_embed.extension_event sink "logseq-editor" "dom-event"
       (Js.Json.stringify (Js.Json.object_list
         ["name",Js.Json.string "copy";"payload",Js.Json.string
@@ -919,7 +954,40 @@ let native_block_click_mounts_shared_editor () =
     Editor_state.set (fun state -> {state with Editor_state.editing=None});
     ignore (Lui_app.flush app);
     check "ending the editor activation rejects a late file upload"
-      (not (Editor_actions.asset_upload_current upload)))
+      (not (Editor_actions.asset_upload_current upload));
+    let claim ?current_guard promise finish =
+      Editor_actions.run_structure ?current_guard ~restore:None promise finish;
+      snd (Option.get !Editor_actions.structure_owner) in
+    let refreshed = ref 0 and cleaned = ref 0 in
+    let guard : Editor_actions.structure_guard = {
+      structure_current=(fun () -> true);structure_owned=(fun () -> true);
+      structure_refresh=(fun () -> incr refreshed;Js.Promise.resolve ());
+      structure_finish=(fun () -> incr cleaned) } in
+    let failed = claim ~current_guard:guard (Js.Promise.reject (Failure "expected inline structure failure"))
+      (fun () -> check "rejected native structure cannot finish successfully" false) in
+    let rejected = ref false in
+    Js.Promise.observe (function Error _ -> rejected:=true | Ok () -> ()) failed;
+    check "already-rejected native work recovers, releases and rejects its stable tail"
+      (!rejected && not !Editor_state.structure_pending && !refreshed=1 && !cleaned=1);
+    let release_old = ref (fun () -> ()) and release_new = ref (fun () -> ()) in
+    let old = Js.Promise.make (fun ~resolve ~reject:_ -> release_old:=(fun () -> resolve () [@u]))
+    and newer = Js.Promise.make (fun ~resolve ~reject:_ -> release_new:=(fun () -> resolve () [@u])) in
+    ignore (claim old (fun () -> check "retired native structure cannot finish" false));
+    let current = claim newer (fun () -> ()) in
+    !release_old ();
+    check "old native completion cannot clear or replace a newer owner"
+      (!Editor_state.structure_pending && snd (Option.get !Editor_actions.structure_owner)==current);
+    !release_new ();
+    check "the newer native owner releases its own gate" (not !Editor_state.structure_pending);
+    let release_nested = ref (fun () -> ()) in
+    let nested = Js.Promise.make (fun ~resolve ~reject:_ -> release_nested:=(fun () -> resolve () [@u])) in
+    let nested_completion = ref None in
+    ignore (claim (Js.Promise.resolve ()) (fun () -> nested_completion:=Some (claim nested (fun () -> ()))));
+    check "inline native finish cannot overwrite the nested pending owner"
+      (!Editor_state.structure_pending
+       && snd (Option.get !Editor_actions.structure_owner)==Option.get !nested_completion);
+    !release_nested ();
+    check "nested native completion releases without a timer" (not !Editor_state.structure_pending))
 
 let native_graph_menu_contract () =
   let backend : Lui_protocol.backend = {

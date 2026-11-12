@@ -499,7 +499,16 @@ let run_structure ?recover ?current_guard ~restore p finish =
     | None -> true
   in
   let claimed = Option.is_none current_guard || context_current () in
+  let settle_completion = ref None in
+  let completion = Js.Promise.make (fun ~resolve ~reject ->
+      settle_completion := Some
+        ((fun () -> resolve () [@u]), (fun error -> reject error [@u]))) in
+  let resolve_completion, reject_completion = Option.get !settle_completion in
   if claimed then begin
+    (* Native promise continuations can run inline for an already-settled
+       title or worker result. Publish the exact owner and its stable tail
+       before attaching any completion, recovery or drain callbacks. *)
+    structure_owner := Some (owner, completion);
     S.structure_pending := true
   end;
   let current () = owned () && context_current () in
@@ -560,8 +569,11 @@ let run_structure ?recover ?current_guard ~restore p finish =
             guard.structure_finish ();
             finished)
   in
-  if claimed then structure_owner := Some (owner, complete);
-  ignore complete
+  ignore
+    ((let* () = complete in resolve_completion (); Js.Promise.resolve ())
+     |> Js.Promise.catch (fun error ->
+         reject_completion error;
+         Js.Promise.resolve ()))
 
 (* Arm the optimistic editor now and again after canonical rows land. *)
 let with_focus_after ~restore uuid caret p =
