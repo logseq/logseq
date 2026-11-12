@@ -1400,7 +1400,9 @@ let native_controlled_field_resets () =
   let backend : Lui_protocol.backend={
     backend_profile=Lui_protocol.profile Lui_protocol.MacOS Lui_protocol.NshHost;
     apply_batch=(fun _ -> incr publications;true)} in
-  let app=Lui_app.create backend {Model.initial with repo=Some "field-reset-owner"}
+  let initial={Model.initial with repo=Some "field-reset-owner"} in
+  Runtime.read_model:=(fun () -> initial);
+  let app=Lui_app.create backend initial
     (fun model () -> model)
     (fun context _ _ ->
       let ps=Signal.value (Editor_commands.popup_vs_of context) in
