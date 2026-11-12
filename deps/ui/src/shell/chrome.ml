@@ -1150,14 +1150,16 @@ let shell (ms : Model.t Signal.signal) : t =
   Settings_state.ensure context;
   let preferences = Settings_state.signal () in
   let st = Sidebar_state.ensure ms in
-    (Ui_components.with_props [Ui_components.Prop.height_viewport 1.]
-     (stack ~key:"wrapper" ~accessibility_identifier:"app-container-wrapper"
-       ~min_height:0
-       ~style_class:(reactive (fun (m : Model.t) preferences ->
+    (Ui_parts.string_prop Lui_protocol.StyleClass
+       ~value:(reactive (fun (m : Model.t) preferences ->
          "theme-container-inner"
          ^ (if m.left_sidebar_open then " ls-left-sidebar-open" else "")
          ^ (if preferences.Settings_state.wide_mode then " ls-wide-mode" else "")
          ^ (if Pdf_state.hl_colored () then " ls-hl-colored" else "")) ms preferences)
+    (Ui_components.with_props [Ui_components.Prop.height_viewport 1.]
+     (stack ~key:"wrapper" ~accessibility_identifier:"app-container-wrapper"
+       ~min_height:0
+       ~style_class:"theme-container-inner"
        [ skip_to_main
     ; row ~key:"app" ~accessibility_identifier:"app-container" ~grow:1. ~min_height:0
         [ right_split ms st
@@ -1191,4 +1193,4 @@ let shell (ms : Model.t Signal.signal) : t =
               | Model.Not_found _ -> not_found_page
               | _ -> spacer ~key:"route-none" [])
             ms
-       ])) context parent
+       ]))) context parent

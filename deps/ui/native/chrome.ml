@@ -685,16 +685,17 @@ let shell (ms : Model.t Signal.signal) : t =
     | Some current when current == refresh -> Platform_native.document_refresh := None
     | _ -> ());
   let body =
+      Ui_parts.string_prop Lui_protocol.StyleClass
+        ~value:(reactive (fun (m : Model.t) preferences ->
+          "theme-container-inner ls-hl-colored"
+          ^ (if m.left_sidebar_open then " ls-left-sidebar-open" else "")
+          ^ (if preferences.Settings_state.wide_mode then " ls-wide-mode" else ""))
+          ms preferences)
       (* Keep inherited theme props on the stable root. The inner stack
          reconciles its shell and overlay children on a locale change. *)
-      Ui_components.with_props
+      (Ui_components.with_props
          [ Ui_components.Prop.height_viewport 1. ]
          (stack ~key:"wrapper" ~accessibility_identifier:"app-container-wrapper"
-            ~style_class:(reactive (fun (m : Model.t) preferences ->
-              "theme-container-inner ls-hl-colored"
-              ^ (if m.left_sidebar_open then " ls-left-sidebar-open" else "")
-              ^ (if preferences.Settings_state.wide_mode then " ls-wide-mode" else ""))
-              ms preferences)
-            [ reactive (fun _ -> shell_contents ms) (Signal.value revision) ])
+            [ reactive (fun _ -> shell_contents ms) (Signal.value revision) ]))
   in
   body context parent
