@@ -369,6 +369,7 @@ fn install(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use nsh_base::input;
     use nsh_engine::{EngineConfig, EngineContext, Root};
     use nsh_testing::Headless;
     use std::sync::{Arc, Mutex};
