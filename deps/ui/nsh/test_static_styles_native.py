@@ -23,7 +23,9 @@ class NativeStyleCompileTests(unittest.TestCase):
         includes = []
         for archive in ARCHIVES:
             path = UI / "_build/default" / archive
-            includes += ["-I", path.parent / ("." + path.stem + ".objs/byte")]
+            objects = path.parent / ("." + path.stem + ".objs")
+            for kind in ("byte", "native"):
+                includes += ["-I", objects / kind]
         with tempfile.TemporaryDirectory(prefix="native-style-rejected-call-") as temporary:
             stage = Path(temporary)
             source = stage / "target_fixture.ml"
@@ -122,6 +124,40 @@ let fixed visible =
   if Lui_ui.host context = Lui_protocol.NshHost then
     Lui_elements.text_field ~on_dismiss:(fun _ -> ()) []
   else Lui_elements.input ~kind:`time ~on_dismiss:(fun _ -> ()) []
+''', rejected=False)
+
+    def test_native_time_dynamic_text_preserves_the_runtime_value_boundary(self):
+        self.check_fixture('''let value text =
+  Lui_elements.input ~kind:`time ~text []
+''', rejected=False, expected_deferred=["(1 optional, 0 required)"])
+
+    def test_native_time_known_callback_presence_does_not_execute_the_callback(self):
+        self.check_fixture('''module Input = Lui_elements
+let cancel _ = failwith "the application callback must never execute during preflight"
+let value text = Input.input ~kind:`time ~text ?on_dismiss:(Some cancel) []
+''', rejected=True, expected_diagnostic="NSH TimeField does not expose dismiss-enabled")
+
+    def test_native_time_absent_dismissal_remains_valid(self):
+        self.check_fixture('''let value = Lui_elements.input ~kind:`time ~text:"12:30"
+  ?on_dismiss:None []
+''', rejected=False)
+
+    def test_native_time_known_options_are_rejected_with_unknown_text(self):
+        for option, diagnostic in (("~read_only:true", "does not expose read-only"),
+                ("~autofocus:true", "does not expose autofocus"),
+                ("~on_navigate:(fun _ -> ())", "does not expose navigate-enabled"),
+                ('~placeholder:"Time"', "does not expose a placeholder")):
+            with self.subTest(option=option):
+                self.check_fixture(f'''let value text =
+  Lui_elements.input ~kind:`time ~text {option} []
+''', rejected=True, expected_diagnostic="NSH TimeField " + diagnostic)
+
+    def test_native_color_rejection_preserves_other_backend_color_calls(self):
+        self.check_fixture('let value = Lui_elements.input ~kind:`color []\n',
+            rejected=True, expected_diagnostic="NSH input-type=color is not implemented")
+        self.check_fixture('''let value context =
+  if Lui_ui.host context = Lui_protocol.NshHost then Lui_elements.text_field []
+  else Lui_elements.input ~kind:`color []
 ''', rejected=False)
 
     def test_nsh_rejects_a_literal_native_style_grammar_error(self):

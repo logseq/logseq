@@ -1,5 +1,22 @@
 # API migrations
 
+## Native input capability preflight uses the runtime provider policy
+
+The actual native target gate now rejects statically authored unsupported
+TimeField options and color input before application startup. Callback presence
+is taken from the compiler's typed application; the probe substitutes an inert
+callback and never executes application handlers. The extractor already captured
+`on_dismiss` correctly; the missing validation was the style-only provider gate.
+That gate now reuses the renderer's pure input capability policy in LUI.
+
+Dynamic or omitted time text stays at the existing runtime value boundary,
+while known read-only, autofocus, navigation, dismissal and nonempty-placeholder
+options are rejected for native TimeField. None/absent callbacks remain valid.
+Actual target branch pruning preserves the Web/mobile time and color alternatives;
+there is no backend-blind constructor restriction, source callback evaluation or
+new wire operation. Applications should select a text field for cancelable
+native time drafts. Runtime value-before-option error priority is unchanged.
+
 ## Native audio assets use the platform streaming player
 
 The canonical `logseq-audio` extension now owns a public NSH `AudioPlayer`.
