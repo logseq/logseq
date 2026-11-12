@@ -1,5 +1,64 @@
 # API migrations
 
+## Standalone NSH installation owns its native restart
+
+The actual Rust main now captures its installed executable, original arguments,
+working directory and environment before any update can move the application.
+It constructs `relaunch::Session::root`, whose internal Rust component supplies
+the process owner to the existing application menu. Default `App` roots and
+embedded hosts keep the save-and-refuse policy because they do not own a process
+to restart; no LUI wire or JS prop is added.
+
+The standalone menu obtains an existing `InstallLease` only after the correlated
+OCaml preparation has saved and stopped every proven owned worker. Cancellation
+and known pre-replacement failures keep the existing abort/restoration protocol.
+After installation dispatch, unknown outcomes and restart failure keep writes
+closed. The final callback requests public native `quit`; the captured runner
+acts only after `run_app` returns, without reading the moved N1 executable path.
+
+Unix replaces the process image at the captured installed path with `exec`.
+Windows starts that same path using normal `Command` argument quoting, adding
+the internal `--nsh-restart-after <pid> <creation-time> <remote-event> [original arguments]`
+handoff. Before credentials, installation admission, workers or windows start,
+the child opens a non-inheritable exact parent process handle, verifies its
+creation time, duplicates the parent's exact unnamed event into a local handle,
+signals capture, and waits for the process handle to signal exit.
+The old process remains alive until capture is acknowledged. Timeout or failure
+does not start application services; only the parent's newly spawned child can
+be cleaned up after a failed handoff. No shell, helper executable, SDK restart
+internals or global process registry is used.
+
+Private `--startup-preflight` roots and the existing no-login-daemon setting
+remain attached to the original arguments/environment. The next process drops
+the same artifact-loader overrides excluded by packaged-startup qualification,
+including the old OCaml-library, asset and worker overrides. It then resolves
+the new package's normal resources. The user's profile, storage, credential
+policy and other environment values stay intact.
+
+This is a source candidate pending actual native compilation and the private
+actual-Logseq N1-to-N2 install/relaunch/data gate. It has not been run against
+an installed user application or a developer trust store. Complete application,
+platform packaging/signing and rollback qualification remain required before
+shipping this standalone policy.
+
+The existing explicit `--startup-preflight` launch also emits one console JSON
+record containing the Rust-compiled canonical release version and process ID.
+Private upgrade qualification pairs this with the existing settings view's
+OCaml `Version.app`, exact executable/library/worker hashes and persisted data.
+The marker is neither installation permission nor a claim of N2 readiness.
+
+After native quit, a failed exec/spawn cannot roll installed files back or
+restore the disposed old UI. The runner reports the failure and exits without
+reopening writes or old workers. The private qualifier must preserve code,
+process and stderr evidence for this fail-closed outcome. Filesystem replacement
+and any rollback before this point remain owned by the existing signed updater.
+
+The Windows remote event boundary uses only the
+[public DuplicateHandle source-process contract](https://learn.microsoft.com/en-us/windows/win32/api/handleapi/nf-handleapi-duplicatehandle).
+Only its newly duplicated local handle is owned/closed; the remote value is
+never dereferenced or closed in the new process. The protocol changes neither
+process's standard input/output/error streams.
+
 ## Icon color changes paint retained cells
 
 Changing the icon palette now updates each mounted Tabler button's existing

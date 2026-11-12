@@ -32,6 +32,7 @@ keyring = { version = "=3.6.3", default-features = false, features = ["apple-nat
 nsh-platform-macos = { git = "https://github.com/logseq/nsh", rev = "adc186db7213f3ccd1eacaa836cc721e9779fd14", default-features = false, features = ["editor", "highlight"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "=0.62.2", features = ["Win32_Foundation", "Win32_Security", "Win32_System_Threading"] }
 keyring = { version = "=3.6.3", default-features = false, features = ["windows-native"] }
 nsh-platform-windows = { git = "https://github.com/logseq/nsh", rev = "adc186db7213f3ccd1eacaa836cc721e9779fd14", default-features = false, features = ["editor", "highlight"] }
 

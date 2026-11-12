@@ -96,10 +96,18 @@ impl ApplicationMenu {
         }));
         let cleanup_preparation = preparation.clone();
         cleanup(move || cleanup_preparation.close());
-        let updates = UpdateActions::installed(Rc::new(InstallationUnavailable {
-            installed,
-            preparation: preparation.clone(),
-        }));
+        let lifecycle: Rc<dyn UpdateLifecycle> = match use_context::<crate::relaunch::Request>() {
+            Some(relaunch) => Rc::new(StandaloneInstallation {
+                installed,
+                preparation: preparation.clone(),
+                relaunch,
+            }),
+            None => Rc::new(InstallationUnavailable {
+                installed,
+                preparation: preparation.clone(),
+            }),
+        };
+        let updates = UpdateActions::installed(lifecycle);
         effect(move || {
             if let Some(current) = installed.get() {
                 let contribution = updates.menu_items(current.labels.updates.clone());
@@ -151,10 +159,8 @@ impl ApplicationMenu {
     }
 }
 
-// Actual installation remains closed until the application supplies a verified
-// save/quiesce, worker-ownership and relaunch lifecycle. Checks and downloads
-// still use the existing updater; even a successful save is explicitly released
-// and acknowledged before refusal. This policy never issues an installation lease.
+// Embedded/default roots have no process owner to restart. Their existing
+// save/refusal path releases preparation and waits for its acknowledgement.
 struct InstallationUnavailable {
     installed: Signal<Option<Installed>>,
     preparation: Rc<Preparation>,
@@ -169,6 +175,23 @@ impl UpdateLifecycle for InstallationUnavailable {
             current.send,
             current.labels.installation_unavailable_description,
         )
+    }
+}
+
+struct StandaloneInstallation {
+    installed: Signal<Option<Installed>>,
+    preparation: Rc<Preparation>,
+    relaunch: crate::relaunch::Request,
+}
+impl UpdateLifecycle for StandaloneInstallation {
+    fn prepare(&self) -> InstallPreparation {
+        let current = self
+            .installed
+            .get_untracked()
+            .expect("standalone update requires installed translated menu labels");
+        let relaunch = self.relaunch.clone();
+        self.preparation
+            .prepare_install(current.send, move || relaunch.schedule())
     }
 }
 

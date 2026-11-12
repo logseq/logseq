@@ -17,7 +17,14 @@ const APP_ID: &str = "com.logseq.logseq";
 
 #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
 fn main() -> impl std::process::Termination {
-    let arguments = std::env::args_os().skip(1).collect::<Vec<_>>();
+    let startup = match nsh_app_logseq::relaunch::Startup::read() {
+        Ok(startup) => startup,
+        Err(error) => {
+            eprintln!("Logseq restart handoff: {error}");
+            return std::process::ExitCode::FAILURE;
+        }
+    };
+    let arguments = startup.arguments.clone();
     if arguments
         .first()
         .is_some_and(|argument| argument == "--validate-native-styles")
@@ -40,9 +47,7 @@ fn main() -> impl std::process::Termination {
             }
         };
     }
-    let launch = match launch(std::env::args_os().skip(1).collect(), |name| {
-        std::env::var_os(name)
-    }) {
+    let launch = match launch(arguments.clone(), |name| std::env::var_os(name)) {
         Ok(qualification) => qualification,
         Err(error) => {
             eprintln!("Logseq native arguments: {error}");
@@ -66,6 +71,13 @@ fn main() -> impl std::process::Termination {
         }
         Launch::Application(qualification) => qualification,
     };
+    let session = match nsh_app_logseq::relaunch::Session::capture(arguments) {
+        Ok(session) => session,
+        Err(error) => {
+            eprintln!("Logseq standalone launch identity: {error}");
+            return std::process::ExitCode::FAILURE;
+        }
+    };
     #[cfg(target_os = "windows")]
     if let Err(error) = installation::register() {
         eprintln!("Logseq installation admission: {error}");
@@ -73,26 +85,29 @@ fn main() -> impl std::process::Termination {
     }
     env_logger::init();
     let startup_preflight = qualification.is_some();
+    if startup_preflight {
+        match startup_release_marker() {
+            Ok(marker) => eprintln!("{marker}"),
+            Err(error) => {
+                eprintln!("Logseq compiled release identity: {error}");
+                return std::process::ExitCode::FAILURE;
+            }
+        }
+    }
     let data_dir = qualification.as_ref().map(|root| root.join("nsh-data"));
     let cache = qualification
         .as_ref()
         .map_or_else(Default::default, |root| {
             platform::CacheOptions::at(platform::CacheLocation::Dir(root.join("nsh-cache")))
         });
-    let root =
-        nsh_app_logseq::with_bundled_fonts(platform::Root::new::<nsh_app_logseq::App>(move || {
-            nsh_app_logseq::AppProps {
-                startup_preflight: startup_preflight.into(),
-            }
-        }))
-        .app_id(APP_ID);
+    let root = nsh_app_logseq::with_bundled_fonts(session.root(startup_preflight)).app_id(APP_ID);
     #[cfg(target_os = "macos")]
     let components = {
         let components = platform::Components::default();
         nsh_app_logseq::extensions::register_pdf(&components);
         components
     };
-    std::process::Termination::report(platform::run_app(
+    let status = std::process::Termination::report(platform::run_app(
         platform::AppSource::Rust(root),
         platform::AppOptions {
             #[cfg(target_os = "macos")]
@@ -106,7 +121,37 @@ fn main() -> impl std::process::Termination {
             background: std::env::var("LUI_AGENT_BACKGROUND").is_ok_and(|value| value == "1"),
             ..Default::default()
         },
-    ))
+    ));
+    match session.finish(status) {
+        Ok(status) => status,
+        Err(error) => {
+            eprintln!(
+                "Logseq installed update restart failed; saved state remains closed: {error}"
+            );
+            std::process::ExitCode::FAILURE
+        }
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+fn startup_release_marker() -> Result<String, String> {
+    #[derive(serde::Deserialize)]
+    struct Release {
+        version: String,
+    }
+    // Embed the authored release metadata in the Rust executable as well as
+    // OCaml's existing Version.app. Runtime package metadata alone cannot prove
+    // that an installed restart actually loaded the new native executable.
+    let release: Release = serde_json::from_str(include_str!("../../../../resources/package.json"))
+        .map_err(|error| error.to_string())?;
+    if release.version.is_empty() {
+        return Err("compiled application release version is empty".into());
+    }
+    Ok(
+        serde_json::json!({"event":"logseq-native-start", "compiledVersion":release.version,
+        "processId":std::process::id()})
+        .to_string(),
+    )
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
