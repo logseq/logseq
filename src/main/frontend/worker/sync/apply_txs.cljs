@@ -1639,6 +1639,13 @@
         (ldb/transact! conn tx-data
                        {:outliner-op :recycle-delete-permanently})))
 
+    :recycle-gc
+    (let [[root-uuid deleted-at] args]
+      ;; Skip roots that a preceding remote tx restored, recycled again or removed.
+      (when-let [tx-data (outliner-recycle/gc-root-tx-data @conn root-uuid deleted-at)]
+        (ldb/transact! conn tx-data
+                       {:outliner-op :recycle-gc})))
+
     (let [[tx-data tx-meta] args
           tx-data (expand-block-retracts-to-descendants @conn tx-data)]
       (when-let [tx-data (seq tx-data)]

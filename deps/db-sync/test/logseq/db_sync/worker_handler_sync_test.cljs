@@ -2834,7 +2834,7 @@
       (is (nil? (d/entity @conn [:block/uuid missing-uuid]))))))
 
 (deftest tx-batch-accepts-stale-delete-as-idempotent-test
-  (doseq [outliner-op [:delete-blocks :delete-page]]
+  (doseq [outliner-op [:delete-blocks :delete-page :recycle-gc]]
     (testing (str outliner-op " succeeds when the target is already absent")
       (let [sql (test-sql/make-sql)
             conn (storage/open-conn sql)

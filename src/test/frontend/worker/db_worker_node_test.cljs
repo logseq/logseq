@@ -18,6 +18,7 @@
             [logseq.common.graph :as common-graph]
             [logseq.common.graph-dir :as graph-dir]
             [logseq.common.path :as path]
+            [logseq.common.util :as common-util]
             [logseq.common.version :as build-version]
             [logseq.db :as ldb]
             [logseq.db-worker.log :as db-worker-log]
@@ -935,6 +936,49 @@
                  (is (contains? status-result :local-tx))
                  (is (contains? status-result :remote-tx))
                  (is (contains? status-result :graph-id)))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally (fn []
+                            (if-let [stop! (:stop! @daemon)]
+                              (-> (stop!) (p/finally (fn [] (done))))
+                              (done))))))))
+
+(deftest db-worker-node-reopen-queues-recycle-gc-deletion-test
+  (async done
+         (let [daemon (atom nil)
+               data-dir (node-helper/create-tmp-dir "db-worker-recycle-gc")
+               repo (str "logseq_db_recycle_gc_" (subs (str (random-uuid)) 0 8))
+               recycled-count-query '[:find (count ?e) . :where [?e :logseq.property/deleted-at]]
+               real-time-ms common-util/time-ms
+               open-graph! (fn []
+                             (p/let [{:keys [host port stop!]} (start-daemon! {:root-dir data-dir
+                                                                              :repo repo})
+                                     _ (reset! daemon {:stop! stop!})
+                                     _ (invoke host port "thread-api/create-or-open-db" [repo {}])
+                                     recycled-count (invoke host port "thread-api/q" [repo [recycled-count-query]])
+                                     status (invoke host port "thread-api/db-sync-status" [repo])]
+                               {:host host
+                                :port port
+                                :recycled-count recycled-count
+                                :pending-local (:pending-local status)}))]
+           (-> (p/let [{:keys [host port]} (open-graph!)
+                       {[_title page-uuid] :result}
+                       (invoke host port "thread-api/apply-outliner-ops"
+                               [repo [[:create-page ["Recycle GC" {}]]] {}])
+                       _ (invoke host port "thread-api/apply-outliner-ops"
+                                 [repo [[:delete-page [page-uuid {}]]] {}])
+                       recycled-count (invoke host port "thread-api/q" [repo [recycled-count-query]])
+                       {pending-before :pending-local} (invoke host port "thread-api/db-sync-status" [repo])
+                       _ ((:stop! @daemon))
+                       _ (reset! daemon nil)
+                       reopened (p/with-redefs [common-util/time-ms (fn []
+                                                                      (+ (real-time-ms) (* 31 24 3600 1000)))]
+                                  (open-graph!))]
+                 (is (= 1 recycled-count))
+                 (is (nil? (:recycled-count reopened))
+                     "Reopening after the retention window permanently deletes the recycled page.")
+                 (is (= (inc pending-before) (:pending-local reopened))
+                     "The recycle GC deletion is queued for sync on graph open."))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
                (p/finally (fn []

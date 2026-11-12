@@ -42,6 +42,7 @@
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.sqlite.export :as sqlite-export]
             [logseq.db.test.helper :as db-test]
+            [logseq.outliner.recycle :as outliner-recycle]
             [promesa.core :as p]
             [shadow.resource :as rc]))
 
@@ -471,6 +472,61 @@
                         _ (<assert-bootstrap-is-canonical! "bootstrap-datoms"
                                                           {:datoms (bootstrap-datoms)})]
                   nil)))
+             (p/catch (fn [error]
+                        (is false (str error))))
+             (p/finally done))))
+
+(defn- expired-recycled-page-datoms
+  [page-uuid]
+  (let [conn (d/create-conn db-schema/schema)]
+    (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+    (d/transact! conn [{:block/uuid page-uuid
+                        :block/name "expired"
+                        :block/title "Expired"
+                        :block/tags :logseq.class/Page}])
+    (d/transact! conn (outliner-recycle/recycle-page-tx-data
+                       @conn
+                       (d/entity @conn [:block/uuid page-uuid])
+                       {:now-ms 0}))
+    (vec (d/datoms @conn :eavt))))
+
+(deftest open-db-hands-recycle-gc-deletion-to-db-sync-test
+  (async done
+         (-> (restoring-worker-state
+              (fn []
+                (let [repo "open-db-recycle-gc"
+                      page-uuid #uuid "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+                      opened-dbs (atom [(fake-storage-db) (fake-storage-db) (fake-storage-db)])
+                      handled-reports (atom [])]
+                  (platform/set-platform!
+                   (assoc-in (build-test-platform)
+                             [:sqlite :open-db]
+                             (fn [_opts]
+                               (let [opened-db (first @opened-dbs)]
+                                 (swap! opened-dbs subvec 1)
+                                 opened-db))))
+                  (p/with-redefs
+                    [shared-service/*master-client? (atom true)
+                     db-sync/handle-local-tx! (fn [handled-repo tx-report]
+                                                (swap! handled-reports conj
+                                                       {:repo handled-repo
+                                                        :tx-report tx-report}))
+                     db-listener/listen-db-changes! (fn [& _] nil)]
+                    (p/let [_ ((get-thread-api :thread-api/create-or-open-db)
+                               repo
+                               {:datoms (expired-recycled-page-datoms page-uuid)})
+                            conn (worker-state/get-datascript-conn repo)
+                            {:keys [tx-data tx-meta]} (:tx-report (first @handled-reports))]
+                      (is (nil? (d/entity @conn [:block/uuid page-uuid]))
+                          "Opening the graph runs recycle GC on the expired page.")
+                      (is (= [repo] (mapv :repo @handled-reports))
+                          "The GC runs before db listeners attach, so open must queue it for sync itself.")
+                      (is (= :recycle-gc (:outliner-op tx-meta)))
+                      (is (some #(and (= :block/uuid (:a %))
+                                      (= page-uuid (:v %))
+                                      (false? (:added %)))
+                                tx-data))
+                      (db-core/close-db! repo))))))
              (p/catch (fn [error]
                         (is false (str error))))
              (p/finally done))))
