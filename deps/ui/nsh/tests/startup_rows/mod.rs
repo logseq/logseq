@@ -328,6 +328,14 @@ impl Measurements {
         let untouched = native_row(app.screen(), 1)?;
         let changed = native_row(app.screen(), 0)?;
         let before = logical(&self.agent.tree()?)?;
+        let before_changed = *before
+            .rows
+            .get(&row_name(0))
+            .ok_or("edited row missing from the actual logical tree")?;
+        let before_neighbor = *before
+            .rows
+            .get(&row_name(1))
+            .ok_or("neighbor row missing from the actual logical tree")?;
         let before_churn = *self.churn.lock().unwrap();
         let started = Instant::now();
         let saved = worker.call("edit", Some(text))?;
@@ -335,8 +343,8 @@ impl Measurements {
         let after = self.sample(app, worker.count, stage)?;
         if native_row(app.screen(), 0)? != changed
             || native_row(app.screen(), 1)? != untouched
-            || before.rows.get(&row_name(0)) != after.rows.get(&row_name(0))
-            || before.rows.get(&row_name(1)) != after.rows.get(&row_name(1))
+            || after.rows.get(&row_name(0)) != Some(&before_changed)
+            || after.rows.get(&row_name(1)) != Some(&before_neighbor)
         {
             return Err("one-row worker edit replaced a stable production UUID/native root".into());
         }
