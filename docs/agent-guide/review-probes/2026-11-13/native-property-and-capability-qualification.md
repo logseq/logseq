@@ -252,3 +252,123 @@ clipboard cancellation/acknowledgement compatibility, exact popup/application/
 graph ownership, and a same-owner journals refresh that advances the model's
 context revision without rejecting its pending result. These protocol and
 ownership results do not qualify the Rust parser's unresolved weekday semantics.
+
+## Retained table and datetime execution after the column-key repair
+
+At actual App `d1ef69a5ff7470537e1ecb8cfe76ba6e03def8f8` with local LUI
+`f2b550632d871cb83dc40979fe4ba7547bdd95a4`, the complete shared suite passed
+16,440 checks with zero failures, followed by the service contracts. The table
+regression uses the actual production `Views_view.body_el` and instance data;
+it verifies asynchronous column growth/reorder, retained header/cell/filler
+owners, a dirty scalar editor and its live input handler. No test PPX or Dune
+change was needed. Log: `/tmp/logseq-table-updates-shared-final.log`, SHA-256
+`0a99c7656b0cf973e6c1fd402a11570a93134ef937a0023e04c3a857bf4ea52c`.
+
+The complete release publisher and actual startup preflight passed in 17.22
+seconds before native interaction. Its receipt passed the ordinary freshness
+check. Log: `/tmp/logseq-table-updates-release-build-final.log`, SHA-256
+`60859b4c8663bc2e31e87f98fa05284ddc10cba163a7ae15bac208a76155fa0f`.
+The receipt SHA-256 is
+`a7251e464c1dc7fe95105cabcb44421a63b95cf6597681188e25aaf1e0bfc7e1`.
+
+The real AppKit table case passed in 8.7 seconds. Ordinary CmdK input and Enter
+opened the exact class, a native title press opened its editor, and contiguous
+keyboard selection/input/Escape saved `x` through the actual private worker.
+The same originating cell kept canonical ID 2282 and native incarnation 1708;
+the untouched sibling, parent/tag and row identity remained correct. No
+backend error occurred. Screenshots were captured through the LUI CLI and
+`editor-open.png` was visually inspected. Evidence root:
+`logseq-native-table-title.uxF84D/`. Log:
+`/tmp/logseq-native-table-title-keyed-current.log`, SHA-256
+`5d06a269e82e9f376eac4477117cb6b5f23c9a130dc0feade7bfec55b1634f25`.
+Physical modifier clicks and native generic cell focus after Escape remain
+unqualified; canonical selection alone is not a focus assertion.
+
+The actual datetime case passed in 10.3 seconds under
+`TZ=America/Los_Angeles`: the native time field changed 09:07 to 10:07, the
+calendar selected February 29, 2024, and reopening showed that persisted local
+date/time. Original date-only/string properties and all three block identities,
+titles, parents and ordering remained unchanged. Its observer requires native
+geometry only for the exact original main property owner; linked-reference
+copies are recorded separately. There was no backend error or activation.
+`datetime-reopened.png` was visually inspected in evidence root
+`logseq-native-property-date.5xCSrH/`. Log:
+`/tmp/logseq-native-datetime-keyed-current.log`, SHA-256
+`173218ae2cbc5fe77a76d3369f2e65ef3a5257c6939e011248a8bf50c52d71fd`.
+
+These are real native interaction tests using release OCaml/worker resources;
+NSH's generated native functional-test host is a development host, so they
+are not standalone release memory/frame measurements. DST/NLP parity, IME,
+restart durability, dark/narrow visual review and accessibility remain open.
+
+The separate strict-ISO case did **not** pass at this revision: malformed
+input emitted a real warning whose close button referenced the undefined
+`--lui-c-foreground` token. The backend correctly rejected that paint expression.
+Log: `/tmp/logseq-native-date-iso-keyed-current.log`, SHA-256
+`521abaff49ea7e69577f8c01c912d73bb1df4e9e7fd483e7d1626810f976f26e`.
+The authored theme-token family must be repaired and this exact case rerun;
+no validator or refusal path was relaxed.
+
+### Published-role repair and actual strict-ISO rerun
+
+At App `fba88ccac8` with published LUI
+`fb9146338f93c5fab0892f699e9a3bc9e176d193`, the six stale typed-property
+references in warning-toast, CmdK and dialog chrome now use the existing
+published semantic roles. Legitimate Web CSS-local aliases remain unchanged.
+The real warning toast and affected chrome resolve their authored colors
+against both application palettes, including forced foreground/background
+fallbacks. The full shared suite passed 16,508 checks with zero failures plus
+the service contracts. Log: `/tmp/logseq-chrome-token-shared-final.log`, SHA-256
+`c0a773dc0c248d44aa68f4ea002755fbb061bc1012cae4fe4e0397069747b1ad`.
+
+The fresh release publisher passed its actual startup gate in 17.09 seconds,
+and its ordinary receipt check passed before interaction. Log:
+`/tmp/logseq-chrome-token-release-build-final.log`, SHA-256
+`c14cd6f02e7a9d3f916d63c2f9957a0de8a63286109b223241a36ff1ed83ab3f`.
+
+The previously failing actual strict-ISO case passed in 15.3 seconds: malformed
+`2023-02-29` rendered the existing warning and retained the input/original value;
+valid leap-day input subsequently saved correctly. The warning screenshot was
+visually inspected and contains the warning and dismiss button with no backend
+error banner. Evidence root: `logseq-native-property-date.fdTSGX/`. Log:
+`/tmp/logseq-native-date-iso-published-theme.log`, SHA-256
+`d3c7d99641a1295089917538b5b209e7934f0e51ebe1dcf22ead8d9f433ff4ec`.
+
+The separate actual date-only calendar selection case also passed in 7.9 seconds,
+preserving unrelated block/property values. Evidence root:
+`logseq-native-property-date.zADAo9/`. Log:
+`/tmp/logseq-native-date-calendar-published-theme.log`, SHA-256
+`479cb32ffc3aaae7cb41e542bd7dc7d5a4e3f5d5888b3bbdd858291f083db0a0`.
+Both runs use the actual private worker and native input path; neither proves
+natural-language parser parity, restarted persistence, physical IME, complete
+visual parity or current standalone memory. Those gates remain open.
+
+### Native contracts and remaining Rust parser failure
+
+After that release build, the complete native FFI/save/update/geometry/property
+suite and production virtual-row/picker runner both passed with the existing
+compiled PPX driver. The former includes the real queued native updater-state
+ownership and initialization regression; the latter still exercises complete
+Emoji/icon collections, 1k/100k demand, retained interactions and pagination.
+Logs: `/tmp/logseq-current-updater-geometry-native-ffi.log` (SHA-256
+`37adb47a70f6c7295a205337085d99793932bf5c7cb365fcb12b64078dde0696`)
+and `/tmp/logseq-current-chrome-virtual-native.log` (SHA-256
+`219d408f31fb8f91ac434266e400360967544945ce66ff1a7d35404146229a1a`).
+
+The full actual App release Rust library run is **not green**: 76 tests passed
+and one failed because the production interim parser interprets `next friday
+8pm` as the current Friday instead of the following week. The captured-reference
+expectation remains unchanged. The five standalone main tests and strict
+all-target release Clippy passed separately. Logs:
+`/tmp/logseq-current-full-rust-release.log`,
+`/tmp/logseq-current-main-release-tests.log`, and
+`/tmp/logseq-current-all-target-release-clippy.log`.
+
+The isolated `51eb05e08e` candidate adapter passed both natural-date tests in
+release using the explicitly local system-timezone prototype override:
+`/tmp/logseq-chrono-node-real-adapter-release-tests.log`, SHA-256
+`97de5b8252e77f3eab68a57358537b17174f6ce2af0a198b2428431ddae9c6ea`.
+This is an isolated dependency qualification, not a production dependency change,
+immutable published fork, actual calendar NLP interaction, or a passing result
+for the main App's failing parser test. A new organization dependency fork still
+requires its separate authorization before publication and production pinning.
