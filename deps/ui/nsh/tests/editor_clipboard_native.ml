@@ -5,11 +5,16 @@ let check label condition = if not condition then failwith label
 let natural_date_tasks () =
   let previous_host = !Host.host_op and previous_support = !Platform.natural_dates_supported in
   let previous_model = !Runtime.read_model and previous_flush = !Runtime.app_flush in
+  let previous_send = !Runtime.app_send and previous_popup = !Editor_commands.active
+  and previous_popup_signal = !Editor_commands.popup_vs in
   let requests = ref [] in
   Host.set_host_op (fun operation payload -> requests:=(operation,Yojson.Safe.from_string payload)::!requests);
   Fun.protect ~finally:(fun () ->
     Platform.cancel_host_tasks ();
+    Editor_commands.cancel_nlp ();
     Runtime.read_model:=previous_model;Runtime.app_flush:=previous_flush;
+    Runtime.app_send:=previous_send;Editor_commands.active:=previous_popup;
+    Editor_commands.popup_vs:=previous_popup_signal;
     Host.set_host_op previous_host;
     Platform.configure_natural_dates ~nsh:previous_support) (fun () ->
     let observe task =
@@ -24,6 +29,11 @@ let natural_date_tasks () =
     check "non-NSH native hosts explicitly reject NLP without emitting an operation"
       (!requests=[] && match !unsupported with Some (Error _) -> true | _ -> false);
     Platform.configure_natural_dates ~nsh:true;
+    List.iter (fun reference ->
+      check "native date references reject before conversion or host dispatch"
+        (try ignore (Platform.date_parse_natural ~reference "Next week");false
+         with Invalid_argument _ -> !requests=[]))
+      [nan;infinity;neg_infinity;0.5;8640000000000001.;1e30];
     let request_id () = match !requests with
       | ("natural-date-parse",`Assoc fields)::_ ->
           (match List.assoc "request-id" fields with `String id -> id | _ -> failwith "date request ID")
@@ -106,7 +116,60 @@ let natural_date_tasks () =
       | _ -> failwith "missing real clipboard request" in
     Platform.note_clipboard_write (`Assoc ["request-id",`String id;"ok",`Bool true]);
     Host.drain ();
-    check "sharing the existing request owner preserves clipboard acknowledgements" (!clipboard=Some (Ok ())));
+    check "sharing the existing request owner preserves clipboard acknowledgements" (!clipboard=Some (Ok ()));
+    let invalid_reply fields =
+      try Platform.note_clipboard_write (`Assoc (("request-id",`String id)::fields));false
+      with Invalid_argument _ -> true in
+    check "retired clipboard replies still reject malformed payloads synchronously"
+      (invalid_reply ["ok",`String "true"] && invalid_reply ["ok",`Bool true;"extra",`Bool true]
+       && invalid_reply ["ok",`Bool false;"error",`String ""]);
+    let cancelled=Platform.clipboard_write_text "cancelled clipboard" in
+    let cancelled_result=observe cancelled in
+    let cancelled_id=match !requests with
+      | (_,`Assoc fields)::_ -> (match List.assoc "request-id" fields with `String id -> id | _ -> assert false)
+      | _ -> assert false in
+    Ui_task.cancel cancelled;
+    check "cancelled clipboard requests retain synchronous wire validation"
+      (try Platform.note_clipboard_write (`Assoc ["request-id",`String cancelled_id;"ok",`Int 1]);false
+       with Invalid_argument _ -> true);
+    Platform.note_clipboard_write (`Assoc ["request-id",`String cancelled_id;"ok",`Bool true]);
+    Host.drain ();
+    check "a valid late clipboard acknowledgement cannot undo cancellation"
+      (!cancelled_result=Some (Error Ui_task.Cancelled));
+    Runtime.app_flush:=(fun () -> ());
+    let popup_toasts=ref [] in
+    let sender = function Action.Toast_push toast -> popup_toasts:=toast::!popup_toasts;true | _ -> false in
+    Runtime.app_send:=sender;Editor_commands.popup_vs:=None;
+    check "the NLP owner fixture starts without another pending popup task"
+      (Option.is_none !Editor_commands.pending_nlp);
+    let popup : Editor_commands.popup =
+      {kind=Editor_commands.Cal_insert "not a date";uuid="natural-date-popup";from=0;
+       cy=2026;cm=11;cd=13;hour=0;tmin=0;x=0.;y=0.;menu=None;rpt=None} in
+    model:={!model with Model.repo=Some "natural-date-origin"};
+    Editor_commands.active:=Some popup;
+    Editor_commands.nlp_commit popup;
+    let refresh_id=request_id () and revision=(!model).Model.context_revision in
+    model:=Update.update !model (Action.Journals_loaded []);
+    reply refresh_id ["status",`String "no-match"];
+    check "an ordinary journals refresh preserves the same popup's pending result"
+      ((!model).Model.context_revision>revision && List.length !popup_toasts=1);
+    Editor_commands.nlp_commit popup;
+    let graph_id=request_id () in
+    model:={!model with Model.repo=Some "natural-date-destination"};
+    reply graph_id ["status",`String "no-match"];
+    check "the same popup cannot publish into another graph" (List.length !popup_toasts=1);
+    model:={!model with Model.repo=Some "natural-date-origin"};
+    Editor_commands.nlp_commit popup;
+    let application_id=request_id () in
+    Runtime.app_send:=(fun _ -> false);
+    reply application_id ["status",`String "no-match"];
+    check "a replacement application cannot inherit an old popup result" (List.length !popup_toasts=1);
+    Runtime.app_send:=sender;
+    Editor_commands.nlp_commit popup;
+    let closed_id=request_id () in
+    Editor_commands.close_popup popup;
+    reply closed_id ["status",`String "no-match"];
+    check "closing the actual editor popup cancels its parser result" (List.length !popup_toasts=1));
   print_endline "PASS native date task channel: cancellation, reordered replies, errors and clipboard isolation"
 
 let run () =

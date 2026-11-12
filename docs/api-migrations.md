@@ -2612,7 +2612,8 @@ filters use `Views_state.current_view`, and query builders retain their active
 session guard. New input, a date/month/time choice, clear or disposal cancels
 the current request. A reply must match its request ticket, live scope and
 current application owner before choosing a date or showing a message. Editor
-date popups similarly capture their exact active popup and graph/route revision.
+date popups capture their exact active popup, graph and application sender.
+An ordinary same-owner model refresh does not invalidate a pending date result.
 No-match uses `date/invalid-date-warning`; a failed service uses the distinct
 `date/parse-service-error` error notification. Empty submission and cancellation
 remain silent.

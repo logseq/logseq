@@ -333,9 +333,9 @@ let nlp_commit p =
   in
   cancel_nlp ();
   if v <> "" then begin
-    let context = Runtime.repo (),Runtime.route (),(Runtime.model ()).Model.context_revision in
+    let repo = Runtime.repo () and application = !Runtime.app_send in
     let current () =
-      context=(Runtime.repo (),Runtime.route (),(Runtime.model ()).Model.context_revision)
+      repo=Runtime.repo () && application == !Runtime.app_send
       && match !active with Some current -> current==p | None -> false in
     let apply = function
     | Some d when current () ->
