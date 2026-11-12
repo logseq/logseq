@@ -267,7 +267,7 @@ fn player(
     view()
         .element_ref(&context.reference)
         .role(AccessibilityRole::Group)
-        .accessibility_label(move || model.get().label.clone().map(Into::into))
+        .optional_label(move || model.get().label.clone().map(Into::into))
         .state_inline_style(move || {
             raw_style::compile(&style.node.get(), "audio", |value| {
                 style.resolve_text(value)
