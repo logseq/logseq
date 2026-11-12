@@ -1199,7 +1199,8 @@ let table_row_navigation inst ~row_uuid ~columns = function
    outline rows use). *)
 let row_el inst (cols : V.column list) ~row_uuid ~blk : t =
  fun ctx parent ->
-  let cell_wrap c = box ~height:32 [ cell_el inst ~row_uuid ~blk c ] in
+  let cell_wrap c = box ~key:(cell_id inst row_uuid c.V.c_id)
+      ~height:32 [ cell_el inst ~row_uuid ~blk c ] in
   let pinned, free =
     List.partition (fun c -> is_pinned (V.get inst) c) cols
   in
@@ -1241,7 +1242,7 @@ let row_el inst (cols : V.column list) ~row_uuid ~blk : t =
                      (List.map cell_wrap free
                       @ (match (if Ui_services.env_publishing () then None else show_add_property inst) with
                          | Some _ ->
-                             [ box
+                             [ box ~key:"table-add-property-filler"
                                  [ box ~style_class:"ls-table-cell"
                                      [ row ~cross:`center ~grow:1. [] ] ] ]
                          | None -> [])) ]))))
@@ -1297,8 +1298,9 @@ let table_header ?rows inst cols : t =
   let cell_item c =
     let cell = header_cell ?rows inst c in
     if c.V.c_id = "select" then
-      box ~accessibility_identifier:"Select" [ cell ]
-    else box [ cell ]
+      box ~key:("table-header-" ^ c.V.c_id)
+        ~accessibility_identifier:"Select" [ cell ]
+    else box ~key:("table-header-" ^ c.V.c_id) [ cell ]
   in
   let pinned, free =
     List.partition (fun c -> is_pinned (V.get inst) c) cols
@@ -1324,7 +1326,7 @@ let table_header ?rows inst cols : t =
             | Some p ->
                 (* cljs add-property-button: trailing "New property"
                    header cell on class-objects tables only *)
-                [ box ~accessibility_identifier:"add property"
+                [ box ~key:"table-add-property-header" ~accessibility_identifier:"add property"
                     [ box ~style_class:"ls-table-header-cell"
                         [ Ui_components.button ~variant:`ghost ~size:`sm ~icon:(`app "plus")
                             ~text:(I.t "view/new-property") ~grow:1. ~main:`start

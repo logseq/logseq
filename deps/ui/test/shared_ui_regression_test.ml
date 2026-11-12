@@ -1112,6 +1112,96 @@ let sidebar_favorite_rows ~registry ~profile =
        && (find "sidebar-page-actions").M.id=button.M.id);
     ignore (Lui_app.dispose session.S.app))
 
+let table_column_ownership ~registry ~profile =
+  let module V = Views_state in
+  let previous_model = !Runtime.read_model and previous_flush = !Runtime.app_flush
+  and previous_page = !Runtime.current_page
+  and previous_edit = !Properties_value.active_editor
+  and previous_close = !Properties_value.close_editor
+  and previous_editor = !Editor_state.st in
+  let page = Option.get (Decode.page_of_summary
+      (Wire.Map [Wire.kw "block/uuid",Wire.Uuid "column-owner";
+                 Wire.kw "block/title",Wire.String "Column ownership"])) in
+  let page = {page with Model.page_is_tag=true} in
+  let model = {Model.initial with repo=Some "column-identity";route_page=Some page} in
+  Runtime.read_model:=(fun () -> model);Runtime.app_flush:=(fun () -> ());
+  Runtime.current_page:=Some page;Properties_value.active_editor:=None;
+  Properties_value.close_editor:=(fun () -> ());Editor_state.st:=None;
+  let instance = ref None in
+  let property = Wire.Map [Wire.kw "db/ident",Wire.kw "user.property/notes";
+    Wire.kw "block/title",Wire.String "Notes";
+    Wire.kw "logseq.property/type",Wire.kw "string"] in
+  let notes = {(Views_table.builtin_column "user.property/notes" "Notes" "string" ())
+    with V.c_prop=Some property} in
+  let select = Views_table.select_column () and created = Views_table.created_column () in
+  let uuid = "column-row" in
+  let block = Wire.Map [Wire.kw "block/uuid",Wire.Uuid uuid;Wire.kw "db/id",Wire.Int 77;
+    Wire.kw "block/title",Wire.String "Row";
+    Wire.kw "user.property/notes",Wire.String "Original column draft"] in
+  Fun.protect ~finally:(fun () ->
+    Runtime.read_model:=previous_model;Runtime.app_flush:=previous_flush;
+    Runtime.current_page:=previous_page;Properties_value.active_editor:=previous_edit;
+    Properties_value.close_editor:=previous_close;Editor_state.st:=previous_editor) (fun () ->
+    let session = S.mount ~registry ~profile ~initial:model
+      ~reducer:(fun model () -> model)
+      ~view:(fun context _ _ ->
+        let inst=V.make ~sched:context.Lui_ui.ui_scheduler
+          ~kind:(V.KTagPage "column-owner") ~feature:"class-objects" ~owner:(Wire.Uuid "column-owner") in
+        instance:=Some inst;
+        V.set inst {(V.empty_vstate ()) with V.columns=[select;notes];loading=false;
+          selected=V.Sset.singleton uuid};
+        Lui_elements.column [reactive (fun columns -> Lui_elements.column
+          [Views_table.table_header inst columns;
+           Views_table.row_el inst columns ~row_uuid:uuid ~blk:block])
+          (reactive (fun (state:V.vstate) -> state.V.columns) (Views_table.sig_of inst))]) () in
+    Runtime.app_flush:=(fun () -> S.flush session);
+    Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose session.S.app)) (fun () ->
+      let inst=Option.get !instance in
+      let find identifier=List.find (fun node ->
+        M.string_prop node "accessibility-identifier"=Some identifier) (nodes session) in
+      let rec subtree node = node.M.id :: List.concat_map subtree (M.children session.S.tree node.M.id) in
+      let filler=find "add property" in
+      let filler_ids=subtree filler in
+      let header=find (Views_table.header_cell_id inst notes) in
+      let cell=find (Views_table.cell_id inst uuid notes.V.c_id) in
+      let cell_wrapper=List.find (fun node -> Some node.M.id=cell.M.parent) (nodes session) in
+      let row_filler=List.hd (List.rev (M.children session.S.tree (Option.get cell_wrapper.M.parent))) in
+      let row_filler_ids=subtree row_filler in
+      let value=List.find (fun node -> node.M.kind="button"
+        && M.string_prop node "text"=Some "Original column draft") (nodes session) in
+      S.press session value.M.id;
+      let field=List.find (fun node -> node.M.kind="text-field") (nodes session) in
+      S.text_changed session field.M.id "Unsaved column draft";
+      let verify label =
+        check (label ^ " retains the original Notes header and cell")
+          ((find (Views_table.header_cell_id inst notes)).M.id=header.M.id
+           && (find (Views_table.cell_id inst uuid notes.V.c_id)).M.id=cell.M.id);
+        check (label ^ " retains the real scalar editor and unsaved draft")
+          (List.exists (fun node -> node.M.id=field.M.id
+            && M.string_prop node "text"=Some "Unsaved column draft") (nodes session));
+        check (label ^ " preserves row selection")
+          (V.table_row_selected (V.get inst) uuid
+           && class_has (find ("ls-block-" ^ uuid)) "selected");
+        check (label ^ " retains the trailing add-property owner")
+          ((find "add property").M.id=filler.M.id) in
+      V.update inst (fun state -> {state with V.columns=[select;notes;created]});
+      S.flush session;verify "Async column population";
+      let new_header=find (Views_table.header_cell_id inst created) in
+      let new_cell=find (Views_table.cell_id inst uuid created.V.c_id) in
+      check "The new interactive column never adopts an inert trailing-header descendant"
+        (not (List.mem new_header.M.id filler_ids));
+      check "The new data cell never adopts an inert trailing-row descendant"
+        (not (List.mem new_cell.M.id row_filler_ids));
+      V.update inst (fun state -> {state with V.columns=[select;created;notes]});
+      S.flush session;verify "Column reorder";
+      check "Column reorder retains the newly populated column owners"
+        ((find (Views_table.header_cell_id inst created)).M.id=new_header.M.id
+         && (find (Views_table.cell_id inst uuid created.V.c_id)).M.id=new_cell.M.id);
+      S.text_changed session field.M.id "Still editable after reorder";
+      check "The retained editor keeps its live input handler after column changes"
+        (List.exists (fun node -> node.M.id=field.M.id
+          && M.string_prop node "text"=Some "Still editable after reorder") (nodes session))))
+
 let table_title_completion ~registry ~profile =
   let module V = Views_state in
   List.iter (fun is_mac ->
@@ -1257,6 +1347,7 @@ let calendar_invalid_input ~registry ~profile ~finish =
   in next [false;true]
 
 let run_views ~registry ~profile ~finish =
+  table_column_ownership ~registry ~profile;
   table_title_completion ~registry ~profile;
   sidebar_favorite_rows ~registry ~profile;
   native_view_type_menu ~registry;

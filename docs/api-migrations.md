@@ -2722,3 +2722,18 @@ AppKit qualification. Shared factory/notification checks, Rust parser/protocol
 tests and native OCaml request/calendar ownership regressions accompany the
 source. The release build, lockfile resolution and actual native interaction
 remain separate qualification steps.
+
+## Table columns retain their semantic owners during schema updates
+
+Table header and row-cell owners now use stable keys derived from canonical
+column identifiers. The trailing add-property header and empty row filler have
+distinct reserved keys. They cannot be adopted as a newly populated column by
+positional same-kind reconciliation. Existing columns retain their header, cell,
+selection and unsaved scalar editor when metadata adds or reorders columns.
+
+For example, changing `[select; notes]` to `[select; notes; created-at]`, then
+`[select; created-at; notes]`, preserves the Notes draft and input owner; the new
+Created At column receives its own owner. No application parameter or wire
+payload changes. Callers continue supplying canonical column identifiers and
+must not assign two different columns the same identifier. This correction adds
+no permanent pointer observers, native capability relaxation or table remount.
