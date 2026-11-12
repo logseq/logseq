@@ -1215,7 +1215,10 @@ let native_wide_reading_column () =
       let backend : Lui_protocol.backend={
         backend_profile=Lui_protocol.profile os host;
         apply_batch=(fun _ -> true)} in
-      let app=Lui_app.create backend Model.initial (fun _ model -> model)
+      let app=Lui_app.create backend Model.initial
+        (fun model -> function
+          | Action.Navigate_to route -> {model with Model.route}
+          | _ -> model)
         (fun context model _ ->
           let state value=Signal.state context.Lui_ui.ui_scheduler value in
           Sidebar_state.st_ref:=Some {Sidebar_state.favorites=state [];home_page=state None;
@@ -1254,7 +1257,7 @@ let native_wide_reading_column () =
           check "wide mode persists the existing quoted storage representation"
             (Ui_services.storage_get "wide-mode"=Some (if wide then "\"true\"" else "\"false\"")))
           [not expected;expected];
-        ignore (Lui_app.send app {Model.initial with route=Model.All_pages});
+        ignore (Lui_app.send app (Action.Navigate_to Model.All_pages));
         ignore (Lui_app.flush app);
         check "All pages retains its full-width native layout independently of wide mode"
           (column ()=retained && width ()=Some (Lui_protocol.IntValue 1920));
