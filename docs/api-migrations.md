@@ -2288,3 +2288,18 @@ No worker wire operation or public LUI contract changes. Selection defaults,
 class-property handling and other property write workflows retain their
 existing behavior. The dedicated Task-view status-preservation option remains
 outside this change; this entry does not claim that separate master parity.
+
+## Property choices clear their retained search
+
+`Properties_select.view` now clears its query and remote result snapshot before
+an accepted pointer or Enter choice, including new-option and free-text entry.
+This restores master's default `clear-input-on-chosen?=true` behavior. For
+example, choosing `Alpha` from a filtered multi-value picker leaves the picker
+open with an empty input and all initial options; previously its old filter
+remained. Selected values remain selected and the input node stays mounted.
+
+Accepting a choice also retires the existing search ticket, so a pending reply
+cannot restore the cleared filter. Disposed owners cannot update a replacement
+picker. No new LUI callback, worker operation or component parameter is added.
+Master's explicit library add-pages opt-out belongs to its separate picker path
+and is unchanged.
