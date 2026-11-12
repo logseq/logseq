@@ -174,6 +174,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Strict actual application compilation failed' }
           cargo test --locked --manifest-path deps/ui/nsh/Cargo.toml --lib --bin nsh-app-logseq
           if ($LASTEXITCODE -ne 0) { throw 'Actual application host/factory tests failed' }
+          cargo test --locked --manifest-path deps/ui/nsh/Cargo.toml --test windows_relaunch
+          if ($LASTEXITCODE -ne 0) { throw 'Actual Windows parent/child relaunch handoff failed' }
       - name: Build the actual DLL, schemas, worker and clean-PATH private App gate
         run: |
           $tools = Get-Content _build/nsh-ci/windows-toolchain.json -Raw | ConvertFrom-Json

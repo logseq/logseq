@@ -40,3 +40,11 @@ nsh-platform-windows = { git = "https://github.com/logseq/nsh", rev = "adc186db7
 ureq = "=3.5.1"
 nsh-engine = { git = "https://github.com/logseq/nsh", rev = "adc186db7213f3ccd1eacaa836cc721e9779fd14", default-features = false }
 nsh-testing = { git = "https://github.com/logseq/nsh", rev = "adc186db7213f3ccd1eacaa836cc721e9779fd14", default-features = false }
+
+[target.'cfg(target_os = "windows")'.dev-dependencies]
+windows = { version = "=0.62.2", features = ["Win32_System_JobObjects"] }
+
+[[test]]
+name = "windows_relaunch"
+path = "src/windows_relaunch_test.rs"
+harness = false

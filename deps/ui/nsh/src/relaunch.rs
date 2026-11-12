@@ -18,6 +18,12 @@ use std::{
 #[cfg(target_os = "windows")]
 mod windows;
 
+/// Test-target-only driver for actual Windows parent/child handoff processes.
+#[cfg(all(test, target_os = "windows"))]
+pub fn windows_handoff_fixture() -> ExitCode {
+    windows::process_tests::run()
+}
+
 // Match the packaged-startup qualifier's artifact-loader exclusions. Profile,
 // storage, credentials and the user's remaining environment stay unchanged.
 const ARTIFACT_OVERRIDES: &[&str] = &[

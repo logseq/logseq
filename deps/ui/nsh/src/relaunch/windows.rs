@@ -176,6 +176,9 @@ fn cleanup(child: &mut Child) -> Result<(), String> {
     Ok(())
 }
 #[cfg(test)]
+pub(super) mod process_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     #[test]

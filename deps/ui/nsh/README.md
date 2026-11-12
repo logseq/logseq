@@ -784,3 +784,44 @@ Pure guard tests (no native app, network or trust changes) are:
 python3 deps/ui/nsh/test_private_update_https.py
 python3 deps/ui/nsh/test_standalone_upgrade.py
 ```
+
+## Native Windows restart handoff qualification
+
+The Windows workflow also executes the real parent/child restart protocol:
+
+```powershell
+cargo test --locked --manifest-path deps/ui/nsh/Cargo.toml --test windows_relaunch
+```
+
+This test target has a plain `main`, because libtest would reject the real
+private `--nsh-restart-after` argument prefix before dispatching a child test.
+Its fixture-only roles are absent from shipping builds. The successful parent
+calls the actual `Session::finish` after a captured restart request; its child
+calls the actual `Startup::read` before publishing an initialization marker.
+The driver proves that the acknowledged child remains blocked while its exact
+parent is alive, then requires successful initialization only after that parent
+exits. Original arguments, including spaces, Unicode, quotes and backslashes,
+must survive the real Windows command-line round trip.
+
+Five additional cases require rejection of a stale parent creation identity,
+the actual child-side parent-exit deadline, parent exit before event capture,
+replacement exit before acknowledgement, and the actual parent-side capture
+deadline. Both timeout cases retain the production 30-second deadline. Failed
+capture must leave initialization absent and preserve a separately spawned
+sibling, proving that production cleanup targets the exact replacement.
+
+Each case owns an unnamed kill-on-close Windows Job. A private stdin gate keeps
+the initial fixture process from starting descendants or entering `Startup`
+until the driver assigns it to that Job. Grandchild observation additionally
+checks the reported PID and creation identity against an actual process handle
+and membership in this same Job. Closing only that case's Job bounds failure
+cleanup; no process-name search, foreign PID termination, installed application,
+credentials, worker, window or user data is involved. The JSON log reports the
+private temporary evidence directory, which is retained after the run.
+
+These are execution tests of the existing handoff and cleanup protocol, not
+proof of SDK quit delivery or an installed N-to-N+1 upgrade. The fixture sets
+its captured restart-request bit directly, without constructing a UI engine,
+and its initialization marker stands in for work that must follow `Startup`.
+Unix restart behavior and its PID-preserving `exec` path are unchanged. Actual
+Windows CI execution is required; source review alone does not qualify it.
