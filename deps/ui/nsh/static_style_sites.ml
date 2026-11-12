@@ -12,7 +12,11 @@ let constants = Hashtbl.create 128
 let known = Hashtbl.create 128
 let key = function Path.Pident id -> Ident.unique_name id | path -> Path.name path
 let name expression = match expression.exp_desc with
-  | Texp_ident (path,_,_) -> Path.name (Env.normalize_value_path None expression.exp_env path)
+  | Texp_ident (path,_,_) ->
+      (* Native CMTs retain summarized environments. Restore their typed module
+         aliases before normalizing a value such as Props.overflow. *)
+      let environment=Envaux.env_of_only_summary expression.exp_env in
+      Path.name (Env.normalize_value_path None environment path)
   | _ -> ""
 let last name = match String.rindex_opt name '.' with
   | Some index -> String.sub name (index+1) (String.length name-index-1)
@@ -195,6 +199,7 @@ let inspect filename =
   Load_path.init ~auto_include:Load_path.no_auto_include
     ~visible:(List.map absolute info.cmt_loadpath.visible)
     ~hidden:(List.map absolute info.cmt_loadpath.hidden);
+  Envaux.reset_cache ();
   match info.cmt_annots with
   | Cmt_format.Implementation structure -> iterator.structure iterator structure
   | _ -> invalid_arg ("Expected native implementation typedtree: " ^ filename)

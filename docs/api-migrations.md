@@ -1523,6 +1523,13 @@ the existing public encoders and the actual NSH style validator. An immutable
 Local shadowing and backend branch selection retain their compiler identities;
 Web-only values behind a proven host branch remain valid.
 
+The extractor restores the summarized compiler environment stored in each CMT
+before resolving module aliases. For example, `module Props = Ui_parts.Prop`
+now reaches the same encoder as `Ui_parts.Prop`, including through a host guard;
+it no longer disappears from capture. Negative compile fixtures require the
+actual candidate provider's offending-value diagnostic. An empty capture or
+an unrelated OCaml/C compilation failure cannot count as a rejected style call.
+
 The pass evaluates no application function, dereferences no mutable storage,
 and does not execute signals. Literal syntax expansion is bounded to 512 nodes, including substituted aliases,
 so large generated data bindings do not impose unbounded preflight expansion;
