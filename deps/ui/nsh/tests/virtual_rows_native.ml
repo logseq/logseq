@@ -353,6 +353,12 @@ let test_picker_viewport_ownership () = with_picker_services (fun () ->
        && property runtime field TextValue=Some (StringValue ""));
     ignore (far_window ());
     let color_body=body () in
+    let color_source=list () in
+    let color_generation=integer runtime color_source VirtualGeneration in
+    let color_indices=property runtime color_source VirtualIndices in
+    let last_display=fst (List.hd (List.rev (Icon_picker.icon_items ()))) in
+    let last_cell=find runtime (fun node kind -> kind=Button
+      && property runtime node AccessibilityLabel=Some (StringValue last_display)) in
     let palette=find runtime (fun node kind -> kind=Button
       && property runtime node AccessibilityLabel=Some (StringValue (I18n.t "icon/select-color"))) in
     send (Press palette);
@@ -361,7 +367,12 @@ let test_picker_viewport_ownership () = with_picker_services (fun () ->
     send (Press preset);
     check "native far-down color edit retains the Scroll and search owner"
       (body ()=color_body && input ()=field);
-    ignore (far_window ())))
+    check "native color paint keeps the exact virtual source revision and far window"
+      (list ()=color_source && integer runtime color_source VirtualGeneration=color_generation
+       && property runtime color_source VirtualIndices=color_indices);
+    check "native color paint updates the retained last icon without a window wake"
+      (Hashtbl.mem runtime.mounted_nodes last_cell
+       && property runtime last_cell ForegroundValue=Some (StringValue "#5e69d2"))))
 
 let () =
   test_rows_sig ~lazy_children:false 1_000 ();

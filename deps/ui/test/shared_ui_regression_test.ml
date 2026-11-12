@@ -2652,6 +2652,7 @@ let run_views ~registry ~profile ~finish =
   let picker_root = (List.find (fun n -> class_has n "cp__emoji-icon-picker") (nodes picker)).M.id in
   let initial_body = (body ()).M.id in
   let initial_search = (search ()).M.id in
+  let initial_icon = (List.find (fun n -> class_has n "ls-emoji-cell") (buttons ())).M.id in
   let labelled () = List.for_all (fun n ->
       P.node_properties_supported P.Button (button_properties n)) (buttons ()) in
   check "icon picker buttons satisfy the host label contract" (labelled ());
@@ -2672,6 +2673,9 @@ let run_views ~registry ~profile ~finish =
     (Option.value (Ui_services.storage_get "ls-icon-color-preset") ~default:"");
   check "palette edits preserve the result viewport and search input"
     ((body ()).M.id=initial_body && (search ()).M.id=initial_search);
+  check "color edits repaint the retained icon instead of rebuilding its source"
+    (List.exists (fun n -> n.M.id=initial_icon && class_has n "ls-emoji-cell"
+      && M.string_prop n "foreground"=Some "#6e7b8b") (buttons ()));
   let tab name = List.find (fun n -> n.M.kind="toggle-button"
       && M.string_prop n "text"=Some (I18n.t ("icon/tab-" ^ name))) (nodes picker) in
   S.toggle picker (tab "icons").M.id true;

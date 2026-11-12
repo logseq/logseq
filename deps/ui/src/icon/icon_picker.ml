@@ -260,15 +260,12 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
   let item_btn (it : item) : t =
     (* ls-emoji-cell is the regression test's icon-button locator; the
        .its/.icons-row button chrome moved to the typed props *)
-    let cell ?font_size ?fg ?ff ~cls ~key ~label ~tooltip ~on_press child : t =
+    let cell ?font_size ?ff ~cls ~key ~label ~tooltip ~on_press child : t =
       Ui_components.with_props
         ([ ( Ui_components.Prop.hover_background
                "var(--lx-gray-03, var(--ls-menu-hover-color, \
                   hsl(var(--muted))))" )
          ]
-         @ (match fg with
-            | Some c -> [ Ui_components.Prop.foreground c ]
-            | None -> [])
          @ (match ff with
             | Some f -> [ Ui_components.Prop.font_family f ]
             | None -> [])
@@ -291,15 +288,16 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
           ~on_press:(fun _ -> choose (Emoji id))
           (Logseq_emoji.el ~name:id ())
     | Tabler_item (display, kebab) ->
-        cell ~cls:"ls-emoji-cell" ~key:("t-" ^ icon_id display) ~label:display
-          ~fg:(Option.value (get ()).preset ~default:"inherit")
+        Ui_parts.string_prop P.ForegroundValue
+          ~value:(reactive (fun s -> Option.value s.preset ~default:"inherit") sv)
+          (cell ~cls:"ls-emoji-cell" ~key:("t-" ^ icon_id display) ~label:display
           ~tooltip:(icon_id display)
           ~on_press:(fun _ ->
             choose (Tabler (icon_id display, (get ()).preset)))
           (* cljs ui/icon called with the display name: the ls-icon class
              keeps the spaces verbatim, the svg uses the kebab name *)
           (icon ~name:(Icons.name_ref kebab) ~point_size:24
-             ~style_class:("ui__icon ti ls-icon-" ^ display) [])
+             ~style_class:("ui__icon ti ls-icon-" ^ display) []))
   in
 
   (* items are chunked into rows of 9: the web fallback relied on
@@ -565,7 +563,6 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
                 [ reactive
                     ~equal:(fun (a : pstate) b ->
                        a.q = b.q && a.tab = b.tab
-                       && a.preset = b.preset
                        && a.emoji_results = b.emoji_results)
                     content_view sv ] ])) ]))
     context parent

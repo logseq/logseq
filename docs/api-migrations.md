@@ -1,5 +1,17 @@
 # API migrations
 
+## Icon color changes paint retained cells
+
+Changing the icon palette now updates each mounted Tabler button's existing
+foreground binding. Color is excluded from the result-content shape comparison,
+so it does not rebuild the virtual source, change its generation/window, replace
+the cells, or reset the far-down Scroll and search input. Emoji glyphs retain
+their own colors; icon choice still reads the current selected preset.
+
+This is a shared-view identity/performance correction with no new parameter,
+wire event, imperative scroll, timer or artificial viewport feedback. Query and
+tab changes keep their explicit result-viewport reset behavior.
+
 ## Icon picker result viewports reset with the tab and query
 
 Changing the icon picker tab, editing its search query, or clearing search now
