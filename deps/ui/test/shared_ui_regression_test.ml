@@ -828,7 +828,97 @@ let gallery_remote_cover_policy ~registry =
      ({P.profile_os=P.AndroidOS;P.profile_host=P.KotlinHost},false);
      ({P.profile_os=P.MacOS;P.profile_host=P.NshHost},true)]
 
+let native_view_type_menu ~registry =
+  let module V = Views_state in
+  let previous_model = !Runtime.read_model and previous_flush = !Runtime.app_flush
+  and previous_worker = !Runtime.worker and previous_ops = !V.ops_ref in
+  Fun.protect ~finally:(fun () -> Runtime.read_model:=previous_model;
+    Runtime.app_flush:=previous_flush;Runtime.worker:=previous_worker;V.ops_ref:=previous_ops) (fun () ->
+    List.iter (fun (profile, native) ->
+      let effects = ref [] and writes = ref [] and instance = ref None in
+      Runtime.read_model:=(fun () -> {Model.initial with repo=Some "view-type-fixture"});
+      Runtime.app_flush:=(fun () -> ());
+      Runtime.worker:=Some {Worker_client.invoke_fn=(fun name args ->
+        if name<>"thread-api/apply-outliner-ops" then
+          failwith ("Unexpected view-type request: " ^ name);
+        effects:="persist"::!effects;writes:=args::!writes;
+        Js.Promise.make (fun ~resolve:_ ~reject:_ -> ()));
+        on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
+      V.install_ops {o_refresh=(fun _ -> effects:="refresh"::!effects);
+        o_refresh_src=(fun _ _ -> ());o_create_view=(fun _ -> ());
+        o_rename_box=(fun _ _ -> Lui_elements.spacer []);o_export=(fun _ -> ());
+        o_add_object=(fun _ -> ());o_title_of_uuid=(fun _ uuid -> uuid);
+        o_load_more=(fun _ -> ());o_full_action_rows=(fun _ reply -> reply (Error "No full rows"))};
+      let session = S.mount ~registry ~profile ~initial:Model.initial
+        ~reducer:(fun model () -> model) ~view:(fun context _ _ ->
+          let inst = V.make ~sched:context.Lui_ui.ui_scheduler
+            ~kind:V.KAllPages ~feature:"view-type-menu" ~owner:Wire.Nil in
+          V.set inst {(V.empty_vstate ()) with view_uuid="native-view-type"};
+          instance:=Some inst;
+          Views_head.display_type_el inst) () in
+      Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose session.S.app)) (fun () ->
+        Runtime.app_flush:=(fun () -> S.flush session);
+        let inst = Option.get !instance in
+        let identifier="vtype-" ^ string_of_int inst.V.id in
+        let named id = List.find (fun node ->
+          M.string_prop node "accessibility-identifier"=Some id) (nodes session) in
+        let trigger () = named identifier in
+        let trigger_id = (trigger ()).M.id in
+        let icon () = List.find (fun node -> node.M.kind="icon") (nodes session) in
+        let icon_id = (icon ()).M.id in
+        let menus = List.filter (fun node -> node.M.kind="context-menu") (nodes session) in
+        if native then (
+          let menu = match menus with [menu] -> menu
+            | _ -> failwith "Native view type requires one attached ContextMenu" in
+          let rows = M.children session.S.tree menu.M.id in
+          check "view-type menu attaches to its actual retained Button"
+            (menu.M.parent=Some trigger_id && List.length rows=3
+             && List.for_all (fun node -> node.M.kind="menu-item" && node.M.parent=Some menu.M.id) rows);
+          check "native Menu is the only view-type opening owner"
+            (Hashtbl.find_opt (trigger ()).M.props "press-enabled"<>Some (P.BoolValue true));
+          let row_ids = List.map (fun node -> node.M.id) rows in
+          let expect current expected_icon =
+            check "view-type changes retain the trigger and icon"
+              ((trigger ()).M.id=trigger_id && (icon ()).M.id=icon_id
+               && M.string_prop (icon ()) "name"=Some ("app:" ^ expected_icon));
+            check "view-type state updates retain all menu rows"
+              (List.map (fun node -> node.M.id) (M.children session.S.tree menu.M.id)=row_ids);
+            List.iter (fun dt ->
+              check "native view-type checked presentation follows existing state"
+                (Hashtbl.find_opt (named (identifier ^ "-" ^ dt)).M.props "selected"
+                   =Some (P.BoolValue (dt=current)))) ["table";"list";"gallery"] in
+          expect "table" "table";
+          V.update inst (fun state -> {state with input="unrelated search edit"});S.flush session;
+          expect "table" "table";
+          check "unrelated view updates do not persist or refresh" (!effects=[]);
+          List.iter (fun (dt, expected_icon) ->
+            effects:=[];writes:=[];
+            S.press session (named (identifier ^ "-" ^ dt)).M.id;
+            check "view-type action updates its existing state" ((V.get inst).V.display_type=dt);
+            check "view-type action dispatches persistence before one refresh"
+              (List.rev !effects=["persist";"refresh"]);
+            check "view-type action persists its exact canonical property"
+              (match !writes with
+               | [[Wire.String "view-type-fixture";Wire.Array [Wire.Array
+                   [Wire.Keyword "set-block-property";Wire.Array
+                     [Wire.Uuid "native-view-type";Wire.Keyword "logseq.property.view/type";Wire.Keyword value]]];_]] ->
+                   value="logseq.property.view/type." ^ dt
+               | _ -> false);
+            expect dt expected_icon) ["list","list";"gallery","layout-grid";"table","table"])
+        else (
+          check "non-NSH view type keeps the externally opened popup path"
+            (menus=[] && Hashtbl.find_opt (trigger ()).M.props "press-enabled"=Some (P.BoolValue true));
+          V.update inst (fun state -> {state with display_type="gallery"});S.flush session;
+          check "non-NSH icon updates retain the existing trigger"
+            ((trigger ()).M.id=trigger_id && (icon ()).M.id=icon_id
+             && M.string_prop (icon ()) "name"=Some "app:layout-grid"))))
+      [({P.profile_os=P.WebOS;P.profile_host=P.WebHost},false);
+       ({P.profile_os=P.IOS;P.profile_host=P.SwiftUIHost},false);
+       ({P.profile_os=P.AndroidOS;P.profile_host=P.KotlinHost},false);
+       ({P.profile_os=P.MacOS;P.profile_host=P.NshHost},true)])
+
 let run_views ~registry ~profile ~finish =
+  native_view_type_menu ~registry;
   gallery_remote_cover_policy ~registry;
   find_in_page_submit ~registry;
   accent_swatch_palettes ~registry;

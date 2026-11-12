@@ -67,3 +67,14 @@ measurable content, scrolls to the final settings row, dismisses through native
 Escape and checks that the journal body and More trigger remain retained.
 Headless geometry and interaction checks do not replace light/dark native pixel
 review.
+
+
+## View-type action menu
+
+The view-type Button keeps its shared action-button dimensions, theme and live
+icon. Its three native menu rows show the controlled view state; the attached
+NSH Menu owns entrance/exit, selection, focus restoration and reduced-motion
+policy. This introduces no application popup state, animation clock or position
+controller. Verify native arrow navigation, selection dismissal and light/dark
+check marks in the real view; recording tests prove canonical composition,
+action ordering and retained identities, not native pixel or keyboard behavior.
