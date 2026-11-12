@@ -13,6 +13,13 @@ Navigation callback presence is captured in the same way, so a known
 TimeField restriction. Optional forwarded callbacks whose presence is unknown
 remain deferred.
 
+Constructor result types use the same compiler-resolved module aliases as call
+heads. For example, `module Input = Lui_elements` followed by
+``Input.input ~kind:`time ~text ?on_dismiss:(Some cancel) []`` now reaches the
+same capability check even when `text` is dynamic. The probe substitutes an
+inert callback, preserves dynamic value deferral, and distinguishes shadowed
+modules by compiler identity. No application callback or user function is run.
+
 Dynamic or omitted time text stays at the existing runtime value boundary,
 while known read-only, autofocus, navigation, dismissal and nonempty-placeholder
 options are rejected for native TimeField. None/absent callbacks remain valid.

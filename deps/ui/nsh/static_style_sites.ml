@@ -51,14 +51,15 @@ let rec module_path summary path =
   match local_module_type summary path with
   | Some (Types.Mty_alias alias) -> module_path summary alias
   | _ -> path
+let member_path expression = function
+  | Path.Pdot (parent,label) ->
+      Path.Pdot (module_path (Env.summary expression.exp_env) parent,label)
+  | path -> path
 let name expression = match expression.exp_desc with
   | Texp_ident (path,_,_) ->
       (* Read only aliases on this value's module path. Reconstructing the whole
          CMT environment would eagerly load unrelated opened modules. *)
-      let path=match path with
-        | Path.Pdot (parent,label) ->
-            Path.Pdot (module_path (Env.summary expression.exp_env) parent,label)
-        | _ -> path in
+      let path=member_path expression path in
       Path.name (Env.normalize_value_path None expression.exp_env path)
   | _ -> ""
 let last name = match String.rindex_opt name '.' with
@@ -160,7 +161,9 @@ let element expression = match expression.exp_desc with
       let children = match values with [value] -> (match Types.get_desc value.exp_type with
         | Types.Tconstr (path,[_],_) -> Path.name path="list" | _ -> false) | _ -> false in
       let result = match Types.get_desc expression.exp_type with
-        | Types.Tconstr (path,[],_) -> Path.name path="Lui_elements.t"
+        | Types.Tconstr (path,[],_) ->
+            Path.name (Env.normalize_type_path None expression.exp_env
+              (member_path expression path))="Lui_elements.t"
         | Types.Tarrow _ -> true
         | _ -> false in
       if children && result then begin

@@ -142,6 +142,27 @@ let value text = Input.input ~kind:`time ~text ?on_dismiss:(Some cancel) []
   ?on_dismiss:None []
 ''', rejected=False)
 
+    def test_aliased_input_dynamic_text_and_absent_callback_remain_valid(self):
+        self.check_fixture('''module Input = Lui_elements
+module Controls = struct module Fields = Input end
+let value text = Controls.Fields.input ~kind:`time ~text ?on_dismiss:None []
+''', rejected=False, expected_deferred=["(1 optional, 0 required)"])
+
+    def test_aliased_constructor_rejection_uses_the_actual_provider(self):
+        self.check_fixture('''module Input = Lui_elements
+let value = Input.text ~overflow:"auto" []
+''', rejected=True, expected_diagnostic='does not support overflow="auto"')
+
+    def test_constructor_alias_shadowing_preserves_the_actual_target(self):
+        self.check_fixture('''module Input = Lui_elements
+let cancel _ = failwith "the application callback must never execute during preflight"
+let value text =
+  let module Input = struct
+    let input ~kind:_ ~text:_ ?on_dismiss:_ _ = Ui_parts.Prop.overflow `hidden
+  end in
+  Input.input ~kind:`time ~text ?on_dismiss:(Some cancel) []
+''', rejected=False)
+
     def test_native_time_known_options_are_rejected_with_unknown_text(self):
         for option, diagnostic in (("~read_only:true", "does not expose read-only"),
                 ("~autofocus:true", "does not expose autofocus"),
