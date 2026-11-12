@@ -242,15 +242,19 @@ LUI_EXPORT int32_t lui_ocaml_start(lui_patch_callback callback,
 /* OCaml-internal: native_embed.ml's `external wakeup` calls here; we
    bounce to the Swift callback so async completions pump on the UI
    thread. Must NOT call back into the OCaml runtime. */
-LUI_EXPORT void logseq_lui_wakeup(void) {
+CAMLprim value logseq_lui_wakeup(value unit) {
+  CAMLparam1(unit);
   if (wakeup_callback != NULL) wakeup_callback();
+  CAMLreturn(Val_unit);
 }
 
-LUI_EXPORT void logseq_lui_platform_request(value payload) {
+CAMLprim value logseq_lui_platform_request(value payload) {
+  CAMLparam1(payload);
   const char *data = String_val(payload);
   int32_t length = (int32_t)caml_string_length(payload);
   if (platform_request_callback != NULL)
     platform_request_callback(data, length);
+  CAMLreturn(Val_unit);
 }
 
 /* Registers a foreign thread (the UI thread) as a domain-0 systhread so
