@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "release": "chromium/8125",
+  "engineVersion": "158.0.8125.0",
+  "repository": "https://github.com/bblanchon/pdfium-binaries",
+  "buildRecipeCommit": "4bdb7acd45b39ef6a7fc2a5b4c83f0398e45c9a6",
+  "wrapperCommit": "3c786ab9463fcfb503afb93b3386c5a9da4b72e3",
+  "wrapperVersion": "0.9.6",
+  "bindingsFeature": "pdfium_8125",
+  "artifacts": {
+    "linux-arm64": {
+      "name": "pdfium-linux-arm64.tgz",
+      "assetId": 678551284,
+      "sha256": "8b8818f2ec57d1b213d952ca6d7f0ffeca9d0110487d0e20ad83ba918bc92efa",
+      "bytes": 3728574,
+      "library": "lib/libpdfium.so"
+    },
+    "linux-x64": {
+      "name": "pdfium-linux-x64.tgz",
+      "assetId": 678551415,
+      "sha256": "e1c3ce6e270cb5e0c20816b379ad9f2c1309972697c505f508de92bf5e7d6659",
+      "bytes": 3828800,
+      "library": "lib/libpdfium.so"
+    },
+    "win-arm64": {
+      "name": "pdfium-win-arm64.tgz",
+      "assetId": 678551890,
+      "sha256": "d394ba61991fb53f4d87f70988035f337d9e73f2bd2c3c1b966df8c43fcabb05",
+      "bytes": 3654486,
+      "library": "bin/pdfium.dll"
+    },
+    "win-x64": {
+      "name": "pdfium-win-x64.tgz",
+      "assetId": 678551894,
+      "sha256": "9a964261760cff52570aabf038ab346d3a5034dd8b30d0d5fe8861235d356b8b",
+      "bytes": 3904987,
+      "library": "bin/pdfium.dll"
+    }
+  }
+}
