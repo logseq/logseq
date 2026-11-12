@@ -1320,7 +1320,8 @@ let native_menu_scope_retention () =
   let previous_model = !Runtime.read_model and previous_flush = !Runtime.app_flush
   and previous_schedule = !Runtime.schedule_flush and previous_worker = !Runtime.worker
   and previous_sidebar = !Sidebar_state.st_ref and previous_sidebar_model = !Sidebar_state.model_signal
-  and previous_hash = !Platform.hash_ref and previous_lp_context = !Sidebar_state.lp_ctx in
+  and previous_hash = !Platform.hash_ref and previous_back = !Platform.back_stack
+  and previous_forward = !Platform.fwd_stack and previous_lp_context = !Sidebar_state.lp_ctx in
   let page uuid title = Option.get (Decode.page_of_summary (Wire.Map [
     Wire.Keyword "block/uuid",Wire.Uuid uuid;Wire.Keyword "block/title",Wire.String title])) in
   let first=page "11111111-1111-4111-8111-111111111111" "First favorite"
@@ -1382,7 +1383,8 @@ let native_menu_scope_retention () =
     Runtime.app_flush:=previous_flush;Runtime.schedule_flush:=previous_schedule;
     Runtime.worker:=previous_worker;Sidebar_state.st_ref:=previous_sidebar;
     Sidebar_state.model_signal:=previous_sidebar_model;Sidebar_state.lp_ctx:=previous_lp_context;
-    Platform.hash_ref:=previous_hash) (fun () ->
+    Platform.hash_ref:=previous_hash;Platform.back_stack:=previous_back;
+    Platform.fwd_stack:=previous_forward) (fun () ->
     Runtime.read_model:=(fun () -> Lui_app.model app);
     Runtime.app_flush:=(fun () -> ignore (Lui_app.flush app));
     Runtime.schedule_flush:=Host.enqueue;
@@ -1433,9 +1435,14 @@ let native_menu_scope_retention () =
       [[second;first];[{second with page_title="Renamed second"};first];[first;second]];
     let action=Hashtbl.fold (fun node key found ->
       if key="qa-all" then Some node else found) runtime.Lui_runtime.runtime_reload_keys None |> Option.get in
+    let expected=Runtime.nav_hash "#/graphs" in
+    Platform.hash_ref:="#/retained-menu-action-fixture";
     ignore (Lui_app.dispatch_event app (Lui_protocol.Press action));
+    (* Dispatch enqueues the retained handler; observe it after the same
+       scheduler/host barrier used by the preceding menu updates. *)
+    ignore (Lui_app.flush app);Host.drain ();
     check "retained graph action still owns its handler after prior scopes retire"
-      (String.starts_with ~prefix:"#/graphs" (Platform.location_hash ()));
+      (Platform.location_hash ()=expected);
     check "native menu invariant was inspected across actual publications" (!publications>5))
 
 let native_controlled_field_resets () =
