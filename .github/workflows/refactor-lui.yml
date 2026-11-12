@@ -14,7 +14,7 @@ concurrency:
 env:
   NODE_VERSION: '22'
   OCAML_VERSION: '5.5.1'
-  LUI_REF: '20fc6fbbda28e5785a0d364bf816704375886df2'
+  LUI_REF: '414ef098c7323d0428da67299619ef7e2b4eafc4'
 
 jobs:
   ubuntu:
