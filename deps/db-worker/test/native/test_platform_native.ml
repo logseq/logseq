@@ -35,10 +35,11 @@
      reads via the browser's pfs in-memory fs seam; the native asset
      store is file-backed.
 
-   The keychain tests keep their cljs names: on native every owner
-   source uses the kv-file secret store (runtime/native/secret_store.ml
-   documents this as the CLI_E2E_TEST code path), so both tests assert
-   the same file-backed round-trip. *)
+   The native secret tests adapt the original cljs normalization and
+   keychain-owner cases to the maintained host boundary: without an OS
+   keychain host, read/save/delete reject for every owner. CLI_E2E_TEST
+   cannot enable plaintext KV fallback or expose legacy KV secrets. No
+   test invokes a system keychain. *)
 
 let check (name : string) (ok : bool) =
   Alcotest.(check bool) name true ok
@@ -84,11 +85,20 @@ let test_kv_get_normalizes_undefined_to_nil () =
   check "missing key is None"
     (await (Idb.get "test-only-missing-key") = None)
 
-(* (deftest read-secret-text-normalizes-undefined-to-nil-test ...) —
-   same normalize contract through the secret-store surface. *)
-let test_read_secret_text_normalizes_undefined_to_nil () =
-  check "missing secret is None"
-    (await (Secret_store.read ~key:"test-only-missing-secret") = None)
+let requires_keychain_host label task =
+  Alcotest.check_raises label
+    (Failure "Native secrets require the OS keychain host")
+    (fun () -> ignore (await task))
+
+(* The cljs missing-value normalization case needs an installed keychain
+   host. Missing native capability is an error, not an absent credential. *)
+let test_read_secret_requires_secure_host () =
+  with_tmp_dir (fun kv_dir ->
+      with_env "LOGSEQ_WORKER_KV_DIR" (Some kv_dir) (fun () ->
+          requires_keychain_host "missing secret still requires the secure host"
+            (Secret_store.read ~key:"test-only-missing-secret");
+          check "refused missing-secret read creates no KV store"
+            (await (File_sys.stat (Filename.concat kv_dir "kv-store.json")) = None)))
 
 (* ---------- platform_node_test.cljs ---------- *)
 
@@ -156,35 +166,50 @@ let test_node_platform_writes_text_atomically_and_deletes_files () =
       in
       check "no .tmp- leftovers" (leftovers = []))
 
-(* (deftest node-platform-cli-owner-bypasses-keychain-in-cli-e2e-test ...)
-   — on native the kv file IS the secret store (no keychain binding), so
-   the test asserts the same observable round-trip through kv-get /
-   read-secret-text / delete. *)
-let test_node_platform_cli_owner_bypasses_keychain () =
-  with_tmp_dir (fun kv_dir ->
+(* CLI ownership and the old e2e flag cannot manufacture a secure host. *)
+let test_cli_e2e_cannot_bypass_secure_host () =
+  List.iter (fun e2e ->
+    with_tmp_dir (fun kv_dir ->
       with_env "LOGSEQ_WORKER_KV_DIR" (Some kv_dir) (fun () ->
-          await (Secret_store.save ~key:"secret-key" "secret-value");
-          check "kv-value" (await (Idb.get "secret-key") = Some "secret-value");
-          check "secret-value"
-            (await (Secret_store.read ~key:"secret-key")
-             = Some "secret-value");
-          await (Secret_store.delete ~key:"secret-key");
-          check "kv cleared" (await (Idb.get "secret-key") = None)))
+        with_env "LOGSEQ_OWNER_SOURCE" (Some "cli") (fun () ->
+          with_env "CLI_E2E_TEST" e2e (fun () ->
+            let path = Filename.concat kv_dir "kv-store.json" in
+            let unchanged label = check label (await (File_sys.stat path) = None) in
+            requires_keychain_host "CLI save refuses without the secure host"
+              (Secret_store.save ~key:"secret-key" "secret-value");
+            unchanged "refused CLI save creates no KV file";
+            requires_keychain_host "CLI read refuses without the secure host"
+              (Secret_store.read ~key:"secret-key");
+            unchanged "refused CLI read creates no KV file";
+            requires_keychain_host "CLI delete refuses without the secure host"
+              (Secret_store.delete ~key:"secret-key");
+            unchanged "refused CLI delete creates no KV file")))))
+    [None; Some "true"]
 
-(* (deftest node-platform-cli-owner-uses-keychain-when-keychain-present ...)
-   — native has no OS keychain; the kv file backs secrets on every
-   owner, so this asserts the same save/read/delete round-trip without
-   CLI_E2E_TEST set. *)
-let test_node_platform_cli_owner_uses_keychain_when_present () =
-  with_tmp_dir (fun kv_dir ->
+(* Existing plaintext KV bytes must neither become a credential source nor
+   be rewritten or deleted when a secure operation is refused. *)
+let test_other_owners_preserve_legacy_kv_without_secure_host () =
+  List.iter (fun owner ->
+    with_tmp_dir (fun kv_dir ->
       with_env "LOGSEQ_WORKER_KV_DIR" (Some kv_dir) (fun () ->
-          await (Secret_store.save ~key:"secret-key" "secret-value");
-          check "secret-value"
-            (await (Secret_store.read ~key:"secret-key")
-             = Some "secret-value");
-          await (Secret_store.delete ~key:"secret-key");
-          check "deleted value"
-            (await (Secret_store.read ~key:"secret-key") = None)))
+        with_env "LOGSEQ_OWNER_SOURCE" (Some owner) (fun () ->
+          with_env "CLI_E2E_TEST" (Some "true") (fun () ->
+            let path = Filename.concat kv_dir "kv-store.json" in
+            let original = Transit_codec.to_string (Wire.Map
+              [Wire.String "secret-key", Wire.String "legacy-secret";
+               Wire.String "ordinary-key", Wire.String "ordinary-value"]) ^ "\n" in
+            await (File_sys.write_text_atomic path original);
+            let unchanged label = check label (await (File_sys.read_text path) = original) in
+            requires_keychain_host "other-owner save refuses without the secure host"
+              (Secret_store.save ~key:"secret-key" "replacement");
+            unchanged "refused save preserves every legacy KV byte";
+            requires_keychain_host "legacy secret cannot be read through the secure API"
+              (Secret_store.read ~key:"secret-key");
+            unchanged "refused read preserves every legacy KV byte";
+            requires_keychain_host "other-owner delete refuses without the secure host"
+              (Secret_store.delete ~key:"secret-key");
+            unchanged "refused delete preserves every legacy KV byte")))))
+    ["electron"; "other"]
 
 (* (deftest kv-store-preserves-uint8array-values-across-reloads-test ...)
    — Uint8Array <-> raw bytes; two reads emulate the second platform
@@ -467,8 +492,8 @@ let cases =
     [ (* platform_test.cljs *)
       "kv-get-normalizes-undefined-to-nil-test"
     , test_kv_get_normalizes_undefined_to_nil
-    ; "read-secret-text-normalizes-undefined-to-nil-test"
-    , test_read_secret_text_normalizes_undefined_to_nil
+    ; "missing-native-secret-requires-secure-host"
+    , test_read_secret_requires_secure_host
     ; (* platform_node_test.cljs *)
       "node-platform-disables-vector-embedding-off-macos"
     , test_node_platform_disables_vector_embedding_off_macos
@@ -480,10 +505,10 @@ let cases =
     , test_node_platform_env_owner_source_is_propagated
     ; "node-platform-writes-text-atomically-and-deletes-files"
     , test_node_platform_writes_text_atomically_and_deletes_files
-    ; "node-platform-cli-owner-bypasses-keychain-in-cli-e2e-test"
-    , test_node_platform_cli_owner_bypasses_keychain
-    ; "node-platform-cli-owner-uses-keychain-when-keychain-present"
-    , test_node_platform_cli_owner_uses_keychain_when_present
+    ; "native-cli-e2e-cannot-bypass-secure-host"
+    , test_cli_e2e_cannot_bypass_secure_host
+    ; "native-other-owners-preserve-legacy-kv-without-secure-host"
+    , test_other_owners_preserve_legacy_kv_without_secure_host
     ; "kv-store-preserves-uint8array-values-across-reloads-test"
     , test_kv_store_preserves_uint8array_values_across_reloads
     ; "kv-store-get-on-binary-key-returns-b64-wrapped"
