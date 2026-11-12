@@ -1,5 +1,17 @@
 # API migrations
 
+## NSH trailing add-block rows route native activation
+
+The shared trailing add-block row now opts into native pointer and press-detail
+events on NSH, using the same document event bridge as displayed block content.
+An empty Journal/page and the trailing row after existing blocks now reach the
+existing `Editor_keys` append action with their original parent-page and scope
+attributes. Hover restores full opacity for the trailing row.
+
+No caller API migration is required: existing `Add_button.el ~puuid ~flags` calls
+retain their signature. Web and Apple hosts keep their existing document-event
+ownership; no second direct append handler is installed.
+
 ## Packaged NSH native startup requires visible Journal bounds
 
 The optional macOS `qualify_packaged_startup.py --native-background` gate now

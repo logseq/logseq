@@ -26,13 +26,19 @@ let el ?puuid ~(flags : 'a -> (bool * bool) Signal.signal) : t =
   if Ui_services.env_publishing () then Logseq_el.nothing context parent
   else
     let fs = flags context in
+    let on_pointer_down, on_pointer_up, on_press_detail =
+      Ui_parts.native_document_pointer_handlers context in
     (* the doc-level click/Enter listener matches closest
        ".block-add-button" and reads data-parentblockid *)
     (Ui_parts.class_signal fs
        (fun (_has, indented) ->
          "ls-block block-add-button flex-1 flex-col rounded-sm cursor-text transition-opacity ease-in duration-100 !py-0 "
          ^ (if indented then " ls-block-content-indent" else ""))
-       (column ~key:"bab"
+       (Ui_components.with_props
+          [ Ui_components.Prop.cursor `text
+          ; Ui_components.Prop.hover_opacity 1. ]
+        (column ~key:"bab"
+          ?on_pointer_down ?on_pointer_up ?on_press_detail
           ~data_attrs:
             (("tabindex", "0")
              :: (match puuid with
@@ -60,5 +66,5 @@ let el ?puuid ~(flags : 'a -> (bool * bool) Signal.signal) : t =
                               ~corner_radius:999 ~opacity:1.
                               ~background:
                                 "var(--lx-gray-09, var(--ls-block-bullet-color))"
-                              [] ] ]) ] ]))
+                              [] ] ]) ] ])))
       context parent

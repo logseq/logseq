@@ -5,6 +5,36 @@
 
 open Lui_elements
 
+(* Native containers opt into the shared document event pipeline explicitly.
+   Web and Apple already supply document pointer events from their host. *)
+let native_document_pointer_handlers context =
+  if Lui_ui.host context <> Lui_protocol.NshHost then None, None, None
+  else
+    let emit name node (detail : Lui_protocol.pointer_detail) buttons =
+      Ui_services.dom_emit_json name
+        (Json.stringify (Json.Object
+          [ "nodeId", Json.Number (float_of_int node)
+          ; "clientX", Json.Number detail.x; "clientY", Json.Number detail.y
+          ; "button", Json.Number (float_of_int detail.button)
+          ; "buttons", Json.Number (float_of_int buttons)
+          ; "ctrlKey", Json.Bool (detail.modifiers land 1 <> 0)
+          ; "shiftKey", Json.Bool (detail.modifiers land 2 <> 0)
+          ; "metaKey", Json.Bool (detail.modifiers land 4 <> 0) ])) in
+    let down = function
+      | Lui_protocol.PointerDown (node, detail) ->
+          let buttons = if detail.button = 0 then 1 else if detail.button = 2 then 2 else 4 in
+          emit "pointerdown" node detail buttons;
+          emit "mousedown" node detail buttons
+      | _ -> () in
+    let up = function
+      | Lui_protocol.PointerUp (node, detail) -> emit "pointerup" node detail 0
+      | _ -> () in
+    let press = function
+      | Lui_protocol.PressDetail (node, detail) -> emit "click" node detail 0
+      | _ -> () in
+    Some down, Some up, Some press
+
+
 (* Wrap adapters dereference the node kind: on dom/extension nodes
    Lui_ui.node_kind raises "unknown node" mid-render — surface a
    caller-pointing message instead. dom nodes must bind ~events/~attrs

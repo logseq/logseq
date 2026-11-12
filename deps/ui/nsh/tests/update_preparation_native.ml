@@ -659,6 +659,53 @@ let native_click_delivery_follows_the_active_host_profile () =
     check "Apple retains its legacy monitor duplicate coalescing"
       (run Lui_protocol.SwiftUIHost = []))
 
+let native_add_button_events_reach_the_shared_document_owner () =
+  let previous_app = !Native_embed.current_app
+  and previous_target = !Platform.event_target_of in
+  let names = ["pointerdown"; "mousedown"; "pointerup"; "click"] in
+  let previous_listeners = List.map (fun name ->
+    name, Hashtbl.find_opt Platform.capture_listeners name) names in
+  let backend : Lui_protocol.backend = {
+    backend_profile = Lui_protocol.profile Lui_protocol.MacOS Lui_protocol.NshHost;
+    apply_batch = (fun _ -> true) } in
+  let app = Lui_app.create backend Model.initial
+    (fun model (_ : Action.t) -> model)
+    (fun context _ _ ->
+      Add_button.el ~puuid:"native-empty-page"
+        ~flags:(fun _ -> Signal.constant context.Lui_ui.ui_scheduler (false, false))) in
+  Native_embed.current_app := Some app;
+  Fun.protect ~finally:(fun () ->
+    ignore (Lui_app.dispose app);
+    Native_embed.current_app := previous_app;
+    Platform.event_target_of := previous_target;
+    List.iter (fun (name, previous) -> match previous with
+      | Some listeners -> Hashtbl.replace Platform.capture_listeners name listeners
+      | None -> Hashtbl.remove Platform.capture_listeners name) previous_listeners) (fun () ->
+    ignore (Lui_app.start app); ignore (Lui_app.flush app);
+    let runtime = Lui_app.runtime app in
+    Platform.event_target_of := (fun id -> Some (Native_embed.ext_snapshot runtime id));
+    let observed = ref [] in
+    List.iter (fun name -> Hashtbl.replace Platform.capture_listeners name
+      [fun payload ->
+        let event = Ui_dom_native.ev_of payload in
+        check "native add activation preserves its shared add-button target"
+          (match event.Ui_services.target with
+           | Some target -> (match target.Ui_services.closest ".block-add-button" with
+               | Some add -> add.Ui_services.attr "data-parentblockid" = Some "native-empty-page"
+               | None -> false)
+           | None -> false);
+        observed := name :: !observed]) names;
+    let node = Lui_app.root_node app in
+    let properties = Hashtbl.find runtime.Lui_runtime.runtime_properties node in
+    check "the empty native add row owns native activation"
+      (Lui_protocol.Property_map.find_opt Lui_protocol.PressEnabled properties
+       = Some (Lui_protocol.BoolValue true));
+    ignore (Native_embed.pointer_down node 12. 8. 0 0 "");
+    ignore (Native_embed.pointer_up node 12. 8. 0 0 "");
+    ignore (Native_embed.press_detail node 12. 8. 0 0 "");
+    check "native empty-page add reaches the shared document sequence once"
+      (List.rev !observed = names))
+
 let native_block_click_mounts_shared_editor () =
   let prior_model = !Runtime.read_model and prior_flush = !Runtime.app_flush
   and prior_host = !Host.host_op and prior_target = !Platform.event_target_of
@@ -757,5 +804,6 @@ let () =
   native_route_document_data ();
   persisted_journal_hash_links_delegate_through_the_native_owner ();
   native_click_delivery_follows_the_active_host_profile ();
+  native_add_button_events_reach_the_shared_document_owner ();
   native_block_click_mounts_shared_editor ();
   print_endline "PASS real native save/abort/worker/timer races and post-release draft safety"
