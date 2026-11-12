@@ -2034,6 +2034,7 @@
  :updater.dialog/done-label "确定"
  :updater.dialog/download-label "下载"
  :updater.dialog/error-title "无法完成更新"
+ :updater.dialog/installation-unavailable-description "在 Logseq 能够安全保存并重启之前，无法安装此更新。"
  :updater.dialog/install-label "安装并重启"
  :updater.dialog/later-label "稍后"
  :updater.dialog/open-download-label "打开下载页面"

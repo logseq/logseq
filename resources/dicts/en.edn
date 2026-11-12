@@ -2039,6 +2039,7 @@
  :updater.dialog/done-label "OK"
  :updater.dialog/download-label "Download"
  :updater.dialog/error-title "Update Could Not Be Completed"
+ :updater.dialog/installation-unavailable-description "This update cannot be installed until Logseq can safely save and restart."
  :updater.dialog/install-label "Install and Restart"
  :updater.dialog/later-label "Later"
  :updater.dialog/open-download-label "Open Download Page"
