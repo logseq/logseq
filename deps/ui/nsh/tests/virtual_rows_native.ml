@@ -266,26 +266,47 @@ let test_picker_grids () =
     ["Emoji", emojis; "Icon", icons]
 
 let with_picker_services run =
-  let previous = !Ui_services.installed in
-  Fun.protect ~finally:(fun () -> Ui_services.installed:=previous) (fun () ->
-    Ui_services.installed:=None;
-    (* Reuse the native suite's typed service shape, then isolate every picker
-       preference before mounting. No system storage or native DOM is queried. *)
-    Platform.install_ui_services ~paints_caret:false ~assert_owner:(fun () -> ())
-      ~request_flush:(fun () -> ()) ~dom:Ui_dom_native.ops
-      ~timers:Ui_dom_native.timers ~files:Ui_dom_native.files;
-    let base=Ui_services.get () in
+  let previous_host = !Host.host_op in
+  Fun.protect ~finally:(fun () -> Host.host_op:=previous_host) (fun () ->
+    let unsupported name = failwith ("Unexpected native picker fixture capability: " ^ name) in
+    Host.set_host_op (fun operation _ -> unsupported operation);
+    (* This is the executable's final, owned case. Install its private services
+       once through the public boundary; they remain until this process exits. *)
     let values=Hashtbl.create 8 in
-    let services : Ui_services.t={base with
+    let services : Ui_services.t={
       storage={get=Hashtbl.find_opt values;set=Hashtbl.replace values;remove=Hashtbl.remove values};
       native_performance=None;
+      request_flush=(fun () -> ());assert_owner=(fun () -> ());
       theme={mode=(fun () -> "light");system_default=(fun () -> true);
         prefers_dark=(fun () -> false);set_system_pref=(fun _ -> ());set_theme_pref=(fun _ -> ());
         apply_dataset=(fun _ -> ());apply_classes=(fun _ -> ());apply_snapshot=(fun _ -> ())};
       doc={set_lang=(fun _ -> ());preferred_lang=(fun () -> "en");set_lang_pref=(fun _ -> ());
         set_data=(fun _ _ -> ());rm_data=(fun _ -> ());set_title=(fun _ -> ());reload=(fun () -> ())};
-      dom={base.dom with query=(fun _ -> None)}} in
-    Ui_services.installed:=Some services;
+      nav={hash=(fun () -> "");set_hash=(fun _ -> unsupported "set_hash");
+        replace_hash=(fun _ -> unsupported "replace_hash");back=(fun () -> unsupported "back");
+        forward=(fun () -> unsupported "forward");on_change=(fun _ -> unsupported "on_change");
+        subscribe_change=(fun _ -> unsupported "subscribe_change");
+        on_navigate=(fun _ -> unsupported "on_navigate");search=(fun () -> "");
+        query_param=(fun _ -> None);hash_query_param=(fun _ -> None);decode_uri=Fun.id;
+        reload=(fun () -> unsupported "reload");origin=(fun () -> "");pathname=(fun () -> "")};
+      time={now=(fun () -> 0.);local_fields=(fun _ -> unsupported "local_fields");
+        of_fields=(fun _ -> unsupported "of_fields");parse=(fun _ -> unsupported "parse");
+        fmt_date=(fun _ -> unsupported "fmt_date")};
+      log={error=(fun _ -> ());info=(fun _ -> ());error_message=prerr_endline};
+      perf={mark=(fun _ -> ())};uri={encode_component=(fun _ -> unsupported "uri")};
+      clipboard={copy=(fun _ -> unsupported "clipboard copy");
+        write_text=(fun _ -> unsupported "clipboard write");read_text=(fun () -> unsupported "clipboard read")};
+      session={get=Hashtbl.find_opt values;set=Hashtbl.replace values};
+      env={publishing=(fun () -> false);dev_build=(fun () -> false);rtc_test_mode=(fun () -> false);
+        online=(fun () -> false);is_mac=(fun () -> true);user_agent=(fun () -> "Private picker fixture");
+        language=(fun () -> "en");native_drag=(fun () -> true);native_block_controls=(fun () -> true);
+        css_transform_icons=(fun () -> false);edit_units=(fun () -> `Bytes);
+        random_uuid=(fun () -> unsupported "random_uuid");open_url=(fun _ -> unsupported "open_url");
+        resource_url=(fun _ -> unsupported "resource_url");paints_caret=(fun () -> true);
+        component_menus=(fun () -> true);css_animations=(fun () -> false)};
+      dom={Ui_dom_native.ops with query=(fun _ -> None)};
+      timers=Ui_dom_native.timers;files=Ui_dom_native.files} in
+    Ui_services.install services;
     run ())
 
 let test_picker_viewport_ownership () = with_picker_services (fun () ->
