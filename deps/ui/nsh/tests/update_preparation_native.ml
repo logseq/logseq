@@ -396,7 +396,7 @@ let editor_keyboard_capture_order () =
          | Js.Json.JObject fields ->
              List.assoc_opt "nodeId" fields = Some (Js.Json.JNumber (float_of_int node))
              && List.assoc_opt "key" fields = Some (Js.Json.JString "Enter")
-             && List.assoc_opt "metaKey" fields = Some (Js.Json.JBool true)
+             && List.assoc_opt "metaKey" fields = Some (Js.Json.boolean true)
          | _ -> false);
       if !consume then Platform.request_prevent ();
       if !remove then ignore (Lui_app.dispose app))];
@@ -414,13 +414,11 @@ let editor_keyboard_capture_order () =
     key ();
     check "a retired sink cannot dispatch another document key" (!observed = ["capture"]))
 
+let native_dom_events = ref []
+
 let native_outliner_content_events () =
-  let recorded = ref [] in
-  let dom = {Ui_dom_native.ops with Ui_services.emit_json = (fun name payload ->
-    recorded := !recorded @ [name, Js.Json.parseExn payload];
-    Ui_dom_native.ops.Ui_services.emit_json name payload)} in
-  Platform.install_ui_services ~paints_caret:true ~assert_owner:(fun () -> ())
-    ~request_flush:(fun () -> ()) ~dom ~timers:Ui_dom_native.timers ~files:Ui_dom_native.files;
+  let recorded = native_dom_events in
+  recorded := [];
   let prior_target = !Platform.event_target_of
   and prior_capture = Hashtbl.find_opt Platform.capture_listeners "pointerdown"
   and prior_state = !Editor_state.st
@@ -477,7 +475,7 @@ let native_outliner_content_events () =
                    List.assoc_opt "nodeId" fields=Some (Js.Json.JNumber (float_of_int node))
                    && List.assoc_opt "clientX" fields=Some (Js.Json.JNumber 31.)
                    && List.assoc_opt "clientY" fields=Some (Js.Json.JNumber 47.)
-                   && List.assoc_opt "ctrlKey" fields=Some (Js.Json.JBool true)
+                   && List.assoc_opt "ctrlKey" fields=Some (Js.Json.boolean true)
                    && List.assoc_opt "buttons" fields=Some (Js.Json.JNumber
                      (if name="pointerdown" || name="mousedown" then 1. else 0.))
                | _ -> false)) !recorded;
@@ -521,7 +519,7 @@ let native_route_document_data () =
        | _ -> ()); true);
     Runtime.worker := Some {
       Worker_client.invoke_fn = (fun name _ -> Js.Promise.resolve (match name with
-        | "thread-api/get-page-route-info" -> Wire.kw_map ["block/title",Wire.String title]
+        | "thread-api/get-page-route-info" -> Wire.Map [Wire.Keyword "block/title", Wire.String title]
         | "thread-api/get-page-blocks-tree" -> Wire.Array []
         | "thread-api/get-case-page" -> Wire.Map []
         | _ -> failwith ("Unexpected route endpoint: " ^ name)));
@@ -557,12 +555,18 @@ let native_route_document_data () =
        | () -> false
        | exception Failure message -> message="Unexpected native DOM request: dom-op"))
 let persisted_journal_hash_links_delegate_through_the_native_owner () =
+  let previous_worker = !Runtime.worker in
+  Runtime.worker := Some {
+    Worker_client.invoke_fn = (fun _ _ -> Js.Promise.resolve Wire.Nil);
+    on_message = (fun _ _ -> ()); dead = Js.Promise.liveness () };
   let backend : Lui_protocol.backend = {
     backend_profile = Lui_protocol.profile Lui_protocol.MacOS Lui_protocol.NshHost;
     apply_batch = (fun _ -> true)
   } in
   let registry = Lui_extension.registry () in
-  Logseq_el.register registry;
+  Logseq_el.register_all registry;
+  Logseq_codemirror.register registry;
+  Logseq_editor.register registry;
   let block = Model.empty_block ~uuid:"persisted-journal-link"
     ~title:"Persisted [[Page]] #tag" ~is_page:false in
   let app = Lui_app.create_with_extensions backend registry Model.initial
@@ -578,6 +582,7 @@ let persisted_journal_hash_links_delegate_through_the_native_owner () =
   Native_embed.current_app := Some app;
   Fun.protect ~finally:(fun () ->
     ignore (Lui_app.dispose app);
+    Runtime.worker := previous_worker;
     Native_embed.current_app := previous_app;
     Platform.event_target_of := previous_target;
     match previous_clicks with
@@ -606,7 +611,7 @@ let persisted_journal_hash_links_delegate_through_the_native_owner () =
       (match !observed with
        | [Js.Json.JObject fields] ->
            List.assoc_opt "nodeId" fields = Some (Js.Json.JNumber (float_of_int node))
-           && List.assoc_opt "shiftKey" fields = Some (Js.Json.JBool true)
+           && List.assoc_opt "shiftKey" fields = Some (Js.Json.boolean true)
            && (match List.assoc_opt "target" fields with
                | Some target -> Dom_ext.get_attribute target "href" = Some "#"
                | None -> false)
@@ -626,14 +631,16 @@ let native_block_click_mounts_shared_editor () =
   let requests = ref [] in
   let uuid = "native-edit-entry" in
   let block = Model.empty_block ~uuid ~title:"A real editable block" ~is_page:false in
-  let page = Option.get (Decode.page_of_summary (Wire.kw_map ["block/title",Wire.String "Native editing"])) in
+  let page = Option.get (Decode.page_of_summary (Wire.Map [Wire.Keyword "block/title", Wire.String "Native editing"])) in
   let page = {page with Model.page_blocks=[block]} in
   let model = {Model.initial with repo=Some "native-edit";route=Model.Page "Native editing";route_page=Some page} in
   let backend : Lui_protocol.backend = {
     backend_profile=Lui_protocol.profile Lui_protocol.MacOS Lui_protocol.NshHost;
     apply_batch=(fun _ -> true)} in
   let registry = Lui_extension.registry () in
-  Logseq_el.register_all registry; Logseq_editor.register registry;
+  Logseq_el.register_all registry;
+  Logseq_codemirror.register registry;
+  Logseq_editor.register registry;
   Editor_state.st := None; Editor_state.field_sigs_opt := None;
   let app = Lui_app.create_with_extensions backend registry model
     (fun model (_ : Action.t) -> model)
@@ -688,8 +695,13 @@ let native_block_click_mounts_shared_editor () =
 
 let () =
   let owner = Thread.id (Thread.self ()) in
-  Ui_task.install { enqueue = Host.enqueue;
-    assert_owner = (fun () -> check "native callbacks stay on their app owner" (Thread.id (Thread.self ()) = owner)) };
+  let assert_owner () =
+    check "native callbacks stay on their app owner" (Thread.id (Thread.self ()) = owner) in
+  let dom = {Ui_dom_native.ops with Ui_services.emit_json = (fun name payload ->
+    native_dom_events := !native_dom_events @ [name, Js.Json.parseExn payload];
+    Ui_dom_native.ops.Ui_services.emit_json name payload)} in
+  Platform.install_ui_services ~paints_caret:true ~assert_owner
+    ~request_flush:(fun () -> ()) ~dom ~timers:Ui_dom_native.timers ~files:Ui_dom_native.files;
   native_entry_admission ();
   editor_keyboard_capture_order ();
   native_worker_admission ();

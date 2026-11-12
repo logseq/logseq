@@ -156,6 +156,7 @@ pub(super) async fn execute(
 mod tests {
     use super::*;
     use lui_nsh::{
+        render::Renderer,
         extensions::{Extensions, Profile, Schema},
         wire::Batch,
     };
