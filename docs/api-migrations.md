@@ -17,6 +17,27 @@ callback. Other application links using a delegated route controller should use
 and links with explicit action callbacks keep their existing constructor calls.
 The matching NSH backend must transport native Link detail to the existing
 `PressModifiers` callback to retain Shift sidebar navigation.
+## Favorites and recent rows share desktop typography and action visibility
+
+The left sidebar now carries the reference 14px/20px medium row typography and
+32px trailing title reservation in typed LUI props. The previous list-level
+Web CSS declarations did not reach NSH, which inherited the application's
+16px root size. These values match master
+`29fd2edd015e12963742b985ce6d2311c074e09b`
+(`left_sidebar.cljs` Favorites `ul.favorites.text-sm` / `li.font-medium`,
+`container.css` row `.page-title` `pr-8`). Existing callers need no migration.
+
+The retained dots button is shown while its row is hovered or its own menu is
+open; closing the menu after leaving the row hides the action slot. The row
+keeps the reference gray hover/open surface, while the button stays transparent,
+matching master's `!bg-transparent` and row-scoped hover selector. The 32px row
+and navigation/menu sibling hit targets are preserved. Hover updates change
+properties without rebuilding the button or navigation subtree.
+
+A Favorites activation without a preceding pointer sequence now navigates,
+while a captured pointer release suppresses its subsequent detail event to
+avoid duplicate navigation. Drag completion still reorders without navigation;
+secondary context-menu routing and existing menu actions retain their owners.
 
 ## Native pointer bridge qualification
 

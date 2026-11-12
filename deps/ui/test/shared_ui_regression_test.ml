@@ -917,7 +917,89 @@ let native_view_type_menu ~registry =
        ({P.profile_os=P.AndroidOS;P.profile_host=P.KotlinHost},false);
        ({P.profile_os=P.MacOS;P.profile_host=P.NshHost},true)])
 
+let sidebar_favorite_rows ~registry ~profile =
+  let previous_worker = !Runtime.worker and previous_model = !Runtime.read_model
+  and previous_flush = !Runtime.app_flush and previous_context = !Sidebar_state.lp_ctx in
+  Fun.protect ~finally:(fun () ->
+    Runtime.worker := previous_worker; Runtime.read_model := previous_model;
+    Runtime.app_flush := previous_flush; Sidebar_state.lp_ctx := previous_context) (fun () ->
+    let model = {Model.initial with repo=Some "favorite-fixture"} in
+    Runtime.read_model := (fun () -> model);
+    let route_calls = ref 0 in
+    Runtime.worker := Some {
+      Worker_client.invoke_fn=(fun method_ _ ->
+        if method_="thread-api/get-page-route-info" then incr route_calls;
+        Js.Promise.make (fun ~resolve:_ ~reject:_ -> ()));
+      on_message=(fun _ _ -> ());
+      dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
+    let sidebar = ref None in
+    let target = Option.get (Decode.page_of_summary (Wire.Map [
+      Wire.Keyword "block/uuid", Wire.Uuid "favorite-target";
+      Wire.Keyword "block/title", Wire.String "Favorite page"])) in
+    let session=S.mount ~registry ~profile ~initial:model ~reducer:(fun value () -> value)
+      ~view:(fun ctx _ _ ->
+        let state value=Signal.state ctx.Lui_ui.ui_scheduler value in
+        let st : Sidebar_state.t =
+          {favorites=state [target];home_page=state None;favorite_drop=state None;
+           recents=state [];nav_checked=state [];nav_tag_titles=state [];items=state [];
+           open_menu=state "";groups_collapsed=state [];left_width=state 246.;
+           right_fraction=state 0.3;viewport_w=state 1440.} in
+        sidebar:=Some st;
+        Left_sidebar_view.page_item_el st target ~li_class:"favorite-item"
+          ~recent:false ~key:"favorite-fixture") () in
+    Runtime.app_flush := (fun () -> S.flush session);
+    let st=Option.get !sidebar in
+    let find cls=List.find (fun node -> class_has node cls) (nodes session) in
+    let row=find "favorite-item" and title=find "page-title"
+    and slot=find "sidebar-page-actions-slot" and button=find "sidebar-page-actions" in
+    let navigation=List.find (fun node ->
+      Hashtbl.find_opt node.M.props "pointer-capture"=Some (P.BoolValue true)) (nodes session) in
+    let current id=List.find (fun node -> node.M.id=id) (nodes session) in
+    let display ()=M.string_prop (current slot.M.id) "display" in
+    check "Favorites carries master's 14px medium typography through typed props"
+      (M.string_prop row "font-size"=Some "0.875rem"
+       && M.string_prop row "line-height"=Some "1.25rem"
+       && Hashtbl.find_opt row.M.props "font-weight"=Some (P.IntValue 500));
+    check "Favorites reserves the reference trailing title space on native hosts"
+      (Hashtbl.find_opt title.M.props "padding-right"=Some (P.IntValue 32)
+       && Hashtbl.find_opt title.M.props "min-width"=Some (P.IntValue 0));
+    check "Favorites actions start hidden without removing their button" (display ()=Some "none");
+    S.dispatch session (P.PointerEnter row.M.id);
+    check "Favorites actions follow row hover" (display ()=Some "block");
+    S.dispatch session (P.PointerLeave row.M.id);
+    check "Favorites actions hide when the pointer leaves" (display ()=Some "none");
+    let detail : P.pointer_detail = {x=10.;y=10.;modifiers=0;button=0;target_class=""} in
+    S.dispatch session (P.PointerDown (navigation.M.id,detail));
+    S.dispatch session (P.PointerUp (navigation.M.id,detail));
+    S.dispatch session (P.PressDetail (navigation.M.id,detail));
+    check "A Favorites pointer activation navigates exactly once" (!route_calls=1);
+    S.dispatch session (P.PressDetail (navigation.M.id,detail));
+    check "Favorites also accepts activation without a pointer sequence" (!route_calls=2);
+    S.dispatch session (P.PointerDown (navigation.M.id,detail));
+    let moved={detail with x=20.} in
+    S.dispatch session (P.PointerMove (navigation.M.id,moved));
+    S.dispatch session (P.PointerUp (navigation.M.id,moved));
+    S.dispatch session (P.PressDetail (navigation.M.id,moved));
+    check "Dragging a favorite does not navigate afterward" (!route_calls=2);
+    S.dispatch session (P.PointerEnter row.M.id);
+    S.press session button.M.id;
+    S.dispatch session (P.PressDetail (button.M.id,detail));
+    S.dispatch session (P.PointerLeave row.M.id);
+    check "Favorites menu keeps its owning row and action visible"
+      (Runtime.signal_get st.open_menu="lp-favorite-target" && display ()=Some "block"
+       && M.string_prop (current row.M.id) "background"=
+          Some "var(--lx-gray-04, var(--ls-quaternary-background-color))");
+    check "Favorites actions keep the reference transparent hover surface"
+      (M.string_prop (current button.M.id) "hover-background"=Some "transparent"
+       && !route_calls=2);
+    S.dispatch session (P.PressDetail (button.M.id,detail));
+    check "Repeating Favorites actions closes the menu and retains the button"
+      (Runtime.signal_get st.open_menu="" && display ()=Some "none"
+       && (find "sidebar-page-actions").M.id=button.M.id);
+    ignore (Lui_app.dispose session.S.app))
+
 let run_views ~registry ~profile ~finish =
+  sidebar_favorite_rows ~registry ~profile;
   native_view_type_menu ~registry;
   gallery_remote_cover_policy ~registry;
   find_in_page_submit ~registry;

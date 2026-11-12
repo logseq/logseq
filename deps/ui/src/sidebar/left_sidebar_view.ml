@@ -576,7 +576,10 @@ let nav_group ms st =
 (* ---------- favorites / recents ---------- *)
 
 
-let page_item_el st (p : Model.page) ~li_class ~recent ~key =
+let page_item_el st (p : Model.page) ~li_class ~recent ~key : t =
+ fun context parent ->
+  let hovered = Signal.state context.Lui_ui.ui_scheduler false in
+  let hover value = Runtime.signal_set hovered value in
   let go_page shift =
     if shift then
       match p.Model.page_uuid with
@@ -588,10 +591,11 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key =
          | "" -> Option.value p.Model.page_uuid ~default:""
          | title -> title)
   in
-  let origin = ref None and dragged = ref false in
+  let origin = ref None and dragged = ref false and pointer_completed = ref false in
   let drag_down = function
     | P.PointerDown (_, d) when not recent && d.button = 0 ->
         dragged := false;
+        pointer_completed := false;
         origin := Some (Runtime.repo (), d.x, d.y)
     | _ -> () in
   let drag_move = function
@@ -604,6 +608,7 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key =
     | _ -> () in
   let drag_up = function
     | P.PointerUp (_, d) when not recent && d.button = 0 ->
+        pointer_completed := Option.is_some !origin;
         (match !origin, p.Model.page_uuid with
          | Some (repo, _, _), Some source when !dragged ->
              Sidebar_state.favorite_drop_at st d.x d.y;
@@ -615,6 +620,7 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key =
     | _ -> () in
   let drag_cancel _ =
     origin := None;
+    pointer_completed := false;
     Runtime.signal_set st.Sidebar_state.favorite_drop None in
   let lp_ref =
     match p.Model.page_uuid with
@@ -644,30 +650,42 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key =
   in
   Ui_components.with_props
     [ Ui_components.Prop.position `relative
+    ; Ui_components.Prop.font_size "0.875rem"
+    ; Ui_components.Prop.line_height "1.25rem"
     ; Ui_components.Prop.font_weight 500
     ; Ui_components.Prop.cursor `pointer
-    ; Ui_components.Prop.user_select `none ]
-    (column ~key ~style_class:li_class
-    [ Ui_components.with_props
-        [ Ui_components.Prop.opacity 0.8
-        ; Ui_components.Prop.hover_opacity 1.
-        ; Ui_components.Prop.hover_background
-            "var(--lx-gray-04, var(--ls-quaternary-background-color))" ]
-        (arm_press ~on_press_detail:(fun ev ->
+    ; Ui_components.Prop.user_select `none
+    ; Ui_components.Prop.hover_opacity 1.
+    ; Ui_components.Prop.hover_background
+        "var(--lx-gray-04, var(--ls-quaternary-background-color))" ]
+    (column ~key ~style_class:li_class ~corner_radius:6
+       ~on_pointer_enter:(fun _ -> hover true)
+       ~on_pointer_leave:(fun _ -> hover false)
+       ~opacity:(reactive (fun menu -> if menu = "lp-" ^ lp_ref then 1. else 0.8)
+                    (Signal.value st.Sidebar_state.open_menu))
+       ~background:(reactive (fun (drop, menu) ->
+           if menu = "lp-" ^ lp_ref then
+             "var(--lx-gray-04, var(--ls-quaternary-background-color))"
+           else match drop with
+           | Some (uuid, _) when p.Model.page_uuid = Some uuid ->
+               "var(--lx-accent-04, var(--ls-tertiary-background-color))"
+           | _ -> "transparent")
+           (Signal.value st.Sidebar_state.favorite_drop)
+           (Signal.value st.Sidebar_state.open_menu))
+    [ (arm_press ~on_press_detail:(fun ev ->
              match ev with
              | Lui_protocol.PressDetail (_, d) ->
-                 (* Captured Favorites complete through PointerUp. *)
-                 if recent then go_page (d.Lui_protocol.modifiers land 2 <> 0)
+                 (* PointerUp completes captured Favorites; a native keyboard
+                    activation has no preceding pointer sequence. *)
+                 if recent || not !pointer_completed then
+                   go_page (d.Lui_protocol.modifiers land 2 <> 0);
+                 pointer_completed := false
              | _ -> ())
           (box ~pointer_capture:(not recent)
             ~on_pointer_down:drag_down ~on_pointer_move:drag_move
             ~on_pointer_up:drag_up ~on_pointer_cancel:drag_cancel
             [ row ~cross:`center ~main:`space_between
            ~style_class:"link-item group"
-           ~background:(reactive (function
-               | Some (uuid, _) when p.Model.page_uuid = Some uuid ->
-                   "var(--lx-accent-04, var(--ls-tertiary-background-color))"
-               | _ -> "transparent") (Signal.value st.Sidebar_state.favorite_drop))
            ~height:32 ~padding_horizontal:8 ~corner_radius:6
            ~data_attrs:
              [ ("data-lp-ref", lp_ref)
@@ -678,23 +696,28 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key =
                   border-radius:6px" ) ]
            [ row ~cross:`center ~style_class:"page-icon" ~margin_right:4
                [ Icon_picker.page_icon_el ~size:16. p ]
-           ; text ~style_class:"page-title" ~value:p.Model.page_title
-               ~white_space:"nowrap" ~text_overflow:"ellipsis" ~grow:1.
-               ~line_height:"1.25rem"
-               ~data_attrs:[ ("style", "overflow:hidden;padding-right:32px") ]
-               [] ] ]))
+           ; Ui_components.with_props [Ui_components.Prop.padding_right 32]
+               (text ~style_class:"page-title" ~value:p.Model.page_title
+                  ~white_space:"nowrap" ~text_overflow:"ellipsis" ~grow:1.
+                  ~line_height:"1.25rem" ~min_width:0 [])
+             ] ]))
         (* The menu button is outside the navigation target. *)
         ; Ui_components.with_props
             [ Ui_components.Prop.position `absolute
             ; Ui_components.Prop.inset_top 0.
-            ; Ui_components.Prop.inset_right 4.
-            ; Ui_components.Prop.cursor `pointer
+            ; Ui_components.Prop.inset_right 0. ]
+            (column ~key:(key ^ "-actions") ~style_class:"sidebar-page-actions-slot"
+               ~display:(reactive (fun (over, menu) ->
+                   if over || menu = "lp-" ^ lp_ref then `block else `none)
+                   (Signal.value hovered) (Signal.value st.Sidebar_state.open_menu))
+               [ Ui_components.with_props
+            [ Ui_components.Prop.cursor `pointer
             ; Ui_components.Prop.user_select `none
             ; Ui_components.Prop.opacity 0.4
             ; Ui_components.Prop.hover_opacity 0.8
             ; Ui_components.Prop.pressed_opacity 1.
             ; Ui_components.Prop.disabled_opacity 0.5
-            ; ( Ui_components.Prop.hover_background "hsl(var(--secondary) / 0.7)" )
+            ; ( Ui_components.Prop.hover_background "transparent" )
             ; ( Ui_components.Prop.hover_foreground "hsl(var(--secondary-foreground))" )
             ; ( Ui_components.Prop.focus_shadow "0 0 0 2px hsl(var(--ring))" ) ]
             (Ui_components.button ~variant:`ghost ~size:`icon
@@ -710,8 +733,8 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key =
                  | _ -> ())
                ~data_attrs:
                  [ ("style", "transform:scale(0.75);font-size:0.875rem") ]
-               [ Icons.icon ~size:18. "dots" ])
-        ])
+               [ Icons.icon ~size:18. "dots" ]) ])
+        ]) context parent
 
 (* cljs sidebar-content-group: .bd renders only when the group supplies a
    child — favorites passes a child only when non-empty, recent always
