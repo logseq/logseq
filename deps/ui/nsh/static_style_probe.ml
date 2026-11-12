@@ -16,7 +16,7 @@ let element location view =
           props := (Lui_wire_schema.property_name key,scalar value) :: !props
       | _ -> ()) batch.ops;
     true)} in
-  let app=Lui_app.create backend () (fun () () -> ()) (fun _ () _ -> view) in
+  let app=Lui_app.create backend () (fun () () -> ()) (fun _ _ _ -> view) in
   Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app)) (fun () ->
     ignore (Lui_app.start app); ignore (Lui_app.flush app);
     Hashtbl.iter (fun _ (kind,props) ->

@@ -30,7 +30,9 @@ def validate(executable: Path, *, cmts=None):
         archives.append(path)
         objects = path.parent / ("." + path.stem + ".objs")
         includes.extend(["-I", objects / "byte", "-I", objects / "native"])
-        inputs.extend(sorted((objects / "byte").glob("*.cmt")))
+        # The extractor reads each archive's actual unit table. Directory
+        # globs would include obsolete or another target's stale .cmt files.
+        inputs.append(path)
     if cmts is not None:
         inputs = list(cmts)
     if not inputs:
@@ -41,7 +43,7 @@ def validate(executable: Path, *, cmts=None):
         extractor = stage / ("static_style_sites" + suffix)
         source = stage / "static_style_sites.ml"
         source.write_bytes((UI / "nsh/static_style_sites.ml").read_bytes())
-        command([*prefix, "ocamlfind", "ocamlopt", "-package", "compiler-libs.common", "-linkpkg",
+        command([*prefix, "ocamlfind", "ocamlopt", "-package", "compiler-libs.optcomp", "-linkpkg",
                  source, "-o", extractor], cwd=stage)
         generated = stage / "probe.ml"
         with generated.open("wb") as output:

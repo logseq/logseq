@@ -118,16 +118,26 @@ let rec iterator = {Tast_iterator.default_iterator with
     Tast_iterator.default_iterator.structure_item self item;
     match item.str_desc with Tstr_value (_,bindings) -> List.iter bind bindings | _ -> ()) }
 
+let inspect filename =
+  let info=Cmt_format.read_cmt filename in
+  let absolute path = if Filename.is_relative path then Filename.concat info.cmt_builddir path else path in
+  Load_path.init ~auto_include:Load_path.no_auto_include
+    ~visible:(List.map absolute info.cmt_loadpath.visible)
+    ~hidden:(List.map absolute info.cmt_loadpath.hidden);
+  match info.cmt_annots with
+  | Cmt_format.Implementation structure -> iterator.structure iterator structure
+  | _ -> invalid_arg ("Expected native implementation typedtree: " ^ filename)
+
 let () =
   for index=1 to Array.length Sys.argv-1 do
-    let info=Cmt_format.read_cmt Sys.argv.(index) in
-    let absolute path = if Filename.is_relative path then Filename.concat info.cmt_builddir path else path in
-    Load_path.init ~auto_include:Load_path.no_auto_include
-      ~visible:(List.map absolute info.cmt_loadpath.visible)
-      ~hidden:(List.map absolute info.cmt_loadpath.hidden);
-    match info.cmt_annots with
-    | Cmt_format.Implementation structure -> iterator.structure iterator structure
-    | _ -> invalid_arg ("Expected native implementation typedtree: " ^ Sys.argv.(index))
+    let filename=Sys.argv.(index) in
+    if Filename.check_suffix filename ".cmxa" then begin
+      let library=Compilenv.read_library_info filename in
+      let base=Filename.remove_extension (Filename.basename filename) in
+      let objects=Filename.concat (Filename.dirname filename) ("." ^ base ^ ".objs/byte") in
+      List.iter (fun (unit,_) ->
+        inspect (Filename.concat objects (String.uncapitalize_ascii unit.Cmx_format.ui_name ^ ".cmt"))) library.Cmx_format.lib_units
+    end else inspect filename
   done;
   Printf.printf "let () =\n%s\nfinish ();;\n" (String.concat "\n" (List.rev !probes));
   Printf.eprintf "Native style source capture: %d literal calls; %d constructor calls require dynamic values\n%!" (List.length !probes) !dynamic

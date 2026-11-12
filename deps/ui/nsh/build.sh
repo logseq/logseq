@@ -129,7 +129,8 @@ BUILD_ARTIFACT
 "$node_bin" "$publication_tool" check "$staging/sources.json" "$staging/lui-rust-manifest"
 # Literal presentation in every actual native module is checked with the
 # candidate provider before any application window or publication step.
-"$python_bin" "$nsh_root/validate_static_styles.py" "$staging/logseq-nsh" >&2
+OCAMLPATH="$lui_source/_build/install/default/lib${OCAMLPATH:+:$OCAMLPATH}" \
+  "$python_bin" "$nsh_root/validate_static_styles.py" "$staging/logseq-nsh" >&2
 # The real application gate loads only the complete candidate set. No published
 # file or prior build receipt is changed when compilation or this gate fails.
 LUI_OCAML_LIBRARY="$staging/$(basename "$library")" \
