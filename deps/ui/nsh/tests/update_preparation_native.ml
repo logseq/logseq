@@ -434,12 +434,14 @@ let native_outliner_content_events () =
   let recorded = native_dom_events in
   recorded := [];
   let prior_target = !Platform.event_target_of
+  and prior_worker = !Runtime.worker and prior_model = !Runtime.read_model
   and prior_capture = Hashtbl.find_opt Platform.capture_listeners "pointerdown"
   and prior_click = Hashtbl.find_opt Platform.capture_listeners "click"
   and prior_state = !Editor_state.st
   and prior_fields = !Editor_state.field_sigs_opt in
   Fun.protect ~finally:(fun () ->
     Platform.event_target_of := prior_target;
+    Runtime.worker := prior_worker; Runtime.read_model := prior_model;
     (match prior_capture with
      | Some listeners -> Hashtbl.replace Platform.capture_listeners "pointerdown" listeners
      | None -> Hashtbl.remove Platform.capture_listeners "pointerdown");
@@ -456,8 +458,29 @@ let native_outliner_content_events () =
       } in
       let registry = Lui_extension.registry () in
       Logseq_el.register registry;
+      let model={Model.initial with repo=Some "native-motion-fixture"} in
+      let render_reads=ref 0 and unexpected_reads=ref [] in
+      let request=Wire.Map [Wire.String "id",Wire.Uuid "native-motion";
+        Wire.String "opts",Wire.Map [Wire.Keyword "render-data?",Wire.Bool true]] in
+      Runtime.worker:=Some {Worker_client.invoke_fn=(fun method_ args ->
+        if method_="thread-api/get-blocks"
+           && args=[Wire.String "native-motion-fixture";Wire.Array [request]] then (
+          incr render_reads;
+          Js.Promise.resolve (Wire.Array [Wire.Map [
+            Wire.String "id",Wire.Uuid "native-motion";
+            Wire.String "block",Wire.Map [
+              Wire.Keyword "block/uuid",Wire.Uuid "native-motion";
+              Wire.Keyword "block.temp/positioned-properties",Wire.Map [];
+              Wire.Keyword "block.temp/display-properties",Wire.Map [
+                Wire.String "full-properties",Wire.Array [];
+                Wire.String "hidden-properties",Wire.Array []]]]]))
+        else (
+          unexpected_reads:=method_::!unexpected_reads;
+          Js.Promise.reject (Failure ("Unexpected native row fixture read: " ^ method_))));
+        on_message=(fun _ _ -> ());dead=Js.Promise.liveness ()};
+      Runtime.read_model:=(fun () -> model);
       let block = Model.empty_block ~uuid:"native-content" ~title:"Content target" ~is_page:false in
-      let app = Lui_app.create_with_extensions backend registry Model.initial
+      let app = Lui_app.create_with_extensions backend registry model
         (fun model (_ : Action.t) -> model)
         (fun context _ _ ->
           Editor_state.ensure context;
@@ -470,8 +493,14 @@ let native_outliner_content_events () =
               [Tree.row_main ~editable:false ~library:false "main"
                 (Model.empty_block ~uuid:"native-motion" ~title:"Motion target" ~is_page:false)] ]) in
       Native_embed.current_app := Some app;
-      Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app)) (fun () ->
+      Fun.protect ~finally:(fun () ->
+        ignore (Lui_app.dispose app);
+        ignore (Properties_state.live_areas ())) (fun () ->
         ignore (Lui_app.start app); ignore (Lui_app.flush app);
+        Properties_data.flush_render_data (); Host.drain ();
+        ignore (Lui_app.flush app);
+        check "actual row motion fixture resolves one coalesced render-data request"
+          (!render_reads=1 && !unexpected_reads=[]);
         let runtime = Lui_app.runtime app in
         let node = List.hd (Lui_runtime.children runtime (Lui_app.root_node app)) in
         let props = Hashtbl.find runtime.Lui_runtime.runtime_properties node in
