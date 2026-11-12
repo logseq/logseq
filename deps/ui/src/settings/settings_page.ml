@@ -154,66 +154,84 @@ let editor_font_row ?(density = `regular) () =
             | _ -> ()) [])
     ]
 
-let color_names =
-  [ "tomato"; "red"; "crimson"; "pink"; "plum"; "purple"; "violet"
-  ; "indigo"; "blue"; "cyan"; "teal"; "green"; "grass"; "orange" ]
+type accent_palette =
+  | Tomato | Red | Crimson | Pink | Plum | Purple | Violet
+  | Indigo | Blue | Cyan | Teal | Green | Grass | Orange
+
+type accent_swatch = No_accent | Logseq_accent | Palette of accent_palette
+
+let palette_name = function
+  | Tomato -> "tomato" | Red -> "red" | Crimson -> "crimson" | Pink -> "pink"
+  | Plum -> "plum" | Purple -> "purple" | Violet -> "violet" | Indigo -> "indigo"
+  | Blue -> "blue" | Cyan -> "cyan" | Teal -> "teal" | Green -> "green"
+  | Grass -> "grass" | Orange -> "orange"
+
+(* Persisted strings remain an external boundary, never a palette constructor. *)
+let accent_name = function
+  | No_accent -> "none"
+  | Logseq_accent -> "logseq"
+  | Palette palette -> palette_name palette
+
+let accent_swatches =
+  No_accent :: Logseq_accent :: List.map (fun palette -> Palette palette)
+    [Tomato; Red; Crimson; Pink; Plum; Purple; Violet; Indigo; Blue; Cyan;
+     Teal; Green; Grass; Orange]
 
 let color_label = function
-  | "none" -> (T.t "settings.general/accent-color-none-desc")
-  | "logseq" -> (T.t "settings.general/accent-color-logseq")
-  | "tomato" -> (T.t "color/tomato")
-  | "red" -> (T.t "color/red")
-  | "crimson" -> (T.t "color/crimson")
-  | "pink" -> (T.t "color/pink")
-  | "plum" -> (T.t "color/plum")
-  | "purple" -> (T.t "color/purple")
-  | "violet" -> (T.t "color/violet")
-  | "indigo" -> (T.t "color/indigo")
-  | "blue" -> (T.t "color/blue")
-  | "cyan" -> (T.t "color/cyan")
-  | "teal" -> (T.t "color/teal")
-  | "green" -> (T.t "color/green")
-  | "grass" -> (T.t "color/grass")
-  | _ -> (T.t "color/orange")
+  | No_accent -> T.t "settings.general/accent-color-none-desc"
+  | Logseq_accent -> T.t "settings.general/accent-color-logseq"
+  | Palette palette -> T.t ("color/" ^ palette_name palette)
+
+let swatch_color swatch level =
+  match swatch with
+  | No_accent -> "hsl(var(--foreground))"
+  | Logseq_accent -> "var(--rx-logseq-" ^ level ^ ")"
+  | Palette palette -> "var(--rx-" ^ palette_name palette ^ "-" ^ level ^ ")"
+
+let swatch_background = function
+  | No_accent -> "transparent"
+  | (Logseq_accent | Palette _) as swatch -> swatch_color swatch "09"
+
+let swatch_hover_background = function
+  | No_accent -> "hsl(var(--accent))"
+  | (Logseq_accent | Palette _) as swatch -> swatch_color swatch "09"
 
 (* cljs settings.cljs accent-color-row: 20px rounded-full button at
    opacity .5 (1 when active), 1px/4px outline in rx-06/07, inner 8px
    dot in rx-07 hidden unless active; "none" is a red bar *)
 let accent_swatch ~key ~current color =
-  let active = color = current and none = color = "none" in
+  let active = accent_name color = current and none = color = No_accent in
   let outline = "0 0 0 " ^ (if active then "4px " else "1px ")
-    ^ (if none then "hsl(var(--foreground))"
-       else "var(--rx-" ^ color ^ (if active then "-07)" else "-06)")) in
+    ^ swatch_color color (if active then "07" else "06") in
   row ~key ~height:20 ~main:`start ~cross:`center
     ~opacity:(if active then 1. else 0.5)
     [ Ui_components.with_props
         [ Ui_components.Prop.shadow outline
         ; Ui_components.Prop.focus_shadow
             (outline ^ ", 0 0 0 2px hsl(var(--background)), 0 0 0 4px hsl(var(--ring))")
-        ; Ui_components.Prop.hover_background ("var(--rx-" ^ color ^ "-09)")
+        ; Ui_components.Prop.hover_background (swatch_hover_background color)
         ; Ui_components.Prop.pressed_opacity 1. ]
       (Ui_components.button ~key:(key ^ "-b") ~variant:`ghost
         ~style_class:(C.btn_cls ~variant:`Text ())
         ~label:(color_label color)
-        ~background:("var(--rx-" ^ color ^ "-09)")
+        ~background:(swatch_background color)
         ~selected:active
         ~border_width:0
         ~width:20 ~height:20 ~corner_radius:999 ~padding:0
-        ~on_press:(fun _ -> S.set_accent color)
+        ~on_press:(fun _ -> S.set_accent (accent_name color))
         [ box ~key:(key ^ "-s")
            
             ~opacity:(if none || active then 1. else 0.)
             ~width:(if none then 12 else 8) ~height:(if none then 2 else 8)
             ~corner_radius:9999
             ~background:
-              (if none then "#b91c1c" else "var(--rx-" ^ color ^ "-07)")
+              (if none then "#b91c1c" else swatch_color color "07")
             []
         ])
     ]
 
 let accent_row ~modal =
   let current = S.current_accent () in
-  let names = "none" :: "logseq" :: color_names in
   let swatches =
     column ~key:"acc-l"
       ~margin_left:(if modal then 4 else 0)
@@ -223,7 +241,7 @@ let accent_row ~modal =
           ?width:(if modal then None else Some 216) ~max_width:(if modal then 320 else 250)
           (List.mapi
              (fun i color -> accent_swatch ~key:("acc-" ^ string_of_int i) ~current color)
-             names) ]
+             accent_swatches) ]
   in
   column ~key:"acc"
     [ C.action_row ~key:"acc-r"

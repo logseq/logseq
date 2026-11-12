@@ -676,7 +676,68 @@ let native_popup_alignment ~registry =
        ({P.profile_os=P.AndroidOS;P.profile_host=P.KotlinHost},false);
        ({P.profile_os=P.MacOS;P.profile_host=P.NshHost},true)])
 
+let accent_swatch_palettes ~registry =
+  let previous_accent = Ui_services.storage_get "radix-color" in
+  let previous_settings = !Settings_state.st in
+  Settings_state.st := None;
+  Fun.protect ~finally:(fun () ->
+    Settings_state.st := previous_settings;
+    match previous_accent with
+    | Some value -> Ui_services.storage_set "radix-color" value
+    | None -> Ui_services.storage_remove "radix-color") (fun () ->
+    List.iter (fun profile ->
+      List.iter (fun current ->
+        let current_name = Settings_page.accent_name current in
+        Ui_services.storage_set "radix-color"
+          (Ui_services.storage_quote (":" ^ current_name));
+        let session = S.mount ~registry ~profile ~initial:()
+          ~reducer:(fun () () -> ())
+          ~view:(fun _ _ _ -> Settings_page.accent_row ~modal:true) () in
+        Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose session.S.app)) (fun () ->
+          let buttons = List.filter (fun node -> node.M.kind="button") (nodes session) in
+          eqi "Appearance records every closed accent choice" 16 (List.length buttons);
+          let selected = List.filter (fun node ->
+            Hashtbl.find_opt node.M.props "selected"=Some (P.BoolValue true)) buttons in
+          check "persisted accent strings select exactly their typed swatch"
+            (match selected with
+             | [node] -> button_label node=Some (Settings_page.color_label current)
+             | _ -> false);
+          List.iter (fun mode ->
+            let palette = Ui_theme.css_palette mode ~accent:current_name in
+            let vars = Ui_theme_vars.resolve_layers
+              ~root:palette.Ui_theme.root ~body:palette.Ui_theme.body
+              ~application:palette.Ui_theme.application
+              ~overrides:(Ui_theme.snapshot mode).Ui_theme.vars in
+            List.iter (fun node ->
+              List.iter (fun property ->
+                match M.string_prop node property with
+                | None -> ()
+                | Some value ->
+                    check ("every recorded accent " ^ property ^ " resolves in both themes")
+                      (Option.is_some (Ui_theme_vars.substitute (Hashtbl.find_opt vars) value));
+                    check "no-color sentinel never becomes a palette variable"
+                      (not (List.exists (String.starts_with ~prefix:"--rx-none-")
+                        (Ui_theme_vars.references value))))
+                ["background";"hover-background";"shadow";"focus-shadow"])
+              (nodes session)) [Ui_theme.Light; Ui_theme.Dark];
+          let none_button = List.find (fun node ->
+            button_label node=Some (Settings_page.color_label Settings_page.No_accent)) buttons in
+          check "no-color keeps a transparent swatch with a semantic hover"
+            (M.string_prop none_button "background"=Some "transparent"
+             && M.string_prop none_button "hover-background"=Some "hsl(var(--accent))");
+          check "no-color retains its red bar"
+            (List.exists (fun node -> node.M.kind="box"
+              && M.string_prop node "background"=Some "#b91c1c") (nodes session));
+          let button = List.find (fun node ->
+            button_label node=Some (Settings_page.color_label current)) buttons in
+          S.press session button.M.id;
+          eqs "typed swatch persists the existing accent string boundary"
+            current_name (Settings_state.current_accent ()))) Settings_page.accent_swatches)
+      [{P.profile_os=P.WebOS;P.profile_host=P.WebHost};
+       {P.profile_os=P.MacOS;P.profile_host=P.NshHost}])
+
 let run_views ~registry ~profile ~finish =
+  accent_swatch_palettes ~registry;
   native_popup_alignment ~registry;
   native_header_menu_inputs ();
   standalone_inline_groups ~registry;

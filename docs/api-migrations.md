@@ -1,5 +1,16 @@
 # API migrations
 
+## Settings accent swatches
+
+Appearance accent choices now use a closed internal swatch type. The no-color
+choice is a sentinel with a transparent background, semantic accent hover and
+its existing red bar; it never constructs an undefined `--rx-none-*` variable.
+Logseq remains a valid palette using the existing light and dark
+`--rx-logseq-*` definitions. Palette and translated label mappings are exhaustive.
+Persisted values remain unchanged: for example, `":none"`, `":logseq"` and
+`":blue"` still select and save the same choices. No downstream migration is
+required; Web and desktop share the corrected swatch producer.
+
 ## NSH desktop CodeMirror extension
 
 The existing `Logseq_codemirror.cm` constructor and `cm-event` scalar fields are
