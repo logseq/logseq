@@ -1523,10 +1523,11 @@ the existing public encoders and the actual NSH style validator. An immutable
 Local shadowing and backend branch selection retain their compiler identities;
 Web-only values behind a proven host branch remain valid.
 
-The extractor restores the summarized compiler environment stored in each CMT
-before resolving module aliases. For example, `module Props = Ui_parts.Prop`
-now reaches the same encoder as `Ui_parts.Prop`, including through a host guard;
-it no longer disappears from capture. Negative compile fixtures require the
+The extractor reads compiler-declared aliases from each CMT's environment
+summary only along the module prefix being checked. It does not eagerly load
+unrelated opened modules. For example, `module Props = Ui_parts.Prop` now reaches
+the same encoder as `Ui_parts.Prop`, including through a host guard; it no longer
+disappears from capture. Negative compile fixtures require the
 actual candidate provider's offending-value diagnostic. An empty capture or
 an unrelated OCaml/C compilation failure cannot count as a rejected style call.
 

@@ -122,6 +122,23 @@ let baseline = Ui_parts.Prop.overflow `hidden
 let value = Props.overflow `auto
 ''', rejected=True, expected_diagnostic='does not support overflow="auto"')
 
+    def test_nested_module_aliases_keep_the_native_branch_valid(self):
+        self.check_fixture('''module Parts = Ui_parts
+module Controls = struct module Props = Parts.Prop end
+module Host = Lui_ui
+let value context =
+  let native = Host.host context = Lui_protocol.NshHost in
+  if not native then Controls.Props.overflow `auto else Controls.Props.overflow `hidden
+''', rejected=False)
+
+    def test_module_alias_shadowing_keeps_each_compiler_identity(self):
+        self.check_fixture('''module Props = Ui_parts.Prop
+let baseline = Props.overflow `hidden
+let value () =
+  let module Props = struct let overflow _ = Ui_parts.Prop.overflow `hidden end in
+  Props.overflow `auto
+''', rejected=False)
+
     def test_host_guard_preserves_web_only_constant_alias(self):
         self.check_fixture('''let overflow = `auto
 let value context =

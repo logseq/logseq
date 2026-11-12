@@ -10,13 +10,56 @@ let dynamic_optional_arguments = ref 0
 let dynamic_required_arguments = ref 0
 let constants = Hashtbl.create 128
 let known = Hashtbl.create 128
+let module_bindings = Hashtbl.create 32
 let key = function Path.Pident id -> Ident.unique_name id | path -> Path.name path
+let rec summary_module id = function
+  | Env.Env_empty -> None
+  | Env.Env_module (previous,bound,_,declaration) ->
+      if Ident.same id bound then Some declaration else summary_module id previous
+  | Env.Env_value (previous,_,_) | Env.Env_type (previous,_,_)
+  | Env.Env_extension (previous,_,_) | Env.Env_modtype (previous,_,_)
+  | Env.Env_class (previous,_,_) | Env.Env_cltype (previous,_,_)
+  | Env.Env_open (previous,_) | Env.Env_not_aliasable (previous,_)
+  | Env.Env_constraints (previous,_) | Env.Env_copy_types previous
+  | Env.Env_persistent (previous,_) | Env.Env_value_unbound (previous,_,_)
+  | Env.Env_module_unbound (previous,_,_) -> summary_module id previous
+let local_module summary id =
+  if Ident.persistent id then None
+  else match Hashtbl.find_opt module_bindings (Ident.unique_name id) with
+    | Some declaration -> declaration
+    | None ->
+        let declaration=summary_module id summary in
+        Hashtbl.add module_bindings (Ident.unique_name id) declaration;
+        declaration
+let rec local_module_type summary = function
+  | Path.Pident id -> Option.map (fun declaration -> declaration.Types.md_type)
+      (local_module summary id)
+  | Path.Pdot (parent,label) ->
+      (match local_module_type summary parent with
+       | Some (Types.Mty_alias alias) -> local_module_type summary (Path.Pdot (alias,label))
+       | Some (Types.Mty_signature signature) ->
+           List.find_map (function
+             | Types.Sig_module (id,_,declaration,_,_) when Ident.name id=label ->
+                 Some declaration.Types.md_type
+             | _ -> None) signature
+       | _ -> None)
+  | Path.Papply _ | Path.Pextra_ty _ -> None
+let rec module_path summary path =
+  let path=match path with
+    | Path.Pdot (parent,label) -> Path.Pdot (module_path summary parent,label)
+    | _ -> path in
+  match local_module_type summary path with
+  | Some (Types.Mty_alias alias) -> module_path summary alias
+  | _ -> path
 let name expression = match expression.exp_desc with
   | Texp_ident (path,_,_) ->
-      (* Native CMTs retain summarized environments. Restore their typed module
-         aliases before normalizing a value such as Props.overflow. *)
-      let environment=Envaux.env_of_only_summary expression.exp_env in
-      Path.name (Env.normalize_value_path None environment path)
+      (* Read only aliases on this value's module path. Reconstructing the whole
+         CMT environment would eagerly load unrelated opened modules. *)
+      let path=match path with
+        | Path.Pdot (parent,label) ->
+            Path.Pdot (module_path (Env.summary expression.exp_env) parent,label)
+        | _ -> path in
+      Path.name (Env.normalize_value_path None expression.exp_env path)
   | _ -> ""
 let last name = match String.rindex_opt name '.' with
   | Some index -> String.sub name (index+1) (String.length name-index-1)
@@ -194,12 +237,12 @@ let rec iterator = {Tast_iterator.default_iterator with
 let inspect filename =
   Hashtbl.clear known;
   Hashtbl.clear constants;
+  Hashtbl.clear module_bindings;
   let info=Cmt_format.read_cmt filename in
   let absolute path = if Filename.is_relative path then Filename.concat info.cmt_builddir path else path in
   Load_path.init ~auto_include:Load_path.no_auto_include
     ~visible:(List.map absolute info.cmt_loadpath.visible)
     ~hidden:(List.map absolute info.cmt_loadpath.hidden);
-  Envaux.reset_cache ();
   match info.cmt_annots with
   | Cmt_format.Implementation structure -> iterator.structure iterator structure
   | _ -> invalid_arg ("Expected native implementation typedtree: " ^ filename)
