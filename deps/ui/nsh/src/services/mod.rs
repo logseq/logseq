@@ -166,6 +166,10 @@ impl Services {
                 self.menu.install(&request.payload, events)?;
                 Ok(Vec::new())
             }
+            "application-update-check" => {
+                self.menu.check_updates(&request.payload)?;
+                Ok(Vec::new())
+            }
             "clipboard" | "clipboard-write" | "clipboard-read" | "open-url" => {
                 self.clipboard
                     .handle(&request.operation, &request.payload)

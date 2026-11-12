@@ -60,6 +60,7 @@ let run () =
         }
     ; request_flush = (fun () -> incr flushes)
     ; native_performance = None
+    ; desktop_updates = None
     ; assert_owner = (fun () -> ())
     ; theme =
         { mode = (fun () ->
@@ -526,4 +527,27 @@ let run () =
      && Ui_services.dom_query "body" = None);
   check "selected uuids"
     (Ui_services.dom_selected_block_uuids () = [ "u1"; "u2" ]);
-  print_endline "PASS services: installation, storage, theme, navigation, document, ops"
+  let current_update : Ui_services.desktop_update_state ref =
+    ref { Ui_services.configured = false; busy = false } in
+  let listener = ref None and cancellations = ref 0 and checks = ref 0 in
+  let updates : Ui_services.desktop_updates =
+    { current = (fun () -> !current_update)
+    ; subscribe = (fun notify -> listener := Some notify; fun () -> incr cancellations; listener := None)
+    ; check = (fun () -> incr checks) } in
+  let scheduler = Signal.scheduler () and scope = Signal.scope "desktop-update-consumer" in
+  let source = Ui_services.desktop_updates_signal ~scheduler ~scope updates in
+  check "unconfigured updater is represented honestly" (not (Signal.get source).configured);
+  let retained_listener = Option.get !listener in
+  retained_listener { Ui_services.configured = true; busy = true };
+  Signal.stabilize scheduler;
+  check "settings shares the host's configured and busy state"
+    ((Signal.get source).configured && (Signal.get source).busy);
+  updates.check ();
+  check "check routes through the retained host service" (!checks = 1);
+  Signal.dispose_scope scope;
+  let previous_flushes = !flushes in
+  retained_listener { Ui_services.configured = true; busy = false };
+  Signal.dispose_scope scope;
+  check "retired settings subscribers cannot publish or flush"
+    (!cancellations = 1 && !flushes = previous_flushes && !listener = None);
+  print_endline "PASS services: installation, storage, theme, navigation, document, ops, scoped desktop updates"

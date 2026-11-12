@@ -43,6 +43,21 @@ let wide_mode_row ~key ?density () =
 
 let revision = "dev" (* logseq.common.version/REVISION — goog-define default *)
 
+let desktop_update_button () : t =
+ fun ctx parent ->
+  match Ui_services.desktop_updates () with
+  | None -> box ~display:`contents [] ctx parent
+  | Some service ->
+    let state = Ui_services.desktop_updates_signal
+      ~scheduler:ctx.Lui_ui.ui_scheduler ~scope:ctx.Lui_ui.ui_scope service in
+    let label = T.t "settings.general/check-for-updates" in
+    Ui_components.button ~key:"settings-update-check" ~variant:`outline ~size:`sm
+      ~accessibility_identifier:"settings-check-for-updates"
+      ~label ~text:label
+      ~disabled:(reactive (fun (value : Ui_services.desktop_update_state) ->
+        not value.configured || value.busy) state)
+      ~on_press:(fun _ -> service.check ()) [] ctx parent
+
 let version_row () =
   C.action_row ~key:"ver" ~label:(T.t "settings.general/current-version")
     ~actions:
@@ -56,7 +71,7 @@ let version_row () =
                  (row ~key:"ver-c" ~style_class:"ctls" ~cross:`center
                     [ row ~key:"ver-i" ~style_class:"ls-ver-wrap"
                         ~cross:`center ~gap:16 ~flex_wrap:`wrap
-                        [ box ~key:"ver-b" []
+                        [ desktop_update_button ()
                         ; text ~key:"ver-v" ~style_class:"ls-ver-text"
                             ~value:version []
                         ; Ui_components.faded_link ~key:"ver-cl"

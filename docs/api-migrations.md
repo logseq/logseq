@@ -1,5 +1,28 @@
 # API migrations
 
+## Settings reuses its native menu's update owner
+
+The NSH settings General pane restores master's Check for updates button in the
+existing version row. Its label reuses `settings.general/check-for-updates` for
+that exact existing action and role. It is disabled until the host confirms an
+installed update source and while the same updater/preparation is busy. It
+does not create another updater or install a cached archive without checking.
+
+`Ui_services.t.desktop_updates` is an optional typed host service with
+`current`, scoped `subscribe`, and `check`. Existing custom service records
+must add `desktop_updates = None` when unsupported. The maintained Web,
+Apple/iOS and Android adapters preserve their existing behavior with no NSH
+request path. NSH exposes the service through its native adapter; views use
+`desktop_updates_signal ~scheduler ~scope service`, whose subscription and leaf
+signal retire with the view. A retained old callback cannot flush a new view.
+
+On the existing application pump, `application-update-check` accepts exactly
+an empty object and invokes the retained menu owner's public LUI Check action.
+`application-updater-state` carries required boolean `configured` and `busy`
+fields. The menu publishes its own existing phase/preparation state; OCaml
+validates the boundary and ignores queued updates from a retired application.
+No extra queue, installer endpoint, polling timer or backend API flag is added.
+
 ## Standalone NSH installation owns its native restart
 
 The actual Rust main now captures its installed executable, original arguments,

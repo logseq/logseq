@@ -171,6 +171,7 @@ let install ~request_flush ~dom ~timers ~files =
         }
     ; request_flush
     ; native_performance = None
+    ; desktop_updates = None
     ; assert_owner = (fun () -> ())
     ; theme =
         { mode = theme_mode

@@ -63,6 +63,35 @@ let host_request : (string -> unit) ref = ref (fun _ -> ())
 
 let request_host name payload = !host_request (name ^ "\n" ^ payload)
 
+let desktop_updates_enabled = ref false
+let desktop_update_state : Ui_services.desktop_update_state ref =
+  ref { Ui_services.configured = false; busy = false }
+let desktop_update_listeners = Hashtbl.create 2
+let desktop_update_listener_id = ref 0
+let reset_desktop_updates () =
+  desktop_updates_enabled := false;
+  desktop_update_state := { Ui_services.configured = false; busy = false };
+  Hashtbl.clear desktop_update_listeners
+let update_desktop_updates (value : Ui_services.desktop_update_state) =
+  if not !desktop_updates_enabled then invalid_arg "Desktop updates require the NSH host";
+  if value <> !desktop_update_state then begin
+    desktop_update_state := value;
+    let listeners = Hashtbl.fold (fun _ notify all -> notify :: all) desktop_update_listeners [] in
+    List.iter (fun notify -> notify value) listeners
+  end
+let desktop_updates : Ui_services.desktop_updates =
+  { current = (fun () -> !desktop_update_state)
+  ; subscribe = (fun notify ->
+      incr desktop_update_listener_id;
+      let id = !desktop_update_listener_id in
+      Hashtbl.add desktop_update_listeners id notify;
+      fun () -> Hashtbl.remove desktop_update_listeners id)
+  ; check = (fun () ->
+      if not !desktop_updates_enabled then invalid_arg "Desktop updates require the NSH host";
+      let state = !desktop_update_state in
+      if state.configured && not state.busy then request_host "application-update-check" "{}")
+  }
+
 let native_performance_sample : Ui_services.native_performance_sample ref =
   ref { Ui_services.fps = None; panel_open = false }
 let native_performance_listeners = Hashtbl.create 2
@@ -710,7 +739,9 @@ let fmt_date ms =
     (List.nth month_of_abbr (f.month - 1))
     f.day f.year
 
-let install_ui_services ~paints_caret ~assert_owner ~request_flush ~dom ~timers ~files =
+let install_ui_services ~paints_caret ~nsh_updates ~assert_owner ~request_flush ~dom ~timers ~files =
+  reset_desktop_updates ();
+  desktop_updates_enabled := nsh_updates;
   Ui_services.install
     { storage =
         { get = local_storage_get
@@ -719,6 +750,7 @@ let install_ui_services ~paints_caret ~assert_owner ~request_flush ~dom ~timers 
         }
     ; request_flush
     ; native_performance = Some native_performance
+    ; desktop_updates = (if nsh_updates then Some desktop_updates else None)
     ; assert_owner
     ; theme =
         { mode = theme_mode

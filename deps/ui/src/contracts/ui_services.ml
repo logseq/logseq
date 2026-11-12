@@ -6,6 +6,13 @@ type storage = {
 
 type native_performance_sample = { fps : float option; panel_open : bool }
 
+type desktop_update_state = { configured : bool; busy : bool }
+type desktop_updates = {
+  current : unit -> desktop_update_state;
+  subscribe : (desktop_update_state -> unit) -> (unit -> unit);
+  check : unit -> unit;
+}
+
 type native_performance = {
   current : unit -> native_performance_sample;
   subscribe : (native_performance_sample -> unit) -> (unit -> unit);
@@ -410,6 +417,7 @@ type dom = {
 type t = {
   storage : storage;
   native_performance : native_performance option;
+  desktop_updates : desktop_updates option;
   request_flush : unit -> unit;
   assert_owner : unit -> unit;
   theme : theme;
@@ -453,6 +461,17 @@ let storage_quote v = "\"" ^ v ^ "\""
 
 let request_flush () = (get ()).request_flush ()
 let native_performance () = (get ()).native_performance
+let desktop_updates () = (get ()).desktop_updates
+let desktop_updates_signal ~scheduler ~scope (service : desktop_updates) =
+  if Signal.scope_is_disposed scope then invalid_arg "Desktop updates require a live scope";
+  let state = Signal.state scheduler (service.current ()) in
+  let cancel = service.subscribe (fun value ->
+    if not (Signal.scope_is_disposed scope) then begin
+      Signal.set state value;
+      (get ()).request_flush ()
+    end) in
+  Signal.on_dispose scope (fun () -> cancel (); Signal.dispose_signal (Signal.value state));
+  Signal.value state
 
 let theme_mode () = (get ()).theme.mode ()
 let theme_system_default () = (get ()).theme.system_default ()

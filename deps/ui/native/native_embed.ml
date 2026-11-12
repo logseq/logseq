@@ -488,7 +488,7 @@ let initialize_unlocked platform_code host_code (payload : string) =
   in
   Printexc.record_backtrace true;
   Daemon_client.start_prewarm ();
-  Platform.install_ui_services ~paints_caret ~assert_owner:assert_entry_owner ~request_flush:Runtime.flush ~dom:Ui_dom_native.ops ~timers:Ui_dom_native.timers ~files:Ui_dom_native.files;
+  Platform.install_ui_services ~paints_caret ~nsh_updates:(host_code = 6) ~assert_owner:assert_entry_owner ~request_flush:Runtime.flush ~dom:Ui_dom_native.ops ~timers:Ui_dom_native.timers ~files:Ui_dom_native.files;
   (match (I18n.init ()).Js.Promise.state with
    | Js.Promise.Resolved () -> ()
    | Js.Promise.Rejected error -> raise error
@@ -926,6 +926,18 @@ let platform_event payload =
       in
       if name = "update-prepare" then start_update_preparation (update_id body)
       else if name = "update-abort" then abort_update_preparation (update_id body)
+      else if name = "application-updater-state" then begin
+        let fields = match json with Js.Json.JObject fields -> fields
+          | _ -> invalid_arg "Application updater state requires an object" in
+        let boolean field = match List.assoc_opt field fields with
+          | Some (Js.Json.JBoolean value) -> value
+          | _ -> invalid_arg ("Application updater state requires boolean " ^ field) in
+        let state = { Ui_services.configured = boolean "configured"; busy = boolean "busy" } in
+        let owner = !current_app in
+        Host.enqueue (fun () -> match owner, !current_app with
+          | Some captured, Some current when captured == current -> Platform.update_desktop_updates state
+          | Some _, Some _ | Some _, None | None, Some _ | None, None -> ())
+      end
       else if name = "application-menu-command" then
         Host.enqueue (fun () ->
           Update_admission.require_input Update_admission.application "application-menu";
@@ -1095,6 +1107,7 @@ let dispose () =
     last_native_palette_view := None;
     Platform.cancel_host_tasks ();
     Platform.configure_natural_dates ~nsh:false;
+    Platform.reset_desktop_updates ();
     Platform.cancel_keychain_requests ();
     Browser_ui.cancel_requests ();
     Host.set_host_op Host.disconnected;
@@ -1187,6 +1200,7 @@ module Ffi = struct
               ["update-prepare";
                "update-abort";
                "application-menu-command";
+               "application-updater-state";
                "keychain-result";
                "clipboard-write-result";
                "natural-date-result";

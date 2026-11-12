@@ -276,6 +276,7 @@ let with_picker_services run =
     let services : Ui_services.t={
       storage={get=Hashtbl.find_opt values;set=Hashtbl.replace values;remove=Hashtbl.remove values};
       native_performance=None;
+      desktop_updates=None;
       request_flush=(fun () -> ());assert_owner=(fun () -> ());
       theme={mode=(fun () -> "light");system_default=(fun () -> true);
         prefers_dark=(fun () -> false);set_system_pref=(fun _ -> ());set_theme_pref=(fun _ -> ());

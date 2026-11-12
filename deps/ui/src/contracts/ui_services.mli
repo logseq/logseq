@@ -6,6 +6,13 @@ type storage = {
 
 type native_performance_sample = { fps : float option; panel_open : bool }
 
+type desktop_update_state = { configured : bool; busy : bool }
+type desktop_updates = {
+  current : unit -> desktop_update_state;
+  subscribe : (desktop_update_state -> unit) -> (unit -> unit);
+  check : unit -> unit;
+}
+
 type native_performance = {
   current : unit -> native_performance_sample;
   subscribe : (native_performance_sample -> unit) -> (unit -> unit);
@@ -314,6 +321,7 @@ type dom = {
 type t = {
   storage : storage;
   native_performance : native_performance option;
+  desktop_updates : desktop_updates option;
   request_flush : unit -> unit;
   assert_owner : unit -> unit;
   theme : theme;
@@ -342,6 +350,8 @@ val storage_quote : string -> string
 
 val request_flush : unit -> unit
 val native_performance : unit -> native_performance option
+val desktop_updates : unit -> desktop_updates option
+val desktop_updates_signal : scheduler:Signal.scheduler -> scope:Signal.scope -> desktop_updates -> desktop_update_state Signal.signal
 
 val theme_mode : unit -> string
 val theme_system_default : unit -> bool

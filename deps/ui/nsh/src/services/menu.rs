@@ -76,6 +76,7 @@ pub struct ApplicationMenu {
     owner: Owner,
     installed: Signal<Option<Installed>>,
     preparation: Rc<Preparation>,
+    updates: UpdateActions,
 }
 impl ApplicationMenu {
     pub fn mount() -> Self {
@@ -108,9 +109,19 @@ impl ApplicationMenu {
             }),
         };
         let updates = UpdateActions::installed(lifecycle);
+        let menu_updates = updates.clone();
         effect(move || {
             if let Some(current) = installed.get() {
-                let contribution = updates.menu_items(current.labels.updates.clone());
+                let contribution = menu_updates.menu_items(current.labels.updates.clone());
+                let state = PlatformEvent {
+                    operation: "application-updater-state".into(),
+                    payload: json!({"configured":menu_updates.is_configured(),
+                        "busy":menu_updates.is_busy() || preparing.get()})
+                    .to_string(),
+                };
+                if let Err(error) = (current.send)(state) {
+                    eprintln!("application updater state: {error}");
+                }
                 set_application_menu(items(
                     current.labels,
                     os() == Os::MacOs,
@@ -125,10 +136,27 @@ impl ApplicationMenu {
             owner: Owner::current(),
             installed,
             preparation,
+            updates,
         }
     }
     pub(super) fn preparation_result(&self, payload: &str) -> Result<(), String> {
         self.preparation.response(payload)
+    }
+    pub(super) fn check_updates(&self, payload: &str) -> Result<(), String> {
+        #[derive(Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct CheckRequest {}
+        let _: CheckRequest = serde_json::from_str(payload)
+            .map_err(|error| format!("application-update-check: {error}"))?;
+        if !self.owner.is_live() || self.preparation.active() {
+            return Ok(());
+        }
+        let current = self
+            .installed
+            .get_untracked()
+            .ok_or("application update requires installed menu labels")?;
+        self.updates.check_for_updates(current.labels.updates)?;
+        Ok(())
     }
     pub fn install(&self, payload: &str, events: ApplicationEvents) -> Result<(), String> {
         if !self.owner.is_live() {
