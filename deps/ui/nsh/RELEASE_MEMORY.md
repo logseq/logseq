@@ -2,6 +2,12 @@
 
 ## Scope and artifact identity
 
+For the later isolated standalone release measurement with the compiled default
+and bounded complete Emoji/icon picker visits, see
+[native property and capability qualification](../../../docs/agent-guide/review-probes/2026-11-13/native-property-and-capability-qualification.md#current-standalone-release-memory).
+That report identifies its separate exact application/LUI checkpoint; neither
+measurement is automatically evidence for subsequent builds.
+
 These are historical control measurements of one release artifact, not memory
 qualification of the current final application. The approximately 135 MiB result
 belongs to the previous release with an explicit `OCAMLRUNPARAM=s=2M` override.
