@@ -1221,7 +1221,8 @@ let native_popup_placement_contract () =
               | [popup] -> popup.Properties_state.vo_view
               | _ -> failwith "Placement fixture requires one popup" in
             Lui_elements.column
-              [Lui_elements.button ~accessibility_identifier:"popup-placement-trigger" [];
+              [Lui_elements.button ~accessibility_identifier:"popup-placement-trigger"
+                 ~text:"Popup trigger" [];
                popup]) in
         Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app)) (fun () ->
           ignore (Lui_app.start app);ignore (Lui_app.flush app);
