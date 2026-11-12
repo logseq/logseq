@@ -537,8 +537,10 @@ let test_structure_completion_ownership (h : host) =
   check "immediate rejection recovers and releases the exact owner"
     (rejected && not !S.structure_pending && !refreshed=1 && !cleaned=1);
   let release_old = ref (fun () -> ()) and release_new = ref (fun () -> ()) in
-  let old = Js.Promise.make (fun ~resolve ~reject:_ -> release_old := (fun () -> resolve () [@u])) in
-  let newer = Js.Promise.make (fun ~resolve ~reject:_ -> release_new := (fun () -> resolve () [@u])) in
+  let old = Js.Promise.make (fun ~resolve ~reject:_ -> release_old := (fun () -> resolve true [@u]))
+    |> Js.Promise.then_ (fun _ -> Js.Promise.resolve ()) in
+  let newer = Js.Promise.make (fun ~resolve ~reject:_ -> release_new := (fun () -> resolve true [@u]))
+    |> Js.Promise.then_ (fun _ -> Js.Promise.resolve ()) in
   let old_finished = ref false and new_finished = ref false in
   let old_complete = claim old (fun () -> old_finished:=true) in
   let new_complete = claim newer (fun () -> new_finished:=true) in
@@ -551,7 +553,8 @@ let test_structure_completion_ownership (h : host) =
   let* () = new_complete in
   check "the current operation alone releases the gate" (not !S.structure_pending && !new_finished);
   let release_nested = ref (fun () -> ()) in
-  let nested = Js.Promise.make (fun ~resolve ~reject:_ -> release_nested := (fun () -> resolve () [@u])) in
+  let nested = Js.Promise.make (fun ~resolve ~reject:_ -> release_nested := (fun () -> resolve true [@u]))
+    |> Js.Promise.then_ (fun _ -> Js.Promise.resolve ()) in
   let nested_completion = ref None and inline_outer = ref None in
   A.run_structure ~restore:(S.editing ()) (Js.Promise.resolve ()) (fun () ->
     inline_outer := Some (snd (Option.get !A.structure_owner));

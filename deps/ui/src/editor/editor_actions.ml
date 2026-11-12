@@ -499,11 +499,11 @@ let run_structure ?recover ?current_guard ~restore p finish =
     | None -> true
   in
   let claimed = Option.is_none current_guard || context_current () in
-  let settle_completion = ref None in
-  let completion = Js.Promise.make (fun ~resolve ~reject ->
-      settle_completion := Some
-        ((fun () -> resolve () [@u]), (fun error -> reject error [@u]))) in
-  let resolve_completion, reject_completion = Option.get !settle_completion in
+  let completed = ref None and release_completion = ref None in
+  let pending = Js.Promise.make (fun ~resolve ~reject:_ ->
+      release_completion := Some (fun () -> resolve true [@u])) in
+  let completion = let* _ = pending in Option.get !completed in
+  let release_completion = Option.get !release_completion in
   if claimed then begin
     (* Native promise continuations can run inline for an already-settled
        title or worker result. Publish the exact owner and its stable tail
@@ -569,11 +569,14 @@ let run_structure ?recover ?current_guard ~restore p finish =
             guard.structure_finish ();
             finished)
   in
+  (* The boolean notification has the same resolver arity on both runtimes.
+     Adopt the original settled promise, retaining its exact rejection without
+     converting Melange's opaque Promise.error into a native exception. *)
+  completed := Some complete;
+  let notify () = release_completion (); Js.Promise.resolve () in
   ignore
-    ((let* () = complete in resolve_completion (); Js.Promise.resolve ())
-     |> Js.Promise.catch (fun error ->
-         reject_completion error;
-         Js.Promise.resolve ()))
+    ((let* () = complete in notify ())
+     |> Js.Promise.catch (fun _ -> notify ()))
 
 (* Arm the optimistic editor now and again after canonical rows land. *)
 let with_focus_after ~restore uuid caret p =
