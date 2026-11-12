@@ -86,6 +86,32 @@ def wait_find(agent, selector, deadline):
     raise RuntimeError(f"Packaged native view did not become ready: {selector}")
 
 
+def dated_journal_header(tree, helper):
+    # Match the actual default English journal title, regardless of node kind.
+    # The caller supplies only the canonical journals subtree, never the sidebar.
+    pattern = r"(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) [0-9]{1,2}(?:st|nd|rd|th), [0-9]{4}"
+    for node in helper.nodes(tree):
+        text = node.get("props", {}).get("text")
+        if isinstance(text, str) and re.fullmatch(pattern, text.strip()):
+            return {"node": node.get("id"), "dateHeaderText": text.strip()}
+    return None
+
+
+def wait_journal_body(agent, helper, deadline):
+    selector = "prop:accessibility-identifier=journals"
+    while time.monotonic() < deadline:
+        matches = agent.request(op="find", selector=selector).get("nodes", [])
+        if len(matches) > 1:
+            raise RuntimeError("Packaged application has multiple canonical journals roots")
+        if matches:
+            subtree = agent.request(op="tree", selector=selector)
+            header = dated_journal_header(subtree, helper)
+            if header:
+                return subtree, header
+        time.sleep(min(0.05, max(0, deadline - time.monotonic())))
+    raise RuntimeError("Actual dated journal body did not mount before the deadline")
+
+
 def native_press(agent, selector):
     reply = agent.request(op="native-press", selector=selector)
     if reply.get("handled") is not True or reply.get("activation") != "native-controller":
@@ -134,11 +160,13 @@ def background_native(application, private, logs, deadline):
                 if not any(node.get("props", {}).get("text") == "Journals" for node in helper.nodes(tree)):
                     raise RuntimeError("Actual packaged Journals semantic content is missing")
                 (logs / "journal-tree.json").write_text(json.dumps(tree, indent=2) + "\n", encoding="utf-8")
+                subtree, result["journalBody"] = wait_journal_body(agent, helper, deadline)
+                (logs / "journal-body-tree.json").write_text(json.dumps(subtree, indent=2) + "\n", encoding="utf-8")
                 result["screenshots"] = [save_png(agent.request(op="screenshot"), logs / "journal.png")]
                 result["more"] = native_press(agent, "prop:accessibility-identifier=toolbar-dots-btn")
-                wait_find(agent, "text:Appearance", deadline)
+                wait_find(agent, "kind:menu-item&text:Appearance", deadline)
                 result["screenshots"].append(save_png(agent.request(op="screenshot"), logs / "more.png"))
-                result["appearance"] = native_press(agent, "text:Appearance")
+                result["appearance"] = native_press(agent, "kind:menu-item&text:Appearance")
                 wait_find(agent, "prop:accessibility-identifier=appearance_settings", deadline)
                 result["screenshots"].append(save_png(agent.request(op="screenshot"), logs / "appearance.png"))
                 if process.poll() is not None:

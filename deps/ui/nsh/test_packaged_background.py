@@ -31,6 +31,16 @@ class PackagedBackgroundTests(unittest.TestCase):
             self.assertEqual(environment["PATH"], "kept")
         self.assertEqual(inherited, before)
 
+    def test_journal_readiness_accepts_real_text_or_raw_headers_not_sidebar_labels(self):
+        helper = type("TreeHelper", (), {"nodes": staticmethod(lambda tree: iter(tree["nodes"]))})
+        for kind in ("text", "extension"):
+            tree = {"nodes": [{"id": 9, "kind": kind, "props": {"text": "Nov 12th, 2026"}}]}
+            self.assertEqual(QUALIFIER.dated_journal_header(tree, helper),
+                             {"node": 9, "dateHeaderText": "Nov 12th, 2026"})
+        for text in ("Journals", "Demo", "2026", "Loading 2026", "Nov 12th, "):
+            tree = {"nodes": [{"props": {"text": text}}]}
+            self.assertIsNone(QUALIFIER.dated_journal_header(tree, helper))
+
     def test_png_evidence_rejects_mismatched_dimensions_or_non_app_content(self):
         # A complete one-pixel PNG exercises evidence validation, not an app flow.
         png = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j89sAAAAASUVORK5CYII=")

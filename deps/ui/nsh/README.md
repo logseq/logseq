@@ -355,8 +355,9 @@ the packaged-library Headless gate used on Linux. It extracts outside the checko
 and runs the actual `Contents/MacOS/Logseq` launcher with fresh private
 home/graph/state directories and `--startup-preflight`. External native library,
 asset, worker and dynamic-loader overrides are removed. It reuses LUI's existing
-packaged-agent helper, requires Journals semantic readiness, captures real app
-content, activates the native More/Appearance controllers and requires the actual
+packaged-agent helper, requires Journals semantic readiness and an actual dated
+journal header inside the canonical `journals` subtree before the first PNG,
+captures real app content, activates the native More/Appearance controllers and requires the actual
 startup log to report `active=false, hidden=false`.
 
 The native flow has a 50-second deadline plus bounded cleanup within 60 seconds.
