@@ -338,3 +338,32 @@ These are source/consumer checks, not an operating-system IME qualification. The
 shown-run policy alone does not prove concealed-delimiter advance removal;
 `visibility:hidden` and `display:none` have different text-layout semantics and
 require a separate renderer projection check.
+
+
+### Packaged macOS background-window regression
+
+After building and packaging the actual host, run:
+
+```sh
+LUI_SOURCE_ROOT=/absolute/path/to/lui python3 deps/ui/nsh/qualify_packaged_startup.py \
+  /absolute/path/to/Logseq-NSH-darwin-arm64-2.0.2.zip \
+  --native-background --evidence _build/nsh-ci/packaged-startup.json
+```
+
+The flag selects a real macOS package-launch qualification; the default remains
+the packaged-library Headless gate used on Linux. It extracts outside the checkout
+and runs the actual `Contents/MacOS/Logseq` launcher with fresh private
+home/graph/state directories and `--startup-preflight`. External native library,
+asset, worker and dynamic-loader overrides are removed. It reuses LUI's existing
+packaged-agent helper, requires Journals semantic readiness, captures real app
+content, activates the native More/Appearance controllers and requires the actual
+startup log to report `active=false, hidden=false`.
+
+The native flow has a 50-second deadline plus bounded cleanup within 60 seconds.
+Only its fresh process group and private resources are stopped. The evidence
+JSON reports `qualified-background-native-window`; PNGs, agent transcript, tree
+and native log are preserved beside it and uploaded by macOS CI. Successful
+capture/controller activation does not establish pixel/UX parity, hardware
+input, focus or IME behavior. No application activation, unlock or display-power
+operation is performed. The optional mode requires actual macOS and never
+silently falls back to Headless.

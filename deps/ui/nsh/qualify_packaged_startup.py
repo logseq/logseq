@@ -1,24 +1,183 @@
 #!/usr/bin/env python3
 """Qualify actual packaged OCaml/worker/resources with the real App Headless gate.
 
-This does not launch the packaged native window or establish pixel/UX parity.
+The default is the existing Headless gate. --native-background additionally
+selects the real macOS package launcher/window flow without activation; it does
+not establish pixel/UX parity or hardware input.
 """
 from __future__ import annotations
 
 import argparse
+import base64
+import importlib.util
 import json
 import os
 from pathlib import Path
 import platform
+import re
+import signal
+import socket
+import struct
 import subprocess
 import tempfile
+import time
 
 REPO = Path(__file__).resolve().parents[3]
 
 
-def qualify(archive, evidence):
+REMOVED_OVERRIDES = (
+    "LUI_OCAML_LIBRARY", "LOGSEQ_NATIVE_ASSET_DIR", "LOGSEQ_DB_WORKER_BIN",
+    "NSH_RUNTIME", "NSH_RUNTIME_DIR", "LD_LIBRARY_PATH", "DYLD_LIBRARY_PATH",
+    "DYLD_FALLBACK_LIBRARY_PATH", "DYLD_INSERT_LIBRARIES",
+)
+
+
+def package_agent():
+    source = Path(os.environ.get("LUI_SOURCE_ROOT", REPO.parent / "lui")).resolve()
+    path = source / "tooling/test_nsh_packaged_app.py"
+    if not path.is_file():
+        raise ValueError(f"Actual LUI packaged agent helper is missing: {path}")
+    spec = importlib.util.spec_from_file_location("logseq_packaged_lui_agent", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def native_environment(private, address, inherited):
+    environment = inherited.copy()
+    for name in REMOVED_OVERRIDES:
+        environment.pop(name, None)
+    for name, directory in {
+        "HOME": "home", "LOGSEQ_ROOT_DIR": "root", "LOGSEQ_GRAPHS_DIR": "graphs",
+        "LOGSEQ_UI_STATE_DIR": "state", "XDG_STATE_HOME": "state",
+        "XDG_DATA_HOME": "data", "XDG_CACHE_HOME": "cache",
+    }.items():
+        path = private / directory
+        path.mkdir(parents=True, exist_ok=True)
+        environment[name] = str(path.resolve())
+    environment.update(LOGSEQ_NO_LOGIN_DAEMON="1", LUI_AGENT_BACKGROUND="1",
+                       LUI_AGENT_LISTEN=f"{address[0]}:{address[1]}")
+    return environment
+
+
+def save_png(reply, destination):
+    if reply.get("format") != "png" or reply.get("capture") != "appkit-content":
+        raise ValueError("Packaged host did not return actual AppKit content")
+    encoded = reply.get("data")
+    if not isinstance(encoded, str) or len(encoded) > 16 * 1024 * 1024:
+        raise ValueError("Screenshot must be a bounded base64 PNG")
+    png = base64.b64decode(encoded, validate=True)
+    if len(png) < 33 or png[:8] != b"\x89PNG\r\n\x1a\n" or png[8:16] != b"\0\0\0\rIHDR":
+        raise ValueError("Screenshot has no valid PNG header")
+    width, height = struct.unpack(">II", png[16:24])
+    if not width or not height or (width, height) != (reply.get("width"), reply.get("height")):
+        raise ValueError("Screenshot dimensions disagree with its actual PNG")
+    destination.write_bytes(png)
+    return {"file": str(destination), "width": width, "height": height,
+            "capture": "appkit-content", "pixelAndUxParity": "unqualified"}
+
+
+def wait_find(agent, selector, deadline):
+    while time.monotonic() < deadline:
+        reply = agent.request(op="find", selector=selector)
+        if reply.get("nodes"):
+            return reply
+        time.sleep(min(0.05, max(0, deadline - time.monotonic())))
+    raise RuntimeError(f"Packaged native view did not become ready: {selector}")
+
+
+def native_press(agent, selector):
+    reply = agent.request(op="native-press", selector=selector)
+    if reply.get("handled") is not True or reply.get("activation") != "native-controller":
+        raise RuntimeError(f"Actual native controller did not handle {selector}: {reply}")
+    return reply
+
+
+def background_native(application, private, logs, deadline):
+    helper = package_agent()
+    executable = application / "Contents/MacOS/Logseq"
+    if not executable.is_file() or not os.access(executable, os.X_OK):
+        raise ValueError("Package is missing its actual executable Logseq launcher")
+    logs.mkdir(parents=True, exist_ok=True)
+    with socket.socket() as reservation:
+        reservation.bind(("127.0.0.1", 0))
+        address = reservation.getsockname()
+    environment = native_environment(private, address, os.environ)
+    result = {"qualified": False, "boundary": "qualified-background-native-window",
+              "launcher": str(executable), "removedOverrides": list(REMOVED_OVERRIDES),
+              "privateRoot": str(private), "pixelAndUxParity": "unqualified",
+              "hardwareInput": "unqualified"}
+    process = None
+    agent = None
+    try:
+        with (logs / "native.log").open("wb") as output, \
+                (logs / "agent.jsonl").open("w", encoding="utf-8") as transcript:
+            process = subprocess.Popen([str(executable), "--startup-preflight", str(private)],
+                                       cwd=private, env=environment, stdin=subprocess.DEVNULL,
+                                       stdout=output, stderr=output, start_new_session=True)
+            try:
+                agent = helper.Agent(helper.connect(process, address, deadline), deadline, transcript)
+                hello = agent.request(op="hello")
+                if (hello.get("protocol") != "lui-agent" or hello.get("version") != 1
+                        or hello.get("host") != "logseq-native"):
+                    raise RuntimeError(f"Unexpected packaged agent protocol: {hello}")
+                if not {"native-press", "screenshot"}.issubset(hello.get("host_native_ops", [])):
+                    raise RuntimeError("Package does not advertise the required actual native operations")
+                result["hello"] = hello
+                own_listener = f"lui-agent listening on {address[0]}:{address[1]}"
+                if own_listener not in (logs / "native.log").read_text(encoding="utf-8", errors="replace"):
+                    raise RuntimeError("Launched process did not prove ownership of its agent endpoint")
+                wait_find(agent, "prop:accessibility-identifier=left-menu", deadline)
+                native_press(agent, "prop:accessibility-identifier=left-menu")
+                wait_find(agent, "text:Journals", deadline)
+                tree = agent.request(op="tree")
+                if not any(node.get("props", {}).get("text") == "Journals" for node in helper.nodes(tree)):
+                    raise RuntimeError("Actual packaged Journals semantic content is missing")
+                (logs / "journal-tree.json").write_text(json.dumps(tree, indent=2) + "\n", encoding="utf-8")
+                result["screenshots"] = [save_png(agent.request(op="screenshot"), logs / "journal.png")]
+                result["more"] = native_press(agent, "prop:accessibility-identifier=toolbar-dots-btn")
+                wait_find(agent, "text:Appearance", deadline)
+                result["screenshots"].append(save_png(agent.request(op="screenshot"), logs / "more.png"))
+                result["appearance"] = native_press(agent, "text:Appearance")
+                wait_find(agent, "prop:accessibility-identifier=appearance_settings", deadline)
+                result["screenshots"].append(save_png(agent.request(op="screenshot"), logs / "appearance.png"))
+                if process.poll() is not None:
+                    raise RuntimeError("Packaged application exited during the native flow")
+                output.flush()
+                state = re.findall(r"Logseq background window: active=(true|false), hidden=(true|false)",
+                                   (logs / "native.log").read_text(encoding="utf-8", errors="replace"))
+                if not state or any(pair != ("false", "false") for pair in state):
+                    raise RuntimeError(f"Background launch did not prove inactive, unhidden state: {state}")
+                result["backgroundState"] = {"active": False, "hidden": False,
+                                             "evidence": "actual startup log"}
+                result["qualified"] = True
+            finally:
+                if agent:
+                    agent.close()
+                if process:
+                    result["shutdown"] = helper.stop(process)
+                    # A crashed parent can leave a worker in its original group;
+                    # helper.stop returns early when that parent already exited.
+                    # This is only the fresh group this qualifier created.
+                    try:
+                        os.killpg(process.pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                    result["exitCode"] = process.returncode
+    except Exception as error:
+        result.update(qualified=False, error=str(error))
+        raise
+    finally:
+        (logs / "result.json").write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+    return result
+
+
+def qualify(archive, evidence, native_background=False):
     archive = archive.resolve(strict=True)
     system = platform.system()
+    if native_background and system != "Darwin":
+        raise ValueError("--native-background requires actual native macOS")
+    deadline = time.monotonic() + 50 if native_background else None
     if system not in ("Darwin", "Linux"):
         raise ValueError("Packaged App startup currently requires native macOS or Linux")
     with tempfile.TemporaryDirectory(prefix="logseq-nsh-package-") as directory:
@@ -26,14 +185,17 @@ def qualify(archive, evidence):
         if outside == REPO or REPO in outside.parents:
             raise ValueError("Package extraction must be outside the checkout; change TMPDIR")
         if system == "Darwin":
-            subprocess.run(["ditto", "-x", "-k", str(archive), str(outside)], check=True)
+            subprocess.run(["ditto", "-x", "-k", str(archive), str(outside)], check=True,
+                           timeout=max(0.01, deadline-time.monotonic()) if deadline else None)
             application = outside / "Logseq NSH.app"
             executable = application / "Contents/MacOS/logseq-nsh"
             resources = application / "Contents/Resources"
             library = resources / "liblogseq_ui.dylib"
-            subprocess.run(["codesign", "--verify", "--deep", "--strict", str(application)], check=True)
+            subprocess.run(["codesign", "--verify", "--deep", "--strict", str(application)], check=True,
+                           timeout=max(0.01, deadline-time.monotonic()) if deadline else None)
         else:
-            subprocess.run(["tar", "-xzf", str(archive), "-C", str(outside)], check=True)
+            subprocess.run(["tar", "-xzf", str(archive), "-C", str(outside)], check=True,
+                           timeout=max(0.01, deadline-time.monotonic()) if deadline else None)
             application = outside / "Logseq-NSH"
             executable = application / "bin/logseq-nsh"
             resources = application / "Resources"
@@ -44,6 +206,16 @@ def qualify(archive, evidence):
                 raise ValueError(f"The actual package is missing {artifact.relative_to(outside)}")
         if not os.access(executable, os.X_OK) or not os.access(worker, os.X_OK):
             raise ValueError("Packaged native host/worker must retain executable permissions")
+        if native_background:
+            private = outside / "private"
+            private.mkdir()
+            result = background_native(application, private.resolve(),
+                                       evidence.resolve().with_suffix(""), deadline)
+            result.update(archive=str(archive), platform=system, outsideCheckout=True,
+                          nativeWindowLaunch="qualified-background-native-window")
+            evidence.parent.mkdir(parents=True, exist_ok=True)
+            evidence.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+            return result
         environment = os.environ.copy()
         environment.update(LUI_OCAML_LIBRARY=str(library),
                            LOGSEQ_NATIVE_ASSET_DIR=str(resources), LOGSEQ_DB_WORKER_BIN=str(worker))
@@ -66,10 +238,12 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("archive", type=Path)
     parser.add_argument("--evidence", type=Path, required=True)
+    parser.add_argument("--native-background", action="store_true",
+                        help="Qualify the actual macOS launcher/window and native menu without activation")
     args = parser.parse_args()
     try:
-        print(json.dumps(qualify(args.archive, args.evidence)))
-    except (OSError, ValueError, subprocess.CalledProcessError) as error:
+        print(json.dumps(qualify(args.archive, args.evidence, args.native_background)))
+    except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
         parser.exit(1, f"Actual packaged App startup failed: {error}\n")
 
 

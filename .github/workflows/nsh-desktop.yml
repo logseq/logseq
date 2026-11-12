@@ -91,6 +91,8 @@ jobs:
           cargo clippy --locked --manifest-path deps/ui/nsh/Cargo.toml --all-targets -- -D warnings
       - name: Windows candidate source guards (not Windows qualification)
         run: python3 -m unittest discover -s deps/ui/nsh -p test_windows_dll_builder.py
+      - name: Packaged native orchestration source tests
+        run: python3 -m unittest discover -s deps/ui/nsh -p test_packaged_background.py
       - name: Actual native factories and host service tests
         run: cargo test --locked --manifest-path deps/ui/nsh/Cargo.toml --lib --bin nsh-app-logseq
       - name: Build and qualify the complete staged native application
@@ -112,8 +114,12 @@ jobs:
       - name: Qualify actual packaged runtime and resources outside the checkout
         run: |
           archive=$(cat _build/nsh-ci/archive.txt)
+          native_options=()
+          if [[ "$RUNNER_OS" == "macOS" ]]; then
+            native_options+=(--native-background)
+          fi
           python3 deps/ui/nsh/qualify_packaged_startup.py "$archive" \
-            --evidence _build/nsh-ci/packaged-startup.json \
+            --evidence _build/nsh-ci/packaged-startup.json "${native_options[@]}" \
             > _build/nsh-ci/packaged-startup.log 2>&1
       - name: Preserve application build and startup evidence
         if: always()
