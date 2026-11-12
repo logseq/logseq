@@ -112,6 +112,9 @@ jobs:
           export NODE_PATH="$runtime"
           (cd deps/ui && opam exec -- dune runtest test/contracts) 2>&1 | tee _build/nsh-ci/activity-contracts.log
           python3 deps/ui/nsh/run_update_preparation_native.py 2>&1 | tee _build/nsh-ci/save-abort-contracts.log
+          python3 deps/ui/nsh/run_owned_worker_update_native.py \
+            --worker "$PWD/deps/db-worker/_build/default/bin/main.exe" \
+            2>&1 | tee _build/nsh-ci/owned-worker-update.log
           python3 deps/ui/nsh/run_virtual_rows_native.py 2>&1 | tee _build/nsh-ci/production-virtual-rows.log
       - name: Package the qualified actual native host
         run: |

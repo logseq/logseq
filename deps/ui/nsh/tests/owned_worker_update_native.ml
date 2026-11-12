@@ -169,7 +169,7 @@ let run () =
   assert_stream_closed stream;
   event "stopped" (metadata first);
   gate "continue";
-  await (Daemon_client.ipc [Wire.String "releaseDbWorkerRuntime"; Wire.String repo]);
+  ignore (await (Daemon_client.ipc [Wire.String "releaseDbWorkerRuntime"; Wire.String repo]));
   let reopened = attach repo in
   check "Durability probe starts a new actual child instance"
     (reopened.origin.instance<>first.origin.instance);
