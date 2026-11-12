@@ -60,11 +60,11 @@ The same driver is now required by the macOS/Linux and Windows application CI
 workflows. This local result does not qualify Windows HANDLE waiting, Windows
 Job containment or Linux execution. Those require actual corresponding jobs.
 
-This test qualifies explicit owned-worker protocol operations. It does not
-qualify saving/quiescing all application workers as one update transaction,
-restoring transports after partial shutdown, installer admission, package
-replacement, signing or relaunch. The ordinary update action still refuses
-installation after its existing save/abort preparation path.
+The initial single-worker execution above qualified explicit owned-worker
+protocol operations. The follow-up below expands this to real multiworker
+preparation and transport restoration. Installer admission, package replacement,
+signing and relaunch remain outside these worker tests. The ordinary update
+action still refuses installation after its save/abort preparation path.
 
 ## Production coordinator follow-up
 
