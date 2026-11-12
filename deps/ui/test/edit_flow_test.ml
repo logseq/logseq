@@ -1215,9 +1215,9 @@ let test_property_remove_batch (h : host) =
   let requests = ref [] and refreshed = ref [] and closed = ref 0 in
   let rejected = ref false and complete = ref (fun () -> ()) in
   Runtime.read_model := (fun () -> !model);
-  Runtime.hooks.refresh_property_areas := (fun () ->
+  Runtime.hooks.refresh_property_areas <- (fun () ->
     refreshed := !refreshed @ ["properties"]; Ui_task.resolve ());
-  Runtime.hooks.refresh_after_ops := (fun () ->
+  Runtime.hooks.refresh_after_ops <- (fun () ->
     refreshed := !refreshed @ ["view"]; Ui_task.resolve ());
   Properties_dialog.current_sig := None;
   let prop = W.Map [W.Keyword "db/ident",W.Keyword "fixture/remove"] in
@@ -1275,8 +1275,8 @@ let test_property_remove_batch (h : host) =
   check "old property completion neither refreshes the destination nor closes a newer dialog"
     (!refreshed=[] && !closed=0 && !Properties_dialog.current=Some newer);
   Runtime.worker:=previous_worker;Runtime.read_model:=previous_model;
-  Runtime.hooks.refresh_property_areas:=previous_properties;
-  Runtime.hooks.refresh_after_ops:=previous_view;
+  Runtime.hooks.refresh_property_areas <- previous_properties;
+  Runtime.hooks.refresh_after_ops <- previous_view;
   Properties_dialog.current:=previous_dialog;Properties_dialog.current_sig:=previous_signal;
   Properties_dialog.current_on_close:=previous_close;
   Js.Promise.resolve ()
