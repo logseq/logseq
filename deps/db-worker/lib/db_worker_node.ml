@@ -767,12 +767,9 @@ let health_payload ~(bound_repo : string) ~(host : string)
    /v1/shutdown comparison is intentionally against the raw url). *)
 let handle_request_admitted (proxy : proxy) ~(bound_repo : string)
     ~(stop_fn : unit -> unit) ~(host : string) ~(port : int option)
-    ~(owner_source : string) ~(root_dir : string)
+    ~(owner_source : string) ~(root_dir : string) ~parsed_url ~request_path ~http_method
     (req : Http_server.req) (res : Http_server.res) : unit E.t =
   let url = Http_server.req_url req in
-  let parsed_url = Node_url.parse ~base:"http://127.0.0.1" url in
-  let request_path = Node_url.pathname parsed_url in
-  let http_method = Http_server.req_method req in
   if http_method = "OPTIONS" then (send_no_content res; E.pure ())
   else if request_path = "/healthz" then begin
     send_json res
@@ -817,23 +814,30 @@ let handle_request_admitted (proxy : proxy) ~(bound_repo : string)
     else (send_text res 405 "method-not-allowed"; E.pure ())
   else (send_text res 404 "not-found"; E.pure ())
 
+let prepare_request proxy ~bound_repo ~stop_fn ~host ~port ~owner_source ~root_dir req res =
+  let parsed_url = Node_url.parse ~base:"http://127.0.0.1" (Http_server.req_url req) in
+  let path = Node_url.pathname parsed_url and meth = Http_server.req_method req in
+  let management = path=native_update_path in
+  let task =
+    if management then handle_native_update ~stop_fn req res
+    else
+      let session = match !native_app_owner with None -> None
+        | Some _ -> Http_server.req_header req "x-logseq-app-session" in
+      let invoke () = handle_request_admitted proxy ~bound_repo ~stop_fn ~host ~port
+        ~owner_source ~root_dir ~parsed_url ~request_path:path ~http_method:meth req res in
+      match admit_native_request ~path ~meth ~session with
+      | Error code ->
+          send_json res 409 (smap ["ok", Wire.Bool false; "error", smap [
+            "code", Wire.String code; "message", Wire.String "Worker is sealed for an application update"]]);
+          E.pure ()
+      | Ok None -> invoke ()
+      | Ok (Some owner) ->
+          let task = try invoke () with error -> E.error error in
+          E.finally task (fun () -> finish_native_request owner; E.pure ()) in
+  management, task
+
 let handle_request proxy ~bound_repo ~stop_fn ~host ~port ~owner_source ~root_dir req res =
-  let path = Node_url.pathname (Node_url.parse ~base:"http://127.0.0.1" (Http_server.req_url req)) in
-  if path=native_update_path then handle_native_update ~stop_fn req res
-  else
-    let session = match !native_app_owner with None -> None
-      | Some _ -> Http_server.req_header req "x-logseq-app-session" in
-    match admit_native_request ~path ~meth:(Http_server.req_method req) ~session with
-    | Error code ->
-        send_json res 409 (smap ["ok", Wire.Bool false; "error", smap [
-          "code", Wire.String code; "message", Wire.String "Worker is sealed for an application update"]]);
-        E.pure ()
-    | Ok reservation ->
-        let release () = Option.iter finish_native_request reservation; E.pure () in
-        let task = try
-          handle_request_admitted proxy ~bound_repo ~stop_fn ~host ~port ~owner_source ~root_dir req res
-          with error -> E.error error in
-        E.finally task release
+  snd (prepare_request proxy ~bound_repo ~stop_fn ~host ~port ~owner_source ~root_dir req res)
 
 (* track_request — cljs *requests set: pending effects drained on
    shutdown via p/all. *)
@@ -867,12 +871,10 @@ type server_ctx =
 let make_server (proxy : proxy) (ctx : server_ctx) : Http_server.server =
   let server =
     Http_server.create (fun req res ->
-        let path = Node_url.pathname
-          (Node_url.parse ~base:"http://127.0.0.1" (Http_server.req_url req)) in
-        let task = handle_request proxy ~bound_repo:ctx.bound_repo
+        let management, task = prepare_request proxy ~bound_repo:ctx.bound_repo
           ~stop_fn:ctx.stop_fn ~host:ctx.host ~port:!(ctx.port_cell)
           ~owner_source:ctx.owner_source ~root_dir:ctx.ctx_root_dir req res in
-        if path=native_update_path then E.async (fun () -> task)
+        if management then E.async (fun () -> task)
         else track_request task)
   in
   Http_server.disable_timeouts server;
