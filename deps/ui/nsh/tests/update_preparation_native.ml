@@ -1839,6 +1839,66 @@ let native_controlled_field_resets () =
       (not (List.exists (fun operation ->
         operation="set-value" || operation="set-text-content") !dom_operations)))
 
+let native_worker_update_identity () =
+  let key = ("/store", "/store/graphs", "/store/lifecycle", "logseq_db_origin") in
+  let origin : Daemon_client.worker_origin = {
+    pid = 4321; port = 12345; executable = "/app/logseq-db-worker";
+    session = "01234567-0123-4567-89ab-0123456789ab";
+    instance = "11234567-0123-4567-89ab-0123456789ab"
+  } in
+  let health ?(pid=origin.pid) ?(instance=origin.instance) ?(shared=false)
+      ?(generation="graph-generation") ?(ticket=`Null) ?(revision="worker-code") () =
+    Yojson.Safe.to_string (`Assoc [
+      "pid", `Int pid; "port", `Int origin.port; "repo", `String "logseq_db_origin";
+      "status", `String "ready"; "owner-source", `String "electron";
+      "generation", `String generation; "ticket", ticket; "revision", `String revision;
+      "storage", `Assoc [ "root", `String "/store"; "graphsDir", `String "/store/graphs";
+        "lifecycleDir", `String "/store/lifecycle" ];
+      "nsh-app-ownership", `Assoc [ "session", `String origin.session;
+        "instance", `String instance; "executable", `String origin.executable;
+        "shared", `Bool shared ] ]) in
+  let inspect body = Daemon_client.inspect_update_worker ~key ~origin body in
+  let first = inspect (health ()) in
+  check "actual child provenance retains the sampled current generation"
+    (first.origin = origin && first.generation = "graph-generation" && first.ticket = None);
+  let changed = inspect (health ~generation:"next-generation" ~ticket:(`String "next-ticket")
+    ~revision:"new-worker-revision" ()) in
+  check "graph ticket and revision are observations rather than immutable process ownership"
+    (changed.origin = origin && changed.generation = "next-generation"
+     && changed.ticket = Some "next-ticket" && changed.revision = "new-worker-revision");
+  let reject label body =
+    match inspect body with
+    | _ -> failwith ("Update worker identity unexpectedly admitted: " ^ label)
+    | exception Failure _ -> () in
+  reject "reused pid" (health ~pid:9999 ());
+  reject "same-pid replacement instance" (health ~instance:"replacement" ());
+  reject "owned child later shared by another consumer" (health ~shared:true ());
+  reject "owner-source alone is not ownership" "{\"owner-source\":\"electron\"}";
+  let calls = ref 0 in
+  let fetch ~port ~path =
+    incr calls;
+    check "worker identity only queries its exact loopback health endpoint"
+      (port = origin.port && path = "/healthz");
+    Some (200, health ()) in
+  check "actual ownership verifier accepts the complete exact child descriptor"
+    (List.length (Daemon_client.verify_update_workers ~fetch [key, Some origin]) = 1);
+  let before = !calls in
+  (match Daemon_client.verify_update_workers ~fetch [key, None] with
+   | _ -> failwith "reused or externally owned workers must refuse preparation"
+   | exception Failure _ -> ());
+  check "refusing reused workers never sends them a management request" (!calls = before);
+  let old_session = Sys.getenv_opt "LOGSEQ_NSH_APP_SESSION"
+  and old_instance = Sys.getenv_opt "LOGSEQ_NSH_WORKER_INSTANCE" in
+  let environment = Daemon_client.worker_environment ~session:origin.session ~instance:origin.instance
+    |> Array.to_list in
+  let matching prefix = List.filter (String.starts_with ~prefix) environment in
+  check "child environment carries exactly one explicit process-origin stamp"
+    (matching "LOGSEQ_NSH_APP_SESSION=" = ["LOGSEQ_NSH_APP_SESSION=" ^ origin.session]
+     && matching "LOGSEQ_NSH_WORKER_INSTANCE=" = ["LOGSEQ_NSH_WORKER_INSTANCE=" ^ origin.instance]);
+  check "worker origin never changes the parent application's environment"
+    (Sys.getenv_opt "LOGSEQ_NSH_APP_SESSION" = old_session
+     && Sys.getenv_opt "LOGSEQ_NSH_WORKER_INSTANCE" = old_instance)
+
 let () =
   let owner = Thread.id (Thread.self ()) in
   let assert_owner () =
@@ -1863,6 +1923,7 @@ let () =
   native_entry_admission ();
   editor_keyboard_capture_order ();
   native_worker_admission ();
+  native_worker_update_identity ();
   ordered_mailbox_barrier ();
   promise_observation ();
   abort_waits_for_initial_worker_and_skips_later_mutation_boundaries ();

@@ -24,6 +24,8 @@ val close : server -> bool Db_worker_effect.t
 (* IncomingMessage *)
 val req_method : req -> string
 val req_url : req -> string
+(* Case-insensitive named request header; absent headers return None. *)
+val req_header : req -> string -> string option
 val on_close : req -> (unit -> unit) -> unit
 
 (* Collects "data" chunks until "end"; rejects on request "error".

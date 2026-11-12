@@ -173,10 +173,10 @@ impl Preparation {
             preparation.pending.borrow_mut().take();
             (preparation.changed)(false);
             reservation.active = false;
-            if let Err(error) = saved {
-                eprintln!("application update preparation refused: {error}");
+            match saved {
+                Ok(()) => Err(unavailable),
+                Err(error) => Err(error),
             }
-            Err(unavailable)
         })
     }
 }
@@ -273,7 +273,7 @@ mod tests {
         answer(&preparation, "1", "prepared", false).unwrap();
         assert!(poll(&mut future).is_pending());
         answer(&preparation, "1", "released", true).unwrap();
-        expect_refused(&mut future, "无法安全安装更新");
+        expect_refused(&mut future, "save refused");
         assert!(!preparation.active());
     }
     #[test]

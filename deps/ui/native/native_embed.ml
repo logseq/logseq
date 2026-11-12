@@ -852,7 +852,11 @@ let start_update_preparation id =
     | None -> invalid_arg "Update preparation requires the NSH application owner" in
   let preparation = Update_preparation.start
       ~gate:Update_admission.application ~scope
-      ~save:(fun ~current -> prepare_window_close ~current ())
+      ~save:(fun ~current ->
+        let open Promise_ext in
+        let* () = prepare_window_close ~current () in
+        if not (current ()) then Js.Promise.reject Update_preparation.Cancelled
+        else Daemon_client.require_update_owned_workers ())
       ~flush:(fun () -> Option.iter (fun app -> ignore (Lui_app.flush app)) !current_app)
       ~logical_idle:update_logical_idle
       ~respond:(fun phase ok error -> update_result id phase ok error) id in

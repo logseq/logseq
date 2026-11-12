@@ -159,6 +159,11 @@ let lifecycle_dir () =
    the native application's UUID generator on every desktop platform. *)
 let new_uuid = Host.random_uuid
 
+(* A process-origin stamp, not authentication or permission to stop a daemon.
+   Reused workers keep their own origin and remain fully usable. *)
+let app_session = new_uuid ()
+let app_session_header = "X-Logseq-App-Session: " ^ app_session ^ "\r\n"
+
 let jobj (kvs : (string * Js.Json.t) list) : Js.Json.t =
   Js.Json.JObject kvs
 
@@ -212,6 +217,33 @@ let attachment_key repo =
 let attached : (string * string * string * string, string) Hashtbl.t =
   Hashtbl.create 4
 
+type worker_origin = {
+  pid : int;
+  port : int;
+  executable : string;
+  session : string;
+  instance : string;
+}
+type update_worker = {
+  storage : string * string * string * string;
+  origin : worker_origin;
+  generation : string;
+  ticket : string option;
+  revision : string;
+}
+(* Guarded by attach_mu. Retain workers after graph detachment: their process
+   and installed executable intentionally outlive the current graph view. *)
+let update_workers :
+    (string * string * string * string, worker_origin option) Hashtbl.t = Hashtbl.create 4
+
+let worker_environment ~session ~instance =
+  let inherited = Unix.environment () |> Array.to_list |> List.filter (fun entry ->
+    let name = if Sys.os_type = "Win32" then String.uppercase_ascii entry else entry in
+    not (String.starts_with ~prefix:"LOGSEQ_NSH_APP_SESSION=" name
+         || String.starts_with ~prefix:"LOGSEQ_NSH_WORKER_INSTANCE=" name)) in
+  Array.of_list (("LOGSEQ_NSH_APP_SESSION=" ^ session)
+                :: ("LOGSEQ_NSH_WORKER_INSTANCE=" ^ instance) :: inherited)
+
 (* boot timing: stderr marks carry seconds since module init so launch
    profiling needs no external stopwatch *)
 let boot_t0 = Unix.gettimeofday ()
@@ -234,7 +266,8 @@ let spawn_daemon (repo : string) : string =
   mkdir_p (root_dir ());
   mkdir_p (graphs_dir ());
   ensure_graph_created repo;
-  let bin = daemon_bin () in
+  let bin = Unix.realpath (daemon_bin ()) in
+  let instance = new_uuid () in
   let log_path =
     Filename.concat (root_dir ())
       ("db-worker-" ^ Graph_dir.encode_graph_dir_name repo ^ ".log")
@@ -247,7 +280,7 @@ let spawn_daemon (repo : string) : string =
     Unix.openfile (if Sys.os_type = "Win32" then "NUL" else "/dev/null")
       [ Unix.O_RDONLY ] 0 in
   let child_process =
-    Unix.create_process bin
+    Unix.create_process_env bin
       [| bin
        ; "--root-dir"
        ; root_dir ()
@@ -257,6 +290,7 @@ let spawn_daemon (repo : string) : string =
        ; repo
        ; "--owner-source"
        ; "electron" |]
+      (worker_environment ~session:app_session ~instance)
       devnull log_fd log_fd
   in
   Unix.close devnull;
@@ -271,6 +305,8 @@ let spawn_daemon (repo : string) : string =
   let rec poll () =
     match port_for_pid pid with
     | Some port ->
+        Hashtbl.replace update_workers (attachment_key repo)
+          (Some { pid; port; executable = bin; session = app_session; instance });
         boot_mark
           ("daemon up pid=" ^ string_of_int pid ^ " port="
            ^ string_of_int port);
@@ -394,6 +430,69 @@ let find_live_daemon key : string option =
        end)
     entries
 
+let attach_mu = Mutex.create ()
+
+(* A sampled prerequisite only. Stage two must atomically seal ownership and
+   prove final worker shutdown before any installation lease can be issued. *)
+let inspect_update_worker ~key ~(origin : worker_origin) body =
+  let root, graphs, lifecycle, repo = key in
+  let fail detail = failwith ("Update preparation requires this application's unshared worker: " ^ detail) in
+  let fields = match Yojson.Safe.from_string body with
+    | `Assoc fields -> fields
+    | _ -> fail "invalid worker health descriptor" in
+  let field fields name = List.assoc_opt name fields in
+  let required fields name = match field fields name with
+    | Some (`String value) when value <> "" -> value
+    | _ -> fail ("missing " ^ name) in
+  let metadata = match field fields "nsh-app-ownership" with
+    | Some (`Assoc fields) -> fields
+    | _ -> fail "worker has no application process origin" in
+  if field fields "pid" <> Some (`Int origin.pid)
+     || field fields "port" <> Some (`Int origin.port)
+     || field fields "repo" <> Some (`String repo)
+     || field fields "status" <> Some (`String "ready")
+     || required metadata "session" <> origin.session
+     || required metadata "instance" <> origin.instance
+     || required metadata "executable" <> origin.executable
+  then fail "worker process identity changed";
+  if field metadata "shared" <> Some (`Bool false) then fail "worker is shared with another client";
+  let storage = match field fields "storage" with
+    | Some (`Assoc storage) -> storage
+    | _ -> fail "missing canonical worker storage" in
+  if required storage "root" <> root || required storage "graphsDir" <> graphs
+     || required storage "lifecycleDir" <> lifecycle
+  then fail "worker storage identity changed";
+  let generation = required fields "generation" and revision = required fields "revision" in
+  let ticket = match field fields "ticket" with
+    | Some (`String value) when value <> "" -> Some value
+    | Some `Null -> None
+    | _ -> fail "invalid worker admission ticket" in
+  { storage = key; origin; generation; ticket; revision }
+
+let verify_update_workers ~fetch snapshot =
+  List.map (fun (key, origin) ->
+    let _, _, _, repo = key in
+    match origin with
+    | None -> failwith ("Update preparation cannot stop a reused or externally owned worker: " ^ repo)
+    | Some origin ->
+        match fetch ~port:origin.port ~path:"/healthz" with
+        | Some (status, body) when status >= 200 && status < 300 ->
+            inspect_update_worker ~key ~origin body
+        | _ -> failwith ("Update preparation cannot verify the current worker: " ^ repo)) snapshot
+
+let require_update_owned_workers () =
+  let promise, resolve, reject = Js.Promise.pending () in
+  ignore (Thread.create (fun () ->
+    try
+      let snapshot =
+        Mutex.lock attach_mu;
+        Fun.protect ~finally:(fun () -> Mutex.unlock attach_mu) (fun () ->
+          Hashtbl.fold (fun key origin acc -> (key, origin) :: acc) update_workers []) in
+      ignore (verify_update_workers ~fetch:http_get snapshot);
+      Host.enqueue (fun () -> resolve ())
+    with error -> Host.enqueue (fun () -> reject error)) ());
+  promise
+
 (* ---------- graph listing ---------- *)
 
 let list_repo_names () : Wire.t list =
@@ -417,7 +516,6 @@ let list_repo_names () : Wire.t list =
    so only one daemon is spawned per storage/repo: a second waiter blocks
    on the mutex, then finds the freshly published daemon in
    server-list / `attached`. *)
-let attach_mu = Mutex.create ()
 
 let last_repo_path () = Filename.concat (root_dir ()) "last-repo"
 
@@ -442,6 +540,10 @@ let ensure_attached (repo : string) : string =
             match find_live_daemon key with
             | Some base ->
                 boot_mark ("reuse daemon " ^ base);
+                (match Hashtbl.find_opt update_workers key with
+                 | Some (Some origin)
+                   when base = Printf.sprintf "http://127.0.0.1:%d" origin.port -> ()
+                 | Some None | Some (Some _) | None -> Hashtbl.replace update_workers key None);
                 base
             | None -> spawn_daemon repo
           in
@@ -618,8 +720,8 @@ let http_post ~(host : string) ~(port : int) ~(path : string)
     Printf.sprintf
       "POST %s HTTP/1.1\r\nHost: %s:%d\r\nContent-Type: \
        application/json\r\nContent-Length: %d\r\nConnection: \
-       close\r\n\r\n%s"
-      path host port (String.length body) body
+       close\r\n%s\r\n%s"
+      path host port (String.length body) app_session_header body
   in
   output_string oc req;
   flush oc;
@@ -687,8 +789,8 @@ let http_get_stream ~(host : string) ~(port : int) ~(path : string)
      let oc = Unix.out_channel_of_descr fd in
      Printf.fprintf oc
        "GET %s HTTP/1.1\r\nHost: %s:%d\r\nAccept: \
-        text/event-stream\r\n\r\n"
-       path host port;
+        text/event-stream\r\n%s\r\n"
+       path host port app_session_header;
      flush oc;
      let ic = Unix.in_channel_of_descr fd in
      (* consume status + headers *)

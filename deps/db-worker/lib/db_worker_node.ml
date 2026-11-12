@@ -558,6 +558,35 @@ let handle_shutdown (stop_fn : unit -> unit) (res : Http_server.res) : unit =
     (Timers.set_timeout 10 (fun () ->
          stop_fn ()))
 
+(* Only the native entrypoint installs this process-origin descriptor. A
+   foreign request permanently disqualifies exclusive update ownership while
+   leaving all existing clients and daemon reuse behavior operational. *)
+type native_app_owner = {
+  session : string;
+  instance : string;
+  executable : string;
+  mutable shared : bool;
+}
+let native_app_owner : native_app_owner option ref = ref None
+let valid_app_identity id =
+  String.length id = 36
+  && (String.to_seqi id |> Seq.for_all (fun (index, character) ->
+    if index = 8 || index = 13 || index = 18 || index = 23 then character = '-'
+    else match character with '0'..'9' | 'a'..'f' -> true | _ -> false))
+let configure_native_app_owner ~session ~instance ~executable =
+  if not (valid_app_identity session && valid_app_identity instance) || executable = ""
+  then invalid_arg "Invalid native application worker origin";
+  native_app_owner := Some { session; instance; executable; shared = false }
+let observe_native_app_request ~path ~meth ~session =
+  if path <> "/healthz" && meth <> "OPTIONS" then
+    Option.iter (fun owner ->
+      if session <> Some owner.session then owner.shared <- true) !native_app_owner
+let native_app_health owner =
+  smap [ "session", Wire.String owner.session
+       ; "instance", Wire.String owner.instance
+       ; "executable", Wire.String owner.executable
+       ; "shared", Wire.Bool owner.shared ]
+
 (* Installed only by the native entrypoint. Health checks never collect or
    compact the heap, and maintained JavaScript responses omit this field. *)
 let native_gc_stats_fn : (unit -> Wire.t) option ref = ref None
@@ -607,6 +636,9 @@ let health_payload ~(bound_repo : string) ~(host : string)
     ; "storage", storage_w
     ; "revision", Wire.String (Common_version.revision ()) ]
   in
+  let fields = match !native_app_owner with
+    | None -> fields
+    | Some owner -> ("nsh-app-ownership", native_app_health owner) :: fields in
   smap (match !native_gc_stats_fn with
     | None -> fields
     | Some sample -> ("native-gc", sample ()) :: fields)
@@ -621,6 +653,9 @@ let handle_request (proxy : proxy) ~(bound_repo : string)
   let parsed_url = Node_url.parse ~base:"http://127.0.0.1" url in
   let request_path = Node_url.pathname parsed_url in
   let http_method = Http_server.req_method req in
+  if Option.is_some !native_app_owner then
+    observe_native_app_request ~path:request_path ~meth:http_method
+      ~session:(Http_server.req_header req "x-logseq-app-session");
   if http_method = "OPTIONS" then (send_no_content res; E.pure ())
   else if request_path = "/healthz" then begin
     send_json res

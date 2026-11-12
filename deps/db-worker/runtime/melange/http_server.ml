@@ -60,6 +60,9 @@ let close server =
 
 external req_method : req -> string = "method" [@@mel.get]
 external req_url : req -> string = "url" [@@mel.get]
+
+external req_headers : req -> string Js.Dict.t = "headers" [@@mel.get]
+let req_header req name = Js.Dict.get (req_headers req) (String.lowercase_ascii name)
 external req_on : req -> string -> 'a -> unit = "on" [@@mel.send]
 
 let on_close req f = req_on req "close" (fun [@u] () -> f ())

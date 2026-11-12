@@ -583,6 +583,72 @@ let () =
       match run () with
       | () -> restore ()
       | exception error -> restore (); raise error);
+  Fest.test "native-app-worker-origin-is-additive-and-foreign-consumers-remain-accepted" (fun () ->
+      let original = !Db_worker_node.native_app_owner in
+      let restore () = Db_worker_node.native_app_owner := original in
+      let run () =
+        let health () = Db_worker_node.health_payload
+          ~bound_repo:"origin" ~host:"127.0.0.1" ~port:(Some 1234)
+          ~owner_source:"electron" ~root_dir:"/store" in
+        let session = "01234567-0123-4567-89ab-0123456789ab" in
+        let configure () = Db_worker_node.configure_native_app_owner ~session
+          ~instance:"11234567-0123-4567-89ab-0123456789ab" ~executable:"/app/worker" in
+        let shared () = match Wire.get "nsh-app-ownership" (health ()) with
+          | Some owner -> Wire.get "shared" owner
+          | None -> failwith "Missing native worker process origin" in
+        Db_worker_node.native_app_owner := None;
+        Fest.expect |> Fest.equal (Wire.get "nsh-app-ownership" (health ())) None;
+        configure ();
+        Fest.expect |> Fest.equal (shared ()) (Some (Wire.Bool false));
+        Db_worker_node.observe_native_app_request ~path:"/healthz" ~meth:"GET" ~session:None;
+        Db_worker_node.observe_native_app_request ~path:"/v1/invoke" ~meth:"OPTIONS" ~session:None;
+        Db_worker_node.observe_native_app_request ~path:"/v1/events" ~meth:"GET" ~session:(Some session);
+        Fest.expect |> Fest.equal (shared ()) (Some (Wire.Bool false));
+        List.iter (fun foreign ->
+          configure ();
+          Db_worker_node.observe_native_app_request ~path:"/v1/invoke" ~meth:"POST" ~session:foreign;
+          Fest.expect |> Fest.equal (shared ()) (Some (Wire.Bool true));
+          Db_worker_node.observe_native_app_request ~path:"/v1/invoke" ~meth:"POST" ~session:(Some session);
+          Fest.expect |> Fest.equal (shared ()) (Some (Wire.Bool true)))
+          [None; Some "another-app-session"]
+      in
+      match run () with
+      | () -> restore ()
+      | exception error -> restore (); raise error);
+  Fest.Promise.test "native-worker-session-header-preserves-legacy-http-clients" (fun () ->
+      let original = !Db_worker_node.native_app_owner in
+      let session = "01234567-0123-4567-89ab-0123456789ab" in
+      Db_worker_node.configure_native_app_owner ~session
+        ~instance:"11234567-0123-4567-89ab-0123456789ab" ~executable:"/app/worker";
+      let server = Http_server.create (fun req res ->
+        Db_worker_node.observe_native_app_request ~path:(Http_server.req_url req)
+          ~meth:(Http_server.req_method req)
+          ~session:(Http_server.req_header req "X-Logseq-App-Session");
+        Db_worker_node.send_json res 200 (kvs ["ok", Wire.Bool true])) in
+      let shared () = match !Db_worker_node.native_app_owner with
+        | Some owner -> owner.Db_worker_node.shared
+        | None -> failwith "Missing worker origin" in
+      let cleanup () =
+        Db_worker_node.native_app_owner := original;
+        let* _ = promise_of_task (Http_server.close server) in
+        Js.Promise.resolve () in
+      let run () =
+        let* port = promise_of_task (Http_server.listen server ~host:"127.0.0.1" ~port:0) in
+        let* own_status, _ = http_request ~host:"127.0.0.1" ~port ~meth:"POST"
+          ~path:"/v1/invoke" ~headers:["x-LOGSEQ-app-session", session] () in
+        Fest.expect |> Fest.equal own_status 200;
+        Fest.expect |> Fest.equal (shared ()) false;
+        let* health_status, _ = http_get "127.0.0.1" port "/healthz" in
+        Fest.expect |> Fest.equal health_status 200;
+        Fest.expect |> Fest.equal (shared ()) false;
+        let* legacy_status, _ = http_request ~host:"127.0.0.1" ~port ~meth:"POST"
+          ~path:"/v1/invoke" () in
+        Fest.expect |> Fest.equal legacy_status 200;
+        Fest.expect |> Fest.equal (shared ()) true;
+        cleanup () in
+      Js.Promise.catch (fun error ->
+        let* () = cleanup () in
+        Js.Promise.reject (exn_of_rejection error)) (run ()));
   (* ---- db-worker-node-root-dir-permission-error ---- *)
   Fest.Promise.test "db-worker-node-root-dir-permission-error" (fun () ->
       if Node.Process.process##platform = "win32" then Js.Promise.resolve ()

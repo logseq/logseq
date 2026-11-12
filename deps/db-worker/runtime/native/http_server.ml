@@ -255,6 +255,7 @@ let res_end (res : res) : unit =
 
 let req_method (req : req) : string = req.req_method
 let req_url (req : req) : string = req.req_url
+let req_header (req : req) name = header_lookup req.req_headers name
 let on_close (req : req) (f : unit -> unit) : unit =
   req.req_conn.conn_on_close := f :: !(req.req_conn.conn_on_close)
 let read_body (req : req) : string E.t = E.pure req.req_body

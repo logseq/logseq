@@ -1,5 +1,53 @@
 # API migrations
 
+## NSH worker process origin is an update prerequisite
+
+New native DB workers spawned by the current NSH application receive
+`LOGSEQ_NSH_APP_SESSION` and `LOGSEQ_NSH_WORKER_INSTANCE` in that child's
+explicit environment. Neither variable is set on the parent process. The native
+worker adds an optional `nsh-app-ownership` object to `/healthz`:
+
+```json
+{"session":"<application UUID>","instance":"<spawn UUID>",
+ "executable":"<canonical worker executable>","shared":false}
+```
+
+The native loopback invoke and SSE requests add `X-Logseq-App-Session`. A native
+worker carrying this origin permanently marks `shared: true` when a non-health,
+non-OPTIONS request comes from another session or has no session header. Requests
+remain accepted: existing CLI, Electron and mobile consumers keep their current
+request formats and reuse behavior. Workers started without both new environment
+variables omit the field. Existing health readers must continue ignoring unknown
+fields. These origin stamps describe process provenance; they are not credentials
+or authority to shut down a worker.
+
+For example, a CLI that attaches to a worker spawned by NSH still sends its normal
+`POST /v1/invoke` request. That request succeeds normally and makes the worker
+ineligible for the NSH application's update preparation. A login-resident or
+previously running daemon can still be reused for editing; its `owner-source`
+value never promotes it to this session's owned child.
+
+After saving, NSH update preparation now verifies all known worker attachments
+off the application thread. Only an actual child-spawn record matching the health
+PID, port, session, instance, executable and canonical storage/repo can pass this
+prerequisite, with `shared: false`. The current graph generation, admission ticket
+and worker revision are sampled separately; normal changes to them do not imply
+a different process owner. Retired graph views do not discard still-running child
+records. Missing, reused, changed or shared identities produce a preparation error.
+The existing matching abort/released acknowledgement still precedes displaying
+that specific error. A successful prerequisite still returns the translated
+installation-unavailable explanation and never issues an `InstallLease`.
+
+This sampled check is not atomic exclusivity or completed shutdown proof. Final
+worker fencing, drain/graph-close/process-exit acknowledgement and an explicit
+packaged relaunch policy remain necessary before enabling installation.
+Unconfigured updates still create no updater or preparation event.
+
+The maintained worker platform contract adds
+`Http_server.req_header : req -> string -> string option` with case-insensitive
+lookup on native and Melange. Downstream platform implementations must implement
+this getter; existing request, response and invocation payloads are unchanged.
+
 ## Native element clicks activate the retained NSH controller
 
 The native `click` service used by comment-reply reveal and popup keyboard
@@ -1048,8 +1096,8 @@ worker, feed request or preparation event.
 
 The policy **always** sends `update-abort` and waits for the matching `released`
 acknowledgement before returning the translated
-`updater.dialog/installation-unavailable-description`. Save failures are logged
-as diagnostics and also remain unavailable. No successful preparation returns an
+`updater.dialog/installation-unavailable-description` after a successful save.
+Save or ownership failures return their specific error after release acknowledgement. No successful preparation returns an
 `InstallLease`, so this increment cannot dispatch installation or relaunch.
 Cancelling the preparation future sends the matching abort but keeps admission
 closed until its acknowledgement; a stale earlier completion cannot release a

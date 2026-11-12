@@ -78,6 +78,12 @@ let serialize (f : 'a -> 'b E.t) : 'a -> 'b E.t =
     | `Err exn -> finish_invocation (); raise exn
 
 let () =
+  (match Sys.getenv_opt "LOGSEQ_NSH_APP_SESSION", Sys.getenv_opt "LOGSEQ_NSH_WORKER_INSTANCE" with
+   | None, None -> ()
+   | Some session, Some instance ->
+       Db_worker_node.configure_native_app_owner ~session ~instance
+         ~executable:(Unix.realpath Sys.executable_name)
+   | _ -> invalid_arg "Incomplete native application worker origin");
   Db_worker_node.native_gc_stats_fn := Some (fun () ->
     let stats = Gc.quick_stat () in
     let word_bytes = Sys.word_size / 8 in
