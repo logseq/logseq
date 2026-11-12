@@ -2,6 +2,7 @@
 //! These are native-engine checks; AppKit raster/input qualification is separate.
 use super::{Duration, Headless, startup_rows::Agent, wait_for_chrome};
 use nsh_core::prelude::px;
+use nsh_testing::{LayoutNode, Screen};
 use serde_json::Value;
 use std::cell::RefCell;
 
@@ -46,6 +47,101 @@ fn picker(tree: &Value) -> Result<&Value, String> {
         .into_iter()
         .find(|node| class(node, "cp__emoji-icon-picker"))
         .ok_or("actual picker is not mounted".into())
+}
+
+fn body_scroll(tree: &Value) -> Result<&Value, String> {
+    nodes(picker(tree)?)
+        .into_iter()
+        .find(|node| {
+            node.get("kind").and_then(Value::as_str) == Some("scroll") && class(node, "bd")
+        })
+        .ok_or("picker has no real body Scroll".into())
+}
+
+fn native_viewport(screen: &Screen, scroll: &str) -> Result<LayoutNode, String> {
+    let native = screen
+        .layout_nodes()
+        .into_iter()
+        .find(|node| node.test_id.as_deref() == scroll.strip_prefix("id:"))
+        .ok_or_else(|| format!("current picker body {scroll} has no native layout"))?;
+    if native.hidden
+        || !native.bounds.size.width.0.is_finite()
+        || !native.bounds.size.height.0.is_finite()
+        || native.bounds.size.width.0 <= 0.0
+        || native.bounds.size.height.0 <= 0.0
+        || native.bounds.size.height.0 > 408.0
+    {
+        return Err(format!("picker has no finite viewport: {native:#?}"));
+    }
+    Ok(native)
+}
+
+// Canonical target publication precedes the native mount acknowledgement. Read
+// the live owner on each engine pump; a previous tab's selector is not a lease.
+fn current_body(
+    app: &mut Headless,
+    agent: &Agent,
+    tab: &str,
+    retired: Option<&str>,
+) -> Result<String, String> {
+    let found = RefCell::new(None);
+    let failure = RefCell::new(None);
+    let pending = RefCell::new(String::new());
+    wait_for_chrome(
+        app,
+        &format!("current {tab} picker viewport committed and previous owner retired"),
+        Duration::from_secs(10),
+        |screen| {
+            let tree = match agent.tree() {
+                Ok(tree) => tree,
+                Err(error) => {
+                    *failure.borrow_mut() = Some(error);
+                    return true;
+                }
+            };
+            let scroll = match body_scroll(&tree).and_then(selector) {
+                Ok(scroll) => scroll,
+                Err(error) => {
+                    *pending.borrow_mut() = error;
+                    return false;
+                }
+            };
+            if let Some(retired) = retired {
+                if scroll == retired
+                    || nodes(&tree)
+                        .into_iter()
+                        .any(|node| selector(node).as_deref() == Ok(retired))
+                    || screen
+                        .layout_nodes()
+                        .into_iter()
+                        .any(|node| node.test_id.as_deref() == retired.strip_prefix("id:"))
+                {
+                    *pending.borrow_mut() = format!("previous picker body {retired} is still live");
+                    return false;
+                }
+            }
+            if let Err(error) = native_viewport(screen, &scroll) {
+                *pending.borrow_mut() = error;
+                return false;
+            }
+            *found.borrow_mut() = Some(scroll);
+            true
+        },
+    )
+    .map_err(|error| {
+        format!(
+            "{error}\nCurrent viewport observation: {}",
+            pending.borrow().as_str()
+        )
+    })?;
+    if let Some(error) = failure.into_inner() {
+        return Err(error);
+    }
+    let scroll = found
+        .into_inner()
+        .ok_or("current picker viewport was not captured")?;
+    eprintln!("COMMIT actual {tab} picker viewport: current={scroll}, retired={retired:?}");
+    Ok(scroll)
 }
 
 fn cells<'a>(root: &'a Value, tab: &str) -> Vec<&'a Value> {
@@ -131,28 +227,9 @@ fn bounded(app: &Headless, tree: &Value, tab: &str) -> Result<(), String> {
             app.screen().layout_nodes().len()
         ));
     }
-    let scroll = nodes(body)
-        .into_iter()
-        .find(|node| {
-            node.pointer("/props/style-class")
-                .and_then(Value::as_str)
-                .is_some_and(|value| value.split_whitespace().any(|value| value == "bd"))
-        })
-        .ok_or("picker has no real body Scroll")?;
+    let scroll = body_scroll(tree)?;
     let id = selector(scroll)?;
-    let native = app
-        .screen()
-        .layout_nodes()
-        .into_iter()
-        .find(|node| node.test_id.as_deref() == id.strip_prefix("id:"))
-        .ok_or("picker body Scroll has no native layout")?;
-    if native.hidden
-        || native.bounds.size.width.0 <= 0.0
-        || native.bounds.size.height.0 <= 0.0
-        || native.bounds.size.height.0 > 408.0
-    {
-        return Err(format!("{tab} has no finite picker viewport: {native:#?}"));
-    }
+    let native = native_viewport(app.screen(), &id)?;
     eprintln!(
         "BOUND actual {tab} picker: cells={cells}, canonical={}, native={}, viewport={:?}",
         nodes(body).len(),
@@ -309,6 +386,7 @@ pub(super) fn qualify(app: &mut Headless) -> Result<(), String> {
     let agent = Agent::discover()?;
     for (tab, minimum_rows) in [("Emojis", 100), ("Icons", 500)] {
         open(app, &agent)?;
+        let previous_body = selector(body_scroll(&agent.tree()?)?)?;
         eprintln!("BEGIN actual complete {tab} tab activation");
         app.press(tab)?;
         eprintln!("DONE actual complete {tab} tab activation");
@@ -334,7 +412,11 @@ pub(super) fn qualify(app: &mut Headless) -> Result<(), String> {
         if let Some(error) = failure.into_inner() {
             return Err(error);
         }
+        let scroll = current_body(app, &agent, tab, Some(&previous_body))?;
         let tree = agent.tree()?;
+        if selector(body_scroll(&tree)?)? != scroll {
+            return Err("picker body changed again after native layout admission".into());
+        }
         bounded(app, &tree, tab)?;
         let body = picker(&tree)?;
         let list = nodes(body)
@@ -349,11 +431,6 @@ pub(super) fn qualify(app: &mut Headless) -> Result<(), String> {
             .pointer("/props/virtual-total-count")
             .and_then(Value::as_u64)
             .unwrap();
-        let scroll = nodes(body)
-            .into_iter()
-            .find(|node| class(node, "bd"))
-            .ok_or("picker lost its body Scroll")?;
-        let scroll = selector(scroll)?;
         // The public Scroll step clamps its target to the native content end
         // before advancing frames. A raw million-point drag would generate
         // 100,000 gesture frames, even after reaching that end. This case uses
@@ -365,9 +442,11 @@ pub(super) fn qualify(app: &mut Headless) -> Result<(), String> {
         bounded(app, &agent.tree()?, tab)?;
         // Returning through the same controller exercises cell retirement and
         // rebinding in both directions, rather than only a one-way reveal.
+        let scroll = current_body(app, &agent, tab, None)?;
         app.scroll(&scroll, px(-(count as f32 * 44.0 + 408.0)))?;
         wait_for_edge(app, &agent, tab, count, false)?;
         bounded(app, &agent.tree()?, tab)?;
+        let scroll = current_body(app, &agent, tab, None)?;
         app.scroll(&scroll, px(count as f32 * 44.0 + 408.0))?;
         wait_for_edge(app, &agent, tab, count, true)?;
         let tree = agent.tree()?;
