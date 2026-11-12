@@ -20,20 +20,22 @@ let constructor expression = match expression.exp_desc with
 let host expression = match expression.exp_desc with
   | Texp_apply (fn,_) -> name fn = "Lui_ui.host"
   | _ -> false
+let standard fn operation =
+  let path=name fn in path="Stdlib." ^ operation || path="Stdlib.(" ^ operation ^ ")"
 let rec boolean expression = match expression.exp_desc with
   | Texp_construct (_,description,[]) when description.Data_types.cstr_name = "true" -> Some true
   | Texp_construct (_,description,[]) when description.Data_types.cstr_name = "false" -> Some false
   | Texp_ident (path,_,_) -> Hashtbl.find_opt known (key path)
   | Texp_apply (fn,arguments) -> (match last (name fn),args arguments with
-    | "not",[value] -> Option.map not (boolean value)
-    | (("="|"<>") as operation),[left;right] ->
+    | "not",[value] when standard fn "not" -> Option.map not (boolean value)
+    | (("="|"<>") as operation),[left;right] when standard fn operation ->
         let compare left right = match host left,constructor right with
           | true,Some backend -> Some ((backend="NshHost") = (operation="="))
           | _ -> None in
         (match compare left right with Some _ as value -> value | None -> compare right left)
-    | "&&",[left;right] -> (match boolean left,boolean right with
+    | "&&",[left;right] when standard fn "&&" -> (match boolean left,boolean right with
         | Some false,_|_,Some false -> Some false | Some true,Some true -> Some true | _ -> None)
-    | "||",[left;right] -> (match boolean left,boolean right with
+    | "||",[left;right] when standard fn "||" -> (match boolean left,boolean right with
         | Some true,_|_,Some true -> Some true | Some false,Some false -> Some false | _ -> None)
     | _ -> None)
   | _ -> None
@@ -100,19 +102,33 @@ let rec iterator = {Tast_iterator.default_iterator with
         List.iter (fun binding -> self.expr self binding.vb_expr; bind binding) bindings;
         self.expr self body
     | Texp_match (value,cases,effects,partial) when host value || boolean value <> None ->
-        let matches pattern =
-          let pattern,_=Typedtree.split_pattern pattern in
-          Option.map (fun pattern -> match pattern.pat_desc with
-            | Tpat_any | Tpat_var _ -> true
-            | Tpat_construct (_,description,[],_) ->
-                (match boolean value with
-                 | Some expected -> description.Data_types.cstr_name = string_of_bool expected
-                 | None -> description.Data_types.cstr_name="NshHost")
-            | _ -> true) pattern |> Option.value ~default:false in
+        let rec matches pattern = match pattern.pat_desc with
+          | Tpat_any | Tpat_var _ -> Some true
+          | Tpat_alias (pattern,_,_,_,_) -> matches pattern
+          | Tpat_or (left,right,_) -> (match matches left,matches right with
+              | Some true,_|_,Some true -> Some true
+              | Some false,Some false -> Some false | _ -> None)
+          | Tpat_construct (_,description,[],_) ->
+              Some (match boolean value with
+                | Some expected -> description.Data_types.cstr_name=string_of_bool expected
+                | None -> description.Data_types.cstr_name="NshHost")
+          | _ -> None in
+        let rec cases_to_visit = function
+          | [] -> ()
+          | case::remaining ->
+              let pattern,_=Typedtree.split_pattern case.c_lhs in
+              let accepted=Option.bind pattern matches in
+              (match accepted with
+               | Some false -> cases_to_visit remaining
+               | _ ->
+                   Option.iter (self.expr self) case.c_guard;
+                   let guard=Option.bind case.c_guard boolean in
+                   if guard<>Some false then self.expr self case.c_rhs;
+                   if accepted<>Some true || (case.c_guard<>None && guard<>Some true)
+                   then cases_to_visit remaining) in
         self.expr self value;
-        (match List.find_opt (fun case -> matches case.c_lhs && case.c_guard=None) cases with
-         | Some case -> self.expr self case.c_rhs
-         | None -> Tast_iterator.default_iterator.expr self {expression with exp_desc=Texp_match(value,cases,effects,partial)})
+        ignore effects; ignore partial;
+        cases_to_visit cases
     | _ -> Tast_iterator.default_iterator.expr self expression);
   structure_item=(fun self item ->
     Tast_iterator.default_iterator.structure_item self item;

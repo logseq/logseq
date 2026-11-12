@@ -53,6 +53,13 @@ let value context =
   else Ui_parts.Prop.font_size "16px"
 ''', rejected=True)
 
+    def test_host_match_prunes_only_the_other_backend(self):
+        self.check_fixture('''let value context =
+  match Lui_ui.host context with
+  | Lui_protocol.NshHost -> Ui_parts.Prop.overflow `hidden
+  | _ -> Ui_parts.Prop.overflow `auto
+''', rejected=False)
+
     def test_literal_constructor_props_use_the_actual_encoder(self):
         self.check_fixture('let value = Lui_elements.text ~font_size:"not-a-font-size" []\n', rejected=True)
 
