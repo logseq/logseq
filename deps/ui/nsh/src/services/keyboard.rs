@@ -755,12 +755,12 @@ mod tests {
         // through the keyboard matcher without type_text reacquiring focus.
         app.type_text("id:native-catalog-editor", "").unwrap();
         observed.0.lock().unwrap().clear();
-        for key in ["d", "r", "a", "f", "t", "n", "p", "你"] {
+        for key in ["d", "r", "a", "f", "t", "n", "p"] {
             app.press_key(key).unwrap();
         }
         assert_eq!(
             app.screen().input_text("id:native-catalog-editor").unwrap(),
-            Some("draftnp你")
+            Some("draftnp")
         );
         assert_eq!(
             observed.0.lock().unwrap().as_slice(),
@@ -771,12 +771,13 @@ mod tests {
                 json!({"input":"draf"}),
                 json!({"input":"draft"}),
                 json!({"input":"draftn"}),
-                json!({"input":"draftnp"}),
-                json!({"input":"draftnp你"})
+                json!({"input":"draftnp"})
             ],
             "flattened command prefixes must not steal, duplicate or reorder native text"
         );
-        app.compose("id:native-catalog-editor", "中文").unwrap();
+        // Named keystrokes use US-layout keys. Exercise Unicode through the
+        // public composition driver, separately from the contiguous key burst.
+        app.compose("id:native-catalog-editor", "你中文").unwrap();
         assert_eq!(
             app.screen().input_text("id:native-catalog-editor").unwrap(),
             Some("draftnp你中文")
