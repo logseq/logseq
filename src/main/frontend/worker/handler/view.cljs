@@ -29,7 +29,7 @@
   [operator value]
   (case operator
     (:is :is-not)
-    (when (set? value) value)
+    (when (or (set? value) (= :empty value)) value)
 
     (:text-contains :text-not-contains)
     (when (string? value) value)
@@ -71,9 +71,19 @@
     (assoc value :value (:block/uuid (:value value)))
     value))
 
+(defn- resolve-query-row-uuids
+  "The filter UI sends the uuids of the rows a query returned, like the view
+  resource does. `db-view/get-property-values` reads them as `:query-entity-ids`."
+  [db {:keys [query-row-uuids] :as option}]
+  (cond-> (dissoc option :query-row-uuids)
+    (some? query-row-uuids)
+    (assoc :query-entity-ids
+           (into [] (keep #(:db/id (d/entity db [:block/uuid %]))) query-row-uuids))))
+
 (defn view-filter-data
   [db {:keys [property property-ident operator value] :as option}]
-  (let [property (or property
+  (let [option (resolve-query-row-uuids db option)
+        property (or property
                      (some-> (d/entity db property-ident)
                              entity-util/entity->map))
         operator (or operator :is)

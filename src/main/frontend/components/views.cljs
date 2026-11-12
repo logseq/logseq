@@ -205,6 +205,29 @@
   [table row selected?]
   (set-table-row-selected! table (table-row-id row) selected?))
 
+(defn- table-range-rows
+  "Rows in display order that a shift-click range can span. A flat table paints
+  only a window of `:data` and keeps the whole list in `:full-data`; the
+  `:data` of a group table is the group."
+  [table]
+  (if (get-in table [:state :group-by-property])
+    (:data table)
+    (or (:full-data table) (:data table))))
+
+(defn- table-row-index
+  "Index of `row` among the rows a shift-click range spans, nil when absent."
+  [table row]
+  (let [idx (.indexOf (or (table-range-rows table) []) (table-row-id row))]
+    (when-not (neg? idx)
+      idx)))
+
+(defn- select-table-row-range!
+  [table from-idx to-idx]
+  (let [rows (table-range-rows table)]
+    (doseq [row-id (keep (fn [idx] (some-> (util/nth-safe rows idx) table-row-id))
+                         (range (min from-idx to-idx) (inc (max from-idx to-idx))))]
+      (state/set-state! (table-selection-path table :row-selection :selected-ids row-id) true))))
+
 (defn- table-toggle-selected-all!
   [table selected?]
   (let [group-by-property (get-in table [:state :group-by-property])]
@@ -252,7 +275,7 @@
    "#"])
 
 (hsx/defc row-checkbox
-  [{:keys [data] :as table} row _column]
+  [table row _column]
   (let [id (str (:db/id row) "-" "checkbox")
         [show? set-show!] (hooks/use-state false)
         checked? (use-table-row-selected? table row)]
@@ -267,18 +290,14 @@
        :on-click (fn [e]
                    (when-let [last-selected-idx (and (.-shiftKey e)
                                                      (get-table-last-selected-idx table))]
-                     (util/stop e)
-                     (let [idx (.indexOf data (table-row-id row))]
+                     (when-let [idx (table-row-index table row)]
+                       (util/stop e)
                        (when (not= last-selected-idx idx)
-                         (let [new-ids (keep (fn [idx] (util/nth-safe data idx)) (range (min last-selected-idx idx) (inc (max last-selected-idx idx))))]
-                           (when (seq new-ids)
-                             (doseq [row-id (map table-row-id new-ids)]
-                               (state/set-state! (table-selection-path table :row-selection :selected-ids row-id) true))))))))
+                         (select-table-row-range! table last-selected-idx idx)))))
        :on-checked-change (fn [v]
-                            (if v
-                              (let [idx (.indexOf data (table-row-id row))]
-                                (set-table-last-selected-idx! table idx))
-                              (let [idx (.indexOf data (table-row-id row))]
+                            (let [idx (table-row-index table row)]
+                              (if v
+                                (set-table-last-selected-idx! table idx)
                                 (when (= idx (get-table-last-selected-idx table))
                                   (set-table-last-selected-idx! table nil))))
                             (table-toggle-row-selected! table row v))
@@ -287,7 +306,7 @@
                    (if (or show? checked?) "opacity-100" "opacity-0"))})]))
 
 (hsx/defc gallery-card-checkbox
-  [{:keys [data] :as table} row]
+  [table row]
   (let [id (str (:db/id row) "-gallery-checkbox")
         checked? (use-table-row-selected? table row)]
     [:label.ls-gallery-card-select.flex.items-center.justify-center.cursor-pointer
@@ -299,17 +318,12 @@
        :on-click (fn [e]
                    (when-let [last-selected-idx (and (.-shiftKey e)
                                                      (get-table-last-selected-idx table))]
-                     (util/stop e)
-                     (let [idx (.indexOf data (table-row-id row))]
+                     (when-let [idx (table-row-index table row)]
+                       (util/stop e)
                        (when (not= last-selected-idx idx)
-                         (let [new-ids (keep (fn [idx] (util/nth-safe data idx))
-                                             (range (min last-selected-idx idx)
-                                                    (inc (max last-selected-idx idx))))]
-                           (when (seq new-ids)
-                             (doseq [row-id (map table-row-id new-ids)]
-                               (state/set-state! (table-selection-path table :row-selection :selected-ids row-id) true))))))))
+                         (select-table-row-range! table last-selected-idx idx)))))
        :on-checked-change (fn [v]
-                            (let [idx (.indexOf data (table-row-id row))]
+                            (let [idx (table-row-index table row)]
                               (if v
                                 (set-table-last-selected-idx! table idx)
                                 (when (= idx (get-table-last-selected-idx table))
@@ -492,12 +506,28 @@
   [block]
   (true? (:block.temp/first-window-preview? block)))
 
+(defn- untitled-text?
+  "A page without a title has a blank title or, when it was created from a
+  reference, its uuid as title."
+  [text]
+  (or (string/blank? text)
+      (some? (parse-uuid text))))
+
+(defn- table-title-text
+  "Text of a name cell. An untitled page reads `Untitled`, as in page references,
+  so that its row can still be seen, opened and selected."
+  [block]
+  (let [text (first-window-title-text block)]
+    (if (untitled-text? text)
+      (t :ui/untitled)
+      text)))
+
 (defn- first-window-block-title
   "Tags/Movies first paint spent block-title hooks on every preview row."
   [block]
   [:div.table-block-title.relative.flex.items-center.w-full.h-full.cursor-pointer
    [:div.flex.flex-row
-    [:div (first-window-title-text block)]]])
+    [:div (table-title-text block)]]])
 
 (defn- first-window-list-block
   "List view first paint should show the preview title before full block hydration."
@@ -508,7 +538,7 @@
 
 (hsx/defc ^:large-vars/cleanup-todo block-title-interactive
   "Used on table view"
-  [block* {:keys [create-new-block width row property]}]
+  [block* {:keys [create-new-block width row property property-ident]}]
   (let [*ref (hooks/use-ref nil)
         [opacity set-opacity!] (hooks/use-state 0)
         [focus-timeout set-focus-timeout!] (hooks/use-state nil)
@@ -573,8 +603,9 @@
        [:div.flex.flex-row
         (let [render (fn [block]
                        [:div
-                        (if (first-window-title-preview? block)
-                          (first-window-title-text block)
+                        (if (or (first-window-title-preview? block)
+                                (untitled-text? (first-window-title-text block)))
+                          (table-title-text block)
                           (inline-title
                            {:table? true
                             :block/uuid (:block/uuid block)}
@@ -585,7 +616,10 @@
             (render block*)))]
        [:div])
 
+     ;; The open buttons belong to the name column only. A text property
+     ;; cell (such as Description) would repeat them on the same row.
      (when (and (not (util/mobile?))
+                (= :block/title property-ident)
                 (not (first-window-title-preview? block)))
        (let [class (mobile-btn-class opacity)]
          [:div.absolute.-right-1
@@ -1764,7 +1798,7 @@
        (if (and view-entity property-ident)
          (p/let [data (db-async/<get-view-filter-data property
                                                       {:view-id (:db/id view-entity)
-                                                       :query-entity-ids (:query-entity-ids opts)})]
+                                                       :query-row-uuids (:query-row-uuids opts)})]
            (set-filter-data! data))
          (set-filter-data! nil)))
      [property-ident])
@@ -1874,6 +1908,23 @@
     :number-lte "<="
     :between (t :view.filter/operator-between)))
 
+(defn- <change-filter-operator!
+  "Switches the operator of the filter at `idx`. The clause has no value yet when
+  the user has not entered one (or cleared it), so it is [property operator]."
+  [property operator filters set-filters! idx]
+  (p/let [data (db-async/<get-view-filter-data property
+                                               {:operator operator
+                                                :value (nth (get-in filters [:filters idx]) 2 nil)})
+          value' (:value-after-operator-change data)]
+    (set-filters!
+     (update filters :filters
+             (fn [col]
+               (update col idx
+                       (fn [[property _old-operator _value]]
+                         (if value'
+                           [property operator value']
+                           [property operator]))))))))
+
 (hsx/defc filter-operator
   [property operator filters set-filters! idx]
   (let [[operators set-operators!] (hooks/use-state nil)]
@@ -1895,19 +1946,7 @@
       {:align "start"}
       (for [operator (or operators [])]
         (shui/dropdown-menu-item
-         {:on-click (fn []
-                      (p/let [data (db-async/<get-view-filter-data property
-                                                                    {:operator operator
-                                                                     :value (nth (get-in filters [:filters idx]) 2)})
-                              value' (:value-after-operator-change data)]
-                        (set-filters!
-                         (update filters :filters
-                                 (fn [col]
-                                   (update col idx
-                                           (fn [[property _old-operator _value]]
-                                             (if value'
-                                               [property operator value']
-                                               [property operator]))))))))}
+         {:on-click #(<change-filter-operator! property operator filters set-filters! idx)}
          (operator->text operator)))))))
 
 (hsx/defc between
@@ -1957,7 +1996,7 @@
         :on-click (fn [e]
                     (p/let [filter-data (db-async/<get-view-filter-data property
                                                                         {:view-id (:db/id view-entity)
-                                                                         :query-entity-ids (:query-entity-ids opts)
+                                                                         :query-row-uuids (:query-row-uuids opts)
                                                                          :operator operator})
                             many? (:many? filter-data)
                             items (case (:value-source filter-data)
@@ -3961,6 +4000,10 @@
                                             nil)]
     {:initial-row-count initial-row-count
      :window-context window-context
+     ;; Identifies the view whose previous paint may stay on screen while the
+     ;; next result loads. The search input is left out: typing must keep the
+     ;; old table mounted so the search box is not unmounted mid-keystroke.
+     :previous-paint-key (pr-str (dissoc (or window-context full-context) :input))
      :full-context full-context
      :resource-key [:view-data view-uuid (or window-context full-context)]
      :full-key (when window-context
@@ -4083,11 +4126,16 @@
      (fn []
        (set-row-offset-state! nil)
        (set-stale-offset-window! nil)
-       ;; Keep previous paint only for same-context refetches (delete).
-       ;; A new filter/sort/input key must not keep the old 431-row table.
-       (set-previous-view-data! nil)
        js/undefined)
      [window-context-key])
+    (hooks/use-effect!
+     (fn []
+       ;; Keep previous paint for same-context refetches (delete) and for
+       ;; search input changes, so the search box stays mounted while typing.
+       ;; A new filter/sort key must not keep the old 431-row table.
+       (set-previous-view-data! nil)
+       js/undefined)
+     [(:previous-paint-key plan)])
     (hooks/use-effect!
      (fn []
        (let [next-layout [display-type group-by-property-ident]]
