@@ -2,7 +2,7 @@ name: Private NSH PDF native feedback
 
 on:
   pull_request:
-    branches: ['refactor/lui']
+    branches: ['refactor/lui', 'feat/nsh-host']
     paths:
       - '.github/workflows/nsh-pdf-native.yml'
       - 'deps/ui/nsh/Cargo.toml'
