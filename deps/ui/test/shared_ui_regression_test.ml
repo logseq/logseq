@@ -736,7 +736,45 @@ let accent_swatch_palettes ~registry =
       [{P.profile_os=P.WebOS;P.profile_host=P.WebHost};
        {P.profile_os=P.MacOS;P.profile_host=P.NshHost}])
 
+let find_in_page_submit ~registry =
+  let module Find = Cmdk_state.Find_in_page in
+  List.iter (fun profile ->
+    let actions = ref [] in
+    let initial = {Find.initial with query="initial";total=3;current=1} in
+    let session = S.mount ~registry ~profile ~initial ~reducer:Find.update
+      ~view:(fun _ state send ->
+        Cmdk_view.Find_in_page.view ~i18n:I18n.t ~state
+          ~dispatch:(fun action -> actions := action :: !actions; send action) ()) () in
+    Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose session.S.app)) (fun () ->
+      let query () = List.find (fun node ->
+        M.string_prop node "accessibility-identifier"=Some "find-in-page-query")
+        (nodes session) in
+      let query_id = (query ()).M.id in
+      check "find-in-page single-line input registers Submit"
+        (Hashtbl.find_opt (query ()).M.props "submit-enabled"=Some (P.BoolValue true));
+      check "find-in-page never sends Textarea-only SubmitOnEnter to TextField"
+        (not (Hashtbl.mem (query ()).M.props "submit-on-enter"));
+      S.text_changed session query_id "needle";
+      ignore (Lui_app.send session.S.app (Find.Results {revision=1;total=3}));
+      S.flush session;
+      S.submit session query_id;
+      check "find-in-page Enter dispatches exactly one Next after editing"
+        (!actions=[Find.Next;Find.Query "needle"]);
+      check "find-in-page Submit reveals the next match"
+        (List.exists (fun node ->
+          M.string_prop node "accessibility-identifier"=Some "find-in-page-count"
+          && M.string_prop node "text"=Some "2/3") (nodes session));
+      S.submit session query_id;
+      check "find-in-page retains its query node and draft across repeated Submit"
+        ((query ()).M.id=query_id && M.string_prop (query ()) "text"=Some "needle"
+         && !actions=[Find.Next;Find.Next;Find.Query "needle"])))
+    [{P.profile_os=P.WebOS;P.profile_host=P.WebHost};
+     {P.profile_os=P.IOS;P.profile_host=P.SwiftUIHost};
+     {P.profile_os=P.AndroidOS;P.profile_host=P.KotlinHost};
+     {P.profile_os=P.MacOS;P.profile_host=P.NshHost}]
+
 let run_views ~registry ~profile ~finish =
+  find_in_page_submit ~registry;
   accent_swatch_palettes ~registry;
   native_popup_alignment ~registry;
   native_header_menu_inputs ();

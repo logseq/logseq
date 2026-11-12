@@ -1,5 +1,13 @@
 # API migrations
 
+## Find-in-page single-line submission
+
+The find-in-page query uses TextField's standard Enter submission through
+`on_submit`; it no longer supplies `submit_on_enter`, which belongs only to
+Textarea. Enter still dispatches `Next`, and query edits and repeated submission
+retain the same query node. Textarea submission policies and the maintained
+mobile and Web backends are unchanged.
+
 ## Settings accent swatches
 
 Appearance accent choices now use a closed internal swatch type. The no-color

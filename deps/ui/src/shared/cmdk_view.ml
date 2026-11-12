@@ -42,7 +42,6 @@ module Find_in_page = struct
           ~label:(i18n "search.find-in-page/input-placeholder")
           ~placeholder:(i18n "search.find-in-page/input-placeholder")
           ~text:(reactive (fun s -> s.query) state)
-          ~submit_on_enter:true
           ~on_input:(function
             | Lui_protocol.TextChanged (_, "") -> dispatch Clear
             | Lui_protocol.TextChanged (_, query) -> dispatch (Query query)
