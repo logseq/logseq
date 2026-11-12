@@ -2068,7 +2068,9 @@
  :view.table/sort-descending "降序排列"
  :view.table/sort-groups-by "分组排序依据"
  :view.table/sort-groups-order "分组排序方向"
+ :view.table/time-spent "耗时"
  :view.table/total-refs-count "总引用数"
+ :view.table/total-time "总耗时：{1}"
  :view.table/unpin "取消固定"
 
  :web.test-site/help-test "我想帮忙测试"
