@@ -1,5 +1,20 @@
 # API migrations
 
+## Abandoned update preparation accepts eventual successful recovery
+
+After an update preparation waiter is dropped, a failed matching `released`
+acknowledgement keeps application admission fenced. Repeated failed recovery
+acknowledgements for that abandoned request are inert; a later matching
+successful `released` acknowledgement clears the reservation. Previously a
+recorded failure made that eventual success look like a duplicate and could
+leave the Rust fence permanently held after the native side recovered.
+
+For example, cancellation followed by a failed worker restore can now retry the
+same request and reopen admission only after the native owner proves recovery.
+Live waiters still reject duplicate responses. Request identity, phase checks,
+old-response handling and the requirement for a successful release proof remain
+unchanged. This does not enable installation or grant an install lease.
+
 ## Native update rollback restores exact worker and transport owners
 
 The native coordinator can capture a deterministic owned-worker snapshot with

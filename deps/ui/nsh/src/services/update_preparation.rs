@@ -88,7 +88,18 @@ impl Preparation {
                 return Err("preparation response phase does not match the active request".into());
             }
             if pending.response.is_some() {
-                return Err("duplicate preparation response".into());
+                if pending.abandoned
+                    && response.phase == Phase::Released
+                    && matches!(&pending.response, Some(Err(_)))
+                {
+                    // Recovery can fail more than once after the waiter was
+                    // dropped. Keep its fence until a later successful retry.
+                    if !response.ok {
+                        return Ok(());
+                    }
+                } else {
+                    return Err("duplicate preparation response".into());
+                }
             }
             let released = response.phase == Phase::Released && response.ok && pending.abandoned;
             pending.response = Some(if response.ok {
@@ -322,6 +333,38 @@ mod tests {
                 .count(),
             2
         );
+    }
+    #[test]
+    fn abandoned_failed_release_keeps_the_fence_until_a_successful_retry() {
+        let (preparation, send, _) = fixture();
+        let mut future = preparation.refuse_after_save(send, "unavailable".into());
+        assert!(poll(&mut future).is_pending());
+        drop(future);
+        answer(&preparation, "1", "released", false).unwrap();
+        answer(&preparation, "1", "released", false).unwrap();
+        assert!(preparation.active());
+        answer(&preparation, "1", "prepared", true).unwrap();
+        assert!(preparation.active());
+        answer(&preparation, "2", "released", true).unwrap_err();
+        answer(&preparation, "1", "released", true).unwrap();
+        assert!(!preparation.active());
+    }
+    #[test]
+    fn live_waiter_still_rejects_duplicate_failed_release() {
+        let (preparation, send, _) = fixture();
+        let mut future = preparation.refuse_after_save(send, "unavailable".into());
+        assert!(poll(&mut future).is_pending());
+        answer(&preparation, "1", "prepared", true).unwrap();
+        assert!(poll(&mut future).is_pending());
+        answer(&preparation, "1", "released", false).unwrap();
+        answer(&preparation, "1", "released", false).unwrap_err();
+        assert!(preparation.active());
+        expect_refused(&mut future, "save refused");
+        drop(future);
+        answer(&preparation, "1", "released", false).unwrap();
+        assert!(preparation.active());
+        answer(&preparation, "1", "released", true).unwrap();
+        assert!(!preparation.active());
     }
     #[test]
     fn retired_preparation_owner_cannot_begin_a_new_request() {
