@@ -255,7 +255,13 @@ fn native_sink(context: ExtensionContext, block: String, read: SnapshotReader) -
                 ))
             });
             let Some(selected) = selected else {
-                eprintln!("logseq-editor: native selection is not a UTF-16 boundary");
+                let (units, bytes) = value.with_untracked(|text| (text.encode_utf16().count(), text.len()));
+                let transport = selection_state.borrow();
+                eprintln!(
+                    "logseq-editor: native selection is not a UTF-16 boundary: start={} end={} utf16_len={units} bytes={bytes} focused={} mirrored_selection={:?} serial={} source_version={:?}",
+                    selection.start, selection.end, focused.get_untracked(),
+                    transport.selection, transport.serial, selection_context.property("source-version")
+                );
                 return;
             };
             let previous = selection_state.borrow().selection;
