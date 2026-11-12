@@ -20,16 +20,24 @@ module Activity = struct
   type snapshot = { pending : int; epoch : int }
   let current : t option ref = ref None
   let create () = { pending = 0; epoch = 0; live = true }
+  let same_scope left right = match left, right with
+    | None, None -> true
+    | Some left, Some right -> left == right
+    | None, Some _ | Some _, None -> false
   let in_context scope f =
     let previous = !current in
-    current := scope;
-    Fun.protect ~finally:(fun () -> current := previous) f
+    if same_scope scope previous then f ()
+    else begin
+      current := scope;
+      Fun.protect ~finally:(fun () -> current := previous) f
+    end
   let within scope f = in_context (Some scope) f
   let without f = in_context None f
   let capture f =
-    match !current with
-    | None -> (fun value -> without (fun () -> f value))
-    | Some scope -> (fun value -> within scope (fun () -> f value))
+    let scope = !current in
+    fun value ->
+      if same_scope scope !current then f value
+      else in_context scope (fun () -> f value)
   let begin_work () =
     match !current with
     | Some scope when scope.live ->

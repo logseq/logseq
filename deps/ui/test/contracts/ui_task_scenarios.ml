@@ -189,7 +189,7 @@ let run ~enqueue ~drain ~set_owner () =
             finish := Some resolve_nested;
             nested)));
         Ui_task.Activity.within other (fun () -> resolve ());
-        drain ();
+        Ui_task.Activity.within other drain;
         check "continuation keeps its creating observation owner"
           ((Ui_task.Activity.snapshot activity).pending = 2
            && (Ui_task.Activity.snapshot other).pending = 0);
@@ -203,6 +203,30 @@ let run ~enqueue ~drain ~set_owner () =
         resolve ();
         drain ();
         check "closing observation does not cancel or retain task completion"
+          ((Ui_task.Activity.snapshot activity).pending = 0));
+      "activity context restores after exceptions and closed continuations", (fun () ->
+        let activity = Ui_task.Activity.create () in
+        let other = Ui_task.Activity.create () in
+        (try Ui_task.Activity.within activity (fun () -> failwith "observed failure")
+         with Failure _ -> ());
+        let unobserved, finish_unobserved, _ = Ui_task.pending () in
+        check "exception cannot leak ambient observation"
+          ((Ui_task.Activity.snapshot activity).pending = 0);
+        ignore unobserved; finish_unobserved (); drain ();
+        let task, resolve, _ = Ui_task.Activity.within activity Ui_task.pending in
+        let finish_nested = ref None in
+        ignore (Ui_task.Activity.within activity (fun () ->
+          Ui_task.bind task (fun () ->
+            let nested, finish, _ = Ui_task.pending () in
+            finish_nested := Some finish; nested)));
+        Ui_task.Activity.close activity;
+        resolve ();
+        Ui_task.Activity.within other drain;
+        check "closed continuation creates no newly counted work"
+          ((Ui_task.Activity.snapshot activity).pending = 1
+           && (Ui_task.Activity.snapshot other).pending = 0);
+        Option.get !finish_nested (); drain ();
+        check "previously observed work still completes after closing"
           ((Ui_task.Activity.snapshot activity).pending = 0));
       "creation exceptions reject asynchronously", (fun () ->
         let received = ref None in

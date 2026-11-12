@@ -35,12 +35,15 @@ module Activity : sig
   val create : unit -> t
   val within : t -> (unit -> 'a) -> 'a
   val without : (unit -> 'a) -> 'a
+
   (** Capture the current observation context for a later continuation. *)
   val capture : ('a -> 'b) -> 'a -> 'b
+
   (** A one-shot completion hook for an additional application-owned async
       primitive, or [None] outside an observed scope. No task is created. *)
   val begin_work : unit -> (unit -> unit) option
   val snapshot : t -> snapshot
+
   (** Stop observing newly created work; existing completion hooks still work. *)
   val close : t -> unit
 end
