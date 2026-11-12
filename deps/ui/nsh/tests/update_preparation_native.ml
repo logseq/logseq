@@ -421,6 +421,7 @@ let native_outliner_content_events () =
   recorded := [];
   let prior_target = !Platform.event_target_of
   and prior_capture = Hashtbl.find_opt Platform.capture_listeners "pointerdown"
+  and prior_click = Hashtbl.find_opt Platform.capture_listeners "click"
   and prior_state = !Editor_state.st
   and prior_fields = !Editor_state.field_sigs_opt in
   Fun.protect ~finally:(fun () ->
@@ -428,6 +429,9 @@ let native_outliner_content_events () =
     (match prior_capture with
      | Some listeners -> Hashtbl.replace Platform.capture_listeners "pointerdown" listeners
      | None -> Hashtbl.remove Platform.capture_listeners "pointerdown");
+    (match prior_click with
+     | Some listeners -> Hashtbl.replace Platform.capture_listeners "click" listeners
+     | None -> Hashtbl.remove Platform.capture_listeners "click");
     Editor_state.st := prior_state;
     Editor_state.field_sigs_opt := prior_fields;
     Native_embed.current_app := None) (fun () ->
@@ -492,17 +496,18 @@ let native_outliner_content_events () =
           check "input delivery retains the same mounted content owner"
             (List.hd (Lui_runtime.children runtime (Lui_app.root_node app))=node);
           recorded := [];
+          let bullet_target = ref None in
+          Hashtbl.replace Platform.capture_listeners "click" [fun payload ->
+            bullet_target := (Ui_dom_native.ev_of payload).Ui_services.target];
           ignore (Native_embed.pointer_down bullet 9. 12. 0 0 "");
           ignore (Native_embed.pointer_up bullet 9. 12. 0 0 "");
           ignore (Native_embed.press_detail bullet 9. 12. 0 0 "");
           check "native bullet activation reaches the shared document owner once"
             (List.map fst !recorded=["pointerdown";"mousedown";"pointerup";"click"]);
           check "the native bullet retains its controller's prefixed target identity"
-            (match List.assoc_opt "click" !recorded with
-             | Some payload -> (match (Ui_dom_native.ev_of payload).Ui_services.target with
-                 | Some target -> (match target.Ui_services.closest ".bullet-container" with
-                     | Some bullet -> bullet.Ui_services.id () = "dot-native-content"
-                     | None -> false)
+            (match !bullet_target with
+             | Some target -> (match target.Ui_services.closest ".bullet-container" with
+                 | Some bullet -> bullet.Ui_services.id () = "dot-native-content"
                  | None -> false)
              | None -> false)
         end))
