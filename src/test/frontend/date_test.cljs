@@ -56,6 +56,13 @@
     (is (= "2026/04/05"
            (date/journal-name test-date-time)))))
 
+(deftest journal-block-name-test
+  (with-redefs [state/get-date-formatter (constantly "yyyy-MM-dd")]
+    (is (= "Apr 5th, 2026"
+           (date/journal-block-name test-date-time)))
+    (is (= "2026-04-05"
+           (date/journal-name test-date-time)))))
+
 (deftest start-of-day-test
   (let [result (date/start-of-day test-date-time)]
     (is (= 2026 (t/year result)))

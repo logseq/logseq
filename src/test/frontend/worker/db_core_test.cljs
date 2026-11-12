@@ -2009,17 +2009,23 @@
      (let [transact! (get @thread-api/*thread-apis :thread-api/transact)
            conn (d/create-conn db-schema/schema)]
        (reset! worker-state/*datascript-conns {test-repo conn})
-       ;; Create today's journal page
+       ;; Today's journal page, with a title in a custom journal title format.
+       ;; Its :block/name is always the default-format title.
        (d/transact! conn [{:block/title "2024-01-01"
-                           :block/name "2024-01-01"}])
+                           :block/name "jan 1st, 2024"
+                           :block/journal-day 20240101}])
        ;; Transaction with create-today-journal? should be skipped
        (let [result (transact! test-repo
                                 [{:block/title "journal entry"}]
                                 {:create-today-journal? true
-                                 :today-journal-name "2024-01-01"}
+                                 :today-journal-day 20240101}
                                 nil)]
          ;; Should return nil (no transaction performed)
-         (is (nil? result)))))))
+         (is (nil? result))
+         (is (empty? (d/q '[:find [?b ...]
+                            :where [?b :block/title "journal entry"]]
+                          @conn))
+             "The skipped transaction must not be applied"))))))
 
 (deftest get-latest-journals-returns-worker-maps
   (restoring-worker-state

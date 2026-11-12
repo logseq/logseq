@@ -37,11 +37,12 @@
   (when (compare-and-set! *journal-calendar-open? false true)
     (let [apply-date! (fn [date]
                         (let [repo (state/get-current-repo)
-                              page-name (date/journal-name (gdate/Date. (js/Date. date)))]
-                          (p/let [journal (db-async/<get-block repo page-name {:children? false})
+                              journal-day (date/date->journal-day (gdate/Date. (js/Date. date)))]
+                          (p/let [journal (db-async/<get-journal-page-by-day repo journal-day)
                                   page (if journal
                                          journal
-                                         (page-handler/<create! page-name {:redirect? false}))]
+                                         (page-handler/<create! (date/journal-day->journal-name journal-day)
+                                                                {:redirect? false}))]
                             (route-handler/redirect-to-page! (:block/uuid page)))))]
       (-> (.showDatePicker mobile-util/ui-local)
           (p/then (fn [^js e]

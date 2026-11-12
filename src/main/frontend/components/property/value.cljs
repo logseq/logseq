@@ -939,18 +939,49 @@
     other-position?
     (assoc :on-click util/stop-propagation)))
 
+(defn- unresolved-journal-page-ref
+  "Page reference for a day without a journal page yet: by the default-format
+  journal name, which is what a journal page created for that day gets."
+  [utc-ms]
+  {:block/name (date/journal-block-name (t/to-default-time-zone (tc/from-long utc-ms)))})
+
+(defn- <journal-page-ref
+  "Resolves the page reference for the journal day of `utc-ms` by
+  `:block/journal-day`: a journal's `:block/name` doesn't follow the
+  configured journal title format, and older journals keep a name in a former
+  format."
+  [repo utc-ms]
+  (p/let [page (db-async/<get-journal-page-by-day repo (date/ms->journal-day utc-ms))]
+    (if-let [page-uuid (:block/uuid page)]
+      {:block/uuid page-uuid}
+      (unresolved-journal-page-ref utc-ms))))
+
+(hsx/defc journal-date-link
+  [utc-ms label other-position?]
+  (let [[resolved set-resolved!] (hooks/use-state nil)
+        page-cp (state/get-component :block/page-cp)]
+    (hooks/use-effect!
+     (fn []
+       (let [cancelled? (atom false)]
+         (p/let [page-ref (<journal-page-ref (state/get-current-repo) utc-ms)]
+           (when-not @cancelled?
+             (set-resolved! {:utc-ms utc-ms :page-ref page-ref})))
+         #(reset! cancelled? true)))
+     [utc-ms])
+    (when page-cp
+      [:span.inline-flex (date-page-link-props other-position?)
+       (page-cp {:disable-preview? true
+                 :show-non-exists-page? true
+                 :label label}
+                (if (= utc-ms (:utc-ms resolved))
+                  (:page-ref resolved)
+                  (unresolved-journal-page-ref utc-ms)))])))
+
 (hsx/defc datetime-value
   [value property-id repeated-task? {:keys [datetime? other-position? suppress-inline-edit-icon?]}]
   (when-let [date (t/to-default-time-zone (tc/from-long value))]
     (let [content [:div.ls-datetime.flex.flex-row.gap-1.items-center
-                   (when-let [page-cp (state/get-component :block/page-cp)]
-                     (let [page-title (date/journal-name date)]
-                       ^{:key page-title}
-                       [:span.inline-flex (date-page-link-props other-position?)
-                        (page-cp {:disable-preview? true
-                                  :show-non-exists-page? true
-                                  :label (human-date-label value)}
-                                 {:block/name page-title})]))
+                   [journal-date-link value (human-date-label value) other-position?]
                    (when datetime?
                      (let [date (js/Date. value)
                            hours (.getHours date)
