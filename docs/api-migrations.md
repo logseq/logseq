@@ -1337,3 +1337,27 @@ used by the real workflow and its long-body native contract fixture. That fixtur
 checks owner structure, mounted actions and resize retention; a semantic action
 on an offscreen row does not qualify native scrolling or physical hit testing.
 Those require the native engine/window flow against a fresh release.
+
+## NSH target builds check literal presentation before opening a window
+
+The desktop build now reads the `.cmt` files belonging to its four actual native
+archives. Compiler-resolved `Lui_elements` constructor calls and public
+`Ui_parts.Prop` literal encoders generate a temporary probe; the probe calls
+those exact compiled APIs and exports their wire values with the application's
+computed light/dark theme snapshots. `Ui_parts.Prop.to_wire` exposes the existing
+immutable encoded pair for this read-only tooling. No property vocabulary or
+capability matrix is maintained separately.
+
+The candidate executable's `--validate-native-styles` command checks that
+manifest with the same Rust theme resolver and style compiler used at runtime.
+Both Unix desktop and Windows build paths run it before startup qualification
+and publication. Failures identify the authored native source location. Native
+host comparisons and their local boolean aliases select the NSH branches;
+Web-only CSS literals remain valid in their own branches.
+
+This is a presentation gate, not whole-program interpretation: arbitrary
+computed values, missing scoped theme variables, opaque helper applications,
+retained event ownership and platform layout still require boundary validation
+and real application qualification. The report records captured literal sites
+and deferred scoped-variable checks. It does not claim those dynamic paths have
+been statically proved or that every conditional route has been exercised.

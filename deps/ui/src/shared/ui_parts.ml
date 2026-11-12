@@ -243,6 +243,7 @@ module Prop : sig
   type t
   type s
 
+  val to_wire : t -> Lui_protocol.property * Lui_protocol.wire_value
   val set : Lui_ui.ui_context -> int -> t -> unit
   val set_signal : Lui_ui.ui_context -> int -> s -> unit
 
@@ -353,6 +354,8 @@ end = struct
 
   let sstr p v : s = Sbind (p, v, fun s -> StringValue s)
   let sint p v : s = Sbind (p, v, fun i -> IntValue i)
+
+  let to_wire (value : t) = value
 
   let set ctx node ((prop, v) : t) =
     match v with

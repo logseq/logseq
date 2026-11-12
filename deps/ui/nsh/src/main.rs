@@ -17,6 +17,29 @@ const APP_ID: &str = "com.logseq.logseq";
 
 #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
 fn main() -> impl std::process::Termination {
+    let arguments = std::env::args_os().skip(1).collect::<Vec<_>>();
+    if arguments
+        .first()
+        .is_some_and(|argument| argument == "--validate-native-styles")
+    {
+        if arguments.len() != 2 {
+            eprintln!("native style validation requires one manifest path");
+            return std::process::ExitCode::FAILURE;
+        }
+        return match std::fs::read_to_string(&arguments[1])
+            .map_err(|error| error.to_string())
+            .and_then(|source| lui_nsh::preflight::validate_styles(&source))
+        {
+            Ok(report) => {
+                println!("{report}");
+                std::process::ExitCode::SUCCESS
+            }
+            Err(error) => {
+                eprintln!("{error}");
+                std::process::ExitCode::FAILURE
+            }
+        };
+    }
     let launch = match launch(std::env::args_os().skip(1).collect(), |name| {
         std::env::var_os(name)
     }) {

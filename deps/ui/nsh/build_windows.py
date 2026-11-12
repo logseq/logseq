@@ -146,6 +146,8 @@ def build(*, output, lui_source, dll_roots, dumpbin):
         resources = candidate / "Resources"
         resources.mkdir(parents=True)
         shutil.copy2(artifact(records, "nsh-app-logseq"), candidate / "logseq-nsh.exe")
+        execute(["opam", "exec", "--", sys.executable, HOST / "validate_static_styles.py",
+                 candidate / "logseq-nsh.exe"], environment=environment)
         shutil.copy2(library, resources / "logseq_ui.dll")
         shutil.copy2(REPO / "deps/db-worker/_build/default/bin/main.exe", resources / "logseq-db-worker.exe")
         for pattern, source, destination in (("*.json", UI / "assets", resources),
