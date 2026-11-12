@@ -241,3 +241,14 @@ date-flow interaction, all-platform packaging, signing and installed updates
 remain incomplete. The later natural-date service has passed shared compilation
 and 16,428 checks plus actual release startup, but its Rust parser's next-weekday
 behavior differs from frozen master and its semantic regression remains red.
+
+At `fd35023f92` plus the test-only fragile-pattern correction, both the complete
+shared suite (16,428 checks and contracts) and native FFI suite passed again:
+`/tmp/logseq-natural-date-owned-boundary-shared-tests.log` and
+`/tmp/logseq-natural-date-owned-boundary-native-final.log`. The native tests
+exercise actual platform-event replies, strict validation even after request
+retirement, finite/integral reference validation before integer conversion,
+clipboard cancellation/acknowledgement compatibility, exact popup/application/
+graph ownership, and a same-owner journals refresh that advances the model's
+context revision without rejecting its pending result. These protocol and
+ownership results do not qualify the Rust parser's unresolved weekday semantics.
