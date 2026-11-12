@@ -1781,7 +1781,7 @@ let gallery_remote_url value =
     match W.as_string value with
     | Some url ->
         let url = String.trim url in
-        if Str_util.starts_with "https://" url || Str_util.starts_with "http://" url
+        if Str_util.starts_with url "https://" || Str_util.starts_with url "http://"
         then Some url else None
     | None -> None) values
 

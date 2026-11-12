@@ -776,6 +776,18 @@ let find_in_page_submit ~registry =
 let gallery_remote_cover_policy ~registry =
   let module V = Views_state in
   let url = "https://images.example.org/gallery-cover.png" in
+  check "gallery accepts an actual HTTPS URL after trimming"
+    (Views_table.gallery_remote_url (Wire.String ("  " ^ url ^ "  "))=Some url);
+  check "gallery accepts an HTTP property value inside a collection"
+    (Views_table.gallery_remote_url (Wire.Array
+      [Wire.String "not a URL";
+       Wire.Map [Wire.kw "logseq.property/value",
+         Wire.String "http://images.example.org/cover.png"]])=
+      Some "http://images.example.org/cover.png");
+  List.iter (fun value ->
+    check "gallery remote covers reject local, script and incomplete URL prefixes"
+      (Views_table.gallery_remote_url (Wire.String value)=None))
+    ["file:///tmp/cover.png";"javascript:alert(1)";"https";"http"];
   let block = Wire.Map
     [Wire.kw "block/uuid",Wire.Uuid "gallery-remote-row";
      Wire.kw "block/title",Wire.String "Remote cover";
@@ -799,8 +811,8 @@ let gallery_remote_cover_policy ~registry =
         (M.string_prop (image ()) "url"=Some url
          && M.string_prop (image ()) "alt"=Some "");
       check "actual gallery URL cover keeps its authored dimensions"
-        (Hashtbl.find_opt (image ()).M.props "width"=Some (P.FloatValue 220.)
-         && Hashtbl.find_opt (image ()).M.props "height"=Some (P.FloatValue 192.));
+        (Hashtbl.find_opt (image ()).M.props "width"=Some (P.IntValue 220)
+         && Hashtbl.find_opt (image ()).M.props "height"=Some (P.IntValue 192));
       check "only NSH gallery covers select the native eager loading policy"
         (M.string_prop (image ()) "loading"=Some (if native then "eager" else "lazy"));
       check "NSH has no page Referer policy prop while other hosts retain no-referrer"

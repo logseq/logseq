@@ -2,6 +2,12 @@
 
 ## NSH remote gallery covers
 
+Remote gallery classification now passes the URL and prefix to the existing
+string helper in their declared order. Previously, full HTTP(S) URLs were
+incorrectly excluded before an Image could be created. Trimmed HTTP(S) strings
+and property-value collections now reach the existing gallery image branch;
+local and script schemes remain excluded.
+
 URL-backed gallery covers use NSH's existing native Image loader with eager
 loading. NSH does not have a browser document Referer and the producer omits the
 browser-only `referrer_policy` prop. Web, Apple and Android keep the existing
