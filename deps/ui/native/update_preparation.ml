@@ -117,19 +117,19 @@ and recover_workers t =
       | [] ->
           check_owner ();
           t.pending_recovery <- List.rev failed;
-          let* resumed = if t.resume_needed then
-              (match t.lifecycle with
-               | Some lifecycle -> outcome lifecycle.resume
-               | None -> Js.Promise.reject (Failure "Worker recovery has no captured transport owner"))
-            else Js.Promise.resolve (Ok ()) in
-          check_owner ();
-          let errors = match resumed with
-            | Ok () -> t.resume_needed <- false; errors
-            | Error error -> error::errors in
           (match errors with
-           | [] -> Js.Promise.resolve ()
-           | errors -> Js.Promise.reject (Failure (String.concat "; "
-               (List.rev_map Printexc.to_string errors))))
+           | _::_ -> Js.Promise.reject (Failure (String.concat "; "
+               (List.rev_map Printexc.to_string errors)))
+           | [] ->
+               let* resumed = if t.resume_needed then
+                   (match t.lifecycle with
+                    | Some lifecycle -> outcome lifecycle.resume
+                    | None -> Js.Promise.reject (Failure "Worker recovery has no captured transport owner"))
+                 else Js.Promise.resolve (Ok ()) in
+               check_owner ();
+               match resumed with
+               | Ok () -> t.resume_needed <- false; Js.Promise.resolve ()
+               | Error error -> Js.Promise.reject error)
       | worker::rest ->
           check_owner ();
           let* result = outcome worker.recover in

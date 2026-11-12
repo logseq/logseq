@@ -159,14 +159,29 @@ let partial_failure_and_retry () =
     check "stop failure reports unsuccessful Prepared"
       (List.exists (fun (phase,ok,_) -> phase="prepared" && not ok) !(fixture.responses));
     Update_preparation.abort fixture.owner;Host.drain ();
-    complete fixture "restore:a";reject fixture "prove:b";reject fixture "resume";
-    check "unknown stop/failed probe never reports release success" (not (released fixture));
+    complete fixture "restore:a";reject fixture "prove:b";
+    check "partial worker recovery cannot dispatch transport readiness"
+      (Queue.is_empty fixture.pending && not (List.mem "resume" !(fixture.log)));
+    check "unknown stop never reports release success" (not (released fixture));
     worker_fenced fixture;reset_refused fixture;
     Update_preparation.abort fixture.owner;Host.drain ();
-    complete fixture "prove:b";complete fixture "resume";
-    check "explicit retry recovers only the failed handle/probe" (released fixture);
-    check "successful exited-worker restoration is retained across retry"
-      (List.length (List.filter ((=) "restore:a") !(fixture.log))=1))
+    check "retry targets only the failed worker before transport readiness"
+      ((next fixture).name="prove:b");
+    complete fixture "prove:b";
+    check "transport readiness starts only after the last worker recovers"
+      ((next fixture).name="resume");
+    reject fixture "resume";
+    check "failed transport readiness still holds the release" (not (released fixture));
+    worker_fenced fixture;reset_refused fixture;
+    let before_retry= !(fixture.log) in
+    Update_preparation.abort fixture.owner;Host.drain ();
+    check "readiness-only retry never repeats successful worker recovery"
+      (!(fixture.log)=before_retry @ ["resume"]);
+    complete fixture "resume";
+    check "explicit retry releases after worker and transport proofs" (released fixture);
+    check "partial rollback and retry preserve exact protocol order"
+      (!(fixture.log)=["capture";"seal:a";"seal:b";"stop:a";"stop:b";
+        "restore:a";"prove:b";"prove:b";"resume";"resume"]))
 let capture_and_seal_refusal () =
   let fixture=start ~defer_capture:true ["a";"b"] in
   Fun.protect ~finally:(fun () -> cleanup fixture) (fun () ->

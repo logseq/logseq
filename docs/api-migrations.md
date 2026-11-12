@@ -37,6 +37,9 @@ preparation owner then aborts live sealed workers and restores independently
 verified exited workers through their captured handles. Restoration/probe
 failure on one worker does not skip recovery of the others. Successful recoveries
 are retained; a matching later abort retries only failed recovery/readiness work.
+Transport readiness does not start until every worker recovery is proven. A
+readiness-only failure retries that readiness check without replaying successful
+worker recoveries.
 The original active transport is rebound through its captured same-repo closure,
 including confirmed SSE readiness and a finite graph probe. Only after those
 operations and nested activity/mailbox/model callbacks settle does the bridge
