@@ -95,3 +95,9 @@ public `gtk4` re-export, locally naming it `gtk` for the widget types. Missing
 subclass traits/PageView diagnostics in that log cascade from this import.
 No test or native engine result is inferred from this failure, and no local
 compiler/test was run for the correction; the same target requires another CI run.
+
+The next run, 43304781232 at c74eeaf363, reached the same native test target
+and reported one type inference error in the selection-offset closure. Its
+argument indexes individual glyphs, so it is explicitly `usize`, rather than an
+unresolved generic `SliceIndex`. This source correction still requires the
+actual Linux compile and widget tests; no execution is inferred from it.

@@ -489,7 +489,7 @@ impl PageView {
             page.caret = caret.min(text.glyphs.len());
             let first = page.anchor.min(page.caret);
             let last = page.anchor.max(page.caret);
-            let logical = |offset| {
+            let logical = |offset: usize| {
                 text.glyphs.get(offset).map_or_else(
                     || text.glyphs.last().map_or(0, |glyph| glyph.index + 1),
                     |glyph| glyph.index,
