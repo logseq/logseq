@@ -3136,6 +3136,15 @@
          (not= (nth value pos) sym)
          true)))
 
+(defn- inside-display-math?
+  "Whether `text-before-cursor` leaves a `$$` display math block open. The `$`
+  run right before the cursor is ignored, since it may start the closing `$$`."
+  [text-before-cursor]
+  (->> (string/replace text-before-cursor #"\$+$" "")
+       (re-seq #"\$\$")
+       count
+       odd?))
+
 (defn ^:large-vars/cleanup-todo keydown-not-matched-handler
   "NOTE: Keydown cannot be used on Android platform"
   [format]
@@ -3185,7 +3194,12 @@
         (and (= "$" key) (string/blank? (util/get-selected-text)))
         (do
           (util/stop e)
-          (commands/simple-insert! input-id "$$" {:backward-pos 1}))
+          ;; Step over a closing `$` with extra logic for closing `$$` too
+          (if (and (= "$" (get-current-input-char input))
+                   (or (not= "$" (util/nth-safe value (dec pos)))
+                       (inside-display-math? (subs value 0 pos))))
+            (cursor/move-cursor-forward input)
+            (commands/simple-insert! input-id "$$" {:backward-pos 1})))
 
         (and (contains? (set/difference (set (keys editor-autopair/reversed-autopair-map))
                                         #{"`"})

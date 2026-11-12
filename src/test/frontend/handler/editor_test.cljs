@@ -1399,6 +1399,7 @@
                   util/get-selected-text (constantly "")
                   util/stop (constantly nil)
                   cursor/pos (constantly cursor-pos)
+                  cursor/get-caret-pos (constantly {:pos cursor-pos})
                   cursor/move-cursor-to (fn [_ pos' & _]
                                           (reset! cursor-pos' pos'))]
       ((editor/keydown-not-matched-handler :markdown) event nil)
@@ -1414,6 +1415,38 @@
           :cursor-pos 9}
          (keydown-dollar-without-selection-result {:value "inline $$"
                                                    :cursor-pos 8}))))
+
+(deftest keydown-not-matched-handler-steps-over-closing-dollar
+  (testing "$x|$ steps over the closing $"
+    (is (= {:content nil
+            :cursor-pos 3}
+           (keydown-dollar-without-selection-result {:value "$x$"
+                                                     :cursor-pos 2}))))
+  (testing "$$x|$$ steps over the first closing $"
+    (is (= {:content nil
+            :cursor-pos 4}
+           (keydown-dollar-without-selection-result {:value "$$x$$"
+                                                     :cursor-pos 3}))))
+  (testing "$$x$|$ steps over the last closing $ of display math"
+    (is (= {:content nil
+            :cursor-pos 5}
+           (keydown-dollar-without-selection-result {:value "$$x$$"
+                                                     :cursor-pos 4}))))
+  (testing "display math with spaces and newlines closes the same way"
+    (is (= {:content nil
+            :cursor-pos 11}
+           (keydown-dollar-without-selection-result {:value "$$\na + b\n$$"
+                                                     :cursor-pos 10}))))
+  (testing "$|$ after a closed display block still expands to $$|$$"
+    (is (= {:content "$$a$$ and $$$$"
+            :cursor-pos 12}
+           (keydown-dollar-without-selection-result {:value "$$a$$ and $$"
+                                                     :cursor-pos 11}))))
+  (testing "single dollars such as prices don't count as display delimiters"
+    (is (= {:content "costs $5, $$$$"
+            :cursor-pos 12}
+           (keydown-dollar-without-selection-result {:value "costs $5, $$"
+                                                     :cursor-pos 11})))))
 
 (defn- keydown-backtick-autopaired?
   [event]
