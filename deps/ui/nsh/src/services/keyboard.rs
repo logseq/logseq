@@ -702,7 +702,7 @@ mod tests {
                 {"stroke":"n","command":"editor/toggle-number-list","scope":"global-prevent-default"},
                 {"stroke":"p","command":"editor/add-property-deadline","scope":"global-non-editing-only"},
                 {"stroke":"d","command":"editor/add-property-deadline","scope":"global-non-editing-only"},
-                {"stroke":"mod+k","command":"go/search","scope":"global-prevent-default"},
+                {"stroke":"mod+shift+m","command":"editor/move-blocks","scope":"editor-global"},
                 {"stroke":"alt+shift+g","command":"graph/open","scope":"editor-global"}
             ]}).to_string()
     }
@@ -783,7 +783,7 @@ mod tests {
             app.screen().input_text("id:native-catalog-editor").unwrap(),
             Some("draftnp")
         );
-        app.press_key("meta+k").unwrap();
+        app.press_key("alt+shift+g").unwrap();
         assert!(
             observed.0.lock().unwrap().is_empty(),
             "marked text neither commits source nor runs global commands"
@@ -805,15 +805,21 @@ mod tests {
             Some("draftnp你中文")
         );
         observed.0.lock().unwrap().clear();
-        app.press_key("meta+k").unwrap();
+        // ModK belongs to the real block editor's local conduit, absent
+        // from this raw Input probe. Move-blocks is the catalog's genuine
+        // application-owned modified shortcut while that editor has focus.
+        assert!(editor_owns(parse("mod+k").unwrap()));
+        assert!(!editor_owns(parse("mod+shift+m").unwrap()));
+        app.press_key("meta+shift+m").unwrap();
         let events = observed.0.lock().unwrap();
         assert_eq!(
             events.len(),
             1,
             "modified global commands still have one dispatcher"
         );
-        assert_eq!(events[0]["key"]["key"], json!("k"));
+        assert_eq!(events[0]["key"]["key"], json!("m"));
         assert_eq!(events[0]["key"]["metaKey"], json!(true));
+        assert_eq!(events[0]["key"]["shiftKey"], json!(true));
         drop(events);
         observed.0.lock().unwrap().clear();
         app.press_key("alt+shift+g").unwrap();

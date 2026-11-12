@@ -368,6 +368,11 @@ let editor_keyboard_capture_order () =
      | _ -> false);
   check "property prefix commands retain their actual nonediting catalog scope"
     (Keymap_data.command_handler "editor/add-property-deadline" = Some "global-non-editing-only");
+  check "modified shortcut regression uses the actual application-owned move-blocks binding"
+    (Keymap_data.command_handler "editor/move-blocks" = Some "editor-global"
+     && match Keymap_data.default_shortcut "editor/move-blocks" with
+        | Commands_data.Binds keys -> List.mem "mod+shift+m" keys
+        | _ -> false);
   check "configured Option shortcut remains a modified catalog command"
     (Keymap_data.command_handler "graph/open" = Some "editor-global"
      && match Keymap_data.default_shortcut "graph/open" with
