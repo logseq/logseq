@@ -866,3 +866,20 @@ clipboard insertion remain on the native input. Applications must not emit a
 second `dom-event` keydown for an NSH editor `key` event; it is delivered by the
 native application entry. No LUI API parameter or schema changes are required for
 this ordering change.
+
+## NSH outliner content pointer delivery
+
+The typed block content Column now owns NSH pointer-down, pointer-up and detailed
+press events when a deeper native control does not own the press. It forwards the
+actual LUI node ID, coordinates, primary button state and modifier flags into the
+existing document event controller. Pointer-down precedes mousedown; the release
+ends range-selection state, and the press becomes the existing click event.
+This restores the same selection and editing entry path without a second
+outliner controller. Web, Apple and Android keep their existing document routing.
+
+Raw nonsemantic markup inside content now forwards `pointerdown` before
+`mousedown` with `button: 0` and `buttons: 1`. Native Buttons and Inputs retain
+their semantic event ownership. Applications should continue using the shared
+selection/edit handlers; they must not add a parallel native content click
+handler. This change establishes click and modifier-selection delivery, not
+cross-row pointer hit testing or native drag/drop parity.

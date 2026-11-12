@@ -350,12 +350,10 @@ fn host<E: Element + Interactive + Accessible>(
             }
         })
         .on_press_down(move |event: &nsh_core::PressEvent| {
-            emit_dom(
-                &down,
-                owner,
-                "mousedown",
-                pointer(event.page_position, event.modifiers),
-            )
+            let mut payload = pointer(event.page_position, event.modifiers);
+            payload["buttons"] = 1.into();
+            emit_dom(&down, owner, "pointerdown", payload.clone());
+            emit_dom(&down, owner, "mousedown", payload)
         })
         .on_mouse_up(move |event: &nsh_core::MouseEvent| {
             emit_dom(
@@ -372,19 +370,16 @@ fn host<E: Element + Interactive + Accessible>(
             emit_dom(&leave, owner, "mouseleave", json!({}))
         })
         .on_context_menu(move |event: &ContextMenuEvent| {
-            emit_dom(
-                &menu,
-                owner,
-                "contextmenu",
-                pointer(event.page_position, event.modifiers),
-            )
+            let mut payload = pointer(event.page_position, event.modifiers);
+            payload["button"] = 2.into();
+            emit_dom(&menu, owner, "contextmenu", payload)
         })
         .on_focus(move || emit_dom(&focus, owner, "focus", json!({})))
         .on_blur(move || emit_dom(&blur, owner, "blur", json!({})))
         .into_element()
 }
 fn pointer(point: Point<Points>, modifiers: Modifiers) -> Value {
-    json!({"clientX":point.x.0,"clientY":point.y.0,"shiftKey":modifiers.shift,"altKey":modifiers.alt,"metaKey":modifiers.cmd,"ctrlKey":modifiers.ctrl})
+    json!({"clientX":point.x.0,"clientY":point.y.0,"button":0,"buttons":0,"shiftKey":modifiers.shift,"altKey":modifiers.alt,"metaKey":modifiers.cmd,"ctrlKey":modifiers.ctrl})
 }
 fn emit_dom(context: &ExtensionContext, owner: Owner, name: &str, payload: Value) {
     if !owner.is_live() {

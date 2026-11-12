@@ -193,6 +193,25 @@ fn ActualRawContract() -> impl IntoElement {
                 }),
         )
         .child(text(move || format!("Raw events: {}", events.get().len())))
+        .child(text(move || {
+            events
+                .get()
+                .iter()
+                .map(|fields| {
+                    let payload: Value = fields
+                        .get("payload")
+                        .and_then(Value::as_str)
+                        .map(|payload| serde_json::from_str(payload).unwrap())
+                        .unwrap_or(Value::Null);
+                    format!(
+                        "{}:{}",
+                        fields["name"].as_str().unwrap(),
+                        payload.get("buttons").unwrap_or(&Value::Null)
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join(" ")
+        }))
 }
 #[test]
 fn actual_raw_schema_validates_atomically_and_guards_declared_events() {
@@ -205,4 +224,13 @@ fn actual_raw_schema_validates_atomically_and_guards_declared_events() {
     assert!(!app.screen().shows("Actual raw schema"));
     assert!(!app.screen().shows("Retained child"));
     assert!(app.screen().shows("Raw events: 2"));
+}
+
+#[test]
+fn actual_raw_content_press_starts_the_existing_primary_pointer_controller() {
+    let mut app = Headless::start(EngineConfig::new(Root::of::<ActualRawContract>())).unwrap();
+    app.wait_for("Actual raw schema").unwrap();
+    app.press("Actual raw schema").unwrap();
+    app.wait_for("pointerdown:1 mousedown:1").unwrap();
+    assert!(app.screen().shows("click:0"));
 }

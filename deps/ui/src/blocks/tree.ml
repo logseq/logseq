@@ -416,7 +416,36 @@ let block_bg_css = function
   | "gray" -> "var(--ls-highlight-color-gray, #e8e8e8)"
   | c -> c
 
+let native_content_handlers context =
+  if Lui_ui.host context <> Lui_protocol.NshHost then None, None, None
+  else
+    let emit name node (detail : Lui_protocol.pointer_detail) buttons =
+      Ui_services.dom_emit_json name
+        (Json.stringify (Json.Object
+          [ "nodeId", Json.Number (float_of_int node)
+          ; "clientX", Json.Number detail.x; "clientY", Json.Number detail.y
+          ; "button", Json.Number (float_of_int detail.button)
+          ; "buttons", Json.Number (float_of_int buttons)
+          ; "ctrlKey", Json.Bool (detail.modifiers land 1 <> 0)
+          ; "shiftKey", Json.Bool (detail.modifiers land 2 <> 0)
+          ; "metaKey", Json.Bool (detail.modifiers land 4 <> 0) ])) in
+    let down = function
+      | Lui_protocol.PointerDown (node, detail) ->
+          let buttons = if detail.button = 0 then 1 else if detail.button = 2 then 2 else 4 in
+          emit "pointerdown" node detail buttons;
+          emit "mousedown" node detail buttons
+      | _ -> () in
+    let up = function
+      | Lui_protocol.PointerUp (node, detail) -> emit "pointerup" node detail 0
+      | _ -> () in
+    let press = function
+      | Lui_protocol.PressDetail (node, detail) -> emit "click" node detail 0
+      | _ -> () in
+    Some down, Some up, Some press
+
 let content_el uuid (b : Model.block) : t =
+ fun context parent ->
+  let on_pointer_down, on_pointer_up, on_press_detail = native_content_handlers context in
   let title_bg =
     match b.Model.block_bg_color with
     | Some c -> block_bg_css c
@@ -428,6 +457,7 @@ let content_el uuid (b : Model.block) : t =
      reads, and an I-beam is the pointer for rendered block text. *)
   Ui_components.with_props [ Ui_components.Prop.cursor `text ]
   (column ~key:("content-" ^ uuid) ~style_class:"block-content"
+    ?on_pointer_down ?on_pointer_up ?on_press_detail
     ~min_height:24 ~min_width:0 ~main:`center ~cross:`stretch ~grow:1. ~background:title_bg
     ~accessibility_identifier:("block-content-" ^ uuid)
     ~data_attrs:
@@ -474,7 +504,7 @@ let content_el uuid (b : Model.block) : t =
                    Render.title_block ~self:uuid ~annot:true
                      ~resolved:(S.title_for uuid b.block_title)
                      b))       ]
-    ])
+    ]) context parent
 
 let editor_el ?(cls = "") uuid scope : t = Editor_surface.mount ~cls uuid scope
 

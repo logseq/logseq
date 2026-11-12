@@ -414,6 +414,78 @@ let editor_keyboard_capture_order () =
     key ();
     check "a retired sink cannot dispatch another document key" (!observed = ["capture"]))
 
+let native_outliner_content_events () =
+  let recorded = ref [] in
+  let dom = {Ui_dom_native.ops with Ui_services.emit_json = (fun name payload ->
+    recorded := !recorded @ [name, Js.Json.parseExn payload];
+    Ui_dom_native.ops.Ui_services.emit_json name payload)} in
+  Platform.install_ui_services ~paints_caret:true ~assert_owner:(fun () -> ())
+    ~request_flush:(fun () -> ()) ~dom ~timers:Ui_dom_native.timers ~files:Ui_dom_native.files;
+  let prior_target = !Platform.event_target_of
+  and prior_capture = Hashtbl.find_opt Platform.capture_listeners "pointerdown"
+  and prior_state = !Editor_state.st
+  and prior_fields = !Editor_state.field_sigs_opt in
+  Fun.protect ~finally:(fun () ->
+    Platform.event_target_of := prior_target;
+    (match prior_capture with
+     | Some listeners -> Hashtbl.replace Platform.capture_listeners "pointerdown" listeners
+     | None -> Hashtbl.remove Platform.capture_listeners "pointerdown");
+    Editor_state.st := prior_state;
+    Editor_state.field_sigs_opt := prior_fields;
+    Native_embed.current_app := None) (fun () ->
+    List.iter (fun (os, host, native) ->
+      let backend : Lui_protocol.backend = {
+        backend_profile = Lui_protocol.profile os host;
+        apply_batch = (fun _ -> true)
+      } in
+      let registry = Lui_extension.registry () in
+      Logseq_el.register registry;
+      let block = Model.empty_block ~uuid:"native-content" ~title:"Content target" ~is_page:false in
+      let app = Lui_app.create_with_extensions backend registry Model.initial
+        (fun model (_ : Action.t) -> model)
+        (fun context _ _ ->
+          Editor_state.ensure context;
+          Lui_elements.column ~style_class:"ls-block"
+          ~data_attrs:["data-blockid","native-content";"data-cid","main"]
+          [Tree.content_el "native-content" block]) in
+      Native_embed.current_app := Some app;
+      Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app)) (fun () ->
+        ignore (Lui_app.start app); ignore (Lui_app.flush app);
+        let runtime = Lui_app.runtime app in
+        let node = List.hd (Lui_runtime.children runtime (Lui_app.root_node app)) in
+        let props = Hashtbl.find runtime.Lui_runtime.runtime_properties node in
+        let enabled = Lui_protocol.Property_map.find_opt Lui_protocol.PointerEnabled props
+          = Some (Lui_protocol.BoolValue true) in
+        check "only NSH content registers a native pointer owner" (enabled = native);
+        if native then begin
+          Platform.event_target_of := (fun node -> Some (Native_embed.ext_snapshot runtime node));
+          Hashtbl.replace Platform.capture_listeners "pointerdown"
+            [(fun payload -> Block_selection.pointerdown (Ui_dom_native.ev_of payload))];
+          Editor_state.set (fun state -> {state with selected=Editor_state.String_set.empty;anchor=None});
+          recorded := [];
+          ignore (Native_embed.pointer_down node 31. 47. 1 0 "");
+          check "Ctrl pointerdown reaches the existing block selection controller"
+            (Editor_state.String_set.mem "native-content" (Editor_state.selected ()));
+          ignore (Native_embed.pointer_up node 31. 47. 1 0 "");
+          ignore (Native_embed.press_detail node 31. 47. 1 0 "");
+          check "native content emits ordered pointer and click phases"
+            (List.map fst !recorded=["pointerdown";"mousedown";"pointerup";"click"]);
+          List.iter (fun (name,payload) ->
+            check "native content preserves genuine target, coordinates and primary button state"
+              (match payload with
+               | Js.Json.JObject fields ->
+                   List.assoc_opt "nodeId" fields=Some (Js.Json.JNumber (float_of_int node))
+                   && List.assoc_opt "clientX" fields=Some (Js.Json.JNumber 31.)
+                   && List.assoc_opt "clientY" fields=Some (Js.Json.JNumber 47.)
+                   && List.assoc_opt "ctrlKey" fields=Some (Js.Json.JBool true)
+                   && List.assoc_opt "buttons" fields=Some (Js.Json.JNumber
+                     (if name="pointerdown" || name="mousedown" then 1. else 0.))
+               | _ -> false)) !recorded;
+          check "input delivery retains the same mounted content owner"
+            (Lui_runtime.children runtime (Lui_app.root_node app)=[node])
+        end))
+      Lui_protocol.[MacOS,NshHost,true;IOS,SwiftUIHost,false;AndroidOS,KotlinHost,false])
+
 let () =
   let owner = Thread.id (Thread.self ()) in
   Ui_task.install { enqueue = Host.enqueue;
@@ -429,4 +501,5 @@ let () =
   finite_timer_observation_and_cancel_race ();
   opaque_logical_save_does_not_release_or_self_poll_at_zero_activity ();
   sparse_feedback_materializes_while_held_through_actual_ffi ();
+  native_outliner_content_events ();
   print_endline "PASS real native save/abort/worker/timer races and post-release draft safety"
