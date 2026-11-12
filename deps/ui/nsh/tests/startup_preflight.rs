@@ -17,6 +17,7 @@ use std::{
 
 mod startup_body;
 mod startup_rows;
+mod startup_surfaces;
 
 const CHILD: &str = "LOGSEQ_NSH_STARTUP_PREFLIGHT_CHILD";
 const TEST: &str = "real_application_startup_preflight";
@@ -354,6 +355,7 @@ fn mount_actual_application(rows: Option<usize>) -> Result<(), String> {
     {
         return Err("Appearance scrolling or dismissal remounted More or the journal body".into());
     }
+    startup_surfaces::qualify(&mut app)?;
     // Headless owns and joins the engine thread on drop. The process boundary
     // also isolates OCaml's persistent worker from every other Rust test.
     drop(app);

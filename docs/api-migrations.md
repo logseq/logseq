@@ -1,5 +1,20 @@
 # API migrations
 
+## The native publication gate mounts deferred application surfaces
+
+`real_application_startup_preflight` now opens the actual compiled Settings dialog
+and every pane, a nested sync URL dialog, Search and its Commands filter, the
+right sidebar, and the Pages route through public native-engine input. Each step
+checks the actual application agent barrier and rejects renderer failure, in
+addition to requiring the expected mounted native content. Existing Appearance
+and shell resize/menu checks remain required.
+
+A release whose startup Journal works but whose deferred Settings URL/style is
+unsupported now fails publication before launching the normal window. This is
+headless native-engine contract evidence; AppKit rendering, hardware input,
+platform motion, editor selection/drag, and unexercised application surfaces still
+require their own qualification. No application API migration is required.
+
 ## NSH uses the bundled Inter faces before its first layout
 
 The native runner and its actual startup qualification now register the existing

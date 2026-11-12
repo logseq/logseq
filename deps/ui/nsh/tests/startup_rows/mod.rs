@@ -139,9 +139,9 @@ fn owned_worker(root: &Path, count: usize) -> Result<Worker, String> {
     }
     Ok(owned.remove(0))
 }
-struct Agent(SocketAddr);
+pub(super) struct Agent(SocketAddr);
 impl Agent {
-    fn discover() -> Result<Self, String> {
+    pub(super) fn discover() -> Result<Self, String> {
         let transcript = std::env::var_os("LOGSEQ_NSH_PROBE_TRANSCRIPT")
             .ok_or("qualification transcript path missing")?;
         let log = fs::read_to_string(transcript).map_err(|error| error.to_string())?;
@@ -165,7 +165,7 @@ impl Agent {
         }
         Ok(Self(address))
     }
-    fn tree(&self) -> Result<Value, String> {
+    pub(super) fn tree(&self) -> Result<Value, String> {
         self.query("tree")
     }
     fn query(&self, operation: &str) -> Result<Value, String> {
