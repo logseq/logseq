@@ -156,5 +156,14 @@ comparisons use the clean sequence above.
 
 An earlier foreground diagnostic was affected by concurrent interaction and
 remained on All; those samples were excluded from this comparison. Real wheel
-input, high-rate Scroll after the queue fix, repeated open/close memory and
+input, high-rate Scroll after the queue fix, longer open/close memory runs and
 light/dark visual finishing checks remain unqualified.
+
+The same clean candidate subsequently completed eight Icons open/close samples,
+retained in `cycle-measurements.json` and per-cycle ignored evidence. Open
+physical footprint increased from 124.5 to 126.0 MiB; closed footprint increased
+from 122.4 to 123.8 MiB, with a 126.7 MiB process peak. Each open sample had 135
+cells from 15/689 rows, and every closed sample had zero canonical picker nodes,
+cells or row lists. No screenshots or forced collections were introduced. This
+short run supports bounded initial materialization and canonical retirement; it
+does not establish long-term leak freedom or native wheel-scroll correctness.
