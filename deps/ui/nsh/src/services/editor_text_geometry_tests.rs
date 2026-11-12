@@ -211,6 +211,7 @@ fn actual_committed_layout_answers_source_geometry_and_rejects_stale_revision() 
             .unwrap();
     #[cfg(not(target_os = "macos"))]
     let mut app = Headless::start(config).unwrap();
+    app.first_render().unwrap();
     app.press("Query committed editor").unwrap();
     app.wait_for("Committed text geometry passed").unwrap();
 }

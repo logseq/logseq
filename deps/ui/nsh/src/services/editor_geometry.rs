@@ -247,6 +247,7 @@ mod tests {
     #[test]
     fn deferred_focus_reaches_actual_input_and_does_not_retarget_retired_owner() {
         let mut app = Headless::start(EngineConfig::new(Root::of::<EditorFocus>())).unwrap();
+        app.first_render().unwrap();
         app.press("Focus mounted editor").unwrap();
         app.wait_for("Focus reached the mounted input").unwrap();
         app.press("Retire editor row").unwrap();

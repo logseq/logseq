@@ -394,15 +394,52 @@ fn anchor_only_authoritative_selection_replaces_the_actual_native_selected_range
     let (mut app, fixture) = start();
     app.type_text("id:lui-1", "").unwrap();
     let before = native(&app);
-    let queries = fixture.queries.load(Ordering::SeqCst);
     app.press_key("f5").unwrap();
     app.wait_until(
-        "anchor-only authoritative snapshot",
+        "anchor-only native UTF-16 selection command",
         std::time::Duration::from_secs(2),
-        |_| fixture.queries.load(Ordering::SeqCst) > queries,
+        |app| {
+            app.screen().commands().iter().any(|(id, command)| {
+                *id == before
+                    && matches!(
+                        command,
+                        nsh_core::Command::SetSelection { start: 1, end: 5 }
+                    )
+            })
+        },
     )
     .unwrap();
-    app.type_text("id:lui-1", "X").unwrap();
+    // Headless::type_text always appends and does not retain SetSelection.
+    // Apply the observed platform command and report its actual replacement,
+    // preserving the native UTF-16/UTF-8 boundary contract over the real Input.
+    let (start, end) = app
+        .screen()
+        .commands()
+        .iter()
+        .rev()
+        .find_map(|(id, command)| match command {
+            nsh_core::Command::SetSelection { start, end } if *id == before => Some((*start, *end)),
+            _ => None,
+        })
+        .unwrap();
+    let mut replacement = fixture.model.lock().unwrap().source.clone();
+    let first = utf16_to_byte(&replacement, start).unwrap();
+    let last = utf16_to_byte(&replacement, end).unwrap();
+    replacement.replace_range(first..last, "X");
+    app.engine().control().dispatch_event(
+        before,
+        nsh_core::EventKind::ChangeText,
+        nsh_core::EventPayload::Text {
+            text: replacement,
+            count: 1,
+        },
+    );
+    app.wait_until(
+        "native selected-range replacement",
+        std::time::Duration::from_secs(2),
+        |_| fixture.model.lock().unwrap().source == "AX",
+    )
+    .unwrap();
     assert_eq!(fixture.model.lock().unwrap().source, "AX");
     assert_eq!(native(&app), before);
 }
