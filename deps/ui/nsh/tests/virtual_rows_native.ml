@@ -158,7 +158,14 @@ let test_array_list () =
       (property runtime list ScrollTarget = Some (StringValue "block-90000"));
     check "offscreen editor activation issues a request token"
       (integer runtime list ScrollToken = 1);
-    check "offscreen target resolves without mounting all intermediate rows"
+    check "offscreen target resolves to its canonical source index"
+      (integer runtime list VirtualScrollIndex = 90_000);
+    (* The native host requests the target window after resolving the command;
+       a target property alone does not pretend to be native viewport feedback. *)
+    ignore (Lui_app.dispatch_event app
+      (VirtualWindow (list, integer runtime list VirtualGeneration, 90_000, 90_011, [])));
+    ignore (Lui_app.flush app);
+    check "native target feedback mounts no intermediate rows"
       (property runtime (identified runtime "block-90000") TextValue
        = Some (StringValue "block-90000")
        && Hashtbl.length runtime.mounted_nodes < 256);
