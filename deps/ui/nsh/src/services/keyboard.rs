@@ -571,6 +571,29 @@ mod tests {
         config.context = EngineContext::default().with(observed.clone());
         config.environment.os = nsh_core::platform::Os::MacOs;
         let mut app = Headless::start(config).unwrap();
+        let batches = Arc::new(Mutex::new(Vec::<String>::new()));
+        let trace = batches.clone();
+        app.observe(move |step, batch| {
+            let mut trace = trace.lock().unwrap();
+            if trace.len() < 96 {
+                if let Some(keymap) = &batch.keymap {
+                    trace.push(format!("{step}: keymap {:?}", keymap.bindings()));
+                }
+                let commands = batch
+                    .items
+                    .iter()
+                    .filter_map(|item| match item {
+                        nsh_core::MountItem::Command { command, .. } => {
+                            Some(format!("{command:?}"))
+                        }
+                        _ => None,
+                    })
+                    .collect::<Vec<_>>();
+                if !commands.is_empty() {
+                    trace.push(format!("{step}: commands {commands:?}"));
+                }
+            }
+        });
         app.wait_for("Select blocks").unwrap();
         app.press_key("escape").unwrap();
         assert!(
@@ -601,10 +624,13 @@ mod tests {
             "one Escape cancels the popover without also clearing its selection"
         );
         app.press_key("escape").unwrap();
+        let after_second_escape = observed.0.lock().unwrap().clone();
         assert_eq!(
-            observed.0.lock().unwrap().len(),
+            after_second_escape.len(),
             2,
-            "next Escape reaches selection exactly once"
+            "next Escape reaches selection exactly once; batches={:?}; events={:?}",
+            batches.lock().unwrap(),
+            after_second_escape
         );
         assert_eq!(observed.0.lock().unwrap()[1]["owner"], json!("bridge"));
         app.press("Clear selection").unwrap();
@@ -618,20 +644,26 @@ mod tests {
         app.type_text("label:Ordinary form text", "kept").unwrap();
         observed.0.lock().unwrap().clear();
         app.press_key("escape").unwrap();
+        assert!(
+            observed.0.lock().unwrap().is_empty(),
+            "a focused form's Escape must not reach the document bridge"
+        );
         assert_eq!(
-            observed.0.lock().unwrap().as_slice(),
-            [json!({"owner":"form","key":"Escape"})],
-            "a focused form retains native Escape even while blocks are selected"
+            app.screen().input_text("label:Ordinary form text").unwrap(),
+            Some("kept")
         );
         observed.0.lock().unwrap().clear();
         app.press("Select blocks").unwrap();
         app.type_text("label:Block editor text", "draft").unwrap();
         observed.0.lock().unwrap().clear();
         app.press_key("escape").unwrap();
+        assert!(
+            observed.0.lock().unwrap().is_empty(),
+            "a focused block editor's Escape must not reach a second bridge dispatcher"
+        );
         assert_eq!(
-            observed.0.lock().unwrap().as_slice(),
-            [json!({"owner":"editor","key":"Escape"})],
-            "a focused block editor owns Escape without a second bridge dispatch"
+            app.screen().input_text("label:Block editor text").unwrap(),
+            Some("draft")
         );
         observed.0.lock().unwrap().clear();
         app.press("Open palette").unwrap();
