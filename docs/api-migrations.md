@@ -23,6 +23,50 @@ call the setter rather than only writing the storage key and relying on an
 unrelated model publication to refresh the class. Custom CSS dimension overrides
 remain a Web capability: native's prior fixed 960-point width did not support
 them, and this correction does not introduce native custom-dimension parity.
+## NSH native file requests use the system Open and Save dialogs
+
+The existing native `Browser_ui.open_file_picker`, `download_text` and
+`download_binary` operations now use the pinned NSH public `pick_paths` and
+`pick_save_path` APIs. They run as application-owned deferred completions, so
+an open dialog does not block the ordered OCaml input pump. No hidden picker
+view, DOM mutation implementation, extra overlay or NSH fork API is introduced.
+
+Open-file requests preserve the integer `request` token and receive one
+`files-picked` response with selected file metadata, an empty `files` array on
+cancel, or `error`. NSH directory selection enumerates regular files off the
+application owner and provides `/`-separated selected-root-relative paths plus
+absolute selected paths. It does not follow directory links or copy every file
+into base64. Contents continue through the existing asynchronous native file
+reader; files can change between selection and that read, as with ordinary
+native file selections. Extension filters such as `.md,.txt` use the native
+dialog; MIME/UTI filters remain unsupported by this NSH path. Folder selection
+does not apply file filters, so imports can still inspect configuration/assets.
+
+NSH downloads add a canonical string `request-id` to the existing host envelope.
+`file-download-result` echoes it after Save cancellation, an error, or completion
+of an atomic sibling-file replacement at the user-selected destination. Text
+uses UTF-8; binary export preserves every byte. The MIME value remains metadata;
+the suggested filename supplies the native extension. Existing Apple/iOS,
+Android and other native host payloads remain unchanged.
+
+Pending NSH picker/export completions participate in `Ui_task.Activity`.
+Update preparation refuses new requests, drains accepted filesystem work and
+suppresses picker callbacks that would initiate new UI actions while fenced.
+Application retirement releases pending completion hooks and drops callbacks;
+late or duplicate replies cannot target a new request. No callback token is
+reused after reinitialization.
+
+Downstream callers keep their existing API, for example:
+
+```ocaml
+Browser_ui.open_file_picker ~accept:".md,.txt" on_files;
+Browser_ui.download_binary ~filename:"graph.sqlite"
+  ~mime:"application/octet-stream" bytes
+```
+
+Native dialog behavior on macOS, Windows and Linux still requires runtime
+qualification. Headless public-dialog tests and the compiled native activity
+fixture cover protocol/ownership behavior; they do not establish OS dialog UX.
 
 ## Anonymous property popup anchors use point placement
 

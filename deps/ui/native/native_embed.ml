@@ -509,6 +509,7 @@ let initialize_unlocked platform_code host_code (payload : string) =
     | 6 -> Lui_protocol.NshHost
     | _ -> Lui_protocol.GenericHost
   in
+  Browser_ui.configure ~nsh:(host_kind = Lui_protocol.NshHost);
   let backend =
     { Lui_protocol.backend_profile = Lui_protocol.profile os host_kind
     ; apply_batch = enqueue_batch
@@ -616,6 +617,7 @@ let initialize_unlocked platform_code host_code (payload : string) =
   take_patches ()
 
 let initialize platform_code host_code payload =
+  Browser_ui.cancel_requests ();
   Option.iter Update_preparation.close !update_preparation;
   update_preparation := None;
   Option.iter Ui_task.Activity.close !activity_scope;
@@ -1045,6 +1047,7 @@ let dispose () =
     last_native_palette_view := None;
     Platform.cancel_clipboard_writes ();
     Platform.cancel_keychain_requests ();
+    Browser_ui.cancel_requests ();
     Host.set_host_op Host.disconnected;
     Queue.clear pending_batches;
     (match !current_app with
@@ -1137,6 +1140,8 @@ module Ffi = struct
                "application-menu-command";
                "keychain-result";
                "clipboard-write-result";
+               "files-picked";
+               "file-download-result";
                "window-close-request";
                "platform-error";
                "window-size";

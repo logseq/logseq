@@ -21,6 +21,52 @@ let file_text (_ : Js.Json.t) : string Js.Promise.t =
 
 (* ---- downloads / picks ---- *)
 
+let native_dialogs = ref false
+let configure ~nsh = native_dialogs := nsh
+let completion () =
+  Option.value (Ui_task.Activity.begin_work ()) ~default:(fun () -> ())
+let input_open () =
+  not !native_dialogs || match Update_admission.application.phase with
+  | Update_admission.Open -> true
+  | Preparing _ | Held _ | Aborting _ -> false
+
+let download_pending : (string, unit -> unit) Hashtbl.t = Hashtbl.create 4
+let download_req = ref 0
+let download_listener = ref false
+
+let install_download_listener () =
+  if not !download_listener then begin
+    download_listener := true;
+    Platform.add_event_listener "file-download-result" (fun json ->
+      let id=Option.get (Dom_ext.str_prop "request-id" json) in
+      match Hashtbl.find_opt download_pending id with
+      | None -> ()
+      | Some finish ->
+          Hashtbl.remove download_pending id;
+          Fun.protect ~finally:finish (fun () ->
+            Option.iter (fun error ->
+              Ui_services.log_error_message ("file download: " ^ error);
+              Ui_services.dom_dispatch_json "ls:toast"
+                (Json.Object ["msg",Json.String error;"cls",Json.String "error"]))
+              (Dom_ext.str_prop "error" json)))
+  end
+
+let request_download operation fields =
+  if not !native_dialogs then
+    Host.dom_op operation (Js.Json.stringify (Js.Json.JObject fields))
+  else begin
+    Update_admission.require_input Update_admission.application "file-download";
+    install_download_listener ();
+    if !download_req=max_int then invalid_arg "Native download request ids are exhausted";
+    incr download_req;
+    let id=string_of_int !download_req and finish=completion () in
+    Hashtbl.add download_pending id finish;
+    match Host.dom_op operation (Js.Json.stringify
+      (Js.Json.JObject (("request-id",Js.Json.JString id)::fields))) with
+    | () -> ()
+    | exception error -> Hashtbl.remove download_pending id;finish ();raise error
+  end
+
 let b64_encode (data : string) : string =
   let tbl = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/" in
   let b = Buffer.create (String.length data * 4 / 3 + 4) in
@@ -45,27 +91,24 @@ let binary_to_u8 (s : string) : Js.Typed_array.Uint8Array.t =
 
 let download_text ~(filename : string) ~(mime : string)
     (text : string) : unit =
-  Host.dom_op "download-text"
-    (Js.Json.stringify
-       (Js.Json.JObject
-          [ ("name", Js.Json.JString filename)
-          ; ("mime", Js.Json.JString mime)
-          ; ("text", Js.Json.JString text) ]))
+  request_download "download-text"
+    [ ("name", Js.Json.JString filename)
+    ; ("mime", Js.Json.JString mime)
+    ; ("text", Js.Json.JString text) ]
 
 let download_binary ~(filename : string) ~(mime : string)
     (data : string) : unit =
   (* the dom-op payload is a JSON body — binary goes base64 so it
      survives the envelope; the host decodes it in saveFile *)
-  Host.dom_op "download-binary"
-    (Js.Json.stringify
-       (Js.Json.JObject
-          [ ("name", Js.Json.JString filename)
-          ; ("mime", Js.Json.JString mime)
-          ; ("data-b64", Js.Json.JString (b64_encode data)) ]))
+  request_download "download-binary"
+    [ ("name", Js.Json.JString filename)
+    ; ("mime", Js.Json.JString mime)
+    ; ("data-b64", Js.Json.JString (b64_encode data)) ]
 
-(* Directory picks carry root-relative names and captured bytes; ordinary
-   file picks and drag-drop payloads carry a host path. *)
-let pick_pending : (int, Js.Json.t array -> unit) Hashtbl.t =
+(* NSH directory picks carry root-relative names and selected host paths.
+   Other native hosts may supply captured bytes through the same file reader. *)
+type pending_pick = { deliver : Js.Json.t array -> unit; finish : unit -> unit }
+let pick_pending : (int, pending_pick) Hashtbl.t =
   Hashtbl.create 4
 
 let pick_req = ref 0
@@ -79,8 +122,9 @@ let install_pick_listener () =
         | Some n -> (
             let id = int_of_float n in
             match Hashtbl.find_opt pick_pending id with
-            | Some cb ->
+            | Some pending ->
                 Hashtbl.remove pick_pending id;
+                Fun.protect ~finally:pending.finish (fun () ->
                 (match Dom_ext.str_prop "error" j with
                  | Some error ->
                      Ui_services.log_error_message ("file picker: " ^ error);
@@ -94,7 +138,7 @@ let install_pick_listener () =
                        | Js.Json.JArray a -> a
                        | _ -> [||]
                      in
-                     cb files)
+                     if input_open () then pending.deliver files))
             | None -> ())
         | None -> ())
   end
@@ -103,9 +147,14 @@ let open_file_picker ?accept ?(multiple : bool = false)
     ?(directory : bool = false) (on_files : Js.Json.t array -> unit)
     : unit =
   install_pick_listener ();
+  if !native_dialogs then Update_admission.require_input Update_admission.application "file-picker";
+  if !pick_req=max_int || Int64.of_int !pick_req>=9_007_199_254_740_991L
+  then invalid_arg "Native file picker request ids are exhausted";
   incr pick_req;
-  Hashtbl.replace pick_pending !pick_req on_files;
-  Host.dom_op "open-file-picker"
+  let id= !pick_req in
+  let pending={deliver=Ui_task.Activity.capture on_files;finish=completion ()} in
+  Hashtbl.add pick_pending id pending;
+  match Host.dom_op "open-file-picker"
     (Js.Json.stringify
        (Js.Json.JObject
           ([ ("request", Js.Json.JNumber (float_of_int !pick_req))
@@ -114,12 +163,20 @@ let open_file_picker ?accept ?(multiple : bool = false)
           @
           match accept with
           | Some a -> [ ("accept", Js.Json.JString a) ]
-          | None -> [])))
+          | None -> []))) with
+  | () -> ()
+  | exception error -> Hashtbl.remove pick_pending id;pending.finish ();raise error
+
+let cancel_requests () =
+  let picks=Hashtbl.fold (fun _ pending result -> pending.finish::result) pick_pending []
+  and downloads=Hashtbl.fold (fun _ finish result -> finish::result) download_pending [] in
+  Hashtbl.clear pick_pending;Hashtbl.clear download_pending;
+  List.iter (fun finish -> finish ()) picks;
+  List.iter (fun finish -> finish ()) downloads
 
 let confirm (_ : string) : bool = false
 
-(* Directory selections carry eager bytes and root-relative metadata;
-   ordinary file selections retain the selected host path. *)
+(* Both selected paths and eager byte snapshots use the existing async reader. *)
 let file_name (f : Js.Json.t) : string =
   match Dom_ext.str_prop "name" f with
   | Some s -> s

@@ -3,6 +3,7 @@ mod clipboard;
 mod dom;
 mod editor_geometry;
 mod editor_text_geometry;
+mod files;
 pub(crate) mod keyboard;
 mod menu;
 pub(crate) mod resources;
@@ -11,7 +12,7 @@ mod update_preparation;
 
 use clipboard::ClipboardService;
 use lui_nsh::{
-    app::{ApplicationEvents, ServiceResponse},
+    app::{ApplicationEvents, ApplicationMutations, ServiceResponse},
     application_icons::IconRegistry,
     application_theme::ThemeRegistry,
     render::Renderer,
@@ -121,6 +122,13 @@ impl Services {
                 .payload
                 .split_once('\n')
                 .ok_or("dom-op requires an operation separator")?;
+            if let Some(request) = files::capture(operation, payload)? {
+                let admission = use_context::<ApplicationMutations>()
+                    .ok_or("native file service requires the application mutation owner")?;
+                return Ok(ServiceResponse::AfterCommit(Box::pin(async move {
+                    files::execute(request, admission).await
+                })));
+            }
             let captured = dom::capture(operation, payload, &renderer)?;
             return Ok(ServiceResponse::AfterCommit(Box::pin(async move {
                 dom::execute(captured, &renderer).await

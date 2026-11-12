@@ -1543,6 +1543,79 @@ let native_menu_scope_retention () =
       (Platform.location_hash ()=expected);
     check "native menu invariant was inspected across actual publications" (!publications>5))
 
+let native_file_request_lifetimes () =
+  let previous_host= !Host.host_op and previous_nsh= !Browser_ui.native_dialogs in
+  let gate=Update_admission.application in
+  let previous_gate={gate with Update_admission.phase=gate.phase} in
+  let scope=Ui_task.Activity.create () and requests=ref [] in
+  let pending_callback=ref None and delivered=ref 0 in
+  let pending ()=(Ui_task.Activity.snapshot scope).pending in
+  let payload operation =
+    let body=List.find_map (fun (name,body) -> if name=operation then Some body else None) !requests |> Option.get in
+    Yojson.Safe.from_string body in
+  let pick_id ()=Yojson.Safe.Util.(payload "open-file-picker" |> member "request" |> to_int) in
+  let emit_pick id=Platform.emit_event "files-picked"
+    (Js.Json.JObject ["request",Js.Json.JNumber (float_of_int id);"files",Js.Json.JArray [||]]) in
+  let download_id ()=Yojson.Safe.Util.(payload "download-binary" |> member "request-id" |> to_string) in
+  let emit_download id=Platform.emit_event "file-download-result"
+    (Js.Json.JObject ["request-id",Js.Json.JString id;"cancelled",Js.Json.JBoolean true]) in
+  Fun.protect ~finally:(fun () ->
+    Browser_ui.cancel_requests ();Ui_task.Activity.close scope;
+    Browser_ui.configure ~nsh:previous_nsh;Host.host_op:=previous_host;
+    gate.phase<-previous_gate.phase;gate.released<-previous_gate.released;
+    gate.latest<-previous_gate.latest;gate.save_finished<-previous_gate.save_finished) (fun () ->
+    Browser_ui.configure ~nsh:true;Update_admission.reset gate;
+    Host.set_host_op (fun name body ->
+      check "native file requests retain the existing host envelope" (name="dom-op");
+      let boundary=String.index body '\n' in
+      requests:=(String.sub body 0 boundary,
+        String.sub body (boundary+1) (String.length body-boundary-1))::!requests);
+    Ui_task.Activity.within scope (fun () ->
+      Browser_ui.open_file_picker ~accept:".md,.txt" (fun _ ->
+        incr delivered;
+        ignore (Js.Promise.make (fun ~resolve ~reject:_ -> pending_callback:=Some resolve))));
+    let first=pick_id () in
+    check "accepted native picker participates in update activity" (pending ()=1);
+    emit_pick first;
+    check "native picker completion retains its callback observation context"
+      (!delivered=1 && pending ()=1);
+    (Option.get !pending_callback) ();pending_callback:=None;
+    check "native picker callback completion releases its existing activity" (pending ()=0);
+    emit_pick first;
+    check "a duplicate picker reply cannot invoke its callback twice" (!delivered=1);
+    Ui_task.Activity.within scope (fun () ->
+      Browser_ui.download_binary ~filename:"fixture.bin" ~mime:"application/octet-stream" "\000\255A\000");
+    let download=download_id () in
+    check "native export preserves binary bytes and tracks native Save completion"
+      (pending ()=1
+       && Yojson.Safe.Util.(payload "download-binary" |> member "data-b64" |> to_string)="AP9BAA==");
+    emit_download download;
+    check "native Save cancellation releases accepted work" (pending ()=0);
+    Ui_task.Activity.within scope (fun () ->
+      Browser_ui.open_file_picker (fun _ -> incr delivered));
+    let fenced=pick_id () in
+    Update_admission.begin_prepare gate "1";
+    refused "file-picker" (fun () -> Browser_ui.open_file_picker (fun _ -> incr delivered));
+    refused "file-download" (fun () ->
+      Browser_ui.download_text ~filename:"fixture.txt" ~mime:"text/plain" "x");
+    emit_pick fenced;
+    check "a picker completion during update preparation releases work without new UI actions"
+      (!delivered=1 && pending ()=0);
+    Update_admission.reset gate;
+    Ui_task.Activity.within scope (fun () ->
+      Browser_ui.open_file_picker (fun _ -> incr delivered);
+      Browser_ui.download_binary ~filename:"retired.bin" ~mime:"application/octet-stream" "x");
+    let retired=pick_id () and retired_download=download_id () in
+    check "native owner retains only its outstanding file requests" (pending ()=2);
+    Browser_ui.cancel_requests ();
+    check "native retirement releases every file completion hook" (pending ()=0);
+    emit_pick retired;emit_download retired_download;
+    check "late native file replies cannot invoke a retired callback" (!delivered=1);
+    Browser_ui.configure ~nsh:false;
+    Browser_ui.download_binary ~filename:"legacy.bin" ~mime:"application/octet-stream" "x";
+    check "other native hosts retain their existing download payload"
+      (Yojson.Safe.Util.(payload "download-binary" |> member "request-id")=`Null))
+
 let native_controlled_field_resets () =
   let previous_model= !Runtime.read_model and previous_flush= !Runtime.app_flush
   and previous_schedule= !Runtime.schedule_flush and previous_worker= !Runtime.worker
@@ -1660,6 +1733,7 @@ let () =
   native_wide_reading_column ();
   native_popup_placement_contract ();
   native_controlled_field_resets ();
+  native_file_request_lifetimes ();
   native_entry_admission ();
   editor_keyboard_capture_order ();
   native_worker_admission ();
