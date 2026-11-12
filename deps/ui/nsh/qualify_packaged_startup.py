@@ -200,6 +200,16 @@ def background_native(application, private, logs, deadline):
     return result
 
 
+def installed_artifacts(application, system):
+    if system == "Darwin":
+        resources = application / "Contents/Resources"
+        return application / "Contents/MacOS/logseq-nsh", resources, resources / "liblogseq_ui.dylib"
+    if system == "Linux":
+        resources = application / "Resources"
+        return application / "logseq-nsh", resources, resources / "liblogseq_ui.so"
+    raise ValueError("Packaged App startup currently requires native macOS or Linux")
+
+
 def qualify(archive, evidence, native_background=False):
     archive = archive.resolve(strict=True)
     system = platform.system()
@@ -216,18 +226,13 @@ def qualify(archive, evidence, native_background=False):
             subprocess.run(["ditto", "-x", "-k", str(archive), str(outside)], check=True,
                            timeout=max(0.01, deadline-time.monotonic()) if deadline else None)
             application = outside / "Logseq NSH.app"
-            executable = application / "Contents/MacOS/logseq-nsh"
-            resources = application / "Contents/Resources"
-            library = resources / "liblogseq_ui.dylib"
             subprocess.run(["codesign", "--verify", "--deep", "--strict", str(application)], check=True,
                            timeout=max(0.01, deadline-time.monotonic()) if deadline else None)
         else:
             subprocess.run(["tar", "-xzf", str(archive), "-C", str(outside)], check=True,
                            timeout=max(0.01, deadline-time.monotonic()) if deadline else None)
             application = outside / "Logseq-NSH"
-            executable = application / "bin/logseq-nsh"
-            resources = application / "Resources"
-            library = resources / "liblogseq_ui.so"
+        executable, resources, library = installed_artifacts(application, system)
         worker = resources / "logseq-db-worker"
         for artifact in (executable, library, worker, resources / "dicts/en.edn"):
             if not artifact.is_file():

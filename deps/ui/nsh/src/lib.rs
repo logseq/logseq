@@ -140,7 +140,11 @@ fn library_path() -> String {
         .expect("application executable path")
         .parent()
         .expect("application executable directory")
-        .join("../Resources")
+        .join(if cfg!(target_os = "macos") {
+            "../Resources"
+        } else {
+            "Resources"
+        })
         .join(filename)
         .to_string_lossy()
         .into_owned()

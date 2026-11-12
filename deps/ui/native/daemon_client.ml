@@ -47,32 +47,42 @@ let rec mkdir_p path =
   end
 
 let daemon_bin () =
-  let candidates =
-    (match Sys.getenv_opt "LOGSEQ_DB_WORKER_BIN" with
-     | Some p -> [ p ]
-     | None -> [])
-    @ [ Filename.concat (Filename.dirname Sys.executable_name)
-          "logseq-db-worker"
-      ; Filename.concat (Filename.dirname Sys.executable_name)
-          "../Resources/logseq-db-worker"
-      (* in-tree dune build: <root>/deps/ui/_build/default/ocaml_host/
+  let runnable path =
+    try
+      (Unix.stat path).Unix.st_kind = Unix.S_REG
+      && (Unix.access path [Unix.X_OK]; true)
+    with
+    | Unix.Unix_error ((Unix.ENOENT | Unix.ENOTDIR | Unix.EACCES), _, _) -> false
+  in
+  match Sys.getenv_opt "LOGSEQ_DB_WORKER_BIN" with
+  | Some path ->
+      if path <> "" && runnable path then path
+      else failwith ("LOGSEQ_DB_WORKER_BIN is not an executable regular file: " ^ path)
+  | None ->
+    let worker = if Sys.os_type = "Win32" then "logseq-db-worker.exe" else "logseq-db-worker" in
+    let packaged = Filename.concat Platform_native.packaged_resource_dir worker in
+    let package_metadata =
+      if Platform_native.is_mac () then
+        Filename.concat Platform_native.packaged_resource_dir "nsh/app.json"
+      else Filename.concat (Filename.dirname Sys.executable_name) "nsh/app.json" in
+    let candidates =
+      if Sys.file_exists package_metadata then [packaged]
+      else [ packaged
+      ; Filename.concat (Filename.dirname Sys.executable_name) worker
+      (* in-tree dune build: <root>/deps/ui/_build/default/native/
          -> <root>/deps/db-worker/_build/default/bin/main.exe *)
       ; Filename.concat (Filename.dirname Sys.executable_name)
           "../../../../db-worker/_build/default/bin/main.exe"
       (* launched with the repo root as CWD (e.g. dune exec at root) *)
       ; Filename.concat (Sys.getcwd ())
-          "deps/db-worker/_build/default/bin/main.exe"
-      ; Filename.concat (home ())
-          "repos/logseq-rewrite/deps/db-worker/_build/default/bin/main.exe"
-      ; Filename.concat (home ())
-          "repos/logseq/deps/db-worker/_build/default/bin/main.exe" ]
-  in
-  match List.find_opt Sys.file_exists candidates with
-  | Some p -> p
-  | None ->
-      failwith
-        ("logseq-db-worker binary not found; set LOGSEQ_DB_WORKER_BIN \
-          (searched: " ^ String.concat ", " candidates ^ ")")
+          "deps/db-worker/_build/default/bin/main.exe" ]
+    in
+    match List.find_opt runnable candidates with
+    | Some path -> path
+    | None ->
+        failwith
+          ("logseq-db-worker binary not found; set LOGSEQ_DB_WORKER_BIN \
+            (searched: " ^ String.concat ", " candidates ^ ")")
 
 (* ---------- server-list ---------- *)
 

@@ -13,6 +13,21 @@ SPEC.loader.exec_module(QUALIFIER)
 
 
 class PackagedBackgroundTests(unittest.TestCase):
+    def test_complete_linux_update_root_and_macos_bundle_resolve_their_own_resources(self):
+        application = Path("outside checkout/installed app")
+        for system, executable, library in (
+                ("Linux", application / "logseq-nsh", application / "Resources/liblogseq_ui.so"),
+                ("Darwin", application / "Contents/MacOS/logseq-nsh",
+                 application / "Contents/Resources/liblogseq_ui.dylib")):
+            with self.subTest(system=system):
+                actual_executable, resources, actual_library = QUALIFIER.installed_artifacts(application, system)
+                self.assertEqual(actual_executable, executable)
+                self.assertEqual(actual_library, library)
+                self.assertEqual(resources / "logseq-db-worker", library.parent / "logseq-db-worker")
+                self.assertEqual(actual_library.parent, resources)
+        with self.assertRaises(ValueError):
+            QUALIFIER.installed_artifacts(application, "Windows")
+
     def test_private_environment_removes_external_artifacts_and_preserves_input(self):
         inherited = {name: "/unrelated/user/artifact" for name in QUALIFIER.REMOVED_OVERRIDES}
         inherited.update(HOME="/user/home", LOGSEQ_ROOT_DIR="/user/graph", PATH="kept")

@@ -5,9 +5,16 @@
 Actual Logseq packages now write canonical `nsh/app.json` metadata before
 signing. The entire Linux `Logseq-NSH` directory is the installation unit:
 `logseq` and `logseq-nsh` move from `bin/` to its root alongside `Resources/`.
-Installed native resource lookup must use `../Resources` on macOS and
-`Resources` relative to the executable on Linux/Windows. Web and mobile paths
-are unchanged. External scripts that ran `Logseq-NSH/bin/logseq` must now run
+Installed native resource lookup uses `../Resources` on macOS and
+`Resources` relative to the executable on Linux/Windows, in both the Rust
+library resolver and OCaml asset/worker services. Web and mobile paths are
+unchanged. `LUI_OCAML_LIBRARY` and `LOGSEQ_NATIVE_ASSET_DIR` overrides remain
+supported. An explicit `LOGSEQ_DB_WORKER_BIN` must name an executable regular
+file; an invalid override fails immediately instead of finding a different
+worker. A package with `nsh/app.json` only uses its own packaged worker when no
+override is supplied. Development executable-relative/current-checkout paths
+remain available outside an installed package; personal home checkout guesses
+are removed. External scripts that ran `Logseq-NSH/bin/logseq` must now run
 `Logseq-NSH/logseq`.
 
 Release version comes only from `resources/package.json`; development

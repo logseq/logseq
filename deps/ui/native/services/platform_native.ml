@@ -21,6 +21,10 @@ let native_system =
 
 let is_mac () = native_system = "Darwin"
 
+let packaged_resource_dir =
+  Filename.concat (Filename.dirname Sys.executable_name)
+    (if is_mac () then "../Resources" else "Resources")
+
 let asset_path path =
   if not (Filename.is_relative path) then path
   else
@@ -28,8 +32,7 @@ let asset_path path =
       match Sys.getenv_opt "LOGSEQ_NATIVE_ASSET_DIR" with
       | Some "" -> invalid_arg "LOGSEQ_NATIVE_ASSET_DIR must not be empty"
       | Some path -> path
-      | None ->
-          Filename.concat (Filename.dirname Sys.executable_name) "../Resources"
+      | None -> packaged_resource_dir
     in
     Filename.concat root path
 

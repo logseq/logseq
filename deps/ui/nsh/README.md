@@ -235,8 +235,13 @@ pnpm ui:nsh:package --built-host "$PWD/deps/ui/_build/nsh/logseq-nsh"
 
 The command refuses stale code/resources, unowned resource paths and source
 changes during packaging. Shared Resources outputs owned by other maintained
-backends are not copied. The launcher sets library, asset and private worker
-locations from its installed directory, independently of the working directory.
+backends are not copied. The launcher and direct native resource resolvers select library, asset and
+private worker locations from the installed executable directory, independently
+of the working directory. macOS uses `../Resources`; Linux/Windows use the
+sibling `Resources` directory. Explicit library/asset overrides remain supported.
+An invalid `LOGSEQ_DB_WORKER_BIN` fails immediately, and an identified installed
+package never searches a checkout for a missing worker. The development run
+script retains its explicit qualified paths.
 The packager writes the archive plus `<archive>.lui-build.json` only after
 source verification; a package receipt hashes the final archive after native
 library relocation and signing.
