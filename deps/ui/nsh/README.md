@@ -478,3 +478,40 @@ startup has been established by those tests. Windows archive construction,
 outside-checkout native launch, Authenticode, whole-app upgrade and CI execution
 remain separate qualification work; the Unix packager does not silently produce
 a Windows archive.
+
+
+### Actual Windows CI qualification
+
+`.github/workflows/nsh-windows.yml` runs the actual application path on a native
+x64 Windows runner. It pins LUI `82cc86cfe1337fc78e7fe21935053f76129faa1d`,
+uses stock [setup-ocaml@v3](https://github.com/ocaml/setup-ocaml/tree/v3) with
+OCaml 5.5.1 and explicit MinGW/Cygwin selection, and reuses the existing DB-worker
+and UI dependency scripts. Rust/dumpbin use the x64 MSVC environment from
+[msvc-dev-cmd@v1](https://github.com/ilammy/msvc-dev-cmd/tree/v1). Native Rust
+steps run in PowerShell so Git Bash's GNU `link` cannot shadow the MSVC linker.
+
+The workflow resolves the actual opam MinGW sysroot, switch bin, OCaml runtime
+and x64 Visual C++ CRT directories explicitly. The CRT location follows
+[Microsoft's documented VCToolsRedistDir layout](https://learn.microsoft.com/en-us/cpp/windows/determining-which-dlls-to-redistribute?view=msvc-170).
+It records these paths and the exact revisions, runs strict actual-App compiler
+and host/factory tests, then invokes the complete Windows builder above. A real
+native worker fixture verifies the OS pid returned across the bridge's owned
+HANDLE boundary, handle release and checked invalid-handle errors. It compiles
+in a temporary directory, never into tracked source.
+
+LUI's pinned Windows `runtime.rs` already uses public libloading
+`load_with_flags(LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR |
+LOAD_LIBRARY_SEARCH_DEFAULT_DIRS)` on the canonical absolute OCaml DLL path. Its
+private dependent DLLs can therefore load from Resources without the development
+PATH or changing the process DLL search policy. The generic `Library::new` path
+is compiled only on non-Windows targets. The worker's current vendored SQLite
+archive deliberately satisfies sqlite imports before the sysroot import library;
+the dependency closure and clean-PATH startup gate remain authoritative for the
+actual built PE files.
+
+CI preserves the compiler/explicit-root metadata, dependency provenance, build
+log and final source receipt. The new workflow is a qualification requirement,
+not a claim of a successful remote run. A green job establishes real Windows
+App/OCaml/private-worker Headless startup and the HANDLE fixture; native window
+launch, outside-checkout packaged launch, ZIP/Authenticode and upgrades remain
+separate gates. It never substitutes the generic LUI Todos bridge or package.

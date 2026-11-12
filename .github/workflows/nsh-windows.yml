@@ -1,0 +1,159 @@
+name: Actual Logseq NSH Windows
+
+on:
+  push:
+    branches: ['refactor/lui']
+  pull_request:
+    branches: ['refactor/lui']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: logseq-nsh-windows-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  LUI_REF: 82cc86cfe1337fc78e7fe21935053f76129faa1d
+  RUSTUP_TOOLCHAIN: 1.97.0
+  CARGO_BUILD_JOBS: 2
+  RUST_MIN_STACK: 268435456
+  PYTHONUTF8: 1
+
+jobs:
+  native-application:
+    name: Actual Windows App, private worker and native HANDLE boundary
+    runs-on: windows-latest
+    timeout-minutes: 180
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: '5.5.1'
+          windows-compiler: mingw
+          windows-environment: cygwin
+          dune-cache: true
+      - name: Select the active native OCaml switch
+        run: |
+          $switch = opam switch show
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot identify the native OCaml switch' }
+          "OPAMSWITCH=$switch" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Checkout the exact LUI application provider beside Logseq
+        run: |
+          $lui = Join-Path (Split-Path $env:GITHUB_WORKSPACE -Parent) 'lui'
+          git clone --no-checkout https://github.com/logseq/lui.git $lui
+          if ($LASTEXITCODE -ne 0) { throw 'LUI checkout failed' }
+          git -C $lui checkout --detach $env:LUI_REF
+          if ($LASTEXITCODE -ne 0) { throw 'Immutable LUI revision checkout failed' }
+          $actual = git -C $lui rev-parse HEAD
+          if ($LASTEXITCODE -ne 0 -or $actual -ne $env:LUI_REF) { throw 'LUI source revision mismatch' }
+          "LUI_SOURCE=$lui" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "LUI_SOURCE_ROOT=$lui" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Root stylesheet and native generator dependencies
+        run: pnpm install --frozen-lockfile
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: true
+      - name: Locked UI-local JavaScript dependencies
+        run: npm ci --prefix deps/ui --ignore-scripts
+      - name: Install the existing actual worker and UI OCaml dependencies
+        shell: bash
+        run: |
+          (cd deps/db-worker && sh scripts/install-opam-deps.sh)
+          (cd deps/ui && sh scripts/install-opam-deps.sh)
+      # Keep native Cargo/link steps in PowerShell: Git Bash prepends GNU link,
+      # which otherwise shadows the MSVC linker configured by this action.
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - name: Install the pinned native Rust toolchain
+        run: rustup toolchain install 1.97.0 --profile minimal --component rustfmt,clippy
+      - name: Resolve explicit native toolchain and redistributable roots
+        run: |
+          New-Item -ItemType Directory -Force _build/nsh-ci | Out-Null
+          $dumpbin = (Get-Command dumpbin.exe -CommandType Application -ErrorAction Stop).Source
+          $opamRoot = opam var root
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot resolve the opam root' }
+          $switchBin = opam var bin
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot resolve the opam switch bin directory' }
+          $ocamlLibrary = opam exec -- ocamlc -where
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot resolve the OCaml runtime directory' }
+          $mingw = Join-Path $opamRoot '.cygwin/root/usr/x86_64-w64-mingw32/sys-root/mingw/bin'
+          if (!(Test-Path $mingw -PathType Container)) { throw "Missing existing worker MinGW sysroot: $mingw" }
+          if (!$env:VCToolsRedistDir) { throw 'MSVC did not provide VCToolsRedistDir' }
+          $crt = @(Get-ChildItem (Join-Path $env:VCToolsRedistDir 'x64') -Directory -Filter 'Microsoft.VC*.CRT')
+          if ($crt.Count -ne 1) { throw 'Expected exactly one active x64 Visual C++ CRT directory' }
+          $roots = @($mingw, $switchBin, $ocamlLibrary, $crt[0].FullName) |
+            ForEach-Object { (Resolve-Path $_ -ErrorAction Stop).Path } | Select-Object -Unique
+          @{
+            dumpbin = $dumpbin
+            dllRoots = @($roots)
+            lui = $env:LUI_REF
+            logseq = (git rev-parse HEAD)
+          } | ConvertTo-Json | Set-Content _build/nsh-ci/windows-toolchain.json -Encoding utf8
+          "NSH_DUMPBIN=$dumpbin" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          opam exec -- ocamlopt -config | Set-Content _build/nsh-ci/ocaml-config.txt -Encoding utf8
+          if ($LASTEXITCODE -ne 0) { throw 'Native OCaml configuration failed' }
+      - name: Source and publication plumbing regressions
+        run: |
+          python -m unittest discover -s deps/ui/nsh -p 'test_windows*.py'
+          if ($LASTEXITCODE -ne 0) { throw 'Windows build source regressions failed' }
+          node --test --test-name-pattern="Windows receipt" deps/ui/nsh/build_publication_test.mjs
+          if ($LASTEXITCODE -ne 0) { throw 'Application publication regressions failed' }
+      - name: Native worker HANDLE ownership, OS pid and error codes
+        run: |
+          $handleLog = Join-Path $env:GITHUB_WORKSPACE '_build/nsh-ci/windows-handles.log'
+          $fixture = Join-Path $env:RUNNER_TEMP 'logseq-nsh-worker-handles'
+          New-Item -ItemType Directory -Force $fixture | Out-Null
+          Copy-Item deps/ui/native/logseq_lui_bridge.c $fixture
+          Copy-Item deps/ui/nsh/tests/fixtures/windows_worker_handles.ml $fixture
+          Push-Location $fixture
+          try {
+            opam exec -- ocamlfind ocamlopt -thread -package 'unix,threads.posix' -linkpkg `
+              logseq_lui_bridge.c windows_worker_handles.ml -o worker-handles.exe
+            if ($LASTEXITCODE -ne 0) { throw 'Actual Windows HANDLE fixture compilation failed' }
+            & .\worker-handles.exe 2>&1 | Tee-Object $handleLog
+            if ($LASTEXITCODE -ne 0) { throw 'Actual Windows HANDLE fixture failed' }
+          } finally { Pop-Location }
+      - name: Actual application formatting, strict compiler and host tests
+        run: |
+          cargo fmt --manifest-path deps/ui/nsh/Cargo.toml --check
+          if ($LASTEXITCODE -ne 0) { throw 'Application formatting failed' }
+          cargo clippy --locked --manifest-path deps/ui/nsh/Cargo.toml --all-targets -- -D warnings
+          if ($LASTEXITCODE -ne 0) { throw 'Strict actual application compilation failed' }
+          cargo test --locked --manifest-path deps/ui/nsh/Cargo.toml --lib --bin nsh-app-logseq
+          if ($LASTEXITCODE -ne 0) { throw 'Actual application host/factory tests failed' }
+      - name: Build the actual DLL, schemas, worker and clean-PATH private App gate
+        run: |
+          $tools = Get-Content _build/nsh-ci/windows-toolchain.json -Raw | ConvertFrom-Json
+          $arguments = @('deps/ui/nsh/build_windows.py', '--lui-source', $env:LUI_SOURCE_ROOT,
+            '--dumpbin', $env:NSH_DUMPBIN)
+          foreach ($root in $tools.dllRoots) { $arguments += @('--dll-root', $root) }
+          & python @arguments 2>&1 | Tee-Object _build/nsh-ci/build-windows.log
+          if ($LASTEXITCODE -ne 0) { throw 'Actual Windows application build/private startup qualification failed' }
+          $binary = Join-Path $env:GITHUB_WORKSPACE 'deps/ui/_build/nsh-windows/logseq-nsh.exe'
+          node "$env:LUI_SOURCE_ROOT/tooling/lui_build_receipt.mjs" check --artifact $binary
+          if ($LASTEXITCODE -ne 0) { throw 'Qualified Windows application receipt is stale' }
+          Copy-Item "$binary.lui-build.json" _build/nsh-ci/actual-app.lui-build.json
+          Copy-Item deps/ui/_build/nsh-windows/Resources/windows-dependencies.json _build/nsh-ci/
+      - name: Preserve actual Windows build and startup evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: actual-logseq-nsh-windows
+          path: _build/nsh-ci/
+          if-no-files-found: warn
