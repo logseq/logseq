@@ -17,6 +17,9 @@ url = "2"
 env_logger = "0.11"
 arboard = { version = "=3.6.1", default-features = false }
 
+[target.'cfg(any(target_os = "linux", target_os = "windows"))'.dependencies]
+pdfium-render = { git = "https://github.com/ajrcarey/pdfium-render", rev = "3c786ab9463fcfb503afb93b3386c5a9da4b72e3", default-features = false, features = ["pdfium_8125", "thread_safe"] }
+
 [target.'cfg(target_os = "linux")'.dependencies]
 keyring = { version = "=3.6.3", default-features = false, features = ["sync-secret-service", "crypto-rust"] }
 nsh-platform-linux = { git = "https://github.com/logseq/nsh", rev = "adc186db7213f3ccd1eacaa836cc721e9779fd14", default-features = false, features = ["editor", "highlight"] }
