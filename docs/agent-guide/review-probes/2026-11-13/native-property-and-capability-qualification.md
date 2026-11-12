@@ -148,7 +148,7 @@ unchecked Checkbox and a handled native-controller reply. It performs no direct
 worker writes after setup. This qualifies controller-triggered refresh with
 native keyboard continuation, not physical pointer focus behavior.
 
-## Stronger picker geometry gate
+## Stronger picker geometry gate: initial finding
 
 A new actual AppKit end-of-list probe checks visible native geometry as well as
 bounded materialization. Its first run found negative `native-bounds` coordinates
@@ -156,9 +156,8 @@ for the last icon although the LUI CLI own-window screenshot clearly paints that
 icon at the bottom of the picker. The existing diagnostic uses bare
 `NSView.convertRect`, which omits NSH's layer transforms; the SDK's own native
 test driver accounts for them. No production virtualization repair is justified
-by that diagnostic failure alone. The diagnostic correction and subsequent
-tab/filter/color transition tests remain open; do not weaken their geometric
-assertions or call the stronger suite passed.
+by that diagnostic failure alone. The updated qualification below supersedes
+this initial diagnostic finding; the negative evidence remains recorded here.
 
 Evidence: `/tmp/logseq-native-picker-state-geometry-capture.log` and private
 `logseq-picker-wheel.XWSy4H/failed-target-native.json`, canonical tree and
@@ -166,7 +165,7 @@ Evidence: `/tmp/logseq-native-picker-state-geometry-capture.log` and private
 against this exact owned test listener. Its `--unchecked` flag identifies the
 test-driver receipt limitation; it is not independent build-freshness evidence.
 
-## Open many-choice input finding
+## Many-choice input: initial finding
 
 The new actual AppKit many-value chooser case seeded real Alpha/Beta/Gamma
 closed-value entities and initially selected Gamma. Native typing `al` filtered
@@ -176,5 +175,61 @@ while retaining the canonical input ID. However, an immediately following native
 `BlurAndSubmit`, unlike the existing Web/Apple submit path which emits without
 unconditionally blurring. The proposed correction uses the SDK's existing
 focus-preserving `Submit` behavior, with no new LUI argument or wire property.
-It remains unqualified until retained-input and actual Enter/pointer cases pass.
+The successful Enter/pointer qualification below supersedes this initial failure.
 Evidence: `/tmp/logseq-native-property-many-enter-authored.log`.
+
+## Updated release and native qualification
+
+Application source checkpoint: `d68e2e0abcb4d8def0168908681ec1a6f65e9e80`.
+Its four dependency pins select published LUI
+`b73fc438e44c58209b8729470bb6c9d3e0989dad`; NSH remains unchanged.
+The older memory table above belongs to its explicitly stated `71cd1d746e`
+checkpoint and has not been remeasured for this newer application source.
+
+- The release publisher passed, including 1,909 encoded style sites in both
+  themes and real private application startup in 16.95 seconds:
+  `/tmp/logseq-picker-paint-date-table-release-build.log`.
+- The full shared/Web suite passed 16,427 checks without failures, plus all 15
+  stylesheet-scope tests and contract suites:
+  `/tmp/logseq-picker-color-date-table-calendar-ui-tests-events.log`.
+- The complete real native OCaml/FFI suite passed, retaining graph-owned
+  property, editor, clipboard, assets and update races:
+  `/tmp/logseq-current-date-table-native-ffi.log`.
+- LUI's existing public `SubmitBehavior::Submit` now preserves the native
+  single-line input focus after submit. Both real many-choice Enter and pointer
+  cases passed: selecting Alpha clears the query, immediately typing `b`
+  reaches the same retained input without a focus helper, and selecting Beta
+  persists all three values. Evidence:
+  `/tmp/logseq-native-property-many-enter-focus-fixed.log` and
+  `/tmp/logseq-native-property-many-pointer-focus-fixed.log`.
+- The corrected native-bounds diagnostic accounts for existing CALayer
+  transforms. Its own real AppKit geometry fixture passed; the previously
+  negative last-row coordinates were a diagnostic defect, not proof that the
+  renderer failed to paint that row. Source and results are recorded in LUI's
+  `input-focus-and-painted-bounds.md`.
+- Actual native tab transitions and filtered/empty-result clearing reset the
+  result viewport as frozen master does, while retaining the search field.
+  Evidence: `/tmp/logseq-native-picker-state-changes-reset-query-fixed.log`
+  (tab subcase passed before the later input-fixture failure) and
+  `/tmp/logseq-native-picker-filter-reset-native-input.log` (complete filter
+  case passed). These are distinct scoped results, not a claim that the former
+  combined run passed.
+- Actual native far-down color editing passed in 37.9 seconds:
+  `/tmp/logseq-native-picker-color-reactive-final.log`. Before and after choosing
+  `#5e69d2`, the result Scroll remained 858, source 864, source generation 12,
+  sparse indices 674–688, 134 mounted cells and final cell 14641. The last
+  `Zzz Off` cell remained at `[548,413,36,36]` inside the actual body viewport;
+  its foreground changed from `inherit` to the chosen color. No extra wheel,
+  synthetic VirtualWindow or post-change focus operation was used. This uses
+  the actual application module and release OCaml library in the native test
+  host, not the standalone release memory process. Its private evidence root
+  is `logseq-picker-wheel.ninCN4/` under the system temporary directory.
+
+The stronger canonical picker unit case initially failed because its private
+services were absent, then because its full real view was created without the
+application extension registry. That test remains open pending its corrected
+typed initialization and rerun; passing actual native color interaction does
+not convert this unit target into a passing result. A separate LUI regression
+also investigates source-factory replacement independently of the application's
+paint-only color repair. Native table focus/navigation, date-flow interaction,
+all-platform packaging, signing and installed updates remain incomplete.
