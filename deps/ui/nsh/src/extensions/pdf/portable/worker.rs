@@ -16,8 +16,7 @@ use std::{
 pub enum Event {
     Opened {
         epoch: u64,
-        pages: usize,
-        first: PageInfo,
+        pages: Vec<PageInfo>,
     },
     PasswordRequired {
         epoch: u64,
@@ -89,7 +88,7 @@ struct Open {
 enum Command {
     Open(Open),
     Close(u64),
-    Viewport(Viewport),
+    Viewport(Vec<Viewport>),
     Select {
         epoch: u64,
         page: usize,
@@ -118,7 +117,7 @@ impl Command {
     fn epoch(&self) -> Option<u64> {
         match self {
             Self::Open(open) => Some(open.epoch),
-            Self::Viewport(viewport) => Some(viewport.epoch),
+            Self::Viewport(viewports) => viewports.first().map(|viewport| viewport.epoch),
             Self::Close(epoch)
             | Self::Outline(epoch)
             | Self::Select { epoch, .. }
@@ -131,7 +130,7 @@ impl Command {
 #[derive(Default)]
 struct Pending {
     finite: VecDeque<Command>,
-    viewport: Option<Viewport>,
+    viewport: Option<Vec<Viewport>>,
 }
 struct State {
     pending: Mutex<Pending>,
@@ -272,25 +271,57 @@ impl Worker {
         Ok(())
     }
     pub fn viewport(&self, viewport: Viewport) -> Result<(), Error> {
+        self.viewports(vec![viewport])
+    }
+    /// One revision contains only the visible page tiles, with a shared pixel
+    /// budget. Scrolling replaces the whole batch, never an individual page.
+    pub fn viewports(&self, viewports: Vec<Viewport>) -> Result<(), Error> {
+        let first = viewports.first().ok_or_else(|| {
+            Error::Failure("PDF viewport batch must contain a visible tile".into())
+        })?;
+        let epoch = first.epoch;
+        let revision = first.revision;
+        let mut pixels = 0_i64;
+        for viewport in &viewports {
+            if viewport.epoch != epoch
+                || viewport.revision != revision
+                || viewport.page == 0
+                || viewport.width <= 0
+                || viewport.tile.x < 0
+                || viewport.tile.y < 0
+                || viewport.tile.width <= 0
+                || viewport.tile.height <= 0
+            {
+                return Err(Error::Failure(
+                    "PDF viewport batch has inconsistent owner or geometry".into(),
+                ));
+            }
+            pixels = pixels
+                .checked_add(i64::from(viewport.tile.width) * i64::from(viewport.tile.height))
+                .ok_or_else(|| Error::Failure("PDF viewport pixel budget overflowed".into()))?;
+        }
+        if viewports.len() > 8 || pixels > 8 * 1024 * 1024 {
+            return Err(Error::Failure(
+                "PDF visible viewport exceeds its tile/pixel budget".into(),
+            ));
+        }
         let mut pending = self
             .state
             .pending
             .lock()
             .expect("PDF worker mailbox poisoned");
-        if !self.state.current(viewport.epoch) || self.state.closing.load(Ordering::Acquire) {
+        if !self.state.current(epoch) || self.state.closing.load(Ordering::Acquire) {
             return Err(Error::Failure(
                 "PDF viewport belongs to a retired or closing document".into(),
             ));
         }
-        if viewport.revision <= self.state.revision.load(Ordering::Acquire) {
+        if revision <= self.state.revision.load(Ordering::Acquire) {
             return Err(Error::Failure(
                 "PDF viewport revision is not newer than its owner state".into(),
             ));
         }
-        self.state
-            .revision
-            .store(viewport.revision, Ordering::Release);
-        pending.viewport = Some(viewport);
+        self.state.revision.store(revision, Ordering::Release);
+        pending.viewport = Some(viewports);
         self.state.wake.notify_one();
         Ok(())
     }
@@ -417,6 +448,7 @@ enum DocumentExit {
     Open(Open),
     Close,
     Stop,
+    Yield,
 }
 fn run(state: &State, library: &std::path::Path, output: &dyn Fn(Event)) {
     let mut next = None;
@@ -438,16 +470,20 @@ fn run(state: &State, library: &std::path::Path, output: &dyn Fn(Event)) {
         let result =
             engine::with_document(library, &open.path, open.password.as_deref(), |document| {
                 let mut text_cache = VecDeque::new();
-                let pages = engine::page_count(document)?;
-                let first = engine::page_info(document, 1)?;
-                state.emit(
-                    Event::Opened {
-                        epoch,
-                        pages,
-                        first,
-                    },
-                    output,
-                );
+                let count = engine::page_count(document)?;
+                if count == 0 || count > 100_000 {
+                    return Err(Error::Failure(
+                        "PDF page count exceeds its geometry budget".into(),
+                    ));
+                }
+                let mut pages = Vec::with_capacity(count);
+                for page in 1..=count {
+                    if !state.current(epoch) || state.closing.load(Ordering::Acquire) {
+                        return Ok(DocumentExit::Yield);
+                    }
+                    pages.push(engine::page_info(document, page)?);
+                }
+                state.emit(Event::Opened { epoch, pages }, output);
                 loop {
                     let command = state.next();
                     match command {
@@ -476,6 +512,7 @@ fn run(state: &State, library: &std::path::Path, output: &dyn Fn(Event)) {
             Ok(DocumentExit::Open(open)) => next = Some(open),
             Ok(DocumentExit::Close) => state.emit(Event::Closed { epoch }, output),
             Ok(DocumentExit::Stop) => return,
+            Ok(DocumentExit::Yield) => {}
             Err(error) => state.failure(epoch, error, output),
         }
     }
@@ -488,58 +525,74 @@ fn execute(
     output: &dyn Fn(Event),
 ) -> Result<(), Error> {
     match command {
-        Command::Viewport(viewport) => {
-            if state.revision.load(Ordering::Acquire) != viewport.revision {
-                return Ok(());
-            }
-            let raster = engine::raster(document, viewport.page, viewport.width, viewport.tile)?;
-            if !state.current(viewport.epoch)
-                || state.revision.load(Ordering::Acquire) != viewport.revision
-                || state.closing.load(Ordering::Acquire)
-            {
-                return Ok(());
-            }
-            let key = (viewport.page, viewport.width);
-            let text = if let Some(index) = text_cache.iter().position(|(cached, _)| *cached == key)
-            {
-                let entry = text_cache
-                    .remove(index)
-                    .expect("known PDF text-cache position");
-                let text = entry.1.clone();
-                text_cache.push_back(entry);
-                text
-            } else {
-                let text = Arc::new(engine::page_text(document, viewport.page, viewport.width)?);
-                let size = |text: &PageText| {
-                    text.glyphs.capacity() * std::mem::size_of::<engine::Glyph>()
-                        + std::mem::size_of::<PageText>()
-                };
-                let bytes = size(&text);
-                const BUDGET: usize = 64 * 1024 * 1024;
-                if bytes > BUDGET {
-                    return Err(Error::Failure(
-                        "PDF page text exceeds its retained byte budget".into(),
-                    ));
+        Command::Viewport(viewports) => {
+            let mut retained_text = Vec::<Arc<PageText>>::new();
+            let mut retained_bytes = 0_usize;
+            for viewport in viewports {
+                if state.revision.load(Ordering::Acquire) != viewport.revision {
+                    return Ok(());
                 }
-                while text_cache.len() >= 3
-                    || text_cache.iter().map(|(_, text)| size(text)).sum::<usize>() + bytes > BUDGET
+                let raster =
+                    engine::raster(document, viewport.page, viewport.width, viewport.tile)?;
+                if !state.current(viewport.epoch)
+                    || state.revision.load(Ordering::Acquire) != viewport.revision
+                    || state.closing.load(Ordering::Acquire)
                 {
-                    text_cache.pop_front();
+                    return Ok(());
                 }
-                text_cache.push_back((key, text.clone()));
-                text
-            };
-            if state.revision.load(Ordering::Acquire) == viewport.revision {
-                state.emit(
-                    Event::Viewport {
-                        epoch: viewport.epoch,
-                        revision: viewport.revision,
-                        page: viewport.page,
-                        raster,
-                        text,
-                    },
-                    output,
-                );
+                let key = (viewport.page, viewport.width);
+                let text =
+                    if let Some(index) = text_cache.iter().position(|(cached, _)| *cached == key) {
+                        let entry = text_cache
+                            .remove(index)
+                            .expect("known PDF text-cache position");
+                        let text = entry.1.clone();
+                        text_cache.push_back(entry);
+                        text
+                    } else {
+                        let text =
+                            Arc::new(engine::page_text(document, viewport.page, viewport.width)?);
+                        let size = |text: &PageText| {
+                            text.glyphs.capacity() * std::mem::size_of::<engine::Glyph>()
+                                + std::mem::size_of::<PageText>()
+                        };
+                        let bytes = size(&text);
+                        const BUDGET: usize = 64 * 1024 * 1024;
+                        if bytes > BUDGET {
+                            return Err(Error::Failure(
+                                "PDF page text exceeds its retained byte budget".into(),
+                            ));
+                        }
+                        while text_cache.len() >= 3
+                            || text_cache.iter().map(|(_, text)| size(text)).sum::<usize>() + bytes
+                                > BUDGET
+                        {
+                            text_cache.pop_front();
+                        }
+                        text_cache.push_back((key, text.clone()));
+                        text
+                    };
+                if !retained_text.iter().any(|old| Arc::ptr_eq(old, &text)) {
+                    retained_bytes += text.glyphs.capacity() * std::mem::size_of::<engine::Glyph>();
+                    if retained_bytes > 64 * 1024 * 1024 {
+                        return Err(Error::Failure(
+                            "PDF visible text exceeds its retained byte budget".into(),
+                        ));
+                    }
+                    retained_text.push(text.clone());
+                }
+                if state.revision.load(Ordering::Acquire) == viewport.revision {
+                    state.emit(
+                        Event::Viewport {
+                            epoch: viewport.epoch,
+                            revision: viewport.revision,
+                            page: viewport.page,
+                            raster,
+                            text,
+                        },
+                        output,
+                    );
+                }
             }
         }
         Command::Select {

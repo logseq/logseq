@@ -2,6 +2,9 @@
 #[cfg(any(target_os = "linux", target_os = "windows"))]
 #[path = "../src/extensions/pdf/portable/engine.rs"]
 mod engine;
+#[cfg(all(target_os = "linux", test))]
+#[path = "../src/extensions/pdf/portable/gtk_completion.rs"]
+mod gtk_completion;
 #[cfg(any(target_os = "linux", target_os = "windows"))]
 #[path = "../src/extensions/pdf/portable/worker.rs"]
 mod worker;
@@ -189,10 +192,10 @@ fn worker_probe(
     if !private_file_open(document)? {
         return Err("worker Opened did not retain its exact document file".into());
     }
-    let height = opened["first"]["height"]
+    let height = opened["geometry"][0]["height"]
         .as_f64()
         .ok_or("missing page height")?;
-    let width = opened["first"]["width"]
+    let width = opened["geometry"][0]["width"]
         .as_f64()
         .ok_or("missing page width")?;
     let tile = engine::Tile {
@@ -249,6 +252,56 @@ fn worker_probe(
     if search["hits"].as_array().is_none_or(Vec::is_empty) {
         return Err("worker search lost its text marker".into());
     }
+    let upper = engine::Tile {
+        height: tile.height / 2,
+        ..tile
+    };
+    let lower = engine::Tile {
+        y: upper.height,
+        height: tile.height - upper.height,
+        ..tile
+    };
+    worker.viewports(vec![
+        worker::Viewport {
+            epoch,
+            revision: 2,
+            page: 1,
+            width: 512,
+            tile: upper,
+        },
+        worker::Viewport {
+            epoch,
+            revision: 2,
+            page: 1,
+            width: 512,
+            tile: lower,
+        },
+    ])?;
+    let upper_result = worker_event(&receiver, epoch, "viewport")?;
+    let lower_result = worker_event(&receiver, epoch, "viewport")?;
+    if upper_result["revision"] != 2
+        || lower_result["revision"] != 2
+        || upper_result["tile"][1] != upper.y
+        || lower_result["tile"][1] != lower.y
+    {
+        return Err("visible tile batch overwrote a page/strip under the same revision".into());
+    }
+    if worker
+        .viewports(
+            (0..9)
+                .map(|_| worker::Viewport {
+                    epoch,
+                    revision: 3,
+                    page: 1,
+                    width: 512,
+                    tile: upper,
+                })
+                .collect(),
+        )
+        .is_ok()
+    {
+        return Err("worker admitted an over-budget visible tile batch".into());
+    }
     worker.outline(epoch)?;
     let outline = worker_event(&receiver, epoch, "outline")?;
     worker.close(epoch)?;
@@ -276,7 +329,7 @@ fn worker_probe(
     Ok(
         serde_json::json!({"opened": opened, "viewport": viewport, "selection": selection,
         "area": area, "search": search, "outline": outline, "closed": closed,
-        "replacementEpoch": reopened, "fileReleased": true, "ownedThreadExited": true}),
+        "replacementEpoch": reopened, "visibleBatchTiles": [upper_result, lower_result], "fileReleased": true, "ownedThreadExited": true}),
     )
 }
 
@@ -298,8 +351,8 @@ fn worker_event(
             worker::Event::PasswordRequired { .. } => {
                 return Err("worker requires the private fixture password".into());
             }
-            worker::Event::Opened { pages, first, .. } => {
-                serde_json::json!({"kind":"opened","pages":pages,"first":first})
+            worker::Event::Opened { pages, .. } => {
+                serde_json::json!({"kind":"opened","pages":pages.len(),"geometry":pages})
             }
             worker::Event::Viewport {
                 revision,
@@ -308,7 +361,7 @@ fn worker_event(
                 text,
                 ..
             } => {
-                serde_json::json!({"kind":"viewport","revision":revision,"page":page,"rasterBytes":raster.rgba.len(),"text":text.as_ref()})
+                serde_json::json!({"kind":"viewport","revision":revision,"page":page,"rasterBytes":raster.rgba.len(),"tile":[raster.tile.x,raster.tile.y,raster.tile.width,raster.tile.height],"text":text.as_ref()})
             }
             worker::Event::Selected { selection, .. } => {
                 serde_json::json!({"kind":"selected","selection":selection})

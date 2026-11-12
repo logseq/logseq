@@ -173,3 +173,34 @@ accessibility remain in progress; this candidate is not enabled in App startup.
 
 Primary lifecycle references: [Rust Windows share mode](https://doc.rust-lang.org/std/os/windows/fs/trait.OpenOptionsExt.html#tymethod.share_mode),
 [Linux proc filesystem](https://www.kernel.org/doc/html/latest/filesystems/proc.html).
+
+## Continuous viewport and GTK delivery candidate
+
+Opened now returns bounded geometry for every page (at most 100,000), checking
+owner retirement between page reads. A visible batch shares one epoch/revision
+across at most eight tiles and eight million pixels; a new scroll replaces the
+whole batch. This preserves multiple visible pages/strips instead of a later
+request overwriting an earlier page in the same viewport. The worker additionally
+limits the batch's unique owned text snapshots to 64 MiB. The engine probe now
+asserts both half-page results arrive under one revision and rejects an oversized
+batch. These budgets require the host to progressively request bounded batches
+for a large or high-DPI viewport; they are not permission to discard visible tiles.
+
+`gtk_completion.rs` implements the delivery boundary using public GTK-reexported
+GLib/GIO APIs. Its per-reader queue retains at most 16 events and 128 MiB, with
+backpressure released by consumption, replacement epoch or disposal. One attached
+Source wakes the captured GTK context; no callback executes inline on the worker
+and no recurring idle/timer polls for results. A SimpleAction is the typed weak
+target. Disposal disables it, destroys the exact retained Source, clears results
+and wakes blocked producers. Every callback rechecks epoch/liveness, including
+between events when a prior callback could reenter and replace/dispose the owner.
+A fast Opened arriving before `Worker::open` returns is preserved by set_epoch.
+
+Two source regressions are included in the Linux engine example test target:
+`cargo test --locked --example pdfium_engine_probe`. They create private GLib
+contexts without a display, check that sending from a joined worker does not run
+inline while the context is unowned, dispatch on the owner thread, discard stale
+epochs, preserve a fast new epoch, and reject late work after source destruction.
+No compiler, test, GLib loop, engine or native app was executed for this batch.
+The actual GTK widget and Windows UIA host are still separate pending integration;
+these tests alone do not qualify native accessibility or physical interactions.

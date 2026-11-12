@@ -155,10 +155,17 @@ fn page<'document>(
 }
 pub fn page_info(document: &PdfDocument<'_>, number: usize) -> Result<PageInfo, Error> {
     let page = page(document, number)?;
+    let width = f64::from(page.width().value);
+    let height = f64::from(page.height().value);
+    if !width.is_finite() || !height.is_finite() || width <= 0.0 || height <= 0.0 {
+        return Err(Error::Failure(
+            "PDF page dimensions must be positive and finite".into(),
+        ));
+    }
     Ok(PageInfo {
         page: number,
-        width: f64::from(page.width().value),
-        height: f64::from(page.height().value),
+        width,
+        height,
     })
 }
 fn configuration(page: &PdfPage<'_>, width: i32) -> Result<(PdfRenderConfig, i32), Error> {
