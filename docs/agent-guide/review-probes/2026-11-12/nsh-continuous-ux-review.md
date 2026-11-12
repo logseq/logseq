@@ -93,10 +93,56 @@ fully resolves the observed issue before a runtime or memory fix is claimed.
 The required actual-application startup matrix now includes an independent
 `icon-picker` child. It opens the production Journal icon action, changes both
 tabs, verifies a positive finite native body height and bounded mounted cells,
-drags the real native Scroll to the complete source's final row, activates the
-last item, and waits for the Journal icon to be persisted. It does not manually
+scrolls the real native Scroll to the complete source's final row, returns to
+the first row, reaches the final row again, activates the last item, and waits
+for the Journal icon to be persisted and the native picker to retire. It does not manually
 supply `VirtualWindow` events, truncate generated datasets, or replace the picker
 with a test-only view. The earlier recording-host row tests remain useful for
-source semantics but do not prove native viewport ownership. Compilation and this
-new native-engine case are pending the parent's serialized build; native raster,
-scroll-wheel behavior and release physical-footprint comparison remain pending.
+source semantics but do not prove native viewport ownership. The release build
+reached this case and exposed an independent queue saturation failure during the
+complete Emoji Scroll. The round-trip and native-retirement assertions are source
+only and still require the parent's serialized run after that queue repair.
+
+### Release native-window measurements
+
+A separate, nonactivated AppKit window used the release candidate from application
+`1bcfa19da4`, LUI `4849e6bf` and NSH
+`2635333e4cc0d3be8032c97f3a5e08d3685179c6`. It used a private Demo graph and native
+credentials/state, with an initial 10-second idle period. Tab changes used the
+host's `native-press` controller operation. No collection was forced. The figures
+below are the frontend's macOS `vmmap -summary` physical footprint; they exclude
+the separate database worker. They are neither virtual address size nor the
+sum of mapped shared-library pages.
+
+| State | Physical footprint, MiB | Mounted picker cells | Mounted/source rows | OCaml major heap capacity, bytes |
+| --- | ---: | ---: | ---: | ---: |
+| Idle before picker | 95.2 | 0 | — | 6,195,352 |
+| First Emojis tab | 119.7 | 135 | 15/208 | 10,262,144 |
+| First Icons tab | 220.6 | 135 | 15/689 | 7,098,200 |
+| Second Emojis tab | 221.1 | 135 | 15/208 | 9,071,384 |
+| Second Icons tab | 222.6 | 135 | 15/689 | 6,247,424 |
+
+The current domain's minor-heap **limit** was 16,777,216 bytes throughout. This
+limit and the major heap's reserved capacity do not report live object size.
+The process peak reached 260.7 MiB during the sequence, which also captured
+screenshots. The four tab samples establish bounded initial row demand and no
+source-sized materialization in this candidate; they do not establish a steady
+state memory budget, freedom from leaks over many cycles, or native wheel-scroll
+correctness. The original reported 1 GB behavior was not reproduced in this
+sequence. The installed application has not been qualified against these bytes.
+
+Evidence is retained under the ignored application directory
+`deps/ui/_build/nsh-picker-diagnostic/`: `measurements.json`, per-state
+`*-summary.json` and `*-vmmap.txt`, `emojis.png`, `icons.png`, source snapshot
+`sources.json` and the actual Cargo compiler-artifact inventory. The directory's
+`diagnostic-only.json` explicitly records `qualified: false`; this is not a
+successful build publication receipt. Candidate SHA-256 values:
+
+- Host: `dc558885396a4ad7c3c7db0a7892646057c5f87a5aa432d4422a78c088a847af`.
+- OCaml library: `2413f5ac358057e95e33e7da0a3d63a0a1b165d43d7d10848f95000a3df055d8`.
+- Worker: `c49397ca24df1e96ec7183175088ffab67df5e281be1e260ef7178f2367ea20e`.
+
+An earlier foreground diagnostic was affected by concurrent interaction and
+remained on All; those samples were excluded from this comparison. Real wheel
+input, high-rate Scroll after the queue fix, repeated open/close memory and
+light/dark visual finishing checks remain unqualified.
