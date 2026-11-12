@@ -164,6 +164,9 @@ impl Agent {
         Ok(Self(address))
     }
     fn tree(&self) -> Result<Value, String> {
+        self.query("tree")
+    }
+    fn query(&self, operation: &str) -> Result<Value, String> {
         let mut stream = TcpStream::connect_timeout(&self.0, Duration::from_secs(2))
             .map_err(|error| error.to_string())?;
         stream
@@ -173,7 +176,7 @@ impl Agent {
             .set_write_timeout(Some(Duration::from_secs(2)))
             .map_err(|error| error.to_string())?;
         stream
-            .write_all(b"{\"op\":\"tree\"}\n")
+            .write_all(format!("{{\"op\":\"{operation}\"}}\n").as_bytes())
             .map_err(|error| error.to_string())?;
         let mut reader = BufReader::new(stream).take(MAX_TREE + 1);
         let mut response = Vec::new();
@@ -187,11 +190,73 @@ impl Agent {
         }
         let tree: Value = serde_json::from_slice(&response).map_err(|error| error.to_string())?;
         if tree.get("ok").and_then(Value::as_bool) != Some(true) {
-            return Err(format!("actual LUI agent rejected tree: {tree}"));
+            return Err(format!("actual LUI agent rejected {operation}: {tree}"));
         }
         Ok(tree)
     }
 }
+/// Check reported capacities from both real OCaml runtimes without a GC.
+pub(super) fn qualify_minor_heaps() -> Result<(), String> {
+    let words: u64 = std::env::var("LOGSEQ_NSH_EXPECTED_MINOR_HEAP_WORDS")
+        .map_err(|error| error.to_string())?
+        .parse::<u64>()
+        .map_err(|error| error.to_string())?;
+    let check = |owner: &str, gc: &Value| -> Result<(), String> {
+        let word_bytes = gc
+            .get("word-bytes")
+            .and_then(Value::as_u64)
+            .filter(|bytes| matches!(bytes, 4 | 8))
+            .ok_or_else(|| format!("{owner}: missing OCaml machine-word size: {gc}"))?;
+        let actual = gc
+            .get("current-domain-minor-heap-limit-bytes")
+            .and_then(Value::as_u64);
+        if actual != Some(words * word_bytes) {
+            return Err(format!("{owner}: expected {words} words, got {gc}"));
+        }
+        Ok(())
+    };
+    let ui = Agent::discover()?.query("gc-stats")?;
+    check("UI", ui.get("gc").ok_or("UI heap diagnostics missing")?)?;
+    let root = std::env::var_os("LOGSEQ_ROOT_DIR").ok_or("private root missing")?;
+    let root = fs::canonicalize(root).map_err(|error| error.to_string())?;
+    let registry =
+        fs::read_to_string(root.join("server-list")).map_err(|error| error.to_string())?;
+    let mut workers = 0;
+    for line in registry.lines() {
+        let fields: Vec<_> = line.split_whitespace().collect();
+        if fields.len() != 2 {
+            return Err("invalid private worker registry".into());
+        }
+        let port = fields[1]
+            .parse::<u16>()
+            .map_err(|error| error.to_string())?;
+        let (status, body) = super::request(port, "GET", "/healthz")?;
+        if status != 200 {
+            return Err(format!("worker health status: {status}"));
+        }
+        let health: Value = serde_json::from_str(&body).map_err(|error| error.to_string())?;
+        let storage = health
+            .get("storage")
+            .and_then(|storage| storage.get("root"))
+            .and_then(Value::as_str)
+            .ok_or("worker storage root missing")?;
+        if fs::canonicalize(storage).map_err(|error| error.to_string())? != root {
+            return Err("heap query resolved a different worker root".into());
+        }
+        check(
+            "worker",
+            health
+                .get("native-gc")
+                .ok_or("worker heap diagnostics missing")?,
+        )?;
+        workers += 1;
+    }
+    if workers != 1 {
+        return Err(format!("expected one actual worker, found {workers}"));
+    }
+    Ok(())
+}
+
 #[derive(Default)]
 struct Logical {
     nodes: usize,

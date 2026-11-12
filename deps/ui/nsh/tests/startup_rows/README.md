@@ -53,3 +53,14 @@ The 300-second process deadline bounds setup, graph writes and cleanup; it is
 not a claimed interaction latency budget. Backend diagnostics, missing content,
 unbounded render counts, identity loss, malformed protocol replies and ownership
 mismatches fail the case explicitly.
+
+## Runtime heap configuration
+
+The real startup gate and row gates query `gc-stats` and the owned worker's
+`/healthz` `native-gc` field without collecting or compacting. They require the
+bridge's default of 2,097,152 machine words in both runtimes.
+`real_application_minor_heap_override` exercises the same actual application
+with `OCAMLRUNPARAM=s=1M` and requires 1,048,576 words in both runtimes. These
+assertions qualify configured capacities, not physical memory consumption or
+interaction latency. The child environment is isolated from the build shell's
+OCaml heap settings, and each case still owns its private graph and worker.

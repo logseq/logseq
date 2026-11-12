@@ -899,3 +899,17 @@ their semantic event ownership. Applications should continue using the shared
 selection/edit handlers; they must not add a parallel native content click
 handler. This change establishes click and modifier-selection delivery, not
 cross-row pointer hit testing or native drag/drop parity.
+
+## Native OCaml minor-heap default uses machine words
+
+The native bridge now defaults `OCAMLRUNPARAM` to `s=2M` when the variable is
+absent. OCaml counts this parameter in machine words: this is 16 MiB on a
+64-bit desktop. The previous `s=16M` allocated a 128 MiB minor-heap capacity
+instead of its documented 16 MiB. The UI's native DB-worker child inherits the
+same environment. Existing explicit `OCAMLRUNPARAM` settings remain authoritative.
+
+For example, `OCAMLRUNPARAM=s=1M <native-launcher>` retains an explicit 8 MiB
+minor-heap limit on a 64-bit desktop. Do not interpret either configured
+capacity as live OCaml objects or add it to the process's physical footprint.
+The actual-application startup test queries both runtime limits without forcing
+a collection; its override case runs the same compiled path with `s=1M`.

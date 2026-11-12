@@ -31,6 +31,15 @@ fn real_application_startup_preflight() -> Result<(), String> {
 }
 
 #[test]
+fn real_application_minor_heap_override() -> Result<(), String> {
+    require_artifacts()?;
+    if std::env::var(CHILD).as_deref() == Ok("1") {
+        return mount_actual_application(None);
+    }
+    isolated_process("real_application_minor_heap_override", false)
+}
+
+#[test]
 fn real_application_rows_1k() -> Result<(), String> {
     production_rows_case(1_000, "real_application_rows_1k")
 }
@@ -146,6 +155,7 @@ fn mount_actual_application(rows: Option<usize>) -> Result<(), String> {
         Duration::from_secs(5),
         startup_body::sidebar_ready,
     )?;
+    startup_rows::qualify_minor_heaps()?;
     if let Some(count) = rows {
         return startup_rows::qualify(
             &mut app,
@@ -437,12 +447,22 @@ fn run_child(
         .env("XDG_DATA_HOME", directory.join("data"))
         .env("XDG_CACHE_HOME", directory.join("cache"))
         .env("LOGSEQ_NO_LOGIN_DAEMON", "1")
-        .env("LUI_AGENT_LISTEN", if rows { "127.0.0.1:0" } else { "" })
+        .env("LUI_AGENT_LISTEN", "127.0.0.1:0")
         .env("LOGSEQ_NSH_PROBE_TRANSCRIPT", transcript)
         .env("LUI_AGENT_BACKGROUND", "1")
         .stdin(Stdio::null())
         .stdout(output.try_clone().map_err(|e| e.to_string())?)
         .stderr(output);
+    // Qualify the bridge's actual default independently of the build shell,
+    // and a smaller explicit value through the same compiled startup path.
+    let overridden = test == "real_application_minor_heap_override";
+    command.env_remove("OCAMLRUNPARAM").env(
+        "LOGSEQ_NSH_EXPECTED_MINOR_HEAP_WORDS",
+        if overridden { "1048576" } else { "2097152" },
+    );
+    if overridden {
+        command.env("OCAMLRUNPARAM", "s=1M");
+    }
     // Descendant workers belong only to this test's group; the regular path
     // still shuts them down through their private daemon protocol, not signals.
     #[cfg(unix)]
