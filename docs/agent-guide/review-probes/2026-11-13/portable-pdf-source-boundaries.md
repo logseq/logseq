@@ -101,3 +101,14 @@ and reported one type inference error in the selection-offset closure. Its
 argument indexes individual glyphs, so it is explicitly `usize`, rather than an
 unresolved generic `SliceIndex`. This source correction still requires the
 actual Linux compile and widget tests; no execution is inferred from it.
+
+## First actual Windows compile result
+
+Run 43300275904, job 131469285114, passed the strict App host tests and
+artifact source guards, then failed the native PDF test compile at three calls
+to the removed `Error::from_win32` constructor. The pinned windows-result 0.4.1
+uses `Error::from_thread` for the current Win32 last error. The search path
+already captures `GetLastError`, so it constructs the HRESULT from that exact
+captured error instead of rereading thread state. No error is suppressed or
+replaced with success. The correction requires another native target run;
+Win32/UIA tests and the subsequent PDFium load step have not run yet.

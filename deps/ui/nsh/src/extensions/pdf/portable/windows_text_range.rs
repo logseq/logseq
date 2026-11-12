@@ -210,7 +210,7 @@ impl ITextRangeProvider_Impl for TextRange_Impl {
         if found < 0 {
             let error = unsafe { GetLastError() };
             if error != ERROR_SUCCESS {
-                return Err(Error::from_win32());
+                return Err(Error::from_hresult(HRESULT::from_win32(error.0)));
             }
             return absent();
         }

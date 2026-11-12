@@ -386,7 +386,7 @@ impl State {
         let mut origin = POINT::default();
         // SAFETY: exact current bound HWND and an initialized output point.
         if !unsafe { ClientToScreen(hwnd, &mut origin) }.as_bool() {
-            return Err(Error::from_win32());
+            return Err(Error::from_thread());
         }
         Ok((f64::from(origin.x), f64::from(origin.y)))
     }
@@ -554,7 +554,7 @@ impl ITextProvider_Impl for Provider_Impl {
         if !unsafe { ScreenToClient(state.hwnd.get().ok_or_else(unavailable)?, &mut client) }
             .as_bool()
         {
-            return Err(Error::from_win32());
+            return Err(Error::from_thread());
         }
         let scene = state.scene.borrow();
         let offset = scene
