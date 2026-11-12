@@ -153,6 +153,30 @@ fn mount_actual_application(rows: Option<usize>) -> Result<(), String> {
             count,
         );
     }
+    // Exercise the real compiled pointer C boundary, not the semantic agent.
+    // Journals owns detail navigation and hover listeners, so these gestures
+    // traverse the NSH controller, queued runtime and actual OCaml bridge.
+    for (gesture, action) in [
+        ("hover", 0_u8),
+        ("press", 1),
+        ("drag", 2),
+        ("context menu", 3),
+    ] {
+        match action {
+            0 => app.hover("Journals")?,
+            1 => app.press("Journals")?,
+            2 => app.drag("Journals", point(px(12.0), px(0.0)))?,
+            3 => app.right_click("Journals")?,
+            _ => unreachable!("fixed pointer gesture cases"),
+        }
+        wait_for_chrome(
+            &mut app,
+            &format!("journal body after native pointer {gesture}"),
+            Duration::from_secs(10),
+            |screen| startup_body::ready(screen) && startup_body::sidebar_ready(screen),
+        )?;
+    }
+    app.press_key("escape")?;
     let body =
         startup_body::identity(app.screen()).ok_or("qualified journal identity is missing")?;
     // Resize and toggle through real public native input. The source graph,

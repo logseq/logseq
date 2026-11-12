@@ -19,6 +19,12 @@ Invalid negative lengths and nonempty null buffers are rejected. Pointer
 arguments and callback results are rooted across OCaml allocation and dispatch;
 embedded NULs in target classes retain their original byte length.
 
+The actual Headless application startup gate also hovers, presses, drags and
+context-clicks Journals through public NSH controller input, requiring the dated
+body and sidebar afterward and failing immediately on renderer diagnostics.
+These exercise the linked C pointer path that semantic agent presses do not;
+all six pointer exports remain required by the staged-library symbol gate.
+
 ## Native heap diagnostics
 
 The opt-in native UI agent now advertises `gc-stats` in its `hello.ops`.
