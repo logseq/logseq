@@ -103,7 +103,7 @@ cp "$ui_root/assets/"*.json "$staged_resources/"
 cp "$ui_root/assets/fonts/"*.ttf "$staged_resources/fonts/"
 cp -R "$repo_root/resources/img/." "$staged_resources/img/"
 cp "$repo_root/resources/dicts/"*.edn "$staged_resources/dicts/"
-cargo build "${cargo_profile_args[@]}" --locked --manifest-path "$nsh_root/Cargo.toml" --message-format=json \
+cargo build "${cargo_profile_args[@]}" --locked --manifest-path "$nsh_root/Cargo.toml" --message-format=json-render-diagnostics \
   > "$staging/cargo-build.jsonl"
 "$python_bin" - "$staging/cargo-build.jsonl" "$staging/logseq-nsh" \
   "$repo_root/deps/db-worker/_build/default/bin/main.exe" "$staged_resources/logseq-db-worker" \

@@ -222,7 +222,9 @@ fn input_for(context: ExtensionContext, kind: &str) -> AnyElement {
                 ..nsh_base::CheckboxProps::initial()
             })
             .on_event(move |event: &nsh_base::CheckboxEvent| {
-                let nsh_base::CheckboxEvent::Change(checked) = event;
+                let nsh_base::CheckboxEvent::Change(checked) = event else {
+                    return;
+                };
                 emit_dom(&change, owner, "click", json!({}));
                 emit_dom(&change, owner, "input", json!({"checked":checked}));
                 emit_dom(&change, owner, "change", json!({"checked":checked}));
