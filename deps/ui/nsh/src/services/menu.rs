@@ -312,6 +312,76 @@ mod tests {
         app.press_key("ctrl+r").unwrap();
         app.wait_for("text:Command: reload").unwrap();
     }
+    #[component]
+    fn PreparingMenuFixture() -> impl IntoElement {
+        let preparing = signal(false);
+        let commands = signal(0_u32);
+        effect(move || {
+            set_application_menu(items(
+                Labels::parse(&labels()).unwrap(),
+                false,
+                Rc::new(move |_| commands.set(commands.get_untracked() + 1)),
+                Vec::new(),
+                preparing.get(),
+            ));
+        });
+        for (key, value) in [("f2", true), ("f3", false)] {
+            on_key_with(
+                key,
+                KeyOptions {
+                    when: nsh_core::keymap::When::Always,
+                    ..Default::default()
+                },
+                move |_| preparing.set(value),
+            );
+        }
+        cleanup(|| set_application_menu(None));
+        text(move || format!("Commands executed:{}", commands.get()))
+    }
+    #[test]
+    fn preparation_disables_actual_global_menu_roles_and_shortcuts_then_restores_them() {
+        use nsh_core::{
+            Command,
+            desktop::{DesktopCommand, MenuItem as NativeMenuItem},
+        };
+        fn disabled(item: &NativeMenuItem) -> bool {
+            match item {
+                NativeMenuItem::Separator => true,
+                NativeMenuItem::Action(action) => !action.enabled,
+                NativeMenuItem::Submenu { enabled, items, .. } => {
+                    !enabled && items.iter().all(disabled)
+                }
+            }
+        }
+        let mut config = EngineConfig::new(Root::of::<PreparingMenuFixture>());
+        config.environment.os = Os::Linux;
+        config.environment.idiom = nsh_core::platform::Idiom::Desktop;
+        let mut app = Headless::start(config).unwrap();
+        app.wait_for("text:Commands executed:0").unwrap();
+        app.press_key("ctrl+r").unwrap();
+        app.wait_for("text:Commands executed:1").unwrap();
+        app.press_key("f2").unwrap();
+        let menu = app
+            .screen()
+            .commands()
+            .iter()
+            .rev()
+            .find_map(|(_, command)| match command {
+                Command::Desktop(command) => match &**command {
+                    DesktopCommand::SetMenu(Some(items)) => Some(items),
+                    _ => None,
+                },
+                _ => None,
+            })
+            .expect("actual installed native menu");
+        assert!(menu.iter().all(disabled));
+        app.press_key("ctrl+r").unwrap();
+        app.wait_for("text:Commands executed:1").unwrap();
+        app.press_key("f3").unwrap();
+        app.press_key("ctrl+r").unwrap();
+        app.wait_for("text:Commands executed:2").unwrap();
+    }
+
     #[test]
     fn translated_menu_labels_are_required_before_native_menu_replacement() {
         let mut payload: serde_json::Value = serde_json::from_str(&labels()).unwrap();
