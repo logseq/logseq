@@ -14,7 +14,8 @@ let emit_native_document_pointer name node (detail : Lui_protocol.pointer_detail
           ; "buttons", Json.Number (float_of_int buttons)
           ; "ctrlKey", Json.Bool (detail.modifiers land 1 <> 0)
           ; "shiftKey", Json.Bool (detail.modifiers land 2 <> 0)
-          ; "metaKey", Json.Bool (detail.modifiers land 4 <> 0) ]))
+          ; "metaKey", Json.Bool (detail.modifiers land 4 <> 0)
+          ; "altKey", Json.Bool (detail.modifiers land 16 <> 0) ]))
 
 (* Native containers opt into the shared document event pipeline explicitly.
    Web and Apple already supply document pointer events from their host. *)
@@ -105,7 +106,8 @@ let delegated_link (elem : t) : t =
           ; "button", Json.Number 0.; "buttons", Json.Number 0.
           ; "ctrlKey", Json.Bool (modifiers land 1 <> 0)
           ; "shiftKey", Json.Bool (modifiers land 2 <> 0)
-          ; "metaKey", Json.Bool (modifiers land 4 <> 0) ])))
+          ; "metaKey", Json.Bool (modifiers land 4 <> 0)
+          ; "altKey", Json.Bool (modifiers land 16 <> 0) ])))
   end;
   node
 

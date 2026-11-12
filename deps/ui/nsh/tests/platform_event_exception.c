@@ -54,3 +54,15 @@ CAMLprim value caml_logseq_test_platform_event(value payload) {
   caml_stat_free(copy);
   CAMLreturn(Val_int(accepted));
 }
+
+/* Exercise the actual length-independent integer mask ABI. The OCaml executable
+   already owns its runtime; this follows the existing foreign-entry lock state. */
+CAMLprim value caml_logseq_test_press_modifiers(value node, value modifiers) {
+  CAMLparam2(node, modifiers);
+  int64_t target = Long_val(node);
+  int32_t mask = Int_val(modifiers);
+  caml_enter_blocking_section();
+  int32_t accepted = lui_ocaml_press_ex(target, mask);
+  caml_leave_blocking_section();
+  CAMLreturn(Val_int(accepted));
+}

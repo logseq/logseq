@@ -1818,3 +1818,18 @@ remain valid. Select the physical form in the `NshHost` branch to retain an
 existing `contents`/`none` implementation on other backends. Unknown projections
 remain subject to the existing dynamic host validation; no user function or
 signal source is evaluated by this source analysis.
+
+## Native pointer and delegated Link events expose the existing Alt input
+
+The NSH native document bridge decodes the new canonical pointer/press Alt bit
+16 into `altKey`, alongside unchanged Ctrl=1, Shift=2 and Meta=4. For example,
+a `PointerMove` whose mask is 23 now reaches the shared controller with all four
+modifier booleans true. Delegated native Link clicks decode the same Alt bit.
+
+The native C bridge continues to transport the complete integer mask without a
+signature or payload-layout change; a real exported-entry regression preserves
+mask 31, including the separate secondary-pointer-button bit 8. This does not
+change `ToggleChangedDetail`, whose distinct Alt=8 mask remains unchanged.
+Web/mobile document event producers retain their existing modifier booleans.
+This bridge change alone does not enable native block dragging or qualify
+physical Alt-key continuity during an AppKit drag.

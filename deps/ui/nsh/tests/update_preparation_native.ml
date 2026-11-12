@@ -526,7 +526,7 @@ let native_outliner_content_events () =
         recorded:=[];
         List.iter (fun (button,buttons) ->
           let before=List.length !recorded in
-          ignore (Native_embed.pointer_move motion 53. 71. 7 button "");
+          ignore (Native_embed.pointer_move motion 53. 71. 23 button "");
           check "one canonical main-row movement produces one document movement"
             (List.length !recorded=before+(if native then 1 else 0));
           if native then (
@@ -542,6 +542,7 @@ let native_outliner_content_events () =
                    && List.assoc_opt "ctrlKey" fields=Some (Js.Json.boolean true)
                    && List.assoc_opt "shiftKey" fields=Some (Js.Json.boolean true)
                    && List.assoc_opt "metaKey" fields=Some (Js.Json.boolean true)
+                   && List.assoc_opt "altKey" fields=Some (Js.Json.boolean true)
                | _ -> false))) [-1,0;0,1;1,4;2,2;3,8;4,16];
         let before=List.length !recorded in
         ignore (Native_embed.pointer_cancel motion 53. 71. 0 0 "");
@@ -1015,6 +1016,26 @@ let native_favorite_menu_contract () =
 external bridge_platform_event : string -> int = "caml_logseq_test_platform_event"
 
 external bridge_adversarial_callbacks : bool -> unit = "caml_logseq_test_adversarial_callbacks"
+
+external bridge_press_modifiers : int -> int -> int = "caml_logseq_test_press_modifiers"
+
+let native_alt_mask_through_actual_ffi () =
+  let previous_app= !Native_embed.current_app and received=ref None in
+  let backend : Lui_protocol.backend={
+    backend_profile=Lui_protocol.profile Lui_protocol.MacOS Lui_protocol.NshHost;
+    apply_batch=(fun _ -> true)} in
+  let app=Lui_app.create backend Model.initial (fun model (_ : Action.t) -> model)
+    (fun _ _ _ -> Lui_elements.button ~text:"Native modifier ABI"
+      ~on_press:(function
+        | Lui_protocol.PressModifiers (_,mask) -> received:=Some mask
+        | _ -> failwith "Native modifier ABI lost the supplied mask") []) in
+  Fun.protect ~finally:(fun () ->
+    ignore (Lui_app.dispose app);Native_embed.current_app:=previous_app) (fun () ->
+    Native_embed.current_app:=Some app;
+    ignore (Lui_app.start app);ignore (Lui_app.flush app);
+    let node=Lui_app.root_node app in
+    check "actual native C/OCaml ABI preserves Alt alongside all existing mask bits"
+      (bridge_press_modifiers node 31=1 && !received=Some 31))
 
 let native_primitive_unit_results () =
   let previous_wakeup = !Host.wakeup_cb and previous_left = !Host.titlebar_left in
@@ -1911,6 +1932,7 @@ let () =
   Editor_clipboard_native.run ();
   native_platform_exception_reporting ();
   native_primitive_unit_results ();
+  native_alt_mask_through_actual_ffi ();
   Editor_clipboard_native.async_file_read_keeps_the_application_owner_responsive ();
   native_settings_route_links ();
   native_cmdk_controlled_input ();
