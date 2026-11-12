@@ -1788,3 +1788,21 @@ The actual native admission fixture exercises invalid/valid frequency commits,
 external frequency updates, concurrent comment drafts, successful clearing and
 post-disposal completion. Source preparation does not establish that the
 compiled native checks have passed; the primary build owner runs them serially.
+
+## NSH build diagnostic for proven reactive display topology changes
+
+The actual native-target presentation gate now rejects a direct reactive display
+projection whose finite literal return paths include both `contents` and another
+display value. It checks compiler-resolved `Ui_parts.string_prop DisplayValue`
+bindings and canonical `Lui_elements` constructor display bindings after the real
+LUI PPX expansion. The diagnostic names the source location before application
+startup; it is not a backend-blind restriction in the shared PPX.
+
+For example, `~value:(reactive (fun width -> if width >= 640. then "contents"
+else "none") viewport)` cannot retain one NSH node across those topology modes.
+Use `"block"`/`"none"` for native visibility or remount a structural branch.
+Static `contents`, constant `contents` projections and reactive `block`/`none`
+remain valid. Select the physical form in the `NshHost` branch to retain an
+existing `contents`/`none` implementation on other backends. Unknown projections
+remain subject to the existing dynamic host validation; no user function or
+signal source is evaluated by this source analysis.

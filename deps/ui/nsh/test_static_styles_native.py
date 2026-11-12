@@ -16,7 +16,8 @@ from validate_static_styles import validate
 
 
 class NativeStyleCompileTests(unittest.TestCase):
-    def check_fixture(self, body, *, rejected, expected_diagnostic=None, expected_deferred=None):
+    def check_fixture(self, body, *, rejected, expected_diagnostic=None, expected_deferred=None,
+                      ppx=False, source_rejected=False):
         executable = Path(os.environ["LOGSEQ_NSH_PREFLIGHT_EXECUTABLE"]).resolve(strict=True)
         prefix = ["opam", "exec", "--switch=" + os.environ.get("OPAMSWITCH", "5.5.1"), "--"]
         includes = []
@@ -27,7 +28,8 @@ class NativeStyleCompileTests(unittest.TestCase):
             stage = Path(temporary)
             source = stage / "target_fixture.ml"
             source.write_text(body, encoding="utf-8")
-            subprocess.run([*map(str, prefix), "ocamlfind", "ocamlopt", "-package", "lui",
+            subprocess.run([*map(str, prefix), "ocamlfind", "ocamlopt", "-package",
+                "lui,lui.ppx" if ppx else "lui",
                 *map(str, includes), "-bin-annot", "-c", str(source)], cwd=stage, check=True)
             # A supplied typed fixture must not trigger an unrelated archive
             # Dune build; it is already the exact unit under qualification.
@@ -52,13 +54,62 @@ class NativeStyleCompileTests(unittest.TestCase):
                     self.assertIsNotNone(expected_diagnostic)
                     with self.assertRaises(subprocess.CalledProcessError) as failure:
                         validate(executable, cmts=[source.with_suffix(".cmt")])
-                    self.assertEqual(Path(failure.exception.cmd[0]), executable)
+                    if source_rejected:
+                        self.assertEqual(Path(failure.exception.cmd[0]).stem, "static_style_sites")
+                        self.assertIn("target_fixture.ml", failure.exception.stderr)
+                    else:
+                        self.assertEqual(Path(failure.exception.cmd[0]), executable)
                     self.assertIn(expected_diagnostic, failure.exception.stderr)
                 else:
                     validate(executable, cmts=[source.with_suffix(".cmt")])
             if expected_deferred:
                 for expected in expected_deferred:
                     self.assertIn(expected, "\n".join(diagnostics))
+
+    def test_actual_string_prop_reactive_contents_transition_fails_before_launch(self):
+        self.check_fixture('''let value viewport =
+  Ui_parts.string_prop Lui_protocol.DisplayValue
+    ~value:(reactive (fun width -> if width >= 640. then "contents" else "none") viewport)
+    (Lui_elements.box [])
+''', ppx=True, rejected=True, source_rejected=True,
+            expected_diagnostic="NSH reactive display can change between contents and a physical display")
+
+    def test_reactive_constructor_contents_transition_fails_before_launch(self):
+        self.check_fixture('''let value visible =
+  Lui_elements.box ~display:(reactive (fun show -> if show then `contents else `none) visible) []
+''', ppx=True, rejected=True, source_rejected=True,
+            expected_diagnostic="NSH reactive display can change between contents and a physical display")
+
+    def test_static_contents_and_physical_visibility_remain_valid(self):
+        self.check_fixture('''let static = Lui_elements.box ~display:`contents []
+let value visible =
+  Ui_parts.string_prop Lui_protocol.DisplayValue
+    ~value:(reactive (fun show -> if show then "block" else "none") visible)
+    (Lui_elements.box [])
+let constructor visible =
+  Lui_elements.box ~display:(reactive (fun show -> if show then `block else `none) visible) []
+let fixed visible =
+  Ui_parts.string_prop Lui_protocol.DisplayValue
+    ~value:(reactive (fun _ -> "contents") visible) (Lui_elements.box [])
+''', ppx=True, rejected=False)
+
+    def test_host_pruning_preserves_other_backend_contents_transitions(self):
+        self.check_fixture('''let value context viewport =
+  if Lui_ui.host context = Lui_protocol.NshHost then
+    Ui_parts.string_prop Lui_protocol.DisplayValue
+      ~value:(reactive (fun width -> if width >= 640. then "block" else "none") viewport)
+      (Lui_elements.box [])
+  else
+    Ui_parts.string_prop Lui_protocol.DisplayValue
+      ~value:(reactive (fun width -> if width >= 640. then "contents" else "none") viewport)
+      (Lui_elements.box [])
+''', ppx=True, rejected=False)
+
+    def test_unknown_display_projection_stays_at_the_dynamic_boundary(self):
+        self.check_fixture('''let value project visible =
+  Ui_parts.string_prop Lui_protocol.DisplayValue
+    ~value:(reactive project visible) (Lui_elements.box [])
+''', ppx=True, rejected=False)
 
     def test_nsh_rejects_a_literal_native_style_grammar_error(self):
         self.check_fixture('let value = Ui_parts.Prop.font_size "not-a-font-size"\n',

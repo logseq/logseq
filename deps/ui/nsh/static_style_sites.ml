@@ -188,9 +188,67 @@ let element expression = match expression.exp_desc with
       end
   | _ -> ()
 
+(* Infer only finite literal return paths of a direct projection. Unknown calls,
+   mutable state and signal values remain deferred to the runtime boundary. *)
+let projection_displays expression =
+  let remaining=ref max_literal_nodes in
+  let rec returns expression =
+    if !remaining=0 then None else begin
+    decr remaining;
+    match literal expression with
+    | Some {exp_desc=Texp_constant (Const_string (value,_,_));_} -> Some [value]
+    | Some {exp_desc=Texp_variant (value,None);_} -> Some [value]
+    | _ -> (match expression.exp_desc with
+      | Texp_function (_,Tfunction_body body) -> returns body
+      | Texp_ifthenelse (condition,yes,Some no) ->
+          (match boolean condition with
+           | Some true -> returns yes
+           | Some false -> returns no
+           | None -> Option.bind (returns yes) (fun yes ->
+               Option.map (fun no -> List.sort_uniq String.compare (yes @ no)) (returns no)))
+      | _ -> None)
+    end in
+  returns expression
+let rec signal_displays expression = match expression.exp_desc with
+  | Texp_apply (fn,arguments) ->
+      (match name fn,args arguments with
+       | "Signal.own_signal",[_;source] -> signal_displays source
+       | "Signal.map",[projection;_] | "Signal.map2",[projection;_;_] ->
+           projection_displays projection
+       | _ -> None)
+  | _ -> None
+let labelled label arguments = List.find_map (function
+  | Labelled actual,Arg value when actual=label -> Some value
+  | Optional actual,Arg {exp_desc=Texp_construct (_,description,[value]);_}
+      when actual=label && description.Data_types.cstr_name="Some" -> Some value
+  | _ -> None) arguments
+let reject_display_transition expression values =
+  if List.mem "contents" values && List.exists ((<>) "contents") values then begin
+    Location.print_report Format.err_formatter
+      (Location.errorf ~loc:expression.exp_loc
+        "NSH reactive display can change between contents and a physical display (%s); use block/none on NSH or remount the structural branch"
+        (String.concat ", " values));
+    exit 2
+  end
+let reactive_display expression = match expression.exp_desc with
+  | Texp_apply (fn,arguments) ->
+      let path=name fn in
+      let display =
+        if path="Ui_parts.string_prop" then
+          (match args (List.filter (fun (label,_) -> label=Nolabel) arguments) with
+           | property::_ when constructor property=Some "DisplayValue" ->
+               labelled "value_signal" arguments
+           | _ -> None)
+        else if String.starts_with ~prefix:"Lui_elements." path then
+          labelled "display_signal" arguments
+        else None in
+      Option.iter (fun signal -> Option.iter (reject_display_transition expression)
+        (signal_displays signal)) display
+  | _ -> ()
+
 let rec iterator = {Tast_iterator.default_iterator with
   expr=(fun self expression ->
-    property expression; element expression;
+    reactive_display expression; property expression; element expression;
     match expression.exp_desc with
     | Texp_ifthenelse (condition,yes,no) ->
         self.expr self condition;
