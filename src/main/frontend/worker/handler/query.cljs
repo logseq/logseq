@@ -242,9 +242,11 @@
 
 (defn- recycled-eids
   "Ids of the recycled roots (they carry :logseq.property/deleted-at) and of
-  everything below them, which carries no deleted-at of its own."
+  everything below them, which carries no deleted-at of its own. Read by
+  attribute (:aevt): :logseq.property/deleted-at is not indexed in every graph
+  (the CLI's), and an :avet read of it throws there."
   [db]
-  (loop [queue (mapv :e (d/datoms db :avet :logseq.property/deleted-at))
+  (loop [queue (mapv :e (d/datoms db :aevt :logseq.property/deleted-at))
          seen (transient #{})]
     (if-let [id (peek queue)]
       (if (contains? seen id)
