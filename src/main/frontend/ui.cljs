@@ -118,7 +118,11 @@
   (into [:> ErrorBoundary opts] children))
 
 (def useInView (gobj/get react-intersection-observer "useInView"))
-(defonce _emoji-init-data ((gobj/get emoji-mart "init") #js {:data emoji-data}))
+(defonce ^:private emoji-init-data
+  (delay ((gobj/get emoji-mart "init") #js {:data emoji-data})))
+
+(defn ensure-emoji-data! []
+  @emoji-init-data)
 
 (defonce icon-size (if (mobile-util/native-platform?) 24 20))
 

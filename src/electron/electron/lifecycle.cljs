@@ -9,3 +9,11 @@
                     (p/then (fn [_] (operation))))]
     (vreset! lifecycle-op next-op)
     next-op))
+
+(defn when-loaded!
+  "Runs f once the window's web contents have finished loading: now when they already have (a main-process reload
+  in development sets up again on a loaded window, whose did-finish-load has already fired), else on did-finish-load."
+  [^js contents f]
+  (if (.isLoading contents)
+    (.once contents "did-finish-load" f)
+    (f)))

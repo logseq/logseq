@@ -1,6 +1,15 @@
 (ns frontend.components.icon-test
-  (:require [cljs.test :refer [deftest is testing]]
+  (:require ["@emoji-mart/data" :as emoji-data]
+            [cljs-bean.core :as bean]
+            [goog.object :as gobj]
+            [cljs.test :refer [deftest is testing]]
             [frontend.components.icon :as icon]))
+
+(deftest deferred-emoji-data-preserves-picker-items-test
+  (let [items @@#'icon/emojis]
+    (is (= (vals (bean/->clj (gobj/get emoji-data "emojis"))) items))
+    (is (identical? items @@#'icon/emojis)
+        "Repeated picker opens reuse the converted dictionary")))
 
 (deftest icon-search-keeps-horizontal-arrows-inside-picker
   (doseq [key ["ArrowLeft" "ArrowRight"]]

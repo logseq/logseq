@@ -191,9 +191,29 @@
                          _ (assert-current!)
                          runtime' (start-daemon! repo opts)]
                    (install! runtime'))))))
-         (p/let [_ (assert-current!)
-                 runtime (start-daemon! repo opts)]
-           (install! runtime)))))))
+         ;; One start per graph at a time: a call that comes while a start is in
+         ;; flight (the startup prestart, then the renderer's own call) waits for
+         ;; it and then takes the reuse path above, or starts again when it failed.
+         ;; Each waiter gets its own deferred: on a rejected promesa promise, a
+         ;; second subscriber's p/catch does not recover (funcool/promesa#172).
+         (if (get-in @state [:starting key])
+           (let [waiter (p/deferred)]
+             (swap! state update-in [:starting key :waiters] conj waiter)
+             (p/let [_ waiter]
+               (ensure-started! manager repo window-id opts)))
+           (let [token #js {}
+                 settle! (fn []
+                           (let [entry (get-in @state [:starting key])]
+                             (when (identical? token (:token entry))
+                               (swap! state update :starting dissoc key)
+                               (doseq [waiter (:waiters entry)]
+                                 (p/resolve! waiter nil)))))]
+             (swap! state assoc-in [:starting key] {:token token :waiters []})
+             (-> (p/let [_ (assert-current!)
+                         runtime (start-daemon! repo opts)]
+                   (install! runtime))
+                 (p/then (fn [runtime] (settle!) runtime))
+                 (p/catch (fn [error] (settle!) (p/rejected error)))))))))))
 
 (defn- parse-runtime-lock
   [{:keys [base-url]}]

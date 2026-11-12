@@ -575,14 +575,16 @@
 
 (defn build-category-map [ks]
   (->> (if (sequential? ks)
-         ks (let [{:keys [ns includes excludes]} ks]
+         ks (let [{:keys [ns includes excludes]} ks
+                  ;; built once per category, not once per shortcut (this runs at load)
+                  ns-names (when ns (set (map #(name %) (if (seqable? ns) (seq ns) [ns]))))
+                  includes (when includes (set includes))
+                  excludes (when (seq excludes) (set excludes))]
               (->> (keys all-built-in-keyboard-shortcuts)
                    (filter (fn [k]
-                             (and (or (and ns (keyword? k)
-                                           (contains? (->> (if (seqable? ns) (seq ns) [ns]) (map #(name %)) (set))
-                                                      (namespace k)))
-                                      (and includes (contains? (set includes) k)))
-                                  (if (not (seq excludes)) true (not (contains? (set excludes) k)))))))))
+                             (and (or (and ns-names (keyword? k) (contains? ns-names (namespace k)))
+                                      (and includes (contains? includes k)))
+                                  (if excludes (not (contains? excludes k)) true)))))))
        (select-keys all-built-in-keyboard-shortcuts)
        (remove (comp :inactive val))
     ;; Convert keyword fns to real fns

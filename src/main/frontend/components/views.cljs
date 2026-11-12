@@ -3427,12 +3427,11 @@
         (db-async/<get-block repo (:block/uuid result) {:children? false})))))
 
 (def ^:private default-view-title-candidates
-  (reduce-kv
-   (fn [acc feature-type title-key]
-     (assoc acc feature-type
-            (set (keep #(get % title-key) (vals dicts/dicts)))))
-   {}
-   default-view-title-key-by-feature-type))
+  {:linked-references (dicts/translation-values :view/linked-references)
+   :unlinked-references (dicts/translation-values :view/unlinked-references)
+   :class-objects (dicts/translation-values :view/all)
+   :property-objects (dicts/translation-values :view/all)
+   :all-pages (dicts/translation-values :view/all)})
 
 (defn display-view-title
   [view]

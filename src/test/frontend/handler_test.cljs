@@ -12,6 +12,50 @@
             [frontend.state :as state]
             [promesa.core :as p]))
 
+(deftest startup-waits-for-ui-after-runtime-failure-test
+  (async done
+    (let [ui (p/deferred)
+          runtime (p/deferred)
+          finished? (atom false)
+          error (js/Error. "worker failed")
+          result (#'handler/startup-ready ui runtime)]
+      (-> result
+          (p/then (fn [_] (is false "Startup should reject")))
+          (p/catch (fn [actual]
+                     (reset! finished? true)
+                     (is (identical? error actual))))
+          (p/finally done))
+      (p/reject! runtime error)
+      (-> (p/resolved nil)
+          (p/then (fn [_]
+                    (is (false? @finished?) "Failure waits for pending UI")
+                    (p/resolve! ui nil)))))))
+
+(deftest startup-waits-for-both-components-test
+  (async done
+    (let [ui (p/deferred)
+          runtime (p/deferred)
+          finished? (atom false)]
+      (-> (#'handler/startup-ready ui runtime)
+          (p/then (fn [_] (reset! finished? true)))
+          (p/finally done))
+      (p/resolve! ui nil)
+      (-> (p/resolved nil)
+          (p/then (fn [_]
+                    (is (false? @finished?) "UI alone is not app readiness")
+                    (p/resolve! runtime nil)))))))
+
+(deftest startup-ui-failure-does-not-wait-for-runtime-test
+  (async done
+    (let [ui (p/deferred)
+          runtime (p/deferred)
+          error (js/Error. "UI failed")]
+      (-> (#'handler/startup-ready ui runtime)
+          (p/then (fn [_] (is false "UI failure must reject startup")))
+          (p/catch (fn [actual] (is (identical? error actual))))
+          (p/finally done))
+      (p/reject! ui error))))
+
 (deftest date-watch-queries-the-journal-only-when-the-day-changes-test
   (let [today (atom "Jul 19th, 2026")
         create-count (atom 0)
