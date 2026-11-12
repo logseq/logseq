@@ -465,3 +465,24 @@ revision compatibility or authorize an update. Adapter primitives can use the
 one-shot optional completion hook from `begin_work` to account for native
 promises without copying task state. Long-lived transport liveness subscriptions
 must be classified separately rather than waited on as finite work.
+
+
+### Native Windows timer wake channel uses the OCaml socketpair primitive
+
+The native Host timer scheduler now uses `Unix.socketpair PF_UNIX SOCK_STREAM`
+on Windows, retaining the existing anonymous pipe on POSIX. Both paths retain
+close-on-exec, nonblocking wake writes and the same select-driven timer worker;
+there is no new polling loop, listener service or application worker.
+
+OCaml 5.5.1's Windows [`nonblock.c`](https://raw.githubusercontent.com/ocaml/ocaml/5.5.1/otherlibs/unix/nonblock.c)
+uses the Winsock nonblocking operation, while its
+[`read_win32.c`](https://raw.githubusercontent.com/ocaml/ocaml/5.5.1/otherlibs/unix/read_win32.c)
+uses socket receive for sockets and blocking ReadFile for pipes. The supported
+[`socketpair_win32.c`](https://raw.githubusercontent.com/ocaml/ocaml/5.5.1/otherlibs/unix/socketpair_win32.c)
+implementation supplies same-process AF_UNIX socket endpoints. Consequently the
+previous pipe could fail at Host module initialization on native Windows and
+could not implement the nonblocking wake drain correctly. Unsupported native
+socketpair environments fail honestly rather than falling back to an unsafe
+pipe. Actual Windows CI now compiles and runs the real Host source to exercise
+initialization, delayed/zero timers, cancellation, wake bursts and mailbox drain;
+this source change alone is not a passed Windows runtime qualification.

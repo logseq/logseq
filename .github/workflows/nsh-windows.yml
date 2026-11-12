@@ -130,6 +130,30 @@ jobs:
             & .\worker-handles.exe 2>&1 | Tee-Object $handleLog
             if ($LASTEXITCODE -ne 0) { throw 'Actual Windows HANDLE fixture failed' }
           } finally { Pop-Location }
+      - name: Native Windows Host timer module and nonblocking wake channel
+        run: |
+          $timerLog = Join-Path $env:GITHUB_WORKSPACE '_build/nsh-ci/windows-host-timers.log'
+          $fixture = Join-Path $env:RUNNER_TEMP 'logseq-nsh-host-timers'
+          New-Item -ItemType Directory -Force $fixture | Out-Null
+          Copy-Item deps/ui/src/contracts/ui_task.ml $fixture
+          Copy-Item deps/ui/src/contracts/ui_task.mli $fixture
+          Copy-Item deps/ui/native/services/host.ml $fixture
+          Copy-Item deps/ui/nsh/tests/fixtures/windows_host_timers.ml $fixture
+          Push-Location $fixture
+          try {
+            opam exec -- ocamlfind ocamlopt -thread -package 'unix,threads.posix,ocaml-signal,mtime.clock.os' -linkpkg `
+              ui_task.mli ui_task.ml host.ml windows_host_timers.ml -o host-timers.exe
+            if ($LASTEXITCODE -ne 0) { throw 'Actual Windows Host timer fixture compilation failed' }
+            $probe = Start-Process -FilePath (Join-Path $fixture 'host-timers.exe') -PassThru -NoNewWindow `
+              -RedirectStandardOutput $timerLog -RedirectStandardError "$timerLog.stderr"
+            if (-not $probe.WaitForExit(15000)) {
+              $probe.Kill()
+              throw 'Actual Windows Host timer fixture did not finish in 15 seconds'
+            }
+            Get-Content $timerLog
+            if (Test-Path "$timerLog.stderr") { Get-Content "$timerLog.stderr" }
+            if ($probe.ExitCode -ne 0) { throw 'Actual Windows Host timer fixture failed' }
+          } finally { Pop-Location }
       - name: Actual application formatting, strict compiler and host tests
         run: |
           cargo fmt --manifest-path deps/ui/nsh/Cargo.toml --check

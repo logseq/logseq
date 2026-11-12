@@ -51,7 +51,13 @@ let timer_next = ref 0
 let timers : (int, timer) Hashtbl.t = Hashtbl.create 16
 let deadlines = ref Timer_deadlines.empty
 let timers_lock = Mutex.create ()
-let timer_read, timer_write = Unix.pipe ~cloexec:true ()
+(* OCaml 5.5.1 implements socketpair on native Windows with AF_UNIX sockets.
+   Its nonblocking/read/select primitives require sockets, not anonymous pipes.
+   Keep the existing POSIX pipe and the same sleeping timer worker elsewhere. *)
+let timer_read, timer_write =
+  if Sys.os_type = "Win32" then
+    Unix.socketpair ~cloexec:true Unix.PF_UNIX Unix.SOCK_STREAM 0
+  else Unix.pipe ~cloexec:true ()
 let () = Unix.set_nonblock timer_read; Unix.set_nonblock timer_write
 let timer_signal = Bytes.make 1 't'
 let timer_time () = Int64.to_float (Mtime_clock.elapsed_ns ()) *. 1e-9
