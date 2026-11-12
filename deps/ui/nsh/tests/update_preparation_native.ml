@@ -2015,8 +2015,8 @@ let native_scalar_string_dismissal () =
       if host=Lui_protocol.NshHost then begin
         ignore (Native_embed.text_changed initial_field (if kind="number" then "246" else "changed"));
         let before= !writes and before_refresh= !refreshes in
-        ignore (Native_embed.dismiss initial_field);
         if cancelable then begin
+          ignore (Native_embed.dismiss initial_field);
           check "actual native Dismiss clears the active string owner before deferred Submit"
             (!Properties_value.active_editor=None && !refreshes=before_refresh+1 && !writes=before);
           ignore (Native_embed.submit initial_field);
@@ -2037,6 +2037,11 @@ let native_scalar_string_dismissal () =
             (Properties_value.has_active_edit context (row kind));
           ignore (Native_embed.dismiss reopened)
         end else begin
+          (match Native_embed.dismiss initial_field with
+           | _ -> failwith "number fields must reject an unauthored Dismiss event"
+           | exception Invalid_argument message ->
+               check "number dismissal is rejected by canonical event admission"
+                 (message="event is unsupported by node kind"));
           check "unhandled number dismissal leaves its ordinary blur owner active"
             (Properties_value.has_active_edit context (row kind) && !writes=before);
           ignore (Native_embed.submit initial_field);
