@@ -1289,3 +1289,8 @@ and retain CSS surface overflow on the other hosts. `css_scroll` is only the CSS
 surface half of that composition; it does not provide native scrolling by itself.
 The backend still rejects unsupported CSS overflow instead of silently clipping
 content or pretending a plain element is scrollable.
+
+Native alert-dialog cards use that bounded Scroll composition. Right-sidebar
+header actions use a horizontal Scroll on NSH; Web keeps its CSS row. Favorites
+and Recent contents borrow the native sidebar's existing Scroll instead of
+adding another CSS overflow owner. Their other hosts retain the original styles.

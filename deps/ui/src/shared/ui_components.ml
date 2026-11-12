@@ -1226,10 +1226,10 @@ let alert_dialog_content ~key ~data_attrs children : t =
       int_of_float (Float.max 0. (Float.min 512. (viewport -. 32.)))) viewport)
     (with_props
     [ Prop.position `relative; Prop.z_index 999
-    ; Prop.max_height_viewport 0.9; Prop.overflow `auto
+    ; Prop.max_height_viewport 0.9
     ; ( Prop.shadow "0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px \
             rgb(0 0 0 / 0.1)" ) ]
-    (column ~key ~gap:16 ~padding:24 ~min_width:0 ~max_width:512 ~corner_radius:8
+    (scroll_column ~key ~gap:16 ~padding:24 ~min_width:0 ~max_width:512 ~corner_radius:8
        ~border_width:1 ~border_color:"hsl(var(--border))"
        ~background:"var(--ls-primary-background-color, var(--lui-c-background))"
        ~style_class:"ui__alert-dialog-content"

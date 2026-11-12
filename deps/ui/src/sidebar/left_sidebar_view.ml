@@ -863,9 +863,10 @@ let content_group st ~key ~class_ ~label ~items_sig ~li_class ~ul_class
              (reactive
                (fun ps ->
                  if ps = [] && not always_bd then Logseq_el.nothing
-                 else
+                 else fun ctx parent ->
                    box ~key:(key ^ "-bd") ~style_class:"bd"
-                     ~data_attrs:[ ("style", "overflow-y:auto") ]
+                     ~data_attrs:(if Lui_ui.host ctx = Lui_protocol.NshHost then []
+                       else [ ("style", "overflow-y:auto") ])
                      [ (list ~key:(key ^ "-ul") ~style_class:ul_class
                          ~data_attrs:
                            [ ( "style"
@@ -878,7 +879,7 @@ let content_group st ~key ~class_ ~label ~items_sig ~li_class ~ul_class
                                   (key ^ "-"
                                    ^ Option.value p.Model.page_uuid
                                        ~default:p.Model.page_title))
-                            ps)) ])
+                            ps)) ] ctx parent)
                items_sig)
            ]
        ])

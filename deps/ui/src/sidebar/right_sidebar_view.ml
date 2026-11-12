@@ -67,15 +67,21 @@ let topbar st =
          "var(--ls-right-sidebar-topbar-color, var(--lx-gray-02, \
           var(--ls-secondary-background-color, #d8e1e8)))"
        ~style_class:"cp__right-sidebar-topbar"
-       [ row ~key:"rs-settings" ~gap:4
-           ~style_class:"cp__right-sidebar-settings hide-scrollbar"
-           ~data_attrs:[ ("style", "margin:0;overflow:auto") ]
-           ([ topbar_btn "contents" (t "page/contents") (fun () ->
+       [ (let children = [ topbar_btn "contents" (t "page/contents") (fun () ->
                   Sidebar_state.open_sticky_item st "contents")
             ; topbar_btn "help" (t "nav/help") (fun () ->
                   Sidebar_state.open_sticky_item st "help")
             ]
-           @ dev_items)
+           @ dev_items in
+          if Lui_ui.host ctx = Lui_protocol.NshHost then
+            scroll ~key:"rs-settings" ~orientation:`horizontal ~grow:1.
+              ~min_width:0 ~height:32
+              ~style_class:"cp__right-sidebar-settings hide-scrollbar"
+              [row ~gap:4 ~cross:`center children]
+          else
+            row ~key:"rs-settings" ~gap:4
+              ~style_class:"cp__right-sidebar-settings hide-scrollbar"
+              ~data_attrs:[ ("style", "margin:0;overflow:auto") ] children)
        ])
     ctx parent
 
