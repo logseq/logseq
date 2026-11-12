@@ -169,6 +169,19 @@ impl Agent {
         self.query("tree")
     }
     fn query(&self, operation: &str) -> Result<Value, String> {
+        self.request(&json!({"op": operation}))
+    }
+    pub(super) fn document(&self, name: &str, payload: Value) -> Result<Value, String> {
+        self.request(&json!({
+            "op":"ext", "selector":"ext:logseq-dom", "identifier":"logseq-dom",
+            "name":"dom-event", "fields":json!({"name":name,"payload":payload.to_string()}).to_string()
+        }))
+    }
+    fn request(&self, request: &Value) -> Result<Value, String> {
+        let operation = request
+            .get("op")
+            .and_then(Value::as_str)
+            .ok_or("agent operation missing")?;
         let mut stream = TcpStream::connect_timeout(&self.0, Duration::from_secs(2))
             .map_err(|error| error.to_string())?;
         stream
@@ -178,7 +191,7 @@ impl Agent {
             .set_write_timeout(Some(Duration::from_secs(2)))
             .map_err(|error| error.to_string())?;
         stream
-            .write_all(format!("{{\"op\":\"{operation}\"}}\n").as_bytes())
+            .write_all(format!("{request}\n").as_bytes())
             .map_err(|error| error.to_string())?;
         let mut reader = BufReader::new(stream).take(MAX_TREE + 1);
         let mut response = Vec::new();

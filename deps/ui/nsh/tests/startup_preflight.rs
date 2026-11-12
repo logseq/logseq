@@ -28,7 +28,24 @@ fn real_application_startup_preflight() -> Result<(), String> {
     if std::env::var(CHILD).as_deref() == Ok("1") {
         return mount_actual_application(None);
     }
-    isolated_process(TEST, false)
+    let mut failures = Vec::new();
+    for surface in std::iter::once(None).chain(
+        startup_surfaces::DIALOG_CASES
+            .iter()
+            .map(|name| Some(*name)),
+    ) {
+        if let Err(error) = isolated_process_for(TEST, false, surface) {
+            failures.push(format!(
+                "surface {}: {error}",
+                surface.unwrap_or("native-navigation")
+            ));
+        }
+    }
+    if failures.is_empty() {
+        Ok(())
+    } else {
+        Err(failures.join("\n\n"))
+    }
 }
 
 #[test]
@@ -158,6 +175,13 @@ fn mount_actual_application(rows: Option<usize>) -> Result<(), String> {
         startup_body::sidebar_ready,
     )?;
     startup_rows::qualify_minor_heaps()?;
+    if let Some(surface) = std::env::var_os(startup_surfaces::CASE_ENV) {
+        let name = surface
+            .to_str()
+            .ok_or("conditional native surface case is not UTF-8")?;
+        startup_surfaces::qualify_dialog(&mut app, name)?;
+        return Ok(());
+    }
     if let Some(count) = rows {
         return startup_rows::qualify(
             &mut app,
@@ -391,6 +415,10 @@ fn wait_for_chrome(
 }
 
 fn isolated_process(test: &str, rows: bool) -> Result<(), String> {
+    isolated_process_for(test, rows, None)
+}
+
+fn isolated_process_for(test: &str, rows: bool, surface: Option<&str>) -> Result<(), String> {
     let nonce = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_err(|e| e.to_string())?
@@ -404,7 +432,14 @@ fn isolated_process(test: &str, rows: bool) -> Result<(), String> {
     }
     let transcript = directory.join("startup.log");
     let mut process_group = None;
-    let result = run_child(&directory, &transcript, &mut process_group, test, rows);
+    let result = run_child(
+        &directory,
+        &transcript,
+        &mut process_group,
+        test,
+        rows,
+        surface,
+    );
     // Only the worker registered beneath our unguessable private root is
     // contacted, and its health response must confirm that exact root first.
     let graceful = stop_owned_workers(&directory.join("root"));
@@ -436,6 +471,7 @@ fn run_child(
     process_group: &mut Option<u32>,
     test: &str,
     rows: bool,
+    surface: Option<&str>,
 ) -> Result<(), String> {
     let output = File::create(transcript).map_err(|e| e.to_string())?;
     let mut command = Command::new(std::env::current_exe().map_err(|e| e.to_string())?);
@@ -456,6 +492,10 @@ fn run_child(
         .stdin(Stdio::null())
         .stdout(output.try_clone().map_err(|e| e.to_string())?)
         .stderr(output);
+    command.env_remove(startup_surfaces::CASE_ENV);
+    if let Some(surface) = surface {
+        command.env(startup_surfaces::CASE_ENV, surface);
+    }
     // Qualify the bridge's actual default independently of the build shell,
     // and a smaller explicit value through the same compiled startup path.
     let overridden = test == "real_application_minor_heap_override";

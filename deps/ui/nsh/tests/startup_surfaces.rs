@@ -1,7 +1,7 @@
 //! Conditional production surfaces mounted by the real compiled OCaml app.
 //! This is native-engine contract coverage, not AppKit raster or hardware input.
 use super::{Duration, Headless, startup_body, startup_rows::Agent, wait_for_chrome};
-use serde_json::Value;
+use serde_json::{Value, json};
 use std::cell::RefCell;
 
 fn healthy(agent: &Agent, step: &str) -> Result<Value, String> {
@@ -240,5 +240,116 @@ pub(super) fn qualify(app: &mut Headless) -> Result<(), String> {
     settings(app, &agent)?;
     search_and_commands(app, &agent)?;
     sidebar_and_pages(app, &agent)?;
+    Ok(())
+}
+
+/// Separate owned children let one failed renderer reveal every independent
+/// deferred body in the same publication attempt, rather than masking the rest.
+pub(super) const CASE_ENV: &str = "LOGSEQ_NSH_CONDITIONAL_SURFACE";
+pub(super) const DIALOG_CASES: &[&str] = &[
+    "new-graph",
+    "login",
+    "import",
+    "export",
+    "sync-server",
+    "publish-server",
+    "graph-open",
+    "graph-remove",
+    "plugins",
+    "quick-add",
+    "rtc-collaborators",
+];
+
+fn selector_for_class(tree: &Value, class: &str) -> Result<String, String> {
+    let mut pending = tree
+        .get("nodes")
+        .and_then(Value::as_array)
+        .ok_or("conditional tree has no nodes")?
+        .iter()
+        .collect::<Vec<_>>();
+    let mut found = None;
+    while let Some(node) = pending.pop() {
+        if node
+            .pointer("/props/style-class")
+            .and_then(Value::as_str)
+            .is_some_and(|classes| classes.split_whitespace().any(|word| word == class))
+        {
+            let id = node
+                .get("id")
+                .and_then(Value::as_u64)
+                .ok_or("conditional node has no id")?;
+            let identifier = node
+                .pointer("/props/accessibility-identifier")
+                .and_then(Value::as_str)
+                .filter(|value| !value.is_empty())
+                .map(str::to_owned)
+                .unwrap_or_else(|| format!("lui-{id}"));
+            if found.replace(format!("id:{identifier}")).is_some() {
+                return Err(format!("conditional class {class} has multiple owners"));
+            }
+        }
+        if let Some(children) = node.get("children").and_then(Value::as_array) {
+            pending.extend(children);
+        }
+    }
+    found.ok_or_else(|| format!("conditional class {class} is not mounted"))
+}
+
+pub(super) fn qualify_dialog(app: &mut Headless, name: &str) -> Result<(), String> {
+    if !DIALOG_CASES.contains(&name) {
+        return Err(format!("unknown conditional native dialog {name}"));
+    }
+    let agent = Agent::discover()?;
+    // Existing document-event carrier and business entry: no production-only
+    // testing endpoint or hand-built substitute for Dialogs_view is added.
+    agent.document("ls:open-dialog", json!({"detail":{"name":name}}))?;
+    let class = format!("ls-dialog-{name}");
+    let failure = RefCell::new(None::<String>);
+    let last = RefCell::new(String::new());
+    let result = wait_for_chrome(
+        app,
+        &format!("native dialog {name}"),
+        Duration::from_secs(20),
+        |screen| {
+            let tree = match agent.tree() {
+                Ok(tree) => tree,
+                Err(error) => {
+                    *failure.borrow_mut() = Some(error);
+                    return true;
+                }
+            };
+            let selector = match selector_for_class(&tree, &class) {
+                Ok(selector) => selector,
+                Err(error) => {
+                    *last.borrow_mut() = error;
+                    return false;
+                }
+            };
+            let native = screen
+                .layout_nodes()
+                .into_iter()
+                .find(|node| node.test_id.as_deref() == selector.strip_prefix("id:"));
+            *last.borrow_mut() = format!("{selector}: {native:#?}");
+            native.is_some_and(|node| {
+                !node.hidden
+                    && node.bounds.size.width.0 > 0.0
+                    && node.bounds.size.height.0 > 0.0
+                    && node.bounds.origin.x.0 < 1440.0
+                    && node.bounds.origin.y.0 < 900.0
+                    && node.bounds.origin.x.0 + node.bounds.size.width.0 > 0.0
+                    && node.bounds.origin.y.0 + node.bounds.size.height.0 > 0.0
+            })
+        },
+    );
+    if let Some(error) = failure.into_inner() {
+        return Err(format!("dialog {name}: {error}"));
+    }
+    result.map_err(|error| format!("{error}\n{}", last.into_inner()))?;
+    healthy(&agent, &format!("dialog {name} native mount"))?;
+    agent.document("ls:close-dialog", json!({}))?;
+    let tree = healthy(&agent, &format!("dialog {name} closed"))?;
+    if selector_for_class(&tree, &class).is_ok() {
+        return Err(format!("dialog {name} retained its open model after close"));
+    }
     Ok(())
 }

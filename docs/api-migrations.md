@@ -15,6 +15,14 @@ headless native-engine contract evidence; AppKit rendering, hardware input,
 platform motion, editor selection/drag, and unexercised application surfaces still
 require their own qualification. No application API migration is required.
 
+The same publication test additionally mounts the known graph creation, login,
+import/export, sync/publish URL, graph open/remove, plugins, quick-add and
+collaborator dialog bodies through the existing `logseq-dom` document carrier.
+Each body owns a fresh private child process, graph root and worker; all scenario
+failures are collected in one publication attempt. Branch selection through this
+existing semantic event does not establish native trigger hit testing or the
+business completion of login/import/export/publishing actions.
+
 ## NSH uses the bundled Inter faces before its first layout
 
 The native runner and its actual startup qualification now register the existing
