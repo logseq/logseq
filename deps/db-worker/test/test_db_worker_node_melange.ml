@@ -570,13 +570,13 @@ let () =
             ~bound_repo:"heap-diagnostics" ~host:"127.0.0.1" ~port:(Some 1234)
             ~owner_source:"lui" ~root_dir:"/private/heap-diagnostics" in
           Db_worker_node.native_gc_stats_fn := None;
-          Fest.expect |> Fest.equal (Wire.get "native-gc" (health ())) None;
+          Fest.expect |> Fest.deep_equal (Wire.get "native-gc" (health ())) None;
           let calls = ref 0 in
           let sample = kvs [ "major-heap-capacity-bytes", Wire.Int 4096 ] in
           Db_worker_node.native_gc_stats_fn := Some (fun () -> incr calls; sample);
           let result = health () in
-          Fest.expect |> Fest.equal (Wire.get "native-gc" result) (Some sample);
-          Fest.expect |> Fest.equal (Wire.get "repo" result)
+          Fest.expect |> Fest.deep_equal (Wire.get "native-gc" result) (Some sample);
+          Fest.expect |> Fest.deep_equal (Wire.get "repo" result)
             (Some (Wire.String "heap-diagnostics"));
           Fest.expect |> Fest.equal !calls 1
       in
@@ -597,19 +597,19 @@ let () =
           | Some owner -> Wire.get "shared" owner
           | None -> failwith "Missing native worker process origin" in
         Db_worker_node.native_app_owner := None;
-        Fest.expect |> Fest.equal (Wire.get "nsh-app-ownership" (health ())) None;
+        Fest.expect |> Fest.deep_equal (Wire.get "nsh-app-ownership" (health ())) None;
         configure ();
-        Fest.expect |> Fest.equal (shared ()) (Some (Wire.Bool false));
+        Fest.expect |> Fest.deep_equal (shared ()) (Some (Wire.Bool false));
         Db_worker_node.observe_native_app_request ~path:"/healthz" ~meth:"GET" ~session:None;
         Db_worker_node.observe_native_app_request ~path:"/v1/invoke" ~meth:"OPTIONS" ~session:None;
         Db_worker_node.observe_native_app_request ~path:"/v1/events" ~meth:"GET" ~session:(Some session);
-        Fest.expect |> Fest.equal (shared ()) (Some (Wire.Bool false));
+        Fest.expect |> Fest.deep_equal (shared ()) (Some (Wire.Bool false));
         List.iter (fun foreign ->
           configure ();
           Db_worker_node.observe_native_app_request ~path:"/v1/invoke" ~meth:"POST" ~session:foreign;
-          Fest.expect |> Fest.equal (shared ()) (Some (Wire.Bool true));
+          Fest.expect |> Fest.deep_equal (shared ()) (Some (Wire.Bool true));
           Db_worker_node.observe_native_app_request ~path:"/v1/invoke" ~meth:"POST" ~session:(Some session);
-          Fest.expect |> Fest.equal (shared ()) (Some (Wire.Bool true)))
+          Fest.expect |> Fest.deep_equal (shared ()) (Some (Wire.Bool true)))
           [None; Some "another-app-session"]
       in
       match run () with
@@ -633,7 +633,10 @@ let () =
         let* _ = promise_of_task (Http_server.close server) in
         Js.Promise.resolve () in
       let run () =
-        let* port = promise_of_task (Http_server.listen server ~host:"127.0.0.1" ~port:0) in
+        let* _ = promise_of_task (Http_server.listen server ~host:"127.0.0.1" ~port:0) in
+        let port = match Http_server.address_port server with
+          | Some port when port > 0 && port <= 65535 -> port
+          | _ -> failwith "HTTP ownership fixture requires an actual bound TCP port" in
         let* own_status, _ = http_request ~host:"127.0.0.1" ~port ~meth:"POST"
           ~path:"/v1/invoke" ~headers:["x-LOGSEQ-app-session", session] () in
         Fest.expect |> Fest.equal own_status 200;
