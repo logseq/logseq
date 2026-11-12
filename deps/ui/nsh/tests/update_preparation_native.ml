@@ -780,6 +780,42 @@ let native_block_click_mounts_shared_editor () =
       (List.exists (fun (operation,payload) -> operation="dom-op"
         && String.starts_with ~prefix:"set-input-focus\n" payload) !requests))
 
+let native_graph_menu_contract () =
+  let backend : Lui_protocol.backend = {
+    backend_profile=Lui_protocol.profile Lui_protocol.MacOS Lui_protocol.NshHost;
+    apply_batch=(fun _ -> true)} in
+  let registry = Lui_extension.registry () in
+  Logseq_el.register_all registry;
+  Logseq_codemirror.register registry; Logseq_editor.register registry;
+  let initial = {Model.initial with repo=Some "menu-contract";repos=["menu-contract"]} in
+  let app = Lui_app.create_with_extensions backend registry initial
+    (fun _ next -> next)
+    (fun context model _ ->
+      let state value = Signal.state context.Lui_ui.ui_scheduler value in
+      let sidebar : Sidebar_state.t = {
+        favorites=state [];home_page=state None;favorite_drop=state None;recents=state [];
+        nav_checked=state [];nav_tag_titles=state [];items=state [];open_menu=state "";
+        groups_collapsed=state [];left_width=state 246.;right_fraction=state 0.3;
+        viewport_w=state 1440.} in
+      Left_sidebar_view.graphs_selector sidebar model) in
+  Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app)) (fun () ->
+    ignore (Lui_app.start app); ignore (Lui_app.flush app);
+    let runtime = Lui_app.runtime app in
+    let attachments () = Hashtbl.fold (fun node kind found ->
+      if kind=Lui_protocol.ContextMenu then node::found else found)
+      runtime.Lui_runtime.mounted_nodes [] in
+    let attachment = match attachments () with
+      | [node] -> node
+      | _ -> failwith "native graph selector must have exactly one attached Menu" in
+    check "actual native graph menu mounts direct canonical items without contract errors"
+      (Hashtbl.fold (fun _ kind found -> found || kind=Lui_protocol.MenuItem)
+        runtime.Lui_runtime.mounted_nodes false);
+    ignore (Lui_app.send app {initial with repo=Some "another-menu-contract";
+      repos=["menu-contract";"another-menu-contract"]});
+    ignore (Lui_app.flush app);
+    check "actual native graph updates retain their original attached Menu identity"
+      (attachments ()=[attachment]))
+
 let () =
   let owner = Thread.id (Thread.self ()) in
   let assert_owner () =
@@ -806,4 +842,5 @@ let () =
   native_click_delivery_follows_the_active_host_profile ();
   native_add_button_events_reach_the_shared_document_owner ();
   native_block_click_mounts_shared_editor ();
+  native_graph_menu_contract ();
   print_endline "PASS real native save/abort/worker/timer races and post-release draft safety"

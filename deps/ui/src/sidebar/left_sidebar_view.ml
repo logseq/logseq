@@ -223,7 +223,7 @@ let lp_menu st =
 (* cljs repo.cljs repos-dropdown-content: "Switch to:" header (only
    when >1 repo), the switch list minus the current graph, then the
    quick-actions footer. Remote rows render only for a logged-in user. *)
-let repos_menu_content st (m : Model.t) : t =
+let repos_menu_choices (m : Model.t) =
   let cur = Option.value m.Model.repo ~default:"" in
   let by_seen a b =
     compare
@@ -244,6 +244,10 @@ let repos_menu_content st (m : Model.t) : t =
     List.sort by_seen
       (List.filter (fun r -> r <> cur) m.Model.repos)
   in
+  switch_repos, remote
+
+let repos_menu_content st (m : Model.t) : t =
+  let switch_repos, remote = repos_menu_choices m in
   let n_repos = List.length m.Model.repos + List.length remote in
   let close () = Sidebar_state.close_menu st in
   let repo_item repo =
@@ -262,12 +266,7 @@ let repos_menu_content st (m : Model.t) : t =
         ignore (Graphs_ops.download_remote ~name:n ~uuid ~e2ee))
       ()
   in
-  let action key label icn act : t =
-   fun ctx parent ->
-    (if Lui_ui.host ctx = Lui_protocol.NshHost then
-       Menu_item.el ~key ~label ~icon:(Icons.name_ref icn)
-         ~on_click:(fun () -> close (); act ()) ()
-     else
+  let action key label icn act =
     (* cljs repos-footer: ghost button rows — icon + label, w-full *)
     Ui_components.with_props
       [ Ui_components.Prop.opacity 0.7
@@ -277,7 +276,7 @@ let repos_menu_content st (m : Model.t) : t =
       ~on_press:(fun _ ->
         close ();
         act ())
-        [ icon_ ~size:18 icn; text ~key:"t" ~value:label [] ])) ctx parent
+        [ icon_ ~size:18 icn; text ~key:"t" ~value:label [] ])
   in
   column ~key:"wrap"
         [ (if n_repos <= 1 then Logseq_el.nothing
@@ -313,6 +312,31 @@ let repos_menu_content st (m : Model.t) : t =
             ; action "qa-all" (I18n.t "graph/all-graphs") "layout-2" (fun () ->
                   Ui_services.nav_set_hash
                     (Runtime.nav_hash "#/graphs")) ]) ]
+
+(* Native Menu owns scrolling and selection. Direct canonical items avoid
+   introducing a layout container under the strict context-menu contract. *)
+let native_repos_menu_items st model =
+  let local, remote = repos_menu_choices model in
+  let close () = Sidebar_state.close_menu st in
+  let local_item repo =
+    Menu_item.el ~key:("rp-" ^ repo) ~label:(Graphs_view.short_name repo)
+      ~on_click:(fun () -> close (); ignore (Graphs_ops.navigate_journal repo)) () in
+  let remote_item (name, uuid, e2ee, _role) =
+    Menu_item.el ~key:("rr-" ^ uuid) ~label:name
+      ~icon:(Icons.name_ref (if e2ee then "lock" else "cloud"))
+      ~on_click:(fun () -> close ();
+        ignore (Graphs_ops.download_remote ~name ~uuid ~e2ee)) () in
+  let action key label icon act =
+    Menu_item.el ~key ~label:(t label) ~icon:(Icons.name_ref icon)
+      ~on_click:(fun () -> close (); act ()) () in
+  List.map local_item local @ List.map remote_item remote
+  @ (if local=[] && remote=[] then [] else [Menu_item.separator ~key:"qa-separator"])
+  @ [action "qa-new" "graph/create-db" "database-plus"
+       (fun () -> Dialogs_state.open_ "new-graph");
+     action "qa-imp" "import/notes" "database-import"
+       (fun () -> Ui_services.nav_set_hash "#/import");
+     action "qa-all" "graph/all-graphs" "layout-2"
+       (fun () -> Ui_services.nav_set_hash (Runtime.nav_hash "#/graphs"))]
 
 let repos_menu st (ms : Model.t Signal.signal) : t =
   Ui_components.menu_surface (popover ~key:"repos-menu" ~anchor:`below ~anchor_alignment:`start
@@ -885,7 +909,7 @@ let plugins_toolbar (ms : Model.t Signal.signal) : t =
    shade-mask + resizer; these pieces fill its .wrap skeleton *)
 
 (* cljs repo/graphs-selector: icon + graph display name + selector chevron *)
-let graphs_selector st (ms : Model.t Signal.signal) : t =
+let graphs_selector_body st (ms : Model.t Signal.signal) : t =
  fun ctx parent ->
   let native = Lui_ui.host ctx = Lui_protocol.NshHost in
   let name_of (m : Model.t) =
@@ -961,14 +985,22 @@ let graphs_selector st (ms : Model.t Signal.signal) : t =
                        [ context_menu ~key:"repos-menu"
                            ~accessibility_identifier:"graphs-selector-menu"
                            ~on_dismiss:(fun _ -> Sidebar_state.close_menu st)
-                           [ reactive
-                               ~equal:(fun (a : Model.t) b -> a.repo=b.repo && a.repos=b.repos)
-                               (repos_menu_content st) ms ] ]
+                           (native_repos_menu_items st (Signal.get ms)) ]
                      else []))
         ; if native then Logseq_el.nothing else if_ ~test:(reactive (fun menu -> menu = "repos") (Signal.value st.Sidebar_state.open_menu))
             (repos_menu st ms)
         ] ] ctx parent
 ;;
+
+let graphs_selector st (ms : Model.t Signal.signal) : t =
+ fun context parent ->
+  if Lui_ui.host context <> Lui_protocol.NshHost then
+    graphs_selector_body st ms context parent
+  else
+    (reactive (fun _ -> graphs_selector_body st ms)
+       (reactive (fun (model : Model.t) ->
+          model.repo, model.repos, Rtc_flows.logged_in (), !Graphs_ops.remote_graphs) ms))
+      context parent
 
 let contents (ms : Model.t Signal.signal) : t =
   let st = Sidebar_state.ensure ms in
