@@ -141,14 +141,18 @@
   [db parent-uuids]
   (into {}
         (map (fn [parent-uuid]
-               (let [children (block-handler/open-children-tree
-                               db parent-uuid children-subtree-node-limit)
-                     eager-uuids (block-handler/document-order-uuids
-                                  children parent-uuid children-eager-block-limit)
-                     {:keys [blocks]} (block-handler/canonical-blocks db eager-uuids)]
-                 [[:children parent-uuid]
-                  (merge (common/children-slots children)
-                         (common/block-slots blocks))])))
+               [[:children parent-uuid]
+                (if-let [children (block-handler/open-children-tree
+                                   db parent-uuid children-subtree-node-limit)]
+                  (let [eager-uuids (block-handler/document-order-uuids
+                                     children parent-uuid children-eager-block-limit)
+                        {:keys [blocks]} (block-handler/canonical-blocks db eager-uuids)]
+                    (merge (common/children-slots children)
+                           (common/block-slots blocks)))
+                  ;; Delete still has an in-flight [:children] snapshot.
+                  ;; Throwing here rejects the whole get-render-snapshots
+                  ;; batch and crashes the app.
+                  {[:children parent-uuid] {:missing? true}})]))
         parent-uuids))
 
 (defn render-snapshots

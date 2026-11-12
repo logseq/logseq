@@ -319,13 +319,15 @@
          :block/order order
          :block/collapsed? (true? (:block/collapsed? attrs))}))))
 
+(defn- parent-id-by-uuid
+  [db parent-uuid]
+  (:e (first (d/datoms db :avet :block/uuid parent-uuid))))
+
 (defn- resolve-parent-id
   [db parent-uuid]
-  (let [parent-id (:e (first (d/datoms db :avet :block/uuid parent-uuid)))]
-    (when-not parent-id
+  (or (parent-id-by-uuid db parent-uuid)
       (fail-render-read! "Missing direct-children parent"
-                         {:parent-uuid parent-uuid}))
-    parent-id))
+                         {:parent-uuid parent-uuid})))
 
 (defn- parent-membership
   [db parent-uuid parent-id parent-recycled?]
@@ -357,18 +359,19 @@
   "Membership for expanded nodes of the subtree, visited in document order (a
    node's children come before its following siblings) and bounded to at most
    `node-limit` expanded nodes. Nodes beyond the limit produce no [:children]
-   slot; the renderer loads them on demand when their rows mount."
+   slot; the renderer loads them on demand when their rows mount. Returns nil
+   when `root-uuid` is gone so a just-deleted parent does not fail the
+   snapshot batch."
   ([db root-uuid]
    (open-children-tree db root-uuid nil))
   ([db root-uuid node-limit]
    (when-not (uuid? root-uuid)
      (fail-render-read! "Invalid direct-children parent UUID"
                         {:parent-uuid root-uuid}))
-   (let [root-id (resolve-parent-id db root-uuid)
-         remaining0 (or node-limit ##Inf)]
+   (when-let [root-id (parent-id-by-uuid db root-uuid)]
      (loop [pending [[root-id root-uuid (recycled-chain? db root-id)]]
             seen #{}
-            remaining remaining0
+            remaining (or node-limit ##Inf)
             children {}]
        (if-let [[parent-id parent-uuid parent-recycled?] (when (pos? remaining)
                                                            (peek pending))]
@@ -409,7 +412,9 @@
 
 (defn open-block-tree
   [db root-uuid]
-  (let [children (open-children-tree db root-uuid)
+  (let [children (or (open-children-tree db root-uuid)
+                     (fail-render-read! "Missing block-tree root"
+                                        {:root-uuid root-uuid}))
         block-uuids (into #{root-uuid}
                           (mapcat (fn [{:keys [items]}] (map first items)))
                           (vals children))

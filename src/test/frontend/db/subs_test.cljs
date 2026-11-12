@@ -1119,6 +1119,126 @@
                   (is (= [resource-key] @calls))
                   (unsubscribe))))))))
 
+(defn- missing-children-patch
+  [basis-rev parent-uuid]
+  {:basis-rev basis-rev
+   :slots {[:children parent-uuid] {:missing? true}}})
+
+(deftest missing-children-parent-snapshot-is-missing-not-an-error-test
+  (async done
+         (let [parent-uuid (random-uuid)]
+           (finish-async!
+            done
+            (p/with-redefs [subs/<load-children
+                            (fn [_graph-id requested-parent]
+                              (p/resolved
+                               (missing-children-patch 1 requested-parent)))]
+              (let [unsubscribe (subs/subscribe-children! parent-uuid (fn []))]
+                (p/let [_ (p/delay 0)]
+                  (is (= {:status :missing}
+                         (subs/children-snapshot parent-uuid))
+                      "A missing parent must not surface as a renderer error.")
+                  (unsubscribe))))))))
+
+(deftest deleted-parent-tombstones-children-without-reload-test
+  (async done
+         (let [parent-uuid (random-uuid)
+               child-uuid (random-uuid)
+               calls (atom 0)]
+           (finish-async!
+            done
+            (p/with-redefs [subs/<load-children
+                            (fn [_graph-id requested-parent]
+                              (swap! calls inc)
+                              (p/resolved
+                               (children-patch 1 requested-parent 1
+                                               [[child-uuid "a"]])))]
+              (let [unsubscribe (subs/subscribe-children! parent-uuid (fn []))]
+                (p/let [_ (p/delay 0)
+                        _ (is (= {:status :ready :value [child-uuid]}
+                                 (subs/children-snapshot parent-uuid)))
+                        _ (subs/apply-delta!
+                           (delta 2 {:deleted {parent-uuid {:rev 2}}}))
+                        _ (p/delay 0)]
+                  (is (= 1 @calls)
+                      "Deleting a parent must not refetch its children.")
+                  (is (= {:status :missing}
+                         (subs/children-snapshot parent-uuid)))
+                  (unsubscribe))))))))
+
+(deftest restored-parent-rebuilds-missing-children-from-patch-test
+  (async done
+         (let [parent-uuid (random-uuid)
+               child-uuid (random-uuid)
+               calls (atom 0)]
+           (finish-async!
+            done
+            (p/with-redefs [subs/<load-children
+                            (fn [_graph-id requested-parent]
+                              (swap! calls inc)
+                              (p/resolved
+                               (children-patch @calls requested-parent @calls
+                                               [[child-uuid "a"]])))]
+              (let [unsubscribe (subs/subscribe-children! parent-uuid (fn []))]
+                (p/let [_ (p/delay 0)
+                        _ (is (= {:status :ready :value [child-uuid]}
+                                 (subs/children-snapshot parent-uuid)))
+                        _ (subs/apply-delta!
+                           (delta 2 {:deleted {parent-uuid {:rev 2}}}))
+                        _ (p/delay 0)
+                        _ (is (= 1 @calls))
+                        _ (is (= {:status :missing}
+                                 (subs/children-snapshot parent-uuid)))
+                        _ (subs/apply-delta!
+                           (delta 3
+                                  {:blocks {parent-uuid
+                                            (block parent-uuid 3 "restored")}
+                                   :children
+                                   {parent-uuid
+                                    {:base-rev 2
+                                     :rev 3
+                                     :remove []
+                                     :upsert [[child-uuid "a"]]}}}))
+                        _ (p/delay 0)]
+                  (is (= 1 @calls)
+                      "A restore patch must rebuild membership without a refetch.")
+                  (is (= {:status :ready :value [child-uuid]}
+                         (subs/children-snapshot parent-uuid)))
+                  (unsubscribe))))))))
+
+(deftest restored-parent-reloads-missing-children-without-patch-test
+  (async done
+         (let [parent-uuid (random-uuid)
+               child-uuid (random-uuid)
+               calls (atom 0)]
+           (finish-async!
+            done
+            (p/with-redefs [subs/<load-children
+                            (fn [_graph-id requested-parent]
+                              (let [n (swap! calls inc)]
+                                (p/resolved
+                                 (children-patch (if (= n 1) 1 3)
+                                                 requested-parent n
+                                                 [[child-uuid "a"]]))))]
+              (let [unsubscribe (subs/subscribe-children! parent-uuid (fn []))]
+                (p/let [_ (p/delay 0)
+                        _ (is (= {:status :ready :value [child-uuid]}
+                                 (subs/children-snapshot parent-uuid)))
+                        _ (subs/apply-delta!
+                           (delta 2 {:deleted {parent-uuid {:rev 2}}}))
+                        _ (p/delay 0)
+                        _ (is (= 1 @calls))
+                        _ (subs/apply-delta!
+                           (delta 3
+                                  {:blocks {parent-uuid
+                                            (block parent-uuid 3 "restored")}}))
+                        _ (p/delay 0)]
+                  (is (= 2 @calls)
+                      "Restoring a parent without a membership patch must refetch children.")
+                  (is (= {:status :ready :value [child-uuid]}
+                         (subs/children-snapshot parent-uuid)))
+                  (unsubscribe))))))))
+
 (deftest deleted-resource-owner-becomes-missing-without-reload-test
   (async done
          (let [block-uuid (random-uuid)

@@ -2762,6 +2762,48 @@
            (-> response ldb/write-transit-str ldb/read-transit-str))
         "Isolated view errors must stay transit-encodable.")))
 
+(deftest render-snapshots-missing-children-parent-does-not-fail-the-batch-test
+  (let [{:keys [conn journal-a]} (render-resource-fixture)
+        missing-uuid (random-uuid)
+        journals-key [:journals]
+        response (render-engine/render-snapshots
+                  @conn
+                  {:blocks []
+                   :children [missing-uuid journal-a]
+                   :resources [journals-key]}
+                  {})]
+    (is (true? (get-in response [:slots [:children missing-uuid] :missing?]))
+        "A deleted or unknown parent must degrade to a missing children slot.")
+    (is (vector? (get-in response [:slots [:children journal-a] :items]))
+        "A missing parent must not fail sibling children in the same snapshot.")
+    (is (vector? (get-in response [:slots [:resource journals-key] :value]))
+        "A missing parent must not fail sibling resources in the same snapshot.")
+    (is (= #{[:children missing-uuid]}
+           (get-in response [:groups [:children missing-uuid]])))
+    (is (= response
+           (-> response ldb/write-transit-str ldb/read-transit-str))
+        "Missing children slots must stay transit-encodable.")))
+
+(deftest render-snapshots-retracted-children-parent-does-not-fail-the-batch-test
+  (let [{:keys [conn journal-a]} (render-resource-fixture)
+        journals-key [:journals]
+        parent-id (:e (first (d/datoms @conn :avet :block/uuid journal-a)))
+        before (render-engine/render-snapshots
+                @conn
+                {:blocks [] :children [journal-a] :resources []}
+                {})]
+    (is (seq (get-in before [:slots [:children journal-a] :items])))
+    (d/transact! conn [[:db/retractEntity parent-id]])
+    (let [response (render-engine/render-snapshots
+                    @conn
+                    {:blocks []
+                     :children [journal-a]
+                     :resources [journals-key]}
+                    {})]
+      (is (true? (get-in response [:slots [:children journal-a] :missing?]))
+          "Retracting a parent after Recycle delete-permanently must not throw.")
+      (is (vector? (get-in response [:slots [:resource journals-key] :value]))))))
+
 (deftest query-resource-injects-built-in-rules-and-merges-user-rules-test
   (when-let [api (render-resource-api)]
     (let [{:keys [conn resource-block reference-block]}

@@ -41,6 +41,67 @@
     (w/click "#left-menu")
     (w/wait-for "#left-sidebar.is-open")))
 
+(defn- accept-dialog!
+  [action]
+  (let [dialog* (atom nil)
+        handler (reify Consumer
+                  (accept [_ dialog]
+                    (reset! dialog* {:type (.type dialog)
+                                     :message (.message dialog)})
+                    (.accept dialog)))]
+    (.onDialog (w/get-page) handler)
+    (try
+      (action)
+      (finally
+        (.offDialog (w/get-page) handler)))
+    @dialog*))
+
+(defn- page-console-logs
+  ([]
+   (page-console-logs 0))
+  ([offset]
+   (->> @custom-report/*pw-page->console-logs*
+        vals
+        (apply concat)
+        (drop offset)
+        (map str))))
+
+(defn- console-log-count
+  []
+  (count (page-console-logs)))
+
+(defn- assert-app-did-not-crash!
+  ([]
+   (assert-app-did-not-crash! 0))
+  ([log-offset]
+   (assert/assert-is-hidden (util/get-by-text "Something went wrong" false))
+   (let [logs (page-console-logs log-offset)]
+     (is (not-any? #(string/includes? % "Missing direct-children parent") logs)
+         (str "Worker must not throw Missing direct-children parent: "
+              (pr-str logs))))))
+
+(defn- create-invalid-advanced-query!
+  []
+  (b/new-block "")
+  (util/input-command "advanced query")
+  (when-not (w/visible? "pre.CodeMirror-line")
+    (w/click ".ls-query-setting"))
+  (w/click (.first (w/-query "pre.CodeMirror-line")))
+  (k/press "ControlOrMeta+a")
+  (util/input "{}")
+  (k/esc)
+  (util/exit-edit))
+
+(defn- permanently-delete-recycle-root!
+  [page-name]
+  (let [root (recycle-root page-name)]
+    (assert/assert-is-visible root)
+    (let [dialog (accept-dialog!
+                  #(w/click (.locator root "button:text('Delete')")))]
+      (is (= "confirm" (:type dialog)))
+      (is (string/includes? (:message dialog) "cannot be undone")))
+    root))
+
 (deftest recycle-restore-removes-row-immediately-test
   (let [page-name (str "recycle-restore-" (random-uuid))]
     (p/new-page page-name)
@@ -61,25 +122,42 @@
     (b/save-block "recycle delete content")
     (p/delete-page page-name)
     (open-recycle!)
-    (let [root (recycle-root page-name)]
-      (assert/assert-is-visible root)
-      (let [dialog* (atom nil)
-            handler (reify Consumer
-                      (accept [_ dialog]
-                        (reset! dialog* {:type (.type dialog)
-                                         :message (.message dialog)})
-                        (.accept dialog)))]
-        (.onDialog (w/get-page) handler)
-        (try
-          (w/click (.locator root "button:text('Delete')"))
-          (finally
-            (.offDialog (w/get-page) handler)))
-        (is (= "confirm" (:type @dialog*)))
-        (is (string/includes? (:message @dialog*) "cannot be undone")))
+    (let [root (permanently-delete-recycle-root! page-name)]
       (assert/assert-have-count root 0)
       (assert/assert-have-count recent-item 0)
       (w/wait-for-not-visible
        (loc/filter ".ui__toast.success" :has-text page-name)))))
+
+(deftest recycle-delete-invalid-advanced-query-does-not-crash-app-test
+  (testing "permanently deleting a page with an invalid advanced query stays on Recycle"
+    (let [page-name (str "recycle-invalid-query-" (random-uuid))
+          log-offset (console-log-count)]
+      (p/new-page page-name)
+      (create-invalid-advanced-query!)
+      (assert-app-did-not-crash! log-offset)
+      (assert/assert-is-visible (util/get-by-text "Query error:" false))
+      (util/refresh-until-graph-loaded)
+      (p/goto-page page-name)
+      (util/refresh-until-graph-loaded)
+      (assert-app-did-not-crash! log-offset)
+      (p/delete-page page-name)
+      (open-recycle!)
+      (let [root (recycle-root page-name)
+            control (.locator root ".block-control")]
+        (assert/assert-is-visible root)
+        (when (pos? (.count control))
+          (w/click (.first control))))
+      (let [root (permanently-delete-recycle-root! page-name)]
+        ;; Query resources debounce reloads by 2s; wait past that so a
+        ;; leftover snapshot fetch cannot crash the app after the row is gone.
+        (util/wait-timeout 2500)
+        (assert-app-did-not-crash! log-offset)
+        (assert/assert-is-visible ".ls-recycle-page-content")
+        (assert/assert-have-count root 0)
+        (w/wait-for-not-visible
+         (loc/filter ".ui__toast.success" :has-text page-name))
+        (assert-app-did-not-crash! log-offset)
+        (custom-report/screenshot (w/get-page) "recycle-invalid-query-after-delete")))))
 
 (defn- open-block-context-menu!
   []
