@@ -2182,3 +2182,22 @@ successful structured clipboard snapshot. Keyboard Copy keeps its selection.
 Downstream toolbar callers that need master behavior should invoke
 `Editor_actions.copy_selection_and_clear ()`; ordinary copy callers retain
 `Editor_actions.copy_selection_text ()`.
+
+
+### Native nonediting selection Escape ownership
+
+The application-private `native-keymap` snapshot now requires a boolean
+`block-selection`, published only while a block selection exists without an
+active editor. Changes to this context republish the snapshot even when user
+shortcut bindings have the same revision. The Rust consumer validates the field
+and installs plain Escape with NSH `When::NotEditing` only for that context.
+Unselected documents gain no Escape shortcut; focused form fields and block
+editors keep their native keys. This does not bind the normally unbound
+`editor/escape-editing` command or change Web/Apple/Android key registration.
+
+The SDK appends its topmost overlay Cancel binding after component bindings.
+Therefore Escape first dismisses selection actions, and a subsequent Escape
+clears the remaining selection once the native overlay has retired. Palette and
+keyboard-capture contexts reuse their existing deduplicated Escape path. Keep
+producer and consumer together when updating the application-private snapshot;
+there is no new LUI public wire field or downstream component parameter.

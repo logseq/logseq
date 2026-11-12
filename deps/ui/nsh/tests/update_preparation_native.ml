@@ -882,6 +882,11 @@ let native_block_click_mounts_shared_editor () =
       ["pointerdown",Block_selection.pointerdown;"mousedown",Editor_keys.on_mousedown;
        "click",Editor_keys.on_click;"copy",Editor_keys.on_copy];
     ignore (Lui_app.start app); ignore (Lui_app.flush app);
+    let expect_selection_keymap label expected =
+      !(Native_embed.publish_native_keymap) ();
+      check label (match !Native_embed.last_native_keymap with
+        | Some (owner, _, _, _, _, selection) -> owner == app && selection = expected
+        | None -> false) in
     let node = Hashtbl.fold (fun id props found ->
       if Lui_protocol.Property_map.find_opt Lui_protocol.AccessibilityIdentifier props
         = Some (Lui_protocol.StringValue ("block-content-" ^ uuid)) then Some id else found)
@@ -906,6 +911,7 @@ let native_block_click_mounts_shared_editor () =
       runtime.Lui_runtime.runtime_extension_nodes None |> Option.get in
     check "an immediately resolved native title releases its exact structure owner"
       (not !Editor_state.structure_pending);
+    expect_selection_keymap "an active native editor does not publish nonediting Escape ownership" false;
     (* This fixture has no native geometry service. The click above proves
        mounting; the ordered conduit case below isolates structure completion
        from its separate initial-click geometry request. *)
@@ -959,6 +965,10 @@ let native_block_click_mounts_shared_editor () =
     ignore (Lui_app.flush app);
     check "ending the editor activation rejects a late file upload"
       (not (Editor_actions.asset_upload_current upload));
+    Editor_actions.select_single uuid;
+    expect_selection_keymap "a nonediting block selection publishes native Escape ownership" true;
+    Editor_actions.clear_selection ();
+    expect_selection_keymap "clearing selection republishes native key ownership without a keymap revision" false;
     (* Exercise the actual native clipboard request/ack facade. Dismissing
        this toolbar is not itself a successful or cancelled clipboard write. *)
     let begin_toolbar_copy () =

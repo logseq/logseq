@@ -62,7 +62,7 @@ let () =
     | None -> true)
 
 let last_native_keymap :
-    ((Model.t, Action.t) Lui_app.reducer_app * int * bool * bool * bool) option ref = ref None
+    ((Model.t, Action.t) Lui_app.reducer_app * int * bool * bool * bool * bool) option ref = ref None
 
 (* A palette view is immutable. Idle drains must not flatten its complete
    result groups just to re-read the highlighted item's copy context. *)
@@ -97,9 +97,11 @@ let () = publish_native_keymap := (fun () ->
       let revision = Keymap_data.revision () in
       let palette, copy_reference = native_palette_context () in
       let capture = Keyboard_capture.active () in
+      let block_selection = Editor_state.editing () = None && Editor_state.selection_active () in
       let unchanged = match !last_native_keymap with
-        | Some (owner, previous, p, c, copy) ->
-            owner == app && previous = revision && p = palette && c = capture && copy = copy_reference
+        | Some (owner, previous, p, c, copy, selection) ->
+            owner == app && previous = revision && p = palette && c = capture
+            && copy = copy_reference && selection = block_selection
         | None -> false in
       if not unchanged then begin
         let bindings = Keymap_data.current_items () |> Keymap_data.unique_rows
@@ -117,10 +119,11 @@ let () = publish_native_keymap := (fun () ->
                                 "scope", `String scope] :: items)
                       items (String.split_on_char ' ' sequence)) items sequences
               | Commands_data.Disabled | Commands_data.Unbound -> items) [] |> List.rev in
-        last_native_keymap := Some (app, revision, palette, capture, copy_reference);
+        last_native_keymap := Some (app, revision, palette, capture, copy_reference, block_selection);
         platform_request ("native-keymap\n" ^ Yojson.Safe.to_string
           (`Assoc ["revision", `Int revision; "palette", `Bool palette;
                    "capture", `Bool capture; "palette-copy-reference", `Bool copy_reference;
+                   "block-selection", `Bool block_selection;
                    "bindings", `List bindings]))
       end
   | Some _ | None -> ())

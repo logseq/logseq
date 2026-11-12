@@ -59,6 +59,8 @@ struct Snapshot {
     capture: bool,
     #[serde(rename = "palette-copy-reference")]
     palette_copy_reference: bool,
+    #[serde(rename = "block-selection")]
+    block_selection: bool,
     bindings: Vec<Binding>,
 }
 #[derive(Clone, PartialEq, Eq, Deserialize)]
@@ -316,6 +318,12 @@ fn install(
                 },
             );
         }
+        // Core appends its topmost overlay Cancel binding after component
+        // bindings. A visible toolbar therefore dismisses first; selection
+        // Escape is reachable only after that native overlay retires.
+        if snapshot.block_selection && !snapshot.palette && editor.is_none() {
+            add(parse("escape").expect("fixed selection key"), 0);
+        }
         if snapshot.palette {
             for key in [
                 "up", "down", "home", "end", "pageup", "pagedown", "enter", "escape",
@@ -377,7 +385,7 @@ mod tests {
     #[derive(Clone)]
     struct Observed(Arc<Mutex<Vec<Value>>>);
     fn snapshot(stroke: &str, revision: u64) -> String {
-        json!({"revision":revision,"palette":false,"capture":false,"palette-copy-reference":false,"bindings":[
+        json!({"revision":revision,"palette":false,"capture":false,"palette-copy-reference":false,"block-selection":false,"bindings":[
             {"stroke":stroke,"command":"go/search","scope":"global-prevent-default"},
             {"stroke":"t","command":"ui/toggle-left-sidebar","scope":"global-non-editing-only"},
             {"stroke":"l","command":"ui/toggle-left-sidebar","scope":"global-non-editing-only"},
@@ -449,6 +457,193 @@ mod tests {
                 .is_some()
         );
     }
+    fn selection_snapshot(selected: bool, palette: bool) -> String {
+        json!({"revision":1,"palette":palette,"capture":false,
+            "palette-copy-reference":false,"block-selection":selected,"bindings":[]})
+        .to_string()
+    }
+
+    #[component]
+    fn SelectionEscapeProbe() -> impl IntoElement {
+        let observed = engine_context::<Observed>().unwrap();
+        let keyboard = GlobalKeyboard::mount();
+        let output = observed.0.clone();
+        keyboard.send.set(Some(Rc::new(move |value| {
+            output
+                .lock()
+                .unwrap()
+                .push(json!({"owner":"bridge","event":value}));
+        })));
+        keyboard.replace(&selection_snapshot(false, false)).unwrap();
+        let popup = signal(false);
+        let form_value = signal(String::new());
+        let editor_value = signal(String::new());
+        let ready = signal(true);
+        let composing = signal(false);
+        let editor_ref = element_ref();
+        let focus_ref = editor_ref;
+        let blur_ref = editor_ref;
+        let form_output = observed.0.clone();
+        let editor_output = observed.0.clone();
+        let popup_output = observed.0.clone();
+        view()
+            .flex_col()
+            .w(px(400.0))
+            .h(px(400.0))
+            .child(
+                nsh_base::button()
+                    .on_press(move || {
+                        keyboard.replace(&selection_snapshot(true, false)).unwrap();
+                    })
+                    .child(text("Select blocks")),
+            )
+            .child(
+                nsh_base::button()
+                    .on_press(move || {
+                        keyboard.replace(&selection_snapshot(false, false)).unwrap();
+                    })
+                    .child(text("Clear selection")),
+            )
+            .child(
+                nsh_base::button()
+                    .on_press(move || {
+                        keyboard.replace(&selection_snapshot(true, false)).unwrap();
+                        popup.set(true);
+                    })
+                    .child(text("Open selection actions")),
+            )
+            .child(
+                nsh_base::button()
+                    .on_press(move || {
+                        keyboard.replace(&selection_snapshot(true, true)).unwrap();
+                    })
+                    .child(text("Open palette")),
+            )
+            .child(
+                nsh_core::element::input()
+                    .label("Ordinary form text")
+                    .value(move || form_value.get())
+                    .on_change(move |value: &str| form_value.set(value.to_owned()))
+                    .on_key_press(move |key: &str| {
+                        form_output
+                            .lock()
+                            .unwrap()
+                            .push(json!({"owner":"form","key":key}));
+                    }),
+            )
+            .child(
+                nsh_core::element::input()
+                    .label("Block editor text")
+                    .element_ref(&editor_ref)
+                    .value(move || editor_value.get())
+                    .on_change(move |value: &str| editor_value.set(value.to_owned()))
+                    .on_focus(move || {
+                        let node = u64::from(focus_ref.node().expect("mounted editor input"));
+                        keyboard.focus_editor(node, 1, ready, composing, Rc::new(|| {}));
+                    })
+                    .on_blur(move || {
+                        if let Some(node) = blur_ref.node() {
+                            keyboard.blur_editor(u64::from(node), 1);
+                        }
+                    })
+                    .on_key_press(move |key: &str| {
+                        editor_output
+                            .lock()
+                            .unwrap()
+                            .push(json!({"owner":"editor","key":key}));
+                    }),
+            )
+            .child(when(popup, move || {
+                let output = popup_output.clone();
+                overlay()
+                    .on_cancel(move || {
+                        output.lock().unwrap().push(json!({"owner":"popover"}));
+                        popup.set(false);
+                    })
+                    .child(text("Native selection actions"))
+            }))
+    }
+
+    #[test]
+    fn native_selection_escape_is_scoped_and_topmost_cancel_keeps_precedence() {
+        let observed = Observed(Arc::new(Mutex::new(Vec::new())));
+        let mut config = EngineConfig::new(Root::of::<SelectionEscapeProbe>());
+        config.context = EngineContext::default().with(observed.clone());
+        config.environment.os = nsh_core::platform::Os::MacOs;
+        let mut app = Headless::start(config).unwrap();
+        app.wait_for("Select blocks").unwrap();
+        app.press_key("escape").unwrap();
+        assert!(
+            observed.0.lock().unwrap().is_empty(),
+            "no selection installs no Escape"
+        );
+        app.press("Select blocks").unwrap();
+        app.press_key("escape").unwrap();
+        assert_eq!(
+            observed.0.lock().unwrap().as_slice(),
+            [json!({"owner":"bridge","event":{
+            "key":"Escape","ctrlKey":false,"metaKey":false,"shiftKey":false,
+            "altKey":false,"isComposing":false,"repeat":false}})]
+        );
+        observed.0.lock().unwrap().clear();
+        app.press("Open selection actions").unwrap();
+        app.wait_for("Native selection actions").unwrap();
+        app.press_key("escape").unwrap();
+        app.wait_until(
+            "topmost actions retired",
+            std::time::Duration::from_secs(1),
+            |screen| !screen.shows("Native selection actions"),
+        )
+        .unwrap();
+        assert_eq!(
+            observed.0.lock().unwrap().as_slice(),
+            [json!({"owner":"popover"})],
+            "one Escape cancels the popover without also clearing its selection"
+        );
+        app.press_key("escape").unwrap();
+        assert_eq!(
+            observed.0.lock().unwrap().len(),
+            2,
+            "next Escape reaches selection exactly once"
+        );
+        assert_eq!(observed.0.lock().unwrap()[1]["owner"], json!("bridge"));
+        app.press("Clear selection").unwrap();
+        observed.0.lock().unwrap().clear();
+        app.press_key("escape").unwrap();
+        assert!(
+            observed.0.lock().unwrap().is_empty(),
+            "clearing selection removes its Escape"
+        );
+        app.press("Select blocks").unwrap();
+        app.type_text("label:Ordinary form text", "kept").unwrap();
+        observed.0.lock().unwrap().clear();
+        app.press_key("escape").unwrap();
+        assert_eq!(
+            observed.0.lock().unwrap().as_slice(),
+            [json!({"owner":"form","key":"Escape"})],
+            "a focused form retains native Escape even while blocks are selected"
+        );
+        observed.0.lock().unwrap().clear();
+        app.press("Select blocks").unwrap();
+        app.type_text("label:Block editor text", "draft").unwrap();
+        observed.0.lock().unwrap().clear();
+        app.press_key("escape").unwrap();
+        assert_eq!(
+            observed.0.lock().unwrap().as_slice(),
+            [json!({"owner":"editor","key":"Escape"})],
+            "a focused block editor owns Escape without a second bridge dispatch"
+        );
+        observed.0.lock().unwrap().clear();
+        app.press("Open palette").unwrap();
+        app.press_key("escape").unwrap();
+        assert_eq!(
+            observed.0.lock().unwrap().len(),
+            1,
+            "palette and selection deduplicate Escape"
+        );
+        assert_eq!(observed.0.lock().unwrap()[0]["owner"], json!("bridge"));
+    }
+
     #[test]
     fn native_key_scope_and_editor_fallback_ownership_keep_one_dispatcher() {
         let key = Keystroke {
