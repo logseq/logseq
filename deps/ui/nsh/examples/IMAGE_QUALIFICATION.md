@@ -11,7 +11,8 @@ The background runner uses the production LUI Renderer and NSH Image on the
 actual macOS surface. Its private loopback server serves an owned PNG through a
 redirect, records every request, and rejects any Referer header. A second URL
 must decode and deliver a second native Load while keeping the same mounted
-Image. The runner checks nonempty native bounds, writes `result.json`, and quits
+Image. It authors the gallery's eager policy, empty alt and 220x192 dimensions
+and checks those native bounds. The runner writes `result.json` and quits
 its own process. It neither activates an application nor changes display power.
 The evidence and native data/cache directories stay outside the repository.
 

@@ -124,8 +124,10 @@ mod macos {
                         .measure()
                         .await
                         .ok_or("loaded Image has no bounds")?;
-                    if bounds.frame.size.width <= px(0.0) || bounds.frame.size.height <= px(0.0) {
-                        return Err("loaded Image has empty bounds".to_owned());
+                    if (bounds.frame.size.width - px(220.0)).abs() > px(1.0)
+                        || (bounds.frame.size.height - px(192.0)).abs() > px(1.0)
+                    {
+                        return Err(format!("gallery Image dimensions differ: {bounds:?}"));
                     }
                     let requests = probe.requests.lock().map_err(|e| e.to_string())?.clone();
                     let paths: Vec<_> =
@@ -136,7 +138,7 @@ mod macos {
                     let result = json!({"ok":true,"qualification":"native-image-http",
                         "background":true,"transport":"NSH macOS installed transport",
                         "checks":["redirect","no-referer-on-every-hop","two-native-loads",
-                            "source-replacement","retained-native-image","nonempty-bounds"],
+                            "source-replacement","retained-native-image","gallery-dimensions"],
                         "requests":requests,"nativeImage":format!("{native:?}"),
                         "unqualified":["pixels","OCaml-gallery-interaction","Linux","Windows"]});
                     std::fs::write(
@@ -160,9 +162,10 @@ mod macos {
             {"op":"create-node","id":1,"kind":"column"},
             {"op":"create-node","id":2,"kind":"image"},
             {"op":"set-prop","id":2,"property":"url","value":format!("{}/redirect",probe.origin)},
-            {"op":"set-prop","id":2,"property":"width","value":128},
-            {"op":"set-prop","id":2,"property":"height","value":64},
-            {"op":"set-prop","id":2,"property":"image-fit","value":"fit"},
+            {"op":"set-prop","id":2,"property":"width","value":220},
+            {"op":"set-prop","id":2,"property":"height","value":192},
+            {"op":"set-prop","id":2,"property":"loading","value":"eager"},
+            {"op":"set-prop","id":2,"property":"alt","value":""},
             {"op":"insert-child","parent":1,"child":2,"index":0}
         ])).and_then(|patch|renderer.apply(patch)).and_then(|()|renderer.set_root(1));
         if let Err(error) = result {
@@ -273,7 +276,7 @@ mod macos {
                 platform::AppOptions {
                     background: true,
                     title: "Image transport qualification".into(),
-                    size: (240, 160),
+                    size: (260, 240),
                     keep_size: true,
                     data_dir: Some(directory.join("native-data")),
                     cache: platform::CacheOptions::at(platform::CacheLocation::Dir(
