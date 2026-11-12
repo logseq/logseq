@@ -79,10 +79,27 @@
      title]
     (or title (:block/title block))))
 
+(defn- edit-guard-passes?
+  "An edit guard set for this block in :editor/edit-guard (by the undo/redo
+  cursor restore) decides, once and right before the editor moves, whether the
+  edit still applies: the user may have selected or typed while the block loaded."
+  [block]
+  (let [{:keys [block-uuid ok?] :as guard} (state/get-state :editor/edit-guard)]
+    (if (and guard (= block-uuid (:block/uuid block)))
+      (do (state/set-state! :editor/edit-guard nil)
+          (boolean (ok?)))
+      true)))
+
 (defn- edit-loaded-block!
   [repo block pos {:keys [custom-content tail-len save-code-editor?] :as opts}]
-  (if (ldb/recycled? block)
+  (cond
+    (not (edit-guard-passes? block))
+    nil
+
+    (ldb/recycled? block)
     (notification/show! (t :storage.recycle/readonly) :warning)
+
+    :else
     (do
       (when save-code-editor?
         (state/pub-event! [:editor/save-code-editor]))

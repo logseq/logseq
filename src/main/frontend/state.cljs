@@ -218,10 +218,9 @@
       :editor/latest-shortcut                nil
 
       :history/paused?                       false
-      ;; our own undo/redo is in flight, and the editing block's title the
-      ;; pipeline held back meanwhile ([block-uuid title])
-      :history/request-pending?              false
-      :history/held-editing-title            nil
+      ;; {:block-uuid :ok?}: the undo/redo cursor restore's last check before
+      ;; the editor moves (frontend.handler.block/edit-guard-passes?)
+      :editor/edit-guard                     nil
       :editor/cursor-range                   nil
       :editor/container-id                   nil
       :editor/next-edit-block                nil
