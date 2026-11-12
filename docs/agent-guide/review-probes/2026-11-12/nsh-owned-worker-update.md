@@ -1,6 +1,7 @@
 # Actual owned-worker update shutdown qualification
 
-Status: stage-two native macOS qualification passed. Installation remains disabled.
+Status: native macOS protocol and real two-worker rollback qualification passed.
+Installation remains disabled.
 
 ## Revisions and commands
 
@@ -64,3 +65,38 @@ qualify saving/quiescing all application workers as one update transaction,
 restoring transports after partial shutdown, installer admission, package
 replacement, signing or relaunch. The ordinary update action still refuses
 installation after its existing save/abort preparation path.
+
+## Production coordinator follow-up
+
+The same driver was extended at application `008398cb3c` and executed successfully
+with the same native worker digest above. LUI was `414ef098` for the associated
+production code; this native OCaml fixture does not exercise LUI's Rust renderer.
+The original protocol checks still run in their own fresh contained process.
+The additional coordinator process starts two concurrent actual owned workers,
+stores and queries a distinct durable page in each, and uses the real
+`Native_embed.update_worker_lifecycle` with an actual `Worker_client` and SSE.
+
+The complete preparation proves both captured children exited cleanly before
+`prepared: true`. Abort then replaces both, restores the same client/message
+owner, acknowledges SSE and performs finite reads of the original durable data.
+
+The next preparation pauses only after the first real stop has completed and
+its exact exit has been proved. At this boundary the Python parent independently
+checks that A is closed and unlocked, while B remains alive, locked and sealed.
+Cancellation then prevents dispatch of the second stop. Recovery replaces only
+A, aborts B's seal without replacing B, restores the captured active transport,
+and again reads both durable values. This boundary wrapper changes no exit or
+management result; there is no simulated worker shutdown.
+
+The complete command exited successfully, reporting `stage2Qualified: true`,
+`coordinatorQualified: true`, and `installerEnabled: false` in
+`/tmp/logseq-real-multiworker-update.log`. All fixture processes were contained
+and cleaned; the installed developer frontend and worker remained running.
+The separate native admission runner also passed deterministic ordering,
+recovery-failure retry, readiness-only retry, and retired-owner fence cases.
+
+This closes the macOS two-worker full/partial rollback seam. It does not qualify
+actual editor saving through an installed application update, transport failure
+during physical replacement, crash/retirement recovery, Windows/Linux, public
+HTTPS download/install actions or relaunch. Those remain required gates before
+enabling production installation.
