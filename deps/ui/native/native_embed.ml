@@ -659,14 +659,14 @@ let editor_keydown_payload node fields =
     | Some (Lui_protocol.StringValue value) -> Js.Json.JString value
     | _ -> Js.Json.JString "" in
   let boolean name = match Lui_protocol.String_map.find_opt name fields with
-    | Some (Lui_protocol.BoolValue value) -> Js.Json.JBool value
-    | _ -> Js.Json.JBool false in
+    | Some (Lui_protocol.BoolValue value) -> Js.Json.boolean value
+    | _ -> Js.Json.boolean false in
   Js.Json.JObject
     [ "nodeId", Js.Json.JNumber (float_of_int node)
     ; "key", string "key"; "code", string "code"
     ; "shiftKey", boolean "shift"; "altKey", boolean "alt"
     ; "metaKey", boolean "meta"; "ctrlKey", boolean "ctrl"
-    ; "repeat", boolean "repeat"; "isComposing", Js.Json.JBool false ]
+    ; "repeat", boolean "repeat"; "isComposing", Js.Json.boolean false ]
 
 let extension_event node identifier name values =
   with_entry_lock (fun () ->

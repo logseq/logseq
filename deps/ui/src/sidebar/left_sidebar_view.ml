@@ -663,7 +663,7 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key : t =
        ~on_pointer_leave:(fun _ -> hover false)
        ~opacity:(reactive (fun menu -> if menu = "lp-" ^ lp_ref then 1. else 0.8)
                     (Signal.value st.Sidebar_state.open_menu))
-       ~background:(reactive (fun (drop, menu) ->
+       ~background:(reactive (fun drop menu ->
            if menu = "lp-" ^ lp_ref then
              "var(--lx-gray-04, var(--ls-quaternary-background-color))"
            else match drop with
@@ -707,7 +707,7 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key : t =
             ; Ui_components.Prop.inset_top 0.
             ; Ui_components.Prop.inset_right 0. ]
             (column ~key:(key ^ "-actions") ~style_class:"sidebar-page-actions-slot"
-               ~display:(reactive (fun (over, menu) ->
+               ~display:(reactive (fun over menu ->
                    if over || menu = "lp-" ^ lp_ref then `block else `none)
                    (Signal.value hovered) (Signal.value st.Sidebar_state.open_menu))
                [ Ui_components.with_props
