@@ -111,6 +111,19 @@ let fixed visible =
     ~value:(reactive project visible) (Lui_elements.box [])
 ''', ppx=True, rejected=False)
 
+    def test_native_time_dismissal_is_rejected_before_launch(self):
+        self.check_fixture('''let value = Lui_elements.input ~kind:`time ~text:"12:30"
+  ~on_dismiss:(fun _ -> ()) []
+''', rejected=True,
+            expected_diagnostic="NSH TimeField does not expose dismiss-enabled")
+
+    def test_native_text_dismissal_and_other_target_time_branch_are_valid(self):
+        self.check_fixture('''let value context =
+  if Lui_ui.host context = Lui_protocol.NshHost then
+    Lui_elements.text_field ~on_dismiss:(fun _ -> ()) []
+  else Lui_elements.input ~kind:`time ~on_dismiss:(fun _ -> ()) []
+''', rejected=False)
+
     def test_nsh_rejects_a_literal_native_style_grammar_error(self):
         self.check_fixture('let value = Ui_parts.Prop.font_size "not-a-font-size"\n',
             rejected=True, expected_diagnostic='unsupported font-size="not-a-font-size"')

@@ -1976,6 +1976,91 @@ let native_menu_scope_retention () =
       (Platform.location_hash ()=expected);
     check "native menu invariant was inspected across actual publications" (!publications>5))
 
+let native_scalar_string_dismissal () =
+  let previous_app= !Native_embed.current_app and previous_model= !Runtime.read_model
+  and previous_flush= !Runtime.app_flush and previous_worker= !Runtime.worker
+  and previous_editing= !Editor_state.st
+  and previous_active= !Properties_value.active_editor
+  and previous_pending= !Properties_value.pending_edit
+  and previous_close= !Properties_value.close_editor
+  and previous_overlays= !Properties_state.overlays
+  and previous_view_overlays= !Properties_state.view_overlays_state in
+  let writes=ref 0 and refreshes=ref 0 in
+  let initial={Model.initial with repo=Some "scalar-cancel-owner"} in
+  let context : Properties_value.ctx={owner_key="scalar-cancel";block_uuid="scalar-owner";
+    block_id=Some 77;refresh=(fun () -> incr refreshes);is_page=false;class_schema=false} in
+  let row kind=Wire.Map [Wire.Keyword "property-id",Wire.Keyword "fixture/scalar";
+    Wire.Keyword "property",Wire.Map [Wire.Keyword "logseq.property/type",Wire.Keyword kind];
+    Wire.Keyword "value",(if kind="number" then Wire.Int 137 else Wire.String "original")] in
+  let run kind host =
+    let backend : Lui_protocol.backend={
+      backend_profile=Lui_protocol.profile Lui_protocol.MacOS host;apply_batch=(fun _ -> true)} in
+    Properties_value.set_pending_edit ~block_uuid:context.block_uuid ~ident:"fixture/scalar";
+    let app=Lui_app.create backend initial (fun model (_ : Action.t) -> model)
+      (fun _ _ _ -> Properties_value.scalar_edit_cell ~jump_target:false context (row kind)) in
+    Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app)) (fun () ->
+      Native_embed.current_app:=Some app;
+      Runtime.app_flush:=(fun () -> ignore (Lui_app.flush app));
+      ignore (Lui_app.start app);ignore (Lui_app.flush app);
+      let runtime=Lui_app.runtime app in
+      let field ()=Hashtbl.fold (fun node node_kind found ->
+        if node_kind=Lui_protocol.TextField then Some node else found)
+        runtime.Lui_runtime.mounted_nodes None |> Option.get in
+      let props node=Hashtbl.find runtime.Lui_runtime.runtime_properties node in
+      let initial_field=field () in
+      let cancelable=host=Lui_protocol.NshHost && kind="string" in
+      check "only actual native string drafts author the cancellation capability"
+        (Lui_protocol.Property_map.find_opt Lui_protocol.DismissEnabled (props initial_field)
+          =(if cancelable then Some (Lui_protocol.BoolValue true) else None));
+      if host=Lui_protocol.NshHost then begin
+        ignore (Native_embed.text_changed initial_field (if kind="number" then "246" else "changed"));
+        let before= !writes and before_refresh= !refreshes in
+        ignore (Native_embed.dismiss initial_field);
+        if cancelable then begin
+          check "actual native Dismiss clears the active string owner before deferred Submit"
+            (!Properties_value.active_editor=None && !refreshes=before_refresh+1 && !writes=before);
+          ignore (Native_embed.submit initial_field);
+          !Properties_value.close_editor ();
+          check "retired native blur and close callbacks cannot save the canceled string" (!writes=before);
+          let button=Hashtbl.fold (fun node node_props found ->
+            if Lui_protocol.Property_map.find_opt Lui_protocol.StyleClass node_props
+              =Some (Lui_protocol.StringValue "pv-scalar") then Some node else found)
+            runtime.Lui_runtime.runtime_properties None |> Option.get in
+          ignore (Native_embed.press button);
+          let reopened=field () in
+          check "a real value-button reopen starts from the original controlled value"
+            (reopened<>initial_field
+             && Lui_protocol.Property_map.find_opt Lui_protocol.TextValue (props reopened)
+                =Some (Lui_protocol.StringValue "original"));
+          ignore (Native_embed.dismiss initial_field);
+          check "late dismissal cannot cancel the replacement editor"
+            (Properties_value.has_active_edit context (row kind));
+          ignore (Native_embed.dismiss reopened)
+        end else begin
+          check "unhandled number dismissal leaves its ordinary blur owner active"
+            (Properties_value.has_active_edit context (row kind) && !writes=before);
+          ignore (Native_embed.submit initial_field);
+          check "ordinary native number blur still commits exactly once" (!writes=before+1)
+        end
+      end)
+  in
+  Fun.protect ~finally:(fun () ->
+    Native_embed.current_app:=previous_app;Runtime.read_model:=previous_model;
+    Runtime.app_flush:=previous_flush;Runtime.worker:=previous_worker;
+    Editor_state.st:=previous_editing;Properties_value.active_editor:=previous_active;
+    Properties_value.pending_edit:=previous_pending;Properties_value.close_editor:=previous_close;
+    Properties_state.overlays:=previous_overlays;
+    Properties_state.view_overlays_state:=previous_view_overlays) (fun () ->
+    Editor_state.st:=None;Properties_state.overlays:=[];Properties_state.view_overlays_state:=None;
+    Runtime.read_model:=(fun () -> initial);
+    Runtime.worker:=Some {Worker_client.invoke_fn=(fun method_ _ ->
+      if method_="thread-api/apply-outliner-ops" then incr writes;
+      Js.Promise.resolve Wire.Nil);on_message=(fun _ _ -> ());dead=Js.Promise.liveness ();
+      capture_restore_fn=(fun () -> fun () -> Js.Promise.resolve ())};
+    run "string" Lui_protocol.NshHost;
+    run "number" Lui_protocol.NshHost;
+    run "string" Lui_protocol.GenericHost)
+
 let native_file_request_lifetimes () =
   let previous_host= !Host.host_op and previous_nsh= !Browser_ui.native_dialogs in
   let gate=Update_admission.application in
@@ -2402,6 +2487,7 @@ let () =
   native_wide_reading_column ();
   native_popup_placement_contract ();
   native_controlled_field_resets ();
+  native_scalar_string_dismissal ();
   native_file_request_lifetimes ();
   native_entry_admission ();
   editor_keyboard_capture_order ();

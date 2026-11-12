@@ -3,8 +3,8 @@
    Each cell is a semantic control per property type (web master's
    cell structure kept where it maps):
    - text/url:    a ghost button showing the display text; press swaps
-                  in an inline text_field (Enter commits — the LUI
-                  event set has no blur event yet, recorded in NOTES)
+                  in an inline text_field (Enter/blur commit; native
+                  string cancellation discards the captured draft)
    - number:      same, commit parses Float
    - checkbox:    LUI checkbox; toggle writes Bool
    - date/datetime: ghost button opens an anchored popover with
@@ -580,6 +580,14 @@ let scalar_edit_cell ?(jump_target = true) ctx row : t =
                   set_edit_buffer ctx row t
               | _ -> ())
             ~on_submit:(fun _ -> commit true)
+            ?on_dismiss:(if Lui_ui.host edit_context = Lui_protocol.NshHost
+                && D.row_type row = "string" then
+              Some (fun _ ->
+                if !live && Runtime.signal_get editing && has_active_edit ctx row
+                   && not (S.overlay_open ()) then (
+                  Signal.set buffer initial;
+                  commit false))
+              else None)
             []) edit_context edit_parent)
      ])
     context parent

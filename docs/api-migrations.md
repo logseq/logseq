@@ -2242,3 +2242,27 @@ there is no SDK change, extra input buffer, per-character delay or synthetic
 replay. Web/Apple/Android registrations and user shortcut defaults are unchanged.
 The focused native Input still owns composition, while its existing composing
 signal suspends application bindings. Downstream callers need no API migration.
+
+## Native scalar string cancellation
+
+Native string property fields now opt into canonical input `on_dismiss`.
+Cancellation clears the captured active edit owner and editing state before a
+later native blur could submit the draft. The original value remains unchanged;
+reopening starts from that original value. Number fields retain their existing
+Escape-to-commit behavior through native blur submission. The Web window-keydown
+handler remains unchanged and receives no duplicate dismissal callback.
+
+For application text fields with cancelable drafts, use the input callback and
+keep the application as the owner of the reset:
+
+```ocaml
+Lui_elements.text_field ~text:draft ~submit_on_blur:true
+  ~on_dismiss:(fun _ -> cancel_owned_draft ()) []
+```
+
+Actual native style admission now captures statically present input dismissal
+callbacks without executing them. NSH ``input ~kind:`time`` uses TimeField, whose
+public API does not expose cancellation; an authored callback fails the actual
+native preflight rather than being silently ignored. Other maintained backend
+branches are pruned according to the actual native target as before. Dynamic
+values retain provider validation.
