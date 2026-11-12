@@ -116,8 +116,10 @@ batch. The GTK/Windows native hosts and complete UI integration remain in progre
 The engine candidate also supplies logical character-range selection and area
 PNG encoding. Selection copies characters by index and obtains rectangles from
 PDFium's `segments_subset(start, count)`; it never calls a rectangle's text
-extractor to assemble the copied text. Unmapped Unicode is an explicit selection
-error, not invented replacement text. Search-hit output carries native match rectangles; the search request
+extractor to assemble the copied text. An absent Unicode scalar is a selection
+error. This does not yet establish rejection of PDFium Unicode-mapping errors:
+the pinned wrapper has a separately audited boolean-inversion issue, recorded in
+`portable-pdf-source-boundaries.md`. Search-hit output carries native match rectangles; the search request
 identifies the query once, without duplicating it in every hit; it does not mislabel rectangle-extracted text as an
 exact logical match. The private probe checks that selecting the authored marker
 copies exactly that marker and returns highlight rectangles.
@@ -213,9 +215,11 @@ handle. Owned RGBA tiles become GdkMemoryTextures; logical PDF glyph indices,
 selection feedback, native text contents, caret and selection bounds share the
 same captured PageText. Native TextBuffer/TextIter supplies Unicode character,
 word and sentence operations, without introducing a second text-layout engine or
-ASCII word splitter. Native text is read-only. An unmapped PDF glyph is exposed
-as a replacement character for accessibility; the engine continues to reject an
-exact copy request containing unmapped Unicode, rather than inventing copied text.
+ASCII word splitter. Native text is read-only. An absent Unicode scalar is
+exposed as a replacement character for accessibility and rejected for exact
+engine copying. PDFium's separate Unicode-mapping-error flag is not yet checked;
+the pinned wrapper inversion and required native evidence remain explicit gates
+in `portable-pdf-source-boundaries.md`.
 
 The widget fences document epoch, render revision, page and dimensions before
 accepting pixels/text. It bounds retained textures to eight/32 MiB and checks
