@@ -12,6 +12,10 @@ captured storage and child after independently proving clean exit. A lost stop
 acknowledgement remains insufficient; the exact retained child token must produce
 `WEXITED 0`. Conflicting origins or attachments are preserved and rejected. A
 successful retry verifies its recorded replacement instead of spawning again.
+The replacement origin, exact child token and endpoint are recorded before its
+first health probe. Transient 503 or transport failure retries within a finite
+background deadline; later abort attempts can verify the same child again.
+Unpublished startup remains unproven and cannot spawn another replacement.
 
 Before stopping workers, capture
 `let resume = Worker_client.capture_restore_after_update worker`. On rollback,

@@ -543,6 +543,25 @@ let verify_update_workers ~fetch snapshot =
             inspect_update_worker ~key ~origin body
         | _ -> failwith ("Update preparation cannot verify the current worker: " ^ repo)) snapshot
 
+(* Port publication can precede graph readiness. Only transient readiness and
+   transport failures retry; a different process or storage fails immediately. *)
+let wait_for_ready_update_worker ~timeout ~check_current ~fetch ~key ~origin =
+  if not (Float.is_finite timeout) || timeout < 0. then
+    invalid_arg "Invalid worker restoration readiness timeout";
+  let started = Mtime_clock.elapsed_ns () in
+  let rec wait () =
+    check_current ();
+    match fetch ~port:origin.port ~path:"/healthz" with
+    | Some (200, body) -> inspect_update_worker ~key ~origin body
+    | Some (503, _) | None ->
+        if Int64.to_float (Int64.sub (Mtime_clock.elapsed_ns ()) started) *. 1e-9 >= timeout then
+          failwith "Restored worker readiness is unproven after its finite deadline";
+        Thread.delay 0.01;
+        wait ()
+    | Some _ -> failwith "Restored worker refused its readiness check"
+  in
+  wait ()
+
 let capture_update_workers () =
   let promise, resolve, reject = Js.Promise.pending () in
   ignore (Thread.create (fun () ->
@@ -885,7 +904,8 @@ end = struct
     process : Child_process.t;
     request_id : string;
     phase : worker_update_phase Atomic.t;
-    restored : worker_origin option Atomic.t;
+    restored : (worker_origin * Child_process.t) option Atomic.t;
+    replacement_started : bool Atomic.t;
   }
   let phase update = Atomic.get update.phase
   let background action =
@@ -904,7 +924,8 @@ end = struct
         match Hashtbl.find_opt spawned_children worker.origin.instance with
         | Some child when child.origin=Some worker.origin -> child.process
         | _ -> failwith "Update shutdown requires the exact captured child, never a reused PID") in
-    {worker; process; request_id; phase=Atomic.make Worker_initial; restored=Atomic.make None})
+    {worker; process; request_id; phase=Atomic.make Worker_initial; restored=Atomic.make None;
+      replacement_started=Atomic.make false})
   let exchange update allowed next =
     let rec change () =
       let current = phase update in
@@ -965,40 +986,57 @@ end = struct
       let _, _, _, repo = worker.storage in
       if attachment_key repo <> worker.storage then
         failwith "Worker restoration storage changed";
+      let verify_replacement (origin, process) =
+        if Hashtbl.find_opt update_workers worker.storage <> Some (Some origin)
+           || Hashtbl.find_opt attached worker.storage <>
+                Some (Printf.sprintf "http://127.0.0.1:%d" origin.port)
+        then failwith "Restored worker origin changed";
+        (match Hashtbl.find_opt spawned_children origin.instance with
+         | Some child when child.process == process && child.storage=worker.storage
+             && child.origin=Some origin -> ()
+         | _ -> failwith "Restored worker lost its exact captured child");
+        if Child_process.poll process <> None then
+          failwith "Restored worker child is no longer running" in
+      let ready replacement =
+        let origin, _ = replacement in
+        ignore (wait_for_ready_update_worker ~timeout:10.
+          ~check_current:(fun () -> verify_replacement replacement)
+          ~fetch:http_get ~key:worker.storage ~origin) in
       match Atomic.get update.restored with
-      | Some origin ->
-          if Hashtbl.find_opt update_workers worker.storage <> Some (Some origin)
-             || Hashtbl.find_opt attached worker.storage <>
-                  Some (Printf.sprintf "http://127.0.0.1:%d" origin.port)
-          then failwith "Restored worker origin changed";
-          (match http_get ~port:origin.port ~path:"/healthz" with
-           | Some (200, body) -> ignore (inspect_update_worker ~key:worker.storage ~origin body)
-           | _ -> failwith "Restored worker no longer proves readiness")
+      | Some replacement -> ready replacement
       | None ->
-      if Hashtbl.find_opt update_workers worker.storage <> Some (Some worker.origin) then
-        failwith "Worker restoration would replace a different origin";
-      (match Hashtbl.find_opt spawned_children worker.origin.instance with
-       | Some child when child.process == update.process && child.origin=Some worker.origin -> ()
-       | _ -> failwith "Worker restoration lost its exact captured child");
-      let previous_base = Printf.sprintf "http://127.0.0.1:%d" worker.origin.port in
-      (match Hashtbl.find_opt attached worker.storage with
-       | None -> ()
-       | Some base when base=previous_base -> ()
-       | Some _ -> failwith "Worker restoration would replace a different attachment");
-      (* Never adopt another client's replacement. Use the same owned spawning
-         path as normal attachment, under its existing serialization lock. *)
-      if Option.is_some (find_live_daemon worker.storage) then
-        failwith "Worker restoration found an externally replaced endpoint";
-      Hashtbl.remove attached worker.storage;
-      let base = spawn_daemon repo in
-      let origin = match Hashtbl.find_opt update_workers worker.storage with
-        | Some (Some origin) when origin.instance<>worker.origin.instance -> origin
-        | _ -> failwith "Restored worker has no fresh captured origin" in
-      (match http_get ~port:origin.port ~path:"/healthz" with
-       | Some (200, body) -> ignore (inspect_update_worker ~key:worker.storage ~origin body)
-       | _ -> failwith "Restored worker did not prove ready storage");
-      Hashtbl.replace attached worker.storage base;
-      Atomic.set update.restored (Some origin)))
+          if Atomic.get update.replacement_started then
+            failwith "Owned replacement startup has not published an exact origin";
+          if Hashtbl.find_opt update_workers worker.storage <> Some (Some worker.origin) then
+            failwith "Worker restoration would replace a different origin";
+          (match Hashtbl.find_opt spawned_children worker.origin.instance with
+           | Some child when child.process == update.process && child.origin=Some worker.origin -> ()
+           | _ -> failwith "Worker restoration lost its exact captured child");
+          let previous_base = Printf.sprintf "http://127.0.0.1:%d" worker.origin.port in
+          (match Hashtbl.find_opt attached worker.storage with
+           | None -> ()
+           | Some base when base=previous_base -> ()
+           | Some _ -> failwith "Worker restoration would replace a different attachment");
+          (* Never adopt another client's replacement. Use the same owned
+             spawning path under its existing serialization lock. *)
+          if Option.is_some (find_live_daemon worker.storage) then
+            failwith "Worker restoration found an externally replaced endpoint";
+          Hashtbl.remove attached worker.storage;
+          Atomic.set update.replacement_started true;
+          let base = spawn_daemon repo in
+          let origin = match Hashtbl.find_opt update_workers worker.storage with
+            | Some (Some origin) when origin.instance<>worker.origin.instance -> origin
+            | _ -> failwith "Restored worker has no fresh captured origin" in
+          let process = match Hashtbl.find_opt spawned_children origin.instance with
+            | Some child when child.origin=Some origin && child.storage=worker.storage -> child.process
+            | _ -> failwith "Restored worker has no exact retained child" in
+          let replacement = origin, process in
+          (* Retain authority before the first fallible readiness probe. A
+             transient 503 or timeout must not turn our own child into a stale
+             foreign origin, and an unpublished spawn must never be repeated. *)
+          Hashtbl.replace attached worker.storage base;
+          Atomic.set update.restored (Some replacement);
+          ready replacement))
 end
 
 let http_get_stream ~(host : string) ~(port : int) ~(path : string)

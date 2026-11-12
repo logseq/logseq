@@ -186,6 +186,21 @@ let run () =
   await (Daemon_client.Worker_update.restore_exited stopped);
   check "repeating restoration verifies the exact replacement without another child"
     (Hashtbl.length Daemon_client.spawned_children=2);
+  let replacement_child = Hashtbl.find Daemon_client.spawned_children reopened.origin.instance in
+  let previous_child = Hashtbl.find Daemon_client.spawned_children first.origin.instance in
+  Hashtbl.replace Daemon_client.spawned_children reopened.origin.instance
+    {replacement_child with process=previous_child.process};
+  (try
+     await (Daemon_client.Worker_update.restore_exited stopped);
+     failwith "Restoration must retain its exact replacement child token"
+   with Failure message -> check "a replacement-token conflict refuses without process adoption"
+     (message="Restored worker lost its exact captured child"));
+  Hashtbl.replace Daemon_client.spawned_children reopened.origin.instance replacement_child;
+  await (Daemon_client.Worker_update.restore_exited stopped);
+  check "restoration retries preserve the owned replacement endpoint and child count"
+    (Hashtbl.find Daemon_client.attached first.storage=
+       Printf.sprintf "http://127.0.0.1:%d" reopened.origin.port
+     && Hashtbl.length Daemon_client.spawned_children=2);
   let snapshot = await (Daemon_client.capture_update_workers ()) in
   check "captured update workers expose the ready replacement origin"
     (List.exists (fun (worker : Daemon_client.update_worker) -> worker.origin=reopened.origin) snapshot);

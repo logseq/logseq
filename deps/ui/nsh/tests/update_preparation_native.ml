@@ -2029,6 +2029,32 @@ let native_worker_update_identity () =
   let first = inspect (health ()) in
   check "actual child provenance retains the sampled current generation"
     (first.origin = origin && first.generation = "graph-generation" && first.ticket = None);
+  let readiness_checks = ref 0 and ownership_checks = ref 0 in
+  let ready = Daemon_client.wait_for_ready_update_worker ~timeout:1.
+    ~check_current:(fun () -> incr ownership_checks)
+    ~fetch:(fun ~port ~path ->
+      check "restoration readiness stays on the exact captured endpoint"
+        (port=origin.port && path="/healthz");
+      incr readiness_checks;
+      if !readiness_checks=1 then Some (503,"starting") else Some (200,health ()))
+    ~key ~origin in
+  check "port publication can precede health readiness without losing ownership"
+    (!readiness_checks=2 && !ownership_checks=2 && ready.origin=origin);
+  (try
+     ignore (Daemon_client.wait_for_ready_update_worker ~timeout:0.
+       ~check_current:(fun () -> ()) ~fetch:(fun ~port:_ ~path:_ -> Some (503,"starting")) ~key ~origin);
+     failwith "An unready worker must not acknowledge restoration"
+   with Failure message -> check "readiness refusal is bounded without a UI timer"
+     (message="Restored worker readiness is unproven after its finite deadline"));
+  let wrong_checks = ref 0 in
+  let wrong_refused =
+    try
+      ignore (Daemon_client.wait_for_ready_update_worker ~timeout:1.
+        ~check_current:(fun () -> ()) ~fetch:(fun ~port:_ ~path:_ ->
+          incr wrong_checks;Some (200,health ~pid:9999 ())) ~key ~origin);
+      false
+    with Failure _ -> true in
+  check "ready identity conflicts are refused without retry" (wrong_refused && !wrong_checks=1);
   let changed = inspect (health ~generation:"next-generation" ~ticket:(`String "next-ticket")
     ~revision:"new-worker-revision" ()) in
   check "graph ticket and revision are observations rather than immutable process ownership"
