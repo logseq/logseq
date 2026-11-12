@@ -41,9 +41,10 @@ Before writing the build receipt or reporting success, `build.sh` runs
 `cargo test --test startup_preflight` with the newly built OCaml library,
 resources and private DB worker. One isolated child process mounts the actual
 `nsh_app_logseq::App` with public NSH Headless. Fresh home/state/graph directories
-keep user data separate; no agent listener, login daemon, OS window, screenshot
-or application activation is used. Its explicit `StartupPreflight` engine
-context injects an owner-local empty credential store: changing HOME alone
+keep user data separate; no login daemon, OS window, screenshot or application
+activation is used. An ephemeral loopback agent in the owned child serves the
+read-only heap-configuration queries; it is separate from any running user app.
+Its explicit `StartupPreflight` engine context injects an owner-local empty credential store: changing HOME alone
 would not isolate the OS keychain. The production runner always uses the native
 vault; no environment variable selects the in-memory test store.
 The test requires Demo/Journals and real
@@ -61,6 +62,14 @@ fast unit-test path without loading the application library. A successful gate
 qualifies this production startup path and its encountered backend validation;
 it does not statically prove every conditional UI branch or replace native UX,
 IME, signing and update tests.
+
+## Release memory evidence
+
+[November 12, 2026 release controls](RELEASE_MEMORY.md) record the ten-second
+physical footprint, summed RSS and separately reported OCaml capacities from
+one previous release artifact. The approximately 135 MiB override result is a
+historical control; the integrated release and picker virtualization require
+fresh measurements.
 
 ## Safe native publication and build receipts
 
