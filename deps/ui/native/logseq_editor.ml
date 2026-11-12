@@ -33,11 +33,11 @@
 
    Commands (OCaml -> host via Host.dom_op; measurement replies come
    back through the platform-event channel under the same name):
-     caret-rect      {block-id, offset} -> {block-id, offset, x, y, h, ox, oy}
+     caret-rect      {block-id, offset, affinity?} -> {block-id, offset, affinity?, x, y, h, ox, oy}
                      x/y/h relative to .block-editor; ox/oy its
                      window-space origin (popup anchors add them)
      selection-rects {block-id, first, last} -> {block-id, first, last, rects}
-     offset-at       {block-id, x, y}   -> {block-id, x, y, offset}
+     offset-at       {block-id, x, y}   -> {block-id, x, y, offset, affinity?}
      line-ranges     {block-id}         -> {block-id, ranges} — "lo,hi;…"
      scroll-height   {block-id}         -> {block-id, height}
      set-input-focus {block-id, focused} — one-way, no reply
@@ -169,13 +169,13 @@ let register registry =
 type caret_rect_reply =
   { cx : int; cy : int; ch : int; ox : int; oy : int }
 
-let caret_rects : (string * int, caret_rect_reply * int) Hashtbl.t =
+let caret_rects : (string * int * Edit_model.affinity, caret_rect_reply * int) Hashtbl.t =
   Hashtbl.create 64
 
 let selection_rects : (string * int * int, Edit_input.rect list * int) Hashtbl.t =
   Hashtbl.create 64
 
-let offset_ats : (string * int * int, int * int) Hashtbl.t = Hashtbl.create 64
+let offset_ats : (string * int * int, Edit_model.position * int) Hashtbl.t = Hashtbl.create 64
 
 let line_ranges_store : (string, (int * int) list * int) Hashtbl.t =
   Hashtbl.create 8
@@ -252,6 +252,29 @@ let store_measurement block_id tbl key value =
         | _ -> ())
   end
 
+(* The selected host determines whether the native wire supports affinity.
+   Other native hosts keep their existing downstream-only query contract. *)
+let geometry_affinity = ref false
+let configure_geometry ~affinity = geometry_affinity := affinity
+
+let affinity_name = function
+  | Edit_model.Upstream -> "upstream"
+  | Edit_model.Downstream -> "downstream"
+
+let effective_affinity affinity =
+  if !geometry_affinity then affinity else Edit_model.Downstream
+
+let reply_affinity j =
+  match jstr "affinity" j with
+  | Some "upstream" -> Edit_model.Upstream
+  | Some "downstream" -> Edit_model.Downstream
+  | None when not !geometry_affinity -> Edit_model.Downstream
+  | _ -> invalid_arg "Invalid editor geometry affinity"
+
+let caret_arg off affinity =
+  let arg = string_of_int off in
+  if !geometry_affinity then arg ^ "," ^ affinity_name affinity else arg
+
 let note_measurement name (j : Js.Json.t) : unit =
   match jstr "block-id" j with
   | None -> ()
@@ -264,11 +287,12 @@ let note_measurement name (j : Js.Json.t) : unit =
       | "caret-rect" -> (
           match (jnum "offset" j, jnum "x" j, jnum "y" j, jnum "h" j) with
           | Some off, Some x, Some y, Some h ->
-              let arg = string_of_int (int_of_float off) in
+              let affinity = reply_affinity j in
+              let arg = caret_arg (int_of_float off) affinity in
               if reply_fresh block_id name arg then begin
                 Hashtbl.remove pending (block_id, name ^ "|" ^ arg);
                 cap caret_rects;
-                store_measurement block_id caret_rects (block_id, int_of_float off)
+                store_measurement block_id caret_rects (block_id, int_of_float off, affinity)
                   ( { cx = int_of_float x
                     ; cy = int_of_float y
                     ; ch = int_of_float h
@@ -287,7 +311,7 @@ let note_measurement name (j : Js.Json.t) : unit =
                 cap offset_ats;
                 store_measurement block_id offset_ats
                   (block_id, int_of_float x, int_of_float y)
-                  (int_of_float off, ep)
+                  (Edit_model.position ~affinity:(reply_affinity j) (int_of_float off), ep)
               end
           | _ -> ())
       | "selection-rects" -> (
@@ -337,6 +361,15 @@ let request block_id name fields =
 
 let jnum_v n = Js.Json.JNumber (Float.of_int n)
 
+let request_caret block_id off affinity =
+  let affinity = effective_affinity affinity in
+  issue block_id "caret-rect" (caret_arg off affinity);
+  let fields = ["offset", jnum_v off] in
+  let fields = if !geometry_affinity then
+    ("affinity", Js.Json.JString (affinity_name affinity)) :: fields else fields in
+  request block_id "caret-rect" fields;
+  Hashtbl.find_opt caret_rects (block_id, off, affinity)
+
 (* Unlike the web adapter there is no per-element create callback on the
    native backends, so mountedness is a host fact — the conduit is always
    constructible and each op degrades to the no-data answer (None / [])
@@ -345,10 +378,8 @@ let jnum_v n = Js.Json.JNumber (Float.of_int n)
 let conduit block_id : Edit_input.conduit option =
   Some
     { Edit_input.caret_rect =
-        (fun off ->
-          issue block_id "caret-rect" (string_of_int off);
-          request block_id "caret-rect" [ ("offset", jnum_v off) ];
-          match Hashtbl.find_opt caret_rects (block_id, off) with
+        (fun ~affinity off ->
+          match request_caret block_id off affinity with
           | Some (r, ep) when ep = epoch_of block_id && r.ch > 0 ->
               Some { Edit_input.x = r.cx; y = r.cy; w = 0; h = r.ch }
           | _ -> None)
@@ -399,12 +430,10 @@ let popup_pos block_id : (float * float * float) option =
     match Editor_state.editing () with
     | Some e when e.Editor_state.uuid = block_id ->
         let off = e.Editor_state.model.Edit_model.caret in
-        issue block_id "caret-rect" (string_of_int off);
-        request block_id "caret-rect" [ ("offset", jnum_v off) ];
         (* reply coords are container-relative — re-anchor into viewport
            space (x-20, line bottom - 3, line top), matching the web
            twin's popup_pos *)
-        (match Hashtbl.find_opt caret_rects (block_id, off) with
+        (match request_caret block_id off e.Editor_state.model.Edit_model.caret_affinity with
          | Some (r, ep) when ep = epoch_of block_id && r.ch > 0 ->
              (* ch=0 is the contract's no-data reply — the run is not
                 measured yet; None keeps the caller's sentinel retry

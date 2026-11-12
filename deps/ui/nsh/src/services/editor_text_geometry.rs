@@ -9,9 +9,16 @@ use nsh_core::{
 use serde_json::{Map, Value, json};
 use std::{collections::HashMap, sync::Arc};
 
+fn affinity_name(affinity: Affinity) -> &'static str {
+    match affinity {
+        Affinity::Upstream => "upstream",
+        Affinity::Downstream => "downstream",
+    }
+}
+
 #[derive(Clone, Copy)]
 pub(super) enum Query {
-    Caret(usize),
+    Caret(usize, Affinity),
     Selection(usize, usize),
     Hit { x: i32, y: i32 },
     Lines,
@@ -41,7 +48,15 @@ impl Request {
                 .ok_or_else(|| format!("editor {operation} requires an integer {name}"))
         };
         let query = match operation {
-            "caret-rect" => Query::Caret(offset("offset")?),
+            "caret-rect" => {
+                let affinity = match fields.get("affinity") {
+                    None => Affinity::Downstream,
+                    Some(Value::String(value)) if value == "downstream" => Affinity::Downstream,
+                    Some(Value::String(value)) if value == "upstream" => Affinity::Upstream,
+                    _ => return Err("editor caret affinity must be upstream or downstream".into()),
+                };
+                Query::Caret(offset("offset")?, affinity)
+            }
             "selection-rects" => {
                 let (first, last) = (offset("first")?, offset("last")?);
                 if first > last {
@@ -407,16 +422,13 @@ impl Layout {
     async fn answer(&self, request: &Request) -> Result<Option<Value>, String> {
         let mut payload = json!({"geometry-epoch":request.epoch});
         match request.query {
-            Query::Caret(offset) => {
+            Query::Caret(offset, affinity) => {
                 let Some((line, at)) = self.caret(offset) else {
                     return Ok(None);
                 };
                 let Some(answer) = line
                     .reference
-                    .text_geometry(TextGeometryQuery::Caret(TextPosition::new(
-                        at,
-                        Affinity::Downstream,
-                    )))
+                    .text_geometry(TextGeometryQuery::Caret(TextPosition::new(at, affinity)))
                     .await
                 else {
                     return Ok(None);
@@ -429,6 +441,7 @@ impl Layout {
                 };
                 let rect = line.root_rect(rect, self.root_measurement);
                 payload["offset"] = json!(offset);
+                payload["affinity"] = json!(affinity_name(affinity));
                 payload["x"] = rect["x"].clone();
                 payload["y"] = rect["y"].clone();
                 payload["h"] = rect["h"].clone();
@@ -485,6 +498,7 @@ impl Layout {
                 payload["x"] = json!(x);
                 payload["y"] = json!(y);
                 payload["offset"] = json!(offset);
+                payload["affinity"] = json!(affinity_name(at.affinity));
             }
             Query::Selection(first, last) => {
                 let mut pending = Vec::new();
@@ -635,3 +649,7 @@ mod tests;
 #[cfg(all(test, target_os = "macos"))]
 #[path = "editor_text_geometry_partition_tests.rs"]
 mod partition_tests;
+
+#[cfg(all(test, target_os = "macos"))]
+#[path = "editor_text_geometry_affinity_tests.rs"]
+mod affinity_tests;

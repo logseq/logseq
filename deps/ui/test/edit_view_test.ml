@@ -427,8 +427,8 @@ let test_input_mapping () =
      neighbouring block *)
   let conduit =
     { E.no_conduit with
-      caret_rect = (fun _ -> Some { E.x = 4; y = 2; w = 0; h = 8 })
-    ; offset_at = (fun ~x:_ ~y -> if y < 2 then Some 0 else Some 2)
+      caret_rect = (fun ~affinity:_ _ -> Some { E.x = 4; y = 2; w = 0; h = 8 })
+    ; offset_at = (fun ~x:_ ~y -> Some (M.position (if y < 2 then 0 else 2)))
     }
   in
   let mv = E.handle ~route ~conduit m (E.Key (M.key_ev "ArrowUp", false)) in
@@ -450,6 +450,25 @@ let test_input_mapping () =
 (* proper JS strings: these literals are byte-strings in the file;
    Platform.decode_utf8_bytes decodes them into real UTF-16 JS strings *)
 let js s = Platform.decode_utf8_bytes s
+
+let test_wrap_hit_affinity () =
+  let m = M.set_lines (M.create "abcdef") [0,3;3,6] in
+  let m = M.select m ~anchor:5 ~focus:5 in
+  let measured = ref [] in
+  let conduit =
+    { E.no_conduit with
+      caret_rect = (fun ~affinity off ->
+        measured := (off, affinity) :: !measured;
+        Some { E.x = 8; y = (if off >= 3 && affinity = M.Downstream then 20 else 0); w = 0; h = 10 })
+    ; offset_at = (fun ~x:_ ~y:_ -> Some (M.position ~affinity:M.Upstream 3))
+    }
+  in
+  let moved = E.vertical ~conduit ~extend:false m M.Up in
+  eqi "vertical hit keeps source offset" 3 moved.M.caret;
+  check "vertical hit keeps upstream affinity" (moved.M.caret_affinity = M.Upstream);
+  eqi "vertical hit stays on preceding row" 0 (M.caret_line moved);
+  ignore (E.measure conduit moved);
+  check "overlay requests hit affinity" (List.hd !measured = (3, M.Upstream))
 
 let test_u16 () =
   let s = js "中a文" in (* 3 code units *)
@@ -597,6 +616,7 @@ let run ~env =
   test_overlay ~env ();
   test_sink_events ~env ();
   test_input_mapping ();
+  test_wrap_hit_affinity ();
   test_bytes_default ()
 
 (* web-entry only: UTF-16 code-unit semantics, JS string literals via

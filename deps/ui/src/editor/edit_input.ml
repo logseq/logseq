@@ -31,15 +31,15 @@ let empty_frame = { caret = None; selection = [] }
    the model's units. Selection rectangles come from the platform range,
    since wrapped/bidirectional ranges cannot be inferred from two carets. *)
 type conduit =
-  { caret_rect : int -> rect option (* byte off -> caret rect *)
+  { caret_rect : affinity:Edit_model.affinity -> int -> rect option (* byte off -> caret rect *)
   ; selection_rects : int * int -> rect list
-  ; offset_at : x:int -> y:int -> int option (* px -> byte off *)
+  ; offset_at : x:int -> y:int -> Edit_model.position option (* px -> byte position *)
   ; line_ranges : unit -> (int * int) list (* visual lines as [lo, hi) *)
   ; set_input_focus : bool -> unit
   }
 
 let no_conduit =
-  { caret_rect = (fun _ -> None)
+  { caret_rect = (fun ~affinity:_ _ -> None)
   ; selection_rects = (fun _ -> [])
   ; offset_at = (fun ~x:_ ~y:_ -> None)
   ; line_ranges = (fun () -> [])
@@ -197,7 +197,7 @@ let delete m = function
    No goal-column memory yet — one hop per keypress from the live
    caret. *)
 let vertical ~conduit ~extend m d =
-  match conduit.caret_rect m.Edit_model.caret with
+  match conduit.caret_rect ~affinity:m.Edit_model.caret_affinity m.Edit_model.caret with
   | None -> m
   | Some r -> (
       (* same line table the boundary checks in edit_arrows use *)
@@ -214,17 +214,18 @@ let vertical ~conduit ~extend m d =
       match target with
       | None -> m
       | Some (lo, _) -> (
-          match conduit.caret_rect lo with
+          match conduit.caret_rect ~affinity:Edit_model.Downstream lo with
           | None -> m
           | Some tr -> (
               match conduit.offset_at ~x:r.x ~y:(tr.y + (tr.h / 2)) with
               | None -> m
-              | Some off ->
+              | Some position ->
+                  let off = position.Edit_model.offset in
                   let anchor =
                     if extend then Option.value m.anchor ~default:m.caret
                     else off
                   in
-                  Edit_model.select m ~anchor ~focus:off)))
+                  Edit_model.select ~affinity:position.Edit_model.affinity m ~anchor ~focus:off)))
 
 (* routed intents + host-resolved moves; every other action already ran
    through Edit_model.apply inside handle_key *)
@@ -271,7 +272,7 @@ let handle ~route ~conduit m (ev : event) : Edit_model.t =
    the caret bar plus one selection rect per selected visual line *)
 let measure conduit (m : Edit_model.t) : frame =
   let m = Edit_model.display_model m in
-  let caret = conduit.caret_rect m.Edit_model.caret in
+  let caret = conduit.caret_rect ~affinity:m.Edit_model.caret_affinity m.Edit_model.caret in
   let selection =
     match Edit_model.selection_range m with
     | None -> []

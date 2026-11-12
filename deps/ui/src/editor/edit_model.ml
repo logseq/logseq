@@ -223,12 +223,21 @@ let word_bounds u s off =
 
 (* --- model ------------------------------------------------------------------ *)
 
+type affinity = Upstream | Downstream
+
+type position = { offset : int; affinity : affinity }
+
+let position ?(affinity = Downstream) offset = { offset; affinity }
+
+(* Affinity chooses one of the two visual carets at a soft-wrap boundary.
+   It never changes source offsets or selection replacement semantics. *)
 type t =
   { source : string           (* the db-stored block text *)
   ; version : int             (* bumped on every buffer change *)
   ; runs : E.run list         (* display runs over [source] *)
   ; units : units             (* what offsets count — see above *)
   ; caret : int               (* focus end; unit offset, codepoint-aligned *)
+  ; caret_affinity : affinity
   ; anchor : int option       (* selection anchor; None = collapsed *)
   ; composition : (int * int) option
       (* IME marked range. Contract: composing text is NOT in [source];
@@ -275,7 +284,7 @@ let snap_ref m off ~forward =
 let rebuild m source ~caret ~anchor ~dirty =
   let next =
     { m with source; version = m.version + 1; runs = E.runs source
-    ; caret; anchor; composition = None; composition_text = ""
+    ; caret; caret_affinity = Downstream; anchor; composition = None; composition_text = ""
     ; lines = lines_of_source source; dirty }
   in
   { next with
@@ -288,6 +297,7 @@ let create ?(units = Bytes) source =
   ; runs = E.runs source
   ; units
   ; caret = 0
+  ; caret_affinity = Downstream
   ; anchor = None
   ; composition = None
   ; composition_text = ""
@@ -342,7 +352,7 @@ let set_lines m lines = { m with lines; dirty = None }
 let caret_line m =
   let rec go i = function
     | [] -> max 0 (List.length m.lines - 1)
-    | (_, hi) :: ((next, _) :: _ as tl) when m.caret = hi && hi = next ->
+    | (_, hi) :: ((next, _) :: _ as tl) when m.caret = hi && hi = next && m.caret_affinity = Downstream ->
         go (i + 1) tl
     | (lo, hi) :: _ when m.caret >= lo && m.caret <= hi -> i
     | _ :: tl -> go (i + 1) tl
@@ -520,16 +530,22 @@ let move m d ~extend =
     if extend then Some (Option.value m.anchor ~default:m.caret)
     else None
   in
-  { m with caret; anchor }
+  let caret_affinity = match d with
+    | End | Doc_end -> Upstream
+    | Up | Down -> m.caret_affinity
+    | _ -> Downstream
+  in
+  { m with caret; caret_affinity; anchor }
 
-let select m ~anchor ~focus =
+let select ?(affinity = Downstream) m ~anchor ~focus =
   { m with
     anchor = Some (snap_ref m (clamp_caret m.units m.source anchor) ~forward:(anchor > focus))
   ; caret = snap_ref m (clamp_caret m.units m.source focus) ~forward:(focus > anchor)
+  ; caret_affinity = affinity
   }
 
 let select_all m =
-  { m with anchor = Some 0; caret = String.length m.source }
+  { m with anchor = Some 0; caret = String.length m.source; caret_affinity = Upstream }
 
 (* --- IME composition -----------------------------------------------------------
    Contract: the conduit does NOT insert marked text into [source];

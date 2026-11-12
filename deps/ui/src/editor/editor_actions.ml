@@ -42,7 +42,8 @@ let update_model uuid f =
       | Some e when e.S.uuid = uuid ->
           let nm = f e.S.model in
           moved := nm.Edit_model.source = e.S.model.Edit_model.source
-                   && nm.Edit_model.caret <> e.S.model.Edit_model.caret;
+                   && (nm.Edit_model.caret <> e.S.model.Edit_model.caret
+                       || nm.Edit_model.caret_affinity <> e.S.model.Edit_model.caret_affinity);
           if nm.Edit_model.source <> e.S.model.Edit_model.source then begin
             (match e.S.owner with
              | S.Persisted -> S.history_input_before := Some (S.history_editing e)
@@ -179,8 +180,10 @@ let resolve_initial_click (request : S.focus_request) (editing : S.editing) =
         true)
       else match click_offset request.S.focus_uuid point with
       | None -> false
-      | Some offset ->
-          let model = Edit_model.select editing.S.model ~anchor:offset ~focus:offset in
+      | Some position ->
+          let offset = position.Edit_model.offset in
+          let model = Edit_model.select ~affinity:position.Edit_model.affinity
+              editing.S.model ~anchor:offset ~focus:offset in
           S.set_silent (fun st ->
               match st.S.editing with
               | Some current when current.S.epoch == editing.S.epoch
@@ -260,7 +263,8 @@ let rec apply_focus () =
              stale — keep where the model put it *)
           if !S.last_edit_input_ms <= armed_ms then
             (match S.editing () with
-             | Some e when Edit_model.selection_range e.S.model <> None -> ()
+             | Some e when Edit_model.selection_range e.S.model <> None
+                           || e.S.model.Edit_model.caret = request.S.focus_caret -> ()
              | _ -> set_caret uuid request.S.focus_caret);
           (* the sink's runs prop and first layout can lag the landing —
              a split/merge's remount by far more than a patch or two —

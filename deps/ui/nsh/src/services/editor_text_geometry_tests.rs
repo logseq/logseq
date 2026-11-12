@@ -59,6 +59,8 @@ fn source_mapping_preserves_multibyte_boundaries_and_atomic_reveal() {
         json!({"geometry-epoch":0,"offset":-1}),
         json!({"geometry-epoch":0,"offset":1.5}),
         json!({"offset":0}),
+        json!({"geometry-epoch":0,"offset":0,"affinity":"sideways"}),
+        json!({"geometry-epoch":0,"offset":0,"affinity":true}),
     ] {
         assert!(Request::decode("caret-rect", fields.as_object().unwrap()).is_err());
     }

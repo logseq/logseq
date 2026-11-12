@@ -983,7 +983,7 @@ let local_input_during_split uuid ev =
    two reply round-trips (caret_rect, then offset_at). Aborts on a newer
    input, a caret change, block switch, or exhaustion — mine_ms tracks
    this retry chain's own note_input stamps so a real keystroke wins *)
-let rec retry_vertical uuid scope epoch ev armed_caret mine_ms attempts =
+let rec retry_vertical uuid scope epoch ev armed_position mine_ms attempts =
   if attempts > 0 then
     ignore
       (Ui_services.timers_timeout
@@ -993,9 +993,10 @@ let rec retry_vertical uuid scope epoch ev armed_caret mine_ms attempts =
           when e2.S.uuid = uuid
                && e2.S.scope = scope && e2.S.epoch == epoch
                && !S.last_edit_input_ms <= mine_ms
-               && e2.S.model.Edit_model.caret = armed_caret ->
+               && e2.S.model.Edit_model.caret = armed_position.Edit_model.offset
+               && e2.S.model.Edit_model.caret_affinity = armed_position.Edit_model.affinity ->
             apply_input uuid ev;
-            retry_vertical uuid scope epoch ev armed_caret !S.last_edit_input_ms
+            retry_vertical uuid scope epoch ev armed_position !S.last_edit_input_ms
               (attempts - 1)
         | _ -> ())
          16)
@@ -1216,9 +1217,11 @@ and apply_input ?frame uuid ev =
            ({ Edit_model.key = "ArrowUp" | "ArrowDown"; meta = false
             ; ctrl = false; alt = false; _ }, _)
          when Ui_services.env_edit_units () = `Bytes && m'.Edit_model.caret = m0.Edit_model.caret
+              && m'.Edit_model.caret_affinity = m0.Edit_model.caret_affinity
               && m'.Edit_model.anchor = m0.Edit_model.anchor
               && not (S.selection_active ()) ->
-           retry_vertical uuid e.S.scope e.S.epoch ev m0.Edit_model.caret
+           retry_vertical uuid e.S.scope e.S.epoch ev
+             (Edit_model.position ~affinity:m0.Edit_model.caret_affinity m0.Edit_model.caret)
              !S.last_edit_input_ms 6
        | _ -> ());
       if m'.Edit_model.source <> m0.source then begin

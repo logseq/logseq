@@ -30,6 +30,37 @@ No application API migration is required. For example, clicking a page link and
 immediately clicking a block now reaches both delegated handlers on NSH; the
 second click no longer silently disappears in the legacy 60ms window.
 
+## Native editor geometry preserves soft-wrap caret affinity
+
+An NSH `offset-at` response now contains `affinity: "upstream" | "downstream"`
+alongside the UTF-8 byte `offset`. The same source offset can be the end of one
+visual row or the start of its successor. `caret-rect` accepts that affinity and
+echoes it; omitted request affinity retains the previous downstream default.
+Invalid dynamic affinity values are rejected. Native reply caches key caret
+rectangles by block, offset and affinity, and retain the existing geometry epoch
+and source/layout guards. There is no additional text shaper or hit cache.
+
+The shared model records `caret_affinity`; initial click resolution and vertical
+navigation retain the native hit position through overlay measurement. Source
+edits and ordinary byte-based selection calls default to downstream. End/Document
+End use upstream, and line membership respects affinity at a soft-wrap boundary.
+Insertion and range replacement continue to use the same source byte offset.
+
+Custom editor conduits must migrate from `caret_rect off` to
+`caret_rect ~affinity off`, and from `offset_at : int option` to
+`offset_at : Edit_model.position option`. For example, a downstream-only adapter
+can return `Some (Edit_model.position off)` and accept `~affinity:_`; an adapter
+with native hit information returns
+`Some (Edit_model.position ~affinity:Edit_model.Upstream off)`. NSH initialization
+explicitly enables the affinity wire. Other native hosts retain their existing
+byte-only requests/replies and downstream geometry; Web keeps its existing
+unit representation and default hit semantics while accepting the typed conduit.
+
+The regressions cover shared model line membership/insertion, hit-to-overlay
+propagation, independent native conduit replies and epoch rejection, and a real
+CoreText wrapped multibyte layout whose upstream hit returns a caret on the same
+visual row. They do not qualify hardware typing or IME.
+
 ## Native icon and Emoji picker rows use the canonical viewport
 
 NSH icon and Emoji picker sections now feed nine-cell, 44px rows into the

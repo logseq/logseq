@@ -410,7 +410,7 @@ type frect = { fx : float; fy : float; fh : float }
 
 (* rect of [fel]'s first text child at unit offset [u16]; [u16] = model
    offset - frag lo, already a DOM code-unit offset *)
-let frag_rect fel u16 =
+let frag_rect ?(affinity = Edit_model.Downstream) fel u16 =
   let tn = j_first_child fel in
   if js_nullish tn then None
   else (
@@ -430,11 +430,13 @@ let frag_rect fel u16 =
       (* At a soft wrap Chromium returns both the previous row's end
          and the next row's start. Forward affinity lands on the row
          whose first character follows this offset. *)
-      let r = rl_at rl (rl_len rl - 1) in
+      let r = rl_at rl (match affinity with
+        | Edit_model.Upstream -> 0
+        | Edit_model.Downstream -> rl_len rl - 1) in
       Some { fx = rect_left r; fy = rect_top r; fh = rect_height r }
     else None)
 
-let caret_rect_el el (off : int) : frect option =
+let caret_rect_el ?(affinity = Edit_model.Downstream) el (off : int) : frect option =
   let st = state_of el in
   let els = run_els el in
   let try_idx i =
@@ -463,7 +465,7 @@ let caret_rect_el el (off : int) : frect option =
           if tag = "z" then 0
           else min (off - a) (String.length (j_text_content fel))
         in
-        match frag_rect fel u16 with
+        match frag_rect ~affinity fel u16 with
         | None when tag = "z" ->
             (* The final landing pad also measures an empty buffer or
                trailing newline without using a multiline span's box. *)
@@ -1006,7 +1008,7 @@ let conduit block_id : Edit_input.conduit option =
       in
       Some
         { Edit_input.caret_rect =
-            (fun off ->
+            (fun ~affinity off ->
               Option.map
                 (fun r ->
                   let ox, oy = origin () in
@@ -1015,7 +1017,7 @@ let conduit block_id : Edit_input.conduit option =
                   ; w = 0
                   ; h = int_of_float r.fh
                   })
-                (caret_rect_el el off))
+                (caret_rect_el ~affinity el off))
         ; selection_rects =
             (fun (first,last) ->
               match source_range_el el first last with
@@ -1033,8 +1035,9 @@ let conduit block_id : Edit_input.conduit option =
         ; offset_at =
             (fun ~x ~y ->
               let ox, oy = origin () in
-              offset_at_el el ~x:(float x +. float ox)
-                ~y:(float y +. float oy))
+              Option.map (fun off -> Edit_model.position off)
+                (offset_at_el el ~x:(float x +. float ox)
+                   ~y:(float y +. float oy)))
         ; line_ranges = (fun () -> line_ranges_el el)
         ; set_input_focus = (fun b -> if b then focus el else blur el)
         }

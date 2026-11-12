@@ -610,14 +610,14 @@ let test_measure_deferred () =
   let f = EI.measure EI.no_conduit m in
   check "measure without conduit has no caret" (f.EI.caret = None);
   let conduit =
-    { EI.no_conduit with EI.caret_rect = (fun _ -> None) }
+    { EI.no_conduit with EI.caret_rect = (fun ~affinity:_ _ -> None) }
   in
   let f = EI.measure conduit m in
   check "pending reply yields no caret" (f.EI.caret = None);
   let conduit =
     { EI.no_conduit with
       EI.caret_rect =
-          (fun off ->
+          (fun ~affinity:_ off ->
             if off = m.EM.caret then Some { EI.x = 4; y = 2; w = 0; h = 8 }
             else None)
     }

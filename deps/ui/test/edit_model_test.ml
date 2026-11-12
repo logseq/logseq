@@ -364,7 +364,25 @@ let test_double_click () =
     ; "中文 word", 7, Some (7, 11)
     ]
 
+let test_wrap_affinity () =
+  let m = M.set_lines (M.create "ab中文cd") [0,5;5,10] in
+  let upstream = M.select ~affinity:M.Upstream m ~anchor:5 ~focus:5 in
+  let downstream = M.select m ~anchor:5 ~focus:5 in
+  eqi "same source offset upstream" 5 upstream.M.caret;
+  eqi "same source offset downstream" 5 downstream.M.caret;
+  eqi "upstream belongs to preceding visual line" 0 (M.caret_line upstream);
+  eqi "downstream belongs to following visual line" 1 (M.caret_line downstream);
+  eqi "upstream end uses preceding line" 5 (M.move upstream M.End ~extend:false).M.caret;
+  eqi "downstream home uses following line" 5 (M.move downstream M.Home ~extend:false).M.caret;
+  let inserted = M.insert_text upstream "X" in
+  eqs "affinity does not alter insertion offset" "ab中X文cd" inserted.M.source;
+  check "edits reset affinity" (inserted.M.caret_affinity = M.Downstream);
+  let moved = M.move upstream M.Right ~extend:false in
+  eqi "right steps a whole character" 8 moved.M.caret;
+  check "ordinary movement resets affinity" (moved.M.caret_affinity = M.Downstream)
+
 let run () =
+  test_wrap_affinity ();
   test_source_replacement ();
   test_double_click ();
   test_byte_exact ();
