@@ -809,7 +809,9 @@ mod tests {
         // from this raw Input probe. Move-blocks is the catalog's genuine
         // application-owned modified shortcut while that editor has focus.
         assert!(editor_owns(Keystroke::parse_with("mod+k", true).unwrap()));
-        assert!(!editor_owns(Keystroke::parse_with("mod+shift+m", true).unwrap()));
+        assert!(!editor_owns(
+            Keystroke::parse_with("mod+shift+m", true).unwrap()
+        ));
         app.press_key("meta+shift+m").unwrap();
         let events = observed.0.lock().unwrap();
         assert_eq!(
