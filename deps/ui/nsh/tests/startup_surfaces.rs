@@ -2,6 +2,7 @@
 //! This is native-engine contract coverage, not AppKit raster or hardware input.
 use super::{Duration, Headless, startup_body, startup_rows::Agent, wait_for_chrome};
 use serde_json::Value;
+use std::cell::RefCell;
 
 fn healthy(agent: &Agent, step: &str) -> Result<Value, String> {
     let tree = agent.tree().map_err(|error| format!("{step}: {error}"))?;
@@ -105,13 +106,57 @@ fn input_selector(tree: &Value) -> Result<String, String> {
 
 fn search_and_commands(app: &mut Headless, agent: &Agent) -> Result<(), String> {
     app.press("role:button[Search]")?;
-    wait_for_chrome(
+    let selected = RefCell::new(None::<String>);
+    let failure = RefCell::new(None::<String>);
+    let last_candidates = RefCell::new(String::new());
+    let wait = wait_for_chrome(
         app,
-        "actual search input",
+        "actual positive native search input",
         Duration::from_secs(10),
-        |screen| screen.matches("role:textbox") == Ok(true),
-    )?;
-    let selector = input_selector(&healthy(agent, "Search opened")?)?;
+        |screen| {
+            let tree = match agent.tree() {
+                Ok(tree) => tree,
+                Err(error) => {
+                    *failure.borrow_mut() = Some(error);
+                    return true;
+                }
+            };
+            let selector = match input_selector(&tree) {
+                Ok(selector) => selector,
+                Err(error) => {
+                    *last_candidates.borrow_mut() = error;
+                    return false;
+                }
+            };
+            let nodes = screen.layout_nodes();
+            let native = nodes
+                .iter()
+                .find(|node| node.test_id.as_deref() == selector.strip_prefix("id:"));
+            *last_candidates.borrow_mut() = format!(
+                "canonical input={selector}; native={native:#?}; input kinds={:#?}",
+                nodes
+                    .iter()
+                    .filter(|node| node.kind == nsh_core::ViewKind::Input)
+                    .collect::<Vec<_>>()
+            );
+            if native.is_some_and(|node| {
+                !node.hidden && node.bounds.size.width.0 > 0.0 && node.bounds.size.height.0 > 0.0
+            }) {
+                *selected.borrow_mut() = Some(selector);
+                true
+            } else {
+                false
+            }
+        },
+    );
+    if let Some(error) = failure.into_inner() {
+        return Err(format!("Search input agent barrier: {error}"));
+    }
+    wait.map_err(|error| format!("{error}\n{}", last_candidates.into_inner()))?;
+    let selector = selected
+        .into_inner()
+        .ok_or("positive native search input was not captured")?;
+    healthy(agent, "Search opened")?;
     app.type_text(&selector, "/")?;
     wait_for_chrome(
         app,
@@ -130,12 +175,25 @@ fn search_and_commands(app: &mut Headless, agent: &Agent) -> Result<(), String> 
     healthy(agent, "Commands filter")?;
     app.press_key("escape")?;
     // Escape first clears a forced filter; a second Escape closes the palette.
-    if app.screen().matches("role:textbox") == Ok(true) {
+    if input_selector(&agent.tree()?).is_ok() {
         app.press_key("escape")?;
     }
-    wait_for_chrome(app, "Search dismissed", Duration::from_secs(10), |screen| {
-        screen.count("role:textbox") == Ok(0) && startup_body::ready(screen)
-    })?;
+    let failure = RefCell::new(None::<String>);
+    wait_for_chrome(
+        app,
+        "Search dismissed",
+        Duration::from_secs(10),
+        |screen| match agent.tree() {
+            Ok(tree) => input_selector(&tree).is_err() && startup_body::ready(screen),
+            Err(error) => {
+                *failure.borrow_mut() = Some(error);
+                true
+            }
+        },
+    )?;
+    if let Some(error) = failure.into_inner() {
+        return Err(format!("Search dismissal agent barrier: {error}"));
+    }
     healthy(agent, "Search dismissed")?;
     Ok(())
 }
