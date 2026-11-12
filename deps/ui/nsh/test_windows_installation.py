@@ -61,5 +61,20 @@ class InstallationAdmissionTests(unittest.TestCase):
         self.assertIn('InitializeUninstall',code)
         self.assertIn('CloseHandle(Admission)',code)
 
+    def test_directory_errors_cannot_be_interpreted_as_empty(self):
+        code=package.admission_script({})
+        enumeration=code[code.index('function NonemptyDirectory'):code.index('function PrepareToInstall')]
+        self.assertIn("external 'FindFirstFileW@kernel32.dll stdcall'",code)
+        self.assertIn("external 'FindNextFileW@kernel32.dll stdcall'",code)
+        self.assertIn('SizeOf(Entry) <> 592',enumeration)
+        self.assertIn("WinFindFirst(AddBackslash(Directory) + '*', Entry);\n  Error := DLLGetLastError;",enumeration)
+        self.assertIn('(Error <> 2) and (Error <> 3)',enumeration)
+        self.assertIn('WinFindNext(Handle, Entry) = 0',enumeration)
+        self.assertIn('if Error <> 18 then',enumeration)
+        self.assertEqual(enumeration.count("RaiseException('Cannot inspect native installation directory:"),2)
+        self.assertIn('finally\n    WinFindClose(Handle);',enumeration)
+        self.assertNotIn('TFindRec',enumeration)
+        self.assertLess(code.index('if NonemptyDirectory'),code.index('not SaveStringToFile'))
+
 
 if __name__=='__main__': unittest.main()

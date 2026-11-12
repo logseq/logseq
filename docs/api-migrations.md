@@ -3,6 +3,20 @@
 
 ## Windows installation qualification boundary
 
+Manual installation now distinguishes a verified absent/empty target from a
+directory enumeration failure. Direct typed `FindFirstFileW`/`FindNextFileW`
+bindings capture each error through Inno's `DLLGetLastError`: only no-match,
+missing-path and successful end-of-enumeration results can admit an empty target.
+Access/I/O failures abort before writing the installation-in-progress marker or
+replacing any payload. The Windows installer qualifier adds an actual temporary
+deny-list ACL scenario and restores that ACL afterward; local source tests do not
+substitute for running it on Windows.
+
+The bindings follow Microsoft's [WIN32_FIND_DATAW declaration](https://github.com/microsoft/win32metadata/blob/main/generation/WinSDK/RecompiledIdlHeaders/um/minwinbase.h).
+Inno 6.7.1's [built-in helpers](https://github.com/jrsoftware/issrc/blob/is-6_7_1/Projects/Src/Setup.ScriptFunc.HelperFunc.pas#L214)
+return Boolean results without capturing the script DLL error slot, so that slot
+must be read from the direct native calls instead.
+
 The Windows CI now compiles the real worker admission fixture and exercises the
 actual Inno installer with private target/profile paths: active-worker refusal,
 independent worker lifetime, fresh installation, real installed-host/worker

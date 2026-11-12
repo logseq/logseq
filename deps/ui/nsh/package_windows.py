@@ -80,6 +80,19 @@ def admission_script(payload_hashes):
                       f"  if CompareText(GetSHA256OfFile(FileName), '{digest}') <> 0 then RaiseException('Installed payload differs: ' + FileName);")
     return r'''
 [Code]
+type
+  TNativeFindData = record
+    Attributes: Cardinal;
+    CreationTime: TFileTime;
+    LastAccessTime: TFileTime;
+    LastWriteTime: TFileTime;
+    SizeHigh: Cardinal;
+    SizeLow: Cardinal;
+    Reserved0: Cardinal;
+    Reserved1: Cardinal;
+    FileName: array[0..259] of Char;
+    AlternateFileName: array[0..13] of Char;
+  end;
 var
   Admission: THandle;
 function WinCreateMutex(Attributes: NativeInt; Owner: Integer; Name: String): THandle;
@@ -90,6 +103,12 @@ function WinCloseHandle(Handle: THandle): Integer;
   external 'CloseHandle@kernel32.dll stdcall';
 procedure WinSetLastError(Error: Cardinal);
   external 'SetLastError@kernel32.dll stdcall';
+function WinFindFirst(FileName: String; var Data: TNativeFindData): NativeInt;
+  external 'FindFirstFileW@kernel32.dll stdcall';
+function WinFindNext(Handle: NativeInt; var Data: TNativeFindData): Integer;
+  external 'FindNextFileW@kernel32.dll stdcall';
+function WinFindClose(Handle: NativeInt): Integer;
+  external 'FindClose@kernel32.dll stdcall';
 function AcquireAdmission: Boolean;
 var Error: Cardinal;
 begin
@@ -150,20 +169,39 @@ begin
   if Result then Result := Trim(String(Value)) = '@PROTOCOL@';
 end;
 function NonemptyDirectory(Directory: String): Boolean;
-var Entry: TFindRec;
+var Entry: TNativeFindData; Handle: NativeInt; Error: Cardinal;
 begin
+  { Built-in FindFirst/FindNext do not capture DLLGetLastError. Use the
+    public WIN32_FIND_DATAW ABI so access/I/O failures cannot mean empty. }
+  if SizeOf(Entry) <> 592 then
+    RaiseException('Unsupported native directory enumeration ABI');
   Result := False;
-  if FindFirst(AddBackslash(Directory) + '*', Entry) then begin
-    try
-      repeat
-        if (Entry.Name <> '.') and (Entry.Name <> '..') then begin
-          Result := True;
-          Exit;
-        end;
-      until not FindNext(Entry);
-    finally
-      FindClose(Entry);
+  Handle := WinFindFirst(AddBackslash(Directory) + '*', Entry);
+  Error := DLLGetLastError;
+  if Handle = -1 then begin
+    { ERROR_FILE_NOT_FOUND / ERROR_PATH_NOT_FOUND prove absent matches. }
+    if (Error <> 2) and (Error <> 3) then
+      RaiseException('Cannot inspect native installation directory: ' + IntToStr(Error));
+    Exit;
+  end;
+  try
+    while True do begin
+      if not ((Entry.FileName[0] = '.') and
+          ((Entry.FileName[1] = #0) or
+           ((Entry.FileName[1] = '.') and (Entry.FileName[2] = #0)))) then begin
+        Result := True;
+        Exit;
+      end;
+      if WinFindNext(Handle, Entry) = 0 then begin
+        Error := DLLGetLastError;
+        { ERROR_NO_MORE_FILES is the only successful enumeration end. }
+        if Error <> 18 then
+          RaiseException('Cannot inspect native installation directory: ' + IntToStr(Error));
+        Exit;
+      end;
     end;
+  finally
+    WinFindClose(Handle);
   end;
 end;
 function PrepareToInstall(var NeedsRestart: Boolean): String;

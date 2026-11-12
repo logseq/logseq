@@ -204,6 +204,28 @@ def qualify(archive,fixture,evidence,*,dumpbin=None,dll_roots=()):
                 setup(legacy,'legacy-target-refused',False)
                 if old.read_bytes()!=b'old unqualified code' or (legacy/'Resources').exists():
                     raise RuntimeError('Legacy refusal modified old files')
+                denied=private/'enumeration-denied';denied.mkdir()
+                sentinel=denied/'logseq-nsh.exe';sentinel.write_bytes(b'nonempty denied target')
+                icacls=Path(os.environ['SystemRoot'])/'System32/icacls.exe'
+                # A non-inheriting deny applies only to listing this fresh
+                # directory. Child bytes and DACL repair remain accessible.
+                run(icacls,[denied,'/deny','*S-1-1-0:(RD)'],'deny-target-listing',success=True)
+                try:
+                    try:
+                        with os.scandir(denied) as entries:
+                            list(entries)
+                    except PermissionError:
+                        pass
+                    else:
+                        raise RuntimeError('Native fixture did not deny directory enumeration')
+                    setup(denied,'enumeration-error-refused',False)
+                    log=(evidence/'enumeration-error-refused-inno.log').read_text(encoding='utf-8-sig')
+                    if 'Cannot inspect native installation directory: 5' not in log:
+                        raise RuntimeError('Installer did not report its actual directory access error')
+                    if sentinel.read_bytes()!=b'nonempty denied target' or (denied/'.nsh-installing').exists():
+                        raise RuntimeError('Enumeration refusal modified the denied installation')
+                finally:
+                    run(icacls,[denied,'/remove:d','*S-1-1-0'],'restore-target-listing',success=True)
                 uninstallers=list(installation.glob('unins*.exe'))
                 if len(uninstallers)!=1: raise RuntimeError('Expected one actual Inno uninstaller')
                 active=hold('uninstall-worker')
