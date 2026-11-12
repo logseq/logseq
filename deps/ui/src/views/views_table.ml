@@ -357,6 +357,36 @@ let open_row_sidebar row_uuid =
   Ui_services.dom_dispatch_json "ls:open-right-sidebar"
     (Json.Object [ ("uuid", Json.String row_uuid) ])
 
+let cell_id inst row_uuid column =
+  Printf.sprintf "table-%d-cell-%s-%s" inst.V.id row_uuid column
+
+let open_row_page row_uuid =
+  Runtime.mark_nav ();
+  Platform.set_location_hash ("#/page/" ^ Ui_services.uri_encode_component row_uuid)
+
+type title_action = Edit_title | Open_page | Open_sidebar
+
+let title_action ~is_mac = function
+  | L.PressModifiers (_, modifiers) ->
+      if modifiers land (if is_mac then 4 else 1) <> 0 then Open_page
+      else if modifiers land 2 <> 0 then Open_sidebar
+      else Edit_title
+  | _ -> Edit_title
+
+(* Keep the originating element handle, not an identifier that a replacement
+   view can reuse while the editor's save is pending. *)
+let capture_cell_return context inst ~row_uuid ~column =
+  let current = V.current_view inst in
+  let cell = Ui_services.dom_by_id (cell_id inst row_uuid column) in
+  fun () ->
+    if Ui_effect.alive context.Lui_ui.ui_scope && current () then
+      match cell with
+      | Some cell when cell.Ui_services.connected () ->
+          V.update inst (fun state ->
+            {state with V.table_cell_focus = Some (row_uuid, column)});
+          cell.Ui_services.focus ()
+      | _ -> ()
+
 let title_cell inst ~row_uuid ~blk (c : V.column) : t =
   let title = Wr.prop_text (cell_value blk c) in
   match inst.V.kind, W.get blk "block/name" with
@@ -404,9 +434,16 @@ let title_cell inst ~row_uuid ~blk (c : V.column) : t =
                  ~accessibility_identifier:anchor ~data_attrs:["tabindex","0"]
                  ~style_class:"table-block-title"
                  [ (* Keep the caption and overlay actions as sibling hit regions. *)
-                   Ui_parts.pressable ~on_press:(fun _ ->
-                     Table_title_editor.show ~anchor ~column_width:(column_width (V.get inst) c)
-                       {(Decode.block_of_wire blk) with Model.block_uuid=Some row_uuid})
+                   Ui_parts.pressable ~on_press:(fun event ->
+                     match title_action ~is_mac:(Ui_services.env_is_mac ()) event with
+                     | Open_page -> open_row_page row_uuid
+                     | Open_sidebar -> open_row_sidebar row_uuid
+                     | Edit_title ->
+                         let on_close = capture_cell_return context inst
+                           ~row_uuid ~column:c.V.c_id in
+                         Table_title_editor.show ~anchor ~on_close
+                           ~column_width:(column_width (V.get inst) c)
+                           {(Decode.block_of_wire blk) with Model.block_uuid=Some row_uuid})
                      (row ~grow:1. ~min_width:0 ~height:32 ~cross:`center
                        [ text ~white_space:"nowrap" (Render_inline.parse ~self:row_uuid title) ])
                  ; Ui_parts.float_prop L.Opacity
@@ -416,10 +453,7 @@ let title_cell inst ~row_uuid ~blk (c : V.column) : t =
                         Ui_components.Prop.inset_top 4.]
                        (row ~cross:`center ~gap:0 ~height:24 ~style_class:"ls-title-ghosts"
                           ~transition:"opacity 100ms cubic-bezier(0.4, 0, 1, 1)"
-                          [ ghost "arrow-right" (I.t "ui/open") (fun () ->
-                              Runtime.mark_nav ();
-                              Platform.set_location_hash
-                                ("#/page/" ^ Ui_services.uri_encode_component row_uuid))
+                          [ ghost "arrow-right" (I.t "ui/open") (fun () -> open_row_page row_uuid)
                           ; ghost "layout-sidebar-right" (I.t "sidebar.right/open")
                               (fun () -> open_row_sidebar row_uuid) ]))
                  ]) ]) context parent
@@ -509,9 +543,6 @@ let prop_cell ~blk (c : V.column) : t =
   | W.Bool b when c.V.c_type = "checkbox" ->
       inner_cell [ Ui_components.checkbox ~checked:b ~disabled:true [] ]
   | v -> inner_cell [ text ~value:(fmt_cell_value c v) [] ]
-
-let cell_id inst row_uuid column =
-  Printf.sprintf "table-%d-cell-%s-%s" inst.V.id row_uuid column
 
 let focus_cell inst row_uuid column =
   V.update inst (fun s -> { s with V.table_cell_focus = Some (row_uuid, column) });

@@ -2508,3 +2508,33 @@ areas produces a distinct two-UUID batch. This preserves the native worker's
 intentional identical-read coalescing while exercising an actual overlapping
 request shape. An identical in-flight batch is not expected to increment the
 underlying worker request count.
+
+## Table title activation and editor return focus
+
+Table title captions now preserve the reference application's modifier-click
+behavior: Command-click on macOS or Ctrl-click elsewhere opens the row's page;
+Shift-click opens the right sidebar. The platform primary modifier takes
+precedence when Shift is also held. An ordinary click continues to open the
+existing rich-text title editor. The existing ghost buttons are unchanged.
+This uses canonical `PressModifiers`; there is no new LUI or worker wire field.
+
+The table title editor's internal `show` call now requires an `on_close`
+completion callback. Its originating mounted title captures the existing cell
+handle and table/view context. Successful editor retirement restores that
+cell's selected appearance and focus once, provided the originating scope,
+graph, route/view and connected element are still current. Removed/replaced
+rows and destination graphs do not inherit the completion. It does not select
+the row checkbox, create a focus timer, or look up a replacement by identifier.
+
+```ocaml
+let on_close = Views_table.capture_cell_return context table
+  ~row_uuid ~column:"block/title" in
+Table_title_editor.show ~anchor ~column_width ~on_close block
+```
+
+Shared recording-host regressions cover modifier precedence, exactly-once
+completion, disconnected replacements, changed views/graphs, stale sessions
+and disposed owners. These are application ownership checks, not AppKit
+first-responder qualification. Generic NSH container `NavigationKey` projection
+remains a separate backend gap; this change does not claim table arrow-key
+parity or alter the maintained Web/mobile backends' event contracts.

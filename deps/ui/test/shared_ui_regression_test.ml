@@ -1112,7 +1112,90 @@ let sidebar_favorite_rows ~registry ~profile =
        && (find "sidebar-page-actions").M.id=button.M.id);
     ignore (Lui_app.dispose session.S.app))
 
+let table_title_completion ~registry ~profile =
+  let module V = Views_state in
+  List.iter (fun is_mac ->
+    let primary = if is_mac then 4 else 1 in
+    let other = if is_mac then 1 else 4 in
+    List.iter (fun (modifiers, expected) ->
+      check "Table title uses the platform primary modifier before Shift"
+        (Views_table.title_action ~is_mac (P.PressModifiers (1, modifiers)) = expected))
+      [0,Views_table.Edit_title;primary,Views_table.Open_page;
+       2,Views_table.Open_sidebar;primary lor 2,Views_table.Open_page;
+       other,Views_table.Edit_title;16,Views_table.Edit_title];
+    check "An ordinary semantic title press keeps the editor path"
+      (Views_table.title_action ~is_mac (P.Press 1) = Views_table.Edit_title)) [false;true];
+  let services = Ui_services.get () in
+  let previous_model = !Runtime.read_model and previous_flush = !Runtime.app_flush
+  and previous_active = !Table_title_editor.active
+  and previous_sources = !Editor_state.extra_sources
+  and previous_editor = !Editor_state.st in
+  let current = ref {Model.initial with repo=Some "table-return-origin"} in
+  let connected = ref true and focuses = ref 0 and replacements = ref 0 and lookups = ref 0 in
+  let original = {(Ui_dom_web.el_of (Stub_dom.make_element "div")) with
+    Ui_services.connected=(fun () -> !connected);focus=(fun () -> incr focuses)} in
+  let replacement = {original with Ui_services.focus=(fun () -> incr replacements)} in
+  let resolved = ref original in
+  Ui_services.installed := Some {services with dom={services.dom with
+    by_id=(fun _ -> incr lookups;Some !resolved)}};
+  Runtime.read_model := (fun () -> !current);
+  Runtime.app_flush := (fun () -> ());
+  Editor_state.st := None;
+  Fun.protect ~finally:(fun () ->
+    Ui_services.installed := Some services;Runtime.read_model:=previous_model;
+    Runtime.app_flush:=previous_flush;Table_title_editor.active:=previous_active;
+    Editor_state.extra_sources:=previous_sources;Editor_state.st:=previous_editor) (fun () ->
+    let inst = ref None and capture = ref (fun () -> ()) in
+    let app = S.mount ~registry ~profile ~initial:!current
+      ~reducer:(fun model () -> model)
+      ~view:(fun context _ _ ->
+        Editor_state.st:=Some (Signal.state context.Lui_ui.ui_scheduler Editor_state.initial);
+        let table = V.make ~sched:context.Lui_ui.ui_scheduler ~kind:V.KLinkedRefs
+          ~feature:"table-title-return" ~owner:Wire.Nil in
+        V.set table {(V.empty_vstate ()) with V.view_uuid="origin-view"};
+        inst:=Some table;
+        capture:=Views_table.capture_cell_return context table
+          ~row_uuid:"table-row" ~column:"block/title";
+        Lui_elements.column []) () in
+    let table = Option.get !inst in
+    let complete callback =
+      let session : Table_title_editor.session =
+        {uuid="table-row";popup_id=(-1);return_scope="main";on_close=callback} in
+      Table_title_editor.active:=Some session;
+      Table_title_editor.retire session;
+      Table_title_editor.retire session in
+    Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app.S.app)) (fun () ->
+      complete !capture;
+      check "Title completion selects its originating cell and focuses it exactly once"
+        (!focuses=1 && (V.get table).V.table_cell_focus=Some ("table-row","block/title"));
+      check "Restoring a cell does not select its row checkbox"
+        (not (V.table_row_selected (V.get table) "table-row"));
+      resolved:=replacement;connected:=false;
+      complete !capture;
+      check "A disconnected cell cannot focus a same-identifier replacement"
+        (!focuses=1 && !replacements=0 && !lookups=1);
+      connected:=true;
+      V.update table (fun state -> {state with V.view_uuid="replacement-view"});
+      complete !capture;
+      check "A switched view cannot receive its predecessor's completion" (!focuses=1);
+      V.update table (fun state -> {state with V.view_uuid="origin-view"});
+      current:={!current with Model.repo=Some "destination-graph"};
+      complete !capture;
+      check "A same-UUID destination graph cannot receive the origin cell focus" (!focuses=1);
+      current:={!current with Model.repo=Some "table-return-origin"};
+      let newer : Table_title_editor.session =
+        {uuid="newer-row";popup_id=(-2);return_scope="main";on_close=(fun () -> ())} in
+      let stale = {newer with Table_title_editor.uuid="table-row";on_close= !capture} in
+      Table_title_editor.active:=Some newer;
+      Table_title_editor.retire stale;
+      check "An older editor completion cannot retire a newer editor"
+        (!focuses=1 && match !Table_title_editor.active with Some s -> s==newer | None -> false);
+      Table_title_editor.active:=None);
+    !capture ();
+    check "Disposing the originating title owner retires its focus callback" (!focuses=1))
+
 let run_views ~registry ~profile ~finish =
+  table_title_completion ~registry ~profile;
   sidebar_favorite_rows ~registry ~profile;
   native_view_type_menu ~registry;
   gallery_remote_cover_policy ~registry;

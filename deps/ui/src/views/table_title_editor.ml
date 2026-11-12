@@ -8,7 +8,12 @@ module P = Views_popup
 
 let scope = "table-title"
 
-type session = { uuid : string; popup_id : int; return_scope : string }
+type session =
+  { uuid : string
+  ; popup_id : int
+  ; return_scope : string
+  ; on_close : unit -> unit
+  }
 let active : session option ref = ref None
 
 let owns session = match !active with
@@ -21,7 +26,8 @@ let retire session =
     S.set (fun state -> if state.S.selection_scope = scope
       then {state with S.selection_scope = session.return_scope} else state);
     S.remove_block_source ~scope;
-    P.close_entry session.popup_id
+    P.close_entry session.popup_id;
+    session.on_close ()
   end
 
 let rec close session =
@@ -38,14 +44,14 @@ let () = S.on_edit_exit (fun uuid ->
   | Some session when session.uuid = uuid && (S.read ()).S.selection_scope = scope -> retire session
   | _ -> ())
 
-let rec show ~anchor ~column_width (block : Model.block) =
+let rec show ~anchor ~column_width ~on_close (block : Model.block) =
   let context = Runtime.repo (), Runtime.route () in
   let later () = S.enqueue_edit_action ~real:true (fun () ->
     if context = (Runtime.repo (), Runtime.route ()) && !active = None
-       && S.editing () = None then show ~anchor ~column_width block) in
+       && S.editing () = None then show ~anchor ~column_width ~on_close block) in
   if !S.structure_pending then
     S.enqueue_edit_action ~real:true (fun () ->
-      if context = (Runtime.repo (), Runtime.route ()) then show ~anchor ~column_width block)
+      if context = (Runtime.repo (), Runtime.route ()) then show ~anchor ~column_width ~on_close block)
   else match !active, S.editing () with
   | Some session, _ when Some session.uuid = block.Model.block_uuid ->
       A.request_focus session.uuid (String.length (A.live_buffer session.uuid))
@@ -55,7 +61,7 @@ let rec show ~anchor ~column_width (block : Model.block) =
       P.close_all ();
       let uuid = Option.get block.Model.block_uuid in
       let session = { uuid; popup_id = !(P.next_id) + 1;
-        return_scope = (S.read ()).S.selection_scope } in
+        return_scope = (S.read ()).S.selection_scope; on_close } in
       active := Some session;
       S.add_block_source ~scope (fun () -> [block]);
       let width = max 160 column_width - 18 in
