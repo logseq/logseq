@@ -13,6 +13,40 @@ let install scheduler =
   | Some _ -> invalid_arg "UI task scheduler already installed"
   | None -> scheduler.assert_owner (); installed := Some scheduler
 
+(* Optional application-owned work observation. No registry is installed for
+   ordinary callers; the ambient scope only follows a serialized application. *)
+module Activity = struct
+  type t = { mutable pending : int; mutable epoch : int; mutable live : bool }
+  type snapshot = { pending : int; epoch : int }
+  let current : t option ref = ref None
+  let create () = { pending = 0; epoch = 0; live = true }
+  let in_context scope f =
+    let previous = !current in
+    current := scope;
+    Fun.protect ~finally:(fun () -> current := previous) f
+  let within scope f = in_context (Some scope) f
+  let without f = in_context None f
+  let capture f =
+    match !current with
+    | None -> (fun value -> without (fun () -> f value))
+    | Some scope -> (fun value -> within scope (fun () -> f value))
+  let begin_work () =
+    match !current with
+    | Some scope when scope.live ->
+        scope.pending <- scope.pending + 1;
+        scope.epoch <- scope.epoch + 1;
+        let finished = ref false in
+        Some (fun () ->
+          if not !finished then begin
+            finished := true;
+            scope.pending <- scope.pending - 1;
+            scope.epoch <- scope.epoch + 1
+          end)
+    | None | Some _ -> None
+  let snapshot (scope : t) : snapshot = { pending = scope.pending; epoch = scope.epoch }
+  let close scope = scope.live <- false
+end
+
 exception Cancelled
 type 'a state = Pending | Settled of ('a, exn) result
 type 'a listener = {
@@ -24,11 +58,13 @@ type 'a t = {
   mutable callbacks : 'a listener list;
   mutable cancel_hooks : (unit -> unit) list;
   mutable cleanup_hooks : (unit -> unit) list;
+  finish_activity : (unit -> unit) option;
 }
 
 let new_pending () =
   owner ();
-  { state = Pending; callbacks = []; cancel_hooks = []; cleanup_hooks = [] }
+  { state = Pending; callbacks = []; cancel_hooks = []; cleanup_hooks = [];
+    finish_activity = Activity.begin_work () }
 
 let notify listener result =
   (scheduler ()).enqueue (fun () ->
@@ -44,6 +80,7 @@ let settle task result =
   | Settled _ -> ()
   | Pending ->
       task.state <- Settled result;
+      Option.iter (fun finish -> finish ()) task.finish_activity;
       let callbacks = List.rev task.callbacks and cleanup = task.cleanup_hooks in
       task.callbacks <- [];
       task.cancel_hooks <- [];
@@ -69,7 +106,7 @@ let reject error = let task = new_pending () in settle task (Error error); task
 
 let observe task callback =
   owner ();
-  let listener = { callback; active = true } in
+  let listener = { callback = Activity.capture callback; active = true } in
   (match task.state with
   | Pending -> task.callbacks <- listener :: task.callbacks
   | Settled result -> notify listener result);

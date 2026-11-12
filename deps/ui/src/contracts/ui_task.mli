@@ -24,3 +24,23 @@ val cancel : 'a t -> unit
    releases observations, and invokes its cancellation hook once. Rejection
    observers remain deferred, and later I/O completions are ignored. *)
 val ( let* ) : 'a t -> ('a -> 'b t) -> 'b t
+
+
+(** Optional work counters owned by one serialized application/scope. Observation
+    does not settle, cancel, retain or enumerate tasks. Existing callers need not
+    install a scope. Call these operations on the application's owner thread. *)
+module Activity : sig
+  type t
+  type snapshot = { pending : int; epoch : int }
+  val create : unit -> t
+  val within : t -> (unit -> 'a) -> 'a
+  val without : (unit -> 'a) -> 'a
+  (** Capture the current observation context for a later continuation. *)
+  val capture : ('a -> 'b) -> 'a -> 'b
+  (** A one-shot completion hook for an additional application-owned async
+      primitive, or [None] outside an observed scope. No task is created. *)
+  val begin_work : unit -> (unit -> unit) option
+  val snapshot : t -> snapshot
+  (** Stop observing newly created work; existing completion hooks still work. *)
+  val close : t -> unit
+end

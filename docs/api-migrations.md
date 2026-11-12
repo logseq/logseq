@@ -439,3 +439,24 @@ after writing the optional configuration and before signing. Supply both
 options preserve a manual-install package without update metadata or network
 activity. Ordinary application launch and the explicit private
 `--startup-preflight ROOT` mode keep their existing credential/storage rules.
+
+
+### Optional application-owned asynchronous work observation
+
+`Ui_task.Activity` supplies app/scope-owned pending-work and activity-epoch
+snapshots. `within scope f` observes tasks created by that scope and preserves the
+observation context of their continuations; `without f` marks control work that
+must not count itself. `close scope` stops observing newly created work without
+cancelling tasks. Counters release exactly once through the existing settlement
+and cancellation lifecycle. There is no global cross-application task registry,
+new worker, timer or deferred-invoke queue. Existing Web/mobile callers need not
+create an observation scope and retain task ordering and cancellation semantics.
+
+For example, a native save coordinator may create one application-owned scope,
+run its existing serialized entries inside that scope, and inspect
+`Activity.snapshot scope` after the existing mailbox drains. Outstanding unknown
+work must explicitly refuse preparation; a snapshot alone does not prove worker
+revision compatibility or authorize an update. Adapter primitives can use the
+one-shot optional completion hook from `begin_work` to account for native
+promises without copying task state. Long-lived transport liveness subscriptions
+must be classified separately rather than waited on as finite work.

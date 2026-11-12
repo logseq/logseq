@@ -147,6 +147,63 @@ let run ~enqueue ~drain ~set_owner () =
         resolve_next "fresh page";
         drain ();
         check "work armed after the switch completes" (!published = Some "fresh page"));
+      "application-owned observation preserves task ordering and cancellation", (fun () ->
+        let activity = Ui_task.Activity.create () in
+        let other = Ui_task.Activity.create () in
+        let task, resolve, _ = Ui_task.Activity.within activity Ui_task.pending in
+        let values = ref [] in
+        ignore (Ui_task.Activity.within activity (fun () ->
+          Ui_task.bind task (fun value -> values := value :: !values; Ui_task.resolve ())));
+        check "only the creating app observes pending work"
+          ((Ui_task.Activity.snapshot activity).pending = 2
+           && (Ui_task.Activity.snapshot other).pending = 0);
+        let before = (Ui_task.Activity.snapshot activity).epoch in
+        resolve 7;
+        check "observation cannot settle work or run callbacks" (!values = []);
+        drain ();
+        check "settlement keeps original callback semantics" (!values = [7]);
+        check "observed completion releases once"
+          ((Ui_task.Activity.snapshot activity).pending = 0
+           && (Ui_task.Activity.snapshot activity).epoch > before);
+        let cancelled = ref 0 in
+        let task, late, _ = Ui_task.Activity.within activity Ui_task.pending in
+        ignore (Ui_task.Activity.within activity (fun () ->
+          Ui_task.catch task (fun error ->
+            if error = Ui_task.Cancelled then incr cancelled;
+            Ui_task.resolve ())));
+        Ui_task.cancel task;
+        Ui_task.cancel task;
+        late ();
+        drain ();
+        check "observing does not duplicate cancellation" (!cancelled = 1);
+        check "cancelled task and late completion leave no observed work"
+          ((Ui_task.Activity.snapshot activity).pending = 0));
+      "observation follows owned continuations without a global task registry", (fun () ->
+        let activity = Ui_task.Activity.create () in
+        let other = Ui_task.Activity.create () in
+        let task, resolve, _ = Ui_task.Activity.within activity Ui_task.pending in
+        let finish = ref None in
+        ignore (Ui_task.Activity.within activity (fun () ->
+          Ui_task.bind task (fun () ->
+            let nested, resolve_nested, _ = Ui_task.pending () in
+            finish := Some resolve_nested;
+            nested)));
+        Ui_task.Activity.within other (fun () -> resolve ());
+        drain ();
+        check "continuation keeps its creating observation owner"
+          ((Ui_task.Activity.snapshot activity).pending = 2
+           && (Ui_task.Activity.snapshot other).pending = 0);
+        Option.get !finish ();
+        drain ();
+        check "nested work settles through existing cleanup"
+          ((Ui_task.Activity.snapshot activity).pending = 0);
+        let task, resolve, _ = Ui_task.Activity.within activity Ui_task.pending in
+        Ui_task.Activity.close activity;
+        ignore task;
+        resolve ();
+        drain ();
+        check "closing observation does not cancel or retain task completion"
+          ((Ui_task.Activity.snapshot activity).pending = 0));
       "creation exceptions reject asynchronously", (fun () ->
         let received = ref None in
         let task = Ui_task.create (fun ~resolve:_ ~reject:_ -> failwith "request startup failed") in
