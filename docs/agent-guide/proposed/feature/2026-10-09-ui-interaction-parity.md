@@ -2773,3 +2773,47 @@ The signed release restarts and renders the opaque narrow sidebar without journa
 Some immediate window screenshots after a narrow sidebar toggle omit the footer text before a later capture shows it again. Do not infer a glyph-cache or layout fix from that observation. The exported frame retains both footer nodes at their expected bounds, valid unclipped glyph ranges and opaque ink. Full scene rasterization, the IOSurface backing read and Core Animation layer-composition read each contain the same 1547 dark footer pixels. This leaves physical delivery/capture timing unresolved; no speculative repaint workaround is added. Remove the temporary composition-capture probe from production source and restore the normal launcher. Keep this observation with the broader physical presentation/input gate rather than claiming continuous 120 FPS or complete visual parity.
 
 Final application release @all, serial host/native/contracts tests, all 5279 shared checks, fifteen stylesheet checks and CSS/Web builds pass. The reloaded Web keeps the original Task fixture, restores its 1280 viewport and 246-point sidebar, has no inline application-sidebar alias and emits no warning/error entries. Its right-toggle widths are 0, 0, 32 and 32 at viewport widths 360, 639, 640 and 1280. No graph content is edited. Remove fourteen temporary capture/inspection files, retain only the two fixed external screenshot slots and exclude all diagnostic artifacts from commits. The updated decision passes validation; the repository-wide document check retains its thirteen pre-existing invalid documents.
+
+## NSH before-install save, quiescence and restart audit (2026-11-12)
+
+**Acceptance: RED.** Update menu composition does not establish that replacing and restarting the real Logseq application is safe. This is a source design, not an implemented hook, protocol or runtime qualification. Sources: Logseq `f0977652f6ee103e2cbdc087d672c0ca46c339f7`, LUI `d34412f29d7c4dc8e16f471b9ca5285626a26ec3`, pinned NSH `bfa15d0c843c0d6f5bf3a2a230e8ca56b876b61c`. In-flight root CLI edits were excluded.
+
+### Existing seams and missing guarantees
+
+- LUI `platform/nsh/src/desktop_updates.rs:375–405` confirms installation, calls `Updater::install`, then requests restart. `update.rs:480–504` re-verifies the archive and performs the indivisible installation. Neither asks Logseq to save or quiesce first.
+- Logseq `deps/ui/native/native_embed.ml:683–701` owns `prepare_window_close`: await worker idle; settle structural/property editing; commit the live editor buffer; flush pending outliner saves; await worker idle again. Its request/result route at lines 721–731 reaches `deps/ui/nsh/src/services/mod.rs:160–173`, whose successful result **closes the window**. Calling that unchanged would dispose the updater before installation.
+- `deps/ui/src/editor/outliner_ops.ml:1935–1938` owns pending-save flushing. A Rust-only “saved” flag or input blur is not an authoritative substitute.
+- Worker release is deliberately detach-only (`deps/ui/native/daemon_client.ml:589–596`). It keeps the daemon open across launches. Spawn uses `Unix.create_process` and `--owner-source electron` (lines 234–261); that label does not prove exclusive ownership.
+- `/healthz` reports revision, pid, storage, ownership ticket/generation and owner source (`deps/db-worker/lib/db_worker_node.ml:563–604`). Reuse currently checks ready/identity and canonical storage (`daemon_client.ml:343–388`), not executable revision or exclusive clients. Saving the app does not prove an old daemon can safely serve newly installed code.
+
+### Minimal preparation hook plan
+
+1. Add an optional application-owned asynchronous preparation hook to the existing LUI update controller. Invoke it **after** final user confirmation and **before** the installer. Preserve generic standalone behavior; do not duplicate workers, dialogs, verification or installation.
+2. Logseq obtains an owner-scoped preparation lease through its existing serialized event/worker pump. Factor/reuse `prepare_window_close`'s save work with a correlated acknowledgement that does not close a window. Leave the app pump free to process completions; never await its own response inside a blocking publication service. The typed request/result contract requires separate implementation review; this audit adds none.
+3. Quiesce new edits, structural commands and graph switches from this application while draining already admitted work. Disabling only update-menu items is insufficient: otherwise new input can follow the save acknowledgement. Bind preparation to its application/session and identity; retired owners or changed sessions cannot authorize installation.
+4. Resolve successfully only after actual editor/outliner save and worker-idle acknowledgement. Error, cancellation, timeout or disposal prevents installation/restart, retains the verified download and restores normal input, with the existing translated error when appropriate. Cancellation before installation has no install side effect.
+5. Retain quiescence during the existing indivisible installation. Do not promise mid-install rollback/cancellation. On failure, release the lease and resume the app with an explicit error. On success, remain quiescent through orderly exit and the approved relaunch. Late callbacks cannot reopen input or restart a replacement owner.
+
+### Shared worker ownership is a separate gate
+
+Do not stop a daemon merely because it appears in this app's server-list or has `owner-source = electron`. CLI/native/other clients can share it. Root/pid/ticket checks establish identity, not absence of other clients. Define an explicit compatibility and exclusive restart/transfer policy before claiming an update that also replaces the bundled worker. If safe reuse/handoff cannot be established, stop before installation with an actionable error. Do not silently attach new app code to an unverified old worker, signal a shared user daemon or add a second document controller.
+
+The private fixture can shut down only its uniquely rooted workers using the existing ownership checks (`deps/ui/nsh/tests/startup_preflight.rs:465–510`); that authority must not become a production cleanup shortcut.
+
+### Relaunch, argv and credential ownership
+
+NSH `crates/nsh-core/src/restart.rs:61–75` carries process arguments, but its macOS bundle path at lines 124–136 uses `open -n`, explicitly activating the application. The bounded old-process wait also launches after its limit even if exit was not established. Neither proves a nonactivating, exclusive private Logseq restart. Do not exercise that path for locked/background qualification.
+
+An application-owned relaunch policy/hook must preserve the approved installed program/launcher, validated arguments, working directory and necessary environment; start only after this process actually exits; and fail without launching a second app if exit cannot be established. Keep generic NSH behavior unchanged. Do not assume Launch Services preserves private environment values or treat inherited library/resource overrides as trusted installation configuration.
+
+Normal sessions must retain the native credential store. Explicit `--startup-preflight <private-root>` sessions must preserve that marker plus validated private HOME/root/graphs/state/cache/data paths and background policy, and continue selecting the owner-local empty credential backend (`deps/ui/nsh/src/main.rs:39–47`, `lib.rs:58–63`, `services/mod.rs:35–39`). If these inputs cannot be preserved and revalidated, abort rather than falling back to regular startup, user graphs or OS keychain access. Private restart must not activate/unlock/wake the display or acquire authority over unrelated processes.
+
+### Required evidence before closing RED acceptance
+
+- A dirty real block/property editor is committed once and persisted before replacement; pending structural work and saves settle in order.
+- Save failure/cancellation/timeout prevents install/restart, preserves the running app/download and restores input. Disposal and late replies cannot authorize a replacement owner.
+- New edits/graph switches are excluded between preparation acknowledgement and exit; installation failure releases that exclusion safely.
+- Shared-worker compatibility/ownership is established, including refusal of an unrelated or still-shared worker; private cleanup cannot touch user graphs.
+- Actual installed old→new Logseq qualification proves old-process exit, new app/library/worker identities, graph persistence and argv ownership. Its private variant proves preserved isolation/empty credentials and nonactive background relaunch.
+
+Menu presence, generic updater fixtures, synthetic save acknowledgements and package startup cannot satisfy these cases. Production feed/key, real Logseq preparation, worker handoff and safe background relaunch remain unqualified. `spec-dev-tool` was unavailable on PATH and absent from the searched repository/skill locations, so its document validator was not run; no installation or build was attempted.
