@@ -561,11 +561,19 @@ let handle_shutdown (stop_fn : unit -> unit) (res : Http_server.res) : unit =
 (* Only the native entrypoint installs this process-origin descriptor. A
    foreign request permanently disqualifies exclusive update ownership while
    leaving all existing clients and daemon reuse behavior operational. *)
+type native_update_phase = Update_open | Update_sealed of string | Update_stopping of string
+type native_update_state = {
+  phase : native_update_phase;
+  shared : bool;
+  active : int;
+  latest : string option;
+  drained : unit E.resolver option;
+}
 type native_app_owner = {
   session : string;
   instance : string;
   executable : string;
-  mutable shared : bool;
+  update_state : native_update_state Atomic.t;
 }
 let native_app_owner : native_app_owner option ref = ref None
 let valid_app_identity id =
@@ -576,16 +584,128 @@ let valid_app_identity id =
 let configure_native_app_owner ~session ~instance ~executable =
   if not (valid_app_identity session && valid_app_identity instance) || executable = ""
   then invalid_arg "Invalid native application worker origin";
-  native_app_owner := Some { session; instance; executable; shared = false }
+  native_app_owner := Some { session; instance; executable;
+    update_state = Atomic.make {phase=Update_open; shared=false; active=0; latest=None; drained=None} }
+let rec native_update_change owner change =
+  let before = Atomic.get owner.update_state in
+  let after, result = change before in
+  if Atomic.compare_and_set owner.update_state before after then result
+  else native_update_change owner change
+let native_app_shared owner = (Atomic.get owner.update_state).shared
 let observe_native_app_request ~path ~meth ~session =
   if path <> "/healthz" && meth <> "OPTIONS" then
     Option.iter (fun owner ->
-      if session <> Some owner.session then owner.shared <- true) !native_app_owner
+      if session <> Some owner.session then
+        native_update_change owner (fun state -> {state with shared=true}, ())) !native_app_owner
 let native_app_health owner =
+  let state = Atomic.get owner.update_state in
+  let phase = match state.phase with
+    | Update_open -> "open" | Update_sealed _ -> "sealed" | Update_stopping _ -> "stopping" in
   smap [ "session", Wire.String owner.session
        ; "instance", Wire.String owner.instance
        ; "executable", Wire.String owner.executable
-       ; "shared", Wire.Bool owner.shared ]
+       ; "shared", Wire.Bool state.shared
+       ; "phase", Wire.String phase ]
+
+(* CAS orders a finite request's reservation against sealing. Registration must
+   precede evaluating its handler: a native handler can already wait on graph
+   work before it has returned its effect to the legacy request tracker. *)
+let admit_native_request ~path ~meth ~session =
+  match !native_app_owner with
+  | None -> Ok None
+  | Some _ when path = "/healthz" || meth = "OPTIONS" -> Ok None
+  | Some owner ->
+      native_update_change owner (fun state ->
+        let shared = state.shared || session <> Some owner.session in
+        match state.phase with
+        | Update_open -> {state with shared; active=state.active+1}, Ok (Some owner)
+        | Update_sealed _ | Update_stopping _ ->
+            {state with shared}, Error "worker-update-sealed")
+let finish_native_request owner =
+  let drained = native_update_change owner (fun state ->
+    if state.active <= 0 then invalid_arg "Native worker request reservation underflow";
+    let active = state.active-1 in
+    let notify = if active = 0 then state.drained else None in
+    {state with active; drained=(if active=0 then None else state.drained)}, notify) in
+  Option.iter (fun resolver -> E.wakeup resolver ()) drained
+let valid_native_update_id id =
+  String.length id > 0 && String.length id <= 20 && id.[0] <> '0'
+  && String.for_all (function '0'..'9' -> true | _ -> false) id
+let native_update_owner ~session ~instance =
+  match !native_app_owner with
+  | Some owner when session = Some owner.session && instance = owner.instance -> Ok owner
+  | Some _ | None -> Error "worker-update-owner-mismatch"
+let native_update_seal owner id =
+  native_update_change owner (fun state ->
+    match state.phase with
+    | Update_open when not state.shared && Option.fold ~none:true
+        ~some:(fun previous -> String.length id > String.length previous
+          || (String.length id=String.length previous && String.compare id previous > 0)) state.latest ->
+        {state with phase=Update_sealed id; latest=Some id}, Ok ()
+    | Update_sealed current when current=id && not state.shared -> state, Ok ()
+    | _ -> state, Error (if state.shared then "worker-update-shared" else "worker-update-state-mismatch"))
+let native_update_abort owner id =
+  native_update_change owner (fun state ->
+    match state.phase with
+    | Update_sealed current when current=id -> {state with phase=Update_open}, Ok ()
+    | Update_open when Option.fold ~none:true ~some:(fun previous ->
+        String.length id > String.length previous
+        || (String.length id=String.length previous && String.compare id previous >= 0)) state.latest ->
+        {state with latest=Some id}, Ok ()
+    | Update_stopping current when current=id -> state, Error "worker-update-stop-dispatched"
+    | _ -> state, Error "worker-update-state-mismatch")
+let native_update_stop owner id =
+  let waiting, resolver = E.wait () in
+  native_update_change owner (fun state ->
+    match state.phase with
+    | Update_sealed current when current=id && not state.shared ->
+        let drain = if state.active=0 then E.pure () else waiting in
+        {state with phase=Update_stopping id;
+          drained=(if state.active=0 then None else Some resolver)}, Ok drain
+    | _ -> state, Error (if state.shared then "worker-update-shared" else "worker-update-state-mismatch"))
+
+let native_update_path = "/v1/nsh-update"
+let native_update_reply res status fields = send_json res status (smap fields)
+let native_update_error res code =
+  native_update_reply res 409 ["ok", Wire.Bool false; "error", Wire.String code];
+  E.pure ()
+let handle_native_update ~stop_fn req res =
+  if Http_server.req_method req <> "POST" then
+    (send_text res 405 "method-not-allowed"; E.pure ())
+  else E.catch
+    (E.bind (Http_server.read_body req) (fun body ->
+      let payload = Json.parse body in
+      let string name = match Wire.get name payload with Some (Wire.String value) -> value
+        | _ -> invalid_arg ("Native update request requires " ^ name) in
+      let id = string "id" and instance = string "instance" and action = string "action" in
+      (match payload with
+       | Wire.Map fields when List.length fields=3 -> ()
+       | _ -> invalid_arg "Native update request requires exactly id, instance and action");
+      if not (valid_native_update_id id && valid_app_identity instance) then
+        invalid_arg "Invalid native update request identity";
+      match native_update_owner ~session:(Http_server.req_header req "x-logseq-app-session") ~instance with
+      | Error code -> native_update_error res code
+      | Ok owner ->
+          let answer phase = native_update_reply res 200
+            ["ok", Wire.Bool true; "id", Wire.String id;
+             "instance", Wire.String instance; "phase", Wire.String phase] in
+          match action with
+          | "seal" -> (match native_update_seal owner id with
+              | Error code -> native_update_error res code
+              | Ok () -> answer "sealed"; E.pure ())
+          | "abort" -> (match native_update_abort owner id with
+              | Error code -> native_update_error res code
+              | Ok () -> answer "open"; E.pure ())
+          | "stop" -> (match native_update_stop owner id with
+              | Error code -> native_update_error res code
+              | Ok drained ->
+                  (* This acknowledgement is dispatch only. The caller must
+                     independently wait for its captured exact child to exit. *)
+                  answer "stopping";
+                  E.async (fun () -> E.bind drained (fun () -> stop_fn (); E.pure ()));
+                  E.pure ())
+          | _ -> native_update_error res "worker-update-unknown-action"))
+    (fun _ -> native_update_error res "worker-update-invalid-request")
 
 (* Installed only by the native entrypoint. Health checks never collect or
    compact the heap, and maintained JavaScript responses omit this field. *)
@@ -645,7 +765,7 @@ let health_payload ~(bound_repo : string) ~(host : string)
 
 (* handle-request! — the cljs router; [url] is the raw req.url (the
    /v1/shutdown comparison is intentionally against the raw url). *)
-let handle_request (proxy : proxy) ~(bound_repo : string)
+let handle_request_admitted (proxy : proxy) ~(bound_repo : string)
     ~(stop_fn : unit -> unit) ~(host : string) ~(port : int option)
     ~(owner_source : string) ~(root_dir : string)
     (req : Http_server.req) (res : Http_server.res) : unit E.t =
@@ -653,9 +773,6 @@ let handle_request (proxy : proxy) ~(bound_repo : string)
   let parsed_url = Node_url.parse ~base:"http://127.0.0.1" url in
   let request_path = Node_url.pathname parsed_url in
   let http_method = Http_server.req_method req in
-  if Option.is_some !native_app_owner then
-    observe_native_app_request ~path:request_path ~meth:http_method
-      ~session:(Http_server.req_header req "x-logseq-app-session");
   if http_method = "OPTIONS" then (send_no_content res; E.pure ())
   else if request_path = "/healthz" then begin
     send_json res
@@ -700,6 +817,24 @@ let handle_request (proxy : proxy) ~(bound_repo : string)
     else (send_text res 405 "method-not-allowed"; E.pure ())
   else (send_text res 404 "not-found"; E.pure ())
 
+let handle_request proxy ~bound_repo ~stop_fn ~host ~port ~owner_source ~root_dir req res =
+  let path = Node_url.pathname (Node_url.parse ~base:"http://127.0.0.1" (Http_server.req_url req)) in
+  if path=native_update_path then handle_native_update ~stop_fn req res
+  else
+    let session = match !native_app_owner with None -> None
+      | Some _ -> Http_server.req_header req "x-logseq-app-session" in
+    match admit_native_request ~path ~meth:(Http_server.req_method req) ~session with
+    | Error code ->
+        send_json res 409 (smap ["ok", Wire.Bool false; "error", smap [
+          "code", Wire.String code; "message", Wire.String "Worker is sealed for an application update"]]);
+        E.pure ()
+    | Ok reservation ->
+        let release () = Option.iter finish_native_request reservation; E.pure () in
+        let task = try
+          handle_request_admitted proxy ~bound_repo ~stop_fn ~host ~port ~owner_source ~root_dir req res
+          with error -> E.error error in
+        E.finally task release
+
 (* track_request — cljs *requests set: pending effects drained on
    shutdown via p/all. *)
 let track_request (task : unit E.t) : unit =
@@ -732,11 +867,13 @@ type server_ctx =
 let make_server (proxy : proxy) (ctx : server_ctx) : Http_server.server =
   let server =
     Http_server.create (fun req res ->
-        track_request
-          (handle_request proxy ~bound_repo:ctx.bound_repo
-             ~stop_fn:ctx.stop_fn ~host:ctx.host
-             ~port:!(ctx.port_cell) ~owner_source:ctx.owner_source
-             ~root_dir:ctx.ctx_root_dir req res))
+        let path = Node_url.pathname
+          (Node_url.parse ~base:"http://127.0.0.1" (Http_server.req_url req)) in
+        let task = handle_request proxy ~bound_repo:ctx.bound_repo
+          ~stop_fn:ctx.stop_fn ~host:ctx.host ~port:!(ctx.port_cell)
+          ~owner_source:ctx.owner_source ~root_dir:ctx.ctx_root_dir req res in
+        if path=native_update_path then E.async (fun () -> task)
+        else track_request task)
   in
   Http_server.disable_timeouts server;
   server

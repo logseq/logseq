@@ -12,6 +12,70 @@ actions at the cell boundary. Web, Apple, Android and ordinary page routes retai
 their existing spacing. No application call changes; continue using the same
 journal and title-action components.
 
+## Explicit owned-worker seal and shutdown capability remains disabled for installation
+
+Native workers carrying the NSH process-origin descriptor now support
+`POST /v1/nsh-update` with `X-Logseq-App-Session` and exactly:
+
+```json
+{"id":"<positive decimal request ID>","instance":"<spawn UUID>","action":"seal"}
+```
+
+`action` is `seal`, `abort` or `stop`. Successful replies carry `ok: true`, the
+matching `id` and `instance`, and `phase: "sealed"`, `"open"` or `"stopping"`.
+Malformed, mismatched, shared or invalid-state requests return HTTP 409 with
+`ok: false` and a specific string `error` code. Wrong HTTP methods return 405.
+These operations use the existing loopback worker, not a new daemon or installer.
+
+Sealing atomically orders against ordinary finite request admission. Work already
+admitted can finish; later ordinary requests receive HTTP 409 with the normal
+structured error containing `code: "worker-update-sealed"`. Legacy clients keep
+working before an explicit seal. Read-only health and OPTIONS remain available;
+an SSE stream counts only its finite setup, not its connection lifetime. A
+foreign client marks the process shared, including a rejected request after a
+seal. Shared processes cannot start a stop. `nsh-app-ownership` health metadata
+also adds `phase` (`open`, `sealed` or `stopping`). Existing health readers keep
+ignoring unknown fields.
+
+For example, `seal` request `7` can be released with `abort` request `7`. That
+release is idempotent; its tombstone rejects a delayed seal of `7`. A seal of `8`
+cannot be released by an old abort of `7`. Once `stop` is dispatched, abort returns
+`worker-update-stop-dispatched`; neither the worker nor the client pretends it
+can resume. Existing signed-update download and installation behavior is not
+changed by these internal worker operations.
+
+Stop waits for all finite reservations accepted before the seal, then invokes
+the existing daemon stop lifecycle: close streams, stop DB sync, drain writes,
+close the bound DB, release graph ownership and exit. Its HTTP `stopping` reply
+acknowledges dispatch only. It does not prove graph closure or process exit.
+The management request is excluded from the ordinary request drain, so it never
+waits for itself.
+
+The native client's explicit `Worker_update` helper requires a child token made
+only by `Child_process.spawn`. It retains the actual unreaped child identifier
+on POSIX and original process HANDLE on Windows, and uses `Unix.waitpid` on that
+exact token. It never obtains stop authority from a registry PID or a liveness
+probe. The original HANDLE remains owned until waiting consumes it or the parent
+process exits; normal persistent worker lifetime is unchanged. OCaml 5.5.1's
+[createprocess.c](https://github.com/ocaml/ocaml/blob/5.5.1/otherlibs/unix/createprocess.c)
+returns that HANDLE, and
+[winwait.c](https://github.com/ocaml/ocaml/blob/5.5.1/otherlibs/unix/winwait.c)
+waits its termination and closes it. The existing consuming PID helper remains
+available; the new private getter obtains the OS PID without consuming the
+original HANDLE. No duplicated handle or custom process waiter is introduced.
+
+Network and bounded exact-child exit checks run off the application owner. Only
+`WEXITED 0` proves a clean stop. Nonzero, signalled, timed-out or otherwise unknown
+exit leaves the client uncertain; an uncertain stop cannot abort or release.
+Transport failure during seal or abort can only be resolved by a matching abort
+acknowledgement, including a tombstone for a seal that never arrived.
+
+**Normal update preparation does not invoke these management operations, and
+installation still issues no `InstallLease`.** Whole-application restoration after
+partial stop, final abort/released coordination, relaunch policy and end-to-end
+qualification remain prerequisites before enabling them. Unconfigured updates
+still do not create an updater, network operation or preparation event.
+
 ## NSH right sidebar header toggle retains its native wrapper on resize
 
 `Ui_components.header_right_sidebar_toggle` now uses `display=block` at widths
@@ -46,7 +110,7 @@ worker adds an optional `nsh-app-ownership` object to `/healthz`:
 
 The native loopback invoke and SSE requests add `X-Logseq-App-Session`. A native
 worker carrying this origin permanently marks `shared: true` when a non-health,
-non-OPTIONS request comes from another session or has no session header. Requests
+non-OPTIONS request comes from another session or has no session header. Until an explicit update seal, requests
 remain accepted: existing CLI, Electron and mobile consumers keep their current
 request formats and reuse behavior. Workers started without both new environment
 variables omit the field. Existing health readers must continue ignoring unknown
@@ -70,9 +134,10 @@ The existing matching abort/released acknowledgement still precedes displaying
 that specific error. A successful prerequisite still returns the translated
 installation-unavailable explanation and never issues an `InstallLease`.
 
-This sampled check is not atomic exclusivity or completed shutdown proof. Final
-worker fencing, drain/graph-close/process-exit acknowledgement and an explicit
-packaged relaunch policy remain necessary before enabling installation.
+This sampled check is not atomic exclusivity or completed shutdown proof. The
+explicit stage-two capability above is separate and remains unused by normal
+preparation. Final restoration/released coordination and a packaged relaunch
+policy remain necessary before enabling installation.
 Unconfigured updates still create no updater or preparation event.
 
 The maintained worker platform contract adds

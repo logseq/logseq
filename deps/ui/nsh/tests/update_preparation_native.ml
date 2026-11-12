@@ -1860,6 +1860,45 @@ let native_controlled_field_resets () =
       (not (List.exists (fun operation ->
         operation="set-value" || operation="set-text-content") !dom_operations)))
 
+let native_owned_child_exit_proof () =
+  List.iter (fun code ->
+    let executable, arguments =
+      if Sys.os_type="Win32" then
+        let executable = Filename.concat (Sys.getenv "SystemRoot")
+          "System32/WindowsPowerShell/v1.0/powershell.exe" in
+        executable, [| executable; "-NoLogo"; "-NoProfile"; "-NonInteractive";
+          "-Command"; Printf.sprintf "$null=[Console]::ReadLine(); exit %d" code |]
+      else "/bin/sh", [| "/bin/sh"; "-c"; Printf.sprintf "read gate; exit %d" code |] in
+    let read_end, write_end = Unix.pipe ~cloexec:true () in
+    let null = Unix.openfile (if Sys.os_type="Win32" then "NUL" else "/dev/null")
+      [Unix.O_WRONLY] 0 in
+    let pid, child = Fun.protect ~finally:(fun () -> Unix.close read_end; Unix.close null)
+      (fun () -> Daemon_client.Child_process.spawn executable arguments (Unix.environment ())
+        read_end null null) in
+    check "actual child process ID is positive" (pid>0);
+    let output = Unix.out_channel_of_descr write_end in
+    let sent = ref false in
+    let finish () = if not !sent then begin
+      sent := true; output_string output "finish\n"; close_out output
+    end in
+    Fun.protect ~finally:finish (fun () ->
+      check "captured child remains alive before its explicit private gate"
+        (Daemon_client.Child_process.poll child=None);
+      (match Daemon_client.Child_process.await_clean_exit ~timeout:0. child with
+       | () -> failwith "A live child cannot prove completed worker shutdown"
+       | exception Failure message -> check "unknown exit keeps shutdown unproven"
+           (message="Owned worker exit is unproven after stop dispatch"));
+      finish ();
+      if code=0 then begin
+        Daemon_client.Child_process.await_clean_exit ~timeout:5. child;
+        check "exact child exit proof is retained after its OS handle is consumed"
+          (Daemon_client.Child_process.poll child=Some (Unix.WEXITED 0))
+      end else
+        match Daemon_client.Child_process.await_clean_exit ~timeout:5. child with
+        | () -> failwith "Nonzero child exit must not certify clean shutdown"
+        | exception Failure message -> check "nonzero exit is explicitly refused"
+            (message="Owned worker exited unsuccessfully: 7"))) [0;7]
+
 let native_worker_update_identity () =
   let key = ("/store", "/store/graphs", "/store/lifecycle", "logseq_db_origin") in
   let origin : Daemon_client.worker_origin = {
@@ -1946,6 +1985,7 @@ let () =
   editor_keyboard_capture_order ();
   native_worker_admission ();
   native_worker_update_identity ();
+  native_owned_child_exit_proof ();
   ordered_mailbox_barrier ();
   promise_observation ();
   abort_waits_for_initial_worker_and_skips_later_mutation_boundaries ();

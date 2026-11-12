@@ -626,7 +626,7 @@ let () =
           ~session:(Http_server.req_header req "X-Logseq-App-Session");
         Db_worker_node.send_json res 200 (kvs ["ok", Wire.Bool true])) in
       let shared () = match !Db_worker_node.native_app_owner with
-        | Some owner -> owner.Db_worker_node.shared
+        | Some owner -> Db_worker_node.native_app_shared owner
         | None -> failwith "Missing worker origin" in
       let cleanup () =
         Db_worker_node.native_app_owner := original;
@@ -651,6 +651,100 @@ let () =
         cleanup () in
       Js.Promise.catch (fun error ->
         let* () = cleanup () in
+        Js.Promise.reject (exn_of_rejection error)) (run ()));
+  Fest.test "owned-worker-seal-orders-admission-and-drains-only-finite-reservations" (fun () ->
+      let original = !Db_worker_node.native_app_owner in
+      Fun.protect ~finally:(fun () -> Db_worker_node.native_app_owner := original) (fun () ->
+        let session = "01234567-0123-4567-89ab-0123456789ab" in
+        let configure () =
+          Db_worker_node.configure_native_app_owner ~session
+            ~instance:"11234567-0123-4567-89ab-0123456789ab" ~executable:"/app/worker";
+          Option.get !Db_worker_node.native_app_owner in
+        let admit session = Db_worker_node.admit_native_request ~path:"/v1/invoke"
+          ~meth:"POST" ~session in
+        let owner = configure () in
+        Fest.expect |> Fest.deep_equal
+          (Db_worker_node.native_update_owner ~session:(Some "another-session") ~instance:owner.instance)
+          (Error "worker-update-owner-mismatch");
+        Fest.expect |> Fest.deep_equal
+          (Db_worker_node.native_update_owner ~session:(Some session) ~instance:"another-instance")
+          (Error "worker-update-owner-mismatch");
+        (match admit (Some session) with Ok (Some _) -> () | _ -> failwith "Own pre-seal request refused");
+        Fest.expect |> Fest.deep_equal (Db_worker_node.native_update_seal owner "1") (Ok ());
+        Fest.expect |> Fest.deep_equal (admit (Some session)) (Error "worker-update-sealed");
+        let drained = match Db_worker_node.native_update_stop owner "1" with
+          | Ok drained -> drained | Error error -> failwith error in
+        Fest.expect |> Fest.equal (Db_worker_effect.is_pending drained) true;
+        Fest.expect |> Fest.deep_equal (Db_worker_node.native_update_abort owner "1")
+          (Error "worker-update-stop-dispatched");
+        Db_worker_node.finish_native_request owner;
+        Fest.expect |> Fest.equal (Db_worker_effect.is_pending drained) false;
+        let owner = configure () in
+        Fest.expect |> Fest.deep_equal (Db_worker_node.native_update_seal owner "2") (Ok ());
+        Fest.expect |> Fest.deep_equal (Db_worker_node.native_update_abort owner "2") (Ok ());
+        Fest.expect |> Fest.deep_equal (Db_worker_node.native_update_abort owner "2") (Ok ());
+        Fest.expect |> Fest.deep_equal (Db_worker_node.native_update_seal owner "2")
+          (Error "worker-update-state-mismatch");
+        Fest.expect |> Fest.deep_equal (Db_worker_node.native_update_seal owner "3") (Ok ());
+        Fest.expect |> Fest.deep_equal (Db_worker_node.native_update_abort owner "2")
+          (Error "worker-update-state-mismatch");
+        Fest.expect |> Fest.deep_equal (admit None) (Error "worker-update-sealed");
+        Fest.expect |> Fest.deep_equal (Db_worker_node.native_update_stop owner "3")
+          (Error "worker-update-shared");
+        Fest.expect |> Fest.deep_equal (Db_worker_node.native_update_abort owner "3") (Ok ());
+        (match admit None with Ok (Some accepted) -> Db_worker_node.finish_native_request accepted
+         | _ -> failwith "Aborted worker must still accept legacy clients");
+        Fest.expect |> Fest.deep_equal (Db_worker_node.native_update_seal owner "4")
+          (Error "worker-update-shared")));
+  Fest.Promise.test "owned-worker-http-stop-ack-is-dispatch-and-waits-for-preseal-work" (fun () ->
+      let original = !Db_worker_node.native_app_owner in
+      let session = "01234567-0123-4567-89ab-0123456789ab"
+      and instance = "11234567-0123-4567-89ab-0123456789ab" in
+      Db_worker_node.configure_native_app_owner ~session ~instance ~executable:"/app/worker";
+      let owner = Option.get !Db_worker_node.native_app_owner in
+      let stops = ref 0 in
+      let proxy : Db_worker_node.proxy = {
+        remote_invoke=(fun _ _ -> Db_worker_effect.pure "");
+        remote_invoke_binary=(fun _ _ _ -> Db_worker_effect.pure Wire.Nil) } in
+      let server = Db_worker_node.make_server proxy {
+        bound_repo="origin"; host="127.0.0.1"; owner_source="electron";
+        ctx_root_dir="/private/worker-origin"; port_cell=ref None;
+        stop_fn=(fun () -> incr stops) } in
+      let cleanup () =
+        Db_worker_node.native_app_owner := original;
+        let* _ = promise_of_task (Http_server.close server) in Js.Promise.resolve () in
+      let run () =
+        let* _ = promise_of_task (Http_server.listen server ~host:"127.0.0.1" ~port:0) in
+        let port = Option.get (Http_server.address_port server) in
+        let request id action = http_request ~host:"127.0.0.1" ~port ~meth:"POST"
+          ~path:"/v1/nsh-update" ~headers:["x-logseq-app-session", session; "Content-Type", "application/json"]
+          ~body:(`String (Json.stringify (kvs ["id", Wire.String id; "instance", Wire.String instance;
+            "action", Wire.String action]))) () in
+        let* sealed, _ = request "1" "seal" in
+        Fest.expect |> Fest.equal sealed 200;
+        let* refused, refusal = http_request ~host:"127.0.0.1" ~port ~meth:"POST"
+          ~path:"/v1/invoke" ~headers:["x-logseq-app-session", session] () in
+        Fest.expect |> Fest.equal refused 409;
+        Fest.expect |> Fest.deep_equal
+          (Option.bind (Wire.get "error" (Json.parse refusal)) (Wire.get "code"))
+          (Some (Wire.String "worker-update-sealed"));
+        let* aborted, _ = request "1" "abort" in
+        Fest.expect |> Fest.equal aborted 200;
+        (match Db_worker_node.admit_native_request ~path:"/v1/invoke" ~meth:"POST"
+          ~session:(Some session) with Ok (Some _) -> () | _ -> failwith "Pre-seal request refused");
+        let* sealed, _ = request "2" "seal" in
+        Fest.expect |> Fest.equal sealed 200;
+        let* stopped, body = request "2" "stop" in
+        Fest.expect |> Fest.equal stopped 200;
+        Fest.expect |> Fest.equal (json_string (Js.Json.parseExn body) "phase") "stopping";
+        Fest.expect |> Fest.equal !stops 0;
+        let* late_abort, body = request "2" "abort" in
+        Fest.expect |> Fest.equal late_abort 409;
+        Fest.expect |> Fest.equal (json_string (Js.Json.parseExn body) "error") "worker-update-stop-dispatched";
+        Db_worker_node.finish_native_request owner;
+        Fest.expect |> Fest.equal !stops 1;
+        cleanup () in
+      Js.Promise.catch (fun error -> let* () = cleanup () in
         Js.Promise.reject (exn_of_rejection error)) (run ()));
   (* ---- db-worker-node-root-dir-permission-error ---- *)
   Fest.Promise.test "db-worker-node-root-dir-permission-error" (fun () ->

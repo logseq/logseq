@@ -17,6 +17,57 @@ let home = Platform_native.home_directory
    Registry and health messages use the child's real OS pid. *)
 external worker_process_id : int -> int = "caml_logseq_worker_process_id"
 
+(* The wait identity is the actual unreaped child on POSIX, or the original
+   process HANDLE on Windows. It is never reconstructed from a registry PID. *)
+module Child_process : sig
+  type t
+  val spawn : string -> string array -> string array ->
+    Unix.file_descr -> Unix.file_descr -> Unix.file_descr -> int * t
+  val poll : t -> Unix.process_status option
+  val await_clean_exit : timeout:float -> t -> unit
+end = struct
+  type state = Waiting | Exited of Unix.process_status | Unknown of exn
+  type t = { wait_identity : int; mutex : Mutex.t; mutable state : state }
+  external process_os_id : int -> int = "caml_logseq_worker_process_id_retained"
+  let spawn executable arguments environment input_fd output_fd error_fd =
+    let wait_identity = Unix.create_process_env executable arguments environment input_fd output_fd error_fd in
+    let pid = process_os_id wait_identity in
+    if pid <= 0 then invalid_arg "Invalid actual child process identity";
+    pid, { wait_identity; mutex=Mutex.create (); state=Waiting }
+  let poll child =
+    Mutex.lock child.mutex;
+    Fun.protect ~finally:(fun () -> Mutex.unlock child.mutex) (fun () ->
+      match child.state with
+      | Exited status -> Some status
+      | Unknown error -> raise error
+      | Waiting ->
+          try
+            match Unix.waitpid [Unix.WNOHANG] child.wait_identity with
+            | 0, _ -> None
+            | identity, status when identity=child.wait_identity ->
+                child.state <- Exited status;
+                Some status
+            | _ -> failwith "Exact child wait returned an unrelated process"
+          with
+          | Unix.Unix_error (Unix.EINTR, _, _) -> None
+          | error -> child.state <- Unknown error; raise error)
+  let await_clean_exit ~timeout child =
+    if not (Float.is_finite timeout) || timeout < 0. then invalid_arg "Invalid child exit timeout";
+    let started = Mtime_clock.elapsed_ns () in
+    let rec wait () =
+      match poll child with
+      | Some (Unix.WEXITED 0) -> ()
+      | Some (Unix.WEXITED code) -> failwith ("Owned worker exited unsuccessfully: " ^ string_of_int code)
+      | Some (Unix.WSIGNALED signal) | Some (Unix.WSTOPPED signal) ->
+          failwith ("Owned worker did not exit normally: " ^ string_of_int signal)
+      | None ->
+          if Int64.to_float (Int64.sub (Mtime_clock.elapsed_ns ()) started) *. 1e-9 >= timeout then
+            failwith "Owned worker exit is unproven after stop dispatch";
+          Thread.delay 0.02;
+          wait () in
+    wait ()
+end
+
 let root_dir () =
   match Sys.getenv_opt "LOGSEQ_ROOT_DIR" with
   | Some d -> d
@@ -236,6 +287,12 @@ type update_worker = {
 let update_workers :
     (string * string * string * string, worker_origin option) Hashtbl.t = Hashtbl.create 4
 
+type spawned_child = {
+  process : Child_process.t;
+  mutable origin : worker_origin option;
+}
+let spawned_children : (string, spawned_child) Hashtbl.t = Hashtbl.create 4
+
 let worker_environment ~session ~instance =
   let inherited = Unix.environment () |> Array.to_list |> List.filter (fun entry ->
     let name = if Sys.os_type = "Win32" then String.uppercase_ascii entry else entry in
@@ -279,8 +336,9 @@ let spawn_daemon (repo : string) : string =
   let devnull =
     Unix.openfile (if Sys.os_type = "Win32" then "NUL" else "/dev/null")
       [ Unix.O_RDONLY ] 0 in
-  let child_process =
-    Unix.create_process_env bin
+  let pid, process =
+    Fun.protect ~finally:(fun () -> Unix.close devnull; Unix.close log_fd) (fun () ->
+    Child_process.spawn bin
       [| bin
        ; "--root-dir"
        ; root_dir ()
@@ -291,22 +349,18 @@ let spawn_daemon (repo : string) : string =
        ; "--owner-source"
        ; "electron" |]
       (worker_environment ~session:app_session ~instance)
-      devnull log_fd log_fd
+      devnull log_fd log_fd)
   in
-  Unix.close devnull;
-  Unix.close log_fd;
-  (* No caller waits or signals through this handle: the worker's existing
-     registry/health/shutdown protocol owns its remaining lifecycle. *)
-  let pid =
-    if Sys.os_type = "Win32" then worker_process_id child_process
-    else child_process in
+  let spawned = { process; origin=None } in
+  Hashtbl.add spawned_children instance spawned;
   (* poll server-list for our pid *)
   let deadline = Unix.gettimeofday () +. 15. in
   let rec poll () =
     match port_for_pid pid with
     | Some port ->
-        Hashtbl.replace update_workers (attachment_key repo)
-          (Some { pid; port; executable = bin; session = app_session; instance });
+        let origin = { pid; port; executable=bin; session=app_session; instance } in
+        spawned.origin <- Some origin;
+        Hashtbl.replace update_workers (attachment_key repo) (Some origin);
         boot_mark
           ("daemon up pid=" ^ string_of_int pid ^ " port="
            ^ string_of_int port);
@@ -487,6 +541,8 @@ let require_update_owned_workers () =
       let snapshot =
         Mutex.lock attach_mu;
         Fun.protect ~finally:(fun () -> Mutex.unlock attach_mu) (fun () ->
+          Hashtbl.iter (fun _ child ->
+            if child.origin=None then failwith "An owned worker has not completed attachment") spawned_children;
           Hashtbl.fold (fun key origin acc -> (key, origin) :: acc) update_workers []) in
       ignore (verify_update_workers ~fetch:http_get snapshot);
       Host.enqueue (fun () -> resolve ())
@@ -712,10 +768,16 @@ let ipc (args : Wire.t list) : Wire.t Js.Promise.t =
 (* ---------- http ---------- *)
 
 (* minimal blocking HTTP over a socket; localhost only *)
-let http_post ~(host : string) ~(port : int) ~(path : string)
+let http_post_with_timeout ~timeout ~(host : string) ~(port : int) ~(path : string)
     ~(body : string) : (int * string) =
   let addr = Unix.ADDR_INET (Unix.inet_addr_of_string host, port) in
-  let ic, oc = Unix.open_connection addr in
+  let fd = Unix.socket ~cloexec:true Unix.PF_INET Unix.SOCK_STREAM 0 in
+  let ic = Unix.in_channel_of_descr fd in
+  Fun.protect ~finally:(fun () -> close_in_noerr ic) (fun () ->
+  Option.iter (fun seconds ->
+    Unix.setsockopt_float fd Unix.SO_RCVTIMEO seconds;
+    Unix.setsockopt_float fd Unix.SO_SNDTIMEO seconds) timeout;
+  Unix.connect fd addr;
   let req =
     Printf.sprintf
       "POST %s HTTP/1.1\r\nHost: %s:%d\r\nContent-Type: \
@@ -723,8 +785,13 @@ let http_post ~(host : string) ~(port : int) ~(path : string)
        close\r\n%s\r\n%s"
       path host port (String.length body) app_session_header body
   in
-  output_string oc req;
-  flush oc;
+  let rec write offset =
+    if offset < String.length req then
+      match Unix.write_substring fd req offset (String.length req-offset) with
+      | 0 -> failwith "Native daemon request socket closed while writing"
+      | count -> write (offset+count)
+      | exception Unix.Unix_error (Unix.EINTR, _, _) -> write offset in
+  write 0;
   (* status line *)
   let status_line = input_line ic in
   let status =
@@ -777,8 +844,99 @@ let http_post ~(host : string) ~(port : int) ~(path : string)
        done
      with End_of_file -> ())
   end;
-  Unix.close (Unix.descr_of_in_channel ic);
-  (status, Buffer.contents buf)
+  (status, Buffer.contents buf))
+
+let http_post ~host ~port ~path ~body =
+  http_post_with_timeout ~timeout:None ~host ~port ~path ~body
+
+(* This explicit stage-two capability is deliberately not called by ordinary
+   update preparation. Installation remains disabled until restoration and the
+   application relaunch policy have their own end-to-end qualification. *)
+type worker_update_action = Seal_worker | Abort_worker | Stop_worker
+type worker_update_phase =
+  | Worker_initial | Worker_sealing | Worker_sealed | Worker_aborting
+  | Worker_released | Worker_stopping | Worker_exited
+  | Worker_uncertain of worker_update_action * string
+module Worker_update : sig
+  type t
+  val create : request_id:string -> update_worker -> t Js.Promise.t
+  val phase : t -> worker_update_phase
+  val seal : t -> unit Js.Promise.t
+  val abort : t -> unit Js.Promise.t
+  val stop : t -> unit Js.Promise.t
+end = struct
+  type t = {
+    worker : update_worker;
+    process : Child_process.t;
+    request_id : string;
+    phase : worker_update_phase Atomic.t;
+  }
+  let phase update = Atomic.get update.phase
+  let background action =
+    let promise, resolve, reject = Js.Promise.pending () in
+    ignore (Thread.create (fun () ->
+      try let value = action () in Host.enqueue (fun () -> resolve value)
+      with error -> Host.enqueue (fun () -> reject error)) ());
+    promise
+  let create ~request_id worker = background (fun () ->
+    Update_admission.validate_id request_id;
+    let process =
+      Mutex.lock attach_mu;
+      Fun.protect ~finally:(fun () -> Mutex.unlock attach_mu) (fun () ->
+        if Hashtbl.find_opt update_workers worker.storage <> Some (Some worker.origin) then
+          failwith "Worker update storage does not own this captured child";
+        match Hashtbl.find_opt spawned_children worker.origin.instance with
+        | Some child when child.origin=Some worker.origin -> child.process
+        | _ -> failwith "Update shutdown requires the exact captured child, never a reused PID") in
+    {worker; process; request_id; phase=Atomic.make Worker_initial})
+  let exchange update allowed next =
+    let rec change () =
+      let current = phase update in
+      if not (allowed current) then failwith "Worker update operation is not admitted in its current phase";
+      if not (Atomic.compare_and_set update.phase current next) then change () in
+    change ()
+  let request update action expected =
+    let origin = update.worker.origin in
+    if origin.session<>app_session then failwith "Worker update belongs to another application session";
+    let status, body = http_post_with_timeout ~timeout:(Some 5.)
+      ~host:"127.0.0.1" ~port:origin.port ~path:"/v1/nsh-update"
+      ~body:(Yojson.Safe.to_string (`Assoc ["id", `String update.request_id;
+        "instance", `String origin.instance; "action", `String action])) in
+    let fields = match Yojson.Safe.from_string body with `Assoc fields -> fields
+      | _ -> failwith "Invalid worker update acknowledgement" in
+    let get name = List.assoc_opt name fields in
+    if status<>200 || get "ok"<>Some (`Bool true) then begin
+      let detail = match get "error" with Some (`String detail) -> detail
+        | _ -> "worker update request was not acknowledged" in
+      failwith detail
+    end;
+    if get "id"<>Some (`String update.request_id)
+       || get "instance"<>Some (`String origin.instance)
+       || get "phase"<>Some (`String expected)
+    then failwith "Worker update acknowledgement belongs to a different operation"
+  let run update operation next allowed action = background (fun () ->
+    exchange update allowed next;
+    try action ()
+    with error ->
+      Atomic.set update.phase (Worker_uncertain (operation, Printexc.to_string error));
+      raise error)
+  let seal update =
+    run update Seal_worker Worker_sealing ((=) Worker_initial) (fun () ->
+      request update "seal" "sealed";
+      Atomic.set update.phase Worker_sealed)
+  let abort update =
+    run update Abort_worker Worker_aborting (function
+      | Worker_initial | Worker_sealed | Worker_uncertain (Seal_worker, _)
+      | Worker_uncertain (Abort_worker, _) -> true
+      | _ -> false) (fun () ->
+      request update "abort" "open";
+      Atomic.set update.phase Worker_released)
+  let stop update =
+    run update Stop_worker Worker_stopping ((=) Worker_sealed) (fun () ->
+      request update "stop" "stopping";
+      Child_process.await_clean_exit ~timeout:30. update.process;
+      Atomic.set update.phase Worker_exited)
+end
 
 let http_get_stream ~(host : string) ~(port : int) ~(path : string)
     ~(on_line : string -> unit) ~(alive : unit -> bool) : unit =

@@ -66,6 +66,24 @@ CAMLprim value caml_logseq_worker_process_id(value child_process) {
 #endif
 }
 
+/* Keep the original create_process HANDLE for Unix.waitpid. OCaml 5.5.1
+   winwait.c waits that exact process object and closes it after termination. */
+CAMLprim value caml_logseq_worker_process_id_retained(value child_process) {
+  CAMLparam1(child_process);
+#if defined(_WIN32)
+  DWORD pid = GetProcessId((HANDLE)(intnat)Long_val(child_process));
+  if (pid == 0) {
+    char message[96];
+    snprintf(message, sizeof(message), "GetProcessId failed with Windows error %lu",
+             (unsigned long)GetLastError());
+    caml_failwith(message);
+  }
+  CAMLreturn(Val_long(pid));
+#else
+  CAMLreturn(child_process);
+#endif
+}
+
 /* Read-only editor state; the caller copies the borrowed UTF-8 buffer. */
 LUI_EXPORT int32_t lui_ocaml_editor_snapshot_utf8(
     const char *block_id, int32_t length,
