@@ -67,6 +67,11 @@
  :account/upgrade-plan "升级计划"
  :account/username "用户名"
 
+ :asset.audio/loading "正在加载音频…"
+ :asset.audio/pause "暂停音频"
+ :asset.audio/play "播放音频"
+ :asset.audio/seek "音频播放位置"
+ :asset.audio/volume "音频音量"
  :asset/acceptable-file-extensions "可接受的文件扩展名"
  :asset/add-assets "添加附件"
  :asset/add-directory "添加目录"

@@ -16,6 +16,7 @@ struct Model {
     source: String,
     file: Option<String>,
     labels: BTreeMap<String, String>,
+    label: Option<String>,
     disabled: bool,
 }
 impl Model {
@@ -44,6 +45,10 @@ impl Model {
             source,
             file,
             labels,
+            label: attrs
+                .get("aria-label")
+                .filter(|label| !label.is_empty())
+                .cloned(),
             disabled: attrs.contains_key("disabled"),
         })
     }
@@ -69,18 +74,27 @@ pub(super) fn element(context: ExtensionContext) -> AnyElement {
     let source = context.clone();
     each(
         move || {
-            Model::read(&source.node.get())
-                .expect("validated native audio")
+            let model = Model::read(&source.node.get()).expect("validated native audio");
+            model
                 .location(resources)
+                .map(|url| (model.graph, url))
                 .into_iter()
                 .collect::<Vec<_>>()
         },
         Clone::clone,
-        move |url, _| player(context.clone(), resources, url.get_untracked()),
+        move |identity, _| {
+            let (graph, source) = identity.get_untracked();
+            player(context.clone(), resources, graph, source)
+        },
     )
 }
 
-fn player(context: ExtensionContext, resources: Resources, source: String) -> AnyElement {
+fn player(
+    context: ExtensionContext,
+    resources: Resources,
+    graph: String,
+    source: String,
+) -> AnyElement {
     let owner = Owner::current();
     let admission = use_context::<ApplicationMutations>().expect("native audio mutation owner");
     let model_context = context.clone();
@@ -124,7 +138,10 @@ fn player(context: ExtensionContext, resources: Resources, source: String) -> An
                     loading.set(false);
                     error.set(String::new());
                 }
-                AudioEvent::Paused => playing.set(false),
+                AudioEvent::Paused => {
+                    playing.set(false);
+                    loading.set(false);
+                }
                 AudioEvent::Progress {
                     position: current,
                     duration: total,
@@ -148,14 +165,21 @@ fn player(context: ExtensionContext, resources: Resources, source: String) -> An
     });
     let guard_context = context.clone();
     let admitted: Rc<dyn Fn() -> bool> = Rc::new(move || {
-        if !owner.is_live() || admission.check().is_err() {
-            return false;
-        }
-        let current =
-            Model::read(&guard_context.node.get_untracked()).expect("validated native audio");
-        !current.disabled
-            && current.location(resources).as_deref() == Some(source.as_str())
-            && raw::try_emit_dom(&guard_context, owner, "click", json!({}))
+        let current = || {
+            if !owner.is_live() || admission.check().is_err() {
+                return false;
+            }
+            let Some(node) = guard_context.node.try_get() else {
+                return false;
+            };
+            let current = Model::read(&node).expect("validated native audio");
+            !current.disabled
+                && current.graph == graph
+                && current.location(resources).as_deref() == Some(source.as_str())
+        };
+        // The application click callback can synchronously retire this source
+        // or hold mutations. Prove the captured identity again before playback.
+        current() && raw::try_emit_dom(&guard_context, owner, "click", json!({})) && current()
     });
     let toggle_handle = handle.clone();
     let toggle_admitted = admitted.clone();
@@ -189,7 +213,8 @@ fn player(context: ExtensionContext, resources: Resources, source: String) -> An
     })
     .px_3()
     .py_1()
-    .rounded(px(4.0))
+    .rounded(move || Length::from(nsh_base::theme().radius))
+    .disabled_style(|style| style.opacity(0.5))
     .hover(|style| style.bg(nsh_base::theme().muted))
     .focus_visible(|style| style.outline(px(2.0)).outline_color(nsh_base::theme().ring))
     .child(text(move || if playing.get() { "⏸" } else { "▶" }));
@@ -241,6 +266,8 @@ fn player(context: ExtensionContext, resources: Resources, source: String) -> An
     let style = context.clone();
     view()
         .element_ref(&context.reference)
+        .role(AccessibilityRole::Group)
+        .accessibility_label(move || model.get().label.clone().map(Into::into))
         .state_inline_style(move || {
             raw_style::compile(&style.node.get(), "audio", |value| {
                 style.resolve_text(value)
@@ -388,9 +415,28 @@ mod tests {
                 host: "nsh".into(),
             })
             .unwrap();
-        let renderer = Renderer::with_extensions(registry, |_, _| {});
+        let click_action = signal(0_u8);
+        let click_graph =
+            json!({"graph":"different","graph-dir":fixture.root,"asset-dir":fixture.root})
+                .to_string();
+        let renderer = Renderer::with_extensions(registry, move |event, renderer| {
+            if let lui_nsh::render::Event::Extension { name, values, .. } = event {
+                if name == "dom-event"
+                    && values.get("name").and_then(|value| value.as_str()) == Some("click")
+                {
+                    match click_action.get_untracked() {
+                        1 => held.set(true),
+                        2 => resources.install(&click_graph).unwrap(),
+                        3 => renderer
+                            .apply(batch(2, json!([{"op":"detach-subtree","id":1}])))
+                            .unwrap(),
+                        _ => {}
+                    }
+                }
+            }
+        });
         let attrs = json!({"data-asset-graph":"audio","data-asset-file":"owned.wav","src":"/stale/owned.wav",
-            "controls":"","labels":json!({"play":"Play audio","pause":"Pause audio","seek":"Audio position",
+            "aria-label":"Owned recording","controls":"","labels":json!({"play":"Play audio","pause":"Pause audio","seek":"Audio position",
                 "volume":"Audio volume","loading":"Loading audio"}).to_string()});
         renderer.apply(batch(1,json!([
             {"op":"create-extension","id":1,"identifier":"logseq-audio","fingerprint":fingerprint},
@@ -411,6 +457,11 @@ mod tests {
         let disable = renderer.clone();
         let replace = renderer.clone();
         let replacement_attrs = attrs.clone();
+        let next_graph = renderer.clone();
+        let next_graph_attrs = attrs.clone();
+        let next_graph_roots =
+            json!({"graph":"replacement","graph-dir":fixture.root,"asset-dir":fixture.root})
+                .to_string();
         let switched =
             json!({"graph":"different","graph-dir":fixture.root,"asset-dir":fixture.root})
                 .to_string();
@@ -420,6 +471,13 @@ mod tests {
             .child(nsh_base::button().child(text("Close audio graph")).on_press(move ||
                 resources.install(r#"{"graph":"","graph-dir":"","asset-dir":""}"#).unwrap()))
             .child(nsh_base::button().child(text("Switch audio graph")).on_press(move || resources.install(&switched).unwrap()))
+            .child(nsh_base::button().child(text("Switch same audio URL")).on_press(move || {
+                nsh_core::element::batch(|| {
+                    resources.install(&next_graph_roots).unwrap();
+                    let mut attrs=next_graph_attrs.clone();attrs["data-asset-graph"]=json!("replacement");
+                    next_graph.apply(batch(2,json!([{"op":"set-extension-prop","id":1,"property":"attrs","value":attrs.to_string()}]))).unwrap();
+                });
+            }))
             .child(nsh_base::button().child(text("Replace audio source")).on_press(move || {
                 let mut attrs=replacement_attrs.clone();attrs["data-asset-file"]=json!("replacement.wav");
                 replace.apply(batch(2,json!([{"op":"set-extension-prop","id":1,"property":"attrs","value":attrs.to_string()}]))).unwrap();
@@ -429,7 +487,11 @@ mod tests {
             .child(nsh_base::button().child(text("Disable audio")).on_press(move || {
                 let mut attrs=attrs.clone();attrs["disabled"]=json!("");
                 disable.apply(batch(2,json!([{"op":"set-extension-prop","id":1,"property":"attrs","value":attrs.to_string()}]))).unwrap();
-            })).child(text("audio-ready"))
+            }))
+            .child(nsh_base::button().child(text("Hold during audio click")).on_press(move || click_action.set(1)))
+            .child(nsh_base::button().child(text("Switch during audio click")).on_press(move || click_action.set(2)))
+            .child(nsh_base::button().child(text("Retire during audio click")).on_press(move || click_action.set(3)))
+            .child(text("audio-ready"))
     }
     #[test]
     fn native_audio_controls_stream_events_and_close_the_owned_player() {
@@ -449,6 +511,7 @@ mod tests {
             app
         };
         let mut app = start();
+        app.wait_for("role:group[Owned recording]").unwrap();
         let opened = app.audio_calls();
         assert_eq!(
             opened.iter().filter(|call| call.command == "open").count(),
@@ -551,5 +614,63 @@ mod tests {
                 .count(),
             1
         );
+        let mut app = start();
+        app.press("label:Play audio").unwrap();
+        app.end_audio().unwrap();
+        app.wait_for("1:00 / 1:00").unwrap();
+        app.press("Switch same audio URL").unwrap();
+        app.wait_for("0:00 / 0:00").unwrap();
+        let calls = app.audio_calls();
+        assert_eq!(
+            calls.iter().filter(|call| call.command == "open").count(),
+            2
+        );
+        assert_eq!(
+            calls.iter().filter(|call| call.command == "close").count(),
+            1
+        );
+        assert_eq!(
+            calls.iter().filter(|call| call.command == "resume").count(),
+            1,
+            "the replacement graph never inherits active playback"
+        );
+        assert!(
+            calls
+                .iter()
+                .filter(|call| call.command == "open")
+                .all(|call| call.src == wave.0.join("owned.wav").to_string_lossy())
+        );
+        app.press("label:Play audio").unwrap();
+        app.wait_for("0:00 / 1:00").unwrap();
+        assert_eq!(
+            app.audio_calls()
+                .iter()
+                .filter(|call| call.command == "resume")
+                .count(),
+            2
+        );
+        app.press("Close audio graph").unwrap();
+        assert_eq!(
+            app.audio_calls()
+                .iter()
+                .filter(|call| call.command == "close")
+                .count(),
+            2
+        );
+        for action in [
+            "Hold during audio click",
+            "Switch during audio click",
+            "Retire during audio click",
+        ] {
+            let mut app = start();
+            app.press(action).unwrap();
+            app.press("label:Play audio").unwrap();
+            assert!(
+                !app.audio_calls()
+                    .iter()
+                    .any(|call| call.command == "resume"),
+                "{action}: reentrant application callbacks cannot authorize playback"
+            );
+        }
     }
 }

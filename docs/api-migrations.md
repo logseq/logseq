@@ -18,6 +18,10 @@ missing labels and autoplay are rejected during actual target admission.
 Playback starts only on user activation. Control requests obey disabled state,
 application quiescence, exact retained incarnation, captured graph and source.
 Graph close, source replacement and view disposal retire the owned player.
+Playback identity includes the captured graph as well as the resolved source:
+switching graphs retires playback even when both graphs resolve the same URL or
+filesystem path. The asset's optional `aria-label` names a semantic group around
+its controls. Audio control labels include English and Simplified Chinese text.
 Progress is driven by the platform event stream; idle players do not poll,
 load or autoplay, and this adds no OCaml request queue or media cache.
 
@@ -44,6 +48,11 @@ sources use `open_url`. This does not grant default navigation to arbitrary raw
 anchors. Closed/different graphs, disabled links, update quiescence and retired
 element incarnations cannot issue an open request. Platform failures use the
 existing `platform-error` completion channel. No new OCaml request queue is added.
+Both file activation and audio controls recheck the captured graph, source,
+owner and mutation admission after notifying the application's click handler.
+For example, a click callback that closes the graph or prepares an update cannot
+then open the previous graph's file or resume its audio. A callback that only
+changes presentation attributes retains the accepted file action.
 
 The native archive fixture checks emitted Image/MediaSurface/managed-link kinds,
 source ownership and labels. Headless tests inspect actual native OpenPath

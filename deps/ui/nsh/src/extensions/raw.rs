@@ -420,11 +420,14 @@ pub(super) fn try_emit_dom(
     if !owner.is_live() {
         return false;
     }
+    let Some(node) = context.node.try_get() else {
+        return false;
+    };
     let mut payload = payload
         .as_object()
         .expect("native DOM payload object")
         .clone();
-    payload.insert("nodeId".into(), context.node.get_untracked().id.into());
+    payload.insert("nodeId".into(), node.id.into());
     let mut values = Map::new();
     values.insert("name".into(), name.into());
     values.insert("payload".into(), Value::Object(payload).to_string().into());
@@ -441,11 +444,14 @@ fn activate_asset(
     resources: Option<crate::services::resources::Resources>,
     events: Option<ApplicationEvents>,
 ) {
-    let attrs = attributes(context);
-    if !owner.is_live()
-        || attrs.contains_key("disabled")
-        || admission.is_none_or(|admission| admission.check().is_err())
-    {
+    if !owner.is_live() || admission.is_none_or(|admission| admission.check().is_err()) {
+        return;
+    }
+    let Some(node) = context.node.try_get() else {
+        return;
+    };
+    let attrs = raw_style::attrs(&node).expect("validated managed asset attributes");
+    if attrs.contains_key("disabled") {
         return;
     }
     let location = resources
@@ -462,6 +468,32 @@ fn activate_asset(
     // The existing emitter checks the exact retained incarnation synchronously.
     // No asynchronous work or path request is admitted for a retired element.
     if !try_emit_dom(context, owner, "click", json!({})) {
+        return;
+    }
+    let Some(current_node) = context.node.try_get() else {
+        return;
+    };
+    let current_attrs =
+        raw_style::attrs(&current_node).expect("validated managed asset attributes");
+    // Application callbacks are synchronous and may change the graph, source,
+    // disabled state or update admission before the native request is issued.
+    if !owner.is_live()
+        || admission.is_none_or(|admission| admission.check().is_err())
+        || current_attrs.contains_key("disabled")
+        || ["data-asset-graph", "data-asset-file", "href"]
+            .into_iter()
+            .any(|key| current_attrs.get(key) != attrs.get(key))
+        || resources
+            .expect("managed assets require the application resource owner")
+            .asset_link(
+                &attrs["data-asset-graph"],
+                attrs.get("href").map(String::as_str).unwrap_or(""),
+                attrs.get("data-asset-file").map(String::as_str),
+            )
+            .expect("managed asset link was validated before publication")
+            .as_ref()
+            != Some(&location)
+    {
         return;
     }
     use crate::services::resources::AssetLocation;

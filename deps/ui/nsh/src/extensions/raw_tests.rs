@@ -68,7 +68,36 @@ fn ManagedAssets() -> impl IntoElement {
             host: "nsh".into(),
         })
         .unwrap();
-    let renderer = Renderer::with_extensions(registry, |_, _| {});
+    let click_action = signal(0_u8);
+    let click_graph = roots("different");
+    let renderer = Renderer::with_extensions(registry, move |event, renderer| {
+        if let Event::Extension { name, values, .. } = event {
+            if name == "dom-event"
+                && values.get("name").and_then(|value| value.as_str()) == Some("click")
+            {
+                match click_action.get_untracked() {
+                    1 => held.set(true),
+                    2 => resources.install(&click_graph).unwrap(),
+                    3 => renderer
+                        .apply(patch(2, json!([{"op":"detach-subtree","id":1}])))
+                        .unwrap(),
+                    4 => {
+                        let mut attrs =
+                            super::raw_style::attrs(&renderer.node_snapshot(1).unwrap()).unwrap();
+                        attrs.insert("title".into(), "Updated tooltip".into());
+                        renderer
+                            .apply(patch(
+                                2,
+                                json!([{"op":"set-extension-prop","id":1,
+                            "property":"attrs","value":serde_json::to_string(&attrs).unwrap()}]),
+                            ))
+                            .unwrap();
+                    }
+                    _ => {}
+                }
+            }
+        }
+    });
     let attrs = json!({"data-asset-graph":"original","data-asset-file":"图 report.txt","href":"/stale/graph/report.txt"});
     renderer
         .apply(patch(
@@ -100,6 +129,10 @@ fn ManagedAssets() -> impl IntoElement {
             let captured=captured.borrow(); let (context,owner)=captured.as_ref().unwrap();
             raw::activate_asset(context,*owner,Some(&admission),Some(resources),None);
         }))
+        .child(nsh_base::button().child(text("Hold during asset click")).on_press(move || click_action.set(1)))
+        .child(nsh_base::button().child(text("Switch during asset click")).on_press(move || click_action.set(2)))
+        .child(nsh_base::button().child(text("Retire during asset click")).on_press(move || click_action.set(3)))
+        .child(nsh_base::button().child(text("Restyle during asset click")).on_press(move || click_action.set(4)))
         .child(text("asset-ready"))
 }
 
@@ -146,6 +179,27 @@ fn managed_asset_activation_uses_native_open_path_and_rejects_stale_or_held_view
     app.press("Retire asset").unwrap();
     app.press("Try retained asset").unwrap();
     assert!(app.screen().file_requests().is_empty());
+    for action in [
+        "Hold during asset click",
+        "Switch during asset click",
+        "Retire during asset click",
+    ] {
+        let mut app = start();
+        app.press(action).unwrap();
+        app.press("Report").unwrap();
+        assert!(
+            app.screen().file_requests().is_empty(),
+            "{action}: synchronous callbacks must be fenced before native opening"
+        );
+    }
+    let mut app = start();
+    app.press("Restyle during asset click").unwrap();
+    app.press("Report").unwrap();
+    assert_eq!(
+        app.screen().file_requests().len(),
+        1,
+        "presentation-only callbacks preserve the accepted asset action"
+    );
 }
 
 fn schemas() -> Vec<Schema> {
