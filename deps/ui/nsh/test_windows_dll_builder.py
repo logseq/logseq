@@ -35,7 +35,15 @@ class WindowsDllGuards(unittest.TestCase):
         self.assertIn("lui_ocaml_pump", exports)
         self.assertIn("lui_ocaml_platform_event", exports)
         self.assertIn("lui_ocaml_editor_snapshot_utf8", exports)
+        self.assertIn("lui_ocaml_virtual_window", exports)
         self.assertNotIn("lui_ocaml_last_error", exports)
+
+    def test_missing_sparse_window_export_is_rejected_before_compilation(self):
+        source = (builder.UI / "native/logseq_lui_bridge.c").read_text(encoding="utf-8")
+        source = source.replace("LUI_EXPORT int32_t lui_ocaml_virtual_window(",
+                                "static int32_t omitted_sparse_window(")
+        with self.assertRaisesRegex(ValueError, "typed Logseq service ABI"):
+            builder.bridge_exports(source)
 
     def test_worker_handle_boundary_preserves_error_codes_and_releases_its_owned_handle(self):
         source = (builder.UI / "native/logseq_lui_bridge.c").read_text(encoding="utf-8")
@@ -88,7 +96,8 @@ class SchemaExportPlumbing(unittest.TestCase):
                 (native / "logseq_lui_bridge.c").write_text(
                     "\n".join(f"LUI_EXPORT int {name}(void) {{}}" for name in
                         ["lui_ocaml_start", "lui_ocaml_pump", "lui_ocaml_platform_event",
-                         "lui_ocaml_editor_snapshot_utf8", "lui_ocaml_extension_event_utf8"]))
+                         "lui_ocaml_editor_snapshot_utf8", "lui_ocaml_extension_event_utf8",
+                         "lui_ocaml_virtual_window"]))
                 for archive in builder.ARCHIVES:
                     file = ui / "_build/default" / archive
                     file.parent.mkdir(parents=True, exist_ok=True)

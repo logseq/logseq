@@ -682,3 +682,18 @@ Virt_list.rows_sig ~key:block_uuid ~cmp:String.compare
 This production adapter change does not itself qualify large-page AppKit
 scrolling or native pixel output. Run the production-helper fixture and the
 actual Journal/page native qualifier against the selected immutable LUI pin.
+# Logseq sparse virtual-window native ABI
+
+The actual seven-argument Logseq OCaml bridge now exports
+`lui_ocaml_virtual_window(node, generation, first, last, pins, count)`, matching
+LUI's generic native ABI. Its registered OCaml callback dispatches canonical
+`VirtualWindow` feedback through the existing serialized application entry.
+This is accepted layout maintenance during update preparation, not new user
+input; generation and mounted-row identity checks remain in LUI.
+
+Applications using the NSH sparse viewport must rebuild their actual OCaml
+library together with the host. For example, a host requesting `[100, 120)`
+with retained row IDs passes those IDs in `pins`, rather than sending a public
+`VisibleRange` event as a substitute. Windows and Unix candidate builders now
+require the export before startup qualification or publication. No startup
+signature, wire property ordinal, mobile backend, or shared-worker API changes.

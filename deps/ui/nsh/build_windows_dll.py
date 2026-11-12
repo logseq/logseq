@@ -55,7 +55,8 @@ def native_config():
 def bridge_exports(source):
     exports = sorted(set(re.findall(r"LUI_EXPORT\s+\w+\s+(lui_ocaml_\w+)\s*\(", source)))
     required = {"lui_ocaml_start", "lui_ocaml_pump", "lui_ocaml_platform_event",
-                "lui_ocaml_editor_snapshot_utf8", "lui_ocaml_extension_event_utf8"}
+                "lui_ocaml_editor_snapshot_utf8", "lui_ocaml_extension_event_utf8",
+                "lui_ocaml_virtual_window"}
     if not required.issubset(exports):
         raise ValueError("The application source is missing its typed Logseq service ABI")
     return exports

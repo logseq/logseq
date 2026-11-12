@@ -50,6 +50,22 @@ staged_resources="$staging/Resources"
 mkdir -p "$staged_resources/fonts" "$staged_resources/img" "$staged_resources/dicts"
 # All candidate code and resources stay private until qualification succeeds.
 cc -o "$staging/$(basename "$library")" "$ui_root/_build/default/native/native_embed.exe.o" "${link_flags[@]}"
+# Validate actual candidate symbols before schemas, startup or publication.
+# Loading may run loader initializers; this child invokes no OCaml entry point.
+"$python_bin" - "$nsh_root" "$staging/$(basename "$library")" "$ui_root/native/logseq_lui_bridge.c" <<'BRIDGE_EXPORTS'
+import ctypes
+from pathlib import Path
+import sys
+
+sys.path.insert(0, sys.argv[1])
+from build_windows_dll import bridge_exports
+
+required = bridge_exports(Path(sys.argv[3]).read_text(encoding="utf-8"))
+library = ctypes.CDLL(sys.argv[2])
+missing = [name for name in required if not hasattr(library, name)]
+if missing:
+    raise SystemExit("Candidate Logseq OCaml library is missing exports: " + ", ".join(missing))
+BRIDGE_EXPORTS
 ocaml_where=$(opam exec --switch="$switch" -- ocamlc -where)
 cc -I "$ocaml_where" -o "$staging/export-schemas" "$nsh_root/export_schemas.c" \
   "$ui_root/_build/default/native/native_embed.exe.o" -lpthread -lm

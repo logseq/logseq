@@ -553,7 +553,8 @@ let dispatch_lui (event : Lui_protocol.event) =
   with_entry_lock (fun () ->
       (match event with
        | Lui_protocol.Appear _ | Lui_protocol.Load _ | Lui_protocol.VisibleRange _
-       | Lui_protocol.ScrollCompleted _ | Lui_protocol.Picked _ -> ()
+       | Lui_protocol.ScrollCompleted _ | Lui_protocol.Picked _
+       | Lui_protocol.VirtualWindow _ -> ()
        | _ -> Update_admission.require_input Update_admission.application "ordinary-ui");
       let t0 = perf_ms () in
       (match !current_app with
@@ -639,6 +640,9 @@ let scroll_completed node token outcome =
 
 let visible_range node first last =
   dispatch_lui (Lui_protocol.VisibleRange (node, first, last))
+
+let virtual_window node generation first last pins =
+  dispatch_lui (Lui_protocol.VirtualWindow (node, generation, first, last, pins))
 
 let picked node payload =
   dispatch_lui (Lui_protocol.Picked (node, payload))
@@ -964,6 +968,8 @@ module Ffi = struct
   let slider_changed node value = encode_batches (slider_changed node value)
   let scroll_completed node token outcome = encode_batches (scroll_completed node token outcome)
   let visible_range node first last = encode_batches (visible_range node first last)
+  let virtual_window node generation first last pins =
+    encode_batches (virtual_window node generation first last pins)
   let picked node payload = encode_batches (picked node payload)
   let navigate_previous node = encode_batches (navigate_previous node)
   let navigate_next node = encode_batches (navigate_next node)
@@ -1029,6 +1035,7 @@ let () =
   Callback.register "lui_ocaml_slider_changed" Ffi.slider_changed;
   Callback.register "lui_ocaml_scroll_completed" Ffi.scroll_completed;
   Callback.register "lui_ocaml_visible_range" Ffi.visible_range;
+  Callback.register "lui_ocaml_virtual_window" Ffi.virtual_window;
   Callback.register "lui_ocaml_picked" Ffi.picked;
   Callback.register "lui_ocaml_navigate_previous" Ffi.navigate_previous;
   Callback.register "lui_ocaml_navigate_next" Ffi.navigate_next;
