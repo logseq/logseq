@@ -708,3 +708,66 @@ SID would currently add pointer/string marshalling or a helper/WMI/PowerShell
 launch to the admission path. No such fallback or false SID/v2 marker is added.
 A future SID-scoped Global protocol requires a reviewed common identity seam and
 a version/marker transition before ordinary multi-user concurrency is claimed.
+
+## Private standalone N1 → N2 qualification
+
+`qualify_standalone_upgrade.py` is the actual macOS application gate for the
+app-owned install/relaunch candidate. It packages two already-built, distinct
+**authored release versions** with the existing test signing key and loopback
+HTTPS feed. Both builds must contain the standalone runner, Settings update
+action and LUI's actual native-sheet agent operations. It does not manufacture a
+version, rebuild code, invoke a test-only update shortcut or replace production
+TLS/signature verification. `Version.app` is compiled from `Version_gen.app`;
+its generator re-reads `resources/package.json` on every UI build. A metadata
+file change without distinct actual Rust and OCaml binaries is rejected.
+
+Run only on a disposable **GitHub-hosted macOS runner**, after the normal
+release/receipt gates for both authored source revisions:
+
+```sh
+python3 deps/ui/nsh/qualify_standalone_upgrade.py \
+  --allow-disposable-ci-trust \
+  --n1-source "$N1_SOURCE" --n1-host "$N1_RELEASE_HOST" \
+  --n2-source "$N2_SOURCE" --n2-host "$N2_RELEASE_HOST" \
+  --lui-source "$LUI_SOURCE" --pinned-cli "$PINNED_NSH_CLI_DIRECTORY" \
+  --evidence "$RUNNER_TEMP/standalone-upgrade/evidence.json"
+```
+
+The explicit flag plus `CI`, `GITHUB_ACTIONS`, `RUNNER_ENVIRONMENT=github-hosted`
+and a private descendant of `RUNNER_TEMP` are required before creating/trusting
+the ephemeral CA. Existing shared HTTPS support restores the exact owned
+keychain/trust entry. No developer trust store or `/Applications` installation
+is used. It removes application loader overrides and inherited application
+configuration/authentication variables, creates private credentials/storage with
+`--startup-preflight`, and launches the extracted executable outside all
+checkouts. Private graph, installation, native log, agent transcript, original
+archive receipts, signed manifest and partial failure evidence remain under the
+runner's temporary/evidence directories for artifact collection.
+
+The gate creates a real journal block through the existing canonical editor
+extension/reducer, then uses the actual Settings Check for updates controller
+and the real NSAlert Download / Install and Restart buttons. It qualifies the
+unchanged public HTTPS actions, native preparation, signed whole-app replacement
+and app-owned Unix exec together. It requires the same main PID to load the new
+compiled Rust marker and the new Settings `Version.app`, installed code hashes
+to match N2, the old owned worker PID to disappear, and a new child worker with
+new session/instance identity, the installed worker executable and the same
+private storage to serve the durable journal data in N2. GET-only worker health
+inspection deliberately does not make the worker a foreign/shared consumer.
+The driver retains its unreaped session leader until task-owned group cleanup.
+
+This source gate must pass before calling the candidate installed update path
+qualified. It does not prove hardware typing/IME, pixel parity, distribution
+signing/notarization, Windows restart handoff or Linux/Windows updater-dialog
+automation. Earlier preparation rollback/partial-stop gates remain required;
+a post-quit exec failure is a closed failed restart, never evidence that the old
+UI or admission resumed. The current native-sheet attachment is macOS-only;
+GTK's alert-role overlay and Windows' custom dialog surface need their actual
+controller qualification rather than guessed OS dialog-window automation.
+
+Pure guard tests (no native app, network or trust changes) are:
+
+```sh
+python3 deps/ui/nsh/test_private_update_https.py
+python3 deps/ui/nsh/test_standalone_upgrade.py
+```
