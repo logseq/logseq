@@ -54,6 +54,35 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     "authored text marker was not found by PDFium search".into(),
                 ));
             }
+            let marker: Vec<char> = expected.chars().collect();
+            let indexed: Vec<_> = text
+                .glyphs
+                .iter()
+                .filter_map(|glyph| glyph.unicode.map(|unicode| (glyph.index, unicode)))
+                .collect();
+            let start = indexed
+                .windows(marker.len())
+                .position(|window| {
+                    window
+                        .iter()
+                        .zip(&marker)
+                        .all(|(actual, expected)| actual.1 == *expected)
+                })
+                .ok_or_else(|| {
+                    engine::Error::Failure("authored logical character range was not found".into())
+                })?;
+            let selection = engine::selection(
+                document,
+                1,
+                512,
+                indexed[start].0,
+                indexed[start + marker.len() - 1].0 + 1,
+            )?;
+            if selection.text != expected || selection.rects.is_empty() {
+                return Err(engine::Error::Failure(
+                    "logical copy/highlight range changed the authored text".into(),
+                ));
+            }
             let full = engine::raster(
                 document,
                 1,
@@ -88,6 +117,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     height: text.height - split,
                 },
             )?;
+            let png = engine::area_png(document, 1, 512, lower.tile)?;
+            let mut decoded = png::Decoder::new(std::io::Cursor::new(&png))
+                .read_info()
+                .map_err(|error| engine::Error::Failure(error.to_string()))?;
+            let length = decoded.output_buffer_size().ok_or_else(|| {
+                engine::Error::Failure("area PNG has no bounded decode length".into())
+            })?;
+            let mut pixels = vec![0; length];
+            decoded
+                .next_frame(&mut pixels)
+                .map_err(|error| engine::Error::Failure(error.to_string()))?;
+            if pixels != lower.rgba {
+                return Err(engine::Error::Failure(
+                    "decoded area PNG differs from the selected crop pixels".into(),
+                ));
+            }
             let mut stitched = upper.rgba;
             stitched.extend(lower.rgba);
             if full.rgba != stitched {
@@ -107,6 +152,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             Ok(serde_json::json!({
                 "pages": count, "page": info, "text": text, "hits": hits,
+                "selection": selection, "areaPngBytes": png.len(), "areaPixelsMatch": true,
                 "outline": engine::outline(document)?, "raster": {
                     "width": full.page_width, "height": full.page_height,
                     "tile": [full.tile.x, full.tile.y, full.tile.width, full.tile.height],

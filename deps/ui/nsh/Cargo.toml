@@ -19,6 +19,7 @@ arboard = { version = "=3.6.1", default-features = false }
 
 [target.'cfg(any(target_os = "linux", target_os = "windows"))'.dependencies]
 pdfium-render = { git = "https://github.com/ajrcarey/pdfium-render", rev = "3c786ab9463fcfb503afb93b3386c5a9da4b72e3", default-features = false, features = ["pdfium_8125", "thread_safe"] }
+png = "=0.18.1"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 keyring = { version = "=3.6.3", default-features = false, features = ["sync-secret-service", "crypto-rust"] }

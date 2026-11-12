@@ -112,3 +112,20 @@ strip identity; it does not yet qualify all page rotations, passwords, selection
 interaction, annotations, area PNG, native accessibility or any App persistence.
 No engine probe, compiler, document load or native app was run for this source
 batch. The GTK/Windows native hosts and complete UI integration remain in progress.
+
+The engine candidate also supplies logical character-range selection and area
+PNG encoding. Selection copies characters by index and obtains rectangles from
+PDFium's `segments_subset(start, count)`; it never calls a rectangle's text
+extractor to assemble the copied text. Unmapped Unicode is an explicit selection
+error, not invented replacement text. Search-hit output identifies the query and
+native match rectangles; it does not mislabel rectangle-extracted text as an
+exact logical match. The private probe checks that selecting the authored marker
+copies exactly that marker and returns highlight rectangles.
+
+Area encoding uses the existing rendered tile and pinned `png` 0.18.1 (MIT OR
+Apache-2.0; safe Rust encoder API checked in the installed upstream source).
+It creates owned PNG bytes without writing a file or changing the PDF. The
+private probe decodes those bytes and compares all pixels against the selected
+lower-page crop. The OCaml `pdf-hl-area` persistence/ref owner is unchanged and
+is not yet connected by the native viewport. These are semantic-layer candidates,
+not passing integration or user-interaction results.

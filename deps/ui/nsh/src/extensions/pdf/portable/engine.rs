@@ -60,7 +60,15 @@ pub struct PageText {
 pub struct SearchHit {
     pub page: usize,
     pub bounds: Vec<Bounds>,
+    pub query: String,
+}
+#[derive(Clone, Debug, Serialize)]
+pub struct Selection {
+    pub page: usize,
+    pub width: i32,
+    pub height: i32,
     pub text: String,
+    pub rects: Vec<Bounds>,
 }
 #[derive(Clone, Debug, Serialize)]
 pub struct OutlineEntry {
@@ -302,18 +310,83 @@ pub fn search(
             ));
         }
         let mut rectangles = Vec::with_capacity(result.len());
-        let mut content = String::new();
         for segment in result.iter() {
             rectangles.push(bounds(&page, segment.bounds(), &config)?);
-            content.push_str(&segment.text());
         }
         hits.push(SearchHit {
             page: number,
             bounds: rectangles,
-            text: content,
+            query: query.to_owned(),
         });
     }
     Ok(hits)
+}
+
+/// Copy uses logical character indices. PDFium supplies rectangles for that
+/// exact range; extracting text from their union would include other columns.
+pub fn selection(
+    document: &PdfDocument<'_>,
+    number: usize,
+    width: i32,
+    start: usize,
+    end: usize,
+) -> Result<Selection, Error> {
+    let page = page(document, number)?;
+    let (config, height) = configuration(&page, width)?;
+    let page_text = page.text()?;
+    let chars = page_text.chars();
+    if start >= end || end > chars.len() || end - start > MAX_GLYPHS {
+        return Err(Error::Failure(
+            "PDF selection is outside its logical character range".into(),
+        ));
+    }
+    let mut text = String::new();
+    for index in start..end {
+        let character = chars.get(index)?;
+        let unicode = character.unicode_char().ok_or_else(|| {
+            Error::Failure("PDF selection contains a character without a Unicode mapping".into())
+        })?;
+        text.push(unicode);
+    }
+    let segments = page_text.segments_subset(start, end - start);
+    let mut rects = Vec::with_capacity(segments.len());
+    for segment in segments.iter() {
+        rects.push(bounds(&page, segment.bounds(), &config)?);
+    }
+    Ok(Selection {
+        page: number,
+        width,
+        height,
+        text,
+        rects,
+    })
+}
+
+/// The existing OCaml PDF owner persists these PNG bytes as an asset. This
+/// encoder creates no file and never rewrites the PDF or its annotations.
+pub fn area_png(
+    document: &PdfDocument<'_>,
+    number: usize,
+    width: i32,
+    tile: Tile,
+) -> Result<Vec<u8>, Error> {
+    let raster = raster(document, number, width, tile)?;
+    let mut bytes = Vec::new();
+    {
+        let mut encoder = png::Encoder::new(&mut bytes, tile.width as u32, tile.height as u32);
+        encoder.set_color(png::ColorType::Rgba);
+        encoder.set_depth(png::BitDepth::Eight);
+        let mut writer = encoder
+            .write_header()
+            .map_err(|error| Error::Failure(error.to_string()))?;
+        writer
+            .write_image_data(&raster.rgba)
+            .map_err(|error| Error::Failure(error.to_string()))?;
+        writer
+            .finish()
+            .map_err(|error| Error::Failure(error.to_string()))?;
+    }
+    Ok(bytes)
 }
 
 pub fn outline(document: &PdfDocument<'_>) -> Result<Vec<OutlineEntry>, Error> {
