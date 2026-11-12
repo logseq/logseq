@@ -940,7 +940,10 @@ let native_platform_exception_reporting () =
     check "actual platform-event ABI reports a callback exception without crashing"
       (bridge_platform_event "raise-platform-event"=0);
     check "actual platform-event ABI remains callable after the exception"
-      (bridge_platform_event "accept-platform-event"=1 && !calls=2))
+      (bridge_platform_event "accept-platform-event"=1 && !calls=2);
+    Callback.register "lui_ocaml_platform_event" Native_embed.Ffi.platform_event;
+    check "actual platform handler preserves its original rejection after OCaml logging"
+      (bridge_platform_event "window-titlebar\n{}"=0))
 
 let () =
   let owner = Thread.id (Thread.self ()) in

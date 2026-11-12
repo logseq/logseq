@@ -61,8 +61,14 @@ def run() -> None:
         result.check_returncode()
         expected = ('OCaml exception in lui_ocaml_platform_event: '
                     'Failure("platform-event-callback-regression")')
-        if expected not in result.stderr:
-            raise RuntimeError("Actual platform-event exception diagnostic was not retained")
+        expected_messages = [expected,
+            'platform event window-titlebar failed: '
+            'Invalid_argument("Invalid native window titlebar insets")',
+            'OCaml exception in lui_ocaml_platform_event: '
+            'Invalid_argument("Invalid native window titlebar insets")']
+        for message in expected_messages:
+            if message not in result.stderr:
+                raise RuntimeError("Actual platform-event exception diagnostic was not retained: " + message)
 
 
 if __name__ == "__main__":

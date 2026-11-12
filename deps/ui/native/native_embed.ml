@@ -1012,7 +1012,41 @@ module Ffi = struct
   let pump () = encode_batches (pump ())
   let dispose () = encode_batches (dispose ())
   let resync target = encode_batches (resync target)
-  let platform_event = platform_event
+  let platform_event payload =
+    try platform_event payload with error ->
+      let backtrace = Printexc.get_raw_backtrace () in
+      (* Only known protocol operation names are logged. Never print the body
+         or an arbitrary caller-controlled first line. *)
+      let operation = match String.index_opt payload '\n' with
+        | Some index when index <= 64 ->
+            let name=String.sub payload 0 index in
+            if List.mem name
+              ["update-prepare";
+               "update-abort";
+               "application-menu-command";
+               "keychain-result";
+               "clipboard-write-result";
+               "window-close-request";
+               "platform-error";
+               "window-size";
+               "window-titlebar";
+               "appearance";
+               "native-performance-toggle";
+               "mygo-performance";
+               "node-rect";
+               "node-natural-size";
+               "caret-rect";
+               "selection-rects";
+               "offset-at";
+               "line-ranges";
+               "scroll-height";
+               "clipboard-read"]
+            then name else "unrecognized-operation"
+        | _ -> "malformed-operation" in
+      let message=Printexc.to_string error in
+      Printf.eprintf "logseq native: platform event %s failed: %.*s\n%!"
+        operation 1024 message;
+      Printexc.raise_with_backtrace error backtrace
   let document_event payload =
     let separator = String.index payload '\n' in
     let name = String.sub payload 0 separator in
