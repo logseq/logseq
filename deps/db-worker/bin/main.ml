@@ -78,6 +78,18 @@ let serialize (f : 'a -> 'b E.t) : 'a -> 'b E.t =
     | `Err exn -> finish_invocation (); raise exn
 
 let () =
+  Db_worker_node.native_gc_stats_fn := Some (fun () ->
+    let stats = Gc.quick_stat () in
+    let word_bytes = Sys.word_size / 8 in
+    Db_worker_node.smap
+      [ "word-bytes", Wire.Int word_bytes
+      ; "major-heap-words", Wire.Int stats.heap_words
+      ; "major-heap-capacity-bytes", Wire.Int (stats.heap_words * word_bytes)
+      ; "current-domain-minor-heap-limit-bytes",
+        Wire.Int ((Gc.get ()).minor_heap_size * word_bytes)
+      ; "minor-collections", Wire.Int stats.minor_collections
+      ; "major-collections", Wire.Int stats.major_collections
+      ; "compactions", Wire.Int stats.compactions ]);
   (* parse_argv expects JS argv ([runtime, script, ...args]); native
      argv only has the executable name, so pad one slot. *)
   Db_worker_node.argv_fn :=

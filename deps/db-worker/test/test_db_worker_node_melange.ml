@@ -562,6 +562,27 @@ let with_db_exists v thunk =
 (* ============================== tests ============================== *)
 
 let () =
+  Fest.test "worker-health-native-heap-sampler-is-optional-and-read-only" (fun () ->
+      let original = !Db_worker_node.native_gc_stats_fn in
+      let restore () = Db_worker_node.native_gc_stats_fn := original in
+      let run () =
+          let health () = Db_worker_node.health_payload
+            ~bound_repo:"heap-diagnostics" ~host:"127.0.0.1" ~port:(Some 1234)
+            ~owner_source:"lui" ~root_dir:"/private/heap-diagnostics" in
+          Db_worker_node.native_gc_stats_fn := None;
+          Fest.expect |> Fest.equal (Wire.get "native-gc" (health ())) None;
+          let calls = ref 0 in
+          let sample = kvs [ "major-heap-capacity-bytes", Wire.Int 4096 ] in
+          Db_worker_node.native_gc_stats_fn := Some (fun () -> incr calls; sample);
+          let result = health () in
+          Fest.expect |> Fest.equal (Wire.get "native-gc" result) (Some sample);
+          Fest.expect |> Fest.equal (Wire.get "repo" result)
+            (Some (Wire.String "heap-diagnostics"));
+          Fest.expect |> Fest.equal !calls 1
+      in
+      match run () with
+      | () -> restore ()
+      | exception error -> restore (); raise error);
   (* ---- db-worker-node-root-dir-permission-error ---- *)
   Fest.Promise.test "db-worker-node-root-dir-permission-error" (fun () ->
       if Node.Process.process##platform = "win32" then Js.Promise.resolve ()

@@ -558,6 +558,10 @@ let handle_shutdown (stop_fn : unit -> unit) (res : Http_server.res) : unit =
     (Timers.set_timeout 10 (fun () ->
          stop_fn ()))
 
+(* Installed only by the native entrypoint. Health checks never collect or
+   compact the heap, and maintained JavaScript responses omit this field. *)
+let native_gc_stats_fn : (unit -> Wire.t) option ref = ref None
+
 (* health-payload — cljs port is an atom (IDeref) or a number. *)
 let health_payload ~(bound_repo : string) ~(host : string)
     ~(port : int option) ~(owner_source : string) ~(root_dir : string) :
@@ -572,7 +576,7 @@ let health_payload ~(bound_repo : string) ~(host : string)
           ; "lifecycleDir", Wire.String s.lifecycle_dir ]
     | None -> Wire.Nil
   in
-  smap
+  let fields =
     [ "repo", Wire.String bound_repo
     ; "status", Wire.String (if !ready then "ready" else "starting")
     ; "host", Wire.String host
@@ -602,6 +606,10 @@ let health_payload ~(bound_repo : string) ~(host : string)
     ; "root-dir", Wire.String root_dir
     ; "storage", storage_w
     ; "revision", Wire.String (Common_version.revision ()) ]
+  in
+  smap (match !native_gc_stats_fn with
+    | None -> fields
+    | Some sample -> ("native-gc", sample ()) :: fields)
 
 (* handle-request! — the cljs router; [url] is the raw req.url (the
    /v1/shutdown comparison is intentionally against the raw url). *)

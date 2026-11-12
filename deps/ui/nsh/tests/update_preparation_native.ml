@@ -40,6 +40,37 @@ let native_entry_admission () =
     (match Yojson.Safe.from_string query with
      | `Assoc fields -> List.assoc_opt "ok" fields = Some (`Bool true)
      | _ -> false);
+  let hello, _ = Native_embed.Ffi.agent "{\"op\":\"hello\"}" in
+  check "native diagnostics are discoverable on the existing agent channel"
+    (match Yojson.Safe.from_string hello with
+     | `Assoc fields ->
+         (match List.assoc_opt "ops" fields with
+          | Some (`List ops) -> List.mem (`String "gc-stats") ops
+          | _ -> false)
+     | _ -> false);
+  let diagnostics, _ = Native_embed.Ffi.agent "{\"op\":\"gc-stats\"}" in
+  check "heap diagnostics remain read-only during save"
+    (match Yojson.Safe.from_string diagnostics with
+     | `Assoc fields ->
+         List.assoc_opt "ok" fields = Some (`Bool true)
+         && (match List.assoc_opt "gc" fields with
+             | Some (`Assoc gc) ->
+                 let integer name = match List.assoc_opt name gc with
+                   | Some (`Int value) -> value
+                   | _ -> failwith ("Missing integer heap diagnostic: " ^ name) in
+                 let word_bytes = integer "word-bytes" in
+                 (word_bytes = 4 || word_bytes = 8)
+                 && integer "major-heap-capacity-bytes"
+                    = integer "major-heap-words" * word_bytes
+                 && integer "current-domain-minor-heap-limit-bytes" > 0
+                 && integer "minor-collections" >= 0
+                 && integer "major-collections" >= 0
+                 && integer "compactions" >= 0
+                 && List.assoc_opt "live-bytes" gc = None
+             | _ -> false)
+     | _ -> false);
+  check "heap queries do not invoke application input handlers"
+    (!presses = 1 && !documents = 0);
   Update_admission.finish_save gate "1";
   check "matching preparation seals" (Update_admission.seal gate "1");
   check "abort only records intent" (Update_admission.request_abort gate "1" = `Pending);

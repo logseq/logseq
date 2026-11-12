@@ -1,5 +1,31 @@
 # API migrations
 
+## Native heap diagnostics
+
+The opt-in native UI agent now advertises `gc-stats` in its `hello.ops`.
+Send `{"op":"gc-stats"}` on that existing channel; the successful reply is
+`{"ok":true,"op":"gc-stats","gc":{...}}`. No new listener is opened.
+Native DB-worker `/healthz` responses additionally include `native-gc` using the
+same fields. JavaScript workers omit that field, and other health fields retain
+their existing meanings. Consumers must check the capability or field presence
+instead of assuming every maintained target exposes native GC diagnostics.
+
+Both objects contain integer `word-bytes`, `major-heap-words`,
+`major-heap-capacity-bytes`, `current-domain-minor-heap-limit-bytes`,
+`minor-collections`, `major-collections`, and `compactions`. For example,
+`major-heap-words: 1000` with `word-bytes: 8` means 8000 bytes of major heap
+capacity. The minor value is the configured capacity of the sampling domain;
+it is not a sum over all domains. Neither capacity is a live-object count or
+additional memory to add to process RSS/physical footprint.
+
+Sampling uses `Gc.quick_stat` and `Gc.get` without forcing a collection,
+compaction, UI action, database operation, or allocation-profile mode. Existing
+production collection and idle-release policy remains enabled. UI queries are
+serialized through the existing application entry and remain available during
+update preparation as read-only diagnostics. Worker health samples its own native
+runtime through an optional entrypoint-installed hook; maintained JavaScript
+health responses do not call the native GC.
+
 
 ## Windows installation qualification boundary
 

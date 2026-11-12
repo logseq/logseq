@@ -995,7 +995,44 @@ module Ffi = struct
       let dispatch event =
         Update_admission.require_input Update_admission.application "semantic-agent";
         target.dispatch event in
-      let reply = Lui_agent.handle { target with dispatch } request in
+      let gc_stats () =
+        let stats = Gc.quick_stat () in
+        let word_bytes = Sys.word_size / 8 in
+        `Assoc
+          [ "word-bytes", `Int word_bytes
+          ; "major-heap-words", `Int stats.heap_words
+          ; "major-heap-capacity-bytes", `Int (stats.heap_words * word_bytes)
+          ; "current-domain-minor-heap-limit-bytes",
+            `Int ((Gc.get ()).minor_heap_size * word_bytes)
+          ; "minor-collections", `Int stats.minor_collections
+          ; "major-collections", `Int stats.major_collections
+          ; "compactions", `Int stats.compactions ]
+      in
+      let op =
+        match Lui_json.parse_object request with
+        | fields -> List.assoc_opt "op" fields
+        | exception Lui_json.Parse_error _ -> None
+      in
+      let reply =
+        match op with
+        | Some (Lui_json.String "gc-stats") ->
+            Yojson.Basic.to_string (`Assoc
+              [ "ok", `Bool true; "op", `String "gc-stats"
+              ; "gc", gc_stats () ])
+        | Some (Lui_json.String "hello") ->
+            let reply = Lui_agent.handle { target with dispatch } request in
+            (match Yojson.Basic.from_string reply with
+             | `Assoc fields ->
+                 Yojson.Basic.to_string (`Assoc
+                   (List.map (fun (name, value) ->
+                     if name = "ops" then
+                       match value with
+                       | `List ops -> name, `List (`String "gc-stats" :: ops)
+                       | _ -> name, value
+                     else name, value) fields))
+             | _ -> reply)
+        | _ -> Lui_agent.handle { target with dispatch } request
+      in
       reply, encode_batches (take_patches_dbg "agent"))
   let editor_snapshot block_id =
     with_entry_lock (fun () ->
