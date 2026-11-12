@@ -16,7 +16,7 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
-  LUI_REF: c754e0c57c61e829db90794d8bbeb58ef2d85e8f
+  LUI_REF: 7dccfb65a9274fa0ff8651b9e91b9c364efb339a
   RUSTUP_TOOLCHAIN: 1.97.0
   CARGO_BUILD_JOBS: 2
   # Keep the platform's final signed/native bytes; the macOS archive stripper

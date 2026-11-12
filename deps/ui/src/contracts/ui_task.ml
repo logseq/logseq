@@ -40,7 +40,11 @@ module Activity = struct
     if same_scope scope previous then f ()
     else begin
       current := scope;
-      Fun.protect ~finally:(fun () -> current := previous) f
+      (* Keep exception cleanup portable to Melange, whose runtime does not
+         implement the raw-backtrace restoration used by Fun.protect. *)
+      match f () with
+      | result -> current := previous; result
+      | exception error -> current := previous; raise error
     end
   let within scope f = in_context (Some scope) f
   let without f = in_context None f
