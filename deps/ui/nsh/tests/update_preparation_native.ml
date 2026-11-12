@@ -1253,6 +1253,7 @@ let native_popup_placement_contract () =
 let native_cmdk_controlled_input () =
   let previous_app = !Native_embed.current_app
   and previous_provider = !Dom_ext.doc_elements_provider
+  and previous_subtree = !Dom_ext.subtree_elements_provider
   and previous_host = !Host.host_op in
   let state = ref None and services = ref None and requests = ref [] in
   let backend : Lui_protocol.backend = {
@@ -1263,12 +1264,15 @@ let native_cmdk_controlled_input () =
       let svs=Cmdk_host.services ~host:(Lui_ui.host context) () in
       let st=Cmdk_state.make ~register:false context.Lui_ui.ui_scheduler svs in
       services:=Some svs;state:=Some st;
-      Cmdk_view.input_row svs st) in
+      Lui_elements.column ~style_class:"cp__cmdk"
+        [Cmdk_view.input_row svs st;Cmdk_view.scroller svs st]) in
   Fun.protect ~finally:(fun () ->
     ignore (Lui_app.dispose app);Native_embed.current_app:=previous_app;
-    Dom_ext.doc_elements_provider:=previous_provider;Host.host_op:=previous_host) (fun () ->
+    Dom_ext.doc_elements_provider:=previous_provider;
+    Dom_ext.subtree_elements_provider:=previous_subtree;Host.host_op:=previous_host) (fun () ->
     Native_embed.current_app:=Some app;
     Dom_ext.doc_elements_provider:=Native_embed.collect_elements;
+    Dom_ext.subtree_elements_provider:=Native_embed.collect_subtree;
     Host.set_host_op (fun name payload ->
       let operation,body = if name="dom-op" then
         let boundary=String.index payload '\n' in
@@ -1313,7 +1317,25 @@ let native_cmdk_controlled_input () =
     let legacy=Cmdk_host.services ~host:Lui_protocol.GenericHost () in
     legacy.Cmdk_services.set_input_value "legacy mirror";
     check "maintained native hosts keep their existing imperative input mirror"
-      (List.exists (fun (name,_) -> name="set-value") !requests))
+      (List.exists (fun (name,_) -> name="set-value") !requests);
+    let item=Cmdk_state.command_item svs
+      {Cmdk_services.id="ui/toggle-left-sidebar";label="Native row scroll";
+       i18n=false;sc="";dev=false} in
+    let group={Cmdk_state.gid=Cmdk_state.G_commands;gtitle="Commands";
+      gitems=[{item with idx=0}];gtotal=1;glimit=20;gexpanded=false;gfilter_active=false} in
+    Cmdk_state.set_in st (fun view -> {view with groups=[group];hl = -1});
+    ignore (Lui_app.flush app);
+    requests:=[];
+    Cmdk_state.move_hl st 1;
+    check "actual native command keyboard navigation requests its mounted row and Scroll owner"
+      (match !requests with
+       | [("scroll-row-into-view",payload)] ->
+           let json=Yojson.Safe.from_string payload in
+           let node field=Yojson.Safe.Util.(json |> member field |> member "node-id" |> to_int) in
+           Hashtbl.find runtime.Lui_runtime.mounted_nodes (node "scroller")=Lui_protocol.Scroll
+           && Hashtbl.mem runtime.Lui_runtime.mounted_nodes (node "row")
+           && node "scroller" <> node "row"
+       | _ -> false))
 
 let native_menu_scope_retention () =
   let open Lui_elements in

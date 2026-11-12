@@ -14,6 +14,23 @@ anonymous `.ls-page-icon` anchor. That picker now reopens through the valid poin
 branch. No caller signatures or event payloads change, and the same correction
 applies to NSH, Apple/iOS, Android and Web. Callers with a live retained anchor
 should continue supplying its identifier for native anchor tracking.
+## NSH keyboard navigation reveals rows in their explicit scroll owner
+
+The native `scroll-row-into-view` service used by command-palette and editor
+autocomplete navigation is now implemented through NSH's existing public
+measurement, scroll observation and `ElementRef::scroll_to` APIs. The request
+keeps its existing `scroller` and `row` references. It scrolls only the nearest
+vertical canonical Scroll/List owner, by the minimum distance needed to show
+the row, preserving horizontal offset. Autocomplete group headings participate
+in the top edge, matching the existing Web helper.
+
+Both references retain their captured incarnations across asynchronous layout.
+Missing or replaced rows, incorrect owners and unavailable layout are errors;
+they never become successful no-ops or measurements of a replacement node.
+No persistent offset cache or second scroll controller is added. Downstream
+callers keep using `Ui_services.dom_scroll_row_into_view ~scroller ~row`, for
+example after moving a keyboard highlight. Apple/iOS, Android and Web producers
+and delivery paths are unchanged.
 
 ## Closing an already closed command palette leaves search persistence unchanged
 

@@ -224,9 +224,148 @@ async fn scroll_top(target: &Target, top: f32, renderer: &Renderer) -> Result<()
     Ok(())
 }
 
+fn scroll_owner(scroller: &Node, row: &Node, renderer: &Renderer) -> Result<(), String> {
+    let mut parent = row.parent;
+    while let Some(id) = parent {
+        let node = renderer
+            .node_snapshot(id)
+            .ok_or("row scroll ancestor retired")?;
+        let owns_scroll = matches!(node.kind.as_str(), "scroll" | "list")
+            || (node.kind == "virtual-list" && node.string("virtual-viewport") != "parent");
+        if owns_scroll {
+            return if node.id == scroller.id
+                && node.incarnation == scroller.incarnation
+                && node.string("orientation") != "horizontal"
+            {
+                Ok(())
+            } else {
+                Err("row scroll requires its nearest vertical Scroll/List owner".into())
+            };
+        }
+        parent = node.parent;
+    }
+    Err("row scroll target is outside the requested Scroll/List".into())
+}
+
+fn group_heading(row: &Node, renderer: &Renderer) -> Option<Arc<Node>> {
+    let parent = renderer.node_snapshot(row.parent?)?;
+    let group = renderer.node_snapshot(parent.parent?)?;
+    let index = group.children.iter().position(|id| *id == parent.id)?;
+    let heading = renderer.node_snapshot(*group.children.get(index.checked_sub(1)?)?)?;
+    let is_heading = heading
+        .string("style-class")
+        .split_whitespace()
+        .any(|class| class == "ui__ac-group-name");
+    is_heading.then_some(heading)
+}
+
+async fn scroll_row(
+    scroller: (u64, u64),
+    row: (u64, u64),
+    renderer: &Renderer,
+) -> Result<Vec<PlatformEvent>, String> {
+    let scroller = target(&Value::Null, Some(scroller), renderer)
+        .await?
+        .ok_or("row scroll owner is missing, retired or unmounted")?;
+    let row = target(&Value::Null, Some(row), renderer)
+        .await?
+        .ok_or("row scroll target is missing, retired or unmounted")?;
+    scroll_owner(&scroller.node, &row.node, renderer)?;
+    let heading = if let Some(node) = group_heading(&row.node, renderer) {
+        Some(
+            target(&Value::Null, Some((node.id, node.incarnation)), renderer)
+                .await?
+                .ok_or("row scroll group heading retired or unmounted")?,
+        )
+    } else {
+        None
+    };
+    let sampled = Rc::new(RefCell::new(None::<Point<Points>>));
+    let sample = sampled.clone();
+    let reference = scroller.reference;
+    let (owner, ()) = nsh_core::element::create_root(|| {
+        watch_scroll(
+            move || reference.node(),
+            move |event| *sample.borrow_mut() = Some(event.offset),
+        )
+    });
+    let _owner = WatchOwner(owner);
+    // Queue the measurements together, so they share one native commit.
+    let viewport = scroller.reference.measure();
+    let item = row.reference.measure();
+    let heading_measurement = heading.as_ref().map(|heading| heading.reference.measure());
+    let viewport = viewport
+        .await
+        .ok_or("row scroll owner has no committed layout")?;
+    let item = item
+        .await
+        .ok_or("row scroll target has no committed layout")?;
+    let heading_top = if let Some(measurement) = heading_measurement {
+        Some(
+            measurement
+                .await
+                .ok_or("row scroll group heading has no committed layout")?
+                .page
+                .y
+                .0,
+        )
+    } else {
+        None
+    };
+    if !scroller.current(renderer)
+        || !row.current(renderer)
+        || heading
+            .as_ref()
+            .is_some_and(|heading| !heading.current(renderer))
+    {
+        return Err("row scroll identity retired while measuring".into());
+    }
+    let current = renderer
+        .node_snapshot(row.node.id)
+        .ok_or("row scroll target retired")?;
+    scroll_owner(&scroller.node, &current, renderer)?;
+    let offset = sampled
+        .borrow()
+        .as_ref()
+        .copied()
+        .ok_or("row scroll offset was unavailable after commit")?;
+    let top = heading_top.unwrap_or(item.page.y.0) - viewport.page.y.0;
+    let bottom = item.page.y.0 + item.frame.size.height.0 - viewport.page.y.0;
+    let height = viewport.frame.size.height.0;
+    if ![top, bottom, height, offset.x.0, offset.y.0]
+        .iter()
+        .all(|value| value.is_finite())
+        || height <= 0.0
+        || item.frame.size.height.0 <= 0.0
+    {
+        return Err("row scroll requires finite positive committed geometry".into());
+    }
+    let delta = if top < 0.0 {
+        top
+    } else if bottom > height {
+        bottom - height
+    } else {
+        0.0
+    };
+    if delta != 0.0 {
+        let top = offset.y.0 + delta;
+        if !top.is_finite() {
+            return Err("row scroll destination is outside finite native geometry".into());
+        }
+        scroller
+            .reference
+            .scroll_to(Point::new(offset.x, px(top.max(0.0))), false);
+    }
+    Ok(Vec::new())
+}
+
 /// An owned request deferred until its creating patches reach the native commit.
 /// Existing targets retain their incarnation even if their identifier is renamed.
 pub enum CapturedRequest {
+    ScrollRow {
+        scroller: (u64, u64),
+        row: (u64, u64),
+    },
     Node {
         operation: String,
         payload: String,
@@ -239,6 +378,25 @@ pub fn capture(
     payload: &str,
     renderer: &Renderer,
 ) -> Result<CapturedRequest, String> {
+    if operation == "scroll-row-into-view" {
+        let request = object(payload)?;
+        let resolve_field = |name| -> Result<Arc<Node>, String> {
+            resolve(
+                request
+                    .get(name)
+                    .ok_or_else(|| format!("row scroll requires {name}"))?,
+                renderer,
+            )?
+            .ok_or_else(|| format!("row scroll {name} is missing or retired"))
+        };
+        let scroller = resolve_field("scroller")?;
+        let row = resolve_field("row")?;
+        scroll_owner(&scroller, &row, renderer)?;
+        return Ok(CapturedRequest::ScrollRow {
+            scroller: (scroller.id, scroller.incarnation),
+            row: (row.id, row.incarnation),
+        });
+    }
     if super::editor_geometry::supported(operation) {
         return super::editor_geometry::capture(operation, payload, renderer)
             .map(CapturedRequest::Editor);
@@ -262,6 +420,7 @@ pub async fn execute(
     renderer: &Renderer,
 ) -> Result<Vec<PlatformEvent>, String> {
     match request {
+        CapturedRequest::ScrollRow { scroller, row } => scroll_row(scroller, row, renderer).await,
         CapturedRequest::Node {
             operation,
             payload,
@@ -504,5 +663,136 @@ mod tests {
         app.wait_for("Measured current").unwrap();
         app.press("Measure retired").unwrap();
         app.wait_for("Retired measurement rejected").unwrap();
+    }
+
+    #[component]
+    fn NativeRowScroll() -> impl IntoElement {
+        let renderer = Renderer::new(|_, _| {});
+        let mut ops = vec![
+            json!({"op":"create-node","id":1,"kind":"scroll"}),
+            json!({"op":"set-prop","id":1,"property":"width","value":320}),
+            json!({"op":"set-prop","id":1,"property":"height","value":160}),
+            json!({"op":"create-node","id":2,"kind":"column"}),
+            json!({"op":"set-prop","id":2,"property":"height","value":700}),
+            json!({"op":"set-prop","id":2,"property":"min-height","value":700}),
+            json!({"op":"insert-child","parent":1,"child":2,"index":0}),
+            json!({"op":"create-node","id":3,"kind":"scroll"}),
+            json!({"op":"set-prop","id":3,"property":"height","value":100}),
+            json!({"op":"set-prop","id":3,"property":"min-height","value":100}),
+            json!({"op":"insert-child","parent":2,"child":3,"index":0}),
+            json!({"op":"create-node","id":4,"kind":"column"}),
+            json!({"op":"set-prop","id":4,"property":"height","value":640}),
+            json!({"op":"set-prop","id":4,"property":"min-height","value":640}),
+            json!({"op":"insert-child","parent":3,"child":4,"index":0}),
+            json!({"op":"create-node","id":5,"kind":"spacer"}),
+            json!({"op":"set-prop","id":5,"property":"height","value":600}),
+            json!({"op":"insert-child","parent":2,"child":5,"index":1}),
+        ];
+        for index in 0..20 {
+            let id = index + 100;
+            ops.extend([
+                json!({"op":"create-node","id":id,"kind":"text"}),
+                json!({"op":"set-prop","id":id,"property":"text","value":format!("Choice {index}")}),
+                json!({"op":"set-prop","id":id,"property":"height","value":32}),
+                json!({"op":"insert-child","parent":4,"child":id,"index":index}),
+            ]);
+        }
+        renderer.apply(patch(1, json!(ops))).unwrap();
+        renderer.set_root(1).unwrap();
+        for payload in [
+            json!({"scroller":{"node-id":1},"row":{"node-id":119}}),
+            json!({"scroller":{"node-id":3},"row":{"node-id":999}}),
+            json!({"row":{"node-id":119}}),
+        ] {
+            assert!(capture("scroll-row-into-view", &payload.to_string(), &renderer).is_err());
+        }
+        let offsets = signal((0.0_f32, 0.0_f32));
+        for (id, inner) in [(1, false), (3, true)] {
+            let node = renderer.node_snapshot(id).unwrap();
+            let reference = renderer.native_reference(id, node.incarnation).unwrap();
+            watch_scroll(
+                move || reference.node(),
+                move |event| {
+                    offsets.update(|offsets| {
+                        if inner {
+                            offsets.0 = event.offset.y.0
+                        } else {
+                            offsets.1 = event.offset.y.0
+                        }
+                    });
+                },
+            );
+        }
+        let status = signal("Waiting".to_owned());
+        let responses = signal(0_u64);
+        let generation = signal(1_u64);
+        let scrolling = renderer.clone();
+        let retiring = renderer.clone();
+        view()
+            .child(renderer.element())
+            .child(
+                nsh_base::button()
+                    .child(text("Reveal last choice"))
+                    .on_press(move || {
+                        let request = capture(
+                            "scroll-row-into-view",
+                            r#"{"scroller":{"node-id":3},"row":{"node-id":119}}"#,
+                            &scrolling,
+                        )
+                        .unwrap();
+                        let renderer = scrolling.clone();
+                        spawn(async move {
+                            assert!(execute(request, &renderer).await.unwrap().is_empty());
+                            responses.update(|count| *count += 1);
+                            status.set(format!("Row revealed {}", responses.get_untracked()));
+                        });
+                    }),
+            )
+            .child(
+                nsh_base::button()
+                    .child(text("Reject replacement"))
+                    .on_press(move || {
+                        let request = capture(
+                            "scroll-row-into-view",
+                            r#"{"scroller":{"node-id":3},"row":{"node-id":119}}"#,
+                            &retiring,
+                        )
+                        .unwrap();
+                        generation.update(|current| *current += 1);
+                        retiring.apply(patch(generation.get_untracked(), json!([
+                    {"op":"remove-child","parent":4,"child":119},
+                    {"op":"drop-node","id":119},
+                    {"op":"create-node","id":119,"kind":"text"},
+                    {"op":"set-prop","id":119,"property":"text","value":"Replacement choice"},
+                    {"op":"set-prop","id":119,"property":"height","value":32},
+                    {"op":"insert-child","parent":4,"child":119,"index":19}
+                ]))).unwrap();
+                        let renderer = retiring.clone();
+                        spawn(async move {
+                            assert!(execute(request, &renderer).await.is_err());
+                            status.set("Replacement rejected".into());
+                        });
+                    }),
+            )
+            .child(text(move || status.get()))
+            .child(text(move || {
+                let (inner, outer) = offsets.get();
+                format!("Offsets: {inner}, {outer}")
+            }))
+    }
+
+    #[test]
+    fn row_reveal_scrolls_only_its_explicit_owner_and_rejects_replacement() {
+        let mut app = Headless::start(EngineConfig::new(Root::of::<NativeRowScroll>())).unwrap();
+        app.wait_for("Reveal last choice").unwrap();
+        app.press("Reveal last choice").unwrap();
+        app.wait_for("Row revealed 1").unwrap();
+        app.wait_for("Offsets: 540, 0").unwrap();
+        app.press("Reveal last choice").unwrap();
+        app.wait_for("Row revealed 2").unwrap();
+        app.wait_for("Offsets: 540, 0").unwrap();
+        app.press("Reject replacement").unwrap();
+        app.wait_for("Replacement rejected").unwrap();
+        app.wait_for("Offsets: 540, 0").unwrap();
     }
 }
