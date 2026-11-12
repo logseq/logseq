@@ -231,6 +231,5 @@ fn actual_raw_content_press_starts_the_existing_primary_pointer_controller() {
     let mut app = Headless::start(EngineConfig::new(Root::of::<ActualRawContract>())).unwrap();
     app.wait_for("Actual raw schema").unwrap();
     app.press("Actual raw schema").unwrap();
-    app.wait_for("text:pointerdown:1 mousedown:1").unwrap();
-    assert!(app.screen().shows("click:0"));
+    app.wait_for("text:pointerdown:1 mousedown:1 click:0").unwrap();
 }

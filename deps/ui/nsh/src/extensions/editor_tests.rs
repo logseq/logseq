@@ -398,8 +398,8 @@ fn anchor_only_authoritative_selection_replaces_the_actual_native_selected_range
     app.wait_until(
         "anchor-only native UTF-16 selection command",
         std::time::Duration::from_secs(2),
-        |app| {
-            app.screen().commands().iter().any(|(id, command)| {
+        |screen| {
+            screen.commands().iter().any(|(id, command)| {
                 *id == before
                     && matches!(
                         command,

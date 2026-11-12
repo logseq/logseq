@@ -1,5 +1,6 @@
 use super::*;
 use lui_nsh::{
+    render::Renderer,
     extensions::{Extensions, Profile, Schema},
     wire::Batch,
 };
@@ -157,6 +158,7 @@ fn coretext_wrapped_lines_cover_hidden_leading_markup_without_changing_hits() {
         nsh_platform_macos::CoreTextEngine::default,
     )
     .unwrap();
+    app.first_render().unwrap();
     app.press("Query wrapped markup partitions").unwrap();
     app.wait_for("Wrapped markup source partitions passed")
         .unwrap();
