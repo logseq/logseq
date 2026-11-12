@@ -1361,3 +1361,42 @@ retained event ownership and platform layout still require boundary validation
 and real application qualification. The report records captured literal sites
 and deferred scoped-variable checks. It does not claim those dynamic paths have
 been statically proved or that every conditional route has been exercised.
+## Native OCaml primitives return boxed OCaml values
+
+`logseq_lui_wakeup` and `logseq_lui_platform_request`, bound by OCaml as
+`unit -> unit` and `string -> unit`, now use `CAMLprim value` signatures, root
+their arguments and explicitly return `Val_unit`. Their host callbacks keep the
+existing C `void` ABI. Application code and wire messages do not change. Any
+embedding that directly called the primitive as a host `void` function must use
+the registered host callback instead; OCaml primitives require the runtime lock
+and boxed arguments.
+
+The prior C `void` implementations could tail-call a host callback and return
+its arbitrary machine-register residue to OCaml. The real macOS crash report
+`logseq-nsh-2026-11-12-164859.ips` records `caml_format_exception` receiving
+`0x1c`; the matching embedded library UUID is
+`F38BB3D8-BD73-34B9-A926-4A42B81A0FC8`. Disassembly of that exact library shows
+both primitives tail-branching into their `void` host callbacks, and the exported
+platform-event bridge applying the legacy exception-result encoding test. An
+ordinary return residue of `0x1e` satisfies that test and decodes to `0x1c`.
+This explains why the OCaml exception logger did not run: no OCaml exception
+was raised. The return-value correction addresses the malformed result; normal
+OCaml exception diagnostics remain intact.
+
+Both Unix and Windows native build paths now parse the actual native OCaml
+external declarations with the compiler's parser and compile the real C bridge
+in the same translation unit as derived boxed-value prototypes. Wrong return
+types and argument counts become C compiler errors before application startup.
+Unsupported external calling-convention attributes fail explicitly and require
+an ABI derivation rather than silently treating them as ordinary boxed calls.
+For example, `external wakeup : unit -> unit = "logseq_lui_wakeup"` requires
+`CAMLprim value logseq_lui_wakeup(value unit)` and an explicit `Val_unit` result.
+
+The existing actual-native admission runner includes the real bridge once and
+installs test-only host callbacks that deliberately leave `0x1e` in the return
+register. It exercises actual `Ffi.platform_event -> Host.enqueue -> wakeup`
+and update-result `platform_request` paths, then confirms the queued state
+change survives. The existing throwing-callback/GC regression remains enabled.
+The primitive-signature native suite also compiles rejected `void` and wrong
+arity definitions. These checks do not replace a real application session or
+qualify unrelated native UI behavior.

@@ -932,6 +932,36 @@ let native_favorite_menu_contract () =
 
 external bridge_platform_event : string -> int = "caml_logseq_test_platform_event"
 
+external bridge_adversarial_callbacks : bool -> unit = "caml_logseq_test_adversarial_callbacks"
+
+let native_primitive_unit_results () =
+  let previous_wakeup = !Host.wakeup_cb and previous_left = !Host.titlebar_left in
+  Host.drain ();
+  bridge_adversarial_callbacks true;
+  Fun.protect ~finally:(fun () ->
+    bridge_adversarial_callbacks false;
+    Host.set_wakeup previous_wakeup;
+    Host.drain ();
+    Host.set_titlebar_left previous_left;
+    Callback.register "lui_ocaml_platform_event" Native_embed.Ffi.platform_event) (fun () ->
+    Host.set_wakeup Native_embed.wakeup;
+    Callback.register "lui_ocaml_platform_event" Native_embed.Ffi.platform_event;
+    check "actual native Host.enqueue returns unit after an adversarial void wakeup"
+      (bridge_platform_event
+        "window-titlebar\n{\"height\":32,\"left\":84,\"right\":0}" = 1);
+    Host.drain ();
+    check "actual native platform event retains its queued state change"
+      (!Host.titlebar_left = 84);
+    check "actual platform_request returns unit after an adversarial void service callback"
+      (bridge_platform_event "update-abort\n{\"id\":\"999\"}" = 1);
+    Callback.register "lui_ocaml_platform_event" (fun _ -> Native_embed.wakeup ());
+    check "direct wakeup callback result is an OCaml unit"
+      (bridge_platform_event "tail-wakeup" = 1);
+    Callback.register "lui_ocaml_platform_event"
+      (fun payload -> Native_embed.platform_request payload);
+    check "direct platform request callback result is an OCaml unit"
+      (bridge_platform_event "tail-platform-request" = 1))
+
 let native_platform_exception_reporting () =
   let previous_control = Gc.get () in
   let calls = ref 0 in
@@ -1159,6 +1189,7 @@ let () =
     ~request_flush:(fun () -> ()) ~dom ~timers:Ui_dom_native.timers ~files:Ui_dom_native.files;
   Editor_clipboard_native.run ();
   native_platform_exception_reporting ();
+  native_primitive_unit_results ();
   Editor_clipboard_native.async_file_read_keeps_the_application_owner_responsive ();
   native_settings_route_links ();
   native_point_property_scroll ();

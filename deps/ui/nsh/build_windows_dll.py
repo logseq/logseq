@@ -101,6 +101,7 @@ def build(output, *, environment=None):
     run = partial(execute, environment=environment)
     bridge = UI / "native/logseq_lui_bridge.c"
     exports = bridge_exports(bridge.read_text(encoding="utf-8"))
+    run([sys.executable, UI / "nsh/validate_primitive_signatures.py"])
     # Build only libraries. The Unix native_embed executable object's _pic
     # runtime flag is deliberately not involved in this native DLL route.
     run(["opam", "exec", "--", "dune", "build", *ARCHIVES])

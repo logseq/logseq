@@ -65,6 +65,7 @@ sys.path.insert(0, sys.argv[1])
 from build_windows_dll import bridge_exports
 bridge_exports(Path(sys.argv[2]).read_text(encoding="utf-8"))
 BRIDGE_SOURCE
+OPAMSWITCH="$switch" "$python_bin" "$nsh_root/validate_primitive_signatures.py" >&2
 (cd "$lui_source" && opam exec --switch="$switch" -- dune build @install) >&2
 (cd "$ui_root" && opam exec --switch="$switch" -- env \
   OCAMLPATH="$lui_source/_build/install/default/lib${OCAMLPATH:+:$OCAMLPATH}" \

@@ -35,9 +35,6 @@ def run() -> None:
     compiler = [*prefix, "ocamlfind", "ocamlopt", "-thread", "-package", PACKAGES, *includes]
     with tempfile.TemporaryDirectory(prefix="logseq-update-admission-") as temporary:
         stage = Path(temporary)
-        bridge = stage / ("logseq_lui_bridge" + extension)
-        subprocess.run([*prefix, "ocamlopt", "-c", "-o", str(bridge),
-                        str(UI / "native/logseq_lui_bridge.c")], cwd=stage, check=True)
         event_probe = stage / ("platform_event_exception" + extension)
         subprocess.run([*prefix, "ocamlopt", "-c", "-o", str(event_probe),
                         str(UI / "nsh/tests/platform_event_exception.c")], cwd=stage, check=True)
@@ -52,7 +49,7 @@ def run() -> None:
         source.write_bytes((UI / "nsh/tests/update_preparation_native.ml").read_bytes())
         executable = stage / ("admission.exe" if os.name == "nt" else "admission")
         subprocess.run([*compiler, "-I", str(stage), "-linkall", "-linkpkg",
-                        *map(str, archives), str(embed), str(geometry), str(clipboard), str(source), str(bridge), str(event_probe),
+                        *map(str, archives), str(embed), str(geometry), str(clipboard), str(source), str(event_probe),
                         "-o", str(executable)], cwd=stage, check=True)
         result = subprocess.run([str(executable)], cwd=stage, check=False, timeout=30,
                                 capture_output=True, text=True)

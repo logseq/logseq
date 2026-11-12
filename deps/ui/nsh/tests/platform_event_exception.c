@@ -1,13 +1,47 @@
 /* Test-only adapter enters the exported bridge with the same runtime-lock
    state as the native Rust owner. The callback remains real OCaml code. */
-#include <stdint.h>
-#include <string.h>
-#include <caml/alloc.h>
-#include <caml/memory.h>
-#include <caml/mlvalues.h>
-#include <caml/signals.h>
+/* Include the actual implementation once so test-only callback installation
+   can access its private callback slots without adding a production API. */
+#include "../../native/logseq_lui_bridge.c"
 
-extern int32_t lui_ocaml_platform_event(const char *data, int32_t length);
+/* A void host callback may leave any register value behind. Reproduce the
+   crashing encoded value deterministically, without casting function types or
+   manufacturing an OCaml exception. The primitive must return Val_unit after
+   calling it. These are the desktop architectures supported by this runner. */
+#if defined(__aarch64__)
+#define CLOBBER_RETURN_REGISTER "mov x0, #30\nret"
+#elif defined(__x86_64__)
+#define CLOBBER_RETURN_REGISTER "mov $30, %eax\nret"
+#else
+#error "Add an adversarial void callback for this native desktop architecture"
+#endif
+
+__attribute__((naked)) static void clobber_wakeup(void) {
+  __asm__(CLOBBER_RETURN_REGISTER);
+}
+
+__attribute__((naked)) static void clobber_request(
+    const char *data __attribute__((unused)),
+    int32_t length __attribute__((unused))) {
+  __asm__(CLOBBER_RETURN_REGISTER);
+}
+
+static logseq_wakeup_callback saved_wakeup;
+static logseq_platform_request_callback saved_request;
+
+CAMLprim value caml_logseq_test_adversarial_callbacks(value enabled) {
+  CAMLparam1(enabled);
+  if (Bool_val(enabled)) {
+    saved_wakeup = wakeup_callback;
+    saved_request = platform_request_callback;
+    wakeup_callback = clobber_wakeup;
+    platform_request_callback = clobber_request;
+  } else {
+    wakeup_callback = saved_wakeup;
+    platform_request_callback = saved_request;
+  }
+  CAMLreturn(Val_unit);
+}
 
 CAMLprim value caml_logseq_test_platform_event(value payload) {
   CAMLparam1(payload);
