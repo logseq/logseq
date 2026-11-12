@@ -285,3 +285,32 @@ PDFium/CRT/data tests. No window/COM provider was created or tested for this not
 Primary contracts: [SetWindowSubclass reference data, identity and thread restriction](https://learn.microsoft.com/en-us/windows/win32/api/commctrl/nf-commctrl-setwindowsubclass),
 [DefSubclassProc and the modern subclass chain](https://learn.microsoft.com/en-us/windows/win32/controls/subclassing-overview),
 [WM_NCDESTROY memory-release ordering](https://learn.microsoft.com/en-us/windows/win32/winmsg/wm-ncdestroy).
+
+The reviewed boundary is now drafted as qualification-only
+`portable/windows_window.rs`, included only by the Windows engine-example test
+target. It creates a hidden owned STATIC window, stores exactly one registration
+through SetWindowSubclass, clones Rc before dispatch, removes the callback before
+reclaiming registration, and verifies NCDESTROY changed the exact owner's HWND
+state before close succeeds. If a handler destroys the window reentrantly and
+returns no result, the outer callback returns without invoking another native
+handler on that destroyed window. A retirement gate prevents any later message
+from invoking application code. Rc keeps the owner !Send/!Sync and close verifies
+its creating thread. No production reader/provider registration is enabled.
+
+Four authored real-Windows tests cover ordinary close/retirement/one-drop,
+reentrant actual DestroyWindow with a live outer handler, parent-driven adopted
+child destruction, and a real failed SetWindowSubclass on the destroyed private
+HWND with registration Rc count restored. They are in
+`cargo test --locked --example pdfium_engine_probe` on Windows and require actual
+native execution; they do not substitute fake window destruction or interface
+success for OS results. No compiler, Windows process, window or test was run for
+this candidate. Generated COM TextPattern implementation and its independent
+retained-range/closed-owner gates remain in progress.
+
+Installation retains Rust ownership of the box until SetWindowSubclass returns
+success. A tiny Installing/WindowOwned/Destroyed transfer state also covers
+possible reentrant NCDESTROY during installation: that callback removes itself
+and marks destruction but leaves the still caller-owned box for normal Rust
+drop. Only after successful installation, with no intervening native call, does
+Box::into_raw transfer reclamation to NCDESTROY. Thus a failed or reentrantly
+destroyed installation cannot reclaim the same registration twice.

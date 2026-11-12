@@ -12,6 +12,10 @@ mod gtk_page;
 #[path = "../src/extensions/pdf/portable/worker.rs"]
 mod worker;
 
+#[cfg(all(target_os = "windows", test))]
+#[path = "../src/extensions/pdf/portable/windows_window.rs"]
+mod windows_window;
+
 #[cfg(any(target_os = "linux", target_os = "windows"))]
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut arguments = std::env::args_os().skip(1);
