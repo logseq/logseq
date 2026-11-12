@@ -119,6 +119,7 @@ let rec iterator = {Tast_iterator.default_iterator with
     match item.str_desc with Tstr_value (_,bindings) -> List.iter bind bindings | _ -> ()) }
 
 let inspect filename =
+  Hashtbl.clear known;
   let info=Cmt_format.read_cmt filename in
   let absolute path = if Filename.is_relative path then Filename.concat info.cmt_builddir path else path in
   Load_path.init ~auto_include:Load_path.no_auto_include
