@@ -16,6 +16,7 @@ use std::{
 };
 
 mod startup_body;
+mod startup_rows;
 
 const CHILD: &str = "LOGSEQ_NSH_STARTUP_PREFLIGHT_CHILD";
 const TEST: &str = "real_application_startup_preflight";
@@ -24,9 +25,28 @@ const TEST: &str = "real_application_startup_preflight";
 fn real_application_startup_preflight() -> Result<(), String> {
     require_artifacts()?;
     if std::env::var(CHILD).as_deref() == Ok("1") {
-        return mount_actual_application();
+        return mount_actual_application(None);
     }
-    isolated_process()
+    isolated_process(TEST, false)
+}
+
+#[test]
+fn real_application_rows_1k() -> Result<(), String> {
+    production_rows_case(1_000, "real_application_rows_1k")
+}
+
+#[test]
+fn real_application_rows_100k() -> Result<(), String> {
+    production_rows_case(100_000, "real_application_rows_100k")
+}
+
+fn production_rows_case(count: usize, name: &str) -> Result<(), String> {
+    require_artifacts()?;
+    if std::env::var(CHILD).as_deref() == Ok("1") {
+        mount_actual_application(Some(count))
+    } else {
+        isolated_process(name, true)
+    }
 }
 
 fn require_artifacts() -> Result<(), String> {
@@ -47,9 +67,17 @@ fn require_artifacts() -> Result<(), String> {
     Ok(())
 }
 
-fn mount_actual_application() -> Result<(), String> {
-    let mut config = EngineConfig::new(Root::of::<nsh_app_logseq::App>());
+fn mount_actual_application(rows: Option<usize>) -> Result<(), String> {
+    let jump = rows.map(|_| startup_rows::Jump::default());
+    let mut config = EngineConfig::new(if rows.is_some() {
+        Root::of::<startup_rows::RowsApp>()
+    } else {
+        Root::of::<nsh_app_logseq::App>()
+    });
     config.context = EngineContext::default().with(nsh_app_logseq::StartupPreflight);
+    if let Some(jump) = &jump {
+        config.context = config.context.with(jump.clone());
+    }
     config.viewport = Size::new(px(1440.0), px(900.0));
     config.environment.idiom = Idiom::Desktop;
     config.environment.os = if cfg!(target_os = "macos") {
@@ -118,6 +146,13 @@ fn mount_actual_application() -> Result<(), String> {
         Duration::from_secs(5),
         startup_body::sidebar_ready,
     )?;
+    if let Some(count) = rows {
+        return startup_rows::qualify(
+            &mut app,
+            jump.as_ref().expect("row qualification context"),
+            count,
+        );
+    }
     let body =
         startup_body::identity(app.screen()).ok_or("qualified journal identity is missing")?;
     // Resize and toggle through real public native input. The source graph,
@@ -318,7 +353,7 @@ fn wait_for_chrome(
     }
 }
 
-fn isolated_process() -> Result<(), String> {
+fn isolated_process(test: &str, rows: bool) -> Result<(), String> {
     let nonce = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_err(|e| e.to_string())?
@@ -332,7 +367,7 @@ fn isolated_process() -> Result<(), String> {
     }
     let transcript = directory.join("startup.log");
     let mut process_group = None;
-    let result = run_child(&directory, &transcript, &mut process_group);
+    let result = run_child(&directory, &transcript, &mut process_group, test, rows);
     // Only the worker registered beneath our unguessable private root is
     // contacted, and its health response must confirm that exact root first.
     let graceful = stop_owned_workers(&directory.join("root"));
@@ -341,6 +376,14 @@ fn isolated_process() -> Result<(), String> {
     // failure cannot leak a worker that registered after the health check.
     let cleanup = terminate_owned_group(process_group).and(graceful);
     let output = fs::read_to_string(&transcript).unwrap_or_default();
+    if rows && result.is_ok() {
+        for line in output
+            .lines()
+            .filter(|line| line.starts_with("NSH_PRODUCTION_ROWS "))
+        {
+            eprintln!("{line}");
+        }
+    }
     let removal = fs::remove_dir_all(&directory).map_err(|e| e.to_string());
     match (result, cleanup, removal) {
         (Ok(()), Ok(()), Ok(())) => Ok(()),
@@ -354,11 +397,13 @@ fn run_child(
     directory: &Path,
     transcript: &Path,
     process_group: &mut Option<u32>,
+    test: &str,
+    rows: bool,
 ) -> Result<(), String> {
     let output = File::create(transcript).map_err(|e| e.to_string())?;
     let mut command = Command::new(std::env::current_exe().map_err(|e| e.to_string())?);
     command
-        .args(["--exact", TEST, "--nocapture", "--test-threads=1"])
+        .args(["--exact", test, "--nocapture", "--test-threads=1"])
         .env(CHILD, "1")
         .env("HOME", directory.join("home"))
         .env("LOGSEQ_ROOT_DIR", directory.join("root"))
@@ -368,7 +413,8 @@ fn run_child(
         .env("XDG_DATA_HOME", directory.join("data"))
         .env("XDG_CACHE_HOME", directory.join("cache"))
         .env("LOGSEQ_NO_LOGIN_DAEMON", "1")
-        .env("LUI_AGENT_LISTEN", "")
+        .env("LUI_AGENT_LISTEN", if rows { "127.0.0.1:0" } else { "" })
+        .env("LOGSEQ_NSH_PROBE_TRANSCRIPT", transcript)
         .env("LUI_AGENT_BACKGROUND", "1")
         .stdin(Stdio::null())
         .stdout(output.try_clone().map_err(|e| e.to_string())?)
@@ -382,7 +428,9 @@ fn run_child(
     }
     let mut child = command.spawn().map_err(|e| e.to_string())?;
     *process_group = Some(child.id());
-    let deadline = Instant::now() + Duration::from_secs(110);
+    // The large graph write is measured separately from rendering. This is
+    // a finite process/cleanup deadline, not a passing interaction budget.
+    let deadline = Instant::now() + Duration::from_secs(if rows { 300 } else { 110 });
     loop {
         if let Some(status) = child.try_wait().map_err(|e| e.to_string())? {
             return if status.success() {
@@ -394,7 +442,9 @@ fn run_child(
         if Instant::now() >= deadline {
             child.kill().map_err(|e| e.to_string())?;
             child.wait().map_err(|e| e.to_string())?;
-            return Err("actual Logseq startup exceeded the isolated 110-second deadline".into());
+            return Err(
+                "actual Logseq qualification exceeded its isolated process deadline".into(),
+            );
         }
         thread::sleep(Duration::from_millis(20));
     }

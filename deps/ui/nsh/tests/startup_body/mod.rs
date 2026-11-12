@@ -36,7 +36,7 @@ fn descendant(mut node: NodeId, ancestor: NodeId, nodes: &BTreeMap<NodeId, &Layo
 }
 // Dates.journal_title_of emits a plain title in this shape. Do not hardcode
 // today's day/year or introduce a competing timezone/calendar implementation.
-fn dated_title(value: &str) -> bool {
+pub(super) fn dated_title(value: &str) -> bool {
     let Some((date, year)) = value.trim().split_once(", ") else {
         return false;
     };
