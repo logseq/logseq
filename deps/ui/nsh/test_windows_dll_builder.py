@@ -36,6 +36,7 @@ class WindowsDllGuards(unittest.TestCase):
         self.assertIn("lui_ocaml_platform_event", exports)
         self.assertIn("lui_ocaml_editor_snapshot_utf8", exports)
         self.assertIn("lui_ocaml_virtual_window", exports)
+        self.assertIn("lui_ocaml_focus_within_changed", exports)
         self.assertNotIn("lui_ocaml_last_error", exports)
 
     def test_missing_sparse_window_export_is_rejected_before_compilation(self):
@@ -43,6 +44,14 @@ class WindowsDllGuards(unittest.TestCase):
         source = source.replace("LUI_EXPORT int32_t lui_ocaml_virtual_window(",
                                 "static int32_t omitted_sparse_window(")
         with self.assertRaisesRegex(ValueError, "typed Logseq service ABI"):
+            builder.bridge_exports(source)
+
+    def test_missing_container_focus_export_is_rejected_before_compilation(self):
+        source = (builder.UI / "native/logseq_lui_bridge.c").read_text(encoding="utf-8")
+        declaration = "LUI_EXPORT int32_t lui_ocaml_focus_within_changed("
+        self.assertIn(declaration, source)
+        source = source.replace(declaration, "static int32_t omitted_focus_within(")
+        with self.assertRaisesRegex(ValueError, "lui_ocaml_focus_within_changed"):
             builder.bridge_exports(source)
 
     def test_all_pointer_macro_exports_are_probed_as_byte_length_functions(self):

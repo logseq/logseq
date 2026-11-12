@@ -12,6 +12,14 @@ unfinished draft restores the accepted year. A disposed owner never receives
 the callback. No view argument, event ordinal, queue or maintained backend API
 changes.
 
+All native application builders require this symbol in their existing shared
+application-ABI inventory before invoking native compilation. The candidate
+library symbol check also requires it before schemas, startup qualification or
+publication. An application bridge that omits container focus support is thus a
+build failure, rather than a first-focus runtime diagnostic. Generic LUI
+libraries still retain their optional capability contract; this requirement
+belongs to the actual Logseq application that authors these handlers.
+
 ## NSH code editors fill their horizontal parent
 
 The native CodeMirror adapter now explicitly sizes its retained root to the

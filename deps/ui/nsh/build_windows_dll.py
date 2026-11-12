@@ -67,6 +67,7 @@ NSH_REQUIRED_EXPORTS = frozenset({
     "lui_ocaml_navigate_previous", "lui_ocaml_navigate_next",
     "lui_ocaml_navigation_key_utf8", "lui_ocaml_toggle_changed",
     "lui_ocaml_toggle_changed_detail", "lui_ocaml_slider_changed",
+    "lui_ocaml_focus_within_changed",
     "lui_ocaml_appear", "lui_ocaml_load", "lui_ocaml_radio_changed",
     "lui_ocaml_picked_utf8", "lui_ocaml_scroll_completed",
     "lui_ocaml_scroll_edges", "lui_ocaml_visible_range",
