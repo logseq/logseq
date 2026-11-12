@@ -35,6 +35,8 @@ keyring = { version = "=3.6.3", default-features = false, features = ["apple-nat
 nsh-platform-macos = { git = "https://github.com/logseq/nsh", rev = "adc186db7213f3ccd1eacaa836cc721e9779fd14", default-features = false, features = ["editor", "highlight"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
+# The public COM implementation macro expands through this exact crate name.
+windows-core = "=0.62.2"
 keyring = { version = "=3.6.3", default-features = false, features = ["windows-native"] }
 nsh-platform-windows = { git = "https://github.com/logseq/nsh", rev = "adc186db7213f3ccd1eacaa836cc721e9779fd14", default-features = false, features = ["editor", "highlight"] }
 

@@ -33,7 +33,7 @@ pub struct Document {
     lines: Vec<u32>,
     page_units: Vec<u32>,
     document: [u32; 2],
-    pub pages: Vec<Page>,
+    pages: Vec<Page>,
 }
 impl Builder {
     pub fn append(
@@ -121,6 +121,9 @@ impl Builder {
     }
 }
 impl Document {
+    pub fn pages(&self) -> &[Page] {
+        &self.pages
+    }
     pub fn len(&self) -> usize {
         self.offsets.len() - 1
     }
@@ -203,6 +206,9 @@ impl Document {
             .saturating_sub(1)
             .min(bounds.len() - 2);
         let next = (index as i64 + i64::from(count)).clamp(0, bounds.len() as i64 - 2) as usize;
+        if next == index {
+            return (range, 0);
+        }
         (
             bounds[next] as usize..bounds[next + 1] as usize,
             next as i32 - index as i32,
@@ -258,13 +264,15 @@ mod tests {
         );
         assert!(doc.slice(0..doc.len()).unwrap().contains("\u{c}second"));
         assert_eq!(doc.page_ranges(1..4).unwrap(), vec![(1, 43..46)]);
-        let second = doc.pages[1].start;
+        let second = doc.pages()[1].start;
         assert_eq!(doc.enclosing(second, Unit::Page), second..doc.len());
         assert_eq!(doc.move_endpoint(0, Unit::Character, -4), (0, 0));
         assert_eq!(doc.move_endpoint(0, Unit::Character, 2), (2, 2));
         assert_eq!(doc.move_range(0..4, Unit::Page, 1), (second..doc.len(), 1));
         assert_eq!(doc.enclosing(second, Unit::Word), second..doc.len());
         assert_eq!(doc.enclosing(0, Unit::Line), 0..7);
+        assert_eq!(doc.move_range(1..4, Unit::Word, 0), (1..4, 0));
+        assert_eq!(doc.move_range(0..4, Unit::Page, -1), (0..4, 0));
     }
     #[test]
     fn failed_append_is_atomic_and_large_or_unordered_documents_are_explicit_errors() {

@@ -384,3 +384,53 @@ and reads no owner-window memory afterwards, so a retirement hook may reenter
 actual DestroyWindow safely. An additional real hidden-window test exercises
 that ordering and the single notification/registration release. No native test
 was executed for this source-only follow-up.
+
+The qualification-only TextPattern candidate is now authored in
+`windows_text.rs`, `windows_text_range.rs` and the narrow `windows_arrays.rs`
+ownership wrapper. It implements generated Simple/Text/readonly-Value providers
+and every required TextRange entry: complete document text, visible/selected
+ranges, hit testing, native-screen rectangles, checked peers, grapheme/word/line/
+page movement, logical Unicode text/search, selection and scroll actions,
+attributes and empty embedded-child enumeration for the current text model.
+Case-sensitive search is exact; case-insensitive search uses public Windows NLS
+on bounded UTF-16 rather than an ASCII case conversion. Unsupported format and
+paragraph units map to the next supported larger unit. Zero/blocked movement
+leaves the range unchanged; degenerate selection operations move the logical
+caret without creating disjoint selection.
+
+The portable document caps at two million code points/100,000 pages. Its immutable
+page spans map selected text back to per-page glyph indices. UAX #29 grapheme/word
+boundaries use exact unicode-segmentation 1.13.3, already present transitively in
+the lock. Generated COM implementations require direct windows-core 0.62.2 by the
+macro's documented absolute crate name; that is the same already locked public
+SDK crate, not a second ABI binding. The root owner still generates the lockfile.
+
+The reader bounds visible geometry to 100,000 glyphs/ranges and simultaneous
+provider/range objects to 512. Normal releases restore that budget. Retained COM
+objects hold no strong text or native-window reference. Explicit close, actual
+parent destruction and document replacement invalidate old providers/ranges.
+Selection/scroll actions check enabled state and the captured epoch both before
+and after callbacks; serial checks prevent an older callback from overwriting a
+newer reentrant selection. No mutable state borrow survives callback delivery.
+Text/selection changes use actual UIA notifications; Value/Name changes also emit
+the matching property notifications for listeners. Ordinary selection without a
+provider/listener does not allocate a COM object; full-document Value variants
+are constructed only when listeners require their property-change notification.
+
+Seven authored actual-Windows COM/native-window tests cover complete multilingual
+text, surrogate-safe lengths, combining graphemes, exact peer endpoints, native
+visible geometry, selection/scroll callbacks, readonly/disabled behavior, stale
+provider/range disposal without retained text, parent-driven destruction,
+reentrant actual DestroyWindow, newer reentrant selection, cross-owner rejection,
+object-budget restoration and zero/invalid/degenerate range operations. Tests call
+the generated COM interfaces and real Windows/OLE functions; no compiler, test,
+window, COM client or process was executed for this source batch.
+
+This is not final reader parity: the worker still needs to publish the complete
+logical document incrementally off the UI thread; the final controller must bind
+repo/identity/instance changes to epochs, admission to enabled state, real glyph
+geometry to client pixels, and the typed callbacks to its existing selection,
+scroll and annotation owners. Hyperlink/annotation child-provider enumeration,
+TextPattern2/caret integration, real cross-process COM/Narrator, physical pointer/
+keyboard behavior and packaged native-reader performance remain explicit gates.
+No production provider, system trust, SDK, Dune or installed application changed.

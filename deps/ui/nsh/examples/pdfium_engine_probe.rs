@@ -16,6 +16,9 @@ mod text;
 mod worker;
 
 #[cfg(all(target_os = "windows", test))]
+#[path = "../src/extensions/pdf/portable/windows_text.rs"]
+mod windows_text;
+#[cfg(all(target_os = "windows", test))]
 #[path = "../src/extensions/pdf/portable/windows_window.rs"]
 mod windows_window;
 
