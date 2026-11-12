@@ -21,6 +21,22 @@ minimum row height, actual native input and retained identity on controlled
 echo. The real application fence/edit/language gates remain required for native
 rendering, focus, worker persistence and screenshot qualification.
 
+## Calendar year drafts restore the accepted year on blur
+
+The shared calendar retains partial or invalid year text while its year input is
+focused, without changing the displayed month or selecting a date. Leaving that
+input restores the latest accepted calendar year, matching the existing master
+calendar behavior. For example, typing `20` in a February 2024 calendar and
+moving focus away restores `2024`; typing `2025` updates the calendar grid without
+calling `on_pick`. Month navigation and date selection also clear an unfinished
+year draft.
+
+Accepted year input must contain exactly four characters and remain within the
+existing supported range, 1000 through 9999. A padded value such as `02024` is an
+unfinished draft rather than a different representation of 2024. No constructor
+argument changes; the year input retains its identity across draft and grid
+updates on all maintained backends.
+
 ## Settings reuses its native menu's update owner
 
 The NSH settings General pane restores master's Check for updates button in the

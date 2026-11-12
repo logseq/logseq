@@ -1591,9 +1591,10 @@ let run_views ~registry ~profile ~finish =
   check "Calendar activation commits the navigated date"
     (Option.map Dates.journal_day_of !picked_date=Some (next.year*10000+next.month*100+next.day));
   ignore (Lui_app.dispose calendar.S.app);
+  let year_picks=ref 0 in
   let labelled_calendar = mount (fun _ -> Ui_components.calendar ~week_starts_on:0 ~month_label:I18n.calendar_month_label ~day_label:I18n.calendar_day_label
       ~initial:(Dates.make ~year:2024 ~month:2 ~day:29 ()) ~translate:I18n.t
-      ~on_pick:(fun _ -> ()) ()) in
+      ~on_pick:(fun _ -> incr year_picks) ()) in
   calendar_structure labelled_calendar "February 2024";
   List.iter (fun (y,m,d,label) ->
     let button = find_day labelled_calendar y m d in
@@ -1607,6 +1608,35 @@ let run_views ~registry ~profile ~finish =
      2024,2,22,"Thursday, February 22nd, 2024";
      2024,2,29,"Thursday, February 29th, 2024";
      2024,3,2,"Saturday, March 2nd, 2024"];
+  let year=List.find (fun node -> M.string_prop node "accessibility-identifier"=Some "calendar-year")
+      (nodes labelled_calendar) in
+  let year_owner=List.find (fun node -> M.string_prop node "accessibility-identifier"=Some "calendar-year-owner")
+      (nodes labelled_calendar) in
+  List.iter (fun draft ->
+    S.dispatch labelled_calendar (P.FocusWithinChanged (year_owner.M.id,true));
+    S.text_changed labelled_calendar year.M.id draft;
+    check "Partial or invalid year input remains a visible uncommitted draft"
+      (M.string_prop year "text"=Some draft
+       && List.exists (fun node -> M.string_prop node "accessibility-identifier"=Some "calendar-day-2024-02-29")
+         (nodes labelled_calendar));
+    S.dispatch labelled_calendar (P.FocusWithinChanged (year_owner.M.id,false));
+    check "Leaving an invalid year draft restores the actual displayed calendar year"
+      (List.exists (fun node -> node.M.id=year.M.id && M.string_prop node "text"=Some "2024")
+        (nodes labelled_calendar))) ["20";"invalid";"02024";"99999"];
+  S.dispatch labelled_calendar (P.FocusWithinChanged (year_owner.M.id,true));
+  S.text_changed labelled_calendar year.M.id "2025";
+  check "A complete supported year updates the grid while retaining the year input"
+    (List.exists (fun node -> node.M.id=year.M.id && M.string_prop node "text"=Some "2025")
+       (nodes labelled_calendar)
+     && List.exists (fun node -> M.string_prop node "accessibility-identifier"=Some "calendar-day-2025-02-28")
+       (nodes labelled_calendar)
+     && not (List.exists (fun node -> M.string_prop node "accessibility-identifier"=Some "calendar-day-2025-02-29")
+       (nodes labelled_calendar)));
+  S.text_changed labelled_calendar year.M.id "202";
+  S.dispatch labelled_calendar (P.FocusWithinChanged (year_owner.M.id,false));
+  check "Invalid year blur returns to the most recently accepted year without selecting a date"
+    (List.exists (fun node -> node.M.id=year.M.id && M.string_prop node "text"=Some "2025")
+       (nodes labelled_calendar) && !year_picks=0);
   ignore (Lui_app.dispose labelled_calendar.S.app);
   let old_calendar = !Editor_commands.active and old_calendar_signal = !Editor_commands.popup_vs in
   let previous_calendar_model = !Runtime.read_model in

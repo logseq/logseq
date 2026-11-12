@@ -1357,6 +1357,7 @@ let calendar ?initial ?(datetime=false) ?(initial_focus_day=false) ?on_clear
     Signal.state context.Lui_ui.ui_scheduler
       (initial.year, initial.month, initial.day)
   in
+  let year_draft = Signal.state context.Lui_ui.ui_scheduler None in
   let month_open = Signal.state context.Lui_ui.ui_scheduler false in
   let day_focused = Signal.state context.Lui_ui.ui_scheduler initial_focus_day in
   let time = Signal.state context.Lui_ui.ui_scheduler
@@ -1383,6 +1384,7 @@ let calendar ?initial ?(datetime=false) ?(initial_focus_day=false) ?on_clear
       (Json.Object ["msg",Json.String (Buffer.contents message);"cls",Json.String kind]) in
   let set_month y m =
     cancel_parse ();
+    Signal.set year_draft None;
     let _, _, d = Signal.get_state date in
     Signal.set day_focused false;
     Signal.set date (y, m, min d (Dates.days_in_month ~y ~m))
@@ -1403,6 +1405,7 @@ let calendar ?initial ?(datetime=false) ?(initial_focus_day=false) ?on_clear
   in
   let commit value =
     cancel_parse ();
+    Signal.set year_draft None;
     let fields=Dates.fields value in
     Signal.set date (fields.year,fields.month,fields.day);
     if datetime then Signal.set time (Printf.sprintf "%02d:%02d" fields.hours fields.minutes);
@@ -1526,25 +1529,31 @@ let calendar ?initial ?(datetime=false) ?(initial_focus_day=false) ?on_clear
                                         []))
                                  (calendar_month_names translate))));
                     ])
-                ~year:(input ~accessibility_identifier:"calendar-year" ~width:52
+                ~year:(row ~accessibility_identifier:"calendar-year-owner" ~width:52 ~height:32
+                    ~on_focus_within:(fun focused ->
+                      if not focused then Signal.set year_draft None)
+                    [input ~accessibility_identifier:"calendar-year" ~width:52
                     ~height:32 ~padding_horizontal:8 ~padding_vertical:0
                     ~text:
                       (reactive
-                         (fun (y, _, _) -> string_of_int y)
-                         (Signal.value date))
+                         (fun (y, _, _) draft ->
+                           Option.value draft ~default:(string_of_int y))
+                         (Signal.value date) (Signal.value year_draft))
                     ~on_input:(function
                       | P.TextChanged (_, value) -> (
+                          Signal.set year_draft (Some value);
                           match int_of_string_opt value with
-                          | Some y when y >= 1000 && y <= 9999 ->
+                          | Some y when String.length value=4 && y >= 1000 && y <= 9999 ->
                               let _, m, _ = Signal.get_state date in
                               set_month y m
                           | _ -> ())
                       | _ -> ())
-                    []);
+                    []]);
               reactive
                 (fun (year, month, d) focused ->
                   calendar_grid ~week_starts_on ~month_label ~day_label ~year ~month ~day:(if focused then Some d else None)
                     ~tab_day:d ~on_navigate:(fun y m d ->
+                      Signal.set year_draft None;
                       Signal.set date (y,m,d);
                       Signal.set day_focused true)
                     ~on_pick:pick)
