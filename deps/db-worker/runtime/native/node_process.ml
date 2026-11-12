@@ -1,8 +1,5 @@
 (* POSIX equivalents of the node process surface. *)
 
-external installation_protocol : unit -> string = "caml_logseq_installation_protocol"
-external installation_admission : unit -> unit = "caml_logseq_installation_admission"
-
 external real_pid : unit -> int = "caml_logseq_process_id"
 
 let argv () = Array.to_list Sys.argv

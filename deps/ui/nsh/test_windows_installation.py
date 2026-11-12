@@ -45,7 +45,7 @@ class InstallationAdmissionTests(unittest.TestCase):
         self.assertIn('error != 2',rust)
         self.assertIn('error != ERROR_FILE_NOT_FOUND',worker)
         entry=(REPO/'deps/db-worker/bin/main.ml').read_text()
-        self.assertLess(entry.index('Node_process.installation_admission ()'),entry.index('Db_worker_node.main ();'))
+        self.assertLess(entry.index('installation_admission ()'),entry.index('Db_worker_node.main ();'))
 
     def test_installer_refuses_legacy_and_keeps_incomplete_files_closed(self):
         code=package.inno_script(Path('candidate'), '2.0.2','setup',{'logseq-nsh.exe':'a'*64})
