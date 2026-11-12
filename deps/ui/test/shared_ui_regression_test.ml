@@ -2647,6 +2647,11 @@ let run_views ~registry ~profile ~finish =
       Icon_picker.picker_view ~del:true ~emoji_only:false
         ~on_chosen:(fun c -> chosen := Some c) ~close:(fun () -> ())) in
   let buttons () = List.filter (fun n -> n.M.kind = "button") (nodes picker) in
+  let body () = List.find (fun n -> n.M.kind="scroll" && class_has n "bd") (nodes picker) in
+  let search () = List.find (fun n -> class_has n "ls-search-with-clear") (nodes picker) in
+  let picker_root = (List.find (fun n -> class_has n "cp__emoji-icon-picker") (nodes picker)).M.id in
+  let initial_body = (body ()).M.id in
+  let initial_search = (search ()).M.id in
   let labelled () = List.for_all (fun n ->
       P.node_properties_supported P.Button (button_properties n)) (buttons ()) in
   check "icon picker buttons satisfy the host label contract" (labelled ());
@@ -2665,6 +2670,33 @@ let run_views ~registry ~profile ~finish =
   check "selecting a preset closes the palette" (presets () = []);
   eqs "selected icon color is persisted" "#6e7b8b"
     (Option.value (Ui_services.storage_get "ls-icon-color-preset") ~default:"");
+  check "palette edits preserve the result viewport and search input"
+    ((body ()).M.id=initial_body && (search ()).M.id=initial_search);
+  let tab name = List.find (fun n -> n.M.kind="toggle-button"
+      && M.string_prop n "text"=Some (I18n.t ("icon/tab-" ^ name))) (nodes picker) in
+  S.toggle picker (tab "icons").M.id true;
+  let icon_body = (body ()).M.id in
+  check "switching tabs retires the previous result viewport" (icon_body<>initial_body);
+  let field = (search ()).M.id in
+  S.text_changed picker field "zzzz-no-matching-icon";
+  let empty_body = (body ()).M.id in
+  check "empty filtering owns a fresh viewport without replacing the input"
+    (empty_body<>icon_body && (search ()).M.id=field);
+  S.text_changed picker field "star";
+  let filtered_body = (body ()).M.id in
+  check "changing the filter retires the empty viewport" (filtered_body<>empty_body);
+  let clear = List.find (fun n -> button_label n=Some (I18n.t "icon/clear-search")) (buttons ()) in
+  S.press picker clear.M.id;
+  check "clearing search restores a fresh unfiltered viewport and retained input"
+    ((body ()).M.id<>filtered_body && (search ()).M.id=field
+     && M.string_prop (search ()) "text"=Some "");
+  let cleared_body = (body ()).M.id in
+  S.toggle picker (tab "emojis").M.id true;
+  check "switching from icons to emojis retires the old viewport"
+    ((body ()).M.id<>cleared_body);
+  S.toggle picker (tab "icons").M.id true;
+  check "viewport resets preserve the surrounding picker"
+    (List.exists (fun n -> n.M.id=picker_root && class_has n "cp__emoji-icon-picker") (nodes picker));
   let icon = List.find_opt (fun n -> class_has n "ls-emoji-cell") (buttons ()) in
   (match icon with
    | Some n -> S.press picker n.M.id;

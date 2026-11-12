@@ -1,5 +1,19 @@
 # API migrations
 
+## Icon picker result viewports reset with the tab and query
+
+Changing the icon picker tab, editing its search query, or clearing search now
+creates a fresh result Scroll owner at the beginning of that result set. This
+restores the master picker reset behavior: switching from the last Icons row to
+Emojis, or changing an end-of-list filter to a short/empty result, cannot retain
+the previous result set's far-down offset. Native virtual rows remain bounded.
+
+Only the result viewport is keyed by tab/query/reset identity. Palette opening,
+color changes and asynchronous search-result publication keep that viewport;
+query edits keep the existing search input and surrounding picker. The existing
+tab-specific search reset behavior, chosen icon payload and callbacks are
+unchanged. No new DOM/Scroll operation, timer or backend API is introduced.
+
 ## Native input capability preflight uses the runtime provider policy
 
 The actual native target gate now rejects statically authored unsupported

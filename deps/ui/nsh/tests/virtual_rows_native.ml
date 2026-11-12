@@ -265,6 +265,81 @@ let test_picker_grids () =
     test_picker_grid (label ^ " complete") data ())
     ["Emoji", emojis; "Icon", icons]
 
+let test_picker_viewport_ownership () =
+  let backend = {backend_profile=profile MacOS NshHost; apply_batch=(fun _ -> true)} in
+  let app = Lui_app.create backend () (fun () () -> ()) (fun _ _ _ ->
+    Icon_picker.picker_view ~del:true ~emoji_only:false
+      ~on_chosen:(fun _ -> ()) ~close:(fun () -> ())) in
+  let previous_flush = !Runtime.app_flush
+  and previous_schedule = !Runtime.schedule_flush
+  and previous_pending = !Runtime.flush_pending
+  and previous_preset = Ui_services.storage_get "ls-icon-color-preset" in
+  Runtime.schedule_flush := (fun _ -> ());
+  Runtime.app_flush := (fun () -> ignore (Lui_app.flush app));
+  Runtime.flush_pending := false;
+  Fun.protect ~finally:(fun () ->
+    ignore (Lui_app.dispose app);
+    Runtime.app_flush := previous_flush;
+    Runtime.schedule_flush := previous_schedule;
+    Runtime.flush_pending := previous_pending;
+    match previous_preset with
+    | Some value -> Ui_services.storage_set "ls-icon-color-preset" value
+    | None -> Ui_services.storage_remove "ls-icon-color-preset") (fun () ->
+    ignore (Lui_app.start app);ignore (Lui_app.flush app);
+    let runtime = Lui_app.runtime app in
+    let send event =
+      ignore (Lui_app.dispatch_event app event);ignore (Lui_app.flush app);
+      Runtime.flush_pending := false in
+    let body () = find runtime (fun _ kind -> kind=Scroll) in
+    let input () = find runtime (fun _ kind -> kind=SearchField) in
+    let tab name = find runtime (fun node kind -> kind=ToggleButton
+      && property runtime node TextValue=Some (StringValue (I18n.t ("icon/tab-" ^ name)))) in
+    let list () = find runtime (fun _ kind -> kind=VirtualList) in
+    let far_window () =
+      let source=list () in
+      let count=integer runtime source VirtualTotalCount in
+      send (VirtualWindow(source,integer runtime source VirtualGeneration,max 0 (count-7),count,[]));
+      check "complete native picker retains bounded far-down cells"
+        (Hashtbl.length runtime.mounted_nodes<512);
+      source in
+    send (ToggleChanged(tab "icons",true));
+    let icon_body=body () in
+    let old_list=far_window () in
+    send (ToggleChanged(tab "emojis",true));
+    check "native tab transition retires the scrolled owner and source"
+      (body ()<>icon_body && not (Hashtbl.mem runtime.mounted_nodes old_list));
+    let emoji_body=body () in
+    ignore (far_window ());
+    send (ToggleChanged(tab "icons",true));
+    check "native reverse tab transition creates a fresh viewport" (body ()<>emoji_body);
+    let icon_body=body () and field=input () in
+    let old_list=far_window () in
+    send (TextChanged(field,"zzzz-no-matching-icon"));
+    let empty_body=body () in
+    check "native empty filter retires far-down rows without remounting search"
+      (empty_body<>icon_body && input ()=field
+       && not (Hashtbl.mem runtime.mounted_nodes old_list));
+    send (TextChanged(field,"star"));
+    let filtered_body=body () in
+    check "native short filter receives a new owner" (filtered_body<>empty_body);
+    let clear=find runtime (fun node kind -> kind=Button
+      && property runtime node AccessibilityLabel=Some (StringValue (I18n.t "icon/clear-search"))) in
+    send (Press clear);
+    check "native clear restores a fresh unfiltered owner and retained input"
+      (body ()<>filtered_body && input ()=field
+       && property runtime field TextValue=Some (StringValue ""));
+    ignore (far_window ());
+    let color_body=body () in
+    let palette=find runtime (fun node kind -> kind=Button
+      && property runtime node AccessibilityLabel=Some (StringValue (I18n.t "icon/select-color"))) in
+    send (Press palette);
+    let preset=find runtime (fun node kind -> kind=Button
+      && property runtime node BackgroundValue=Some (StringValue "#5e69d2")) in
+    send (Press preset);
+    check "native far-down color edit retains the Scroll and search owner"
+      (body ()=color_body && input ()=field);
+    ignore (far_window ()))
+
 let () =
   test_rows_sig ~lazy_children:false 1_000 ();
   test_rows_sig ~lazy_children:false 100_000 ();
@@ -272,4 +347,5 @@ let () =
   test_rows_sig ~lazy_children:true 100_000 ();
   test_array_list ();
   test_picker_grids ();
+  test_picker_viewport_ownership ();
   print_endline "Production native virtual rows and picker grids: bounded 1k/100k, complete Emoji/icons, retained interactions and pagination passed"

@@ -548,7 +548,12 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
                       (Ui_services.dom_query ".cp__emoji-icon-picker input"))
                   ())
              sv ]
-     ; Ui_parts.class_signal sv
+     ; (* A tab or query owns a fresh result viewport, as master reset-q!
+          scrolls the results to zero. Color/results repaint within that owner;
+          the search input and surrounding picker keep their existing scope. *)
+       keyed ~source:(reactive (fun s -> [(s.tab, s.q, s.reset)]) sv)
+         ~key:(fun identity -> identity) ~cmp:Stdlib.compare
+         ~mount:(fun _ -> Ui_parts.class_signal sv
          (fun s -> "bd " ^ tab_name s.tab)
          (* A shrink-to-fit popup must not use the grid's intrinsic height as
             its flex basis. The Scroll receives only the space left by the
@@ -562,7 +567,7 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
                        a.q = b.q && a.tab = b.tab
                        && a.preset = b.preset
                        && a.emoji_results = b.emoji_results)
-                    content_view sv ] ]) ]))
+                    content_view sv ] ])) ]))
     context parent
 ;;
 
