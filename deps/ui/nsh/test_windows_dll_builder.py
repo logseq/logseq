@@ -74,7 +74,7 @@ class WindowsDllGuards(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, symbol + "_utf8"):
             builder.bridge_exports(source)
 
-    def test_worker_handle_boundary_preserves_error_codes_and_releases_its_owned_handle(self):
+    def test_worker_handle_boundaries_preserve_legacy_close_and_exact_child_waiting(self):
         source = (builder.UI / "native/logseq_lui_bridge.c").read_text(encoding="utf-8")
         boundary = source.split("CAMLprim value caml_logseq_worker_process_id", 1)[1].split(
             "/* Read-only editor state", 1)[0]
@@ -89,8 +89,16 @@ class WindowsDllGuards(unittest.TestCase):
         daemon = (builder.UI / "native/daemon_client.ml").read_text(encoding="utf-8")
         spawn = daemon.split("let spawn_daemon", 1)[1].split("(* ---------- daemon reuse", 1)[0]
         self.assertIn('if Sys.os_type = "Win32" then "NUL" else "/dev/null"', spawn)
-        self.assertIn('if Sys.os_type = "Win32" then worker_process_id child_process', spawn)
+        self.assertIn('Child_process.spawn', spawn)
+        self.assertNotRegex(spawn, r"\bworker_process_id\s")
         self.assertNotRegex(spawn, r"Unix\.(?:waitpid|kill)\s")
+        retained = source.split(
+            "CAMLprim value caml_logseq_worker_process_id_retained", 1)[1].split(
+                "/* Read-only editor state", 1)[0]
+        self.assertIn("GetProcessId((HANDLE)(intnat)Long_val(child_process))", retained)
+        self.assertNotIn("CloseHandle", retained)
+        self.assertIn('"caml_logseq_worker_process_id_retained"', daemon)
+        self.assertIn("Unix.waitpid [Unix.WNOHANG] child.wait_identity", daemon)
 
     def test_windows_default_home_and_state_do_not_require_a_posix_shell_home(self):
         source = (builder.UI / "native/services/platform_native.ml").read_text(encoding="utf-8")

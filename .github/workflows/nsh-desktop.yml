@@ -91,7 +91,10 @@ jobs:
           cargo +1.97.0 fmt --manifest-path deps/ui/nsh/Cargo.toml --check
           cargo clippy --locked --manifest-path deps/ui/nsh/Cargo.toml --all-targets -- -D warnings
       - name: Windows candidate source guards (not Windows qualification)
-        run: python3 -m unittest discover -s deps/ui/nsh -p test_windows_dll_builder.py
+        run: |
+          mkdir -p _build/nsh-ci
+          python3 -m unittest discover -s deps/ui/nsh -p test_windows_dll_builder.py \
+            2>&1 | tee _build/nsh-ci/windows-source-guards.log
       - name: Packaged native orchestration source tests
         run: python3 -m unittest discover -s deps/ui/nsh -p test_packaged_background.py
       - name: Actual native factories and host service tests
