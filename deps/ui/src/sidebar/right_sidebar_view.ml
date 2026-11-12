@@ -811,12 +811,8 @@ let render (ms : Model.t Signal.signal) : t =
   (Logseq_el.fragment
      [ (* the hand-rolled .resizer separator is gone — the docked
           split's divider owns the drag affordance *)
-       if_
-         ~test:
-           (Logseq_el.own ctx
-              (Signal.map
-                 (fun (m : Model.t) -> m.Model.right_sidebar_open)
-                 ms))
-         (inner st)
+       (if Lui_ui.host ctx = Lui_protocol.NshHost then inner st
+        else if_ ~test:(reactive (fun (m : Model.t) -> m.Model.right_sidebar_open) ms)
+          (inner st))
      ])
     ctx parent

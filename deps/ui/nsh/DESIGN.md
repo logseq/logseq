@@ -78,3 +78,28 @@ policy. This introduces no application popup state, animation clock or position
 controller. Verify native arrow navigation, selection dismissal and light/dark
 check marks in the real view; recording tests prove canonical composition,
 action ordering and retained identities, not native pixel or keyboard behavior.
+
+## Sidebar reveal motion
+
+The existing sidebar reveal token is 300ms standard ease-in-out, shared with
+the maintained desktop hosts. Its purpose is spatial consistency as a docked
+panel gives space to the document. The split's retained native region requests
+NSH scoped layout animation only when the authored first-pane width changes.
+NSH owns interpolation, interruption and reduced motion; there is no application
+clock, intermediate width signal or second resize controller. Native divider
+drags remain direct, and unrelated document updates do not request motion.
+
+| Change | Owner and tool | Reduced motion |
+| --- | --- | --- |
+| Left/right sidebar toggle and resulting document width | Retained NSH ResizablePanelGroup; scoped layout update, sidebar reveal token | Instant native frame update |
+| Divider drag and release | Existing native ResizablePanelGroup capture and sizing | Direct manipulation, unchanged |
+| Sidebar content, scroll and editor state | Retained pane subtree clipped by its native panel; no content entry/exit motion | Retained identically |
+| Toolbar hover/press and labels | Existing shared controls; no new motion | Existing control policy |
+| Page selection, loading and live updates | Existing owners; no additional sidebar motion | Existing policy |
+
+Keep closing content mounted until and after the zero-width endpoint so a rapid
+reversal uses the same views and scroll owners. Do not apply display-none to the
+sidebar at the start of its closing transition. Native pixel review must check
+both sides, rapid reversal, divider drag, focus and scroll retention, and the OS
+reduced-motion setting. Headless commit/identity tests do not verify animation
+pixels.

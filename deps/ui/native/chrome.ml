@@ -306,11 +306,7 @@ let hidden_chrome (ms : Model.t Signal.signal) : t =
 let right_sidebar (ms : Model.t Signal.signal) =
   let viewport=Signal.value (Sidebar_state.ensure ms).Sidebar_state.viewport_w in
   let availability element : t = fun context parent ->
-    if Lui_ui.host context = Lui_protocol.NshHost then
-      Ui_parts.string_prop Lui_protocol.DisplayValue
-        ~value:(reactive (fun (m : Model.t) width ->
-          if m.right_sidebar_open && width>=640. then "block" else "none") ms viewport)
-        element context parent
+    if Lui_ui.host context = Lui_protocol.NshHost then element context parent
     else Ui_parts.bool_prop Lui_protocol.Inert
       ~value:(reactive (fun (m : Model.t) width -> not m.right_sidebar_open || width<640.) ms viewport)
       element context parent
@@ -392,23 +388,21 @@ let legacy_left_sidebar (ms : Model.t Signal.signal) =
 let native_left_sidebar (ms : Model.t Signal.signal) =
   Ui_parts.class_signal ms
     (fun (m : Model.t) -> "cp__sidebar-left-layout" ^ if m.left_sidebar_open then " is-open" else "")
-    (Ui_parts.string_prop Lui_protocol.DisplayValue
-       ~value:(reactive (fun (m : Model.t) -> if m.left_sidebar_open then "block" else "none") ms)
-       (Ui_parts.int_prop Lui_protocol.MinWidth
-          ~value:(reactive (fun (m : Model.t) -> if m.left_sidebar_open then Sidebar_state.left_width_min else 0) ms)
-          (box ~key:"left-sidebar" ~accessibility_identifier:"left-sidebar"
-             ~container_relative_frame:`both ~max_width:Sidebar_state.left_width_max
-             ~min_height:0 ~style_class:"cp__sidebar-left-layout"
-             [left_sidebar_panel ~container_relative_frame:`both
-                (left_sidebar_inner ~titlebar:true ms)])))
+    (Ui_parts.int_prop Lui_protocol.MinWidth
+       ~value:(reactive (fun (m : Model.t) -> if m.left_sidebar_open then Sidebar_state.left_width_min else 0) ms)
+       (box ~key:"left-sidebar" ~accessibility_identifier:"left-sidebar"
+          ~container_relative_frame:`both ~max_width:Sidebar_state.left_width_max
+          ~min_height:0 ~style_class:"cp__sidebar-left-layout"
+          [left_sidebar_panel ~container_relative_frame:`both
+             (left_sidebar_inner ~titlebar:true ms)]))
 
 let left_sidebar (ms : Model.t Signal.signal) : t =
  fun context parent ->
   (if Lui_ui.host context = Lui_protocol.NshHost then native_left_sidebar ms
    else legacy_left_sidebar ms) context parent
 
-(* NSH owns native drag sizes and motion. Other hosts keep their existing
-   controlled split geometry and transition options. *)
+(* NSH owns drag sizing and scoped layout motion. The reveal token is shared
+   with the existing controlled split geometry on the maintained hosts. *)
 let left_split (ms : Model.t Signal.signal) (st : Sidebar_state.t)
     (content : t) : t =
  fun context parent ->
@@ -424,8 +418,7 @@ let left_split (ms : Model.t Signal.signal) (st : Sidebar_state.t)
              else Sidebar_state.left_docked m.Model.left_sidebar_open viewport in
            if opened then width else 0.)
          ms (Signal.value st.Sidebar_state.left_width) (Signal.value st.Sidebar_state.viewport_w))
-    ?resize_duration:(if native then None else Some 300)
-    ?resize_easing:(if native then None else Some `standard)
+    ~resize_duration:300 ~resize_easing:`standard
     ~on_resize:(if native then Sidebar_state.on_native_left_split_resize st
                 else Sidebar_state.on_left_split_resize st)
     (left_sidebar ms) content) context parent
@@ -453,6 +446,7 @@ let right_split (ms : Model.t Signal.signal) (st : Sidebar_state.t)
            | Ui_effect.Ready _ -> true
            | Ui_effect.Failed error -> raise error) width)
           (split ~key:"right-split" ~grow:1. ~gap:0 ~min_height:0
+             ~resize_duration:300 ~resize_easing:`standard
              ~first_width:(reactive
                (fun measured (m : Model.t) fraction viewport ->
                  match measured with

@@ -987,3 +987,19 @@ sink; removed or replaced owners cannot redirect an asynchronous focus request.
 The payload remains `{"block-id":"<uuid>","focused":true}` and needs no downstream
 API migration. Text click positioning still requires the geometry service before
 queued editing actions can be released.
+
+## Native sidebar reveal retains its content
+
+Both desktop sidebar splits now share the existing 300ms standard reveal token
+with the maintained hosts. On NSH, LUI passes this to scoped native layout
+animation for changes to the authored first-pane width. Native divider drag
+remains direct and the platform owns interruption and reduced motion.
+
+NSH sidebars no longer set display-none at the start of closing. Their native
+panels clip the retained subtree as the width reaches zero. Right-sidebar
+content also remains mounted across close/reopen, preserving its keyed rows,
+scroll and editor owners. Web/mobile keep their existing conditional right
+sidebar content and inert semantics. Applications following the same pattern
+should keep content mounted inside the split, set its closed minimum width to
+zero, and let the native panel own clipping. Do not add a timer or intermediate
+width signal around the existing split.
