@@ -105,16 +105,93 @@
         :block/uuid #uuid "00000000-0000-4000-8000-000000000601"}
        {:block/title "see ((00000000-0000-4000-8000-0000000009ff)) here"
         :build/keep-uuid? true
-        :block/uuid #uuid "00000000-0000-4000-8000-000000000602"}]}]))
+        :block/uuid #uuid "00000000-0000-4000-8000-000000000602"}]}
+     {:page {:block/title "page7"}
+      :blocks
+      [{:block/title "has text property children"
+        :build/keep-uuid? true
+        :block/uuid #uuid "00000000-0000-4000-8000-000000000801"
+        :build/properties
+        {:user.property/notes
+         {:build/property-value :block
+          :block/title "note value"
+          :build/children [{:block/title "note child"
+                            :build/children [{:block/title "note grandchild"}]}]}}}]}]))
+
+(def ^:private block-embed-test-page
+  "Block embeds: a block whose :block/link is the embedded block (links set in
+  load-export-test-files!)."
+  {:page {:block/title "page7"}
+      :blocks
+      [{:block/title "embedded"
+        :build/keep-uuid? true
+        :block/uuid #uuid "00000000-0000-4000-8000-000000000701"
+        :build/children [{:block/title "embedded child"}]}
+       {:block/title ""
+        :build/keep-uuid? true
+        :block/uuid #uuid "00000000-0000-4000-8000-000000000702"}
+       {:block/title ""
+        :build/keep-uuid? true
+        :block/uuid #uuid "00000000-0000-4000-8000-000000000703"}
+       {:block/title ""
+        :build/keep-uuid? true
+        :block/uuid #uuid "00000000-0000-4000-8000-000000000704"}
+       {:block/title ""
+        :build/keep-uuid? true
+        :block/uuid #uuid "00000000-0000-4000-8000-000000000705"}
+       {:block/title ""
+        :build/keep-uuid? true
+        :block/uuid #uuid "00000000-0000-4000-8000-000000000706"
+        :build/children [{:block/title "own child of the embed"}]}
+       {:block/title "collapsed"
+        :build/keep-uuid? true
+        :block/uuid #uuid "00000000-0000-4000-8000-000000000707"
+        :build/children [{:block/title "hidden child"}]}
+       {:block/title "parent of an embed"
+        :build/keep-uuid? true
+        :block/uuid #uuid "00000000-0000-4000-8000-000000000709"
+        :build/children [{:block/title ""
+                          :build/keep-uuid? true
+                          :block/uuid #uuid "00000000-0000-4000-8000-000000000708"}]}
+       {:block/title "has a property"
+        :build/keep-uuid? true
+        :block/uuid #uuid "00000000-0000-4000-8000-000000000711"
+        :build/properties {:embedsecret "hidden value"}}
+       {:block/title "parent of a property embed"
+        :build/keep-uuid? true
+        :block/uuid #uuid "00000000-0000-4000-8000-000000000710"
+        :build/children [{:block/title ""
+                          :build/keep-uuid? true
+                          :block/uuid #uuid "00000000-0000-4000-8000-000000000712"}]}]})
 
 (defn- load-export-test-files!
   []
   (let [{:keys [init-tx block-props-tx]}
-        (sqlite-build/build-blocks-tx {:pages-and-blocks test-files
+        (sqlite-build/build-blocks-tx {:properties {:user.property/notes {:logseq.property/type :default}}
+                                       :pages-and-blocks (conj test-files block-embed-test-page)
                                        :auto-create-ontology? true})
         init-index (map #(select-keys % [:block/uuid]) init-tx)]
     (d/transact! (conn/get-db test-helper/test-db false)
-                 (concat init-index init-tx block-props-tx))))
+                 (concat init-index init-tx block-props-tx))
+    ;; a block embed: a block whose :block/link is the embedded block; 703 embeds itself
+    (d/transact! (conn/get-db test-helper/test-db false)
+                 [[:db/add [:block/uuid #uuid "00000000-0000-4000-8000-000000000702"]
+                   :block/link [:block/uuid #uuid "00000000-0000-4000-8000-000000000701"]]
+                  [:db/add [:block/uuid #uuid "00000000-0000-4000-8000-000000000703"]
+                   :block/link [:block/uuid #uuid "00000000-0000-4000-8000-000000000703"]]
+                  ;; 704 embeds 705, which embeds 704
+                  [:db/add [:block/uuid #uuid "00000000-0000-4000-8000-000000000704"]
+                   :block/link [:block/uuid #uuid "00000000-0000-4000-8000-000000000705"]]
+                  [:db/add [:block/uuid #uuid "00000000-0000-4000-8000-000000000705"]
+                   :block/link [:block/uuid #uuid "00000000-0000-4000-8000-000000000704"]]
+                  [:db/add [:block/uuid #uuid "00000000-0000-4000-8000-000000000706"]
+                   :block/link [:block/uuid #uuid "00000000-0000-4000-8000-000000000701"]]
+                  [:db/add [:block/uuid #uuid "00000000-0000-4000-8000-000000000708"]
+                   :block/link [:block/uuid #uuid "00000000-0000-4000-8000-000000000707"]]
+                  [:db/add [:block/uuid #uuid "00000000-0000-4000-8000-000000000707"] :block/collapsed? true]
+                  ;; 712, a child of 710, embeds 711, which has a property
+                  [:db/add [:block/uuid #uuid "00000000-0000-4000-8000-000000000712"]
+                   :block/link [:block/uuid #uuid "00000000-0000-4000-8000-000000000711"]]])))
 
 (use-fixtures :once
   {:before (fn []
@@ -473,6 +550,18 @@
              (string/trim without-properties)))
       (done))))
 
+(deftest export-blocks-as-markdown-keeps-text-property-value-children
+  (async done
+    (p/let [content (<export-blocks-as-markdown
+                     [#uuid "00000000-0000-4000-8000-000000000801"]
+                     {:remove-options #{}})]
+      (is (string/includes? content "note value"))
+      (is (string/includes? content "note child")
+          "children of a Text property value are exported")
+      (is (string/includes? content "note grandchild")
+          "descendants of a Text property value are exported")
+      (done))))
+
 (deftest export-blocks-as-markdown-keeps-ref-to-missing-block
   (async done
     (p/let [only-ref (<export-blocks-as-markdown
@@ -484,6 +573,49 @@
       (is (= "- ((00000000-0000-4000-8000-0000000009ff))" (string/trim only-ref))
           "a block that is only a ref to a missing block keeps the ref")
       (is (= "- see ((00000000-0000-4000-8000-0000000009ff)) here" (string/trim in-text)))
+      (done))))
+
+(deftest export-blocks-as-markdown-block-embed
+  (async done
+    (p/let [embed (<export-blocks-as-markdown
+                   [#uuid "00000000-0000-4000-8000-000000000702"]
+                   {:remove-options #{}})
+            self-embed (<export-blocks-as-markdown
+                        [#uuid "00000000-0000-4000-8000-000000000703"]
+                        {:remove-options #{}})]
+      (is (= "- embedded\n\t- embedded child" (string/trim embed))
+          "a block embed exports the embedded block and its children")
+      (is (= "-" (string/trim self-embed)) "an embed of itself is written as the block itself")
+      (done))))
+
+(deftest export-blocks-as-markdown-block-embed-cycle-and-options
+  (async done
+    (p/let [embed-cycle (<export-blocks-as-markdown
+                   [#uuid "00000000-0000-4000-8000-000000000704"]
+                   {:remove-options #{}})
+            own-child (<export-blocks-as-markdown
+                       [#uuid "00000000-0000-4000-8000-000000000706"]
+                       {:remove-options #{}})
+            open-only (<export-blocks-as-markdown
+                       [#uuid "00000000-0000-4000-8000-000000000709"]
+                       {:remove-options #{:property}
+                        :other-options {:open-blocks-only true}})]
+      (is (= "-" (string/trim embed-cycle))
+          "A embeds B embeds A: the cycle stops at B, written as itself")
+      (is (= "- embedded\n\t- embedded child" (string/trim own-child))
+          "the embed shows the embedded block's children, not the embedding block's own")
+      (is (= "- parent of an embed\n\t- collapsed" (string/trim open-only))
+          "the export's open-blocks-only option applies inside the embed")
+      (done))))
+
+(deftest export-blocks-as-markdown-without-properties-in-a-nested-embed
+  (async done
+    (p/let [content (<export-blocks-as-markdown
+                     [#uuid "00000000-0000-4000-8000-000000000710"]
+                     {:remove-options #{:property}})]
+      (is (string/includes? content "has a property") content)
+      (is (not (string/includes? content "hidden value"))
+          (str "an export without properties leaves them out of an embed in a child block too: " content))
       (done))))
 
 (deftest export-page-as-markdown-preserves-semantic-block-formatting
@@ -725,3 +857,13 @@
 
      [["pages/page2.md" "- 3\n\t- 1\n\t\t- 2\n\t\t\t- 3\n\t\t\t- 3\n\t- 4\n"]]
      [{:path "pages/page2.md" :content "- 3\n\t- 1\n\t\t- 2\n\t\t\t- 3\n\t\t\t- 3\n\t- 4\n" :names ["page2"] :format :markdown}])))
+
+(deftest export-html-quote
+  (testing "a quote holding a paragraph"
+    (is (= [:ul [:li "a" [:blockquote [:p "q" [:br]]]]]
+           (export-html/export-hiccup "- a\n  > q" :markdown {}))))
+  (testing "a quote holding a list does not fail the export"
+    (are [content] (= [:ul [:li "a" [:blockquote [:ul [:li [:p "x"]] [:li [:p "y"]]]]]]
+                      (export-html/export-hiccup content :markdown {}))
+      "- a\n  > * x\n  > * y"
+      "- a\n  #+BEGIN_QUOTE\n  * x\n  * y\n  #+END_QUOTE")))

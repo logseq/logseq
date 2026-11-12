@@ -158,13 +158,29 @@
        (when (some? value)
          (str " " value))))
 
+(defn- property-value-has-children-or-properties?
+  [db value context]
+  (boolean
+   (some (fn [v]
+           (when-let [id (:db/id v)]
+             (let [value-entity (d/entity db id)]
+               (or (seq (:block/_parent value-entity))
+                   (not (string/blank? (block-properties-content db value-entity "" context)))))))
+         (if (set? value) value [value]))))
+
 (defn- default-property-values-as-blocks?
-  [property value context]
-  (and (:export-default-property-values-as-blocks? context)
-       (= :default (:logseq.property/type property))
+  "Text property values are exported as blocks when a value has children or
+  properties of its own (so they are not dropped) or, if the caller asks for it,
+  when the property allows multiple values. A single value with neither stays on
+  the property line."
+  [db property value context]
+  (and (= :default (:logseq.property/type property))
        (not (if (set? value)
               (some :block/closed-value-property value)
-              (:block/closed-value-property value)))))
+              (:block/closed-value-property value)))
+       (or (property-value-has-children-or-properties? db value context)
+           (and (:export-default-property-values-as-blocks? context)
+                (db-property/many? property)))))
 
 (defn- block-properties-content
   [db block spaces-tabs context]
@@ -193,7 +209,7 @@
                                                   (:block/raw-title property)
                                                   (name property-ident))
                                value (get properties property-ident)]
-                           (if (default-property-values-as-blocks? property value context)
+                           (if (default-property-values-as-blocks? db property value context)
                              (str (property-line-content property-title nil spaces-tabs context)
                                   "\n"
                                   (property-value-blocks-content db property value (str spaces-tabs "  ") context))
@@ -382,6 +398,25 @@
       (str content "\n" properties-content)
       content)))
 
+(def ^:private ^:dynamic *embedding-ids*
+  "Ids of the blocks whose embeds are being exported, to stop an embed cycle."
+  #{})
+
+(defn- embed-content
+  "Content of a block that embeds another block (:block/link): the embedded
+  block and its children, as the embed shows them, with the export's tree
+  options; nil for an embed cycle (the block is then written as itself). Only when the context asks for inlined
+  embeds (the text export); the Markdown mirror writes one line per block."
+  [db f level tree-opts context]
+  (when (:inline-block-embeds? context)
+    (when-let [linked (some->> (:block/link f) :db/id (d/entity db))]
+      (when-not (contains? *embedding-ids* (:db/id linked))
+        (binding [*embedding-ids* (conj *embedding-ids* (:db/id f) (:db/id linked))]
+          (block->content db (:block/uuid linked)
+                          (assoc (select-keys tree-opts [:open-blocks-only? :include-properties?])
+                                 :init-level level)
+                          context))))))
+
 (defn- tree->file-content-aux
   [db tree {:keys [init-level link] :as opts} context]
   (let [block-contents (transient [])]
@@ -389,7 +424,11 @@
       (if (nil? f)
         (->> block-contents persistent! flatten (remove nil?))
         (let [page? (nil? (:block/page f))
+              embed (when-not page? (embed-content db f level opts context))
               content (cond
+                        embed
+                        embed
+
                         (and page? (not link) (:include-page-properties? opts))
                         (block-properties-content db f "" context)
 
@@ -399,8 +438,10 @@
                         :else
                         (transform-content db f level opts context))
               new-content
-              (if-let [children (seq (:block/children f))]
-                (cons content (tree->file-content-aux db children {:init-level (inc level)} context))
+              (if-let [children (and (not embed) (seq (:block/children f)))]
+                (cons content (tree->file-content-aux db children (assoc (select-keys opts [:open-blocks-only? :include-properties?])
+                                                                          :init-level (inc level))
+                                                     context))
                 [content])]
           (conj! block-contents new-content)
           (recur r level))))))
@@ -457,8 +498,8 @@
         tree (otree/blocks->vec-tree db blocks (str root-block-uuid))
         tree (if (:open-blocks-only? tree->file-opts)
                (remove-collapsed-descendants tree)
-               tree)
-        tree->file-opts (dissoc tree->file-opts :open-blocks-only?)]
+               tree)]
+    ;; :open-blocks-only? stays in the options for block embeds inside the tree
     (tree->file-content db tree
                         (assoc tree->file-opts :init-level init-level)
                         context)))
