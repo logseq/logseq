@@ -70,15 +70,17 @@ async function check(snapshot, compiledManifest) {
 async function main() {
   const [operation, ...args] = process.argv.slice(2);
   if (operation === "snapshot") {
-    const [tool, repo, ocamlLui, metadataFile, output, command] = args;
+    const [tool, repo, ocamlLui, metadataFile, output, command, profile = "dev"] = args;
+    if (!["dev", "release"].includes(profile)) throw new Error("Invalid native build profile");
     const packages = read(metadataFile).packages.filter(pkg => pkg.name === "lui-nsh" && pkg.source == null);
     if (packages.length !== 1) throw new Error("Expected exactly one local LUI Rust package in Cargo metadata");
     const rustManifest = packages[0].manifest_path;
     const api = await import(pathToFileURL(tool).href);
     const scope = sourceInputs(repo, ocamlLui, rustManifest, tool);
     const quote = value => "'" + value.replaceAll("'", "'\"'\"'") + "'";
-    const snapshot = {...scope, tool, rustManifest,
-      command:command ?? `LUI_SOURCE_ROOT=${quote(ocamlLui)} bash ${quote(path.join(repo, "deps/ui/nsh/build.sh"))}`,
+    const snapshot = {...scope, tool, rustManifest, buildProfile:profile,
+      duneProfile:process.env.DUNE_PROFILE ?? "dev",
+      command:command || `LUI_SOURCE_ROOT=${quote(ocamlLui)} bash ${quote(path.join(repo, "deps/ui/nsh/build.sh"))}${profile === "release" ? " --release" : ""}`,
       files:api.digestInputs(scope.root, scope.inputs)};
     writeFileSync(output, JSON.stringify(snapshot));
   } else if (operation === "check") {
@@ -114,6 +116,8 @@ async function main() {
       return file;
     };
     receipt.artifact = path.resolve(finalArtifact);
+    receipt.buildProfile = snapshot.buildProfile;
+    receipt.duneProfile = snapshot.duneProfile;
     receipt.ownedResources = resourceInputs.map(file => portable(path.relative(resources, path.resolve(snapshot.root, file))));
     if (extraCode.length) receipt.ownedCode = extraCode.map(item => portable(path.relative(path.dirname(finalArtifact), item.target)));
     receipt.inputs = receipt.inputs.map(file => portable(path.relative(snapshot.root, relocate(path.resolve(snapshot.root, file)))));

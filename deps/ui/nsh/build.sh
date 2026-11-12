@@ -3,8 +3,24 @@ set -euo pipefail
 nsh_root=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 ui_root=$(cd "$nsh_root/.." && pwd)
 repo_root=$(cd "$ui_root/../.." && pwd)
-output="$ui_root/_build/nsh"
-resources="$ui_root/_build/Resources"
+build_profile=dev
+cargo_profile_args=()
+if [[ ${1:-} == --release ]]; then
+  build_profile=release
+  cargo_profile_args=(--release)
+  shift
+fi
+[[ $# -eq 0 ]] || { printf 'Usage: build.sh [--release]\n' >&2; exit 1; }
+export DUNE_PROFILE="$build_profile"
+if [[ $build_profile == release ]]; then
+  # Keep the existing bin/../Resources contract without replacing dev artifacts.
+  output="$ui_root/_build/nsh-release/bin"
+  resources="$ui_root/_build/nsh-release/Resources"
+else
+  output="$ui_root/_build/nsh"
+  resources="$ui_root/_build/Resources"
+fi
+printf 'NSH build profile: %s (DUNE_PROFILE=%s)\n' "$build_profile" "$DUNE_PROFILE" >&2
 switch="${OPAMSWITCH:-5.5.1}"
 lui_source=$(cd "${LUI_SOURCE_ROOT:-$repo_root/../lui}" && pwd -P)
 export RUSTUP_TOOLCHAIN="${RUSTUP_TOOLCHAIN:-1.97.0}"
@@ -36,7 +52,7 @@ publication_tool="$nsh_root/build_publication.mjs"
 cargo metadata --locked --format-version=1 --manifest-path "$nsh_root/Cargo.toml" \
   > "$staging/cargo-metadata.json"
 "$node_bin" "$publication_tool" snapshot "$receipt_tool" "$repo_root" "$lui_source" \
-  "$staging/cargo-metadata.json" "$staging/sources.json"
+  "$staging/cargo-metadata.json" "$staging/sources.json" "" "$build_profile"
 # Refuse stale canonical domains before compiling the application provider.
 # Regeneration is an explicit source change, so a new enum case cannot reuse an
 # old Rust contract that would hide its missing native implementation.
@@ -79,7 +95,7 @@ cp "$ui_root/assets/"*.json "$staged_resources/"
 cp "$ui_root/assets/fonts/"*.ttf "$staged_resources/fonts/"
 cp -R "$repo_root/resources/img/." "$staged_resources/img/"
 cp "$repo_root/resources/dicts/"*.edn "$staged_resources/dicts/"
-cargo build --locked --manifest-path "$nsh_root/Cargo.toml" --message-format=json \
+cargo build "${cargo_profile_args[@]}" --locked --manifest-path "$nsh_root/Cargo.toml" --message-format=json \
   > "$staging/cargo-build.jsonl"
 "$python_bin" - "$staging/cargo-build.jsonl" "$staging/logseq-nsh" \
   "$repo_root/deps/db-worker/_build/default/bin/main.exe" "$staged_resources/logseq-db-worker" \
@@ -108,7 +124,7 @@ BUILD_ARTIFACT
 LUI_OCAML_LIBRARY="$staging/$(basename "$library")" \
 LOGSEQ_NATIVE_ASSET_DIR="$staged_resources" \
 LOGSEQ_DB_WORKER_BIN="$staged_resources/logseq-db-worker" \
-cargo test --locked --manifest-path "$nsh_root/Cargo.toml" \
+cargo test "${cargo_profile_args[@]}" --locked --manifest-path "$nsh_root/Cargo.toml" \
   --test startup_preflight -- --exact real_application_startup_preflight --nocapture >&2
 # Recheck sources after qualification and prepare the final-location receipt
 # from the tested staged bytes before any success-path publication starts.

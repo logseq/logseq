@@ -753,3 +753,29 @@ flow instead of using coordinates relative to an assumed button containing
 block. The old padding reserved for that absolute icon is removed; the name
 still truncates with an ellipsis. Existing keys, labels, handlers and menu
 ownership are unchanged across native and Web hosts.
+
+### Explicit native release builds
+
+`bash deps/ui/nsh/build.sh --release` now selects `DUNE_PROFILE=release` for
+both the LUI/Logseq OCaml libraries and the worker, and `cargo --release` for
+both the native executable build and its actual startup qualification test.
+No Dune file or compiler-warning policy changes. The no-argument command
+explicitly selects the existing development profile.
+
+Release publication uses `deps/ui/_build/nsh-release/bin/logseq-nsh`, its native
+OCaml library beside it, and `deps/ui/_build/nsh-release/Resources`. Development
+outputs remain in their existing paths. Both profiles retain staged validation
+and atomic per-file publication. Their receipts record `buildProfile`,
+`duneProfile`, and a rebuild command that retains `--release` when selected.
+
+For example, package the exact qualified release output with:
+
+```sh
+host=$(bash deps/ui/nsh/build.sh --release)
+pnpm --silent ui:nsh:package --built-host "$host"
+```
+
+`run.sh` still uses the development build; a release measurement must launch the
+returned release executable with its own adjacent library and sibling Resources,
+or launch its qualified package. A release profile does not itself establish
+memory or performance budgets.
