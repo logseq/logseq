@@ -65,11 +65,19 @@ jobs:
           "LUI_SOURCE=$lui" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "LUI_SOURCE_ROOT=$lui" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       # Initialize supported VS 2022 before locked Node native addons compile.
-      # Keep Cargo/link steps in PowerShell so GNU link cannot shadow MSVC.
+      # Pin the actual linker before opam adds Cygwin programs to PATH.
       - uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: x64
           vsversion: '2022'
+      - name: Pin the Visual C++ linker before opam changes PATH
+        run: |
+          if (!$env:VCToolsInstallDir) { throw 'MSVC did not provide VCToolsInstallDir' }
+          $msvcBin = Join-Path $env:VCToolsInstallDir 'bin/Hostx64/x64'
+          $linker = (Resolve-Path (Join-Path $msvcBin 'link.exe') -ErrorAction Stop).Path
+          $dumpbin = (Resolve-Path (Join-Path $msvcBin 'dumpbin.exe') -ErrorAction Stop).Path
+          "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER=$linker" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "NSH_DUMPBIN=$dumpbin" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       - name: Root stylesheet and native generator dependencies
         run: pnpm install --frozen-lockfile
         env:
@@ -86,7 +94,8 @@ jobs:
       - name: Resolve explicit native toolchain and redistributable roots
         run: |
           New-Item -ItemType Directory -Force _build/nsh-ci | Out-Null
-          $dumpbin = (Get-Command dumpbin.exe -CommandType Application -ErrorAction Stop).Source
+          $dumpbin = (Resolve-Path $env:NSH_DUMPBIN -ErrorAction Stop).Path
+          $linker = (Resolve-Path $env:CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER -ErrorAction Stop).Path
           $opamRoot = opam var root
           if ($LASTEXITCODE -ne 0) { throw 'Cannot resolve the opam root' }
           $switchBin = opam var bin
@@ -102,6 +111,7 @@ jobs:
             ForEach-Object { (Resolve-Path $_ -ErrorAction Stop).Path } | Select-Object -Unique
           @{
             dumpbin = $dumpbin
+            linker = $linker
             dllRoots = @($roots)
             lui = $env:LUI_REF
             logseq = (git rev-parse HEAD)
@@ -180,6 +190,11 @@ jobs:
       - name: Real native save cancellation and production bounded row contracts
         run: |
           $contractsLog = Join-Path $env:GITHUB_WORKSPACE '_build/nsh-ci/activity-contracts.log'
+          python -m unittest discover -s deps/ui/scripts -p 'test_prepare_melange_runtime.py'
+          if ($LASTEXITCODE -ne 0) { throw 'Melange runtime metadata regressions failed' }
+          $runtime = python deps/ui/scripts/prepare-melange-runtime.py _build/nsh-ci/melange-runtime
+          if ($LASTEXITCODE -ne 0) { throw 'Matching Melange CommonJS runtime generation failed' }
+          $env:NODE_PATH = $runtime
           Push-Location deps/ui
           try {
             opam exec -- dune runtest test/contracts 2>&1 | Tee-Object $contractsLog

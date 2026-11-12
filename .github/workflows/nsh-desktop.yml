@@ -107,6 +107,9 @@ jobs:
           printf 'LUI=%s\nLOGSEQ=%s\n' "$LUI_REF" "$(git rev-parse HEAD)" > _build/nsh-ci/revisions.txt
       - name: Real native save cancellation and production bounded row contracts
         run: |
+          python3 -m unittest discover -s deps/ui/scripts -p 'test_prepare_melange_runtime.py'
+          runtime=$(python3 deps/ui/scripts/prepare-melange-runtime.py _build/nsh-ci/melange-runtime)
+          export NODE_PATH="$runtime"
           (cd deps/ui && opam exec -- dune runtest test/contracts) 2>&1 | tee _build/nsh-ci/activity-contracts.log
           python3 deps/ui/nsh/run_update_preparation_native.py 2>&1 | tee _build/nsh-ci/save-abort-contracts.log
           python3 deps/ui/nsh/run_virtual_rows_native.py 2>&1 | tee _build/nsh-ci/production-virtual-rows.log
