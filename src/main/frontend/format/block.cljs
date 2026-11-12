@@ -12,72 +12,19 @@
             [lambdaisland.glogi :as log]
             [logseq.common.config :as common-config]
             [logseq.graph-parser.block :as gp-block]
+            [logseq.graph-parser.db-input :as db-input]
             [logseq.graph-parser.property :as gp-property]))
-
-(defn- standalone-display-block
-  [block]
-  (let [raw-title (:block/title block)
-        title (when (string? raw-title) (string/trim raw-title))
-        display-markup? (and title
-                             (or (re-find #"(?s)^```.*```$" title)
-                                 (re-find #"(?s)^\$\$.*\$\$$" title)))
-        ast-body (when display-markup?
-                   (or (:block.temp/ast-body block)
-                       (map first (mldoc/->edn title :markdown))))
-        [ast-node] ast-body
-        [node-type node-data] ast-node]
-    (if (= 1 (count ast-body))
-      (case node-type
-        "Src"
-        (let [{:keys [language lines]} node-data]
-          (cond-> (assoc block
-                         :block/title (string/replace (apply str lines) #"\r?\n$" "")
-                         :logseq.property.node/display-type :code)
-            (not-empty language)
-            (assoc :logseq.property.code/lang language)))
-
-        "Displayed_Math"
-        (assoc block
-               :block/title (string/trim node-data)
-               :logseq.property.node/display-type :math)
-
-        block)
-      block)))
-
-(defn math-block-formula
-  "The formula of a title written as 1 display math ($$E=mc^2$$), nil for any
-  other title. A math block's title is the formula alone; a save of the
-  editor's text from before the block became a math block brings the $$ back."
-  [title]
-  (let [block (standalone-display-block {:block/title title})]
-    (when (= :math (:logseq.property.node/display-type block))
-      (:block/title block))))
 
 (defn extract-blocks
   "Wrapper around logseq.graph-parser.block/extract-blocks that adds in system state
 and handles unexpected failure."
   [blocks content format {:keys [page-name]}]
   (try
-    (let [blocks (gp-block/extract-blocks blocks content format
-                                          {:user-config (state/get-config)
-                                           :block-pattern common-config/block-pattern
-                                           :date-formatter (state/get-date-formatter)
-                                           :page-name page-name
-                                           :db-graph-mode? true})]
-      (map (fn [block]
-             (let [block (standalone-display-block block)
-                   ;; Only a heading is saved from the parsed properties. Others (e.g. an
-                   ;; Org :PROPERTIES: drawer typed in a block) stay in the block's text.
-                   ;; Markdown headings go up to 6; mldoc reports `####### x` as size 7.
-                   heading (get-in block [:block/properties :heading])
-                   heading (when (or (true? heading) (and (integer? heading) (<= 1 heading 6)))
-                             heading)]
-               (cond-> (dissoc block :block/format :block/properties :block/macros :block/properties-order
-                               :block/scheduled :block/deadline :block/marker :block/priority
-                               :block/properties-text-values :block/invalid-properties)
-                 heading
-                 (assoc :logseq.property/heading heading))))
-           blocks))
+    (db-input/extract-blocks blocks content format
+                             {:repo (state/get-current-repo)
+                              :user-config (state/get-config)
+                              :date-formatter (state/get-date-formatter)
+                              :page-name page-name})
     (catch :default e
       (log/error :exception e)
       (state/pub-event! [:capture-error {:error e
@@ -86,23 +33,11 @@ and handles unexpected failure."
       [])))
 
 (defn parse-block
-  [{:block/keys [uuid title format] :as block}]
-  (when-not (string/blank? title)
-    (let [block (dissoc block :block/pre-block?)
-          format (or format :markdown)
-          parse-config (mldoc/get-default-config format)
-          ;; Disable extraction for display-type blocks as there isn't a reason to have
-          ;; it enabled yet and can cause visible bugs when '#' is used
-          blocks (if (:logseq.property.node/display-type block)
-                   [block]
-                   (let [ast (format/to-edn title parse-config)]
-                     (extract-blocks ast title format {})))
-          new-block (first blocks)
-          block (cond-> (merge block new-block)
-                  true
-                  (dissoc :block/format))
-          block (dissoc block :block.temp/ast-body :block/level)]
-      (if uuid (assoc block :block/uuid uuid) block))))
+  [block]
+  (db-input/parse-block block {:repo (state/get-current-repo)
+                               :user-config (state/get-config)
+                               :date-formatter (state/get-date-formatter)
+                               :extract-blocks extract-blocks}))
 
 (defonce *blocks-ast-cache (volatile! (common.cache/empty-lru 5000)))
 

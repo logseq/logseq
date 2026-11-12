@@ -330,7 +330,7 @@ Inspect and edit commands:
 
 ### Markdown block input
 
-`--blocks` takes Markdown text; `--blocks-file` reads that text from a file. Supply one input source per command. Both flags create new blocks. They do not accept EDN block maps, and they cannot be used with `--id` or `--uuid` to update an existing block. Use `--content` for a literal single block. Each run of a Markdown insert creates a new tree, even when the input is unchanged.
+`--blocks` takes Markdown text; `--blocks-file` reads that text from a file. Supply one input source per command. Both flags create new blocks. They do not accept EDN block maps, and they cannot be used with `--id` or `--uuid` to update an existing block. Use `--content` for a single editor block. Each run of a Markdown insert creates a new tree, even when the input is unchanged.
 
 ```bash
 logseq upsert block --graph demo --target-page Home \
@@ -349,13 +349,15 @@ The equivalent `blocks.md` file is:
 logseq upsert block --graph demo --target-page Home --blocks-file ./blocks.md
 ```
 
-- Markdown bullets and headings become blocks; indentation makes child blocks. Code fences, quotes, tables, and other body lines stay in the containing block's title. An ordered list is not supported as block input.
+- Markdown bullets and headings become blocks; indentation makes child blocks. Quotes, tables, and other body lines stay in the containing block. Standalone fenced code and display math use the same display types and stored content as the Desktop DB editor. An ordered list is not supported as outline input.
 - `key:: value` on a block sets an existing graph property on that block and is removed from the stored title. Values are coerced to the property's schema type; unknown properties or invalid values fail. Property keys with spaces or colons cannot be written with this syntax. Create the property first with `upsert property` if needed.
-- `[[Page]]` in a title links to the page and creates it if missing. `#tag` associates an existing tag with the block and remains in the title; an unknown tag fails. References in code are treated as literal text.
+- Inline content follows the Desktop DB editor's parsing rules. `[[Page]]` links to the page and creates it if missing; inline `#tag` associates a tag and creates it if missing. Explicit `--update-tags` still requires existing tags.
+- Resolved page links are stored as UUID links. Prefer returned entity IDs for later updates and queries; the raw stored title can differ from the typed page-name text. Page renames preserve UUID link identity.
+- Existing name-stored titles are not migrated. If their target page has been renamed, editing an old `[[name]]` can create a new page with that name. Use the target's UUID or current name when updating these old blocks. Shared undo/redo and sync reference-accuracy issues are outside this change.
 - `--target-page`, `--target-id`, and `--target-uuid` select one insertion target. Without a target, the blocks go on today's journal page. `--pos` defaults to `last-child`; `first-child` also works with a page or block target, while `sibling` requires `--target-id` or `--target-uuid`.
 - `--update-tags <edn-vector>` and `--update-properties <edn-map>` can be combined with either Markdown input flag; they apply to the top-level blocks only. Use Markdown `#tag` and `key:: value` for metadata on individual descendants. `--remove-tags` and `--remove-properties` are only for update mode.
-- `--dry-run` works in create mode with either Markdown input flag (and with `--content`). It resolves the input and prints planned outliner ops without writing. With `--output json` or `--output edn`, the response includes `dry-run`, `ops`, and `would-create-pages` under `data`.
-- The block tree and its metadata are written in one outliner transaction. Missing target or reference pages may be created before that transaction. JSON/EDN output lists the created block ids in tree preorder, including descendants.
+- `--dry-run` works in create mode with either Markdown input flag (and with `--content`). It resolves the input and prints planned outliner ops without writing. With `--output json` or `--output edn`, the response includes `dry-run`, `ops`, and `would-create-pages` under `data`. The page list covers input resolution; it does not forecast pages created by downstream transaction hooks.
+- The block tree, inline reference/tag pages, and metadata are written in one outliner transaction. Missing target or named property-value pages may be created before that transaction. JSON/EDN output lists the created block ids in tree preorder, including descendants.
 
 Help output:
 

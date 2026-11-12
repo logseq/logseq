@@ -6,7 +6,7 @@
             [frontend.worker.handler.block :as block-handler]
             [frontend.worker.handler.transaction]
             [frontend.worker.state :as worker-state]
-            [logseq.outliner.op :as outliner-op]))
+            [logseq.outliner.input :as outliner-input]))
 
 (deftest apply-outliner-ops-returns-stored-delta-and-canonical-editor-rows-test
   (let [repo "transaction-handler-test"
@@ -32,7 +32,7 @@
         hydration-calls (atom 0)]
     (try
       (reset! worker-state/*datascript-conns {repo conn})
-      (with-redefs [outliner-op/apply-ops! (fn [_conn _ops _opts]
+      (with-redefs [outliner-input/apply-ops! (fn [_conn _ops _opts]
                                              result)
                     db-listener/take-outliner-op-delta!
                     (fn [requested-perf-id]
