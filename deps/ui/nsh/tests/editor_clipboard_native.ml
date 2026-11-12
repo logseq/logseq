@@ -57,7 +57,9 @@ let natural_date_tasks () =
     let failed=observe (Platform.date_parse_natural ~reference:0. "today") in
     reply (request_id ()) ["status",`String "error";"error",`String "injected provider failure"];
     check "native service errors reject instead of becoming invalid-date results"
-      (match !failed with Some (Error (Failure "injected provider failure")) -> true | _ -> false);
+      (match !failed with
+       | Some (Error (Failure message)) -> message = "injected provider failure"
+       | _ -> false);
     let model=ref {Model.initial with repo=Some "natural-date-origin"} in
     Runtime.read_model:=(fun () -> !model);
     let picks=ref [] and notices=ref [] in
