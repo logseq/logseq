@@ -144,9 +144,19 @@ It waits for that exact glyph/reference to render in the Journal icon button,
 then reads the private daemon's production `get-latest-journals` response and
 checks the persisted icon kind and id. The read client verifies the daemon's
 storage root and repository before querying; it performs no graph writes.
-This stronger assertion requires a fresh actual-application qualification before
-an exact-choice persistence result is claimed. The end/first/end bounds and
-native retirement checks remain in place.
+The full release publisher passed at application `c65730defa`, LUI `3f1606c0`
+and NSH `adc186d`. Both complete tabs passed end/first/end native-controller
+scrolling, bounded materialization, exact rendered and persisted icon kind/id
+checks, and native picker retirement. The LUI candidate also passed all 262 tests
+and strict Clippy; its real Desktop regression confirms that queued agent refusals
+cannot strand pending list feedback.
+
+A subsequent isolated AppKit wheel test failed before reaching the picker tabs.
+Its default 390pt window exposed a retained `display=contents` to `none` change
+in the responsive right-sidebar header wrapper at the 640pt breakpoint. This is
+separate from the picker viewport correction and is not a passing wheel result.
+The shipping release memory measurements below retain their original candidate
+identities; the mixed native test host is not used for release memory claims.
 
 ### Release native-window measurements
 
