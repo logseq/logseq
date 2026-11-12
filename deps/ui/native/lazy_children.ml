@@ -138,7 +138,15 @@ let uuids_of_payload payload =
    journals page and the web gate lives in the outer list. *)
 let lazy_rows ~active_key ~key ~cmp ~mount ~estimate_height ~source : t =
  fun ctx parent ->
-  if Lui_ui.host ctx <> Lui_protocol.GenericHost then
+  if Lui_ui.host ctx = Lui_protocol.NshHost then
+    (Virt_list.nsh_list
+       ~pin_key:(fun () -> Option.bind active_key Signal.get)
+       ~pin_sig:(fun () -> active_key)
+       ~estimate_size:(fun _ -> match Signal.get source with
+         | item :: _ -> estimate_height item
+         | [] -> 32.)
+       (virtual_rows ~source ~key ~cmp ~mount ~scroll_key:key ())) ctx parent
+  else if Lui_ui.host ctx <> Lui_protocol.GenericHost then
     (Lui_elements.keyed ~source ~key ~cmp ~mount) ctx parent
   else begin
     let sched = ctx.Lui_ui.ui_scheduler in

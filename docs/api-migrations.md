@@ -590,3 +590,42 @@ real observed work resolves it; it is never treated as proof of quiescence.
 The actual application still aborts and awaits release before returning its
 translated installation-unavailable explanation. No installation lease, daemon
 termination or relaunch is enabled by this change.
+
+
+### NSH production row sources borrow the existing Scroll
+
+The native `Virt_list.list`, `Virt_list.rows_sig`, and
+`Lazy_children.lazy_rows` adapters now use canonical `virtual_rows` on NSH.
+Their `virtual_list` uses `viewport = parent`: the existing enclosing Scroll
+remains the sole scroll owner, including journal headers and adjacent content.
+Apple and the other existing host branches retain their previous behavior.
+
+NSH rows use their application key (normally a block/page UUID), without a
+content-version suffix. `rows_sig` keeps its signal-aware row mount; `list`
+updates a changed snapshot through the existing `render` function within that
+retained row scope. Applications that need control identity during a row's
+content changes should use `rows_sig` and reactive properties inside `mount`.
+Only requested rows and native interaction pins own mounted row scopes;
+unmounted editor state must remain in the application model.
+
+The existing pin/active-key notification becomes a canonical nonanimated
+`scroll_target` request with `scroll_anchor = nearest` and a monotonic token.
+The native virtual list owns measurement, focus retention and viewport feedback;
+there is no second application viewport or per-row visibility cache on NSH.
+`on_end` uses the canonical visible half-open range, emits once when the source
+end becomes visible, and can emit again after the count changes or the viewport
+leaves and returns to the end. The estimate must be finite and positive; NSH
+measures mounted rows, so the estimate is not a fixed row-height requirement.
+
+For example, keep a stable UUID key and put live content on the mounted row:
+
+```ocaml
+Virt_list.rows_sig ~key:block_uuid ~cmp:String.compare
+  ~estimate_size:(fun _ -> 32.)
+  ~mount:(fun block -> text ~text:(reactive block_title block) ())
+  blocks
+```
+
+This production adapter change does not itself qualify large-page AppKit
+scrolling or native pixel output. Run the production-helper fixture and the
+actual Journal/page native qualifier against the selected immutable LUI pin.

@@ -60,6 +60,65 @@ let lazy_row ?node_key ?(style_class="") ?(pinned=fun () -> false)
       end)
     [if_ ~test:ns child]) ctx parent
 
+(* NSH borrows the nearest Scroll viewport. Unlike the legacy native spine,
+   the canonical row source owns scopes only for the requested window and
+   interaction pins; it does not create a placeholder for every business row. *)
+let nsh_list ?(on_end = fun () -> ()) ?(overscan = 5)
+    ?(style_class = "ls-virt-list") ?(data_attrs = [])
+    ?(pin_key = fun () -> None) ?(pin_sig = fun () -> None)
+    ~estimate_size rows : t =
+ fun ctx parent ->
+  let extent = estimate_size 0 in
+  if not (Float.is_finite extent) || extent <= 0. then
+    invalid_arg "NSH virtual rows require a finite positive estimated extent";
+  (* A pin is an imperative reveal request, not a second viewport. The two
+     owned signals adapt the existing editor-selection notification to the
+     canonical target/token command. Caller-owned sources remain borrowed. *)
+  let target = Signal.state ctx.Lui_ui.ui_scheduler "" in
+  let token = Signal.state ctx.Lui_ui.ui_scheduler 0 in
+  let target_source = Signal.own_signal ctx.Lui_ui.ui_scope (Signal.value target) in
+  let token_source = Signal.own_signal ctx.Lui_ui.ui_scope (Signal.value token) in
+  let last_pin = ref None in
+  let request_pin () =
+    let next = pin_key () in
+    if next <> !last_pin then begin
+      last_pin := next;
+      match next with
+      | None -> Signal.set target ""
+      | Some key ->
+          Signal.set target key;
+          Signal.update token (( + ) 1)
+    end
+  in
+  request_pin ();
+  Option.iter (fun changes ->
+    ignore (Signal.own ctx.Lui_ui.ui_scope
+      (Signal.subscribe changes (fun _ -> request_pin ())))) (pin_sig ());
+  let last_end_count = ref None in
+  let on_visible_range = function
+    | Lui_protocol.VisibleRange (node, first, last) ->
+        (* Read the canonical sparse source count, not List.length on every
+           scroll notification. Range indices are half-open and exclude pins. *)
+        let properties = Hashtbl.find ctx.Lui_ui.ui_application.Lui_runtime.runtime_properties node in
+        let count = match Lui_protocol.Property_map.find_opt
+            Lui_protocol.VirtualTotalCount properties with
+          | Some (Lui_protocol.IntValue count) -> count
+          | _ -> failwith "NSH virtual row source did not publish its count"
+        in
+        if first < last && last >= count then begin
+          if !last_end_count <> Some count then begin
+            last_end_count := Some count;
+            on_end ()
+          end
+        end else last_end_count := None
+    | _ -> ()
+  in
+  virtual_list ~viewport:`parent ~overscan ~item_extent:extent
+    ~style_class ~data_attrs ~track_visible_range:true ~on_visible_range
+    ~scroll_target_signal:target_source ~scroll_token_signal:token_source
+    ~scroll_anchor:`nearest ~scroll_animated:false
+    [rows] ctx parent
+
 let list ?(scroll_parent_id = "main-content-container") ?(overscan = 5)
     ?(estimate_size = fun _ -> 32.) ?(initial_rows = -1) ?(list_attrs = [])
     ?(list_class = "ls-virt-list") ?(pin_key = fun () -> None)
@@ -77,6 +136,13 @@ let list ?(scroll_parent_id = "main-content-container") ?(overscan = 5)
       | Some s -> s
       | None -> Signal.constant sched data
     in
+    if Lui_ui.host ctx = Lui_protocol.NshHost then
+      (nsh_list ~on_end ~overscan ~style_class:list_class ~data_attrs:list_attrs
+         ~pin_key ~pin_sig ~estimate_size
+         (virtual_rows ~key:key_of ~cmp:String.compare ~scroll_key:key_of
+            ~mount:(fun item -> reactive ~equal:same_item render item)
+            ~source:(reactive Array.to_list arr_sig) ())) ctx parent
+    else begin
     let attrs_sig =
       Logseq_el.attrs_signal arr_sig (fun (arr : 'a array) ->
           list_attrs
@@ -191,6 +257,7 @@ let list ?(scroll_parent_id = "main-content-container") ?(overscan = 5)
           ~key:key_of_versioned ~cmp:String.compare
           ~mount:(fun item_sig -> row_mount (Signal.get item_sig)) ]
       ctx parent
+    end
 
 (* Signal-driven row stream: same [ls-virt-list] shell but children are
    a keyed collection, so a splice republishes only the touched rows —
@@ -201,6 +268,10 @@ let rows_sig ~key ~cmp ~mount ?(on_end = fun () -> ())
     ?(initial_rows = -1) ?overscan ~estimate_size
     (source : 'a list Signal.signal) : t =
  fun ctx parent ->
+  if Lui_ui.host ctx = Lui_protocol.NshHost then
+    (nsh_list ~on_end ?overscan ~estimate_size
+       (virtual_rows ~key ~cmp ~mount ~scroll_key:key ~source ())) ctx parent
+  else begin
   (* rows are real children on this backend; overscan is a windowing concept *)
   ignore overscan;
   let sched = ctx.Lui_ui.ui_scheduler in
@@ -251,3 +322,5 @@ let rows_sig ~key ~cmp ~mount ?(on_end = fun () -> ())
      ~on_dom_event:(fun _name _payload -> on_end ())
      [ Lui_elements.keyed ~source:source ~key ~cmp ~mount:row_mount ])
     ctx parent
+
+  end
