@@ -1,5 +1,26 @@
 # API migrations
 
+## NSH code editors fill their horizontal parent
+
+The native CodeMirror adapter now explicitly sizes its retained root to the
+parent width. A code-display block's canonical `code-editor` Row can have valid
+positive bounds while a bare keyed-region root collapses to zero intrinsic
+width around its percent-width NSH Editor. The previous direct column/stretch
+fixture did not expose that production layout.
+
+The explicit full-width View replaces the View NSH already creates implicitly
+for a region root; it does not add a second outer layout node. The existing
+`(source-role, uuid)` key still owns the Editor, document, history and input
+callbacks. Value/language changes retain that Editor; changing source identity
+replaces it. No caller migration, schema, event payload or default editor prop
+changes. Web CodeMirror and the Apple/iOS and Android backends are unchanged.
+
+The regression uses the actual registered CodeMirror factory/schema under the
+same canonical grow Row as `Render.code_block`, requiring materialized width,
+minimum row height, actual native input and retained identity on controlled
+echo. The real application fence/edit/language gates remain required for native
+rendering, focus, worker persistence and screenshot qualification.
+
 ## Settings reuses its native menu's update owner
 
 The NSH settings General pane restores master's Check for updates button in the

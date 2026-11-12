@@ -41,11 +41,17 @@ pub(super) fn validate(node: &Node) -> Result<(), String> {
 pub(super) fn element(context: ExtensionContext) -> AnyElement {
     let source_context = context.clone();
     let source = computed(move || Source::read(&source_context));
-    each(
-        move || vec![source.get()],
-        Clone::clone,
-        move |source, _| editor_for(context.clone(), source.get_untracked()),
-    )
+    // A bare keyed region gets an implicit auto-width View from NSH. In the
+    // production Row that host collapses around the percent-width Editor.
+    // Size that same root explicitly; the source-keyed Editor stays retained.
+    view()
+        .w_full()
+        .child(each(
+            move || vec![source.get()],
+            Clone::clone,
+            move |source, _| editor_for(context.clone(), source.get_untracked()),
+        ))
+        .into_element()
 }
 
 fn editor_for(context: ExtensionContext, source: Source) -> AnyElement {
