@@ -112,6 +112,43 @@ let textarea =
       Lui_elements.textarea ~background ~border_color ~border_width
         ~corner_radius)
 
+(* CSS overflow and native scrolling share content and bounds. NSH needs an
+   actual Scroll owner with one unbounded content column. *)
+let scroll_column ?key ?style_class ?data_attrs ?background ?foreground
+    ?padding ?padding_horizontal ?padding_vertical ?gap ?min_width ?max_width
+    ?min_height ?max_height ?width ?height ?grow ?corner_radius ?border_width
+    ?border_color ?main ?cross ?accessibility_identifier children : t =
+ fun context parent ->
+  (if Lui_ui.host context = P.NshHost then
+     scroll ?key ?style_class ?data_attrs ?background ?foreground
+       ?min_width ?max_width ?min_height ?max_height ?width ?height ?grow
+       ?corner_radius ?border_width ?border_color ?accessibility_identifier
+       ~orientation:`vertical
+       [column ?padding ?padding_horizontal ?padding_vertical ?gap ?main ?cross
+          ~min_width:0 children]
+   else
+     with_props [Prop.overflow `auto]
+       (column ?key ?style_class ?data_attrs ?background ?foreground
+          ?padding ?padding_horizontal ?padding_vertical ?gap ?min_width ?max_width
+          ?min_height ?max_height ?width ?height ?grow ?corner_radius ?border_width
+          ?border_color ?main ?cross ?accessibility_identifier children)) context parent
+
+(* A native Menu already owns its bounded scrolling. Rich popup callers place
+   an explicit Scroll inside their surface instead of applying CSS overflow. *)
+let css_scroll element : t = fun context parent ->
+  (if Lui_ui.host context = P.NshHost then element
+   else with_props [Prop.overflow `auto] element) context parent
+
+(* Popup content owns the native viewport; the CSS host keeps its existing
+   surface and child unchanged. Native content must not have its own max-height. *)
+let scroll_body ?max_height ?max_height_viewport body : t =
+ fun context parent ->
+  (if Lui_ui.host context = P.NshHost then
+     with_props (match max_height_viewport with
+       | None -> [] | Some height -> [Prop.max_height_viewport height])
+       (scroll ?max_height ~orientation:`vertical ~min_width:0 ~min_height:0 [body])
+   else body) context parent
+
 (* Indicator borders are independent of the selected primary fill and label ink. *)
 let checkbox ?key ?gap ?main ?cross ?grow ?columns ?padding ?padding_horizontal ?padding_vertical ?margin ?margin_horizontal ?margin_vertical ?margin_top ?margin_right ?margin_bottom ?margin_left ?background ?foreground ?border_color ?border_width ?corner_radius ?width ?height ?min_width ?max_width ?min_height ?max_height ?container_relative_frame ?container_relative_frame_inset ?accessibility_identifier ?accessibility_identifier_signal ?foreground_signal ?background_signal ?style_class ?data_attrs ?data_attrs_signal ?on_appear ?on_pointer_enter ?on_pointer_leave ?text ?text_signal ?checked ?checked_signal ?label ?disabled ?disabled_signal ?on_toggle ?on_context_menu ?transition (children : t list) : t =
   with_props
@@ -1086,7 +1123,7 @@ let menu_surface_chrome ?max_height element =
 (* Surface overflow belongs to the CSS host. A native caller that supplies an
    explicit bounded Scroll uses the same chrome without a second scroll owner. *)
 let menu_surface ?max_height element =
-  with_props [Prop.overflow `auto] (menu_surface_chrome ?max_height element)
+  css_scroll (menu_surface_chrome ?max_height element)
 
 let menu_card ~key ?(cls = "") ~anchor ~anchor_alignment ~on_dismiss
     ?max_height ?(data_attrs = []) items : t =

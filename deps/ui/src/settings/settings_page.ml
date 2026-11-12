@@ -1388,8 +1388,7 @@ let inner ~modal ms : t =
                    ~value:(reactive (fun viewport ->
                      if viewport>=768. then 0
                      else nav_aside_height viewport) viewport)
-                 (Ui_components.with_props [Ui_components.Prop.overflow `auto]
-                 (column ~key:"settings-aside"
+                 (Ui_components.scroll_column ~key:"settings-aside"
                  ~style_class:"settings-aside"
                  ~data_attrs:["role", "complementary"]
                  ~background:
@@ -1415,7 +1414,7 @@ let inner ~modal ms : t =
                         (fun i it ->
                           nav_item ~key:("nav-" ^ string_of_int i) it)
                         (nav_items ())))
-                 ]))))
+                 ])))
              ; article ~modal ~keymap ms ctx
              ])
       ]

@@ -605,9 +605,8 @@ let menu_view (m : popup_menu) : t =
     ; Ui_components.Prop.inset_left m.mx
     ; Ui_components.Prop.inset_top m.my
     ; Ui_components.Prop.z_index 901
-    ; Ui_components.Prop.overflow `auto
     ; Ui_components.Prop.shadow "0 4px 12px rgb(0 0 0 / 0.15)" ]
-    (box ~key:"menu" ~style_class:m.mclass ~max_height:256
+    (Ui_components.scroll_column ~key:"menu" ~style_class:m.mclass ~max_height:256
        ~background:
          "var(--lx-popover-bg, var(--ls-primary-background-color, #fff))"
        ~border_width:1

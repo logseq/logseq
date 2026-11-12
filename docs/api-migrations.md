@@ -1257,3 +1257,20 @@ may be an application hash or an external URL. A relative external destination
 such as `assets/readme.md` receives no application press handler and remains
 subject to the NSH URL boundary validation. The backend does not accept arbitrary
 relative URLs or invent their navigation behavior.
+
+## NSH scrolling uses explicit native viewport owners
+
+`Ui_components.scroll_column` preserves the CSS overflow column on Web and the
+maintained hosts, and uses an actual vertical NSH Scroll with one unbounded
+content column on desktop. Constraints, surface identity and chrome stay on the
+scroll owner; gap and content padding remain on its child. For example, a bounded
+settings navigation pane must use `scroll_column ~max_height:480 children`, rather
+than applying ``Prop.overflow `auto`` to an ordinary Column.
+
+Native Menu surfaces already provide their own scrolling. `menu_surface` therefore
+keeps the shared surface chrome without applying CSS overflow on NSH. Rich popup
+callers use `scroll_body ~max_height` or `~max_height_viewport` around their content
+and retain CSS surface overflow on the other hosts. `css_scroll` is only the CSS
+surface half of that composition; it does not provide native scrolling by itself.
+The backend still rejects unsupported CSS overflow instead of silently clipping
+content or pretending a plain element is scrollable.
