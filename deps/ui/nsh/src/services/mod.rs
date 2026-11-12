@@ -2,6 +2,7 @@
 mod clipboard;
 mod dom;
 mod editor_geometry;
+mod editor_text_geometry;
 mod menu;
 pub(crate) mod resources;
 mod secrets;

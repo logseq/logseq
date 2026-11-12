@@ -240,7 +240,8 @@ pub fn capture(
     renderer: &Renderer,
 ) -> Result<CapturedRequest, String> {
     if super::editor_geometry::supported(operation) {
-        return super::editor_geometry::capture(payload, renderer).map(CapturedRequest::Editor);
+        return super::editor_geometry::capture(operation, payload, renderer)
+            .map(CapturedRequest::Editor);
     }
     if !supported(operation) {
         return Err(format!(

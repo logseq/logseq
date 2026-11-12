@@ -4,12 +4,24 @@ use serde_json::{Map, Value};
 use std::sync::Arc;
 
 pub(super) fn supported(operation: &str) -> bool {
-    operation == "set-input-focus"
+    matches!(
+        operation,
+        "set-input-focus"
+            | "caret-rect"
+            | "selection-rects"
+            | "offset-at"
+            | "line-ranges"
+            | "scroll-height"
+    )
 }
 
 pub struct CapturedRequest {
     owner: EditorOwner,
-    focused: bool,
+    command: Command,
+}
+enum Command {
+    Focus(bool),
+    Geometry(super::editor_text_geometry::Request),
 }
 
 struct EditorOwner {
@@ -75,7 +87,11 @@ impl EditorOwner {
     }
 }
 
-pub(super) fn capture(payload: &str, renderer: &Renderer) -> Result<CapturedRequest, String> {
+pub(super) fn capture(
+    operation: &str,
+    payload: &str,
+    renderer: &Renderer,
+) -> Result<CapturedRequest, String> {
     let request: Map<String, Value> =
         serde_json::from_str(payload).map_err(|error| format!("editor focus request: {error}"))?;
     let block = request
@@ -83,13 +99,21 @@ pub(super) fn capture(payload: &str, renderer: &Renderer) -> Result<CapturedRequ
         .and_then(Value::as_str)
         .filter(|block| !block.is_empty())
         .ok_or("editor focus requires a nonempty block-id")?;
-    let focused = request
-        .get("focused")
-        .and_then(Value::as_bool)
-        .ok_or("editor focus requires a boolean focused value")?;
+    let command = if operation == "set-input-focus" {
+        Command::Focus(
+            request
+                .get("focused")
+                .and_then(Value::as_bool)
+                .ok_or("editor focus requires a boolean focused value")?,
+        )
+    } else {
+        Command::Geometry(super::editor_text_geometry::Request::decode(
+            operation, &request,
+        )?)
+    };
     Ok(CapturedRequest {
         owner: EditorOwner::capture(renderer, block.into()),
-        focused,
+        command,
     })
 }
 
@@ -97,14 +121,29 @@ pub(super) async fn execute(
     request: CapturedRequest,
     renderer: &Renderer,
 ) -> Result<Vec<PlatformEvent>, String> {
-    let Some(sink) = request.owner.resolve(renderer, request.focused) else {
+    let Some(sink) = request
+        .owner
+        .resolve(renderer, !matches!(request.command, Command::Focus(false)))
+    else {
         return Ok(Vec::new());
+    };
+    let focused = match request.command {
+        Command::Focus(focused) => focused,
+        Command::Geometry(query) => {
+            return super::editor_text_geometry::execute(
+                query,
+                sink,
+                request.owner.sink.as_deref(),
+                renderer,
+            )
+            .await;
+        }
     };
     let Some(reference) = renderer.native_reference(sink.id, sink.incarnation) else {
         return Ok(Vec::new());
     };
     if reference.node().is_some() {
-        if request.focused {
+        if focused {
             reference.focus();
         } else {
             reference.blur();
@@ -164,9 +203,14 @@ mod tests {
             "{}",
             r#"{"block-id":"first","focused":"true"}"#,
         ] {
-            assert!(capture(invalid, &renderer).is_err());
+            assert!(capture("set-input-focus", invalid, &renderer).is_err());
         }
-        let captured = capture(r#"{"block-id":"first","focused":true}"#, &renderer).unwrap();
+        let captured = capture(
+            "set-input-focus",
+            r#"{"block-id":"first","focused":true}"#,
+            &renderer,
+        )
+        .unwrap();
         renderer.apply(patch(2, json!([
             {"op":"create-extension","id":2,"identifier":"logseq-editor","fingerprint":schema().fingerprint},
             {"op":"set-extension-prop","id":2,"property":"block-id","value":"first"},

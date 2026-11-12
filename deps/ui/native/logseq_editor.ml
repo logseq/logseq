@@ -255,6 +255,9 @@ let store_measurement block_id tbl key value =
 let note_measurement name (j : Js.Json.t) : unit =
   match jstr "block-id" j with
   | None -> ()
+  | Some block_id when (match jnum "geometry-epoch" j with
+      | Some epoch -> epoch <> float_of_int (epoch_of block_id)
+      | None -> false) -> ()
   | Some block_id -> (
       let ep = epoch_of block_id in
       match name with
@@ -328,7 +331,9 @@ let request block_id name fields =
   Host.dom_op name
     (Js.Json.stringify
        (Js.Json.JObject
-          (("block-id", Js.Json.JString block_id) :: fields)))
+          (("block-id", Js.Json.JString block_id)
+           :: ("geometry-epoch", Js.Json.JNumber (float_of_int (epoch_of block_id)))
+           :: fields)))
 
 let jnum_v n = Js.Json.JNumber (Float.of_int n)
 

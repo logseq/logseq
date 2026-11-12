@@ -1003,3 +1003,36 @@ sidebar content and inert semantics. Applications following the same pattern
 should keep content mounted inside the split, set its closed minimum width to
 zero, and let the native panel own clipping. Do not add a timer or intermediate
 width signal around the existing split.
+
+
+## NSH committed block-editor text geometry (2026-11-12)
+
+The native application now implements `caret-rect`, `selection-rects`,
+`offset-at`, `line-ranges`, and `scroll-height` using the approved NSH
+`ElementRef.text_geometry` API. Queries target the existing `.ed-line` text
+blocks and use the exact attributed string and span identities committed by the
+platform text engine. No alternative text shaper, document buffer, persistent
+geometry cache, or offscreen materialization is introduced.
+
+NSH fragment views carry `ls-editor-run-<index>` span identifiers scoped to their
+logical line. Atomic block-reference rows receive a containing text span so the
+engine exposes their attachment interval. Display labels and landing pads do not
+become source. Native UTF-16 boundaries convert to LUI UTF-8 byte offsets;
+hidden delimiters are excluded from hit targets, and clicking an atomic display
+uses the existing shared editor's interior-offset reveal behavior.
+
+Native measurement requests now include `geometry-epoch`, and NSH replies echo
+it. For example, `offset-at` receives
+`{"block-id":"<uuid>","geometry-epoch":7,"x":120,"y":8}` and replies with the
+same identity/coordinates plus `offset` in source bytes. The OCaml adapter rejects
+an echoed epoch after an edit, remount, or disposal. Existing native hosts may
+continue returning replies without this additive field. NSH also rejects stale
+source-version/run/composition snapshots, replaced nodes, and layout answers
+whose committed text or scroll/window coordinate space changed while awaiting a
+query. Unavailable/culled geometry remains unavailable and is retried by the
+existing shared editor lifecycle.
+
+No application API changes are required. Existing caret and selection rectangles
+remain relative to the editor's root-view origin; caret replies include `ox`/`oy`
+for viewport popup anchoring. NSH's page scale is included when projecting text
+content coordinates into this space.

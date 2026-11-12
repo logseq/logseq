@@ -423,7 +423,7 @@ let frag_binds ~nsh cls =
 let frag_view ~on_input ~start_off_of (frag_s : frag Signal.signal) : t =
  fun context parent ->
   let nsh = Lui_ui.host context = NshHost in
-  (match (Signal.sample frag_s).kind with
+  let fragment = match (Signal.sample frag_s).kind with
   | Frag_pad ->
       text ~value:(reactive (fun f -> f.text) frag_s)
         ~style_class:"ed-r ed-pad" []
@@ -492,8 +492,20 @@ let frag_view ~on_input ~start_off_of (frag_s : frag Signal.signal) : t =
                 on_input
                   (Edit_input.Pointer
                      (start_off_of (Signal.sample frag_s).idx + 1, false)))
-              [])))
-    context parent
+              [])) in
+  let fragment =
+    if not nsh then fragment
+    else
+      let identifier f = "ls-editor-run-" ^ string_of_int f.idx in
+      match (Signal.sample frag_s).kind with
+      | Frag_pill when List.mem "ed-block-ref" (String.split_on_char ' ' (Signal.sample frag_s).cls) ->
+          (* An atomic row is a text attachment. Its containing span carries
+             the source-run identity into NSH's committed attributed layout. *)
+          text ~accessibility_identifier:(reactive identifier frag_s) [fragment]
+      | _ -> Ui_parts.string_prop AccessibilityIdentifier
+          ~value:(reactive identifier frag_s) fragment
+  in
+  fragment context parent
 
 let same_rendered_frags before after =
   let rec equal a b =
