@@ -42,6 +42,11 @@ signals through that discarded handle; existing worker health/shutdown owns
 its later lifecycle. POSIX pid behavior and the seven-argument Logseq startup
 ABI are unchanged. Actual Windows runtime qualification remains required.
 
+Graph creation also reuses the native application's existing UUID generator
+for lifecycle generations instead of opening the POSIX-only `/dev/urandom`
+path. Generation values retain their UUID-v4 identity format; they are not
+authentication secrets, and no consumer migration is required.
+
 ## NSH update-compatible package identity and layout
 
 Actual Logseq packages now write canonical `nsh/app.json` metadata before

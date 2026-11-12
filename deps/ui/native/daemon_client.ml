@@ -155,22 +155,9 @@ let lifecycle_dir () =
     (Filename.concat (Filename.dirname graphs) ".graph-lifecycle")
     store_id
 
-let new_uuid () =
-  let ic = open_in_bin "/dev/urandom" in
-  let b = really_input_string ic 16 in
-  close_in ic;
-  let b = Bytes.of_string b in
-  Bytes.set b 6 (Char.chr ((Char.code (Bytes.get b 6) land 0x0f) lor 0x40));
-  Bytes.set b 8 (Char.chr ((Char.code (Bytes.get b 8) land 0x3f) lor 0x80));
-  let hex =
-    let buf = Buffer.create 32 in
-    Bytes.iter
-      (fun c -> Buffer.add_string buf (Printf.sprintf "%02x" (Char.code c)))
-      b;
-    Buffer.contents buf
-  in
-  String.sub hex 0 8 ^ "-" ^ String.sub hex 8 4 ^ "-" ^ String.sub hex 12 4
-  ^ "-" ^ String.sub hex 16 4 ^ "-" ^ String.sub hex 20 12
+(* Graph generations are unique identities, not authentication secrets. Reuse
+   the native application's UUID generator on every desktop platform. *)
+let new_uuid = Host.random_uuid
 
 let jobj (kvs : (string * Js.Json.t) list) : Js.Json.t =
   Js.Json.JObject kvs
