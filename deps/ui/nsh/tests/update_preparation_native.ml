@@ -2097,6 +2097,25 @@ let native_scalar_draft_area_refresh () =
   Logseq_el.register_all registry;Logseq_codemirror.register registry;Logseq_editor.register registry;
   let backend : Lui_protocol.backend={backend_profile=Lui_protocol.profile Lui_protocol.MacOS Lui_protocol.NshHost;
     apply_batch=(fun _ -> true)} in
+  (* create evaluates the real area view and queues its first read. Install
+     its ownership and worker first; never clear that newly registered area. *)
+  Hashtbl.remove Properties_state.areas key;
+  Properties_data.rd_pending:=[];Properties_data.rd_scheduled:=false;
+  Editor_state.st:=None;Properties_value.active_editor:=None;
+  Properties_state.overlays:=[];Properties_state.view_overlays_state:=None;
+  Runtime.read_model:=(fun () -> !model);
+  Runtime.worker:=Some {Worker_client.invoke_fn=(fun method_ args ->
+    if method_="thread-api/get-blocks" then (
+      incr reads;
+      check "actual property area read carries the current captured repo"
+        (List.hd args=Wire.String (Runtime.repo ()));
+      Js.Promise.resolve (response ()))
+    else (
+      if method_="thread-api/apply-outliner-ops" then incr writes;
+      Js.Promise.resolve Wire.Nil));
+    on_message=(fun _ _ -> ());dead=Js.Promise.liveness ();
+    capture_restore_fn=(fun () -> fun () -> Js.Promise.resolve ())};
+  Properties_value.set_pending_edit ~block_uuid:uuid ~ident:"fixture/dirty-string";
   let app=Lui_app.create_with_extensions backend registry !model
     (fun state (_ : Action.t) -> state)
     (fun _ _ _ -> Properties_area.block_area ~scope:"draft" ~uuid) in
@@ -2109,79 +2128,82 @@ let native_scalar_draft_area_refresh () =
     Properties_data.rd_pending:=previous_rd;Properties_data.rd_scheduled:=previous_rd_scheduled;
     match previous_area with Some area -> Hashtbl.replace Properties_state.areas key area
       | None -> Hashtbl.remove Properties_state.areas key) (fun () ->
-    Hashtbl.remove Properties_state.areas key;
-    Properties_data.rd_pending:=[];Properties_data.rd_scheduled:=false;
-    Editor_state.st:=None;Properties_value.active_editor:=None;
-    Properties_state.overlays:=[];Properties_state.view_overlays_state:=None;
-    Runtime.read_model:=(fun () -> !model);
-    Runtime.worker:=Some {Worker_client.invoke_fn=(fun method_ args ->
-      if method_="thread-api/get-blocks" then (
-        incr reads;
-        check "actual property area read carries the current captured repo"
-          (List.hd args=Wire.String (Runtime.repo ()));
-        Js.Promise.resolve (response ()))
-      else (
-        if method_="thread-api/apply-outliner-ops" then incr writes;
-        Js.Promise.resolve Wire.Nil));
-      on_message=(fun _ _ -> ());dead=Js.Promise.liveness ();
-      capture_restore_fn=(fun () -> fun () -> Js.Promise.resolve ())};
     Native_embed.current_app:=Some app;
     Runtime.app_flush:=(fun () -> ignore (Lui_app.flush app));
-    Properties_value.set_pending_edit ~block_uuid:uuid ~ident:"fixture/dirty-string";
-    ignore (Lui_app.start app);
-    let settle ()=
-      Properties_data.flush_render_data ();Host.drain ();ignore (Lui_app.flush app);
-      Properties_data.flush_render_data ();Host.drain ();ignore (Lui_app.flush app) in
-    settle ();
+    check "native property refresh fixture starts" (Lui_app.start app);
     let runtime=Lui_app.runtime app in
+    let snapshot phase =
+      let rows=match Hashtbl.find_opt Properties_state.areas key with
+        | Some area -> (Runtime.signal_get area.Properties_state.a_state).Properties_state.rows
+        | None -> [] in
+      let mounted=Hashtbl.fold (fun node kind found ->
+        (string_of_int node ^ ":" ^ Lui_wire_schema.node_kind_name kind)::found)
+        runtime.Lui_runtime.mounted_nodes [] |> List.sort String.compare |> List.take 64 in
+      let active=match !Properties_value.active_editor with
+        | None -> "none"
+        | Some edit -> let surface,block,ident=edit.Properties_value.edit_owner in
+            String.concat ":" [edit.edit_repo;surface;block;ident] in
+      Printf.sprintf "scalar refresh phase=%s repo=%s reads=%d writes=%d pending-reads=%d scheduled=%b rows=[%s] active=%s pending-edit=%b mounted=[%s]"
+        phase (Runtime.repo ()) !reads !writes (List.length !Properties_data.rd_pending)
+        !Properties_data.rd_scheduled
+        (String.concat "," (List.filter_map Properties_data.row_ident rows)) active
+        (Option.is_some !Properties_value.pending_edit) (String.concat "," mounted) in
+    let require phase = function Some value -> value | None -> failwith (snapshot phase) in
+    let settle ()=
+      Properties_data.flush_render_data ();Host.drain ();
+      check (snapshot "first publication") (Lui_app.flush app);
+      Properties_data.flush_render_data ();Host.drain ();
+      check (snapshot "second publication") (Lui_app.flush app) in
+    settle ();
+    check (snapshot "initial get-blocks read") (!reads>0);
     let field ()=Hashtbl.fold (fun node kind found ->
       if kind=Lui_protocol.TextField then Some node else found)
       runtime.Lui_runtime.mounted_nodes None in
     let text node=Lui_protocol.Property_map.find_opt Lui_protocol.TextValue
       (Hashtbl.find runtime.Lui_runtime.runtime_properties node) in
-    let input=Option.get (field ()) in
+    let input=require "initial scalar field after real area read" (field ()) in
     ignore (Native_embed.text_changed input "unsaved draft");
-    let owner=Option.get !Properties_value.active_editor in
+    let owner=require "active owner after initial native text" !Properties_value.active_editor in
     let old_close= !Properties_value.close_editor in
     sibling:=true;
     let before= !reads in
     context.refresh ();settle ();
     check "the real ctx.refresh refetches and republishes its native property area" (!reads>before);
-    let refreshed=Option.get (field ()) in
+    let refreshed=require "field after sibling ctx.refresh" (field ()) in
     check "sibling worker refresh preserves the actual controlled draft and field identity"
       (refreshed=input && text refreshed=Some (Lui_protocol.StringValue "unsaved draft")
-       && Option.get !Properties_value.active_editor == owner && !writes=0);
+       && require "owner after sibling ctx.refresh" !Properties_value.active_editor == owner && !writes=0);
     old_close ();settle ();
     check "retired view close cannot commit or clear the adopted draft"
       (field ()=Some refreshed && Properties_value.edit_buffer context (row "fixture/dirty-string" "string" "Dirty string" (Wire.String !stored))="unsaved draft" && !writes=0);
     ignore (Native_embed.dismiss refreshed);settle ();
     check "cancel after area refresh discards the draft without mutating stored data"
       (field ()=None && !stored="original" && !writes=0);
-    let open_value ()=
+    let open_value phase=
       let button=Hashtbl.fold (fun node props found ->
         if Lui_protocol.Property_map.find_opt Lui_protocol.StyleClass props=Some (Lui_protocol.StringValue "pv-scalar")
-        then Some node else found) runtime.Lui_runtime.runtime_properties None |> Option.get in
-      ignore (Native_embed.press button);settle ();Option.get (field ()) in
-    let reopened=open_value () in
+        then Some node else found) runtime.Lui_runtime.runtime_properties None |> require (phase ^ ": value button") in
+      ignore (Native_embed.press button);settle ();require (phase ^ ": opened field") (field ()) in
+    let reopened=open_value "reopen after cancellation" in
     check "reopening reads the actual stored source after cancellation"
       (text reopened=Some (Lui_protocol.StringValue "original"));
     ignore (Native_embed.text_changed reopened "older dirty source");
     let replaced_close= !Properties_value.close_editor in
-    let source_owner=Option.get !Properties_value.active_editor in
+    let source_owner=require "source owner before authoritative replacement" !Properties_value.active_editor in
     stored:="external source";context.refresh ();settle ();
-    let replaced=Option.get (field ()) in
+    let replaced=require "field after authoritative source refresh" (field ()) in
     check "authoritative source replacement resets the draft while preserving the focused field owner"
       (replaced=reopened && text replaced=Some (Lui_protocol.StringValue "external source")
-       && Option.get !Properties_value.active_editor != source_owner && !writes=0);
+       && require "owner after authoritative source refresh" !Properties_value.active_editor != source_owner && !writes=0);
     replaced_close ();settle ();
     check "old source close cannot overwrite a newer authoritative value"
       (field ()=Some replaced && !stored="external source" && !writes=0);
     model:={!model with Model.repo=Some "draft-destination"};
     context.refresh ();settle ();
     check "the same UUID in another repo does not adopt the origin draft" (field ()=None && !writes=0);
-    let destination=open_value () in
+    let destination=open_value "new destination repo edit" in
     check "a fresh destination edit belongs only to the destination repo"
-      ((Option.get !Properties_value.active_editor).Properties_value.edit_repo="draft-destination"
+      ((require "destination active owner" !Properties_value.active_editor).Properties_value.edit_repo="draft-destination"
        && text destination=Some (Lui_protocol.StringValue "external source"));
     replaced_close ();settle ();
     check "origin close cannot save into or clear the destination owner"
