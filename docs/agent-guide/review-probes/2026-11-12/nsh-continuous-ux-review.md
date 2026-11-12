@@ -120,7 +120,7 @@ The required actual-application startup matrix now includes an independent
 tabs, verifies a positive finite native body height and bounded mounted cells,
 scrolls the real native Scroll to the complete source's final row, returns to
 the first row, reaches the final row again, activates the last item, and waits
-for the Journal icon to be persisted and the native picker to retire. It does not manually
+for the Journal icon button to appear and the native picker to retire. It does not manually
 supply `VirtualWindow` events, truncate generated datasets, or replace the picker
 with a test-only view. The earlier recording-host row tests remain useful for
 source semantics but do not prove native viewport ownership. The initial release
@@ -128,11 +128,25 @@ run exposed independent queue saturation during the complete Emoji Scroll.
 After coalescing visible-range feedback, the full release publisher passed its
 actual application matrix at application `aa5a29d4b8` and LUI `eee8d3fa`. This
 includes both complete tabs, end/first/end native-controller scrolling, bounded
-cells, persisted final choices and native picker retirement. The Emoji case
+cells, choice-triggered closure and native picker retirement. That earlier gate
+checked only the presence of a Journal icon button; it did not establish the
+identity of the persisted choice, particularly on the second tab when a button
+already existed. The Emoji case
 measured a 328pt viewport and 133–135 mounted cells. Reopening after choosing an
 emoji also exposed mixed point/element popover placement; the passing candidate
 uses mutually exclusive placement branches. This is native-engine evidence,
 not hardware wheel-input or raster-performance qualification.
+
+The strengthened source regression captures the exact last mounted source cell's
+production identity before activation: the emoji id carried by its native emoji
+node, or the icon id carried by its tooltip and the canonical icon reference.
+It waits for that exact glyph/reference to render in the Journal icon button,
+then reads the private daemon's production `get-latest-journals` response and
+checks the persisted icon kind and id. The read client verifies the daemon's
+storage root and repository before querying; it performs no graph writes.
+This stronger assertion requires a fresh actual-application qualification before
+an exact-choice persistence result is claimed. The end/first/end bounds and
+native retirement checks remain in place.
 
 ### Release native-window measurements
 

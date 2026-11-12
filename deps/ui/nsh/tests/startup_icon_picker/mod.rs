@@ -60,6 +60,67 @@ fn cells<'a>(root: &'a Value, tab: &str) -> Vec<&'a Value> {
         .collect()
 }
 
+#[derive(Debug)]
+enum Choice {
+    Emoji(String),
+    Icon { id: String, name: String },
+}
+impl Choice {
+    fn from_cell(cell: &Value, tab: &str) -> Result<Self, String> {
+        if tab == "Emojis" {
+            Self::emoji_id(cell)
+                .map(Self::Emoji)
+                .ok_or("final Emoji cell has no production emoji identity".into())
+        } else {
+            let id = cell
+                .pointer("/props/tooltip")
+                .and_then(Value::as_str)
+                .ok_or("final Icon cell has no production icon id")?;
+            let name =
+                Self::icon_name(cell).ok_or("final Icon cell has no production icon reference")?;
+            Ok(Self::Icon {
+                id: id.into(),
+                name,
+            })
+        }
+    }
+    fn emoji_id(root: &Value) -> Option<String> {
+        let emoji = nodes(root).into_iter().find(|node| {
+            node.get("kind").and_then(Value::as_str) == Some("extension:logseq-em-emoji")
+        })?;
+        let attrs: Value = serde_json::from_str(emoji.pointer("/props/attrs")?.as_str()?).ok()?;
+        attrs.get("id")?.as_str().map(str::to_owned)
+    }
+    fn icon_name(root: &Value) -> Option<String> {
+        nodes(root)
+            .into_iter()
+            .find(|node| node.get("kind").and_then(Value::as_str) == Some("icon"))?
+            .pointer("/props/name")?
+            .as_str()
+            .map(str::to_owned)
+    }
+    fn kind(&self) -> &str {
+        match self {
+            Self::Emoji(_) => "emoji",
+            Self::Icon { .. } => "tabler-icon",
+        }
+    }
+    fn id(&self) -> &str {
+        match self {
+            Self::Emoji(id) | Self::Icon { id, .. } => id,
+        }
+    }
+    fn rendered_by(&self, button: &Value) -> bool {
+        match self {
+            Self::Emoji(id) => Self::emoji_id(button).as_deref() == Some(id.as_str()),
+            Self::Icon { name, .. } => {
+                Self::icon_name(button).as_deref() == Some(name.as_str())
+                    && Self::emoji_id(button).is_none()
+            }
+        }
+    }
+}
+
 fn bounded(app: &Headless, tree: &Value, tab: &str) -> Result<(), String> {
     let body = picker(tree)?;
     let cells = cells(body, tab).len();
@@ -263,6 +324,7 @@ pub(super) fn qualify(app: &mut Headless) -> Result<(), String> {
             .last()
             .copied()
             .ok_or("final picker row has no item")?;
+        let expected = Choice::from_cell(last, tab)?;
         let last = selector(last)?;
         app.press(&last)?;
         let failure = RefCell::new(None);
@@ -300,7 +362,7 @@ pub(super) fn qualify(app: &mut Headless) -> Result<(), String> {
             |_| match agent.tree() {
                 Ok(tree) => nodes(&tree)
                     .into_iter()
-                    .any(|node| class(node, "ls-page-icon-btn")),
+                    .any(|node| class(node, "ls-page-icon-btn") && expected.rendered_by(node)),
                 Err(error) => {
                     *failure.borrow_mut() = Some(error);
                     true
@@ -310,8 +372,16 @@ pub(super) fn qualify(app: &mut Headless) -> Result<(), String> {
         if let Some(error) = failure.into_inner() {
             return Err(error);
         }
+        let persisted = super::startup_rows::persisted_journal_icon()?;
+        if persisted.get("kind").and_then(Value::as_str) != Some(expected.kind())
+            || persisted.get("id").and_then(Value::as_str) != Some(expected.id())
+        {
+            return Err(format!(
+                "{tab} final source cell {expected:?} persisted as {persisted}"
+            ));
+        }
         eprintln!(
-            "PASS actual complete {tab} picker: {count} rows, finite native Scroll, bounded round-trip cells, final item persisted, native picker retired"
+            "PASS actual complete {tab} picker: {count} rows, finite native Scroll, bounded round-trip cells, exact final item {expected:?} persisted, native picker retired"
         );
     }
     Ok(())

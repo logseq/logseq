@@ -139,6 +139,12 @@ fn owned_worker(root: &Path, count: usize) -> Result<Worker, String> {
     }
     Ok(owned.remove(0))
 }
+/// Read the real private Journal after the production picker write/reload.
+pub(super) fn persisted_journal_icon() -> Result<Value, String> {
+    let root = std::env::var_os("LOGSEQ_ROOT_DIR").ok_or("private graph root missing")?;
+    owned_worker(Path::new(&root), 0)?.call("journal-icon", None)
+}
+
 pub(super) struct Agent(SocketAddr);
 impl Agent {
     pub(super) fn discover() -> Result<Self, String> {

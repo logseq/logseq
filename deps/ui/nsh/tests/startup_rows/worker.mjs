@@ -6,7 +6,7 @@ import transit from "transit-js";
 
 const spec = JSON.parse(process.argv[2]);
 assert.ok(Number.isInteger(spec.port) && spec.port > 0 && spec.port < 65536);
-assert.ok([1000, 100000].includes(spec.count));
+assert.ok(spec.action === "journal-icon" || [1000, 100000].includes(spec.count));
 assert.ok(typeof spec.repo === "string" && spec.repo.length > 0);
 // Recheck ownership for every helper invocation, including edit/clear. Never
 // treat a reused loopback port or a graph title as evidence of private storage.
@@ -59,6 +59,18 @@ async function countChildren(page) {
 const started = performance.now();
 let result;
 switch (spec.action) {
+  case "journal-icon": {
+    const pages = await invoke("thread-api/get-latest-journals", [spec.repo, 1, 0]);
+    assert.ok(Array.isArray(pages) && pages.length === 1, "actual startup has one current Journal");
+    const icon = get(pages[0], "icon");
+    assert.ok(transit.isMap(icon), "persisted Journal icon is a map");
+    const kind = get(icon, "type");
+    const id = get(icon, "id");
+    assert.ok(transit.isKeyword(kind), "persisted icon kind is a keyword");
+    assert.ok(typeof id === "string" && id.length > 0, "persisted icon id is nonempty");
+    result = {kind: kind.name(), id};
+    break;
+  }
   case "prepare": {
     const pages = await invoke("thread-api/get-latest-journals", [spec.repo, 1, 0]);
     assert.ok(Array.isArray(pages) && pages.length === 1, "actual startup created today's journal");
