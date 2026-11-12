@@ -775,9 +775,31 @@ mod tests {
             ],
             "flattened command prefixes must not steal, duplicate or reorder native text"
         );
-        // Named keystrokes use US-layout keys. Exercise Unicode through the
-        // public composition driver, separately from the contiguous key burst.
+        // compose stages marked text only; it does not commit Unicode. Keep
+        // this separate from the uninterrupted keyboard-prefix regression.
+        observed.0.lock().unwrap().clear();
         app.compose("id:native-catalog-editor", "你中文").unwrap();
+        assert_eq!(
+            app.screen().input_text("id:native-catalog-editor").unwrap(),
+            Some("draftnp")
+        );
+        app.press_key("meta+k").unwrap();
+        assert!(
+            observed.0.lock().unwrap().is_empty(),
+            "marked text neither commits source nor runs global commands"
+        );
+        app.compose("id:native-catalog-editor", "").unwrap();
+        assert_eq!(
+            app.screen().input_text("id:native-catalog-editor").unwrap(),
+            Some("draftnp")
+        );
+        assert!(
+            observed.0.lock().unwrap().is_empty(),
+            "composition cancellation does not commit text"
+        );
+        // type_text ends composition and supplies actual native text edits;
+        // this qualifies Unicode Input behavior, not a physical IME session.
+        app.type_text("id:native-catalog-editor", "你中文").unwrap();
         assert_eq!(
             app.screen().input_text("id:native-catalog-editor").unwrap(),
             Some("draftnp你中文")
