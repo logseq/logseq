@@ -1345,6 +1345,7 @@ let calendar_nav_button ~id ~label ~icon ~autofocus ~on_press =
        ~corner_radius:6 ~accessibility_identifier:id ~label ~icon ~autofocus ~on_press [])
 
 let calendar ?initial ?(datetime=false) ?(initial_focus_day=false) ?on_clear
+    ?(is_current=(fun () -> true))
     ~week_starts_on ~month_label ~day_label ~translate ~on_pick () : t =
  fun context parent ->
   let initial = Dates.fields (Option.value initial ~default:(Dates.date_now ())) in
@@ -1358,7 +1359,26 @@ let calendar ?initial ?(datetime=false) ?(initial_focus_day=false) ?on_clear
       (Printf.sprintf "%02d:%02d" initial.hours initial.minutes) in
   let buffer = Signal.state context.Lui_ui.ui_scheduler "" in
   let committed = ref None in
+  let parse_request = Ui_effect.request () in
+  let pending_parse = ref None in
+  let cancel_parse () =
+    ignore (Ui_effect.issue parse_request);
+    Option.iter Ui_task.cancel !pending_parse;
+    pending_parse := None in
+  Signal.on_dispose context.Lui_ui.ui_scope cancel_parse;
+  let notify ~kind ~key value =
+    let template = translate key in
+    let message = Buffer.create (String.length template + String.length value) in
+    let rec append index =
+      if index < String.length template then
+        if index + 3 <= String.length template && String.sub template index 3 = "{1}" then
+          (Buffer.add_string message value;append (index + 3))
+        else (Buffer.add_char message template.[index];append (index + 1)) in
+    append 0;
+    Ui_services.dom_dispatch_json "ls:toast"
+      (Json.Object ["msg",Json.String (Buffer.contents message);"cls",Json.String kind]) in
   let set_month y m =
+    cancel_parse ();
     let _, _, d = Signal.get_state date in
     Signal.set day_focused false;
     Signal.set date (y, m, min d (Dates.days_in_month ~y ~m))
@@ -1378,6 +1398,7 @@ let calendar ?initial ?(datetime=false) ?(initial_focus_day=false) ?on_clear
     else None
   in
   let commit value =
+    cancel_parse ();
     let fields=Dates.fields value in
     Signal.set date (fields.year,fields.month,fields.day);
     if datetime then Signal.set time (Printf.sprintf "%02d:%02d" fields.hours fields.minutes);
@@ -1393,6 +1414,7 @@ let calendar ?initial ?(datetime=false) ?(initial_focus_day=false) ?on_clear
   in
   let commit_time () = let y,m,d=Signal.get_state date in pick y m d in
   let submit () =
+    cancel_parse ();
     let value = String.trim (Signal.get_state buffer) in
     let parsed =
       match String.split_on_char '-' value with
@@ -1418,16 +1440,37 @@ let calendar ?initial ?(datetime=false) ?(initial_focus_day=false) ?on_clear
         if datetime then commit value
         else let f=Dates.fields value in publish f.year f.month f.day 0 0
     | None when value <> "" ->
-        let template = translate "date/invalid-date-warning" in
-        let message = Buffer.create (String.length template + String.length value) in
-        let rec append index =
-          if index < String.length template then
-            if index + 3 <= String.length template && String.sub template index 3 = "{1}" then
-              (Buffer.add_string message value;append (index + 3))
-            else (Buffer.add_char message template.[index];append (index + 1)) in
-        append 0;
-        Ui_services.dom_dispatch_json "ls:toast"
-          (Json.Object ["msg",Json.String (Buffer.contents message);"cls",Json.String "warning"])
+        let warn () = notify ~kind:"warning" ~key:"date/invalid-date-warning" value in
+        (* A malformed ISO calendar date must not be normalized by a permissive
+           natural-language provider after the strict local-date check failed. *)
+        if String.length value=10 && value.[4]='-' && value.[7]='-' then warn ()
+        else begin
+          let ticket = Ui_effect.issue parse_request in
+          let current () = Ui_effect.alive context.Lui_ui.ui_scope && is_current ()
+            && Ui_effect.is_current parse_request ticket in
+          let failed error =
+            if current () && error <> Ui_task.Cancelled then begin
+              pending_parse:=None;
+              Ui_services.log_error_message ("Natural date parsing: " ^ Printexc.to_string error);
+              notify ~kind:"error" ~key:"date/parse-service-error" ""
+            end in
+          try
+            let task = Dates.parse_natural ~reference:(Float.floor (Dates.date_now ())) value in
+            pending_parse:=Some task;
+            ignore (Ui_task.catch
+              (Ui_task.bind task (fun parsed ->
+                if Ui_effect.is_current parse_request ticket then pending_parse:=None;
+                if current () then begin
+                  match parsed with
+                  | None -> warn ()
+                  | Some date ->
+                      if datetime then commit date
+                      else let f=Dates.fields date in publish f.year f.month f.day 0 0
+                end;
+                Ui_task.resolve ()))
+              (fun error -> failed error;Ui_task.resolve ()))
+          with error -> failed error
+        end
     | None -> ()
   in
   (with_props
@@ -1439,7 +1482,7 @@ let calendar ?initial ?(datetime=false) ?(initial_focus_day=false) ?on_clear
               calendar_header
                 ~clear:(Option.map (fun clear -> calendar_nav_button
                     ~id:"calendar-clear" ~autofocus:false ~label:(translate "ui/delete")
-                    ~icon:(`app "trash") ~on_press:(fun _ -> clear ())) on_clear)
+                    ~icon:(`app "trash") ~on_press:(fun _ -> cancel_parse ();clear ())) on_clear)
                 ~previous:(calendar_nav_button ~id:"calendar-prev" ~autofocus:(not initial_focus_day)
                     ~label:(translate "editor.date-picker/previous-month")
                     ~icon:(`app "chevron-left") ~on_press:(fun _ -> move (-1)))
@@ -1459,6 +1502,7 @@ let calendar ?initial ?(datetime=false) ?(initial_focus_day=false) ?on_clear
                                (calendar_month_names translate).(m - 1))
                              (Signal.value date))
                         ~on_press:(fun _ ->
+                          cancel_parse ();
                           Signal.set month_open
                             (not (Signal.get_state month_open)))
                         [];
@@ -1509,7 +1553,7 @@ let calendar ?initial ?(datetime=false) ?(initial_focus_day=false) ?on_clear
                    ~label:(translate "ui.calendar/time-label") ~height:32 ~width:112
                    ~padding_horizontal:12 ~padding_vertical:0 ~submit_on_blur:true
                    ~text:(reactive Fun.id (Signal.value time))
-                   ~on_input:(function P.TextChanged (_,value) -> Signal.set time value | _ -> ())
+                   ~on_input:(function P.TextChanged (_,value) -> cancel_parse ();Signal.set time value | _ -> ())
                    ~on_submit:(fun _ -> commit_time ()) [];
                  button ~variant:`ghost ~size:`sm ~grow:1. ~height:32 ~padding:0
                    ~foreground:"hsl(var(--muted-foreground))"
@@ -1524,7 +1568,7 @@ let calendar ?initial ?(datetime=false) ?(initial_focus_day=false) ?on_clear
                 ~margin_bottom:12
                 ~placeholder:(translate "ui/date-natural-language-placeholder")
                 ~on_input:(function
-                  | P.TextChanged (_, value) -> Signal.set buffer value
+                  | P.TextChanged (_, value) -> cancel_parse ();Signal.set buffer value
                   | _ -> ())
                 ~on_submit:(fun _ -> submit ())
                 [];

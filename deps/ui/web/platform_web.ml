@@ -123,6 +123,20 @@ let date_parse s =
   let ms = Js.Date.getTime (Js.Date.fromString s) in
   if Float.is_nan ms then None else Some ms
 
+external chrono_parse_date : string -> Js.Date.t -> Js.Date.t Js.Nullable.t
+  = "parseDate" [@@mel.module "chrono-node"]
+
+let date_parse_natural ~reference text =
+  Ui_task.create (fun ~resolve ~reject ->
+    try
+      let result = Js.Nullable.toOption
+        (chrono_parse_date text (Js.Date.fromFloat reference)) in
+      let parsed = Option.bind result (fun date ->
+        let value = Js.Date.getTime date in
+        if Float.is_finite value then Some value else None) in
+      resolve parsed
+    with error -> reject error)
+
 (* window.__tablerChildren — resources/js/icon-data.js keeps the icon
    children table out of main.js; the closures read the live global so
    test fixtures that set it after install still resolve *)
@@ -202,6 +216,7 @@ let install ~request_flush ~dom ~timers ~files =
         ; local_fields
         ; of_fields
         ; parse = date_parse
+        ; parse_natural = date_parse_natural
         ; fmt_date = Platform.fmt_time
         }
     ; log = { error = Platform.console_error; info = Platform.console_log

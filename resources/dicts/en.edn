@@ -461,6 +461,7 @@
  :context-menu/toggle-number-list "Toggle number list"
 
  :date/invalid-date-warning "{1} is not a valid date. Please try again"
+ :date/parse-service-error "Date parsing failed. Please try again."
 
  :date.nlp/last-friday "Last Friday"
  :date.nlp/last-monday "Last Monday"

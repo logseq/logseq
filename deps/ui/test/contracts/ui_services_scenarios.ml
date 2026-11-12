@@ -498,6 +498,12 @@ let run () =
   (* time fmt_date *)
   check "fmt_date short form"
     (Ui_services.time_fmt_date 0. = "Jan 1, 1970");
+  List.iter (fun reference ->
+    check "natural date references reject invalid epoch values before invoking a host task"
+      (invalid (fun () -> ignore (Ui_services.time_parse_natural ~reference "Next week"))))
+    [nan;infinity;0.5;8640000000000001.];
+  check "natural date input rejects oversized values before invoking a host task"
+    (invalid (fun () -> ignore (Ui_services.time_parse_natural ~reference:0. (String.make 1025 'x'))));
 
   (* dom: typed event delivery + element/document ops *)
   let got : Ui_services.ev option ref = ref None in

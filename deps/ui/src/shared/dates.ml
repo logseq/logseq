@@ -84,6 +84,18 @@ let parse s =
      && (s.[10]='T' || s.[10]=' ') then parse_local_datetime s
   else Ui_services.time_parse s
 
+(* Keep strict calendar dates and the existing ISO/journal parsing path local;
+   only unresolved free text needs the asynchronous host parser. *)
+let parse_natural ~reference value =
+  let value = String.trim value in
+  let length = String.length value in
+  if value = "" then Ui_task.resolve None
+  else if length = 10 && value.[4] = '-' && value.[7] = '-' then
+    Ui_task.resolve (parse_local_datetime value)
+  else match parse value with
+    | Some value -> Ui_task.resolve (Some value)
+    | None -> Ui_services.time_parse_natural ~reference value
+
 let weekday_offset ~week_starts_on weekday =
   if week_starts_on<0 || week_starts_on>6 || weekday<0 || weekday>6 then
     invalid_arg "Calendar weekdays must be between zero and six";

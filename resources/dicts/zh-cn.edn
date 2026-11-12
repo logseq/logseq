@@ -461,6 +461,7 @@
  :context-menu/toggle-number-list "切换编号列表"
 
  :date/invalid-date-warning "{1} 不是有效日期。请重试"
+ :date/parse-service-error "日期解析失败。请重试。"
 
  :date.nlp/last-friday "上周五"
  :date.nlp/last-monday "上周一"

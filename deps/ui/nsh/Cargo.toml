@@ -16,6 +16,8 @@ base64 = "0.22.1"
 url = "2"
 env_logger = "0.11"
 arboard = { version = "=3.6.1", default-features = false }
+chrono = { version = "=0.4.45", default-features = false, features = ["clock", "std"] }
+interim = { version = "=0.2.2", default-features = false, features = ["chrono_0_4"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 keyring = { version = "=3.6.3", default-features = false, features = ["sync-secret-service", "crypto-rust"] }

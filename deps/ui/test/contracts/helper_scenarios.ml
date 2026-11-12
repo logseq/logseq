@@ -67,6 +67,7 @@ let fake_time : Ui_services.time =
               -> Some (float_of_int (days_from_civil y m d) *. 86400000.)
             | _ -> None)
         | _ -> None)
+  ; parse_natural = (fun ~reference:_ _ -> Ui_task.resolve None)
   ; fmt_date =
       (fun ms ->
         let f = local_fields ms in

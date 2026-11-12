@@ -79,6 +79,7 @@ type time = {
   local_fields : float -> date_fields;
   of_fields : date_fields -> float;
   parse : string -> float option;
+  parse_natural : reference:float -> string -> float option Ui_task.t;
   fmt_date : float -> string;
 }
 
@@ -379,6 +380,9 @@ val time_now : unit -> float
 val time_local_fields : float -> date_fields
 val time_of_fields : date_fields -> float
 val time_parse : string -> float option
+val time_parse_natural : reference:float -> string -> float option Ui_task.t
+(** Parse bounded English free text relative to finite integer epoch
+    milliseconds. None means no match; transport/capability failures reject. *)
 val time_fmt_date : float -> string
 
 val log_error : 'a -> unit

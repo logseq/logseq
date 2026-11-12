@@ -2553,3 +2553,77 @@ Valid dates keep the existing selection behavior on every maintained backend.
 No application API, translation key or worker contract changes. This feedback
 does not add natural-language parsing: native inputs such as `Next week` still
 need the separate parser integration and compatibility qualification.
+
+## Asynchronous English date parsing for desktop calendars
+
+`Ui_services.time` now requires
+`parse_natural : reference:float -> string -> float option Ui_task.t`.
+Custom service factories must supply this field; the ordinary synchronous
+`parse` field and `Ui_services.time_parse` retain their existing ISO, RFC and
+journal-title behavior. Call the public `Ui_services.time_parse_natural` wrapper
+with a finite, integral epoch-millisecond reference and at most 1024 input
+string units. Invalid references and oversized input fail before host dispatch.
+`None` means the text did not match; rejected tasks represent capability or
+service failures, not invalid user dates.
+
+```ocaml
+(* Every custom time service must implement this typed field. *)
+{ now; local_fields; of_fields; parse; fmt_date;
+  parse_natural = (fun ~reference text -> parse_english ~reference text) }
+
+(* The existing Ui_task owner cancels or discards stale results. *)
+Ui_services.time_parse_natural
+  ~reference:(Float.floor (Ui_services.time_now ())) "Next week"
+```
+
+Web uses the application's existing `chrono-node` 2.10.1 package. NSH uses pure
+Rust `interim = 0.2.2`, with only `chrono_0_4`, and the already resolved
+`chrono = 0.4.45` with local-clock support. No JavaScript engine is introduced
+into the shipping native application. The published interim archive inspected
+for this implementation has SHA-256
+`4711cb91b46a8f9d5b8dc20531c49c968fa7806e8016ddc8f9ef9b09e065bc1e`.
+Its public `parse_date_string` accepts an explicit reference and dialect; this
+application chooses US English, matching the default English parser used by
+the reference application. Native non-NSH hosts reject natural-language parsing
+before emitting a host operation; structured-date fast paths remain usable.
+Their existing platform UI backends and mobile tools remain maintained.
+
+The application host operation is `natural-date-parse`:
+
+```json
+{"request-id":"7","input":"Next week","reference-ms":1794528000000}
+```
+
+Its `natural-date-result` event echoes that positive decimal request identity
+with exactly one result shape: `status="parsed"` and integer `epoch-ms`,
+`status="no-match"`, or `status="error"` and nonempty `error`. The Rust boundary
+rejects unknown request fields and enforces a 1024-byte UTF-8 input limit.
+The native reference must fall within calendar years 1000–9999; an unsupported
+reference returns a service error before local-timezone conversion.
+Completions reuse the existing cancellable clipboard-write request owner,
+with operation checks preventing one service from settling another's task.
+Disposal cancels outstanding host tasks; late cancelled replies are ignored.
+
+Calendars preserve strict local ISO-date validation and existing structured
+fast paths. Only unresolved nonempty free text starts a task. The shared
+calendar's optional `is_current` callback captures its application's existing
+owner guard; property pickers capture their graph and mounted scope, table
+filters use `Views_state.current_view`, and query builders retain their active
+session guard. New input, a date/month/time choice, clear or disposal cancels
+the current request. A reply must match its request ticket, live scope and
+current application owner before choosing a date or showing a message. Editor
+date popups similarly capture their exact active popup and graph/route revision.
+No-match uses `date/invalid-date-warning`; a failed service uses the distinct
+`date/parse-service-error` error notification. Empty submission and cancellation
+remain silent.
+
+This is a bounded English parser, not complete `chrono-node` compatibility.
+Weekday dialect, inferred times and whole-input matching can differ. The
+published 0.2.2 Chrono adapter resolves offsets at the target local date, rejects
+nonexistent local times and chooses the earlier instant for an ambiguous local
+time unless an explicit offset selects otherwise. Its published DST regression
+source was inspected; this change does not claim an executed OS-timezone or
+AppKit qualification. Shared factory/notification checks, Rust parser/protocol
+tests and native OCaml request/calendar ownership regressions accompany the
+source. The release build, lockfile resolution and actual native interaction
+remain separate qualification steps.

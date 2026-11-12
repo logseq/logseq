@@ -145,6 +145,10 @@ type popup =
    [update_p] publishes a fresh record — the previous published value
    then stays a real snapshot for the reactive ~equal comparators *)
 let active : popup option ref = ref None
+let pending_nlp : (popup * float option Ui_task.t) option ref = ref None
+let cancel_nlp () =
+  Option.iter (fun (_,task) -> Ui_task.cancel task) !pending_nlp;
+  pending_nlp:=None
 
 let popup_vs : popup option Signal.state option ref = ref None
 
@@ -162,6 +166,7 @@ let publish () =
   | None -> ()
 
 let update_p f =
+  cancel_nlp ();
   (match !active with
    | Some p -> active := Some (f p)
    | None -> ());
@@ -191,6 +196,7 @@ let focus_day () =
   | None -> ()
 
 let close_popup ?focus_caret p =
+  cancel_nlp ();
   active := None;
   Runtime.editor_popup_open := false;
   publish ();
@@ -317,8 +323,6 @@ let open_choice_menu sel items =
                 } })
   | None -> ()
 
-(* cljs nld-parse covers natural language; here a plain JS Date parse
-   handles ISO / "Sep 30, 2026" style input, else the warning toast *)
 let parse_nlp_date s = Dates.parse s
 
 let nlp_commit p =
@@ -327,16 +331,43 @@ let nlp_commit p =
     | Cal_insert text | Cal_prop (_, text) -> String.trim text
     | Link_form _ -> invalid_arg "nlp_commit: not a calendar popup"
   in
-  if v <> "" then
-    match parse_nlp_date v with
-    | Some d ->
+  cancel_nlp ();
+  if v <> "" then begin
+    let context = Runtime.repo (),Runtime.route (),(Runtime.model ()).Model.context_revision in
+    let current () =
+      context=(Runtime.repo (),Runtime.route (),(Runtime.model ()).Model.context_revision)
+      && match !active with Some current -> current==p | None -> false in
+    let apply = function
+    | Some d when current () ->
         let f = Dates.fields d in
         update_p (fun p ->
             { p with cy = f.Dates.year; cm = f.Dates.month
                    ; cd = f.Dates.day });
         with_p commit_cal
+    | None when current () -> Toast.warning (I18n.tf "date/invalid-date-warning" [v])
+    | _ -> () in
+    match parse_nlp_date v with
+    | Some date -> apply (Some date)
     | None ->
-        Toast.warning (I18n.tf "date/invalid-date-warning" [ v ])
+        let failed error =
+          if current () && error <> Ui_task.Cancelled then begin
+            pending_nlp:=None;
+            Ui_services.log_error_message ("Natural date parsing: " ^ Printexc.to_string error);
+            Toast.error (I18n.t "date/parse-service-error")
+          end in
+        try
+          let task=Dates.parse_natural ~reference:(Float.floor (Dates.date_now ())) v in
+          pending_nlp:=Some (p,task);
+          ignore (Ui_task.catch
+            (Ui_task.bind task (fun result ->
+              (match !pending_nlp with
+               | Some (owner,_) when owner==p -> pending_nlp:=None
+               | _ -> ());
+              if current () then apply result;
+              Ui_task.resolve ()))
+            (fun error -> failed error;Ui_task.resolve ()))
+        with error -> failed error
+  end
 
 (* cljs open-editor-popup! anchors at the caret mirror span; a popup
    opened on a selected (non-editing) block — the `p d` chord — anchors
@@ -1257,6 +1288,7 @@ let open_cal kind uuid from =
     ; cy = today.Dates.year; cm = today.Dates.month; cd = today.Dates.day
     ; hour = 0; tmin = 0; x; y; menu = None; rpt = None }
   in
+  cancel_nlp ();
   active := Some p;
   Runtime.editor_popup_open := true;
   publish ();
@@ -1272,6 +1304,7 @@ let open_link_form image uuid from =
     { kind = Link_form { image; url = ""; label = "" }; uuid; from; cy = 0; cm = 0; cd = 0
     ; hour = 0; tmin = 0; x; y; menu = None; rpt = None }
   in
+  cancel_nlp ();
   active := Some p;
   Runtime.editor_popup_open := true;
   publish ()

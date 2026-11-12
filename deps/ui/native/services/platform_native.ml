@@ -261,57 +261,101 @@ let perf_mark name =
 
 (* ---------- clipboard ---------- *)
 
-let clipboard_write_id = ref 0
-let clipboard_writes : (string, unit Ui_task.t * (unit -> unit) * (exn -> unit)) Hashtbl.t =
-  Hashtbl.create 8
+type host_task =
+  { operation : string
+  ; cancel : unit -> unit
+  ; complete : Yojson.Safe.t -> unit
+  }
 
-let clipboard_write_text text =
-  if !clipboard_write_id = max_int then invalid_arg "Clipboard request identity exhausted";
-  incr clipboard_write_id;
-  let id = string_of_int !clipboard_write_id in
+(* Clipboard writes and date parsing share one cancellable request owner. *)
+let host_task_id = ref 0
+let host_tasks : (string, host_task) Hashtbl.t = Hashtbl.create 8
+
+let request_host_task ~operation ~fields ~decode =
+  if !host_task_id = max_int then invalid_arg "Native request identity exhausted";
+  incr host_task_id;
+  let id = string_of_int !host_task_id in
   let complete = ref None in
-  let task = Ui_task.create ~cancel:(fun () -> Hashtbl.remove clipboard_writes id)
+  let task = Ui_task.create ~cancel:(fun () -> Hashtbl.remove host_tasks id)
     (fun ~resolve ~reject -> complete := Some (resolve,reject)) in
   let resolve,reject = Option.get !complete in
-  Hashtbl.add clipboard_writes id (task,resolve,reject);
-  (try Host.clipboard_write_request (Yojson.Safe.to_string
-    (`Assoc ["request-id",`String id;"text",`String text]))
+  Hashtbl.add host_tasks id
+    {operation;cancel=(fun () -> Ui_task.cancel task);
+     complete=(fun payload -> try resolve (decode payload) with error -> reject error)};
+  (try !Host.host_op operation (Yojson.Safe.to_string
+    (`Assoc (("request-id",`String id)::fields)))
    with error -> Ui_task.cancel task; raise error);
   task
 
-let note_clipboard_write json =
-  let invalid () = invalid_arg "Invalid native clipboard write result" in
-  let id,result = match json with
-    | `Assoc fields ->
-        let keys = List.map fst fields |> List.sort String.compare in
-        let id = match List.assoc_opt "request-id" fields with
-          | Some (`String id) ->
-              (match int_of_string_opt id with
-               | Some value when value > 0 && string_of_int value = id
-                                 && value <= !clipboard_write_id -> id
-               | _ -> invalid ())
-          | _ -> invalid () in
-        let result = match keys,List.assoc_opt "ok" fields with
-          | ["ok";"request-id"],Some (`Bool true) -> Ok ()
-          | ["error";"ok";"request-id"],Some (`Bool false) ->
-              (match List.assoc_opt "error" fields with
-               | Some (`String message) when message <> "" ->
-                   Error (Failure ("Clipboard write " ^ id ^ ": " ^ message))
-               | _ -> invalid ())
-          | _ -> invalid () in
-        id,result
+let note_host_task ~operation json =
+  let invalid () = invalid_arg ("Invalid native " ^ operation ^ " result") in
+  let id = match json with
+    | `Assoc fields -> (match List.assoc_opt "request-id" fields with
+        | Some (`String id) ->
+            (match int_of_string_opt id with
+             | Some value when value > 0 && string_of_int value = id
+                               && value <= !host_task_id -> id
+             | _ -> invalid ())
+        | _ -> invalid ())
     | _ -> invalid () in
   Host.enqueue (fun () ->
-    match Hashtbl.find_opt clipboard_writes id with
+    match Hashtbl.find_opt host_tasks id with
     | None -> ()
-    | Some (_,resolve,reject) ->
-        Hashtbl.remove clipboard_writes id;
-        match result with Ok () -> resolve () | Error error -> reject error)
+    | Some pending when pending.operation = operation ->
+        Hashtbl.remove host_tasks id;
+        pending.complete json
+    | Some _ -> invalid ())
 
-let cancel_clipboard_writes () =
-  let tasks = Hashtbl.fold (fun _ (task,_,_) tasks -> task::tasks) clipboard_writes [] in
-  Hashtbl.clear clipboard_writes;
-  List.iter Ui_task.cancel tasks
+let clipboard_write_text text =
+  request_host_task ~operation:"clipboard-write" ~fields:["text",`String text]
+    ~decode:(function
+      | `Assoc fields ->
+          (match List.sort String.compare (List.map fst fields),List.assoc_opt "ok" fields with
+           | ["ok";"request-id"],Some (`Bool true) -> ()
+           | ["error";"ok";"request-id"],Some (`Bool false) ->
+               (match List.assoc_opt "request-id" fields,List.assoc_opt "error" fields with
+                | Some (`String id),Some (`String message) when message <> "" ->
+                    failwith ("Clipboard write " ^ id ^ ": " ^ message)
+                | _ -> invalid_arg "Invalid native clipboard write result")
+           | _ -> invalid_arg "Invalid native clipboard write result")
+      | _ -> invalid_arg "Invalid native clipboard write result")
+
+let note_clipboard_write json = note_host_task ~operation:"clipboard-write" json
+
+let cancel_host_tasks () =
+  let cancel = Hashtbl.fold (fun _ task acc -> task.cancel::acc) host_tasks [] in
+  Hashtbl.clear host_tasks;
+  List.iter (fun cancel -> cancel ()) cancel
+
+let natural_dates_supported = ref false
+let configure_natural_dates ~nsh = natural_dates_supported := nsh
+
+let date_parse_natural ~reference text =
+  if not !natural_dates_supported then
+    Ui_task.reject (Failure "Natural date parsing is unavailable on this native host")
+  else request_host_task ~operation:"natural-date-parse"
+    ~fields:["input",`String text;
+             "reference-ms",`Intlit (Int64.to_string (Int64.of_float reference))]
+    ~decode:(function
+      | `Assoc fields ->
+          (match List.sort String.compare (List.map fst fields),List.assoc_opt "status" fields with
+           | ["request-id";"status"],Some (`String "no-match") -> None
+           | ["epoch-ms";"request-id";"status"],Some (`String "parsed") ->
+               let value = match List.assoc_opt "epoch-ms" fields with
+                 | Some (`Int value) -> float_of_int value
+                 | Some (`Intlit value) -> Int64.to_float (Int64.of_string value)
+                 | _ -> invalid_arg "Invalid natural date epoch" in
+               if not (Float.is_finite value) || abs_float value > 8640000000000000. then
+                 invalid_arg "Invalid natural date epoch";
+               Some value
+           | ["error";"request-id";"status"],Some (`String "error") ->
+               (match List.assoc_opt "error" fields with
+                | Some (`String message) when message <> "" -> failwith message
+                | _ -> invalid_arg "Invalid natural date error")
+           | _ -> invalid_arg "Invalid native natural date result")
+      | _ -> invalid_arg "Invalid native natural date result")
+
+let note_natural_date json = note_host_task ~operation:"natural-date-parse" json
 
 (* "clipboard-read" requests are answered by a same-named platform
    event; one resolver per outstanding read, FIFO *)
@@ -707,6 +751,7 @@ let install_ui_services ~paints_caret ~assert_owner ~request_flush ~dom ~timers 
         ; local_fields
         ; of_fields
         ; parse = date_parse
+        ; parse_natural = date_parse_natural
         ; fmt_date
         }
     ; log = { error = (fun _ -> ()); info = (fun _ -> ())

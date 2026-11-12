@@ -291,6 +291,7 @@ let with_picker_services run =
         reload=(fun () -> unsupported "reload");origin=(fun () -> "");pathname=(fun () -> "")};
       time={now=(fun () -> 0.);local_fields=(fun _ -> unsupported "local_fields");
         of_fields=(fun _ -> unsupported "of_fields");parse=(fun _ -> unsupported "parse");
+        parse_natural=(fun ~reference:_ _ -> Ui_task.reject (Failure "Unused natural date capability"));
         fmt_date=(fun _ -> unsupported "fmt_date")};
       log={error=(fun _ -> ());info=(fun _ -> ());error_message=prerr_endline};
       perf={mark=(fun _ -> ())};uri={encode_component=(fun _ -> unsupported "uri")};

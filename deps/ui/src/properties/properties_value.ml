@@ -975,6 +975,7 @@ let repeat_column ctx ~ident ~is_datetime ~rep : t =
 (* Property entry points share the same calendar, time input and commit rules. *)
 let date_picker_content ctx ~ident ~is_datetime ~value ~on_value ~on_clear ~on_dismiss : t =
  fun context parent ->
+  let origin_repo = Runtime.repo () in
   let alive = ref true in
   Signal.on_dispose context.Lui_ui.ui_scope (fun () -> alive:=false);
   let rep = Signal.state context.Lui_ui.ui_scheduler None in
@@ -990,15 +991,17 @@ let date_picker_content ctx ~ident ~is_datetime ~value ~on_value ~on_clear ~on_d
       Dates.make ~year:(day / 10000) ~month:(day mod 10000 / 100) ~day:(day mod 100) ()
   in
   let pick ms =
-    if is_datetime then on_value (W.Float ms)
+    if not (!alive && Runtime.repo () = origin_repo) then ()
+    else if is_datetime then on_value (W.Float ms)
     else ignore (let* id=D.resolve_journal_day (Dates.journal_day_of ms) in
-      if !alive then (
+      if !alive && Runtime.repo () = origin_repo then (
         on_value (W.Int id);on_dismiss ());
       Js.Promise.resolve ())
   in
   (row ~key:"property-date-content" ~width:556 ~gap:0 ~cross:`start
      ~style_class:"ls-property-date-picker"
      [ Ui_components.calendar ~week_starts_on:(Sdk_config.calendar_week_starts_on ()) ~month_label:I18n.calendar_month_label ~day_label:I18n.calendar_day_label ~initial ~datetime:is_datetime ~initial_focus_day:true
+         ~is_current:(fun () -> !alive && Runtime.repo () = origin_repo)
          ~translate:I18n.t ~on_pick:pick
          ?on_clear:(if D.value_empty_p value then None else Some on_clear) ();
        repeat_column ctx ~ident ~is_datetime ~rep ]) context parent

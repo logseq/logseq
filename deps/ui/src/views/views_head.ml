@@ -386,8 +386,9 @@ let filter_value_phase inst ~anchor ?index (c : V.column) =
       in
       let custom_content it =
         if timestamp && it.P.si_value = "custom-date" then
-          Some ("ls-view-date-picker", Ui_components.date_picker ~week_starts_on:(Sdk_config.calendar_week_starts_on ()) ~month_label:I18n.calendar_month_label ~day_label:I18n.calendar_day_label ~translate:I18n.t ~on_pick:(fun date ->
-               commit (W.Date_ms (Int64.of_float date))))
+          let current = V.current_view inst in
+          Some ("ls-view-date-picker", Ui_components.calendar ~is_current:current ~week_starts_on:(Sdk_config.calendar_week_starts_on ()) ~month_label:I18n.calendar_month_label ~day_label:I18n.calendar_day_label ~translate:I18n.t ~on_pick:(fun date ->
+               if current () then commit (W.Date_ms (Int64.of_float date))) ())
         else None
       in
       let ops =

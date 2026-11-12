@@ -513,6 +513,7 @@ let initialize_unlocked platform_code host_code (payload : string) =
     | _ -> Lui_protocol.GenericHost
   in
   Browser_ui.configure ~nsh:(host_kind = Lui_protocol.NshHost);
+  Platform.configure_natural_dates ~nsh:(host_kind = Lui_protocol.NshHost);
   let backend =
     { Lui_protocol.backend_profile = Lui_protocol.profile os host_kind
     ; apply_batch = enqueue_batch
@@ -975,6 +976,8 @@ let platform_event payload =
         Platform.note_keychain_result json
       else if name = "clipboard-write-result" then
         Platform.note_clipboard_write (Yojson.Safe.from_string body)
+      else if name = "natural-date-result" then
+        Platform.note_natural_date (Yojson.Safe.from_string body)
       else if name = "window-close-request" then
         Host.enqueue (fun () ->
           Update_admission.require_input Update_admission.application "window-close";
@@ -1087,9 +1090,11 @@ let dispose () =
      and the graph open so the next launch attaches instantly *)
   with_entry_lock (fun () ->
     Editor_actions.cancel_clipboard_actions ();
+    Editor_commands.cancel_nlp ();
     last_native_keymap := None;
     last_native_palette_view := None;
-    Platform.cancel_clipboard_writes ();
+    Platform.cancel_host_tasks ();
+    Platform.configure_natural_dates ~nsh:false;
     Platform.cancel_keychain_requests ();
     Browser_ui.cancel_requests ();
     Host.set_host_op Host.disconnected;
@@ -1184,6 +1189,7 @@ module Ffi = struct
                "application-menu-command";
                "keychain-result";
                "clipboard-write-result";
+               "natural-date-result";
                "files-picked";
                "file-download-result";
                "window-close-request";

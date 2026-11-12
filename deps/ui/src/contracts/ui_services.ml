@@ -110,6 +110,9 @@ type time = {
   local_fields : float -> date_fields;
   of_fields : date_fields -> float;
   parse : string -> float option;
+  parse_natural : reference:float -> string -> float option Ui_task.t;
+  (* English free-text dates relative to the captured reference instant, in the
+     host's local timezone. None is an ordinary non-match; failures reject. *)
   fmt_date : float -> string;
   (* Short locale date ("Oct 9, 2026" shape) — the cljs
      toLocaleDateString(undefined, {year numeric, month short,
@@ -489,6 +492,13 @@ let time_now () = (get ()).time.now ()
 let time_local_fields ms = (get ()).time.local_fields ms
 let time_of_fields f = (get ()).time.of_fields f
 let time_parse s = (get ()).time.parse s
+let time_parse_natural ~reference s =
+  if not (Float.is_finite reference) || abs_float reference > 8640000000000000.
+     || Float.floor reference <> reference then
+    invalid_arg "Natural date reference requires finite integer epoch milliseconds";
+  if String.length s > 1024 then
+    invalid_arg "Natural date input exceeds 1024 string units";
+  (get ()).time.parse_natural ~reference s
 let time_fmt_date ms = (get ()).time.fmt_date ms
 
 let log_error v = (get ()).log.error v

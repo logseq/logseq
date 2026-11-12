@@ -512,13 +512,13 @@ let between_picker inst ~tree ~loc ~anchor =
       ignore (P.show_custom ~anchor ~cls:"query-builder-picker"
         (column ~padding:8 ~gap:8
           [ text ~value:label []
-          ; Ui_components.date_picker
+          ; Ui_components.calendar ~is_current:inst.active
               ~week_starts_on:(Sdk_config.calendar_week_starts_on ())
               ~month_label:I.calendar_month_label ~day_label:I.calendar_day_label
               ~translate:I.t
               ~on_pick:(fun ms ->
                 P.close_top ();
-                if inst.active () then on_pick (Dates.journal_title_of ms)) ]))
+                if inst.active () then on_pick (Dates.journal_title_of ms)) () ]))
   in
   pick (I.t "query.builder/between-start-label") (fun start ->
     pick (I.t "query.builder/between-end-label") (fun finish ->

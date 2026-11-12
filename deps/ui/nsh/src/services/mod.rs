@@ -6,6 +6,7 @@ mod editor_text_geometry;
 mod files;
 pub(crate) mod keyboard;
 mod menu;
+mod natural_date;
 pub(crate) mod resources;
 mod secrets;
 mod update_preparation;
@@ -137,6 +138,7 @@ impl Services {
             })));
         }
         let replies = match request.operation.as_str() {
+            "natural-date-parse" => natural_date::handle(&request.payload),
             "native-keymap" => self.keyboard.replace(&request.payload).map(|()| Vec::new()),
             "app-icons" => {
                 self.icons.replace_json(&request.payload)?;
