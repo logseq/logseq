@@ -1294,7 +1294,8 @@ let native_menu_scope_retention () =
   Logseq_el.register_all registry;
   Logseq_codemirror.register registry;Logseq_editor.register registry;
   Runtime.worker:=Some {Worker_client.invoke_fn=(fun _ _ -> Js.Promise.resolve Wire.Nil);
-    on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
+    on_message=(fun _ _ -> ());dead=Js.Promise.liveness ()};
+  Runtime.read_model:=(fun () -> initial);
   let app=Lui_app.create_with_extensions backend registry initial (fun _ next -> next)
     (fun context model _ ->
       let state value=Signal.state context.Lui_ui.ui_scheduler value in
