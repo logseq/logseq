@@ -2468,3 +2468,19 @@ areas produces a distinct two-UUID batch. This preserves the native worker's
 intentional identical-read coalescing while exercising an actual overlapping
 request shape. An identical in-flight batch is not expected to increment the
 underlying worker request count.
+
+## Staged GTK PDF selection collapses before unmodified arrow movement
+
+The portable GTK PDF page's existing keyboard handler now collapses a nonempty
+selection to its start on unmodified Left and to its end on unmodified Right,
+regardless of which endpoint is the active caret. Previously it stepped from
+the active caret into the selected text before collapsing. For example, selecting
+all three characters in `aé中` and pressing Left now places the caret before `a`.
+
+Shift continues to extend or shrink from the existing anchor; Ctrl/Meta word
+movement and other modifier behavior are unchanged. The existing owned Select
+callback still carries the page's logical glyph range. No public LUI API, wire
+property, dependency or additional selection state is introduced. The actual
+GTK widget fixture checks forward/reversed selections, both arrows and Shift
+extension using its native Unicode buffer. This is a staged portable reader
+behavior change; target CI and runtime qualification remain separate gates.

@@ -600,6 +600,19 @@ impl PageView {
             self.select(0, count, true);
             return true;
         }
+        // An unmodified horizontal arrow first collapses a selection. Keep
+        // the existing Shift extension and Ctrl/Meta word movement unchanged.
+        if anchor != caret && modifiers.is_empty() {
+            let boundary = match key {
+                gdk::Key::Left => Some(anchor.min(caret)),
+                gdk::Key::Right => Some(anchor.max(caret)),
+                _ => None,
+            };
+            if let Some(boundary) = boundary {
+                self.select(boundary, boundary, true);
+                return true;
+            }
+        }
         let mut iter = self.imp().buffer.iter_at_offset(caret as i32);
         match key {
             gdk::Key::Left => {
@@ -717,6 +730,58 @@ mod tests {
             "中".as_bytes(),
             "native character offsets must not become UTF-8 byte offsets"
         );
+        // Use the same real GTK widget/buffer and production key handler. Both
+        // selection directions must collapse to the requested boundary, rather
+        // than move one character inside the selected Unicode text.
+        for (anchor, caret) in [(0, 3), (3, 0)] {
+            for (key, boundary) in [(gdk::Key::Left, 0), (gdk::Key::Right, 3)] {
+                view.select(anchor, caret, false);
+                actions.borrow_mut().clear();
+                assert!(view.key(key, gdk::ModifierType::empty()));
+                let current = view.imp().page.borrow();
+                let current = current.as_ref().unwrap();
+                assert_eq!((current.anchor, current.caret), (boundary, boundary));
+                assert_eq!(view.imp().caret_position(), boundary as u32);
+                assert!(view.imp().selection().is_empty());
+                assert_eq!(
+                    &*actions.borrow(),
+                    &[Action::Select {
+                        page: 2,
+                        width: 30,
+                        start: 42 + boundary,
+                        end: 42 + boundary,
+                    }]
+                );
+            }
+        }
+        for (anchor, caret, key, expected_caret) in [
+            (0, 3, gdk::Key::Left, 2),
+            (0, 3, gdk::Key::Right, 3),
+            (3, 0, gdk::Key::Left, 0),
+            (3, 0, gdk::Key::Right, 1),
+        ] {
+            view.select(anchor, caret, false);
+            actions.borrow_mut().clear();
+            assert!(view.key(key, gdk::ModifierType::SHIFT_MASK));
+            let current = view.imp().page.borrow();
+            let current = current.as_ref().unwrap();
+            assert_eq!((current.anchor, current.caret), (anchor, expected_caret));
+            assert_eq!(view.imp().caret_position(), expected_caret as u32);
+            let range = view.imp().selection()[0];
+            let first = anchor.min(expected_caret);
+            let last = anchor.max(expected_caret);
+            assert_eq!((range.start(), range.length()), (first, last - first));
+            assert_eq!(
+                &*actions.borrow(),
+                &[Action::Select {
+                    page: 2,
+                    width: 30,
+                    start: 42 + first,
+                    end: 42 + last,
+                }]
+            );
+        }
+        actions.borrow_mut().clear();
         view.select(0, 3, true);
         let range = view.imp().selection()[0];
         assert_eq!((range.start(), range.length()), (0, 3));
