@@ -98,10 +98,16 @@ the first row, reaches the final row again, activates the last item, and waits
 for the Journal icon to be persisted and the native picker to retire. It does not manually
 supply `VirtualWindow` events, truncate generated datasets, or replace the picker
 with a test-only view. The earlier recording-host row tests remain useful for
-source semantics but do not prove native viewport ownership. The release build
-reached this case and exposed an independent queue saturation failure during the
-complete Emoji Scroll. The round-trip and native-retirement assertions are source
-only and still require the parent's serialized run after that queue repair.
+source semantics but do not prove native viewport ownership. The initial release
+run exposed independent queue saturation during the complete Emoji Scroll.
+After coalescing visible-range feedback, the full release publisher passed its
+actual application matrix at application `aa5a29d4b8` and LUI `eee8d3fa`. This
+includes both complete tabs, end/first/end native-controller scrolling, bounded
+cells, persisted final choices and native picker retirement. The Emoji case
+measured a 328pt viewport and 133–135 mounted cells. Reopening after choosing an
+emoji also exposed mixed point/element popover placement; the passing candidate
+uses mutually exclusive placement branches. This is native-engine evidence,
+not hardware wheel-input or raster-performance qualification.
 
 ### Release native-window measurements
 
@@ -156,8 +162,10 @@ comparisons use the clean sequence above.
 
 An earlier foreground diagnostic was affected by concurrent interaction and
 remained on All; those samples were excluded from this comparison. Real wheel
-input, high-rate Scroll after the queue fix, longer open/close memory runs and
-light/dark visual finishing checks remain unqualified.
+input, longer memory runs and light/dark visual finishing checks remain
+unqualified. Computer-use verification of the installed candidate was blocked
+by the locked macOS session; the app remains open, and no unlock or display-power
+action was performed.
 
 The same clean candidate subsequently completed eight Icons open/close samples,
 retained in `cycle-measurements.json` and per-cycle ignored evidence. Open
