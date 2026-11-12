@@ -166,10 +166,10 @@ let element expression = match expression.exp_desc with
       if children && result then begin
         let required = ref true and deferred = ref false in
         let labels = List.filter_map (function
-          | Optional "on_dismiss",Arg {exp_desc=Texp_construct (_,description,[_]);_}
+          | Optional (("on_dismiss"|"on_navigate") as label),Arg {exp_desc=Texp_construct (_,description,[_]);_}
               when description.Data_types.cstr_name="Some" ->
               (* Capture callback presence without evaluating application code. *)
-              Some "~on_dismiss:(fun _ -> ())"
+              Some ("~" ^ label ^ ":(fun _ -> ())")
           | Optional label,Arg argument ->
               (match literal argument with
                | Some {exp_desc=Texp_construct (_,description,[value]);_}

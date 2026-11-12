@@ -8,6 +8,10 @@ is taken from the compiler's typed application; the probe substitutes an inert
 callback and never executes application handlers. The extractor already captured
 `on_dismiss` correctly; the missing validation was the style-only provider gate.
 That gate now reuses the renderer's pure input capability policy in LUI.
+Navigation callback presence is captured in the same way, so a known
+`on_navigate` cannot be dropped as an unknown function and hide the native
+TimeField restriction. Optional forwarded callbacks whose presence is unknown
+remain deferred.
 
 Dynamic or omitted time text stays at the existing runtime value boundary,
 while known read-only, autofocus, navigation, dismissal and nonempty-placeholder
