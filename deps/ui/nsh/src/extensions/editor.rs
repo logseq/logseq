@@ -6,6 +6,8 @@
 //! Public Input does not accept an external candidate-window rectangle or expose
 //! selection anchor direction. Those geometry/platform limits remain explicit.
 use super::string;
+#[path = "editor_clipboard.rs"]
+mod clipboard;
 use lui_nsh::{
     app::ApplicationRuntime, extensions::ExtensionContext, runtime::EditorSnapshot, store::Node,
 };
@@ -165,6 +167,9 @@ fn native_sink(context: ExtensionContext, block: String, read: SnapshotReader) -
     let composition_current = current.clone();
     let focus_current = current.clone();
     let test_id = format!("lui-{}", context.node.get_untracked().id);
+    let paste_context = context.clone();
+    let paste_current = current.clone();
+    let paste_state = state.clone();
     input()
         .test_id(&test_id)
         .value(move || value.get())
@@ -172,6 +177,31 @@ fn native_sink(context: ExtensionContext, block: String, read: SnapshotReader) -
         .readonly(move || !ready.get())
         .multiline(true)
         .submit_behavior(nsh_core::SubmitBehavior::Newline)
+        .paste_behavior(move || {
+            if composing.get() {
+                nsh_core::PasteBehavior::Insert
+            } else {
+                nsh_core::PasteBehavior::Report
+            }
+        })
+        .on_paste(move |content: &nsh_core::PasteEvent| {
+            if !paste_current(&paste_context) || !ready.get_untracked() || composing.get_untracked()
+            {
+                return;
+            }
+            match clipboard::payload(paste_context.node.get_untracked().id, content) {
+                Ok(payload) => {
+                    let selection = {
+                        let mut transport = paste_state.borrow_mut();
+                        transport.serial += 1;
+                        transport.selection
+                    };
+                    emit_selection(&paste_context, selection);
+                    emit_document(&paste_context, "paste", payload);
+                }
+                Err(error) => eprintln!("logseq-editor clipboard: {error}"),
+            }
+        })
         .auto_focus(true)
         .auto_correct(false)
         .caret(false)
@@ -398,6 +428,7 @@ fn bind_keys(
             ("enter", "Enter"),
             ("a", "a"),
             ("b", "b"),
+            ("c", "c"),
             ("d", "d"),
             ("e", "e"),
             ("f", "f"),
@@ -410,7 +441,9 @@ fn bind_keys(
             ("s", "s"),
             ("t", "t"),
             ("u", "u"),
+            ("v", "v"),
             ("w", "w"),
+            ("x", "x"),
             ("y", "y"),
             ("z", "z"),
             (";", ";"),
@@ -418,9 +451,13 @@ fn bind_keys(
             (".", "."),
         ] {
             for mask in 0_u8..16 {
-                // Plain text and clipboard insertion stay on the native input.
+                // Plain text and ordinary paste stay on the native input.
                 // The shared editor owns these modifier commands and Enter policy.
                 if key.len() == 1 && !matches!(mask, 4 | 5 | 8 | 9) {
+                    continue;
+                }
+                if (key == "v" && !matches!(mask, 5 | 9)) || (key == "x" && !matches!(mask, 4 | 8))
+                {
                     continue;
                 }
                 let mut chord = String::new();
@@ -454,11 +491,19 @@ fn bind_keys(
                             && !composing.get_untracked()
                         {
                             state.borrow_mut().serial += 1;
-                            emit(
-                                &context,
-                                "key",
-                                json!({"key":key,"shift":mask&1!=0,"alt":mask&2!=0,"ctrl":mask&4!=0,"meta":mask&8!=0}),
-                            );
+                            if matches!(mask, 4 | 8) && matches!(key, "c" | "x") {
+                                emit_document(
+                                    &context,
+                                    if key == "c" { "copy" } else { "cut" },
+                                    json!({"nodeId":context.node.get_untracked().id}),
+                                );
+                            } else {
+                                emit(
+                                    &context,
+                                    "key",
+                                    json!({"key":key,"shift":mask&1!=0,"alt":mask&2!=0,"ctrl":mask&4!=0,"meta":mask&8!=0}),
+                                );
+                            }
                         }
                     },
                 );
@@ -544,6 +589,13 @@ fn emit_replacement(context: &ExtensionContext, edit: Replacement) {
     } else {
         emit(context, "insert", json!({"text":edit.text}));
     }
+}
+fn emit_document(context: &ExtensionContext, name: &str, payload: Value) {
+    emit(
+        context,
+        "dom-event",
+        json!({"name":name,"payload":payload.to_string()}),
+    );
 }
 fn emit(context: &ExtensionContext, name: &str, values: Value) {
     let values: Map<String, Value> = values

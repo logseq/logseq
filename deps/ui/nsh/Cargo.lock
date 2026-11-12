@@ -2514,6 +2514,7 @@ name = "nsh-app-logseq"
 version = "0.1.0"
 dependencies = [
  "arboard",
+ "base64 0.22.1",
  "block2",
  "dispatch2",
  "env_logger",

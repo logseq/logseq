@@ -1174,3 +1174,32 @@ compiled native contract fixture exercises real constructor validation, appearan
 and dismissal routing; native pointer/keyboard usability still requires the
 running app flow. This change does not implement row secondary-click menus or
 other external menu-role popovers.
+## NSH editor clipboard events use the shared controller
+
+The NSH block editor now sets its native Input to `PasteBehavior::Report` outside
+IME composition. Native paste supplies its event-time plain text, HTML, captured
+image bytes and copied local-file URLs to the existing `logseq-editor` `dom-event`
+channel as a document `paste` event. `nodeId` identifies the retained editor sink;
+`clipboardData` uses the existing native file snapshot shape (`data-b64` for
+captured bytes, `path` for local files). Actual file metadata is read for copied
+local files; their contents remain lazy and use the existing file channel.
+Malformed URLs, inaccessible files and directories are rejected explicitly.
+No clipboard re-read, shadow document, alternate block parser or clipboard cache
+is introduced. The shared controller continues to own internal tree paste,
+HTML-to-Markdown conversion, paragraph splitting and asset uploads. Input's
+default text insertion is disabled for that event, so the paste is applied once.
+During marked-text composition, the existing native Input insertion/composition
+path remains in charge.
+
+Focused editor Cmd/Ctrl+C and Cmd/Ctrl+X now emit shared `copy`/`cut` document
+events. The existing selected-source-text and collapsed block-reference copy
+policies remain authoritative. Cmd/Ctrl+Shift+C and Cmd/Ctrl+Shift+V go through
+the existing shared editor key handlers for whole-block text copy and paste into
+one block. This changes no Web or maintained mobile adapter API.
+
+The public NSH Input has no `on_copy`/`on_cut` interception for platform-native
+Edit menu and context-menu actions. Those selectors still use native Input
+behavior and require a reviewed public seam before claiming full clipboard UX
+parity. Native paste from those menus does use `on_paste`. The added retained
+Input, native facade and actual shared-copy regressions do not qualify hardware
+clipboard actions, IME combinations or platform file access on all desktops.

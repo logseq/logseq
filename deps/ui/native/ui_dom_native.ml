@@ -112,7 +112,10 @@ let text_clipboard_data text =
     "files",Js.Json.JArray [||]]
 
 let clipboard_value data mime =
-  if mime="text/plain" then Option.value (jstr "text" data) ~default:"" else ""
+  match mime with
+  | "text/plain" -> Option.value (jstr "text" data) ~default:""
+  | "text/html" -> Option.value (jstr "html" data) ~default:""
+  | _ -> ""
 
 let empty_clipboard_snapshot () = Ui_services.empty_clipboard_snapshot
 

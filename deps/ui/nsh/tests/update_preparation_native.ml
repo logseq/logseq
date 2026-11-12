@@ -738,7 +738,7 @@ let native_block_click_mounts_shared_editor () =
   and prior_state = !Editor_state.st and prior_fields = !Editor_state.field_sigs_opt
   and prior_pending = !Editor_state.pending_focus and prior_click = !Editor_state.click_point in
   let captures = List.map (fun name -> name, Hashtbl.find_opt Platform.capture_listeners name)
-    ["pointerdown";"mousedown";"click"] in
+    ["pointerdown";"mousedown";"click";"copy"] in
   let requests = ref [] in
   let uuid = "native-edit-entry" in
   let block = Model.empty_block ~uuid ~title:"A real editable block" ~is_page:false in
@@ -782,7 +782,8 @@ let native_block_click_mounts_shared_editor () =
     Platform.event_target_of := (fun node -> Some (Native_embed.ext_snapshot runtime node));
     List.iter (fun (name, handler) -> Hashtbl.replace Platform.capture_listeners name
       [(fun payload -> handler (Ui_dom_native.ev_of payload))])
-      ["pointerdown",Block_selection.pointerdown;"mousedown",Editor_keys.on_mousedown;"click",Editor_keys.on_click];
+      ["pointerdown",Block_selection.pointerdown;"mousedown",Editor_keys.on_mousedown;
+       "click",Editor_keys.on_click;"copy",Editor_keys.on_copy];
     ignore (Lui_app.start app); ignore (Lui_app.flush app);
     let node = Hashtbl.fold (fun id props found ->
       if Lui_protocol.Property_map.find_opt Lui_protocol.AccessibilityIdentifier props
@@ -802,7 +803,26 @@ let native_block_click_mounts_shared_editor () =
     Editor_actions.apply_focus ();
     check "shared focus emits its actual native focus command"
       (List.exists (fun (operation,payload) -> operation="dom-op"
-        && String.starts_with ~prefix:"set-input-focus\n" payload) !requests))
+        && String.starts_with ~prefix:"set-input-focus\n" payload) !requests);
+    let sink = Hashtbl.fold (fun id identifier found ->
+      if identifier="logseq-editor" then Some id else found)
+      runtime.Lui_runtime.runtime_extension_nodes None |> Option.get in
+    let copy () = ignore (Native_embed.extension_event sink "logseq-editor" "dom-event"
+      (Js.Json.stringify (Js.Json.object_list
+        ["name",Js.Json.string "copy";"payload",Js.Json.string
+          (Js.Json.stringify (Js.Json.object_list ["nodeId",Js.Json.number (float_of_int sink)]))]))) in
+    Editor_actions.update_model uuid (fun model -> Edit_model.select model ~anchor:0 ~focus:6);
+    ignore (Lui_app.flush app);
+    requests := [];
+    copy ();
+    check "native copy reaches the real shared source-selection controller"
+      (List.mem ("clipboard","A real") !requests);
+    Editor_actions.update_model uuid (fun model -> Edit_model.select model ~anchor:0 ~focus:0);
+    ignore (Lui_app.flush app);
+    requests := [];
+    copy ();
+    check "native collapsed copy keeps the shared block-reference policy"
+      (List.mem ("clipboard","[[" ^ uuid ^ "]]") !requests))
 
 let native_graph_menu_contract () =
   let backend : Lui_protocol.backend = {
@@ -905,6 +925,7 @@ let () =
     Ui_dom_native.ops.Ui_services.emit_json name payload)} in
   Platform.install_ui_services ~paints_caret:true ~assert_owner
     ~request_flush:(fun () -> ()) ~dom ~timers:Ui_dom_native.timers ~files:Ui_dom_native.files;
+  Editor_clipboard_native.run ();
   native_entry_admission ();
   editor_keyboard_capture_order ();
   native_worker_admission ();

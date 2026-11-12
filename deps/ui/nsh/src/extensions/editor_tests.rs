@@ -469,3 +469,103 @@ fn native_preedit_cancel_is_not_committed_and_removed_sink_releases_its_keys() {
     app.press_key("enter").unwrap();
     assert_eq!(fixture.events.lock().unwrap().len(), before);
 }
+
+#[test]
+fn native_paste_reports_rich_snapshot_once_without_plain_input_insertion() {
+    let (mut app, fixture) = start();
+    let before = native(&app);
+    let mut content = nsh_core::PasteEvent::default();
+    content.text = "one\n\ntwo".into();
+    content.html = "<p>one</p><p><strong>two</strong></p>".into();
+    content.files.push(nsh_core::PastedFile::new(
+        "clip.png",
+        "image/png",
+        vec![0, 128, 255],
+    ));
+    fixture.events.lock().unwrap().clear();
+    app.paste("id:lui-1", &content).unwrap();
+    let events = fixture.events.lock().unwrap();
+    let pastes = events
+        .iter()
+        .filter(|(name, fields)| name == "dom-event" && fields["name"] == "paste")
+        .collect::<Vec<_>>();
+    assert_eq!(pastes.len(), 1);
+    let payload: Value = serde_json::from_str(pastes[0].1["payload"].as_str().unwrap()).unwrap();
+    assert_eq!(payload["nodeId"], 1);
+    assert_eq!(payload["clipboardData"]["text"], content.text);
+    assert_eq!(payload["clipboardData"]["html"], content.html);
+    assert_eq!(payload["clipboardData"]["files"][0]["data-b64"], "AID/");
+    assert_eq!(payload["clipboardData"]["files"][0]["size"], 3);
+    assert!(!events.iter().any(|(name, _)| name == "insert"));
+    assert_eq!(
+        fixture.model.lock().unwrap().source,
+        "A😀中z",
+        "the actual shared paste controller owns the edit, not Input's default insertion"
+    );
+    assert_eq!(native(&app), before);
+}
+
+#[test]
+fn native_clipboard_chords_reach_shared_copy_cut_and_single_block_paste_commands() {
+    let (mut app, fixture) = start();
+    app.type_text("id:lui-1", "").unwrap();
+    fixture.events.lock().unwrap().clear();
+    for key in ["ctrl+c", "ctrl+x", "ctrl+shift+c", "ctrl+shift+v"] {
+        app.press_key(key).unwrap();
+    }
+    let events = fixture.events.lock().unwrap();
+    let documents = events
+        .iter()
+        .filter(|(name, _)| name == "dom-event")
+        .map(|(_, fields)| fields["name"].as_str().unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(documents, ["copy", "cut"]);
+    for key in ["c", "v"] {
+        assert_eq!(
+            events
+                .iter()
+                .filter(|(name, fields)| name == "key"
+                    && fields["key"] == key
+                    && fields["shift"] == true
+                    && fields["ctrl"] == true)
+                .count(),
+            1
+        );
+    }
+    assert!(
+        !events
+            .iter()
+            .any(|(name, _)| name == "insert" || name == "delete")
+    );
+    assert_eq!(fixture.model.lock().unwrap().source, "A😀中z");
+}
+
+#[test]
+fn pasted_local_files_keep_real_metadata_and_existing_path_snapshot_shape() {
+    let path = std::env::temp_dir().join(format!(
+        "logseq-paste-{}-{}.txt",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    std::fs::write(&path, b"actual clipboard file").unwrap();
+    let mut content = nsh_core::PasteEvent::default();
+    content
+        .uris
+        .push(url::Url::from_file_path(&path).unwrap().to_string());
+    let answer = clipboard::payload(3, &content);
+    std::fs::remove_file(&path).unwrap();
+    let answer = answer.unwrap();
+    assert_eq!(answer["clipboardData"]["files"][0]["size"], 21);
+    assert_eq!(
+        answer["clipboardData"]["files"][0]["path"],
+        path.to_str().unwrap()
+    );
+    assert_eq!(answer["clipboardData"]["types"], json!(["Files"]));
+    content.uris = vec!["https://example.org/file.txt".into()];
+    assert!(clipboard::payload(3, &content).is_err());
+    content.uris = vec!["relative.txt".into()];
+    assert!(clipboard::payload(3, &content).is_err());
+}

@@ -42,11 +42,13 @@ def run() -> None:
                         str(UI / "native/native_embed.ml")], cwd=stage, check=True)
         geometry = stage / "editor_geometry_affinity_native.ml"
         geometry.write_bytes((UI / "nsh/tests/editor_geometry_affinity_native.ml").read_bytes())
+        clipboard = stage / "editor_clipboard_native.ml"
+        clipboard.write_bytes((UI / "nsh/tests/editor_clipboard_native.ml").read_bytes())
         source = stage / "update_preparation_native.ml"
         source.write_bytes((UI / "nsh/tests/update_preparation_native.ml").read_bytes())
         executable = stage / ("admission.exe" if os.name == "nt" else "admission")
         subprocess.run([*compiler, "-I", str(stage), "-linkall", "-linkpkg",
-                        *map(str, archives), str(embed), str(geometry), str(source), str(bridge),
+                        *map(str, archives), str(embed), str(geometry), str(clipboard), str(source), str(bridge),
                         "-o", str(executable)], cwd=stage, check=True)
         subprocess.run([str(executable)], cwd=stage, check=True, timeout=30)
 
