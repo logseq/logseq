@@ -56,6 +56,203 @@ let () =
         "\"status\"";
       expect_named_not_contains "skill markdown data wrapper" output "\"data\"")
 
+let () =
+  let run_import_case name ~import_type ~reply ~output_mode ~error_message =
+    test_promise ("graph import worker result: " ^ name) (fun () ->
+        let root = temp_dir "logseq-cli-import-result-" in
+        let input = Node.Path.join [| root; "seed" |] in
+        write_file input "{:pages-and-blocks []}";
+        let imported = ref false in
+        let server =
+          invoke_server (fun body ->
+              if
+                Js.String.includes
+                  ~search:
+                    (if import_type = "edn" then "thread-api/import-edn"
+                     else "thread-api/import-db-binary")
+                  body
+              then (
+                imported := true;
+                reply)
+              else "null")
+        in
+        with_server server (fun base_url ->
+            let* output =
+              run_cli_p
+                ~env:[| ("LOGSEQ_CLI_BASE_URL", base_url) |]
+                [|
+                  "--root-dir";
+                  root;
+                  "--graph";
+                  "demo";
+                  "--output";
+                  output_mode;
+                  "graph";
+                  "import";
+                  "--type";
+                  import_type;
+                  "--input";
+                  input;
+                |]
+            in
+            remove_tree root;
+            assert_true "worker received import" !imported
+              "worker did not receive import";
+            (match error_message with
+            | Some message ->
+                assert_true "rejected import exit" (output.code = 1)
+                  (Printf.sprintf "expected exit 1, got %d: %s %s" output.code
+                     output.stdout output.stderr);
+                expect_named_contains "worker rejection message"
+                  (output.stdout ^ output.stderr)
+                  message;
+                expect_named_not_contains "no false success" output.stdout
+                  ("Imported " ^ import_type ^ " from");
+                if output_mode = "json" then (
+                  ignore (expect_valid_json "import error JSON" output.stdout);
+                  expect_named_contains "error status" output.stdout
+                    "\"status\":\"error\"";
+                  expect_named_contains "validation error code" output.stdout
+                    "\"code\":\"graph-validation-failed\"";
+                  expect_named_contains "unwrapped original message"
+                    output.stdout
+                    ("\"message\":" ^ Js.Json.stringify (Js.Json.string message)))
+                else if output_mode = "edn" then (
+                  expect_named_contains "error status" output.stdout
+                    ":status :error";
+                  expect_named_contains "validation error code" output.stdout
+                    "graph-validation-failed")
+            | None ->
+                assert_true "successful import exit" (output.code = 0)
+                  (Printf.sprintf "expected exit 0, got %d: %s %s" output.code
+                     output.stdout output.stderr);
+                expect_named_contains "success message" output.stdout
+                  ("Imported " ^ import_type));
+            Js.Promise.resolve pass))
+  in
+  Array.iter
+    (fun mode ->
+      run_import_case
+        ("EDN validation rejection in " ^ mode)
+        ~import_type:"edn"
+        ~reply:
+          "[\"^ \",\"~:error\",\"The Imported EDN has 1 validation error(s)\"]"
+        ~output_mode:mode
+        ~error_message:(Some "The Imported EDN has 1 validation error(s)"))
+    [| "human"; "json"; "edn" |];
+  run_import_case "unexpected invalid EDN" ~import_type:"edn"
+    ~reply:
+      "[\"^ \",\"~:error\",\"The Imported EDN is unexpectedly invalid: \
+       Expected number or lookup ref\"]"
+    ~output_mode:"json"
+    ~error_message:
+      (Some
+         "The Imported EDN is unexpectedly invalid: Expected number or lookup \
+          ref");
+  run_import_case "structured worker rejection" ~import_type:"edn"
+    ~reply:"[\"^ \",\"~:error\",[\"^ \",\"~:invalid-entity\",42]]"
+    ~output_mode:"human" ~error_message:(Some "{:invalid-entity 42}");
+  Array.iter
+    (fun import_type ->
+      Array.iter
+        (fun tag ->
+          let message = "SQLITE_CORRUPT: malformed imported database" in
+          run_import_case
+            (import_type ^ " " ^ tag ^ " rejection")
+            ~import_type
+            ~reply:
+              ("[\"~#" ^ tag ^ "\",[\"^ \",\"~:message\",\"" ^ message ^ "\""
+              ^ (if tag = "error" then
+                   ",\"~:data\",[\"^ \",\"~:reason\",\"~:invalid-db\"]"
+                 else "")
+              ^ "]]")
+            ~output_mode:"json" ~error_message:(Some message))
+        [| "error"; "js/Error" |])
+    [| "edn"; "sqlite" |];
+  run_import_case "map containing js/Error preserves message" ~import_type:"edn"
+    ~reply:
+      "[\"^ \",\"~:error\",[\"~#js/Error\",[\"^ \",\"~:message\",\"Import \
+       transaction failed: invalid lookup ref\"]]]"
+    ~output_mode:"json"
+    ~error_message:(Some "Import transaction failed: invalid lookup ref");
+  run_import_case "successful EDN transaction count" ~import_type:"edn"
+    ~reply:"[\"^ \",\"~:tx-count\",11]" ~output_mode:"json" ~error_message:None;
+  run_import_case "nil error is not a rejection" ~import_type:"edn"
+    ~reply:"[\"^ \",\"~:error\",null,\"~:tx-count\",11]" ~output_mode:"edn"
+    ~error_message:None;
+  run_import_case "successful SQLite nil reply" ~import_type:"sqlite"
+    ~reply:"null" ~output_mode:"human" ~error_message:None
+
+let () =
+  match
+    Js.Dict.get Node.Process.process##env "LOGSEQ_DB_WORKER_NODE_SCRIPT"
+  with
+  | None -> ()
+  | Some worker_script ->
+      Array.iter
+        (fun import_type ->
+          test_promise ("graph import survives worker restart: " ^ import_type)
+            (fun () ->
+              let root = temp_dir "logseq-cli-import-restart-" in
+              let input = Node.Path.join [| root; "export" |] in
+              let env = [| ("LOGSEQ_DB_WORKER_NODE_SCRIPT", worker_script) |] in
+              let run graph args =
+                run_cli_p ~env
+                  (Array.append
+                     [|
+                       "--root-dir"; root; "--graph"; graph; "--output"; "json";
+                     |]
+                     args)
+              in
+              let cleanup () =
+                let* _ = run "source" [| "server"; "stop" |] in
+                let* _ = run "destination" [| "server"; "stop" |] in
+                remove_tree root;
+                Js.Promise.resolve ()
+              in
+              let scenario () =
+                let* created = run "source" [| "graph"; "create" |] in
+                ignore (expect_cli_exit_zero "create import source" created);
+                let* seeded =
+                  run "source"
+                    [| "upsert"; "page"; "--page"; "Imported lifecycle page" |]
+                in
+                ignore (expect_cli_exit_zero "seed import source" seeded);
+                let* exported =
+                  run "source"
+                    [|
+                      "graph"; "export"; "--type"; import_type; "--file"; input;
+                    |]
+                in
+                ignore (expect_cli_exit_zero "export import source" exported);
+                let* imported =
+                  run "destination"
+                    [|
+                      "graph"; "import"; "--type"; import_type; "--input"; input;
+                    |]
+                in
+                ignore (expect_cli_exit_zero "import destination" imported);
+                let* before = run "destination" [| "list"; "page" |] in
+                ignore (expect_cli_exit_zero "read imported graph" before);
+                expect_named_contains "imported page before restart"
+                  before.stdout "Imported lifecycle page";
+                let* restarted = run "destination" [| "server"; "restart" |] in
+                ignore (expect_cli_exit_zero "restart imported graph" restarted);
+                let* after = run "destination" [| "list"; "page" |] in
+                ignore (expect_cli_exit_zero "reopen imported graph" after);
+                expect_named_contains "imported page after restart" after.stdout
+                  "Imported lifecycle page";
+                Js.Promise.resolve ()
+              in
+              scenario () |> Js.Promise.then_ cleanup
+              |> Js.Promise.catch (fun error ->
+                  let* () = cleanup () in
+                  fail_promise
+                    (Option.value
+                       (promise_error_message error)
+                       ~default:"import restart scenario failed"))))
+        [| "edn"; "sqlite" |]
+
 let write_cli_wrapper path =
   write_file path
     ("require("
@@ -3258,6 +3455,56 @@ let () =
       fail_test ("unexpected invoke body: " ^ body);
       None)
   in
+  Array.iter
+    (fun tag ->
+      test_promise ("sync download rejects async " ^ tag) (fun () ->
+          let root = temp_dir "logseq-cli-download-error-" in
+          let download_requests = ref 0 in
+          let message = "Download failed: snapshot checksum mismatch" in
+          let server =
+            invoke_server (fun body ->
+                let response = sync_invoke_response download_requests body in
+                if
+                  Js.String.includes
+                    ~search:"thread-api/db-sync-download-graph-by-id" body
+                then
+                  "[\"~#" ^ tag ^ "\",[\"^ \",\"~:message\",\"" ^ message ^ "\""
+                  ^ (if tag = "error" then
+                       ",\"~:data\",[\"^ \",\"~:graph-id\",\"~u" ^ sync_graph_id
+                       ^ "\"]"
+                     else "")
+                  ^ "]]"
+                else Option.get response)
+          in
+          with_server server (fun base_url ->
+              let* output =
+                run_cli_p
+                  ~env:[| ("LOGSEQ_CLI_BASE_URL", base_url) |]
+                  [|
+                    "--root-dir";
+                    root;
+                    "--graph";
+                    "alpha";
+                    "--output";
+                    "json";
+                    "sync";
+                    "download";
+                  |]
+              in
+              remove_tree root;
+              assert_true "download exit" (output.code = 1)
+                (Printf.sprintf "expected exit 1, got %d: %s %s" output.code
+                   output.stdout output.stderr);
+              assert_true "download invoked" (!download_requests = 1)
+                "expected one download request";
+              expect_named_contains "original download message" output.stdout
+                message;
+              expect_named_contains "download error status" output.stdout
+                "\"status\":\"error\"";
+              expect_named_not_contains "no download success" output.stdout
+                "\"status\":\"ok\"";
+              Js.Promise.resolve pass)))
+    [| "error"; "js/Error" |];
   test_promise "invoke response decodes JSON escaped resultTransit" (fun () ->
       let server =
         create_server (fun[@u] req res ->
@@ -3646,8 +3893,8 @@ let () =
         Node.Path.join [| current_dirname; "fake_codex.js" |]
       in
       write_file codex_bin
-        ("#!/bin/sh\nexec " ^ Node.Process.argv.(0) ^ " " ^ fake_codex_js
-       ^ " \"$@\"\n");
+        ("#!/bin/sh\nexec " ^ Filename.quote Node.Process.argv.(0) ^ " "
+       ^ Filename.quote fake_codex_js ^ " \"$@\"\n");
       chmod_sync codex_bin 0o755;
       write_file config_path
         (edn_map
