@@ -84,3 +84,24 @@ The enclosing workflow run identifies the App source and its existing LUI pin;
 the engine receipt identifies the wrapper/build recipe, target and exact native
 library hashes. No public API, runtime default or shipping resource contract is
 changed by this private qualification tooling.
+
+## Combined qualification branch checks
+
+The root combined the isolated engine/native-surface candidates onto actual
+application checkpoint `e422bf9936c4d0f5b91e1a86d1c36e3842d53552`, preserving
+the existing shipping provider and its pinned SDK. Cargo metadata resolution
+added eight packages to the existing lockfile without upgrading existing package
+versions; no native PDFium binary was downloaded or loaded locally. Formatting,
+diff checks and all eight authored-archive/private-PDF helper tests passed.
+Evidence: `/tmp/logseq-portable-pdf-current-cargo-resolution.log` and
+`/tmp/logseq-portable-pdf-staging-tests.log` (helper code unchanged on combination).
+
+An independent source review found no new high-priority ownership/type-safety
+blocker, and corrected plain GTK arrow collapse for forward/reversed selections
+in the existing native widget fixture. This remains source review, not native
+target proof. In particular, the Windows UIA and GTK surface modules are test-
+gated: ordinary `cargo check --example` does not compile them. The required CI
+commands use `cargo test --example pdfium_engine_probe` and execute actual native
+tests before the separate staged-engine loading gate. The wrapper Unicode-map
+boolean defect, complete real-worker text publication and final application
+provider/controller assembly remain explicitly open.
