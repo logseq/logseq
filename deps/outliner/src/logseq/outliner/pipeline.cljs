@@ -75,11 +75,13 @@
 
 (defn- block-title-name-refs
   "Ids of the existing pages a title links by name (`[[Page]]`), as the CLI
-  stores a title. A `[[Page]]` that names no page is not a ref."
+  stores a title. A `[[Page]]` that names no page is not a ref, and neither is
+  one in a code block, whose title is literal text."
   [db block]
   (let [content (or (:block/raw-title block)
                     (:block/title block))]
-    (when (and (string? content) (string/includes? content "[["))
+    (when (and (string? content) (string/includes? content "[[")
+               (not= :code (:logseq.property.node/display-type block)))
       (->> (re-seq page-ref/page-ref-re content)
            (map second)
            distinct
