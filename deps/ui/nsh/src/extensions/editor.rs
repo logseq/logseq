@@ -170,6 +170,16 @@ fn native_sink(context: ExtensionContext, block: String, read: SnapshotReader) -
     let paste_context = context.clone();
     let paste_current = current.clone();
     let paste_state = state.clone();
+    let keyboard = use_context::<crate::services::keyboard::GlobalKeyboard>();
+    let native_identity = context.node.get_untracked();
+    let native_node = native_identity.id;
+    let native_incarnation = native_identity.incarnation;
+    let key_state = state.clone();
+    cleanup(move || {
+        if let Some(keyboard) = keyboard {
+            keyboard.blur_editor(native_node, native_incarnation);
+        }
+    });
     input()
         .test_id(&test_id)
         .value(move || value.get())
@@ -312,6 +322,11 @@ fn native_sink(context: ExtensionContext, block: String, read: SnapshotReader) -
         .on_focus(move || {
             if focus_current(&focus_context) {
                 focused.set(true);
+                if let Some(keyboard) = keyboard {
+                    let state = key_state.clone();
+                    keyboard.focus_editor(native_node, native_incarnation, ready, composing,
+                        Rc::new(move || state.borrow_mut().serial += 1));
+                }
                 emit(&focus_context, "focus", json!({}));
                 focus_revision.update(|revision| *revision += 1);
             }
@@ -319,6 +334,7 @@ fn native_sink(context: ExtensionContext, block: String, read: SnapshotReader) -
         .on_blur(move || {
             if current(&blur_context) {
                 focused.set(false);
+                if let Some(keyboard) = keyboard { keyboard.blur_editor(native_node, native_incarnation); }
                 composing.set(false);
                 blur_state.borrow_mut().preedit.clear();
                 blur_state.borrow_mut().commit = None;
@@ -420,42 +436,7 @@ fn bind_keys(
         if !focused.get() || composing.get() || !ready.get() {
             return;
         }
-        for (native, key) in [
-            ("left", "ArrowLeft"),
-            ("right", "ArrowRight"),
-            ("up", "ArrowUp"),
-            ("down", "ArrowDown"),
-            ("home", "Home"),
-            ("end", "End"),
-            ("backspace", "Backspace"),
-            ("delete", "Delete"),
-            ("tab", "Tab"),
-            ("escape", "Escape"),
-            ("enter", "Enter"),
-            ("a", "a"),
-            ("b", "b"),
-            ("c", "c"),
-            ("d", "d"),
-            ("e", "e"),
-            ("f", "f"),
-            ("h", "h"),
-            ("i", "i"),
-            ("k", "k"),
-            ("l", "l"),
-            ("n", "n"),
-            ("p", "p"),
-            ("s", "s"),
-            ("t", "t"),
-            ("u", "u"),
-            ("v", "v"),
-            ("w", "w"),
-            ("x", "x"),
-            ("y", "y"),
-            ("z", "z"),
-            (";", ";"),
-            (",", ","),
-            (".", "."),
-        ] {
+        for &(native, key) in crate::services::keyboard::EDITOR_KEYS {
             for mask in 0_u8..16 {
                 // Plain text and ordinary paste stay on the native input.
                 // The shared editor owns these modifier commands and Enter policy.

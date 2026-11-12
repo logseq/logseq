@@ -1,0 +1,467 @@
+//! One window-owned bridge from the effective OCaml keymap to native shortcuts.
+use lui_nsh::{
+    app::{ApplicationEvents, ApplicationMutations},
+    render::Renderer,
+    runtime::PlatformEvent,
+};
+use nsh_core::{
+    element::SignalEquals,
+    keymap::{Key, Keystroke, When},
+    prelude::*,
+};
+use serde::Deserialize;
+use serde_json::{Value, json};
+use std::{collections::BTreeMap, rc::Rc};
+
+// Standard editor conduit keys; shared with its focused native Input owner.
+pub(crate) const EDITOR_KEYS: &[(&str, &str)] = &[
+    ("left", "ArrowLeft"),
+    ("right", "ArrowRight"),
+    ("up", "ArrowUp"),
+    ("down", "ArrowDown"),
+    ("home", "Home"),
+    ("end", "End"),
+    ("backspace", "Backspace"),
+    ("delete", "Delete"),
+    ("tab", "Tab"),
+    ("escape", "Escape"),
+    ("enter", "Enter"),
+    ("a", "a"),
+    ("b", "b"),
+    ("c", "c"),
+    ("d", "d"),
+    ("e", "e"),
+    ("f", "f"),
+    ("h", "h"),
+    ("i", "i"),
+    ("k", "k"),
+    ("l", "l"),
+    ("n", "n"),
+    ("p", "p"),
+    ("s", "s"),
+    ("t", "t"),
+    ("u", "u"),
+    ("v", "v"),
+    ("w", "w"),
+    ("x", "x"),
+    ("y", "y"),
+    ("z", "z"),
+    (";", ";"),
+    (",", ","),
+    (".", "."),
+];
+
+#[derive(Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Snapshot {
+    revision: u64,
+    palette: bool,
+    capture: bool,
+    #[serde(rename = "palette-copy-reference")]
+    palette_copy_reference: bool,
+    bindings: Vec<Binding>,
+}
+#[derive(Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Binding {
+    stroke: String,
+    command: String,
+    scope: String,
+}
+#[derive(Clone)]
+struct EditorFocus {
+    node: u64,
+    incarnation: u64,
+    ready: Signal<bool>,
+    composing: Signal<bool>,
+    before_key: Rc<dyn Fn()>,
+}
+impl PartialEq for EditorFocus {
+    fn eq(&self, other: &Self) -> bool {
+        self.node == other.node && self.incarnation == other.incarnation
+    }
+}
+type SendKey = Rc<dyn Fn(Value)>;
+
+/// Retained by the application owner; native focus is local to its editor Input.
+#[derive(Clone, Copy)]
+pub(crate) struct GlobalKeyboard {
+    snapshot: Signal<Option<Snapshot>>,
+    editor: Signal<Option<EditorFocus>>,
+    send: Signal<Option<SendKey>>,
+}
+impl GlobalKeyboard {
+    pub(crate) fn mount() -> Self {
+        let keyboard = Self {
+            snapshot: signal(None),
+            editor: signal(None),
+            send: signal_with(None, SignalEquals::Never),
+        };
+        let admission = use_context::<ApplicationMutations>();
+        effect(move || {
+            let Some(snapshot) = keyboard.snapshot.get() else {
+                return;
+            };
+            let Some(send) = keyboard.send.get() else {
+                return;
+            };
+            let editor = keyboard.editor.get();
+            if editor.as_ref().is_some_and(|editor| editor.composing.get()) {
+                return;
+            }
+            let editor = editor.filter(|editor| editor.ready.get());
+            install(&snapshot, editor, send, admission.clone());
+        });
+        keyboard
+    }
+    pub(crate) fn connect(self, events: ApplicationEvents, renderer: Renderer) {
+        self.send.set(Some(Rc::new(move |payload| {
+            if let Err(error) = events.send(PlatformEvent {
+                operation: "native-key".into(),
+                payload: payload.to_string(),
+            }) {
+                renderer.fail(error);
+            }
+        })));
+    }
+    pub(crate) fn replace(self, payload: &str) -> Result<(), String> {
+        let snapshot: Snapshot =
+            serde_json::from_str(payload).map_err(|error| format!("native keymap: {error}"))?;
+        if snapshot.bindings.len() > 4096 {
+            return Err("native keymap exceeds 4096 strokes".into());
+        }
+        for binding in &snapshot.bindings {
+            if !matches!(
+                binding.scope.as_str(),
+                "editor-global"
+                    | "block-editing-only"
+                    | "global-non-editing-only"
+                    | "global-prevent-default"
+                    | "misc"
+            ) {
+                return Err(format!("unsupported native keymap scope {}", binding.scope));
+            }
+            parse(&binding.stroke)?;
+        }
+        self.snapshot.set(Some(snapshot));
+        Ok(())
+    }
+    pub(crate) fn focus_editor(
+        self,
+        node: u64,
+        incarnation: u64,
+        ready: Signal<bool>,
+        composing: Signal<bool>,
+        before_key: Rc<dyn Fn()>,
+    ) {
+        self.editor.set(Some(EditorFocus {
+            node,
+            incarnation,
+            ready,
+            composing,
+            before_key,
+        }));
+    }
+    pub(crate) fn blur_editor(self, node: u64, incarnation: u64) {
+        if self.editor.with_untracked(|editor| {
+            editor
+                .as_ref()
+                .is_some_and(|editor| editor.node == node && editor.incarnation == incarnation)
+        }) {
+            self.editor.set(None);
+        }
+    }
+}
+
+fn parse(stroke: &str) -> Result<Keystroke, String> {
+    if stroke.len() > 128 {
+        return Err("native keystroke exceeds 128 bytes".into());
+    }
+    let native = stroke
+        .replace("open-square-bracket", "[")
+        .replace("close-square-bracket", "]");
+    Keystroke::parse_with(&native, apple_keys())
+        .map_err(|error| format!("native keystroke {stroke}: {error}"))
+}
+fn mask(stroke: Keystroke) -> u8 {
+    u8::from(stroke.modifiers.shift)
+        | u8::from(stroke.modifiers.alt) << 1
+        | u8::from(stroke.modifiers.ctrl) << 2
+        | u8::from(stroke.modifiers.cmd) << 3
+}
+fn editor_owns(stroke: Keystroke) -> bool {
+    let name = key_name(stroke.key);
+    EDITOR_KEYS.iter().any(|(_, key)| {
+        *key == name
+            && (key.len() != 1 || matches!(mask(stroke), 4 | 5 | 8 | 9))
+            && (*key != "v" || matches!(mask(stroke), 5 | 9))
+            && (*key != "x" || matches!(mask(stroke), 4 | 8))
+    })
+}
+
+fn key_name(key: Key) -> String {
+    match key {
+        Key::Char(' ') => " ".into(),
+        Key::Char(c) => c.to_string(),
+        Key::Enter => "Enter".into(),
+        Key::Escape => "Escape".into(),
+        Key::Tab => "Tab".into(),
+        Key::Backspace => "Backspace".into(),
+        Key::Delete => "Delete".into(),
+        Key::Insert => "Insert".into(),
+        Key::Up => "ArrowUp".into(),
+        Key::Down => "ArrowDown".into(),
+        Key::Left => "ArrowLeft".into(),
+        Key::Right => "ArrowRight".into(),
+        Key::Home => "Home".into(),
+        Key::End => "End".into(),
+        Key::PageUp => "PageUp".into(),
+        Key::PageDown => "PageDown".into(),
+        Key::F(n) => format!("F{n}"),
+    }
+}
+fn payload(stroke: Keystroke, editor: Option<&EditorFocus>) -> Value {
+    let mut payload = json!({"key":key_name(stroke.key),"ctrlKey":stroke.modifiers.ctrl,"metaKey":stroke.modifiers.cmd,
+        "shiftKey":stroke.modifiers.shift,"altKey":stroke.modifiers.alt,"isComposing":false,"repeat":false});
+    if let Some(editor) = editor {
+        payload["nodeId"] = json!(editor.node);
+    }
+    payload
+}
+fn install(
+    snapshot: &Snapshot,
+    editor: Option<EditorFocus>,
+    send: SendKey,
+    admission: Option<ApplicationMutations>,
+) {
+    // Deduplicate physical strokes. NSH resolves the shared command catalog;
+    // OCaml remains the only sequence matcher and command dispatcher.
+    let mut bindings = BTreeMap::<String, (Keystroke, u8)>::new();
+    let mut add = |stroke: Keystroke, priority: u8| {
+        if stroke.reserved(os()).is_none() {
+            bindings
+                .entry(stroke.to_string())
+                .and_modify(|(_, previous)| *previous = (*previous).max(priority))
+                .or_insert((stroke, priority));
+        }
+    };
+    if snapshot.capture {
+        let names = (32_u8..=126)
+            .map(|c| {
+                if c == 32 {
+                    "space".to_owned()
+                } else {
+                    char::from(c).to_string()
+                }
+            })
+            .chain((1..=24).map(|n| format!("f{n}")))
+            .chain(
+                [
+                    "left",
+                    "right",
+                    "up",
+                    "down",
+                    "home",
+                    "end",
+                    "pageup",
+                    "pagedown",
+                    "tab",
+                    "enter",
+                    "escape",
+                    "backspace",
+                    "delete",
+                    "insert",
+                ]
+                .map(str::to_owned),
+            );
+        for name in names {
+            for modifiers in 0..16 {
+                let prefixes = [(1, "shift+"), (2, "alt+"), (4, "ctrl+"), (8, "cmd+")]
+                    .into_iter()
+                    .filter_map(|(bit, prefix)| (modifiers & bit != 0).then_some(prefix))
+                    .collect::<String>();
+                if let Ok(stroke) = parse(&format!("{prefixes}{name}")) {
+                    add(stroke, 2);
+                }
+            }
+        }
+    } else {
+        for binding in &snapshot.bindings {
+            if snapshot.palette
+                && !matches!(
+                    binding.command.as_str(),
+                    "go/search" | "command-palette/toggle"
+                )
+            {
+                continue;
+            }
+            if editor.is_none() && binding.scope == "block-editing-only" {
+                continue;
+            }
+            if editor.is_some() && binding.scope == "global-non-editing-only" {
+                continue;
+            }
+            let stroke = parse(&binding.stroke).expect("validated native keymap");
+            if editor.is_some() && editor_owns(stroke) {
+                continue;
+            }
+            add(
+                stroke,
+                if editor.is_some() {
+                    2
+                } else if binding.scope == "global-non-editing-only" {
+                    0
+                } else {
+                    1
+                },
+            );
+        }
+        if snapshot.palette {
+            for key in [
+                "up", "down", "home", "end", "pageup", "pagedown", "enter", "escape",
+            ] {
+                for modifiers in ["", "shift+", "ctrl+", "cmd+"] {
+                    add(
+                        parse(&format!("{modifiers}{key}")).expect("fixed palette key"),
+                        2,
+                    );
+                }
+            }
+            for key in ["ctrl+n", "ctrl+p"] {
+                add(parse(key).expect("fixed palette key"), 2);
+            }
+            if snapshot.palette_copy_reference {
+                add(parse("mod+c").expect("fixed palette copy"), 2);
+            }
+        }
+    }
+    for (_, (stroke, priority)) in bindings {
+        let send = send.clone();
+        let editor = editor.clone();
+        let admission = admission.clone();
+        on_key_with(
+            &stroke.to_string(),
+            KeyOptions {
+                when: match priority {
+                    0 => When::NotEditing,
+                    1 => When::Auto,
+                    _ => When::Always,
+                },
+                repeat: !snapshot.capture,
+                ..Default::default()
+            },
+            move |_| {
+                if admission
+                    .as_ref()
+                    .is_some_and(|admission| admission.check().is_err())
+                {
+                    return;
+                }
+                if let Some(editor) = &editor {
+                    (editor.before_key)();
+                }
+                send(payload(stroke, editor.as_ref()));
+            },
+        );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use nsh_engine::{EngineConfig, EngineContext, Root};
+    use nsh_testing::Headless;
+    use std::sync::{Arc, Mutex};
+
+    #[derive(Clone)]
+    struct Observed(Arc<Mutex<Vec<Value>>>);
+    fn snapshot(stroke: &str, revision: u64) -> String {
+        json!({"revision":revision,"palette":false,"capture":false,"palette-copy-reference":false,"bindings":[
+            {"stroke":stroke,"command":"go/search","scope":"global-prevent-default"},
+            {"stroke":"t","command":"ui/toggle-left-sidebar","scope":"global-non-editing-only"},
+            {"stroke":"l","command":"ui/toggle-left-sidebar","scope":"global-non-editing-only"},
+            {"stroke":"mod+z","command":"editor/undo","scope":"global-prevent-default"}
+        ]}).to_string()
+    }
+    #[component]
+    fn KeyboardProbe() -> impl IntoElement {
+        let observed = engine_context::<Observed>().unwrap();
+        let keyboard = GlobalKeyboard::mount();
+        let output = observed.0.clone();
+        keyboard.send.set(Some(Rc::new(move |value| {
+            output.lock().unwrap().push(value)
+        })));
+        keyboard.replace(&snapshot("mod+k", 1)).unwrap();
+        let changed = keyboard;
+        on_key_with(
+            "f8",
+            KeyOptions {
+                when: When::Always,
+                ..Default::default()
+            },
+            move |_| {
+                changed.replace(&snapshot("mod+shift+j", 2)).unwrap();
+            },
+        );
+        let value = signal(String::new());
+        view().child(
+            input()
+                .label("Ordinary text")
+                .value(move || value.get())
+                .on_change(move |text: &str| value.set(text.to_owned())),
+        )
+    }
+    #[test]
+    fn native_global_keys_follow_effective_rebinding_without_stealing_text_input_keys() {
+        let observed = Observed(Arc::new(Mutex::new(Vec::new())));
+        let mut config = EngineConfig::new(Root::of::<KeyboardProbe>());
+        config.context = EngineContext::default().with(observed.clone());
+        config.environment.os = nsh_core::platform::Os::MacOs;
+        let mut app = Headless::start(config).unwrap();
+        app.first_render().unwrap();
+        app.press_key("meta+k").unwrap();
+        app.press_key("t").unwrap();
+        app.press_key("l").unwrap();
+        let keys = observed
+            .0
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|value| value["key"].as_str().unwrap().to_owned())
+            .collect::<Vec<_>>();
+        assert_eq!(keys, ["k", "t", "l"]);
+        app.press_key("f8").unwrap();
+        app.press_key("meta+k").unwrap();
+        assert_eq!(observed.0.lock().unwrap().len(), 3);
+        app.press_key("meta+shift+j").unwrap();
+        assert_eq!(observed.0.lock().unwrap()[3]["key"], json!("j"));
+        app.type_text("label:Ordinary text", "").unwrap();
+        app.press_key("t").unwrap();
+        app.press_key("meta+z").unwrap();
+        assert_eq!(observed.0.lock().unwrap().len(), 4);
+        // A global non-editing sequence must not turn an input's normal t into
+        // a document chord; native undo remains owned by the ordinary Input.
+        assert!(
+            app.screen()
+                .input_text("label:Ordinary text")
+                .unwrap()
+                .is_some()
+        );
+    }
+    #[test]
+    fn native_key_scope_and_editor_fallback_ownership_keep_one_dispatcher() {
+        let key = Keystroke {
+            key: Key::Char('z'),
+            modifiers: nsh_core::keymap::Modifiers {
+                cmd: true,
+                ..Default::default()
+            },
+        };
+        assert!(editor_owns(key));
+        assert!(!editor_owns(Keystroke {
+            key: Key::Char('g'),
+            ..key
+        }));
+        assert_eq!(key_name(Key::Left), "ArrowLeft");
+    }
+}

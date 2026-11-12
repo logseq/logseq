@@ -16,6 +16,7 @@ use std::{
 };
 
 mod startup_body;
+mod startup_keyboard;
 mod startup_rows;
 mod startup_surfaces;
 
@@ -379,6 +380,7 @@ fn mount_actual_application(rows: Option<usize>) -> Result<(), String> {
     {
         return Err("Appearance scrolling or dismissal remounted More or the journal body".into());
     }
+    startup_keyboard::qualify(&mut app)?;
     startup_surfaces::qualify(&mut app)?;
     // Headless owns and joins the engine thread on drop. The process boundary
     // also isolates OCaml's persistent worker from every other Rust test.

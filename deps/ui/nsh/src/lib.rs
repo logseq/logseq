@@ -58,6 +58,7 @@ pub fn App(props: AppProps) -> impl IntoElement {
         },
     );
     let application_menu = services::ApplicationMenu::mount();
+    provide_context(services::keyboard::GlobalKeyboard::mount());
     let services = if props.startup_preflight.get_untracked()
         || engine_context::<StartupPreflight>().is_some()
     {

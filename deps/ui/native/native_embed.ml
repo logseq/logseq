@@ -38,7 +38,10 @@ let with_entry_lock f =
   | x -> entry_owner := None; Mutex.unlock entry_lock; x
   | exception e -> entry_owner := None; Mutex.unlock entry_lock; raise e
 
+let publish_native_keymap : (unit -> unit) ref = ref (fun () -> ())
+
 let take_patches () =
+  !publish_native_keymap ();
   let batches = Queue.fold (fun acc batch -> batch :: acc) [] pending_batches in
   Queue.clear pending_batches;
   List.rev batches
@@ -57,6 +60,51 @@ let () =
         (Lui_app.runtime app).Lui_runtime.runtime_backend.backend_profile.profile_host
         <> Lui_protocol.NshHost
     | None -> true)
+
+let last_native_keymap :
+    ((Model.t, Action.t) Lui_app.reducer_app * int * bool * bool * bool) option ref = ref None
+
+let () = publish_native_keymap := (fun () ->
+  match !current_app with
+  | Some app when (Lui_app.runtime app).Lui_runtime.runtime_backend.backend_profile.profile_host
+                  = Lui_protocol.NshHost ->
+      let revision = Keymap_data.revision () in
+      let palette, copy_reference = match !Cmdk_state.latest_st with
+        | Some state ->
+            let view = Cmdk_state.get state in
+            let copy = match Cmdk_state.item_at view view.Cmdk_state.hl with
+              | Some {Cmdk_state.act=(Cmdk_state.Open_page _ | Cmdk_state.Open_block _);_} -> true
+              | _ -> false in
+            view.Cmdk_state.open_, copy
+        | None -> false, false in
+      let capture = Keyboard_capture.active () in
+      let unchanged = match !last_native_keymap with
+        | Some (owner, previous, p, c, copy) ->
+            owner == app && previous = revision && p = palette && c = capture && copy = copy_reference
+        | None -> false in
+      if not unchanged then begin
+        let bindings = Keymap_data.current_items () |> Keymap_data.unique_rows
+          |> List.fold_left (fun items (row : Keymap_data.row) ->
+            let scope = Keymap_data.handler row in
+            if not (Keymap_data.global_handler scope) then items
+            else
+              let command = Keymap_data.command_id row.title in
+              match Keymap_data.effective_shortcut command with
+              | Commands_data.Binds sequences ->
+                  List.fold_left (fun items sequence ->
+                    List.fold_left (fun items stroke ->
+                      if stroke = "" then items else
+                        `Assoc ["stroke", `String stroke; "command", `String command;
+                                "scope", `String scope] :: items)
+                      items (String.split_on_char ' ' sequence)) items sequences
+              | Commands_data.Disabled | Commands_data.Unbound -> items) [] |> List.rev in
+        last_native_keymap := Some (app, revision, palette, capture, copy_reference);
+        platform_request ("native-keymap\n" ^ Yojson.Safe.to_string
+          (`Assoc ["revision", `Int revision; "palette", `Bool palette;
+                   "capture", `Bool capture; "palette-copy-reference", `Bool copy_reference;
+                   "bindings", `List bindings]))
+      end
+  | Some _ | None -> ())
 
 let require_go_metrics () =
   match !current_app with
@@ -409,6 +457,7 @@ let perf_mark name t0 =
   then Printf.eprintf "[perf] %s %.1fms\n%!" name (perf_ms () -. t0)
 
 let initialize_unlocked platform_code host_code (payload : string) =
+  last_native_keymap := None;
   let paints_caret =
     match Yojson.Safe.from_string payload with
     | `Assoc [ ("paintsCaret", `Bool value) ] -> value
@@ -814,6 +863,46 @@ let platform_event payload =
         Host.enqueue (fun () ->
           Update_admission.require_input Update_admission.application "application-menu";
           Platform.emit_event name json)
+      else if name = "native-key" then begin
+        let fields = match json with Js.Json.JObject fields -> fields
+          | _ -> invalid_arg "Native key requires an object" in
+        let value field = match List.assoc_opt field fields with
+          | Some value -> value | None -> invalid_arg ("Native key missing " ^ field) in
+        let key = match Js.Json.decodeString (value "key") with
+          | Some key when key <> "" -> key | _ -> invalid_arg "Native key requires a key" in
+        let boolean field = match Js.Json.decodeBoolean (value field) with
+          | Some value -> value | None -> invalid_arg ("Native key requires boolean " ^ field) in
+        let shift = boolean "shiftKey" and alt = boolean "altKey"
+        and ctrl = boolean "ctrlKey" and meta = boolean "metaKey"
+        and repeat = boolean "repeat" in
+        ignore (boolean "isComposing");
+        let node = match List.assoc_opt "nodeId" fields with
+          | None -> None
+          | Some value -> (match Js.Json.decodeNumber value with
+              | Some value when value >= 0. && value <= float_of_int max_int
+                                && Float.floor value = value -> Some (int_of_float value)
+              | _ -> invalid_arg "Native key requires an integer nodeId") in
+        let values = decode_extension_values (Js.Json.stringify (Js.Json.object_list
+          [ "key", Js.Json.string key; "shift", Js.Json.boolean shift;
+            "alt", Js.Json.boolean alt; "ctrl", Js.Json.boolean ctrl;
+            "meta", Js.Json.boolean meta; "repeat", Js.Json.boolean repeat ])) in
+        Host.enqueue (fun () ->
+          Update_admission.require_input Update_admission.application "native-keyboard";
+          match !current_app with
+          | None -> invalid_arg "Native key before application initialization"
+          | Some app ->
+              let runtime = Lui_app.runtime app in
+              let current () = match node with
+                | None -> true
+                | Some id -> Lui_runtime.extension_identifier runtime id = Some "logseq-editor" in
+              if current () then begin
+                Platform.emit_event "keydown" json;
+                if not !Platform.default_prevented && current () then
+                  Option.iter (fun id -> ignore (Lui_app.dispatch_event app
+                    (Lui_protocol.ExtensionEvent (id,"logseq-editor","key",values)))) node;
+                app_flush_checked app
+              end)
+      end
       else if name = "keychain-result" then
         let json = try Yojson.Safe.from_string body
           with Yojson.Json_error _ -> invalid_arg "Invalid keychain result encoding" in
@@ -932,6 +1021,7 @@ let dispose () =
      and the graph open so the next launch attaches instantly *)
   with_entry_lock (fun () ->
     Editor_actions.cancel_clipboard_actions ();
+    last_native_keymap := None;
     Platform.cancel_clipboard_writes ();
     Platform.cancel_keychain_requests ();
     Host.set_host_op Host.disconnected;

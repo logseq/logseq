@@ -3,6 +3,7 @@ mod clipboard;
 mod dom;
 mod editor_geometry;
 mod editor_text_geometry;
+pub(crate) mod keyboard;
 mod menu;
 pub(crate) mod resources;
 mod secrets;
@@ -35,6 +36,7 @@ pub struct Services {
     closing: Cell<bool>,
     resources: resources::Resources,
     menu: ApplicationMenu,
+    keyboard: keyboard::GlobalKeyboard,
 }
 impl Services {
     pub fn new(icons: IconRegistry, themes: ThemeRegistry, menu: ApplicationMenu) -> Rc<Self> {
@@ -58,6 +60,8 @@ impl Services {
             closing: Cell::new(false),
             resources: resources::Resources::new(),
             menu,
+            keyboard: use_context::<keyboard::GlobalKeyboard>()
+                .expect("application keyboard owner"),
         })
     }
     pub(crate) fn resources(&self) -> resources::Resources {
@@ -67,6 +71,7 @@ impl Services {
         let events =
             use_context::<ApplicationEvents>().ok_or("application event pump is missing")?;
         if !self.connected.replace(true) {
+            self.keyboard.connect(events.clone(), renderer.clone());
             let failure = renderer.clone();
             let send = events.clone();
             effect(move || {
@@ -122,6 +127,7 @@ impl Services {
             })));
         }
         let replies = match request.operation.as_str() {
+            "native-keymap" => self.keyboard.replace(&request.payload).map(|()| Vec::new()),
             "app-icons" => {
                 self.icons.replace_json(&request.payload)?;
                 Ok(Vec::new())

@@ -402,6 +402,20 @@ let editor_keyboard_capture_order () =
       if !remove then ignore (Lui_app.dispose app))];
     let key () = ignore (Native_embed.extension_event node "logseq-editor" "key"
       {|{"key":"Enter","meta":true}|}) in
+    let global_key () =
+      Native_embed.platform_event ("native-key\n" ^ Js.Json.stringify (Js.Json.object_list
+        ["nodeId",Js.Json.number (float_of_int node); "key",Js.Json.string "Enter";
+         "metaKey",Js.Json.boolean true; "ctrlKey",Js.Json.boolean false;
+         "shiftKey",Js.Json.boolean false; "altKey",Js.Json.boolean false;
+         "isComposing",Js.Json.boolean false; "repeat",Js.Json.boolean false]));
+      ignore (Native_embed.pump ()) in
+    global_key ();
+    check "global native keyboard uses the same capture-before-conduit transaction"
+      (!observed = ["capture"; "conduit"]);
+    observed := []; consume := true;
+    global_key ();
+    check "global native key capture can consume the conduit exactly once" (!observed = ["capture"]);
+    observed := []; consume := false;
     key ();
     check "native document capture runs before exactly one conduit event"
       (!observed = ["capture"; "conduit"]);

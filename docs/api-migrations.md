@@ -1,5 +1,29 @@
 # API migrations
 
+## NSH global shortcuts use the effective shared keymap
+
+The native runner now installs one application-owned native keymap from the
+current OCaml `Keymap_data` catalog and user overrides. The new internal
+`native-keymap` host message carries revision, command scopes, individual chord
+strokes, palette state and keyboard-recording state. The ordered `native-key`
+reply supplies the existing document key event fields and, for a focused block
+editor, its retained node ID. Document capture runs before the editor conduit;
+consumed or retired-target keys do not reach that conduit.
+
+Cmd/Ctrl+K, the command palette and nonediting sequences such as T L and T R now
+reach their shared handlers even when no block editor is focused. Binding edits
+replace native registrations when their revision changes. Native text inputs
+retain their ordinary editing keys; focused editor fallback keys remain owned by
+the existing conduit, with one shared stroke table preventing duplicate delivery.
+Palette navigation and keyboard recording register only while those scopes are
+active. OS-reserved strokes remain owned by the operating system.
+
+Applications require no API changes. Maintained Apple/iOS, Android and Web event
+routes are unchanged. Rebuild both the native OCaml library and Rust host together
+because the new internal host messages are required as a pair. The required
+startup gate exercises native keymap dispatch into the compiled real application;
+AppKit responder and hardware focus still require native-window qualification.
+
 ## The native publication gate mounts deferred application surfaces
 
 `real_application_startup_preflight` now opens the actual compiled Settings dialog
