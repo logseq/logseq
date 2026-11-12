@@ -33,7 +33,13 @@ retirement defect still affects other providers and is explicitly unresolved
 in `../2026-11-12/nsh-continuous-ux-review.md`; the actual selection popover uses
 both Cancel and PressOutside and does not take that SDK path.
 
-## Exact implementation and build
+After the printable-shortcut correction, the same unchanged complete block
+scenario passed again at `b14403b6fe` in 15.9 seconds:
+`/tmp/logseq-printable-current-block-all.log`, private `logseq-native-block.VPXO7r`.
+The paired native CmdK qualification, artifact hashes and remaining input limits
+are recorded in [nsh-native-cmdk.md](nsh-native-cmdk.md).
+
+## Earlier implementation and build
 
 - Application: `c5bd59e23afa7c14afb9b539a20fd54350bda8d1`.
 - LUI: `58b7d39df9d69305c75f5a88474788ea86085a96`.
