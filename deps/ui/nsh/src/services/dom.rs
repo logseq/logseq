@@ -850,7 +850,9 @@ mod tests {
 
     #[component]
     fn NativeClick() -> impl IntoElement {
-        let mode = engine_context::<ClickMode>().unwrap_or(ClickMode::Live);
+        let mode = engine_context::<ClickMode>()
+            .map(|mode| *mode)
+            .unwrap_or(ClickMode::Live);
         let allowed = signal(mode != ClickMode::Preparing);
         let count = signal(0_u32);
         let renderer = Renderer::new(move |event, renderer| {
