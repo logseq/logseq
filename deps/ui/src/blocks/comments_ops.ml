@@ -100,29 +100,29 @@ let add_box_of area_uuid =
 
 let submitting : (string * string, unit) Hashtbl.t = Hashtbl.create 8
 
-let submit area_uuid =
-  match add_box_of area_uuid with
-  | Some ta ->
-      let original = ta.Ui_services.value () in
-      let text = String.trim original in
-      let repo = Runtime.repo () in
-      let key = repo, area_uuid in
-      if text <> "" && not (Hashtbl.mem submitting key) then (
-        Hashtbl.add submitting key ();
-        (let* () = Outliner_ops.apply_and_refresh
-             [ insert_comment_op area_uuid text ] in
+let submit_value area_uuid ~value ~current ~clear =
+  let original = value () in
+  let text = String.trim original in
+  let repo = Runtime.repo () in
+  let key = repo, area_uuid in
+  if text <> "" && current () && not (Hashtbl.mem submitting key) then (
+    Hashtbl.add submitting key ();
+    (let* () = Outliner_ops.apply_and_refresh [insert_comment_op area_uuid text] in
+     Hashtbl.remove submitting key;
+     if Runtime.repo () = repo && current () && value () = original then clear ();
+     Js.Promise.resolve ())
+    |> Js.Promise.catch (fun error ->
          Hashtbl.remove submitting key;
-         if Runtime.repo () = repo && ta.Ui_services.connected ()
-            && ta.Ui_services.value () = original then (
-           ta.Ui_services.set_value "";
-           ta.Ui_services.set_text "");
+         Ui_services.log_error ("Comment submission failed", error);
          Js.Promise.resolve ())
-        |> Js.Promise.catch (fun error ->
-             Hashtbl.remove submitting key;
-             Ui_services.log_error ("Comment submission failed", error);
-             Js.Promise.resolve ())
-        |> ignore)
-  | None -> ()
+    |> ignore)
+
+let submit area_uuid =
+  Option.iter (fun textarea ->
+    submit_value area_uuid ~value:textarea.Ui_services.value
+      ~current:textarea.connected
+      ~clear:(fun () -> textarea.set_value "";textarea.set_text ""))
+    (add_box_of area_uuid)
 
 let delete uuid =
   match (Runtime.model ()).Model.repo with

@@ -120,15 +120,11 @@ let comment_row uuid (b : Model.block) : t =
 (* cljs comment-box: a bare textarea plus the send-button submit —
    reveal()/submit() still resolve the box by '.ls-comment-add textarea'
    and the textarea kind renders a real <textarea> *)
-let add_box uuid : t =
+let add_box_body uuid ~input ~submit : t =
   box ~key:("caa-" ^ uuid) ~style_class:"ls-comment-add"
     [ box ~key:("cab-" ^ uuid) 
         [ box ~key:("cae-" ^ uuid) 
-            [ (* rows=1 dropped — no rows prop on the textarea kind *)
-              textarea ~key:("cat-" ^ uuid)
-                ~placeholder:(U.t "block.comments/placeholder")
-                []
-            ]
+            [input]
         ; box ~key:("cax-" ^ uuid) 
             [ (* data-area-uuid dropped — direct on_press covers the
                  action; the delegated editor_keys lookup now no-ops *)
@@ -137,11 +133,39 @@ let add_box uuid : t =
                 ~variant:`ghost ~size:`icon
                 ~label:(U.t "ui/submit")
                 ~icon:(`app "send")
-                ~on_press:(fun _ -> Comments_ops.submit uuid)
+                ~on_press:(fun _ -> submit ())
                 []
             ]
         ]
     ]
+
+let reply_draft_slot : string Signal.state_slot = Signal.state_slot "comments-reply-draft"
+
+let add_box uuid : t =
+ fun context parent ->
+  if Lui_ui.host context <> Lui_protocol.NshHost then
+    add_box_body uuid
+      ~input:(textarea ~key:("cat-" ^ uuid)
+        ~placeholder:(U.t "block.comments/placeholder") [])
+      ~submit:(fun () -> Comments_ops.submit uuid) context parent
+  else
+    let context=Lui_ui.child_context context ("comment-reply-" ^ Runtime.repo () ^ "-" ^ uuid) in
+    let draft=Signal.state_at context.Lui_ui.ui_scheduler context.ui_state_scope
+      reply_draft_slot "" in
+    let repo=Runtime.repo () in
+    let current ()=not (Signal.scope_is_disposed context.ui_state_scope)
+      && Runtime.repo ()=repo in
+    add_box_body uuid
+      ~input:(textarea ~key:("cat-" ^ uuid)
+        ~accessibility_identifier:("comment-reply-" ^ uuid)
+        ~text:(reactive Fun.id (Signal.value draft))
+        ~placeholder:(U.t "block.comments/placeholder")
+        ~on_input:(function
+          | Lui_protocol.TextChanged (_,value) -> Runtime.signal_set draft value
+          | _ -> ()) [])
+      ~submit:(fun () -> Comments_ops.submit_value uuid
+        ~value:(fun () -> Runtime.signal_get draft) ~current
+        ~clear:(fun () -> Runtime.signal_set draft "")) context parent
 
 (* cljs comments-area-view (expanded branch) *)
 let area_view uuid (b : Model.block) : t =

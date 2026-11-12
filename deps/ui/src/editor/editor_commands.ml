@@ -439,7 +439,7 @@ let toggle_repeated () =
                      "logseq.property.repeat/temporal-property" ]))
   | None -> ()
 
-let commit_freq v =
+let commit_freq ~restore v =
   match cur_rpt () with
   | None -> ()
   | Some r -> (
@@ -451,13 +451,7 @@ let commit_freq v =
                 apply_props p
                   [ Ops.set_block_property p.uuid
                       "logseq.property.repeat/recur-frequency" (W.Int n) ]))
-      | _ -> (
-          match
-            Ui_services.dom_query
-              "#date-time-picker .ls-repeat-frequency-input"
-          with
-          | Some inp -> inp.Ui_services.set_value (string_of_int r.freq)
-          | None -> ()))
+      | _ -> restore r.freq)
 
 let commit_time v =
   match String.split_on_char ':' v with
@@ -506,7 +500,7 @@ let repeat_select ps ~sel ~label ~label_of ~options_of ~on_pick : t =
 (* the raw-input bridge — LUI input only emits text/color kinds and
    carries no blur/value-attr plumbing, so number/time inputs ride
    Logseq_el with real attrs + dom events *)
-let freq_input ps : t =
+let legacy_freq_input ps : t =
   Logseq_el.el ~key:"finp" ~tag:"input"
     ~style_class:"ls-repeat-frequency-input" ~events:"blur keydown"
     ~attrs_signal_v:
@@ -526,13 +520,47 @@ let freq_input ps : t =
       match name with
       | "keydown" ->
           if Json_payload.str payload "key" = "Enter" then (
-            commit_freq (Json_payload.str payload "value");
+            commit_freq ~restore:(fun frequency ->
+              Option.iter (fun input -> input.Ui_services.set_value (string_of_int frequency))
+                (Ui_services.dom_query "#date-time-picker .ls-repeat-frequency-input"))
+              (Json_payload.str payload "value");
             (* blur commits in the original; focusing the grid day
                blurs this input the same way *)
             focus_day ())
-      | "blur" -> commit_freq (Json_payload.str payload "value")
+      | "blur" -> commit_freq ~restore:(fun frequency ->
+              Option.iter (fun input -> input.Ui_services.set_value (string_of_int frequency))
+                (Ui_services.dom_query "#date-time-picker .ls-repeat-frequency-input"))
+              (Json_payload.str payload "value")
       | _ -> ())
     []
+
+let freq_input ps : t =
+ fun context parent ->
+  if Lui_ui.host context <> Lui_protocol.NshHost then legacy_freq_input ps context parent
+  else
+    let frequency po = match rpt_of po with Some repeat -> repeat.freq | None -> 1 in
+    let initial = frequency (Signal.get ps) in
+    let buffer = Signal.state context.Lui_ui.ui_scheduler (initial, string_of_int initial) in
+    let value po (basis, draft) =
+      let current = frequency po in
+      if basis = current then draft else string_of_int current in
+    (Ui_components.text_field ~key:"finp"
+       ~accessibility_identifier:"calendar-repeat-frequency"
+       ~style_class:"ls-repeat-frequency-input"
+       ~label:(I18n.t "property.repeat/every")
+       ~width:56 ~min_width:56 ~height:32 ~padding_horizontal:8 ~padding_vertical:0
+       ~submit_on_blur:true
+       ~text:(reactive value ps (Signal.value buffer))
+       ~on_input:(function
+         | Lui_protocol.TextChanged (_, draft) ->
+             Signal.set buffer (frequency (Signal.get ps), draft)
+         | _ -> ())
+       ~on_submit:(fun _ ->
+         let draft = value (Signal.get ps) (Signal.get_state buffer) in
+         commit_freq ~restore:(fun frequency ->
+           Signal.set buffer (frequency, string_of_int frequency)) draft;
+         let current = match cur_rpt () with Some repeat -> repeat.freq | None -> 1 in
+         Signal.set buffer (current, string_of_int current)) []) context parent
 
 let year_input ps : t =
   Logseq_el.el ~key:"yin" ~tag:"input" ~style_class:"ls-date-year-input"

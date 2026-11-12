@@ -1521,3 +1521,32 @@ counts. Unknown optional values are no longer silently dropped from the coverage
 report. Known arguments on the same constructor are still checked through its
 real encoder; a constructor requiring unknown mandatory arguments remains deferred.
 These counts describe captured syntax, not exhaustive UI or dynamic-value coverage.
+## Native calendar and legacy comment fields reset through their owners
+
+The NSH calendar repeat-frequency field is a canonical controlled TextField.
+Its scoped draft commits on Enter or blur. Invalid values restore the existing
+positive frequency through the field's TextValue binding; valid values update
+the existing repeat model and worker operation. An authoritative frequency
+change replaces a draft based on an older value. Other backends retain their
+numeric input and existing DOM restore/focus behavior.
+
+`Editor_commands.commit_freq` now requires `~restore`, so each caller explicitly
+provides its field owner rather than implicitly performing a DOM mutation:
+
+```ocaml
+Editor_commands.commit_freq
+  ~restore:(fun frequency -> Signal.set draft (string_of_int frequency)) value
+```
+
+Legacy Comments areas on NSH use one scoped, controlled textarea draft per
+reply owner. `Comments_ops.submit_value area_uuid ~value ~current ~clear`
+submits through the existing operation path and clears only if the original
+owner, graph and draft remain current after the asynchronous write. A newer
+draft or disposed owner is preserved. The DOM-oriented `Comments_ops.submit`
+facade remains available for existing non-NSH consumers and keeps its behavior;
+no global native DOM setter or extra draft registry is introduced.
+
+The actual native admission fixture exercises invalid/valid frequency commits,
+external frequency updates, concurrent comment drafts, successful clearing and
+post-disposal completion. Source preparation does not establish that the
+compiled native checks have passed; the primary build owner runs them serially.

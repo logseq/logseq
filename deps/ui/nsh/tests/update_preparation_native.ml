@@ -1380,6 +1380,89 @@ let native_menu_scope_retention () =
       (String.starts_with ~prefix:"#/graphs" (Platform.location_hash ()));
     check "native menu invariant was inspected across actual publications" (!publications>5))
 
+let native_controlled_field_resets () =
+  let previous_model= !Runtime.read_model and previous_flush= !Runtime.app_flush
+  and previous_schedule= !Runtime.schedule_flush and previous_worker= !Runtime.worker
+  and previous_popup= !Editor_commands.active and previous_popup_signal= !Editor_commands.popup_vs in
+  let repeat : Editor_commands.repeat={prop_id=1;repeated=true;freq=2;unit_id=1;
+    unit_choices=[];rtype_id=1;rtype_choices=[];when_id=1;when_choices=[]} in
+  let popup : Editor_commands.popup={kind=Cal_insert "";uuid="frequency-reset-owner";
+    from=0;cy=2026;cm=11;cd=12;hour=0;tmin=0;x=0.;y=0.;menu=None;rpt=Some repeat} in
+  Editor_commands.active:=Some popup;Editor_commands.popup_vs:=None;
+  let pending=ref None and writes=ref 0 in
+  Runtime.worker:=Some {Worker_client.invoke_fn=(fun method_ _ ->
+    if method_="thread-api/apply-outliner-ops" then (
+      incr writes;
+      Js.Promise.make (fun ~resolve ~reject:_ -> pending:=Some resolve))
+    else Js.Promise.resolve Wire.Nil);
+    on_message=(fun _ _ -> ());dead=Js.Promise.liveness ()};
+  let publications=ref 0 in
+  let backend : Lui_protocol.backend={
+    backend_profile=Lui_protocol.profile Lui_protocol.MacOS Lui_protocol.NshHost;
+    apply_batch=(fun _ -> incr publications;true)} in
+  let app=Lui_app.create backend {Model.initial with repo=Some "field-reset-owner"}
+    (fun model () -> model)
+    (fun context _ _ ->
+      let ps=Signal.value (Editor_commands.popup_vs_of context) in
+      Lui_elements.column [Editor_commands.freq_input ps;Comments.add_box "legacy-comment"]) in
+  Fun.protect ~finally:(fun () ->
+    Option.iter (fun resolve -> resolve Wire.Nil) !pending;
+    ignore (Lui_app.dispose app);Runtime.read_model:=previous_model;
+    Runtime.app_flush:=previous_flush;Runtime.schedule_flush:=previous_schedule;
+    Runtime.worker:=previous_worker;Editor_commands.active:=previous_popup;
+    Editor_commands.popup_vs:=previous_popup_signal) (fun () ->
+    Runtime.read_model:=(fun () -> Lui_app.model app);
+    Runtime.app_flush:=(fun () -> ignore (Lui_app.flush app));
+    Runtime.schedule_flush:=Host.enqueue;
+    ignore (Lui_app.start app);ignore (Lui_app.flush app);
+    let runtime=Lui_app.runtime app in
+    let named identifier=Hashtbl.fold (fun node props found ->
+      if Lui_protocol.Property_map.find_opt Lui_protocol.AccessibilityIdentifier props
+        =Some (Lui_protocol.StringValue identifier) then Some node else found)
+      runtime.Lui_runtime.runtime_properties None |> Option.get in
+    let frequency=named "calendar-repeat-frequency"
+    and comment=named "comment-reply-legacy-comment" in
+    let comment_submit=Hashtbl.fold (fun node key found ->
+      if key="cas-legacy-comment" then Some node else found)
+      runtime.Lui_runtime.runtime_reload_keys None |> Option.get in
+    let flush ()=ignore (Lui_app.flush app);Host.drain () in
+    let text node=Option.bind (Hashtbl.find_opt runtime.Lui_runtime.runtime_properties node)
+      (Lui_protocol.Property_map.find_opt Lui_protocol.TextValue) in
+    let type_ node value=ignore (Lui_app.dispatch_event app (Lui_protocol.TextChanged (node,value)));flush () in
+    let settle ()=match !pending with
+      | None -> failwith "native controlled field write was not sent"
+      | Some resolve -> pending:=None;resolve Wire.Nil;flush () in
+    List.iter (fun invalid ->
+      type_ frequency invalid;
+      ignore (Lui_app.dispatch_event app (Lui_protocol.Submit frequency));flush ();
+      check "invalid native frequency restores its actual controlled field without a write"
+        (text frequency=Some (Lui_protocol.StringValue "2") && !writes=0))
+      ["";"0";"-2";"invalid"];
+    type_ frequency "3";
+    ignore (Lui_app.dispatch_event app (Lui_protocol.Submit frequency));flush ();
+    check "valid native frequency commits through its actual calendar owner"
+      (text frequency=Some (Lui_protocol.StringValue "3") && !writes=1);
+    settle ();
+    type_ frequency "99";
+    Editor_commands.update_rpt (fun current -> {current with freq=8});flush ();
+    check "external calendar frequency replaces an older local draft on the retained field"
+      (named "calendar-repeat-frequency"=frequency && text frequency=Some (Lui_protocol.StringValue "8"));
+    type_ comment "First reply";
+    ignore (Lui_app.dispatch_event app (Lui_protocol.Press comment_submit));flush ();
+    type_ comment "Newer reply";settle ();
+    check "asynchronous comment success preserves a newer draft on the retained textarea"
+      (named "comment-reply-legacy-comment"=comment && text comment=Some (Lui_protocol.StringValue "Newer reply"));
+    ignore (Lui_app.dispatch_event app (Lui_protocol.Press comment_submit));flush ();settle ();
+    check "successful current comment clears through its controlled textarea owner"
+      (text comment=Some (Lui_protocol.StringValue ""));
+    type_ comment "Detached reply";
+    ignore (Lui_app.dispatch_event app (Lui_protocol.Press comment_submit));flush ();
+    ignore (Lui_app.dispose app);
+    let after_disposal= !publications in
+    settle ();
+    check "a detached comment owner does not publish an asynchronous field reset"
+      (!publications=after_disposal))
+
 let () =
   let owner = Thread.id (Thread.self ()) in
   let assert_owner () =
@@ -1396,6 +1479,7 @@ let () =
   native_settings_route_links ();
   native_cmdk_controlled_input ();
   native_point_property_scroll ();
+  native_controlled_field_resets ();
   native_entry_admission ();
   editor_keyboard_capture_order ();
   native_worker_admission ();
