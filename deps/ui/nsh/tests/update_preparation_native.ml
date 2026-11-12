@@ -445,7 +445,8 @@ let native_outliner_content_events () =
           Editor_state.ensure context;
           Lui_elements.column ~style_class:"ls-block"
           ~data_attrs:["data-blockid","native-content";"data-cid","main"]
-          [Tree.content_el "native-content" block]) in
+          [ Tree.content_el "native-content" block
+          ; Tree.control_wrap ~scope:"main" ~library:false "native-content" block ]) in
       Native_embed.current_app := Some app;
       Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app)) (fun () ->
         ignore (Lui_app.start app); ignore (Lui_app.flush app);
@@ -455,6 +456,15 @@ let native_outliner_content_events () =
         let enabled = Lui_protocol.Property_map.find_opt Lui_protocol.PointerEnabled props
           = Some (Lui_protocol.BoolValue true) in
         check "only NSH content registers a native pointer owner" (enabled = native);
+        let bullet = Hashtbl.fold (fun id props found ->
+          if Lui_protocol.Property_map.find_opt Lui_protocol.AccessibilityIdentifier props
+             = Some (Lui_protocol.StringValue "dot-native-content")
+          then Some id else found) runtime.Lui_runtime.runtime_properties None
+          |> Option.get in
+        let bullet_properties = Hashtbl.find runtime.Lui_runtime.runtime_properties bullet in
+        check "only NSH bullets register their native activation owner"
+          ((Lui_protocol.Property_map.find_opt Lui_protocol.PointerEnabled bullet_properties
+           = Some (Lui_protocol.BoolValue true)) = native);
         if native then begin
           Platform.event_target_of := (fun node -> Some (Native_embed.ext_snapshot runtime node));
           Hashtbl.replace Platform.capture_listeners "pointerdown"
@@ -480,7 +490,21 @@ let native_outliner_content_events () =
                      (if name="pointerdown" || name="mousedown" then 1. else 0.))
                | _ -> false)) !recorded;
           check "input delivery retains the same mounted content owner"
-            (Lui_runtime.children runtime (Lui_app.root_node app)=[node])
+            (List.hd (Lui_runtime.children runtime (Lui_app.root_node app))=node);
+          recorded := [];
+          ignore (Native_embed.pointer_down bullet 9. 12. 0 0 "");
+          ignore (Native_embed.pointer_up bullet 9. 12. 0 0 "");
+          ignore (Native_embed.press_detail bullet 9. 12. 0 0 "");
+          check "native bullet activation reaches the shared document owner once"
+            (List.map fst !recorded=["pointerdown";"mousedown";"pointerup";"click"]);
+          check "the native bullet retains its controller's prefixed target identity"
+            (match List.assoc_opt "click" !recorded with
+             | Some payload -> (match (Ui_dom_native.ev_of payload).Ui_services.target with
+                 | Some target -> (match target.Ui_services.closest ".bullet-container" with
+                     | Some bullet -> bullet.Ui_services.id () = "dot-native-content"
+                     | None -> false)
+                 | None -> false)
+             | None -> false)
         end))
       Lui_protocol.[MacOS,NshHost,true;IOS,SwiftUIHost,false;AndroidOS,KotlinHost,false])
 

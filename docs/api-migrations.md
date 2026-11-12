@@ -1,5 +1,16 @@
 # API migrations
 
+## NSH block bullets reach the shared outline controller
+
+Displayed block bullets now opt into the same native pointer/document bridge as
+block content. A native bullet activation reaches the existing zoom handler, and
+Shift activation retains the existing open-in-sidebar behavior. Pointer down is
+also delivered to the shared drag controller. This does not by itself qualify
+move/drop targeting or hardware drag behavior.
+
+No application call-site changes are required. Apple, Android and Web retain
+their current host event ownership.
+
 ## NSH trailing add-block rows route native activation
 
 The shared trailing add-block row now opts into native pointer and press-detail

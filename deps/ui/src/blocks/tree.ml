@@ -253,6 +253,8 @@ let hidden_tag_ident (ident : string) : bool =
 let control_wrap ~scope ~library uuid (b : Model.block) : t =
  fun ctx parent ->
   Settings_state.ensure ctx;
+  let on_pointer_down, on_pointer_up, on_press_detail =
+    Ui_parts.native_document_pointer_handlers ctx in
   let order_list = b.Model.block_order_list = Some "number" in
   let bullet_cls =
     "bullet-container cursor"
@@ -355,6 +357,7 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
         [ Ui_parts.class_signal cs
             (fun c -> bullet_cls ^ if c then " bullet-closed" else "")
             (box ~key:("dotw-" ^ uuid)
+               ?on_pointer_down ?on_pointer_up ?on_press_detail
                ~accessibility_identifier:("dot-" ^ uuid)
                ~main:`center ~cross:`center ~corner_radius:8
                ~width:control_size ~min_width:control_size
