@@ -2591,6 +2591,7 @@ dependencies = [
  "serde_json",
  "ureq",
  "url",
+ "windows",
 ]
 
 [[package]]
