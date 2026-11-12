@@ -146,24 +146,27 @@ fn saved(request: String, result: Result<bool, String>) -> Vec<PlatformEvent> {
 pub(super) async fn execute(
     request: Request,
     admission: ApplicationMutations,
-) -> Result<Vec<PlatformEvent>, String> {
+) -> Vec<PlatformEvent> {
     match request {
         Request::Open(request, dialog) => {
             if admission.check().is_err() {
-                return Ok(picked(request.request, Ok(Vec::new())));
+                return picked(request.request, Ok(Vec::new()));
             }
             let selected = pick_paths(dialog).await;
             if admission.check().is_err() {
-                return Ok(picked(request.request, Ok(Vec::new())));
+                return picked(request.request, Ok(Vec::new()));
             }
             let files = match selected {
-                Ok(Some(paths)) => blocking(move || snapshots(paths, request.directory))
-                    .await
-                    .map_err(|error| format!("file metadata task: {error}"))?,
+                Ok(Some(paths)) => {
+                    match blocking(move || snapshots(paths, request.directory)).await {
+                        Ok(result) => result,
+                        Err(error) => Err(format!("file metadata task: {error}")),
+                    }
+                }
                 Ok(None) => Ok(Vec::new()),
                 Err(error) => Err(error),
             };
-            Ok(picked(request.request, files))
+            picked(request.request, files)
         }
         Request::Download {
             request,
@@ -171,21 +174,21 @@ pub(super) async fn execute(
             bytes,
         } => {
             if admission.check().is_err() {
-                return Ok(saved(request, Ok(true)));
+                return saved(request, Ok(true));
             }
             let selected = pick_save_path(SaveDialog::new().file_name(name)).await;
             if admission.check().is_err() {
-                return Ok(saved(request, Ok(true)));
+                return saved(request, Ok(true));
             }
             let result = match selected {
-                Ok(Some(path)) => blocking(move || write_download(&path, &bytes))
-                    .await
-                    .map_err(|error| format!("file export task: {error}"))?
-                    .map(|()| false),
+                Ok(Some(path)) => match blocking(move || write_download(&path, &bytes)).await {
+                    Ok(result) => result.map(|()| false),
+                    Err(error) => Err(format!("file export task: {error}")),
+                },
                 Ok(None) => Ok(true),
                 Err(error) => Err(error),
             };
-            Ok(saved(request, result))
+            saved(request, result)
         }
     }
 }
@@ -347,11 +350,8 @@ mod tests {
                         let observed = observed.clone();
                         state.set("Working");
                         spawn(async move {
-                            observed
-                                .0
-                                .lock()
-                                .unwrap()
-                                .extend(execute(request, admission).await.unwrap());
+                            let replies = execute(request, admission).await;
+                            observed.0.lock().unwrap().extend(replies);
                             state.set("Done");
                         });
                     })
@@ -416,6 +416,45 @@ mod tests {
             ),
         ] {
             assert!(capture(operation, payload).is_err());
+        }
+    }
+
+    #[test]
+    fn all_authored_native_import_and_upload_filters_use_the_public_dialog_contract() {
+        for (accept, directory, extensions) in [
+            (None, false, vec![]),
+            (
+                Some(".sqlite,.sqlite3,.db"),
+                false,
+                vec!["sqlite", "sqlite3", "db"],
+            ),
+            (Some(".zip"), false, vec!["zip"]),
+            (
+                Some(".edn,.json,.md,.org,.png,.jpg,.jpeg,.zip"),
+                true,
+                vec![],
+            ),
+            (Some(".transit,.json"), false, vec!["transit", "json"]),
+            (Some(".edn"), false, vec!["edn"]),
+        ] {
+            let mut payload = json!({"request":1,"multiple":false,"directory":directory});
+            if let Some(accept) = accept {
+                payload["accept"] = json!(accept);
+            }
+            let Request::Open(_, dialog) = capture("open-file-picker", &payload.to_string())
+                .unwrap()
+                .unwrap()
+            else {
+                panic!("authored native open request")
+            };
+            assert_eq!(dialog.picks_folders(), directory);
+            let actual = dialog
+                .filters
+                .iter()
+                .flat_map(|filter| filter.extensions.iter())
+                .map(String::as_str)
+                .collect::<Vec<_>>();
+            assert_eq!(actual, extensions);
         }
     }
 

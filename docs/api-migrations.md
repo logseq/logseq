@@ -49,6 +49,10 @@ uses UTF-8; binary export preserves every byte. The MIME value remains metadata;
 the suggested filename supplies the native extension. Existing Apple/iOS,
 Android and other native host payloads remain unchanged.
 
+Every accepted file-service execution produces its correlated terminal event,
+including failure to join an off-owner metadata or export task. Those failures
+cannot bypass completion bookkeeping through a generic service error.
+
 Pending NSH picker/export completions participate in `Ui_task.Activity`.
 Update preparation refuses new requests, drains accepted filesystem work and
 suppresses picker callbacks that would initiate new UI actions while fenced.

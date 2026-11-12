@@ -28,7 +28,7 @@ let completion () =
 let input_open () =
   not !native_dialogs || match Update_admission.application.phase with
   | Update_admission.Open -> true
-  | Preparing _ | Held _ | Aborting _ -> false
+  | Update_admission.Preparing _ | Update_admission.Held _ | Update_admission.Aborting _ -> false
 
 let download_pending : (string, unit -> unit) Hashtbl.t = Hashtbl.create 4
 let download_req = ref 0
@@ -148,7 +148,8 @@ let open_file_picker ?accept ?(multiple : bool = false)
     : unit =
   install_pick_listener ();
   if !native_dialogs then Update_admission.require_input Update_admission.application "file-picker";
-  if !pick_req=max_int || Int64.of_int !pick_req>=9_007_199_254_740_991L
+  (* Native Js.Json.stringify emits exact integral decimals below 9e15. *)
+  if !pick_req=max_int || Int64.of_int !pick_req>=8_999_999_999_999_999L
   then invalid_arg "Native file picker request ids are exhausted";
   incr pick_req;
   let id= !pick_req in

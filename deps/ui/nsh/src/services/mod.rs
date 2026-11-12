@@ -126,7 +126,7 @@ impl Services {
                 let admission = use_context::<ApplicationMutations>()
                     .ok_or("native file service requires the application mutation owner")?;
                 return Ok(ServiceResponse::AfterCommit(Box::pin(async move {
-                    files::execute(request, admission).await
+                    Ok(files::execute(request, admission).await)
                 })));
             }
             let captured = dom::capture(operation, payload, &renderer)?;
