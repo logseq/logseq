@@ -30,6 +30,28 @@ function fixture() {
   for (const file of ["Cargo.toml", "Cargo.lock", "nsh.json", "export_schemas.c", "run.sh", "src/lib.rs", "tests/startup_preflight.rs"])
     write(path.join(host, file), "source");
   write(path.join(host, "schemas.json"), "[]\n");
+  write(path.join(repo, "deps/ui/native/logseq_lui_bridge.c"), "fake-seven-argument-bridge-with-sparse-feedback");
+  // Model only the native-export guard interface and loader boundary. Candidate
+  // bytes below are deliberately not a shared library; real loading is covered
+  // by the actual platform build, never by this publication plumbing fixture.
+  write(path.join(host, "build_windows_dll.py"), `import ctypes,os,pathlib
+root=pathlib.Path(os.environ['PUBLICATION_TEST_ROOT'])
+def record(event):
+ with (root/'calls').open('a') as stream: stream.write(event+'\\n')
+def bridge_exports(source):
+ assert source=='fake-seven-argument-bridge-with-sparse-feedback'
+ record('abi-source')
+ return ['lui_ocaml_virtual_window']
+def load(candidate):
+ candidate=pathlib.Path(candidate)
+ assert '.publication.' in str(candidate) and candidate.read_text()=='new-library'
+ record('abi-load')
+ class Library: pass
+ library=Library()
+ if os.environ.get('PUBLICATION_FAILURE')!='abi': library.lui_ocaml_virtual_window=object()
+ return library
+ctypes.CDLL=load
+`);
   for (const file of ["assets/catalog.json", "assets/fonts/app.ttf"])
     write(path.join(repo, "deps/ui", file), "new-resource");
   write(path.join(repo, "resources/img/logo.svg"), "new-icon");
@@ -52,12 +74,12 @@ function fixture() {
   write(path.join(tools, "uname"), "#!/bin/sh\nprintf 'Linux\\n'\n", true);
   write(path.join(tools, "opam"), "#!/bin/sh\ncase \"$*\" in *'ocamlc -where'*) printf '/tmp\\n';; esac\n", true);
   write(path.join(tools, "cc"), `#!/usr/bin/env python3
-import pathlib,sys
+import os,pathlib,sys
 if sys.argv[1]=='-print-file-name=librt.a':
  print('/tmp/librt.a'); sys.exit(0)
 out=pathlib.Path(sys.argv[sys.argv.index('-o')+1])
 if out.name=='export-schemas':
- out.write_text("#!/usr/bin/env python3\\nprint('[]')\\n")
+ out.write_text("#!/usr/bin/env python3\\nimport os,pathlib\\nwith (pathlib.Path(os.environ['PUBLICATION_TEST_ROOT'])/'calls').open('a') as stream: stream.write('schemas\\\\n')\\nprint('[]')\\n")
  out.chmod(0o755)
 else: out.write_text('new-library')
 `, true);
@@ -73,6 +95,7 @@ elif sys.argv[1]=='build':
  print(json.dumps({'reason':'compiler-artifact','executable':str(root/'candidate'),'target':{'name':'nsh-app-logseq'}}))
  print(json.dumps({'reason':'compiler-artifact','manifest_path':str(lui/'platform/nsh/Cargo.toml'),'target':{'name':'lui_nsh'}}))
 elif sys.argv[1]=='test':
+ with (root/'calls').open('a') as stream: stream.write('gate\\n')
  library=pathlib.Path(os.environ['LUI_OCAML_LIBRARY'])
  resources=pathlib.Path(os.environ['LOGSEQ_NATIVE_ASSET_DIR'])
  worker=pathlib.Path(os.environ['LOGSEQ_DB_WORKER_BIN'])
@@ -93,20 +116,25 @@ else: sys.exit('unexpected Cargo operation')
     [path.join(resources, "logseq-db-worker"), "previous-worker"],
   ]);
   for (const [file, contents] of old) write(file, contents);
-  return {temporary, repo, lui, host, output, resources, old, run(failure = "") {
+  return {temporary, repo, lui, host, output, resources, old,
+    calls:() => existsSync(path.join(temporary, "calls")) ? readFileSync(path.join(temporary, "calls"), "utf8").trim().split("\n") : [],
+    run(failure = "") {
     return spawnSync("bash", [path.join(host, "build.sh")], {encoding:"utf8", timeout:15000,
       env:{...process.env, PATH:`${tools}${path.delimiter}${process.env.PATH}`,
         LUI_SOURCE_ROOT:lui, PUBLICATION_TEST_ROOT:temporary, PUBLICATION_FAILURE:failure,
         NODE_BINARY:process.execPath, PYTHON_BINARY:process.env.PYTHON_BINARY ?? "python3"}});
   }};
 }
-for (const failure of ["gate", "source", "after-gate"]) {
+for (const failure of ["abi", "gate", "source", "after-gate"]) {
   test(`candidate ${failure} failure leaves the complete published set and receipt untouched`, () => {
     const app = fixture();
     try {
       const result = app.run(failure);
       assert.notEqual(result.status, 0, result.stdout + result.stderr);
-      if (failure !== "gate") assert.match(result.stderr, /sources changed during build/);
+      if (failure === "abi") {
+        assert.match(result.stderr, /missing exports: lui_ocaml_virtual_window/);
+        assert.deepEqual(app.calls(), ["abi-source", "abi-load"]);
+      } else if (failure !== "gate") assert.match(result.stderr, /sources changed during build/);
       for (const [file, contents] of app.old) assert.equal(readFileSync(file, "utf8"), contents);
       assert.equal(existsSync(path.join(app.resources, "catalog.json")), false);
     } finally { rmSync(app.temporary, {recursive:true, force:true}); }
@@ -117,6 +145,7 @@ test("qualified publication preserves shared outputs, retires owned resources an
   try {
     const result = app.run();
     assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.deepEqual(app.calls(), ["abi-source", "abi-load", "schemas", "gate"]);
     const artifact = path.join(app.output, "logseq-nsh");
     assert.equal(readFileSync(artifact, "utf8"), "new-executable");
     assert.equal(readFileSync(path.join(app.resources, "logseq-db-worker"), "utf8"), "new-worker");
