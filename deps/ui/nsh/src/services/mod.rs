@@ -1,6 +1,7 @@
 //! Application host operations; the LUI desktop pump owns all OCaml dispatch.
 mod clipboard;
 mod dom;
+mod editor_geometry;
 mod menu;
 pub(crate) mod resources;
 mod secrets;

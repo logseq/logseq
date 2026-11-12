@@ -952,3 +952,14 @@ minor-heap limit on a 64-bit desktop. Do not interpret either configured
 capacity as live OCaml objects or add it to the process's physical footprint.
 The actual-application startup test queries both runtime limits without forcing
 a collection; its override case runs the same compiled path with `s=1M`.
+
+## NSH retained block editor focus (2026-11-12)
+
+The NSH application host accepts the existing `set-input-focus` command emitted
+by the shared block editor. It focuses or blurs the current `logseq-editor`
+native Input through its retained ElementRef. Requests captured before the sink
+creation batch may bind only to the original mounted block row and its descendant
+sink; removed or replaced owners cannot redirect an asynchronous focus request.
+The payload remains `{"block-id":"<uuid>","focused":true}` and needs no downstream
+API migration. Text click positioning still requires the geometry service before
+queued editing actions can be released.

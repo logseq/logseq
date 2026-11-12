@@ -614,6 +614,78 @@ let persisted_journal_hash_links_delegate_through_the_native_owner () =
     check "delegated navigation retains the same mounted Link"
       (Hashtbl.mem runtime.Lui_runtime.mounted_nodes node))
 
+let native_block_click_mounts_shared_editor () =
+  let prior_model = !Runtime.read_model and prior_flush = !Runtime.app_flush
+  and prior_host = !Host.host_op and prior_target = !Platform.event_target_of
+  and prior_elements = !Dom_ext.doc_elements_provider
+  and prior_subtree = !Dom_ext.subtree_elements_provider
+  and prior_state = !Editor_state.st and prior_fields = !Editor_state.field_sigs_opt
+  and prior_pending = !Editor_state.pending_focus and prior_click = !Editor_state.click_point in
+  let captures = List.map (fun name -> name, Hashtbl.find_opt Platform.capture_listeners name)
+    ["pointerdown";"mousedown";"click"] in
+  let requests = ref [] in
+  let uuid = "native-edit-entry" in
+  let block = Model.empty_block ~uuid ~title:"A real editable block" ~is_page:false in
+  let page = Option.get (Decode.page_of_summary (Wire.kw_map ["block/title",Wire.String "Native editing"])) in
+  let page = {page with Model.page_blocks=[block]} in
+  let model = {Model.initial with repo=Some "native-edit";route=Model.Page "Native editing";route_page=Some page} in
+  let backend : Lui_protocol.backend = {
+    backend_profile=Lui_protocol.profile Lui_protocol.MacOS Lui_protocol.NshHost;
+    apply_batch=(fun _ -> true)} in
+  let registry = Lui_extension.registry () in
+  Logseq_el.register_all registry; Logseq_editor.register registry;
+  Editor_state.st := None; Editor_state.field_sigs_opt := None;
+  let app = Lui_app.create_with_extensions backend registry model
+    (fun model (_ : Action.t) -> model)
+    (fun context _ _ ->
+      Editor_state.ensure context;
+      Lui_elements.column ~style_class:"ls-block"
+        ~accessibility_identifier:("ls-block-" ^ uuid)
+        ~data_attrs:["data-blockid",uuid;"data-cid","main"]
+        [Tree.content_or_editor ~editable:true uuid "main" block]) in
+  Fun.protect ~finally:(fun () ->
+    ignore (Lui_app.dispose app); Native_embed.current_app := None;
+    Runtime.read_model := prior_model; Runtime.app_flush := prior_flush;
+    Host.host_op := prior_host; Platform.event_target_of := prior_target;
+    Dom_ext.doc_elements_provider := prior_elements;
+    Dom_ext.subtree_elements_provider := prior_subtree;
+    Editor_state.st := prior_state; Editor_state.field_sigs_opt := prior_fields;
+    Editor_state.pending_focus := prior_pending; Editor_state.click_point := prior_click;
+    List.iter (fun (name, previous) -> match previous with
+      | Some listeners -> Hashtbl.replace Platform.capture_listeners name listeners
+      | None -> Hashtbl.remove Platform.capture_listeners name) captures) (fun () ->
+    Native_embed.current_app := Some app;
+    Runtime.read_model := (fun () -> Lui_app.model app);
+    Runtime.app_flush := (fun () -> ignore (Lui_app.flush app));
+    Host.set_host_op (fun operation payload -> requests := (operation,payload) :: !requests);
+    Dom_ext.doc_elements_provider := Native_embed.collect_elements;
+    Dom_ext.subtree_elements_provider := Native_embed.collect_subtree;
+    let runtime = Lui_app.runtime app in
+    Platform.event_target_of := (fun node -> Some (Native_embed.ext_snapshot runtime node));
+    List.iter (fun (name, handler) -> Hashtbl.replace Platform.capture_listeners name
+      [(fun payload -> handler (Ui_dom_native.ev_of payload))])
+      ["pointerdown",Block_selection.pointerdown;"mousedown",Editor_keys.on_mousedown;"click",Editor_keys.on_click];
+    ignore (Lui_app.start app); ignore (Lui_app.flush app);
+    let node = Hashtbl.fold (fun id props found ->
+      if Lui_protocol.Property_map.find_opt Lui_protocol.AccessibilityIdentifier props
+        = Some (Lui_protocol.StringValue ("block-content-" ^ uuid)) then Some id else found)
+      runtime.Lui_runtime.runtime_properties None |> Option.get in
+    ignore (Native_embed.pointer_down node 31. 47. 0 0 "");
+    ignore (Native_embed.pointer_up node 31. 47. 0 0 "");
+    ignore (Native_embed.press_detail node 31. 47. 0 0 "");
+    ignore (Lui_app.flush app);
+    check "actual native content click enters the shared editor in its original scope"
+      (match Editor_state.editing () with
+       | Some editing -> editing.Editor_state.uuid=uuid && editing.scope="main"
+       | None -> false);
+    check "click replaces rendered content with the actual editor conduit"
+      (Hashtbl.fold (fun _ identifier found -> found || identifier="logseq-editor")
+        runtime.Lui_runtime.runtime_extension_nodes false);
+    Editor_actions.apply_focus ();
+    check "shared focus emits its actual native focus command"
+      (List.exists (fun (operation,payload) -> operation="dom-op"
+        && String.starts_with ~prefix:"set-input-focus\n" payload) !requests))
+
 let () =
   let owner = Thread.id (Thread.self ()) in
   Ui_task.install { enqueue = Host.enqueue;
@@ -632,4 +704,5 @@ let () =
   native_outliner_content_events ();
   native_route_document_data ();
   persisted_journal_hash_links_delegate_through_the_native_owner ();
+  native_block_click_mounts_shared_editor ();
   print_endline "PASS real native save/abort/worker/timer races and post-release draft safety"

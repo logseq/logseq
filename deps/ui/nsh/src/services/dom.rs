@@ -226,16 +226,22 @@ async fn scroll_top(target: &Target, top: f32, renderer: &Renderer) -> Result<()
 
 /// An owned request deferred until its creating patches reach the native commit.
 /// Existing targets retain their incarnation even if their identifier is renamed.
-pub struct CapturedRequest {
-    operation: String,
-    payload: String,
-    known: Option<(u64, u64)>,
+pub enum CapturedRequest {
+    Node {
+        operation: String,
+        payload: String,
+        known: Option<(u64, u64)>,
+    },
+    Editor(super::editor_geometry::CapturedRequest),
 }
 pub fn capture(
     operation: &str,
     payload: &str,
     renderer: &Renderer,
 ) -> Result<CapturedRequest, String> {
+    if super::editor_geometry::supported(operation) {
+        return super::editor_geometry::capture(payload, renderer).map(CapturedRequest::Editor);
+    }
     if !supported(operation) {
         return Err(format!(
             "DOM operation {operation} is not implemented by the NSH host"
@@ -244,7 +250,7 @@ pub fn capture(
     let request = object(payload)?;
     let reference = request.get("ref").unwrap_or(&Value::Null);
     let known = resolve(reference, renderer)?.map(|node| (node.id, node.incarnation));
-    Ok(CapturedRequest {
+    Ok(CapturedRequest::Node {
         operation: operation.into(),
         payload: payload.into(),
         known,
@@ -254,13 +260,16 @@ pub async fn execute(
     request: CapturedRequest,
     renderer: &Renderer,
 ) -> Result<Vec<PlatformEvent>, String> {
-    handle_inner(
-        &request.operation,
-        &request.payload,
-        renderer,
-        request.known,
-    )
-    .await
+    match request {
+        CapturedRequest::Node {
+            operation,
+            payload,
+            known,
+        } => handle_inner(&operation, &payload, renderer, known).await,
+        CapturedRequest::Editor(request) => {
+            super::editor_geometry::execute(request, renderer).await
+        }
+    }
 }
 fn supported(operation: &str) -> bool {
     matches!(
