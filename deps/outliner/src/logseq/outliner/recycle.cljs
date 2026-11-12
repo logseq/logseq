@@ -2,6 +2,7 @@
   "Recycle-based soft delete helpers for DB graphs"
   (:require [datascript.core :as d]
             [logseq.common.util :as common-util]
+            [logseq.outliner.validate :as outliner-validate]
             [logseq.common.uuid :as common-uuid]
             [logseq.db :as ldb]
             [logseq.db.common.delete-blocks :as delete-blocks]
@@ -187,8 +188,10 @@
   [db root]
   (let [original-parent (resolve-entity db (:logseq.property.recycle/original-parent root))
         original-page (resolve-entity db (:logseq.property.recycle/original-page root))
+        ;; `ldb/recycled?` also checks ancestors: a parent inside a recycled
+        ;; tree is pending, or the restored root would stay hidden in it
         parent-valid? (and original-parent
-                           (not (recycled? original-parent))
+                           (not (ldb/recycled? original-parent))
                            (d/entity db (:db/id original-parent)))
         parent-pending? (and original-parent (not parent-valid?))]
     (cond
@@ -207,7 +210,7 @@
 
       (and original-page
            (d/entity db (:db/id original-page))
-           (not (recycled? original-page)))
+           (not (ldb/recycled? original-page)))
       {:parent original-page
        :page original-page
        :order (restore-order original-page)}
@@ -249,6 +252,20 @@
         [[] (some-> parent :block/_parent ldb/sort-by-order last :block/order)]
         children)))))
 
+(defn- validate-restored-page-names!
+  "Throws the duplicate-name notification when `tx-data` puts a page next to a live
+  page with the same name: the restored root, and every page relinked under a
+  restored parent. A recycled page is parented under the Recycle, so its name was
+  free to be taken while it was there."
+  [db tx-data]
+  (let [{:keys [db-after] tx-datoms :tx-data} (d/with db (remove nil? tx-data))]
+    (doseq [page (->> tx-datoms
+                      (keep (fn [datom] (when (= :block/parent (:a datom)) (:e datom))))
+                      distinct
+                      (map #(d/entity db-after %))
+                      (filter ldb/page?))]
+      (outliner-validate/validate-unique-by-name-and-tags db-after (:block/title page) page))))
+
 (defn ^:api restore-tx-data
   [db root]
   (when-let [{:keys [parent page order parent-pending?]} (restore-target db root)]
@@ -276,9 +293,13 @@
                                    {:db/id (:db/id node)
                                     :block/page (:db/id page)})
                                  subtree))
+          ;; pages under `root` come back with it, so pages waiting on them
+          ;; are re-attached too
           relink-tx (when (ldb/page? root)
-                      (relink-waiting-children-tx db root))]
-      (concat clear-structure [root-tx] subtree-page-tx (remove nil? clear-meta) relink-tx))))
+                      (mapcat #(relink-waiting-children-tx db %) (page-descendants root)))
+          tx-data (concat clear-structure [root-tx] subtree-page-tx (remove nil? clear-meta) relink-tx)]
+      (validate-restored-page-names! db tx-data)
+      tx-data)))
 
 (defn ^:api restore!
   [conn root-uuid]

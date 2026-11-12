@@ -288,19 +288,35 @@
         title (common-util/remove-boundary-slashes title)]
     title))
 
-(defn- get-page-by-parent-name
-  [db parent-title child-title class?]
+(defn- get-page-by-parent
+  [db parent-id child-title class?]
   (some->>
    (d/q
     '[:find [?b ...]
-      :in $ ?attribute ?parent-name ?child-name
+      :in $ ?attribute ?p ?child-name
       :where
       [?b ?attribute ?p]
-      [?b :block/name ?child-name]
-      [?p :block/name ?parent-name]]
+      [?b :block/name ?child-name]]
     db
     (if class? :logseq.property.class/extends :block/parent)
-    (common-util/page-name-sanity-lc parent-title)
+    parent-id
+    (common-util/page-name-sanity-lc child-title))
+   first
+   (d/entity db)))
+
+(defn- get-recycled-page-by-original-parent
+  "A page in the Recycle that was deleted from under `parent-id`."
+  [db parent-id child-title]
+  (some->>
+   (d/q
+    '[:find [?b ...]
+      :in $ ?p ?child-name
+      :where
+      [?b :logseq.property.recycle/original-parent ?p]
+      [?b :block/name ?child-name]
+      [?b :logseq.property/deleted-at]]
+    db
+    parent-id
     (common-util/page-name-sanity-lc child-title))
    first
    (d/entity db)))
@@ -326,19 +342,30 @@
              parts (->> (string/split title ns-util/parent-re)
                         (map string/trim)
                         (remove string/blank?))
-             pages (map-indexed
-                    (fn [idx part]
+             pages (reduce
+                    (fn [pages [idx part]]
                       (let [last-part? (= idx (dec (count parts)))
-                            page (if (zero? idx)
+                            parent (peek pages)
+                            ;; a part exists only under the page found for the
+                            ;; part before it, not under any page with that name
+                            page (cond
+                                   (zero? idx)
                                    (ldb/get-page db part)
-                                   (get-page-by-parent-name db (nth parts (dec idx)) part create-class?))
+
+                                   (de/entity? parent)
+                                   ;; a recycled page is found by its original
+                                   ;; parent, and restored like a recycled root
+                                   (or (get-page-by-parent db (:db/id parent) part create-class?)
+                                       (when-not create-class?
+                                         (get-recycled-page-by-original-parent db (:db/id parent) part))))
                             result (or page
                                        (gp-block/page-name->map part db true date-formatter
                                                                 {:page-uuid (when last-part? block-uuid)
                                                                  :skip-existing-page-check? true
                                                                  :class? class?}))]
-                        result))
-                    parts)]
+                        (conj pages result)))
+                    []
+                    (map-indexed vector parts))]
          (cond
            (and (not class?) (not (every? ldb/internal-page? pages)))
            (throw (ex-info "Cannot create this page unless all parents are pages"
@@ -379,6 +406,36 @@
             pages)))
        [page])
      (remove nil?))))
+
+(defn- recycled-root
+  "The entity in `entity`'s parent chain, itself included, that was put in the Recycle."
+  [entity]
+  (loop [entity entity
+         seen #{}]
+    (when (and entity (not (contains? seen (:db/id entity))))
+      (if (:logseq.property/deleted-at entity)
+        entity
+        (recur (:block/parent entity) (conj seen (:db/id entity)))))))
+
+(defn- split-namespace-pages-restoring-recycled
+  "`split-namespace-pages`, after restoring the recycled trees its existing pages
+  lie in, so a page created under them is not born inside the Recycle. Each
+  restore is planned against the db as the restores before it leave it, and the
+  pages are looked up again after it, so a page the restore brings back (or
+  re-attaches under its parent) is found instead of created a second time.
+  Returns `{:pages .. :restore-tx ..}`."
+  [db page date-formatter create-class?]
+  (loop [db' db
+         restore-tx []]
+    (let [pages (split-namespace-pages db' page date-formatter create-class?)
+          recycled (some->> pages
+                            (some #(when (and (de/entity? %) (ldb/recycled? %)) %))
+                            recycled-root)
+          tx (some->> recycled (outliner-recycle/restore-tx-data db') (remove nil?) seq)]
+      (if tx
+        (recur (:db-after (d/with db' tx)) (into restore-tx tx))
+        {:pages pages
+         :restore-tx restore-tx}))))
 
 (defn ^:large-vars/cleanup-todo ^:api create
   "Pure function without side effects"
@@ -464,13 +521,14 @@
                                                  :page-uuid (when (uuid? uuid') uuid')
                                                  :skip-existing-page-check? true})
                    encrypted-title? (assoc :block/name encrypted-name))
-            [page parents'] (if (and (not (:block/journal-day page))
-                                     (not encrypted-title?)
-                                     (text/namespace-page? title)
-                                     split-namespace?)
-                              (let [pages (split-namespace-pages db page date-formatter class?)]
-                                [(last pages) (butlast pages)])
-                              [page nil])]
+            [page parents' restore-tx] (if (and (not (:block/journal-day page))
+                                                (not encrypted-title?)
+                                                (text/namespace-page? title)
+                                                split-namespace?)
+                                         (let [{:keys [pages restore-tx]}
+                                               (split-namespace-pages-restoring-recycled db page date-formatter class?)]
+                                           [(last pages) (butlast pages) restore-tx])
+                                         [page nil nil])]
         (when (and page (or (nil? (:db/ident page))
                             ;; New page creation must not override built-in entities
                             (not (db-malli-schema/internal-ident? (:db/ident page)))))
@@ -486,12 +544,16 @@
           (let [page-uuid (if-let [journal-day (:block/journal-day page)]
                             (common-uuid/gen-uuid :journal-page-uuid journal-day)
                             (:block/uuid page))
-                page (assoc page :block/uuid page-uuid)
-                page-txs (build-page-tx db properties page
-                                        {:class? class?
-                                         :tags resolved-tags
-                                         :class-ident-namespace class-ident-namespace})
+                ;; the namespaced page already exists under its parents
+                existing-page? (de/entity? page)
+                page (if existing-page? page (assoc page :block/uuid page-uuid))
+                page-txs (when-not existing-page?
+                           (build-page-tx db properties page
+                                          {:class? class?
+                                           :tags resolved-tags
+                                           :class-ident-namespace class-ident-namespace}))
                 txs (concat
+                     restore-tx
                      ;; transact doesn't support entities
                      (remove de/entity? parents')
                      page-txs)
