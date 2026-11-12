@@ -99,6 +99,34 @@ jobs:
         run: python3 -m unittest discover -s deps/ui/nsh -p test_packaged_background.py
       - name: Actual native factories and host service tests
         run: cargo test --locked --manifest-path deps/ui/nsh/Cargo.toml --lib --bin nsh-app-logseq
+      - name: Portable PDF fixture and pinned-artifact source guards
+        if: runner.os == 'Linux'
+        run: python3 -m unittest discover -s deps/ui/nsh -p 'test_prepare_pdf*.py'
+      - name: Actual GTK PDF widget and owner-context regressions under Xvfb
+        if: runner.os == 'Linux'
+        run: |
+          mkdir -p _build/nsh-ci/pdfium
+          xvfb-run -a dbus-run-session -- env GDK_BACKEND=x11 \
+            cargo test --locked --manifest-path deps/ui/nsh/Cargo.toml \
+              --example pdfium_engine_probe -- --test-threads=1 \
+            2>&1 | tee _build/nsh-ci/pdfium/native-widget-tests.log
+      - name: Load the pinned PDFium artifact and qualify its owned document worker
+        if: runner.os == 'Linux'
+        run: |
+          private_pdf=$(mktemp -d "$RUNNER_TEMP/logseq-pdf-qualification.XXXXXX")
+          python3 deps/ui/nsh/prepare_pdfium.py --target linux-x64 \
+            --output "$private_pdf/engine" > _build/nsh-ci/pdfium/preparation.json
+          cp "$private_pdf/engine/receipt.json" _build/nsh-ci/pdfium/engine-receipt.json
+          cp "$private_pdf/engine/LICENSE" _build/nsh-ci/pdfium/
+          cp "$private_pdf/engine/args.gn" _build/nsh-ci/pdfium/
+          cp -R "$private_pdf/engine/licenses" _build/nsh-ci/pdfium/
+          python3 deps/ui/nsh/prepare_pdf_probe.py --output "$private_pdf/fixture" \
+            > _build/nsh-ci/pdfium/fixture-receipt.json
+          cargo run --locked --manifest-path deps/ui/nsh/Cargo.toml \
+            --example pdfium_engine_probe -- "$private_pdf/engine/libpdfium.so" \
+            "$private_pdf/fixture/original.pdf" 'Original page one' \
+            > _build/nsh-ci/pdfium/engine-probe.json \
+            2> _build/nsh-ci/pdfium/engine-probe.stderr.log
       - name: Build and qualify the complete staged native application
         run: |
           mkdir -p _build/nsh-ci
