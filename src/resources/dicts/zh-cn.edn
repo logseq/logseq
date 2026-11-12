@@ -1488,6 +1488,7 @@
  :property.built-in/asset-external-url "外部 URL"
  :property.built-in/asset-height "图片高度"
  :property.built-in/asset-last-visit-page "最后访问页"
+ :property.built-in/asset-plugin-id "附件存储插件"
  :property.built-in/asset-remote-metadata "文件远程元数据"
  :property.built-in/asset-resize-metadata "附件缩放元数据"
  :property.built-in/asset-size "文件大小"

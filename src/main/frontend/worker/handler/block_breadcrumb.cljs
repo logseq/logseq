@@ -72,7 +72,7 @@
     :logseq.property/icon :logseq.property.class/hide-from-node
     :logseq.property.asset/type :logseq.property.asset/width
     :logseq.property.asset/height :logseq.property.asset/resize-metadata
-    :logseq.property.asset/external-url
+    :logseq.property.asset/external-url :logseq.property.asset/plugin-id
     :block/closed-value-property :logseq.property/created-from-property})
 
 (defn- scan-ref-attrs
@@ -116,6 +116,7 @@
         asset-height (:logseq.property.asset/height collected)
         asset-resize-metadata (:logseq.property.asset/resize-metadata collected)
         asset-external-url (:logseq.property.asset/external-url collected)
+        asset-plugin-id (:logseq.property.asset/plugin-id collected)
         closed-value? (some? (:block/closed-value-property collected))
         created-from-property? (some? (:logseq.property/created-from-property collected))
         property-value-title (when (and ref-title (or closed-value? created-from-property?))
@@ -135,6 +136,8 @@
       (assoc :logseq.property.asset/resize-metadata asset-resize-metadata)
       (some? asset-external-url)
       (assoc :logseq.property.asset/external-url asset-external-url)
+      (some? asset-plugin-id)
+      (assoc :logseq.property.asset/plugin-id asset-plugin-id)
       (some? property-value-title) (assoc :block/title property-value-title))))
 
 (defn- node-value-target-id

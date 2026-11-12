@@ -664,12 +664,7 @@
                                  remote-ext-url? (and (not (string/blank? ext-url))
                                                       (path/protocol-url? ext-url)
                                                       (not (common-config/local-protocol-asset? ext-url)))
-                                 local-ext-url? (and (not (string/blank? ext-url))
-                                                     (common-config/local-relative-asset? ext-url))
-                                 file-fpath (if local-ext-url?
-                                              ;; Plugin-sourced asset stored under assets/storages/<plugin-id>/...
-                                              (path/path-join repo-dir (string/replace ext-url #"^[./]+" ""))
-                                              (path/path-join repo-dir (str "assets/" (:block/uuid asset-block) (when ext (str "." (name ext))))))]
+                                 file-fpath (path/path-join repo-dir (block-asset/asset-relative-path asset-block))]
                              (if remote-ext-url?
                                (js/window.apis.openExternal ext-url)
                                (js/window.apis.openPath file-fpath))))}
@@ -1251,10 +1246,6 @@
         img-placeholder (when image?
                           [:div.img-placeholder.asset-container
                            {:style img-metadata}])
-        ;; When external-url is set, use it as the render path so
-        ;; plugin-sandboxed assets (./assets/storages/<plugin-id>/...)
-        ;; resolve correctly; <make-asset-url handles both remote URLs
-        ;; and graph-root-relative paths.
         href (or (:logseq.property.asset/external-url block)
                  (path/path-join (str "../" common-config/local-assets-dir) file))
         _ (hooks/use-effect!

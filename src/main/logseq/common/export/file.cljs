@@ -9,6 +9,7 @@
             [logseq.common.util.date-time :as date-time-util]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
+            [logseq.db.frontend.asset :as db-asset]
             [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
@@ -254,7 +255,8 @@
                        (:logseq.property.asset/type block))]
         (when-let [id (:block/uuid block)]
           (when-not (string/blank? ext)
-            (str "../" common-config/local-assets-dir "/" id "." ext)))))))
+            (str "../" common-config/local-assets-dir "/"
+                 (db-asset/asset-file-path id ext (:logseq.property.asset/plugin-id block)))))))))
 
 (defn- asset-export-title
   "Image blocks store the file as `{uuid}.{type}` under assets/ and keep only
