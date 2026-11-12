@@ -958,6 +958,7 @@ let native_settings_route_links () =
   let previous_app = !Native_embed.current_app and previous_settings = !Settings_state.st
   and previous_model = !Runtime.read_model and previous_flush = !Runtime.app_flush
   and previous_worker = !Runtime.worker and previous_target = !Platform.event_target_of
+  and previous_parent = !Platform.dom_parent_of
   and previous_default = !Platform.post_dispatch_hook
   and previous_elements = !Dom_ext.doc_elements_provider
   and previous_subtree = !Dom_ext.subtree_elements_provider
@@ -984,13 +985,37 @@ let native_settings_route_links () =
     (fun model (_ : Action.t) -> model)
     (fun context _ _ ->
       Settings_state.ensure context;
+      let property_context : Properties_value.ctx={
+        owner_key="route-property";block_uuid="route-property-owner";block_id=Some 77;
+        refresh=(fun () -> ());is_page=false;class_schema=false} in
+      let date=Wire.Map [Wire.Keyword "block/uuid",Wire.Uuid "11111111-1111-4111-8111-111111111111";
+        Wire.Keyword "block/title",Wire.String "Date route";
+        Wire.Keyword "block/journal-day",Wire.Int 20261110] in
+      let row kind value=Wire.Map [Wire.Keyword "property-id",Wire.Keyword "fixture/date";
+        Wire.Keyword "property",Wire.Map [Wire.Keyword "logseq.property/type",Wire.Keyword kind];
+        Wire.Keyword "value",value] in
+      let routed url=Ui_components.faded_link ~url ~text:url () in
       Lui_elements.column [Settings_page.general_pane ~modal:false context;
-        Ui_components.faded_link ~key:"routed-faded" ~url:"#/page/faded-route" ~text:"Routed fixture" ()]) in
+        Ui_components.faded_link ~key:"routed-faded" ~url:"#/page/faded-route" ~text:"Routed fixture" ();
+        Properties_value.date_view ~jump_target:false ~hover:None property_context (row "datetime" date);
+        Properties_value.many_dates_view ~jump_target:false ~hover:None property_context
+          (row "date" (Wire.Set [date]));
+        Lui_elements.popover ~role:`dialog ~at:(20.,20.)
+          ~accessibility_identifier:"routed-popover-owner"
+          [routed "#/page/popup%20route?graph-id=route-graph"];
+        Lui_elements.dialog ~text:"Route scope fixture"
+          ~accessibility_identifier:"routed-dialog-owner"
+          [routed "#/";routed "#/all-pages"];
+        Lui_elements.column
+          (List.map routed ["assets/readme.md";"../readme.md";"/absolute/path";
+            "//example.com/path";"?query=value";"#section";"#";
+            "https://example.com/path";"mailto:fixture@example.com"])]) in
   Fun.protect ~finally:(fun () ->
     ignore (Lui_app.dispose app);Native_embed.current_app:=previous_app;
     Settings_state.st:=previous_settings;Runtime.read_model:=previous_model;
     Runtime.app_flush:=previous_flush;Runtime.worker:=previous_worker;
-    Platform.event_target_of:=previous_target;Platform.post_dispatch_hook:=previous_default;
+    Platform.event_target_of:=previous_target;Platform.dom_parent_of:=previous_parent;
+    Platform.post_dispatch_hook:=previous_default;
     Dom_ext.doc_elements_provider:=previous_elements;Dom_ext.subtree_elements_provider:=previous_subtree;
     Platform.hash_ref:=previous_hash;Platform.back_stack:=previous_back;
     Platform.fwd_stack:=previous_forward;Platform.hash_change_fns:=previous_changes;
@@ -1003,6 +1028,7 @@ let native_settings_route_links () =
     Dom_ext.subtree_elements_provider:=Native_embed.collect_subtree;
     let runtime=Lui_app.runtime app in
     Platform.event_target_of:=(fun node -> Some (Native_embed.ext_snapshot runtime node));
+    Platform.dom_parent_of:=(fun node -> Hashtbl.find_opt runtime.Lui_runtime.runtime_parents node);
     Platform.post_dispatch_hook:=Dom_ext.default_event;
     Platform.coalesce_duplicate_clicks:=(fun () -> false);
     Hashtbl.remove Platform.capture_listeners "click";
@@ -1026,7 +1052,46 @@ let native_settings_route_links () =
       Platform.history_back ();
       check "native Settings Link participates in the existing navigation history"
         (Platform.location_hash ()="#/settings"))
-      ["#/file/logseq%2Fconfig.edn";"#/file/logseq%2Fcustom.css";"#/page/faded-route"])
+      ["#/file/logseq%2Fconfig.edn";"#/file/logseq%2Fcustom.css";"#/page/faded-route";
+       "#/page/11111111-1111-4111-8111-111111111111";
+       "#/page/" ^ Ui_services.uri_encode_component (Dates.journal_title_ymd ~y:2026 ~m:11 ~d:10);
+       "#/page/popup%20route?graph-id=route-graph";"#/";"#/all-pages"];
+    let find_url href=Hashtbl.fold (fun node props found ->
+      if Lui_protocol.Property_map.find_opt Lui_protocol.UrlValue props
+        =Some (Lui_protocol.StringValue href) then Some node else found)
+      runtime.Lui_runtime.runtime_properties None |> Option.get in
+    List.iter (fun href ->
+      let props=Hashtbl.find runtime.Lui_runtime.runtime_properties (find_url href) in
+      check "generic routing never grants arbitrary relative or external URLs an application handler"
+        (Lui_protocol.Property_map.find_opt Lui_protocol.PressEnabled props
+         <>Some (Lui_protocol.BoolValue true)))
+      ["assets/readme.md";"../readme.md";"/absolute/path";"//example.com/path";
+       "?query=value";"#section";"#";"https://example.com/path";"mailto:fixture@example.com"];
+    let latest=find_url "#/page/faded-route" in
+    Lui_runtime.set_prop runtime latest Lui_protocol.UrlValue
+      (Lui_protocol.StringValue "#/page/updated%20destination?graph-id=retained-graph");
+    ignore (Native_embed.press_ex latest 0);
+    check "retained native Link activation reads its current authored URL"
+      (Platform.location_hash ()="#/page/updated%20destination?graph-id=retained-graph");
+    let owner=Hashtbl.fold (fun node props found ->
+      if Lui_protocol.Property_map.find_opt Lui_protocol.AccessibilityIdentifier props
+        =Some (Lui_protocol.StringValue "routed-popover-owner") then Some node else found)
+      runtime.Lui_runtime.runtime_properties None |> Option.get in
+    let scoped=find_url "#/page/popup%20route?graph-id=route-graph" in
+    let previous_handlers=Hashtbl.find_opt Platform.dom_handlers owner in
+    Fun.protect ~finally:(fun () -> match previous_handlers with
+      | None -> Hashtbl.remove Platform.dom_handlers owner
+      | Some handlers -> Hashtbl.replace Platform.dom_handlers owner handlers) (fun () ->
+      let shifted=ref false in
+      Platform.register_dom_handler owner ~events:"click" (fun _ payload ->
+        shifted:=(match Option.map Js.Json.parseExn payload with
+          | Some (Js.Json.JObject fields) -> List.assoc_opt "shiftKey" fields=Some (Js.Json.boolean true)
+          | _ -> false);
+        Platform.request_prevent ());
+      Platform.hash_ref:="#/settings";
+      ignore (Native_embed.press_ex scoped 2);
+      check "scoped native Link consumers receive modifiers and can prevent route defaults"
+        (!shifted && Platform.location_hash ()="#/settings")))
 
 let native_point_property_scroll () =
   let previous_app = !Native_embed.current_app in
