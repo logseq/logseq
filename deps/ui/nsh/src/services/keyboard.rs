@@ -576,8 +576,10 @@ mod tests {
         app.observe(move |step, batch| {
             let mut trace = trace.lock().unwrap();
             if trace.len() < 96 {
-                if let Some(keymap) = &batch.keymap {
-                    trace.push(format!("{step}: keymap {:?}", keymap.bindings()));
+                for item in &batch.items {
+                    if let nsh_core::MountItem::Keymap(keymap) = item {
+                        trace.push(format!("{step}: keymap {:?}", keymap.bindings()));
+                    }
                 }
                 let commands = batch
                     .items
