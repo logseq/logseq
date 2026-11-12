@@ -1,5 +1,23 @@
 # API migrations
 
+## Packaged NSH native startup requires visible Journal bounds
+
+The optional macOS `qualify_packaged_startup.py --native-background` gate now
+requires the existing `native-bounds` host operation. Before its first screenshot,
+it requires positive intersecting AppKit window-content bounds for the canonical
+main Scroll, Journals region and the dated title discovered in that subtree.
+Missing, hidden, transparent, offscreen or truncated native evidence cannot pass
+by retaining an otherwise successful semantic tree. The result retains the
+actual replies in `journalBody.nativeBounds`. A `hello.backend_error` rejects
+qualification immediately.
+
+For example, an installed archive whose agent still returns the dated Journal
+node after a renderer rejection now fails this native gate; rebuild the archive
+with the corrected renderer and repeat the same qualification command. The
+existing Headless gate and maintained Web, Apple/iOS and Android paths are
+unchanged. This does not assert pixel parity or hardware input and does not
+require activating the application or making its window key.
+
 ## Native icon and Emoji picker rows use the canonical viewport
 
 NSH icon and Emoji picker sections now feed nine-cell, 44px rows into the

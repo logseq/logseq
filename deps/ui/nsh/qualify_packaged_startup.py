@@ -11,6 +11,7 @@ import argparse
 import base64
 import importlib.util
 import json
+import math
 import os
 from pathlib import Path
 import platform
@@ -97,6 +98,67 @@ def dated_journal_header(tree, helper):
     return None
 
 
+def positive_bounds(value):
+    return (isinstance(value, list) and len(value) == 4
+            and all(type(number) in (int, float) and math.isfinite(number) for number in value)
+            and value[2] > 0 and value[3] > 0)
+
+
+def intersect_bounds(left, right):
+    x, y = max(left[0], right[0]), max(left[1], right[1])
+    width = min(left[0] + left[2], right[0] + right[2]) - x
+    height = min(left[1] + left[3], right[1] + right[3]) - y
+    return [x, y, width, height] if width > 0 and height > 0 else None
+
+
+def visible_native_bounds(reply):
+    diagnostics = reply.get("diagnostics", {})
+    if (reply.get("ok") is not True or reply.get("op") != "native-bounds"
+            or diagnostics.get("present") is not True
+            or diagnostics.get("intersectsViewport") is not True
+            or diagnostics.get("windowVisible") is not True
+            or diagnostics.get("applicationHidden") is not False
+            or diagnostics.get("scanTruncated") is not False
+            or diagnostics.get("ancestryTruncated") is not False
+            or diagnostics.get("coordinateSpace") !=
+            "AppKit window content; not Core layout or desktop screen"):
+        return None
+    bounds, viewport = diagnostics.get("contentBounds"), diagnostics.get("viewport")
+    if not positive_bounds(bounds) or not positive_bounds(viewport):
+        return None
+    ancestors = diagnostics.get("ancestors")
+    if not isinstance(ancestors, list) or not ancestors or ancestors[-1].get("isContentRoot") is not True:
+        return None
+    for ancestor in ancestors:
+        if ancestor.get("hidden") is not False or ancestor.get("hiddenByAncestor") is not False:
+            return None
+        for opacity in (ancestor.get("alpha"), ancestor.get("layerOpacity")):
+            if opacity is not None and (type(opacity) not in (int, float)
+                                       or not math.isfinite(opacity) or opacity <= 0):
+                return None
+        if ancestor.get("alpha") is None:
+            return None
+    return intersect_bounds(bounds, viewport)
+
+
+def journal_native_bounds(agent, header):
+    selectors = {
+        "main": "prop:accessibility-identifier=main-content-container",
+        "journals": "prop:accessibility-identifier=journals",
+        "dateHeader": f"id:{header['node']}",
+    }
+    replies = {name: agent.request(op="native-bounds", selector=selector)
+               for name, selector in selectors.items()}
+    visible = {name: visible_native_bounds(reply) for name, reply in replies.items()}
+    if any(bounds is None for bounds in visible.values()):
+        return None
+    # All three committed native regions must share visible window content.
+    overlap = intersect_bounds(visible["dateHeader"], visible["journals"])
+    if overlap is None or intersect_bounds(overlap, visible["main"]) is None:
+        return None
+    return replies
+
+
 def wait_journal_body(agent, helper, deadline):
     selector = "prop:accessibility-identifier=journals"
     while time.monotonic() < deadline:
@@ -107,9 +169,11 @@ def wait_journal_body(agent, helper, deadline):
             subtree = agent.request(op="tree", selector=selector)
             header = dated_journal_header(subtree, helper)
             if header:
-                return subtree, header
+                bounds = journal_native_bounds(agent, header)
+                if bounds is not None:
+                    return subtree, {**header, "nativeBounds": bounds}
         time.sleep(min(0.05, max(0, deadline - time.monotonic())))
-    raise RuntimeError("Actual dated journal body did not mount before the deadline")
+    raise RuntimeError("Actual dated journal body did not become natively visible before the deadline")
 
 
 def native_press(agent, selector):
@@ -147,8 +211,10 @@ def background_native(application, private, logs, deadline):
                 if (hello.get("protocol") != "lui-agent" or hello.get("version") != 1
                         or hello.get("host") != "logseq-native"):
                     raise RuntimeError(f"Unexpected packaged agent protocol: {hello}")
-                if not {"native-press", "screenshot"}.issubset(hello.get("host_native_ops", [])):
+                if not {"native-press", "native-bounds", "screenshot"}.issubset(hello.get("host_native_ops", [])):
                     raise RuntimeError("Package does not advertise the required actual native operations")
+                if hello.get("backend_error"):
+                    raise RuntimeError(f"Packaged renderer failed: {hello['backend_error']}")
                 result["hello"] = hello
                 own_listener = f"lui-agent listening on {address[0]}:{address[1]}"
                 if own_listener not in (logs / "native.log").read_text(encoding="utf-8", errors="replace"):

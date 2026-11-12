@@ -5,6 +5,7 @@ from pathlib import Path
 import struct
 import tempfile
 import unittest
+from unittest.mock import patch
 
 SPEC = importlib.util.spec_from_file_location(
     "logseq_packaged_startup", Path(__file__).with_name("qualify_packaged_startup.py"))
@@ -55,6 +56,77 @@ class PackagedBackgroundTests(unittest.TestCase):
         for text in ("Journals", "Demo", "2026", "Loading 2026", "Nov 12th, "):
             tree = {"nodes": [{"props": {"text": text}}]}
             self.assertIsNone(QUALIFIER.dated_journal_header(tree, helper))
+
+    @staticmethod
+    def native_bounds(bounds):
+        return {"ok": True, "op": "native-bounds", "diagnostics": {
+            "present": True, "contentBounds": bounds, "viewport": [0, 0, 1440, 900],
+            "intersectsViewport": True, "windowVisible": True, "applicationHidden": False,
+            "applicationActive": False, "windowKey": False, "scanTruncated": False,
+            "ancestryTruncated": False,
+            "coordinateSpace": "AppKit window content; not Core layout or desktop screen",
+            "ancestors": [{"hidden": False, "hiddenByAncestor": False,
+                           "alpha": 1.0, "layerOpacity": None, "isContentRoot": True}]}}
+
+    def test_native_readiness_accepts_inactive_background_geometry_without_activation(self):
+        reply = self.native_bounds([300, 60, 700, 40])
+        self.assertEqual(QUALIFIER.visible_native_bounds(reply), [300, 60, 700, 40])
+
+    def test_native_readiness_rejects_retained_but_missing_hidden_or_blank_views(self):
+        cases = [
+            {"present": False}, {"contentBounds": None}, {"contentBounds": [0, 0, 0, 40]},
+            {"contentBounds": [0, 0, 40, float("nan")]},
+            {"contentBounds": [2000, 0, 200, 40]}, {"intersectsViewport": False},
+            {"windowVisible": False}, {"applicationHidden": True},
+            {"scanTruncated": True}, {"ancestryTruncated": True}, {"ancestors": []},
+            {"coordinateSpace": "Core layout"},
+        ]
+        for ancestor in ({"hidden": True}, {"hiddenByAncestor": True}, {"alpha": 0},
+                         {"layerOpacity": 0}, {"alpha": float("nan")}, {"isContentRoot": False}):
+            original = self.native_bounds([300, 60, 700, 40])["diagnostics"]["ancestors"][0]
+            cases.append({"ancestors": [{**original, **ancestor}]})
+        for change in cases:
+            with self.subTest(change=change):
+                reply = self.native_bounds([300, 60, 700, 40])
+                reply["diagnostics"].update(change)
+                self.assertIsNone(QUALIFIER.visible_native_bounds(reply))
+
+    def test_journal_gate_requires_actual_bounds_for_all_three_canonical_regions(self):
+        helper = type("TreeHelper", (), {"nodes": staticmethod(lambda tree: iter(tree["nodes"]))})
+        tree = {"nodes": [{"id": 9, "props": {"text": "Nov 12th, 2026"}}]}
+        requests = []
+        replies = {
+            "prop:accessibility-identifier=main-content-container": self.native_bounds([250, 40, 900, 800]),
+            "prop:accessibility-identifier=journals": self.native_bounds([280, 50, 800, 750]),
+            "id:9": self.native_bounds([300, 60, 700, 40]),
+        }
+
+        class Fixture:
+            def request(self, **request):
+                requests.append(request)
+                if request["op"] == "find":
+                    return {"nodes": [8]}
+                if request["op"] == "tree":
+                    return tree
+                return replies[request["selector"]]
+
+        with patch.object(QUALIFIER.time, "monotonic", return_value=0):
+            subtree, result = QUALIFIER.wait_journal_body(Fixture(), helper, 1)
+        self.assertIs(subtree, tree)
+        self.assertEqual(result["nativeBounds"]["dateHeader"], replies["id:9"])
+        self.assertEqual([request["selector"] for request in requests if request["op"] == "native-bounds"],
+                         list(replies))
+        for selector, bounds in (("id:9", [300, 60, 0, 40]),
+                                 ("prop:accessibility-identifier=journals", [1200, 60, 200, 40]),
+                                 ("prop:accessibility-identifier=main-content-container", [0, 0, 200, 900])):
+            with self.subTest(selector=selector):
+                previous = replies[selector]
+                replies[selector] = self.native_bounds(bounds)
+                with patch.object(QUALIFIER.time, "monotonic", side_effect=[0, 0, 2]), \
+                        patch.object(QUALIFIER.time, "sleep"), \
+                        self.assertRaisesRegex(RuntimeError, "natively visible"):
+                    QUALIFIER.wait_journal_body(Fixture(), helper, 1)
+                replies[selector] = previous
 
     def test_png_evidence_rejects_mismatched_dimensions_or_non_app_content(self):
         # A complete one-pixel PNG exercises evidence validation, not an app flow.

@@ -420,7 +420,12 @@ and runs the actual `Contents/MacOS/Logseq` launcher with fresh private
 home/graph/state directories and `--startup-preflight`. External native library,
 asset, worker and dynamic-loader overrides are removed. It reuses LUI's existing
 packaged-agent helper, requires Journals semantic readiness and an actual dated
-journal header inside the canonical `journals` subtree before the first PNG,
+journal header inside the canonical `journals` subtree before the first PNG.
+The existing `native-bounds` operation must also prove positive intersecting
+AppKit bounds for the main Scroll, Journals region and dated title, with a visible
+window and complete unhidden, nontransparent ancestry. These native replies are
+retained in `journalBody.nativeBounds`; semantic nodes alone cannot qualify startup.
+The flow rejects a `hello.backend_error` renderer diagnostic,
 captures real app content, activates the native More/Appearance controllers and requires the actual
 startup log to report `active=false, hidden=false`.
 
