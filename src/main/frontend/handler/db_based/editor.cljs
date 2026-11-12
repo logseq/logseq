@@ -41,10 +41,12 @@
   (let [refs (remove #(= (:block/uuid block) (:block/uuid %)) refs)
         title->ref (zipmap (map :block/title cached-refs) cached-refs)]
     (map (fn [x]
-           (if-let [ref (and (map? x) (title->ref (:block/title x)))]
-             (assoc ref :block.temp/original-page-name
-                    (:block.temp/original-page-name x))
-             x))
+           (if-let [ref-uuid (some-> (:block/title x) parse-uuid)]
+             [:block/uuid ref-uuid]
+             (if-let [ref (and (map? x) (title->ref (:block/title x)))]
+               (assoc ref :block.temp/original-page-name
+                      (:block.temp/original-page-name x))
+               x)))
          refs)))
 
 (defn- markdown-heading-level

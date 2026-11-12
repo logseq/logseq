@@ -31,6 +31,7 @@
             [frontend.util.ref :as ref]
             [frontend.util.text :as text-util]
             [goog.object :as gobj]
+            [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.shui.hooks :as hooks]
@@ -158,17 +159,25 @@
 
                             :else
                             (take (get-group-limit group) items))))
-        node-exists? (let [blocks-result (keep :source-block (get-in results [:nodes :items]))]
-                       (when-not (string/blank? input)
-                         (some (fn [block]
-                                 (and
-                                  (:page? block)
-                                  (not (entity/class? block))
-                                  (not (entity/property? block))
-                                  (or (nil? (:block/parent block))
-                                      (entity/journal? block)
-                                      (ldb/library? (peek (:block.temp/breadcrumb block))))
-                                  (= (util/page-name-sanity-lc input) (util/page-name-sanity-lc (:block.temp/original-title block))))) blocks-result)))
+        node-exists? (let [class? (string/starts-with? input "#")
+                           title (if class? (get-class-from-input input) input)
+                           blocks-result (keep :source-block (get-in results [:nodes :items]))]
+                       (or (and (= input (get-in results [:nodes :query]))
+                                (get-in results [:nodes :name-exists?]))
+                           (when-not (string/blank? title)
+                             (some (fn [block]
+                                     (and (:page? block)
+                                          (if class?
+                                            (entity/class? block)
+                                            (and (not (entity/class? block))
+                                                 (not (entity/property? block))
+                                                 (or (nil? (:block/parent block))
+                                                     (entity/journal? block)
+                                                     (ldb/library? (peek (:block.temp/breadcrumb block))))))
+                                          (= (util/page-name-sanity-lc title)
+                                             (util/page-name-sanity-lc (or (:block.temp/original-title block)
+                                                                          (:block/title block))))))
+                                   blocks-result))))
         include-slash? (string/includes? input "/")
         start-with-slash? (string/starts-with? input "/")
         order* (cond
@@ -431,14 +440,41 @@
                :expanded? expanded?})]
     (swap! !results assoc-in [group :status] :loading)
     (swap! !results assoc-in [:current-page :status] :loading)
-    (p/let [current-page-uuid (<page-uuid repo current-page)
-            search-result (search/block-search repo @!input opts)
+    (p/let [input @!input
+            current-page-uuid (<page-uuid repo current-page)
+            class? (string/starts-with? input "#")
+            title (if class? (get-class-from-input input) input)
+            name-exists? (if class?
+                           (db-async/<page-exists? repo title #{:logseq.class/Tag})
+                           (db-async/<q repo {}
+                                        '[:find ?page .
+                                          :in $ ?name ?library-title
+                                          :where
+                                          [?page :block/name ?name]
+                                          (or [?page :block/tags :logseq.class/Page]
+                                              [?page :block/tags :logseq.class/Journal])
+                                          (not [?page :block/tags :logseq.class/Tag])
+                                          (not [?page :block/tags :logseq.class/Property])
+                                          (or-join [?page ?library-title]
+                                                   (not [?page :block/parent])
+                                                   [?page :block/tags :logseq.class/Journal]
+                                                   (and [?page :block/parent ?parent]
+                                                        [?parent :block/title ?library-title]
+                                                        [?parent :logseq.property/built-in? true]))]
+                                        (util/page-name-sanity-lc title)
+                                        common-config/library-page-name))
+            search-result (if class?
+                            (p/let [classes (editor-handler/get-matched-classes title)]
+                              (mapv #(assoc % :page? true
+                                             :block.temp/unique-title (:block/title %)
+                                             :block.temp/original-title (:block/title %)) classes))
+                            (search/block-search repo input opts))
             {:keys [blocks matched-count]} (block-search-result->items search-result)
             blocks (remove nil? blocks)
             items (keep (fn [block]
                           (if (:page? block)
-                            (page-item repo block current-page-uuid @!input)
-                            (block-item repo block current-page-uuid @!input))) blocks)]
+                            (page-item repo block current-page-uuid input)
+                            (block-item repo block current-page-uuid input))) blocks)]
       (if (= group :current-page)
         (let [items-on-current-page (filter :current-page? items)]
           (swap! !results update group merge {:status :success
@@ -447,6 +483,8 @@
                                               :has-more? false}))
         (swap! !results update group merge {:status :success
                                             :items items
+                                            :query input
+                                            :name-exists? name-exists?
                                             :matched-count matched-count
                                             :has-more? (> matched-count (count items))})))))
 

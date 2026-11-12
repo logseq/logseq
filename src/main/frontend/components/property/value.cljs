@@ -1173,17 +1173,16 @@
                                      (not (broad-scoped-node-property? property classes)))
                             (scoped-class-ids classes structured-children-by-class-id))
           page-entity (when-not scope-class-ids
-                        (db-async/<get-block repo page {:children? false}))
+                        (db-async/<get-page-by-name repo page
+                                                     (if class? #{:logseq.class/Tag}
+                                                         #{:logseq.class/Page :logseq.class/Journal})))
           id (if scope-class-ids
                (<get-scoped-page-id repo page scope-class-ids)
-               (:db/id page-entity))
-          ;; Note: property and other types shouldn't be converted to class
-          page? (entity/internal-page? page-entity)]
+               (:db/id page-entity))]
     (cond
-      ;; page not exists or page exists but not a page type
-      (or (nil? id) (and class? (not page?)))
+      (nil? id)
       (p/let [inline-class-entity (when inline-class
-                                    (db-async/<get-block repo inline-class {:children? false}))
+                                    (db-async/<get-page-by-name repo inline-class #{:logseq.class/Tag}))
               inline-class-uuid
               (when inline-class
                 (or (:block/uuid inline-class-entity)
@@ -1203,10 +1202,6 @@
                        (db-page-handler/<create-class! page create-options)
                        (page-handler/<create! page create-options))]
           (:db/id page)))
-
-      (and class? page? id)
-      (p/let [_ (db-page-handler/convert-page-to-tag! page-entity)]
-        id)
 
       :else
       id)))

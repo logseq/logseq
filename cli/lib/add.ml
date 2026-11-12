@@ -350,10 +350,22 @@ let page_query selector =
            Melange_edn_melange.symbol "$"; Melange_edn_melange.symbol "?name";
          |])
     ~where:
-      (Vec.singleton
-         (Cli_primitive.V
-            (Edn_util.vector_t_vec
-               (Vec.of_array [| sym "?e"; kw "block/name"; sym "?name" |]))))
+      (Vec.of_array
+         [|
+           Cli_primitive.V
+             (Edn_util.vector_t_vec
+                (Vec.of_array [| sym "?e"; kw "block/name"; sym "?name" |]));
+           Cli_primitive.L
+             (Edn_util.list_t_vec
+                (Vec.of_array
+                   [|
+                     sym "or";
+                     vector_vec
+                       (Vec.of_array [| sym "?e"; kw "block/tags"; kw "logseq.class/Page" |]);
+                     vector_vec
+                       (Vec.of_array [| sym "?e"; kw "block/tags"; kw "logseq.class/Journal" |]);
+                   |]));
+         |])
     ()
 
 let tag_query selector =
@@ -565,12 +577,9 @@ let pull_created_page config repo name create_result =
         (vector_vec
            (Vec.of_array [| kw "block/uuid"; Edn_util.uuid uuid |]))
   | None ->
-      pull_entity config repo page_selector
-        (vector_vec
-           (Vec.of_array
-              [|
-                kw "block/name"; Edn_util.string (normalized_lookup_name name);
-              |]))
+      Cli_effect.bind (pull_pages_by_name config repo name page_selector)
+        (fun values ->
+          Cli_effect.pure (Option.value (first_entity values) ~default:Edn_util.nil))
 
 (* Returns the EDN value usable as the insert-blocks op target plus the names
    of pages that would be created. A missing target page stays a [:block/name]

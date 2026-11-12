@@ -1,6 +1,7 @@
 (ns logseq.api.db-based-test
   (:require [cljs.test :refer [async deftest is use-fixtures]]
             [clojure.string :as string]
+            [datascript.core :as d]
             [frontend.db.conn :as conn]
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.state :as state]
@@ -232,7 +233,7 @@
                 {:block/title "doing"}]}])
     (-> (api-test/with-plugin-api
           (fn []
-            (p/let [property (db-based-api/upsert-property "status" #js {:type "default" :cardinality "many"} nil)
+            (p/let [property (db-based-api/upsert-property "workflow-state" #js {:type "default" :cardinality "many"} nil)
                     property-uuid (aget property "uuid")
                     choice-uuids (mapv #(-> (test-helper/find-block-by-content %) :block/uuid)
                                       ["todo" "doing"])]
@@ -241,7 +242,7 @@
                                 (p/resolved {:property-id id :values values}))]
                 (p/let [result (db-based-api/add-property-value-choices
                                property-uuid (clj->js (mapv str choice-uuids)))]
-                  (is (= :plugin.property._test_plugin/status (:property-id result)))
+                  (is (= :plugin.property._test_plugin/workflow-state (:property-id result)))
                   (is (= choice-uuids (:values result))))))))
         (p/catch (fn [error]
                    (is false (str error))))
@@ -290,7 +291,7 @@
        :blocks [{:block/title "ident owner"}]}])
     (-> (api-test/with-plugin-api
           (fn []
-            (p/let [user-ident (create-ui-property! "Priority" {:logseq.property/type :number})
+            (p/let [user-ident (create-ui-property! "Review Metric" {:logseq.property/type :number})
                     block (test-helper/find-block-by-content "ident owner")
                     uuid' (str (:block/uuid block))
                     _ (api-editor/upsert_block_property uuid' (str user-ident) 7 nil)
@@ -308,33 +309,24 @@
                    (is false (str error))))
         (p/finally done))))
 
-(deftest plugin-short-name-writes-stay-on-plugin-property
+(deftest plugin-property-creation-rejects-an-existing-name
   (async done
-    (test-helper/load-test-files
-     [{:page {:block/title "Plugin Own Page"}
-       :blocks [{:block/title "plugin owner"}]}])
     (-> (api-test/with-plugin-api
           (fn []
-            (p/let [user-ident (create-ui-property! "Status" {:logseq.property/type :number})
-                    block (test-helper/find-block-by-content "plugin owner")
-                    uuid' (str (:block/uuid block))
-                    _ (api-editor/upsert_block_property uuid' "Status" 42 nil)
-                    fetched-property (db-based-api/get-property "Status")
-                    fetched-map (api-test/js->clj-kw fetched-property)
-                    updated (test-helper/find-block-by-content "plugin owner")]
-              (is (= ":plugin.property._test_plugin/Status" (:ident fetched-map)))
-              (is (= 42 (property-written-value (get updated :plugin.property._test_plugin/Status))))
-              (is (nil? (get updated user-ident))
-                  "A short name must not write onto the UI-owned property"))))
-        (p/catch (fn [error]
-                   (is false (str error))))
+            (p/let [user-ident (create-ui-property! "ReviewStatus" {:logseq.property/type :number})]
+              (-> (db-based-api/upsert-property "reviewstatus" #js {:type "string"} nil)
+                  (p/then (fn [_] (is false "A case variant cannot create another property")))
+                  (p/catch (fn [error]
+                             (is (re-find #"Duplicate property" (str error)))
+                             (is (= :number (:logseq.property/type (d/entity (conn/get-db) user-ident))))))))))
+        (p/catch (fn [error] (is false (str error))))
         (p/finally done))))
 
 (deftest plugin-schema-upsert-of-ui-property-is-rejected
   (async done
     (-> (api-test/with-plugin-api
           (fn []
-            (p/let [user-ident (create-ui-property! "Status" {:logseq.property/type :number})]
+            (p/let [user-ident (create-ui-property! "ReviewStatus" {:logseq.property/type :number})]
               (let [original-property (some #(when (= user-ident (:db/ident %)) %)
                                             (ldb/get-all-properties (conn/get-db)))]
                 (-> (db-based-api/upsert-property (str user-ident) #js {:type "string" :cardinality "many"} nil)

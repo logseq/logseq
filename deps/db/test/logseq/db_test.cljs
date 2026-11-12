@@ -58,19 +58,6 @@
                 (map :block/title)
                 set)))))
 
-(deftest get-case-page
-  (let [conn (db-test/create-conn-with-blocks
-              {:properties
-               {:foo {:logseq.property/type :default}
-                :Foo {:logseq.property/type :default}}
-               :classes {:movie {} :Movie {}}})]
-    ;; Case sensitive properties
-    (is (= "foo" (:block/title (ldb/get-case-page @conn "foo"))))
-    (is (= "Foo" (:block/title (ldb/get-case-page @conn "Foo"))))
-    ;; Case sensitive classes
-    (is (= "movie" (:block/title (ldb/get-case-page @conn "movie"))))
-    (is (= "Movie" (:block/title (ldb/get-case-page @conn "Movie"))))))
-
 (deftest get-journal-page-by-day
   (let [conn (db-test/create-conn-with-blocks
               {:pages-and-blocks
@@ -154,14 +141,14 @@
                {:foo {:logseq.property/type :default}
                 :Foo {:logseq.property/type :default}}
                :classes {:movie {} :Movie {}}})]
-    (is (= ["foo"]
-           (map #(:block/title (d/entity @conn %)) (ldb/page-exists? @conn "foo" #{:logseq.class/Property})))
+    (is (= #{"foo" "Foo"}
+           (set (map #(:block/title (d/entity @conn %)) (ldb/page-exists? @conn "fOO" #{:logseq.class/Property}))))
         "Property pages correctly found for given class")
     (is (= nil
            (ldb/page-exists? @conn "foo" #{:logseq.class/Tag}))
         "Property pages correctly not found for given class")
-    (is (= ["movie"]
-           (map #(:block/title (d/entity @conn %)) (ldb/page-exists? @conn "movie" #{:logseq.class/Tag})))
+    (is (= #{"movie" "Movie"}
+           (set (map #(:block/title (d/entity @conn %)) (ldb/page-exists? @conn "mOVIE" #{:logseq.class/Tag}))))
         "Class pages correctly found for given class")
     (is (= nil
            (ldb/page-exists? @conn "movie" #{:logseq.class/Property}))

@@ -188,7 +188,6 @@
  :class.validation/duplicate "Một thẻ khác tên \"{1}\" đã tồn tại."
  :class.validation/extends-cycle "Vòng lặp kế thừa thẻ."
  :class.validation/invalid-extends-type "Không thể mở rộng trang này vì nó không phải là thẻ hoặc đang kế thừa từ một trang không phải thẻ."
- :class.validation/parents-must-be-tags "Không thể tạo thẻ này trừ khi tất cả các cấp trên đều là thẻ."
  :class.validation/tag-with-non-tag "Không thể đặt thẻ với trang tích hợp sẵn không phải là thẻ \"{1}\"."
 
  :cmdk.action/apply-theme "Áp dụng chủ đề"

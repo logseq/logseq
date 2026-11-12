@@ -23,7 +23,8 @@
             [logseq.outliner.datascript-report :as ds-report]
             [logseq.outliner.page :as outliner-page]
             [logseq.outliner.pipeline :as outliner-pipeline]
-            [logseq.outliner.template :as outliner-template]))
+            [logseq.outliner.template :as outliner-template]
+            [logseq.outliner.validate :as outliner-validate]))
 
 (def ^:private rtc-tx-or-download-graph?
   (let [p (some-fn :rtc-op? :rtc-tx? :rtc-download-graph? :transact-remote?)]
@@ -698,6 +699,9 @@
                               :tx-data (concat (:tx-data tx-report) (:tx-data result))
                               :db-after (:db-after result)))
                      tx-report)
+        _ (when (and derive-extra-data?
+                     (not (rtc-tx-or-download-graph? tx-meta)))
+            (outliner-validate/validate-page-name-changes tx-report*))
         {:keys [blocks]} (ds-report/get-blocks-and-pages tx-report*)
         deleted-blocks (outliner-pipeline/filter-deleted-blocks (:tx-data tx-report*))
         deleted-block-ids (set (map :db/id deleted-blocks))
