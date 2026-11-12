@@ -145,16 +145,25 @@ let inspect filename =
   | Cmt_format.Implementation structure -> iterator.structure iterator structure
   | _ -> invalid_arg ("Expected native implementation typedtree: " ^ filename)
 
+let archive_typedtrees filename =
+  let library=Compilenv.read_library_info filename in
+  let base=Filename.remove_extension (Filename.basename filename) in
+  let objects=Filename.concat (Filename.dirname filename) ("." ^ base ^ ".objs/byte") in
+  List.map (fun (unit,_) ->
+    Filename.concat objects (String.uncapitalize_ascii unit.Cmx_format.ui_name ^ ".cmt"))
+    library.Cmx_format.lib_units
+
 let () =
-  for index=1 to Array.length Sys.argv-1 do
+  let targets_only=Array.length Sys.argv>1 && Sys.argv.(1)="--cmt-targets" in
+  let first=if targets_only then 2 else 1 in
+  for index=first to Array.length Sys.argv-1 do
     let filename=Sys.argv.(index) in
-    if Filename.check_suffix filename ".cmxa" then begin
-      let library=Compilenv.read_library_info filename in
-      let base=Filename.remove_extension (Filename.basename filename) in
-      let objects=Filename.concat (Filename.dirname filename) ("." ^ base ^ ".objs/byte") in
-      List.iter (fun (unit,_) ->
-        inspect (Filename.concat objects (String.uncapitalize_ascii unit.Cmx_format.ui_name ^ ".cmt"))) library.Cmx_format.lib_units
-    end else inspect filename
+    if Filename.check_suffix filename ".cmxa" then
+      List.iter (if targets_only then print_endline else inspect) (archive_typedtrees filename)
+    else if targets_only then invalid_arg ("Expected an actual native archive: " ^ filename)
+    else inspect filename
   done;
-  Printf.printf "let () =\n%s\nfinish ();;\n" (String.concat "\n" (List.rev !probes));
-  Printf.eprintf "Native style source capture: %d literal calls; %d constructor calls require dynamic values\n%!" (List.length !probes) !dynamic
+  if not targets_only then begin
+    Printf.printf "let () =\n%s\nfinish ();;\n" (String.concat "\n" (List.rev !probes));
+    Printf.eprintf "Native style source capture: %d literal calls; %d constructor calls require dynamic values\n%!" (List.length !probes) !dynamic
+  end

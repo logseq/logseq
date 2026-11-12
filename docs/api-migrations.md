@@ -1424,3 +1424,18 @@ change survives. The existing throwing-callback/GC regression remains enabled.
 The primitive-signature native suite also compiles rejected `void` and wrong
 arity definitions. These checks do not replace a real application session or
 qualify unrelated native UI behavior.
+
+## Native style preflight explicitly builds its archive typedtrees
+
+Release native archives may exist without every implementation `.cmt` file.
+The style gate now asks its compiler-libs extractor for the exact unit table of
+those actual `.cmxa` archives, then requests all corresponding native byte-object
+CMT targets in one Dune build. It inherits the selected release/development
+profile and local LUI `OCAMLPATH`; no Dune rules are changed. For example, the
+actual contracts archive's `Ui_task` unit requests
+`src/contracts/.logseq_ui_contracts.objs/byte/ui_task.cmt`.
+
+Inspection still fails when a requested native typedtree is missing. It never
+substitutes Melange output, scans stale object directories or skips an archive
+unit. Regression helpers supplied with an already compiled `cmts` fixture use
+that fixture directly and do not rebuild unrelated archive typedtrees.

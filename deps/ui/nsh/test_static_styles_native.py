@@ -9,6 +9,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
+from unittest.mock import patch
 from build_windows_dll import ARCHIVES, UI
 from validate_static_styles import validate
 
@@ -27,11 +28,15 @@ class NativeStyleCompileTests(unittest.TestCase):
             source.write_text(body, encoding="utf-8")
             subprocess.run([*map(str, prefix), "ocamlfind", "ocamlopt", "-package", "lui",
                 *map(str, includes), "-bin-annot", "-c", str(source)], cwd=stage, check=True)
-            if rejected:
-                with self.assertRaises(subprocess.CalledProcessError):
+            # A supplied typed fixture must not trigger an unrelated archive
+            # Dune build; it is already the exact unit under qualification.
+            with patch("validate_static_styles.ensure_archive_typedtrees",
+                       side_effect=AssertionError("Unexpected archive CMT build")):
+                if rejected:
+                    with self.assertRaises(subprocess.CalledProcessError):
+                        validate(executable, cmts=[source.with_suffix(".cmt")])
+                else:
                     validate(executable, cmts=[source.with_suffix(".cmt")])
-            else:
-                validate(executable, cmts=[source.with_suffix(".cmt")])
 
     def test_nsh_rejects_a_literal_native_style_grammar_error(self):
         self.check_fixture('let value = Ui_parts.Prop.font_size "not-a-font-size"\n', rejected=True)

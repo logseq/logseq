@@ -18,6 +18,32 @@ def command(arguments, *, cwd, stdout=None):
     subprocess.run(list(map(str, arguments)), cwd=cwd, check=True, stdout=stdout)
 
 
+def ensure_archive_typedtrees(prefix, extractor, archives):
+    """Request exactly the CMT units declared by the native archive metadata.
+
+    Release compilation may produce CMX without every CMT. Dune knows the CMT
+    rules, but those targets must be requested explicitly. One batch preserves
+    dependency ordering and the caller's profile/OCAMLPATH without changing rules.
+    """
+    filenames = subprocess.check_output(
+        list(map(str, [extractor, "--cmt-targets", *archives])),
+        cwd=UI / "_build/default", text=True).splitlines()
+    if not filenames:
+        raise ValueError("Actual native archives contain no typedtree units")
+    build_root = (UI / "_build/default").resolve()
+    targets = []
+    for filename in filenames:
+        path = Path(filename).resolve()
+        if path.suffix != ".cmt":
+            raise ValueError("Invalid native typedtree target: " + filename)
+        targets.append(path.relative_to(build_root))
+    command([*prefix, "dune", "build", *targets], cwd=UI)
+    # Missing requested units are never replaced with another backend's output.
+    missing = [filename for filename in filenames if not Path(filename).is_file()]
+    if missing:
+        raise ValueError("Dune did not produce actual native typedtrees: " + ", ".join(missing))
+
+
 def validate(executable: Path, *, cmts=None):
     prefix = ["opam", "exec", "--switch=" + os.environ.get("OPAMSWITCH", "5.5.1"), "--"]
     includes = []
@@ -45,6 +71,8 @@ def validate(executable: Path, *, cmts=None):
         source.write_bytes((UI / "nsh/static_style_sites.ml").read_bytes())
         command([*prefix, "ocamlfind", "ocamlopt", "-package", "compiler-libs.optcomp", "-linkpkg",
                  source, "-o", extractor], cwd=stage)
+        if cmts is None:
+            ensure_archive_typedtrees(prefix, extractor, archives)
         generated = stage / "probe.ml"
         with generated.open("wb") as output:
             output.write((UI / "nsh/static_style_probe.ml").read_bytes())
