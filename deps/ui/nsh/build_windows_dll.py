@@ -27,9 +27,9 @@ ARCHIVES = (
     "native/logseq_ui_native.cmxa",
 )
 PACKAGES = ",".join((
-    "lui.plugin_fetch", "ocaml-signal", "melange-transit-core", "melange-transit-native",
+    "lui", "lui.plugin_fetch", "ocaml-signal", "melange-transit-core", "melange-transit-native",
     "melange-edn-core", "melange-edn-native", "yojson", "ptime", "uri", "unix",
-    "threads.posix", "digestif", "str", "markup", "mtime.clock.os", "re", "re.pcre",
+    "threads.posix", "digestif.c", "str", "markup", "mtime.clock.os", "re", "re.pcre",
 ))
 
 

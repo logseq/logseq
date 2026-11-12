@@ -234,7 +234,8 @@ let run ~enqueue ~drain ~set_owner () =
         let notifications = ref 0 in
         let cancel = Ui_task.Activity.when_idle activity (fun () -> incr notifications) in
         check "duplicate idle observer is rejected" (invalid (fun () ->
-          ignore (Ui_task.Activity.when_idle activity (fun () -> failwith "replaced observer"))));
+          let _cancel = Ui_task.Activity.when_idle activity (fun () -> failwith "replaced observer") in
+          ()));
         resolve ();
         check "settlement cannot run an idle observer inline" (!notifications = 0);
         drain ();
