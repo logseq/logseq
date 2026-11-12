@@ -92,6 +92,58 @@ fn bounded(app: &Headless, tree: &Value, tab: &str) -> Result<(), String> {
     {
         return Err(format!("{tab} has no finite picker viewport: {native:#?}"));
     }
+    eprintln!(
+        "BOUND actual {tab} picker: cells={cells}, canonical={}, native={}, viewport={:?}",
+        nodes(body).len(),
+        app.screen().layout_nodes().len(),
+        native.bounds
+    );
+    Ok(())
+}
+
+fn wait_for_edge(
+    app: &mut Headless,
+    agent: &Agent,
+    tab: &str,
+    count: u64,
+    final_row: bool,
+) -> Result<(), String> {
+    let failure = RefCell::new(None);
+    wait_for_chrome(
+        app,
+        &format!(
+            "{tab} {} source row",
+            if final_row { "final" } else { "first" }
+        ),
+        Duration::from_secs(10),
+        |_| match agent.tree() {
+            Ok(tree) => picker(&tree).is_ok_and(|body| {
+                nodes(body).into_iter().any(|node| {
+                    node.pointer("/props/virtual-total-count")
+                        .and_then(Value::as_u64)
+                        == Some(count)
+                        && node
+                            .pointer("/props/virtual-indices")
+                            .and_then(Value::as_str)
+                            .and_then(|encoded| serde_json::from_str::<Vec<u64>>(encoded).ok())
+                            .is_some_and(|indices| {
+                                if final_row {
+                                    indices.last() == Some(&(count - 1))
+                                } else {
+                                    indices.first() == Some(&0)
+                                }
+                            })
+                })
+            }),
+            Err(error) => {
+                *failure.borrow_mut() = Some(error);
+                true
+            }
+        },
+    )?;
+    if let Some(error) = failure.into_inner() {
+        return Err(error);
+    }
     Ok(())
 }
 
@@ -194,36 +246,19 @@ pub(super) fn qualify(app: &mut Headless) -> Result<(), String> {
         eprintln!("BEGIN actual complete {tab} Scroll: rows={count}, owner={scroll}");
         app.scroll(&scroll, px(count as f32 * 44.0 + 408.0))?;
         eprintln!("DONE actual complete {tab} Scroll");
-        let failure = RefCell::new(None);
-        wait_for_chrome(
-            app,
-            &format!("{tab} final source row"),
-            Duration::from_secs(10),
-            |_| match agent.tree() {
-                Ok(tree) => picker(&tree).is_ok_and(|body| {
-                    nodes(body).into_iter().any(|node| {
-                        node.pointer("/props/virtual-total-count")
-                            .and_then(Value::as_u64)
-                            == Some(count)
-                            && node
-                                .pointer("/props/virtual-indices")
-                                .and_then(Value::as_str)
-                                .and_then(|encoded| serde_json::from_str::<Vec<u64>>(encoded).ok())
-                                .is_some_and(|indices| indices.last() == Some(&(count - 1)))
-                    })
-                }),
-                Err(error) => {
-                    *failure.borrow_mut() = Some(error);
-                    true
-                }
-            },
-        )?;
-        if let Some(error) = failure.into_inner() {
-            return Err(error);
-        }
+        wait_for_edge(app, &agent, tab, count, true)?;
+        bounded(app, &agent.tree()?, tab)?;
+        // Returning through the same controller exercises cell retirement and
+        // rebinding in both directions, rather than only a one-way reveal.
+        app.scroll(&scroll, px(-(count as f32 * 44.0 + 408.0)))?;
+        wait_for_edge(app, &agent, tab, count, false)?;
+        bounded(app, &agent.tree()?, tab)?;
+        app.scroll(&scroll, px(count as f32 * 44.0 + 408.0))?;
+        wait_for_edge(app, &agent, tab, count, true)?;
         let tree = agent.tree()?;
         bounded(app, &tree, tab)?;
         let body = picker(&tree)?;
+        let retired_picker = selector(body)?;
         let last = cells(body, tab)
             .last()
             .copied()
@@ -246,6 +281,17 @@ pub(super) fn qualify(app: &mut Headless) -> Result<(), String> {
         if let Some(error) = failure.into_inner() {
             return Err(error);
         }
+        wait_for_chrome(
+            app,
+            &format!("{tab} native picker retired after choice"),
+            Duration::from_secs(10),
+            |screen| {
+                !screen
+                    .layout_nodes()
+                    .into_iter()
+                    .any(|node| node.test_id.as_deref() == retired_picker.strip_prefix("id:"))
+            },
+        )?;
         let failure = RefCell::new(None);
         wait_for_chrome(
             app,
@@ -265,7 +311,7 @@ pub(super) fn qualify(app: &mut Headless) -> Result<(), String> {
             return Err(error);
         }
         eprintln!(
-            "PASS actual complete {tab} picker: {count} rows, finite native Scroll, bounded cells, final item chosen and persisted"
+            "PASS actual complete {tab} picker: {count} rows, finite native Scroll, bounded round-trip cells, final item persisted, native picker retired"
         );
     }
     Ok(())
