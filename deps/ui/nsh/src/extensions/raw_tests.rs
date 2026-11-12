@@ -1,7 +1,7 @@
 //! Admission uses schemas exported by the actual linked OCaml application.
-use super::*;
+use crate::extensions::{raw, register_codemirror, register_raw};
 use lui_nsh::{
-    extensions::{ExtensionEmitter, Extensions, Profile},
+    extensions::{ExtensionEmitter, Extensions, Profile, Schema},
     render::{Event, Renderer},
     wire::Batch,
 };

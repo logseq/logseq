@@ -502,3 +502,7 @@ fn activate_asset(
         }
     });
 }
+
+#[cfg(test)]
+#[path = "raw_tests.rs"]
+mod tests;

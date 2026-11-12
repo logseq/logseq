@@ -80,9 +80,6 @@ fn boolean(context: &ExtensionContext, name: &str) -> bool {
 #[cfg(test)]
 mod tests;
 
-#[cfg(test)]
-mod raw_tests;
-
 /// Registers the actual PDFKit host before the native AppView is constructed.
 #[cfg(target_os = "macos")]
 pub use pdf::register as register_pdf;
