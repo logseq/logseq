@@ -425,7 +425,7 @@ let run_outliner_drop () =
         ~source:(reactive (fun model -> match model.Model.route_page with
           | Some page -> page.Model.page_blocks | None -> []) model_source)
         ~key:(fun (block : Model.block) -> Option.get block.block_uuid)
-        ~cmp:String.compare ~mount:(Tree.block_row_sig ~scope:"main")]) in
+        ~cmp:String.compare ~mount:(fun block_source -> Tree.block_row_sig ~scope:"main" block_source)]) in
   let flush ()=
     ignore (Lui_app.flush app);
     (match S.editing () with
