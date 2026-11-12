@@ -89,3 +89,30 @@ These tests qualify public-driver injected AppKit input, not physical hardware,
 IME/composition, accessibility, selection reversal, all commands, rich editor
 formats, cross-platform native input or the complete UX acceptance matrix.
 Installation and SDK restart qualification remain disabled/pending.
+
+## Real-worker reference-drop durability
+
+The source-only event regression was extended by fixture commits `27a1a75bca`
+and `9a6befbd5a`, using actual native application archives with production
+selection correction `b2a6e0b62d`. The complete contained worker driver passed:
+`/tmp/logseq-durable-reference-worker-tests.log`. No OCaml compiler warning was
+emitted; the existing findlib dependency warnings remain visible in that log.
+
+Alongside the existing protocol and two-worker rollback modes, the new outliner
+mode mounts actual keyed rows/editor and sends canonical native down/move/up
+events through `Native_embed` and its document controller. All seeding, reads
+and writes use the real session-carrying `Worker_client`. It checks reference
+UUID/title values, after-target, before-first-target and append-child ordering,
+unchanged source/child parents, dirty save before insertion and editor ownership
+after the actual page refresh. It then disposes the view and proves the data
+survives exact owned-worker stop/reopen. Worker SHA-256 remains
+`5404762a8ccd9b5987c0ab00fc8455000e428f0ac652a5e55166b20ec0ba1b50`;
+the outliner worker instances were `42ca3c67-832f-4c4a-a382-e173ceb3ff52` and
+`fa0568ce-787b-4da8-a64b-1930509cf660`.
+
+The resulting JSON reports `stage2Qualified`, `coordinatorQualified` and
+`outlinerDropQualified` true, and `installerEnabled` false. This fixture uses
+authored bounded row geometry and a recording native backend; host commands
+are recorded without fabricated replies. It qualifies the controller-to-real-DB
+path and restart durability, not NSH hit testing, physical held-Alt, focus or
+the whole-application updater. The installed developer session stayed running.
