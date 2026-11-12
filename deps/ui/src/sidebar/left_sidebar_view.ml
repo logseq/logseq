@@ -262,7 +262,12 @@ let repos_menu_content st (m : Model.t) : t =
         ignore (Graphs_ops.download_remote ~name:n ~uuid ~e2ee))
       ()
   in
-  let action key label icn act =
+  let action key label icn act : t =
+   fun ctx parent ->
+    (if Lui_ui.host ctx = Lui_protocol.NshHost then
+       Menu_item.el ~key ~label ~icon:(Icons.name_ref icn)
+         ~on_click:(fun () -> close (); act ()) ()
+     else
     (* cljs repos-footer: ghost button rows — icon + label, w-full *)
     Ui_components.with_props
       [ Ui_components.Prop.opacity 0.7
@@ -272,7 +277,7 @@ let repos_menu_content st (m : Model.t) : t =
       ~on_press:(fun _ ->
         close ();
         act ())
-        [ icon_ ~size:18 icn; text ~key:"t" ~value:label [] ])
+        [ icon_ ~size:18 icn; text ~key:"t" ~value:label [] ])) ctx parent
   in
   column ~key:"wrap"
         [ (if n_repos <= 1 then Logseq_el.nothing
@@ -881,6 +886,8 @@ let plugins_toolbar (ms : Model.t Signal.signal) : t =
 
 (* cljs repo/graphs-selector: icon + graph display name + selector chevron *)
 let graphs_selector st (ms : Model.t Signal.signal) : t =
+ fun ctx parent ->
+  let native = Lui_ui.host ctx = Lui_protocol.NshHost in
   let name_of (m : Model.t) =
     match m.repo with
     | Some r ->
@@ -905,6 +912,7 @@ let graphs_selector st (ms : Model.t Signal.signal) : t =
             ; Ui_components.Prop.pressed_opacity 0.7 ]
             (Ui_components.button ~key:"gsel-a" ~variant:`ghost ~grow:1. ~height:32
                ~label:(t "graph.switch/select-prompt")
+               ~accessibility_identifier:"graphs-selector-trigger"
                ~foreground:"hsl(var(--foreground))"
                ~main:`space_between ~cross:`center
                ~padding_horizontal:4 ~padding_vertical:4 ~corner_radius:4
@@ -913,14 +921,14 @@ let graphs_selector st (ms : Model.t Signal.signal) : t =
                    [ ("data-tooltip", ""); ("aria-haspopup", "menu")
                    ; ("aria-expanded", string_of_bool (menu = "repos")) ])
                    (Signal.value st.Sidebar_state.open_menu) ms)
-               ~on_press:(fun _ ->
+               ?on_press:(if native then None else Some (fun _ ->
                  (* the trigger is inside the popover layer's owned set,
                     so its presses never hit outside-dismiss — a plain
                     toggle is the whole open/close contract *)
                  Runtime.signal_set st.Sidebar_state.open_menu
                    (if Runtime.signal_get st.open_menu = "repos" then ""
-                    else "repos"))
-                  [ Ui_components.with_props
+                    else "repos")))
+                  ([ Ui_components.with_props
                         [ Ui_components.Prop.overflow `hidden ]
                       (row ~key:"gsel-th" ~cross:`center ~main:`center
                           ~width:24 ~min_width:24 ~height:24 ~opacity:0.8
@@ -948,10 +956,18 @@ let graphs_selector st (ms : Model.t Signal.signal) : t =
                           ; Ui_components.Prop.grow 0.
                           ; Ui_components.Prop.margin_right 0
                           ; Ui_components.Prop.opacity 0.4 ]
-                          (icon_ ~size:18 "selector") ])
-        ; if_ ~test:(reactive (fun menu -> menu = "repos") (Signal.value st.Sidebar_state.open_menu))
+                          (icon_ ~size:18 "selector") ]
+                   @ if native then
+                       [ context_menu ~key:"repos-menu"
+                           ~accessibility_identifier:"graphs-selector-menu"
+                           ~on_dismiss:(fun _ -> Sidebar_state.close_menu st)
+                           [ reactive
+                               ~equal:(fun (a : Model.t) b -> a.repo=b.repo && a.repos=b.repos)
+                               (repos_menu_content st) ms ] ]
+                     else []))
+        ; if native then Logseq_el.nothing else if_ ~test:(reactive (fun menu -> menu = "repos") (Signal.value st.Sidebar_state.open_menu))
             (repos_menu st ms)
-        ] ]
+        ] ] ctx parent
 ;;
 
 let contents (ms : Model.t Signal.signal) : t =

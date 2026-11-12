@@ -553,6 +553,54 @@ let foldable_retained_visibility ~registry =
     ;({P.profile_os=P.IOS;P.profile_host=P.SwiftUIHost},false)
     ;({P.profile_os=P.MacOS;P.profile_host=P.NshHost},true)]
 
+let graph_menu_trigger_ownership ~registry =
+  List.iter (fun (profile, native) ->
+    let sidebar = ref None in
+    let initial = {Model.initial with repo=Some "menu-graph";repos=["menu-graph"]} in
+    let session = S.mount ~registry ~profile ~initial
+      ~reducer:(fun _ next -> next)
+      ~view:(fun ctx ms _ ->
+        let state value = Signal.state ctx.Lui_ui.ui_scheduler value in
+        let st : Sidebar_state.t =
+          {favorites=state [];home_page=state None;favorite_drop=state None;recents=state [];
+           nav_checked=state [];nav_tag_titles=state [];items=state [];open_menu=state "";
+           groups_collapsed=state [];left_width=state 246.;right_fraction=state 0.3;
+           viewport_w=state 1440.} in
+        sidebar:=Some st;
+        Left_sidebar_view.graphs_selector st ms) () in
+    Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose session.S.app)) (fun () ->
+      let trigger () = List.find (fun node ->
+        M.string_prop node "accessibility-identifier"=Some "graphs-selector-trigger")
+        (nodes session) in
+      let trigger_id = (trigger ()).M.id in
+      let attachments () = List.filter (fun node -> node.M.kind="context-menu")
+        (M.children session.S.tree trigger_id) in
+      check "only NSH attaches a native Menu to the retained graph selector"
+        (List.length (attachments ())=(if native then 1 else 0));
+      if native then (
+        let menu=List.hd (attachments ()) in
+        check "native graph actions use MenuItem selection semantics"
+          (List.for_all (fun title -> List.exists (fun node -> node.M.kind="menu-item"
+            && M.string_prop node "text"=Some (I18n.t title)) (nodes session))
+            ["graph/create-db";"import/notes";"graph/all-graphs"]);
+        check "native graph trigger delegates activation to NSH"
+          (not (Hashtbl.find_opt (trigger ()).M.props "press-enabled"=Some (P.BoolValue true)));
+        ignore (Lui_app.send session.S.app {initial with repo=Some "renamed-graph"});
+        S.flush session;
+        check "graph changes preserve the real Button and its native Menu owner"
+          ((trigger ()).M.id=trigger_id
+           && (List.hd (attachments ())).M.id=menu.M.id);
+        check "graph selection never creates an external menu-role popover"
+          (not (List.exists (fun node -> node.M.kind="popover") (nodes session))))
+      else (
+        S.press session trigger_id;S.flush session;
+        check "other hosts retain model-owned graph popovers"
+          (Runtime.signal_get (Option.get !sidebar).Sidebar_state.open_menu="repos"
+           && List.exists (fun node -> node.M.kind="popover") (nodes session)))))
+    [({P.profile_os=P.WebOS;P.profile_host=P.WebHost},false);
+     ({P.profile_os=P.IOS;P.profile_host=P.SwiftUIHost},false);
+     ({P.profile_os=P.MacOS;P.profile_host=P.NshHost},true)]
+
 let native_header_menu_inputs () =
   let page = Option.get (Decode.page_of_summary
     (Wire.Map [Wire.kw "block/uuid", Wire.Uuid "native-more-page";
@@ -1005,6 +1053,7 @@ let run_views ~registry ~profile ~finish =
   find_in_page_submit ~registry;
   accent_swatch_palettes ~registry;
   native_popup_alignment ~registry;
+  graph_menu_trigger_ownership ~registry;
   native_header_menu_inputs ();
   standalone_inline_groups ~registry;
   selectable_block_motion ~registry;

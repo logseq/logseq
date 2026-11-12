@@ -183,6 +183,17 @@ def native_press(agent, selector):
     return reply
 
 
+def wait_native_visibility(agent, selector, expected, deadline):
+    while time.monotonic() < deadline:
+        reply = agent.request(op="native-bounds", selector=selector)
+        if reply.get("ok") is not True:
+            raise RuntimeError(f"Native menu inspection failed: {reply}")
+        if (visible_native_bounds(reply) is not None) == expected:
+            return reply
+        time.sleep(min(0.05, max(0, deadline - time.monotonic())))
+    raise RuntimeError(f"Native menu visibility did not become {expected}: {selector}")
+
+
 def background_native(application, private, logs, deadline):
     helper = package_agent()
     executable = application / "Contents/MacOS/Logseq"
@@ -229,8 +240,17 @@ def background_native(application, private, logs, deadline):
                 subtree, result["journalBody"] = wait_journal_body(agent, helper, deadline)
                 (logs / "journal-body-tree.json").write_text(json.dumps(subtree, indent=2) + "\n", encoding="utf-8")
                 result["screenshots"] = [save_png(agent.request(op="screenshot"), logs / "journal.png")]
+                graph_trigger = "prop:accessibility-identifier=graphs-selector-trigger"
+                graph_item = "kind:menu-item&text:Create db graph"
+                result["graphMenuOpen"] = native_press(agent, graph_trigger)
+                result["graphMenuBounds"] = wait_native_visibility(agent, graph_item, True, deadline)
+                result["screenshots"].append(save_png(agent.request(op="screenshot"), logs / "graph-menu.png"))
+                result["graphMenuClose"] = native_press(agent, graph_trigger)
+                result["graphMenuClosedBounds"] = wait_native_visibility(agent, graph_item, False, deadline)
                 result["more"] = native_press(agent, "prop:accessibility-identifier=toolbar-dots-btn")
                 wait_find(agent, "kind:menu-item&text:Appearance", deadline)
+                result["moreBounds"] = wait_native_visibility(
+                    agent, "kind:menu-item&text:Appearance", True, deadline)
                 result["screenshots"].append(save_png(agent.request(op="screenshot"), logs / "more.png"))
                 result["appearance"] = native_press(agent, "kind:menu-item&text:Appearance")
                 wait_find(agent, "prop:accessibility-identifier=appearance_settings", deadline)

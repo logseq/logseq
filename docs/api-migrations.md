@@ -1083,3 +1083,21 @@ with UTF-8 byte offsets (illustrative boundaries; actual cuts come from native
 layout). Hit tests still skip hidden markup, and caret/selection queries retain
 their existing behavior. No application migration or maintained-host change is
 required.
+
+## NSH graph selector uses its retained native Menu owner
+
+The graph selector now permanently attaches a canonical `context_menu` to its
+existing Button on NSH. LUI already projects Button attachments through the public
+NSH `Menu` trigger slot. NSH therefore owns open/close, keyboard traversal,
+selection, outside dismissal and focus return; there is no point-positioned proxy
+or external menu-role popover. Graph footer actions use `menu_item` on NSH so
+selection closes that same native controller. Other hosts keep their model-owned
+popover and Button footer actions.
+
+For native automation, select `prop:accessibility-identifier=graphs-selector-trigger`
+and use `native-press`, then inspect the actual menu item with `native-bounds`.
+The canonical menu attachment remains in the semantic tree while closed, so a
+successful semantic `find` alone does not establish that it is displayed. The
+packaged native gate now opens/closes the graph selector and checks native bounds,
+then opens More and Appearance. These source gates require execution against a
+fresh package; their presence is not evidence of a passing native flow.
