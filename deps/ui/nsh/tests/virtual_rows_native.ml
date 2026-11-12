@@ -312,7 +312,9 @@ let with_picker_services run =
 
 let test_picker_viewport_ownership () = with_picker_services (fun () ->
   let backend = {backend_profile=profile MacOS NshHost; apply_batch=(fun _ -> true)} in
-  let app = Lui_app.create backend () (fun () () -> ()) (fun _ _ _ ->
+  let registry=Lui_extension.registry () in
+  Logseq_el.register_all registry;
+  let app = Lui_app.create_with_extensions backend registry () (fun () () -> ()) (fun _ _ _ ->
     Icon_picker.picker_view ~del:true ~emoji_only:false
       ~on_chosen:(fun _ -> ()) ~close:(fun () -> ())) in
   let previous_flush = !Runtime.app_flush
