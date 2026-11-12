@@ -570,6 +570,8 @@ let page_key uuid = "page:" ^ uuid
    native backends, where no stylesheet can fade the row in. The row
    listens for its own pointer events too: rendered absolutely above
    the wrapper, hovering it can leave the wrapper's bounds. *)
+let title_actions_offset = 20
+
 let title_actions ~(hover : bool Signal.state) ?(slots : t list = [])
     (p : Model.page) : t =
  fun context parent ->
@@ -593,7 +595,7 @@ let title_actions ~(hover : bool Signal.state) ?(slots : t list = [])
        title text; the wrapper's relative position anchors it *)
     (Ui_components.with_props
        [ Ui_components.Prop.position `absolute
-       ; Ui_components.Prop.inset_top (-20.) ]
+       ; Ui_components.Prop.inset_top (-. Float.of_int title_actions_offset) ]
        (row ~key:"pta" ~accessibility_identifier:anchor_id
        ~cross:`center ~gap:8
        ~style_class:"ls-page-title-actions"

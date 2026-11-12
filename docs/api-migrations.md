@@ -1,5 +1,17 @@
 # API migrations
 
+## NSH journal title actions stay inside their native virtual cell
+
+NSH journal rows reserve the existing 20-point title-action offset inside each
+page-inner instead of placing the toolbar above the virtual cell's clipping
+bounds. The reservation comes from its existing bottom padding; opposite margins
+on the journal list preserve the title's global position and total scroll extent.
+The same keyed row, title, actions and editor owners remain mounted. This lets the
+pointer move from a journal title to Add icon or Set property without hiding the
+actions at the cell boundary. Web, Apple, Android and ordinary page routes retain
+their existing spacing. No application call changes; continue using the same
+journal and title-action components.
+
 ## NSH right sidebar header toggle retains its native wrapper on resize
 
 `Ui_components.header_right_sidebar_toggle` now uses `display=block` at widths

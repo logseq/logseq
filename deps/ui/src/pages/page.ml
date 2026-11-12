@@ -1055,8 +1055,14 @@ let journal_item_sig (ms : Model.t Signal.signal)
         ~padding_horizontal:8
         ~data_attrs:(reactive page_wrap_attrs ps)
         [ Ui_components.with_props
-                [ Ui_components.Prop.position `relative
-                ; Ui_components.Prop.padding_bottom 64 ]
+                (Ui_components.Prop.position `relative
+                 :: (if Lui_ui.host ctx = Lui_protocol.NshHost then
+                       (* Keep the title's absolute toolbar inside its native
+                          virtual cell without changing the cell's height. *)
+                       [ Ui_components.Prop.padding_top Properties_area.title_actions_offset
+                       ; Ui_components.Prop.padding_bottom
+                           (64 - Properties_area.title_actions_offset) ]
+                     else [ Ui_components.Prop.padding_bottom 64 ]))
                 (column ~key:("jip-" ^ key) ~gap:32
                    ~style_class:"page-inner"
             [ title_ctx_row ~key:("jit-" ^ key) p0
@@ -1139,6 +1145,15 @@ let journal_item_sig (ms : Model.t Signal.signal)
    repaints the touched day. *)
 let journals_view_ms (ms : Model.t Signal.signal) : t =
  fun ctx parent ->
+  let position_journal_list element =
+    if Lui_ui.host ctx = Lui_protocol.NshHost then
+      (* Move the reserved toolbar space into the existing leading inset.
+         Opposite margins preserve the title position and scroll extent. *)
+      Ui_components.with_props
+        [ Ui_components.Prop.margin_top (- Properties_area.title_actions_offset)
+        ; Ui_components.Prop.margin_bottom Properties_area.title_actions_offset ] element
+    else element
+  in
   let journals_sig =
     Logseq_el.own ctx
       (Signal.map (fun (m : Model.t) -> m.Model.journals) ms)
@@ -1148,7 +1163,7 @@ let journals_view_ms (ms : Model.t Signal.signal) : t =
     ~data_attrs:[ ("style", "overflow-anchor:none;height:100%") ]
     [ box ~key:"js"
         [ box ~key:"jvp"
-            [ box ~key:"jil"
+            [ position_journal_list (box ~key:"jil"
                 ~accessibility_identifier:"virtuoso-item-list"
                 ~data_attrs:[ ("data-testid", "virtuoso-item-list") ]
                 [ Lui_elements.if_
@@ -1164,7 +1179,7 @@ let journals_view_ms (ms : Model.t Signal.signal) : t =
                     ~initial_rows:4 ~estimate_size:(fun _ -> 800.)
                     ~on_end:(fun () -> ignore (!Runtime.journals_load_more ()))
                     journals_sig
-                ]
+                ])
             ]
         ]
     ])
