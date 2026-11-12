@@ -1,0 +1,144 @@
+name: Actual standalone NSH upgrade
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: logseq-nsh-standalone-upgrade-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  LUI_REF: fb9146338f93c5fab0892f699e9a3bc9e176d193
+  RUSTUP_TOOLCHAIN: 1.97.0
+  CARGO_BUILD_JOBS: 2
+  CARGO_PROFILE_RELEASE_STRIP: none
+
+jobs:
+  native-tests:
+    name: Required broad native tests
+    runs-on: macos-26
+    timeout-minutes: 180
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-nsh-upgrade
+        id: setup
+        with:
+          lui-ref: ${{ env.LUI_REF }}
+      - name: Pure qualification ownership and source guards
+        run: |
+          set -euo pipefail
+          for test in test_private_update_https.py test_standalone_upgrade.py test_prepare_standalone_upgrade.py; do
+            python3 -m unittest discover -s deps/ui/nsh -p "$test" 2>&1 \
+              | tee "$QUALIFICATION_ROOT/evidence/$test.log"
+          done
+      - name: Actual release formatting, strict compiler and complete native host tests
+        run: |
+          set -euo pipefail
+          failed=0
+          for role in n1 n2; do
+            source="$QUALIFICATION_ROOT/sources/$role"
+            cargo fmt --manifest-path "$source/deps/ui/nsh/Cargo.toml" --check || failed=1
+            cargo clippy --locked --release --manifest-path "$source/deps/ui/nsh/Cargo.toml" \
+              --all-targets -- -D warnings 2>&1 | tee "$QUALIFICATION_ROOT/evidence/$role-clippy.log" || failed=1
+            cargo test --locked --release --manifest-path "$source/deps/ui/nsh/Cargo.toml" \
+              --lib --bin nsh-app-logseq 2>&1 | tee "$QUALIFICATION_ROOT/evidence/$role-native-tests.log" || failed=1
+          done
+          test "$failed" -eq 0
+      - name: Final authored-source guard
+        if: ${{ always() && steps.setup.outcome == 'success' }}
+        run: python3 deps/ui/nsh/prepare_standalone_upgrade.py check "$QUALIFICATION_ROOT/source-snapshots.json"
+      - name: Preserve required-test evidence even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: standalone-upgrade-required-tests
+          path: |
+            ${{ runner.temp }}/standalone-upgrade/evidence/
+            ${{ runner.temp }}/standalone-upgrade/source-snapshots.json
+          if-no-files-found: error
+
+  actual-upgrade:
+    # Independent of native-tests: a broad regression keeps the overall workflow
+    # red while this job can still publish scoped real-upgrade failure/evidence.
+    name: Required actual signed HTTPS N1 to N2
+    runs-on: macos-26
+    timeout-minutes: 180
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-nsh-upgrade
+        id: setup
+        with:
+          lui-ref: ${{ env.LUI_REF }}
+      - name: Fresh release builds, source receipts and private packaged startup for both versions
+        run: |
+          set -euo pipefail
+          for role in n1 n2; do
+            source="$QUALIFICATION_ROOT/sources/$role"
+            evidence="$QUALIFICATION_ROOT/evidence/$role"
+            mkdir "$evidence"
+            (cd "$source" && bash deps/ui/nsh/build.sh --release) \
+              > "$evidence/host.txt" 2> >(tee "$evidence/build.log" >&2)
+            host=$(cat "$evidence/host.txt")
+            test "$host" = "$source/deps/ui/_build/nsh-release/bin/logseq-nsh"
+            node "$LUI_SOURCE/tooling/lui_build_receipt.mjs" check --artifact "$host"
+            cp "$host.lui-build.json" "$evidence/host.lui-build.json"
+            (cd "$source" && bash deps/ui/scripts/package-nsh.sh --built-host "$host") \
+              > "$evidence/archive.txt" 2> >(tee "$evidence/package.log" >&2)
+            archive=$(cat "$evidence/archive.txt")
+            node "$LUI_SOURCE/tooling/lui_build_receipt.mjs" check --artifact "$archive"
+            node "$source/deps/ui/scripts/package-nsh.mjs" check-release "$archive"
+            cp "$archive.lui-build.json" "$evidence/archive.lui-build.json"
+            python3 "$source/deps/ui/nsh/qualify_packaged_startup.py" "$archive" \
+              --native-background --evidence "$evidence/packaged-startup.json" \
+              > "$evidence/packaged-startup.log" 2>&1
+            python3 deps/ui/nsh/prepare_standalone_upgrade.py check "$QUALIFICATION_ROOT/source-snapshots.json"
+          done
+      - name: Build the exact pinned public NSH manifest-signing CLI
+        run: |
+          set -euo pipefail
+          nsh_revision=$(python3 - "$N1_SOURCE/deps/ui/nsh/Cargo.toml" <<'PY'
+          import re, sys, tomllib
+          from pathlib import Path
+          pin = tomllib.loads(Path(sys.argv[1]).read_text())['dependencies']['nsh-core']
+          assert pin['git'] == 'https://github.com/logseq/nsh'
+          assert re.fullmatch(r'[0-9a-f]{40}', pin['rev'])
+          print(pin['rev'])
+          PY
+          )
+          git clone --filter=blob:none https://github.com/logseq/nsh "$QUALIFICATION_ROOT/nsh-source"
+          git -C "$QUALIFICATION_ROOT/nsh-source" checkout --detach "$nsh_revision"
+          python3 "$LUI_SOURCE/tooling/nsh_delivery.py" setup --app "$N1_SOURCE/deps/ui/nsh" \
+            --checkout "$QUALIFICATION_ROOT/nsh-source" --destination "$QUALIFICATION_ROOT/cli" \
+            > "$QUALIFICATION_ROOT/evidence/pinned-cli.txt" \
+            2> >(tee "$QUALIFICATION_ROOT/evidence/pinned-cli-build.log" >&2)
+          cp "$QUALIFICATION_ROOT/cli/nsh-cli-receipt.json" "$QUALIFICATION_ROOT/evidence/"
+      - name: Real Settings and native-sheet signed HTTPS whole-app upgrade outside all checkouts
+        run: |
+          set -euo pipefail
+          python3 deps/ui/nsh/qualify_standalone_upgrade.py --allow-disposable-ci-trust \
+            --n1-source "$N1_SOURCE" --n1-host "$(cat "$QUALIFICATION_ROOT/evidence/n1/host.txt")" \
+            --n2-source "$N2_SOURCE" --n2-host "$(cat "$QUALIFICATION_ROOT/evidence/n2/host.txt")" \
+            --lui-source "$LUI_SOURCE" --pinned-cli "$QUALIFICATION_ROOT/cli" \
+            --evidence "$QUALIFICATION_ROOT/evidence/actual-upgrade.json" --timeout 300 \
+            > "$QUALIFICATION_ROOT/evidence/actual-upgrade.log" 2>&1
+      - name: Final authored-source guard
+        if: ${{ always() && steps.setup.outcome == 'success' }}
+        run: python3 deps/ui/nsh/prepare_standalone_upgrade.py check "$QUALIFICATION_ROOT/source-snapshots.json"
+      - name: Preserve partial actual-upgrade evidence even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: actual-standalone-upgrade-macos
+          path: |
+            ${{ runner.temp }}/standalone-upgrade/evidence/
+            ${{ runner.temp }}/standalone-upgrade/source-snapshots.json
+          if-no-files-found: error

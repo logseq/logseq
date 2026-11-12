@@ -834,3 +834,53 @@ its captured restart-request bit directly, without constructing a UI engine,
 and its initialization marker stands in for work that must follow `Startup`.
 Unix restart behavior and its PID-preserving `exec` path are unchanged. Actual
 Windows CI execution is required; source review alone does not qualify it.
+
+## Manual disposable macOS workflow
+
+`.github/workflows/nsh-standalone-upgrade.yml` runs only by manual dispatch on
+GitHub-hosted `macos-26` runners. After publishing/registering the workflow,
+dispatch the exact reviewed application branch or commit, for example:
+
+```sh
+gh workflow run nsh-standalone-upgrade.yml --repo logseq/logseq --ref feat/nsh-host
+```
+
+The two independent required jobs share the exact application base, published
+LUI pin, toolchain setup and pair versions. Each job creates its own fresh
+`RUNNER_TEMP/standalone-upgrade/sources/{n1,n2,lui}` siblings. N1 and N2 are
+distinct local Git commits that change the actual `resources/package.json`
+version to `2.0.3-nsh-qualification.1` and `.2`. Fixed author identity and dates
+derived from the common base make those commits reproducible across the jobs.
+No release-version environment override or metadata-only binary relabeling is
+used: the release build compiles the actual Rust version marker and OCaml
+`Version_gen` from each committed input. Both versions get fresh release builds,
+candidate startup gates, final build/archive receipts and packaged native
+startup before the signed HTTPS upgrade attempt.
+
+The required broad-test job runs the full release native host tests and strict
+compiler checks for both versions without test filters. A failure remains red;
+it is never ignored or reclassified as upgrade qualification. The independent
+actual-upgrade job can still produce scoped execution evidence while that
+failure is investigated. Both jobs must pass before the whole workflow passes.
+The actual-upgrade job builds the manifest CLI from the application's immutable
+NSH pin and passes `--allow-disposable-ci-trust` only to the existing guarded
+native gate. Installation, graph data and process-group cleanup remain owned
+by that gate outside all checkouts.
+
+Source guards reject dirty tracked or untracked inputs, changed HEADs/provider
+pins, a release commit with a different parent, extra changed source files,
+wrong pair versions, source/evidence path overlap, and attempts to overwrite an
+old qualification directory. They run after dependency setup, each staged
+release and at job completion. Partial JSON receipts, source snapshots, logs
+and native screenshot/transcript evidence are uploaded with `always()`, even
+when a gate fails. Private CA/keychain key files are not included in those
+artifact paths. Neither a green source guard nor the presence of this workflow
+establishes actual upgrade success; inspect both job results and the native
+`actual-upgrade.json` receipt.
+
+The additional source/ownership regression cases run without Git subprocesses,
+native apps, certificates or network access:
+
+```sh
+python3 deps/ui/nsh/test_prepare_standalone_upgrade.py
+```

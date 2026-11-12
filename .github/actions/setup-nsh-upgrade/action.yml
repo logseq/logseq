@@ -1,0 +1,66 @@
+name: Prepare actual standalone upgrade inputs
+description: Install the desktop toolchain and author the same clean release pair in each disposable job
+inputs:
+  lui-ref:
+    description: Exact published LUI provider commit
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: macOS native development libraries
+      shell: bash
+      run: brew install pkg-config sqlite3 libffi gmp dylibbundler
+    - uses: pnpm/action-setup@v4
+      with:
+        version: 10.33.0
+    - uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+        cache: pnpm
+        cache-dependency-path: pnpm-lock.yaml
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    - uses: ocaml/setup-ocaml@v3
+      with:
+        ocaml-compiler: '5.5.1'
+        dune-cache: true
+    - name: Author private clean N1/N2 inputs and pin their shared LUI provider
+      shell: bash
+      env:
+        QUALIFICATION_LUI_REF: ${{ inputs.lui-ref }}
+      run: |
+        set -euo pipefail
+        root="$RUNNER_TEMP/standalone-upgrade"
+        python3 deps/ui/nsh/prepare_standalone_upgrade.py prepare \
+          --source "$GITHUB_WORKSPACE" --output "$root" --lui-revision "$QUALIFICATION_LUI_REF"
+        {
+          echo "QUALIFICATION_ROOT=$root"
+          echo "N1_SOURCE=$root/sources/n1"
+          echo "N2_SOURCE=$root/sources/n2"
+          echo "LUI_SOURCE=$root/sources/lui"
+          echo "LUI_SOURCE_ROOT=$root/sources/lui"
+          echo "OPAMSWITCH=$(opam switch show)"
+        } >> "$GITHUB_ENV"
+    - name: Locked stylesheet and native generator dependencies for both sources
+      shell: bash
+      env:
+        PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: true
+      run: |
+        set -euo pipefail
+        for source in "$N1_SOURCE" "$N2_SOURCE"; do
+          pnpm --dir "$source" install --frozen-lockfile
+          npm ci --prefix "$source/deps/ui" --ignore-scripts
+        done
+    - name: Actual worker and application OCaml dependencies
+      shell: bash
+      run: |
+        set -euo pipefail
+        (cd "$N1_SOURCE/deps/db-worker" && sh scripts/install-opam-deps.sh)
+        (cd "$N1_SOURCE/deps/ui" && sh scripts/install-opam-deps.sh)
+    - name: Pinned native Rust toolchain
+      shell: bash
+      run: rustup toolchain install 1.97.0 --profile minimal --component rustfmt,clippy
+    - name: Recheck exact authored inputs after dependency setup
+      shell: bash
+      run: python3 deps/ui/nsh/prepare_standalone_upgrade.py check "$QUALIFICATION_ROOT/source-snapshots.json"
