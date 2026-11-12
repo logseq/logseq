@@ -16,10 +16,20 @@ let install scheduler =
 (* Optional application-owned work observation. No registry is installed for
    ordinary callers; the ambient scope only follows a serialized application. *)
 module Activity = struct
-  type t = { mutable pending : int; mutable epoch : int; mutable live : bool }
+  type idle_listener = {
+    callback : unit -> unit;
+    mutable active : bool;
+    mutable queued : bool;
+  }
+  type t = {
+    mutable pending : int;
+    mutable epoch : int;
+    mutable live : bool;
+    mutable idle : idle_listener option;
+  }
   type snapshot = { pending : int; epoch : int }
   let current : t option ref = ref None
-  let create () = { pending = 0; epoch = 0; live = true }
+  let create () = { pending = 0; epoch = 0; live = true; idle = None }
   let same_scope left right = match left, right with
     | None, None -> true
     | Some left, Some right -> left == right
@@ -38,6 +48,30 @@ module Activity = struct
     fun value ->
       if same_scope scope !current then f value
       else in_context scope (fun () -> f value)
+  let same_listener scope listener = match scope.idle with
+    | Some current -> current == listener
+    | None -> false
+  let cancel_listener scope listener =
+    listener.active <- false;
+    if same_listener scope listener then scope.idle <- None
+  let notify_idle scope =
+    match scope.idle with
+    | Some listener when scope.live && scope.pending = 0
+        && listener.active && not listener.queued ->
+        listener.queued <- true;
+        (scheduler ()).enqueue (fun () ->
+          if listener.active && scope.live then begin
+            cancel_listener scope listener;
+            listener.callback ()
+          end)
+    | None | Some _ -> ()
+  let when_idle scope callback =
+    if not scope.live then invalid_arg "Cannot observe a closed activity scope";
+    if Option.is_some scope.idle then invalid_arg "Activity scope already has an idle observer";
+    let listener = { callback = capture callback; active = true; queued = false } in
+    scope.idle <- Some listener;
+    notify_idle scope;
+    fun () -> cancel_listener scope listener
   let begin_work () =
     match !current with
     | Some scope when scope.live ->
@@ -48,11 +82,14 @@ module Activity = struct
           if not !finished then begin
             finished := true;
             scope.pending <- scope.pending - 1;
-            scope.epoch <- scope.epoch + 1
+            scope.epoch <- scope.epoch + 1;
+            notify_idle scope
           end)
     | None | Some _ -> None
   let snapshot (scope : t) : snapshot = { pending = scope.pending; epoch = scope.epoch }
-  let close scope = scope.live <- false
+  let close scope =
+    scope.live <- false;
+    Option.iter (cancel_listener scope) scope.idle
 end
 
 exception Cancelled

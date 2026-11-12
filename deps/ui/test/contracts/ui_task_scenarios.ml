@@ -228,6 +228,29 @@ let run ~enqueue ~drain ~set_owner () =
         Option.get !finish_nested (); drain ();
         check "previously observed work still completes after closing"
           ((Ui_task.Activity.snapshot activity).pending = 0));
+      "idle observation is owned cancellable and never replaces a waiter", (fun () ->
+        let activity = Ui_task.Activity.create () in
+        let task, resolve, _ = Ui_task.Activity.within activity Ui_task.pending in
+        let notifications = ref 0 in
+        let cancel = Ui_task.Activity.when_idle activity (fun () -> incr notifications) in
+        check "duplicate idle observer is rejected" (invalid (fun () ->
+          ignore (Ui_task.Activity.when_idle activity (fun () -> failwith "replaced observer"))));
+        resolve ();
+        check "settlement cannot run an idle observer inline" (!notifications = 0);
+        drain ();
+        check "idle observer runs once after ordinary settlement" (!notifications = 1);
+        ignore task;
+        cancel ();
+        let cancel = Ui_task.Activity.when_idle activity (fun () -> incr notifications) in
+        cancel ();
+        drain ();
+        check "cancelling an already queued idle observer is effective" (!notifications = 1);
+        let cancel = Ui_task.Activity.when_idle activity (fun () -> incr notifications) in
+        Ui_task.Activity.close activity;
+        drain ();
+        cancel ();
+        check "owner close suppresses queued observation without cancelling tasks"
+          (!notifications = 1 && (Ui_task.Activity.snapshot activity).pending = 0));
       "creation exceptions reject asynchronously", (fun () ->
         let received = ref None in
         let task = Ui_task.create (fun ~resolve:_ ~reject:_ -> failwith "request startup failed") in

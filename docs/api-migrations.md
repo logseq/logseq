@@ -547,3 +547,15 @@ ownership and argv/credential/background-preserving relaunch are still open.
 Controller-local native portal interaction is not certified frozen by a root
 `disabled` property, which NSH does not inherit; the durable model/worker fence
 and explicit native-agent admission remain necessary independent protections.
+
+
+### Owned idle notification for asynchronous work observation
+
+`Ui_task.Activity.when_idle scope callback` installs one cancellable notification
+through the existing task scheduler. A second installed observer is an explicit
+error; it never silently replaces the first. Cancelling or closing the scope
+suppresses even an already-queued notification. The callback must recheck the
+snapshot because new work can arrive before it runs. This supplies a bounded
+wake-up for one application-owned save coordinator, without polling, a registry
+or a queue of deferred invokes. Observation does not change task cancellation,
+completion order or existing Web/mobile scheduling behavior.
