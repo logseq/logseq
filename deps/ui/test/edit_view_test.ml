@@ -242,15 +242,19 @@ let test_shape_gated ~env () =
        (cls_nodes h "ed-delim"))
 
 (* Native Text children remain spans by parent kind; this is a producer
-   policy, not a generic conversion from browser inline flow into block layout. *)
+   policy, not a generic conversion from browser inline flow into block layout.
+   The recording target has no LUI PPX: its model supplies the borrowed line
+   signal directly to the production keyed line view. *)
 let test_native_span_policy ~env () =
   env.install ();
   List.iter (fun (profile, nsh) ->
-    let session = S.mount ~profile ~initial:(M.create "a **b** and \t  `code`")
-      ~reducer:(fun model caret -> M.select model ~anchor:caret ~focus:caret)
+    let original = M.create "a **b** and \t  `code`" in
+    let session = S.mount ~profile ~initial:(Edit_view.lines_of original)
+      ~reducer:(fun _lines caret ->
+        Edit_view.lines_of (M.select original ~anchor:caret ~focus:caret))
       ~view:(fun _ctx source _send ->
         Lui_elements.column
-          [ Lui_elements.keyed ~source:(reactive Edit_view.lines_of source)
+          [ Lui_elements.keyed ~source
               ~key:(fun (line : Edit_view.line) -> line.lidx) ~cmp:Int.compare
               ~mount:(Edit_view.line_view ~on_input:(fun _ -> ())) ]) () in
     Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose session.S.app)) (fun () ->
@@ -292,7 +296,12 @@ let test_native_span_policy ~env () =
       S.poll session;
       check "concealment retains keyed run nodes" (before=List.map (fun node -> node.DM.id) (children ()));
       check "host presentation policy never edits the source"
-        ((S.read_model session).M.source = "a **b** and \t  `code`")))
+        (let buffer = Buffer.create 32 in
+         List.iter (fun (line : Edit_view.line) ->
+           List.iter (fun (frag : Edit_view.frag) ->
+             if frag.kind <> Edit_view.Frag_pad then Buffer.add_string buffer frag.text)
+             line.frags) (S.read_model session);
+         Buffer.contents buffer = original.M.source)))
     [({profile_os=WebOS;profile_host=WebHost},false)
     ;({profile_os=MacOS;profile_host=SwiftUIHost},false)
     ;({profile_os=MacOS;profile_host=NshHost},true)]
