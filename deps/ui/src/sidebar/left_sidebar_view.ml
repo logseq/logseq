@@ -357,7 +357,8 @@ let menu_host st =
       | "nav-edit" -> nav_edit_menu st
       | "plugins" -> plugins_menu st
       | m when String.length m > 3 && String.sub m 0 3 = "lp-" ->
-          lp_menu st
+          if Lui_ui.host ctx = Lui_protocol.NshHost then Logseq_el.nothing
+          else lp_menu st
       | _ -> Logseq_el.nothing)
     (Signal.value st.Sidebar_state.open_menu))
     ctx parent
@@ -605,8 +606,22 @@ let nav_group ms st =
 (* ---------- favorites / recents ---------- *)
 
 
+let native_page_actions st ~target ~recent =
+  let action ~key ~label ~icon ~shortcut run =
+    Menu_item.el ~key ~label:(t label) ~icon:(Icons.name_ref icon)
+      ~after:[menu_sc shortcut]
+      ~on_click:(fun () -> Sidebar_state.close_menu st; run ()) () in
+  (if recent then [] else
+     [action ~key:"unfavorite" ~label:"page/unfavorite" ~icon:"star-off"
+        ~shortcut:(Keymap_record.keycaps "mod+shift+f")
+        (fun () -> if Wire.is_uuid_string target then Sidebar_state.unfavorite st target)])
+  @ [action ~key:"open-sidebar" ~label:"sidebar.right/open" ~icon:"layout-sidebar-right"
+       ~shortcut:[{js|⇧|js};"Click"] (fun () -> Sidebar_state.open_ref st target)]
+
 let page_item_el st (p : Model.page) ~li_class ~recent ~key : t =
  fun context parent ->
+  let native = Lui_ui.host context = Lui_protocol.NshHost in
+  let focused = Signal.state context.Lui_ui.ui_scheduler false in
   let hovered = Signal.state context.Lui_ui.ui_scheduler false in
   let hover value = Runtime.signal_set hovered value in
   let go_page shift =
@@ -660,6 +675,9 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key : t =
      details bubble on both hosts, so the row wrapper must stay passive.
      The data-lp-* attributes also feed the document context-menu handler. *)
   let open_lp d =
+    if native then
+      Sidebar_state.toggle_lp_menu st ~target:lp_ref ~recent ~ax:0. ~atop:0. ~abot:0.
+    else
     (* cljs anchors the dots dropdown to the button element,
        not the press point *)
     let ax, atop, abot =
@@ -688,6 +706,7 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key : t =
     ; Ui_components.Prop.hover_background
         "var(--lx-gray-04, var(--ls-quaternary-background-color))" ]
     (column ~key ~style_class:li_class ~corner_radius:6
+       ?on_focus_within:(if native then Some (fun active -> Runtime.signal_set focused active) else None)
        ~on_pointer_enter:(fun _ -> hover true)
        ~on_pointer_leave:(fun _ -> hover false)
        ~opacity:(reactive (fun menu -> if menu = "lp-" ^ lp_ref then 1. else 0.8)
@@ -736,9 +755,10 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key : t =
             ; Ui_components.Prop.inset_top 0.
             ; Ui_components.Prop.inset_right 0. ]
             (column ~key:(key ^ "-actions") ~style_class:"sidebar-page-actions-slot"
-               ~display:(reactive (fun over menu ->
-                   if over || menu = "lp-" ^ lp_ref then `block else `none)
-                   (Signal.value hovered) (Signal.value st.Sidebar_state.open_menu))
+               ~display:(reactive (fun over menu focus ->
+                   if over || focus || menu = "lp-" ^ lp_ref then `block else `none)
+                   (Signal.value hovered) (Signal.value st.Sidebar_state.open_menu)
+                   (Signal.value focused))
                [ Ui_components.with_props
             [ Ui_components.Prop.cursor `pointer
             ; Ui_components.Prop.user_select `none
@@ -762,7 +782,12 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key : t =
                  | _ -> ())
                ~data_attrs:
                  [ ("style", "transform:scale(0.75);font-size:0.875rem") ]
-               [ Icons.icon ~size:18. "dots" ]) ])
+               ([ Icons.icon ~size:18. "dots" ]
+                @ if native then
+                    [context_menu ~key:"page-actions-menu"
+                       ~on_dismiss:(fun _ -> Sidebar_state.close_menu st)
+                       (native_page_actions st ~target:lp_ref ~recent)]
+                  else [])) ])
         ]) context parent
 
 (* cljs sidebar-content-group: .bd renders only when the group supplies a

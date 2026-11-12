@@ -816,6 +816,62 @@ let native_graph_menu_contract () =
     check "actual native graph updates retain their original attached Menu identity"
       (attachments ()=[attachment]))
 
+let native_favorite_menu_contract () =
+  let previous_worker = !Runtime.worker and previous_model = !Runtime.read_model
+  and previous_flush = !Runtime.app_flush and previous_context = !Sidebar_state.lp_ctx in
+  let sidebar = ref None in
+  let page = Option.get (Decode.page_of_summary (Wire.Map [
+    Wire.Keyword "block/uuid",Wire.Uuid "favorite-contract";
+    Wire.Keyword "block/title",Wire.String "Favorite contract"])) in
+  let backend : Lui_protocol.backend = {
+    backend_profile=Lui_protocol.profile Lui_protocol.MacOS Lui_protocol.NshHost;
+    apply_batch=(fun _ -> true)} in
+  let registry=Lui_extension.registry () in
+  Logseq_el.register_all registry;
+  Logseq_codemirror.register registry;Logseq_editor.register registry;
+  let initial={Model.initial with repo=Some "favorite-contract"} in
+  let app=Lui_app.create_with_extensions backend registry initial (fun model () -> model)
+    (fun context _ _ ->
+      let state value=Signal.state context.Lui_ui.ui_scheduler value in
+      let st : Sidebar_state.t = {
+        favorites=state [page];home_page=state None;favorite_drop=state None;recents=state [];
+        nav_checked=state [];nav_tag_titles=state [];items=state [];open_menu=state "";
+        groups_collapsed=state [];left_width=state 246.;right_fraction=state 0.3;
+        viewport_w=state 1440.} in
+      sidebar:=Some st;
+      Lui_elements.column [Left_sidebar_view.page_item_el st page
+        ~li_class:"favorite-item" ~recent:false ~key:"favorite-contract";
+        Left_sidebar_view.menu_host st]) in
+  Fun.protect ~finally:(fun () ->
+    ignore (Lui_app.dispose app);Runtime.worker:=previous_worker;
+    Runtime.read_model:=previous_model;Runtime.app_flush:=previous_flush;
+    Sidebar_state.lp_ctx:=previous_context) (fun () ->
+    Runtime.read_model:=(fun () -> Lui_app.model app);
+    Runtime.app_flush:=(fun () -> ignore (Lui_app.flush app));
+    Runtime.worker:=Some {Worker_client.invoke_fn=(fun _ _ ->
+      Js.Promise.make (fun ~resolve:_ ~reject:_ -> ()));
+      on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
+    ignore (Lui_app.start app);ignore (Lui_app.flush app);
+    let runtime=Lui_app.runtime app in
+    let button=Hashtbl.fold (fun node props found ->
+      if Lui_protocol.Property_map.find_opt Lui_protocol.AccessibilityLabel props
+        =Some (Lui_protocol.StringValue (I18n.t "ui/show-more")) then Some node else found)
+      runtime.Lui_runtime.runtime_properties None |> Option.get in
+    let detail : Lui_protocol.pointer_detail={x=10.;y=10.;button=0;modifiers=0;target_class=""} in
+    ignore (Lui_app.dispatch_event app (Lui_protocol.PressDetail (button,detail)));
+    ignore (Lui_app.flush app);
+    check "native Favorites opening keeps its row active without an external menu popover"
+      (Runtime.signal_get (Option.get !sidebar).Sidebar_state.open_menu="lp-favorite-contract"
+       && not (Hashtbl.fold (fun _ kind found -> found || kind=Lui_protocol.Popover)
+         runtime.Lui_runtime.mounted_nodes false));
+    let attachment=Hashtbl.fold (fun node kind found ->
+      if kind=Lui_protocol.ContextMenu then Some node else found)
+      runtime.Lui_runtime.mounted_nodes None |> Option.get in
+    ignore (Lui_app.dispatch_event app (Lui_protocol.Dismiss attachment));
+    ignore (Lui_app.flush app);
+    check "native Menu dismissal clears the Favorites row's open appearance"
+      (Runtime.signal_get (Option.get !sidebar).Sidebar_state.open_menu=""))
+
 let () =
   let owner = Thread.id (Thread.self ()) in
   let assert_owner () =
@@ -843,4 +899,5 @@ let () =
   native_add_button_events_reach_the_shared_document_owner ();
   native_block_click_mounts_shared_editor ();
   native_graph_menu_contract ();
+  native_favorite_menu_contract ();
   print_endline "PASS real native save/abort/worker/timer races and post-release draft safety"

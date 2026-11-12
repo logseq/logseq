@@ -1004,6 +1004,10 @@ let sidebar_favorite_rows ~registry ~profile =
       Hashtbl.find_opt node.M.props "pointer-capture"=Some (P.BoolValue true)) (nodes session) in
     let current id=List.find (fun node -> node.M.id=id) (nodes session) in
     let display ()=M.string_prop (current slot.M.id) "display" in
+    check "only NSH Favorites attaches a native Menu to the actual actions Button"
+      (List.length (List.filter (fun node -> node.M.kind="context-menu")
+        (M.children session.S.tree button.M.id))=
+         (if profile.P.profile_host=P.NshHost then 1 else 0));
     check "Favorites carries master's 14px medium typography through typed props"
       (M.string_prop row "font-size"=Some "0.875rem"
        && M.string_prop row "line-height"=Some "1.25rem"

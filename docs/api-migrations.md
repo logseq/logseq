@@ -1144,3 +1144,22 @@ successful semantic `find` alone does not establish that it is displayed. The
 packaged native gate now opens/closes the graph selector and checks native bounds,
 then opens More and Appearance. These source gates require execution against a
 fresh package; their presence is not evidence of a passing native flow.
+
+
+## NSH Favorites actions use the retained Button's native Menu
+
+Favorites and Recent rows attach their action items permanently to the real dots
+Button on NSH. Opening the Button activates NSH's existing `Menu` controller; the
+sidebar's `open_menu` value now tracks only the row's active appearance. Native
+Menu dismissal clears that appearance. Action items use canonical `menu_item`
+selection instead of passive rows. Keyboard focus within the native row also
+keeps the actions visible. Other hosts retain the existing point-positioned
+popover and pointer anchor behavior.
+
+Downstream native automation should activate the actual action Button with
+`native-press` and inspect native menu item bounds. Sending a semantic PressDetail
+only updates row appearance and does not simulate the native controller. The
+compiled native contract fixture exercises real constructor validation, appearance
+and dismissal routing; native pointer/keyboard usability still requires the
+running app flow. This change does not implement row secondary-click menus or
+other external menu-role popovers.
