@@ -3,6 +3,7 @@
             [datascript.core :as d]
             [frontend.worker.handler.block :as block-handler]
             [frontend.worker.plain-value :as plain-value]
+            [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]))
 
@@ -139,6 +140,43 @@
         result (plain-value/entity-forward-map db host {})]
     (is (some #{:user.property/related} (:block.temp/property-keys result))
         "Own property idents are persisted so renderer collapse can see them.")))
+
+(deftest class-properties-carry-their-order-test
+  (let [conn (d/create-conn db-schema/schema)
+        first-uuid #uuid "ffffffff-0000-0000-0000-000000000001"
+        second-uuid #uuid "00000000-0000-0000-0000-000000000002"]
+    (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+    (d/transact! conn [{:db/id -1
+                        :db/ident :user.property/first
+                        :block/uuid first-uuid
+                        :block/title "First"
+                        :block/order "a0"
+                        :logseq.property/type :default
+                        :db/cardinality :db.cardinality/one
+                        :block/tags :logseq.class/Property}
+                       {:db/id -2
+                        :db/ident :user.property/second
+                        :block/uuid second-uuid
+                        :block/title "Second"
+                        :block/order "a1"
+                        :logseq.property/type :default
+                        :db/cardinality :db.cardinality/one
+                        :block/tags :logseq.class/Property}
+                       {:db/id -3
+                        :db/ident :user.class/ordered
+                        :block/uuid (random-uuid)
+                        :block/title "Ordered"
+                        :block/tags :logseq.class/Tag
+                        :logseq.property.class/properties #{-1 -2}}])
+    (let [db @conn
+          class-entity (d/entity db :user.class/ordered)
+          properties (:logseq.property.class/properties
+                      (plain-value/entity-forward-map db class-entity {}))]
+      (is (= #{"a0" "a1"} (set (map :block/order properties)))
+          "Class properties keep their :block/order so the renderer can sort them.")
+      (is (= [first-uuid second-uuid]
+             (map :block/uuid (db-property/sort-properties properties)))
+          "Sorting by order beats the uuid tie-break used when orders are missing."))))
 
 (deftest get-block-display-properties-use-resolved-node-values
   (let [[db host target-uuid _value-uuid]

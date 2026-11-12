@@ -32,6 +32,9 @@
         (assoc :block/tags tag-idents)
         (:block/uuid entity)
         (assoc :block/uuid (:block/uuid entity))
+        ;; Lets the renderer list a class's properties in their configured order
+        (and (ldb/property? entity) (:block/order entity))
+        (assoc :block/order (:block/order entity))
         raw-title
         (assoc :block/title raw-title
                :block/raw-title raw-title)
