@@ -38,6 +38,27 @@ popover ~padding:0 ~border_width:0 ~corner_radius:0
 This is a source correction motivated by the actual native reversed-selection
 capture; the updated native paint and geometry require a fresh build and capture.
 
+## Native code measurement and viewport share one maximum-height policy
+
+The `logseq-codemirror` factory now applies its existing ordinary-code 1024pt /
+normalized `calc` Auto policy to its own measurement View as well as its existing
+Editor. The former inner-only cap kept native rows bounded but still contributed
+the full document height to surrounding code rows: the matched actual 1000-line
+Core replay reported a 1024pt Editor inside a 20000pt region/wrapper. The same
+policy on both existing control owners reported 1024pt for all of them at both
+900pt and 1400pt window heights, preserving 803 layout witnesses. A root-only
+cap instead left a 20000pt Editor and 5303 witnesses, so it is not the fix.
+
+There is no extra view, arbitrary canonical-ancestor cap, new line limit,
+`max_rows` approximation or wire/API change. Existing `min_rows=Some(1)` retains
+natural short-code height. Language changes update both bindings through one
+helper without replacing the Editor, its focus or history; only the existing
+`(source-role, uuid)` key replaces the document owner. Both bounds become Auto
+for authored languages normalizing to `calc`. Block/query/read-only callbacks
+and maintained Web/mobile behavior are unchanged. No downstream call changes
+are required. Actual native containment/scrolling and standalone memory require
+a fresh release qualification; these Core measurements do not establish them.
+
 ## NSH outliner bullet paint clips to its existing circular bounds
 
 The childless 6pt outliner and add-block bullet Boxes now use typed

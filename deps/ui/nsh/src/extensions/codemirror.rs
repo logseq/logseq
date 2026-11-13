@@ -24,6 +24,14 @@ impl Source {
     }
 }
 
+fn maximum_height(context: &ExtensionContext) -> Length {
+    if string(context, "lang").trim().eq_ignore_ascii_case("calc") {
+        Length::Auto
+    } else {
+        Length::from(px(1024.0))
+    }
+}
+
 pub(super) fn validate(node: &Node) -> Result<(), String> {
     let properties = &node
         .extension
@@ -41,11 +49,15 @@ pub(super) fn validate(node: &Node) -> Result<(), String> {
 pub(super) fn element(context: ExtensionContext) -> AnyElement {
     let source_context = context.clone();
     let source = computed(move || Source::read(&source_context));
+    let height_context = context.clone();
     // A bare keyed region gets an implicit auto-width View from NSH. In the
     // production Row that host collapses around the percent-width Editor.
     // Size that same root explicitly; the source-keyed Editor stays retained.
     view()
         .w_full()
+        // Bound the control's intrinsic measurement as well as its Editor.
+        // An inner cap alone still lets this root measure the full document.
+        .max_h(move || maximum_height(&height_context))
         .child(each(
             move || vec![source.get()],
             Clone::clone,
@@ -158,16 +170,7 @@ fn editor_for(context: ExtensionContext, source: Source) -> AnyElement {
     .w_full()
     // Match code.css: ordinary code grows up to 1024px; calc explicitly
     // removes that limit. Keep the same Editor and its native row window.
-    .max_h(move || {
-        if string(&height_context, "lang")
-            .trim()
-            .eq_ignore_ascii_case("calc")
-        {
-            Length::Auto
-        } else {
-            Length::from(px(1024.0))
-        }
-    })
+    .max_h(move || maximum_height(&height_context))
     .into_element()
 }
 

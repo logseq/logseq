@@ -183,6 +183,34 @@ fn editor_height(app: &Headless) -> f32 {
         .0
 }
 
+fn code_geometry(app: &Headless) -> ([nsh_core::NodeId; 3], [f32; 3]) {
+    let nodes = app.screen().layout_nodes();
+    let editor = nodes
+        .iter()
+        .find(|node| node.test_id.as_deref() == Some("lui-1"))
+        .expect("the actual native Editor root");
+    let factory = nodes
+        .iter()
+        .find(|node| node.id == editor.parent)
+        .expect("the existing factory measurement View surrounding the keyed Editor");
+    let region = nodes
+        .iter()
+        .find(|node| node.test_id.as_deref() == Some("lui-2"))
+        .expect("the actual canonical code-editor Row");
+    assert_eq!(
+        factory.parent, region.id,
+        "measure the existing factory root, not a guessed ancestor"
+    );
+    (
+        [editor.id, factory.id, region.id],
+        [
+            editor.bounds.size.height.0,
+            factory.bounds.size.height.0,
+            region.bounds.size.height.0,
+        ],
+    )
+}
+
 fn long_document(lines: usize) -> String {
     let mut value = String::with_capacity(lines * 24);
     for line in 0..lines {
@@ -206,9 +234,9 @@ fn ordinary_code_and_queries_keep_complete_large_documents_in_the_master_sized_v
                 Some(nsh_core::geometry::size(px(640.0), px(1600.0))),
             );
             assert_eq!(
-                editor_height(&app),
-                1024.0,
-                "the Editor itself must be capped independently of the taller parent"
+                code_geometry(&app).1,
+                [1024.0; 3],
+                "the Editor viewport, existing factory measurement root and canonical Row must all be bounded"
             );
             let witness_count = app.screen().layout_nodes().len();
             if let Some(expected) = initial_witnesses {
@@ -253,18 +281,23 @@ fn ordinary_code_and_queries_keep_complete_large_documents_in_the_master_sized_v
                 "Undo must restore the full native document"
             );
             assert_eq!(native(&app), before);
-            assert_eq!(editor_height(&app), 1024.0);
+            assert_eq!(code_geometry(&app).1, [1024.0; 3]);
         }
     }
 }
 
 #[test]
 fn short_code_grows_naturally_and_calc_removes_the_cap_without_replacing_history_or_focus() {
-    let (short, _) = start(false, false);
+    let (short, _) = start_with_parent(false, false, true);
     let short_height = editor_height(&short);
     assert!(
         (20.0..1024.0).contains(&short_height),
         "min_rows keeps one editable row; max-height must not become fixed height"
+    );
+    assert_eq!(
+        code_geometry(&short).1,
+        [short_height; 3],
+        "the measurement root must not reserve a fixed maximum for short code"
     );
     drop(short);
     let source = long_document(1_000);
@@ -277,6 +310,7 @@ fn short_code_grows_naturally_and_calc_removes_the_cap_without_replacing_history
         Some(nsh_core::geometry::size(px(640.0), px(1600.0))),
     );
     let before = native(&app);
+    let owners = code_geometry(&app).0;
     app.type_text("id:lui-1", "").unwrap();
     app.press_key("ctrl+end").unwrap();
     let mut paste = nsh_core::PasteEvent::default();
@@ -286,15 +320,21 @@ fn short_code_grows_naturally_and_calc_removes_the_cap_without_replacing_history
     app.press("text:Use calc").unwrap();
     assert_eq!(native(&app), before);
     assert!(
-        editor_height(&app) > 1024.0,
-        "normalized CALC keeps the master's explicit unbounded-height exception"
+        code_geometry(&app)
+            .1
+            .iter()
+            .all(|height| *height > 1024.0),
+        "normalized CALC removes both control bounds and keeps natural parent sizing"
     );
+    assert_eq!(code_geometry(&app).0, owners);
     app.press("text:Use ordinary alias").unwrap();
     assert_eq!(native(&app), before);
-    assert_eq!(editor_height(&app), 1024.0);
+    assert_eq!(code_geometry(&app).1, [1024.0; 3]);
+    assert_eq!(code_geometry(&app).0, owners);
     app.press("text:Change language").unwrap();
     assert_eq!(native(&app), before);
-    assert_eq!(editor_height(&app), 1024.0);
+    assert_eq!(code_geometry(&app).1, [1024.0; 3]);
+    assert_eq!(code_geometry(&app).0, owners);
     assert!(
         !events
             .lock()
@@ -319,6 +359,7 @@ fn short_code_grows_naturally_and_calc_removes_the_cap_without_replacing_history
         "language changes must preserve the real Undo history"
     );
     assert_eq!(native(&app), before);
+    assert_eq!(code_geometry(&app).0, owners);
 }
 
 #[test]
@@ -378,14 +419,26 @@ fn code_editor_echo_and_language_updates_keep_native_identity_and_undo() {
 
 #[test]
 fn source_rebinding_replaces_native_editor_but_plain_authoritative_updates_do_not() {
-    let (mut app, _) = start(false, false);
+    let (mut app, _) = start_with_parent(false, false, true);
     let before = native(&app);
+    let owners = code_geometry(&app).0;
     app.press("text:Remote source").unwrap();
     app.wait_for("text:remote").unwrap();
     assert_eq!(native(&app), before);
+    assert_eq!(code_geometry(&app).0, owners);
     app.press("text:Rebind source").unwrap();
     app.wait_for("text:replacement").unwrap();
     assert_ne!(native(&app), before);
+    let (after, heights) = code_geometry(&app);
+    assert_eq!(
+        after[1..], owners[1..],
+        "source replacement retains the factory measurement root and Row"
+    );
+    assert_eq!(
+        heights,
+        [heights[0]; 3],
+        "a replacement short source must not leave blank reserved document height"
+    );
 }
 
 #[test]

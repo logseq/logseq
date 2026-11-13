@@ -9,8 +9,11 @@ manager, custom paint layer or text document.
 
 Frozen master `29fd2edd`'s `src/main/frontend/extensions/code.css` gives ordinary
 `.CodeMirror` a `1024px` maximum height and explicitly removes it for `calc`.
-The native factory applies the equivalent 1024pt maximum to the existing NSH
-Editor, for both block and query roles. Its existing `min_rows=Some(1)` remains:
+The native factory applies one equivalent 1024pt maximum policy to both its
+existing measurement View and NSH Editor, for block and query roles. The
+measurement root bounds the size contributed to the surrounding App layout;
+the Editor bound limits its own scrolling viewport and native row window.
+Its existing `min_rows=Some(1)` remains:
 short code grows naturally, and long code scrolls within the bounded viewport.
 No maximum line count or `max_rows` approximation is introduced.
 
@@ -24,12 +27,39 @@ slots own virtualization; the App adds no scroll wrapper, row source or layout
 cache.
 
 The existing Headless fixture checks a tall parent independently of the cap,
-short autoheight, complete 1k/100k block/query documents through native
+the factory and canonical Row dimensions, short autoheight, complete 1k/100k
+block/query documents through native
 document-end paste and Undo, and retained identity/focus/history through
 normalized calc/ordinary/rust language changes. Public approximate-layout
 witnesses establish bounded projection, not platform font shaping, standalone
 physical memory or a successful 100k application launch. Those measurements
 require a fresh standalone release and separate code-workload evidence.
+
+### Intrinsic measurement evidence
+
+At App `9650d50756` / LUI `93712b51`, the actual 1000-line AppKit case exposed a
+20000pt standard code region despite the existing Editor cap. The complete
+captured canonical tree, authentic matching theme/icon initialization and real
+public factories/fonts were replayed without removing properties or capping
+canonical ancestors. Public committed Core layout at 1440×900 and 1440×1400
+reported the following diagnostic results:
+
+| Factory variant | Editor height | Code region / wrapper height | Layout witnesses |
+| --- | ---: | ---: | ---: |
+| Original inner cap | 1024 | 20000 | 803 |
+| Direct source without `each` | 1024 | 20000 | 803 |
+| Factory root overflow hidden | 1024 | 20000 | 803 |
+| Factory root explicit minimum zero | 1024 | 20000 | 803 |
+| Root policy only, Editor uncapped | 20000 | 1024 | 5303 |
+| Same policy on root and Editor | 1024 | 1024 | 803 |
+
+These results establish the two distinct control bounds. Removing the source
+key does not correct measurement and would discard required source-rebind
+ownership. Root-only clamping conceals an unbounded Editor viewport. The chosen
+change keeps both existing owners and derives both bindings from one helper;
+`calc` still selects Auto for both. The replay establishes Core geometry, not
+AppKit pixels, standalone RSS or successful 100k App interaction. Fresh actual
+native containment/wheel and memory gates remain required after rebuilding.
 
 ## Motion inventory
 
