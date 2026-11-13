@@ -829,9 +829,11 @@ credentials, worker, window or user data is involved. The JSON log reports the
 private temporary evidence directory, which is retained after the run.
 
 These are execution tests of the existing handoff and cleanup protocol, not
-proof of SDK quit delivery or an installed N-to-N+1 upgrade. The fixture sets
-its captured restart-request bit directly, without constructing a UI engine,
-and its initialization marker stands in for work that must follow `Startup`.
+proof of native OS quit delivery or an installed N-to-N+1 upgrade. A minimal
+Rust Headless root invokes the real captured request callback and requires its
+root desktop Quit command; the fixture tears that engine down before calling
+`Session::finish`. It does not instantiate the actual App or load its OCaml
+library, and its marker stands in for initialization that must follow `Startup`.
 Unix restart behavior and its PID-preserving `exec` path are unchanged. Actual
 Windows CI execution is required; source review alone does not qualify it.
 

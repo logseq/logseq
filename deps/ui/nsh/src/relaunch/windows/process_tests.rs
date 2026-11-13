@@ -8,6 +8,14 @@ use ::windows::Win32::System::{
     },
     Threading::GetExitCodeProcess,
 };
+use nsh_core::{
+    Command, ROOT_ID,
+    desktop::DesktopCommand,
+    element::{Component, Interactive, IntoElement, NoEvent, Root, Scope, text},
+    platform::{Idiom, Os},
+};
+use nsh_engine::EngineConfig;
+use nsh_testing::Headless;
 use serde_json::{Value, json};
 use std::{
     fs,
@@ -26,6 +34,50 @@ const ROLE: &str = "LOGSEQ_RELAUNCH_FIXTURE_ROLE";
 const ROOT: &str = "LOGSEQ_RELAUNCH_FIXTURE_ROOT";
 const GATE: &str = "LOGSEQ_RELAUNCH_FIXTURE_GATE";
 const DEADLINE: Duration = Duration::from_secs(45);
+
+// This root exercises the actual request callback without constructing the
+// standalone App, loading its OCaml library or opening an OS window.
+struct RestartRequestFixture;
+impl Component for RestartRequestFixture {
+    type Props = super::super::StandaloneProps;
+    type Event = NoEvent;
+
+    fn view(props: Self::Props, _: Scope<NoEvent>) -> impl IntoElement {
+        let request = props.request.expect("owned restart request is required");
+        text("Request restart").on_press(move || {
+            request
+                .schedule()
+                .expect("the first restart request is admitted");
+        })
+    }
+}
+
+fn request_restart(session: &Session) -> Result<(), String> {
+    let request = session.request.clone();
+    let root = Root::new::<RestartRequestFixture>(move || super::super::StandaloneProps {
+        request: Some(request.clone()),
+        startup_preflight: false,
+    });
+    let mut config = EngineConfig::new(root);
+    config.environment.os = Os::Windows;
+    config.environment.idiom = Idiom::Desktop;
+    let mut app = Headless::start(config).map_err(|error| error.to_string())?;
+    app.wait_for("text:Request restart")?;
+    app.press("text:Request restart")?;
+    if !app.screen().commands().iter().any(|(id, command)| {
+        *id == ROOT_ID
+            && matches!(command, Command::Desktop(command) if **command == DesktopCommand::Quit)
+    }) {
+        return Err("restart request did not emit the actual root desktop Quit command".into());
+    }
+    // The private runner owns engine teardown, as the real main does after
+    // receiving Quit. Join it before testing the unchanged process handoff.
+    drop(app);
+    if !session.request.0.load(Ordering::Acquire) {
+        return Err("the actual request did not retain the restart intent".into());
+    }
+    Ok(())
+}
 
 fn emit(event: &str, fields: Value) {
     println!("{}", json!({"event":event,"fields":fields}));
@@ -314,7 +366,7 @@ fn parent(role: &str, root: &Path) -> Result<(), String> {
     }
     if role == "parent-success" {
         let session = session(root, "child-success", false)?;
-        session.request.0.store(true, Ordering::Release);
+        request_restart(&session)?;
         if session.finish(ExitCode::SUCCESS)? != ExitCode::SUCCESS {
             return Err("restart capture failed".into());
         }
