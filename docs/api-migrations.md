@@ -40,6 +40,34 @@ the maintained shared parity suite also covers trimmed numbers, exact strings,
 absent values and clearing a populated Number. These are source regressions
 awaiting execution by the integration owner, not native paint or undo evidence.
 
+## Comment and Contents shortcuts retain their editing contexts
+
+`editor/add-comment` (Ctrl-Space) now uses the existing editor-global scope,
+which admits both an active block editor and normal block selection while
+excluding unrelated text controls. Previously its nonediting-only catalog row
+prevented the editing entry from reaching the existing comment capability.
+`ui/toggle-contents` (Alt-Shift-C) now uses global-prevent-default, matching the
+master desktop behavior in both editing and nonediting contexts. Both commands
+retain the current dirty editor rather than exiting editing to satisfy a gate.
+
+No binding strings, configured shortcut storage, command IDs, service signatures
+or native wire fields change. Existing user key overrides keep their keys and
+use the corrected command contexts. For example, a configured Ctrl-Alt-C for
+`editor/add-comment` can now add a comment to the active block as well as a
+selection; a separate search/property input keeps its own input handling.
+No application caller migration is required. Consumers displaying the handler
+metadata should treat these two scopes as corrected availability, not a new
+always-global text-input action. Composition, open-palette, target/control and
+application admission guards remain on the same event path.
+
+The maintained marked portable command fixture exercises the real key entry
+and target-specific CmdK services with observed downstream capabilities. It
+checks both contexts, dirty-editor identity, unrelated text-control ownership,
+composition, palette ownership, empty targets and exactly-once dispatch. This
+is source/semantic regression coverage pending target execution; physical
+native delivery and persisted comment/readiness UI require a separate owned
+release-app scenario.
+
 ## Unclosed inline delimiters reuse their parse-owned suffix search
 
 The existing `Render_inline` matcher now routes hash-page references, image

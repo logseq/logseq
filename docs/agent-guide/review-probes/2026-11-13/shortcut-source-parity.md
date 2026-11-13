@@ -311,3 +311,25 @@ handler outcome, persisted state and exact undo result where appropriate.
    input. A source inventory or one macOS native pass cannot substitute for it.
 
 No user keymap is changed by this report. No application was launched or closed.
+
+## Prepared correction after the inventory snapshot
+
+The next source candidate corrects `editor/add-comment` to existing
+`editor-global`, admitting editing and selection while refusing unrelated
+controls through the existing `chord_may_run` guard. It corrects
+`ui/toggle-contents` to master's `global-prevent-default`. It does not add a new
+scope, dispatcher, key registry or input replay. Default/configured key strings
+are unchanged. The exhaustive matrix above remains the original ea2bfbae0f
+snapshot so its source findings are auditable.
+
+The marked portable fixture in `test/shared_ui_regression_test.ml` now sends
+`Ui_services.ev` values through the actual `Editor_keys.on_global_key` entry.
+It builds the actual target's CmdK services and substitutes only the existing
+Comments/Contents capability callbacks to observe dispatch/targets. It checks
+editing and normal selection, dirty editor source/epoch, independent text
+controls, composing input, open-palette ownership, empty targets and exact
+callback counts. Runtime/editor/settings/chord state and command history are
+restored. Native admission compiles this same marked test against the actual
+native archives. No installed services are replaced. This source preparation is
+not a native OS or persistence pass; root executes the maintained Web and
+native-archive gates before any success claim.
