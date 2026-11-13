@@ -60,6 +60,15 @@ impl Identity {
         if string(health, "ownership-protocol")? != "sqlite-v1" {
             return Err("unsupported worker ownership protocol".into());
         }
+        // health keeps bound_repo; Graph_lifecycle.context records graph_name(repo).
+        let bound_repo = string(health, "repo")?.trim();
+        let repo = bound_repo
+            .strip_prefix("logseq_db_")
+            .unwrap_or(bound_repo)
+            .trim();
+        if repo.is_empty() {
+            return Err("worker graph name is empty".into());
+        }
         let graphs = inside(string(storage, "graphsDir")?, private)?;
         let lifecycle = inside(string(storage, "lifecycleDir")?, private)?;
         let ticket = string(health, "ticket")?;
@@ -92,7 +101,7 @@ impl Identity {
             runtime: records.remove(0),
             lifecycle: lifecycle.clone(),
             fields: serde_json::json!({
-            "pid":pid,"repo":string(health,"repo")?,"ticket":ticket,"generation":string(health,"generation")?,
+            "pid":pid,"repo":repo,"ticket":ticket,"generation":string(health,"generation")?,
             "owner":string(health,"owner-source")?,"root":root,"graphsDir":graphs,"lifecycleDir":lifecycle,"ownership-protocol":"sqlite-v1"}),
         };
         identity.terminal()?;
@@ -107,8 +116,24 @@ impl Identity {
             serde_json::from_str(&fs::read_to_string(path).map_err(|error| error.to_string())?)
                 .map_err(|error| error.to_string())?;
         for key in IDENTITY_FIELDS {
-            if record.get(key) != self.fields.get(key) {
-                return Err(format!("captured worker runtime {key} changed"));
+            let changed = || {
+                format!(
+                    "captured worker runtime {key} changed: expected={}, actual={}",
+                    bounded(self.fields.get(key)),
+                    bounded(record.get(key))
+                )
+            };
+            let same = if matches!(key, "root" | "graphsDir" | "lifecycleDir") {
+                fs::canonicalize(
+                    string(&record, key).map_err(|error| format!("{}; {error}", changed()))?,
+                )
+                .map_err(|error| format!("{}; {error}", changed()))?
+                    == Path::new(string(&self.fields, key)?)
+            } else {
+                record.get(key) == self.fields.get(key)
+            };
+            if !same {
+                return Err(changed());
             }
         }
         match record.get("phase").and_then(Value::as_str) {
@@ -119,6 +144,12 @@ impl Identity {
             _ => Ok(false),
         }
     }
+}
+fn bounded(value: Option<&Value>) -> String {
+    value.map_or_else(
+        || "<missing>".into(),
+        |value| value.to_string().chars().take(240).collect(),
+    )
 }
 fn acknowledge(reply: (u16, String)) -> Result<(), String> {
     let (status, body) = reply;
@@ -353,8 +384,8 @@ mod tests {
             let graphs = fs::canonicalize(graphs).unwrap();
             let lifecycle = fs::canonicalize(lifecycle).unwrap();
             let runtime = lifecycle.join("Demo/runtime-captured-ticket.json");
-            let health = serde_json::json!({"pid":4242,"port":43210,"repo":"logseq_db_Demo","ticket":"captured-ticket","generation":"captured-generation","owner-source":"nsh","ownership-protocol":"sqlite-v1","storage":{"root":root,"graphsDir":graphs,"lifecycleDir":lifecycle}});
-            let record = serde_json::json!({"pid":4242,"repo":"logseq_db_Demo","ticket":"captured-ticket","generation":"captured-generation","owner":"nsh","ownership-protocol":"sqlite-v1","root":root,"graphsDir":graphs,"lifecycleDir":lifecycle,"phase":"ready","error":null});
+            let health = serde_json::json!({"pid":4242,"port":43210,"repo":"logseq_db_Demo","ticket":"captured-ticket","generation":"captured-generation","owner-source":"electron","ownership-protocol":"sqlite-v1","storage":{"root":root,"graphsDir":graphs,"lifecycleDir":lifecycle}});
+            let record = serde_json::json!({"pid":4242,"repo":"Demo","ticket":"captured-ticket","generation":"captured-generation","owner":"electron","ownership-protocol":"sqlite-v1","root":root,"graphsDir":graphs,"lifecycleDir":lifecycle,"phase":"ready","error":null});
             fs::write(&runtime, record.to_string()).unwrap();
             fs::write(root.join("server-list"), "4242 43210\n").unwrap();
             Self {
@@ -573,6 +604,66 @@ mod tests {
             .unwrap_err();
             assert!(error.contains("unsuccessful close"));
         }
+    }
+    #[test]
+    fn health_bound_repo_matches_the_runtime_normalized_graph_name() {
+        let fixture = Fixture::new();
+        assert_eq!(fixture.record["repo"], serde_json::json!("Demo"));
+        for repo in ["logseq_db_Demo", "Demo", "  logseq_db_Demo  "] {
+            let mut health = fixture.health.clone();
+            health["repo"] = serde_json::json!(repo);
+            assert!(Identity::capture(&fixture.root, 4242, 43210, &health).is_ok());
+        }
+        let mut wrong = fixture.health.clone();
+        wrong["repo"] = serde_json::json!("logseq_db_Other");
+        let error = Identity::capture(&fixture.root, 4242, 43210, &wrong).unwrap_err();
+        assert!(error.contains("repo changed: expected=\"Other\", actual=\"Demo\""));
+    }
+    #[test]
+    fn path_identity_uses_the_filesystem_for_valid_aliases_and_rejects_other_existing_paths() {
+        let fixture = Fixture::new();
+        let mut aliases = fixture.record.clone();
+        for key in ["root", "graphsDir", "lifecycleDir"] {
+            aliases[key] = Value::String(format!("{}/.", fixture.record[key].as_str().unwrap()));
+        }
+        fixture.record(&aliases);
+        let captured = Identity::capture(&fixture.root, 4242, 43210, &fixture.health).unwrap();
+        assert!(!captured.terminal().unwrap());
+        aliases["phase"] = serde_json::json!("closed");
+        fixture.record(&aliases);
+        assert!(captured.terminal().unwrap());
+        for key in ["root", "graphsDir", "lifecycleDir"] {
+            let mut wrong = aliases.clone();
+            wrong[key] = fixture.record[if key == "root" { "graphsDir" } else { "root" }].clone();
+            fixture.record(&wrong);
+            assert!(
+                captured
+                    .terminal()
+                    .unwrap_err()
+                    .contains(&format!("{key} changed"))
+            );
+        }
+    }
+    #[cfg(windows)]
+    #[test]
+    fn ordinary_windows_record_paths_match_their_captured_verbatim_paths() {
+        let fixture = Fixture::new();
+        let mut plain = fixture.record.clone();
+        for key in ["root", "graphsDir", "lifecycleDir"] {
+            let canonical = fixture.record[key].as_str().unwrap();
+            // Test data models the other runtime's ordinary Win32 spelling.
+            // Production equality below always resolves through the filesystem.
+            plain[key] = Value::String(if let Some(unc) = canonical.strip_prefix(r"\\?\UNC\") {
+                format!(r"\\{unc}")
+            } else {
+                canonical
+                    .strip_prefix(r"\\?\")
+                    .expect("canonical Windows verbatim path")
+                    .to_owned()
+            });
+        }
+        fixture.record(&plain);
+        assert!(Identity::capture(&fixture.root, 4242, 43210, &fixture.health).is_ok());
     }
     #[test]
     fn existing_ticket_lookup_is_unique_without_reimplementing_graph_encoding() {

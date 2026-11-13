@@ -25,7 +25,10 @@ within this exact unguessable fixture directory, as resolve_storage specifies;
 it is not incorrectly required to be inside LOGSEQ_ROOT_DIR itself. The existing
 runtime-<captured-ticket>.json file is found uniquely within that
 validated private lifecycle directory; its complete immutable identity is then
-checked on every observation. No second graph-name encoder or new registry is
+checked on every observation. The three path fields are compared by filesystem
+canonical identity, preserving /var versus /private/var and ordinary Win32 versus
+verbatim path spellings; other immutable fields retain exact JSON equality.
+No second graph-name encoder or new registry is
 introduced. No registry entry is adopted; the worker intentionally leaves a stale
 server-list tuple after exit.
 
@@ -50,3 +53,14 @@ record, and errors recorded after a valid ACK. They use a controlled transport
 and owned temporary protocol records; they are not substitutes for the actual
 release/worker CI run. This source batch has not been compiled or executed by its
 author. No App, worker production protocol, SDK, Dune or public API changes.
+
+
+The first actual release rerun exposed a mistaken test record: health reports
+its bound repo `logseq_db_Demo`, while Graph_lifecycle.context applies the existing
+graph_name rule before recording runtime repo `Demo`. The fixture now models
+that actual difference and applies only the same trim/optional exact prefix
+removal to the health repo. It does not encode filenames or relax other identity
+fields. The preserved CATwuF runtime record also confirms owner=electron,
+protocol=sqlite-v1, string ticket/generation, integer PID and canonical storage
+paths. Failed identity comparisons now report only the failing key and bounded
+expected/actual values, preserving the mismatch as a failure.
