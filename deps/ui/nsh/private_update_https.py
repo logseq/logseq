@@ -321,4 +321,3 @@ def verify_requests(requests, case, archive_name):
     expected_archives = 0 if case == "tampered-manifest" else 1
     if len(archives) != expected_archives:
         raise ValueError("Public updater archive boundary disagrees with metadata verification")
-
