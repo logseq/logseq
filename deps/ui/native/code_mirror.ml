@@ -34,13 +34,16 @@ let on_native_event uuid ~name ~value ~key =
 let update_calc (_ : 'a) = ()
 let install () = ()
 
-(* -- copy button — block source is the stored block_title, no editor
-   instance needed -- *)
+(* Copy the active document before its debounced save/blur has refreshed the
+   block model. Inactive code keeps the stored-source fallback. *)
 
 let copy_button uuid =
   match Editor_state.find uuid with
   | Some b ->
-      Platform.copy_to_clipboard b.Model.block_title;
+      let source = match Editor_state.editing () with
+        | Some editing when editing.uuid = uuid -> Editor_actions.live_buffer uuid
+        | _ -> b.Model.block_title in
+      Platform.copy_to_clipboard source;
       let d = Js.Dict.empty () in
       Js.Dict.set d "msg"
         (Js.Json.string (I18n.t "notification/copied"));

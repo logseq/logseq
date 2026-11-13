@@ -1,5 +1,21 @@
 # API migrations
 
+## Native code Copy reads the active document before persistence
+
+The native OCaml code toolbar's existing `Code_mirror.copy_button uuid` now
+copies `Editor_actions.live_buffer uuid` when that block owns the active edit
+session. It previously read the persisted block title, so Copy immediately
+after typing could return old text before the existing 400ms save and model
+refresh completed. An active empty document copies an empty string. Inactive
+code blocks keep their stored-source fallback; another block's editing session
+cannot supply their text. Callers need no argument or event changes.
+
+The clipboard transport, copied notification, save debounce, native editor
+identity and history remain unchanged. Web CodeMirror already reads its live
+document. The native admission regression exercises real focus/input/Copy
+callbacks before persistence; actual native pointer/focus and OS clipboard
+readback remain separate application qualification gates.
+
 ## Native code actions overlay the retained editor
 
 On NSH the existing code action row is now positioned four points from the

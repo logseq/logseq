@@ -1858,6 +1858,110 @@ let native_code_toolbar_retention () =
     check "a retired code wrapper cannot receive a stale hover callback"
       (not (Lui_app.dispatch_event app (P.PointerEnter wrap))))
 
+let native_code_copy_live_buffer () =
+  let module P = Lui_protocol in
+  let previous_app = !Native_embed.current_app
+  and previous_model = !Runtime.read_model and previous_flush = !Runtime.app_flush
+  and previous_send = !Runtime.app_send and previous_host = !Host.host_op
+  and previous_elements = !Dom_ext.doc_elements_provider
+  and previous_subtree = !Dom_ext.subtree_elements_provider
+  and previous_state = !Editor_state.st and previous_fields = !Editor_state.field_sigs_opt
+  and previous_init = !Editor_state.on_init
+  and previous_pending = !Editor_state.pending_focus
+  and previous_actions = !Editor_state.pending_focus_actions
+  and previous_click = !Editor_state.click_point
+  and previous_structure = !Editor_state.structure_pending
+  and previous_structure_owner = !Editor_actions.structure_owner
+  and previous_code = !Editor_state.code_buffer_of
+  and previous_history = !Editor_state.history_input_before
+  and previous_save = !Outliner_ops.pending_save
+  and previous_save_timer = !Outliner_ops.save_timer
+  and previous_save_ready = !Outliner_ops.pending_save_ready in
+  let requests = ref [] in
+  let uuid = "12345678-1234-4234-8234-123456789c01" in
+  let stored = "let persisted = 1" and dirty = "let unsaved = 2\n" in
+  let block = { (Model.empty_block ~uuid ~title:stored ~is_page:false) with
+    Model.block_display_type=Some "code"; block_code_lang=Some "ocaml" } in
+  let page = Option.get (Decode.page_of_summary
+    (Wire.Map [Wire.Keyword "block/title",Wire.String "Native code Copy"])) in
+  let model = {Model.initial with repo=Some "native-code-copy";
+    route=Model.Page "Native code Copy";route_page=Some {page with Model.page_blocks=[block]}} in
+  let backend : P.backend = {
+    backend_profile=P.profile P.MacOS P.NshHost;apply_batch=(fun _ -> true)} in
+  let registry = Lui_extension.registry () in
+  Logseq_el.register_all registry;Logseq_codemirror.register registry;Logseq_editor.register registry;
+  Editor_state.st:=None;Editor_state.field_sigs_opt:=None;Editor_state.on_init:=[];
+  Editor_state.pending_focus:=None;Editor_state.pending_focus_actions:=[];
+  Editor_state.click_point:=None;Editor_state.structure_pending:=false;
+  Editor_actions.structure_owner:=None;Editor_state.code_buffer_of:=(fun _ -> None);
+  Outliner_ops.pending_save:=None;Outliner_ops.save_timer:=0;Outliner_ops.pending_save_ready:=None;
+  let app = Lui_app.create_with_extensions backend registry model
+    (fun model (_ : Action.t) -> model)
+    (fun context _ _ ->
+      Editor_state.ensure context;
+      Lui_elements.column ~style_class:"ls-block"
+        ~accessibility_identifier:("ls-block-" ^ uuid)
+        ~data_attrs:["data-blockid",uuid;"data-cid","main"]
+        [Render.code_block ~self:uuid "ocaml" stored]) in
+  Fun.protect ~finally:(fun () ->
+    Outliner_ops.cancel_pending_save ();
+    Editor_state.pending_focus:=None;Editor_state.pending_focus_actions:=[];
+    Host.drain ();
+    ignore (Lui_app.dispose app);Native_embed.current_app:=previous_app;
+    Runtime.read_model:=previous_model;Runtime.app_flush:=previous_flush;Runtime.app_send:=previous_send;
+    Host.host_op:=previous_host;Dom_ext.doc_elements_provider:=previous_elements;
+    Dom_ext.subtree_elements_provider:=previous_subtree;
+    Editor_state.st:=previous_state;Editor_state.field_sigs_opt:=previous_fields;
+    Editor_state.on_init:=previous_init;Editor_state.pending_focus:=previous_pending;
+    Editor_state.pending_focus_actions:=previous_actions;Editor_state.click_point:=previous_click;
+    Editor_state.structure_pending:=previous_structure;Editor_actions.structure_owner:=previous_structure_owner;
+    Editor_state.code_buffer_of:=previous_code;Editor_state.history_input_before:=previous_history;
+    Outliner_ops.pending_save:=previous_save;Outliner_ops.save_timer:=previous_save_timer;
+    Outliner_ops.pending_save_ready:=previous_save_ready) (fun () ->
+    Native_embed.current_app:=Some app;
+    Runtime.read_model:=(fun () -> Lui_app.model app);
+    Runtime.app_flush:=(fun () -> ignore (Lui_app.flush app));
+    Runtime.app_send:=(fun action -> Lui_app.send app action);
+    Host.set_host_op (fun operation payload -> requests:=(operation,payload):: !requests);
+    Dom_ext.doc_elements_provider:=Native_embed.collect_elements;
+    Dom_ext.subtree_elements_provider:=Native_embed.collect_subtree;
+    ignore (Lui_app.start app);ignore (Lui_app.flush app);
+    let runtime=Lui_app.runtime app in
+    let editor=Hashtbl.fold (fun node identifier found ->
+      if identifier="logseq-codemirror" then Some node else found)
+      runtime.Lui_runtime.runtime_extension_nodes None |> Option.get in
+    let actions=Hashtbl.fold (fun node props found ->
+      if P.Property_map.find_opt P.StyleClass props=Some (P.StringValue "code-block-actions")
+      then Some node else found) runtime.Lui_runtime.runtime_properties None |> Option.get in
+    let copy=List.nth (Lui_runtime.children runtime actions) 1 in
+    let copy_expect label expected =
+      requests:=[];
+      ignore (Native_embed.press copy);
+      check label (List.filter_map (fun (op,payload) ->
+        if op="clipboard" then Some payload else None) !requests=[expected]) in
+    copy_expect "inactive native code Copy retains the persisted-source fallback" stored;
+    ignore (Native_embed.extension_event editor "logseq-codemirror" "cm-event" "{\"name\":\"focus\"}");
+    check "the real native code focus callback acquires its shared editor owner"
+      (match Editor_state.editing () with Some editing -> editing.uuid=uuid | None -> false);
+    let input source =
+      ignore (Native_embed.extension_event editor "logseq-codemirror" "cm-event"
+        (Yojson.Safe.to_string (`Assoc ["name",`String "input";"value",`String source])));
+      check "actual native code input updates the authoritative shared buffer"
+        (Editor_actions.live_buffer uuid=source);
+      check "the immediate Copy regression runs before the debounced source reaches the model"
+        ((Option.get (Editor_state.find uuid)).Model.block_title=stored
+         && match Outliner_ops.pending_save_for uuid with Some save -> save.title=source | None -> false)
+    in
+    input dirty;
+    copy_expect "native code Copy immediately writes the unsaved live document" dirty;
+    input "";
+    copy_expect "an empty active code document is copied without falling back to stored text" "";
+    ignore (Lui_app.dispose app);
+    requests:=[];
+    check "a retired code Copy control cannot run its old handler"
+      (not (Lui_app.dispatch_event app (P.Press copy))
+       && not (List.exists (fun (operation,_) -> operation="clipboard") !requests)))
+
 let native_code_language_popup_scroll () =
   let previous_app = !Native_embed.current_app
   and previous_host = !Host.host_op
@@ -3045,6 +3149,7 @@ let () =
   native_point_property_scroll ();
   native_wide_reading_column ();
   native_code_toolbar_retention ();
+  native_code_copy_live_buffer ();
   native_code_language_popup_scroll ();
   native_popup_placement_contract ();
   native_controlled_field_resets ();
