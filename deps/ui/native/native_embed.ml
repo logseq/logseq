@@ -4,6 +4,7 @@
 
 external wakeup : unit -> unit = "logseq_lui_wakeup"
 external platform_request : string -> unit = "logseq_lui_platform_request"
+external publish_patches : string -> unit = "logseq_lui_publish_patches"
 
 (* Every Lui_app.flush produces one incremental batch; async work (promise
    resolutions, daemon invokes) can flush several times inside a single
@@ -40,11 +41,38 @@ let with_entry_lock f =
 
 let publish_native_keymap : (unit -> unit) ref = ref (fun () -> ())
 
+let encode_batches batches =
+  match batches with
+  | [] -> ""
+  | _ ->
+      let buffer = Buffer.create 4096 in
+      Buffer.add_char buffer '[';
+      List.iteri (fun i batch ->
+        if i > 0 then Buffer.add_char buffer ',';
+        Buffer.add_string buffer (Lui_wire.encode_batch batch)) batches;
+      Buffer.add_char buffer ']';
+      Buffer.contents buffer
+
+let queued_batches () =
+  List.rev (Queue.fold (fun acc batch -> batch :: acc) [] pending_batches)
+
+let send_platform_request payload =
+  (* Host callbacks only copy bytes; they never re-enter OCaml. Publish the
+     completed prefix before a request can name one of its new owners. Remove
+     it only after encoding and the callback succeed, preserving later appends. *)
+  let batches = queued_batches () in
+  (match batches with
+   | [] -> ()
+   | _ ->
+       publish_patches (encode_batches batches);
+       List.iter (fun _ -> ignore (Queue.take pending_batches)) batches);
+  platform_request payload
+
 let take_patches () =
   !publish_native_keymap ();
-  let batches = Queue.fold (fun acc batch -> batch :: acc) [] pending_batches in
+  let batches = queued_batches () in
   Queue.clear pending_batches;
-  List.rev batches
+  batches
 
 let enqueue_batch batch =
   Asset_store.publish_resource_context ~repo:(Runtime.repo ());
@@ -598,11 +626,11 @@ let initialize_unlocked platform_code host_code (payload : string) =
      through Host onto this thread via the host wakeup *)
   Host.set_wakeup (fun () -> wakeup ());
   Host.set_host_op (fun name payload ->
-      platform_request (name ^ "\n" ^ payload));
+      send_platform_request (name ^ "\n" ^ payload));
   Resource_native.reset ();
   if host_kind = Lui_protocol.GenericHost
      || host_kind = Lui_protocol.NshHost then
-    platform_request
+    send_platform_request
       ("app-icons\n"
        ^ Js.Json.stringify
            (Js.Json.JObject
@@ -612,7 +640,7 @@ let initialize_unlocked platform_code host_code (payload : string) =
                     ()))));
   (* Platform's request channel ("<op>\n<payload>") shares the same wire
      as Host's — clipboard-write, ui-state, etc. *)
-  Platform.host_request := platform_request;
+  Platform.host_request := send_platform_request;
   Menu_commands.configure ~updates:(host_kind = Lui_protocol.NshHost);
   Logseq_editor.configure_geometry ~affinity:(host_kind = Lui_protocol.NshHost);
   let t0 = perf_ms () in
@@ -1160,17 +1188,7 @@ let resync _ =
 
 (* Preserve the wire ABI for hosts that cross the C bridge. *)
 module Ffi = struct
-  let encode_batches batches =
-    match batches with
-    | [] -> ""
-    | _ ->
-      let buffer = Buffer.create 4096 in
-      Buffer.add_char buffer '[';
-      List.iteri (fun i batch ->
-        if i > 0 then Buffer.add_char buffer ',';
-        Buffer.add_string buffer (Lui_wire.encode_batch batch)) batches;
-      Buffer.add_char buffer ']';
-      Buffer.contents buffer
+  let encode_batches = encode_batches
 
   let initialize platform_code host_code payload = encode_batches (initialize platform_code host_code payload)
   let appear node = encode_batches (appear node)

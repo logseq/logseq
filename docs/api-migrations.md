@@ -1,5 +1,31 @@
 # API migrations
 
+## Native platform requests publish their completed patch prefix first
+
+Both native platform-request channels now publish already-completed queued
+patch batches through the existing C patch callback before emitting a dependent
+host request. For example, publishing a Comments area and then clicking its
+new Reply control delivers the creating patches before the click is captured
+by the Rust renderer. Previously the inline request could precede those batches,
+which were returned only when the OCaml entry finished, leaving a valid new
+canonical owner absent in the native renderer.
+
+This is an internal wire-order correction. Each generation is delivered exactly
+once, and the ordinary entry response returns only the remaining batches.
+Encoding or a missing patch callback fails before the request and keeps the
+unsent queue. The bridge callback still only copies borrowed bytes; it does not
+re-enter OCaml or execute native controls inline. Only completed batches are
+published; no extra view flush, delayed identifier lookup, retry, or target
+fallback is introduced. Generic absent-at-capture and retained-incarnation
+rules remain unchanged. Downstream callers need no API changes: create/flush a
+canonical owner before requesting an operation on it, as before.
+
+The actual native archive/C bridge fixture records create-patch, Host request,
+update-patch, Platform request and final response-patch order, verifies consecutive
+nonduplicated generations, and checks failed-delivery queue retention. The real
+AppKit comment handoff remains a separate required downstream integration gate;
+preparing this source does not establish a native UI pass.
+
 ## Card answer keys stop when the answer control is absent
 
 The Cards answer shortcut (default S, or its configured replacement) now

@@ -303,6 +303,19 @@ CAMLprim value logseq_lui_wakeup(value unit) {
   CAMLreturn(Val_unit);
 }
 
+/* Publish an already-completed prefix before its following platform request.
+   The existing host callback copies the borrowed string and must not re-enter
+   OCaml. Missing delivery is an error; the OCaml queue then retains its prefix. */
+CAMLprim value logseq_lui_publish_patches(value encoded) {
+  CAMLparam1(encoded);
+  if (patch_callback == NULL)
+    caml_failwith("Native patch publication callback is not installed");
+  if (caml_string_length(encoded) == 0)
+    caml_invalid_argument("Native patch publication requires encoded batches");
+  patch_callback(String_val(encoded));
+  CAMLreturn(Val_unit);
+}
+
 CAMLprim value logseq_lui_platform_request(value payload) {
   CAMLparam1(payload);
   const char *data = String_val(payload);

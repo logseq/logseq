@@ -22,6 +22,8 @@ class NativePrimitiveSignatures(unittest.TestCase):
              "void logseq_lui_wakeup(value unit)"),
             ("CAMLprim value logseq_lui_platform_request(value payload)",
              "void logseq_lui_platform_request(value payload)"),
+            ("CAMLprim value logseq_lui_publish_patches(value encoded)",
+             "void logseq_lui_publish_patches(value encoded)"),
             ("CAMLprim value caml_logseq_worker_process_id(value child_process)",
              "CAMLprim value caml_logseq_worker_process_id(value child_process, value extra)"),
         )

@@ -2765,6 +2765,107 @@ let native_click_producers () =
        | _ -> false);
     check "native click producers do not also dispatch duplicate semantic presses" (!activated=0))
 
+external bridge_order_start : unit -> unit = "caml_logseq_test_ordered_callbacks_start"
+external bridge_order_without_patch : unit -> unit = "caml_logseq_test_ordered_callbacks_without_patch"
+external bridge_order_finish : unit -> string list = "caml_logseq_test_ordered_callbacks_finish"
+
+let native_platform_message_order () =
+  let previous_app= !Native_embed.current_app and previous_host= !Host.host_op
+  and previous_request= !Platform.host_request and previous_model= !Runtime.read_model
+  and previous_flush= !Runtime.app_flush and previous_publish= !Native_embed.publish_native_keymap in
+  let previous_batches=Native_embed.queued_batches () in
+  Queue.clear Native_embed.pending_batches;
+  let app_ref=ref None and trigger=ref None and capture=ref false in
+  let stage=ref None and child=ref None in
+  let backend : Lui_protocol.backend={
+    backend_profile=Lui_protocol.profile Lui_protocol.MacOS Lui_protocol.NshHost;
+    apply_batch=Native_embed.enqueue_batch} in
+  let app=Lui_app.create backend Model.initial (fun model (_ : Action.t) -> model)
+    (fun context _ _ ->
+      let step=Signal.state context.Lui_ui.ui_scheduler 0 in
+      stage:=Some step;
+      Lui_elements.column
+        [Lui_elements.button ~accessibility_identifier:"order-trigger"
+          ~on_press:(fun _ ->
+            let app=Option.get !app_ref in
+            Signal.set step 1;ignore (Lui_app.flush app);
+            let runtime=Lui_app.runtime app in
+            let node=Hashtbl.fold (fun id properties found ->
+              if Lui_protocol.Property_map.find_opt Lui_protocol.AccessibilityIdentifier properties
+                =Some (Lui_protocol.StringValue "order-child") then Some id else found)
+                runtime.Lui_runtime.runtime_properties None |> Option.get in
+            child:=Some node;
+            let payload=Printf.sprintf "click\n{\"ref\":{\"node-id\":%d}}" node in
+            Host.dom_op "click" (Printf.sprintf "{\"ref\":{\"node-id\":%d}}" node);
+            Signal.set step 2;ignore (Lui_app.flush app);
+            !Platform.host_request ("dom-op\n" ^ payload);
+            Signal.set step 3;ignore (Lui_app.flush app)) [];
+         reactive (fun visible -> if not visible then Lui_elements.box [] else
+           Lui_elements.button ~accessibility_identifier:"order-child"
+             ~text:(reactive string_of_int (Signal.value step)) [])
+           (reactive (fun step -> step>0) (Signal.value step))]) in
+  app_ref:=Some app;
+  let cleanup ()=
+    if !capture then (ignore (bridge_order_finish ());capture:=false);
+    ignore (Lui_app.dispose app);Queue.clear Native_embed.pending_batches;
+    List.iter (fun batch -> Queue.add batch Native_embed.pending_batches) previous_batches;
+    Native_embed.current_app:=previous_app;Host.host_op:=previous_host;
+    Platform.host_request:=previous_request;Runtime.read_model:=previous_model;
+    Runtime.app_flush:=previous_flush;Native_embed.publish_native_keymap:=previous_publish in
+  Fun.protect ~finally:cleanup (fun () ->
+    Native_embed.current_app:=Some app;Native_embed.publish_native_keymap:=(fun () -> ());
+    Runtime.read_model:=(fun () -> Lui_app.model app);
+    Runtime.app_flush:=(fun () -> ignore (Lui_app.flush app));
+    Host.set_host_op (fun name payload -> Native_embed.send_platform_request (name ^ "\n" ^ payload));
+    Platform.host_request:=Native_embed.send_platform_request;
+    ignore (Lui_app.start app);ignore (Lui_app.flush app);
+    let runtime=Lui_app.runtime app in
+    Hashtbl.iter (fun node properties ->
+      if Lui_protocol.Property_map.find_opt Lui_protocol.AccessibilityIdentifier properties
+        =Some (Lui_protocol.StringValue "order-trigger") then trigger:=Some node)
+      runtime.Lui_runtime.runtime_properties;
+    ignore (Native_embed.take_patches ());
+    bridge_order_start ();capture:=true;
+    check "real C press entry accepts the publication-order fixture"
+      (bridge_press_modifiers (Option.get !trigger) 0=1);
+    let messages=bridge_order_finish () in capture:=false;
+    check "both platform channels keep completed patches before requests and final response patches"
+      (List.map (fun message -> message.[0]) messages=['P';'R';'P';'R';'P']);
+    let patches=List.filter_map (fun message -> if message.[0]='P' then
+      Some (Yojson.Safe.from_string (String.sub message 1 (String.length message-1))) else None) messages in
+    let generations=List.concat_map (function `List batches ->
+      List.map (fun batch -> Yojson.Safe.Util.(batch |> member "generation" |> to_int)) batches
+      | _ -> failwith "actual bridge patches must encode batch arrays") patches in
+    check "streamed and final C callbacks publish each consecutive generation exactly once"
+      (match generations with [first;second;third] -> second=first+1 && third=second+1 | _ -> false);
+    check "publication before requests does not leave duplicate batches for the next reply"
+      (Queue.is_empty Native_embed.pending_batches);
+    check "both actual C requests retain the created canonical child identity"
+      (List.filter_map (fun message -> if message.[0]='R' then
+        let raw=String.sub message 1 (String.length message-1) in
+        let prefix="dom-op\nclick\n" in
+        if not (String.starts_with ~prefix raw) then failwith "unexpected bridge-order request";
+        Some Yojson.Safe.Util.(Yojson.Safe.from_string
+          (String.sub raw (String.length prefix) (String.length raw-String.length prefix))
+            |> member "ref" |> member "node-id" |> to_int)
+        else None) messages=[Option.get !child;Option.get !child]);
+    Signal.set (Option.get !stage) 4;ignore (Lui_app.flush app);
+    let pending=Native_embed.queued_batches () in
+    bridge_order_start ();capture:=true;bridge_order_without_patch ();
+    check "missing C patch callback fails before sending a dependent request"
+      (match Native_embed.send_platform_request "dom-op\nclick\n{}" with
+       | () -> false
+       | exception Failure message -> message="Native patch publication callback is not installed");
+    let messages=bridge_order_finish () in capture:=false;
+    check "failed publication retains the exact unsent queue and emits no request"
+      (messages=[] && Native_embed.queued_batches ()=pending && pending<>[]);
+    bridge_order_start ();capture:=true;
+    Native_embed.send_platform_request "dom-op\nclick\n{}";
+    let messages=bridge_order_finish () in capture:=false;
+    check "retry publishes the retained generation once before its request"
+      (List.map (fun message -> message.[0]) messages=['P';'R']
+       && Queue.is_empty Native_embed.pending_batches))
+
 let native_menu_scope_retention () =
   let open Lui_elements in
   let previous_model = !Runtime.read_model and previous_flush = !Runtime.app_flush
@@ -3679,6 +3780,7 @@ let () =
   native_datetime_value_labels ();
   native_cmdk_controlled_input ();
   native_click_producers ();
+  native_platform_message_order ();
   native_comment_shortcut_handoff ();
   native_point_property_scroll ();
   native_sidebar_scroll_basis ();

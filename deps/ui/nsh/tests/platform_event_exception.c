@@ -169,3 +169,73 @@ CAMLprim value caml_logseq_test_focus_within(value node, value within) {
   caml_leave_blocking_section();
   CAMLreturn(Val_int(accepted));
 }
+
+/* Capture the real bridge callbacks, not a replacement Host implementation.
+   The bounded fixture creates only three incremental batches and two requests. */
+static char *ordered_messages[32];
+static size_t ordered_message_count;
+static int ordered_message_error;
+static int ordered_capture_active;
+static lui_patch_callback ordered_saved_patch;
+static logseq_platform_request_callback ordered_saved_request;
+
+static void record_ordered_message(char kind, const char *data, size_t length) {
+  if (ordered_message_count == 32) {
+    ordered_message_error = 1;
+    return;
+  }
+  char *copy = malloc(length + 2);
+  if (copy == NULL) {
+    ordered_message_error = 1;
+    return;
+  }
+  copy[0] = kind;
+  memcpy(copy + 1, data, length);
+  copy[length + 1] = '\0';
+  ordered_messages[ordered_message_count++] = copy;
+}
+static void ordered_patch(const char *json) {
+  record_ordered_message('P', json, strlen(json));
+}
+static void ordered_request(const char *data, int32_t length) {
+  if (length < 0) ordered_message_error = 1;
+  else record_ordered_message('R', data, (size_t)length);
+}
+CAMLprim value caml_logseq_test_ordered_callbacks_start(value unit) {
+  CAMLparam1(unit);
+  if (ordered_capture_active) caml_failwith("Bridge order capture already active");
+  ordered_saved_patch = patch_callback;
+  ordered_saved_request = platform_request_callback;
+  ordered_message_count = 0;
+  ordered_message_error = 0;
+  ordered_capture_active = 1;
+  patch_callback = ordered_patch;
+  platform_request_callback = ordered_request;
+  CAMLreturn(Val_unit);
+}
+CAMLprim value caml_logseq_test_ordered_callbacks_without_patch(value unit) {
+  CAMLparam1(unit);
+  if (!ordered_capture_active) caml_failwith("Bridge order capture is not active");
+  patch_callback = NULL;
+  CAMLreturn(Val_unit);
+}
+CAMLprim value caml_logseq_test_ordered_callbacks_finish(value unit) {
+  CAMLparam1(unit);
+  CAMLlocal3(result, cell, message);
+  if (!ordered_capture_active) caml_failwith("Bridge order capture is not active");
+  patch_callback = ordered_saved_patch;
+  platform_request_callback = ordered_saved_request;
+  ordered_capture_active = 0;
+  result = Val_emptylist;
+  while (ordered_message_count > 0) {
+    char *bytes = ordered_messages[--ordered_message_count];
+    message = caml_copy_string(bytes);
+    free(bytes);
+    cell = caml_alloc_small(2, 0);
+    Field(cell, 0) = message;
+    Field(cell, 1) = result;
+    result = cell;
+  }
+  if (ordered_message_error) caml_failwith("Bridge order capture exceeded its bounded storage");
+  CAMLreturn(result);
+}
