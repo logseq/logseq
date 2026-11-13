@@ -1168,6 +1168,60 @@ let right_sidebar_block_clipping ~registry ~profile =
         S.flush session;check_contents (List.length next))
         [List.filteri (fun index _ -> index<18) blocks;blocks]))
 
+let shared_block_clipping ~registry ~profile =
+  let previous_model = !Runtime.read_model and previous_flush = !Runtime.app_flush in
+  Fun.protect ~finally:(fun () ->
+    Runtime.read_model:=previous_model;Runtime.app_flush:=previous_flush) (fun () ->
+    let blocks=List.init 2 (fun index ->
+      Model.empty_block ~uuid:(Printf.sprintf "family-clipping-%d" index)
+        ~title:(Printf.sprintf "Family clipping row %d" index) ~is_page:false) in
+    let page=Option.get (Decode.page_of_summary (Wire.Map
+      [Wire.kw "block/uuid",Wire.Uuid "family-clipping-page";
+       Wire.kw "block/title",Wire.String "Clipping page"])) in
+    let page={page with Model.page_blocks=blocks} in
+    let model={Model.initial with repo=None;page_blocks=blocks;route_page=Some page} in
+    List.iter (fun producer ->
+      Runtime.read_model:=(fun () -> model);
+      let session=S.mount ~registry ~profile ~initial:model
+        ~reducer:(fun model blocks -> {model with Model.page_blocks=blocks;
+          route_page=Option.map (fun page -> {page with Model.page_blocks=blocks}) model.Model.route_page})
+        ~view:(fun context ms _ -> match producer with
+          | "static" -> Page.blocks_inner ~scope:"family-clipping" blocks
+          | "keyed" -> Page.blocks_area ~scope:"family-clipping" ~library:false ms
+          | "preview" ->
+              let state=Popups_state.make context.Lui_ui.ui_scheduler in
+              Popups_view.pv_popover state
+                {Popups_state.pv_x=0.;pv_y=0.;pv_title="Clipping preview";
+                 pv_page=None;pv_blocks=blocks}
+          | _ -> assert false) () in
+      Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose session.S.app)) (fun () ->
+        Runtime.read_model:=(fun () -> Lui_app.model session.S.app);
+        Runtime.app_flush:=(fun () -> S.flush session);
+        let find ()=List.find (fun node -> class_has node "ls-page-blocks") (nodes session) in
+        let owner=(find ()).M.id in
+        let rec rows node count =
+          let count=match M.string_prop node "accessibility-identifier" with
+            | Some id when String.starts_with ~prefix:"ls-block-family-clipping-" id -> count+1
+            | _ -> count in
+          List.fold_left (fun count child -> rows child count) count (M.children session.S.tree node.M.id) in
+        let verify expected =
+          let clipped=find () in
+          check (producer ^ " block producer projects authored clipping through the typed owner")
+            (M.string_prop clipped "overflow"=Some "hidden" && clipped.M.id=owner
+             && Hashtbl.find_opt clipped.M.props "min-height"=Some (P.IntValue 60)
+             && not (Hashtbl.mem clipped.M.props "height"));
+          check (producer ^ " keeps real block rows inside the existing clipped document")
+            (rows clipped 0=expected);
+          check (producer ^ " no longer depends on an overflow style carrier")
+            (M.string_prop clipped "data-attrs"=None)
+        in
+        verify 2;
+        if producer="keyed" then
+          List.iter (fun next ->
+            ignore (Lui_app.send session.S.app next);S.flush session;verify (List.length next))
+            [List.filteri (fun index _ -> index=0) blocks;blocks]))
+      ["static";"keyed";"preview"])
+
 let table_column_ownership ~registry ~profile =
   let module V = Views_state in
   let previous_model = !Runtime.read_model and previous_flush = !Runtime.app_flush
@@ -1494,6 +1548,7 @@ let run_views ~registry ~profile ~finish =
   table_title_completion ~registry ~profile;
   sidebar_favorite_rows ~registry ~profile;
   right_sidebar_block_clipping ~registry ~profile;
+  shared_block_clipping ~registry ~profile;
   native_view_type_menu ~registry;
   gallery_remote_cover_policy ~registry;
   find_in_page_submit ~registry;
