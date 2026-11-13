@@ -182,23 +182,29 @@ final class PlatformServices {
             for child in v.subviews { if let found = find(child) { return found } }
             return nil
         }
-        for candidate in NSApp.windows where owns(candidate) && !(candidate is NSSavePanel) {
+        for candidate in NSApp.windows where ownsInputWindow(candidate) {
             if let root = candidate.contentView, let found = find(root) { return found }
         }
         return nil
     }
-    private func owns(_ candidate: NSWindow) -> Bool {
-        var current: NSWindow? = candidate
-        while let owned = current {
-            if owned === window { return true }
-            current = owned.sheetParent
+    func ownsInputWindow(_ candidate: NSWindow) -> Bool {
+        var pending = [candidate]
+        var visited: Set<ObjectIdentifier> = []
+        var owned = false
+        while let current = pending.popLast() {
+            guard visited.insert(ObjectIdentifier(current)).inserted else { continue }
+            // AppKit file panels and their children handle their own input.
+            if current is NSSavePanel { return false }
+            if current === window { owned = true }
+            if let parent = current.parent { pending.append(parent) }
+            if let parent = current.sheetParent { pending.append(parent) }
         }
-        return false
+        return owned
     }
     private func textControl(_ id: Int) -> NSView? {
         if let target = view(id), target is NSTextView || target is NSTextField { return target }
         guard backend?.focusedNodeID == id, let candidate = NSApp.keyWindow,
-              owns(candidate), !(candidate is NSSavePanel) else { return nil }
+              ownsInputWindow(candidate) else { return nil }
         let responder = candidate.firstResponder as? NSView
         return responder is NSTextView || responder is NSTextField ? responder : nil
     }
@@ -471,7 +477,11 @@ final class PlatformServices {
     }
 
     private func fileRequest(_ op: String, _ request: [String: Any]) throws {
-        guard let window else { throw HostError("File dialog has no window") }
+        guard var presentationWindow = window else { throw HostError("File dialog has no window") }
+        // Present above retained dialogs instead of queueing behind them.
+        while let sheet = presentationWindow.attachedSheet, ownsInputWindow(sheet) {
+            presentationWindow = sheet
+        }
         if op == "open-file-picker" {
             let id: Int = try required(request, "request"), multiple: Bool = try required(request, "multiple"), directory: Bool = try required(request, "directory")
             let panel = NSOpenPanel()
@@ -485,7 +495,7 @@ final class PlatformServices {
                 if !types.isEmpty { panel.allowedContentTypes = types }
             }
             panels.append(panel)
-            panel.beginSheetModal(for: window) { [weak self] response in
+            panel.beginSheetModal(for: presentationWindow) { [weak self] response in
                 guard let self, !self.closed else { return }
                 self.panels.removeAll { $0 === panel }
                 self.perform {
@@ -505,7 +515,7 @@ final class PlatformServices {
             } else { let text: String = try required(request, "text"); data = Data(text.utf8) }
             let panel = NSSavePanel(); panel.nameFieldStringValue = URL(fileURLWithPath: name).lastPathComponent; panel.canCreateDirectories = true
             panels.append(panel)
-            panel.beginSheetModal(for: window) { [weak self] response in
+            panel.beginSheetModal(for: presentationWindow) { [weak self] response in
                 guard let self, !self.closed else { return }
                 self.panels.removeAll { $0 === panel }
                 self.perform { if response == .OK, let url = panel.url { try data.write(to: url, options: .atomic) } }

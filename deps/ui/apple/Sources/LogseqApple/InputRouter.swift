@@ -200,14 +200,19 @@ final class InputRouter {
     }
 
     func command(_ name: String) throws {
+        guard let commandWindow = NSApp.keyWindow ?? services.window,
+              services.ownsInputWindow(commandWindow) else {
+            NSApp.sendAction(NSSelectorFromString(name + ":"), to: nil, from: nil)
+            return
+        }
         var payload: [String: Any] = ["nativeCommand": name]
-        payload["nodeId"] = keyboardTarget()
+        payload["nodeId"] = keyboardTarget(in: commandWindow)
         if name == "undo" || name == "redo" || name == "selectAll" {
             let key = name == "selectAll" ? "a" : "z"
             payload["key"] = key; payload["code"] = name == "selectAll" ? "KeyA" : "KeyZ"
             payload["metaKey"] = true; payload["shiftKey"] = name == "redo"
             if try send("keydown", payload) { return }
-            if let editor = services.window?.firstResponder as? NativeEditorInput {
+            if let editor = commandWindow.firstResponder as? NativeEditorInput {
                 editor.send("key", ["key": .string(key), "meta": .bool(true), "shift": .bool(name == "redo")])
                 editor.synchronize()
                 return

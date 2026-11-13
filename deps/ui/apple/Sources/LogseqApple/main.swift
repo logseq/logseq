@@ -181,16 +181,10 @@ final class LogseqHost: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private func acceptsInput(_ event: NSEvent) -> Bool {
         guard let eventWindow = event.window, let window else { return false }
         if eventWindow === window { return true }
-        // Retained dialogs live in native sheets. File panels keep AppKit's
-        // responder handling; pointer coordinates still belong to the host.
-        guard event.type == .keyDown || event.type == .keyUp,
-              !(eventWindow is NSSavePanel) else { return false }
-        var sheetParent = eventWindow.sheetParent
-        while let parent = sheetParent {
-            if parent === window { return true }
-            sheetParent = parent.sheetParent
-        }
-        return false
+        // Retained sheets and popovers receive keyboard events. File panels
+        // keep AppKit responders; pointer coordinates belong to the host.
+        guard event.type == .keyDown || event.type == .keyUp else { return false }
+        return services.ownsInputWindow(eventWindow)
     }
 
     func installMonitor() {
