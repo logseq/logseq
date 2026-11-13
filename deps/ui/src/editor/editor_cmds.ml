@@ -106,6 +106,48 @@ let set_closed_value (h : host) uuid prop content =
     Js.Promise.resolve ())
 ;;
 
+(* Master toggles a selected batch as a unit: any own number list removes
+   numbering from every target; otherwise every target becomes numbered. *)
+let toggle_numbered_lists uuids =
+  let seen = Hashtbl.create 16 in
+  let uuids = List.filter (fun uuid ->
+    if Hashtbl.mem seen uuid then false
+    else (Hashtbl.add seen uuid (); true)) uuids in
+  let context = Runtime.model () in
+  match context.Model.repo, uuids with
+  | None, _ | _, [] -> ()
+  | Some repo, _ when not (Ui_services.env_publishing ()) ->
+      let worker = !Runtime.worker and editor_owner = !Editor_state.st in
+      let owner = Outliner_ops.refresh_owner_for None in
+      let current () = !Runtime.worker == worker && !Editor_state.st == editor_owner
+        && Outliner_ops.refresh_current ?owner context
+        && not (Ui_services.env_publishing ()) in
+      ignore
+        (let* response = Runtime.invoke2 "thread-api/get-blocks" (W.String repo)
+           (W.Array (List.map (fun uuid -> W.Map
+             [W.String "id", W.Uuid uuid;
+              W.String "opts", W.Map [W.Keyword "children?", W.Bool false]]) uuids)) in
+         if not (current ()) then Js.Promise.resolve () else
+         let blocks = Hashtbl.create (List.length uuids) in
+         List.iter (fun pair ->
+           let block = match W.get pair "block" with
+             | Some block -> block
+             | None -> (match W.elems pair with [_; block] -> block | _ -> W.Nil) in
+           match W.map_get_uuid block "block/uuid" with
+           | Some uuid when Hashtbl.mem seen uuid -> Hashtbl.replace blocks uuid block
+           | _ -> ()) (W.elems response);
+         let targets = List.filter (Hashtbl.mem blocks) uuids in
+         if targets = [] then Js.Promise.resolve () else
+         let numbered = List.exists (fun uuid ->
+           Decode.order_list_type_of_wire (Hashtbl.find blocks uuid) = Some "number") targets in
+         let operation = if numbered then batch_remove targets "logseq.property/order-list-type"
+           else batch_set targets "logseq.property/order-list-type" (W.String "number") in
+         let* result = Outliner_ops.apply_result_for ~current context
+           ~opts:(Outliner_ops.op_opts "toggle-numbered-list") [operation] in
+         if current () then Outliner_ops.refresh_via_delta ?owner result
+         else Js.Promise.resolve ())
+  | Some _, _ -> ()
+
 let current_block fallback =
   match fallback with
   | Some u -> Some u
@@ -237,22 +279,9 @@ let run ~command ~block ~value : outcome =
                      [ batch_remove [ uuid ] "logseq.property/heading" ]);
               Handled)
           | "toggle-numbered-list" ->
-              ignore
-                (let* w = Sdk_util.get_by_id (W.String uuid) in
-                let cur =
-                  match Decode.order_list_type_of_wire w with
-                  | Some s -> s
-                  | None -> ""
-                in
-                (if cur = "number" then
-                   apply_soft
-                     [ batch_remove [ uuid ]
-                         "logseq.property/order-list-type" ]
-                 else
-                   apply_soft
-                     [ batch_set [ uuid ] "logseq.property/order-list-type"
-                         (W.String "number") ]);
-                Js.Promise.resolve ());
+              let targets = if Editor_state.String_set.mem uuid (Editor_state.selected ())
+                then Editor_actions.selected_uuids () else [uuid] in
+              toggle_numbered_lists targets;
               Handled
           | "make-flashcard" ->
               ignore

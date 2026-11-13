@@ -469,3 +469,22 @@ keyboard layouts, hardware IME, Windows/Linux input, every configured key, or
 all modal/global prefix collisions. The installed user application was not
 restarted or replaced. `spec-dev-tool --help` could not run because the tool
 is not installed on this host.
+
+## Number-list whole-selection source correction
+
+The earlier batch/history finding is addressed by the candidate shared owner
+`Editor_cmds.toggle_numbered_lists`. Both actual Cmdk_host implementations now
+call it once, and the context-menu dispatcher captures the ordered selection
+when its clicked UUID belongs to that selection. Fresh responses are mapped by
+UUID and projected in captured order; any exact `number` clears the entire
+batch, otherwise one property batch sets every target to number. Palette
+closing cannot change the captured targets, and an editing fallback remains
+available. The existing caret-owning slash command stays separate.
+
+The portable production-entry fixture is compiled by both the maintained Web
+suite and actual native-archive admission runner. New cases cover mixed state,
+repeated fresh reads, reversed worker response order, selection replacement,
+selected/outside context targets, a dirty editor and graph retirement. They
+assert one batch operation and existing before/after history metadata. No
+physical keyboard/pointer Undo/Redo or native UI pass is implied by this source
+change; those acceptance gates remain outstanding until execution evidence.

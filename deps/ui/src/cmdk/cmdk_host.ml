@@ -349,8 +349,7 @@ let services ?(host = Lui_protocol.WebHost) : unit -> Svs.t =
   ; undo = Editor_actions.undo
   ; redo = Editor_actions.redo
   ; quick_add = Editor_actions.quick_add
-  ; toggle_own_list =
-      (fun us -> List.iter (fun u -> Editor_commands.toggle_own_list u 0) us)
+  ; toggle_own_list = Editor_cmds.toggle_numbered_lists
   ; ensure_comments =
       (fun ~repo ~uuids ->
         if Runtime.repo () = repo then Comments_ops.ensure_for ~on_ready:(fun _ -> ()) uuids)

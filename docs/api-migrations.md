@@ -3657,3 +3657,38 @@ The command palette/global `editor/cycle-todo` and selection context-menu `cycle
 Status is re-read from the captured graph for every invocation, so repeated toggles in a retained dirty editor advance from current persisted status. All captured statuses commit through one `cycle-todos` transaction, matching master's multi-selection undo grouping. Graph/worker replacement during status reads prevents a late mutation. Existing dirty buffers, editor identity, IDs and command strings remain; no new host API or dispatcher is introduced. The low-level Editor_cmds capability outcomes remain explicit and unchanged.
 
 For downstream callers with an already captured UUID list, use `Editor_commands.cycle_todos uuids`; `cycle_todo uuid` remains the single-target wrapper. Do not iterate individual cycle calls for one selection, because that splits history transactions. This change does not qualify other multi-selection context commands or native plugin capability; see `docs/agent-guide/review-probes/2026-11-13/editor-command-parity.md`.
+
+## Number-list selection commands use one whole-selection transaction
+
+The Web and native command-palette/shortcut service and the selection context
+menu now share `Editor_cmds.toggle_numbered_lists`. Targets are captured in
+visible document order before the palette closes, deduplicated, and read fresh
+from the worker. If any target owns the exact `number` list type, numbering is
+removed from the entire batch; otherwise the entire batch becomes numbered.
+A mixed `[number, absent, absent]` selection therefore becomes three unnumbered
+blocks, rather than independently toggling to `[absent, number, number]`.
+
+The property change is one `batch-set-property` or `batch-remove-property` in
+one `toggle-numbered-list` transaction with the existing before/after history
+metadata. Clicking a selected block acts on the ordered selection; clicking a
+block outside it acts only on that clicked block. With no selection, the
+palette uses the current editing block. A subsequent command re-reads the
+persisted property, rather than relying on a stale render model.
+
+This follows frozen master `handler/events.cljs:318–332` and
+`handler/editor.cljs:96–106`. Those property commands do not invoke the editor
+exit/save-current-block handoff used by Add comment. The existing transaction
+API still flushes accepted pending saves; it does not force a dirty live editor
+to exit. The separate caret-owning editing/slash `number-list` API is unchanged.
+Worker, editor-state owner, graph, route/publication revision and publishing
+checks fence the read and transaction's existing asynchronous save boundary.
+Existing owned refresh logic handles the resulting delta/page reload.
+
+No wire/schema or constructor changes are required. Callers that passed a list
+through `Cmdk_services.toggle_own_list` retain that API and now receive batch
+semantics. Use one list for one user action; do not call it repeatedly per UUID.
+The shared/native-archive fixture drives the actual target-specific palette and
+context-menu routes against stateful worker replies, including reversed replies,
+selection replacement, mixed/repeated state, outside clicks, dirty editor
+retention, one history batch and graph retirement. Native physical-key/pointer
+Undo/Redo remains a separate acceptance gate; source preparation is not a pass.

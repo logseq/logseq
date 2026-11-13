@@ -1719,8 +1719,11 @@ and run_command st repo (cid : string) =
       close st;
       st.svs.Svs.sidebar_open_cards ()
   | "editor/toggle-number-list" ->
+      let targets = match st.svs.Svs.selected_uuids () with
+        | [] -> Option.to_list (st.svs.Svs.editing_uuid ())
+        | targets -> targets in
       close st;
-      st.svs.Svs.toggle_own_list (st.svs.Svs.selected_uuids ())
+      st.svs.Svs.toggle_own_list targets
   | "ui/toggle-brackets" ->
       close st;
       st.svs.Svs.config_toggle "ui/show-brackets?" true
