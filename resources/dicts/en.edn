@@ -1248,6 +1248,7 @@
  :page.validation/parents-must-be-pages "Cannot create this page unless all parents are pages."
 
  :pdf/annotations-page "Annotations page"
+ :pdf/area-highlight-mode "Area highlight mode"
  :pdf/area-highlight-shortcut "Area highlight ({1})"
  :pdf/auto-fit "Auto fit"
  :pdf/auto-open-context-menu "Auto open context menu for selections"
@@ -1259,6 +1260,7 @@
  :pdf/find-results "{1} of {2} matches (\"{3}\")"
  :pdf/generic-error "Error: {1}\n{2}\nPlease confirm with pdf file resource."
  :pdf/highlight-mode "Highlight mode"
+ :pdf/highlight-selection "Highlight selected text"
  :pdf/highlights "Highlights"
  :pdf/hl-block-colored "Colored label for highlight block"
  :pdf/linked-ref "Linked references"

@@ -17,6 +17,10 @@
 
 open Lui_elements
 
+let apple_host context =
+  Lui_ui.platform context = Lui_protocol.MacOS
+  && Lui_ui.host context = Lui_protocol.SwiftUIHost
+
 (* the web twin mounts #skip-to-main (a11y skip link, CSS-hidden until
    :focus) — dropped here: the native host has no tab-focus reveal
    and the button
@@ -42,7 +46,7 @@ let icon_btn ~key ?(acc = "") ~icon_name ~label ?keys ?disabled_signal
     ~on_press:(fun _ -> on_press ())
     [ Icons.icon ~size:20. icon_name ])
 
-(* The shared leading toolbar mounts the sidebar toggle in its active owner. *)
+(* Non-SwiftUI hosts mount the sidebar toggle in the leading toolbar. *)
 let left_menu_btn ?(key = "left-menu-btn") () =
   icon_btn ~key ~acc:"left-menu" ~icon_name:"layout-sidebar"
     ~label:(I18n.t "header/toggle-left-sidebar")
@@ -173,17 +177,31 @@ let leading_toolbar ~key ~state ~controls : t =
  fun context parent ->
   let inset = Host.titlebar_left_signal
     ~scheduler:context.Lui_ui.ui_scheduler ~scope:context.Lui_ui.ui_scope in
-  (* Host left inset already clears traffic lights + gap; no extra pad. *)
-  Ui_components.leading_toolbar ~key ~in_sidebar:false ~safe_area:0
-    ~safe_area_signal:inset ~padding_horizontal:0 ~state
-    ~is_open:(fun _ -> false) ~controls context parent
+  if apple_host context then
+    (* Only a collapsed sidebar puts detail controls beside the traffic
+       lights and the native 32-point sidebar toggle, with an 8-point gap. *)
+    Ui_parts.int_prop Lui_protocol.MarginLeft
+      ~value:(reactive (fun (m : Model.t) left ->
+        if m.left_sidebar_open then 0 else left + 40) state inset)
+      (row ~key ~height:48 ~min_height:48 ~cross:`center
+        (controls ())) context parent
+  else
+    Ui_components.leading_toolbar ~key ~in_sidebar:false ~safe_area:0
+      ~safe_area_signal:inset ~padding_horizontal:0 ~state
+      ~is_open:(fun _ -> false) ~controls context parent
 
-(* Left cluster: sidebar toggle and search. Right cluster:
-   rtc, home, history, dots and right-toggle. *)
+(* NavigationSplitView supplies the macOS SwiftUI sidebar toggle.
+   Other hosts keep it beside search in the leading toolbar. *)
 let leading_controls () =
   [ left_menu_btn (); search_btn () ]
 
 let topbar (ms : Model.t Signal.signal) : t =
+ fun context parent ->
+  let controls () =
+    if apple_host context then
+      [ search_btn () ]
+    else leading_controls ()
+  in
   row ~key:"head" ~accessibility_identifier:"head"
       ~style_class:"cp__header" ~cross:`center ~main:`space_between
       ~height:48 ~min_height:48
@@ -191,7 +209,7 @@ let topbar (ms : Model.t Signal.signal) : t =
          spans content too and must not carry that strip. *)
       ~data_attrs:[ ("data-window-titlebar", "true") ]
       [ leading_toolbar ~key:"head-leading" ~state:ms
-          ~controls:leading_controls
+          ~controls
       ; Ui_components.with_props [Ui_components.Prop.overflow `hidden;Ui_components.Prop.padding_right 6]
           (row ~key:"head-acts" ~cross:`center ~grow:1. ~min_width:0 ~main:`end_
             ~style_class:"cp__header-r"
@@ -199,7 +217,7 @@ let topbar (ms : Model.t Signal.signal) : t =
             ; home_item ms
             ; back_and_forward ()
             ; dots_btn
-            ; right_toggle_btn ms ]) ]
+            ; right_toggle_btn ms ]) ] context parent
 
 let performance_bar_height = 29
 
@@ -270,7 +288,8 @@ let hidden_chrome (ms : Model.t Signal.signal) : t =
    carries .open/.closed; only renders contents while open. The pane
    stays mounted — the docked split's track owns its width (0 while
    closed). *)
-let right_sidebar (ms : Model.t Signal.signal) =
+let right_sidebar (ms : Model.t Signal.signal) : t =
+ fun context parent ->
   let viewport=Signal.value (Sidebar_state.ensure ms).Sidebar_state.viewport_w in
   Ui_parts.class_signal ms
     (fun (m : Model.t) -> "cp__right-sidebar " ^ if m.right_sidebar_open then "open" else "closed")
@@ -278,16 +297,18 @@ let right_sidebar (ms : Model.t Signal.signal) =
        ~value:(reactive (fun (m : Model.t) width -> if m.right_sidebar_open && width>=640. then 320 else 0) ms viewport)
      (Ui_parts.int_prop Lui_protocol.MaxWidth
        ~value:(reactive (fun width -> if width>=640. then int_of_float (width*.Sidebar_state.right_fraction_max) else 0) viewport)
-       (box ~key:"right-sidebar" ~accessibility_identifier:"right-sidebar" ~container_relative_frame:`both
+       (box ~key:"right-sidebar" ~accessibility_identifier:"right-sidebar"
+          ?container_relative_frame:(if apple_host context then None else Some `both)
           ~inert:(reactive (fun (m : Model.t) width -> not m.right_sidebar_open || width<640.) ms viewport)
           ~min_height:0 ~style_class:"cp__right-sidebar closed"
           [Ui_components.with_props [Ui_components.Prop.overflow `hidden]
              (row ~key:"rs-dock" ~min_height:0 ~grow:1. ~cross:`stretch
-                ~background:"muted" [Right_sidebar_view.render ms])])) )
+                ~background:"muted" [Right_sidebar_view.render ms])])) ) context parent
 
 (* A stable sidebar surface uses the same dock breakpoint and inner width
    as Web. Its own split reveals the small-window panel without squeezing text. *)
-let left_sidebar (ms : Model.t Signal.signal) =
+let left_sidebar (ms : Model.t Signal.signal) : t =
+ fun context parent ->
   let st=Sidebar_state.ensure ms in
   let viewport=Signal.value st.Sidebar_state.viewport_w in
   (* No titlebar row here — the window-level topbar owns nav controls so
@@ -317,19 +338,52 @@ let left_sidebar (ms : Model.t Signal.signal) =
            if Sidebar_state.left_docked m.left_sidebar_open width then Sidebar_state.left_width_min else 0) ms viewport)
        (Ui_parts.int_prop Lui_protocol.MaxWidth
          ~value:(reactive (fun width -> if width<640. then int_of_float width else Sidebar_state.left_width_max) viewport)
-        (Ui_components.with_props [Ui_components.Prop.width_viewport 1.;Ui_components.Prop.inset_top 0.;Ui_components.Prop.inset_left 0.]
-         (box ~key:"left-sidebar" ~accessibility_identifier:"left-sidebar" ~container_relative_frame:`vertical
+        (Ui_components.with_props
+           ((if apple_host context then [] else [Ui_components.Prop.width_viewport 1.])
+            @ [Ui_components.Prop.inset_top 0.;Ui_components.Prop.inset_left 0.])
+         (box ~key:"left-sidebar" ~accessibility_identifier:"left-sidebar"
+            ?container_relative_frame:(if apple_host context then None else Some `vertical)
             ~inert:(reactive (fun (m : Model.t) -> not m.left_sidebar_open) ms)
             ~min_height:0 ~style_class:"cp__sidebar-left-layout"
-            [split ~key:"sidebar-reveal" ~container_relative_frame:`both ~resize_handle_width:0 ~gap:0
+            [split ~key:"sidebar-reveal"
+               ?container_relative_frame:(if apple_host context then None else Some `both)
+               ~resize_handle_width:0 ~gap:0
                ~first_width:(reactive (fun (m : Model.t) width window ->
                  if window<640. then (if m.left_sidebar_open then window*.0.74 else 0.) else width)
                  ms (Signal.value st.Sidebar_state.left_width) viewport)
-               ~resize_duration:300 ~resize_easing:`standard panel shade]))))))
+               ~resize_duration:300 ~resize_easing:`standard panel shade])))))) context parent
 
 (* The host advances transitions; shared state owns the pane widths. *)
 let left_split (ms : Model.t Signal.signal) (st : Sidebar_state.t)
     (content : t) : t =
+ fun context parent ->
+  if apple_host context then
+    (* The Apple backend maps an ordinary fractional Split to
+       NavigationSplitView. Custom handle props select its manual renderer. *)
+    let available (m : Model.t) right viewport =
+      if m.right_sidebar_open then Float.max 1. (viewport *. (1. -. right))
+      else Float.max 1. viewport in
+    split ~key:"left-split" ~grow:1. ~gap:0
+      ~value:(reactive
+        (fun (m : Model.t) width right viewport ->
+          if m.left_sidebar_open then width /. available m right viewport else 0.0001)
+        ms (Signal.value st.Sidebar_state.left_width)
+        (Signal.value st.Sidebar_state.right_fraction)
+        (Signal.value st.Sidebar_state.viewport_w))
+      ~on_resize:(function
+        | Lui_protocol.ValueChanged (node, fraction) ->
+            let m = Runtime.model () in
+            let open_ = fraction > 0.001 in
+            if open_ <> m.Model.left_sidebar_open then
+              Runtime.send Action.Toggle_left_sidebar;
+            if open_ then
+              let viewport = Runtime.signal_get st.Sidebar_state.viewport_w in
+              let right = Runtime.signal_get st.Sidebar_state.right_fraction in
+              Sidebar_state.on_left_split_resize st
+                (Lui_protocol.ValueChanged (node, fraction *. available m right viewport))
+        | _ -> ())
+      (left_sidebar ms) content context parent
+  else
   split ~key:"left-split" ~grow:1.
     ~gap:0 ~resize_handle_width:3 ~resize_handle_offset:0.5
     ~first_width:
@@ -339,7 +393,7 @@ let left_split (ms : Model.t Signal.signal) (st : Sidebar_state.t)
          ms (Signal.value st.Sidebar_state.left_width) (Signal.value st.Sidebar_state.viewport_w))
     ~resize_duration:300 ~resize_easing:`standard
     ~on_resize:(Sidebar_state.on_left_split_resize st)
-    (left_sidebar ms) content
+    (left_sidebar ms) content context parent
 
 let right_split (ms : Model.t Signal.signal) (st : Sidebar_state.t)
     (first : t) (second : t) : t =
@@ -385,21 +439,22 @@ let main_scroll (ms : Model.t Signal.signal) : t =
                       | Model.Journals | Model.Home -> spacer ~key:"content-end" []
                       | _ -> spacer ~key:"content-end" ~height:120 []) ms ] ] ] ]
 
-(* NavigationSplitView detail column — the left dock split's second
-   pane is page scroll only. The window-level topbar sits above the
-   split so header controls do not travel with the dock animation. *)
+(* Native NavigationSplitView owns the sidebar's titlebar and safe area;
+   app controls belong in its detail column, not above both columns. *)
 let detail_column (ms : Model.t Signal.signal) : t =
+ fun context parent ->
   Ui_parts.class_signal ms
     (fun (m : Model.t) ->
       if m.left_sidebar_open then "is-left-sidebar-open" else "")
     (column ~key:"left-container"
        ~accessibility_identifier:"left-container" ~grow:1.
        ~min_height:0
+       ((if apple_host context then [topbar ms] else []) @
        [ (* invisible logseq-dom carrier: hosts forward
             document events through this extension node *)
          Logseq_el.carrier
        ; hidden_chrome ms
-       ; main_scroll ms ])
+       ; main_scroll ms ])) context parent
 
 (* Overlay layer — cmdk palette, popups (autocomplete/slash/context
    menus), dialogs and toasts mount here (single shared container;
@@ -501,18 +556,18 @@ let not_found_page : t =
   ) context parent
 
 let shell_contents (ms : Model.t Signal.signal) : t =
+ fun context parent ->
   let st = Sidebar_state.ensure ms in
   stack ~key:"shell-content"
-    [ (* Devin-style chrome: fixed window titlebar above the dock
-         splits. Sidebar/content panes animate width underneath; the
-         leading controls never remount or translate with the dock. *)
+    [ (* Other hosts retain a window-level header; macOS SwiftUI lets
+         NavigationSplitView own the sidebar's full window height. *)
       column ~key:"app" ~accessibility_identifier:"app-container" ~grow:1. ~min_height:0 ~gap:0
-        [ topbar ms
-        ; row ~key:"panes" ~grow:1. ~min_height:0 ~cross:`stretch
+        ((if apple_host context then [] else [topbar ms]) @
+        [ row ~key:"panes" ~grow:1. ~min_height:0 ~cross:`stretch
             [right_split ms st (left_split ms st (detail_column ms)) (right_sidebar ms);
              Pdf.container_el ~key:"asc" ~id:"app-single-container";
              Host_metrics.panel ()]
-        ; performance_bar () ]
+        ; performance_bar () ])
     ; overlays ms
     ; help_area ms
     ; reactive ~equal:(fun (a : Model.t) (b : Model.t) ->
@@ -523,7 +578,7 @@ let shell_contents (ms : Model.t Signal.signal) : t =
               match m.route with
               | Model.Not_found _ -> not_found_page
               | _ -> spacer ~key:"nf-none" []) ms
-    ]
+    ] context parent
 
 (* Reconcile the mounted interface after dictionary loading while retaining
    the reducer, graph worker, editor sessions and dock state. *)

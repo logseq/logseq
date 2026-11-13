@@ -427,6 +427,7 @@ let initialize_unlocked platform_code host_code (payload : string) =
   let registry = Lui_extension.registry () in
   Logseq_el.register_all registry;
   Logseq_codemirror.register registry;
+  Logseq_katex.register registry;
   Logseq_editor.register registry;
   let app =
     Lui_app.create_with_extensions backend registry Model.initial
@@ -489,7 +490,7 @@ let initialize_unlocked platform_code host_code (payload : string) =
   Host.set_host_op (fun name payload ->
       platform_request (name ^ "\n" ^ payload));
   Resource_native.reset ();
-  if host_kind = Lui_protocol.GenericHost then
+  if host_kind = Lui_protocol.GenericHost || host_kind = Lui_protocol.SwiftUIHost then
     platform_request
       ("app-icons\n"
        ^ Js.Json.stringify

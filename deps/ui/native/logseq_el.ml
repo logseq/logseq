@@ -31,6 +31,7 @@ let native_profile =
    them *)
 let native_profiles =
   [ native_profile
+  ; { Lui_protocol.profile_os = MacOS; Lui_protocol.profile_host = SwiftUIHost }
   ; { Lui_protocol.profile_os = LinuxOS; Lui_protocol.profile_host = GenericHost }
   ; { Lui_protocol.profile_os = WindowsOS
     ; Lui_protocol.profile_host = GenericHost
@@ -83,7 +84,7 @@ let rec in_text_flow context node =
 (* dedicated widget extensions (logseq-codemirror) nest inside
    logseq-<tag> parents the same way tags nest in each other *)
 let child_identifiers =
-  List.map identifier tags @ [ Logseq_codemirror.identifier ]
+  List.map identifier tags @ [ Logseq_codemirror.identifier; "logseq-katex" ]
 
 let schema_of tag =
   Lui_extension.component (identifier tag)

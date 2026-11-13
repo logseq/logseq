@@ -70,6 +70,7 @@ let native_profile =
 
 let native_profiles =
   [ native_profile
+  ; { Lui_protocol.profile_os = MacOS; Lui_protocol.profile_host = SwiftUIHost }
   ; { Lui_protocol.profile_os = LinuxOS; Lui_protocol.profile_host = GenericHost }
   ; { Lui_protocol.profile_os = WindowsOS
     ; Lui_protocol.profile_host = GenericHost

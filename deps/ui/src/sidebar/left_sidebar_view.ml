@@ -16,6 +16,10 @@ module P = Lui_protocol
 
 let t = Sidebar_state.t
 
+let sidebar_gutter context =
+  if Lui_ui.platform context = P.MacOS && Lui_ui.host context = P.SwiftUIHost
+  then 0 else 12
+
 (* Container activation must opt into Press as well as pointer details;
    otherwise a passive text or icon leaf can own the native click. *)
 let arm_press ~on_press_detail (elem : Lui_elements.t) : Lui_elements.t =
@@ -356,10 +360,23 @@ let shortcut_hint hov binding =
    inner `a.item` also gets `active` when the route matches *)
 let nav_link ~sched ~key ~class_ ~active ~title ~icon_name ?shortcut ?on_shift_click ~on_click
     ?(more = Logseq_el.nothing) () =
+ fun context parent ->
   let act = if active then " active" else "" in
   let hov = Signal.state sched false in
   let tail =
     match shortcut with Some s -> [ shortcut_hint hov s ] | None -> []
+  in
+  let icon =
+    Ui_components.with_props
+      [ Ui_components.Prop.margin_left 4; Ui_components.Prop.margin_right 8 ]
+      (icon_ icon_name)
+  in
+  let leading =
+    if Lui_ui.platform context = P.MacOS && Lui_ui.host context = P.SwiftUIHost then
+      [ row ~key:"nav-label" ~grow:1. ~min_width:0 ~cross:`center
+          [ icon; text ~white_space:"nowrap" ~text_overflow:"ellipsis" ~value:title [] ] ]
+    else
+      [ icon; text ~grow:1. ~white_space:"nowrap" ~text_overflow:"ellipsis" ~value:title [] ]
   in
   box ~key ~style_class:(class_ ^ act)
     [ (match on_shift_click with
@@ -394,12 +411,7 @@ let nav_link ~sched ~key ~class_ ~active ~title ~icon_name ?shortcut ?on_shift_c
               ~data_attrs:
                 [ ( "style"
                   , "padding-left:6px;padding-right:2px" ) ]
-              ([ Ui_components.with_props
-                   [ Ui_components.Prop.margin_left 4
-                   ; Ui_components.Prop.margin_right 8 ]
-                   (icon_ icon_name)
-               ; text ~grow:1. ~white_space:"nowrap" ~text_overflow:"ellipsis" ~value:title [] ]
-              @ tail @ [ more ]))) ]
+              (leading @ tail @ [ more ]))) ] context parent
 
 let nav_route ~sched ~class_ ~active ~title ~icon_name ?shortcut hash =
   nav_link ~sched ~key:("nl-" ^ class_) ~class_ ~active ~title ~icon_name
@@ -468,7 +480,7 @@ let nav_group ms st =
   if not (Cards_state.Due_count.ready ()) then ()
   else Cards_state.update_due_count ();
   let nav_hov = Signal.state ctx.Lui_ui.ui_scheduler false in
-  box ~key:"nav-group" ~padding_horizontal:12
+  box ~key:"nav-group" ~padding_horizontal:(sidebar_gutter ctx)
     ~style_class:"sidebar-content-group is-expand"
     [ column ~key:"nav-inner" ~style_class:"sidebar-content-group-inner"
         [ Ui_components.with_props
@@ -857,6 +869,7 @@ let plugins_toolbar (ms : Model.t Signal.signal) : t =
 
 (* cljs repo/graphs-selector: icon + graph display name + selector chevron *)
 let graphs_selector st (ms : Model.t Signal.signal) : t =
+ fun context parent ->
   let name_of (m : Model.t) =
     match m.repo with
     | Some r ->
@@ -865,7 +878,7 @@ let graphs_selector st (ms : Model.t Signal.signal) : t =
         else r
     | None -> t "graph.switch/select-prompt"
   in
-  box ~key:"gsel" ~padding_horizontal:12
+  box ~key:"gsel" ~padding_horizontal:(sidebar_gutter context)
     [ row ~key:"gsel-box" ~cross:`center ~main:`space_between
         ~style_class:"cp__graphs-selector"
         (* data-tooltip="" suppresses the hover tooltip: the service
@@ -928,21 +941,22 @@ let graphs_selector st (ms : Model.t Signal.signal) : t =
                           (icon_ ~size:18 "selector") ])
         ; if_ ~test:(reactive (fun menu -> menu = "repos") (Signal.value st.Sidebar_state.open_menu))
             (repos_menu st ms)
-        ] ]
+        ] ] context parent
 ;;
 
 let contents (ms : Model.t Signal.signal) : t =
+ fun context parent ->
   let st = Sidebar_state.ensure ms in
   Ui_components.with_props
     [ Ui_components.Prop.position `relative
     ; Ui_components.Prop.padding_top 4
-    ; Ui_components.Prop.padding_left 12
-    ; Ui_components.Prop.padding_right 12 ]
+    ; Ui_components.Prop.padding_left (sidebar_gutter context)
+    ; Ui_components.Prop.padding_right (sidebar_gutter context) ]
     (scroll ~key:"ls-contents" ~grow:1. ~min_height:0 ~orientation:`vertical
        ~accessibility_identifier:"left-sidebar-scroll"
        ~style_class:"sidebar-contents-container"
        [ column ~key:"ls-groups" ~gap:4
-           [ favorites_group st; recents_group st ] ])
+           [ favorites_group st; recents_group st ] ]) context parent
 
 let menus (ms : Model.t Signal.signal) : t =
   let st = Sidebar_state.ensure ms in

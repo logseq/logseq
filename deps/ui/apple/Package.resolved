@@ -1,0 +1,23 @@
+{
+  "originHash" : "fed5e5864cc78b4294f7efc428e6aad882ada9572e66033245752aae4f9bb545",
+  "pins" : [
+    {
+      "identity" : "lui",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/logseq/lui.git",
+      "state" : {
+        "revision" : "9b598fc1e23e4b9f79ef470a19b5c87ea91cd7fa"
+      }
+    },
+    {
+      "identity" : "swiftdraw",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/swhitty/SwiftDraw.git",
+      "state" : {
+        "revision" : "dbb4ef98824053ead8c83fa866c2c6054fb41809",
+        "version" : "0.24.0"
+      }
+    }
+  ],
+  "version" : 3
+}

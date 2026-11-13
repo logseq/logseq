@@ -371,10 +371,10 @@ type font_cfg =
 
 let default_font_cfg = { ftype = "default"; fglobal = false }
 
-let editor_font_family = function
-  | "serif" -> "Lyon-Text, Georgia, ui-serif, serif"
-  | "mono" -> "iawriter-mono, Nitti, Menlo, Courier, monospace"
-  | _ -> "var(--lx-font-stack)"
+let editor_font_family ?(apple = false) = function
+  | "serif" -> if apple then "Georgia" else "Lyon-Text, Georgia, ui-serif, serif"
+  | "mono" -> if apple then "Menlo" else "iawriter-mono, Nitti, Menlo, Courier, monospace"
+  | _ -> if apple then "Inter" else "var(--lx-font-stack)"
 
 let current_editor_font () =
   match Ui_services.storage_get "editor-font" with

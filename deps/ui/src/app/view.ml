@@ -3,16 +3,16 @@
 
 open Lui_elements
 
-let font_family () =
+let font_family ~apple () =
   let font = Settings_state.current_editor_font () in
-  Settings_state.editor_font_family
+  Settings_state.editor_font_family ~apple
     (if font.fglobal then font.ftype else "default")
 
 let view _context model_source _send : t =
  fun ctx parent ->
   Settings_state.ensure ctx;
   (Ui_parts.string_prop Lui_protocol.FontFamily
-     ~value:(reactive (fun _ -> font_family ()) (Settings_state.signal ()))
+     ~value:(reactive (fun _ -> font_family ~apple:(Lui_ui.host ctx = Lui_protocol.SwiftUIHost) ()) (Settings_state.signal ()))
      (Ui_components.with_props
         [
           Ui_components.Prop.foreground

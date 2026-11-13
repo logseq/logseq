@@ -287,14 +287,18 @@ static int dispatch_pointer_detail(const char *name, int64_t node,
   caml_leave_blocking_section();
   const value *dispatch = caml_named_value(name);
   if (dispatch != NULL) {
-    value argv[6];
+    CAMLparam0();
+    CAMLlocalN(argv, 6);
+    CAMLlocal1(callback_result);
     argv[0] = Val_long(node);
     argv[1] = caml_copy_double(x);
     argv[2] = caml_copy_double(y);
     argv[3] = Val_long(modifiers);
     argv[4] = Val_long(button);
     argv[5] = caml_copy_string(target_class != NULL ? target_class : "");
-    result = emit_patch(name, caml_callbackN_exn(*dispatch, 6, argv));
+    callback_result = caml_callbackN_exn(*dispatch, 6, argv);
+    result = emit_patch(name, callback_result);
+    CAMLdrop;
   }
   caml_enter_blocking_section();
   return result;

@@ -1245,6 +1245,7 @@
  :page.validation/parents-must-be-pages "页面的父级必须是页面。"
 
  :pdf/annotations-page "批注页"
+ :pdf/area-highlight-mode "区域高亮模式"
  :pdf/area-highlight-shortcut "区域高亮（{1}）"
  :pdf/auto-fit "自动适应"
  :pdf/auto-open-context-menu "为选中文本自动打开上下文菜单"
@@ -1256,6 +1257,7 @@
  :pdf/find-results "{1} / {2} 个匹配（\"{3}\"）"
  :pdf/generic-error "错误：{1}\n{2}\n请确认 PDF 文件资源。"
  :pdf/highlight-mode "高亮模式"
+ :pdf/highlight-selection "高亮所选文字"
  :pdf/highlights "高亮"
  :pdf/hl-block-colored "颜色标识高亮块"
  :pdf/linked-ref "转到注解"
