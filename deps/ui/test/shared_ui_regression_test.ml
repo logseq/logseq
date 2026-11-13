@@ -1429,6 +1429,18 @@ let right_sidebar_block_clipping ~registry ~profile =
           (not (List.exists (String.starts_with ~prefix:"style\x1f") carriers));
         check "The clipped document retains every actual producer block row"
           (List.length (rows surface [])=expected);
+        let navigation_marker node =
+          List.mem "data-right-sidebar-scroll-owner\x1ftrue"
+            (String.split_on_char '\x1e'
+               (Option.value (M.string_prop node "data-attrs") ~default:"")) in
+        check "Navigation marks exactly the existing host-owned scroll viewport without renaming it"
+          (navigation_marker scroll=(profile.P.profile_host=P.NshHost)
+           && navigation_marker document=(profile.P.profile_host=P.WebHost)
+           && List.length (List.filter navigation_marker (nodes session))=
+              (if profile.P.profile_host=P.NshHost || profile.P.profile_host=P.WebHost
+               then 1 else 0)
+           && M.string_prop scroll "accessibility-identifier"=None
+           && M.string_prop document "accessibility-identifier"=None);
         check "Only NSH projects the existing sidebar document's clipped paint bounds into layout"
           (M.string_prop document "overflow"=
            (if profile.P.profile_host=P.NshHost then Some "hidden" else None));
@@ -1474,6 +1486,96 @@ let right_sidebar_block_clipping ~registry ~profile =
          | _ -> false);
       S.press session header_id;
       check_contents 36))
+
+let right_sidebar_navigation_reveal () =
+  let document= !(Stub_dom.document_ref) in
+  let previous_query : string -> Js.Json.t array = Stub_dom.get_field document "querySelectorAll" in
+  let previous_model= !Runtime.read_model and previous_flush= !Runtime.app_flush
+  and previous_schedule= !Runtime.schedule_flush and previous_pending= !Runtime.flush_pending
+  and previous_sidebar= !Sidebar_state.st_ref and previous_signal= !Sidebar_state.model_signal in
+  let current=ref {Model.initial with repo=Some "sidebar-navigation-origin";
+    right_sidebar_open=true} in
+  let scheduler=Signal.scheduler () in
+  let state value=Signal.state scheduler value in
+  let sidebar : Sidebar_state.t =
+    {favorites=state [];home_page=state None;favorite_drop=state None;recents=state [];
+     nav_checked=state [];nav_tag_titles=state [];items=state [];open_menu=state "";
+     groups_collapsed=state [];left_width=state 246.;right_fraction=state 0.4;
+     viewport_w=state 1280.} in
+  let make_target () =
+    let element=Stub_dom.make_element "div" in
+    (* A real DOM element contains itself. The general recording stub only
+       lists descendants, so model this contract on the owned fixture node. *)
+    let contains : Js.Json.t -> bool = Stub_dom.get_field element "contains" in
+    Stub_dom.set_field element "contains" (fun other -> other==element || contains other);
+    let offset=ref 569. and writes=ref 0 in
+    let descriptor=Js.Json.object_ (Js.Dict.empty ()) in
+    Stub_dom.set_field descriptor "get" (fun () -> !offset);
+    Stub_dom.set_field descriptor "set" (fun value -> incr writes;offset:=value);
+    Stub_dom.define_prop element "scrollTop" descriptor;
+    element,offset,writes in
+  let original,offset,writes=make_target () in
+  let targets=ref [|original|] in
+  Stub_dom.set_field document "querySelectorAll" (fun selector ->
+    if selector=Sidebar_state.scroll_owner_selector then !targets else previous_query selector);
+  Runtime.read_model:=(fun () -> !current);
+  Runtime.app_flush:=(fun () -> Signal.stabilize scheduler);
+  Runtime.schedule_flush:=(fun callback -> callback ());Runtime.flush_pending:=false;
+  Sidebar_state.st_ref:=Some sidebar;
+  Sidebar_state.model_signal:=Some (Signal.value (state !current));
+  Fun.protect ~finally:(fun () ->
+    Stub_dom.set_field document "querySelectorAll" previous_query;
+    Runtime.read_model:=previous_model;Runtime.app_flush:=previous_flush;
+    Runtime.schedule_flush:=previous_schedule;Runtime.flush_pending:=previous_pending;
+    Sidebar_state.st_ref:=previous_sidebar;Sidebar_state.model_signal:=previous_signal) (fun () ->
+    let help=Option.get (Sidebar_state.static_item "help" "help" "Help") in
+    let other={help with Sidebar_state.key="other";title="Other"} in
+    let activate () = Sidebar_state.open_sticky_item sidebar "help" in
+    Runtime.signal_set sidebar.Sidebar_state.items [other;{help with collapsed=true}];
+    activate ();
+    check "Help navigation reorders and expands its existing pane and reveals its exact scroll owner once"
+      (!writes=1 && !offset=0. && match Runtime.signal_get sidebar.Sidebar_state.items with
+       | item::_ -> item.Sidebar_state.key="help" && not item.collapsed
+       | [] -> false);
+    offset:=569.;activate ();
+    check "Activating the already-first Help pane still returns to its first row"
+      (!writes=2 && !offset=0.);
+    offset:=569.;
+    Runtime.signal_set sidebar.Sidebar_state.items
+      (List.map (fun (item:Sidebar_state.item) -> {item with title=item.title ^ " refreshed"})
+         (Runtime.signal_get sidebar.Sidebar_state.items));
+    Sidebar_state.move_item sidebar "help" 1;
+    check "Ordinary sidebar refresh and drag reorder retain the user's scroll position"
+      (!writes=2 && !offset=569.);
+    let captured=Sidebar_state.capture_navigation_reveal sidebar in
+    let replacement,replacement_offset,replacement_writes=make_target () in
+    targets:=[|replacement|];captured ();
+    check "A same-marker replacement cannot receive a captured navigation reveal"
+      (!writes=2 && !replacement_writes=0 && !replacement_offset=569.);
+    targets:=[|original|];
+    Stub_dom.set_field original "isConnected" false;captured ();
+    check "A disconnected captured scroll owner cannot receive navigation" (!writes=2);
+    Stub_dom.set_field original "isConnected" true;
+    current:={!current with Model.repo=Some "sidebar-navigation-destination"};captured ();
+    check "A graph switch refuses a captured sidebar navigation reveal" (!writes=2);
+    current:={!current with Model.repo=Some "sidebar-navigation-origin"};
+    Sidebar_state.st_ref:=Some {sidebar with Sidebar_state.items=state []};captured ();
+    check "A replacement sidebar owner cannot receive its predecessor's reveal" (!writes=2);
+    Sidebar_state.st_ref:=Some sidebar;
+    current:={!current with Model.route=Model.Settings};captured ();
+    check "Unrelated same-graph navigation does not retire the retained sidebar's reveal"
+      (!writes=3 && !offset=0.);
+    targets:=[||];
+    let absent=Sidebar_state.capture_navigation_reveal sidebar in
+    targets:=[|replacement|];absent ();
+    check "An absent origin viewport does not adopt a later same-marker owner"
+      (!replacement_writes=0);
+    targets:=[|original;replacement|];
+    let before=Runtime.signal_get sidebar.Sidebar_state.items in
+    check "Ambiguous scroll ownership fails before sidebar navigation mutates its items"
+      ((try activate ();false with Invalid_argument _ -> true)
+       && Runtime.signal_get sidebar.Sidebar_state.items=before
+       && !writes=3 && !replacement_writes=0))
 
 let popup_layout_carriers ~registry ~profile =
   let previous_popup= !Popups_state.active in
@@ -2227,6 +2329,7 @@ let run_views ~registry ~profile ~finish =
   sidebar_help_native_rows ~registry;
   sidebar_favorite_rows ~registry ~profile;
   selection_toolbar_surface ~registry ~profile;
+  right_sidebar_navigation_reveal ();
   List.iter (fun profile -> right_sidebar_block_clipping ~registry ~profile)
     [{P.profile_os=P.WebOS;profile_host=P.WebHost};
      {P.profile_os=P.MacOS;profile_host=P.NshHost};

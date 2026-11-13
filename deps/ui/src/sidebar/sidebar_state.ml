@@ -762,9 +762,36 @@ let static_item key kind title =
 let has_item st key =
   List.exists (fun (i : item) -> i.key = key) (Runtime.signal_get st.items)
 
-let push_item st it =
+let scroll_owner_attr = "data-right-sidebar-scroll-owner", "true"
+let scroll_owner_selector = "[data-right-sidebar-scroll-owner]"
+
+let navigation_current st repo =
+  Runtime.repo () = repo
+  && match !st_ref with Some current -> current == st | None -> false
+
+let scroll_owner () =
+  match Ui_services.dom_query_all scroll_owner_selector with
+  | [] -> None
+  | [target] -> Some target
+  | _ -> invalid_arg "Right sidebar has multiple navigation scroll owners"
+
+let capture_navigation_reveal st =
+  let repo = Runtime.repo () in
+  let target = if navigation_current st repo then scroll_owner () else None in
+  fun () ->
+    if navigation_current st repo then
+      match target with
+      | Some target when target.Ui_services.connected () ->
+          (match scroll_owner () with
+           | Some current when target.contains current && current.contains target ->
+               target.set_scroll_top 0.
+           | _ -> ())
+      | _ -> ()
+
+let push_item ?reveal st it =
+  let reveal = match reveal with Some reveal -> reveal | None -> capture_navigation_reveal st in
   let items = Runtime.signal_get st.items in
-  match List.find_opt (fun (current : item) -> current.key = it.key) items with
+  (match List.find_opt (fun (current : item) -> current.key = it.key) items with
   | Some current ->
       Runtime.signal_set st.items
         ({ current with collapsed = false } ::
@@ -781,7 +808,8 @@ let push_item st it =
     (* cljs sidebar-add-block! conses the entry — newest pane is on
        TOP of the sidebar item list, not appended at the bottom *)
     Runtime.signal_set st.items (it :: items)
-  end
+  end);
+  reveal ()
 
 (* cljs sidebar-add-block! :search — a cmdk-block pane pinned to the
    right sidebar, one per query *)
@@ -879,12 +907,13 @@ let clear_items st =
 ;;
 
 let add_promise st p =
+  let repo = Runtime.repo () and reveal = capture_navigation_reveal st in
   ignore
     (let* v = p in
-    match v with Some it ->
-      push_item st it;
+    match v with Some it when navigation_current st repo ->
+      push_item ~reveal st it;
       Js.Promise.resolve ()
-  | None -> Js.Promise.resolve ())
+  | Some _ | None -> Js.Promise.resolve ())
 
 let open_ref st target =
   let repo = Runtime.repo () in
@@ -906,6 +935,7 @@ let open_uuid ?(edit = false) st uuid =
   let repo = Runtime.repo () in
   if repo = "" then ()
   else
+    let reveal = capture_navigation_reveal st in
     let p =
       (let* ent = pull_entity repo uuid in
       match ent with
@@ -921,11 +951,11 @@ let open_uuid ?(edit = false) st uuid =
     ensure_right_open ();
     ignore (let* item = p in
       (match item with
-       | Some item ->
-           push_item st item;
+       | Some item when navigation_current st repo ->
+           push_item ~reveal st item;
            if edit && context = (Runtime.repo (), Runtime.route ()) then
              Editor_actions.enter_edit ~scope:"sidebar" uuid 0
-       | None -> ());
+       | Some _ | None -> ());
       Js.Promise.resolve ())
 
 let open_today_journal st =

@@ -34,6 +34,35 @@ that an actual theme snapshot retains the pending prefix without publishing it. 
 AppKit comment handoff remains a separate required downstream integration gate;
 preparing this source does not establish a native UI pass.
 
+## Right-sidebar navigation reveals the activated pane
+
+Activating a right-sidebar entry now returns its existing document to the top,
+including when Help is already the first entry. This restores frozen master
+`sidebar-add-block!` behavior: expand/reorder the requested pane, then reveal
+its first row. Previously an old scroll offset could leave the newly activated
+Help pane above the viewport after opening Keyboard shortcuts. Ordinary data
+refresh and drag reorder keep the user's scroll position.
+
+The existing NSH Scroll and Web scrolling document carry the typed
+`data-right-sidebar-scroll-owner` marker; native identifiers, keys, child
+identity and the single-scroll structure do not change. Apple/iOS and Android
+keep their existing projection and receive no marked navigation scroll target.
+No constructor, wire shape or downstream call changes are required. For
+example, Help → Keyboard shortcuts → Help now reveals Help's first row, while
+a worker refresh does not move the viewport.
+
+Navigation captures one exact connected scroll owner before changing the list
+or awaiting a page request. Completion refuses a changed graph/sidebar owner,
+a disconnected element or a same-marker replacement; it never adopts another
+viewport. NSH uses the existing after-commit, measured `set-scroll-top` host
+operation rather than a timer or an offset model. Same-graph main-page
+navigation does not retire the retained sidebar's own reveal.
+
+Shared regressions cover the actual four-host producer marker policy and the
+recording-DOM lifecycle, including repeated activation, unrelated refresh/drag
+and stale-owner refusal. Actual AppKit wheel, Help/shortcut navigation and
+paint qualification remain a separate release gate.
+
 ## Card answer keys stop when the answer control is absent
 
 The Cards answer shortcut (default S, or its configured replacement) now

@@ -841,12 +841,16 @@ let inner st : t =
     ; scroll ~key:"rs-scroll" ~orientation:`vertical ~grow:1. ~min_height:0
         ?height:(if Lui_ui.host context = Lui_protocol.NshHost then Some 0 else None)
         ~style_class:"cp__right-sidebar-scrollable"
+        ?data_attrs:(if Lui_ui.host context = Lui_protocol.NshHost
+          then Some [Sidebar_state.scroll_owner_attr] else None)
         [ Ui_components.with_props
             (Ui_components.Prop.padding_bottom 150 ::
              if Lui_ui.host context = Lui_protocol.NshHost
              then [Ui_components.Prop.overflow `hidden] else [])
           (column ~key:"rs-items" ~padding_horizontal:8
             ~margin_left:4 ~style_class:"sidebar-item-list scrollbar-spacing"
+            ?data_attrs:(if Lui_ui.host context = Lui_protocol.WebHost
+              then Some [Sidebar_state.scroll_owner_attr] else None)
             [ keyed
                 ~source:(reactive (fun items -> List.mapi (fun i it -> (i, it)) items)
                     (Signal.value st.Sidebar_state.items))
