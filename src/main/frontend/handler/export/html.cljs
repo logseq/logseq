@@ -87,16 +87,32 @@
   [inline-coll]
   [:a (str "#" (common/hashtag-value->string inline-coll))])
 
+(defn- image-markdown-link?
+  [full-text]
+  (boolean (and (string? full-text)
+                (string/starts-with? full-text "![")
+                (not (string/starts-with? full-text "![[")))))
+
+(defn- inline-label-text
+  [label]
+  (->> label
+       (keep (fn [inline]
+               (when (and (sequential? inline) (= "Plain" (first inline)))
+                 (second inline))))
+       (string/join)))
+
 (defn- inline-link
   [{:keys [url label full_text]}]
   (let [href (case (first url)
                "Search" (second url)
                "Complex" (str (:protocol (second url)) "://" (:link (second url)))
                nil)]
-    (cond-> [:a]
-      href (conj {:href href})
-      href (concatv (mapv inline-ast->hiccup label))
-      (not href) (conj full_text))))
+    (if (and href (image-markdown-link? full_text))
+      [:img {:src href :alt (inline-label-text label)}]
+      (cond-> [:a]
+        href (conj {:href href})
+        href (concatv (mapv inline-ast->hiccup label))
+        (not href) (conj full_text)))))
 
 (defn- inline-nested-link
   [{:keys [content]}]

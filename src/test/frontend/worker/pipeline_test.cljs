@@ -7,6 +7,7 @@
             [frontend.worker.db.validate :as worker-db-validate]
             [frontend.worker.handler.block :as block-handler]
             [frontend.worker.pipeline :as worker-pipeline]
+            [frontend.worker.input-test-helper :as input-helper]
             [logseq.common.util :as common-util]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.common.util.page-ref :as page-ref]
@@ -1437,6 +1438,88 @@
 (defn- linked-ref-ids
   [db page]
   (set (map :db/id (:ref-blocks (db-reference/get-linked-references db (:db/id page))))))
+
+(defn- complete-task-with-cli-ops!
+  [conn task]
+  ;; upsert task ensures the Task tag even when it is already present.
+  (input-helper/apply-ops!
+   conn
+   [[:batch-set-property [[(:block/uuid task)] :block/tags :logseq.class/Task {}]]
+    [:batch-set-property [[(:block/uuid task)] :logseq.property/status :logseq.property/status.done {}]]]
+   nil))
+
+(deftest repeating-task-completion-rebuilds-journal-refs-test
+  (doseq [property [:logseq.property/scheduled :logseq.property/deadline]
+          existing-journals? [false true]]
+    (testing (str property ", existing journals: " existing-journals?)
+      (let [now (t/local-date-time 2026 11 8 12)
+            conn (db-test/create-conn-with-blocks
+                  {:pages-and-blocks
+                   (into [{:page {:block/title "Inbox"}
+                           :blocks [{:block/title "weekly chore"
+                                     :build/tags [:logseq.class/Task]
+                                     :build/properties
+                                     {:logseq.property/status :logseq.property/status.todo
+                                      property (tc/to-long now)
+                                      :logseq.property.repeat/repeated? true
+                                      :logseq.property.repeat/recur-frequency 1
+                                      :logseq.property.repeat/recur-unit :logseq.property.repeat/recur-unit.week}}]}]
+                         (when existing-journals?
+                           [{:page {:build/journal 20261108}}
+                            {:page {:build/journal 20261115}}]))})
+            task (db-test/find-block-by-content @conn "weekly chore")
+            task-id (:db/id task)
+            journal-days #(set (keep :block/journal-day (:block/refs (d/entity @conn task-id))))]
+        (d/transact! conn [[:db/add task-id :logseq.property.repeat/repeat-type
+                            :logseq.property.repeat/repeat-type.plus]
+                           [:db/add task-id :logseq.property.repeat/temporal-property property]])
+        (with-transact-pipeline
+          (fn []
+            ;; Saving once establishes the starting refs when the old journal exists.
+            (outliner-core/save-block! conn {:db/id task-id :block/title "weekly chore"})
+            (is (= (if existing-journals? #{20261108} #{}) (journal-days)))
+            (with-redefs [t/now (constantly now)]
+              (doseq [[previous-day next-day] [[20261108 20261115] [20261115 20261122]]]
+                (complete-task-with-cli-ops! conn task)
+                (let [updated-task (d/entity @conn task-id)
+                      next-journal (db-test/find-journal-by-journal-day @conn next-day)
+                      previous-journal (db-test/find-journal-by-journal-day @conn previous-day)]
+                  (is (= next-day (date-time-util/ms->journal-day (get updated-task property))))
+                  (is (= :logseq.property/status.todo (:db/ident (:logseq.property/status updated-task))))
+                  (is (= #{next-day} (journal-days)) "Refs follow the rescheduled date immediately")
+                  (is (contains? (linked-ref-ids @conn next-journal) task-id))
+                  (when previous-journal
+                    (is (not (contains? (linked-ref-ids @conn previous-journal) task-id)))))))))))))
+
+(deftest repeating-task-keeps-content-journal-refs-test
+  (let [now (t/local-date-time 2026 11 8 12)
+        conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "Inbox"}
+                :blocks [{:block/title "weekly chore"
+                          :build/tags [:logseq.class/Task]
+                          :build/properties
+                          {:logseq.property/status :logseq.property/status.todo
+                           :logseq.property/scheduled (tc/to-long now)
+                           :logseq.property.repeat/repeated? true
+                           :logseq.property.repeat/recur-frequency 1
+                           :logseq.property.repeat/recur-unit :logseq.property.repeat/recur-unit.week}}]}
+               {:page {:build/journal 20261108}}])
+        task (db-test/find-block-by-content @conn "weekly chore")
+        old-journal (db-test/find-journal-by-journal-day @conn 20261108)]
+    (d/transact! conn [[:db/add (:db/id task) :logseq.property.repeat/repeat-type
+                        :logseq.property.repeat/repeat-type.plus]])
+    (with-transact-pipeline
+      (fn []
+        (outliner-core/save-block! conn {:db/id (:db/id task)
+                                         :block/title (str "weekly chore [[" (:block/uuid old-journal) "]]")})
+        (with-redefs [t/now (constantly now)]
+          (complete-task-with-cli-ops! conn task))
+        (let [next-journal (db-test/find-journal-by-journal-day @conn 20261115)
+              journal-days (set (keep :block/journal-day (:block/refs (d/entity @conn (:db/id task)))))]
+          (is (= #{20261108 20261115} journal-days))
+          (is (contains? (linked-ref-ids @conn old-journal) (:db/id task))
+              "The title still references the old journal")
+          (is (contains? (linked-ref-ids @conn next-journal) (:db/id task))))))))
 
 (deftest clearing-past-deadline-removes-journal-linked-ref-test
   (let [past-day 20260923

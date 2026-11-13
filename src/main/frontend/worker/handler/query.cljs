@@ -256,9 +256,16 @@
          rules-required? :rules-required?} (add-query-rules query-m)
         resolved-query (resolve-page-ref-equality query-form)
         resolved-inputs (mapv #(resolve-custom-query-input db % context) inputs)
-        query-args (cond-> resolved-inputs
-                     rules-required? (conj rules-input))]
-    (apply d/q resolved-query db query-args)))
+        input-args (into [db] resolved-inputs)
+        query-args (if rules-required?
+                     (let [bindings (:in (datalog-util/query-vec->map resolved-query))
+                           rules-index (first (keep-indexed (fn [index binding]
+                                                              (when (= '% binding) index))
+                                                            bindings))
+                           [before after] (split-at rules-index input-args)]
+                       (into (conj (vec before) rules-input) after))
+                     input-args)]
+    (apply d/q resolved-query query-args)))
 
 (defn- require-query-context!
   [context]

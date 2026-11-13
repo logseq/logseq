@@ -1747,6 +1747,33 @@ let () =
       | Some (Output.Mode.Packed Output.Mode.Json) -> pass
       | _ -> fail_test "expected later json output mode");
 
+  Array.iter
+    (fun (name, argv) ->
+      test ("CLI parity parse rejects repeated graph options: " ^ name)
+        (fun () -> expect_parse_error_code name ":invalid-options" argv))
+    [|
+      ("short", [| "-g"; "a"; "graph"; "remove"; "-g"; "b" |]);
+      ("long", [| "--graph"; "a"; "graph"; "list"; "--graph"; "b" |]);
+      ("same value", [| "-g"; "a"; "graph"; "remove"; "-g"; "a" |]);
+      ("mixed aliases", [| "-g"; "a"; "graph"; "info"; "--graph"; "b" |]);
+      ("reverse aliases", [| "--graph"; "a"; "graph"; "list"; "-g"; "b" |]);
+      ("equals", [| "--graph=a"; "graph"; "remove"; "--graph=b" |]);
+      ("short equals", [| "-g=a"; "graph"; "remove"; "--graph=b" |]);
+      ("missing first value", [| "-g"; "--graph=a"; "graph"; "list" |]);
+      ("missing last value", [| "-g"; "a"; "graph"; "list"; "--graph" |]);
+      ("three occurrences", [| "-g=a"; "--graph=a"; "-g=a"; "graph"; "list" |]);
+      ("version", [| "-g=a"; "--graph=a"; "--version" |]);
+    |];
+
+  test "CLI parity parse does not count graph arguments after the terminator"
+    (fun () ->
+      let request =
+        expect_parse_ok "graph after terminator"
+          [| "-g"; "demo"; "upsert"; "block"; "--"; "--graph=content" |]
+      in
+      expect_equal "single graph" "demo"
+        (graph_text (expect_some "graph" request.globals.graph)));
+
   test "CLI parity parse supports list page filters and validation" (fun () ->
       let request =
         expect_parse_ok "list page parse"
@@ -3028,6 +3055,7 @@ let () =
                  {
                    id = Some 1L;
                    page = Some "Home";
+                   rename = None;
                    restore = false;
                    update_tags_edn = None;
                    update_properties_edn = None;
@@ -3122,6 +3150,7 @@ let () =
                 mode = Upsert.Create;
                 id = None;
                 page = Some "Home";
+                rename = None;
                 restore = false;
                 plan = Property.empty_update_plan;
               }
@@ -3171,6 +3200,7 @@ let () =
                 mode = Upsert.Update;
                 id = Some 50L;
                 page = None;
+                rename = None;
                 restore = false;
                 plan = Property.empty_update_plan;
               }
@@ -3235,6 +3265,7 @@ let () =
                 mode = Upsert.Create;
                 id = None;
                 page = Some "Home";
+                rename = None;
                 restore = true;
                 plan;
               }
@@ -3283,6 +3314,7 @@ let () =
                 mode = Upsert.Create;
                 id = None;
                 page = Some "Home";
+                rename = None;
                 restore = true;
                 plan = Property.empty_update_plan;
               }
@@ -3334,6 +3366,7 @@ let () =
                 mode = Upsert.Update;
                 id = Some 50L;
                 page = None;
+                rename = None;
                 restore = true;
                 plan = Property.empty_update_plan;
               }
@@ -5017,60 +5050,6 @@ let () =
                 name = Some "my-query";
                 inputs_edn = None;
               })));
-
-  test_promise "CLI parity query execute appends DSL rules for percent input"
-    (fun () ->
-      let raw_config =
-        Edn_util.map
-          [
-            ( Edn_util.keyword "custom-queries",
-              Edn_util.map
-                [
-                  ( Edn_util.string "task",
-                    Edn_util.map
-                      [
-                        ( Edn_util.keyword "inputs",
-                          Edn_util.vector
-                            [ Edn_util.string "task statuses set" ] );
-                        ( Edn_util.keyword "query",
-                          edn_of_string
-                            "[:find (pull ?b [*]) :in $ ?status % :where (task \
-                             ?b ?status)]" );
-                      ] );
-                ] );
-          ]
-      in
-      let cfg = config ~repo:"demo" ~raw_file_config:raw_config () in
-      let action =
-        expect_ok "task query build"
-          (Query.build cfg (Global_opts.create ())
-             (Query.Parsed_run
-                {
-                  query_edn = None;
-                  name = Some "task";
-                  inputs_edn = Some "[\"Todo\"]";
-                }))
-      in
-      let captured_body = ref None in
-      let server =
-        invoke_server (fun body ->
-            captured_body := Some body;
-            "[]")
-      in
-      with_server server (fun base_url ->
-          let cfg = { cfg with Cli_config.base_url = Some base_url } in
-          let* result =
-            effect_to_promise
-              (execute_with_output Query.execute action cfg Output.Mode.Human)
-          in
-          expect_bool "query execute ok" false (Cli_result.is_error result);
-          let body = expect_some "query request body" !captured_body in
-          expect_named_contains "query method" body "thread-api/q";
-          expect_named_contains "query input" body "Todo";
-          expect_named_contains "rules parent" body "parent";
-          expect_named_contains "rules class extends" body "class-extends";
-          expect_named_contains "rules task" body "task";
-          Js.Promise.resolve pass));
 
   test "CLI parity query list merges built-in and custom query metadata"
     (fun () ->

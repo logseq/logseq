@@ -47,6 +47,36 @@
           (is false (str error))))
        (p/finally done)))))
 
+(deftest property-node-selector-data-extends-options-exclude-root-tag
+  (let [conn (d/create-conn db-schema/schema)]
+    (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+    (d/transact! conn [{:db/id -1
+                        :db/ident :user.class/Topic
+                        :block/title "Topic"
+                        :block/name "topic"
+                        :block/tags :logseq.class/Tag
+                        :logseq.property.class/extends :logseq.class/Root}
+                       {:db/id -2
+                        :db/ident :user.class/Parent
+                        :block/title "Parent"
+                        :block/name "parent"
+                        :block/tags :logseq.class/Tag
+                        :logseq.property.class/extends :logseq.class/Root}])
+    (let [topic (d/entity @conn :user.class/Topic)
+          data (worker-property/property-node-selector-data
+                @conn
+                {:property (select-keys (d/entity @conn :logseq.property.class/extends)
+                                        [:db/id :db/ident :logseq.property/type])
+                 :block {:db/id (:db/id topic)}})]
+      (is (some #(= :user.class/Parent (:db/ident %)) (:extends-class-options data))
+          "Other tags are still offered as parents")
+      (is (not-any? #(= :logseq.class/Root (:db/ident %)) (:extends-class-options data))
+          "Root Tag is the implicit parent and is not a choice in the Extends select"))))
+(defn- display-property-ids
+  [result]
+  {:full (set (map :property-id (:full-properties result)))
+   :hidden (set (map :property-id (:hidden-properties result)))})
+
 (deftest display-properties-hides-hide-by-default-properties-on-nodes
   (let [conn (db-test/create-conn-with-blocks
               {:properties {:keywords {:logseq.property/type :default
@@ -56,15 +86,30 @@
                                           :build/properties {:keywords "clojure"
                                                              :author "Ada"}}}]})
         page (db-test/find-page-by-title @conn "Work")
-        result (worker-property/display-properties @conn page {:page-title? true} false)
-        full-ids (set (map :property-id (:full-properties result)))
-        hidden-ids (set (map :property-id (:hidden-properties result)))]
+        {:keys [full hidden]} (display-property-ids
+                               (worker-property/display-properties @conn page {:page-title? true} false))]
     (testing "hide-by-default still hides the property on nodes that use it"
-      (is (contains? hidden-ids :user.property/keywords))
-      (is (not (contains? full-ids :user.property/keywords))))
+      (is (contains? hidden :user.property/keywords))
+      (is (not (contains? full :user.property/keywords))))
     (testing "visible properties still appear on the node"
-      (is (contains? full-ids :user.property/author))
-      (is (not (contains? hidden-ids :user.property/author))))))
+      (is (contains? full :user.property/author))
+      (is (not (contains? hidden :user.property/author))))))
+
+(deftest display-properties-hides-hide-by-default-when-empty-properties-are-hidden
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties {:keywords {:logseq.property/type :default
+                                       :logseq.property/hide? true}}
+               :pages-and-blocks [{:page {:block/title "Work"
+                                          :build/properties {:keywords "clojure"}}}]})
+        page (db-test/find-page-by-title @conn "Work")
+        {:keys [full hidden]} (display-property-ids
+                               (worker-property/display-properties
+                                @conn page {:page-title? true
+                                            :state-hide-empty-properties? true}
+                                false))]
+    (is (contains? hidden :user.property/keywords)
+        "Hide by default still hides valued properties when empty properties are globally hidden")
+    (is (not (contains? full :user.property/keywords)))))
 
 (deftest display-property-map-reflects-default-value-entity-updates
   (let [conn (d/create-conn db-schema/schema)]

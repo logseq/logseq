@@ -359,3 +359,23 @@
                        (set! js/clearInterval original-clear-interval)
                        (electron-store/reset-auto-backup!)
                        (done)))))))
+
+(deftest import-snapshot-preserves-committed-wal-data
+  (async done
+    (let [dir (node-helper/create-tmp-dir "sqlite-import")
+          source (node-path/join dir "source.sqlite")
+          target (node-path/join dir "snapshot.sqlite")
+          DatabaseSync (resolve-database-sync-ctor)
+          db (new DatabaseSync source)]
+      (.exec db "CREATE TABLE entries (value TEXT); INSERT INTO entries VALUES ('before'); PRAGMA journal_mode=WAL; PRAGMA wal_autocheckpoint=0; PRAGMA wal_checkpoint(TRUNCATE); UPDATE entries SET value='after';")
+      (-> (p/let [payload (electron-store/<read-import-snapshot source)]
+            (fs/writeFileSync target payload)
+            (let [snapshot (new DatabaseSync target)]
+              (try
+                (is (= "after" (.-value (.get (.prepare snapshot "SELECT value FROM entries")))))
+                (finally (.close snapshot)))))
+          (p/catch (fn [error] (is false (str error))))
+          (p/finally (fn []
+                       (.close db)
+                       (fs/rmSync dir #js {:recursive true :force true})
+                       (done)))))))

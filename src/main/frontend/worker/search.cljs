@@ -1019,7 +1019,7 @@ ALTER TABLE blocks_fts_next RENAME TO blocks_fts;"))
              select "select id, page, title, rank from blocks_fts where "
              pg-sql (if page "page = ? and" "")
              match-sql (if (ns-util/namespace-page? q)
-                         (str select pg-sql " title match ? or title match ? limit ?")
+                         (str select pg-sql " (title match ? or title match ?) limit ?")
                          (str select pg-sql " title match ? limit ?"))
              non-match-sql (str select pg-sql " title like ? limit ?")
              matched-result (when (and (not page-only?)

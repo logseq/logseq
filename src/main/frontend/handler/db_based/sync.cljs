@@ -338,42 +338,53 @@
                (fn []
                  (state/set-state! :rtc/downloading-graph-uuid nil)))))))))
 
+(defn- remote-graph-list
+  [graphs]
+  (mapv (fn [graph]
+          (let [graph-e2ee? (if (contains? graph :graph-e2ee?)
+                              (normalize-graph-e2ee? (:graph-e2ee? graph))
+                              true)
+                graph-ready-for-use? (not= false (:graph-ready-for-use? graph))]
+            (merge
+             {:url (str config/db-version-prefix (:graph-name graph))
+              :GraphName (:graph-name graph)
+              :GraphSchemaVersion (:schema-version graph)
+              :GraphUUID (:graph-id graph)
+              :rtc-graph? true
+              :graph-e2ee? graph-e2ee?
+              :graph-ready-for-use? graph-ready-for-use?
+              :graph<->user-user-type (:role graph)
+              :graph<->user-grant-by-user (:invited-by graph)}
+             (dissoc graph :graph-id :graph-name :schema-version :role :invited-by :graph-ready-for-use?))))
+        graphs))
+
 (defn <get-remote-graphs
   []
-  (let [base (http-base)]
-    (if-not base
-      (p/resolved [])
-      (-> (p/let [_ (state/set-state! :rtc/loading-graphs? true)
-                  _ (user-handler/<ensure-id&access-token!)
-                  resp (fetch-json (str base "/graphs")
-                                   {:method "GET"}
-                                   {:response-schema :graphs/list})
-                  _ (<ensure-user-rsa-keys-on-server! {:server-rsa-keys-exists?
-                                                       (:user-rsa-keys-exists? resp)})
-                  graphs (:graphs resp)
-                  result (mapv (fn [graph]
-                                 (let [graph-e2ee? (if (contains? graph :graph-e2ee?)
-                                                     (normalize-graph-e2ee? (:graph-e2ee? graph))
-                                                     true)
-                                       graph-ready-for-use? (not= false (:graph-ready-for-use? graph))]
-                                   (merge
-                                    {:url (str config/db-version-prefix (:graph-name graph))
-                                     :GraphName (:graph-name graph)
-                                     :GraphSchemaVersion (:schema-version graph)
-                                     :GraphUUID (:graph-id graph)
-                                     :rtc-graph? true
-                                     :graph-e2ee? graph-e2ee?
-                                     :graph-ready-for-use? graph-ready-for-use?
-                                     :graph<->user-user-type (:role graph)
-                                     :graph<->user-grant-by-user (:invited-by graph)}
-                                    (dissoc graph :graph-id :graph-name :schema-version :role :invited-by :graph-ready-for-use?))))
-                               graphs)]
-            (state/set-state! :rtc/graphs result)
-            (repo-handler/refresh-repos!)
-            result)
-          (p/finally
-            (fn []
-              (state/set-state! :rtc/loading-graphs? false)))))))
+  (let [base (http-base)
+        session (state/get-state :auth/graph-session)
+        current-session? #(= session (state/get-state :auth/graph-session))]
+    (if (and base session)
+      (do
+        (state/set-state! :rtc/loading-graphs? true)
+        (-> (p/let [_ (user-handler/<ensure-id&access-token!)
+                    resp (when (current-session?)
+                           (fetch-json (str base "/graphs")
+                                       {:method "GET"}
+                                       {:response-schema :graphs/list}))
+                    _ (when (current-session?)
+                        (<ensure-user-rsa-keys-on-server! {:server-rsa-keys-exists?
+                                                           (:user-rsa-keys-exists? resp)}))]
+              (if (current-session?)
+                (let [graphs (remote-graph-list (:graphs resp))]
+                  (state/set-state! :rtc/graphs graphs)
+                  (repo-handler/refresh-repos!)
+                  graphs)
+                []))
+            (p/finally
+              (fn []
+                (when (current-session?)
+                  (state/set-state! :rtc/loading-graphs? false))))))
+      (p/resolved []))))
 
 (def ^:private personal-access-tokens-path "/api/v1/personal-access-tokens")
 

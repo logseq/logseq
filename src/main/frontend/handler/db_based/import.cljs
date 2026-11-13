@@ -3,6 +3,7 @@
   (:require ["jszip" :as JSZip]
             [clojure.edn :as edn]
             [clojure.string :as string]
+            [electron.ipc :as ipc]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.fs :as fs]
@@ -14,7 +15,9 @@
             [frontend.persist-db :as persist-db]
             [frontend.state :as state]
             [frontend.util :as util]
+            [lambdaisland.glogi :as log]
             [logseq.common.config :as common-config]
+            [logseq.common.graph-dir :as graph-dir]
             [logseq.common.path :as path]
             [logseq.db.sqlite.export :as sqlite-export]
             [logseq.db.sqlite.util :as sqlite-util]
@@ -101,6 +104,112 @@
                         (progress-fn next-count total))
                       (p/recur (subvec remaining 1) next-count failed))))))))))))
 
+(defn- notify-copied-assets!
+  [{:keys [copied failed]} asset-total]
+  (when (pos? copied)
+    (notification/show! (t :import/assets-imported copied) :success))
+  (when (seq failed)
+    (notification/show!
+     (t :import/assets-skipped (count failed))
+     :warning false)
+    (log/warn :import/assets-skipped {:failed failed}))
+  (when (and (pos? (or asset-total 0))
+             (not= asset-total (+ copied (count failed))))
+    (notification/show!
+     (t :import/assets-import-partial copied asset-total)
+     :warning false)))
+
+(defn- clear-importing-state!
+  []
+  (state/set-state! :graph/importing nil)
+  (state/set-state! :graph/importing-state nil))
+
+(defn classify-existing-graph-path
+  "Classify a user-picked path as a DB graph source."
+  [path]
+  (when (and (string? path) (not (string/blank? path)))
+    (let [normalized (path/path-normalize path)
+          lower (string/lower-case normalized)]
+      (cond
+        (string/ends-with? lower ".zip") :sqlite-zip
+        (string/ends-with? lower ".sqlite") :sqlite-file
+        :else :graph-dir))))
+
+(defn suggested-graph-name
+  "Infer a DB graph name from a folder, db.sqlite, or ZIP path."
+  [path]
+  (when (and (string? path) (not (string/blank? path)))
+    (let [normalized (path/path-normalize path)
+          kind (classify-existing-graph-path normalized)
+          raw (case kind
+                :sqlite-zip (path/file-stem normalized)
+                :sqlite-file (or (some-> (path/parent normalized) path/basename)
+                                 (path/file-stem normalized))
+                (path/basename normalized))]
+      (or (graph-dir/decode-canonical-graph-dir-key raw)
+          (some-> (graph-dir/decode-graph-dir-name raw)
+                  common-config/strip-leading-db-version-prefix
+                  not-empty)
+          (not-empty (common-config/strip-leading-db-version-prefix raw))))))
+
+(defn- sqlite-source
+  [path kind]
+  (let [normalized (path/path-normalize path)]
+    (case kind
+      :sqlite-file
+      {:sqlite-path normalized
+       :assets-dir (path/path-join (path/parent normalized) common-config/local-assets-dir)}
+
+      :graph-dir
+      {:sqlite-path (path/path-join normalized "db.sqlite")
+       :assets-dir (path/path-join normalized common-config/local-assets-dir)}
+
+      nil)))
+
+(defn- <copy-dir-assets!
+  [repo assets-dir]
+  (p/let [exists? (fs/file-exists? assets-dir)]
+    (if-not exists?
+      (p/resolved {:copied 0 :failed []})
+      (p/let [files (fs/readdir assets-dir {:path-only? true})
+              assets (->> files
+                          (keep (fn [file-path]
+                                  (let [prefix (str (string/replace (path/path-normalize assets-dir) #"/+$" "") "/")
+                                        file-name (subs (path/path-normalize file-path) (count prefix))]
+                                    (when-not (string/blank? file-name)
+                                      {:path file-path :file-name file-name}))))
+                          vec)
+              total (count assets)
+              _ (when (pos? total)
+                  (state/set-state! :graph/importing :sqlite-dir)
+                  (state/set-state! :graph/importing-state {:total total
+                                                            :current-idx 0
+                                                            :step :assets}))]
+        (p/loop [remaining assets
+                 copied 0
+                 failed []]
+          (if (empty? remaining)
+            {:copied copied :failed failed :total total}
+            (let [{:keys [path file-name]} (first remaining)]
+              (p/let [data (p/catch (fs/read-file-raw nil path)
+                                    (fn [e]
+                                      (log/error :import/read-asset-failed {:path path :error e})
+                                      ::read-failed))
+                      write-result (if (= ::read-failed data)
+                                     ::write-failed
+                                     (p/catch (fs/write-asset-file! repo file-name data)
+                                              (fn [e]
+                                                (log/error :import/write-asset-failed {:file-name file-name :error e})
+                                                ::write-failed)))]
+                (if (= ::write-failed write-result)
+                  (p/recur (subvec remaining 1) copied (conj failed file-name))
+                  (let [next-copied (inc copied)]
+                    (when (pos? total)
+                      (state/set-state! :graph/importing-state {:total total
+                                                                :current-idx next-copied
+                                                                :step :assets}))
+                    (p/recur (subvec remaining 1) next-copied failed)))))))))))
+
 (defn import-from-sqlite-db!
   [buffer bare-graph-name finished-ok-handler]
   (let [graph (str config/db-version-prefix bare-graph-name)]
@@ -120,62 +229,97 @@
          (str (.-message e))
          :error))))))
 
+(defn- handle-zip-import-error!
+  [e]
+  (log/error :import/zip-import-failed e)
+  (clear-importing-state!)
+  (notification/show! (t :import/zip-import-error (.-message e)) :error))
+
+(defn <import-from-sqlite-zip-buffer
+  [zip-buffer bare-graph-name finished-ok-handler]
+  (p/let [^js zip (.loadAsync JSZip zip-buffer)
+          entries (zip-entries zip)
+          entry (sqlite-entry entries)
+          asset-total (count (filter (fn [{:keys [name dir?]}]
+                                       (and (not dir?)
+                                            (asset-entry? name)))
+                                     entries))
+          _ (when (pos? asset-total)
+              (state/set-state! :graph/importing :sqlite-zip)
+              (state/set-state! :graph/importing-state {:total asset-total
+                                                        :current-idx 0
+                                                        :step :assets}))]
+    (if-not entry
+      (do
+        (clear-importing-state!)
+        (notification/show! (t :import/zip-missing-db-sqlite) :error))
+      (do
+        (shui/dialog-close!)
+        (p/let [sqlite-buffer (.async ^js (:entry entry) "arraybuffer")]
+          (import-from-sqlite-db!
+           sqlite-buffer
+           bare-graph-name
+           (fn []
+             (p/let [repo (state/get-current-repo)
+                     {:keys [copied failed]}
+                     (<copy-zip-assets!
+                      repo
+                      entries
+                      {:total asset-total
+                       :progress-fn (fn [current total]
+                                      (when (pos? total)
+                                        (state/set-state! :graph/importing-state {:total total
+                                                                                  :current-idx current
+                                                                                  :step :assets})))})]
+               (notify-copied-assets! {:copied copied :failed failed} asset-total)
+               (clear-importing-state!)
+               (finished-ok-handler)))))))))
+
 (defn import-from-sqlite-zip!
   [^js file bare-graph-name finished-ok-handler]
-  (-> (p/let [zip-buffer (.arrayBuffer file)
-              ^js zip (.loadAsync JSZip zip-buffer)
-              entries (zip-entries zip)
-              entry (sqlite-entry entries)
-              asset-total (count (filter (fn [{:keys [name dir?]}]
-                                           (and (not dir?)
-                                                (asset-entry? name)))
-                                         entries))
-              _ (when (pos? asset-total)
-                  (state/set-state! :graph/importing :sqlite-zip)
-                  (state/set-state! :graph/importing-state {:total asset-total
-                                                            :current-idx 0
-                                                            :current-page "Assets"}))]
-        (if-not entry
-          (notification/show! (t :import/zip-missing-db-sqlite) :error)
-          (do
-            (shui/dialog-close!)
-            (p/let [sqlite-buffer (.async ^js (:entry entry) "arraybuffer")]
-              (import-from-sqlite-db!
-               sqlite-buffer
-               bare-graph-name
-               (fn []
-                 (p/let [repo (state/get-current-repo)
-                         {:keys [copied failed]}
-                         (<copy-zip-assets!
-                          repo
-                          entries
-                          {:total asset-total
-                           :progress-fn (fn [current total]
-                                          (when (pos? total)
-                                            (state/set-state! :graph/importing-state {:total total
-                                                                                      :current-idx current
-                                                                                      :current-page "Assets"})))})]
-                   (when (pos? copied)
-                     (notification/show! (t :import/assets-imported copied) :success))
-                   (when (seq failed)
-                     (notification/show!
-                      (t :import/assets-skipped (count failed))
-                      :warning false)
-                     (js/console.warn "Zip import skipped assets:" (clj->js failed)))
-                   (when (and (pos? asset-total)
-                              (not= asset-total (+ copied (count failed))))
-                     (notification/show!
-                      (t :import/assets-import-partial copied asset-total)
-                      :warning false))
-                   (state/set-state! :graph/importing nil)
-                   (state/set-state! :graph/importing-state nil)
-                   (finished-ok-handler))))))))
+  (-> (p/let [zip-buffer (.arrayBuffer file)]
+        (<import-from-sqlite-zip-buffer zip-buffer bare-graph-name finished-ok-handler))
+      (p/catch handle-zip-import-error!)))
+
+(defn- <import-from-sqlite-and-assets!
+  [{:keys [sqlite-path assets-dir]} bare-graph-name finished-ok-handler]
+  (-> (p/let [exists? (fs/file-exists? sqlite-path)]
+        (if-not exists?
+          (notification/show! (t :graph.add-existing/missing-db-error) :error)
+          (p/let [buffer (ipc/ipc :readGraphImportSnapshot sqlite-path)]
+            (import-from-sqlite-db!
+             buffer
+             bare-graph-name
+             (fn []
+               (p/let [repo (state/get-current-repo)
+                       result (<copy-dir-assets! repo assets-dir)]
+                 (notify-copied-assets! result (:total result))
+                 (clear-importing-state!)
+                 (finished-ok-handler)))))))
       (p/catch
        (fn [e]
-         (js/console.error e)
-         (state/set-state! :graph/importing nil)
-         (state/set-state! :graph/importing-state nil)
-         (notification/show! (t :import/zip-import-error (.-message e)) :error)))))
+         (log/error :import/existing-graph-failed {:path sqlite-path :error e})
+         (clear-importing-state!)
+         (notification/show!
+          (t :import/unexpected-error (or (.-message e) (str e)))
+          :error)))))
+
+(defn <import-existing-local-graph!
+  "Import a local DB graph folder, db.sqlite, or official SQLite+assets ZIP."
+  [path bare-graph-name finished-ok-handler]
+  (let [kind (classify-existing-graph-path path)]
+    (case kind
+      :sqlite-zip
+      (-> (p/let [buffer (fs/read-file-raw nil path)]
+            (<import-from-sqlite-zip-buffer buffer bare-graph-name finished-ok-handler))
+          (p/catch handle-zip-import-error!))
+
+      (:sqlite-file :graph-dir)
+      (<import-from-sqlite-and-assets! (sqlite-source path kind)
+                                       bare-graph-name
+                                       finished-ok-handler)
+
+      (notification/show! (t :graph.add-existing/unsupported-error) :error))))
 
 (defn import-from-debug-transit!
   [bare-graph-name raw finished-ok-handler]

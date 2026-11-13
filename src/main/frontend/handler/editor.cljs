@@ -1050,7 +1050,7 @@
   (delete-block-inner! repo (get-state)))
 
 (defn delete-blocks!
-  [_repo block-uuids blocks dom-blocks mobile-action-bar?]
+  [_repo block-uuids blocks dom-blocks mobile-action-bar? & [opts]]
   (when (seq block-uuids)
     (let [uuid->dom-block (zipmap block-uuids dom-blocks)
           block (first blocks)
@@ -1071,7 +1071,7 @@
            edit-block-fn
            (assoc :editor/edit-block-fn edit-block-fn))
          (when (seq blocks)
-           (outliner-op/delete-blocks! blocks nil))
+           (outliner-op/delete-blocks! blocks opts))
          (when (seq journals)
            (doseq [journal journals]
              (outliner-op/delete-page! (:block/uuid journal)))))))))
@@ -1298,11 +1298,10 @@
                      top-level-blocks (block-handler/get-top-level-blocks blocks)]
                  (when-not (every? ldb/recycled? top-level-blocks)
                    (when (seq top-level-blocks)
-                     ;; Delete the selected nodes only. Page nodes unlink their
-                     ;; namespace parent in INode/-del; expanding a page to its
-                     ;; content would wipe the child page (db-test#1242).
-                     ;; Regular blocks still retract their subtree there.
-                     (delete-blocks! repo (map :block/uuid top-level-blocks) top-level-blocks dom-blocks mobile-action-bar?))))))))))))
+                     ;; Page nodes unlink without deleting their content.
+                     ;; Asset-containing cuts preserve the subtree and its incoming references.
+                     (delete-blocks! repo (map :block/uuid top-level-blocks) top-level-blocks dom-blocks mobile-action-bar?
+                                     {:cut? copy?}))))))))))))
 
 (def url-regex
   "Didn't use link/plain-link as it is incorrectly detects words as urls."
@@ -2142,15 +2141,14 @@
     (cursor/move-cursor-forward input 2)))
 
 (defn- paste-block-cleanup
-  [_repo block page _exclude-properties _format content-update-fn keep-uuid?]
+  [_repo block page _exclude-properties _format content-update-fn]
   (let [new-content
         (if content-update-fn
           (content-update-fn (:block/title block))
           (:block/title block))]
-    (merge (cond-> block
-             (not keep-uuid?) (dissoc :block/uuid))
-           {:block/page {:db/id [:block/uuid (:block/uuid page)]}
-            :block/title new-content})))
+    (assoc block
+           :block/page {:db/id [:block/uuid (:block/uuid page)]}
+           :block/title new-content)))
 
 (defn- edit-last-block-after-inserted!
   [result]
@@ -2167,15 +2165,6 @@
   (let [ids (set (map :db/id blocks))]
     (some? (some #(ids (block-parent-id %)) blocks))))
 
-(defn- unrecycle-tx-data
-  [root]
-  (let [root-id [:block/uuid (:block/uuid root)]]
-    [[:db/retract root-id :logseq.property/deleted-at]
-     [:db/retract root-id :logseq.property/deleted-by-ref]
-     [:db/retract root-id :logseq.property.recycle/original-parent]
-     [:db/retract root-id :logseq.property.recycle/original-page]
-     [:db/retract root-id :logseq.property.recycle/original-order]]))
-
 (defn paste-blocks
   "Given a vec of blocks, insert them into the target page.
    keep-uuid?: if true, keep the uuid provided in the block structure."
@@ -2184,6 +2173,7 @@
                   target-block
                   sibling?
                   keep-uuid?
+                  cut?
                   revert-cut-txs
                   skip-empty-target?
                   ops-only?
@@ -2208,12 +2198,16 @@
                                        (and target-block-has-children? (= (count blocks) 1))))]
     (p/let [target-block' (if (and empty-target? target-block-has-children? paste-nested-blocks?)
                             (<left-sibling-or-parent (state/get-current-repo) target-block)
-                            target-block)]
-      (let [existing-blocks (filter :block/uuid blocks)
+                            target-block)
+            current-blocks (when cut?
+                             (db-async/<get-blocks (state/get-current-repo)
+                                                  (keep :block/uuid blocks) {:children? false}))]
+      (let [existing-blocks (filter :block/uuid
+                                   (if cut? (unwrap-block-results current-blocks) blocks))
             move-from-recycle? (and keep-uuid?
                                     (seq existing-blocks)
                                     (or (seq revert-cut-txs)
-                                        (every? ldb/recycled? existing-blocks)))
+                                        (every? ldb/recycled? (block-handler/get-top-level-blocks existing-blocks))))
             sibling? (cond
                        (and paste-nested-blocks? empty-target?)
                        (= (block-parent-id target-block') (block-parent-id target-block))
@@ -2232,10 +2226,10 @@
                                   :additional-tx revert-cut-txs
                                   :ui/page-id (:ui/page-id opts)}
                                  (when target-block'
-                                   (let [top-level-blocks (block-handler/get-top-level-blocks existing-blocks)
-                                         unrecycle-tx (mapcat unrecycle-tx-data top-level-blocks)]
-                                     (when (seq unrecycle-tx)
-                                       (outliner-op/transact! unrecycle-tx nil))
+                                   (let [top-level-blocks (block-handler/get-top-level-blocks existing-blocks)]
+                                     (doseq [block top-level-blocks
+                                             :when (ldb/recycled? block)]
+                                       (outliner-op/restore-recycled! (:block/uuid block)))
                                      (outliner-op/move-blocks! top-level-blocks target-block'
                                                                {:sibling? sibling?
                                                                 :outliner-op :paste}))))
@@ -2247,7 +2241,7 @@
                                    (let [format (get target-block' :block/format :markdown)
                                          repo (state/get-current-repo)
                                          blocks' (map (fn [block]
-                                                        (paste-block-cleanup repo block page exclude-properties format content-update-fn keep-uuid?))
+                                                        (paste-block-cleanup repo block page exclude-properties format content-update-fn))
                                                       blocks)]
                                      (outliner-op/insert-blocks! blocks' target-block' {:sibling? sibling?
                                                                                         :outliner-op :paste
@@ -4107,6 +4101,45 @@
             state/exit-editing-and-set-selected-blocks!)))
    (state/set-state! :selection/selected-all? true)))
 
+(defn- select-parent-page?
+  "True when `parent` is a page. DB worker ref summaries omit the parent's own
+  :block/parent, so page-ness cannot be inferred from a nested parent link."
+  [parent]
+  (boolean
+   (or (:block/name parent)
+       (entity/page? parent))))
+
+(defn- select-parent-target
+  "Next Mod+A expansion from a selected block's worker/file entity.
+   Returns nil to stop, {:select-block uuid}, or {:select-all-page page}."
+  [block current-page]
+  (let [parent (:block/parent block)
+        parent-uuid (or (:block/uuid parent) (:block/parent-uuid block))]
+    (cond
+      (= current-page (str (:block/uuid block)))
+      nil
+
+      (and parent-uuid (not (select-parent-page? parent)))
+      {:select-block parent-uuid}
+
+      (select-parent-page? parent)
+      {:select-all-page (or (:block/name parent)
+                            (some-> (:block/uuid parent) str))})))
+
+(defn- select-parent-block-node
+  "Parent row in the selected child's view. An embed or sidebar copy of the
+   same uuid is ignored; if this view has no parent row, keep the selection."
+  [selected-node parent-uuid]
+  (when (and selected-node parent-uuid)
+    (let [parent-id (str parent-uuid)
+          visual (get-node-parent selected-node)
+          container-id (row-container-id selected-node)
+          rows (util/get-blocks-by-id parent-uuid)]
+      (or (when (= parent-id (dom/attr visual "blockid"))
+            visual)
+          (when container-id
+            (some #(when (= container-id (row-container-id %)) %) rows))))))
+
 (defn select-parent [e]
   (let [edit-input (some-> (state/get-edit-input-id) gdom/getElement)
         edit-block (state/get-edit-block)
@@ -4131,23 +4164,19 @@
       (do
         (util/stop e)
         (when-not (state/get-state :selection/selected-all?)
-          (if-let [block-id (some-> (first (state/get-selection-blocks))
-                                    (dom/attr "blockid")
-                                    uuid)]
-            (p/let [block (db-async/<get-block (state/get-current-repo) block-id)]
-              (when block
-                (let [parent (:block/parent block)]
-                  (cond
-                    (= (state/get-current-page) (str (:block/uuid block)))
-                    nil
+          (if-let [selected (first (state/get-selection-blocks))]
+            (if-let [block-id (some-> selected (dom/attr "blockid") uuid)]
+              (p/let [block (db-async/<get-block (state/get-current-repo) block-id)]
+                (when block
+                  (let [target (select-parent-target block (state/get-current-page))]
+                    (cond
+                      (:select-block target)
+                      (when-let [parent-node (select-parent-block-node selected (:select-block target))]
+                        (state/exit-editing-and-set-selected-blocks! [parent-node]))
 
-                    (and parent (:block/parent parent))
-                    (state/exit-editing-and-set-selected-blocks!
-                     [(util/get-first-block-by-id (:block/uuid parent))])
-
-                    (:block/name parent)
-                    ;; page block
-                    (select-all-blocks! {:page (:block/name parent)})))))
+                      (:select-all-page target)
+                      (select-all-blocks! {:page (:select-all-page target)})))))
+              (select-all-blocks! {}))
             (select-all-blocks! {})))))))
 
 (defn escape-editing

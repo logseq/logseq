@@ -89,6 +89,7 @@
              "--add-properties"
              "--remove-properties"
              "--page"
+             "--rename"
              "--name"
              "--type"
              "--cardinality"

@@ -119,6 +119,12 @@ jobs:
       - name: Run logseq CLI tests
         run: opam exec -- pnpm --dir cli test
 
+      - name: Compile query integration worker
+        run: pnpm db-worker-node:compile
+
+      - name: Run shared query integration tests
+        run: pnpm --dir cli test:query-integration
+
       - name: Build logseq CLI
         run: |
           opam exec -- pnpm cli:release

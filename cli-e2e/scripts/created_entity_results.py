@@ -114,12 +114,21 @@ def main():
                              "--update-tags", '["ResultTag"]',
                              "--update-properties", '{"Result Note" 1}', output=output)
                 ids = result if output == "edn" else result["result"]
-                expected = [title_id(title) for title in titles]
+                stored_titles = titles
+                if refs:
+                    existing_uuid = entity(reference)["block/uuid"]
+                    new_uuid = entity(title_id(new_page))["block/uuid"]
+                    stored_titles = [title.replace("[[ExistingReference]]", f"[[{existing_uuid}]]")
+                                     .replace(f"[[{new_page}]]", f"[[{new_uuid}]]") for title in titles]
+                expected = [query('[:find ?e . :where [?e :block/title ?title] '
+                                  f'[(clojure.string/starts-with? ?title {json.dumps(title.split(" [[", 1)[0])})]]')
+                            for title in titles]
                 print(f"{args.case} {source} {output} refs={refs}: {ids}; expected {expected}", flush=True)
                 assert all(expected), expected
                 assert entity(reference) == before, "Command metadata changed the reference page"
                 for index, entity_id in enumerate(expected):
                     created = entity(entity_id)
+                    assert created["block/title"] == stored_titles[index], created
                     is_root = index in (0, 3)
                     assert (property_value(created) == 1) == is_root, created
                     assert any(t["db/id"] == tag for t in created.get("block/tags", [])) == is_root, created

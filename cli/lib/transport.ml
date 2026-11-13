@@ -257,6 +257,14 @@ let thread_api_q config ~(repo : Cli_primitive.repo)
   invoke config (thread_api_method "q")
     (Vec.of_array [| repo_value repo; Edn_util.any query |])
 
+let thread_api_query_custom config ~(repo : Cli_primitive.repo)
+    ~(query : Melange_edn_melange.map Melange_edn_melange.t)
+    ~(context : Melange_edn_melange.map Melange_edn_melange.t) =
+  invoke config
+    (thread_api_method "query-custom")
+    (Vec.of_array
+       [| repo_value repo; Edn_util.any query; Edn_util.any context |])
+
 let thread_api_set_db_sync_config config ~config:sync_config =
   invoke config
     (thread_api_method "set-db-sync-config")

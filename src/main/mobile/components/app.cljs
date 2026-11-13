@@ -200,7 +200,7 @@
 
 (defn- use-native-graphs-effects!
   []
-  (let [id-token (rfx/use-sub [:auth/id-token])
+  (let [session (rfx/use-sub [:auth/graph-session])
         repos (rfx/use-sub [:me :repos])
         remotes (rfx/use-sub [:rtc/graphs])
         downloading-graph-id (rfx/use-sub [:rtc/downloading-graph-uuid])
@@ -208,7 +208,7 @@
         route-match (rfx/use-sub [:route-match])
         _preferred-language (rfx/use-sub [:preferred-language])
         [tab] (hooks/use-atom mobile-state/*tab)
-        login? (boolean id-token)
+        login? (boolean (rfx/use-sub [:auth/id-token]))
         route-name (get-in route-match [:data :name])
         visible? (and (= tab "graphs")
                       (not (contains? #{:import :export} route-name)))
@@ -220,10 +220,10 @@
      (fn []
        (when (and (mobile-util/native-ios?)
                   login?
-                  (user-handler/rtc-group?))
+                  (user-handler/can-list-remote-graphs?))
          (rtc-handler/<get-remote-graphs))
        nil)
-     [login?])
+     [session])
     (hooks/use-effect!
      (fn []
        (bottom-tabs/update-native-graphs! {:labels labels

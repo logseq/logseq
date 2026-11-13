@@ -617,9 +617,11 @@
     (mapv macro->block @*result)))
 
 (defn with-pre-block-if-exists
-  [blocks body pre-block-properties encoded-content {:keys [db date-formatter]}]
+  [blocks body pre-block-properties encoded-content {:keys [db date-formatter export-to-db-graph? format]
+                                                    :or {format :markdown}}]
   (let [first-block (first blocks)
         first-block-start-pos (get-in first-block [:block/meta :start_pos])
+        format' (or (:block/format first-block) format)
 
         ;; Add pre-block
         blocks (if (or (> first-block-start-pos 0)
@@ -634,16 +636,22 @@
                                             (map (fn [page]
                                                    (:block/title (page-name->map page db true date-formatter)))))
                          pre-block? (if (:heading properties) false true)
-                         block {:block/uuid id
-                                :block/title content
-                                :block/level 1
-                                :block/properties properties
-                                :block/properties-order (vec properties-order)
-                                :block/properties-text-values properties-text-values
-                                :block/invalid-properties invalid-properties
-                                :block/pre-block? pre-block?
-                                :block/macros (extract-macros-from-ast body)
-                                :block.temp/ast-body body}
+                         title (if export-to-db-graph?
+                                 (string/trim (gp-property/remove-properties format' content))
+                                 content)
+                         block (cond-> {:block/uuid id
+                                        :block/title title
+                                        :block/level 1
+                                        :block/properties properties
+                                        :block/properties-order (vec properties-order)
+                                        :block/properties-text-values properties-text-values
+                                        :block/invalid-properties invalid-properties
+                                        :block/pre-block? pre-block?
+                                        :block.temp/ast-body body}
+                                 export-to-db-graph?
+                                 (assoc :block.temp/ast-blocks body)
+                                 (not export-to-db-graph?)
+                                 (assoc :block/macros (extract-macros-from-ast body)))
                          {:keys [tags refs]}
                          (with-page-block-refs {:body body :refs property-refs} db date-formatter {})]
                      (cond-> block
@@ -651,7 +659,8 @@
                        (assoc :block/tags tags)
                        true
                        (assoc :block/refs (concat refs (:block-refs pre-block-properties)))))
-                   (select-keys first-block [:block/format :block/page]))
+                   (cond-> (select-keys first-block [:block/format :block/page])
+                     format' (assoc :block/format format')))
                   blocks)
                  blocks)]
     blocks))
@@ -827,7 +836,7 @@
                  sanity-blocks-data)
              body
              properties]))
-        result (with-pre-block-if-exists blocks body pre-block-properties encoded-content options)]
+        result (with-pre-block-if-exists blocks body pre-block-properties encoded-content (assoc options :format format))]
     (map #(dissoc % :block/meta) result)))
 
 (defn with-parent-and-order

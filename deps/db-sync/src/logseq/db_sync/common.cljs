@@ -1,5 +1,6 @@
 (ns logseq.db-sync.common
   (:require [clojure.string :as string]
+            [clojure.walk :as walk]
             [logseq.db-sync.platform.core :as platform]
             [logseq.db.sqlite.util :as sqlite-util]
             [promesa.core :as p]))
@@ -10,11 +11,22 @@
        "Access-Control-Allow-Methods" "GET,POST,PUT,DELETE,OPTIONS,HEAD"
        "Access-Control-Expose-Headers" "content-type,content-encoding,content-length,cache-control,x-asset-type,x-asset-size,x-snapshot-row-count"})
 
+(defn- stringify-uuid
+  [value]
+  (if (uuid? value)
+    (str value)
+    value))
+
+(defn json-stringify
+  "Serialize Clojure data as JSON, converting UUID instances to strings."
+  [data]
+  (js/JSON.stringify (clj->js (walk/postwalk stringify-uuid data))))
+
 (defn json-response
   ([data] (json-response data 200))
   ([data status]
    (platform/response
-    (js/JSON.stringify (clj->js data))
+    (json-stringify data)
     #js {:status status
          :headers (js/Object.assign
                    #js {"content-type" "application/json"}

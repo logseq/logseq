@@ -466,3 +466,24 @@
       (is (= (set (keys file-attrs))
              (set (get-in result [:upgrade-result-coll 0 :migrate-updates :delete-properties]))))
       (is (nil? (db-migrate/migrate conn :target-version {:major 65 :minor 35}))))))
+(deftest upgrade-version-skips-existing-property
+  (let [conn (d/create-conn db-schema/schema)
+        property-ident :logseq.property/assignee
+        custom-title "Custom assignee title"
+        custom-created-at 1234567890
+        custom-order "zzzz"]
+    (d/transact! conn
+                 [{:db/ident property-ident
+                   :block/uuid #uuid "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+                   :block/title custom-title
+                   :block/created-at custom-created-at
+                   :block/order custom-order}])
+    (let [before (d/entity @conn property-ident)
+          _ (#'db-migrate/upgrade-version!
+             conn "65.30" {:properties [property-ident]})
+          after (d/entity @conn property-ident)]
+      (is (some? after) "Existing property remains after upgrade")
+      (is (= (:db/id before) (:db/id after)))
+      (is (= custom-title (:block/title after)))
+      (is (= custom-created-at (:block/created-at after)))
+      (is (= custom-order (:block/order after))))))

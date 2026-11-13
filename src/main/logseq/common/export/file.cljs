@@ -5,6 +5,7 @@
             [clojure.string :as string]
             [datascript.core :as d]
             [datascript.impl.entity :as de]
+            [logseq.common.config :as common-config]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
@@ -217,13 +218,64 @@
         (when property-title
           (property-line-content property-title value "" context))))))
 
+(defn- markdown-link-label
+  [title]
+  (-> (or title "")
+      (string/replace "\\" "\\\\")
+      (string/replace "]" "\\]")
+      (string/replace #"\r?\n" " ")
+      string/trim))
+
+(defn- markdown-link-url
+  [url]
+  (-> url
+      (string/replace " " "%20")
+      (string/replace "(" "%28")
+      (string/replace ")" "%29")))
+
+(defn- image-asset-type?
+  [asset-type]
+  (let [ext (cond
+              (keyword? asset-type) (name asset-type)
+              (string? asset-type) asset-type)]
+    (boolean (and (not (string/blank? ext))
+                  (contains? (common-config/img-formats)
+                             (keyword (string/lower-case ext)))))))
+
+(defn- asset-export-href
+  [block]
+  (let [external-url (:logseq.property.asset/external-url block)]
+    (if (and (string? external-url) (not (string/blank? external-url)))
+      external-url
+      (when-let [ext (cond
+                       (keyword? (:logseq.property.asset/type block))
+                       (name (:logseq.property.asset/type block))
+                       (string? (:logseq.property.asset/type block))
+                       (:logseq.property.asset/type block))]
+        (when-let [id (:block/uuid block)]
+          (when-not (string/blank? ext)
+            (str "../" common-config/local-assets-dir "/" id "." ext)))))))
+
+(defn- asset-export-title
+  "Image blocks store the file as `{uuid}.{type}` under assets/ and keep only
+   a caption in `:block/title`. Copy and export need image markup so the asset
+   reference is not dropped with the hidden asset properties."
+  [block title]
+  (when (and (ldb/asset? block)
+             (image-asset-type? (:logseq.property.asset/type block)))
+    (when-let [href (asset-export-href block)]
+      (str "![" (markdown-link-label title) "](" (markdown-link-url href) ")"))))
+
 (defn- block-title-content
   [db b context]
   (or (property-value-block-content db b context)
-      (db-content/recur-replace-uuid-in-block-title
-       (d/entity db (:db/id b))
-       10
-       {:replace-block-refs? (not (:preserve-block-refs? context))})))
+      (let [entity (d/entity db (:db/id b))
+            title (db-content/recur-replace-uuid-in-block-title
+                   entity
+                   10
+                   {:replace-block-refs? (not (:preserve-block-refs? context))})]
+        (or (asset-export-title (or entity b) title)
+            title))))
 
 (defn- bounded-heading-level
   [heading level]
@@ -372,6 +424,25 @@
          :else
          node)))
    tree))
+
+(defn own-block-content
+  "Converts one block to file content without outline children.
+
+  Page entities render only page properties when `:include-page-properties?`
+  is set. Regular blocks render the same list item `tree->file-content` would
+  emit for that node at `:init-level`."
+  [db block-uuid tree->file-opts context]
+  (assert (uuid? block-uuid))
+  (when-let [entity (d/entity db [:block/uuid block-uuid])]
+    (when-let [eid (:db/id entity)]
+      (let [pulled (db-content/update-block-content db (d/pull db '[*] eid) eid)
+            init-level (or (:init-level tree->file-opts)
+                           (if (ldb/page? entity) 0 1))]
+        (tree->file-content db [pulled]
+                            (-> tree->file-opts
+                                (dissoc :open-blocks-only?)
+                                (assoc :init-level init-level))
+                            context)))))
 
 (defn block->content
   "Converts a block including its children (recursively) to plain-text."

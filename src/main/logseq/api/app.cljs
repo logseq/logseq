@@ -115,7 +115,7 @@
 
 (def open_external_link
   (fn [url]
-    (when (re-find #"https?://" url)
+    (when (contains? #{"http:" "https:"} (.-protocol (js/URL. url)))
       (js/apis.openExternal url))))
 
 (def invoke_external_command

@@ -218,7 +218,9 @@
         config-file (first (filter #(string/ends-with? (:path %) "logseq/config.edn") *files))
         _ (assert config-file "No 'logseq/config.edn' found for file graph dir")
         options' (merge default-export-options
-                        {:user-options (merge {:convert-all-tags? false} (dissoc options :assets :verbose))
+                        {:user-options (merge {:convert-all-tags? false}
+                                              (dissoc options :assets :verbose :notify-user :fail-fast?
+                                                      :import-timeout-ms :import-heartbeat-ms :log-fn))
                         ;; asset file options
                          :<get-file-stat (fn [path]
                                            (let [abs-path (if (node-path/isAbsolute path)
@@ -228,7 +230,8 @@
                                              (.stat (js/require "fs/promises") abs-path)))
                          :<read-and-copy-asset (fn [file *assets buffer-handler]
                                                  (<read-and-copy-asset file *assets buffer-handler assets))}
-                        (select-keys options [:verbose :import-timeout-ms :import-heartbeat-ms :log-fn]))]
+                        (select-keys options [:verbose :import-timeout-ms :import-heartbeat-ms :log-fn
+                                              :notify-user :fail-fast?]))]
     (gp-exporter/export-file-graph conn conn config-file *files options')))
 
 (defn- import-files-to-db
@@ -924,6 +927,9 @@ abc
       (is (empty? (filter #(= :block/pre-block? (:a %))
                           (d/datoms @conn :eavt)))
           "Legacy pre-block markers are never transacted")
+      (is (= "Plain pre-block"
+             (:block/title (db-test/find-block-by-content @conn "Plain pre-block")))
+          "Non-property content before the first outline block is imported")
       (is (= "Missing ref" (:block/title missing-block))
           "Missing OG block refs are removed from imported content")
       (is (empty? (:block/refs missing-block))
@@ -961,6 +967,109 @@ abc
           "Existing block refs are preserved, including forward refs from later files")
       (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
           "Imported graph validates"))))
+
+(deftest-async import-preserves-non-outline-pre-block-content
+  (p/do
+    (testing "plain paragraphs and code with no bullets or headings"
+      (p/let [file (write-temp-graph-file
+                    "pages/winsock.md"
+                    (str "This is a paragraph about winsock.\n\n"
+                         "Another paragraph.\n\n"
+                         "```javascript\n"
+                         "console.log('hi')\n"
+                         "```\n"))
+              conn (db-test/create-conn)
+              _ (db-pipeline/add-listener conn)
+              _ (import-files-to-db [file] conn {})
+              page (db-test/find-page-by-title @conn "winsock")
+              children (ordered-children page)
+              titles (mapv :block/title children)
+              nested-titles (mapv :block/title (mapcat ordered-children children))]
+        (is (seq children)
+            "A file with no outline bullets or headings still imports content")
+        (is (some #(string/includes? % "This is a paragraph about winsock.") titles)
+            "Paragraph content is imported")
+        (is (or (some #(string/includes? % "console.log") titles)
+                (some #(string/includes? % "console.log") nested-titles))
+            "Fenced code content is imported")
+        (is (empty? (filter #(= :block/pre-block? (:a %))
+                            (d/datoms @conn :eavt)))
+            "Legacy pre-block markers are never transacted")
+        (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+            "Imported graph validates")))
+
+    (testing "page properties plus non-bullet body"
+      (p/let [file (write-temp-graph-file
+                    "pages/notes.md"
+                    (str "note-type:: draft\n"
+                         "topic:: networking\n\n"
+                         "Winsock is a Windows API.\n"))
+              conn (db-test/create-conn)
+              _ (db-pipeline/add-listener conn)
+              _ (import-files-to-db [file] conn {})
+              page (db-test/find-page-by-title @conn "notes")
+              children (ordered-children page)
+              titles (mapv :block/title children)]
+        (is (= {:user.property/note-type "draft"
+                :user.property/topic "networking"
+                :block/tags [:logseq.class/Page]}
+               (db-test/readable-properties page))
+            "Page-level properties are imported onto the page")
+        (is (some #(string/includes? % "Winsock is a Windows API.") titles)
+            "Non-property body is imported as block content")
+        (is (not-any? #(or (string/includes? % "note-type::")
+                           (string/includes? % "topic::"))
+                      titles)
+            "Page property text is not duplicated into the block title")
+        (is (empty? (filter #(= :block/pre-block? (:a %))
+                            (d/datoms @conn :eavt)))
+            "Legacy pre-block markers are never transacted")
+        (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+            "Imported graph validates")))
+
+    (testing "property-only page does not create an empty block"
+      (p/let [file (write-temp-graph-file
+                    "pages/only-props.md"
+                    "note-type:: draft\n")
+              conn (db-test/create-conn)
+              _ (db-pipeline/add-listener conn)
+              _ (import-files-to-db [file] conn {})
+              page (db-test/find-page-by-title @conn "only-props")]
+        (is (= {:user.property/note-type "draft"
+                :block/tags [:logseq.class/Page]}
+               (db-test/readable-properties page))
+            "Property-only files still import page properties")
+        (is (empty? (ordered-children page))
+            "Property-only pre-blocks are omitted as empty blocks")
+        (is (empty? (filter #(= :block/pre-block? (:a %))
+                            (d/datoms @conn :eavt)))
+            "Legacy pre-block markers are never transacted")
+        (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+            "Imported graph validates")))
+
+    (testing "non-property content before the first outline block"
+      (p/let [file (write-temp-graph-file
+                    "pages/intro.md"
+                    (str "note-type:: open\n\n"
+                         "Intro paragraph before any outline.\n\n"
+                         "- first bullet\n"
+                         "- second bullet\n"))
+              conn (db-test/create-conn)
+              _ (db-pipeline/add-listener conn)
+              _ (import-files-to-db [file] conn {})
+              page (db-test/find-page-by-title @conn "intro")
+              titles (mapv :block/title (ordered-children page))]
+        (is (= {:user.property/note-type "open"
+                :block/tags [:logseq.class/Page]}
+               (db-test/readable-properties page))
+            "Page-level properties are imported onto the page")
+        (is (= ["Intro paragraph before any outline." "first bullet" "second bullet"] titles)
+            "Intro content is imported as a sibling of later outline blocks")
+        (is (empty? (filter #(= :block/pre-block? (:a %))
+                            (d/datoms @conn :eavt)))
+            "Legacy pre-block markers are never transacted")
+        (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+            "Imported graph validates")))))
 
 (deftest-async import-converts-markdown-headings-to-db-heading-metadata
   (p/let [file (write-temp-graph-file
@@ -1081,7 +1190,58 @@ abc
       (is (nil? (d/entity @conn [:block/uuid missing-uuid]))
           "Missing OG block ref placeholder is removed"))))
 
-(deftest export-doc-files-continues-after-export-file-failure
+(deftest file-import-error-is-transit-safe-and-names-file
+  (let [error (gp-exporter/file-import-error
+               "pages/T.md"
+               (ex-info "No property schema found for nil" {:errors [#js {:fn (fn [])}]}))
+        roundtrip (-> error ldb/write-transit-str ldb/read-transit-str)]
+    (is (= "pages/T.md: No property schema found for nil" (ex-message error)))
+    (is (= :file-graph-import/file-failed (:code (ex-data error))))
+    (is (= "pages/T.md" (:path (ex-data error))))
+    (is (= "No property schema found for nil" (:reason (ex-data error))))
+    (is (= (ex-message error) (ex-message roundtrip)))
+    (is (= (ex-data error) (ex-data roundtrip)))))
+
+(defn- assert-export-file-graph-fails
+  [rel-path content expected-reason]
+  (let [files (cond-> [["logseq/config.edn" "{:meta/version 1 :journal/page-title-format \"yyyy-MM-dd EEEE\"}"]
+                       [rel-path content]]
+                (= rel-path "pages/B.md")
+                (conj ["pages/A.md" "vegetarian:: false\n\n- a\n"]
+                      ["pages/Later.md" "- should not be imported\n"]))
+        graph-dir (write-temp-file-graph files)
+        conn (db-test/create-conn)]
+    (-> (import-file-graph-to-db graph-dir conn
+                                 {:notify-user (fn [_])})
+        (p/then (fn [_]
+                  (is false (str "expected import to fail for " rel-path))))
+        (p/catch (fn [error]
+                   (let [message (or (ex-message error) (.-message error) "")]
+                     (is (gp-exporter/file-import-error? error) rel-path)
+                     (is (or (= rel-path (:path (ex-data error)))
+                             (string/includes? message rel-path))
+                         rel-path)
+                     (is (string/includes? message expected-reason)
+                         (str rel-path " message: " message))
+                     (is (nil? (db-test/find-block-by-content @conn "should not be imported"))
+                         "Fail-fast does not import later files")))))))
+
+(deftest-async export-file-graph-fails-fast-with-relative-path-and-reason
+  (p/do!
+   (assert-export-file-graph-fails
+    "journals/2022_03_27.md"
+    "- {{query (and (todo now doing))}}\n  query-table:: false\n  query-sort-by:: clock-time\n"
+    "clock-time")
+   (assert-export-file-graph-fails
+    "pages/T.md"
+    "template:: x\n\n- a\n"
+    "No property schema found for nil")
+   (assert-export-file-graph-fails
+    "pages/B.md"
+    "vegetarian:: yes\n\n- b\n"
+    "Expected number or lookup ref for entity id, got nil")))
+
+(deftest export-doc-files-stops-at-first-export-file-failure
   (cljs.test/async
    done
    (let [attempted-paths (atom [])
@@ -1096,6 +1256,48 @@ abc
                       {:macros {} :file/name-format :triple-lowbar}
                       (merge default-export-options
                              {:notify-user #(swap! notifications conj %)
+                              :user-options {:convert-all-tags? false}
+                              :<export-file (fn [conn' {:file/keys [path content]} opts]
+                                              (swap! attempted-paths conj path)
+                                              (if (= path first-file)
+                                                (p/rejected failed-error)
+                                                (gp-exporter/<add-file-to-db-graph conn' path content opts)))}))]
+     (-> (gp-exporter/export-doc-files
+          conn
+          [{:path first-file} {:path second-file}]
+          <read-file
+          doc-options)
+         (p/then (fn [_]
+                   (is false "Default import must stop at the first file failure")
+                   (done)))
+         (p/catch (fn [error]
+                    (let [message (or (ex-message error) (.-message error) "")]
+                      (is (gp-exporter/file-import-error? error))
+                      (is (= [first-file] @attempted-paths)
+                          "Later files are not imported after the first failure")
+                      (is (string/includes? message "worker transact failed"))
+                      (is (some #(= :error (:level %)) @notifications)
+                          "The failed file is reported to the user")
+                      (is (nil? (db-test/find-block-by-content @conn "second"))
+                          "Later files are not imported")
+                      (done))))))))
+
+(deftest export-doc-files-continues-after-export-file-failure-when-fail-fast-disabled
+  (cljs.test/async
+   done
+   (let [attempted-paths (atom [])
+         failed-error (ex-info "worker transact failed" {:code :worker-transact-failed})
+         graph-dir (write-temp-file-graph [["pages/A.md" "- first\n"]
+                                           ["pages/B.md" "- second\n"]])
+         first-file (node-path/join graph-dir "pages/A.md")
+         second-file (node-path/join graph-dir "pages/B.md")
+         conn (db-test/create-conn)
+         notifications (atom [])
+         doc-options (gp-exporter/build-doc-options
+                      {:macros {} :file/name-format :triple-lowbar}
+                      (merge default-export-options
+                             {:fail-fast? false
+                              :notify-user #(swap! notifications conj %)
                               :user-options {:convert-all-tags? false}
                               :<export-file (fn [conn' {:file/keys [path content]} opts]
                                               (swap! attempted-paths conj path)
@@ -1242,6 +1444,32 @@ abc
       (is (= expected (:block/created-at page)))
       (is (= expected (:block/created-at block)))
       (is (not= (.getTime modified-at) (:block/created-at page)))
+      (is (empty? (:errors (db-validate/validate-local-db! @conn)))))))
+
+(deftest-async import-date-property-before-journal-file
+  ;; https://github.com/logseq/logseq/issues/13976
+  ;; A node/date property lookup of a journal page is transacted before that
+  ;; journal file. The journal uuid is preindexed, but the page entity is
+  ;; deferred, so Datascript throws :entity-id/missing.
+  (let [journal-day 20231228
+        expected-created-at (date-time-util/journal-day->ms journal-day)
+        block-uuid #uuid "658d002d-b615-4176-8be5-269641a2f92d"
+        note {:path "aaa.md"
+              :content "when:: [[Dec 28th, 2023]]\n\n- note\n"}
+        journal {:path "journals/2023_12_28.md"
+                 :content (str "- journal block\n  id:: " block-uuid "\n")}]
+    (p/let [conn (<export-in-memory-doc-files [journal note] {})
+            page (ldb/get-page @conn "aaa")
+            journal-page (ldb/get-journal-page-by-day @conn journal-day)
+            when-targets (map :db/id (:user.property/when page))
+            block (d/entity @conn [:block/uuid block-uuid])]
+      (is (= (:db/id journal-page) (first when-targets)))
+      (is (= (common-uuid/gen-uuid :journal-page-uuid journal-day)
+             (:block/uuid journal-page)))
+      (is (= expected-created-at (:block/created-at journal-page)))
+      (is (= journal-day (:block/journal-day journal-page)))
+      (is (= "journal block" (:block/title block)))
+      (is (= (:db/id journal-page) (:db/id (:block/page block))))
       (is (empty? (:errors (db-validate/validate-local-db! @conn)))))))
 
 (deftest-async export-doc-files-keeps-journal-day-when-journal-mentions-another-date
@@ -1866,7 +2094,14 @@ abc
           "Correct number of user classes")
       (is (= 0 (count @(:ignored-properties import-state))) "No ignored properties")
       (is (= 0 (count @(:ignored-assets import-state))) "No ignored assets")
-      (is (= 1 (count @(:ignored-files import-state))) "Ignore .edn for now")
+      (is (= 4 (count @(:ignored-files import-state)))
+          "Unsupported .edn, whiteboard and :hidden-excluded files are reported as ignored")
+      (is (= #{:unsupported-file-format :whiteboard-not-supported :hidden}
+             (set (map :reason @(:ignored-files import-state)))))
+      (is (= #{"ignored/about.org" "ignored/icon-page.md"}
+             (set (map :path (filter #(= :hidden (:reason %))
+                                     @(:ignored-files import-state)))))
+          "Files excluded by :hidden are reported with their paths")
       ;; 2 zotero pdf are external files so not counted here
       (is (= 7 (count @assets))))
 
@@ -2779,15 +3014,15 @@ abc
 (deftest-async import-favorites-from-og-config-edn
   (p/let [dir (write-temp-file-graph
                {"logseq/config.edn"
-                (str "{:favorites [\"Projects\" \"[[Projects]]\" \"foo/bar\"]\n"
+                (str "{:favorites [\"Projects\" \"[[Projects]]\" \"projects\" \"foo/bar\"]\n"
                      " :file/name-format :triple-lowbar}\n")
                 "pages/Projects.md" "- project work\n- [[foo/bar]]\n"})
           conn (db-test/create-conn)
           _ (db-pipeline/add-listener conn)
           _ (import-file-graph-to-db dir conn {})
           favorite-titles (imported-favorite-titles @conn)]
-    (is (= 3 (count favorite-titles))
-        "Bare names, bracketed page refs, and namespaced pages each become a favorite link")
+    (is (= 2 (count favorite-titles))
+        "Bare names, bracketed page refs, and namespaced pages become favorite links, each page only once (#8596)")
     (is (= #{"Projects" "foo/bar"}
            (set favorite-titles))
         "Imported favorites resolve to the original pages including flattened namespaces")))

@@ -44,7 +44,7 @@
   (or (aget claims "pat_id")
       (aget claims "sub")))
 
-(defn- forward-semantic-request [request ^js env {:keys [internal-path path-params]} ^js url e2ee?]
+(defn- forward-semantic-request [request ^js env {:keys [internal-path path-params]} ^js url e2ee? claims]
   (let [graph-id (:graph-id path-params)
         path (reduce-kv (fn [result k value]
                           (string/replace result (str ":" (name k)) value))
@@ -56,7 +56,14 @@
     ;; index flag is authoritative, so pass it down for DO-side write gating.
     (when e2ee?
       (.set (.-searchParams target) "graph-e2ee" "true"))
-    (forward-sync-request request env graph-id target)))
+    (let [forwarded (platform/request (.-url request) request)
+          actor #js {"sub" (aget claims "sub")
+                     "cognito:username" (or (aget claims "cognito:username") "")
+                     "email" (or (aget claims "email") "")}]
+      ;; Overwrite caller-supplied identity before crossing the internal DO boundary.
+      (.set (.-headers forwarded) "x-logseq-sync-actor"
+            (js/encodeURIComponent (js/JSON.stringify actor)))
+      (forward-sync-request forwarded env graph-id target))))
 
 (defn- rate-limit-response []
   (js/Response. (js/JSON.stringify #js {:error "rate limit exceeded"})
@@ -149,7 +156,7 @@
                                               :handler (:handler operation)
                                               :graph-id graph-id})
                         :else
-                        (forward-semantic-request request env operation url e2ee?)))))))))))))
+                        (forward-semantic-request request env operation url e2ee? claims)))))))))))))
 
 (defn- request-user-id
   [request]

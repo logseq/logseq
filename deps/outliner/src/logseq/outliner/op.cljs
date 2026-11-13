@@ -178,6 +178,11 @@
 
 (def ^:private ops-validator (m/validator ops-schema))
 
+(defn validate-ops!
+  "Validates canonical operation shapes before any graph changes."
+  [ops]
+  (assert (ops-validator ops) ops))
+
 (defn- reaction-user-id
   [reaction]
   (:db/id (:logseq.property/created-by-ref reaction)))
@@ -426,22 +431,37 @@
   [[op _args]]
   (= :batch-import-edn op))
 
-(defn apply-ops!
+(defn operation-options
+  "Builds common batch metadata while preserving caller execution options.
+
+  | Option | Meaning |
+  | --- | --- |
+  | `:outliner-op` | Transaction label; defaults to the operation for a single-operation batch. |
+  | `:db-sync/tx-id` | Transaction UUID; generated when absent. |
+  | `:additional-tx` | Additional datoms to apply once after the operations. |
+  | `:current-block` | Execution context excluded from committed metadata. |
+
+  Other caller options are forwarded. Connection, local-transaction and import
+  metadata are derived here for both canonical and raw-content batches."
   [conn ops opts]
-  (assert (ops-validator ops) ops)
-  (let [semantic-ops (atom [])
-        single-op-outliner-op (when (= 1 (count ops))
-                                (first (first ops)))
-        opts' (cond-> (assoc opts
+  (let [default-outliner-op (when (= 1 (count ops)) (ffirst ops))
+        options (cond-> (assoc opts
                              :transact-opts {:conn conn}
                              :local-tx? true
                              :db-sync/tx-id (or (:db-sync/tx-id opts) (random-uuid)))
-                (and single-op-outliner-op
+                (and default-outliner-op
                      (nil? (:outliner-op opts)))
-                (assoc :outliner-op single-op-outliner-op)
+                (assoc :outliner-op default-outliner-op)
 
                 (some import-edn-op? ops)
-                (assoc ::sqlite-export/imported-data? true))
+                (assoc ::sqlite-export/imported-data? true))]
+    options))
+
+(defn apply-ops!
+  [conn ops opts]
+  (validate-ops! ops)
+  (let [semantic-ops (atom [])
+        opts' (operation-options conn ops opts)
         *result (atom nil)]
 
     (ldb/batch-transact-with-temp-conn!
@@ -451,6 +471,10 @@
          (let [result (apply-op! temp-conn opts' *result op-entry)
                [_ [blocks target-id insert-opts]] (first (get-in result [:tx-meta :outliner-ops]))
                op-entry (case op
+                          :upsert-property (let [[_ schema property-opts] args]
+                                             [:upsert-property [(:db/ident result) schema property-opts]])
+                          :create-page (let [[title page-opts] args]
+                                         [:create-page [title (assoc page-opts :uuid (second result))]])
                           :insert-blocks (when result [:insert-blocks [blocks target-id insert-opts]])
                           :apply-template (when result [:apply-template [(first args) target-id
                                                                          (assoc insert-opts :template-blocks blocks)]])

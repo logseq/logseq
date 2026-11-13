@@ -82,10 +82,11 @@
 
 (defn get-matched-ids
   [content]
-  (->> (re-seq id-ref-pattern content)
-       (distinct)
-       (map second)
-       (map uuid)))
+  (some->> (re-seq id-ref-pattern content)
+           (distinct)
+           (map second)
+           (filter common-util/uuid-string?)
+           (map uuid)))
 
 (defn title-has-id-ref?
   [title]

@@ -517,7 +517,6 @@
  :editor.slash/node-embed-desc "Nhúng một nút vào đây"
  :editor.slash/node-reference "Tham chiếu nút"
  :editor.slash/node-reference-desc "Tạo liên kết ngược đến một nút (trang hoặc khối)"
- :editor.slash/normal-text "Văn bản thường"
  :editor.slash/normal-text-desc "Xoá tiêu đề và đặt lại văn bản thường"
  :editor.slash/number-children "Đánh số các con"
  :editor.slash/number-list "Danh sách có số"

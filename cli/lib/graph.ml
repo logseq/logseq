@@ -1117,6 +1117,22 @@ let execute_graph_export mode _graph repo opts config =
                  ~path:output_path) (fun _ ->
                 pure (graph_export_message mode config output_path))))
 
+let graph_import_rejection result =
+  let error =
+    match Edn_util.tagged_error_value result with
+    | Some _ as error -> error
+    | None -> Edn_util.get result "error"
+  in
+  match error with
+  | Some error when not (Edn_util.is_null error) ->
+      let message =
+        Edn_util.worker_error_message
+          ~default_message:(Melange_edn_melange.to_edn_string error)
+          error
+      in
+      Some (Error.make Error.Graph_validation_failed message)
+  | _ -> None
+
 let execute_graph_import mode graph repo opts config =
   let open Cli_effect in
   let new_graph = not (graph_exists config graph) in
@@ -1153,17 +1169,24 @@ let execute_graph_import mode graph repo opts config =
                           | Import_sqlite ->
                               Transport.thread_api_import_db_binary
                                 invoke_config ~repo ~data:input_data)
-                          (fun _ ->
-                            bind (Server_runtime.restart_server config repo)
-                              (function
-                              | Error err ->
-                                  pure
-                                    (Cli_result.error
-                                       ~command:Command_id.Graph_import mode err)
-                              | Ok _ ->
-                                  pure
-                                    (graph_import_message mode config graph opts
-                                       new_graph)))))
+                          (fun result ->
+                            match graph_import_rejection result with
+                            | Some err ->
+                                pure
+                                  (Cli_result.error
+                                     ~command:Command_id.Graph_import mode err)
+                            | None ->
+                                bind (Server_runtime.restart_server config repo)
+                                  (function
+                                  | Error err ->
+                                      pure
+                                        (Cli_result.error
+                                           ~command:Command_id.Graph_import mode
+                                           err)
+                                  | Ok _ ->
+                                      pure
+                                        (graph_import_message mode config graph
+                                           opts new_graph)))))
           in
           bind (Server_runtime.stop_server config repo) (function
             | Error err when err.Error.code = Error.Server_not_found ->

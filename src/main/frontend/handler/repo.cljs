@@ -48,7 +48,7 @@
   (not (demo-only-repo? repo repos)))
 
 (defn remove-repo!
-  [{:keys [url] :as repo} & {:keys [switch-graph?]
+  [{:keys [url] :as repo} & {:keys [switch-graph? ownership]
                              :or {switch-graph? true}}]
   (if-not (removable-repo? repo (state/get-repos))
     (p/rejected (ex-info "Cannot delete the demo graph when it is the only graph"
@@ -56,7 +56,9 @@
                           :repo url}))
     (let [current-repo (state/get-current-repo)]
       (p/do!
-       (db-persist/delete-graph! url)
+       (if ownership
+         (db-persist/delete-graph! url ownership)
+         (db-persist/delete-graph! url))
        (search/remove-db! url)
        (state/delete-repo! repo)
        (when switch-graph?
@@ -145,12 +147,10 @@
 
 (defn refresh-repos!
   []
-  (p/let [repos (get-repos)
-          repos' (combine-local-&-remote-graphs
-                  repos
-                  (state/get-rtc-graphs))]
-    (state/set-repos! repos')
-    repos'))
+  (p/let [repos (get-repos)]
+    (let [repos' (combine-local-&-remote-graphs repos (state/get-rtc-graphs))]
+      (state/set-repos! repos')
+      repos')))
 
 (defn graph-ready!
   ;; FIXME: Call electron that the graph is loaded, an ugly implementation for redirect to page when graph is restored
@@ -164,14 +164,16 @@
   (let [full-graph-name (string/lower-case (str config/db-version-prefix (string/trim graph-name)))]
     (some #(= (some-> (:url %) string/lower-case) full-graph-name) (state/get-repos))))
 
-(defn- create-db [full-graph-name {:keys [file-graph-import? creating-remote-graph?]}]
+(defn- create-db [full-graph-name {:keys [file-graph-import? creating-remote-graph? on-created]}]
   (->
    (p/let [config config/config-default-content
            _ (persist-db/<new full-graph-name
                               (cond-> {:config config
                                        :graph-git-sha (build-version/revision)
                                        :creating-remote-graph? creating-remote-graph?}
-                                file-graph-import? (assoc :import-type :file-graph)))
+                                file-graph-import? (assoc :import-type :file-graph
+                                                          :create-only? true
+                                                          :on-created on-created)))
            _ (state/add-repo! {:url full-graph-name :root (config/get-local-dir full-graph-name)})
            _ (restore-and-setup-repo! full-graph-name {:file-graph-import? file-graph-import?})
            _ (when-not file-graph-import? (route-handler/redirect-to-home!))

@@ -54,6 +54,7 @@
    [logseq.db.frontend.property :as db-property]
    [logseq.db.frontend.schema :as db-schema]
    [logseq.db.sqlite.create-graph :as sqlite-create-graph]
+   [logseq.db.sqlite.export :as sqlite-export]
    [logseq.db.sqlite.util :as sqlite-util]
    [logseq.graph-parser.exporter :as gp-exporter]
    [promesa.core :as p]
@@ -232,9 +233,42 @@
   {:msg msg
    :level level})
 
+(defn- truncate-import-text
+  [s limit]
+  (let [s (str s)]
+    (if (> (count s) limit)
+      (str (subs s 0 limit) "...")
+      s)))
+
+(defn- compact-import-location
+  [location]
+  (cond
+    (map? location) (into {} (map (fn [[k v]] [k (truncate-import-text v 200)]) location))
+    (nil? location) nil
+    :else (truncate-import-text location 200)))
+
+(defn- compact-ignored-item
+  "Keep identifying metadata (path/property/location/reason/schema). :value is
+   dropped because it can contain arbitrary user content."
+  [item]
+  (cond-> (update (dissoc item :value) :location compact-import-location)
+    (contains? item :reason)
+    (update :reason #(if (keyword? %) % (str %)))
+    (contains? item :schema)
+    (update :schema #(truncate-import-text (pr-str %) 300))))
+
+(defn- compact-validation-error
+  [{:keys [entity dispatch-key errors]}]
+  {:title (truncate-import-text
+           (or (:block/title entity) (:block/name entity) (:db/ident entity) (:db/id entity))
+           200)
+   :page (some-> (:block/page entity) :block/name)
+   :dispatch-key dispatch-key
+   :errors (truncate-import-text (pr-str errors) 500)})
+
 (defn- compact-import-result
-  "Counts-only summary. File contents, asset bytes, property values, and
-  import indexes must not leave the worker."
+  "Counts plus bounded, value-free detail lists. File contents, asset bytes,
+  property values, and import indexes must not leave the worker."
   [result notifications validation]
   (let [import-state (:import-state result)
         files (:files result)
@@ -255,6 +289,10 @@
      :ignored-assets-count (count ignored-assets)
      :ignored-properties-count (count ignored-props)
      :validation-error-count (count (:errors validation))
+     :ignored-files-detail (mapv compact-ignored-item ignored-files)
+     :ignored-assets-detail (mapv compact-ignored-item ignored-assets)
+     :ignored-properties-detail (mapv compact-ignored-item ignored-props)
+     :validation-errors-detail (mapv compact-validation-error (:errors validation))
      :notifications (mapv compact-error-notification error-notifications)}))
 
 (defn- import-issue-count
@@ -371,7 +409,7 @@
         (p/resolved nil)))))
 
 (defn- <read-and-copy-import-asset
-  [repo file assets buffer-handler]
+  [repo file assets buffer-handler dry-run?]
   (p/let [payload (<read-import-asset-payload file)]
     (when payload
       (let [buffer (.-buffer payload)
@@ -388,7 +426,7 @@
                               :checksum checksum
                               :asset-id asset-id})]
           (swap! assets assoc asset-name asset-data)
-          (when-not pdf-annotation?
+          (when-not (or dry-run? pdf-annotation?)
             (platform/asset-write-bytes! (platform/current)
                                          repo
                                          (str asset-id "." asset-type)
@@ -405,6 +443,20 @@
     (-> (worker-state/<invoke-main-thread :thread-api/set-ui-state path value)
         (p/catch (fn [_error] nil)))))
 
+(defn- rethrow-as-import-error!
+  [error]
+  (let [data (ex-data error)
+        import-error (if (gp-exporter/file-import-error? error)
+                       error
+                       (gp-exporter/file-import-error (:path data) error))]
+    (log/error :file-graph-import-failed {:message (ex-message import-error)
+                                          :path (:path (ex-data import-error))
+                                          :reason (:reason (ex-data import-error))
+                                          :error (gp-exporter/error-str error)
+                                          :cause (ex-cause error)
+                                          :ex-data data})
+    (throw import-error)))
+
 (defn- <import-file-graph!
   [repo config-file files opts]
   (when-let [conn (worker-state/get-datascript-conn repo)]
@@ -416,13 +468,42 @@
                              :<read-file <read-import-file-content
                              :<get-file-stat <import-file-stat
                              :<read-and-copy-asset (fn [file assets buffer-handler]
-                                                     (<read-and-copy-import-asset repo file assets buffer-handler))))]
-      (p/let [result (gp-exporter/export-file-graph conn conn config-file files options)
-              _ (set-import-ui-state! [:graph/importing-state :step] :validating)
-              _ (set-import-ui-state! [:graph/importing-state :label] :import/validating-graph)
-              _ (set-import-ui-state! [:graph/importing-state :current-page] nil)
-              validation (worker-db-validate/validate-db conn :fix false)]
-        (terminal-import-result run-id (compact-import-result result @notifications validation))))))
+                                                     (<read-and-copy-import-asset repo file assets buffer-handler false))))]
+      (-> (p/let [result (gp-exporter/export-file-graph conn conn config-file files options)
+                  _ (set-import-ui-state! [:graph/importing-state :step] :validating)
+                  _ (set-import-ui-state! [:graph/importing-state :label] :import/validating-graph)
+                  _ (set-import-ui-state! [:graph/importing-state :current-page] nil)
+                  validation (worker-db-validate/validate-db conn :fix false)]
+            (terminal-import-result run-id (compact-import-result result @notifications validation)))
+          (p/catch rethrow-as-import-error!)))))
+
+(defn- <scan-file-graph!
+  "Runs the file-graph export into a throwaway in-memory conn so the renderer
+  can preview what an import would create and skip. Nothing is persisted."
+  [config-file files opts]
+  (let [conn (sqlite-export/create-conn)
+        initial-entity-ids (into #{} (map :e) (d/datoms @conn :eavt))
+        notifications (atom [])
+        options (-> opts
+                    (assoc :notify-user #(swap! notifications conj %)
+                           :set-ui-state set-import-ui-state!
+                           :<read-file <read-import-file-content
+                           :<get-file-stat <import-file-stat
+                           :<read-and-copy-asset (fn [file assets buffer-handler]
+                                                   (<read-and-copy-import-asset nil file assets buffer-handler true))))]
+    (-> (p/let [result (gp-exporter/export-file-graph conn conn config-file files options)
+                validation (worker-db-validate/validate-db conn :fix false :silent? true)
+                db @conn
+                imported-count (fn [attr]
+                                 (transduce (remove #(contains? initial-entity-ids (:e %)))
+                                            (completing (fn [total _] (inc total)))
+                                            0
+                                            (d/datoms db :avet attr)))]
+          (assoc (compact-import-result result @notifications validation)
+                 :page-count (imported-count :block/name)
+                 :journal-count (imported-count :block/journal-day)
+                 :block-count (imported-count :block/page)))
+        (p/catch rethrow-as-import-error!))))
 
 
 (defn upsert-addr-content!
@@ -803,7 +884,7 @@
 
             (db-listener/listen-db-changes! repo conn)
 
-            nil))))))
+            (boolean initial-tx-report)))))))
 
 
 (defn- <list-all-dbs
@@ -876,23 +957,31 @@
    (when close-other-db?
      (close-other-dbs! repo))
    (when @shared-service/*master-client?
-     (<create-or-open-db! repo (dissoc opts :close-other-db?)))
-   nil))
+     (<create-or-open-db! repo (dissoc opts :close-other-db?)))))
 
 (def-thread-api :thread-api/create-or-open-db
   [repo opts]
   (when-not (graph-dir/same-repo? repo (worker-state/get-current-repo)) ; graph switched
     (reset! worker-state/*deleted-block-uuid->db-id {}))
-  (p/let [_ (start-db! repo opts)
+  (p/let [created? (start-db! repo opts)
+          _ (when (and (:create-only? opts) (not created?))
+              (throw (ex-info "Graph already exists" {:code :graph-already-exists :repo repo})))
           conn (or (worker-state/get-datascript-conn repo)
                    (throw (ex-info "Missing worker graph connection"
                                    {:type :db/missing-connection
                                     :repo repo})))]
-    {:schema (:schema @conn)}))
+    (cond-> {:schema (:schema @conn)}
+      (:create-only? opts)
+      (assoc :graph-uuid (:kv/value (d/entity @conn :logseq.kv/local-graph-uuid))))))
 
 (def-thread-api :thread-api/unsafe-unlink-db
-  [repo]
+  [repo & [expected-graph-uuid]]
   (p/let [pool (<get-opfs-pool repo)
+          _ (when expected-graph-uuid
+              (let [conn (worker-state/get-datascript-conn repo)
+                    actual-uuid (some-> conn deref (d/entity :logseq.kv/local-graph-uuid) :kv/value)]
+                (when-not (= expected-graph-uuid actual-uuid)
+                  (throw (ex-info "Graph identity changed" {:code :graph-not-exists :repo repo})))))
           _ (sync-crypt/cancel-ui-requests! {:reason :unsafe-unlink-db
                                              :repo repo})
           _ (close-db! repo)
@@ -1003,6 +1092,10 @@
   [repo config-file files opts]
   (<import-file-graph! repo config-file files opts))
 
+(def-thread-api :thread-api/scan-file-graph
+  [config-file files opts]
+  (<scan-file-graph! config-file files opts))
+
 (comment
   (def-thread-api :general/dangerousRemoveAllDbs
     []
@@ -1066,9 +1159,11 @@
 
 (defn- notify-invalid-data
   [{:keys [tx-meta]} errors]
-  ;; don't notify on production when undo/redo failed
-  (when-not (and (or (:undo? tx-meta) (:redo? tx-meta))
-                 (not worker-util/dev?))
+  ;; File-graph import reports the failing file itself. Skip the generic toast.
+  (when-not (or (get tx-meta :logseq.graph-parser.exporter/imported-data?)
+                (get tx-meta :logseq.graph-parser.exporter/new-graph?)
+                (and (or (:undo? tx-meta) (:redo? tx-meta))
+                     (not worker-util/dev?)))
     (shared-service/broadcast-to-clients! :notification
                                           [nil :error nil nil nil
                                            {:i18n-key :storage/invalid-data-writing}])

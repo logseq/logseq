@@ -1781,6 +1781,36 @@
   [page id-titles]
   (clj->js (map (fn [[id title]] {:id id :title title :page page}) id-titles)))
 
+(deftest search-blocks-page-option-scopes-namespace-matches-test
+  (async done
+    (let [page-a (str (random-uuid))
+          page-b (str (random-uuid))
+          block-a (str (random-uuid))
+          block-b (str (random-uuid))
+          ids (fn [db option]
+                (with-redefs [search/combine-results (fn [_db results] results)
+                              search/search-result->block-result
+                              (fn [_conn _q _code-class _option result]
+                                (assoc result
+                                       :id (:id result)
+                                       :block/uuid (uuid (:id result))))]
+                  (set (map :id (search/search-blocks (atom :large-db)
+                                                      db
+                                                      "alpha/needle"
+                                                      (merge {:limit 10
+                                                              :enable-snippet? false}
+                                                             option))))))]
+      (-> (p/let [db (<open-search-db)]
+            (search/create-tables-and-triggers! db)
+            (search/upsert-blocks! db (index-rows page-a [[block-a "alpha/needle"]]))
+            (search/upsert-blocks! db (index-rows page-b [[block-b "needle"]]))
+            (is (= #{block-a block-b} (ids db {})))
+            (is (= #{block-a} (ids db {:page page-a})))
+            (is (= #{block-b} (ids db {:page page-b})))
+            (.close db))
+          (p/catch (fn [e] (is false (str e))))
+          (p/finally done)))))
+
 (deftest fts-rows-keep-blocks-rowids-test
   (async done
     (let [page (str (random-uuid))

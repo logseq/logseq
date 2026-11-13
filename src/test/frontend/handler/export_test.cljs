@@ -11,6 +11,8 @@
             [frontend.fs :as fs]
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.export :as export]
+            [frontend.handler.export.html :as export-html]
+            [frontend.handler.export.opml :as export-opml]
             [frontend.handler.export.text :as export-text]
             [frontend.handler.notification :as notification]
             [frontend.persist-db :as persist-db]
@@ -499,6 +501,90 @@
   ```")
              (string/trim content)))
       (done))))
+
+(defn- global-get
+  [k]
+  (aget js/globalThis k))
+
+(defn- global-set!
+  [k v]
+  (aset js/globalThis k v))
+
+(defn- install-node-xml-prettify-stub!
+  "Node has no DOMParser. prettifyXml falls back to the original markup when
+   the stub serializer reports a parser error."
+  []
+  (global-set! "DOMParser"
+               (js* "class { parseFromString(source) { return {source: source}; } }"))
+  (global-set! "XSLTProcessor"
+               (js* "class { importStylesheet() {} transformToDocument(doc) { return doc; } }"))
+  (global-set! "XMLSerializer"
+               (js* "class { serializeToString(doc) { return '<parsererror>' + ((doc && doc.source) || ''); } }")))
+
+(defn- with-node-xml-prettify-stub
+  [f]
+  (let [parser (global-get "DOMParser")
+        xslt (global-get "XSLTProcessor")
+        serializer (global-get "XMLSerializer")]
+    (install-node-xml-prettify-stub!)
+    (try
+      (f)
+      (finally
+        (global-set! "DOMParser" parser)
+        (global-set! "XSLTProcessor" xslt)
+        (global-set! "XMLSerializer" serializer)))))
+
+(deftest export-image-asset-block-keeps-asset-reference
+  (testing "a nested image block keeps an asset reference in markdown, html, and opml"
+    (with-node-xml-prettify-stub
+      (fn []
+        (let [image-uuid #uuid "14630000-0000-4000-8000-000000000146"
+              parent-uuid #uuid "14630000-0000-4000-8000-000000000001"
+              db @(db-test/create-conn-with-blocks
+                   {:pages-and-blocks
+                    [{:page {:block/title "Image export"}
+                      :blocks
+                      [{:block/title "Notes"
+                        :block/uuid parent-uuid
+                        :build/keep-uuid? true
+                        :build/children
+                        [{:block/title "Nested text"}
+                         {:block/title "Sunset caption"
+                          :block/uuid image-uuid
+                          :build/keep-uuid? true
+                          :build/tags #{:logseq.class/Asset}
+                          :build/properties {:logseq.property.asset/type "png"
+                                             :logseq.property.asset/checksum "img-checksum"
+                                             :logseq.property.asset/size 128}}
+                         {:block/title "More text"}]}]}]})
+              content-config {:export-bullet-indentation "\t"
+                              :encode-highlight-as-mark? true}
+              options {:remove-options #{:property}}
+              asset-ref (str "../assets/" image-uuid ".png")
+              image-md (str "![Sunset caption](" asset-ref ")")
+              markdown (worker-export/export-blocks-as-format
+                        db parent-uuid :markdown options content-config)
+              image-only (worker-export/export-blocks-as-format
+                          db image-uuid :markdown options content-config)
+              {:keys [content format]} (worker-export/get-blocks-export-data
+                                        db parent-uuid
+                                        {:include-properties? false}
+                                        content-config)
+              html (export-html/export-helper content format options)
+              opml (export-opml/export-helper content format options)]
+          (is (= (string/trim (str "\n- Notes\n"
+                                   "\t- Nested text\n"
+                                   "\t- " image-md "\n"
+                                   "\t- More text"))
+                 (string/trim markdown))
+              "markdown copy/export keeps the image markup")
+          (is (= (str "- " image-md)
+                 (string/trim image-only))
+              "exporting the image block alone keeps the asset reference")
+          (is (string/includes? html "<img") html)
+          (is (string/includes? html asset-ref) html)
+          (is (string/includes? html "alt=\"Sunset caption\"") html)
+          (is (string/includes? opml image-md) opml))))))
 
 (deftest export-blocks-as-markdown-level<N
   (async done

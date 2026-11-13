@@ -3,13 +3,14 @@
   "private": true,
   "scripts": {
     "bundle": "opam exec -- dune build @bundle",
-    "test": "opam exec -- dune runtest"
+    "test": "opam exec -- dune runtest",
+    "test:query-integration": "node --test ../cli-e2e/scripts/query_desktop_parity_test.cjs"
   },
   "devDependencies": {
     "vite": "^8.0.16"
   },
   "dependencies": {
-    "@logseq/graph-lifecycle": "file:../deps/graph-lifecycle",
+    "@logseq/graph-lifecycle": "link:../deps/graph-lifecycle",
     "mldoc": "1.5.9",
     "transit-js": "0.8.874"
   }

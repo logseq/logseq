@@ -1,6 +1,7 @@
 (ns frontend.persist-db
   "Backend of DB based graph"
-  (:require [electron.ipc :as ipc]
+  (:require [clojure.string :as string]
+            [electron.ipc :as ipc]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db.transact :as db-transact]
@@ -371,6 +372,8 @@
                                          :session-id session-id
                                          :epoch epoch})
         (p/let [_ (when @remote-db
+                    ;; Stop queued snapshots for the old graph before replacing its worker.
+                    (db-subs/reset-graph! nil)
                     (remote/stop! @remote-db))]
           (if (and only-if-current? (not (current-for-repo?)))
             (do
@@ -491,14 +494,38 @@
 
 ;; FIXME: limit repo name's length and sanity
 ;; @shuyu Do we still need this?
-(defn <new [repo opts]
+(defn- graph-storage-lock
+  [repo]
+  (str "logseq-create-graph:" (string/lower-case repo)))
+
+(defn <delete-created-browser-graph!
+  [repo graph-uuid]
+  (js/navigator.locks.request
+   (graph-storage-lock repo)
+   (fn [] (state/<invoke-db-worker :thread-api/unsafe-unlink-db repo graph-uuid))))
+
+(defn <new [repo {:keys [create-only? on-created] :as opts}]
   {:pre [(<= (count repo) 128)]}
-  (p/let [generation (when (electron-runtime?) (ipc/ipc "createGraph" repo))
-          impl (if (electron-runtime?)
-                 (<ensure-remote! repo {:generation generation})
-                 (p/resolved (get-impl)))
-          _ (protocol/<new impl repo opts)]
-    (<export-db repo {})))
+  (let [opts (dissoc opts :create-only? :on-created)]
+    (if (electron-runtime?)
+      (p/let [generation (ipc/ipc "createGraph" repo (boolean create-only?))
+              _ (when on-created (on-created {:url repo :generation generation}))
+              impl (<ensure-remote! repo {:generation generation})
+              _ (protocol/<new impl repo opts)]
+        (<export-db repo {}))
+      (let [create! (fn []
+                      (p/let [exists? (when create-only?
+                                        (state/<invoke-db-worker :thread-api/db-exists repo))
+                              _ (when exists?
+                                  (throw (ex-info "Graph already exists" {:code :graph-already-exists :repo repo})))
+                              result (protocol/<new (get-impl) repo (cond-> opts create-only? (assoc :create-only? true)))
+                              _ (when on-created (on-created {:url repo :graph-uuid (:graph-uuid result)}))]
+                        (<export-db repo {})))]
+        (if (some? js/navigator.locks)
+          (js/navigator.locks.request (graph-storage-lock repo) create!)
+          (if create-only?
+            (p/rejected (ex-info "Graph creation requires exclusive storage access" {:repo repo}))
+            (create!)))))))
 
 (defn export-current-graph!
   [& {:keys [succ-notification?]}]

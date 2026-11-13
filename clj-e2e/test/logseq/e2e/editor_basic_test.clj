@@ -1612,6 +1612,73 @@
     (assert/assert-have-count ".ls-page-blocks .ls-block.selected" 4)
     (assert/assert-have-count ".cp__right-sidebar .ls-block.selected" 0)))
 
+(defn- wait-selected-blockid!
+  [blockid]
+  (w/wait-for (format ".ls-page-blocks .ls-block.selected[blockid='%s']" blockid)))
+
+(deftest select-parent-expands-nested-block-to-page-test
+  (testing "Mod+A expands grandchild -> child -> parent -> whole page"
+    (let [page-name (p/get-page-name)
+          parent (ls-api-call! :editor.appendBlockInPage page-name "parent")
+          parent-uuid (get parent "uuid")
+          child (ls-api-call! :editor.insertBlock parent-uuid "child" {:sibling false})
+          child-uuid (get child "uuid")
+          grandchild (ls-api-call! :editor.insertBlock child-uuid "grandchild text" {:sibling false})
+          grandchild-uuid (get grandchild "uuid")]
+      (is (string? parent-uuid))
+      (ls-api-call! :editor.appendBlockInPage page-name "sibling top")
+      (w/click (loc/filter ".ls-page-blocks .block-title-wrap" :has-text "grandchild text"))
+      (assert/assert-editor-mode)
+      (k/press "ControlOrMeta+a")
+      (assert/assert-editor-mode)
+      (is (= "grandchild text" (util/get-edit-content)))
+      (k/press "ControlOrMeta+a")
+      (wait-selected-blockid! grandchild-uuid)
+      (assert/assert-have-count ".ls-page-blocks .ls-block.selected" 1)
+      (k/press "ControlOrMeta+a")
+      (wait-selected-blockid! child-uuid)
+      (assert/assert-have-count ".ls-page-blocks .ls-block.selected" 1)
+      (k/press "ControlOrMeta+a")
+      (wait-selected-blockid! parent-uuid)
+      (assert/assert-have-count ".ls-page-blocks .ls-block.selected" 1)
+      (k/press "ControlOrMeta+a")
+      (w/wait-for ".ls-page-blocks .ls-block.selected :text('sibling top')")
+      (assert/assert-is-visible
+       (loc/filter ".ls-page-blocks .ls-block.selected" :has-text "sibling top"))
+      (is (>= (.count (w/-query ".ls-page-blocks .ls-block.selected")) 4)
+          "Select-all should include the nested tree and the top-level sibling"))))
+
+(deftest select-parent-stops-at-zoomed-in-block-test
+  (testing "Mod+A inside a zoomed-in block expands to that block and then stops"
+    (let [page-name (p/get-page-name)
+          parent (ls-api-call! :editor.appendBlockInPage page-name "zoom parent")
+          parent-uuid (get parent "uuid")
+          child (ls-api-call! :editor.insertBlock parent-uuid "zoom child" {:sibling false})
+          child-uuid (get child "uuid")
+          grandchild (ls-api-call! :editor.insertBlock child-uuid "zoom grandchild" {:sibling false})
+          grandchild-uuid (get grandchild "uuid")]
+      (is (string? parent-uuid))
+      (ls-api-call! :editor.appendBlockInPage page-name "zoom sibling")
+      (w/click (format ".ls-page-blocks #dot-%s" parent-uuid))
+      (is (string/includes? (or (w/eval-js "window.location.hash") "") parent-uuid))
+      (w/click (loc/filter "#main-content-container .block-title-wrap" :has-text "zoom grandchild"))
+      (assert/assert-editor-mode)
+      (k/press "ControlOrMeta+a")
+      (k/press "ControlOrMeta+a")
+      (wait-selected-blockid! grandchild-uuid)
+      (k/press "ControlOrMeta+a")
+      (wait-selected-blockid! child-uuid)
+      (k/press "ControlOrMeta+a")
+      (wait-selected-blockid! parent-uuid)
+      (assert/assert-have-count ".ls-page-blocks .ls-block.selected" 1)
+      (k/press "ControlOrMeta+a")
+      (util/wait-timeout 300)
+      (wait-selected-blockid! parent-uuid)
+      (assert/assert-have-count ".ls-page-blocks .ls-block.selected" 1)
+      (assert/assert-have-count
+       (loc/filter ".ls-page-blocks .ls-block.selected" :has-text "zoom sibling")
+       0))))
+
 (deftest structured-and-plain-text-copy-test
   (testing "structured copy preserves trees while plain copy exposes readable indentation"
     (let [target-page "copy target"]
