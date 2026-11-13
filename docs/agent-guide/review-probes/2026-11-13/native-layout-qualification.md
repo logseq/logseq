@@ -71,11 +71,19 @@ A separate 900pt-high, 1,000-line wheel-only case reached the last
 line through a new outer-page gesture and returned to line 1, with the same
 source/owners and no backend diagnostic. The actual final-line PNG in
 `logseq-native-code-block.2ZWpN7` was inspected. Its extra hover-toolbar assertion
-still failed after 15 seconds, so the complete 900pt case remains failed. Earlier fixture
+failed after 15 seconds, so that complete 900pt attempt failed. Earlier fixture
 attempts failed on a capture-name whitelist and incorrect Scroll test ID; those
 script errors were corrected without changing acceptance assertions. Native
 text rectangles are not exposed by this public test API, so no per-line bounds
-claim is made. The 100,000-line 900pt full-wheel gate remains unexecuted.
+claim is made. Read-only analysis then showed the hover predicate incorrectly
+included metadata with no alpha/opacity fields. The selected view was already
+the first native ancestry record. Correcting only that field ownership kept the
+same strict opacity threshold, deadline, source and geometry assertions. At App
+`c2686c6b198d6c3628ee63a05b7cd3173854fb00`, the complete 900pt case passed in
+50.0 seconds (`logseq-native-code-block.CATwuF`). The final-line and returned
+first-line/visible language-toolbar PNGs were inspected. This uses only public
+wheel and hover input, with no resize, keyboard, focus/caret/offset setter.
+The 100,000-line 900pt full-wheel gate remains unexecuted.
 
 The historical standalone Release physical-footprint measurements in
 `deps/ui/nsh/RELEASE_MEMORY.md` remain scoped to their recorded revisions and
@@ -124,6 +132,11 @@ certificate fixture was corrected in App `9650d507561fa3b41d8db4d5afc3867866d91d
 Thirteen actual OpenSSL/HTTPS tests passed, plus ten standalone and four
 preparation guards. No trust store was changed locally. Workflow 43368225594
 has a completed broad-test failure at the same retained `next friday 8pm`
-assertion (80 passed / 1 failed); its actual signed-upgrade job is still running at
-this checkpoint. Neither its future outcome nor a current complete upgrade is
-claimed. No source, package, trust-store or test-success guard is bypassed.
+assertion (80 passed / 1 failed). Its actual signed-upgrade job subsequently
+failed before signing during a fresh Release startup gate: the plugins child
+passed, but its owned worker shutdown returned `Connection reset by peer`.
+Cleanup remains part of the gate, so neither this startup attempt nor the
+unreached actual upgrade is counted as passing. The certificate fix was not
+exercised by this run. The terminal failure log is retained locally at
+`/tmp/logseq-standalone-upgrade-43368225594-failed.log`. No source, package,
+trust-store or test-success guard is bypassed.

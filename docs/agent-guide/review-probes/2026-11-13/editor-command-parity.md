@@ -27,3 +27,16 @@ These are source regressions awaiting root execution. A passing fake worker prov
 Root's first maintained shared run compiled but reported four cycle assertions; actual native admission failed the same ordered-transaction assertion. The fixture represented a reference-valued status as a bare Wire.Int. The real `thread-api/get-blocks` endpoint uses `Plain_value.entity_forward_map` and serializes references as summary maps; `Properties_data.entity_id_of` consequently reads their db/id from a map. With the incorrect fake representation, every existing status looked absent and transitioned to Todo, explaining exactly the two multi-selection failures plus the repeated-editing transition and persisted-status assertion. The correction changes only fake read data to the actual reference-summary shape; expected transitions, target order, single transaction and editing identity assertions remain unchanged. A genuine fixture journal summary replaces the invalid Nil response to that known refresh endpoint. Failure labels now include the small expected/actual status batches for any further diagnosis.
 
 No production fallback accepting arbitrary bare status integers is added, and no async wait or acceptance threshold changes. These source-only fixture corrections still require root execution in both actual target harnesses.
+
+## Executed target results
+
+At App `f7d1f91efeba850edc778d5f0bae5843d3d87a8d`, the complete maintained
+shared suite compiled and passed 19,405 checks with zero failures. The actual
+native archive admission runner also passed, including the exposed task-cycle
+routes and the pre-existing updater, clipboard, geometry, worker and property
+fixtures. The initial four shared assertion failures and matching native
+failure above remain recorded; they were resolved by the real worker reference
+schema, without changing expected operation batches or adding a production
+fallback. These results qualify route/operation semantics against target
+adapters. Physical Mod-Enter, painted status changes and real database undo
+remain separate acceptance cases.
