@@ -175,11 +175,14 @@ let rtc_item (ms : Model.t Signal.signal) : t =
    false so the shared leading_toolbar stays on the header owner. *)
 let leading_toolbar ~key ~state ~controls : t =
  fun context parent ->
-  let inset = Host.titlebar_left_signal
-    ~scheduler:context.Lui_ui.ui_scheduler ~scope:context.Lui_ui.ui_scope in
-  (* Host left inset already clears traffic lights + gap; no extra pad. *)
+  let inset =
+    if apple_host context then None
+    else Some (Host.titlebar_left_signal
+      ~scheduler:context.Lui_ui.ui_scheduler ~scope:context.Lui_ui.ui_scope)
+  in
+  (* The native detail toolbar is already outside the traffic-light region. *)
   Ui_components.leading_toolbar ~key ~in_sidebar:false ~safe_area:0
-    ~safe_area_signal:inset ~padding_horizontal:0 ~state
+    ?safe_area_signal:inset ~padding_horizontal:0 ~state
     ~is_open:(fun _ -> false) ~controls context parent
 
 (* NavigationSplitView supplies the macOS SwiftUI sidebar toggle.
@@ -431,21 +434,22 @@ let main_scroll (ms : Model.t Signal.signal) : t =
                       | Model.Journals | Model.Home -> spacer ~key:"content-end" []
                       | _ -> spacer ~key:"content-end" ~height:120 []) ms ] ] ] ]
 
-(* NavigationSplitView detail column — the left dock split's second
-   pane is page scroll only. The window-level topbar sits above the
-   split so header controls do not travel with the dock animation. *)
+(* Native NavigationSplitView owns the sidebar's titlebar and safe area;
+   app controls belong in its detail column, not above both columns. *)
 let detail_column (ms : Model.t Signal.signal) : t =
+ fun context parent ->
   Ui_parts.class_signal ms
     (fun (m : Model.t) ->
       if m.left_sidebar_open then "is-left-sidebar-open" else "")
     (column ~key:"left-container"
        ~accessibility_identifier:"left-container" ~grow:1.
        ~min_height:0
+       ((if apple_host context then [topbar ms] else []) @
        [ (* invisible logseq-dom carrier: hosts forward
             document events through this extension node *)
          Logseq_el.carrier
        ; hidden_chrome ms
-       ; main_scroll ms ])
+       ; main_scroll ms ])) context parent
 
 (* Overlay layer — cmdk palette, popups (autocomplete/slash/context
    menus), dialogs and toasts mount here (single shared container;
@@ -547,18 +551,18 @@ let not_found_page : t =
   ) context parent
 
 let shell_contents (ms : Model.t Signal.signal) : t =
+ fun context parent ->
   let st = Sidebar_state.ensure ms in
   stack ~key:"shell-content"
-    [ (* Devin-style chrome: fixed window titlebar above the dock
-         splits. Sidebar/content panes animate width underneath; the
-         leading controls never remount or translate with the dock. *)
+    [ (* Other hosts retain a window-level header; macOS SwiftUI lets
+         NavigationSplitView own the sidebar's full window height. *)
       column ~key:"app" ~accessibility_identifier:"app-container" ~grow:1. ~min_height:0 ~gap:0
-        [ topbar ms
-        ; row ~key:"panes" ~grow:1. ~min_height:0 ~cross:`stretch
+        ((if apple_host context then [] else [topbar ms]) @
+        [ row ~key:"panes" ~grow:1. ~min_height:0 ~cross:`stretch
             [right_split ms st (left_split ms st (detail_column ms)) (right_sidebar ms);
              Pdf.container_el ~key:"asc" ~id:"app-single-container";
              Host_metrics.panel ()]
-        ; performance_bar () ]
+        ; performance_bar () ])
     ; overlays ms
     ; help_area ms
     ; reactive ~equal:(fun (a : Model.t) (b : Model.t) ->
@@ -569,7 +573,7 @@ let shell_contents (ms : Model.t Signal.signal) : t =
               match m.route with
               | Model.Not_found _ -> not_found_page
               | _ -> spacer ~key:"nf-none" []) ms
-    ]
+    ] context parent
 
 (* Reconcile the mounted interface after dictionary loading while retaining
    the reducer, graph worker, editor sessions and dock state. *)
