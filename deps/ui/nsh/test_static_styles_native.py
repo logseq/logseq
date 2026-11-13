@@ -17,7 +17,7 @@ from validate_static_styles import validate
 
 class NativeStyleCompileTests(unittest.TestCase):
     def check_fixture(self, body, *, rejected, expected_diagnostic=None, expected_deferred=None,
-                      ppx=False, source_rejected=False):
+                      ppx=False, source_rejected=False, compile_rejected=False):
         executable = Path(os.environ["LOGSEQ_NSH_PREFLIGHT_EXECUTABLE"]).resolve(strict=True)
         prefix = ["opam", "exec", "--switch=" + os.environ.get("OPAMSWITCH", "5.5.1"), "--"]
         includes = []
@@ -30,9 +30,20 @@ class NativeStyleCompileTests(unittest.TestCase):
             stage = Path(temporary)
             source = stage / "target_fixture.ml"
             source.write_text(body, encoding="utf-8")
-            subprocess.run([*map(str, prefix), "ocamlfind", "ocamlopt", "-package",
+            compiler = [*map(str, prefix), "ocamlfind", "ocamlopt", "-package",
                 "lui,lui.ppx" if ppx else "lui",
-                *map(str, includes), "-bin-annot", "-c", str(source)], cwd=stage, check=True)
+                *map(str, includes), "-bin-annot", "-c", str(source)]
+            if compile_rejected:
+                self.assertTrue(rejected)
+                self.assertIsNotNone(expected_diagnostic)
+                with self.assertRaises(subprocess.CalledProcessError) as failure:
+                    subprocess.run(compiler, cwd=stage, check=True,
+                        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                self.assertEqual(failure.exception.cmd, compiler)
+                self.assertIn("target_fixture.ml", failure.exception.stderr)
+                self.assertIn(expected_diagnostic, failure.exception.stderr)
+                return
+            subprocess.run(compiler, cwd=stage, check=True)
             # A supplied typed fixture must not trigger an unrelated archive
             # Dune build; it is already the exact unit under qualification.
             diagnostics = []
@@ -67,6 +78,16 @@ class NativeStyleCompileTests(unittest.TestCase):
             if expected_deferred:
                 for expected in expected_deferred:
                     self.assertIn(expected, "\n".join(diagnostics))
+
+    def test_list_item_gap_is_rejected_by_the_actual_compiler_before_launch(self):
+        self.check_fixture('''let value = Lui_elements.list_item ~text:"Help" ~gap:4 []
+''', rejected=True, compile_rejected=True,
+            expected_diagnostic="cannot be applied with label ~gap")
+
+    def test_list_item_alignment_and_standard_spacing_remain_valid(self):
+        self.check_fixture('''let value = Lui_elements.list_item ~text:"Help"
+  ~main:`start ~cross:`center ~padding:4 ~margin_horizontal:2 []
+''', rejected=False)
 
     def test_actual_string_prop_reactive_contents_transition_fails_before_launch(self):
         self.check_fixture('''let value viewport =

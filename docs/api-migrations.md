@@ -1,5 +1,27 @@
 # API migrations
 
+## Application LUI source pins advance to the qualified constructor contract
+
+All four application CI workflows and the OCaml dependency installer now pin
+LUI `12c5ef7f6e1d61dc4d16b004d24249c7c48ecc40`, replacing
+`93712b51ab40d7c5882fed1501568a55ab6722ba`. Its maintained-backend and desktop
+CI passed, including native Windows DLL/package startup and macOS/Linux complete
+fixture package upgrades. These library fixture results do not establish actual
+Logseq package or UX qualification; the application must rebuild against the
+same sibling LUI source for its OCaml and Rust halves. NSH stays pinned to
+`adc186db7213f3ccd1eacaa836cc721e9779fd14`.
+
+The dependency intentionally removes the globally unsupported `list_item ~gap`
+constructor label, including optional/signal forwarding. For example,
+`list_item ~text:"Help" ~gap:4 []` now fails compilation; keep supported
+`~main`, `~cross`, padding and margins on the item, and place authored spaced
+content in an appropriate child container. Dynamic/JSON ListItem gap input is
+rejected rather than silently discarded. Existing valid item alignment and
+spacing calls remain supported. The actual application native-build tests now
+require that compiler rejection before provider validation, alongside a valid
+alignment/spacing control. No application event, wire field, SDK revision or
+maintained mobile backend is removed by this pin update.
+
 ## Native DOM requests publish their completed patch prefix first
 
 Both native platform-request channels now publish already-completed queued
