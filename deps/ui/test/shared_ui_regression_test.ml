@@ -3066,6 +3066,9 @@ let run_views ~registry ~profile ~finish =
   let icon_body = (body ()).M.id in
   check "switching tabs retires the previous result viewport" (icon_body<>initial_body);
   let field = (search ()).M.id in
+  check "switching tabs starts a fresh autofocused search owner"
+    (field<>initial_search
+     && Hashtbl.find_opt (search ()).M.props "autofocus"=Some (P.BoolValue true));
   S.text_changed picker field "zzzz-no-matching-icon";
   let empty_body = (body ()).M.id in
   check "empty filtering owns a fresh viewport without replacing the input"

@@ -537,18 +537,17 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
            else []))
      ; box ~key:"hd" ~background:"hsl(var(--popover))"
          ~padding_horizontal:12 ~padding_vertical:4
-         [ reactive
-             ~equal:(fun (a : pstate) b ->
-                a.tab = b.tab && a.reset = b.reset)
-             (fun s ->
+         [ keyed ~source:(reactive (fun s -> [(s.tab, s.reset)]) sv)
+             ~key:(fun identity -> identity) ~cmp:Stdlib.compare
+             ~mount:(fun identity ->
+                let tab, _reset = Signal.get identity in
                 Ui_components.search_row
-                  ~key:
-                    ("sr-" ^ tab_name s.tab ^ "-" ^ string_of_int s.reset)
+                  ~key:"sr"
                   ~height:32 ~pad_left:32 ~borderless:true ~autofocus:true
                   ~background:
                     "var(--lx-gray-03, var(--ls-tertiary-background-color, \
                      hsl(var(--muted))))"
-                  ~placeholder:(placeholder_of s.tab)
+                  ~placeholder:(placeholder_of tab)
                   ~text_signal:(reactive (fun s -> s.q) sv)
                   ~on_text:on_input
                   ~on_dismiss:on_search_dismiss
@@ -556,11 +555,11 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
                   ~on_clear:(fun () ->
                     Option.iter (fun input -> input.Ui_services.focus ())
                       (Ui_services.dom_query ".cp__emoji-icon-picker input"))
-                  ())
-             sv ]
+                  ()) ]
      ; (* A tab or query owns a fresh result viewport, as master reset-q!
           scrolls the results to zero. Color/results repaint within that owner;
-          the search input and surrounding picker keep their existing scope. *)
+          Query edits retain the search input; tab/reset changes own a fresh
+          search scope above. The surrounding picker keeps its existing scope. *)
        keyed ~source:(reactive (fun s -> [(s.tab, s.q, s.reset)]) sv)
          ~key:(fun identity -> identity) ~cmp:Stdlib.compare
          ~mount:(fun _ -> Ui_parts.class_signal sv

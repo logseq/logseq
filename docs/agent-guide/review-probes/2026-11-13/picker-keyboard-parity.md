@@ -23,6 +23,10 @@ The correction forwards an optional `on_dismiss` through the existing helper.
 The picker uses its current state/search-generation owner: nonempty Escape
 invalidates search completions, clears results/query and increments the existing
 input/viewport reset key; blank Escape invokes the existing close callback.
+The search row now has an explicit keyed scope over `(tab, reset)`: changing a
+row key inside the prior reactive branch was insufficient to retire its inner
+`in` input. Query/color changes retain this scope, while tab/reset changes
+dispose the complete prior search owner and install the new autofocus input.
 This is necessary because canonical input cancellation closes one draft until
 actual edit or fresh focus. A controlled text patch alone intentionally cannot
 rearm that draft (`lui/platform/nsh/src/inputs.rs:request_dismiss`). No shared
