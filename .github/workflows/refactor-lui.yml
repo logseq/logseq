@@ -14,7 +14,6 @@ concurrency:
 env:
   NODE_VERSION: '22'
   OCAML_VERSION: '5.5.1'
-  LUI_REF: '2475de1e9fecf3c987b3d07617699dd90c21ec73'
 
 jobs:
   ubuntu:
@@ -46,11 +45,13 @@ jobs:
           ocaml-compiler: ${{ env.OCAML_VERSION }}
           dune-cache: true
 
-      - name: Checkout lui at LUI_REF
+      - name: Checkout lui at pinned revision
         id: lui
         run: |
+          lui_ref=$(sed -n 's/.*lui\.git#\([0-9a-f]\{40\}\).*/\1/p' deps/ui/scripts/install-opam-deps.sh | head -1)
+          test -n "$lui_ref"
           git clone --no-checkout https://github.com/logseq/lui.git "$RUNNER_TEMP/lui"
-          git -C "$RUNNER_TEMP/lui" checkout "$LUI_REF"
+          git -C "$RUNNER_TEMP/lui" checkout "$lui_ref"
           echo "commit=$(git -C "$RUNNER_TEMP/lui" rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           echo "LUI_SOURCE=$RUNNER_TEMP/lui" >> "$GITHUB_ENV"
 
