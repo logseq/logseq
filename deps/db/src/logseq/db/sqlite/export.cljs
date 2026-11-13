@@ -343,9 +343,9 @@
              (group-by #(select-keys (:page %) [:block/title :build/journal]))
              (mapv #(apply merge-with (fn [e1 e2]
                                         ;; merge :page and add :blocks
-                                        (if (and (map? e1) (map e2))
+                                        (if (and (map? e1) (map? e2))
                                           (merge e1 e2)
-                                          (into e1 e2)))
+                                          (sqlite-build/dedupe-blocks-by-uuid (into e1 e2))))
                            (second %))))
         ;; Use merge-with to preserve new-property? and to allow full copies to overwrite shallow ones
         properties (apply merge-with merge (keep :properties export-maps))
