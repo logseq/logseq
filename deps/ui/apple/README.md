@@ -85,6 +85,9 @@ uses ad-hoc signing, and runs `codesign --verify --deep --strict`. Move or remov
 the previous output before packaging again. Distribution signing and
 notarization are separate release steps.
 
+Set `LOGSEQ_DUMP=1` for layout diagnostics: document clicks log retained node
+frames and mounted native scroll metrics without including document text.
+
 ## Architecture
 
 `NativeRuntime` resolves the complete Logseq C ABI with `dlopen`, starts OCaml

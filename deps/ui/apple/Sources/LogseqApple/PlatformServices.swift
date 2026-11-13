@@ -342,6 +342,21 @@ final class PlatformServices {
     }
 
     private func dom(_ op: String, _ request: [String: Any]) throws {
+        if op == "dump-frames" {
+            let rows: [[String: Any]] = nodes.keys.sorted().map { id in
+                var row: [String: Any] = ["id": id, "kind": nodes[id]?["kind"] ?? nodes[id]?["identifier"] ?? "unknown", "children": children[id] ?? []]
+                for key in ["accessibility-identifier", "style-class", "grow", "min-width", "max-width", "width", "height", "main", "cross", "value", "first-pane-width"] {
+                    if let value = nodes[id]?[key] { row[key] = value }
+                }
+                if let r = rect(id) { row["frame"] = ["x": r.minX, "y": r.minY, "width": r.width, "height": r.height] }
+                if let metrics = backend?.scrollMetrics(nodeID: id) {
+                    row["scroll"] = ["top": metrics.offset, "height": metrics.contentSize.height, "viewport-height": metrics.viewportSize.height, "viewport-width": metrics.viewportSize.width]
+                }
+                return row
+            }
+            NSLog("Logseq Apple frames %@", try jsonString(rows))
+            return
+        }
         if ["open-file-picker", "download-text", "download-binary"].contains(op) { try fileRequest(op, request); return }
         if op == "set-input-focus" {
             let block: String = try required(request, "block-id"), focused: Bool = try required(request, "focused")
