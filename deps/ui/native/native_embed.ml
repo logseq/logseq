@@ -490,7 +490,7 @@ let initialize_unlocked platform_code host_code (payload : string) =
   Host.set_host_op (fun name payload ->
       platform_request (name ^ "\n" ^ payload));
   Resource_native.reset ();
-  if host_kind = Lui_protocol.GenericHost then
+  if host_kind = Lui_protocol.GenericHost || host_kind = Lui_protocol.SwiftUIHost then
     platform_request
       ("app-icons\n"
        ^ Js.Json.stringify
