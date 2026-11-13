@@ -729,10 +729,10 @@ let item_body st idx (it : Sidebar_state.item) =
             ~data_attrs:[ ("style", "margin-bottom:0;padding-bottom:64px") ]
             (sidebar_props_row st it
              @ object_tabs_host it
-             @ [ box ~key:("pbi-" ^ it.key)
+             @ [ Ui_components.with_props [Ui_components.Prop.overflow `hidden]
+                 (box ~key:("pbi-" ^ it.key)
                  ~style_class:"ls-page-blocks"
                  ~margin_left:(-20) ~min_height:60
-                 ~data_attrs:[ ("style", "overflow:hidden") ]
                  [ (* data-cid is read by editor_actions' [data-cid]
                       closest queries *)
                    Ui_components.with_props
@@ -748,7 +748,7 @@ let item_body st idx (it : Sidebar_state.item) =
                               Signal.constant ctx.Lui_ui.ui_scheduler
                                 (has_children, indented))
                         ]))
-                 ]
+                 ])
              ]
             (* linked references sit inside .page-inner in cljs *)
             @ (match it.kind, it.uuid with

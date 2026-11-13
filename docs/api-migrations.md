@@ -23,6 +23,28 @@ retained owner are not physical-memory measurements. Standalone large-code
 memory and native shaping/interaction must be requalified after rebuilding;
 failed pre-change workloads are not picker-memory results.
 
+## Right sidebar blocks use their authored clipping on native hosts
+
+The existing right-sidebar `.ls-page-blocks` owner now receives typed
+`overflow=hidden` through `Ui_components.Prop.overflow`. Its previous
+`data-attrs` style carrier expressed the same Web clipping but supplied no
+native layout property. Other data attributes, including the inner sidebar
+context marker, remain intact. No wrapper, fixed document height, scroll offset,
+constructor or wire shape is introduced; callers keep the same sidebar API.
+
+The exact actual-App primitive replay with all original content, theme and
+fonts reported 1424pt scroll content while descendant frames occupied 1118pt.
+Projecting the already-authored clipping alone reported 1118pt, with the same
+960pt card and all real children. This establishes the missing application
+clipping contract; the deeper source of the unclipped descendant overflow is
+still unresolved and no SDK correction is claimed. The actual native end/return
+wheel gate remains required after rebuilding this producer.
+
+The shared producer regression checks the canonical clipping property on the
+same auto-sized owner and retained block rows across content updates. Web keeps
+its existing clipping behavior, now through the same typed property used by
+NSH, Apple/iOS and Android.
+
 ## Selection action bars follow their anchor owner
 
 The selection action bar now keys its popover by the outliner scope and mounted
