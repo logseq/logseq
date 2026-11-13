@@ -3,7 +3,7 @@ GEM
   specs:
     CFPropertyList (3.0.8)
     abbrev (0.1.2)
-    addressable (2.9.0)
+    addressable (2.9.1)
       public_suffix (>= 2.0.2, < 8.0)
     artifactory (3.0.17)
     atomos (0.1.3)
