@@ -330,6 +330,35 @@ let left_sidebar (ms : Model.t Signal.signal) =
 (* The host advances transitions; shared state owns the pane widths. *)
 let left_split (ms : Model.t Signal.signal) (st : Sidebar_state.t)
     (content : t) : t =
+ fun context parent ->
+  if Lui_ui.platform context = Lui_protocol.MacOS
+     && Lui_ui.host context = Lui_protocol.SwiftUIHost then
+    (* The Apple backend maps an ordinary fractional Split to
+       NavigationSplitView. Custom handle props select its manual renderer. *)
+    let available (m : Model.t) right viewport =
+      if m.right_sidebar_open then Float.max 1. (viewport *. (1. -. right))
+      else Float.max 1. viewport in
+    split ~key:"left-split" ~grow:1. ~gap:0
+      ~value:(reactive
+        (fun (m : Model.t) width right viewport ->
+          if m.left_sidebar_open then width /. available m right viewport else 0.)
+        ms (Signal.value st.Sidebar_state.left_width)
+        (Signal.value st.Sidebar_state.right_fraction)
+        (Signal.value st.Sidebar_state.viewport_w))
+      ~on_resize:(function
+        | Lui_protocol.ValueChanged (node, fraction) ->
+            let m = Runtime.model () in
+            let open_ = fraction > 0.001 in
+            if open_ <> m.Model.left_sidebar_open then
+              Runtime.send Action.Toggle_left_sidebar;
+            if open_ then
+              let viewport = Runtime.signal_get st.Sidebar_state.viewport_w in
+              let right = Runtime.signal_get st.Sidebar_state.right_fraction in
+              Sidebar_state.on_left_split_resize st
+                (Lui_protocol.ValueChanged (node, fraction *. available m right viewport))
+        | _ -> ())
+      (left_sidebar ms) content context parent
+  else
   split ~key:"left-split" ~grow:1.
     ~gap:0 ~resize_handle_width:3 ~resize_handle_offset:0.5
     ~first_width:
@@ -339,7 +368,7 @@ let left_split (ms : Model.t Signal.signal) (st : Sidebar_state.t)
          ms (Signal.value st.Sidebar_state.left_width) (Signal.value st.Sidebar_state.viewport_w))
     ~resize_duration:300 ~resize_easing:`standard
     ~on_resize:(Sidebar_state.on_left_split_resize st)
-    (left_sidebar ms) content
+    (left_sidebar ms) content context parent
 
 let right_split (ms : Model.t Signal.signal) (st : Sidebar_state.t)
     (first : t) (second : t) : t =
