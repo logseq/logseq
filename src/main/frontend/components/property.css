@@ -67,7 +67,19 @@
 
 .ls-properties-area {
   .properties-panel {
-    @apply rounded-md overflow-hidden;
+    @apply grid rounded-md overflow-hidden;
+    grid-template-columns: subgrid;
+
+    > div:has(> .property-panel-row),
+    .property-pair.property-panel-row {
+      display: grid;
+      grid-column: 1 / -1;
+      grid-template-columns: subgrid;
+    }
+
+    .property-pair.property-panel-row {
+      padding-right: 0;
+    }
   }
 
   .properties-panel-header {
@@ -76,14 +88,13 @@
 
   .property-pair.property-panel-row {
     @apply grid items-start pr-3 gap-3 w-full;
-    grid-template-columns: fit-content(260px) minmax(0, 1fr);
+    grid-template-columns: 160px minmax(0, 1fr);
     margin-left: 0;
   }
 
   .property-key-panel {
-    @apply flex items-center min-w-0;
+    @apply flex items-center min-w-0 w-full;
     min-height: 28px;
-    min-width: 150px;
     font-size: inherit;
     color: var(--ls-primary-text-color);
   }
@@ -150,13 +161,45 @@
   }
 
   .property-panel-bullet {
-    @apply inline-flex items-center opacity-60;
-    margin-left: 2px;
+    @apply inline-flex items-center justify-center opacity-60 shrink-0;
+    width: 16px;
+    min-width: 16px;
     min-height: 24px;
   }
 
   .property-panel-bullet .bullet-container {
     @apply relative left-0 top-0;
+    width: 15px;
+    height: 15px;
+    min-width: 15px;
+  }
+
+  .property-value-panel .property-block-container {
+    margin-left: 0;
+
+    /* Text and URL values render their own block bullet. Match the panel
+       bullet slot while keeping the expand control outside the value column. */
+    > .ls-block > .block-main-container,
+    > .blocks-container > .blocks-list-wrap > .ls-block > .block-main-container {
+      @apply gap-1;
+
+      > .block-control-wrap {
+        @apply justify-center shrink-0;
+        width: 16px;
+        min-width: 16px;
+
+        > .block-control {
+          position: absolute;
+          right: 100%;
+        }
+
+        > .bullet-link-wrap .bullet-container {
+          width: 15px;
+          height: 15px;
+          min-width: 15px;
+        }
+      }
+    }
   }
 
   .property-panel-edit-btn {
@@ -523,10 +566,20 @@ a.control-link {
   @apply flex flex-row items-center gap-1 relative;
 
   .property-icon {
-    @apply flex items-center;
+    @apply flex items-center justify-center shrink-0;
+    width: 16px;
+    min-width: 16px;
+    height: 16px;
+
     svg {
         width: 15px;
         height: 15px;
+    }
+
+    .bullet-container {
+        width: 15px;
+        height: 15px;
+        min-width: 15px;
     }
   }
 
@@ -556,6 +609,17 @@ a.control-link {
 
 .ls-page-title .ls-page-properties > .ls-new-property {
   @apply mt-2;
+}
+
+.ls-properties-area:has(> .properties-panel) {
+  @apply grid gap-x-3 pr-3;
+
+  /* Visible and expanded hidden properties share the same bounded key column. */
+  grid-template-columns: fit-content(min(360px, 45%)) minmax(0, 1fr);
+
+  > * {
+    grid-column: 1 / -1;
+  }
 }
 
 .ls-property-add {
