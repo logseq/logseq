@@ -2,6 +2,7 @@
   (:require [cljs.test :refer [deftest is testing]]
             [frontend.modules.shortcut.config :as shortcut-config]
             [frontend.modules.shortcut.data-helper :as dh]
+            [frontend.state :as state]
             [frontend.util :as util]))
 
 (deftest test-core-basic
@@ -132,6 +133,53 @@
           "t d from global-non-editing-only should NOT be detected (cross-handler)")
       (is (not (contains? all-keys "t r"))
           "t r from global-non-editing-only should NOT be detected (cross-handler)"))))
+
+(defn- shortcut-groups
+  [id]
+  (->> @shortcut-config/*config
+       (filter (fn [[_ shortcuts]] (contains? shortcuts id)))
+       (map key)
+       (set)))
+
+(deftest test-zoom-shortcut-groups
+  (let [zoom-ids #{:editor/zoom-in :editor/zoom-out}]
+    (testing "zoom runs while editing, and outside editing except on macOS where mod+, opens settings"
+      (doseq [id zoom-ids]
+        (is (= (cond-> #{:shortcut.handler/block-editing-only}
+                 (not util/mac?) (conj :shortcut.handler/global-non-editing-only))
+               (shortcut-groups id))
+            (str id))))
+    (testing "zoom bindings don't conflict with co-active shortcuts"
+      (doseq [id zoom-ids
+              group (shortcut-groups id)]
+        (is (empty? (dh/get-conflicts-by-keys
+                     (dh/shortcut-binding id) group
+                     {:exclude-ids zoom-ids :group-global? true}))
+            (str id " in " group))))))
+
+(deftest test-zoom-shortcuts-outside-editing
+  (when-not util/mac?
+    (let [calls (atom [])
+          handlers (dh/shortcuts-map-by-handler-id :shortcut.handler/global-non-editing-only)
+          press! (fn [id tag-name]
+                   ((get handlers id) #js {:target #js {:tagName tag-name}
+                                           :preventDefault #(swap! calls conj :prevent-default)}))
+          original-history (.-history js/window)]
+      (set! (.-history js/window) #js {:back #(swap! calls conj :back)
+                                       :forward #(swap! calls conj :forward)})
+      (try
+        (with-redefs [state/editing? (constantly false)]
+          (testing "zoom-out/in go back/forward when focus is not in a text input"
+            (press! :editor/zoom-out "DIV")
+            (press! :editor/zoom-in "DIV")
+            (is (= [:back :prevent-default :forward :prevent-default] @calls)))
+          (testing "keys pressed in a text input or code editor are left alone"
+            (reset! calls [])
+            (press! :editor/zoom-out "TEXTAREA")
+            (press! :editor/zoom-in "INPUT")
+            (is (empty? @calls))))
+        (finally
+          (set! (.-history js/window) original-history))))))
 
 (deftest test-add-reaction-shortcut
   (testing "add reaction shortcut is configured with p r"

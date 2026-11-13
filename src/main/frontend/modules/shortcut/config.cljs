@@ -754,6 +754,9 @@
           :dev/rtc-stop
           :dev/rtc-start
           :ui/customize-appearance])
+        ;; zoom-in!/zoom-out! go forward/back in history when not editing.
+        ;; Not on macOS, where zoom-out's mod+, is :ui/toggle-settings here.
+        (merge (when-not mac? (build-category-map [:editor/zoom-in :editor/zoom-out])))
         (with-meta {:before m/enable-when-not-editing-mode!}))
 
     :shortcut.handler/misc
