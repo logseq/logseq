@@ -13,6 +13,85 @@
             [logseq.db.frontend.schema :as db-schema]
             [promesa.core :as p]))
 
+(defn- mock-headers
+  [header-map]
+  (let [headers (js/Headers.)]
+    (doseq [[k v] header-map]
+      (when (some? v)
+        (.set headers k (str v))))
+    headers))
+
+(defn- mock-ok-download-response
+  [{:keys [content-length content-encoding decoded-size]}]
+  (let [body (js/ArrayBuffer. decoded-size)]
+    #js {:ok true
+         :status 200
+         :headers (mock-headers (cond-> {}
+                                  (some? content-length) (assoc "content-length" content-length)
+                                  (some? content-encoding) (assoc "content-encoding" content-encoding)))
+         :arrayBuffer (fn [] (p/resolved body))}))
+
+(defn- latest-asset-progress
+  [broadcasts asset-id]
+  (reduce (fn [progress [event payload]]
+            (if (and (= :rtc-asset-upload-download-progress event)
+                     (= asset-id (:asset-id payload)))
+              (:progress payload)
+              progress))
+          nil
+          broadcasts))
+
+(defn- transfer-active?
+  "Same active-transfer rule as frontend.components.rtc.indicator/asset-transfer-counts."
+  [{:keys [direction loaded total]}]
+  (and (contains? #{:upload :download} direction)
+       (number? loaded)
+       (number? total)
+       (not= loaded total)))
+
+(defn- download-remote-asset-progress!
+  [{:keys [content-length content-encoding decoded-size]}]
+  (let [repo "asset-download-progress-repo"
+        graph-id "graph-1"
+        asset-uuid (random-uuid)
+        asset-id (str asset-uuid)
+        broadcasts (atom [])
+        writes (atom [])
+        original-fetch js/fetch
+        db-sync-config @worker-state/*db-sync-config]
+    (reset! worker-state/*db-sync-config
+            {:http-base "https://sync.example.test"})
+    (set! js/fetch
+          (fn [_url _opts]
+            (p/resolved (mock-ok-download-response
+                         {:content-length content-length
+                          :content-encoding content-encoding
+                          :decoded-size decoded-size}))))
+    (-> (p/with-redefs [sync-assets/graph-aes-key
+                        (fn [_repo _graph-id _fail-fast-f]
+                          (p/resolved nil))
+                        platform/current
+                        (fn [] {})
+                        platform/asset-write-bytes!
+                        (fn [_platform repo' file-name payload]
+                          (swap! writes conj {:repo repo'
+                                              :file-name file-name
+                                              :byte-length (.-byteLength payload)})
+                          (p/resolved nil))
+                        shared-service/broadcast-to-clients!
+                        (fn [event payload]
+                          (swap! broadcasts conj [event payload]))]
+          (sync-assets/download-remote-asset!
+           repo graph-id asset-uuid "png"))
+        (p/then (fn [_]
+                  {:asset-id asset-id
+                   :progress (latest-asset-progress @broadcasts asset-id)
+                   :writes @writes}))
+        (p/finally
+          (fn []
+            (set! js/fetch original-fetch)
+            (reset! worker-state/*db-sync-config db-sync-config))))))
+
 (defn- asset-conn
   [asset-uuid]
   (let [conn (d/create-conn db-schema/schema)]
@@ -389,6 +468,39 @@
                (p/catch (fn [error]
                           (is false (str "unexpected error: " error))))
                (p/finally done)))))
+
+(deftest download-remote-asset-clears-progress-when-content-length-is-compressed-size-test
+  (async done
+         (-> (p/let [gzip (download-remote-asset-progress!
+                           {:content-length 38
+                            :content-encoding "gzip"
+                            :decoded-size 3240})
+                     deflate (download-remote-asset-progress!
+                              {:content-length 38
+                               :content-encoding "deflate"
+                               :decoded-size 3240})]
+               (doseq [{:keys [progress writes]} [gzip deflate]]
+                 (is (= {:direction :download :loaded 3240 :total 3240} progress))
+                 (is (false? (transfer-active? progress)))
+                 (is (= 1 (count writes)))
+                 (is (= 3240 (:byte-length (first writes))))))
+             (p/catch (fn [error]
+                        (is false (str "unexpected error: " error))))
+             (p/finally done))))
+
+(deftest download-remote-asset-clears-progress-for-uncompressed-and-missing-content-length-test
+  (async done
+         (-> (p/let [identity-encoding (download-remote-asset-progress!
+                                        {:content-length 3240
+                                         :decoded-size 3240})
+                     no-length (download-remote-asset-progress!
+                                {:decoded-size 3240})]
+               (doseq [{:keys [progress]} [identity-encoding no-length]]
+                 (is (= {:direction :download :loaded 3240 :total 3240} progress))
+                 (is (false? (transfer-active? progress)))))
+             (p/catch (fn [error]
+                        (is false (str "unexpected error: " error))))
+             (p/finally done))))
 
 (deftest download-remote-assets-if-missing-bounds-download-concurrency-test
   (async done

@@ -358,6 +358,12 @@
       (when (not (js/isNaN length))
         length))))
 
+(defn- compressed-http-encoding?
+  [content-encoding]
+  (boolean
+   (when (string? content-encoding)
+     (re-find #"(?i)(?:^|[\s,])(?:gzip|deflate|br)(?:$|[\s,;])" content-encoding))))
+
 (defn download-remote-asset!
   [repo graph-id asset-uuid asset-type]
   (let [base (sync-auth/http-base-url @worker-state/*db-sync-config)]
@@ -378,18 +384,21 @@
                       (throw (ex-info "download asset failed"
                                       {:type :rtc.exception/download-asset-failed
                                        :data {:status status}})))
-                  total (or (parse-content-length resp) 0)
+                  total (if (compressed-http-encoding?
+                             (some-> (.-headers resp) (.get "content-encoding")))
+                          0
+                          (or (parse-content-length resp) 0))
                   _ (notify-asset-progress! repo asset-id :download 0 total)
                   body (.arrayBuffer resp)
                   body-size (.-byteLength body)
-                  total' (if (pos? total) total body-size)
-                  _ (notify-asset-progress! repo asset-id :download body-size total')
                   asset-file
                   (if (not aes-key)
                     body
                     (let [asset-file-untransited (ldb/read-transit-str (.decode (js/TextDecoder.) body))]
-                      (crypt/<decrypt-uint8array aes-key asset-file-untransited)))]
-            (<write-asset-bytes! repo asset-id asset-type asset-file))
+                      (crypt/<decrypt-uint8array aes-key asset-file-untransited)))
+                  _ (<write-asset-bytes! repo asset-id asset-type asset-file)]
+            ;; Decoded body size, not Content-Length: gzip/deflate wire size is smaller.
+            (notify-asset-progress! repo asset-id :download body-size body-size))
           (p/catch
            (fn [e]
              (if (= :rtc.exception/download-asset-failed (:type (ex-data e)))
