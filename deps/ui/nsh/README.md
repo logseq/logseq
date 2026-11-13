@@ -750,7 +750,22 @@ The explicit flag plus `CI`, `GITHUB_ACTIONS`, `RUNNER_ENVIRONMENT=github-hosted
 and a private descendant of `RUNNER_TEMP` are required before creating/trusting
 the ephemeral CA. Existing shared HTTPS support restores the exact owned
 keychain/trust entry. No developer trust store or `/Applications` installation
-is used. It removes application loader overrides and inherited application
+is used. Its private CA common name is the fixed 29-byte fixture prefix plus a
+32-character UUID hex identifier (61 ASCII bytes, within X.509's 64-byte limit).
+It keeps the complete UUID identity; shortening a temporary directory name does
+not fix the previous 65-byte prefix-plus-hyphenated-UUID failure. Trust ownership
+and cleanup still use the exact generated certificate/fingerprint.
+
+Both upgrade jobs run the existing HTTPS helper tests immediately after Python
+setup and before native/toolchain installation. The regression creates real
+OpenSSL certificates under long private paths, verifies distinct bounded CA
+subjects/fingerprints, server-chain verification and localhost/IP SANs, and never
+constructs `OwnedTrust` or changes a trust store. It prints no key/certificate
+contents. Its early log is preserved even when later setup never starts. This
+preflight proves certificate generation only; an actual signed HTTPS upgrade
+remains a separate required gate.
+
+The upgrade driver removes application loader overrides and inherited application
 configuration/authentication variables, creates private credentials/storage with
 `--startup-preflight`, and launches the extracted executable outside all
 checkouts. Private graph, installation, native log, agent transcript, original
@@ -787,7 +802,8 @@ UI or admission resumed. The current native-sheet attachment is macOS-only;
 GTK's alert-role overlay and Windows' custom dialog surface need their actual
 controller qualification rather than guessed OS dialog-window automation.
 
-Pure guard tests (no native app, network or trust changes) are:
+Helper tests (local OpenSSL certificate files, no native app, network or trust
+changes) and pure upgrade guards are:
 
 ```sh
 python3 deps/ui/nsh/test_private_update_https.py

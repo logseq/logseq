@@ -7,6 +7,15 @@ inputs:
 runs:
   using: composite
   steps:
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    - name: Check private HTTPS certificate generation before toolchain setup
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 -m unittest discover -s deps/ui/nsh -p test_private_update_https.py 2>&1 \
+          | tee "$RUNNER_TEMP/standalone-upgrade-certificate-preflight.log"
     - name: macOS native development libraries
       shell: bash
       run: brew install pkg-config sqlite3 libffi gmp dylibbundler
@@ -18,9 +27,6 @@ runs:
         node-version: '22'
         cache: pnpm
         cache-dependency-path: pnpm-lock.yaml
-    - uses: actions/setup-python@v5
-      with:
-        python-version: '3.11'
     - uses: ocaml/setup-ocaml@v3
       with:
         ocaml-compiler: '5.5.1'

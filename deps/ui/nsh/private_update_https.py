@@ -56,6 +56,26 @@ def require_disposable_ci(allow):
     return root
 
 
+def _prepare_certificates(private):
+    """Create owned TLS files only; this helper never changes a trust store."""
+    ca = private / "ca.pem"
+    configuration = private / "ca.cnf"
+    configuration.write_text("[req]\nprompt=no\ndistinguished_name=dn\nx509_extensions=ca\n"
+                             f"[dn]\nCN=Logseq private HTTPS fixture {uuid.uuid4().hex}\n"
+                             "[ca]\nbasicConstraints=critical,CA:TRUE\nkeyUsage=critical,keyCertSign,cRLSign\n", encoding="utf-8")
+    run(["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1",
+         "-config", configuration, "-keyout", private / "ca.key", "-out", ca])
+    run(["openssl", "req", "-newkey", "rsa:2048", "-nodes", "-subj", "/CN=localhost",
+         "-keyout", private / "server.key", "-out", private / "server.csr"])
+    extension = private / "server.ext"
+    extension.write_text("basicConstraints=critical,CA:FALSE\nsubjectAltName=DNS:localhost,IP:127.0.0.1\nextendedKeyUsage=serverAuth\n", encoding="utf-8")
+    run(["openssl", "x509", "-req", "-days", "1", "-in", private / "server.csr",
+         "-CA", ca, "-CAkey", private / "ca.key", "-CAcreateserial",
+         "-extfile", extension, "-out", private / "server.pem"])
+    for name in ("ca.key", "server.key"):
+        (private / name).chmod(0o600)
+
+
 class OwnedTrust:
     """Mutate only one ephemeral CA on a disposable runner, never developer trust."""
     def __init__(self, private, allow):
@@ -72,21 +92,7 @@ class OwnedTrust:
         self.system = platform.system()
 
     def prepare(self):
-        configuration = self.private / "ca.cnf"
-        configuration.write_text("[req]\nprompt=no\ndistinguished_name=dn\nx509_extensions=ca\n"
-                                 f"[dn]\nCN=Logseq private HTTPS fixture {uuid.uuid4()}\n"
-                                 "[ca]\nbasicConstraints=critical,CA:TRUE\nkeyUsage=critical,keyCertSign,cRLSign\n", encoding="utf-8")
-        run(["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1",
-             "-config", configuration, "-keyout", self.private / "ca.key", "-out", self.ca])
-        run(["openssl", "req", "-newkey", "rsa:2048", "-nodes", "-subj", "/CN=localhost",
-             "-keyout", self.private / "server.key", "-out", self.private / "server.csr"])
-        extension = self.private / "server.ext"
-        extension.write_text("basicConstraints=critical,CA:FALSE\nsubjectAltName=DNS:localhost,IP:127.0.0.1\nextendedKeyUsage=serverAuth\n", encoding="utf-8")
-        run(["openssl", "x509", "-req", "-days", "1", "-in", self.private / "server.csr",
-             "-CA", self.ca, "-CAkey", self.private / "ca.key", "-CAcreateserial",
-             "-extfile", extension, "-out", self.private / "server.pem"])
-        for name in ("ca.key", "server.key"):
-            (self.private / name).chmod(0o600)
+        _prepare_certificates(self.private)
         if self.system == "Linux":
             self.linux_file = Path("/usr/local/share/ca-certificates") / f"logseq-https-{uuid.uuid4().hex}.crt"
             if self.linux_file.exists():

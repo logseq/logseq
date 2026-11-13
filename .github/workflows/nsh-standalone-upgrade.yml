@@ -44,7 +44,7 @@ jobs:
       - name: Pure qualification ownership and source guards
         run: |
           set -euo pipefail
-          for test in test_private_update_https.py test_standalone_upgrade.py test_prepare_standalone_upgrade.py; do
+          for test in test_standalone_upgrade.py test_prepare_standalone_upgrade.py; do
             python3 -m unittest discover -s deps/ui/nsh -p "$test" 2>&1 \
               | tee "$QUALIFICATION_ROOT/evidence/$test.log"
           done
@@ -70,6 +70,7 @@ jobs:
         with:
           name: standalone-upgrade-required-tests
           path: |
+            ${{ runner.temp }}/standalone-upgrade-certificate-preflight.log
             ${{ runner.temp }}/standalone-upgrade/evidence/
             ${{ runner.temp }}/standalone-upgrade/source-snapshots.json
           if-no-files-found: error
@@ -154,6 +155,7 @@ jobs:
         with:
           name: actual-standalone-upgrade-macos
           path: |
+            ${{ runner.temp }}/standalone-upgrade-certificate-preflight.log
             ${{ runner.temp }}/standalone-upgrade/evidence/
             ${{ runner.temp }}/standalone-upgrade/source-snapshots.json
           if-no-files-found: error

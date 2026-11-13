@@ -1,6 +1,8 @@
-"""Trust ownership guards only; no certificates, commands or native apps run."""
+"""Trust ownership guards and real local certificate generation; no trust changes."""
+import hashlib
 import importlib.util
 from pathlib import Path
+import ssl
 import tempfile
 import unittest
 from unittest.mock import Mock, call, patch
@@ -9,6 +11,38 @@ SPEC = importlib.util.spec_from_file_location(
     "logseq_private_update_https", Path(__file__).with_name("private_update_https.py"))
 GATE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(GATE)
+
+
+class CertificateGenerationTests(unittest.TestCase):
+    def test_long_owned_paths_have_bounded_unique_ca_subjects_and_valid_localhost_chains(self):
+        with tempfile.TemporaryDirectory(prefix="private-https-certificates-") as temporary:
+            root=Path(temporary)
+            fingerprints=[]
+            subjects=[]
+            for suffix in ("a", "b"):
+                private=root / ("owned-standalone-upgrade-" + "x" * 64 + suffix)
+                private.mkdir()
+                self.assertGreater(len(private.name),64)
+                # Exercise the production OpenSSL file-generation path without
+                # constructing OwnedTrust or calling any trust-store operation.
+                GATE._prepare_certificates(private)
+                ca=private / "ca.pem"
+                subject=GATE.run(["openssl", "x509", "-in", ca, "-noout",
+                                  "-subject", "-nameopt", "RFC2253"])
+                common_name=subject.split("CN=",1)[1].strip()
+                self.assertLessEqual(len(common_name.encode("utf-8")),64)
+                self.assertRegex(common_name,r"\ALogseq private HTTPS fixture [0-9a-f]{32}\Z")
+                self.assertNotIn(private.name,common_name)
+                subjects.append(common_name)
+                fingerprints.append(hashlib.sha256(
+                    ssl.PEM_cert_to_DER_cert(ca.read_text(encoding="utf-8"))).hexdigest())
+                verified=GATE.run(["openssl", "verify", "-CAfile", ca, private / "server.pem"])
+                self.assertTrue(verified.endswith(": OK"))
+                server=GATE.run(["openssl", "x509", "-in", private / "server.pem", "-noout", "-text"])
+                self.assertIn("DNS:localhost",server)
+                self.assertIn("IP Address:127.0.0.1",server)
+            self.assertNotEqual(subjects[0],subjects[1])
+            self.assertNotEqual(fingerprints[0],fingerprints[1])
 
 
 class DisposableTrustTests(unittest.TestCase):
