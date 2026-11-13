@@ -47,13 +47,18 @@
 
 (defn- put-back!
   [entries]
-  (when (seq entries)
-    (swap! *batch
-           (fn [batch]
-             (reduce (fn [batch entry]
-                       (assoc batch (entry-key entry) entry))
-                     batch
-                     entries)))))
+  (doseq [{:keys [result solo?] :as entry} entries]
+    (let [batch-key (entry-key entry)]
+      (if-let [pending (get @*batch batch-key)]
+        (do
+          ;; A remounted slot can already have a new request queued. Keep it
+          ;; and complete the older caller from the same snapshot load.
+          (when solo?
+            (swap! *batch assoc-in [batch-key :solo?] true))
+          (-> (:result pending)
+              (p/then #(p/resolve! result %))
+              (p/catch #(p/reject! result %))))
+        (swap! *batch assoc batch-key entry)))))
 
 (defn- request-groups
   "Flush view-data first, then blocks, then children, then other resources.
@@ -85,6 +90,13 @@
 
 (defn- take-next-request-group!
   []
+  ;; Each dequeue scans and requeues pending entries. Retrying n entries alone
+  ;; alongside q other queued entries costs O(n^2 + n*q) in queue processing.
+  ;; Retain this design for normal workloads: retries only follow failures,
+  ;; with batches bounded to 25 resources/children or 1000 blocks. Expected
+  ;; data sizes and failure frequency do not warrant a scheduler change.
+  ;; Large backlogs or widespread failures remain a potential hotspot; require
+  ;; representative measurements showing material impact before optimizing.
   (let [entries (take-batch!)
         {wanted true cancelled false} (group-by still-wanted? entries)]
     (reject! cancelled cancelled-error)
