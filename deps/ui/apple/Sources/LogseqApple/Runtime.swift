@@ -1,6 +1,5 @@
 import AppKit
 import Darwin
-import AppKit
 import LUIAppleBackend
 
 typealias PatchCallback = @convention(c) (UnsafePointer<CChar>?) -> Void
@@ -68,7 +67,7 @@ final class NativeRuntime {
     private(set) var presentationEpoch: UInt64 = 0
     var onRequest: ((String) throws -> Void)?
     var onFailure: ((Error) -> Void)?
-    private var scheduled = false
+    private var pumpSource: CFRunLoopSource?
     private var draining = false
     private(set) var started = false
     private var symbols: [String: UnsafeMutableRawPointer] = [:]
@@ -94,6 +93,18 @@ final class NativeRuntime {
     }
 
     func start() throws {
+        var context = CFRunLoopSourceContext(version: 0, info: nil, retain: nil,
+            release: nil, copyDescription: nil, equal: nil, hash: nil,
+            schedule: nil, cancel: nil, perform: { _ in
+                MainActor.assumeIsolated { activeRuntime?.pump() }
+            })
+        guard let source = CFRunLoopSourceCreate(nil, 0, &context) else {
+            throw HostError("Cannot create the OCaml pump run-loop source")
+        }
+        pumpSource = source
+        for mode in [RunLoop.Mode.common, .modalPanel, .eventTracking] {
+            CFRunLoopAddSource(CFRunLoopGetMain(), source, CFRunLoopMode(rawValue: mode.rawValue as CFString))
+        }
         activeRuntime = self
         let payload = "{\"paintsCaret\":false}"
         let accepted = payload.withCString { function("start", StartCall.self)(patches, wake, requests, 1, 2, $0, Int32(payload.utf8.count)) }
@@ -120,18 +131,20 @@ final class NativeRuntime {
     }
 
     func schedulePump() {
-        guard started, !scheduled else { return }
-        scheduled = true
-        // AppKit's asynchronous Quit runs a nested loop; the OCaml worker and
-        // save replies must keep pumping there and during native modal panels.
-        onMainRunLoop { [weak self] in
-            guard let self, self.started else { return }
-            self.scheduled = false
-            do {
-                try self.check(self.function("pump", UnitCall.self)(), "pump")
-                try self.drain()
-            } catch { self.onFailure?(error) }
-        }
+        guard started else { return }
+        guard let source = pumpSource else { preconditionFailure("Missing OCaml pump source") }
+        // CFRunLoop coalesces signals without stranding a scheduled flag in
+        // the outer callback list while AppKit waits in a nested Quit loop.
+        CFRunLoopSourceSignal(source)
+        CFRunLoopWakeUp(CFRunLoopGetMain())
+    }
+
+    private func pump() {
+        guard started else { return }
+        do {
+            try check(function("pump", UnitCall.self)(), "pump")
+            try drain()
+        } catch { onFailure?(error) }
     }
 
     func drain() throws {
@@ -226,6 +239,8 @@ final class NativeRuntime {
     func stop() throws {
         guard started else { return }
         started = false
+        if let source = pumpSource { CFRunLoopSourceInvalidate(source) }
+        pumpSource = nil
         try check(function("stop", UnitCall.self)(), "stop")
         messages.removeAll()
         activeRuntime = nil
