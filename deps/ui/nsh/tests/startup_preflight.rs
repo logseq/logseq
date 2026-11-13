@@ -20,6 +20,7 @@ mod startup_icon_picker;
 mod startup_keyboard;
 mod startup_rows;
 mod startup_surfaces;
+mod startup_worker_cleanup;
 
 const CHILD: &str = "LOGSEQ_NSH_STARTUP_PREFLIGHT_CHILD";
 const TEST: &str = "real_application_startup_preflight";
@@ -474,7 +475,7 @@ fn isolated_process_for(test: &str, rows: bool, surface: Option<&str>) -> Result
     );
     // Only the worker registered beneath our unguessable private root is
     // contacted, and its health response must confirm that exact root first.
-    let graceful = stop_owned_workers(&directory.join("root"));
+    let graceful = startup_worker_cleanup::stop(&directory.join("root"), process_group, request);
     // The OCaml prewarm domain can spawn its private child before publishing
     // server-list. Terminate our own descendant group too, so an early style
     // failure cannot leak a worker that registered after the health check.
@@ -630,54 +631,4 @@ fn request(port: u16, method: &str, path: &str) -> Result<(u16, String), String>
         .read_to_string()
         .map_err(|error| error.to_string())?;
     Ok((status, body))
-}
-fn stop_owned_workers(root: &Path) -> Result<(), String> {
-    let deadline = Instant::now() + Duration::from_secs(4);
-    let expected = fs::canonicalize(root)
-        .map_err(|error| format!("cannot resolve isolated graph root: {error}"))?;
-    loop {
-        let registry = fs::read_to_string(root.join("server-list")).unwrap_or_default();
-        let mut active = false;
-        for line in registry.lines() {
-            let fields = line.split_whitespace().collect::<Vec<_>>();
-            if fields.len() != 2 {
-                return Err("invalid private worker registry".into());
-            }
-            let port = fields[1]
-                .parse::<u16>()
-                .map_err(|_| "invalid private worker port")?;
-            let Ok((status, body)) = request(port, "GET", "/healthz") else {
-                continue;
-            };
-            if !matches!(status, 200 | 503) {
-                return Err("private worker returned an invalid health response".into());
-            }
-            let health: serde_json::Value = serde_json::from_str(&body)
-                .map_err(|error| format!("invalid private worker health JSON: {error}"))?;
-            let actual = health
-                .get("storage")
-                .and_then(|storage| storage.get("root"))
-                .and_then(serde_json::Value::as_str)
-                .ok_or("private worker health response has no storage.root")?;
-            let actual = fs::canonicalize(actual)
-                .map_err(|error| format!("cannot resolve worker graph root: {error}"))?;
-            // macOS /var and /private/var can identify the same private root.
-            // Compare filesystem identity, never a prefix or a JSON substring.
-            if actual != expected {
-                return Err("refusing cleanup of a daemon outside the isolated graph root".into());
-            }
-            active = true;
-            let (status, _) = request(port, "POST", "/v1/shutdown")?;
-            if status != 200 {
-                return Err("private daemon refused shutdown".into());
-            }
-        }
-        if !active {
-            return Ok(());
-        }
-        if Instant::now() >= deadline {
-            return Err("isolated worker did not finish shutdown".into());
-        }
-        thread::sleep(Duration::from_millis(20));
-    }
 }
