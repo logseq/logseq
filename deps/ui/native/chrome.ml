@@ -42,7 +42,7 @@ let icon_btn ~key ?(acc = "") ~icon_name ~label ?keys ?disabled_signal
     ~on_press:(fun _ -> on_press ())
     [ Icons.icon ~size:20. icon_name ])
 
-(* The shared leading toolbar mounts the sidebar toggle in its active owner. *)
+(* Non-SwiftUI hosts mount the sidebar toggle in the leading toolbar. *)
 let left_menu_btn ?(key = "left-menu-btn") () =
   icon_btn ~key ~acc:"left-menu" ~icon_name:"layout-sidebar"
     ~label:(I18n.t "header/toggle-left-sidebar")
@@ -178,12 +178,19 @@ let leading_toolbar ~key ~state ~controls : t =
     ~safe_area_signal:inset ~padding_horizontal:0 ~state
     ~is_open:(fun _ -> false) ~controls context parent
 
-(* Left cluster: sidebar toggle and search. Right cluster:
-   rtc, home, history, dots and right-toggle. *)
+(* NavigationSplitView supplies the macOS SwiftUI sidebar toggle.
+   Other hosts keep it beside search in the leading toolbar. *)
 let leading_controls () =
   [ left_menu_btn (); search_btn () ]
 
 let topbar (ms : Model.t Signal.signal) : t =
+ fun context parent ->
+  let controls () =
+    if Lui_ui.platform context = Lui_protocol.MacOS
+       && Lui_ui.host context = Lui_protocol.SwiftUIHost then
+      [ search_btn () ]
+    else leading_controls ()
+  in
   row ~key:"head" ~accessibility_identifier:"head"
       ~style_class:"cp__header" ~cross:`center ~main:`space_between
       ~height:48 ~min_height:48
@@ -191,7 +198,7 @@ let topbar (ms : Model.t Signal.signal) : t =
          spans content too and must not carry that strip. *)
       ~data_attrs:[ ("data-window-titlebar", "true") ]
       [ leading_toolbar ~key:"head-leading" ~state:ms
-          ~controls:leading_controls
+          ~controls
       ; Ui_components.with_props [Ui_components.Prop.overflow `hidden;Ui_components.Prop.padding_right 6]
           (row ~key:"head-acts" ~cross:`center ~grow:1. ~min_width:0 ~main:`end_
             ~style_class:"cp__header-r"
@@ -199,7 +206,7 @@ let topbar (ms : Model.t Signal.signal) : t =
             ; home_item ms
             ; back_and_forward ()
             ; dots_btn
-            ; right_toggle_btn ms ]) ]
+            ; right_toggle_btn ms ]) ] context parent
 
 let performance_bar_height = 29
 
