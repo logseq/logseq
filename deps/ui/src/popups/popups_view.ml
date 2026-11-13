@@ -1128,9 +1128,9 @@ let pv_popover (st : S.t) (p : S.pv) : t =
                             | None -> []))
                     ]
                 ]
-            ; box ~key:"pvb" ~style_class:"ls-page-blocks"
+            ; Ui_components.with_props [Ui_components.Prop.overflow `hidden]
+              (box ~key:"pvb" ~style_class:"ls-page-blocks"
                 ~margin_top:16 ~margin_left:(-20) ~min_height:60
-                ~data_attrs:[ ("style", "overflow:hidden") ]
                 [ column ~key:"pvbi"
                     ~style_class:"page-blocks-inner"
                     (List.map
@@ -1147,7 +1147,7 @@ let pv_popover (st : S.t) (p : S.pv) : t =
                              Signal.constant ctx.Lui_ui.ui_scheduler
                                (p.S.pv_blocks <> [], false))
                        ])
-                ]
+                ])
             ]
         ]]))
     context parent

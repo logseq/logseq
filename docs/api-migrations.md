@@ -1,5 +1,28 @@
 # API migrations
 
+## Shared page and preview blocks project the same clipping contract
+
+The static `Page.blocks_inner`, signal-driven `Page.blocks_area` and
+`Popups_view.pv_popover` block documents now put their already-authored
+`overflow=hidden` on the existing typed owner. Their Web-only style carrier
+has been removed, matching the right-sidebar projection. Existing keys,
+minimums, margins, block rows, virtual/keyed switching, context data attributes,
+callbacks and scroll ownership remain. No wrapper, fixed height, constructor
+or wire change is introduced.
+
+Web retains the existing authored clipping. NSH and maintained Apple/iOS and
+Android receive that same canonical property rather than relying on a CSS
+string. The shared producer regression covers all three real producers and
+keeps clipping/rows/owner identity through keyed document changes. Actual
+native page, preview, large-document and editor geometry remain application
+qualification gates; this contract projection does not claim a general
+correction to unclipped descendant overflow computation.
+
+The inventory is limited to literal overflow-hidden carriers in active shared
+page/popup/sidebar producers. Explicit non-NSH overflow-auto styles, Web-only
+input/scroll effects and other spacing declarations are unchanged and are not
+counted as solved by this migration.
+
 ## Native ordinary code uses the master's 1024pt maximum viewport
 
 The NSH `logseq-codemirror` factory now constrains the existing native Editor to

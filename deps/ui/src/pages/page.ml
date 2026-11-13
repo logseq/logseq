@@ -816,9 +816,9 @@ let blocks_inner ?puuid ?(virtualize = false) ?(library = false)
              | None -> [])
           list_wrap ]
   in
-  column ~key:"page-blocks" ~style_class:"ls-page-blocks"
+  Ui_components.with_props [Ui_components.Prop.overflow `hidden]
+  (column ~key:"page-blocks" ~style_class:"ls-page-blocks"
     ~min_height:60 ~margin_left:(-20)
-    ~data_attrs:[ ("style", "overflow:hidden") ]
     [ Ui_components.with_props
         [ Ui_components.Prop.position `relative ]
         (box ~key:"page-blocks-inner" ~style_class:"page-blocks-inner"
@@ -829,7 +829,7 @@ let blocks_inner ?puuid ?(virtualize = false) ?(library = false)
                  Signal.constant ctx.Lui_ui.ui_scheduler
                    (blocks <> [], false))
            ]))
-    ]
+    ])
 
 let fold_arrow ?on_click ?(collapsed = false) key : t =
   let arrow =
@@ -1383,9 +1383,9 @@ let blocks_area ~scope ~library ?puuid (ms : Model.t Signal.signal) : t =
       ; Lui_elements.if_ ~test:keyed_on keyed_list ]
   in
   (* cljs plain-block-list emits no .blocks-list-wrap on empty pages *)
+  (Ui_components.with_props [Ui_components.Prop.overflow `hidden]
   (column ~key:"page-blocks" ~style_class:"ls-page-blocks"
     ~min_height:60 ~margin_top:16 ~margin_left:(-20)
-    ~data_attrs:[ ("style", "overflow:hidden") ]
     [ Ui_components.with_props
         [ Ui_components.Prop.position `relative ]
         (box ~key:"page-blocks-inner"
@@ -1418,7 +1418,7 @@ let blocks_area ~scope ~library ?puuid (ms : Model.t Signal.signal) : t =
                      | None -> (false, false))
                    ms))
         ])
-    ])
+    ]))
     ctx parent
 
 let title_row (m : Model.t) (page : Model.page) : t =
