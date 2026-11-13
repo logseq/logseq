@@ -1774,6 +1774,76 @@ let native_wide_reading_column () =
       [Lui_protocol.MacOS,Lui_protocol.NshHost;Lui_protocol.MacOS,Lui_protocol.GenericHost;
        Lui_protocol.IOS,Lui_protocol.SwiftUIHost;Lui_protocol.AndroidOS,Lui_protocol.KotlinHost])
 
+let native_code_toolbar_retention () =
+  let module P = Lui_protocol in
+  let previous_app= !Native_embed.current_app in
+  let batches=ref [] in
+  let backend : P.backend={
+    backend_profile=P.profile P.MacOS P.NshHost;
+    apply_batch=(fun batch -> batches:=batch :: !batches;true)} in
+  let registry=Lui_extension.registry () in
+  Logseq_el.register_all registry;
+  Logseq_codemirror.register registry;Logseq_editor.register registry;
+  let app=Lui_app.create_with_extensions backend registry Model.initial
+    (fun model (_ : Action.t) -> model)
+    (fun _ _ _ -> Render.code_block ~self:"native-code-toolbar" "rust" "retained source") in
+  Fun.protect ~finally:(fun () ->
+    ignore (Lui_app.dispose app);Native_embed.current_app:=previous_app) (fun () ->
+    Native_embed.current_app:=Some app;
+    ignore (Lui_app.start app);ignore (Lui_app.flush app);
+    let runtime=Lui_app.runtime app in
+    let property node key=P.Property_map.find_opt key
+      (Hashtbl.find runtime.Lui_runtime.runtime_properties node) in
+    let find_class cls=Hashtbl.fold (fun node props found ->
+      match P.Property_map.find_opt P.StyleClass props with
+      | Some (P.StringValue classes) when List.mem cls (String.split_on_char ' ' classes) -> Some node
+      | _ -> found) runtime.Lui_runtime.runtime_properties None |> Option.get in
+    let wrap=find_class "ls-code-editor-wrap" and actions=find_class "code-block-actions" in
+    let editor=Hashtbl.fold (fun node identifier found ->
+      if identifier="logseq-codemirror" then Some node else found)
+      runtime.Lui_runtime.runtime_extension_nodes None |> Option.get in
+    let source=Hashtbl.find runtime.Lui_runtime.runtime_extension_properties editor in
+    check "native code actions float over the editor instead of consuming a document row"
+      (property wrap P.Position=Some (P.StringValue "relative")
+       && property actions P.Position=Some (P.StringValue "absolute")
+       && property actions P.InsetTop=Some (P.FloatValue 4.)
+       && property actions P.InsetRight=Some (P.FloatValue 4.)
+       && property actions P.ZIndex=Some (P.IntValue 1));
+    check "native code toolbar starts visually hidden without retiring its actions"
+      (property actions P.Opacity=Some (P.FloatValue 0.)
+       && property actions P.DisplayValue<>Some (P.StringValue "none"));
+    let controls=Lui_runtime.children runtime actions in
+    check "native code toolbar retains its two compact named actions"
+      (List.length controls=2 && List.for_all (fun node ->
+         Hashtbl.find_opt runtime.Lui_runtime.mounted_nodes node=Some P.Button
+         && property node P.HeightValue=Some (P.IntValue 16)
+         && property node P.PressEnabled=Some (P.BoolValue true)
+         && property node P.Enabled<>Some (P.BoolValue false)) controls);
+    batches:=[];
+    let dispatch event expected label =
+      check (label ^ " is admitted by the retained code owner") (Lui_app.dispatch_event app event);
+      ignore (Lui_app.flush app);
+      check label (property actions P.Opacity=Some (P.FloatValue expected));
+      check "hover and focus preserve the original editor source and action owners"
+        (Hashtbl.find_opt runtime.Lui_runtime.runtime_extension_nodes editor=Some "logseq-codemirror"
+         && Hashtbl.find runtime.Lui_runtime.runtime_extension_properties editor=source
+         && Lui_runtime.children runtime actions=controls);
+      check "code toolbar state emits only opacity patches without replacing editor descendants"
+        (List.for_all (fun (batch : P.patch_batch) ->
+          List.for_all (function
+            | P.SetProp (node,P.Opacity,_) -> node=actions
+            | _ -> false) batch.ops) !batches);
+      batches:=[] in
+    dispatch (P.PointerEnter wrap) 1. "pointer entry reveals the code actions";
+    dispatch (P.FocusWithinChanged (wrap,true)) 1. "contained keyboard focus keeps actions visible";
+    dispatch (P.PointerLeave wrap) 1. "pointer exit preserves visibility while keyboard focus remains";
+    dispatch (P.FocusWithinChanged (wrap,false)) 0. "leaving pointer and keyboard focus hides only the action paint";
+    dispatch (P.FocusWithinChanged (wrap,true)) 1. "keyboard entry alone reveals the same actions";
+    dispatch (P.FocusWithinChanged (wrap,false)) 0. "keyboard exit restores the resting toolbar";
+    ignore (Lui_app.dispose app);
+    check "a retired code wrapper cannot receive a stale hover callback"
+      (not (Lui_app.dispatch_event app (P.PointerEnter wrap))))
+
 let native_code_language_popup_scroll () =
   let previous_app = !Native_embed.current_app
   and previous_host = !Host.host_op
@@ -2960,6 +3030,7 @@ let () =
   native_click_producers ();
   native_point_property_scroll ();
   native_wide_reading_column ();
+  native_code_toolbar_retention ();
   native_code_language_popup_scroll ();
   native_popup_placement_contract ();
   native_controlled_field_resets ();

@@ -14,10 +14,22 @@ manager, custom paint layer or text document.
 | Source identity replacement | Keyed native owner disposal/mount | Immediate |
 | Caret reveal while editing | NSH Editor scroll controller | Native NSH policy |
 | Model or language update | Retained editor property binding | Immediate |
+| Code action toolbar hover or contained keyboard focus | Existing shared opacity transition, 300ms ease-in; actions positioned over the editor without changing its layout | Existing LUI/NSH reduced-motion mapping makes the property change immediate |
+| Language/Copy press and language menu | Existing shared compact ghost Buttons and native popup owner | Existing control and popup policy |
 
 No extra animations, sounds, entrances or transitions are introduced. Actual
 light/dark appearance, focus indication and IME behavior must be reviewed in the
 running application; headless tests only establish event and ownership behavior.
+
+The code action toolbar follows frozen master's four-point top/right inset,
+16pt control height, compact shared text/icon recipe and hidden-at-rest state.
+Its existing wrap owns pointer-presence and focus-within state so keyboard focus
+reveals the same retained actions. Only opacity changes when those states
+change; the code extension, native document, source key and editor history do
+not rebuild. The actions remain in normal accessibility/focus traversal rather
+than using display-none, disabled or a separate focus manager. Native light/dark
+placement, hover interruption, keyboard focus and reduced-motion screenshots
+remain required; source/unit checks alone do not qualify pixels.
 
 ## IME qualification boundary
 
