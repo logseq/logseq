@@ -1,5 +1,35 @@
 # API migrations
 
+## Secondary chrome and inline references use their exact typed layout
+
+Dialog and Settings headings now apply their authored zero margin through the
+existing heading constructor. Settings updater controls keep their -5pt bottom
+margin, and collaboration headings keep their -8pt leading/top margins on the
+same owners. The login dialog's existing Scroll applies its authored zero
+padding and relative positioning through typed properties. Existing keys,
+callbacks, membership lifecycle and dialog dismissal remain unchanged.
+
+Reference brackets retain their existing Text owner, semantic class and muted
+foreground, with authored `opacity=0.3` and `display=inline-flex` expressed through
+typed properties. The former DOM-only style carrier left these values unapplied
+on native hosts. Web keeps the same authored opacity/display; maintained native
+backends receive the canonical properties. No wrapper node or new API is added.
+Existing shared regressions include the real bracket producer and check the
+collaboration title during the mounted/unmounted subscription lifecycle.
+
+This clears five of the thirteen literal constructor diagnostics in this lane,
+plus the login Scroll's conditional style carrier. Eight original sites remain:
+two prompt-heading `0.5rem` bottom paddings; Quick Add's `1rem` bottom padding and
+`-1.5rem` leading margin; the timestamp link's font-relative `0.25em` gap and
+`width:fit-content`; the theme thumbnail's 63.25px height; the file editor's
+`width:100%`; and the shared plugin card's
+`width:calc(50% - 0.5rem);box-sizing:border-box`. Their existing declarations are
+retained until an exact typed contract or proven owner-equivalent layout exists.
+They are not rounded to integer points, changed to viewport sizes or suppressed
+in native preflight. Other helper-level carriers, including the prompt input's
+percentage/rem layout, also remain outside the original direct-constructor
+inventory; this migration does not claim complete static wrapper coverage.
+
 ## Group partitions, property areas and editor controls use typed exact spacing
 
 The four grouped List/Table partition producers now apply their authored 8pt top

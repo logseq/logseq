@@ -46,12 +46,12 @@ let substring_finder s =
         Hashtbl.replace searches pat (i, found);
         found
 
-(* .bracket's opacity:0.3 in lui-core.css is stylesheet chrome — the
-   muted-foreground token carries the same soft look to native backends *)
+(* Keep the bracket's authored paint and inline layout on the same typed Text
+   owner; inline DOM style attributes are not a native layout channel. *)
 let bracket s =
-  text ~style_class:"bracket" ~foreground:"muted-foreground"
-    ~data_attrs:[ ("style", "opacity:0.3;display:inline-flex") ]
-    ~value:s []
+  Ui_components.with_props [Ui_components.Prop.display `inline_flex]
+    (text ~style_class:"bracket" ~foreground:"muted-foreground"
+       ~opacity:0.3 ~value:s [])
 
 (* cljs page-reference wraps the anchor in .preview-ref-link —
    logseq-span hosts, not text: children of a text node never draw on

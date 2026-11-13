@@ -64,8 +64,7 @@ let version_row () =
       [ Ui_components.with_props
           [ Ui_components.Prop.position `relative ]
           (row ~key:"ver-a" ~style_class:"cp__settings-app-updater"
-             ~cross:`center ~min_height:20
-             ~data_attrs:[ "style", "margin-bottom: -5px" ]
+             ~cross:`center ~min_height:20 ~margin_bottom:(-5)
              [ Ui_components.with_props
                  [ ( Ui_components.Prop.position `relative ) ]
                  (row ~key:"ver-c" ~style_class:"ctls" ~cross:`center

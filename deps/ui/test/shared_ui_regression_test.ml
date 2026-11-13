@@ -465,11 +465,18 @@ let standalone_inline_groups ~registry =
                  [Lui_elements.text ~value:"Existing row" []])
           ; Ui_parts.inline_flex_group ~key:"inline-group"
               ~style_class:"test-inline-group"
-              [Lui_elements.text ~value:"Standalone group" []]]) () in
+              [Lui_elements.text ~value:"Standalone group" []]
+          ; Render_inline.bracket "[["]) () in
     Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose session.S.app))
       (fun () ->
         let existing = List.find (fun node -> class_has node "test-inline-row") (nodes session) in
         let group = List.find (fun node -> class_has node "test-inline-group") (nodes session) in
+        let bracket = List.find (fun node -> class_has node "bracket") (nodes session) in
+        check "Reference brackets preserve their authored inline Text owner and paint"
+          (bracket.M.kind="text" && M.string_prop bracket "text"=Some "[["
+           && M.string_prop bracket "display"=Some "inline-flex"
+           && Hashtbl.find_opt bracket.M.props "opacity"=Some (P.FloatValue 0.3)
+           && not (Hashtbl.mem bracket.M.props "data-attrs"));
         check "standalone existing inline group retains its Row kind" (existing.M.kind="row");
         check "standalone group uses a native Row only on NSH"
           (group.M.kind=(if native then "row" else "box"));
@@ -4630,7 +4637,14 @@ let run_views ~registry ~profile ~finish =
         (M.string_prop section "font-size"=Some "1.125rem"
          && M.string_prop section "line-height"=Some "1.75rem"
          && Hashtbl.find_opt section.M.props "font-weight"=Some (P.IntValue 500)
-         && Hashtbl.find_opt section.M.props "margin-bottom"=Some (P.IntValue 16))
+         && Hashtbl.find_opt section.M.props "margin-bottom"=Some (P.IntValue 16));
+      let members=List.find (fun n ->
+        n.M.kind="heading"
+        && M.string_prop n "text"=Some (I18n.t "collaboration/members")) (nodes s) in
+      check "Mounted collaboration titles project their negative leading insets without DOM CSS"
+        (Hashtbl.find_opt members.M.props "margin-top"=Some (P.IntValue (-8))
+         && Hashtbl.find_opt members.M.props "margin-left"=Some (P.IntValue (-8))
+         && not (Hashtbl.mem members.M.props "data-attrs"))
     end;
     Signal.set (Option.get !visible) false;
     S.flush s;

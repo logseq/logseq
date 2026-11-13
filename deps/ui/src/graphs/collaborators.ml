@@ -258,7 +258,7 @@ let body (_ms : Model.t Signal.signal) : t =
   in
   column ~key:"collab" ~padding:8 ~margin_bottom:(-32)
     [ heading ~key:"collab-h" ~level:1 ~font_size:"1.875rem"
-        ~data_attrs:[ ("style", "margin-top:-8px;margin-left:-8px") ]
+        ~margin_top:(-8) ~margin_left:(-8)
         ~value:(T.t "collaboration/members") []
     ; column ~key:"collab-w"
         ~style_class:"panel-wrap" ~margin_bottom:32
