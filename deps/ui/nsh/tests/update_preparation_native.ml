@@ -1776,7 +1776,6 @@ let native_wide_reading_column () =
 
 let native_code_toolbar_retention () =
   let module P = Lui_protocol in
-  let previous_app= !Native_embed.current_app in
   let slots=Signal.state_slot_count Render.code_toolbar_visibility_slot in
   let batches=ref [] in
   let backend : P.backend={
@@ -1790,8 +1789,7 @@ let native_code_toolbar_retention () =
     (fun _ source _ -> reactive (fun source ->
        Render.code_block ~self:"native-code-toolbar" "rust" source) source) in
   Fun.protect ~finally:(fun () ->
-    ignore (Lui_app.dispose app);Native_embed.current_app:=previous_app) (fun () ->
-    Native_embed.current_app:=Some app;
+    ignore (Lui_app.dispose app)) (fun () ->
     ignore (Lui_app.start app);ignore (Lui_app.flush app);
     let runtime=Lui_app.runtime app in
     let property node key=P.Property_map.find_opt key
