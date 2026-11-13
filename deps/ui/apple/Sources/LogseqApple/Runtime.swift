@@ -1,6 +1,6 @@
 import AppKit
 import Darwin
-import Foundation
+import AppKit
 import LUIAppleBackend
 
 typealias PatchCallback = @convention(c) (UnsafePointer<CChar>?) -> Void
@@ -35,8 +35,14 @@ private let requests: BytesCallback = { data, count in
     guard let text = String(bytes: bytes, encoding: .utf8) else { fatalError("Invalid platform UTF-8") }
     MainActor.assumeIsolated { activeRuntime?.messages.append(.request(text)) }
 }
+private func onMainRunLoop(_ action: @escaping @MainActor @Sendable () -> Void) {
+    RunLoop.main.perform(inModes: [.common, .modalPanel, .eventTracking]) {
+        MainActor.assumeIsolated { action() }
+    }
+    CFRunLoopWakeUp(CFRunLoopGetMain())
+}
 private let wake: WakeCallback = {
-    DispatchQueue.main.async { activeRuntime?.schedulePump() }
+    onMainRunLoop { activeRuntime?.schedulePump() }
 }
 private let snapshotReceiver: BytesCallback = { data, count in
     guard let data else { return }
@@ -116,7 +122,9 @@ final class NativeRuntime {
     func schedulePump() {
         guard started, !scheduled else { return }
         scheduled = true
-        DispatchQueue.main.async { [weak self] in
+        // AppKit's asynchronous Quit runs a nested loop; the OCaml worker and
+        // save replies must keep pumping there and during native modal panels.
+        onMainRunLoop { [weak self] in
             guard let self, self.started else { return }
             self.scheduled = false
             do {
