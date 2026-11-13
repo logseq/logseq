@@ -57,15 +57,19 @@ let queued_batches () =
   List.rev (Queue.fold (fun acc batch -> batch :: acc) [] pending_batches)
 
 let send_platform_request payload =
-  (* Host callbacks only copy bytes; they never re-enter OCaml. Publish the
-     completed prefix before a request can name one of its new owners. Remove
-     it only after encoding and the callback succeed, preserving later appends. *)
-  let batches = queued_batches () in
-  (match batches with
-   | [] -> ()
-   | _ ->
-       publish_patches (encode_batches batches);
-       List.iter (fun _ -> ignore (Queue.take pending_batches)) batches);
+  (* Registry/theme requests provide prerequisites for queued views, so keep
+     them ahead of the ordinary patch response. Only the DOM service captures
+     native view owners and needs its completed creating prefix first.
+     Callbacks copy bytes without re-entering OCaml; remove the published
+     prefix only after encoding and callback success, preserving later appends. *)
+  if String.starts_with ~prefix:"dom-op\n" payload then begin
+    let batches = queued_batches () in
+    match batches with
+    | [] -> ()
+    | _ ->
+        publish_patches (encode_batches batches);
+        List.iter (fun _ -> ignore (Queue.take pending_batches)) batches
+  end;
   platform_request payload
 
 let take_patches () =

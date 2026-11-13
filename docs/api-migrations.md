@@ -1,14 +1,21 @@
 # API migrations
 
-## Native platform requests publish their completed patch prefix first
+## Native DOM requests publish their completed patch prefix first
 
 Both native platform-request channels now publish already-completed queued
 patch batches through the existing C patch callback before emitting a dependent
-host request. For example, publishing a Comments area and then clicking its
+`dom-op` request. For example, publishing a Comments area and then clicking its
 new Reply control delivers the creating patches before the click is captured
 by the Rust renderer. Previously the inline request could precede those batches,
 which were returned only when the OCaml entry finished, leaving a valid new
 canonical owner absent in the native renderer.
+
+Registry/configuration requests retain the opposite prerequisite order: theme
+snapshots, UI state, icons and resource contexts must arrive before queued views
+that consume them. They do not publish the queued prefix. All request producers
+still use one shared sender; its existing DOM-service channel is the boundary
+that captures renderer references. No theme fallback or duplicated boot setup
+is introduced.
 
 This is an internal wire-order correction. Each generation is delivered exactly
 once, and the ordinary entry response returns only the remaining batches.
@@ -22,7 +29,8 @@ canonical owner before requesting an operation on it, as before.
 
 The actual native archive/C bridge fixture records create-patch, Host request,
 update-patch, Platform request and final response-patch order, verifies consecutive
-nonduplicated generations, and checks failed-delivery queue retention. The real
+nonduplicated generations, checks failed-delivery queue retention and verifies
+that an actual theme snapshot retains the pending prefix without publishing it. The real
 AppKit comment handoff remains a separate required downstream integration gate;
 preparing this source does not establish a native UI pass.
 

@@ -2774,6 +2774,7 @@ let native_platform_message_order () =
   let previous_app= !Native_embed.current_app and previous_host= !Host.host_op
   and previous_request= !Platform.host_request and previous_model= !Runtime.read_model
   and previous_flush= !Runtime.app_flush and previous_publish= !Native_embed.publish_native_keymap in
+  let previous_themes=Hashtbl.copy Platform.theme_snapshots in
   let previous_batches=Native_embed.queued_batches () in
   Queue.clear Native_embed.pending_batches;
   let app_ref=ref None and trigger=ref None and capture=ref false in
@@ -2814,7 +2815,9 @@ let native_platform_message_order () =
     List.iter (fun batch -> Queue.add batch Native_embed.pending_batches) previous_batches;
     Native_embed.current_app:=previous_app;Host.host_op:=previous_host;
     Platform.host_request:=previous_request;Runtime.read_model:=previous_model;
-    Runtime.app_flush:=previous_flush;Native_embed.publish_native_keymap:=previous_publish in
+    Runtime.app_flush:=previous_flush;Native_embed.publish_native_keymap:=previous_publish;
+    Hashtbl.clear Platform.theme_snapshots;
+    Hashtbl.iter (Hashtbl.replace Platform.theme_snapshots) previous_themes in
   Fun.protect ~finally:cleanup (fun () ->
     Native_embed.current_app:=Some app;Native_embed.publish_native_keymap:=(fun () -> ());
     Runtime.read_model:=(fun () -> Lui_app.model app);
@@ -2858,6 +2861,14 @@ let native_platform_message_order () =
         else None) messages=[Option.get !child;Option.get !child]);
     Signal.set (Option.get !stage) 4;ignore (Lui_app.flush app);
     let pending=Native_embed.queued_batches () in
+    bridge_order_start ();capture:=true;
+    Ui_theme.apply "light";
+    let messages=bridge_order_finish () in capture:=false;
+    check "the actual theme snapshot precedes queued views without publishing their prefix"
+      (match messages with
+       | [message] -> String.starts_with ~prefix:"Rtheme-snapshot\n" message
+           && Native_embed.queued_batches ()=pending && pending<>[]
+       | _ -> false);
     bridge_order_start ();capture:=true;bridge_order_without_patch ();
     check "missing C patch callback fails before sending a dependent request"
       (match Native_embed.send_platform_request "dom-op\nclick\n{}" with
@@ -2871,7 +2882,8 @@ let native_platform_message_order () =
     let messages=bridge_order_finish () in capture:=false;
     check "retry publishes the retained generation once before its request"
       (List.map (fun message -> message.[0]) messages=['P';'R']
-       && Queue.is_empty Native_embed.pending_batches))
+       && Queue.is_empty Native_embed.pending_batches);
+    print_endline "PASS actual C native patch/DOM order, theme prerequisites and failed-publication retention")
 
 let native_menu_scope_retention () =
   let open Lui_elements in
