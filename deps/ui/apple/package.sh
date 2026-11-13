@@ -34,6 +34,23 @@ cp -R "$ui_root/_build/Resources/." "$resources/"
 cp "$(dirname "$host")/liblogseq_ui.dylib" "$resources/"
 dylibbundler -b -od -x "$bin/Logseq" -x "$resources/liblogseq_ui.dylib" \
   -x "$resources/logseq-db-worker" -d "$app/Contents/Frameworks" -p '@executable_path/../Frameworks/' >&2
+# dylibbundler can rewrite distinct runpaths to the same bundle path.
+# Keep their first occurrence; dyld rejects duplicate LC_RPATH entries.
+for binary in "$bin/Logseq" "$resources/liblogseq_ui.dylib" \
+  "$resources/logseq-db-worker" "$app/Contents/Frameworks/"*.dylib; do
+  [[ -f $binary ]] || continue
+  duplicate_runpaths=$(otool -l "$binary" | awk '
+    $1 == "cmd" && $2 == "LC_RPATH" {
+      getline; getline
+      sub(/^[[:space:]]*path /, "")
+      sub(/ \(offset [0-9]+\)$/, "")
+      if (seen[$0]++) print
+    }')
+  while IFS= read -r runpath; do
+    [[ -n $runpath ]] || continue
+    install_name_tool -delete_rpath "$runpath" "$binary" >&2
+  done <<< "$duplicate_runpaths"
+done
 codesign --force --deep --sign - "$app" >&2
 codesign --verify --deep --strict "$app" >&2
 destination="$packages/Logseq.app"
