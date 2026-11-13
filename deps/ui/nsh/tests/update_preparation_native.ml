@@ -1761,7 +1761,7 @@ let native_sidebar_scroll_basis () =
           ignore (Lui_app.flush app);
           check "emptying and repopulating Favorites retains both actual scroll owners"
             (find Lui_protocol.AccessibilityIdentifier "left-sidebar-scroll"=left
-             && find Lui_protocol.StyleClass "cp__right-sidebar-scrollable"=right)) [[];pages])))
+             && find Lui_protocol.StyleClass "cp__right-sidebar-scrollable"=right)) [[];pages]))
       [Lui_protocol.MacOS,Lui_protocol.NshHost;Lui_protocol.IOS,Lui_protocol.SwiftUIHost;
        Lui_protocol.AndroidOS,Lui_protocol.KotlinHost;Lui_protocol.WebOS,Lui_protocol.WebHost])
 
