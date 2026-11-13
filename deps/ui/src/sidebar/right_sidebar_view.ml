@@ -337,7 +337,7 @@ let item_header st idx (it : Sidebar_state.item) =
     ; Ui_components.with_props
         [ Ui_components.Prop.padding_left 4; Ui_components.Prop.padding_right 8 ]
         (Ui_components.button ~key:("hdr-" ^ it.key) ~variant:`ghost ~grow:1. ~min_width:0
-        ~height:32
+        ~height:32 ~main:`start
         (* page/block sidebar items can carry an empty title — a button
            with neither text nor accessibility label is rejected and
            kills the whole mount batch *)

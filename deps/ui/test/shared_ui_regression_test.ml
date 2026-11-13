@@ -1398,6 +1398,9 @@ let right_sidebar_block_clipping ~registry ~profile =
           | _ -> acc in
         List.fold_left (fun acc child -> rows child acc) acc (M.children session.S.tree node.M.id) in
       let initial=(clipped ()).M.id in
+      let header ()=List.find (fun node -> M.string_prop node "accessibility-identifier"=
+        Some "sidebar-panel-header-0") (nodes session) in
+      let header_id=(header ()).M.id in
       let check_contents expected =
         let surface=clipped () in
         let body=List.find (fun node -> class_has node "sidebar-panel-content") (nodes session) in
@@ -1421,6 +1424,12 @@ let right_sidebar_block_clipping ~registry ~profile =
           (not (List.exists (String.starts_with ~prefix:"style\x1f") carriers));
         check "The clipped document retains every actual producer block row"
           (List.length (rows surface [])=expected);
+        check "The sidebar title keeps master's leading alignment on its original header button"
+          (let title=header () in title.M.kind="button" && title.M.id=header_id
+           && M.string_prop title "main"=Some "start"
+           && Hashtbl.find_opt title.M.props "grow"=Some (P.FloatValue 1.)
+           && Hashtbl.find_opt title.M.props "min-width"=Some (P.IntValue 0)
+           && Hashtbl.find_opt title.M.props "height"=Some (P.IntValue 32));
         check "The canonical inner document retains its existing sidebar context marker"
           (List.exists (fun node -> class_has node "page-blocks-inner"
              && M.string_prop node "data-attrs"=Some "data-cid\x1fsidebar") (nodes session))
@@ -1430,7 +1439,20 @@ let right_sidebar_block_clipping ~registry ~profile =
       List.iter (fun next ->
         Runtime.signal_set sidebar.Sidebar_state.items [{item with blocks=next}];
         S.flush session;check_contents (List.length next))
-        [List.filteri (fun index _ -> index<18) blocks;blocks]))
+        [List.filteri (fun index _ -> index<18) blocks;blocks];
+      List.iter (fun title ->
+        Runtime.signal_set sidebar.Sidebar_state.items [{item with title}];
+        S.flush session;check_contents 36;
+        check "Changing a long sidebar title keeps the original named header owner"
+          (button_label (header ())=Some title))
+        [String.make 160 'W';String.concat "" (List.init 80 (fun _ -> "侧栏"))];
+      S.press session header_id;
+      check "The same leading-aligned title button still collapses its own sidebar item"
+        (match Runtime.signal_get sidebar.Sidebar_state.items with
+         | [item] -> item.Sidebar_state.collapsed && (header ()).M.id=header_id
+         | _ -> false);
+      S.press session header_id;
+      check_contents 36))
 
 let popup_layout_carriers ~registry ~profile =
   let previous_popup= !Popups_state.active in

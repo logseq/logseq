@@ -1,5 +1,19 @@
 # API migrations
 
+## Sidebar card titles use leading alignment
+
+The existing right-sidebar header Button now declares `main=start`, matching
+master's leading-aligned flex title button. Its growing width, zero minimum
+width, 32pt height, padding, child title, accessibility identifier and collapse,
+reorder and middle-click handlers remain unchanged. The NSH CommandButton's
+centered default previously centered the title in the available header space.
+
+No global Button default or wire/event contract changes. Custom sidebar title
+buttons can likewise opt into ``~main:`start`` while retaining their existing
+semantic Button and content. Shared actual-producer regressions cover the same
+header identity through content refresh, long ASCII/CJK titles and collapse /
+expand. Native long-title bounds and paint remain to be qualified separately.
+
 ## Selection toolbar has one surface owner
 
 The selection action bar's existing positioning Popover now declares
