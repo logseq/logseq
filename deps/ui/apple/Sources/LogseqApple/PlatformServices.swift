@@ -345,9 +345,10 @@ final class PlatformServices {
         if op == "dump-frames" {
             let rows: [[String: Any]] = nodes.keys.sorted().map { id in
                 var row: [String: Any] = ["id": id, "kind": nodes[id]?["kind"] ?? nodes[id]?["identifier"] ?? "unknown", "children": children[id] ?? []]
-                for key in ["accessibility-identifier", "style-class", "grow", "min-width", "max-width", "width", "height", "main", "cross", "value", "first-pane-width"] {
+                for key in ["accessibility-identifier", "style-class", "grow", "min-width", "max-width", "min-height", "max-height", "width", "height", "main", "cross", "display", "position", "container-relative-frame", "inert", "overflow", "gap", "padding", "padding-horizontal", "padding-vertical", "margin-left", "font-size", "font-weight", "first-pane-width"] {
                     if let value = nodes[id]?[key] { row[key] = value }
                 }
+                if nodes[id]?["kind"] as? String == "split", let value = nodes[id]?["value"] { row["value"] = value }
                 if let r = rect(id) { row["frame"] = ["x": r.minX, "y": r.minY, "width": r.width, "height": r.height] }
                 if let metrics = backend?.scrollMetrics(nodeID: id) {
                     row["scroll"] = ["top": metrics.offset, "height": metrics.contentSize.height, "viewport-height": metrics.viewportSize.height, "viewport-width": metrics.viewportSize.width]

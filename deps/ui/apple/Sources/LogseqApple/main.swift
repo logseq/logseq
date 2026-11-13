@@ -17,6 +17,7 @@ final class LogseqHost: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var closing = false
     var closeReady = false
     var quitting = false
+    private var patchTrace: FileHandle?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         do {
@@ -85,7 +86,11 @@ final class LogseqHost: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
     func apply(_ json: String, snapshot: Bool) throws {
         if let path = ProcessInfo.processInfo.environment["LOGSEQ_APPLE_TRACE_PATCHES"] {
-            try Data(json.utf8).write(to: URL(fileURLWithPath: path), options: .atomic)
+            if patchTrace == nil {
+                try Data().write(to: URL(fileURLWithPath: path), options: .atomic)
+                patchTrace = try FileHandle(forWritingTo: URL(fileURLWithPath: path))
+            }
+            try patchTrace?.write(contentsOf: Data((json + "\n").utf8))
         }
         guard let data = json.data(using: .utf8), let batches = try JSONSerialization.jsonObject(with: data) as? [[String: Any]] else { throw HostError("Runtime patch callback must be a batch array") }
         if snapshot {
@@ -158,6 +163,8 @@ final class LogseqHost: NSObject, NSApplicationDelegate, NSWindowDelegate {
         if let appearanceObserver { DistributedNotificationCenter.default().removeObserver(appearanceObserver) }
         services.close()
         do { try runtime?.stop() } catch { NSLog("Logseq Apple stop error: %@", String(describing: error)) }
+        try? patchTrace?.close()
+        patchTrace = nil
         NSLog("Logseq Apple stopped")
     }
     func fail(_ error: Error) {

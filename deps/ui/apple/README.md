@@ -87,6 +87,9 @@ notarization are separate release steps.
 
 Set `LOGSEQ_DUMP=1` for layout diagnostics: document clicks log retained node
 frames and mounted native scroll metrics without including document text.
+For a disposable graph, set `LOGSEQ_APPLE_TRACE_PATCHES=/absolute/path/patches.jsonl`
+to capture every raw patch callback in order. Each launch starts a new trace;
+the trace includes document content and should only be shared after inspection.
 
 ## Architecture
 
