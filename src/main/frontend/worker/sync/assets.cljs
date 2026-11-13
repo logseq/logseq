@@ -358,21 +358,15 @@
       (when (not (js/isNaN length))
         length))))
 
-(defn- compressed-http-encoding?
-  [content-encoding]
-  (boolean
-   (when (string? content-encoding)
-     (re-find #"(?i)(?:^|[\s,])(?:gzip|deflate|br)(?:$|[\s,;])" content-encoding))))
-
 (defn download-remote-asset!
   [repo graph-id asset-uuid asset-type]
-  (let [base (sync-auth/http-base-url @worker-state/*db-sync-config)]
+  (let [base (sync-auth/http-base-url @worker-state/*db-sync-config)
+        asset-id (str asset-uuid)]
     (if (and (seq base) (seq graph-id) (seq asset-type))
       (-> (p/let [aes-key (graph-aes-key
                            repo graph-id
                            (fn [tag data]
                              (throw (ex-info (name tag) data))))
-                  asset-id (str asset-uuid)
                   get-url (sync-large-title/asset-url base graph-id asset-id asset-type)
                   headers (sync-auth/auth-headers (worker-state/get-id-token))
                   request-opts (cond-> {:method "GET"}
@@ -384,10 +378,8 @@
                       (throw (ex-info "download asset failed"
                                       {:type :rtc.exception/download-asset-failed
                                        :data {:status status}})))
-                  total (if (compressed-http-encoding?
-                             (some-> (.-headers resp) (.get "content-encoding")))
-                          0
-                          (or (parse-content-length resp) 0))
+                  ;; In-flight total may be encoded wire size; completion uses decoded size.
+                  total (or (parse-content-length resp) 0)
                   _ (notify-asset-progress! repo asset-id :download 0 total)
                   body (.arrayBuffer resp)
                   body-size (.-byteLength body)
@@ -397,10 +389,10 @@
                     (let [asset-file-untransited (ldb/read-transit-str (.decode (js/TextDecoder.) body))]
                       (crypt/<decrypt-uint8array aes-key asset-file-untransited)))
                   _ (<write-asset-bytes! repo asset-id asset-type asset-file)]
-            ;; Decoded body size, not Content-Length: gzip/deflate wire size is smaller.
             (notify-asset-progress! repo asset-id :download body-size body-size))
           (p/catch
            (fn [e]
+             (notify-asset-progress! repo asset-id :download 0 0)
              (if (= :rtc.exception/download-asset-failed (:type (ex-data e)))
                (p/rejected e)
                (p/rejected (ex-info "download asset failed"
