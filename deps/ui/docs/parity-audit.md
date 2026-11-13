@@ -2,12 +2,12 @@
 
 ## Desktop migration evidence boundary
 
-This is a historical **Web** audit, not MyGo desktop acceptance evidence.
-Desktop now uses `mygo/` with the OCaml application library in `native/` and
-the native database worker. The old `ocaml_host/` SDL renderer and its
+This is a historical **Web** audit, not native desktop acceptance evidence.
+The OCaml application library in `native/` and the native database worker
+remain available for native hosts. The old `ocaml_host/` SDL renderer and its
 renderer-specific tests were removed; passing those old tests cannot establish
-MyGo parity. Native/Web compilation, Go contract tests and package inspection
-are build evidence only, not proof of visual, IME, clipboard or OS-menu parity.
+desktop parity. Native/Web compilation and package inspection are build
+evidence only, not proof of visual, IME, clipboard or OS-menu parity.
 Graph View and Page Graph View are excluded from this migration; ordinary
 graph creation, selection and management remain supported application scope.
 Platform-specific acceptance must be recorded separately on each target OS.

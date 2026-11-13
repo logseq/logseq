@@ -530,7 +530,7 @@ saves also refresh counts. Closing the popup logically cancels pending work:
 no delayed read starts and in-flight results cannot update disposed state.
 The existing RPC is not transport-cancelled. Reopening creates a new request
 owner and subscription. Count updates and the existing 200 ms search debounce
-request a flush explicitly on both Web and MyGo.
+request a flush explicitly on both Web and native hosts.
 
 `Views_popup.show_custom` accepts an optional application-private
 `owner_scope`; the references picker supplies its launching view's scope.
@@ -863,10 +863,10 @@ usage before changing dependency or styling conventions.
 
 ### Native host clipboard requests
 
-The native app sends platform envelopes as `name\npayload`. The MyGo adapter
-handles them in `deps/ui/mygo/platform.go`; the Linux/macOS OCaml SDL host drains
-`Bridge.take_requests` through `Host_requests` on its UI thread. These are distinct
-consumers of the same app-private clipboard task contract.
+The native app sends platform envelopes as `name\npayload` through the
+embedding bridge in `deps/ui/native/logseq_lui_bridge.c`. Native hosts drain
+these requests and dispatch them to OS services on their UI thread using the
+app-private clipboard task contract.
 
 | Request | Payload | Completion |
 | --- | --- | --- |

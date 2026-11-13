@@ -1,5 +1,5 @@
 #!/bin/sh
-# Minimal OCaml dependencies for the Web UI and MyGo application library.
+# Minimal OCaml dependencies for the Web UI and native application library.
 # Run after deps/db-worker/scripts/install-opam-deps.sh in the selected switch.
 set -eu
 # Set LUI_SOURCE to a local Git checkout when validating a LUI update.

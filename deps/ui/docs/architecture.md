@@ -1,10 +1,9 @@
-# deps/ui — OCaml application and Web/MyGo architecture
+# deps/ui — OCaml application and Web/native architecture
 
 Logseq application logic is OCaml. Web compiles through Melange to the LUI
-DOM backend; desktop embeds the native OCaml application library in MyGo.
-MyGo owns native rendering and OS controls. `native/` is application/business
-logic and its service adapters, not the removed SDL renderer. Desktop still
-uses the native database worker. The Web DOM contract is documented in
+DOM backend. `native/` contains the embeddable OCaml application library and
+its service adapters, not a renderer. The native database worker and Electron
+desktop release path remain available. The Web DOM contract is documented in
 `docs/e2e-contract.md`.
 
 ## Build & run
@@ -23,10 +22,9 @@ pnpm ui:build
 # build the worker -> static/js/db-worker.js
 pnpm db-worker:build
 
-# desktop (also builds the native worker):
-pnpm ui:mygo:build
-pnpm ui:mygo
-pnpm ui:mygo:package
+# native application library and worker:
+(cd deps/ui && opam exec -- dune build native/native_embed.exe.o)
+pnpm db-worker-node:native
 ```
 
 Rebuild after any OCaml change. `pnpm gulp build` WIPES `static/js/*.js`
@@ -78,7 +76,7 @@ design.
 
 - The native host consumes ONLY natively-expressible typed props — no
   CSS parsing, no `var()`/`calc()` resolution. Decoration that cannot
-  be expressed natively stays in the MyGo adapter, not a second app stylesheet.
+  be expressed natively stays in the host adapter, not a second app stylesheet.
 - Web keeps adapter-side leftovers in `resources/css/lui-overlay.css`
   behind the same semantic hook classes (`ui__*`, `cp__*`, `ls-*`):
   keyframe animations, `::selection`/`::first-letter`, `transform`,
@@ -136,7 +134,7 @@ lines untouched. Full inventory: `docs/e2e-contract.md`.
 
 ## Shared runtimes (post-migration, 2026-10)
 
-`deps/ui` builds Web and MyGo desktop from shared business/view sources:
+`deps/ui` builds Web and the native application library from shared business/view sources:
 
 | Layer | Path | Runs on | Owns |
 | --- | --- | --- | --- |
@@ -146,14 +144,10 @@ lines untouched. Full inventory: `docs/e2e-contract.md`.
 | web src | `src/` | Melange | web-only view/app code still migrating feature-by-feature; real browser boundary `src/core/web_dom.ml` |
 | web adapter | `web/` | Melange | `platform_web.ml` installs `Ui_services` ops via real browser APIs |
 | native application adapter | `native/` | native OCaml | host services (`services/platform_native.ml`), native view overrides, C bridge, `native_embed` entry |
-| desktop host | `mygo/` | Go/MyGo on macOS/Linux | native window/rendering, OS services and OCaml shared-library embedding |
 
-`mygo/build.sh` builds `native/native_embed.exe.o`, links the platform shared
-library, builds the Go executable with CGO, and builds/copies the native worker.
-The packaged launcher resolves the library, worker and resources relative to
-itself. See `../mygo/README.md` for macOS bundle/Linux archive layouts and
-distribution limits. Electron/CLJS releases remain a distinct product path;
-their executables are never labeled MyGo.
+`native/native_embed.exe.o` and `native/logseq_lui_bridge.c` provide the native
+embedding boundary. Hosts own rendering, OS controls and shared-library loading.
+Electron releases retain their existing macOS, Windows and Linux build jobs.
 
 Boundary gate: `scripts/check-shared-boundaries.sh` (wired into `dune runtest test/contracts` on Unix) rejects `Js.*`/`Webapi`/`Web_dom`/`Unix`/`Thread`/`Yojson`/`Platform.*` in `src/shared`+`src/contracts`+`subs`. Tracked exceptions (must shrink to zero): `subs/promise_ext.ml` (Js.Promise `let*` still opened by src files), `subs_state` promise↔task adapters.
 

@@ -1,18 +1,10 @@
-# Electron releases and explicit non-release MyGo desktop packages.
+# Electron desktop releases.
 
 name: Build-Desktop-Release
 
 on:
   workflow_dispatch:
     inputs:
-      desktop-runtime:
-        description: 'Desktop runtime (MyGo currently produces non-release artifacts only)'
-        type: choice
-        required: true
-        options:
-          - electron
-          - mygo
-        default: electron
       build-target:
         description: 'Build Target (Release Type)'
         type: choice
@@ -61,63 +53,7 @@ env:
   OCAML_VERSION: '5.5.1'
 
 jobs:
-  build-mygo:
-    if: ${{ github.event.inputs.desktop-runtime == 'mygo' }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-22.04, macos-15]
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 90
-    steps:
-      - name: Validate MyGo artifact target
-        env:
-          BUILD_TARGET: ${{ github.event.inputs.build-target }}
-        run: |
-          if [ "$BUILD_TARGET" != non-release ]; then
-            echo '::error::MyGo packages are non-release artifacts, not signed Electron releases.'
-            exit 1
-          fi
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.inputs.git-ref }}
-      - name: Linux dependencies
-        if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y pkg-config libsqlite3-dev libgtk-3-dev libpango1.0-dev libcairo2-dev libharfbuzz-dev libfreetype-dev libfontconfig-dev libgl1-mesa-dev libegl1-mesa-dev libgles2-mesa-dev libffi-dev libgmp-dev
-      - name: macOS dependencies
-        if: runner.os == 'macOS'
-        run: brew install pkg-config sqlite3 libffi gmp dylibbundler
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10.33.0
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-      - uses: ocaml/setup-ocaml@v3
-        with:
-          ocaml-compiler: ${{ env.OCAML_VERSION }}
-          dune-cache: true
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: deps/ui/mygo/go.mod
-          cache-dependency-path: deps/ui/mygo/go.sum
-      - name: Root generator dependencies
-        run: pnpm install --frozen-lockfile
-        env:
-          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: true
-      - name: OCaml dependencies
-        run: |
-          (cd deps/db-worker && sh scripts/install-opam-deps.sh)
-          (cd deps/ui && sh scripts/install-opam-deps.sh)
-      - name: Package MyGo desktop
-        run: pnpm ui:mygo:package
-      - uses: actions/upload-artifact@v4
-        with:
-          name: logseq-mygo-${{ matrix.os }}
-          path: deps/ui/_build/packages/Logseq-MyGo-*
-
   build-ui:
-    if: ${{ github.event.inputs.desktop-runtime != 'mygo' }}
     runs-on: ubuntu-22.04
     steps:
       - name: Check build options
@@ -300,7 +236,6 @@ jobs:
           include-hidden-files: true
 
   build-db-worker-native:
-    if: ${{ github.event.inputs.desktop-runtime != 'mygo' }}
     strategy:
       fail-fast: false
       matrix:
