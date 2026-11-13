@@ -356,10 +356,23 @@ let shortcut_hint hov binding =
    inner `a.item` also gets `active` when the route matches *)
 let nav_link ~sched ~key ~class_ ~active ~title ~icon_name ?shortcut ?on_shift_click ~on_click
     ?(more = Logseq_el.nothing) () =
+ fun context parent ->
   let act = if active then " active" else "" in
   let hov = Signal.state sched false in
   let tail =
     match shortcut with Some s -> [ shortcut_hint hov s ] | None -> []
+  in
+  let icon =
+    Ui_components.with_props
+      [ Ui_components.Prop.margin_left 4; Ui_components.Prop.margin_right 8 ]
+      (icon_ icon_name)
+  in
+  let leading =
+    if Lui_ui.platform context = P.MacOS && Lui_ui.host context = P.SwiftUIHost then
+      [ row ~key:"nav-label" ~grow:1. ~min_width:0 ~cross:`center
+          [ icon; text ~white_space:"nowrap" ~text_overflow:"ellipsis" ~value:title [] ] ]
+    else
+      [ icon; text ~grow:1. ~white_space:"nowrap" ~text_overflow:"ellipsis" ~value:title [] ]
   in
   box ~key ~style_class:(class_ ^ act)
     [ (match on_shift_click with
@@ -394,12 +407,7 @@ let nav_link ~sched ~key ~class_ ~active ~title ~icon_name ?shortcut ?on_shift_c
               ~data_attrs:
                 [ ( "style"
                   , "padding-left:6px;padding-right:2px" ) ]
-              ([ Ui_components.with_props
-                   [ Ui_components.Prop.margin_left 4
-                   ; Ui_components.Prop.margin_right 8 ]
-                   (icon_ icon_name)
-               ; text ~grow:1. ~white_space:"nowrap" ~text_overflow:"ellipsis" ~value:title [] ]
-              @ tail @ [ more ]))) ]
+              (leading @ tail @ [ more ]))) ] context parent
 
 let nav_route ~sched ~class_ ~active ~title ~icon_name ?shortcut hash =
   nav_link ~sched ~key:("nl-" ^ class_) ~class_ ~active ~title ~icon_name
