@@ -1240,6 +1240,30 @@ let right_sidebar_block_clipping ~registry ~profile =
         S.flush session;check_contents (List.length next))
         [List.filteri (fun index _ -> index<18) blocks;blocks]))
 
+let popup_layout_carriers ~registry ~profile =
+  let previous_popup= !Popups_state.active in
+  Fun.protect ~finally:(fun () -> Popups_state.active:=previous_popup) (fun () ->
+    let session=S.mount ~registry ~profile ~initial:Model.initial
+      ~reducer:(fun model () -> model)
+      ~view:(fun context _ _ ->
+        let state=Popups_state.make context.Lui_ui.ui_scheduler in
+        let item=Popups_state.mk_item ~key:"layout-icon" ~label:"Layout icon"
+          ~node:true Popups_state.Noop in
+        Lui_elements.column
+          [ Popups_view.node_icon_slot ~key:"icon-slot" item;
+            Popups_view.ac_inner state ]) () in
+    Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose session.S.app)) (fun () ->
+      let icon=List.find (fun node -> class_has node "ls-ac-node-icon") (nodes session) in
+      check "Autocomplete keeps the actual empty icon slot nonshrinking at its original size"
+        (Hashtbl.find_opt icon.M.props "shrink"=Some (P.FloatValue 0.)
+         && Hashtbl.find_opt icon.M.props "height"=Some (P.IntValue 20)
+         && Hashtbl.find_opt icon.M.props "margin-right"=Some (P.IntValue 4));
+      let scroll=List.find (fun node ->
+        M.string_prop node "accessibility-identifier"=Some "ui__ac-inner") (nodes session) in
+      check "Autocomplete positioning belongs to the existing Scroll, not its virtual contents"
+        (scroll.M.kind="scroll" && M.string_prop scroll "position"=Some "relative"
+         && M.string_prop scroll "data-attrs"=Some "style\x1f-webkit-overflow-scrolling:touch")))
+
 let shared_block_clipping ~registry ~profile =
   let previous_model = !Runtime.read_model and previous_flush = !Runtime.app_flush
   and previous_editor = !Editor_state.st
@@ -1299,6 +1323,29 @@ let shared_block_clipping ~registry ~profile =
             (M.string_prop clipped "data-attrs"=None)
         in
         verify 2;
+        let contents=List.filter (fun node -> class_has node "block-content-wrapper"
+          && Hashtbl.find_opt node.M.props "grow"=Some (P.FloatValue 1.)) (nodes session) in
+        check (producer ^ " keeps block content selectable and its authored overflow visible")
+          (contents<>[] && List.for_all (fun node ->
+            M.string_prop node "overflow"=Some "visible"
+            && M.string_prop node "user-select"=Some "text"
+            && not (Hashtbl.mem node.M.props "data-attrs")) contents);
+        let trailing=List.filter (fun node -> class_has node "ls-block-right") (nodes session) in
+        check (producer ^ " preserves nonshrinking relative trailing block controls")
+          (trailing<>[] && List.for_all (fun node ->
+            Hashtbl.find_opt node.M.props "shrink"=Some (P.FloatValue 0.)
+            && M.string_prop node "position"=Some "relative") trailing);
+        if producer="preview" then begin
+          let wrapper=List.find (fun node -> class_has node "tippy-wrapper") (nodes session) in
+          check "Preview padding-bottom uses the existing typed wrapper with its original dimensions"
+            (Hashtbl.find_opt wrapper.M.props "padding-bottom"=Some (P.IntValue 64)
+             && Hashtbl.find_opt wrapper.M.props "padding"=Some (P.IntValue 8)
+             && Hashtbl.find_opt wrapper.M.props "width"=Some (P.IntValue 600));
+          let title=List.find (fun node -> class_has node "block-content-wrapper"
+            && M.string_prop node "position"=Some "relative") (nodes session) in
+          check "Preview title positioning retains its authored pointer admission"
+            (Hashtbl.find_opt title.M.props "pointer-enabled"=Some (P.BoolValue true))
+        end;
         if producer="keyed" then
           List.iter (fun next ->
             ignore (Lui_app.send session.S.app next);S.flush session;verify (List.length next))
@@ -1631,6 +1678,7 @@ let run_views ~registry ~profile ~finish =
   table_title_completion ~registry ~profile;
   sidebar_favorite_rows ~registry ~profile;
   right_sidebar_block_clipping ~registry ~profile;
+  popup_layout_carriers ~registry ~profile;
   shared_block_clipping ~registry ~profile;
   native_view_type_menu ~registry;
   gallery_remote_cover_policy ~registry;
