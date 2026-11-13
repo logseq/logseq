@@ -412,3 +412,60 @@ explicit button/advance APIs and all native publication remain unchanged.
 Actual native-archive regressions check these phases and a subsequent real
 rating-operation batch. Private AppKit cases must independently demonstrate
 second-S stability and persisted ratings before that boundary is qualified.
+
+## Actual execution at App 7f432847c6
+
+This later execution cohort uses App
+`7f432847c6de019f3aeed7541f1e853fa5d58ead`, LUI
+`93712b51ab40d7c5882fed1501568a55ab6722ba` and unchanged NSH
+`adc186db7213f3ccd1eacaa836cc721e9779fd14`. The original 145-row source
+snapshot above remains historical; matching default strings do not establish
+working command capabilities or exhaustive native execution.
+
+- The complete shared runner passed **19,643 checks, 0 failures** in
+  `/tmp/logseq-final-shortcut-shared-tests.log`. The actual native OCaml archive
+  admission passed in `/tmp/logseq-final-shortcut-native-admission.log`.
+- `PATH=/Users/tienson/.cargo/bin:$PATH bash deps/ui/nsh/build.sh --release`
+  passed the real startup gate in 17.76 seconds and published its checked
+  receipt. All 13 task-owned workers reached durable `closed`, had no error,
+  were absent, and received exactly one shutdown dispatch. Build logs are
+  `/tmp/logseq-shortcut-final-release-build.stdout` and
+  `/tmp/logseq-shortcut-final-release-build.log`.
+- Corrected editing Ctrl-Space **failed** again in the actual AppKit driver,
+  after saving `draft` and displaying the Comments reply. The fatal error is
+  still `native click target is missing or retired`; the prior request-claim
+  fix alone therefore does not qualify this path. Evidence:
+  `/tmp/logseq-shortcut-final-native-comments.log`, private graph
+  `logseq-native-block.dbFkRb`. The capture/publication ordering boundary
+  remains under investigation. No error was ignored or converted to a pass.
+- Four independent private-graph AppKit card cases **passed**. Each starts
+  with one production-created Card tag and answer child, with no fabricated
+  FSRS state or due date; actual G F opens the modal, an early rating digit
+  cannot grade, S shows the answer, and a second S preserves the same answer
+  and rating controls. The actual rating digit persists exactly one review;
+  a repeated digit does not write again. Escape and reopening show no due
+  cards while preserving the actual review. Exact readbacks are:
+
+  | Key | Rating | State / repetitions / lapses | Persisted due offset | Private graph / duration |
+  | --- | --- | --- | --- | --- |
+  | 1 | again | learning / 1 / 1 | 60,000 ms | `logseq-native-block.f1mamY` / 10.7 s |
+  | 2 | hard | learning / 1 / 0 | 300,000 ms | `logseq-native-block.jJz0eF` / 10.7 s |
+  | 3 | good | learning / 1 / 0 | 600,000 ms | `logseq-native-block.kCYIAG` / 10.3 s |
+  | 4 | easy | review / 1 / 0 | 6 days | `logseq-native-block.JkSHcB` / 10.5 s |
+
+  Logs are `/tmp/logseq-shortcut-final-native-cards-1-authored-id.log` and
+  `/tmp/logseq-shortcut-final-native-cards-{2,3,4}.log`. The first two rating-1
+  attempts failed fixture assumptions: a bare UUID was not a valid worker
+  `pull` entity reference, and an explicitly authored native test ID supersedes
+  the generic `lui-ID`. The fixture now queries the actual answer entity ID and
+  selects `card-again`/`card-hard`/`card-good`/`card-easy`. It retains all
+  original state, enabled-control, persistence and phase assertions.
+
+The card-answer and reopened PNGs from the first passing graph were inspected.
+These fixtures load the actual Release application library and worker under
+the macOS NSH native test host, with immutable source/artifact guards and
+task-owned cleanup. They do not qualify a signed installed package, physical
+keyboard layouts, hardware IME, Windows/Linux input, every configured key, or
+all modal/global prefix collisions. The installed user application was not
+restarted or replaced. `spec-dev-tool --help` could not run because the tool
+is not installed on this host.
