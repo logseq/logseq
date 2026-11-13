@@ -515,3 +515,81 @@ entry and NSH provider binding retirement/restoration with local
 submit/cancel. Headless clipboard chords prove absence of application bridge
 interception; they do not simulate the platform text engine's clipboard edit.
 No compiler, test or native process was run in the source-review worktree.
+
+## Executed DOM ordering, comment focus and task history
+
+The next real application cohort at
+`7212da42bfbeb551b915baf609bb491b8ded3a63` uses unchanged LUI
+`93712b51ab40d7c5882fed1501568a55ab6722ba` and NSH
+`adc186db7213f3ccd1eacaa836cc721e9779fd14`. Complete shared checks passed
+**19,701 / 0 failures**, and actual native archive admission passed, including
+the real C press/pump callback sequence, consecutive exactly-once generations,
+missing-publication refusal and actual theme-prerequisite ordering. Fresh
+Release startup passed in 17.50 seconds; all 13 workers reached durable closed,
+were absent and received one shutdown request.
+
+The actual AppKit editing and selection comment cases both passed:
+
+| Case | Observed product result | Evidence |
+| --- | --- | --- |
+| Editing Ctrl-Space | Saves `draft`, replaces block editor 530 with authentic reply editor 687, clears selection/action bar, and the next native `r` enters that reply | `logseq-native-block.AASNgH`, 8.9 s; `/tmp/logseq-dom-order-native-shortcut-comments.log` |
+| Selected A/B Ctrl-Space | Persists the exact two thread targets, preserves Contents and all root data, clears selection/action bar, and native `r` enters reply editor 740 | `logseq-native-block.m27yJk`, 9.0 s; `/tmp/logseq-dom-order-native-shortcut-normal.log` |
+
+Both app-content PNGs were inspected. The ordering repair publishes completed
+patches before dependent DOM reference capture; it neither retries a missing
+target nor delays target lookup. An initial blanket-prefix candidate at
+`821f6a3dd9e0262dafe4b36a5912cc0b20dd55ac` failed the fresh startup gate with
+unresolved `--lx-font-stack`: theme/configuration requests are prerequisites of
+queued views, rather than consumers. The corrected DOM-channel boundary retains
+that ordering, and the failed staged candidate never replaced the published
+artifact. The C regression was also corrected to queue its workflow through
+the actual native pump: creating a derived child inside an enclosing signal
+event transaction had not yet completed a publishable batch. Expected callback
+ordering and consecutive generations were retained.
+
+At subsequent App `543cdfbfea2c1fea5ab5483dd6505d9ab9a2d1c5`, the real
+task-cycle/history case passed in 15.7 seconds in `logseq-native-block.CfW5PB`
+(`/tmp/logseq-native-task-cycle-qualified-keywords.log`). Native Mod-Enter
+cycled fresh persisted Todo, Doing, Done and absence while retaining editor
+530, `draft` and interior caret/anchor 3. Native `x` and Backspace proved
+continued focused input at that position. Escape saved the source; Shift-Down
+selected A/B; Mod-Enter changed both to Todo. One native Undo restored both
+absent statuses without undoing the source; one Redo restored both Todo values.
+The actual worker resolved the status entity IDs and independently proved
+absent properties. The initial fixture incorrectly used Transit Keyword.name(),
+which omits the namespace; it now compares complete typed keyword identities.
+No status, history, focus or caret state is fabricated.
+
+## Properties qualification exposes a remaining local Escape gap
+
+At App `543cdfbfea2c1fea5ab5483dd6505d9ab9a2d1c5`, compilation and **19,801
+shared checks / 0 failures** passed. Actual native archive admission, all-target
+Release Clippy, formatting, three C primitive signature tests, the focused NSH
+keyboard provider case and five main-executable tests passed. Fresh Release
+startup passed in 18.26 seconds with all 13 workers closed/absent after one
+shutdown each. The full Rust library run remains red: **82 passed / 1 failed**
+at the unchanged `next friday 8pm` parser expectation. Logs are
+`/tmp/logseq-property-shortcut-{shared-tests,native-admission,provider-test,clippy,full-tests,main-tests}.log`,
+`/tmp/logseq-final-property-primitive-tests.log`, and
+`/tmp/logseq-properties-owner-release-build.{stdout,log}`.
+
+The actual native Properties case is **not a pass**. It verified A selection,
+Mod-P/query autofocus, repeated Mod-P/Mod-K retaining the same workflow/input,
+native `z`/Backspace focus continuity, and Down/Enter persisting the selected
+checkbox property as false on A only. Reopening and typing worked. One Escape
+then failed to close the nonempty second workflow: dialog 900/incarnation 524
+and input 906/incarnation 528 remained, query `native admission`, generation
+68, no backend error. Evidence: `/tmp/logseq-native-property-shortcuts.log`,
+private `lZQudk`, 36.3-second test. Cleanup reported no errors and the receipt
+recheck passed. The first launch attempt created no native child because the
+tool shell lacked Cargo; an identical fixture rerun supplied the toolchain PATH.
+
+The macOS text input consumes cancelOperation and reports its own Escape before
+the overlay's cancel path. The selector field lacks a local dismissal callback;
+the old application-level Escape route had concealed that ownership gap. A
+typed local dismissal repair for actual dialog/value/menu selector owners is
+pending. No timeout, Escape expectation, backend-error check or modal ownership
+assertion is relaxed. Shared semantic Dismiss callbacks and a provider test
+that first moves focus to a button do not qualify focused-field native Escape.
+IME, physical hardware, OS clipboard editing and other desktop OSes remain
+separate acceptance gates.

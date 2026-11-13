@@ -163,3 +163,34 @@ unreached actual upgrade is counted as passing. The certificate fix was not
 exercised by this run. The terminal failure log is retained locally at
 `/tmp/logseq-standalone-upgrade-43368225594-failed.log`. No source, package,
 trust-store or test-success guard is bypassed.
+
+## Executed Help document containment and navigation repair
+
+The earlier Help failures above are superseded only for this exact native
+cohort: App `7212da42bfbeb551b915baf609bb491b8ded3a63`, LUI
+`93712b51ab40d7c5882fed1501568a55ab6722ba` and NSH
+`adc186db7213f3ccd1eacaa836cc721e9779fd14`. The production NSH document
+Column now clips its own paint/layout bounds under the existing outer Scroll;
+no Contents card clip, new scroll container or arbitrary height cap is added.
+The same retained viewport is marked through typed data attributes, and actual
+sidebar navigation resets that captured viewport through the existing native
+set-scroll-top operation. Refresh and drag reorder do not request navigation.
+
+The unchanged whole native Help gate passed in **30.6 seconds**, including
+native wheel-to-end, return-to-first-row, opening Keyboard shortcuts, exact
+topbar Help activation, and reusing the retained shortcut pane. The first/last
+Help rows remain IDs 472/493; after Help activation its card 452 returns to
+y=96 and its first row to y=184, while retained shortcut card 527 moves below
+it to y=816. Backend diagnostics remain absent. Evidence:
+`/tmp/logseq-owned-reveal-native-help.log`, private
+`logseq-native-help-list.ef0y5l`. The actual Help-returned and shortcut-pane PNGs
+were inspected; cleanup and receipt checks passed. Earlier failed observations
+remain historical and are not relabeled successful.
+
+The complete shared cohort passed 19,701 checks and actual native archive
+admission. Its fresh Release startup passed in 17.50 seconds, with all 13 owned
+workers durably closed/absent after exactly one shutdown dispatch. These
+results do not qualify every sidebar document, native hardware/IME, all OSes,
+or the separate unchanged 36-entity end/return scenario at this revision. Later
+Properties shortcut changes and their local Escape gap are recorded precisely
+in [the shortcut execution ledger](shortcut-source-parity.md#properties-qualification-exposes-a-remaining-local-escape-gap).
