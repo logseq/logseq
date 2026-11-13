@@ -1,17 +1,23 @@
 (ns frontend.handler.db-based.recent-test
-  (:require [clojure.string :as string]
-            [clojure.test :refer [deftest is testing]]
+  (:require [clojure.test :refer [deftest is testing]]
+            [clojure.test.check :as tc]
+            [clojure.test.check.generators :as gen]
+            [clojure.test.check.properties :as prop :include-macros true]
             [datascript.core :as d]
+            [frontend.common.thread-api :as thread-api]
             [frontend.config :as config]
             [frontend.handler.db-based.recent :as db-recent-handler]
             [frontend.state :as state]
             [frontend.test.helper :include-macros true :refer [deftest-async]]
+            [frontend.worker.handler.graph]
             [frontend.worker.handler.page :as worker-page]
             [frontend.worker.pipeline :as worker-pipeline]
+            [frontend.worker.state :as worker-state]
             [logseq.common.config :as common-config]
             [logseq.db :as ldb]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
+            [logseq.db.test.helper :as db-test]
             [promesa.core :as p]))
 
 (defn- make-test-env!
@@ -97,14 +103,9 @@
          (->> page-ids
               distinct
               (take 20)
-              (keep #(some-> (d/entity graph-db %) plain-entity))
-              (filter ldb/page?)
-              (remove ldb/hidden?)
-              (remove (fn [e]
-                        (or (and (ldb/property? e)
-                                 (true? (:logseq.property/hide? e)))
-                            (string/blank? (:block/title e)))))
-              vec)))
+              (keep #(d/entity graph-db %))
+              (filter worker-page/eligible-for-recent?)
+              (mapv plain-entity))))
 
       :thread-api/get-favorite-pages
       (p/resolved (favorite-pages graph-db))
@@ -126,19 +127,20 @@
 (deftest-async recents-test
   (testing "Add some pages to recent"
     (let [env (make-test-env!)
-          pages (map (fn [i] (str "Page " i)) (range 15))]
+          pages (map (fn [i] (str "Page " i)) (range db-recent-handler/max-recent-pages))]
       (with-test-env
         env
         (fn []
           (doseq [page pages]
             (create-page! env page)
-            (db-recent-handler/add-page-to-recent! (:db/id (get-page env page)) false))
+            (db-recent-handler/add-page-to-recent! (:db/id (get-page env page))))
           (p/let [recent-pages (db-recent-handler/get-recent-pages)]
             (is (= (map :block/title recent-pages) (reverse pages)))
-            (testing "Click existing recent item shouldn't update its position"
-              (db-recent-handler/add-page-to-recent! (:db/id (get-page env "Page 10")) true)
+            (testing "A visit to a page in the list moves it to the front"
+              (db-recent-handler/add-page-to-recent! (:db/id (get-page env "Page 10")))
               (p/let [recent-pages (db-recent-handler/get-recent-pages)]
-                (is (= (map :block/title recent-pages) (reverse pages)))))))))))
+                (is (= (map :block/title recent-pages)
+                       (cons "Page 10" (remove #{"Page 10"} (reverse pages)))))))))))))
 
 (deftest-async recents-hide-recycled-pages-test
   (testing "Recycled recent pages are hidden from display"
@@ -150,7 +152,7 @@
         (fn []
           (doseq [page [active-page recycled-page]]
             (create-page! env page)
-            (db-recent-handler/add-page-to-recent! (:db/id (get-page env page)) false))
+            (db-recent-handler/add-page-to-recent! (:db/id (get-page env page))))
           (mark-page-recycled! env recycled-page)
           (p/let [recent-pages (db-recent-handler/get-recent-pages)]
             (is (= [active-page]
@@ -164,16 +166,81 @@
                   (fn [pages]
                     (reset! recent-pages pages)
                     (swap! updates conj pages))]
-      (db-recent-handler/add-page-to-recent! 1 false)
+      (db-recent-handler/add-page-to-recent! 1)
       (is (= [1 2 3] @recent-pages))
-      (db-recent-handler/add-page-to-recent! 2 true)
-      (is (= [1 2 3] @recent-pages)
-          "Existing recent page ids keep their current position")
+      (db-recent-handler/add-page-to-recent! 3)
+      (is (= [3 1 2] @recent-pages)
+          "A visit to a page in the list moves it to the front")
+      (db-recent-handler/add-page-to-recent! 3)
+      (is (= [3 1 2] @recent-pages)
+          "A visit to the front page keeps the list")
       (with-redefs [state/get-state (fn [] {:db/restoring? true})]
-        (db-recent-handler/add-page-to-recent! 4 false))
-      (is (= [[1 2 3]]
+        (db-recent-handler/add-page-to-recent! 4))
+      (is (= [[1 2 3] [3 1 2] [3 1 2]]
              @updates)
           "Restoring state does not mutate recent pages"))))
+
+(deftest add-page-to-recent-keeps-max-recent-pages-test
+  (let [max-recent-pages db-recent-handler/max-recent-pages
+        recent-pages (atom (vec (range 1 (inc max-recent-pages))))]
+    (with-redefs [state/get-recent-pages (fn [] @recent-pages)
+                  state/set-recent-pages! #(reset! recent-pages %)]
+      (db-recent-handler/add-page-to-recent! (inc max-recent-pages))
+      (is (= (vec (cons (inc max-recent-pages) (range 1 max-recent-pages))) @recent-pages)
+          "A visit to a page not in a full list drops the oldest page"))))
+
+(deftest recent-shows-most-recently-visited-eligible-pages-test
+  (testing "Recent shows the max-recent-pages most recently visited eligible pages, ordered by their last visit, newest first"
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 (into [{:page {:block/title "Page with a block"}
+                         :blocks [{:block/title "A block"}]}
+                        {:page {:block/title "Hidden page"
+                                :build/properties {:logseq.property/hide? true}}}
+                        {:page {:block/title "Recycled page"
+                                :build/properties {:logseq.property/deleted-at 1712000000000}}}]
+                       (map (fn [i] {:page {:block/title (str "Page " i)}}))
+                       (range 20))})
+          db @conn
+          page #(ldb/get-page db %)
+          eligible (into [(page "Page with a block")]
+                         (map #(page (str "Page " %)))
+                         (range 20))
+          ineligible [(db-test/find-block-by-content db "A block")
+                      (page "Hidden page")
+                      (page "Recycled page")
+                      (page common-config/recycle-page-name)
+                      (d/entity db :logseq.property/hide?)]
+          eligible-ids (set (map :db/id eligible))
+          ids (mapv :db/id (concat eligible ineligible))
+          uuid-of #(:block/uuid (d/entity db %))
+          repo "recent-property-test"
+          *recent (atom [])
+          page-route-info (get @thread-api/*thread-apis :thread-api/get-page-route-info)
+          get-recent-pages (get @thread-api/*thread-apis :thread-api/get-recent-pages)
+          ;; The same check redirect-to-page! makes before it records a visit
+          visit! (fn [id]
+                   (let [route-info (page-route-info repo (uuid-of id))]
+                     (when (:eligible-for-recent? route-info)
+                       (db-recent-handler/add-page-to-recent! (:page-id route-info)))))
+          expected (fn [visits]
+                     (->> (rseq visits)
+                          (filter eligible-ids)
+                          distinct
+                          (take db-recent-handler/max-recent-pages)
+                          (map uuid-of)))
+          property (prop/for-all [visits (gen/vector (gen/elements ids) 0 60)]
+                     (reset! *recent [])
+                     (run! visit! visits)
+                     (= (expected visits)
+                        (map :block/uuid (get-recent-pages repo @*recent))))]
+      (with-redefs [worker-state/get-datascript-conn (constantly conn)
+                    state/get-recent-pages (fn [] @*recent)
+                    state/set-recent-pages! #(reset! *recent %)]
+        (let [result (tc/quick-check 200 property)]
+          (is (true? (:pass? result))
+              (str "seed " (:seed result) ", smallest failing visits: "
+                   (pr-str (first (get-in result [:shrunk :smallest]))))))))))
 
 (deftest-async favorites-hide-recycled-pages-without-unfavoriting-test
   (let [env (make-test-env!)

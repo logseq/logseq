@@ -107,8 +107,7 @@
   "`page-name` can be a block uuid or name, prefer to use uuid than name when possible"
   ([page-name]
    (redirect-to-page! page-name {}))
-  ([page-name {:keys [anchor push click-from-recent? block-id ignore-alias?]
-               :or {click-from-recent? false}}]
+  ([page-name {:keys [anchor push block-id ignore-alias?]}]
    (when (or (uuid? page-name)
              (and (string? page-name) (not (string/blank? page-name))))
      (p/let [route-info (<page-route-info page-name)]
@@ -119,8 +118,8 @@
          (notification/show! (t :nav/cannot-go-to-internal-page) :warning)
          (if-let [source-uuid (and (not ignore-alias?) (:alias-source-uuid route-info))]
            (p/let [source-route-info (<page-route-info source-uuid)]
-             (when-let [source-id (:alias-source-id route-info)]
-               (recent-handler/add-page-to-recent! source-id click-from-recent?))
+             (when (:eligible-for-recent? source-route-info)
+               (recent-handler/add-page-to-recent! (:page-id source-route-info)))
              (let [m (cond->
                       (merge-query-params
                        (default-page-route (str source-uuid) source-route-info)
@@ -136,8 +135,8 @@
                        (assoc :push push))]
                (redirect! m)))
            (do
-             (when-let [db-id (:page-id route-info)]
-               (recent-handler/add-page-to-recent! db-id click-from-recent?))
+             (when (:eligible-for-recent? route-info)
+               (recent-handler/add-page-to-recent! (:page-id route-info)))
              (let [m (cond->
                       (merge-query-params
                        (default-page-route (str page-name) route-info)

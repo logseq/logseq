@@ -130,12 +130,28 @@
                         (case (first args)
                           :thread-api/get-page-route-info
                           (p/resolved
-                           (when (= "Alias" (last args))
+                           (condp = (last args)
+                             "Alias"
                              {:page-id 42
                               :page-uuid #uuid "22222222-2222-2222-2222-222222222222"
                               :page-title "Alias"
+                              :eligible-for-recent? true
                               :alias-source-id 43
-                              :alias-source-uuid source-uuid}))
+                              :alias-source-uuid source-uuid}
+
+                             source-uuid
+                             {:page-id 43
+                              :page-uuid source-uuid
+                              :page-title "Source"
+                              :eligible-for-recent? true}
+
+                             "Recycle"
+                             {:page-id 44
+                              :page-title "Recycle"
+                              :eligible-for-recent? false
+                              :hidden? true}
+
+                             nil))
 
                           :thread-api/get-journal-page-by-day
                           (p/resolved {:db/id 99})
@@ -159,6 +175,7 @@
              (route-handler/redirect-to-page! "Page name")
              (reset! graph-id "graph-uuid")
              (route-handler/redirect-to-page! "Alias")
+             (route-handler/redirect-to-page! "Recycle")
              (route-handler/sidebar-journals!))
             (p/then
              (fn []
@@ -172,8 +189,10 @@
                        [:push-state :page {:name "page name"} nil]
                        [:thread-api/get-page-route-info "test" "Alias"]
                        [:thread-api/get-page-route-info "test" source-uuid]
-                       [:recent 43 false]
+                       [:recent 43]
                        [:push-state :page {:name (str source-uuid)} {:graph-id "graph-uuid"}]
+                       [:thread-api/get-page-route-info "test" "Recycle"]
+                       [:push-state :page {:name "recycle"} {:graph-id "graph-uuid"}]
                        [:thread-api/get-journal-page-by-day "test" 20260707]
                        ["test" 99 :page]]
                       @calls))))
