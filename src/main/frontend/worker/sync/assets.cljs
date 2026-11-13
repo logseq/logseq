@@ -10,6 +10,7 @@
    [frontend.worker.sync.client-op :as client-op]
    [frontend.worker.sync.crypt :as sync-crypt]
    [frontend.worker.sync.large-title :as sync-large-title]
+   [frontend.worker.sync.log-and-state :as rtc-log-and-state]
    [lambdaisland.glogi :as log]
    [logseq.common.config :as common-config]
    [logseq.common.util :as common-util]
@@ -17,6 +18,35 @@
    [promesa.core :as p]))
 
 (def max-asset-size (* 100 1024 1024))
+
+;; Cloudflare Workers Free/Pro reject request bodies above ~100 MiB before the
+;; sync worker runs. E2EE uploads wrap AES-GCM `[iv ciphertext]` in transit
+;; (Base64), so the PUT body is larger than the plaintext file.
+(def max-upload-body-size (* 100 1024 1024))
+
+(defn encrypted-transit-body-size
+  "Byte length of the transit `[iv ciphertext]` PUT body for a plaintext asset.
+
+  AES-GCM uses a 12-byte IV and a 16-byte tag. Transit JSON is
+  `[\"~b<16-char-iv>\",\"~b<ciphertext-b64>\"]`."
+  [plaintext-size]
+  (+ 27 (* 4 (js/Math.ceil (/ (+ plaintext-size 16) 3)))))
+
+(def max-e2ee-plaintext-size
+  (- (* 3 (quot (- max-upload-body-size 27) 4)) 16))
+
+(defn upload-body-too-large?
+  [body-size]
+  (> body-size max-upload-body-size))
+
+(defn plaintext-too-large?
+  [plaintext-size e2ee?]
+  (or (> plaintext-size max-asset-size)
+      (and e2ee? (> plaintext-size max-e2ee-plaintext-size))))
+
+(defn- permanent-upload-failure?
+  [status]
+  (contains? #{413} status))
 
 (defonce *repo->missing-asset-upload-files
   (atom {}))
@@ -167,6 +197,12 @@
                             (p/let [encrypted-bytes (crypt/<encrypt-uint8array aes-key asset-bytes)]
                               (ldb/write-transit-str encrypted-bytes)))
                   total (payload-size payload)
+                  _ (when (upload-body-too-large? total)
+                      (throw (ex-info "asset too large"
+                                      {:type :rtc.exception/asset-too-large
+                                       :data {:status 413
+                                              :size total
+                                              :body-size total}})))
                   _ (notify-asset-progress! repo asset-id :upload 0 total)
                   headers (merge (sync-auth/auth-headers (worker-state/get-id-token))
                                  {"x-amz-meta-checksum" checksum
@@ -178,14 +214,20 @@
                   status (.-status resp)
                   _ (notify-asset-progress! repo asset-id :upload total total)]
             (when-not (.-ok resp)
-              (throw (ex-info "upload-asset failed"
-                              {:type :rtc.exception/upload-asset-failed
-                               :data {:status status}})))
+              (throw (ex-info (if (permanent-upload-failure? status)
+                                "asset too large"
+                                "upload-asset failed")
+                              {:type (if (permanent-upload-failure? status)
+                                       :rtc.exception/asset-too-large
+                                       :rtc.exception/upload-asset-failed)
+                               :data {:status status
+                                      :body-size total}})))
             nil)
           (p/catch
            (fn [e]
              (if (contains? #{:rtc.exception/read-asset-failed
-                              :rtc.exception/upload-asset-failed}
+                              :rtc.exception/upload-asset-failed
+                              :rtc.exception/asset-too-large}
                             (:type (ex-data e)))
                (p/rejected e)
                (p/rejected (ex-info "upload-asset failed"
@@ -212,6 +254,48 @@
     (broadcast-rtc-state!-f client))
   (p/resolved nil))
 
+(defn- asset-display-name
+  [ent asset-uuid]
+  (let [title (some-> (:block/title ent) str)]
+    (if (seq title)
+      title
+      (str asset-uuid))))
+
+(defn- fail-asset-too-large!
+  [repo asset-uuid asset-name {:keys [size body-size status]}
+   current-client-f broadcast-rtc-state!-f]
+  (let [e2ee? (boolean (sync-crypt/graph-e2ee? repo))
+        body-size (or body-size
+                      (when (some? size)
+                        (if e2ee?
+                          (encrypted-transit-body-size size)
+                          size)))]
+    (log/info :db-sync/asset-too-large
+              {:repo repo
+               :asset-uuid asset-uuid
+               :asset-name asset-name
+               :size size
+               :body-size body-size
+               :status status
+               :e2ee? e2ee?})
+    (rtc-log-and-state/rtc-log :rtc.asset.log/asset-too-large
+                               {:asset-uuid asset-uuid
+                                :asset-name asset-name
+                                :size size
+                                :body-size body-size
+                                :status status})
+    (shared-service/broadcast-to-clients!
+     :notification
+     [nil :error false nil nil
+      {:i18n-key :sync/asset-too-large-error
+       :i18n-args [asset-name]}])
+    (drop-asset-op! repo asset-uuid :asset-too-large
+                    {:op :update-asset
+                     :size size
+                     :body-size body-size
+                     :status status}
+                    current-client-f broadcast-rtc-state!-f)))
+
 (defn process-asset-op!
   [repo graph-id asset-op {:keys [current-client-f broadcast-rtc-state!-f fail-fast-f]}]
   (let [asset-uuid (:block/uuid asset-op)
@@ -227,7 +311,9 @@
         (let [ent (d/entity @conn [:block/uuid asset-uuid])
               asset-type (:logseq.property.asset/type ent)
               checksum (:logseq.property.asset/checksum ent)
-              size (:logseq.property.asset/size ent 0)]
+              size (:logseq.property.asset/size ent 0)
+              asset-name (asset-display-name ent asset-uuid)
+              e2ee? (boolean (sync-crypt/graph-e2ee? repo))]
           (cond
             (nil? ent)
             (drop-asset-op! repo asset-uuid :missing-asset-entity {:op :update-asset}
@@ -243,16 +329,10 @@
                              :asset-type asset-type}
                             current-client-f broadcast-rtc-state!-f)
 
-            (> size max-asset-size)
-            (do
-              (log/info :db-sync/asset-too-large {:repo repo
-                                                  :asset-uuid asset-uuid
-                                                  :size size})
-              (clear-missing-asset-upload-file! repo (str asset-uuid))
-              (client-op/remove-asset-op repo asset-uuid)
-              (when-let [client (current-client-f repo)]
-                (broadcast-rtc-state!-f client))
-              (p/resolved nil))
+            (plaintext-too-large? size e2ee?)
+            (fail-asset-too-large! repo asset-uuid asset-name
+                                   {:size size}
+                                   current-client-f broadcast-rtc-state!-f)
 
             :else
             (-> (upload-remote-asset! repo graph-id asset-uuid asset-type checksum)
@@ -267,18 +347,38 @@
                           (when-let [client (current-client-f repo)]
                             (broadcast-rtc-state!-f client))))
                 (p/catch (fn [e]
-                           (case (:type (ex-data e))
-                            :rtc.exception/read-asset-failed
-                             (when-let [client (current-client-f repo)]
-                               (broadcast-rtc-state!-f client))
+                           (let [data (ex-data e)
+                                 status (get-in data [:data :status])]
+                             (case (:type data)
+                               :rtc.exception/read-asset-failed
+                               (when-let [client (current-client-f repo)]
+                                 (broadcast-rtc-state!-f client))
 
-                             :rtc.exception/upload-asset-failed
-                             nil
+                               :rtc.exception/asset-too-large
+                               (fail-asset-too-large! repo asset-uuid asset-name
+                                                      {:size size
+                                                       :body-size (get-in data [:data :body-size])
+                                                       :status status}
+                                                      current-client-f broadcast-rtc-state!-f)
 
-                             (log/error :db-sync/asset-upload-failed
-                                        {:repo repo
-                                         :asset-uuid asset-uuid
-                                         :error e})))))))
+                               :rtc.exception/upload-asset-failed
+                               (do
+                                 (log/error :db-sync/asset-upload-failed
+                                            {:repo repo
+                                             :asset-uuid asset-uuid
+                                             :status status
+                                             :error e})
+                                 (when (permanent-upload-failure? status)
+                                   (fail-asset-too-large! repo asset-uuid asset-name
+                                                          {:size size
+                                                           :body-size (get-in data [:data :body-size])
+                                                           :status status}
+                                                          current-client-f broadcast-rtc-state!-f)))
+
+                               (log/error :db-sync/asset-upload-failed
+                                          {:repo repo
+                                           :asset-uuid asset-uuid
+                                           :error e}))))))))
         (fail-fast-f :db-sync/missing-db {:repo repo :op :process-asset-op}))
 
       (contains? asset-op :remove-asset)
