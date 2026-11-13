@@ -131,6 +131,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Set up Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '26.3'
+
       - name: System deps
         run: brew install pkg-config gmp libffi dylibbundler
 
