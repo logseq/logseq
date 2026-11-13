@@ -23,13 +23,18 @@ running application; headless tests only establish event and ownership behavior.
 
 The code action toolbar follows frozen master's four-point top/right inset,
 16pt control height, compact shared text/icon recipe and hidden-at-rest state.
-Its existing wrap owns pointer-presence and focus-within state so keyboard focus
+Its existing wrap owns scoped pointer-presence and focus-within state so keyboard focus
 reveals the same retained actions. Only opacity changes when those states
 change; the code extension, native document, source key and editor history do
 not rebuild. The actions remain in normal accessibility/focus traversal rather
 than using display-none, disabled or a separate focus manager. Native light/dark
 placement, hover interruption, keyboard focus and reduced-motion screenshots
 remain required; source/unit checks alone do not qualify pixels.
+
+The existing state-slot/child-context pattern preserves this state through
+controlled source re-renders and releases the slot with its mounted owner.
+The compact recipe explicitly sets height and minimum height to 16pt, with
+zero vertical padding; authored wire height alone is not native size evidence.
 
 ## IME qualification boundary
 

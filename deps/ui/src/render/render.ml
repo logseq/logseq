@@ -187,13 +187,14 @@ let calc_results_el code =
 (* cljs components/block.cljs src-cp actions bar — .code-block-actions
    with a language picker button + copy button. Handlers live in
    Code_mirror (open_lang_picker/copy_button). *)
-let code_block_actions ~self lang : t =
+let code_block_actions ?visibility ~self lang : t =
  fun context parent ->
   let native = Lui_ui.host context = Lui_protocol.NshHost in
   let compact element =
     if native then
       Ui_components.with_props
-        [ Ui_components.Prop.height 16; Ui_components.Prop.padding_vertical 0
+        [ Ui_components.Prop.height 16; Ui_components.Prop.min_height 16
+        ; Ui_components.Prop.padding_vertical 0
         ; Ui_components.Prop.padding_horizontal 4
         ; Ui_components.Prop.font_size "0.75rem"; Ui_components.Prop.line_height "1rem"
         ; Ui_components.Prop.foreground "var(--ls-secondary-text-color)"
@@ -202,8 +203,7 @@ let code_block_actions ~self lang : t =
   in
   (* the language picker is anchored by the .select-language query in
      Code_mirror — the class stays *)
-  (row ~key:"cba" ~style_class:"code-block-actions" ~gap:4
-    ~transition:"opacity 300ms ease-in"
+  let controls =
     [ (if Ui_services.env_publishing () then text ~value:lang [] else compact (Ui_components.button ~key:"sl" ~variant:`ghost ~size:`sm
         ~style_class:"select-language"
         ~accessibility_identifier:("code-language-" ^ self)
@@ -218,7 +218,17 @@ let code_block_actions ~self lang : t =
         ~text:(I18n.t "ui/copy")
         ~on_press:(fun _ -> Code_mirror.copy_button self)
         [])
-    ]) context parent
+    ] in
+  (match visibility with
+   | None -> row ~key:"cba" ~style_class:"code-block-actions" ~gap:4
+       ~transition:"opacity 300ms ease-in" controls
+   | Some visibility -> row ~key:"cba" ~style_class:"code-block-actions" ~gap:4
+       ~transition:"opacity 300ms ease-in"
+       ~opacity:(reactive (fun (hovered,focused) -> if hovered || focused then 1. else 0.) visibility)
+       controls) context parent
+
+let code_toolbar_visibility_slot : (bool * bool) Signal.state_slot =
+  Signal.state_slot "code-toolbar-visibility"
 
 (* cljs src-cp + extensions/code.cljs editor DOM:
    .ui-fenced-code-editor > .ls-code-editor-wrap > (.code-block-actions +
@@ -238,27 +248,34 @@ let code_block ?(self = "") ?(extra = []) lang code =
   let calc = lang = "calc" in
   fun context parent ->
   let visibility =
-    if Lui_ui.host context = Lui_protocol.NshHost then
-      Some (Signal.state context.Lui_ui.ui_scheduler (false,false))
+    if Lui_ui.host context = Lui_protocol.NshHost then begin
+      let owner=Lui_ui.child_context context
+          (Lui_ui.owner_name context ("code-toolbar-" ^ self)) in
+      let state=Signal.state_at owner.Lui_ui.ui_scheduler owner.ui_state_scope
+          code_toolbar_visibility_slot (false,false) in
+      (* The state slot survives controlled source re-renders. This primitive
+         conversion supplies its borrowed read-only source to reactive props. *)
+      Some (owner,state,Signal.value state)
+    end
     else None in
-  let actions = code_block_actions ~self lang in
+  let context = match visibility with
+    | None -> context | Some (owner,_,_) -> owner in
+  let actions = code_block_actions
+      ?visibility:(Option.map (fun (_,_,source) -> source) visibility) ~self lang in
   let actions = match visibility with
     | None -> actions
-    | Some visibility ->
-        Ui_parts.float_prop Lui_protocol.Opacity
-          ~value:(reactive (fun (hovered,focused) -> if hovered || focused then 1. else 0.)
-            (Signal.value visibility))
-          (Ui_components.with_props
+    | Some _ ->
+          Ui_components.with_props
             [ Ui_components.Prop.position `absolute; Ui_components.Prop.inset_top 4.
             ; Ui_components.Prop.inset_right 4.; Ui_components.Prop.z_index 1
             ; Ui_components.Prop.background "var(--lx-gray-01, var(--ls-primary-background-color))" ]
-            actions) in
+            actions in
   let wrap = box ~key:"wrap" ~grow:1.0 ~style_class:"ls-code-editor-wrap"
-      ?on_pointer_enter:(Option.map (fun state _ ->
+      ?on_pointer_enter:(Option.map (fun (_,state,_) _ ->
         Signal.update state (fun (_,focused) -> true,focused)) visibility)
-      ?on_pointer_leave:(Option.map (fun state _ ->
+      ?on_pointer_leave:(Option.map (fun (_,state,_) _ ->
         Signal.update state (fun (_,focused) -> false,focused)) visibility)
-      ?on_focus_within:(Option.map (fun state focused ->
+      ?on_focus_within:(Option.map (fun (_,state,_) focused ->
         Signal.update state (fun (hovered,_) -> hovered,focused)) visibility)
         [ actions
         ; row ~key:"ec" ~grow:1.0 ~style_class:"extensions__code"

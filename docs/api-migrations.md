@@ -4,10 +4,14 @@
 
 On NSH the existing code action row is now positioned four points from the
 editor wrap's top/right rather than consuming a separate document row. Its
-existing ghost Buttons use master's compact 16pt height and 12pt text recipe;
+existing ghost Buttons use master's compact 16pt height/minimum and 12pt text recipe;
 the same language/Copy handlers and accessible controls remain installed.
 
-The retained wrap owns one hover/focus-within tuple. Pointer entry or contained
+The retained wrap owns one scoped hover/focus-within state slot. Controlled
+source re-renders reuse that slot; disposing its owner releases it. One
+state-to-read-only conversion at initialization supplies the existing recipe's
+optional visibility source, and normal Row reactive opacity owns its derived
+binding. Pointer entry or contained
 keyboard focus reveals the action row; leaving both restores opacity zero.
 Only that row's opacity changes, through its existing 300ms ease-in transition
 and native reduced-motion policy. No display-none, disabled flag, focus manager,

@@ -1777,6 +1777,7 @@ let native_wide_reading_column () =
 let native_code_toolbar_retention () =
   let module P = Lui_protocol in
   let previous_app= !Native_embed.current_app in
+  let slots=Signal.state_slot_count Render.code_toolbar_visibility_slot in
   let batches=ref [] in
   let backend : P.backend={
     backend_profile=P.profile P.MacOS P.NshHost;
@@ -1784,9 +1785,10 @@ let native_code_toolbar_retention () =
   let registry=Lui_extension.registry () in
   Logseq_el.register_all registry;
   Logseq_codemirror.register registry;Logseq_editor.register registry;
-  let app=Lui_app.create_with_extensions backend registry Model.initial
-    (fun model (_ : Action.t) -> model)
-    (fun _ _ _ -> Render.code_block ~self:"native-code-toolbar" "rust" "retained source") in
+  let app=Lui_app.create_with_extensions backend registry "retained source"
+    (fun _ source -> source)
+    (fun _ source _ -> reactive (fun source ->
+       Render.code_block ~self:"native-code-toolbar" "rust" source) source) in
   Fun.protect ~finally:(fun () ->
     ignore (Lui_app.dispose app);Native_embed.current_app:=previous_app) (fun () ->
     Native_embed.current_app:=Some app;
@@ -1802,7 +1804,9 @@ let native_code_toolbar_retention () =
     let editor=Hashtbl.fold (fun node identifier found ->
       if identifier="logseq-codemirror" then Some node else found)
       runtime.Lui_runtime.runtime_extension_nodes None |> Option.get in
-    let source=Hashtbl.find runtime.Lui_runtime.runtime_extension_properties editor in
+    let source=ref (Hashtbl.find runtime.Lui_runtime.runtime_extension_properties editor) in
+    check "one native code toolbar state belongs to its mounted source owner"
+      (Signal.state_slot_count Render.code_toolbar_visibility_slot=slots+1);
     check "native code actions float over the editor instead of consuming a document row"
       (property wrap P.Position=Some (P.StringValue "relative")
        && property actions P.Position=Some (P.StringValue "absolute")
@@ -1817,6 +1821,7 @@ let native_code_toolbar_retention () =
       (List.length controls=2 && List.for_all (fun node ->
          Hashtbl.find_opt runtime.Lui_runtime.mounted_nodes node=Some P.Button
          && property node P.HeightValue=Some (P.IntValue 16)
+         && property node P.MinHeight=Some (P.IntValue 16)
          && property node P.PressEnabled=Some (P.BoolValue true)
          && property node P.Enabled<>Some (P.BoolValue false)) controls);
     batches:=[];
@@ -1826,7 +1831,7 @@ let native_code_toolbar_retention () =
       check label (property actions P.Opacity=Some (P.FloatValue expected));
       check "hover and focus preserve the original editor source and action owners"
         (Hashtbl.find_opt runtime.Lui_runtime.runtime_extension_nodes editor=Some "logseq-codemirror"
-         && Hashtbl.find runtime.Lui_runtime.runtime_extension_properties editor=source
+         && Hashtbl.find runtime.Lui_runtime.runtime_extension_properties editor= !source
          && Lui_runtime.children runtime actions=controls);
       check "code toolbar state emits only opacity patches without replacing editor descendants"
         (List.for_all (fun (batch : P.patch_batch) ->
@@ -1836,11 +1841,22 @@ let native_code_toolbar_retention () =
       batches:=[] in
     dispatch (P.PointerEnter wrap) 1. "pointer entry reveals the code actions";
     dispatch (P.FocusWithinChanged (wrap,true)) 1. "contained keyboard focus keeps actions visible";
+    check "controlled source refresh is admitted" (Lui_app.send app "controlled source");
+    ignore (Lui_app.flush app);
+    let refreshed=Hashtbl.find runtime.Lui_runtime.runtime_extension_properties editor in
+    check "controlled source refresh keeps focused actions and their one owned state slot"
+      (P.String_map.find_opt "value" refreshed=Some (P.StringValue "controlled source")
+       && property actions P.Opacity=Some (P.FloatValue 1.)
+       && Lui_runtime.children runtime actions=controls
+       && Signal.state_slot_count Render.code_toolbar_visibility_slot=slots+1);
+    source:=refreshed;batches:=[];
     dispatch (P.PointerLeave wrap) 1. "pointer exit preserves visibility while keyboard focus remains";
     dispatch (P.FocusWithinChanged (wrap,false)) 0. "leaving pointer and keyboard focus hides only the action paint";
     dispatch (P.FocusWithinChanged (wrap,true)) 1. "keyboard entry alone reveals the same actions";
     dispatch (P.FocusWithinChanged (wrap,false)) 0. "keyboard exit restores the resting toolbar";
     ignore (Lui_app.dispose app);
+    check "disposing a native code owner releases its scoped hover/focus state"
+      (Signal.state_slot_count Render.code_toolbar_visibility_slot=slots);
     check "a retired code wrapper cannot receive a stale hover callback"
       (not (Lui_app.dispatch_event app (P.PointerEnter wrap))))
 
