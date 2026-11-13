@@ -199,6 +199,7 @@ struct HostRoot: View {
         ZStack(alignment: .bottomTrailing) {
             LUISwiftUIRoot(backend: backend, rootID: root)
                 .luiSemanticColors(services.themeColors(systemScheme))
+                .luiStyleVariables(services.themeVariables(systemScheme))
             if services.performanceVisible {
                 Text(services.performanceText).font(.system(size: 11, design: .monospaced)).padding(8).background(.regularMaterial).padding(8)
             }

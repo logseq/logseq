@@ -11,6 +11,10 @@ extension PlatformServices {
         }
     }
 
+    func themeVariables(_ systemScheme: ColorScheme) -> [String: String] {
+        snapshots[(preferredScheme ?? systemScheme) == .dark ? "dark" : "light"] ?? [:]
+    }
+
     func themeColors(_ systemScheme: ColorScheme) -> [String: Color] {
         let mode = (preferredScheme ?? systemScheme) == .dark ? "dark" : "light"
         guard let vars = snapshots[mode] else { return [:] }
