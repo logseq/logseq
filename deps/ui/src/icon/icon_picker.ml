@@ -347,6 +347,17 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
             update (fun s -> { s with emoji_results = entries }))
   in
 
+  let on_search_dismiss _ =
+    if (get ()).q = "" then close ()
+    else begin
+      incr gen;
+      (* Cancellation closes this input draft. The existing reset owner gives
+         the cleared search fresh autofocus, ready for the next Escape. *)
+      update (fun s ->
+          { s with q = ""; emoji_results = []; reset = s.reset + 1 })
+    end
+  in
+
   let set_preset c =
     update (fun s -> { s with preset = c; pal_open = false });
     (match c with
@@ -540,6 +551,7 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
                   ~placeholder:(placeholder_of s.tab)
                   ~text_signal:(reactive (fun s -> s.q) sv)
                   ~on_text:on_input
+                  ~on_dismiss:on_search_dismiss
                   ~clear_label:(I.t "icon/clear-search")
                   ~on_clear:(fun () ->
                     Option.iter (fun input -> input.Ui_services.focus ())

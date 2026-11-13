@@ -2920,3 +2920,24 @@ Created At column receives its own owner. No application parameter or wire
 payload changes. Callers continue supplying canonical column identifiers and
 must not assign two different columns the same identifier. This correction adds
 no permanent pointer observers, native capability relaxation or table remount.
+## Icon picker Escape clears the query before closing
+
+The shared icon/emoji picker now handles the focused search field's canonical
+`Dismiss` event: Escape with a nonempty query clears the query and pending emoji
+results, invalidates stale search completions and resets the result viewport.
+It retains the picker, active tab and selected color. The existing search reset
+owner replaces the canceled input draft with an empty autofocused input, so the
+next native key edits the cleared search and a subsequent blank Escape closes
+the picker. Cancellation elsewhere keeps its existing once-per-draft behavior.
+
+`Ui_components.search_row` accepts an optional `on_dismiss` forwarded unchanged
+to its typed `search_field`. Existing calls remain unchanged and do not opt into
+input cancellation. For example:
+
+```ocaml
+Ui_components.search_row ~key:"filter" ~placeholder ~text_signal:query
+  ~on_text:set_query ~on_dismiss:(fun _ -> close_filter ()) ()
+```
+
+This correction matches frozen master's query-first Escape behavior; it does
+not add grid arrow navigation or change global overlay/key handling.

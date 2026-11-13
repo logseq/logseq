@@ -889,7 +889,7 @@ let form_desc ~key ~value : t =
    the same content box on every host. Trailing controls remain in row flow. *)
 let search_row ~key ?(height = 26) ?(font_size = "0.8125rem") ?(pad_left = 28)
     ?pad_right ?background ?(borderless = false) ?(trailing = []) ?autofocus
-    ?clear_label ?on_clear ~placeholder ~text_signal:text ~on_text () : t =
+    ?clear_label ?on_clear ?on_dismiss ~placeholder ~text_signal:text ~on_text () : t =
   let background =
     match background, borderless with
     | None, true -> Some "transparent"
@@ -928,7 +928,7 @@ let search_row ~key ?(height = 26) ?(font_size = "0.8125rem") ?(pad_left = 28)
             (search_field ~key:"in" ~grow:1. ~min_width:0 ~height ?background
                ?style_class:
                  (Option.map (fun _ -> "ls-search-with-clear") clear_label)
-               ~placeholder ?autofocus ~text_signal:text ~on_input []);
+               ~placeholder ?autofocus ~text_signal:text ~on_input ?on_dismiss []);
           with_props
             [
               Prop.position `absolute;

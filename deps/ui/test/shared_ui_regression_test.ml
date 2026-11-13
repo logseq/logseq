@@ -3025,10 +3025,11 @@ let run_views ~registry ~profile ~finish =
     [ {js|中文|js}; {js|café|js}; {js|é|js}; {js|😀|js}; {js|a b|js} ];
   check "The canonical English help link preserves its Unicode arrow"
     (I18n.t "settings.editor/preferred-outdenting-tip-more" = {js|→ Learn more|js});
-  let chosen = ref None in
+  let chosen = ref None and picker_closed = ref 0 in
   let picker = mount (fun _ ->
       Icon_picker.picker_view ~del:true ~emoji_only:false
-        ~on_chosen:(fun c -> chosen := Some c) ~close:(fun () -> ())) in
+        ~on_chosen:(fun c -> chosen := Some c)
+        ~close:(fun () -> incr picker_closed)) in
   let buttons () = List.filter (fun n -> n.M.kind = "button") (nodes picker) in
   let body () = List.find (fun n -> n.M.kind="scroll" && class_has n "bd") (nodes picker) in
   let search () = List.find (fun n -> class_has n "ls-search-with-clear") (nodes picker) in
@@ -3084,6 +3085,31 @@ let run_views ~registry ~profile ~finish =
   S.toggle picker (tab "icons").M.id true;
   check "viewport resets preserve the surrounding picker"
     (List.exists (fun n -> n.M.id=picker_root && class_has n "cp__emoji-icon-picker") (nodes picker));
+  let searched_field = (search ()).M.id in
+  S.text_changed picker searched_field "abacus";
+  let searched_body = (body ()).M.id in
+  S.dispatch picker (P.Dismiss searched_field);
+  let cleared_field = (search ()).M.id in
+  check "query Escape clears the search without choosing or closing the picker"
+    (!picker_closed=0 && !chosen=None && M.string_prop (search ()) "text"=Some "");
+  check "query Escape retires the canceled input draft and filtered viewport"
+    (cleared_field<>searched_field && (body ()).M.id<>searched_body
+     && Hashtbl.find_opt (search ()).M.props "autofocus"=Some (P.BoolValue true)
+     && not (List.exists (fun n -> n.M.id=searched_field) (nodes picker)));
+  check "query Escape preserves the picker, selected tab and color preset"
+    (List.exists (fun n -> n.M.id=picker_root) (nodes picker)
+     && List.exists (fun n -> class_has n "ls-emoji-cell") (buttons ())
+     && not (List.exists (fun n -> class_has n "ls-emoji-preview") (buttons ()))
+     && Ui_services.storage_get "ls-icon-color-preset"=Some "#6e7b8b");
+  S.text_changed picker cleared_field "zzzz-no-matching-icon";
+  S.dispatch picker (P.Dismiss cleared_field);
+  check "Escape also clears an empty result set through its current input owner"
+    (!picker_closed=0 && M.string_prop (search ()) "text"=Some ""
+     && (search ()).M.id<>cleared_field
+     && List.exists (fun n -> class_has n "ls-emoji-cell") (buttons ()));
+  S.dispatch picker (P.Dismiss (search ()).M.id);
+  check "Escape on the fresh blank search requests exactly one picker close"
+    (!picker_closed=1 && !chosen=None);
   let icon = List.find_opt (fun n -> class_has n "ls-emoji-cell") (buttons ()) in
   (match icon with
    | Some n -> S.press picker n.M.id;
