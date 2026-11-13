@@ -376,3 +376,26 @@ before queuing the click, preventing the appearance callback from independently
 retiring that target. The native producer regression verifies that exact owner
 survives an appearance event while activation is deferred. No actual native
 rerun was performed during preparation; the failed run is not relabeled passed.
+
+## Prepared master-faithful comment handoff
+
+The shared Comments helper now drains/saves/clears through the existing
+`Editor_actions.after_pending_input`, then uses the production thread endpoint
+(or tags the captured blank edit in place). It clears only its matching
+captured selection/action bar and waits for an actual owned refresh result
+before arming reply focus. Graph/worker/route changes, replacement editing and
+new selection refuse late focus. Both Comments adapters and the low-level
+context command share it; no new dispatcher, registry, worker API or SDK seam
+is introduced. The native-archive regression uses actual CmdK services with a
+deferred worker/publication boundary rather than substituting the comment
+capability. Actual AppKit evidence remains required for focus/persistence.
+
+The frozen ea84879595 native cohort separately established that editing
+Alt-Shift-C and normal T I/T P with native Escape work (6.6s and 7.9s). The
+editing comment case failed the stale native click boundary. The normal
+comment case reached persisted exact A,B targets, cleared selection and an
+authentic comment editor, then failed its incorrect old zero-editor assertion.
+That failure is not a complete pass: the corrected native scenario must prove
+that the new editor belongs to the real comment area and uses native typing,
+while keeping backend errors fatal. The earlier fixture expectation is
+corrected to match master rather than deleting the failure condition.

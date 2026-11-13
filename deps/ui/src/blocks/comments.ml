@@ -35,29 +35,10 @@ let ensure_for uuids = Comments_ops.ensure_for ~on_ready:(fun _ -> ()) uuids
    the comments area itself; otherwise ensure an area for the editing
    block or the current selection *)
 let add_comment () =
-  match S.editing () with
-  | Some e when String.trim e.S.buffer = "" ->
-      ignore
-        (Outliner_ops.apply_and_refresh
-           [ Outliner_ops.set_block_property e.S.uuid "block/tags"
-               (W.Set [ W.Keyword comments_area_ident ])
-           ])
-  | _ -> (
-      Editor_actions.exit_edit ~select:false;
-      let uuids =
-        match S.editing_uuid () with
-        | Some u -> [ u ]
-        | None -> (
-            match Editor_actions.selected_uuids () with
-            | [] -> (
-                (* cmdk opens after the editor already blur-committed;
-                   cljs still sees the edit block as the context *)
-                match !(Editor_actions.last_edit_uuid) with
-                | Some u -> [ u ]
-                | None -> [])
-            | sel -> sel)
-      in
-      match uuids with [] -> () | _ -> ensure_for uuids)
+  let targets=match S.editing_uuid () with
+    | Some uuid -> [uuid]
+    | None -> Editor_actions.selected_uuids () in
+  ensure_for targets
 
 (* ---- view ---- *)
 

@@ -304,15 +304,9 @@ let run ~command ~block ~value : outcome =
                  Outliner_ops.apply_and_refresh_deferred [ sop ]);
               Handled
           | "add-comment" ->
-              (* cljs add-comment over the block selection — the comments
-                 area mounts once the refresh lands *)
-              ignore
-                (let* _ =
-                   Runtime.invoke2
-                     "thread-api/ensure-comments-area-for-blocks"
-                     (W.String (repo ()))
-                     (W.Array [ W.Uuid uuid ])
-                 in Outliner_ops.refresh_page ());
+              let targets=if Editor_state.String_set.mem uuid (Editor_state.selected ()) then
+                  Editor_actions.selected_uuids () else [uuid] in
+              Comments_ops.ensure_for ~on_ready:(fun _ -> ()) targets;
               Handled
           | "copy-export-as" ->
               (* cljs export-blocks: block ctx menu -> [block] :block; the

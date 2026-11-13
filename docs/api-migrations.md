@@ -1,5 +1,40 @@
 # API migrations
 
+## Comment shortcuts save and hand off to their real reply owner
+
+`Comments_ops.ensure_for` now reuses `Editor_actions.after_pending_input` to
+drain accepted text, await the actual block save and clear block editing before
+ensuring the comment thread. A single captured blank editing block is tagged
+as Comments in place after its save, matching master. Other captured targets
+use the existing production ensure endpoint. Selection targets retain document
+order; successful creation clears only the selection/action bar captured by
+that request. An explicit comment draft or published view cannot start another
+block-comment handoff.
+
+Reply focus is armed only after the existing owned refresh result proves the
+thread's publication. A changed worker, graph, route, selection or newer editor
+refuses the late focus transition. A pending reply request also retires rather
+than replacing a new block edit/selection during appearance. The shared and
+native Comments adapters and low-level context command use this same path;
+there is no second platform-specific save/focus sequence.
+
+`ensure_for` keeps its existing unit-returning async interface. Callers should
+pass captured target UUIDs, for example `Comments.ensure_for [clicked_uuid]`.
+`Comments.add_comment ()` now uses only the current editing block or ordered
+selection; it no longer adopts `last_edit_uuid` after that context has closed.
+A caller whose palette/action already closed editing must retain its explicit
+UUIDs and call `ensure_for`, instead of relying on an unrelated previous edit.
+No LUI constructor, native wire shape, SDK API or service signature changes.
+
+The actual native-archive regression invokes the nonspied CmdK capability and
+defers the real worker boundary: dirty save must settle before ensure, a blank
+save must precede in-place tagging, and reply focus must wait for the owned
+publication. It checks ordered selection/action-bar handoff and refusal after
+graph or editor replacement. The capability-spy shortcut fixture remains only
+a routing test. Actual AppKit must separately verify saved block source, the
+real comment draft/reply focus and persisted targets; retaining the original
+block editor after Ctrl-Space is not the master behavior.
+
 ## Comment reply requests claim one native activation owner
 
 `Comments_ops.reveal` now consumes its existing reply-focus request before

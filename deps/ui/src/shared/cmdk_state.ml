@@ -1327,7 +1327,9 @@ let run_add_reaction st =
    lands *)
 let run_add_comment st repo =
   close st;
-  let uuids = target_uuids st in
+  let uuids=match st.svs.Svs.selected_uuids () with
+    | [] -> Option.to_list (st.svs.Svs.editing_uuid ())
+    | selected -> selected in
   match repo, uuids with
   | Some repo, _ :: _ -> st.svs.Svs.ensure_comments ~repo ~uuids
   | _ -> ()

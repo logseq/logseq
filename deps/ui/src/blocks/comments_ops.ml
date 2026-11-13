@@ -35,14 +35,24 @@ let comment_owned_by ~current_user (block : Model.block) =
 
 let reply_focus_request : (string * string) option ref = ref None
 
+let reply_focus_current uuid =
+  match Editor_state.editing () with
+  | None -> not (Editor_state.selection_active ())
+  | Some editing ->
+      (match editing.Editor_state.owner with
+       | Editor_state.Explicit_draft owner -> owner#current && owner#asset_target = uuid
+       | Editor_state.Persisted -> false)
+
 let take_reply_focus_request uuid =
   if !reply_focus_request = Some (Runtime.repo (), uuid) then begin
     reply_focus_request := None;
-    true
+    reply_focus_current uuid
   end else false
 
 let reveal uuid =
-  match Ui_services.dom_by_id ("area-" ^ uuid) with
+  if !reply_focus_request = Some (Runtime.repo (), uuid) && not (reply_focus_current uuid) then
+    ignore (take_reply_focus_request uuid)
+  else match Ui_services.dom_by_id ("area-" ^ uuid) with
   | None -> ()
   | Some area ->
       area.Ui_services.scroll_into_view_nearest ();
@@ -61,30 +71,54 @@ let reveal_if_requested uuid =
   if !reply_focus_request = Some (Runtime.repo (), uuid) then reveal uuid
 
 let ensure_for ~on_ready uuids =
-  match (Runtime.model ()).Model.repo, uuids with
-  | None, _ | _, [] -> ()
-  | Some repo, _ ->
-      (let* area =
-         Runtime.invoke2 "thread-api/ensure-comments-area-for-blocks"
-           (W.String repo)
-           (W.List (List.map (fun u -> W.String u) uuids))
-       in
-       if Runtime.repo () <> repo then Js.Promise.resolve ()
-       else
-         let uuid = W.map_get_uuid area "block/uuid" in
-         reply_focus_request := Option.map (fun uuid -> repo, uuid) uuid;
-         let* () = Outliner_ops.refresh_page () in
-         if Runtime.repo () = repo then
-           Option.iter (fun uuid ->
-             Editor_state.set_collapsed uuid false;
-             on_ready uuid;
-             reveal_if_requested uuid)
-             uuid;
-         Js.Promise.resolve ())
+  match (Runtime.model ()).Model.repo, uuids, Editor_state.editing () with
+  | None, _, _ | _, [], _ -> ()
+  | _, _, Some editing when Editor_state.is_draft editing -> ()
+  | Some repo, _, editing when not (Ui_services.env_publishing ()) ->
+      let route=Runtime.route () and worker= !Runtime.worker in
+      let selected=Editor_state.selected () and scope=Editor_state.selection_scope () in
+      let current ()=Runtime.repo ()=repo && Runtime.route ()=route && !Runtime.worker==worker
+        && not (Ui_services.env_publishing ()) in
+      let selection_current ()=Editor_state.String_set.equal (Editor_state.selected ()) selected
+        && Editor_state.selection_scope ()=scope in
+      let blank=match editing,uuids with
+        | Some editing,[uuid] when editing.Editor_state.uuid=uuid
+            && String.trim (Editor_actions.live_buffer uuid)="" -> Some uuid
+        | _ -> None in
+      let perform () =
+        if not (current ()) then Js.Promise.resolve () else
+        let ()=reply_focus_request:=None in
+        let* uuid = match blank with
+          | Some uuid ->
+              let* ()=Outliner_ops.apply
+                [Outliner_ops.set_block_property uuid "block/tags" (W.Set [W.Keyword comments_area_ident])] in
+              Js.Promise.resolve (Some uuid)
+          | None ->
+              let* area=Runtime.invoke2 "thread-api/ensure-comments-area-for-blocks"
+                (W.String repo) (W.List (List.map (fun uuid -> W.String uuid) uuids)) in
+              Js.Promise.resolve (W.map_get_uuid area "block/uuid") in
+        match uuid with
+        | Some uuid when current () && Option.is_none (Editor_state.editing ()) && selection_current () ->
+            (* The completed operation owns only its captured selection. A new
+               editor or selection must not be replaced by a late reply focus. *)
+            Editor_actions.clear_selection ();
+            let* result=match Runtime.capture_reload_origin () with
+              | Some entry -> Outliner_ops.refresh_page_owned_result entry
+              | None -> Js.Promise.resolve Runtime.Reload_superseded in
+            if current () && Runtime.reload_result_current result && reply_focus_current uuid then begin
+              Editor_state.set_collapsed uuid false;
+              reply_focus_request:=Some (repo,uuid);
+              on_ready uuid;
+              reveal_if_requested uuid
+            end;
+            Js.Promise.resolve ()
+        | _ -> Js.Promise.resolve () in
+      Editor_actions.after_pending_input perform
       |> Js.Promise.catch (fun error ->
            Ui_services.log_error ("Opening comment thread failed", error);
            Js.Promise.resolve ())
       |> ignore
+  | Some _, _, _ -> ()
 
 (* cljs insert-comment! — api-insert-new-block! under the comments area
    (end position) tagged logseq.class/Comment *)

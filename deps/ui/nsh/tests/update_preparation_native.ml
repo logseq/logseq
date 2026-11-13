@@ -2479,6 +2479,144 @@ let native_cmdk_controlled_input () =
            && node "scroller" <> node "row"
        | _ -> false))
 
+let native_comment_shortcut_handoff () =
+  let module E=Editor_state in
+  let module W=Wire in
+  let prior_model= !Runtime.read_model and prior_worker= !Runtime.worker
+  and prior_flush= !Runtime.app_flush and prior_send= !Runtime.app_send
+  and prior_reload= !Runtime.reload_current_view_owned
+  and prior_editor= !E.st and prior_fields= !E.field_sigs_opt and prior_sources= !E.extra_sources
+  and prior_init= !E.on_init and prior_settings= !Settings_state.st
+  and prior_reply= !Comments_ops.reply_focus_request
+  and prior_save= !Outliner_ops.pending_save and prior_ready= !Outliner_ops.pending_save_ready
+  and prior_timer= !Outliner_ops.save_timer and prior_history= !E.history_input_before
+  and prior_focus= !E.pending_focus and prior_focus_actions= !E.pending_focus_actions
+  and prior_real= !E.pending_edit_real and prior_structure= !E.structure_pending
+  and prior_structure_owner= !Editor_actions.structure_owner and prior_drain= !Editor_actions.drain_gate
+  and prior_cmdk=(!Cmdk_state.latest_vs,!Cmdk_state.latest_t,!Cmdk_state.latest_st,!Cmdk_state.services_ref)
+  and prior_commands=Ui_services.storage_get "commands-history" in
+  let prior_actions=Queue.fold (fun actions action -> action::actions) [] E.pending_edit_actions |> List.rev in
+  E.st:=None;E.field_sigs_opt:=None;E.extra_sources:=[];E.on_init:=[];Settings_state.st:=None;
+  Comments_ops.reply_focus_request:=None;Outliner_ops.pending_save:=None;Outliner_ops.pending_save_ready:=None;
+  Outliner_ops.save_timer:=0;E.history_input_before:=None;E.pending_focus:=None;E.pending_focus_actions:=[];
+  E.pending_edit_real:=0;E.structure_pending:=false;Editor_actions.structure_owner:=None;
+  Editor_actions.drain_gate:=false;Queue.clear E.pending_edit_actions;Cmdk_state.services_ref:=None;
+  let first="34567890-1234-4abc-8def-000000000002" and second="34567890-1234-4abc-8def-000000000001"
+  and area="34567890-1234-4abc-8def-000000000003" in
+  let blocks=List.map (fun uuid -> Model.empty_block ~uuid ~title:"saved" ~is_page:false) [first;second] in
+  let page=Option.get (Decode.page_of_summary (W.Map
+    [W.kw "block/uuid",W.Uuid "34567890-1234-4abc-8def-000000000004";W.kw "block/title",W.String "Comment fixture"])) in
+  let model=ref {Model.initial with repo=Some "comment-origin";route=Model.Journals;
+    journals=[{page with Model.page_blocks=blocks}]} in
+  let backend : Lui_protocol.backend={backend_profile=Lui_protocol.profile Lui_protocol.MacOS Lui_protocol.NshHost;
+    apply_batch=(fun _ -> true)} in
+  let app=Lui_app.create backend () (fun model () -> model) (fun context _ _ ->
+    E.ensure context;
+    ignore (Cmdk_state.make context.Lui_ui.ui_scheduler (Cmdk_host.services ~host:Lui_protocol.NshHost ()));
+    Lui_elements.box []) in
+  let requests=Queue.create () and publications=Queue.create () in
+  let worker : Worker_client.t={invoke_fn=(fun name args ->
+      let promise,resolve,reject=Js.Promise.pending () in Queue.add (name,args,resolve,reject) requests;promise);
+    on_message=(fun _ _ -> ());dead=Js.Promise.liveness ();
+    capture_restore_fn=(fun () -> fun () -> Js.Promise.resolve ())} in
+  let current_graph=ref "comment-origin" in
+  let reset ()=
+    check "previous comment boundary has no outstanding worker request" (Queue.is_empty requests);
+    check "previous comment boundary has no outstanding publication" (Queue.is_empty publications);
+    Comments_ops.reply_focus_request:=None;
+    model:={!model with Model.repo=Some !current_graph};
+    E.set (fun state -> {state with E.editing=None;selected=E.String_set.empty;selection_scope="main";
+      anchor=None;selection_head=None;action_bar=false});
+    ignore (Lui_app.flush app) in
+  let resolve_save expected_title =
+    Host.drain ();
+    let name,args,resolve,_=Queue.take requests in
+    check "comment handoff first waits for the real dirty block save" (name="thread-api/apply-outliner-ops");
+    check "dirty comment target is saved through the actual save-block operation"
+      (match args with [_;operations;_] -> (match W.elems operations with
+       | [operation] -> (match W.elems operation with
+          | [W.Keyword "save-block";arguments] -> (match W.elems arguments with
+             | [block;_] -> W.map_get_uuid block "block/uuid"=Some first
+                && W.map_get_string block "block/title"=Some expected_title
+             | _ -> false) | _ -> false) | _ -> false) | _ -> false);
+    check "comment creation cannot pass an unresolved block save" (Queue.is_empty requests);
+    resolve (W.Map [W.kw "result",W.Nil]);Host.drain () in
+  let resolve_area targets =
+    let name,args,resolve,_=Queue.take requests in
+    check "real comment capability uses the production endpoint and captured ordered targets"
+      (name="thread-api/ensure-comments-area-for-blocks" && match args with
+       | [W.String "comment-origin";values] -> List.filter_map W.as_string (W.elems values)=targets
+       | _ -> false);
+    check "saved block editing has ended before comment creation" (E.editing ()=None);
+    resolve (W.Map [W.kw "block/uuid",W.Uuid area]);Host.drain () in
+  Fun.protect ~finally:(fun () ->
+    ignore (Lui_app.dispose app);Runtime.read_model:=prior_model;Runtime.worker:=prior_worker;
+    Runtime.app_flush:=prior_flush;Runtime.app_send:=prior_send;Runtime.reload_current_view_owned:=prior_reload;
+    E.st:=prior_editor;E.field_sigs_opt:=prior_fields;E.extra_sources:=prior_sources;E.on_init:=prior_init;
+    Settings_state.st:=prior_settings;Comments_ops.reply_focus_request:=prior_reply;
+    Outliner_ops.pending_save:=prior_save;Outliner_ops.pending_save_ready:=prior_ready;
+    Outliner_ops.save_timer:=prior_timer;E.history_input_before:=prior_history;
+    E.pending_focus:=prior_focus;E.pending_focus_actions:=prior_focus_actions;E.pending_edit_real:=prior_real;
+    E.structure_pending:=prior_structure;Editor_actions.structure_owner:=prior_structure_owner;
+    Editor_actions.drain_gate:=prior_drain;Queue.clear E.pending_edit_actions;
+    List.iter (fun action -> Queue.add action E.pending_edit_actions) prior_actions;
+    let vs,t,st,services=prior_cmdk in Cmdk_state.latest_vs:=vs;Cmdk_state.latest_t:=t;
+    Cmdk_state.latest_st:=st;Cmdk_state.services_ref:=services;
+    (match prior_commands with None -> Ui_services.storage_remove "commands-history"
+     | Some value -> Ui_services.storage_set "commands-history" value)) (fun () ->
+    Runtime.read_model:=(fun () -> !model);Runtime.worker:=Some worker;
+    Runtime.app_send:=(fun _ -> false);Runtime.app_flush:=(fun () -> ignore (Lui_app.flush app));
+    Runtime.reload_current_view_owned:=(fun entry -> let promise,resolve,_=Js.Promise.pending () in
+      Queue.add (entry,resolve) publications;promise);
+    ignore (Lui_app.start app);ignore (Lui_app.flush app);
+    let edit buffer=E.set (fun state -> {state with E.editing=Some
+      (E.mk_editing ~uuid:first ~buffer ~base:"saved" ~scope:"main" ())}) in
+    reset ();edit "draft";ignore (Lui_app.flush app);
+    Cmdk_state.dispatch_id "editor/add-comment";
+    resolve_save "draft";resolve_area [first];
+    check "reply focus waits for the correlated publication after saving and creating its real thread"
+      (!Comments_ops.reply_focus_request=None && Queue.length publications=1);
+    let entry,publish=Queue.take publications in
+    publish (Runtime.Reload_unchanged entry);Host.drain ();
+    check "nonspied comment handoff arms only the committed area after leaving the original block editor"
+      (E.editing ()=None && !Comments_ops.reply_focus_request=Some ("comment-origin",area));
+    reset ();edit "";ignore (Lui_app.flush app);
+    Cmdk_state.dispatch_id "editor/add-comment";
+    resolve_save "";
+    let name,args,resolve,_=Queue.take requests in
+    check "a blank editing block converts in place instead of creating a child thread"
+      (name="thread-api/apply-outliner-ops" && match args with [_;operations;_] ->
+       (match W.elems operations with [operation] -> (match W.elems operation with
+         | [W.Keyword "set-block-property";arguments] -> (match W.elems arguments with
+           | [W.Uuid uuid;W.Keyword "block/tags";tags] -> uuid=first
+             && W.elems tags=[W.Keyword Comments_ops.comments_area_ident]
+           | _ -> false) | _ -> false) | _ -> false) | _ -> false);
+    resolve (W.Map [W.kw "result",W.Nil]);Host.drain ();
+    check "blank conversion also waits for publication before focusing its original UUID"
+      (!Comments_ops.reply_focus_request=None && Queue.length publications=1);
+    let entry,publish=Queue.take publications in publish (Runtime.Reload_unchanged entry);Host.drain ();
+    check "committed blank conversion arms reply on the original UUID"
+      (!Comments_ops.reply_focus_request=Some ("comment-origin",first));
+    reset ();
+    E.set (fun state -> {state with E.selected=E.String_set.of_list [second;first];action_bar=true});
+    ignore (Lui_app.flush app);Cmdk_state.dispatch_id "editor/add-comment";Host.drain ();
+    resolve_area [first;second];
+    check "successful comment creation clears its captured selection and action bar"
+      (not (E.selection_active ()) && not (E.read ()).E.action_bar);
+    let newer=E.mk_editing ~uuid:second ~buffer:"newer edit" ~base:"saved" ~scope:"main" () in
+    E.set (fun state -> {state with E.editing=Some newer});ignore (Lui_app.flush app);
+    let entry,publish=Queue.take publications in publish (Runtime.Reload_unchanged entry);Host.drain ();
+    check "late publication retires reply focus instead of replacing a newer editor"
+      (!Comments_ops.reply_focus_request=None && match E.editing () with
+       | Some editing -> editing.epoch==newer.epoch | None -> false);
+    reset ();E.set (fun state -> {state with E.selected=E.String_set.singleton first});
+    ignore (Lui_app.flush app);Cmdk_state.dispatch_id "editor/add-comment";Host.drain ();
+    let _,_,resolve,_=Queue.take requests in
+    current_graph:="comment-destination";model:={!model with Model.repo=Some !current_graph};
+    resolve (W.Map [W.kw "block/uuid",W.Uuid area]);Host.drain ();
+    check "graph retirement prevents comment publication and focus adoption"
+      (Queue.is_empty publications && !Comments_ops.reply_focus_request=None))
+
 let native_click_producers () =
   let previous_app = !Native_embed.current_app
   and previous_provider = !Dom_ext.doc_elements_provider
@@ -3470,6 +3608,7 @@ let () =
   native_datetime_value_labels ();
   native_cmdk_controlled_input ();
   native_click_producers ();
+  native_comment_shortcut_handoff ();
   native_point_property_scroll ();
   native_sidebar_scroll_basis ();
   native_wide_reading_column ();
