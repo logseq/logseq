@@ -1,6 +1,7 @@
 (ns logseq.db.frontend.class-test
   (:require [cljs.test :refer [deftest is testing]]
             [datascript.core :as d]
+            [logseq.common.uuid :as common-uuid]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.test.helper :as db-test]))
 
@@ -99,3 +100,23 @@
     (is (true? (db-class/private-create-page-tag? {:block/title "Property"})))
     (is (false? (db-class/private-create-page-tag? {:block/title "Page"})))
     (is (false? (db-class/private-create-page-tag? {:block/title "Task"})))))
+
+(deftest build-new-class-strips-journal-identity-test
+  (let [conn (db-test/create-conn)
+        journal-uuid (common-uuid/gen-uuid :journal-page-uuid 20240101)
+        class (db-class/build-new-class
+               @conn
+               {:block/title "Jan 1st, 2024"
+                :block/name "jan 1st, 2024"
+                :block/uuid journal-uuid
+                :block/journal-day 20240101
+                :block.temp/original-page-name "2024-01-01"
+                :block/type "journal"
+                :block/tags [:logseq.class/Journal :logseq.class/Page]})]
+    (is (nil? (:block/journal-day class)))
+    (is (nil? (:block.temp/original-page-name class)))
+    (is (nil? (:block/type class)))
+    (is (not= journal-uuid (:block/uuid class)))
+    (is (= #{:logseq.class/Tag} (set (:block/tags class))))
+    (is (= :logseq.class/Root (:logseq.property.class/extends class)))
+    (is (= "user.class" (namespace (:db/ident class))))))
