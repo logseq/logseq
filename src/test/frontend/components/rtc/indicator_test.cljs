@@ -13,6 +13,16 @@
            "missing-total" {:direction :download :loaded 1}
            "other" {:direction :other :loaded 0 :total 10}}))))
 
+(deftest asset-transfer-counts-treats-compressed-content-length-mismatch-as-active
+  (is (= {:upload 0
+          :download 1}
+         (indicator/asset-transfer-counts
+          {"gzip-mismatch" {:direction :download :loaded 3240 :total 38}})))
+  (is (= {:upload 0
+          :download 0}
+         (indicator/asset-transfer-counts
+          {"gzip-complete" {:direction :download :loaded 3240 :total 3240}}))))
+
 (deftest asset-status-rows-shows-pending-upload-and-active-transfer-info
   (is (= [{:count 2 :label-key :sync/missing-asset-files}
           {:count 1 :label-key :sync/pending-asset-uploads}
