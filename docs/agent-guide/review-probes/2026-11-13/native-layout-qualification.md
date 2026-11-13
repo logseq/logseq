@@ -29,28 +29,57 @@ These are the recorded checkpoints, not proof of later source revisions or
 complete outliner/master parity. Nested and cross-container dragging, hardware
 input, IME and accessibility remain separate gates.
 
-## Long-code geometry remains a failing gate
+## Long-code measurement root and focus qualification
 
-The actual 1,000-line code fixture failed its containment assertion after an
-actual native-window resize from 900 to 1,400 points. The ordinary Markdown
-insertion retained all 22,994 source bytes, the source SHA-256 and canonical
-owners. The first native text witnesses and captured first viewport were
-present, but the existing standard `code-editor` region and wrapper each
-reported a 20,000-point AppKit frame. The source-keyed Editor's own committed
-Core dimensions were not measured by that observation.
+The original 1,000-line native fixture failed: the existing code region and
+wrapper reported 20,000pt despite the inner Editor's 1,024pt limit. Preserved
+failed evidence is `logseq-native-code-block.ZkgANV` and `.YjeXsU`. A complete
+265-node public Renderer replay, using actual application extension factories,
+all nine bundled fonts and original initialization services, reproduced this.
+Capping the existing factory measurement root and Editor with the same existing
+maximum-height policy bounded both without replacing source, identity or view
+ownership. Root-only and overflow-only diagnostic alternatives were rejected.
 
-Evidence is retained in `logseq-native-code-block.ZkgANV` and the unchanged
-repeat `logseq-native-code-block.YjeXsU`. The repeat additionally saved
-`first-admitted-tree.json` and `first-admitted-source-hashes.json` for a complete
-public-Renderer replay. No containment assertion was relaxed, ancestor clamped,
-scroll offset set or geometry substituted. The 100,000-line native end/return
-gate has not been run past this failed prerequisite.
+App `b5c929a943c80f109efadb98d7181ed17e360fe0`, with the unchanged LUI/NSH pins
+above, then passed the actual 1,000-line 1,400pt end/return wheel gate in 52.1 seconds.
+Evidence `logseq-native-code-block.7K3peS` includes inspected final-line and
+first-return PNGs. The 100,000-line gate next failed a three-second read-only
+agent request after actual native focus. A failure-only owned-process sample
+in `logseq-native-code-block.Opt22w` identified the OCaml application owner
+allocating growing string concatenations in `Edit_runs.merge_plains`; the native
+main queue and engine were predominantly idle. No timeout was increased.
 
-The successful standalone Release physical-footprint measurements in
-`deps/ui/nsh/RELEASE_MEMORY.md` remain measurements of that workload. They do not
-establish long-code scroll containment or final-line paint. The replay must
-distinguish the native Editor from its original ancestors and use authentic
-initialization theme/icon services, rather than replacing the surrounding tree.
+App `9db47d94b54ea102f91344e1ecb5a97634f7d0c0` replaces only this merge with
+linear buffered copying, preserving complete run metadata and singleton
+identity. Its full shared suite passed 16,763 checks with zero failures. Its fresh
+Release actual-application startup passed in 17.04 seconds. The native allocation/FFI
+suite passed: 1,000 prepared 26,000-byte runs allocated 95,896 bytes in 0.000035 CPU
+seconds; 100,000 prepared 2,600,000-byte runs allocated 11,016,672 bytes in 0.004146
+CPU seconds. These are merge-only counters, not application physical footprint.
+
+The same unchanged 100,000-line native interaction gate then passed in 18.1 seconds,
+using actual Release OCaml/worker artifacts in the AppKit development host.
+`logseq-native-code-block.xAwbC7` retains source receipts and inspected
+`long-end-1400.png`/`long-return-1400.png`: line 100,000 and line 1 really paint.
+Native pointer entry, keyboard document-end/start and real local wheels at both
+ends preserve all 2,499,994 source bytes, SHA-256
+`7646a61839b6e3b9619418939408aded6d23276c4ff562db2ce1d4538bc8be21`
+and canonical owner 455. Bounded text observations contained 109 entries. This is
+not a continuous 100,000-line wheel sweep, frame-time or standalone-memory gate.
+
+A separate 900pt-high, 1,000-line wheel-only case reached the last
+line through a new outer-page gesture and returned to line 1, with the same
+source/owners and no backend diagnostic. The actual final-line PNG in
+`logseq-native-code-block.2ZWpN7` was inspected. Its extra hover-toolbar assertion
+still failed after 15 seconds, so the complete 900pt case remains failed. Earlier fixture
+attempts failed on a capture-name whitelist and incorrect Scroll test ID; those
+script errors were corrected without changing acceptance assertions. Native
+text rectangles are not exposed by this public test API, so no per-line bounds
+claim is made. The 100,000-line 900pt full-wheel gate remains unexecuted.
+
+The historical standalone Release physical-footprint measurements in
+`deps/ui/nsh/RELEASE_MEMORY.md` remain scoped to their recorded revisions and
+workload. They do not establish current focused-editor memory or latency.
 
 ## Six-point bullet paint
 
@@ -72,8 +101,11 @@ The application fix clips the existing childless outliner and add-block visual
 Boxes only on NSH. It preserves radius, size, key, color, opacity and the larger
 input/drag owner. The subsequent complete shared suite passed 16,657 checks,
 including actual NSH block producers and Help under all four maintained host
-profiles. Actual application paint and interaction after this fix still require
-a fresh Release capture.
+profiles. At App `b5c929a943c80f109efadb98d7181ed17e360fe0`, the actual range/reorder
+fixture passed in 14.7 seconds (`logseq-native-block.5xwasL`). Inspected
+`range-reversed.png` and `after-multiroot-drop.png` show round 6pt bullets and one
+selection toolbar surface; selected A/B roots move together after C. This does
+not qualify the separate 5pt property bullet family or complete drag parity.
 
 ## Application delivery failures remain visible
 
@@ -87,5 +119,11 @@ not run. Downloaded failure evidence is outside the repository under
 `/tmp/logseq-standalone-upgrade-43357554443/evidence`.
 
 Neither failure is skipped or treated as a successful qualification. The
-certificate fixture correction and a real OpenSSL-only early regression are
-pending. No source, package, trust-store or test-success guard is bypassed.
+certificate fixture was corrected in App `9650d507561fa3b41d8db4d5afc3867866d91dee`:
+32 hexadecimal UUID characters preserve 128-bit uniqueness within a 61-byte CN.
+Thirteen actual OpenSSL/HTTPS tests passed, plus ten standalone and four
+preparation guards. No trust store was changed locally. Workflow 43368225594
+has a completed broad-test failure at the same retained `next friday 8pm`
+assertion (80 passed / 1 failed); its actual signed-upgrade job is still running at
+this checkpoint. Neither its future outcome nor a current complete upgrade is
+claimed. No source, package, trust-store or test-success guard is bypassed.
