@@ -48,6 +48,13 @@ final class PlatformServices {
         do { try reply("platform-error", ["operation": op, "message": detail]) } catch { onError?(error) }
     }
     func perform(_ body: () throws -> Void) { do { try body() } catch { onError?(error) } }
+    func requestEditorFocus(_ block: String, _ focused: Bool) {
+        focusIntents[block] = focused
+        guard let editor = editors[block]?.value, let window = editor.window else { return }
+        let accepted = focused ? window.makeFirstResponder(editor)
+            : window.firstResponder === editor ? window.makeFirstResponder(nil) : true
+        if accepted { focusIntents.removeValue(forKey: block) }
+    }
 
     // This mirror contains host presentation metadata only; OCaml owns documents.
     func resetPresentation() {
@@ -96,6 +103,18 @@ final class PlatformServices {
         let rect = view.convert(view.bounds, to: content)
         return node(at: NSPoint(x: rect.midX, y: content.isFlipped ? rect.midY : content.bounds.height - rect.midY))
     }
+    func pointerTarget(_ id: Int?) -> Int? {
+        var candidate = id
+        var listener: Int?
+        while let node = candidate, let metadata = nodes[node] {
+            if metadata["enabled"] as? Bool == false || metadata["inert"] as? Bool == true { return nil }
+            if listener == nil, metadata["pointer-enabled"] as? Bool == true { listener = node }
+            candidate = parents[node]
+        }
+        return listener
+    }
+    func capturesPointer(_ id: Int) -> Bool { nodes[id]?["pointer-capture"] as? Bool == true }
+    func styleClass(_ id: Int?) -> String { id.flatMap { nodes[$0]?["style-class"] as? String } ?? "" }
     func isTitlebarBackground(_ id: Int?) -> Bool {
         var candidate = id
         while let node = candidate, let metadata = nodes[node] {
@@ -298,8 +317,7 @@ final class PlatformServices {
         if ["open-file-picker", "download-text", "download-binary"].contains(op) { try fileRequest(op, request); return }
         if op == "set-input-focus" {
             let block: String = try required(request, "block-id"), focused: Bool = try required(request, "focused")
-            focusIntents[block] = focused
-            if let editor = editors[block]?.value { editor.window?.makeFirstResponder(focused ? editor : nil) }
+            requestEditorFocus(block, focused)
             return
         }
         if ["caret-rect", "selection-rects", "offset-at", "line-ranges", "scroll-height"].contains(op) {

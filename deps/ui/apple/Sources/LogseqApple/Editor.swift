@@ -17,6 +17,7 @@ struct EditorSink: NSViewRepresentable {
     }
     func updateNSView(_ input: NativeEditorInput, context: Context) {
         input.extensionContext = self.context; input.services = services
+        input.incarnation = services.incarnations[self.context.nodeID]
         input.block = self.context.string("block-id") ?? ""
         services.editors[input.block] = WeakView(input)
         services.views[self.context.nodeID] = WeakView(input)
@@ -24,9 +25,9 @@ struct EditorSink: NSViewRepresentable {
         input.synchronize()
         if let focused = services.focusIntents[input.block] {
             DispatchQueue.main.async { [weak input] in
-                guard let input, input.window != nil else { return }
-                if focused { input.window?.makeFirstResponder(input) }
-                else if input.window?.firstResponder === input { input.window?.makeFirstResponder(nil) }
+                guard let input, input.window != nil,
+                      input.services?.focusIntents[input.block] == focused else { return }
+                input.services?.requestEditorFocus(input.block, focused)
             }
         }
     }
@@ -39,13 +40,15 @@ final class NativeEditorInput: NSTextView {
     var extensionContext: LUIAppleExtensionViewContext?
     weak var services: PlatformServices?
     var block = ""
+    var incarnation: UInt64?
     private var composing = false
     override var acceptsFirstResponder: Bool { true }
     override var undoManager: UndoManager? { nil }
     override func draw(_ dirtyRect: NSRect) {}
 
     func send(_ name: String, _ values: [String: LUIExtensionValue] = [:]) {
-        guard let context = extensionContext else { return }
+        guard let context = extensionContext, let incarnation,
+              services?.incarnations[context.nodeID] == incarnation else { return }
         services?.perform { try context.emit(name: name, values: values) }
     }
     func synchronize() {
@@ -118,28 +121,88 @@ struct CodeEditor: NSViewRepresentable {
     let services: PlatformServices
     func makeCoordinator() -> Coordinator { Coordinator(self) }
     func makeNSView(context: Context) -> NSScrollView {
-        let editor = NSTextView()
+        let editor = CodeTextView()
         editor.isRichText = false; editor.font = .monospacedSystemFont(ofSize: 13, weight: .regular)
+        editor.isAutomaticQuoteSubstitutionEnabled = false; editor.isAutomaticDashSubstitutionEnabled = false
+        editor.isAutomaticSpellingCorrectionEnabled = false
+        editor.isVerticallyResizable = true; editor.isHorizontallyResizable = false
+        editor.autoresizingMask = [.width]; editor.textContainer?.widthTracksTextView = true
+        editor.onEvent = { [weak coordinator = context.coordinator, weak editor] name, key in
+            guard let editor else { return }
+            coordinator?.emit(name, value: editor.string, key: key)
+        }
         editor.delegate = context.coordinator
         let scroll = NSScrollView(); scroll.hasVerticalScroller = true; scroll.documentView = editor
         return scroll
     }
     func updateNSView(_ scroll: NSScrollView, context: Context) {
-        guard let editor = scroll.documentView as? NSTextView else { return }
+        guard let editor = scroll.documentView as? CodeTextView else { return }
         context.coordinator.parent = self
+        context.coordinator.incarnation = services.incarnations[self.context.nodeID]
         let value = self.context.string("value") ?? ""
-        if editor.string != value { editor.string = value }
-        if case .bool(let readOnly) = self.context.property("read-only") { editor.isEditable = !readOnly }
+        if editor.string != value, !editor.hasMarkedText() {
+            let selection = editor.selectedRange()
+            editor.string = value
+            let count = (value as NSString).length
+            let first = min(selection.location, count)
+            editor.setSelectedRange(NSRange(location: first, length: min(selection.length, count - first)))
+        }
+        editor.role = self.context.string("source-role") ?? ""
+        let readOnly = self.context.property("read-only") == .bool(true)
+            || editor.role == "block" && (self.context.string("uuid") ?? "").isEmpty
+        editor.isEditable = !readOnly
+        if editor.role == "query", !readOnly, !editor.requestedInitialFocus {
+            editor.requestedInitialFocus = true
+            DispatchQueue.main.async { [weak editor] in
+                guard let editor, editor.window != nil else { return }
+                editor.window?.makeFirstResponder(editor)
+            }
+        }
         editor.setAccessibilityIdentifier(self.context.string("accessibility-identifier"))
         services.views[self.context.nodeID] = WeakView(editor)
     }
     @MainActor final class Coordinator: NSObject, NSTextViewDelegate {
         var parent: CodeEditor
+        var incarnation: UInt64?
         init(_ parent: CodeEditor) { self.parent = parent }
+        func emit(_ name: String, value: String, key: String? = nil) {
+            guard let incarnation, parent.services.incarnations[parent.context.nodeID] == incarnation else { return }
+            var values: [String: LUIExtensionValue] = ["name": .string(name), "value": .string(value)]
+            if let key { values["key"] = .string(key) }
+            parent.services.perform { try parent.context.emit(name: "cm-event", values: values) }
+        }
         func textDidChange(_ notification: Notification) {
             guard let editor = notification.object as? NSTextView else { return }
-            parent.services.perform { try parent.context.emit(name: "cm-event", values: ["name": .string("change"), "value": .string(editor.string)]) }
+            emit("input", value: editor.string)
         }
+    }
+}
+
+@MainActor
+final class CodeTextView: NSTextView {
+    var role = ""
+    var requestedInitialFocus = false
+    var onEvent: ((String, String?) -> Void)?
+    override func becomeFirstResponder() -> Bool {
+        let accepted = super.becomeFirstResponder()
+        if accepted, role == "block" { onEvent?("focus", nil) }
+        return accepted
+    }
+    override func resignFirstResponder() -> Bool {
+        let accepted = super.resignFirstResponder()
+        if accepted, role == "block" { onEvent?("blur", nil) }
+        return accepted
+    }
+    override func keyDown(with event: NSEvent) {
+        if isEditable, !hasMarkedText() {
+            let key = nativeKey(event)
+            let modifiers = event.modifierFlags.intersection([.shift, .command, .option, .control])
+            if key == "Escape" || key == "Enter" && role == "query" {
+                onEvent?("key", key); return
+            }
+            if key == "Enter", modifiers == .shift { onEvent?("key", "Shift-Enter"); return }
+        }
+        super.keyDown(with: event)
     }
 }
 

@@ -70,7 +70,7 @@ final class LogseqHost: NSObject, NSApplicationDelegate, NSWindowDelegate {
         self.backend = backend
         backend.frameReportingEnabled = true
         backend.onFramesReport = { [weak self] frames in self?.services.frames = frames }
-        backend.onEvent = { [weak self] event in self?.services.perform { try self?.runtime?.dispatch(event) } }
+        backend.onEvent = { [weak self] event in self?.services.perform { try self?.input?.backendEvent(event) } }
     }
     func apply(_ json: String, snapshot: Bool) throws {
         if let path = ProcessInfo.processInfo.environment["LOGSEQ_APPLE_TRACE_PATCHES"] {

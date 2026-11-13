@@ -12,7 +12,6 @@ dependency scripts before building:
 ```sh
 (cd deps/db-worker && sh scripts/install-opam-deps.sh)
 (cd deps/ui && sh scripts/install-opam-deps.sh)
-opam install uucp
 bash deps/ui/apple/build.sh
 ```
 
@@ -48,6 +47,22 @@ before terminating; a failed save keeps the window open.
 | `LOGSEQ_DB_WORKER_BIN` | Native worker executable; staged `Resources/logseq-db-worker` |
 | `LOGSEQ_NATIVE_ASSET_DIR` | Resource root containing JSON assets, fonts, images and dictionaries |
 | `LOGSEQ_APPLE_LIBRARY` | Development override for the OCaml dynamic library |
+| `LUI_SOURCE` | Explicit OCaml Git source for validating a paired LUI revision |
+
+To validate a framework commit before the shared default pin advances, change
+the Swift package's revision to that full SHA, then install and build the same
+source in the selected opam switch:
+
+```sh
+export LUI_SOURCE="git+https://github.com/logseq/lui.git#<full-commit-sha>"
+bash deps/ui/scripts/install-opam-deps.sh
+bash deps/ui/apple/build.sh
+```
+
+The build compares Swift's revision with the active opam Git pin, including
+explicit `LUI_SOURCE` overrides. Without an override it also requires the shared
+installer's default revision to match. It refuses mismatched schemas before
+building either runtime.
 
 Graph layout and formats belong to the shared OCaml runtime. The host does not
 copy or migrate existing graphs. Relative resource paths are checked against

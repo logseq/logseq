@@ -8,8 +8,16 @@ output="$ui_root/_build/apple"
 resources="$ui_root/_build/Resources"
 # Both languages must use the exact same schema revision.
 revision=$(sed -n 's/.*revision: "\([0-9a-f]*\)".*/\1/p' "$host_root/Package.swift")
-opam_revision=$(sed -n 's/.*github.com\/logseq\/lui.git#\([0-9a-f]*\).*/\1/p' "$ui_root/scripts/install-opam-deps.sh")
-[[ -n $revision && $revision == "$opam_revision" ]] || { printf 'Swift and OCaml LUI pins differ.\n' >&2; exit 1; }
+default_revision=$(sed -n 's/.*github.com\/logseq\/lui.git#\([0-9a-f]*\).*/\1/p' "$ui_root/scripts/install-opam-deps.sh")
+if [[ -z ${LUI_SOURCE:-} && $revision != "$default_revision" ]]; then
+  printf 'Swift and default OCaml LUI pins differ; install a paired revision using LUI_SOURCE.\n' >&2
+  exit 1
+fi
+opam_revision=$(opam pin list --color=never | awk '$1 ~ /^lui\./ && $2 == "git" { gsub(/[()]/, "", $NF); print $NF }')
+[[ $revision =~ ^[0-9a-f]{40}$ && $revision == "$opam_revision" ]] || {
+  printf 'Swift LUI revision %s differs from the active opam Git pin %s. Run scripts/install-opam-deps.sh in the selected switch first.\n' "$revision" "$opam_revision" >&2
+  exit 1
+}
 (cd "$ui_root" && opam exec -- dune build native/native_embed.exe.o) >&2
 (cd "$repo_root/deps/db-worker" && opam exec -- dune build bin/main.exe) >&2
 mkdir -p "$output" "$resources/fonts" "$resources/img" "$resources/dicts"

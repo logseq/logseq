@@ -1,4 +1,5 @@
 import AppKit
+import LUIAppleBackend
 
 // Capture runs before AppKit target delivery. OCaml decides default prevention,
 // shortcuts and block gestures; unhandled events continue to native controls.
@@ -9,6 +10,8 @@ final class InputRouter {
     private var preventMouse = 0
     private var pressed: (node: Int, incarnation: UInt64)?
     private var pressPrevented = false
+    private var captured: (node: Int, incarnation: UInt64)?
+    private var lastPointer: (point: NSPoint, modifiers: Int, button: Int, targetClass: String)?
 
     init(services: PlatformServices) { self.services = services }
 
@@ -20,6 +23,33 @@ final class InputRouter {
         if let text = view as? NSTextView, let owner = text.delegate as? NSView,
            let node = services.node(for: owner) { return node }
         return services.node(for: view)
+    }
+    private func pointer(_ name: String, listener: Int?) throws {
+        guard let listener, services.incarnations[listener] != nil, let detail = lastPointer else { return }
+        try services.runtime?.pointer(name, listener, detail.point.x, detail.point.y, detail.modifiers, detail.button, detail.targetClass)
+        try services.runtime?.drain()
+        services.runtime?.schedulePump()
+    }
+    private func capturedTarget() -> Int? {
+        guard let captured, services.incarnations[captured.node] == captured.incarnation else { return nil }
+        return captured.node
+    }
+    func backendEvent(_ event: LUIEvent) throws {
+        // SwiftUI taps have no position. Supply the real event monitor's
+        // detail, preserving keyboard/accessibility activation as reported.
+        let mouseTypes: Set<NSEvent.EventType> = [.leftMouseDown, .leftMouseUp, .rightMouseDown, .rightMouseUp, .otherMouseDown, .otherMouseUp]
+        if let current = NSApp.currentEvent, mouseTypes.contains(current.type), let detail = lastPointer {
+            switch event {
+            case .pressDetail(let node, _, _, _, _, _):
+                try services.runtime?.dispatch(.pressDetail(node: node, x: detail.point.x, y: detail.point.y, modifiers: detail.modifiers, button: detail.button, targetClass: detail.targetClass))
+                return
+            case .contextMenuPress(let node, _, _, _, _, _):
+                try services.runtime?.dispatch(.contextMenuPress(node: node, x: detail.point.x, y: detail.point.y, modifiers: detail.modifiers, button: detail.button, targetClass: detail.targetClass))
+                return
+            default: break
+            }
+        }
+        try services.runtime?.dispatch(event)
     }
 
     func capture(_ event: NSEvent) throws -> Bool {
@@ -39,6 +69,9 @@ final class InputRouter {
         let local = content.convert(event.locationInWindow, from: nil)
         let point = NSPoint(x: local.x, y: content.isFlipped ? local.y : content.bounds.height - local.y)
         let target = services.node(at: point)
+        let modifiers = (flags.contains(.shift) ? 2 : 0) | (flags.contains(.option) ? 4 : 0)
+            | (flags.contains(.command) ? 8 : 0) | (flags.contains(.control) ? 1 : 0)
+        lastPointer = (point, modifiers, event.buttonNumber == 1 ? 2 : event.buttonNumber == 2 ? 1 : event.buttonNumber, services.styleClass(target))
         payload["nodeId"] = target
         payload["clientX"] = point.x; payload["clientY"] = point.y
         payload["button"] = event.buttonNumber == 1 ? 2 : event.buttonNumber == 2 ? 1 : event.buttonNumber
@@ -57,6 +90,11 @@ final class InputRouter {
             if !pointer { taken = try send("mousedown", payload) }
             if event.type == .rightMouseDown { taken = try send("contextmenu", payload) || taken }
             pressPrevented = taken
+            if !taken, let listener = services.pointerTarget(target) {
+                if services.capturesPointer(listener), let incarnation = services.incarnations[listener] { captured = (listener, incarnation) }
+                try self.pointer("pointer_down", listener: listener)
+                if event.type == .rightMouseDown { try self.pointer("context_menu_press", listener: listener) }
+            }
             if !taken, event.type == .leftMouseDown,
                services.isTitlebarBackground(target) {
                 services.window?.performDrag(with: event)
@@ -69,6 +107,9 @@ final class InputRouter {
             var taken = try send("pointerup", payload)
             if preventMouse & bit == 0 { taken = try send("mouseup", payload) || taken }
             preventMouse &= ~bit
+            if !taken { try self.pointer("pointer_up", listener: capturedTarget() ?? services.pointerTarget(target)) }
+            else { try self.pointer("pointer_cancel", listener: capturedTarget()) }
+            captured = nil
             if event.type == .leftMouseUp {
                 // A recycled retained ID must not receive the old press.
                 let current = pressed.map { services.incarnations[$0.node] == $0.incarnation } ?? true
@@ -85,6 +126,7 @@ final class InputRouter {
             payload["buttons"] = buttons
             var taken = try send("pointermove", payload)
             if preventMouse == 0 { taken = try send("mousemove", payload) || taken }
+            if !taken { try self.pointer("pointer_move", listener: capturedTarget() ?? services.pointerTarget(target)) }
             return taken
         case .scrollWheel:
             payload["buttons"] = buttons
@@ -97,7 +139,9 @@ final class InputRouter {
 
     func blur() throws {
         if buttons != 0 { _ = try send("pointercancel", ["buttons": 0]) }
+        try pointer("pointer_cancel", listener: capturedTarget())
         buttons = 0; preventMouse = 0; pressed = nil; pressPrevented = false
+        captured = nil; lastPointer = nil
         _ = try send("blur", [:])
     }
 
