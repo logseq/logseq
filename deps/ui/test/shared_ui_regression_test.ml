@@ -1984,7 +1984,12 @@ let cycle_routes ~check ~profile ~install_worker ~settle ~done_ =
         if !retire_read then model:={!model with Model.repo=Some "cycle-destination"};
         W.Array (List.map (fun uuid -> W.Map [W.kw "block",W.Map
           ([W.kw "block/uuid",W.Uuid uuid] @ match Hashtbl.find_opt statuses uuid with
-           | Some id -> [W.kw "logseq.property/status",W.Int id] | None -> [])]) ids)
+           | Some id -> [W.kw "logseq.property/status",W.Map [W.kw "db/id",W.Int id;
+               W.kw "db/ident",W.Keyword ("logseq.property/status." ^ List.nth ["todo";"doing";"done"] (id-1))]]
+           | None -> [])]) ids)
+    | "thread-api/get-latest-journals",_ ->
+        W.Array [W.Map [W.kw "block/uuid",W.Uuid "cycle-page";
+          W.kw "block/title",W.String "Cycle fixture";W.kw "block/journal-day",W.Int 20261113]]
     | "thread-api/get-property-closed-values",[W.String repo;W.Keyword "logseq.property/status"] ->
         check "status identities stay on the captured graph" (repo="cycle-origin");
         W.Array (List.mapi (fun index ident -> W.Map
@@ -2016,7 +2021,11 @@ let cycle_routes ~check ~profile ~install_worker ~settle ~done_ =
     settle (fun () ->
       try
         check "exposed cycle command reads fresh captured target statuses once" (List.length !reads=1);
-        check "exposed cycle command persists all statuses in one ordered transaction" (!batches=[expected]);
+        let describe updates=String.concat "," (List.map (fun (uuid,status) ->
+          uuid ^ ":" ^ Option.fold ~none:"clear" ~some:string_of_int status) updates) in
+        check ("exposed cycle command persists all statuses in one ordered transaction; expected=["
+          ^ describe expected ^ "]; actual=[" ^ String.concat ";" (List.map describe !batches) ^ "]")
+          (!batches=[expected]);
         after ()
       with error -> cleanup ();raise error) in
   let palette ()=Cmdk_state.dispatch_id "editor/cycle-todo" in
