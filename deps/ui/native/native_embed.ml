@@ -163,12 +163,12 @@ let () = publish_native_keymap := (fun () ->
         | None -> false in
       if not unchanged then begin
         let bindings = native_keymap_bindings ~cards in
-        last_native_keymap := Some (app, revision, palette, capture, copy_reference, block_selection, cards);
-        platform_request ("native-keymap\n" ^ Yojson.Safe.to_string
+        send_platform_request ("native-keymap\n" ^ Yojson.Safe.to_string
           (`Assoc ["revision", `Int revision; "palette", `Bool palette;
                    "capture", `Bool capture; "palette-copy-reference", `Bool copy_reference;
                    "block-selection", `Bool block_selection;
-                   "bindings", `List bindings]))
+                   "bindings", `List bindings]));
+        last_native_keymap := Some (app, revision, palette, capture, copy_reference, block_selection, cards)
       end
   | Some _ | None -> ())
 
@@ -888,7 +888,7 @@ let update_id body =
   | _ -> invalid_arg "Update preparation requires exactly one string id"
 
 let update_result id phase ok error =
-  platform_request ("update-preparation-result\n" ^ Yojson.Safe.to_string
+  send_platform_request ("update-preparation-result\n" ^ Yojson.Safe.to_string
     (`Assoc [ "id", `String id; "phase", `String phase;
               "ok", `Bool ok; "error", `String error ]))
 
@@ -1041,7 +1041,7 @@ let platform_event payload =
         Host.enqueue (fun () ->
           Update_admission.require_input Update_admission.application "window-close";
           let result ok error =
-            platform_request ("window-close-result\n" ^ Yojson.Safe.to_string
+            send_platform_request ("window-close-result\n" ^ Yojson.Safe.to_string
               (`Assoc [ "ok", `Bool ok; "error", `String error ])) in
           ignore
             (Js.Promise.then_ (fun () -> result true ""; Js.Promise.resolve ())
