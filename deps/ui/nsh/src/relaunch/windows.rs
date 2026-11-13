@@ -180,9 +180,9 @@ pub(super) mod process_tests;
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     #[test]
     fn actual_parent_birth_and_restart_argument_validation() {
+        use super::*;
         let identity = birth(unsafe { GetCurrentProcess() }).unwrap();
         assert_ne!(identity, 0);
         assert!(capture_parent(std::process::id(), identity).is_ok());
@@ -195,6 +195,7 @@ mod tests {
     }
     #[test]
     fn duplicate_is_the_actual_unnamed_event_and_drop_preserves_the_source_owner() {
+        use super::*;
         let source = event().unwrap();
         let parent = capture_parent(
             std::process::id(),

@@ -209,9 +209,9 @@ impl Component for Standalone {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     #[test]
     fn failed_native_teardown_never_starts_the_installed_replacement() {
+        use super::*;
         let session = Session::capture(vec![]).unwrap();
         session.request.0.store(true, Ordering::Release);
         assert!(matches!(session.finish(ExitCode::FAILURE), Err(error)
@@ -219,6 +219,7 @@ mod tests {
     }
     #[test]
     fn captured_restart_keeps_private_profile_argv_and_removes_only_artifact_overrides() {
+        use super::*;
         let arguments = vec![
             "--startup-preflight".into(),
             "/private/profile with spaces".into(),
