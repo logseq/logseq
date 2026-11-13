@@ -119,6 +119,14 @@ jobs:
             --worker "$PWD/deps/db-worker/_build/default/bin/main.exe" \
             2>&1 | tee _build/nsh-ci/owned-worker-update.log
           python3 deps/ui/nsh/run_virtual_rows_native.py 2>&1 | tee _build/nsh-ci/production-virtual-rows.log
+      - name: Actual native compiler rejection contracts
+        run: |
+          LOGSEQ_NSH_PREFLIGHT_EXECUTABLE=$(cat _build/nsh-ci/binary.txt)
+          export LOGSEQ_NSH_PREFLIGHT_EXECUTABLE
+          for test in test_primitive_signatures_native.py test_property_select_dismiss_api_native.py test_static_styles_native.py; do
+            python3 -m unittest discover -s deps/ui/nsh -p "$test" \
+              2>&1 | tee "_build/nsh-ci/$test.log"
+          done
       - name: Package the qualified actual native host
         run: |
           archive=$(pnpm --silent ui:nsh:package --built-host "$PWD/deps/ui/_build/nsh/logseq-nsh" 2> >(tee _build/nsh-ci/package.log >&2))

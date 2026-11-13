@@ -210,6 +210,13 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Actual owned-worker update shutdown and durability contract failed' }
           opam exec -- python deps/ui/nsh/run_virtual_rows_native.py 2>&1 | Tee-Object _build/nsh-ci/production-virtual-rows.log
           if ($LASTEXITCODE -ne 0) { throw 'Actual native bounded row contract failed' }
+      - name: Actual native compiler rejection contracts
+        run: |
+          $env:LOGSEQ_NSH_PREFLIGHT_EXECUTABLE = Join-Path $env:GITHUB_WORKSPACE 'deps/ui/_build/nsh-windows/logseq-nsh.exe'
+          foreach ($test in @('test_primitive_signatures_native.py', 'test_property_select_dismiss_api_native.py', 'test_static_styles_native.py')) {
+            opam exec -- python -m unittest discover -s deps/ui/nsh -p $test 2>&1 | Tee-Object "_build/nsh-ci/$test.log"
+            if ($LASTEXITCODE -ne 0) { throw "Actual native compiler rejection contract failed: $test" }
+          }
       - name: Package the actual Windows App ZIP and unsigned Inno installer
         run: |
           $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6/ISCC.exe'
