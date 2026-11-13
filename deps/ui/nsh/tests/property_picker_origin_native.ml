@@ -81,7 +81,7 @@ let run ~check () =
           Lui_elements.column [Properties_value.node_view ~jump_target:false ctx row;
             reactive (fun entries -> Lui_elements.column
               (List.map (fun (entry : Properties_state.view_overlay) -> entry.vo_view) entries)) overlays]) in
-      let measured = ref None in
+      let measured = ref None and deferred_geometry = ref None in
       Fun.protect ~finally:(fun () ->
         Option.iter (fun node -> Native_embed.platform_event ("node-rect\n" ^
           Js.Json.stringify (Js.Json.object_list ["nodeId",Js.Json.number (float_of_int node)]))) !measured;
@@ -103,19 +103,42 @@ let run ~check () =
               | Js.Json.JObject fields -> fields
               | _ -> failwith "Picker measurement must be an object" in
             let reference=List.assoc "ref" fields in
-            Native_embed.platform_event ("node-rect\n" ^ Js.Json.stringify (Js.Json.object_list
+            let reply () = Native_embed.platform_event ("node-rect\n" ^ Js.Json.stringify (Js.Json.object_list
               ["nodeId",Js.Json.number (float_of_int trigger);"ref",reference;
                "rect",Js.Json.object_list ["left",Js.Json.number 80.;"top",Js.Json.number 100.;
-                 "width",Js.Json.number 120.;"height",Js.Json.number 28.]]))
+                 "width",Js.Json.number 120.;"height",Js.Json.number 28.]])) in
+            if boundary="measurement" then deferred_geometry := Some reply else reply ()
           end else previous_host operation payload);
         let settle () = Host.drain (); ignore (Lui_app.flush app) in
+        let timer_before = !Host.timer_next in
         ignore (Native_embed.press trigger); settle ();
+        if boundary="measurement" then begin
+          check "the actual trigger awaits native measurement before popup mount"
+            (Option.is_some !deferred_geometry && not (Properties_state.view_overlay_open ()));
+          (match retirement with
+           | "graph" -> model := {!model with Model.repo=Some "picker-destination";context_revision=1}
+           | "worker" -> Runtime.worker := Some (make_worker ())
+           | _ -> failwith "Unknown pre-mount picker retirement");
+          (Option.get !deferred_geometry) ();
+          (* Run only the actual retry scheduled by this trigger. It remains a
+             real production callback; no replacement timer service is installed. *)
+          Mutex.lock Host.timers_lock;
+          let retries = Hashtbl.fold (fun id _ ids ->
+            if id>timer_before then id::ids else ids) Host.timers [] in
+          Mutex.unlock Host.timers_lock;
+          check "one actual native-measurement retry belongs to this trigger" (List.length retries=1);
+          Host.run_timer (List.hd retries) (); settle ()
+        end;
         let option = find P.TextValue "Origin node option" in
         check "the actual node option is mounted in the retained picker"
           (Hashtbl.find runtime.Lui_runtime.mounted_nodes option=P.ListItem
            && Properties_state.view_overlay_open ());
         reads := []; holding := true;
         ignore (Native_embed.press option); settle ();
+        if boundary="measurement" then
+          check "a late-mounted option cannot adopt the graph or worker active at measurement completion"
+            (!pending=None && !writes=[] && !reads=[] && not (Properties_state.view_overlay_open ()))
+        else begin
         check "actual option activation reaches the requested async read boundary"
           (Option.is_some !pending && !writes=[]);
         (match retirement with
@@ -149,10 +172,11 @@ let run ~check () =
             (!writes=[] && !reads=before_reply_reads);
           check "a retired async reply cannot close or adopt a replacement chooser"
             (Properties_state.view_overlay_open ()=(retirement="replacement"))
+        end
         end))
       ["block","current";"reference","current";"reference","current-remove";
        "block","graph";"reference","graph";
        "block","worker";"reference","worker";
        "block","route";"reference","dismiss";"block","replacement";
-       "reference","graph-remove"];
+       "reference","graph-remove";"measurement","graph";"measurement","worker"];
     print_endline "PASS native property node picker async graph and owner retirement")

@@ -3,7 +3,8 @@
 ## Node property choices retain their async graph owner
 
 Choosing an existing Node/Page/Class/Asset/Property reference in a value picker
-now keeps the popup's graph and worker identity through its fresh block read
+now captures the popup's graph and worker at trigger activation, before its
+asynchronous anchor measurement, and retains them through its fresh block read
 and any reference-identity lookups. The callback captures the existing reload
 origin for each click, so a graph, worker, route or revision change during those
 reads retires that choice before any set/remove operation. Dismissing the
@@ -26,8 +27,13 @@ does not claim to qualify the separate new-node creation, initial result or
 search-result asynchronous paths. The actual native admission fixture opens
 the real value Button and selects its real ListItem, delays each worker read,
 then tests current add/remove, graph/worker/route retirement, dismissal and
-replacement ownership. It uses the existing target archives and runner without
-Dune changes. These source regressions await root execution; they are not
+replacement ownership. Separate pre-mount cases hold the real anchor response,
+change graph/worker, deliver that response and explicitly drive only the
+trigger's existing native-measurement retry before choosing the actual option.
+This proves that late popup mounting cannot recapture the destination owner;
+it does not measure an elapsed native timer. The fixture uses the existing
+target archives and runner without Dune changes. These source regressions await
+root execution; they are not
 native paint, hardware input or real database undo evidence.
 
 ## Command-palette result gutters use the retained typed Column

@@ -1403,9 +1403,9 @@ let node_view ?(jump_target = true) ctx row : t =
   let chips = ref_chips row in
   let anchor_id = "property-node-" ^ ctx.owner_key ^ "-" ^ ctx.block_uuid ^ "-" ^ ident in
   let activate () =
+    let repo = Runtime.repo () and worker = !Runtime.worker in
     open_value_picker anchor_id
            (fun ~alive ~close context' parent' ->
-           let repo = Runtime.repo () and worker = !Runtime.worker in
            let owned () = alive () && Runtime.repo () = repo
              && !Runtime.worker == worker && not (Ui_services.env_publishing ()) in
            let retire () = close (); Js.Promise.resolve () in
