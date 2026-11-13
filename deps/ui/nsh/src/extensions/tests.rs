@@ -320,10 +320,7 @@ fn short_code_grows_naturally_and_calc_removes_the_cap_without_replacing_history
     app.press("text:Use calc").unwrap();
     assert_eq!(native(&app), before);
     assert!(
-        code_geometry(&app)
-            .1
-            .iter()
-            .all(|height| *height > 1024.0),
+        code_geometry(&app).1.iter().all(|height| *height > 1024.0),
         "normalized CALC removes both control bounds and keeps natural parent sizing"
     );
     assert_eq!(code_geometry(&app).0, owners);
@@ -431,12 +428,12 @@ fn source_rebinding_replaces_native_editor_but_plain_authoritative_updates_do_no
     assert_ne!(native(&app), before);
     let (after, heights) = code_geometry(&app);
     assert_eq!(
-        after[1..], owners[1..],
+        after[1..],
+        owners[1..],
         "source replacement retains the factory measurement root and Row"
     );
     assert_eq!(
-        heights,
-        [heights[0]; 3],
+        heights, [heights[0]; 3],
         "a replacement short source must not leave blank reserved document height"
     );
 }
