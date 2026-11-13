@@ -22,6 +22,54 @@ require that compiler rejection before provider validation, alongside a valid
 alignment/spacing control. No application event, wire field, SDK revision or
 maintained mobile backend is removed by this pin update.
 
+## Property selector fields dismiss their captured workflow
+
+`Properties_select.view` now accepts optional `~on_dismiss`, with the existing
+canonical `Lui_protocol.event -> unit` callback type. Omitting it preserves the
+standalone selector default. An authored callback enables the existing input
+Dismiss capability; no LUI constructor, wire field or SDK API is added. For
+example, a popup owner passes:
+
+```ocaml
+Properties_select.view ~placeholder
+  ~on_dismiss:(fun _ -> close_this_popup ()) items
+```
+
+Every production property-selector owner supplies its own closer. The property
+dialog's fetch-backed helper requires one for each phase and closes only its
+captured `dlg_state`; closed-value, node and repeat-type pickers use their
+existing local popup close; property-schema node tags close their captured
+menu. A retired field cannot close a newer dialog or a different popup.
+
+The composed helpers now require the same captured closer explicitly:
+`Properties_dialog.async_select ~on_dismiss`,
+`Properties_value.picker_content ~close`, and
+`Properties_menu.node_tags_view menu ~close`. For example, migrate an existing
+fetch-backed call to
+`Properties_dialog.async_select ~on_dismiss:(fun _ -> close_this_popup ()) ~placeholder (Js.Promise.resolve items)`.
+Pass the owner already responsible for that content; do not substitute a global
+current-popup closer or a no-op callback.
+
+This is a local cancellation event, separate from application shortcuts.
+While a property workflow suspends global shortcuts, Escape in its focused
+field now requests that workflow's dismissal in one key, including a nonempty
+query. On macOS the native Input consumes Escape before Modal cancellation;
+its existing `on_key_press` policy therefore needs the authored local callback.
+The same canonical opt-in and existing composition/disabled/blur-suppression
+rules apply on maintained backends. Query entry, Down/Enter selection, outside
+dismissal, nested top-popup ownership and the default submit policy are
+unchanged. No global Escape binding or focus helper is installed.
+
+Actual native compile probes accept legacy calls and typed callbacks and
+reject boolean or wrong-payload callbacks before runtime. Regression sources
+cover four-host callback/default projection, the actual
+NativeEmbed dialog and node-picker field paths, stale dialog field refusal,
+and the real NSH TextField listener inside a canonical Dialog through the
+public native event boundary. Headless does not synthesize macOS Input Escape;
+the boundary test is explicitly separate from actual AppKit delivery. The
+original actual-AppKit fixture failed at this exact one-Escape assertion and
+will be rerun unchanged after release qualification.
+
 ## Native DOM requests publish their completed patch prefix first
 
 Both native platform-request channels now publish already-completed queued

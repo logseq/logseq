@@ -186,7 +186,18 @@ let run ~check () =
             (Hashtbl.find runtime.Lui_runtime.mounted_nodes option=P.ListItem
              && Properties_state.view_overlay_open ());
           reads := []; holding := true;
-          if List.mem boundary ["search";"search-dispatch";"search-superseded"]
+          let field = Hashtbl.fold (fun node kind found ->
+            if kind=P.TextField then Some node else found)
+            runtime.Lui_runtime.mounted_nodes None |> Option.get in
+          check "the actual node chooser input owns canonical local Escape"
+            (P.Property_map.find_opt P.DismissEnabled
+               (Hashtbl.find runtime.Lui_runtime.runtime_properties field)=Some (P.BoolValue true));
+          if boundary="local-dismiss" then begin
+            ignore (Native_embed.text_changed field "unsaved query");settle ();
+            ignore (Native_embed.dismiss field);settle ();
+            check "the real node selector's field closes only its owned popup without a property write"
+              (not (Properties_state.view_overlay_open ()) && !writes=[])
+          end else if List.mem boundary ["search";"search-dispatch";"search-superseded"]
              || creation_boundary then begin
             let field = Hashtbl.fold (fun node kind found ->
               if kind=P.TextField then Some node else found)
@@ -274,7 +285,7 @@ let run ~check () =
             end
           end
         end))
-      ["block","current";"reference","current";"reference","current-remove";
+      ["local-dismiss","current";"block","current";"reference","current";"reference","current-remove";
        "block","graph";"reference","graph";
        "block","worker";"reference","worker";
        "block","route";"reference","dismiss";"block","replacement";

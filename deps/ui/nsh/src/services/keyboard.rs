@@ -612,6 +612,104 @@ mod tests {
         assert_eq!(events[4]["key"], json!("p"));
     }
 
+    #[derive(Clone)]
+    struct PropertyFieldEvents(Arc<Mutex<Vec<lui_nsh::render::Event>>>);
+
+    #[component]
+    fn CanonicalPropertyField() -> impl IntoElement {
+        use lui_nsh::{render::Event, wire::Batch};
+        let events = engine_context::<PropertyFieldEvents>().unwrap().0.clone();
+        let generation = Rc::new(std::cell::Cell::new(1));
+        let advancing = generation.clone();
+        let renderer = Renderer::new(move |event, renderer| {
+            events.lock().unwrap().push(event.clone());
+            let update = match event {
+                Event::Text(3, value) => Some((3, value)),
+                Event::Dismiss(3) => Some((4, "local-field-canceled".into())),
+                _ => None,
+            };
+            if let Some((id, value)) = update {
+                let next = advancing.get() + 1;
+                renderer
+                    .apply(
+                        Batch::decode(
+                            &json!({"generation":next,"ops":[
+                                {"op":"set-prop","id":id,"property":"text","value":value}
+                            ]})
+                            .to_string(),
+                        )
+                        .unwrap(),
+                    )
+                    .unwrap();
+                advancing.set(next);
+            }
+        });
+        renderer.apply(Batch::decode(&json!({"generation":1,"ops":[
+            {"op":"create-node","id":1,"kind":"column"},
+            {"op":"create-node","id":2,"kind":"dialog"},
+            {"op":"set-prop","id":2,"property":"text","value":"Property workflow"},
+            {"op":"insert-child","parent":1,"child":2,"index":0},
+            {"op":"create-node","id":3,"kind":"text-field"},
+            {"op":"set-prop","id":3,"property":"text","value":"query"},
+            {"op":"set-prop","id":3,"property":"change-enabled","value":true},
+            {"op":"set-prop","id":3,"property":"submit-enabled","value":true},
+            {"op":"set-prop","id":3,"property":"dismiss-enabled","value":true},
+            {"op":"insert-child","parent":2,"child":3,"index":0},
+            {"op":"create-node","id":4,"kind":"text"},
+            {"op":"set-prop","id":4,"property":"text","value":"waiting-for-local-cancel"},
+            {"op":"insert-child","parent":2,"child":4,"index":1}
+        ]}).to_string()).unwrap()).unwrap();
+        renderer.set_root(1).unwrap();
+        renderer.element()
+    }
+
+    #[test]
+    fn canonical_property_field_native_cancel_reaches_its_local_owner_before_blur() {
+        use lui_nsh::render::Event;
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let mut config = EngineConfig::new(Root::of::<CanonicalPropertyField>());
+        config.context = EngineContext::default().with(PropertyFieldEvents(events.clone()));
+        let mut app = Headless::start(config).unwrap();
+        app.wait_for("id:lui-3").unwrap();
+        app.type_text("id:lui-3", "nonempty query").unwrap();
+        let field = app
+            .screen()
+            .layout_nodes()
+            .into_iter()
+            .find(|node| node.test_id.as_deref() == Some("lui-3"))
+            .unwrap()
+            .id;
+        // Headless does not synthesize the platform Input's Escape event.
+        // Exercise that real listener through the public controller boundary;
+        // the independent actual-AppKit fixture qualifies OS delivery and close.
+        app.engine().control().dispatch_event(
+            field,
+            nsh_core::EventKind::KeyPress,
+            nsh_core::EventPayload::Map(vec![(
+                "key",
+                nsh_core::PayloadValue::Str("Escape".into()),
+            )]),
+        );
+        app.wait_for("text:local-field-canceled").unwrap();
+        let observed = events.lock().unwrap();
+        assert_eq!(
+            observed
+                .iter()
+                .filter(|event| **event == Event::Dismiss(3))
+                .count(),
+            1
+        );
+        assert!(
+            !observed
+                .iter()
+                .any(|event| matches!(event, Event::Dismiss(2) | Event::Submit(3)))
+        );
+        assert_eq!(
+            app.screen().input_text("id:lui-3").unwrap(),
+            Some("nonempty query")
+        );
+    }
+
     #[component]
     fn CardsKeyboardProbe() -> impl IntoElement {
         let observed = engine_context::<Observed>().unwrap();

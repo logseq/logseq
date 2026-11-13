@@ -301,7 +301,7 @@ and on_type_chosen d name ty =
    switches to the anchored popover spec (32px input + 32px rows) —
    master's mod+p picker is that compact dropdown, not the roomier
    centered-card variant *)
-let async_select ~placeholder ?(compact = false) ?(new_case_sensitive = false) ?new_option ?on_search
+let async_select ~on_dismiss ~placeholder ?(compact = false) ?(new_case_sensitive = false) ?new_option ?on_search
     fetch : t =
  fun context parent ->
   let sched = context.Lui_ui.ui_scheduler in
@@ -317,12 +317,12 @@ let async_select ~placeholder ?(compact = false) ?(new_case_sensitive = false) ?
         match m with
         | None -> column ~gap:2 []
         | Some items ->
-            Sel.view ~placeholder ~compact ~new_case_sensitive ?new_option ?on_search items)
+            Sel.view ~placeholder ~compact ~new_case_sensitive ?new_option ?on_search ~on_dismiss items)
      (Signal.value items_st))
     context parent
 
 let prop_select_view d : t =
-  async_select ~placeholder:(I18n.t "property/add-or-change")
+  async_select ~on_dismiss:(fun _ -> close_current d) ~placeholder:(I18n.t "property/add-or-change")
     ~compact:(d.d_placement <> Centered)
     ~new_case_sensitive:true
     ~new_option:(fun name ->
@@ -391,7 +391,7 @@ let type_select_view d name : t =
      ]) context parent
 
 let node_tags_view d prop : t =
-  async_select ~placeholder:(I18n.t "property/choose-tags")
+  async_select ~on_dismiss:(fun _ -> close_current d) ~placeholder:(I18n.t "property/choose-tags")
     ~compact:(d.d_placement <> Centered)
     (let* w = D.all_classes () in
      let items =
@@ -547,7 +547,7 @@ let value_edit_view d prop : t =
   let ty = type_of prop in
   if ty = "date" || ty = "datetime" then date_value_view d prop context parent
   else if ty = "checkbox" then
-    (async_select ~placeholder:(title_of prop)
+    (async_select ~on_dismiss:(fun _ -> close_current d) ~placeholder:(title_of prop)
       (let* block = D.entity_by_uuid d.d_target.uuid in
        let value = match D.getf (D.untag block) (ident_of prop) with
          | Some value -> value
@@ -602,7 +602,7 @@ let value_edit_view d prop : t =
                 ~new_block_id:(Ui_services.env_random_uuid ()) ())))
     in
     if closed <> [] then
-      (async_select ~placeholder ~compact:(d.d_placement <> Centered)
+      (async_select ~on_dismiss:(fun _ -> close_current d) ~placeholder ~compact:(d.d_placement <> Centered)
         (let rec eligible_for values = function
           | [] -> Js.Promise.resolve values
           | block_uuid :: rest ->
@@ -615,12 +615,12 @@ let value_edit_view d prop : t =
         V.node_items_source ~block:(D.uuid_ref d.d_target.uuid) ~prop
           ~on_pick:(fun id -> pick_value d prop id)
       in
-      (async_select ~placeholder ~compact:(d.d_placement <> Centered)
+      (async_select ~on_dismiss:(fun _ -> close_current d) ~placeholder ~compact:(d.d_placement <> Centered)
          ?new_option:on_new
          ~on_search:(Some on_search) initial)
         context parent
     else
-      (async_select ~placeholder ~compact:(d.d_placement <> Centered)
+      (async_select ~on_dismiss:(fun _ -> close_current d) ~placeholder ~compact:(d.d_placement <> Centered)
          ?new_option:on_new
          (let* w =
             D.property_values ~property_ident:(ident_of prop)

@@ -367,7 +367,7 @@ let edit_choice_view m choice ~set_pane ~close : t =
         S.refresh_all ();
         Runtime.signal_set set_pane MChoices))
 
-let node_tags_view m : t =
+let node_tags_view m ~close : t =
  fun context parent ->
   let sched = context.Lui_ui.ui_scheduler in
   let scope = context.Lui_ui.ui_scope in
@@ -422,6 +422,7 @@ let node_tags_view m : t =
                 Properties_select.item ~key:uuid (D.ref_title c) (fun () ->
                   save (fun () -> Js.Promise.resolve c))) (D.entity_uuid_of c)) values in
             Properties_select.view ~placeholder:(I18n.t "property/choose-tags")
+              ~on_dismiss:(fun _ -> close ())
               ~compact:true ~selected_keys:(Signal.value selected)
               ~new_option:new_tag items) (Signal.value classes) ]) context parent
 
@@ -591,7 +592,7 @@ let menu_body_view ~more_options ~with_title m ~close : t =
              | MChoices -> choices_pane_view m ~set_pane:pane ~close
              | MEditChoice c -> edit_choice_view m c ~set_pane:pane ~close
              | MDefaultValue -> default_value_pane_view m ~close
-             | MNodeTags -> node_tags_view m)
+             | MNodeTags -> node_tags_view m ~close)
           ])
      (Signal.value pane))
     context parent

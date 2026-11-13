@@ -484,7 +484,7 @@ let new_node ctx row ~owned ~retire ~close text =
 (* ---------- views ---------- *)
 
 (* Fetch-backed chooser content mounted in an independent popup scope. *)
-let picker_content ?selected_keys ~placeholder ~new_option ~initial ~on_search
+let picker_content ~close ?selected_keys ~placeholder ~new_option ~initial ~on_search
     : t =
  fun context parent ->
   let sched = context.Lui_ui.ui_scheduler in
@@ -506,7 +506,7 @@ let picker_content ?selected_keys ~placeholder ~new_option ~initial ~on_search
         | None -> column ~gap:2 []
             | Some (items, on_search) ->
                 Sel.view ~placeholder ?new_option ?selected_keys
-                  ~on_search:(Some on_search) items)
+                  ~on_search:(Some on_search) ~on_dismiss:(fun _ -> close ()) items)
          (Signal.value items_st)
      ])
     context parent
@@ -892,7 +892,7 @@ let repeat_type_picker ~selected_signal ~options ~on_pick ~on_clear : t =
          let items=if selected=0 then items else items @
            [Sel.item ~icon:"x" (I18n.t "property/clear-value") (fun () -> on_clear ();close ())] in
          closed_value_popup ~on_dismiss:(fun _ -> close ())
-           (Sel.view ~compact:true ~show_empty_result:false
+           (Sel.view ~compact:true ~show_empty_result:false ~on_dismiss:(fun _ -> close ())
               ~placeholder:(I18n.t1 "property/set-placeholder"
                 (I18n.t "property.built-in/repeat-repeat-type")) items)) selected_signal)]) context parent
 
@@ -1373,7 +1373,7 @@ let closed_value_view ?(jump_target = true) ~positioned ~table_view ctx row : t 
                    (function
                      | None -> column ~gap:2 []
                      | Some items ->
-                         Sel.view ~compact:true ~show_empty_result:false
+                         Sel.view ~compact:true ~show_empty_result:false ~on_dismiss:(fun _ -> close ())
                            ~selected_keys:(Signal.value selected)
                            ~placeholder:(I18n.t1 "property/set-placeholder" (D.row_title row)) items)
                    (Signal.value items_st) ]) popup_context popup_parent) in
@@ -1466,7 +1466,7 @@ let node_view ?(jump_target = true) ctx row : t =
            let on_search query =
              if owned () then deliver (search query) else retire_items ()
            in
-           (picker_content ~selected_keys:(Signal.value selected)
+           (picker_content ~close ~selected_keys:(Signal.value selected)
               ~placeholder:
                 (I18n.t1 "property/set-placeholder" (D.row_title row))
               ~new_option:(if List.mem (D.row_type row) ["node";"class"] then

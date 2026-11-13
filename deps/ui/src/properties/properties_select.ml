@@ -5,7 +5,8 @@
    master's .cp__select).
 
    Keyboard: unmodified Up/Down move selection while input focus stays
-   in place; Enter picks that result. Escape is owned by the popup. *)
+   in place; Enter picks that result. An optional field Dismiss callback
+   requests its captured popup's close without application shortcuts. *)
 
 open Promise_ext
 open Lui_elements
@@ -74,7 +75,7 @@ type sel_state =
    menu_items. Mounted inside the property dialog card or an anchored
    dropdown_menu. *)
 let view ~placeholder ?(compact = false) ?(show_empty_result = true) ?(new_case_sensitive = false) ?new_option ?selected_keys ?(on_enter_text = None)
-    ?(on_search = None) items : t =
+    ?(on_search = None) ?on_dismiss items : t =
  fun context parent ->
   Keyboard_capture.suspend_shortcuts ~scope:context.Lui_ui.ui_scope;
   let sched = context.Lui_ui.ui_scheduler in
@@ -232,7 +233,7 @@ let view ~placeholder ?(compact = false) ?(show_empty_result = true) ?(new_case_
            | Lui_protocol.NavigatePrevious _ -> navigate (-1)
            | Lui_protocol.NavigateNext _ -> navigate 1
            | _ -> ())
-         ~on_submit:(fun _ -> pick ())
+         ~on_submit:(fun _ -> pick ()) ?on_dismiss
          [])
      ; list_view
      ]))

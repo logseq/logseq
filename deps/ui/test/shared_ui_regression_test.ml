@@ -2444,7 +2444,7 @@ let property_shortcut_ownership ~registry ~profile =
       let chosen = ref [] and dismissed = ref 0 in
       let selector label = Ui_components.dialog ~text:label
         ~on_dismiss:(fun _ -> incr dismissed)
-        [Properties_select.view ~placeholder:label
+        [Properties_select.view ~placeholder:label ~on_dismiss:(fun _ -> incr dismissed)
           [Properties_select.item "Alpha" (fun () -> chosen:="Alpha"::!chosen);
            Properties_select.item "Beta" (fun () -> chosen:="Beta"::!chosen)]] in
       let first = mount (selector "First property owner") in
@@ -2461,9 +2461,14 @@ let property_shortcut_ownership ~registry ~profile =
       S.dispatch first (P.NavigateNext input.M.id);
       S.submit first input.M.id;
       check "property input, navigation and Enter retain their actual local handlers" (!chosen=["Beta"]);
+      check "the Properties-owned input explicitly admits canonical local dismissal"
+        (Hashtbl.find_opt input.M.props "dismiss-enabled"=Some (P.BoolValue true));
+      S.dismiss first input.M.id;
+      check "field dismissal reaches its captured workflow without selecting a value"
+        (!dismissed=1 && !chosen=["Beta"]);
       let dialog = List.find (fun node -> node.M.kind="dialog") (nodes first) in
       S.dismiss first dialog.M.id;
-      check "property Escape dismissal retains its local event handler" (!dismissed=1);
+      check "the surrounding property surface retains its own dismissal handler" (!dismissed=2);
       let second = mount (selector "Replacement property owner") in
       dispose first;
       check "retiring an older property scope cannot release a replacement owner"
@@ -2490,7 +2495,13 @@ let property_shortcut_ownership ~registry ~profile =
       ignore (press "t");
       check "a fresh sequence works after the final property owner closes" (press "l"=(true,true));
       ignore (press ~composing:true "t");
-      check "composition cannot arm a delayed application prefix" (!Editor_keys.chord_seq=[]))
+      check "composition cannot arm a delayed application prefix" (!Editor_keys.chord_seq=[]);
+      let legacy : Lui_elements.t = Properties_select.view ~placeholder:"Standalone selector" [] in
+      let plain=mount legacy in
+      let plain_field=List.find (fun node -> node.M.kind="text-field") (nodes plain) in
+      check "omitting the optional dismissal callback preserves the standalone selector default"
+        (Hashtbl.find_opt plain_field.M.props "dismiss-enabled"<>Some (P.BoolValue true));
+      dispose plain)
 
 let run_views ~registry ~profile ~finish =
   let finish () =

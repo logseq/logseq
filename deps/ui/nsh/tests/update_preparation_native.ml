@@ -460,6 +460,74 @@ let native_property_shortcut_publication () =
     ignore (key "t");
     check "fresh native browse sequences dispatch after property scope disposal" (key "l"))
 
+let native_property_dialog_field_dismissal () =
+  let module P = Lui_protocol in
+  let module W = Wire in
+  let prior_app= !Native_embed.current_app and prior_model= !Runtime.read_model
+  and prior_flush= !Runtime.app_flush and prior_worker= !Runtime.worker
+  and prior_dialog= !Properties_dialog.current and prior_signal= !Properties_dialog.current_sig
+  and prior_scope= !Properties_dialog.open_scope and prior_close= !Properties_dialog.current_on_close
+  and prior_pending= !Properties_dialog.pending_open
+  and prior_overlays= !Properties_state.overlays
+  and prior_view_overlays= !Properties_state.view_overlays_state
+  and prior_overlay_generation= !Properties_state.overlay_generation in
+  let prop=W.Map [W.kw "db/ident",W.kw "fixture/field-dismiss";
+    W.kw "block/title",W.String "Dismiss fixture";W.kw "logseq.property/type",W.kw "checkbox"] in
+  let writes=ref 0 and closed=ref 0 in
+  let worker : Worker_client.t =
+    {invoke_fn=(fun name _ ->
+       if name="thread-api/get-all-properties" then Js.Promise.resolve (W.Array [prop])
+       else if name="thread-api/apply-outliner-ops" then (incr writes;Js.Promise.resolve W.Nil)
+       else Js.Promise.resolve W.Nil);
+     on_message=(fun _ _ -> ());dead=Js.Promise.liveness ();
+     capture_restore_fn=(fun () -> fun () -> Js.Promise.resolve ())} in
+  Properties_dialog.current:=None;Properties_dialog.current_sig:=None;
+  Properties_dialog.pending_open:=None;
+  Properties_state.overlays:=[];Properties_state.view_overlays_state:=None;
+  Runtime.worker:=Some worker;
+  let model={Model.initial with repo=Some "property-field-dismiss"} in
+  let backend : P.backend = {backend_profile=P.profile P.MacOS P.NshHost;apply_batch=(fun _ -> true)} in
+  let app=Lui_app.create backend model (fun model (_:Action.t) -> model)
+    (fun _ _ _ -> Properties_dialog.view) in
+  Fun.protect ~finally:(fun () ->
+    ignore (Lui_app.dispose app);Native_embed.current_app:=prior_app;
+    Runtime.read_model:=prior_model;Runtime.app_flush:=prior_flush;Runtime.worker:=prior_worker;
+    Properties_dialog.current:=prior_dialog;Properties_dialog.current_sig:=prior_signal;
+    Properties_dialog.open_scope:=prior_scope;Properties_dialog.current_on_close:=prior_close;
+    Properties_dialog.pending_open:=prior_pending;Properties_state.overlays:=prior_overlays;
+    Properties_state.view_overlays_state:=prior_view_overlays;
+    Properties_state.overlay_generation:=prior_overlay_generation) (fun () ->
+    Native_embed.current_app:=Some app;Runtime.read_model:=(fun () -> Lui_app.model app);
+    Runtime.app_flush:=(fun () -> ignore (Lui_app.flush app));
+    ignore (Lui_app.start app);
+    let settle ()=Host.drain ();ignore (Lui_app.flush app) in
+    let target : Properties_dialog.target =
+      {uuid="23456789-1234-4abc-8def-000000000777";uuids=[];db_id=None;is_tag=false;title="Owner"} in
+    let open_ ()=Properties_dialog.open_dialog ~on_close:(fun () -> incr closed) target;settle () in
+    let runtime=Lui_app.runtime app in
+    let field ()=Hashtbl.fold (fun node kind found ->
+      if kind=P.TextField then Some node else found) runtime.Lui_runtime.mounted_nodes None |> Option.get in
+    open_ ();
+    let first=field () in
+    check "the actual fetch-backed Properties dialog enables field cancellation"
+      (P.Property_map.find_opt P.DismissEnabled
+         (Hashtbl.find runtime.Lui_runtime.runtime_properties first)=Some (P.BoolValue true));
+    ignore (Native_embed.text_changed first "nonempty query");settle ();
+    ignore (Native_embed.dismiss first);settle ();
+    check "actual native field Dismiss closes its dialog without selecting or writing"
+      (not (Properties_dialog.is_open ()) && !closed=1 && !writes=0);
+    open_ ();
+    let second=field () in
+    check "a reopened property workflow owns a fresh field" (second<>first);
+    ignore (Native_embed.dismiss first);settle ();
+    check "a retired field cannot dismiss the replacement workflow"
+      (Properties_dialog.is_open () && !closed=1 && !writes=0);
+    ignore (Native_embed.text_changed second "another query");settle ();
+    ignore (Native_embed.dismiss second);settle ();
+    check "the replacement field closes only its own current workflow once"
+      (not (Properties_dialog.is_open ()) && !closed=2 && !writes=0));
+  print_endline "PASS actual native property dialog field dismissal and replacement ownership"
+
 let native_cards_shortcut_publication () =
   let prior_app = !Native_embed.current_app and prior_last = !Native_embed.last_native_keymap
   and prior_model = !Runtime.read_model and prior_flush = !Runtime.app_flush
@@ -3885,6 +3953,7 @@ let () =
   native_entry_admission ();
   editor_keyboard_capture_order ();
   native_property_shortcut_publication ();
+  native_property_dialog_field_dismissal ();
   native_cards_shortcut_publication ();
   native_worker_admission ();
   native_worker_update_identity ();
