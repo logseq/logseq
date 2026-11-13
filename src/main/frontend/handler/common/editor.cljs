@@ -9,12 +9,13 @@
   "Run a graph's edit commands in order, including their async preparation.
   Each command returns its own result; a rejected command releases the queue."
   [repo command]
-  (let [previous (get @*command-tails repo (p/resolved nil))
+  (let [generation (state/get-state :editor/graph-generation)
+        previous (get @*command-tails repo (p/resolved nil))
         result (p/then previous
                        (fn [_]
-                         (when-not (= repo (state/get-current-repo))
-                           (throw (ex-info "Graph changed before editor command" {:repo repo})))
-                         (command)))
+                         (when (and (= repo (state/get-current-repo))
+                                    (= generation (state/get-state :editor/graph-generation)))
+                           (command))))
         tail (p/catch result (constantly nil))]
     (swap! *command-tails assoc repo tail)
     (p/finally tail

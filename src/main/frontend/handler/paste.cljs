@@ -8,6 +8,7 @@
             [frontend.extensions.video :as video]
             [frontend.format.block :as block]
             [frontend.format.mldoc :as mldoc]
+            [frontend.handler.common.editor :as editor-common]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.editor.assets :as editor-assets]
             [frontend.handler.editor.autopair :as editor-autopair]
@@ -207,13 +208,10 @@
     (db-async/<get-block repo (:block/uuid block) {:children? false})))
 
 (defn- paste-copied-blocks-or-text
-  [input text e html]
-  (util/stop e)
-  (let [repo (state/get-current-repo)
-        copied-blocks-from-memory (get-copied-blocks-from-memory text)]
+  [input text html copied-blocks]
+  (let [repo (state/get-current-repo)]
     (->
-     (p/let [{:keys [graph blocks embed-block? op]} (or copied-blocks-from-memory
-                                                        (get-copied-blocks))]
+     (p/let [{:keys [graph blocks embed-block? op]} copied-blocks]
       (if (and (seq blocks) (= graph repo))
        ;; Handle internal paste
          (let [revert-cut-txs (get-revert-cut-txs blocks)
@@ -246,43 +244,26 @@
                 (state/pub-event! [:capture-error {:error error
                                                    :payload {:type ::paste-copied-blocks-or-text}}]))))))
 
-(defn paste-text-in-one-block-at-point
-  []
-  (utils/getClipText
-   (fn [clipboard-data]
-     (when-let [_ (state/get-input)]
-       (if (common-util/url? clipboard-data)
-         (if (string/blank? (util/get-selected-text))
-           (editor-handler/insert (or (wrap-macro-url clipboard-data) clipboard-data) true)
-           (editor-format/html-link-format! clipboard-data))
-         (editor-handler/insert clipboard-data true))))
-   (fn [error]
-     (js/console.error error))))
+(defn- paste-text-in-one-block-at-point
+  [text]
+  (if (common-util/url? text)
+    (if (string/blank? (util/get-selected-text))
+      (editor-handler/insert (or (wrap-macro-url text) text) true)
+      (editor-format/html-link-format! text))
+    (editor-handler/insert text true)))
 
 (defn- editing-display-type-block?
   []
   (boolean
    (:logseq.property.node/display-type (state/get-edit-block))))
 
-(defn- paste-text-or-blocks-aux
-  [input e text html]
-  (if (or (editing-display-type-block?)
-          (thingatpt/markdown-src-at-point input))
-    (when-not (mobile-util/native-ios?)
-      (util/stop e)
-      (paste-text-in-one-block-at-point))
-    (paste-copied-blocks-or-text input text e html)))
-
-(defn- paste-file-if-exists [id e]
+(defn- paste-files! [id files]
   (when id
-    (let [clipboard-data (gobj/get e "clipboardData")
-          files (.-files clipboard-data)]
-      (p/let [blocks (editor-assets/upload-asset! id files
-                                                   (get (state/get-edit-block) :block/format :markdown)
-                                                   editor-handler/*asset-uploading? true)]
-        (when-let [asset (first blocks)]
-          (editor-handler/edit-block! asset :max {})))
-      (util/stop e))))
+    (p/let [blocks (editor-assets/upload-asset! id files
+                                                (get (state/get-edit-block) :block/format :markdown)
+                                                editor-handler/*asset-uploading? true)]
+      (when-let [asset (first blocks)]
+        (editor-handler/edit-block! asset :max {})))))
 
 (defn editor-on-paste!
   "Pastes with formatting and includes the following features:
@@ -295,23 +276,42 @@
 - paste replaces selected text"
   [id]
   (fn [e]
-    (state/set-state! :editor/on-paste? true)
     (let [clipboard-data (gobj/get e "clipboardData")
           html (.getData clipboard-data "text/html")
           text (.getData clipboard-data "text")
-          has-files? (seq (.-files clipboard-data))]
-      (if has-files?
-        (paste-file-if-exists id e)
-        (paste-text-or-blocks-aux (state/get-input) e text html)))))
+          files (when (seq (.-files clipboard-data)) (into-array (.-files clipboard-data)))
+          pending? (some? (state/get-state :editor/pending-new-block))
+          copied-blocks (delay (or (get-copied-blocks-from-memory text) (get-copied-blocks)))
+          paste! (fn []
+                   (state/set-state! :editor/on-paste? true)
+                   (let [input (state/get-input)]
+                     (cond
+                       files (paste-files! (if pending? (state/get-edit-input-id) id) files)
+                       (or (editing-display-type-block?)
+                           (thingatpt/markdown-src-at-point input))
+                       (paste-text-in-one-block-at-point text)
+                       :else (paste-copied-blocks-or-text input text html @copied-blocks))))]
+      (if (and (not pending?) (not files) (mobile-util/native-ios?)
+               (or (editing-display-type-block?) (thingatpt/markdown-src-at-point (state/get-input))))
+        (state/set-state! :editor/on-paste? true)
+        (do
+          (util/stop e)
+          (if pending?
+            (do
+              ;; Clipboard access belongs to this event, even if the target editor is still opening.
+              (when-not files (force copied-blocks))
+              (editor-common/<enqueue-command! (state/get-current-repo) paste!))
+            (paste!)))))))
 
 (defn editor-on-paste-raw!
   "Raw pastes without _any_ formatting. Can also replace selected text with a paste"
   []
-  (state/set-state! :editor/on-paste? true)
-  (utils/getClipText
-   (fn [clipboard-data]
-     (when (state/get-input)
-       (commands/delete-selection! (state/get-edit-input-id))
-       (editor-handler/insert clipboard-data true)))
-   (fn [error]
-     (js/console.error error))))
+  (let [paste! (fn [text]
+                 (when (state/get-input)
+                   (state/set-state! :editor/on-paste? true)
+                   (commands/delete-selection! (state/get-edit-input-id))
+                   (editor-handler/insert text true)))]
+    (if (state/get-state :editor/pending-new-block)
+      (let [text (.readText js/navigator.clipboard)]
+        (editor-common/<enqueue-command! (state/get-current-repo) #(p/then text paste!)))
+      (utils/getClipText paste! (fn [error] (js/console.error error))))))
