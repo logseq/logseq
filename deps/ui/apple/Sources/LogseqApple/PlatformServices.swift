@@ -34,6 +34,8 @@ final class PlatformServices {
     @ObservationIgnored private(set) var parents: [Int: Int] = [:]
     @ObservationIgnored private(set) var children: [Int: [Int]] = [:]
     @ObservationIgnored lazy var editorGeometry = EditorGeometry(services: self)
+    @ObservationIgnored var decodedImageSizes: [Int: CGSize] = [:]
+    @ObservationIgnored var pendingImageSizes: [Int: UInt64] = [:]
     @ObservationIgnored private var menuActions: [MenuAction] = []
     @ObservationIgnored private var panels: [NSSavePanel] = []
     @ObservationIgnored private(set) var closed = false
@@ -64,6 +66,7 @@ final class PlatformServices {
     // This mirror contains host presentation metadata only; OCaml owns documents.
     func resetPresentation() {
         editorGeometry.clear()
+        decodedImageSizes.removeAll(); pendingImageSizes.removeAll()
         nodes.removeAll(); parents.removeAll(); children.removeAll(); views.removeAll(); frames.removeAll(); incarnations.removeAll()
         editors.removeAll(); focusIntents.removeAll()
     }
@@ -82,6 +85,7 @@ final class PlatformServices {
                     pending.append(contentsOf: parents.compactMap { $0.value == dead ? $0.key : nil })
                     nodes.removeValue(forKey: dead); parents.removeValue(forKey: dead); incarnations.removeValue(forKey: dead)
                     children.removeValue(forKey: dead)
+                    decodedImageSizes.removeValue(forKey: dead); pendingImageSizes.removeValue(forKey: dead)
                     views.removeValue(forKey: dead); frames.removeValue(forKey: dead)
                 }
                 for parent in children.keys { children[parent]?.removeAll { nodes[$0] == nil } }
@@ -286,16 +290,13 @@ final class PlatformServices {
             try context.emit(name: "dom-event", values: ["name": .string(name), "payload": .string(try jsonString(body))])
         }
     }
-    func image(_ context: LUIAppleExtensionViewContext) -> NSImage? {
-        guard let attrs = context.string("attrs"), let request = try? object(attrs), let source = request["src"] as? String else { return nil }
-        if source.hasPrefix("data:"), let comma = source.firstIndex(of: ","), let bytes = Data(base64Encoded: String(source[source.index(after: comma)...])) { return NSImage(data: bytes) }
-        if let url = URL(string: source), url.isFileURL { return NSImage(contentsOf: url) }
-        guard let root = graphContext["asset-dir"], !root.isEmpty else { return nil }
-        var relative = source
-        for prefix in ["../assets/", "./assets/", "assets/"] where relative.hasPrefix(prefix) { relative = String(relative.dropFirst(prefix.count)); break }
-        let url = URL(fileURLWithPath: root).appendingPathComponent(relative).standardizedFileURL
-        guard url.path.hasPrefix(root + "/") else { return nil }
-        return NSImage(contentsOf: url)
+    func flushImageSizes() throws {
+        for (id, incarnation) in pendingImageSizes {
+            guard incarnations[id] == incarnation else { pendingImageSizes.removeValue(forKey: id); continue }
+            guard let size = decodedImageSizes[id] ?? backend?.naturalImageSize(nodeID: id) else { continue }
+            pendingImageSizes.removeValue(forKey: id)
+            try reply("node-natural-size", ["nodeId": id, "width": size.width, "height": size.height])
+        }
     }
     func close() {
         closed = true
@@ -386,9 +387,9 @@ final class PlatformServices {
             guard let target else { throw HostError("Native scroll target is unavailable") }
             target.scrollToVisible(target.bounds)
         case "natural-size":
-            if let size = backend?.naturalImageSize(nodeID: id) ?? (target as? NSImageView)?.image?.size {
+            if let size = decodedImageSizes[id] ?? backend?.naturalImageSize(nodeID: id) ?? (target as? NSImageView)?.image?.size {
                 try reply("node-natural-size", ["nodeId": id, "width": size.width, "height": size.height])
-            }
+            } else if let incarnation = incarnations[id] { pendingImageSizes[id] = incarnation }
         case "click":
             if let button = target as? NSButton { button.performClick(nil) }
             else { _ = try runtime?.document("click", ["nodeId": id]) }

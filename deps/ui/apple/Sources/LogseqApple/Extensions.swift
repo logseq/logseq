@@ -83,6 +83,7 @@ struct RawElement: View {
     }
     var body: some View {
         let _ = context.revision
+        if context.string("display") != "none" {
         element
             .font(context.number("font-size").map { .system(size: $0) })
             .opacity(context.number("opacity") ?? 1)
@@ -91,6 +92,7 @@ struct RawElement: View {
             .frame(minWidth: context.dimension("min-width"), maxWidth: context.dimension("max-width"), minHeight: context.dimension("min-height"), maxHeight: context.dimension("max-height"))
             .accessibilityIdentifier(context.string("accessibility-identifier") ?? "lui-node-\(context.nodeID)")
             .background(ViewAnchor(node: context.nodeID, services: services))
+        }
     }
     @ViewBuilder private var element: some View {
         switch tag {
@@ -98,19 +100,47 @@ struct RawElement: View {
         case "hr": Divider()
         case "button", "summary": Button(action: { services.emitDOM(context, "click") }) { children }
         case "input", "textarea": RawInput(context: context, services: services)
-        case "img":
-            if let image = services.image(context) { Image(nsImage: image).resizable().scaledToFit() }
-            else { Text(context.string("text") ?? "").onAppear { services.unsupported("image", "Image source could not be decoded") } }
+        case "img": NativeAssetImage(context: context, services: services).id(services.incarnations[context.nodeID])
+        case "video", "audio": NativeAssetPlayer(context: context, services: services).id(services.incarnations[context.nodeID]).frame(height: tag == "audio" ? 48 : 240)
+        case "iframe": NativeEmbeddedWeb(context: context, services: services).id(services.incarnations[context.nodeID]).frame(height: context.dimension("height") ?? 240)
+        case "table": nativeTable
+        case "tr": HStack(alignment: .top, spacing: 12) { children }
+        case "th", "strong", "b": container.bold()
+        case "em", "i": container.italic()
+        case "del": container.strikethrough()
+        case "u", "ins": container.underline()
+        case "pre", "code", "kbd": container.font(.system(.body, design: .monospaced))
+        case "blockquote": HStack(alignment: .top, spacing: 10) { Rectangle().fill(.secondary).frame(width: 3); container.italic() }
         case "pdf": PDFWorkspace(context: context, services: services).id(services.incarnations[context.nodeID])
-        case "video", "audio", "iframe", "canvas", "svg", "path", "circle", "rect", "line", "polyline", "polygon", "g", "defs", "use", "ellipse":
+        case "canvas", "svg", "path", "circle", "rect", "line", "polyline", "polygon", "g", "defs", "use", "ellipse":
             Text("[\(tag)]").onAppear { services.unsupported("logseq-\(tag)", "Native extension rendering is unavailable") }
         default:
-            if context.string("display") == "none" { EmptyView() }
-            else if context.string("orientation") == "horizontal" {
-                HStack(alignment: .top, spacing: context.number("gap") ?? 0) { children }
-            } else {
-                VStack(alignment: .leading, spacing: context.number("gap") ?? 0) { children }
-            }
+            if context.string("display") == "none" { EmptyView() } else { container }
+        }
+    }
+    @ViewBuilder private var container: some View {
+        if context.string("orientation") == "horizontal" { HStack(alignment: .top, spacing: context.number("gap") ?? 0) { children } }
+        else { VStack(alignment: .leading, spacing: context.number("gap") ?? 0) { children } }
+    }
+    private var tableRows: [Int] {
+        var rows: [Int] = []
+        func walk(_ id: Int) {
+            if context.extensionIdentifier(of: id) == "logseq-tr" { rows.append(id); return }
+            for child in context.childIDs(of: id) { walk(child) }
+        }
+        for child in context.childIDs { walk(child) }
+        return rows
+    }
+    private var nativeTable: some View {
+        let _ = context.measureStamp(of: context.nodeID)
+        return ScrollView(.horizontal) {
+            Grid(alignment: .topLeading, horizontalSpacing: 12, verticalSpacing: 8) {
+                ForEach(tableRows, id: \.self) { row in
+                    GridRow {
+                        ForEach(context.childIDs(of: row), id: \.self) { cell in context.nodeView(of: cell).padding(6) }
+                    }
+                }
+            }.padding(6)
         }
     }
 }

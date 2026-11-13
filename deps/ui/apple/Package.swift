@@ -11,6 +11,6 @@ let package = Package(
     targets: [
         .executableTarget(name: "LogseqApple", dependencies: [
             .product(name: "LUIAppleBackendStatic", package: "lui")
-        ], linkerSettings: [.linkedFramework("AppKit"), .linkedFramework("Security"), .linkedFramework("PDFKit"), .linkedFramework("WebKit")])
+        ], linkerSettings: [.linkedFramework("AppKit"), .linkedFramework("Security"), .linkedFramework("PDFKit"), .linkedFramework("WebKit"), .linkedFramework("AVKit")])
     ]
 )

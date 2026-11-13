@@ -67,18 +67,19 @@ struct PDFWorkspace: View {
 extension PlatformServices {
     func assetURL(_ source: String) throws -> URL {
         if let url = URL(string: source), ["https", "http"].contains(url.scheme?.lowercased() ?? "") { return url }
-        guard let rootPath = graphContext["asset-dir"], !rootPath.isEmpty else { throw HostError("Asset graph context is unavailable") }
-        let root = URL(fileURLWithPath: rootPath, isDirectory: true).standardizedFileURL.resolvingSymlinksInPath()
+        let root = graphContext["asset-dir"].flatMap { $0.isEmpty ? nil : URL(fileURLWithPath: $0, isDirectory: true).standardizedFileURL.resolvingSymlinksInPath() }
+        let resources = ProcessInfo.processInfo.environment["LOGSEQ_NATIVE_ASSET_DIR"].map { URL(fileURLWithPath: $0, isDirectory: true).standardizedFileURL.resolvingSymlinksInPath() }
         let candidate: URL
         if let url = URL(string: source), url.isFileURL { candidate = url }
         else if source.hasPrefix("/") { candidate = URL(fileURLWithPath: source) }
         else {
             var relative = source
             for prefix in ["../assets/", "./assets/", "assets/"] where relative.hasPrefix(prefix) { relative = String(relative.dropFirst(prefix.count)); break }
-            candidate = root.appendingPathComponent(relative)
+            guard let base = source.hasPrefix("img/") ? resources : root else { throw HostError("Asset graph context is unavailable") }
+            candidate = base.appendingPathComponent(relative)
         }
         let resolved = candidate.standardizedFileURL.resolvingSymlinksInPath()
-        guard resolved.path.hasPrefix(root.path + "/") else { throw HostError("Asset path escapes the active graph") }
+        guard [root, resources].compactMap({ $0 }).contains(where: { resolved.path.hasPrefix($0.path + "/") }) else { throw HostError("Asset path escapes the graph and bundled resources") }
         return resolved
     }
 }

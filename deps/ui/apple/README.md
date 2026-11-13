@@ -143,9 +143,13 @@ outside this host's current acceptance scope.
 
 The paired LUI package exposes icon registration, image dimensions, snapshots
 and committed text geometry. Bundled Tabler icons and custom `app-icons` use
-the public icon registry. Native scroll requests still require a mounted
-scroll container. Unsupported presentation mutations and raw media/SVG/canvas
-widgets return a structured `platform-error` and log `UNSUPPORTED`.
+the public icon registry. Images load asynchronously from graph assets,
+bundled resources, HTTP(S) or base64 data URIs, then answer pending dimension
+queries. Audio/video use AVKit; iframe embeds use an isolated WKWebView with
+native external-link handling. Raw tables use a horizontally scrollable
+SwiftUI grid. Native scroll requests still require a mounted scroll container.
+Unsupported presentation mutations and raw SVG/canvas widgets return a
+structured `platform-error` and log `UNSUPPORTED`.
 
 Build and package validation do not establish interaction parity. Acceptance
 requires the real macOS host with isolated graph/UI state, including journal
