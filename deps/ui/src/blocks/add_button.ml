@@ -1,10 +1,8 @@
 (* Page-level .block-add-button — the trailing "click to add block" row
    (cljs components/page.cljs add-button-inner), emitted declaratively as
    the last child of every .page-blocks-inner region (page routes, block
-   routes, journal items, sidebar items, previews, quick-add). Clicks
-   reach Editor_actions.append_block via Editor_keys' document-level
-   listeners matching closest ".block-add-button" and reading
-   data-parentblockid. *)
+   routes, journal items, sidebar items, previews, quick-add). Presses
+   reach Editor_actions.append_block through the semantic event channel. *)
 
 open Lui_elements
 
@@ -21,14 +19,16 @@ open Lui_elements
    about #e9e9e9 — the bullet the empty journal actually shows. Keep
    the row hidden once real blocks exist, and paint the empty-page
    dot at full opacity in the same gray as a block bullet. *)
-let el ?puuid ~(flags : 'a -> (bool * bool) Signal.signal) : t =
+let el ?puuid ?(scope = "main")
+    ~(flags : 'a -> (bool * bool) Signal.signal) : t =
  fun context parent ->
   if Ui_services.env_publishing () then Logseq_el.nothing context parent
   else
     let fs = flags context in
-    (* the doc-level click/Enter listener matches closest
-       ".block-add-button" and reads data-parentblockid *)
-    (Ui_parts.class_signal fs
+    (Ui_parts.pressable
+       ~on_press:(fun _ ->
+         Editor_actions.append_block ?for_page:puuid ~scope ())
+       (Ui_parts.class_signal fs
        (fun (_has, indented) ->
          "ls-block block-add-button flex-1 flex-col rounded-sm cursor-text transition-opacity ease-in duration-100 !py-0 "
          ^ (if indented then " ls-block-content-indent" else ""))
@@ -60,5 +60,5 @@ let el ?puuid ~(flags : 'a -> (bool * bool) Signal.signal) : t =
                               ~corner_radius:999 ~opacity:1.
                               ~background:
                                 "var(--lx-gray-09, var(--ls-block-bullet-color))"
-                              [] ] ]) ] ]))
+                              [] ] ]) ] ])))
       context parent

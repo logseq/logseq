@@ -865,9 +865,7 @@ let on_normal_key ev =
         (A.selected_uuids ())
   | "Enter" when not shift -> (
       match closest ".block-add-button" (ev.Ui_services.target) with
-      | Some btn ->
-          ev.Ui_services.prevent_default ();
-          A.append_block ?for_page:(btn.Ui_services.attr "data-parentblockid") ()
+      | Some _ -> ()
       | None -> (
           match S.anchor () with
           | Some u when selected () ->
@@ -1810,16 +1808,11 @@ let on_click ev =
     (* a block-range drag ends with a click on the anchor row — the
        gesture already produced a selection, the click must not open
        the anchor's editor *)
-    if Block_selection.consume_suppress () then ()
+    if Block_selection.consume_suppress () then ev.Ui_services.stop_immediate ()
     else begin
       let target = ev.Ui_services.target in
-      (* the add-button path defers through S.defer_init, so it works
-         even on an empty page where no block_row has mounted the
-         state yet *)
       match closest ".block-add-button" target with
-  | Some btn ->
-      A.append_block ?for_page:(btn.Ui_services.attr "data-parentblockid")
-        ~scope:(A.scope_of_el btn) ()
+  | Some _ -> ()
   | None ->
       if S.ready () then
         (

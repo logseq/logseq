@@ -825,7 +825,7 @@ let blocks_inner ?puuid ?(virtualize = false) ?(library = false)
         (box ~key:"page-blocks-inner" ~style_class:"page-blocks-inner"
            ~data_attrs:(("data-cid", scope) :: inner_attrs)
         (body
-         @ [ Add_button.el ?puuid
+         @ [ Add_button.el ?puuid ~scope
                ~flags:(fun ctx ->
                  Signal.constant ctx.Lui_ui.ui_scheduler
                    (blocks <> [], false))
@@ -1390,7 +1390,7 @@ let blocks_area ~scope ~library ?puuid (ms : Model.t Signal.signal) : t =
                | Some u -> [ ("data-containerid", u) ]
                | None -> [])
             [ Lui_elements.if_ ~test:nonempty list_el ]
-        ; Add_button.el ?puuid
+        ; Add_button.el ?puuid ~scope
             ~flags:(fun _ ->
               Logseq_el.own ctx
                 (Signal.map

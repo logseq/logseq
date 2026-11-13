@@ -734,7 +734,7 @@ let item_body st idx (it : Sidebar_state.item) =
                      (List.map
                         (Tree.block_row ~scope:"sidebar")
                         it.blocks
-                      @ [ Add_button.el ?puuid:it.Sidebar_state.uuid
+                      @ [ Add_button.el ?puuid:it.Sidebar_state.uuid ~scope:"sidebar"
                             ~flags:(fun ctx ->
                               Signal.constant ctx.Lui_ui.ui_scheduler
                                 (has_children, indented))

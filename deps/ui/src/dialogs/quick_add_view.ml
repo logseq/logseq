@@ -40,7 +40,7 @@ let body (_ms : Model.t Signal.signal) : t =
                   (List.map (Tree.block_row ~scope:"quick-add") blocks
                    @ [ (* cljs quick_add page-blocks mounts
                           page-blocks-cp, which carries add-button *)
-                       Add_button.el
+                       Add_button.el ~scope:"quick-add"
                          ?puuid:
                            (Quick_add_state.value ()).Quick_add_state.page_uuid
                          ~flags:(fun ctx ->
