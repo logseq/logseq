@@ -1278,6 +1278,82 @@ let sidebar_favorite_rows ~registry ~profile =
        && (find "sidebar-page-actions").M.id=button.M.id);
     ignore (Lui_app.dispose session.S.app))
 
+let selection_toolbar_surface ~registry ~profile =
+  let previous_model= !Runtime.read_model and previous_flush= !Runtime.app_flush
+  and previous_worker= !Runtime.worker and previous_editor= !Editor_state.st
+  and previous_fields= !Editor_state.field_sigs_opt
+  and previous_sources= !Editor_state.extra_sources
+  and previous_init= !Editor_state.on_init and previous_popups= !Popups_state.active
+  and previous_palette= !Cmdk_state.latest_vs
+  and previous_dialog= !Properties_dialog.current
+  and previous_dialog_signal= !Properties_dialog.current_sig in
+  Fun.protect ~finally:(fun () ->
+    Runtime.read_model:=previous_model;Runtime.app_flush:=previous_flush;
+    Runtime.worker:=previous_worker;Editor_state.st:=previous_editor;
+    Editor_state.field_sigs_opt:=previous_fields;Editor_state.extra_sources:=previous_sources;
+    Editor_state.on_init:=previous_init;Popups_state.active:=previous_popups;
+    Cmdk_state.latest_vs:=previous_palette;Properties_dialog.current:=previous_dialog;
+    Properties_dialog.current_sig:=previous_dialog_signal) (fun () ->
+    Editor_state.st:=None;Editor_state.field_sigs_opt:=None;
+    Editor_state.extra_sources:=[];Editor_state.on_init:=[];
+    Popups_state.active:=None;Cmdk_state.latest_vs:=None;
+    Properties_dialog.current:=None;Properties_dialog.current_sig:=None;
+    ignore (Fake_worker.install Fake_worker.never);
+    let uuid="toolbar-surface-block" in
+    let page=Option.get (Decode.page_of_summary
+      (Wire.Map [Wire.kw "block/uuid",Wire.Uuid "toolbar-surface-page";
+                 Wire.kw "block/title",Wire.String "Selection surface"])) in
+    let page={page with Model.page_blocks=
+      [Model.empty_block ~uuid ~title:"Selected block" ~is_page:false]} in
+    let model={Model.initial with phase=Model.Ready;repo=Some "toolbar-surface";
+      route=Model.Page "Selection surface";route_page=Some page} in
+    Runtime.read_model:=(fun () -> model);Runtime.app_flush:=(fun () -> ());
+    Editor_state.defer_init (fun state -> {state with
+      Editor_state.selected=Editor_state.String_set.singleton uuid;
+      selection_scope="main";action_bar=true});
+    let session=S.mount ~registry ~profile ~initial:model
+      ~reducer:(fun model () -> {model with Model.theme_dark=not model.theme_dark;
+        context_revision=model.context_revision+1})
+      ~view:(fun _ ms _ -> Lui_elements.column
+        [Lazy_children.track_mounted ~scope:"main" ~uuid
+           (Lui_elements.box ~accessibility_identifier:("ls-block-" ^ uuid) []);
+         Selection_bar.view ~model:ms ()]) () in
+    Runtime.read_model:=(fun () -> Lui_app.model session.S.app);
+    Runtime.app_flush:=(fun () -> S.flush session);
+    Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose session.S.app)) (fun () ->
+      let popup ()=List.find (fun node -> class_has node "selection-action-bar") (nodes session) in
+      let initial=popup () in
+      let capsule ()=match M.children session.S.tree (popup ()).M.id with
+        | [capsule] -> capsule
+        | _ -> failwith "Selection toolbar requires its original single capsule" in
+      let inner=capsule () in
+      let expect () =
+        let outer=popup () and capsule=capsule () in
+        check "The selection positioning Popover does not paint a second padded surface"
+          (Hashtbl.find_opt outer.M.props "padding"=Some (P.IntValue 0)
+           && Hashtbl.find_opt outer.M.props "border-width"=Some (P.IntValue 0)
+           && Hashtbl.find_opt outer.M.props "corner-radius"=Some (P.IntValue 0)
+           && M.string_prop outer "background"=Some "transparent");
+        check "The original capsule remains the toolbar's sole bordered background"
+          (M.string_prop capsule "background"=Some "hsl(var(--popover))"
+           && Hashtbl.find_opt capsule.M.props "border-width"=Some (P.IntValue 1)
+           && Hashtbl.find_opt capsule.M.props "corner-radius"=Some (P.IntValue 6)
+           && M.string_prop capsule "shadow"<>None);
+        check "Surface correction preserves the exact popup, capsule and anchor owners"
+          (outer.M.id=initial.M.id && capsule.M.id=inner.M.id
+           && M.string_prop outer "anchor-target"=Some ("ls-block-" ^ uuid)
+           && M.string_prop outer "anchor"=Some "above"
+           && M.string_prop outer "anchor-alignment"=Some "start"
+           && Hashtbl.find_opt outer.M.props "anchor-offset"=Some (P.FloatValue 8.)
+           && M.string_prop outer "data-attrs"=Some "data-keep-selection\x1ftrue")
+      in
+      expect ();ignore (Lui_app.send session.S.app ());S.flush session;expect ();
+      S.dismiss session initial.M.id;
+      check "Dismissal hides the toolbar through its original owner and retains selection"
+        (not (List.exists (fun node -> class_has node "selection-action-bar") (nodes session))
+         && not (Editor_state.selection_state ()).Editor_state.action_bar
+         && Editor_state.String_set.mem uuid (Editor_state.selected ()))))
+
 let right_sidebar_block_clipping ~registry ~profile =
   let previous_model = !Runtime.read_model and previous_flush = !Runtime.app_flush
   and previous_editor = !Editor_state.st
@@ -1829,6 +1905,7 @@ let run_views ~registry ~profile ~finish =
   table_title_completion ~registry ~profile;
   sidebar_help_native_rows ~registry;
   sidebar_favorite_rows ~registry ~profile;
+  selection_toolbar_surface ~registry ~profile;
   right_sidebar_block_clipping ~registry ~profile;
   popup_layout_carriers ~registry ~profile;
   popup_icon_shrink_backend_policy ~registry;

@@ -319,6 +319,8 @@ and node ~model () : t =
                          ~anchor_target:("ls-block-" ^ anchor)
                          ~anchor:`above ~anchor_alignment:`start
                          ~anchor_offset:8. ~style_class:"selection-action-bar"
+                         ~padding:0 ~border_width:0 ~corner_radius:0
+                         ~background:"transparent"
                          ~on_dismiss:(fun _ -> Editor_actions.hide_action_bar ())
                          ~data_attrs:[ ("data-keep-selection", "true") ]
                          [

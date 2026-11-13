@@ -1,5 +1,29 @@
 # API migrations
 
+## Selection toolbar has one surface owner
+
+The selection action bar's existing positioning Popover now declares
+`padding=0`, `border_width=0`, `corner_radius=0` and
+`background="transparent"`. Its existing `action_bar_capsule` remains the sole
+bordered, rounded background and shadow. This matches frozen master's
+zero-padding, borderless selection popup rather than nesting the NSH popup's
+standard padded surface around an already styled toolbar.
+
+The popup key, selected-block anchor, 8pt offset, alignment, transition and
+Dismiss handler are unchanged. Shared producer regressions cover the outer and
+inner owners, owner retention across a context refresh, and dismissal without
+clearing the selection. No constructor, wire or event contract changes.
+Downstream toolbars that already draw a capsule can use the same existing typed
+props on their positioning popup:
+
+```ocaml
+popover ~padding:0 ~border_width:0 ~corner_radius:0
+  ~background:"transparent" [existing_capsule]
+```
+
+This is a source correction motivated by the actual native reversed-selection
+capture; the updated native paint and geometry require a fresh build and capture.
+
 ## NSH outliner bullet paint clips to its existing circular bounds
 
 The childless 6pt outliner and add-block bullet Boxes now use typed
