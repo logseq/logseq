@@ -1986,6 +1986,7 @@ let cycle_routes ~check ~profile ~install_worker ~settle ~done_ =
   and previous_sources= !E.extra_sources and previous_init= !E.on_init
   and previous_settings= !Settings_state.st
   and previous_command_host= !Editor_cmds.installed
+  and previous_chord=(!Editor_keys.chord_seq,!Editor_keys.chord_ms)
   and previous_cmdk=(!Cmdk_state.latest_vs,!Cmdk_state.latest_t,!Cmdk_state.latest_st,!Cmdk_state.services_ref)
   and previous_popup= !Popups_state.active
   and previous_save= !Outliner_ops.pending_save and previous_ready= !Outliner_ops.pending_save_ready
@@ -2003,10 +2004,15 @@ let cycle_routes ~check ~profile ~install_worker ~settle ~done_ =
   let model=ref {Model.initial with repo=Some "cycle-origin";
     route_page=Some {page with Model.page_blocks=blocks}} in
   let backend : Lui_protocol.backend={backend_profile=profile;apply_batch=(fun _ -> true)} in
+  let shortcut_comments=ref [] and shortcut_contents=ref 0 in
   let app=Lui_app.create backend () (fun model () -> model)
     (fun context _ _ ->
       E.ensure context;
-      ignore (Cmdk_state.make context.Lui_ui.ui_scheduler (Cmdk_host.services ~host:profile.Lui_protocol.profile_host ()));
+      let services=Cmdk_host.services ~host:profile.Lui_protocol.profile_host () in
+      ignore (Cmdk_state.make context.Lui_ui.ui_scheduler
+        {services with Cmdk_services.ensure_comments=(fun ~repo ~uuids ->
+           shortcut_comments:=(repo,uuids)::!shortcut_comments);
+         sidebar_ensure_contents=(fun () -> incr shortcut_contents)});
       if not !Editor_commands.installed then
         ignore (Ui_services.dom_subscribe_document_event ~scope:context.Lui_ui.ui_scope
           ~capture:true "ls:editor-command" Editor_commands.on_command);
@@ -2024,6 +2030,7 @@ let cycle_routes ~check ~profile ~install_worker ~settle ~done_ =
     E.st:=previous_editor;E.field_sigs_opt:=previous_fields;E.extra_sources:=previous_sources;E.on_init:=previous_init;
     Settings_state.st:=previous_settings;Popups_state.active:=previous_popup;
     Editor_cmds.installed:=previous_command_host;
+    let sequence,time=previous_chord in Editor_keys.chord_seq:=sequence;Editor_keys.chord_ms:=time;
     let vs,t,st,svs=previous_cmdk in
     Cmdk_state.latest_vs:=vs;Cmdk_state.latest_t:=t;Cmdk_state.latest_st:=st;Cmdk_state.services_ref:=svs;
     Outliner_ops.pending_save:=previous_save;Outliner_ops.pending_save_ready:=previous_ready;
@@ -2070,6 +2077,60 @@ let cycle_routes ~check ~profile ~install_worker ~settle ~done_ =
     E.set (fun state -> {state with E.editing=None;
       selected=E.String_set.of_list uuids;selection_scope="main"});
     ignore (Lui_app.flush app) in
+  let shortcut_contexts () =
+    (* Observe only the two command capabilities. The real target-specific
+       Cmdk_host and actual key entry retain routing, context and ownership. *)
+    let key ?(ctrl=false) ?(alt=false) ?(shift=false) ?(composing=false) ?target key =
+      { Ui_services.x=0.;y=0.;shift;meta=false;ctrl;alt;composing;key=Some key;key_char=None;
+        buttons=0;button=0;repeat=false;movement_x=0.;movement_y=0.;default_prevented=false;
+        target;touches=[];detail=(fun _ -> None);detail_json=(fun _ -> None);
+        clipboard_get=(fun _ -> "");clipboard_snapshot=(fun () -> Ui_services.empty_clipboard_snapshot);
+        clipboard_set=(fun _ _ -> ());data_transfer_get=(fun _ -> "");files=[];has_files=false;
+        prevent_default=(fun () -> ());stop_propagation=(fun () -> ());stop_immediate=(fun () -> ()) } in
+    let press event=Editor_keys.chord_seq:=[];Editor_keys.on_global_key event in
+    let comment=key ~ctrl:true " " and contents=key ~alt:true ~shift:true "c" in
+    select [];
+    let editing=E.mk_editing ~uuid:"cycle-none" ~buffer:"shortcut dirty draft"
+      ~scope:"main" ~base:"saved" () in
+    E.set (fun state -> {state with E.editing=Some editing});ignore (Lui_app.flush app);
+    press comment;
+    check "editing Ctrl-Space reaches the actual comment command with its current block"
+      (!shortcut_comments=["cycle-origin",["cycle-none"]]);
+    press contents;
+    check "editing Alt-Shift-C reaches the existing Contents capability" (!shortcut_contents=1);
+    check "both editing shortcuts preserve the dirty editor and its exact epoch"
+      (match E.editing () with Some current -> current.epoch==editing.epoch
+        && current.buffer="shortcut dirty draft" | None -> false);
+    let base=Ui_services.dom_body () in
+    let input={base with editable=(fun () -> true);closest=(fun _ -> None)} in
+    press (key ~ctrl:true ~target:input " ");
+    check "a separate text control retains Ctrl-Space rather than adopting the dirty editor"
+      (List.length !shortcut_comments=1);
+    press {comment with Ui_services.composing=true};
+    press {contents with Ui_services.composing=true};
+    check "composition suppresses both restored application shortcuts"
+      (List.length !shortcut_comments=1 && !shortcut_contents=1);
+    let palette=Option.get !Cmdk_state.latest_st in
+    let previous=Cmdk_state.get palette in
+    Cmdk_state.set palette {previous with Cmdk_state.open_=true};
+    press comment;press contents;
+    check "an open command palette keeps both restored shortcut keys"
+      (List.length !shortcut_comments=1 && !shortcut_contents=1);
+    Cmdk_state.set palette previous;
+    select ["cycle-z";"cycle-a"];
+    press comment;press contents;
+    check "normal selected Ctrl-Space still reaches all selected comment targets"
+      (match !shortcut_comments with ("cycle-origin",targets)::_ ->
+         List.sort String.compare targets=["cycle-a";"cycle-z"]
+       | _ -> false);
+    check "normal Alt-Shift-C retains the same Contents capability" (!shortcut_contents=2);
+    check "each mode dispatches each command exactly once" (List.length !shortcut_comments=2);
+    select [];
+    press comment;
+    check "comment shortcut without selection or editing has no target"
+      (List.length !shortcut_comments=2)
+  in
+  (try shortcut_contexts () with error -> cleanup ();raise error);
   let run ?(reset_statuses=true) command expected after =
     (if reset_statuses then reset () else (batches:=[];reads:=[]));command ();
     settle (fun () ->
