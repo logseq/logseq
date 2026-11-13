@@ -441,6 +441,63 @@
              (restore!)
              (done)))))))
 
+(deftest hashtag-class-alias-does-not-convert-page-test
+  (async done
+    (let [alias-id #uuid "88888888-8888-8888-8888-888888888888"
+          class-id #uuid "99999999-9999-9999-9999-999999999999"
+          alias-entity {:db/id 5
+                        :block/uuid alias-id
+                        :block/title "ET"
+                        :block/name "et"
+                        :block/tags [{:db/ident :logseq.class/Page}]
+                        :block/alias-source-page-class? true
+                        :block/alias-source-page-id 6
+                        :block/alias-source-page-uuid class-id}
+          class-entity {:db/id 6
+                        :block/uuid class-id
+                        :block/title "Example Tag"
+                        :block/name "example tag"
+                        :db/ident :user.class/ExampleTag
+                        :block/tags [{:db/ident :logseq.class/Tag}]}
+          get-block-results (atom [alias-entity])
+          calls (atom [])
+          restore! (install-convert-page-to-tag-stubs! get-block-results calls)]
+      (set! db-async/<get-alias-source-page
+            (fn [repo id]
+              (swap! calls conj [:get-alias-source-page repo id])
+              (p/resolved class-entity)))
+      (-> (try
+            ((page-handler/on-chosen-handler (autocomplete-input "#ET" 3) "edit-input" 0 :markdown)
+             {:block/title "ET"
+              :db/id 5
+              :block/uuid alias-id
+              :convert-page-to-tag? true}
+             (autocomplete-select-event))
+            (catch :default error
+              (p/rejected error)))
+          (p/then
+           (fn []
+             (let [convert-calls (filter #(= :convert-page-to-tag (first %)) @calls)
+                   tag-call (some #(when (= :tag-on-chosen (first %)) %) @calls)
+                   insert-call (some #(when (= :insert-command (first %)) %) @calls)]
+               (is (empty? convert-calls)
+                   "An alias of a tag must never be converted")
+               (is (= ["Example Tag" class-entity true "#ET" 3 "#ET"]
+                      (subvec tag-call 1))
+                   "Choosing the alias tags the block with the source tag")
+               (is (= [:insert-command "edit-input" "" :markdown
+                       {:last-pattern "#ET"
+                        :end-pattern nil
+                        :command :page-ref}]
+                      insert-call)))))
+          (p/catch
+           (fn [error]
+             (is false (str error))))
+          (p/finally
+           (fn []
+             (restore!)
+             (done)))))))
+
 
 (deftest chosen-result-loads-uuid-result-through-worker-test
   (async done
