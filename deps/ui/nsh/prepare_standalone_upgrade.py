@@ -22,8 +22,10 @@ def exact_revision(value):
 
 def clean_revision(source):
     revision = exact_revision(https.run(["git", "rev-parse", "HEAD^{commit}"], directory=source))
-    if https.run(["git", "status", "--porcelain", "--untracked-files=normal"], directory=source):
-        raise ValueError("Qualification sources must have no tracked or untracked changes")
+    changes = https.run(["git", "status", "--porcelain", "--untracked-files=normal"], directory=source)
+    if changes:
+        raise ValueError("Qualification sources must have no tracked or untracked changes: "
+                         + changes[:4096])
     return revision
 
 

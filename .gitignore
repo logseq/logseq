@@ -93,6 +93,7 @@ deps/db-sync/data
 /.agent-shell/
 
 _build/
+/_opam/
 ocaml-e2e/.parallel-logs/
 /cli/_opam
 /cli/compile_commands.json
