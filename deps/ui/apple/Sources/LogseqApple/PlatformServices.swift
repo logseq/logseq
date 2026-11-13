@@ -39,6 +39,12 @@ final class PlatformServices {
     @ObservationIgnored var pendingImageSizes: [Int: UInt64] = [:]
     @ObservationIgnored private var menuActions: [MenuAction] = []
     @ObservationIgnored private var panels: [NSSavePanel] = []
+    private struct PendingTextInput {
+        let id: Int
+        let incarnation: UInt64
+        var operations: [(String, [String: Any])] = []
+    }
+    @ObservationIgnored private var pendingTextInput: PendingTextInput?
     @ObservationIgnored private(set) var closed = false
 
     func object(_ text: String) throws -> [String: Any] {
@@ -66,6 +72,7 @@ final class PlatformServices {
 
     // This mirror contains host presentation metadata only; OCaml owns documents.
     func resetPresentation() {
+        pendingTextInput = nil
         editorGeometry.clear()
         scrolling.clear()
         decodedImageSizes.removeAll(); pendingImageSizes.removeAll()
@@ -169,14 +176,45 @@ final class PlatformServices {
     }
     func view(_ id: Int) -> NSView? {
         if let view = views[id]?.value { return view }
-        guard let root = window?.contentView else { return nil }
         let identifier = nodes[id]?["accessibility-identifier"] as? String ?? "lui-node-\(id)"
         func find(_ v: NSView) -> NSView? {
             if v.accessibilityIdentifier() == identifier { return v }
             for child in v.subviews { if let found = find(child) { return found } }
             return nil
         }
-        return find(root)
+        for candidate in NSApp.windows where owns(candidate) && !(candidate is NSSavePanel) {
+            if let root = candidate.contentView, let found = find(root) { return found }
+        }
+        return nil
+    }
+    private func owns(_ candidate: NSWindow) -> Bool {
+        var current: NSWindow? = candidate
+        while let owned = current {
+            if owned === window { return true }
+            current = owned.sheetParent
+        }
+        return false
+    }
+    private func textControl(_ id: Int) -> NSView? {
+        if let target = view(id), target is NSTextView || target is NSTextField { return target }
+        guard backend?.focusedNodeID == id, let candidate = NSApp.keyWindow,
+              owns(candidate), !(candidate is NSSavePanel) else { return nil }
+        let responder = candidate.firstResponder as? NSView
+        return responder is NSTextView || responder is NSTextField ? responder : nil
+    }
+    private func flushPendingTextInput() throws {
+        guard let pending = pendingTextInput else { return }
+        guard incarnations[pending.id] == pending.incarnation else { pendingTextInput = nil; return }
+        let focused = withObservationTracking {
+            backend?.focusedNodeID
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in self?.perform { try self?.flushPendingTextInput() } }
+        }
+        guard focused == pending.id else { return }
+        pendingTextInput = nil
+        for (op, request) in pending.operations {
+            try handle("dom-op\n" + op + "\n" + jsonString(request))
+        }
     }
 
     func handle(_ envelope: String) throws {
@@ -302,6 +340,7 @@ final class PlatformServices {
     }
     func close() {
         closed = true
+        pendingTextInput = nil
         for panel in panels { panel.cancel(nil) }
         panels.removeAll(); editors.removeAll(); views.removeAll()
     }
@@ -379,10 +418,25 @@ final class PlatformServices {
             return
         }
         guard let id else { return } // Stale references have no target.
-        let target = view(id)
+        let target = op == "focus" ? views[id]?.value : textControl(id) ?? view(id)
+        if ["select", "set-selection-range", "set-value"].contains(op) {
+            let editor = (target as? NSTextView) ?? (target as? NSTextField)?.currentEditor() as? NSTextView
+            let ready = op == "set-value" ? target is NSTextField || target is NSTextView : editor != nil
+            if pendingTextInput?.id == id, pendingTextInput?.incarnation == incarnations[id],
+               !ready || pendingTextInput?.operations.isEmpty == false {
+                pendingTextInput?.operations.append((op, request))
+                return
+            }
+        }
         switch op {
         case "focus":
-            guard let target, window?.makeFirstResponder(target) == true else { throw HostError("No native focus target for node \(id)") }
+            if backend?.requestFocus(nodeID: id) == true, let incarnation = incarnations[id] {
+                // SwiftUI focus is accepted before its native field editor mounts.
+                pendingTextInput = PendingTextInput(id: id, incarnation: incarnation)
+                try flushPendingTextInput()
+            } else {
+                guard let target, window?.makeFirstResponder(target) == true else { throw HostError("No native focus target for node \(id)") }
+            }
         case "select", "set-selection-range":
             let editor = (target as? NSTextView) ?? (target as? NSTextField)?.currentEditor() as? NSTextView
             guard let editor else { throw HostError("Node is not a native text control") }

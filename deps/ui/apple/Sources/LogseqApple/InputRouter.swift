@@ -21,8 +21,11 @@ final class InputRouter {
     private func send(_ name: String, _ payload: [String: Any]) throws -> Bool {
         try services.runtime?.document(name, payload) ?? false
     }
-    private func keyboardTarget() -> Int? {
-        guard let view = services.window?.firstResponder as? NSView else { return nil }
+    private func keyboardTarget(in window: NSWindow? = nil) -> Int? {
+        let responder = (window ?? services.window)?.firstResponder as? NSView
+        if let responder, let node = services.views.first(where: { $0.value.value === responder })?.key { return node }
+        if let node = services.backend?.focusedNodeID { return node }
+        guard let view = responder else { return nil }
         if let text = view as? NSTextView, let owner = text.delegate as? NSView,
            let node = services.node(for: owner) { return node }
         return services.node(for: view)
@@ -103,10 +106,10 @@ final class InputRouter {
             "metaKey": flags.contains(.command), "ctrlKey": flags.contains(.control)
         ]
         if event.type == .keyDown || event.type == .keyUp {
-            payload["nodeId"] = keyboardTarget()
+            payload["nodeId"] = keyboardTarget(in: event.window)
             payload["key"] = nativeKey(event); payload["code"] = nativeCode(event)
             payload["repeat"] = event.isARepeat
-            payload["isComposing"] = (services.window?.firstResponder as? NSTextView)?.hasMarkedText() ?? false
+            payload["isComposing"] = (event.window?.firstResponder as? NSTextView)?.hasMarkedText() ?? false
             return try send(event.type == .keyDown ? "keydown" : "keyup", payload)
         }
         guard let content = services.window?.contentView else { return false }

@@ -94,20 +94,21 @@ final class LogseqHost: NSObject, NSApplicationDelegate, NSWindowDelegate {
             try patchTrace?.write(contentsOf: Data((json + "\n").utf8))
         }
         guard let data = json.data(using: .utf8), let batches = try JSONSerialization.jsonObject(with: data) as? [[String: Any]] else { throw HostError("Runtime patch callback must be a batch array") }
-        if snapshot {
-            let focusedBlock = (window?.firstResponder as? NativeEditorInput)?.block
-            let restoreFocus = try focusedBlock.flatMap { block in
-                try runtime?.snapshot(block: block) == nil ? nil : block
-            }
-            hostedRoot = nil
-            services.resetPresentation()
-            if let restoreFocus { services.focusIntents[restoreFocus] = true }
+        let focusedBlock = snapshot ? (window?.firstResponder as? NativeEditorInput)?.block : nil
+        let restoreFocus = try focusedBlock.flatMap { block in
+            try runtime?.snapshot(block: block) == nil ? nil : block
         }
         let rawBatches = try rawPatchBatches(json)
         guard rawBatches.count == batches.count else { throw HostError("Patch batch boundary mismatch") }
         do {
             for (index, entry) in zip(rawBatches, batches).enumerated() {
-                if snapshot && index == 0 { try backend?.applySnapshot(json: entry.0) }
+                if snapshot && index == 0 {
+                    try backend?.applySnapshot(json: entry.0)
+                    // Preserve presentation metadata until the snapshot is accepted.
+                    hostedRoot = nil
+                    services.resetPresentation()
+                    if let restoreFocus { services.focusIntents[restoreFocus] = true }
+                }
                 else { try backend?.apply(json: entry.0) }
                 try services.applied(entry.1)
             }
@@ -177,10 +178,25 @@ final class LogseqHost: NSObject, NSApplicationDelegate, NSWindowDelegate {
         exit(EXIT_FAILURE)
     }
 
+    private func acceptsInput(_ event: NSEvent) -> Bool {
+        guard let eventWindow = event.window, let window else { return false }
+        if eventWindow === window { return true }
+        // Retained dialogs live in native sheets. File panels keep AppKit's
+        // responder handling; pointer coordinates still belong to the host.
+        guard event.type == .keyDown || event.type == .keyUp,
+              !(eventWindow is NSSavePanel) else { return false }
+        var sheetParent = eventWindow.sheetParent
+        while let parent = sheetParent {
+            if parent === window { return true }
+            sheetParent = parent.sheetParent
+        }
+        return false
+    }
+
     func installMonitor() {
         window?.acceptsMouseMovedEvents = true
         monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .keyUp, .leftMouseDown, .leftMouseUp, .rightMouseDown, .rightMouseUp, .otherMouseDown, .otherMouseUp, .mouseMoved, .leftMouseDragged, .rightMouseDragged, .otherMouseDragged, .scrollWheel]) { [weak self] event in
-            guard let self, event.window === self.window, self.runtime?.started == true else { return event }
+            guard let self, self.acceptsInput(event), self.runtime?.started == true else { return event }
             do {
                 if try self.input?.capture(event) == true { return nil }
                 return event
