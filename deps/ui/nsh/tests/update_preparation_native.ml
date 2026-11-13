@@ -3301,6 +3301,20 @@ let native_worker_update_identity () =
     (Sys.getenv_opt "LOGSEQ_NSH_APP_SESSION" = old_session
      && Sys.getenv_opt "LOGSEQ_NSH_WORKER_INSTANCE" = old_instance)
 
+let native_exposed_cycle_todo_routes () =
+  let finished=ref false in
+  Editor_cycle_routes.cycle_routes ~check
+    ~profile:(Lui_protocol.profile Lui_protocol.MacOS Lui_protocol.NshHost)
+    ~install_worker:(fun handler ->
+      Runtime.worker:=Some {Worker_client.invoke_fn=(fun name args -> Js.Promise.resolve (handler name args));
+        on_message=(fun _ _ -> ());dead=Js.Promise.liveness ();
+        capture_restore_fn=(fun () -> fun () -> Js.Promise.resolve ())})
+    ~settle:(fun callback -> Host.drain ();callback ())
+    ~done_:(fun () -> finished:=true);
+  Host.drain ();
+  check "actual native exposed cycle routes completed" !finished;
+  print_endline "PASS native exposed task cycle command routes"
+
 let () =
   let owner = Thread.id (Thread.self ()) in
   let assert_owner () =
@@ -3311,6 +3325,7 @@ let () =
   let () = Platform.install_ui_services ~paints_caret:true ~nsh_updates:true ~assert_owner
     ~request_flush:(fun () -> ()) ~dom ~timers:Ui_dom_native.timers ~files:Ui_dom_native.files in
   native_plain_run_merge ();
+  native_exposed_cycle_todo_routes ();
   native_updater_state_events ();
   Update_worker_coordinator_native.run ();
   Editor_clipboard_native.run ();

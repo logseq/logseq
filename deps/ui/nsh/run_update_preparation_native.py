@@ -62,11 +62,20 @@ def run() -> None:
         clipboard.write_bytes((UI / "nsh/tests/editor_clipboard_native.ml").read_bytes())
         assets = stage / "native_assets_native.ml"
         assets.write_bytes((UI / "nsh/tests/native_assets_native.ml").read_bytes())
+        # Compile the identical portable test fixture used by the maintained Web
+        # suite against these actual native archives; do not copy app producers.
+        fixture_source = (UI / "test/shared_ui_regression_test.ml").read_text(encoding="utf-8")
+        begin = "(* BEGIN portable exposed-cycle fixture. *)"
+        end = "(* END portable exposed-cycle fixture. *)"
+        if fixture_source.count(begin) != 1 or fixture_source.count(end) != 1:
+            raise ValueError("Expected one complete portable command fixture")
+        editor_commands = stage / "editor_cycle_routes.ml"
+        editor_commands.write_text(fixture_source.split(begin, 1)[1].split(end, 1)[0], encoding="utf-8")
         source = stage / "update_preparation_native.ml"
         source.write_bytes((UI / "nsh/tests/update_preparation_native.ml").read_bytes())
         executable = stage / ("admission.exe" if os.name == "nt" else "admission")
         subprocess.run([*compiler, *ppx_arguments, "-I", str(stage), "-linkall", "-linkpkg",
-                        *map(str, archives), str(embed), str(coordinator), str(geometry), str(clipboard), str(assets), str(source), str(event_probe),
+                        *map(str, archives), str(embed), str(coordinator), str(geometry), str(clipboard), str(assets), str(editor_commands), str(source), str(event_probe),
                         "-o", str(executable)], cwd=stage, check=True)
         # Preference fixtures exercise the actual native storage provider without
         # reading or rewriting the developer's installed application state.

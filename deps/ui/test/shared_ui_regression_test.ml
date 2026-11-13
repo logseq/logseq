@@ -1920,7 +1920,146 @@ let calendar_invalid_input ~registry ~profile ~finish =
       in invalid_dates ["2024-02-30";"not a date"]
   in next [false;true]
 
+(* BEGIN portable exposed-cycle fixture. *)
+(* Real command routes against a stateful worker boundary; both targets compile
+   this exact scenario with their actual Cmdk_host and document-event adapter. *)
+let cycle_routes ~check ~profile ~install_worker ~settle ~done_ =
+  let module E = Editor_state in
+  let module W = Wire in
+  let previous_model= !Runtime.read_model and previous_worker= !Runtime.worker
+  and previous_flush= !Runtime.app_flush and previous_send= !Runtime.app_send
+  and previous_editor= !E.st and previous_fields= !E.field_sigs_opt
+  and previous_sources= !E.extra_sources and previous_init= !E.on_init
+  and previous_settings= !Settings_state.st
+  and previous_command_host= !Editor_cmds.installed
+  and previous_cmdk=(!Cmdk_state.latest_vs,!Cmdk_state.latest_t,!Cmdk_state.latest_st,!Cmdk_state.services_ref)
+  and previous_popup= !Popups_state.active
+  and previous_save= !Outliner_ops.pending_save and previous_ready= !Outliner_ops.pending_save_ready
+  and previous_timer= !Outliner_ops.save_timer
+  and previous_history= !E.history_input_before
+  and previous_command_history=Ui_services.storage_get "commands-history" in
+  E.st:=None;E.field_sigs_opt:=None;E.extra_sources:=[];E.on_init:=[];Settings_state.st:=None;
+  Cmdk_state.services_ref:=None;Outliner_ops.pending_save:=None;
+  Editor_cmds.install_host (Editor_cmds_host.host ());
+  Outliner_ops.pending_save_ready:=None;Outliner_ops.save_timer:=0;E.history_input_before:=None;
+  let blocks=List.map (fun uuid -> Model.empty_block ~uuid ~title:uuid ~is_page:false)
+    ["cycle-z";"cycle-a";"cycle-m";"cycle-none"] in
+  let page=Option.get (Decode.page_of_summary (W.Map
+    [W.kw "block/uuid",W.Uuid "cycle-page";W.kw "block/title",W.String "Cycle fixture"])) in
+  let model=ref {Model.initial with repo=Some "cycle-origin";
+    route_page=Some {page with Model.page_blocks=blocks}} in
+  let backend : Lui_protocol.backend={backend_profile=profile;apply_batch=(fun _ -> true)} in
+  let app=Lui_app.create backend () (fun model () -> model)
+    (fun context _ _ ->
+      E.ensure context;
+      ignore (Cmdk_state.make context.Lui_ui.ui_scheduler (Cmdk_host.services ~host:profile.Lui_protocol.profile_host ()));
+      if not !Editor_commands.installed then
+        ignore (Ui_services.dom_subscribe_document_event ~scope:context.Lui_ui.ui_scope
+          ~capture:true "ls:editor-command" Editor_commands.on_command);
+      Lui_elements.box []) in
+  Runtime.read_model:=(fun () -> !model);Runtime.app_send:=(fun _ -> false);
+  Runtime.app_flush:=(fun () -> ignore (Lui_app.flush app));
+  ignore (Lui_app.start app);ignore (Lui_app.flush app);
+  let statuses=Hashtbl.create 4 and batches=ref [] and reads=ref [] and retire_read=ref false in
+  let reset ()=Hashtbl.clear statuses;
+    Hashtbl.add statuses "cycle-z" 1;Hashtbl.add statuses "cycle-a" 2;Hashtbl.add statuses "cycle-m" 3;
+    batches:=[];reads:=[] in
+  let cleanup ()=
+    ignore (Lui_app.dispose app);Runtime.read_model:=previous_model;Runtime.worker:=previous_worker;
+    Runtime.app_flush:=previous_flush;Runtime.app_send:=previous_send;
+    E.st:=previous_editor;E.field_sigs_opt:=previous_fields;E.extra_sources:=previous_sources;E.on_init:=previous_init;
+    Settings_state.st:=previous_settings;Popups_state.active:=previous_popup;
+    Editor_cmds.installed:=previous_command_host;
+    let vs,t,st,svs=previous_cmdk in
+    Cmdk_state.latest_vs:=vs;Cmdk_state.latest_t:=t;Cmdk_state.latest_st:=st;Cmdk_state.services_ref:=svs;
+    Outliner_ops.pending_save:=previous_save;Outliner_ops.pending_save_ready:=previous_ready;
+    Outliner_ops.save_timer:=previous_timer;E.history_input_before:=previous_history;
+    (match previous_command_history with
+     | None -> Ui_services.storage_remove "commands-history"
+     | Some history -> Ui_services.storage_set "commands-history" history) in
+  install_worker (fun name args -> match name,args with
+    | "thread-api/get-blocks",[W.String repo;requests] ->
+        let ids=List.filter_map (fun request -> Option.bind (W.get request "id") W.as_uuid) (W.elems requests) in
+        reads:=(repo,ids)::!reads;
+        if !retire_read then model:={!model with Model.repo=Some "cycle-destination"};
+        W.Array (List.map (fun uuid -> W.Map [W.kw "block",W.Map
+          ([W.kw "block/uuid",W.Uuid uuid] @ match Hashtbl.find_opt statuses uuid with
+           | Some id -> [W.kw "logseq.property/status",W.Int id] | None -> [])]) ids)
+    | "thread-api/get-property-closed-values",[W.String repo;W.Keyword "logseq.property/status"] ->
+        check "status identities stay on the captured graph" (repo="cycle-origin");
+        W.Array (List.mapi (fun index ident -> W.Map
+          [W.kw "db/id",W.Int (index+1);W.kw "db/ident",W.Keyword ("logseq.property/status." ^ ident)])
+          ["todo";"doing";"done"])
+    | "thread-api/apply-outliner-ops",[W.String repo;ops;opts] ->
+        check "one cycle transaction keeps its originating graph and history operation"
+          (repo="cycle-origin" && W.get opts "outliner-op"=Some (W.Keyword "cycle-todos"));
+        let updates=List.map (fun operation -> match W.elems operation with
+          | [W.Keyword "batch-set-property";arguments] ->
+              (match W.elems arguments with
+               | [targets;W.Keyword "logseq.property/status";W.Int id;options] ->
+                   check "cycle values are resolved entity IDs" (W.get options "entity-id?"=Some (W.Bool true));
+                   (match W.elems targets with [W.Uuid uuid] -> Hashtbl.replace statuses uuid id;uuid,Some id
+                    | _ -> failwith "cycle operation targets exactly one captured block")
+               | _ -> failwith "invalid cycle status property operation")
+          | [W.Keyword "remove-block-property";arguments] ->
+              (match W.elems arguments with [W.Uuid uuid;W.Keyword "logseq.property/status"] ->
+                Hashtbl.remove statuses uuid;uuid,None | _ -> failwith "invalid cycle clear operation")
+          | _ -> failwith "unexpected operation in cycle transaction") (W.elems ops) in
+        batches:=updates::!batches;W.Map [W.kw "result",W.Nil]
+    | _ -> W.Nil);
+  let select uuids=
+    E.set (fun state -> {state with E.editing=None;
+      selected=E.String_set.of_list uuids;selection_scope="main"});
+    ignore (Lui_app.flush app) in
+  let run ?(reset_statuses=true) command expected after =
+    (if reset_statuses then reset () else (batches:=[];reads:=[]));command ();
+    settle (fun () ->
+      try
+        check "exposed cycle command reads fresh captured target statuses once" (List.length !reads=1);
+        check "exposed cycle command persists all statuses in one ordered transaction" (!batches=[expected]);
+        after ()
+      with error -> cleanup ();raise error) in
+  let palette ()=Cmdk_state.dispatch_id "editor/cycle-todo" in
+  let context uuid=
+    let popup=Popups_state.make (Lui_app.runtime app).Lui_runtime.runtime_scheduler in
+    Popups_state.open_cm popup ~ax:0. ~atop:0. ~abot:0. ~block_id:uuid ~multi:true;
+    Popups_state.run_cm_item popup "cycle-todo" in
+  let multi=["cycle-z",Some 2;"cycle-a",Some 3;"cycle-m",None] in
+  select ["cycle-z";"cycle-a";"cycle-m"];
+  run palette multi (fun () ->
+    select [];
+    let editing=E.mk_editing ~uuid:"cycle-none" ~buffer:"unsaved draft" ~scope:"main" ~base:"saved" () in
+    E.set (fun state -> {state with E.editing=Some editing});ignore (Lui_app.flush app);
+    run palette ["cycle-none",Some 1] (fun () ->
+      check "status command preserves the exact active dirty editor"
+        (match E.editing () with Some current -> current.epoch==editing.epoch && current.buffer="unsaved draft" | None -> false);
+      run ~reset_statuses:false palette ["cycle-none",Some 2] (fun () ->
+      check "repeated editing commands read the persisted status instead of the entry snapshot"
+        (Hashtbl.find_opt statuses "cycle-none"=Some 2);
+      select ["cycle-z";"cycle-a";"cycle-m"];
+      run (fun () -> context "cycle-a") multi (fun () ->
+        select ["cycle-z";"cycle-a"];
+        run (fun () -> context "cycle-none") ["cycle-none",Some 1] (fun () ->
+          reset ();select ["cycle-z"];
+          retire_read:=true;palette ();
+          settle (fun () ->
+            try
+              check "a graph switch after the captured read prevents every status mutation"
+                (List.length !reads=1 && !batches=[]);
+              cleanup ();done_ ()
+            with error -> cleanup ();raise error))))))
+
+(* END portable exposed-cycle fixture. *)
+
 let run_views ~registry ~profile ~finish =
+  let finish () =
+    let rec settle count callback =
+      ignore (Js.Promise.then_ (fun () ->
+        if count=0 then callback () else settle (count-1) callback;
+        Js.Promise.resolve ()) (Js.Promise.resolve ())) in
+    cycle_routes ~check ~profile
+      ~install_worker:(fun handler -> ignore (Fake_worker.install handler))
+      ~settle:(settle 25) ~done_:finish in
   code_language_caption ~registry ~profile;
   published_chrome_palette ~registry ~profile;
   table_column_ownership ~registry ~profile;
