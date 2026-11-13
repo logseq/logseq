@@ -35,7 +35,7 @@ private let requests: BytesCallback = { data, count in
     guard let text = String(bytes: bytes, encoding: .utf8) else { fatalError("Invalid platform UTF-8") }
     MainActor.assumeIsolated { activeRuntime?.messages.append(.request(text)) }
 }
-private func onMainRunLoop(_ action: @escaping @MainActor @Sendable () -> Void) {
+func onMainRunLoop(_ action: @escaping @MainActor @Sendable () -> Void) {
     RunLoop.main.perform(inModes: [.common, .modalPanel, .eventTracking]) {
         MainActor.assumeIsolated { action() }
     }

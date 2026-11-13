@@ -36,10 +36,11 @@ final class LogseqHost: NSObject, NSApplicationDelegate, NSWindowDelegate {
             services.onError = { [weak self] error in self?.fail(error) }
             services.onCloseReady = { [weak self] ok in
                 guard let self, self.closing else { return }
+                NSLog("Logseq Apple close result: ok=%@", String(ok))
                 self.closing = false
                 if ok {
                     self.closeReady = true
-                    DispatchQueue.main.async { if self.quitting { NSApp.reply(toApplicationShouldTerminate: true) } else { self.window?.performClose(nil) } }
+                    onMainRunLoop { if self.quitting { NSApp.reply(toApplicationShouldTerminate: true) } else { self.window?.performClose(nil) } }
                 } else if self.quitting { NSApp.reply(toApplicationShouldTerminate: false); self.quitting = false }
             }
             makeWindow()
@@ -149,6 +150,7 @@ final class LogseqHost: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func requestClose() {
         guard !closing else { return }
         closing = true
+        NSLog("Logseq Apple close requested: quitting=%@", String(quitting))
         services.perform { try runtime?.send("window-close-request", [:] as [String: String]) }
     }
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
