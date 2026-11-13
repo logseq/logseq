@@ -175,15 +175,20 @@ let rtc_item (ms : Model.t Signal.signal) : t =
    false so the shared leading_toolbar stays on the header owner. *)
 let leading_toolbar ~key ~state ~controls : t =
  fun context parent ->
-  let inset =
-    if apple_host context then None
-    else Some (Host.titlebar_left_signal
-      ~scheduler:context.Lui_ui.ui_scheduler ~scope:context.Lui_ui.ui_scope)
-  in
-  (* The native detail toolbar is already outside the traffic-light region. *)
-  Ui_components.leading_toolbar ~key ~in_sidebar:false ~safe_area:0
-    ?safe_area_signal:inset ~padding_horizontal:0 ~state
-    ~is_open:(fun _ -> false) ~controls context parent
+  let inset = Host.titlebar_left_signal
+    ~scheduler:context.Lui_ui.ui_scheduler ~scope:context.Lui_ui.ui_scope in
+  if apple_host context then
+    (* Only a collapsed sidebar puts detail controls beside the traffic
+       lights and the native 32-point sidebar toggle, with an 8-point gap. *)
+    Ui_parts.int_prop Lui_protocol.MarginLeft
+      ~value:(reactive (fun (m : Model.t) left ->
+        if m.left_sidebar_open then 0 else left + 40) state inset)
+      (row ~key ~height:48 ~min_height:48 ~cross:`center
+        (controls ())) context parent
+  else
+    Ui_components.leading_toolbar ~key ~in_sidebar:false ~safe_area:0
+      ~safe_area_signal:inset ~padding_horizontal:0 ~state
+      ~is_open:(fun _ -> false) ~controls context parent
 
 (* NavigationSplitView supplies the macOS SwiftUI sidebar toggle.
    Other hosts keep it beside search in the leading toolbar. *)
