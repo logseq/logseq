@@ -65,34 +65,81 @@
     (fail! "Block cannot be replaced and deleted"
            {:block-uuid block-uuid})))
 
+(defn- eavt-scalar
+  [db eid attr]
+  (some-> (first (d/datoms db :eavt eid attr)) :v))
+
+(defn- recycled-chain-predicate
+  "Returns a recycle-chain predicate with a cache owned by one DB snapshot
+   during a single delta build. Each visited ancestor is resolved once."
+  [db]
+  (let [cache (volatile! {})]
+    (fn [entity-id]
+      (loop [eid entity-id
+             path []
+             seen #{}]
+        (let [cached (find @cache eid)
+              recycled? (cond
+                          (nil? eid) false
+                          cached (val cached)
+                          (contains? seen eid) false
+                          (some? (eavt-scalar db eid :logseq.property/deleted-at)) true
+                          :else nil)]
+          (if (some? recycled?)
+            (do
+              (vswap! cache into (map #(vector % recycled?) (conj path eid)))
+              recycled?)
+            (recur (eavt-scalar db eid :block/parent)
+                   (conj path eid)
+                   (conj seen eid))))))))
+
+(defn- descendant-entity-ids
+  "Visits each entity at most once across all `root-ids`, including the roots."
+  [db root-ids]
+  (loop [pending (vec root-ids)
+         seen #{}]
+    (if-let [id (peek pending)]
+      (if (contains? seen id)
+        (recur (pop pending) seen)
+        (recur (into (pop pending) (map :e (d/datoms db :avet :block/parent id)))
+               (conj seen id)))
+      seen)))
+
 (defn- structural-entity-ids
-  [tx-data]
-  (into #{}
-        (keep (fn [datom]
-                (when (contains? membership-affecting-attrs (:a datom))
-                  (:e datom))))
-        tx-data))
+  "Includes descendants when a changed entity's inherited recycle visibility
+   flips. Both snapshots share traversal roots to avoid overlapping walks."
+  [{:keys [db-before db-after tx-data]} recycled-before? recycled-after?]
+  (let [direct (into #{}
+                     (keep (fn [datom]
+                             (when (contains? membership-affecting-attrs (:a datom))
+                               (:e datom))))
+                     tx-data)
+        roots (filterv #(not= (recycled-before? %) (recycled-after? %)) direct)]
+    (into (into direct (descendant-entity-ids db-before roots))
+          (descendant-entity-ids db-after roots))))
 
 (defn- membership-at
-  [db entity-id]
+  [db recycled? entity-id]
   (when-let [entity (d/entity db entity-id)]
     (when-not (or (:block/closed-value-property entity)
                   (:logseq.property/created-from-property entity)
-                  (:logseq.property/deleted-at entity))
+                  (recycled? entity-id))
       (when-let [parent (:block/parent entity)]
         (let [block-uuid (:block/uuid entity)
               parent-uuid (:block/uuid parent)
               order (:block/order entity)]
-          (when (some? order)
-            (when-not (uuid? block-uuid)
-              (fail! "Invalid child UUID"
-                     {:entity-id entity-id :block-uuid block-uuid}))
-            (when-not (uuid? parent-uuid)
-              (fail! "Invalid parent UUID"
-                     {:entity-id entity-id :parent-uuid parent-uuid}))
-            {:block-uuid block-uuid
-             :parent-uuid parent-uuid
-             :order order}))))))
+          (when-not (uuid? block-uuid)
+            (fail! "Invalid child UUID"
+                   {:entity-id entity-id :block-uuid block-uuid}))
+          (when-not (uuid? parent-uuid)
+            (fail! "Invalid parent UUID"
+                   {:entity-id entity-id :parent-uuid parent-uuid}))
+          (when-not (or (nil? order) (string? order))
+            (fail! "Invalid child order"
+                   {:entity-id entity-id :order order}))
+          {:block-uuid block-uuid
+           :parent-uuid parent-uuid
+           :order order})))))
 
 (defn- append-membership-op
   [operations operation membership]
@@ -104,18 +151,20 @@
     operations))
 
 (defn- membership-operations
-  [{:keys [db-before db-after tx-data]}]
-  (reduce
-   (fn [operations entity-id]
-     (let [before (membership-at db-before entity-id)
-           after (membership-at db-after entity-id)]
-       (if (= before after)
-         operations
-         (-> operations
-             (append-membership-op :remove before)
-             (append-membership-op :upsert after)))))
-   {}
-   (structural-entity-ids tx-data)))
+  [{:keys [db-before db-after] :as tx-report}]
+  (let [recycled-before? (recycled-chain-predicate db-before)
+        recycled-after? (recycled-chain-predicate db-after)]
+    (reduce
+     (fn [operations entity-id]
+       (let [before (membership-at db-before recycled-before? entity-id)
+             after (membership-at db-after recycled-after? entity-id)]
+         (if (= before after)
+           operations
+           (-> operations
+               (append-membership-op :remove before)
+               (append-membership-op :upsert after)))))
+     {}
+     (structural-entity-ids tx-report recycled-before? recycled-after?))))
 
 (defn- ordered-operations
   [operations]
