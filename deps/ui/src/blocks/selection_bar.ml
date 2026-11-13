@@ -311,10 +311,12 @@ and node ~model () : t =
                | None -> Logseq_el.nothing
                | Some anchor ->
                    with_cut_eligibility model sel (fun eligibility ->
-                       (* The retained anchor owns scroll/resize positioning and
-                 viewport collision handling on both hosts. *)
+                       (* A popup retains its native anchor. Selection changes
+                          keep that owner while the anchor stays mounted; moving
+                          to another block creates a new anchored popup. *)
                        popover ~transition:Ui_components.popover_transition
-                         ~key:"sbar" ~anchor_target:("ls-block-" ^ anchor)
+                         ~key:("sbar-" ^ state.S.selection_scope ^ "-" ^ anchor)
+                         ~anchor_target:("ls-block-" ^ anchor)
                          ~anchor:`above ~anchor_alignment:`start
                          ~anchor_offset:8. ~style_class:"selection-action-bar"
                          ~on_dismiss:(fun _ -> Editor_actions.hide_action_bar ())

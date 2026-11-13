@@ -1,5 +1,20 @@
 # API migrations
 
+## Selection action bars follow their anchor owner
+
+The selection action bar now keys its popover by the outliner scope and mounted
+anchor block. Extending or shrinking a selection retains the popup while its
+first mounted selected block stays the same. Crossing that block during reverse
+selection, or unmounting it during virtualization, retires the old anchored popup
+and mounts one for the new block. The action callbacks still use the current
+selection and existing stale-selection guards. No constructor or wire changes
+are required on any backend.
+
+For example, expanding `B` to `B,C` keeps B's action bar; changing to `A,B`
+creates A's action bar instead of changing a retained NSH popup's native anchor.
+Application code must give a retained anchored popup a new key when changing its
+anchor owner; changing selection membership alone does not require a new key.
+
 ## NSH generic DOM requests retain absence across commit
 
 Generic native DOM services now resolve their canonical target exactly once,
