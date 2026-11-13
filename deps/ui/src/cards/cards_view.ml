@@ -206,8 +206,13 @@ let rec card_view st b phase =
               keyed_card st b'
             ]
         ]
-    ; row ~key:"actions" ~style_class:"ls-card-actions"
-        ~margin_top:32 ~main:`center ~cross:`start ~shrink:0.
+    ; (fun context parent ->
+      Ui_parts.float_prop Lui_protocol.ShrinkValue
+        ?value:(match Lui_ui.host context with
+          | Lui_protocol.WebHost | Lui_protocol.NshHost -> Some 0.
+          | Lui_protocol.GenericHost | Lui_protocol.SwiftUIHost | Lui_protocol.KotlinHost -> None)
+      (row ~key:"actions" ~style_class:"ls-card-actions"
+        ~margin_top:32 ~main:`center ~cross:`start
         ~data_attrs:[ ("style", "padding-bottom:0.5rem") ]
         [ (if np = "show-cloze" || np = "show-answer" then
              (* cljs card-answers is a compact secondary sm button with
@@ -228,7 +233,7 @@ let rec card_view st b phase =
                        ~data_attrs:[ ("style", "transform:scale(0.9)") ]
                        ~value:"s" [] ] ]
            else rating_buttons st)
-        ]
+        ]) context parent)
     ]
 
 (* the card subtree keyed on (eid, phase) — a fresh mount re-reads

@@ -105,8 +105,13 @@ let node_title_el ~key ~query (it : S.ac_item) : t =
 (* cljs node-render icon slot: the h-5 wrap is always present for
    non-db-tag popups, empty when the node has no icon *)
 let node_icon_slot ~key (it : S.ac_item) : t =
-  row ~key ~style_class:"ls-ac-node-icon" ~cross:`center ~height:20
-    ~opacity:0.5 ~margin_right:4 ~shrink:0.
+ fun context parent ->
+  Ui_parts.float_prop P.ShrinkValue
+    ?value:(match Lui_ui.host context with
+      | P.WebHost | P.NshHost -> Some 0.
+      | P.GenericHost | P.SwiftUIHost | P.KotlinHost -> None)
+    (row ~key ~style_class:"ls-ac-node-icon" ~cross:`center ~height:20
+    ~opacity:0.5 ~margin_right:4
     (match it.S.ai_node_icon with
      | Some (icn, true) ->
          [ row ~key:"cp" ~style_class:"icon-cp-container"
@@ -116,7 +121,7 @@ let node_icon_slot ~key (it : S.ac_item) : t =
      | Some (icn, false) ->
          [ icon ~key:"ni" ~name:(Icons.app_ref_of_id icn) ~point_size:14
              ~style_class:"ui__icon" [] ]
-     | None -> [])
+     | None -> [])) context parent
 ;;
 
 (* cljs node-render: div.flex.flex-col > [.text-xs.opacity-70.mb-1

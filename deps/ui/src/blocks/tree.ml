@@ -487,9 +487,10 @@ let content_wrapper uuid (b : Model.block) : t =
   (* cljs puts .block-content-wrapper only around display content;
      the editor replaces it directly under .block-row *)
   Ui_components.with_props
-    [ Ui_components.Prop.user_select `text; Ui_components.Prop.overflow `visible ]
+    [ Ui_components.Prop.overflow `visible ]
     (row ~key:("cw-" ^ uuid)
     ~style_class:"block-content-wrapper" ~grow:1.
+    ~data_attrs:[ ("style", "user-select:text") ]
     [ Jump_state.target ~key:"content" ~uuid
         ~activate:(fun () -> Editor_actions.enter_edit uuid (-1)) (content_el uuid b)
     ; row ~key:("bic-" ^ uuid) ~cross:`center []
@@ -808,10 +809,14 @@ and row_main ~editable ~library scope (b : Model.block) : t =
                                        else
                                          content_or_editor ~editable uuid
                                            scope b)
-                                    ; Ui_components.with_props [ Ui_components.Prop.position `relative ]
+                                    ; Ui_parts.float_prop Lui_protocol.ShrinkValue
+                                        ?value:(match Lui_ui.host context with
+                                          | Lui_protocol.WebHost | Lui_protocol.NshHost -> Some 0.
+                                          | Lui_protocol.GenericHost | Lui_protocol.SwiftUIHost | Lui_protocol.KotlinHost -> None)
+                                      (Ui_components.with_props [ Ui_components.Prop.position `relative ]
                                       (row ~key:("br-" ^ key)
                                         ~style_class:"ls-block-right"
-                                        ~gap:4 ~cross:`center ~shrink:0.
+                                        ~gap:4 ~cross:`center
                                         ~data_attrs:[ ("style", "align-self:flex-start") ]
                                         [ (* cljs .ls-block-right order:
                                              positioned-properties
@@ -825,7 +830,7 @@ and row_main ~editable ~library scope (b : Model.block) : t =
                                           if Comments.is_comments_area b then
                                             spacer ~key:("tags-" ^ uuid) []
                                           else tags_el uuid b
-                                        ])
+                                        ]))
                                     ]
                                 ])
                             ]
@@ -1138,10 +1143,14 @@ and block_row_static ?(depth = 0) ?(library = false) (b : Model.block) : t =
                                     ~grow:1. ~gap:4 ~cross:`center
                                     [ Properties_area.block_left_chips ~scope:"reference" ~uuid
                                     ; content_wrapper uuid b
-                                    ; Ui_components.with_props [ Ui_components.Prop.position `relative ]
+                                    ; Ui_parts.float_prop Lui_protocol.ShrinkValue
+                                        ?value:(match Lui_ui.host ctx with
+                                          | Lui_protocol.WebHost | Lui_protocol.NshHost -> Some 0.
+                                          | Lui_protocol.GenericHost | Lui_protocol.SwiftUIHost | Lui_protocol.KotlinHost -> None)
+                                      (Ui_components.with_props [ Ui_components.Prop.position `relative ]
                                       (row ~key:("br-" ^ key)
                                         ~style_class:"ls-block-right"
-                                        ~gap:4 ~cross:`center ~shrink:0.
+                                        ~gap:4 ~cross:`center
                                         ~data_attrs:[ ("style", "align-self:flex-start") ]
                                         [ (* cljs .ls-block-right order:
                                              positioned-properties
@@ -1149,7 +1158,7 @@ and block_row_static ?(depth = 0) ?(library = false) (b : Model.block) : t =
                                           Properties_area.block_right_chips ~scope:"reference"
                                             ~uuid
                                         ; tags_el uuid b
-                                        ])
+                                        ]))
                                     ]
                                 ]
                             ]

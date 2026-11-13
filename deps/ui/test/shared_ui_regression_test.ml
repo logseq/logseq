@@ -1264,6 +1264,27 @@ let popup_layout_carriers ~registry ~profile =
         (scroll.M.kind="scroll" && M.string_prop scroll "position"=Some "relative"
          && M.string_prop scroll "data-attrs"=Some "style\x1f-webkit-overflow-scrolling:touch")))
 
+let popup_icon_shrink_backend_policy ~registry =
+  List.iter (fun target ->
+    let session=S.mount ~registry ~profile:target ~initial:Model.initial
+      ~reducer:(fun model () -> model)
+      ~view:(fun _ _ _ -> Popups_view.node_icon_slot ~key:"backend-icon"
+        (Popups_state.mk_item ~key:"backend-icon" ~label:"Backend icon"
+          ~node:true Popups_state.Noop)) () in
+    Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose session.S.app)) (fun () ->
+      let icon=List.find (fun node -> class_has node "ls-ac-node-icon") (nodes session) in
+      let expected=match target.P.profile_host with
+        | P.WebHost | P.NshHost -> Some (P.FloatValue 0.)
+        | P.GenericHost | P.SwiftUIHost | P.KotlinHost -> None in
+      check "Autocomplete keeps its native slot valid on every maintained backend profile"
+        (Hashtbl.find_opt icon.M.props "shrink"=expected
+         && Hashtbl.find_opt icon.M.props "height"=Some (P.IntValue 20)
+         && M.children session.S.tree icon.M.id=[])))
+    [{P.profile_os=P.WebOS;profile_host=P.WebHost};
+     {P.profile_os=P.MacOS;profile_host=P.NshHost};
+     {P.profile_os=P.IOS;profile_host=P.SwiftUIHost};
+     {P.profile_os=P.AndroidOS;profile_host=P.KotlinHost}]
+
 let shared_block_clipping ~registry ~profile =
   let previous_model = !Runtime.read_model and previous_flush = !Runtime.app_flush
   and previous_editor = !Editor_state.st
@@ -1328,8 +1349,8 @@ let shared_block_clipping ~registry ~profile =
         check (producer ^ " keeps block content selectable and its authored overflow visible")
           (contents<>[] && List.for_all (fun node ->
             M.string_prop node "overflow"=Some "visible"
-            && M.string_prop node "user-select"=Some "text"
-            && not (Hashtbl.mem node.M.props "data-attrs")) contents);
+            && not (Hashtbl.mem node.M.props "user-select")
+            && M.string_prop node "data-attrs"=Some "style\x1fuser-select:text") contents);
         let trailing=List.filter (fun node -> class_has node "ls-block-right") (nodes session) in
         check (producer ^ " preserves nonshrinking relative trailing block controls")
           (trailing<>[] && List.for_all (fun node ->
@@ -1679,6 +1700,7 @@ let run_views ~registry ~profile ~finish =
   sidebar_favorite_rows ~registry ~profile;
   right_sidebar_block_clipping ~registry ~profile;
   popup_layout_carriers ~registry ~profile;
+  popup_icon_shrink_backend_policy ~registry;
   shared_block_clipping ~registry ~profile;
   native_view_type_menu ~registry;
   gallery_remote_cover_policy ~registry;
