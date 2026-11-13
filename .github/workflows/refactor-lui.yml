@@ -132,7 +132,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: System deps
-        run: brew install pkg-config gmp libffi
+        run: brew install pkg-config gmp libffi dylibbundler
 
       - uses: pnpm/action-setup@v4
         with:
@@ -202,3 +202,13 @@ jobs:
 
       - name: Build Apple host
         run: bash deps/ui/apple/build.sh
+
+      - name: Package Logseq.app
+        run: bash deps/ui/apple/package.sh
+
+      - name: Upload macOS package
+        uses: actions/upload-artifact@v4
+        with:
+          name: logseq-macos-arm64
+          path: deps/ui/_build/packages/Logseq-macos-*.zip
+          if-no-files-found: error
