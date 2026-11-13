@@ -115,6 +115,29 @@ fixture passed in 14.7 seconds (`logseq-native-block.5xwasL`). Inspected
 selection toolbar surface; selected A/B roots move together after C. This does
 not qualify the separate 5pt property bullet family or complete drag parity.
 
+## Help scroll extent investigation
+
+The actual native Help end/return gate remains failing at the recorded 9650
+checkpoint. A full captured-tree public Renderer replay reproduced an extra
+142pt scroll extent. The separate approximate-text eight-delta diagnostic
+completed successfully in `logseq-help-extent-deltas-ji99vrr9`; this is successful
+measurement, not a passing Help UX gate. Only clipping the original document
+Column or Contents card eliminated the extra extent. Help-body, Contents-body
+or page-wrapper clipping and zeroing the existing Spacer grow did not. Removing
+bottom padding or the final card margin also did not fix reported content size.
+No diagnostic-only delta has been applied to production.
+
+A separate replay selected the pinned public macOS `CoreTextEngine` through
+`Headless::start_with_text_engine`, with the same complete tree, original
+services and all nine font assets. It completed all eight cases in
+`logseq-help-coretext-jnjyqa1e`. Its unchanged baseline exactly reproduced the
+native 712pt Help card and 1098pt document frame, versus 1240pt reported content
+size. The 142pt excess and delta outcomes were unchanged. This separates the
+approximate text engine's 20pt heading difference from the actual excess; the
+native fixture had all nine matching font assets throughout. No SDK, font
+policy, production clipping or card height changed. A reviewed containment
+owner and the unchanged actual native wheel/paint gate are still required.
+
 ## Application delivery failures remain visible
 
 Application workflow run `43357554443` completed with two failures. Broad native
