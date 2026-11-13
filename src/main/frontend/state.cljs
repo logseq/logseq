@@ -901,7 +901,13 @@ should be done through this fn in order to get global config and config defaults
 
 (defn set-current-repo!
   [repo]
-  (set-state! :git/current-repo repo)
+  (when (not= repo (get-current-repo))
+    (let [db (-> (rfx/snapshot)
+                 (assoc :git/current-repo repo :editor/pending-new-block nil)
+                 (update :editor/graph-generation (fnil inc 0)))]
+      (rfx/replace-state-paths! db [[:git/current-repo]
+                                    [:editor/pending-new-block]
+                                    [:editor/graph-generation]])))
   (if repo
     (storage/set :git/current-repo repo)
     (storage/remove :git/current-repo))

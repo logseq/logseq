@@ -317,7 +317,9 @@
 
 (defn- start-pending-new-block!
   []
-  (state/set-state! :editor/pending-new-block {:typed-text ""}))
+  (let [id (random-uuid)]
+    (state/set-state! :editor/pending-new-block {:id id :typed-text ""})
+    id))
 
 (defn- pending-new-block
   []
@@ -350,8 +352,9 @@
          (assoc pending :delete? true))))))
 
 (defn- clear-pending-new-block!
-  []
-  (state/set-state! :editor/pending-new-block nil))
+  [id]
+  (when (= id (:id (pending-new-block)))
+    (state/set-state! :editor/pending-new-block nil)))
 
 (declare get-new-container-id)
 (declare delete-block-aux!)
@@ -359,51 +362,54 @@
 
 (defn- inserted-block-edit-fn
   [source-block block container-id]
-  (fn [rows]
-    (let [block' (or (some #(when (= (:block/uuid block) (:block/uuid %)) %) rows)
-                     block)
-          source-block' (or (some #(when (= (:block/uuid source-block) (:block/uuid %)) %) rows)
-                            source-block)
-          {:keys [typed-text tab-indent? delete?]} (pending-new-block)]
-      (if delete?
-        (let [source-title (:block/title source-block')
-              block-title (:block/title block')]
-          (p/do!
-           (edit-block! source-block' (+ (count source-title) (count typed-text))
-                        {:container-id container-id
-                         :custom-content (str source-title typed-text block-title)
-                         :tail-len (count block-title)
-                         :save-code-editor? false
-                         :save-current-block? false
-                         :skip-load? true})
-           (delete-block-aux! block')
-           (let [latest-text (:typed-text (pending-new-block))]
-             (edit-block! source-block' (+ (count source-title) (count latest-text))
-                          {:container-id container-id
-                           :custom-content (str source-title latest-text block-title)
-                           :tail-len (count block-title)
-                           :save-code-editor? false
-                           :save-current-block? false
-                           :skip-load? true}))
-           (clear-pending-new-block!)))
-        (p/do!
-         (when (true? tab-indent?)
-           (expand-collapsed-indent-target! block'))
-         (when (some? tab-indent?)
-           (block-handler/indent-outdent-blocks! [block'] tab-indent? nil))
-         (edit-block! block' (count typed-text)
-                      (cond-> {:container-id container-id
+  (let [id (:id (pending-new-block))]
+    (fn [rows]
+      (when (= id (:id (pending-new-block)))
+        (let [block' (or (some #(when (= (:block/uuid block) (:block/uuid %)) %) rows)
+                         block)
+              source-block' (or (some #(when (= (:block/uuid source-block) (:block/uuid %)) %) rows)
+                                source-block)
+              {:keys [typed-text tab-indent? delete?]} (pending-new-block)]
+          (if delete?
+            (let [source-title (:block/title source-block')
+                  block-title (:block/title block')]
+              (p/do!
+               (edit-block! source-block' (+ (count source-title) (count typed-text))
+                            {:container-id container-id
+                             :custom-content (str source-title typed-text block-title)
+                             :tail-len (count block-title)
+                             :save-code-editor? false
+                             :save-current-block? false
+                             :skip-load? true})
+               (delete-block-aux! block')
+               (let [latest-text (:typed-text (pending-new-block))]
+                 (edit-block! source-block' (+ (count source-title) (count latest-text))
+                              {:container-id container-id
+                               :custom-content (str source-title latest-text block-title)
+                               :tail-len (count block-title)
                                :save-code-editor? false
                                :save-current-block? false
-                               :skip-load? true}
-                        (seq typed-text)
-                        (assoc :custom-content (str typed-text (:block/title block')))))
-         (clear-pending-new-block!))))))
+                               :skip-load? true}))
+               (clear-pending-new-block! id)))
+            (p/do!
+             (when (true? tab-indent?)
+               (expand-collapsed-indent-target! block'))
+             (when (some? tab-indent?)
+               (block-handler/indent-outdent-blocks! [block'] tab-indent? nil))
+             (edit-block! block' (count typed-text)
+                          (cond-> {:container-id container-id
+                                   :save-code-editor? false
+                                   :save-current-block? false
+                                   :skip-load? true}
+                            (seq typed-text)
+                            (assoc :custom-content (str typed-text (:block/title block')))))
+             (clear-pending-new-block! id))))))))
 
 (defn insert-new-block-before-block-aux!
   [config block value]
   (or (skip-insert-for-url-property-value! config block)
-      (let [edit-input-id (state/get-edit-input-id)
+      (let [id (:id (pending-new-block))
+            edit-input-id (state/get-edit-input-id)
             input (gdom/getElement edit-input-id)
             input-text-selected? (util/input-text-selected? input)
             new-m {:block/uuid (ldb/new-block-id)
@@ -418,14 +424,15 @@
                 [_ new-content] (compute-fst-snd-block-text value selection-start selection-end)]
             (state/set-edit-content! edit-input-id new-content)))
         (p/let [left-or-parent (<left-sibling-or-parent repo block)]
-          (let [sibling? (not= (:db/id left-or-parent) (block-parent-id block))
-                container-id (or (get-new-container-id :insert {:sibling? sibling?})
-                                 (:container-id config))
-                config (assoc config :editor/edit-block-fn
-                              (inserted-block-edit-fn block prev-block container-id))
-                result (outliner-insert-block! config left-or-parent prev-block {:sibling? sibling?
-                                                                                 :keep-uuid? true})]
-            [result sibling? prev-block])))))
+          (when (= id (:id (pending-new-block)))
+            (let [sibling? (not= (:db/id left-or-parent) (block-parent-id block))
+                  container-id (or (get-new-container-id :insert {:sibling? sibling?})
+                                   (:container-id config))
+                  config (assoc config :editor/edit-block-fn
+                                (inserted-block-edit-fn block prev-block container-id))
+                  result (outliner-insert-block! config left-or-parent prev-block {:sibling? sibling?
+                                                                                   :keep-uuid? true})]
+              [result sibling? prev-block]))))))
 
 ;; This used to be a list of file attributes. Unclear if remaining ones should be removed
 (def retract-attributes
@@ -443,7 +450,8 @@
     :as block}
    value]
   (or (skip-insert-for-url-property-value! config block)
-      (let [repo (state/get-current-repo)
+      (let [id (:id (pending-new-block))
+            repo (state/get-current-repo)
             block-self? (block-self-alone-when-insert? config uuid)
             input (gdom/getElement (state/get-edit-input-id))
             selection-start (util/get-selection-start input)
@@ -451,25 +459,26 @@
         (p/let [worker-result (when-let [block-id (:db/id block)]
                                 (db-async/<get-block-with-children
                                  repo block-id {:children? true}))]
-          (let [block (block-with-worker-children block worker-result)
-                [fst-block-text snd-block-text] (if (:preserve-current-block? config)
-                                                 [(:block/title block) value]
-                                                 (compute-fst-snd-block-text value selection-start selection-end))
-                current-block (current-block-with-title block fst-block-text)
-                current-block (apply dissoc current-block retract-attributes)
-                new-m {:block/uuid (ldb/new-block-id)
-                       :block/title snd-block-text}
-                next-block (-> (merge (select-keys block [:block/parent :block/format :block/page])
-                                      new-m)
-                               (wrap-parse-block))
-                sibling? (or (get-in block [:block/link :block/collapsed?]) (when block-self? false))
-                container-id (or (get-new-container-id :insert {:sibling? sibling?})
-                                 (:container-id config))
-                config (assoc config :editor/edit-block-fn
-                              (inserted-block-edit-fn current-block next-block container-id))
-                result (outliner-insert-block! config current-block next-block {:sibling? sibling?
-                                                                                :keep-uuid? true})]
-            [result sibling? next-block])))))
+          (when (= id (:id (pending-new-block)))
+            (let [block (block-with-worker-children block worker-result)
+                  [fst-block-text snd-block-text] (if (:preserve-current-block? config)
+                                                    [(:block/title block) value]
+                                                    (compute-fst-snd-block-text value selection-start selection-end))
+                  current-block (current-block-with-title block fst-block-text)
+                  current-block (apply dissoc current-block retract-attributes)
+                  new-m {:block/uuid (ldb/new-block-id)
+                         :block/title snd-block-text}
+                  next-block (-> (merge (select-keys block [:block/parent :block/format :block/page])
+                                        new-m)
+                                 (wrap-parse-block))
+                  sibling? (or (get-in block [:block/link :block/collapsed?]) (when block-self? false))
+                  container-id (or (get-new-container-id :insert {:sibling? sibling?})
+                                   (:container-id config))
+                  config (assoc config :editor/edit-block-fn
+                                (inserted-block-edit-fn current-block next-block container-id))
+                  result (outliner-insert-block! config current-block next-block {:sibling? sibling?
+                                                                                  :keep-uuid? true})]
+              [result sibling? next-block]))))))
 
 (defn clear-when-saved!
   []
@@ -584,43 +593,45 @@
      (when state
        (if (leaf-property-value-insert-blocked? (:config state) (:block state))
          (escape-editing)
-         (do
-           (start-pending-new-block!)
-           (let [{:keys [block value config]} state
-                 value (if (string? block-value) block-value value)
-                 block-id (:block/uuid block)
-                 block-self? (block-self-alone-when-insert? config block-id)
-                 input (:node state)
-                 selection-start (util/get-selection-start input)
-                 selection-end (util/get-selection-end input)
-                 [fst-block-text snd-block-text] (compute-fst-snd-block-text value selection-start selection-end)
-                 insert-above? (and (string/blank? fst-block-text) (not (string/blank? snd-block-text)))
-                 block' block
-                 original-block (:original-block config)
-                 block'' (or
-                          (when original-block
-                            (let [e block']
-                              (if (and (worker-has-children? e)
-                                       (not (:block/collapsed? e)))
-                          ;; object has children and not collapsed
-                                block'
-                                original-block)))
-                          block')
-                 insert-fn (cond
-                             block-self?
-                             insert-new-block-aux!
+         (let [id (start-pending-new-block!)
+               {:keys [block value config]} state
+               value (if (string? block-value) block-value value)
+               block-id (:block/uuid block)
+               block-self? (block-self-alone-when-insert? config block-id)
+               input (:node state)
+               selection-start (util/get-selection-start input)
+               selection-end (util/get-selection-end input)
+               [fst-block-text snd-block-text] (compute-fst-snd-block-text value selection-start selection-end)
+               insert-above? (and (string/blank? fst-block-text) (not (string/blank? snd-block-text)))
+               block' block
+               original-block (:original-block config)
+               block'' (or
+                        (when original-block
+                          (let [e block']
+                            (if (and (worker-has-children? e)
+                                     (not (:block/collapsed? e)))
+                        ;; object has children and not collapsed
+                              block'
+                              original-block)))
+                        block')
+               insert-fn (cond
+                           block-self?
+                           insert-new-block-aux!
 
-                             insert-above?
-                             insert-new-block-before-block-aux!
+                           insert-above?
+                           insert-new-block-before-block-aux!
 
-                             :else
-                             insert-new-block-aux!)]
-             (-> (p/let [insert-result (insert-fn config block'' value)
-                         _ (first insert-result)]
-                   (clear-when-saved!))
-                 (p/catch (fn [error]
-                            (clear-pending-new-block!)
-                            (throw error)))))))))))
+                           :else
+                           insert-new-block-aux!)]
+           (editor-common-handler/<enqueue-command!
+            (state/get-current-repo)
+            (fn []
+              (-> (p/let [insert-result (insert-fn config block'' value)
+                          _ (first insert-result)]
+                    (clear-when-saved!))
+                  (p/catch (fn [error]
+                             (clear-pending-new-block! id)
+                             (throw error))))))))))))
 
 (defn api-insert-new-block!
   [content {:keys [page block-uuid
@@ -3160,7 +3171,7 @@
         (do
           (util/stop e)
           (notification/show! (t :page.validation/name-no-hash) :warning))
-        (pending-new-block?)
+        (and (pending-new-block?) (not (or ctrlKey metaKey)))
         (do
           (when (= 1 (count (str key)))
             (append-pending-new-block-text! key))
