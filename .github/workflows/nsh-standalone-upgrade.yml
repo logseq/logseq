@@ -3,15 +3,8 @@ name: Actual standalone NSH upgrade
 on:
   pull_request:
     branches: ['refactor/lui']
-    paths:
-      - '.github/workflows/nsh-standalone-upgrade.yml'
-      - '.github/actions/setup-nsh-upgrade/**'
-      - 'deps/ui/nsh/prepare_standalone_upgrade.py'
-      - 'deps/ui/nsh/test_prepare_standalone_upgrade.py'
-      - 'deps/ui/nsh/qualify_standalone_upgrade.py'
-      - 'deps/ui/nsh/test_standalone_upgrade.py'
-      - 'deps/ui/nsh/private_update_https.py'
-      - 'deps/ui/nsh/test_private_update_https.py'
+    # Match the normal desktop PR policy: native, shared runtime, worker,
+    # packaging and dependency changes must not bypass real upgrade checks.
   workflow_dispatch:
 
 permissions:
