@@ -1,5 +1,21 @@
 # API migrations
 
+## Native code actions overlay the retained editor
+
+On NSH the existing code action row is now positioned four points from the
+editor wrap's top/right rather than consuming a separate document row. Its
+existing ghost Buttons use master's compact 16pt height and 12pt text recipe;
+the same language/Copy handlers and accessible controls remain installed.
+
+The retained wrap owns one hover/focus-within tuple. Pointer entry or contained
+keyboard focus reveals the action row; leaving both restores opacity zero.
+Only that row's opacity changes, through its existing 300ms ease-in transition
+and native reduced-motion policy. No display-none, disabled flag, focus manager,
+timer, native Editor remount or document/history replacement is used for this
+visibility. Web and maintained mobile hosts keep their existing composition
+and stylesheet behavior. Actual native placement, keyboard focus, language
+selection and Copy still require their normal application qualification gates.
+
 ## Code blocks keep one visible language caption
 
 The separate `.extensions__code-lang` node inside a fenced code editor is now

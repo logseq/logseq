@@ -187,12 +187,24 @@ let calc_results_el code =
 (* cljs components/block.cljs src-cp actions bar — .code-block-actions
    with a language picker button + copy button. Handlers live in
    Code_mirror (open_lang_picker/copy_button). *)
-let code_block_actions ~self lang =
+let code_block_actions ~self lang : t =
+ fun context parent ->
+  let native = Lui_ui.host context = Lui_protocol.NshHost in
+  let compact element =
+    if native then
+      Ui_components.with_props
+        [ Ui_components.Prop.height 16; Ui_components.Prop.padding_vertical 0
+        ; Ui_components.Prop.padding_horizontal 4
+        ; Ui_components.Prop.font_size "0.75rem"; Ui_components.Prop.line_height "1rem"
+        ; Ui_components.Prop.foreground "var(--ls-secondary-text-color)"
+        ; Ui_components.Prop.hover_foreground "var(--ls-primary-text-color)" ] element
+    else element
+  in
   (* the language picker is anchored by the .select-language query in
      Code_mirror — the class stays *)
-  row ~key:"cba" ~style_class:"code-block-actions" ~gap:4
+  (row ~key:"cba" ~style_class:"code-block-actions" ~gap:4
     ~transition:"opacity 300ms ease-in"
-    [ (if Ui_services.env_publishing () then text ~value:lang [] else Ui_components.button ~key:"sl" ~variant:`ghost ~size:`sm
+    [ (if Ui_services.env_publishing () then text ~value:lang [] else compact (Ui_components.button ~key:"sl" ~variant:`ghost ~size:`sm
         ~style_class:"select-language"
         ~accessibility_identifier:("code-language-" ^ self)
         ~text:
@@ -200,13 +212,13 @@ let code_block_actions ~self lang =
            else I18n.t "editor/code-language-placeholder")
         ~icon:(`app "chevron-down") ~icon_placement:`trailing
         ~on_press:(fun _ -> Code_mirror.open_lang_picker self)
-        [])
-    ; Ui_components.button ~key:"cp" ~variant:`ghost ~size:`sm
+        []))
+    ; compact (Ui_components.button ~key:"cp" ~variant:`ghost ~size:`sm
         ~icon:(`app "copy") ~icon_placement:`leading
         ~text:(I18n.t "ui/copy")
         ~on_press:(fun _ -> Code_mirror.copy_button self)
-        []
-    ]
+        [])
+    ]) context parent
 
 (* cljs src-cp + extensions/code.cljs editor DOM:
    .ui-fenced-code-editor > .ls-code-editor-wrap > (.code-block-actions +
@@ -224,10 +236,31 @@ let code_block ?(self = "") ?(extra = []) lang code =
     | l -> l
   in
   let calc = lang = "calc" in
-  row ~key:("fcb-" ^ self) ~grow:1.0
-    ~style_class:"ui-fenced-code-editor"
-    [ box ~key:"wrap" ~grow:1.0 ~style_class:"ls-code-editor-wrap"
-        [ code_block_actions ~self lang
+  fun context parent ->
+  let visibility =
+    if Lui_ui.host context = Lui_protocol.NshHost then
+      Some (Signal.state context.Lui_ui.ui_scheduler (false,false))
+    else None in
+  let actions = code_block_actions ~self lang in
+  let actions = match visibility with
+    | None -> actions
+    | Some visibility ->
+        Ui_parts.float_prop Lui_protocol.Opacity
+          ~value:(reactive (fun (hovered,focused) -> if hovered || focused then 1. else 0.)
+            (Signal.value visibility))
+          (Ui_components.with_props
+            [ Ui_components.Prop.position `absolute; Ui_components.Prop.inset_top 4.
+            ; Ui_components.Prop.inset_right 4.; Ui_components.Prop.z_index 1
+            ; Ui_components.Prop.background "var(--lx-gray-01, var(--ls-primary-background-color))" ]
+            actions) in
+  let wrap = box ~key:"wrap" ~grow:1.0 ~style_class:"ls-code-editor-wrap"
+      ?on_pointer_enter:(Option.map (fun state _ ->
+        Signal.update state (fun (_,focused) -> true,focused)) visibility)
+      ?on_pointer_leave:(Option.map (fun state _ ->
+        Signal.update state (fun (_,focused) -> false,focused)) visibility)
+      ?on_focus_within:(Option.map (fun state focused ->
+        Signal.update state (fun (hovered,_) -> hovered,focused)) visibility)
+        [ actions
         ; row ~key:"ec" ~grow:1.0 ~style_class:"extensions__code"
             ([ (if lang <> "" && not calc then
                  Ui_components.with_props [Ui_components.Prop.display `none]
@@ -256,8 +289,13 @@ let code_block ?(self = "") ?(extra = []) lang code =
                  ]
              ]
             @ extra)
-        ]
-    ]
+        ] in
+  let wrap = match visibility with
+    | None -> wrap
+    | Some _ -> Ui_components.with_props [Ui_components.Prop.position `relative] wrap in
+  (row ~key:("fcb-" ^ self) ~grow:1.0
+    ~style_class:"ui-fenced-code-editor"
+    [wrap]) context parent
 
 let has_sub hay needle =
   let n = String.length hay and m = String.length needle in
