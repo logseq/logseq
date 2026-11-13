@@ -126,11 +126,15 @@ let run (h : host) =
   c "add-comment handled"
     (h.run ~command:"add-comment" ~block:(Some "c1") ~value:None
      = "handled");
-  c "add-comment invokes the comments worker api"
-    (has "thread-api/ensure-comments-area-for-blocks" (h.invokes ()));
   c "quote handled"
     (h.run ~command:"quote" ~block:(Some "c1") ~value:None = "handled");
   h.drain (fun () ->
+      (* Comments first await the existing pending-save drain, including when
+         no block editor is active. Observe the worker effect after that same
+         drain as the other worker-fed commands, rather than on dispatch. *)
+      c "add-comment invokes the comments worker api exactly once after draining input"
+        (List.length (List.filter ((=) "thread-api/ensure-comments-area-for-blocks")
+           (h.invokes ())) = 1);
       c "status-doing applies the resolved property"
         (has "batch-set-property" (h.ops ())
         || has "set-block-property" (h.ops ()));
