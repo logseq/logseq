@@ -1,5 +1,35 @@
 # API migrations
 
+## Node property choices retain their async graph owner
+
+Choosing an existing Node/Page/Class/Asset/Property reference in a value picker
+now keeps the popup's graph and worker identity through its fresh block read
+and any reference-identity lookups. The callback captures the existing reload
+origin for each click, so a graph, worker, route or revision change during those
+reads retires that choice before any set/remove operation. Dismissing the
+chooser also retires its pending choice. A stale completion removes only its
+original popup key and cannot adopt or close a newly opened destination chooser.
+
+Previously, the callback awaited the original block, then invoked property
+helpers which obtained `Runtime.repo ()` again. A graph switch during either
+read could therefore target the destination graph using the original block
+UUID and selected entity ID. Its liveness check guarded only the checkmark
+update after that write. The existing scope, worker and reload-origin checks
+now run before mutation instead; no new cache, request registry or component
+identity is introduced. An already accepted write keeps its existing SDK
+ownership/refresh policy. Current choices still re-read their actual stored
+references, toggle many-valued choices with the same set/delete payloads, and
+keep a many-valued picker open after success.
+
+There is no source or wire migration for downstream applications. This change
+does not claim to qualify the separate new-node creation, initial result or
+search-result asynchronous paths. The actual native admission fixture opens
+the real value Button and selects its real ListItem, delays each worker read,
+then tests current add/remove, graph/worker/route retirement, dismissal and
+replacement ownership. It uses the existing target archives and runner without
+Dune changes. These source regressions await root execution; they are not
+native paint, hardware input or real database undo evidence.
+
 ## Command-palette result gutters use the retained typed Column
 
 `Ui_components.cmdk_item_row` now declares its existing symmetric 2pt gutter

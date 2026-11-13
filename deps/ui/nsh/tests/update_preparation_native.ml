@@ -3364,6 +3364,7 @@ let () =
   native_scalar_string_dismissal ();
   native_scalar_draft_area_refresh ();
   native_property_batch_repo_ownership ();
+  Property_picker_origin_native.run ~check ();
   native_file_request_lifetimes ();
   native_entry_admission ();
   editor_keyboard_capture_order ();

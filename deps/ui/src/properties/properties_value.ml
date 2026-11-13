@@ -1405,23 +1405,34 @@ let node_view ?(jump_target = true) ctx row : t =
   let activate () =
     open_value_picker anchor_id
            (fun ~alive ~close context' parent' ->
+           let repo = Runtime.repo () and worker = !Runtime.worker in
+           let owned () = alive () && Runtime.repo () = repo
+             && !Runtime.worker == worker && not (Ui_services.env_publishing ()) in
+           let retire () = close (); Js.Promise.resolve () in
            let selected = Signal.state context'.Lui_ui.ui_scheduler [] in
            let block = D.uuid_ref ctx.block_uuid in
            let prop = D.row_prop row in
            let on_pick id =
+             if not (owned ()) then close () else
+             let origin = Runtime.capture_reload_origin () in
+             let current () = owned ()
+               && Option.fold ~none:false ~some:Runtime.reload_origin_current origin in
              ignore (let* block = D.entity_by_uuid ctx.block_uuid in
-               let current = Option.value (D.getf (D.untag block) ident) ~default:W.Nil in
-               let* keys = reference_keys current in
+               if not (current ()) then retire () else
+               let value = Option.value (D.getf (D.untag block) ident) ~default:W.Nil in
+               let* keys = reference_keys value in
+               if not (current ()) then retire () else
                let key = "entity-" ^ string_of_int id in
                let remove = many && List.mem key keys in
                let* _ = if remove then
                  D.delete_property_value ~block_uuid:ctx.block_uuid ~ident ~value:(W.Int id)
                  else D.set_block_property ~block_uuid:ctx.block_uuid ~ident ~value:(W.Int id) in
-               if alive () then
+               if owned () then (
                  Runtime.signal_set selected (if remove then List.filter ((<>) key) keys
                    else if many then key :: keys else [key]);
-               S.refresh_all ();
-               if not many then close ();
+                 S.refresh_all ();
+                 if not many then close ())
+               else close ();
                Js.Promise.resolve ())
            in
            let initial, on_search =
