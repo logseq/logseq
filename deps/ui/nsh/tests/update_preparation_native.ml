@@ -1776,6 +1776,7 @@ let native_wide_reading_column () =
 
 let native_code_language_popup_scroll () =
   let previous_app = !Native_embed.current_app
+  and previous_host = !Host.host_op
   and previous_provider = !Dom_ext.doc_elements_provider
   and previous_subtree = !Dom_ext.subtree_elements_provider
   and previous_overlays = !Properties_state.view_overlays_state
@@ -1783,6 +1784,7 @@ let native_code_language_popup_scroll () =
   and previous_flush = !Runtime.app_flush in
   Fun.protect ~finally:(fun () ->
     Native_embed.current_app := previous_app;
+    Host.set_host_op previous_host;
     Dom_ext.doc_elements_provider := previous_provider;
     Dom_ext.subtree_elements_provider := previous_subtree;
     Properties_state.view_overlays_state := previous_overlays;
@@ -1804,7 +1806,7 @@ let native_code_language_popup_scroll () =
              reactive (fun entries -> Lui_elements.column
                (List.map (fun (entry : Properties_state.view_overlay) -> entry.vo_view) entries))
                overlays]) in
-      let measured = ref None in
+      let measured = ref None and measurements = ref 0 in
       Fun.protect ~finally:(fun () ->
         Option.iter (fun node -> Native_embed.platform_event ("node-rect\n" ^
           Js.Json.stringify (Js.Json.object_list ["nodeId",Js.Json.number (float_of_int node)]))) !measured;
@@ -1820,12 +1822,33 @@ let native_code_language_popup_scroll () =
             =Some (Lui_protocol.StringValue identifier) then Some node else found)
           runtime.Lui_runtime.runtime_properties None |> Option.get in
         measured := Some trigger;
-        Native_embed.platform_event ("node-rect\n" ^ Js.Json.stringify (Js.Json.object_list
-          ["nodeId",Js.Json.number (float_of_int trigger);
-           "rect",Js.Json.object_list ["left",Js.Json.number 80.;"top",Js.Json.number 100.;
-             "width",Js.Json.number 120.;"height",Js.Json.number 28.]]));
+        Host.set_host_op (fun operation payload ->
+          check "language popup only requests geometry from its connected fixture host"
+            (operation="dom-op");
+          let boundary=String.index payload '\n' in
+          check "language popup uses the normal measure-node request"
+            (String.sub payload 0 boundary="measure-node");
+          let body=String.sub payload (boundary+1) (String.length payload-boundary-1) in
+          let fields=match Js.Json.parseExn body with
+            | Js.Json.JObject fields -> fields
+            | _ -> failwith "Native measurement request must be an object" in
+          let reference=List.assoc "ref" fields in
+          let node=match reference with
+            | Js.Json.JObject fields ->
+                (match List.assoc "node-id" fields with
+                 | Js.Json.JNumber node -> int_of_float node
+                 | _ -> failwith "Native measurement must retain its canonical node")
+            | _ -> failwith "Native measurement must carry its real toolbar reference" in
+          check "the real toolbar owns every requested measurement" (node=trigger);
+          incr measurements;
+          Native_embed.platform_event ("node-rect\n" ^ Js.Json.stringify (Js.Json.object_list
+            ["nodeId",Js.Json.number (float_of_int node);"ref",reference;
+             "rect",Js.Json.object_list ["left",Js.Json.number 80.;"top",Js.Json.number 100.;
+               "width",Js.Json.number 120.;"height",Js.Json.number 28.]])));
         ignore (Lui_app.dispatch_event app (Lui_protocol.Press trigger));
+        Host.drain ();
         ignore (Lui_app.flush app);
+        check "actual toolbar activation completes its native geometry request/reply" (!measurements>0);
         let items=Hashtbl.fold (fun node kind found ->
           if kind=Lui_protocol.MenuItem then node::found else found) runtime.Lui_runtime.mounted_nodes [] in
         let label node = match Lui_protocol.Property_map.find_opt Lui_protocol.TextValue
