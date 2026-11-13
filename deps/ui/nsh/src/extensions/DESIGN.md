@@ -5,6 +5,32 @@ The native CodeMirror factory uses NSH Editor's existing theme, monospaced scale
 gutter, selection, caret and composition parts. It adds no layout wrapper, focus
 manager, custom paint layer or text document.
 
+## Code viewport and document ownership
+
+Frozen master `29fd2edd`'s `src/main/frontend/extensions/code.css` gives ordinary
+`.CodeMirror` a `1024px` maximum height and explicitly removes it for `calc`.
+The native factory applies the equivalent 1024pt maximum to the existing NSH
+Editor, for both block and query roles. Its existing `min_rows=Some(1)` remains:
+short code grows naturally, and long code scrolls within the bounded viewport.
+No maximum line count or `max_rows` approximation is introduced.
+
+The authored language uses the same whitespace/case normalization as native
+highlighting. `calc` removes the height constraint with `Length::Auto`, while
+still using the existing JavaScript highlighter mapping. Language/height
+bindings update the same Editor; only the existing `(source-role, uuid)` key
+can replace its document/history owner. Read-only, focus and query draft
+contracts remain unchanged. The native Editor's internal Scroll and visible-row
+slots own virtualization; the App adds no scroll wrapper, row source or layout
+cache.
+
+The existing Headless fixture checks a tall parent independently of the cap,
+short autoheight, complete 1k/100k block/query documents through native
+document-end paste and Undo, and retained identity/focus/history through
+normalized calc/ordinary/rust language changes. Public approximate-layout
+witnesses establish bounded projection, not platform font shaping, standalone
+physical memory or a successful 100k application launch. Those measurements
+require a fresh standalone release and separate code-workload evidence.
+
 ## Motion inventory
 
 | Change | Owner and tool | Reduced motion |

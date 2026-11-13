@@ -1,5 +1,28 @@
 # API migrations
 
+## Native ordinary code uses the master's 1024pt maximum viewport
+
+The NSH `logseq-codemirror` factory now constrains the existing native Editor to
+1024pt maximum height for ordinary block and query code. Previously its
+`min_rows=Some(1)` let the native viewport expand to the full document height.
+The default matches frozen master's `.CodeMirror { max-height: 1024px }`.
+Short code still grows from one row; the change does not impose a fixed height,
+truncate source or set an arbitrary maximum number of lines.
+
+For example, an ordinary `source-role="block"` or `"query"` document with
+100,000 lines now uses NSH Editor's own scrolling/visible-row window within
+that maximum. An authored language normalizing to `calc` retains master's
+explicit uncapped exception; switching `" CALC "` to `" CLJ "` or `"rust"`
+updates the same Editor's height constraint and highlighter. The existing
+source key, document, Undo history, focus and read-only/query behavior remain
+owned by that Editor. No wire schema, public constructor or host API changes
+are required downstream.
+
+The public Headless regression's finite bounds, complete native edit/Undo and
+retained owner are not physical-memory measurements. Standalone large-code
+memory and native shaping/interaction must be requalified after rebuilding;
+failed pre-change workloads are not picker-memory results.
+
 ## Selection action bars follow their anchor owner
 
 The selection action bar now keys its popover by the outliner scope and mounted

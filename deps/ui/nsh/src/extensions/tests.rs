@@ -14,6 +14,7 @@ use nsh_testing::Headless;
 use serde_json::{Value, json};
 use std::{
     cell::Cell,
+    fmt::Write,
     rc::Rc,
     sync::{Arc, Mutex},
 };
@@ -34,6 +35,8 @@ struct Fixture {
     query: bool,
     readonly: bool,
     horizontal_parent: bool,
+    document: String,
+    language: String,
     events: Events,
 }
 #[component]
@@ -67,8 +70,8 @@ fn CodeMirrorFixture() -> impl IntoElement {
         {"op":"create-extension","id":1,"identifier":"logseq-codemirror","fingerprint":schema().fingerprint},
         {"op":"set-extension-prop","id":1,"property":"uuid","value":"first"},
         {"op":"set-extension-prop","id":1,"property":"source-role","value":if fixture.query {"query"} else {"block"}},
-        {"op":"set-extension-prop","id":1,"property":"value","value":"initial"},
-        {"op":"set-extension-prop","id":1,"property":"lang","value":"edn"},
+        {"op":"set-extension-prop","id":1,"property":"value","value":fixture.document},
+        {"op":"set-extension-prop","id":1,"property":"lang","value":fixture.language},
         {"op":"set-extension-prop","id":1,"property":"read-only","value":fixture.readonly}
     ]))).unwrap();
     // Render.code_block places its extension directly in a grow Row. Keep
@@ -114,30 +117,47 @@ fn CodeMirrorFixture() -> impl IntoElement {
     };
     view()
         .w(px(640.0))
-        .child(renderer.element())
         .child(action("Remote source", json!({"value":"remote"})))
         .child(action(
             "Rebind source",
             json!({"uuid":"second","value":"replacement"}),
         ))
         .child(action("Change language", json!({"lang":"rust"})))
+        .child(action("Use calc", json!({"lang":" CALC "})))
+        .child(action("Use ordinary alias", json!({"lang":" CLJ "})))
+        .child(renderer.element())
 }
 fn start(query: bool, readonly: bool) -> (Headless, Events) {
     start_with_parent(query, readonly, false)
 }
 fn start_with_parent(query: bool, readonly: bool, horizontal_parent: bool) -> (Headless, Events) {
+    start_with_source(query, readonly, horizontal_parent, "initial", "edn", None)
+}
+fn start_with_source(
+    query: bool,
+    readonly: bool,
+    horizontal_parent: bool,
+    document: &str,
+    language: &str,
+    viewport: Option<Size<Points>>,
+) -> (Headless, Events) {
     let events = Arc::new(Mutex::new(Vec::new()));
     let mut config = EngineConfig {
         context: EngineContext::default().with(Fixture {
             query,
             readonly,
             horizontal_parent,
+            document: document.into(),
+            language: language.into(),
             events: events.clone(),
         }),
         ..EngineConfig::new(Root::of::<CodeMirrorFixture>())
     };
     config.environment.os = Os::Linux;
     config.environment.idiom = Idiom::Desktop;
+    if let Some(viewport) = viewport {
+        config.viewport = viewport;
+    }
     let mut app = Headless::start(config).unwrap();
     app.wait_for("id:lui-1").unwrap();
     (app, events)
@@ -149,6 +169,156 @@ fn native(app: &Headless) -> nsh_core::NodeId {
         .find(|node| node.test_id.as_deref() == Some("lui-1"))
         .unwrap()
         .id
+}
+
+fn editor_height(app: &Headless) -> f32 {
+    app.screen()
+        .layout_nodes()
+        .into_iter()
+        .find(|node| node.test_id.as_deref() == Some("lui-1"))
+        .unwrap()
+        .bounds
+        .size
+        .height
+        .0
+}
+
+fn long_document(lines: usize) -> String {
+    let mut value = String::with_capacity(lines * 24);
+    for line in 0..lines {
+        writeln!(value, "line {line:06} source").unwrap();
+    }
+    value
+}
+
+#[test]
+fn ordinary_code_and_queries_keep_complete_large_documents_in_the_master_sized_viewport() {
+    for query in [false, true] {
+        let mut initial_witnesses = None;
+        for lines in [1_000, 100_000] {
+            let source = long_document(lines);
+            let (mut app, events) = start_with_source(
+                query,
+                false,
+                true,
+                &source,
+                "plaintext",
+                Some(nsh_core::geometry::size(px(640.0), px(1600.0))),
+            );
+            assert_eq!(
+                editor_height(&app),
+                1024.0,
+                "the Editor itself must be capped independently of the taller parent"
+            );
+            let witness_count = app.screen().layout_nodes().len();
+            if let Some(expected) = initial_witnesses {
+                assert_eq!(
+                    witness_count, expected,
+                    "100k source must reuse the same viewport-sized native witness count as 1k"
+                );
+            } else {
+                initial_witnesses = Some(witness_count);
+            }
+            let before = native(&app);
+            app.type_text("id:lui-1", "").unwrap();
+            app.press_key("ctrl+end").unwrap();
+            let mut paste = nsh_core::PasteEvent::default();
+            paste.text = "complete native document tail".into();
+            app.paste("id:lui-1", &paste).unwrap();
+            {
+                let recorded = events.lock().unwrap();
+                let value = recorded
+                    .iter()
+                    .rev()
+                    .find(|event| event["name"] == "input")
+                    .unwrap()["value"]
+                    .as_str()
+                    .unwrap();
+                assert!(
+                    value == format!("{source}{}", paste.text),
+                    "native document-end paste must preserve every source line and its exact order"
+                );
+            }
+            app.press_key("ctrl+z").unwrap();
+            let recorded = events.lock().unwrap();
+            let restored = recorded
+                .iter()
+                .rev()
+                .find(|event| event["name"] == "input")
+                .unwrap()["value"]
+                .as_str()
+                .unwrap();
+            assert!(
+                restored == source,
+                "Undo must restore the full native document"
+            );
+            assert_eq!(native(&app), before);
+            assert_eq!(editor_height(&app), 1024.0);
+        }
+    }
+}
+
+#[test]
+fn short_code_grows_naturally_and_calc_removes_the_cap_without_replacing_history_or_focus() {
+    let (short, _) = start(false, false);
+    let short_height = editor_height(&short);
+    assert!(
+        short_height >= 20.0 && short_height < 1024.0,
+        "min_rows keeps one editable row; max-height must not become fixed height"
+    );
+    drop(short);
+    let source = long_document(1_000);
+    let (mut app, events) = start_with_source(
+        false,
+        false,
+        true,
+        &source,
+        "plaintext",
+        Some(nsh_core::geometry::size(px(640.0), px(1600.0))),
+    );
+    let before = native(&app);
+    app.type_text("id:lui-1", "").unwrap();
+    app.press_key("ctrl+end").unwrap();
+    let mut paste = nsh_core::PasteEvent::default();
+    paste.text = "unsaved native history".into();
+    app.paste("id:lui-1", &paste).unwrap();
+    events.lock().unwrap().clear();
+    app.press("text:Use calc").unwrap();
+    assert_eq!(native(&app), before);
+    assert!(
+        editor_height(&app) > 1024.0,
+        "normalized CALC keeps the master's explicit unbounded-height exception"
+    );
+    app.press("text:Use ordinary alias").unwrap();
+    assert_eq!(native(&app), before);
+    assert_eq!(editor_height(&app), 1024.0);
+    app.press("text:Change language").unwrap();
+    assert_eq!(native(&app), before);
+    assert_eq!(editor_height(&app), 1024.0);
+    assert!(
+        !events
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|event| event["name"] == "blur"),
+        "reactive language/height updates must not retire the focused native Editor"
+    );
+    // No focus/type helper follows the property changes: the same focused
+    // editor must still own this real key and its earlier document history.
+    app.press_key("ctrl+z").unwrap();
+    let recorded = events.lock().unwrap();
+    let restored = recorded
+        .iter()
+        .rev()
+        .find(|event| event["name"] == "input")
+        .unwrap()["value"]
+        .as_str()
+        .unwrap();
+    assert!(
+        restored == source,
+        "language changes must preserve the real Undo history"
+    );
+    assert_eq!(native(&app), before);
 }
 
 #[test]

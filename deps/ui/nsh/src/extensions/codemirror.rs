@@ -98,6 +98,7 @@ fn editor_for(context: ExtensionContext, source: Source) -> AnyElement {
     let value_source = source.clone();
     let value_observation = observed.clone();
     let language_context = context.clone();
+    let height_context = context.clone();
     let label_context = context.clone();
     let events_context = context.clone();
     let events_source = source.clone();
@@ -155,6 +156,18 @@ fn editor_for(context: ExtensionContext, source: Source) -> AnyElement {
     .element_ref(&context.reference)
     .test_id(&test_id)
     .w_full()
+    // Match code.css: ordinary code grows up to 1024px; calc explicitly
+    // removes that limit. Keep the same Editor and its native row window.
+    .max_h(move || {
+        if string(&height_context, "lang")
+            .trim()
+            .eq_ignore_ascii_case("calc")
+        {
+            Length::Auto
+        } else {
+            Length::from(px(1024.0))
+        }
+    })
     .into_element()
 }
 
