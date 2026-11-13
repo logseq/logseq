@@ -109,6 +109,43 @@ the maintained shared parity suite also covers trimmed numbers, exact strings,
 absent values and clearing a populated Number. These are source regressions
 awaiting execution by the integration owner, not native paint or undo evidence.
 
+## Native cards keys follow their existing modal owner
+
+Native key publication now includes the five existing `Cards_state.shortcut_ids`
+only while that state's open signal belongs to the current application
+scheduler and is true. Opening/closing cards republishes the existing native
+keymap even when configured-key revision is unchanged. Configured/disabled
+bindings still come from `Keymap_data.effective_shortcut`; the default S and 1–4
+are not installed as an independent global map. For example, configuring
+`cards/toggle-answers` to Alt-Q retires its S subscription; disabling
+`cards/again` removes 1 from the card subscription set.
+
+This reuses the existing `global-non-editing-only` wire scope and native
+`When::NotEditing` behavior. There are no new payload fields, wire scope values,
+LUI constructors or SDK APIs. Existing palette, shortcut-capture, editor/input,
+composition and application-admission owners retain their event guards. A
+retained cards state from another app scheduler cannot publish into its
+replacement. The five card commands remain absent from the visible Settings
+category catalog, matching the master category policy; their existing explicit
+modal handler and native publisher now share one ID list.
+
+The existing T I (`ui/select-theme-color`) and T P (`ui/goto-plugins`) bindings
+now have rows in the runtime key catalog. Both retain normal/nonediting context
+and their existing appearance/dashboard capabilities; opening the plugin
+dashboard does not add an LSPluginCore runtime. Their Settings labels reuse the
+existing `command.ui/select-theme-color` and `command.ui/goto-plugins` roles.
+No translation keys or user-keymap migration are required.
+
+Provider regressions use actual public Headless native key dispatch and the
+real production keyboard bridge for open/close, rebinding, input/composition,
+palette/capture and held admission. Native-archive checks use the actual cards
+open/close state, publisher and configured phase handler, including stale app
+ownership; the shared portable fixture checks T I/T P through the actual global
+entry. These are source candidates pending execution, not full native flashcard
+rating/persistence, physical IME or all-platform qualification. Existing
+application-global versus modal shortcut-prefix precedence is preserved and
+still needs an actual conflicting-binding scenario.
+
 ## Comment and Contents shortcuts retain their editing contexts
 
 `editor/add-comment` (Ctrl-Space) now uses the existing editor-global scope,

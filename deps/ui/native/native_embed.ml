@@ -62,7 +62,7 @@ let () =
     | None -> true)
 
 let last_native_keymap :
-    ((Model.t, Action.t) Lui_app.reducer_app * int * bool * bool * bool * bool) option ref = ref None
+    ((Model.t, Action.t) Lui_app.reducer_app * int * bool * bool * bool * bool * bool) option ref = ref None
 
 (* A palette view is immutable. Idle drains must not flatten its complete
    result groups just to re-read the highlighted item's copy context. *)
@@ -90,6 +90,35 @@ let native_palette_context () =
       last_native_palette_view := None;
       false, false
 
+let native_cards_open app =
+  match !Cards_state.st_ref with
+  | Some state ->
+      Signal.signal_owner (Signal.value state.Cards_state.open_)
+        == (Lui_app.runtime app).Lui_runtime.runtime_scheduler
+      && Runtime.signal_get state.Cards_state.open_
+  | None -> false
+
+let native_keymap_bindings ~cards =
+  let add scope command items =
+    match Keymap_data.effective_shortcut command with
+    | Commands_data.Binds sequences ->
+        List.fold_left (fun items sequence ->
+          List.fold_left (fun items stroke ->
+            if stroke = "" then items else
+              `Assoc ["stroke", `String stroke; "command", `String command;
+                      "scope", `String scope] :: items)
+            items (String.split_on_char ' ' sequence)) items sequences
+    | Commands_data.Disabled | Commands_data.Unbound -> items in
+  let bindings=Keymap_data.current_items () |> Keymap_data.unique_rows
+    |> List.fold_left (fun items (row : Keymap_data.row) ->
+      let scope=Keymap_data.handler row in
+      if Keymap_data.global_handler scope then
+        add scope (Keymap_data.command_id row.title) items
+      else items) [] in
+  let bindings=if cards then List.fold_left (fun items command ->
+      add "global-non-editing-only" command items) bindings Cards_state.shortcut_ids else bindings in
+  List.rev bindings
+
 let () = publish_native_keymap := (fun () ->
   match !current_app with
   | Some app when (Lui_app.runtime app).Lui_runtime.runtime_backend.backend_profile.profile_host
@@ -97,29 +126,16 @@ let () = publish_native_keymap := (fun () ->
       let revision = Keymap_data.revision () in
       let palette, copy_reference = native_palette_context () in
       let capture = Keyboard_capture.active () in
+      let cards = native_cards_open app in
       let block_selection = Editor_state.editing () = None && Editor_state.selection_active () in
       let unchanged = match !last_native_keymap with
-        | Some (owner, previous, p, c, copy, selection) ->
+        | Some (owner, previous, p, c, copy, selection, previous_cards) ->
             owner == app && previous = revision && p = palette && c = capture
-            && copy = copy_reference && selection = block_selection
+            && copy = copy_reference && selection = block_selection && previous_cards = cards
         | None -> false in
       if not unchanged then begin
-        let bindings = Keymap_data.current_items () |> Keymap_data.unique_rows
-          |> List.fold_left (fun items (row : Keymap_data.row) ->
-            let scope = Keymap_data.handler row in
-            if not (Keymap_data.global_handler scope) then items
-            else
-              let command = Keymap_data.command_id row.title in
-              match Keymap_data.effective_shortcut command with
-              | Commands_data.Binds sequences ->
-                  List.fold_left (fun items sequence ->
-                    List.fold_left (fun items stroke ->
-                      if stroke = "" then items else
-                        `Assoc ["stroke", `String stroke; "command", `String command;
-                                "scope", `String scope] :: items)
-                      items (String.split_on_char ' ' sequence)) items sequences
-              | Commands_data.Disabled | Commands_data.Unbound -> items) [] |> List.rev in
-        last_native_keymap := Some (app, revision, palette, capture, copy_reference, block_selection);
+        let bindings = native_keymap_bindings ~cards in
+        last_native_keymap := Some (app, revision, palette, capture, copy_reference, block_selection, cards);
         platform_request ("native-keymap\n" ^ Yojson.Safe.to_string
           (`Assoc ["revision", `Int revision; "palette", `Bool palette;
                    "capture", `Bool capture; "palette-copy-reference", `Bool copy_reference;

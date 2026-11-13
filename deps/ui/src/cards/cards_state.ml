@@ -377,6 +377,9 @@ let practice_again st =
   let r = repo () in
   if r = "" then () else load_current st r
 
+let shortcut_ids =
+  ["cards/toggle-answers"; "cards/again"; "cards/hard"; "cards/good"; "cards/easy"]
+
 let card_keys = Keymap_data.chord ()
 
 let close st =
@@ -518,7 +521,7 @@ let on_keydown ev st =
   then Keymap_data.reset_chord card_keys
   else if not ev.Ui_services.default_prevented then
     let matched = Keymap_data.match_event card_keys
-      ~ids:["cards/toggle-answers"; "cards/again"; "cards/hard"; "cards/good"; "cards/easy"] ev in
+      ~ids:shortcut_ids ev in
     let consume () = ev.Ui_services.prevent_default (); ev.Ui_services.stop_immediate () in
     match matched with
     | Keymap_data.No_match when ev.Ui_services.key = Some "Escape" -> consume (); close st

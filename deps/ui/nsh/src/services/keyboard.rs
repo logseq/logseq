@@ -465,6 +465,207 @@ mod tests {
                 .is_some()
         );
     }
+    fn cards_snapshot(active: bool, rebound: bool, palette: bool, capture: bool) -> String {
+        let bindings = if active {
+            [("cards/toggle-answers", if rebound { "alt+q" } else { "s" }),
+             ("cards/again", "1"), ("cards/hard", "2"),
+             ("cards/good", "3"), ("cards/easy", "4")]
+                .into_iter().map(|(command, stroke)|
+                    json!({"stroke":stroke,"command":command,"scope":"global-non-editing-only"}))
+                .collect::<Vec<_>>()
+        } else {
+            Vec::new()
+        };
+        json!({"revision":if rebound {2} else {1},"palette":palette,"capture":capture,
+            "palette-copy-reference":false,"block-selection":false,"bindings":bindings})
+        .to_string()
+    }
+
+    #[component]
+    fn CardsKeyboardProbe() -> impl IntoElement {
+        let observed = engine_context::<Observed>().unwrap();
+        let held = signal(false);
+        provide_context(ApplicationMutations::new(move || {
+            if held.get_untracked() {
+                Err("held for update".into())
+            } else {
+                Ok(())
+            }
+        }));
+        let keyboard = GlobalKeyboard::mount();
+        let output = observed.0.clone();
+        keyboard.send.set(Some(Rc::new(move |value| {
+            output.lock().unwrap().push(value);
+        })));
+        keyboard
+            .replace(&cards_snapshot(false, false, false, false))
+            .unwrap();
+        let value = signal(String::new());
+        view()
+            .flex_col()
+            .child(
+                nsh_base::button()
+                    .on_press(move || {
+                        keyboard
+                            .replace(&cards_snapshot(true, false, false, false))
+                            .unwrap();
+                    })
+                    .child(text("Open cards keys")),
+            )
+            .child(
+                nsh_base::button()
+                    .on_press(move || {
+                        keyboard
+                            .replace(&cards_snapshot(false, false, false, false))
+                            .unwrap();
+                    })
+                    .child(text("Close cards keys")),
+            )
+            .child(
+                nsh_base::button()
+                    .on_press(move || {
+                        keyboard
+                            .replace(&cards_snapshot(true, true, false, false))
+                            .unwrap();
+                    })
+                    .child(text("Rebind cards keys")),
+            )
+            .child(
+                nsh_base::button()
+                    .on_press(move || {
+                        keyboard
+                            .replace(&cards_snapshot(true, false, true, false))
+                            .unwrap();
+                    })
+                    .child(text("Palette owns keys")),
+            )
+            .child(
+                nsh_base::button()
+                    .on_press(move || {
+                        keyboard
+                            .replace(&cards_snapshot(true, false, false, true))
+                            .unwrap();
+                    })
+                    .child(text("Capture owns keys")),
+            )
+            .child(
+                nsh_base::button()
+                    .on_press(move || {
+                        keyboard
+                            .replace(&cards_snapshot(true, false, false, false))
+                            .unwrap();
+                        held.set(true);
+                    })
+                    .child(text("Hold cards admission")),
+            )
+            .child(
+                nsh_base::button()
+                    .on_press(move || held.set(false))
+                    .child(text("Release cards admission")),
+            )
+            .child(
+                input()
+                    .label("Cards ordinary input")
+                    .value(move || value.get())
+                    .on_change(move |text: &str| value.set(text.to_owned())),
+            )
+    }
+
+    #[test]
+    fn native_cards_keys_follow_modal_publication_and_preserve_other_owners() {
+        let observed = Observed(Arc::new(Mutex::new(Vec::new())));
+        let mut config = EngineConfig::new(Root::of::<CardsKeyboardProbe>());
+        config.context = EngineContext::default().with(observed.clone());
+        config.environment.os = nsh_core::platform::Os::MacOs;
+        let mut app = Headless::start(config).unwrap();
+        app.wait_for("Open cards keys").unwrap();
+        app.press_key("1").unwrap();
+        assert!(
+            observed.0.lock().unwrap().is_empty(),
+            "closed modal installs no digit keys"
+        );
+        app.press("Open cards keys").unwrap();
+        for key in ["s", "1", "2", "3", "4"] {
+            app.press_key(key).unwrap();
+        }
+        assert_eq!(
+            observed
+                .0
+                .lock()
+                .unwrap()
+                .iter()
+                .map(|v| v["key"].as_str().unwrap().to_owned())
+                .collect::<Vec<_>>(),
+            ["s", "1", "2", "3", "4"]
+        );
+        observed.0.lock().unwrap().clear();
+        app.press("Rebind cards keys").unwrap();
+        app.press_key("s").unwrap();
+        assert!(
+            observed.0.lock().unwrap().is_empty(),
+            "old configured key is unsubscribed"
+        );
+        app.press_key("alt+q").unwrap();
+        assert_eq!(
+            observed.0.lock().unwrap().as_slice(),
+            [json!({"key":"q","ctrlKey":false,
+            "metaKey":false,"shiftKey":false,"altKey":true,"isComposing":false,"repeat":false})]
+        );
+        observed.0.lock().unwrap().clear();
+        app.press("Palette owns keys").unwrap();
+        for key in ["s", "1", "2", "3", "4"] {
+            app.press_key(key).unwrap();
+        }
+        assert!(
+            observed.0.lock().unwrap().is_empty(),
+            "palette excludes the stale modal binding set"
+        );
+        app.press("Capture owns keys").unwrap();
+        app.press_key("1").unwrap();
+        assert_eq!(
+            observed.0.lock().unwrap().len(),
+            1,
+            "capture has one delivery, not a second cards binding"
+        );
+        observed.0.lock().unwrap().clear();
+        app.press("Hold cards admission").unwrap();
+        app.press_key("1").unwrap();
+        assert!(
+            observed.0.lock().unwrap().is_empty(),
+            "held admission refuses modal delivery"
+        );
+        app.press("Release cards admission").unwrap();
+        app.press_key("1").unwrap();
+        assert_eq!(observed.0.lock().unwrap().len(), 1);
+        observed.0.lock().unwrap().clear();
+        app.press("Close cards keys").unwrap();
+        app.press_key("1").unwrap();
+        assert!(
+            observed.0.lock().unwrap().is_empty(),
+            "closing retires the native modal keys"
+        );
+        app.press("Open cards keys").unwrap();
+        app.type_text("label:Cards ordinary input", "").unwrap();
+        app.press_key("1").unwrap();
+        app.press_key("s").unwrap();
+        assert_eq!(
+            app.screen()
+                .input_text("label:Cards ordinary input")
+                .unwrap(),
+            Some("1s")
+        );
+        assert!(
+            observed.0.lock().unwrap().is_empty(),
+            "text input owns its ordinary digits and letters"
+        );
+        app.compose("label:Cards ordinary input", "你").unwrap();
+        app.press_key("1").unwrap();
+        assert!(
+            observed.0.lock().unwrap().is_empty(),
+            "composition cannot grade a card"
+        );
+    }
+
     fn selection_snapshot(selected: bool, palette: bool) -> String {
         json!({"revision":1,"palette":palette,"capture":false,
             "palette-copy-reference":false,"block-selection":selected,"bindings":[]})

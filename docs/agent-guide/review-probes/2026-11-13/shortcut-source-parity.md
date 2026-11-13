@@ -333,3 +333,23 @@ restored. Native admission compiles this same marked test against the actual
 native archives. No installed services are replaced. This source preparation is
 not a native OS or persistence pass; root executes the maintained Web and
 native-archive gates before any success claim.
+
+## Prepared missing-publication correction
+
+The subsequent source candidate adds the existing T I / T P global catalog
+rows and reuses the five explicit Cards_state IDs for native subscription only
+while that state belongs to the current application scheduler and is open.
+It uses the existing global-non-editing-only wire scope; Rust production
+keyboard parsing and installation are unchanged. No visible card shortcut
+category, new snapshot payload field, modal dispatcher or SDK change is added.
+The private OCaml last-publication cache observes open/close, so those state
+changes no longer depend on a keymap revision to retire subscriptions.
+
+Authored tests cover actual provider open/close/rebind/admission/input/IME/
+palette/capture behavior, actual native-archive publication and card phase
+entry, disabled/default/configured keys, stale scheduler refusal and actual
+shared T I / T P dispatch. They restore their model, scheduler-owned states,
+listeners, keymap storage/cache and process-local publication state. They remain
+unexecuted here. They do not qualify actual card grading data, physical input,
+or every configurable global/modal prefix collision; document listener ordering
+is unchanged. The original 145-row snapshot above remains historical.

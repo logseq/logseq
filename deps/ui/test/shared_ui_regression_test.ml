@@ -2025,7 +2025,8 @@ let cycle_routes ~check ~profile ~install_worker ~settle ~done_ =
   let model=ref {Model.initial with repo=Some "cycle-origin";
     route_page=Some {page with Model.page_blocks=blocks}} in
   let backend : Lui_protocol.backend={backend_profile=profile;apply_batch=(fun _ -> true)} in
-  let shortcut_comments=ref [] and shortcut_contents=ref 0 in
+  let shortcut_comments=ref [] and shortcut_contents=ref 0
+  and shortcut_appearance=ref 0 and shortcut_plugins=ref 0 in
   let app=Lui_app.create backend () (fun model () -> model)
     (fun context _ _ ->
       E.ensure context;
@@ -2033,7 +2034,10 @@ let cycle_routes ~check ~profile ~install_worker ~settle ~done_ =
       ignore (Cmdk_state.make context.Lui_ui.ui_scheduler
         {services with Cmdk_services.ensure_comments=(fun ~repo ~uuids ->
            shortcut_comments:=(repo,uuids)::!shortcut_comments);
-         sidebar_ensure_contents=(fun () -> incr shortcut_contents)});
+         sidebar_ensure_contents=(fun () -> incr shortcut_contents);
+         appearance_popup=(fun () -> incr shortcut_appearance);
+         dialogs_open=(fun dialog -> if dialog="plugins" then incr shortcut_plugins
+           else services.Cmdk_services.dialogs_open dialog)});
       if not !Editor_commands.installed then
         ignore (Ui_services.dom_subscribe_document_event ~scope:context.Lui_ui.ui_scope
           ~capture:true "ls:editor-command" Editor_commands.on_command);
@@ -2110,6 +2114,8 @@ let cycle_routes ~check ~profile ~install_worker ~settle ~done_ =
         prevent_default=(fun () -> ());stop_propagation=(fun () -> ());stop_immediate=(fun () -> ()) } in
     let press event=Editor_keys.chord_seq:=[];Editor_keys.on_global_key event in
     let comment=key ~ctrl:true " " and contents=key ~alt:true ~shift:true "c" in
+    let sequence second = Editor_keys.chord_seq:=[];
+      List.iter (fun value -> Editor_keys.on_global_key (key value)) ["t";second] in
     select [];
     let editing=E.mk_editing ~uuid:"cycle-none" ~buffer:"shortcut dirty draft"
       ~scope:"main" ~base:"saved" () in
@@ -2118,6 +2124,9 @@ let cycle_routes ~check ~profile ~install_worker ~settle ~done_ =
     check "editing Ctrl-Space reaches the actual comment command with its current block"
       (!shortcut_comments=["cycle-origin",["cycle-none"]]);
     press contents;
+    sequence "i";sequence "p";
+    check "normal-only theme and plugin sequences do not run inside a dirty editor"
+      (!shortcut_appearance=0 && !shortcut_plugins=0);
     check "editing Alt-Shift-C reaches the existing Contents capability" (!shortcut_contents=1);
     check "both editing shortcuts preserve the dirty editor and its exact epoch"
       (match E.editing () with Some current -> current.epoch==editing.epoch
@@ -2134,7 +2143,9 @@ let cycle_routes ~check ~profile ~install_worker ~settle ~done_ =
     let palette=Option.get !Cmdk_state.latest_st in
     let previous=Cmdk_state.get palette in
     Cmdk_state.set palette {previous with Cmdk_state.open_=true};
-    press comment;press contents;
+    press comment;press contents;sequence "i";sequence "p";
+    check "an open palette retains theme and plugin sequence ownership"
+      (!shortcut_appearance=0 && !shortcut_plugins=0);
     check "an open command palette keeps both restored shortcut keys"
       (List.length !shortcut_comments=1 && !shortcut_contents=1);
     Cmdk_state.set palette previous;
@@ -2145,6 +2156,9 @@ let cycle_routes ~check ~profile ~install_worker ~settle ~done_ =
          List.sort String.compare targets=["cycle-a";"cycle-z"]
        | _ -> false);
     check "normal Alt-Shift-C retains the same Contents capability" (!shortcut_contents=2);
+    sequence "i";sequence "p";
+    check "normal T I and T P reach existing appearance and plugin capabilities once"
+      (!shortcut_appearance=1 && !shortcut_plugins=1);
     check "each mode dispatches each command exactly once" (List.length !shortcut_comments=2);
     select [];
     press comment;

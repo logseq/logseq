@@ -392,6 +392,103 @@ let sparse_feedback_materializes_while_held_through_actual_ffi () =
     check "fixture releases only its matching settled preparation"
       (Update_admission.finish_release gate "8"))
 
+let native_cards_shortcut_publication () =
+  let prior_app = !Native_embed.current_app and prior_last = !Native_embed.last_native_keymap
+  and prior_model = !Runtime.read_model and prior_flush = !Runtime.app_flush
+  and prior_cards = !Cards_state.st_ref and prior_editor = !Editor_state.st
+  and prior_palette = !Cmdk_state.latest_st
+  and prior_palette_cache = !Native_embed.last_native_palette_view and prior_cloze = !Render_inline.cloze_reveal_all
+  and prior_shortcuts = !Keymap_data.user_shortcuts and prior_revision = !Keymap_data.shortcut_revision
+  and prior_cache = !Keymap_data.cached_items and prior_storage = Ui_services.storage_get "ls-shortcuts" in
+  let prior_keys = Cards_state.card_keys.Keymap_data.sequence,
+    Cards_state.card_keys.Keymap_data.time, Cards_state.card_keys.Keymap_data.version in
+  let listeners = List.map (fun name -> name, Hashtbl.find_opt Platform.window_listeners name)
+    ["keydown"; "ls:open-cards"] in
+  let backend : Lui_protocol.backend = {
+    backend_profile=Lui_protocol.profile Lui_protocol.MacOS Lui_protocol.NshHost;
+    apply_batch=(fun _ -> true)} in
+  Cards_state.st_ref:=None;Editor_state.st:=None;Cmdk_state.latest_st:=None;
+  Keymap_data.user_shortcuts:=Keymap_data.Command_map.empty;
+  incr Keymap_data.shortcut_revision;Keymap_data.cached_items:=None;
+  let app=Lui_app.create backend Model.initial (fun model (_ : Action.t) -> model)
+    (fun _ model _ -> Cards_state.ensure model;Lui_elements.box []) in
+  Fun.protect ~finally:(fun () ->
+    ignore (Lui_app.dispose app);Native_embed.current_app:=prior_app;
+    Native_embed.last_native_keymap:=prior_last;Runtime.read_model:=prior_model;Runtime.app_flush:=prior_flush;
+    Cards_state.st_ref:=prior_cards;Editor_state.st:=prior_editor;Cmdk_state.latest_st:=prior_palette;
+    Native_embed.last_native_palette_view:=prior_palette_cache;
+    Render_inline.cloze_reveal_all:=prior_cloze;
+    let sequence,time,version=prior_keys in
+    Cards_state.card_keys.Keymap_data.sequence<-sequence;
+    Cards_state.card_keys.Keymap_data.time<-time;Cards_state.card_keys.Keymap_data.version<-version;
+    Keymap_data.user_shortcuts:=prior_shortcuts;Keymap_data.shortcut_revision:=prior_revision;
+    Keymap_data.cached_items:=prior_cache;
+    (match prior_storage with None -> Ui_services.storage_remove "ls-shortcuts"
+     | Some value -> Ui_services.storage_set "ls-shortcuts" value);
+    List.iter (fun (name,previous) -> match previous with
+      | None -> Hashtbl.remove Platform.window_listeners name
+      | Some previous -> Hashtbl.replace Platform.window_listeners name previous) listeners) (fun () ->
+    Native_embed.current_app:=Some app;
+    Runtime.read_model:=(fun () -> Lui_app.model app);
+    Runtime.app_flush:=(fun () -> ignore (Lui_app.flush app));
+    ignore (Lui_app.start app);ignore (Lui_app.flush app);
+    let state=Option.get !Cards_state.st_ref in
+    let rows () = Native_embed.native_keymap_bindings ~cards:(Native_embed.native_cards_open app) in
+    let strings field command = rows () |> List.filter_map (function
+      | `Assoc fields when List.assoc_opt "command" fields=Some (`String command) ->
+          (match List.assoc_opt field fields with Some (`String value) -> Some value | _ -> None)
+      | _ -> None) in
+    let expect_publication label cards =
+      !(Native_embed.publish_native_keymap) ();
+      check label (match !Native_embed.last_native_keymap with
+        | Some (owner,_,_,_,_,_,active) -> owner==app && active=cards | None -> false) in
+    check "closed cards have no native modal subscriptions"
+      (List.for_all (fun id -> strings "stroke" id=[]) Cards_state.shortcut_ids);
+    Cards_state.open_modal state None;
+    expect_publication "opening real cards republishes without a keymap revision change" true;
+    List.iter2 (fun id stroke ->
+      check ("native cards publishes its configured key: " ^ id)
+        (strings "stroke" id=[stroke] && strings "scope" id=["global-non-editing-only"]))
+      Cards_state.shortcut_ids ["s";"1";"2";"3";"4"];
+    check "theme and plugins sequences are in the effective native catalog"
+      (strings "stroke" "ui/select-theme-color"=["t";"i"]
+       && strings "stroke" "ui/goto-plugins"=["t";"p"]);
+    Keymap_data.save_shortcut "cards/toggle-answers" (Some (Keymap_data.Binds ["alt+q"]));
+    expect_publication "configured modal shortcuts republish from their existing revision" true;
+    check "modal publication uses configured keys instead of hardcoded S"
+      (strings "stroke" "cards/toggle-answers"=["alt+q"]);
+    let key ?(composing=false) ?(prevented=false) ?target key =
+      {Ui_services.x=0.;y=0.;shift=false;meta=false;ctrl=false;alt=true;composing;
+       key=Some key;key_char=None;buttons=0;button=0;repeat=false;movement_x=0.;movement_y=0.;
+       default_prevented=prevented;target;touches=[];detail=(fun _ -> None);detail_json=(fun _ -> None);
+       clipboard_get=(fun _ -> "");clipboard_snapshot=(fun () -> Ui_services.empty_clipboard_snapshot);
+       clipboard_set=(fun _ _ -> ());data_transfer_get=(fun _ -> "");files=[];has_files=false;
+       prevent_default=(fun () -> ());stop_propagation=(fun () -> ());stop_immediate=(fun () -> ())} in
+    Cards_state.on_keydown (key ~composing:true "q") state;
+    Cards_state.on_keydown (key ~prevented:true "q") state;
+    check "composition and earlier capture suppress the actual modal handler"
+      (Runtime.signal_get state.Cards_state.phase="init");
+    Cards_state.on_keydown (key "q") state;
+    check "published configured key reaches the real card phase handler"
+      (Runtime.signal_get state.Cards_state.phase="show-answer");
+    let base=Ui_services.dom_body () in
+    let rec input={base with editable=(fun () -> true);closest=(fun _ -> Some input)} in
+    Cards_state.on_keydown (key ~target:input "q") state;
+    check "a separate input keeps its key rather than advancing the card"
+      (Runtime.signal_get state.Cards_state.phase="show-answer");
+    Keymap_data.save_shortcut "cards/again" (Some Keymap_data.Disabled);
+    check "disabled card key is absent from native subscriptions" (strings "stroke" "cards/again"=[]);
+    Cards_state.close state;
+    expect_publication "closing real cards retires modal subscriptions" false;
+    check "closed card keys cannot remain globally subscribed"
+      (List.for_all (fun id -> strings "stroke" id=[]) Cards_state.shortcut_ids);
+    Cards_state.open_modal state None;
+    let next=Lui_app.create backend Model.initial (fun model (_ : Action.t) -> model)
+      (fun _ _ _ -> Lui_elements.box []) in
+    Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose next)) (fun () ->
+      check "a prior app's open cards cannot publish into a replacement app owner"
+        (not (Native_embed.native_cards_open next))))
+
 let editor_keyboard_capture_order () =
   check "native text ownership regression uses the actual numbered-list catalog scope"
     (Keymap_data.command_handler "editor/toggle-number-list" = Some "global-prevent-default");
@@ -936,7 +1033,7 @@ let native_block_click_mounts_shared_editor () =
     let expect_selection_keymap label expected =
       !(Native_embed.publish_native_keymap) ();
       check label (match !Native_embed.last_native_keymap with
-        | Some (owner, _, _, _, _, selection) -> owner == app && selection = expected
+        | Some (owner, _, _, _, _, selection, _) -> owner == app && selection = expected
         | None -> false) in
     let node = Hashtbl.fold (fun id props found ->
       if Lui_protocol.Property_map.find_opt Lui_protocol.AccessibilityIdentifier props
@@ -3368,6 +3465,7 @@ let () =
   native_file_request_lifetimes ();
   native_entry_admission ();
   editor_keyboard_capture_order ();
+  native_cards_shortcut_publication ();
   native_worker_admission ();
   native_worker_update_identity ();
   native_owned_child_exit_proof ();
