@@ -4199,6 +4199,34 @@ let run_views ~registry ~profile ~finish =
     (List.length categories)
     (List.length (category_headers ()));
   let all_rows = List.length (keymap_rows ()) in
+  let undo_matches =
+    [ "Basics", "editor/outdent"; "Basics", "editor/undo"
+    ; "Navigation", "editor/down"; "Navigation", "editor/left"; "Navigation", "editor/right"
+    ; "Block editing general", "editor/follow-link"
+    ; "Block editing general", "editor/outdent"; "Block editing general", "editor/zoom-out"
+    ; "Block command editing", "editor/end-of-block"
+    ; "Toggle", "ui/toggle-document-mode"; "Plugins", "ui/goto-plugins"
+    ; "Others", "pdf/close"; "Others", "pdf/find"
+    ; "Others", "pdf/next-page"; "Others", "pdf/previous-page" ] in
+  let check_undo_results label =
+    let _,matches=List.fold_left (fun (category,matches) -> function
+      | Keymap_data.Category category -> category,matches
+      | Keymap_data.Shortcut row ->
+          category,(category,Keymap_data.command_id row.title)::matches)
+      ("",[]) (Keymap_data.query_items ~query:"Undo" ~label:Settings_page.keymap_label) in
+    check (label ^ ": exact catalog IDs retain their original categories")
+      (List.sort compare matches=List.sort compare undo_matches);
+    let rec row_label node =
+      if class_has node "ls-kbd-label" then M.string_prop node "text"
+      else List.find_map row_label (M.children keymap.S.tree node.M.id) in
+    let actual=List.filter_map row_label (keymap_rows ()) in
+    let expected=List.map (fun (_,id) -> I18n.t ("command." ^ id)) undo_matches in
+    (* Fuzzy Undo also matches the restored plugin dashboard description;
+       duplicate commands in distinct categories remain distinct visible rows. *)
+    check (label ^ ": actual producer renders every exact matching command")
+      (List.length (keymap_rows ())=List.length expected
+       && List.sort String.compare actual=List.sort String.compare expected)
+  in
   let first_category () = List.hd (category_headers ()) in
   S.press keymap (first_category ()).M.id;
   check "individual category collapse leaves other commands visible"
@@ -4207,7 +4235,7 @@ let run_views ~registry ~profile ~finish =
   eqi "global category toggle collapses a partly collapsed list" 0
     (List.length (keymap_rows ()));
   S.text_changed keymap input.M.id "Undo";
-  eqi "search ignores category collapse" 14 (List.length (keymap_rows ()));
+  check_undo_results "search ignores category collapse";
   eqi "query results hide category actions" 0 (List.length (category_tools ()));
   S.text_changed keymap input.M.id "";
   eqi "clearing search retains category collapse" 0
@@ -4233,8 +4261,7 @@ let run_views ~registry ~profile ~finish =
   check "keymap search uses fuzzy command identifiers and descriptions"
     (List.length (keymap_rows ()) > 1);
   check "query results flatten categories" (category_headers () = []);
-  eqi "query results retain matches in their original categories" 14
-    (List.length (keymap_rows ()));
+  check_undo_results "query results retain matches in their original categories";
   check "query counts follow matching commands"
     (M.string_prop (pill "All") "accessibility-label"
     <> Some
@@ -4246,8 +4273,7 @@ let run_views ~registry ~profile ~finish =
   S.press keymap (pill "Disabled").M.id;
   eqi "filter applies to fuzzy query results" 1 (List.length (keymap_rows ()));
   S.press keymap (pill "Disabled").M.id;
-  eqi "pressing the active filter restores all query results" 14
-    (List.length (keymap_rows ()));
+  check_undo_results "pressing the active filter restores all query results";
   S.press keymap (pill "Disabled").M.id;
   (match clear_buttons () with
   | [ clear ] -> S.press keymap clear.M.id
