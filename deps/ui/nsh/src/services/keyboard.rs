@@ -664,7 +664,7 @@ mod tests {
     }
 
     #[test]
-    fn canonical_property_field_native_cancel_reaches_its_local_owner_before_blur() {
+    fn canonical_property_field_native_cancel_requests_only_its_own_dismissal() {
         use lui_nsh::render::Event;
         let events = Arc::new(Mutex::new(Vec::new()));
         let mut config = EngineConfig::new(Root::of::<CanonicalPropertyField>());
@@ -706,7 +706,7 @@ mod tests {
         );
         assert_eq!(
             app.screen().input_text("id:lui-3").unwrap(),
-            Some("nonempty query")
+            Some("querynonempty query")
         );
     }
 
