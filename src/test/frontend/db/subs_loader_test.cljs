@@ -94,6 +94,51 @@
                (reset-loader!)
                (done))))))))
 
+(deftest overlapping-loads-complete-after-a-failed-batch-test
+  (async done
+    (reset-loader!)
+    (let [graph-id "graph"
+          live-key [:resource [:block-ref-count (random-uuid)]]
+          failed-key [:resource [:block-comment-threads (random-uuid)]]
+          first-response (p/deferred)
+          first-request? (atom true)
+          original-ready? @state/db-worker-ready?
+          *flush (atom nil)]
+      (-> (p/with-redefs [state/<invoke-db-worker
+                          (fn [_api _graph-id request]
+                            (cond
+                              (compare-and-set! first-request? true false)
+                              first-response
+
+                              (some #{(second failed-key)} (:resources request))
+                              (p/rejected (js/Error. "Resource unavailable"))
+
+                              :else
+                              (p/resolved {:basis-rev 1
+                                           :groups {live-key [live-key]}
+                                           :slots {live-key {:value 3}}})))]
+            (reset! state/db-worker-ready? true)
+            (let [first-live (subs-loader/load! graph-id live-key #(reset! *flush %))
+                  failed (subs-loader/load! graph-id failed-key #(reset! *flush %))]
+              (@*flush)
+              (let [next-live (subs-loader/load! graph-id live-key #(reset! *flush %))]
+                (p/reject! first-response (js/Error. "Resource unavailable"))
+                (p/let [[first-value next-value failed-value]
+                        (p/race [(p/all [first-live next-live
+                                         (p/catch failed ex-message)])
+                                 (p/then (p/delay 1000)
+                                         #(throw (js/Error. "Snapshot loads did not complete")))])]
+                  (is (= {:basis-rev 1 :slots {live-key {:value 3}}}
+                         first-value next-value)
+                      "Both callers receive the live resource snapshot.")
+                  (is (= "Resource unavailable" failed-value))))))
+          (p/catch (fn [error] (is false (str error))))
+          (p/finally
+           (fn []
+             (reset! state/db-worker-ready? original-ready?)
+             (reset-loader!)
+             (done)))))))
+
 (deftest loader-drops-unmounted-slots-before-worker-request-test
   (reset-loader!)
   (let [graph-id "graph"
