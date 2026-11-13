@@ -529,6 +529,11 @@ let ensure_login_daemon (repo : string) : unit =
           ^ "  <key>Label</key>\n  <string>" ^ label ^ "</string>\n"
           ^ "  <key>ProgramArguments</key>\n  <array>\n" ^ args
           ^ "  </array>\n"
+          (* Ownership locks are HOME-relative; launchd must use the same
+             directory as the worker spawned by this host. *)
+          ^ "  <key>EnvironmentVariables</key>\n  <dict>\n"
+          ^ "    <key>HOME</key>\n    <string>" ^ xml_escape (home ())
+          ^ "</string>\n  </dict>\n"
           ^ "  <key>RunAtLoad</key>\n  <true/>\n"
           ^ "  <key>KeepAlive</key>\n  <false/>\n"
           ^ "</dict>\n</plist>\n"
