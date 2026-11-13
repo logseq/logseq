@@ -49,9 +49,10 @@ let substring_finder s =
 (* Keep the bracket's authored paint and inline layout on the same typed Text
    owner; inline DOM style attributes are not a native layout channel. *)
 let bracket s =
-  Ui_components.with_props [Ui_components.Prop.display `inline_flex]
+  Ui_components.with_props
+    [Ui_components.Prop.display `inline_flex;Ui_components.Prop.opacity 0.3]
     (text ~style_class:"bracket" ~foreground:"muted-foreground"
-       ~opacity:0.3 ~value:s [])
+       ~value:s [])
 
 (* cljs page-reference wraps the anchor in .preview-ref-link —
    logseq-span hosts, not text: children of a text node never draw on
