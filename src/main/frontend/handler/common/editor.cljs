@@ -1,6 +1,30 @@
 (ns ^:no-doc frontend.handler.common.editor
   (:require [frontend.commands :as commands]
+            [frontend.state :as state]
             [promesa.core :as p]))
+
+(defonce ^:private *command-tails (atom {}))
+
+(defn <enqueue-command!
+  "Run a graph's edit commands in order, including their async preparation.
+  Each command returns its own result; a rejected command releases the queue."
+  [repo command]
+  (let [previous (get @*command-tails repo (p/resolved nil))
+        result (p/then previous
+                       (fn [_]
+                         (when-not (= repo (state/get-current-repo))
+                           (throw (ex-info "Graph changed before editor command" {:repo repo})))
+                         (command)))
+        tail (p/catch result (constantly nil))]
+    (swap! *command-tails assoc repo tail)
+    (p/finally tail
+               (fn []
+                 (swap! *command-tails
+                        (fn [tails]
+                          (if (identical? tail (get tails repo))
+                            (dissoc tails repo)
+                            tails)))))
+    result))
 
 (defn insert-command!
   [id command-output format {:keys [restore?]
