@@ -1084,6 +1084,115 @@ let native_view_type_menu ~registry =
        ({P.profile_os=P.AndroidOS;P.profile_host=P.KotlinHost},false);
        ({P.profile_os=P.MacOS;P.profile_host=P.NshHost},true)])
 
+let sidebar_help_native_rows ~registry =
+  let urls=
+    [ "li-docs","https://docs.logseq.com/"
+    ; "li-start","https://docs.logseq.com/#/page/tutorial"
+    ; "li-faq","https://docs.logseq.com/#/page/faq"
+    ; "li-awesome","https://github.com/logseq/awesome-logseq"
+    ; "li-blog","https://blog.logseq.com"
+    ; "li-forum","https://discuss.logseq.com"
+    ; "li-roadmap","https://discuss.logseq.com/t/logseq-product-roadmap/34267"
+    ; "li-bug","https://github.com/logseq/db-test/issues/new?labels=from:in-app&template=bug_report.yaml"
+    ; "li-feature","https://discuss.logseq.com/c/feedback/feature-requests/"
+    ; "li-changelog","https://docs.logseq.com/#/page/changelog"
+    ; "li-about","https://blog.logseq.com/about/"
+    ; "li-privacy","https://blog.logseq.com/privacy-policy/"
+    ; "li-terms","https://blog.logseq.com/terms/" ] in
+  let headings=List.map I18n.t
+    ["help/usage-title";"help/community-title";"help/development-title";
+     "help/about-title";"help/terms-title"] in
+  let previous_model= !Runtime.read_model and previous_flush= !Runtime.app_flush
+  and previous_sidebar_model= !Sidebar_state.model_signal
+  and previous_urls= !Stub_dom.opened_urls in
+  Fun.protect ~finally:(fun () ->
+    Runtime.read_model:=previous_model;Runtime.app_flush:=previous_flush;
+    Sidebar_state.model_signal:=previous_sidebar_model;Stub_dom.opened_urls:=previous_urls) (fun () ->
+    List.iter (fun profile ->
+      Stub_dom.opened_urls:=[];
+      let mounted=ref None in
+      let model={Model.initial with repo=Some "native-help-fixture";right_sidebar_open=true} in
+      let session=S.mount ~registry ~profile ~initial:model
+        ~reducer:(fun model () -> {model with Model.repo=Some "native-help-refreshed"})
+        ~view:(fun context ms _ ->
+          Sidebar_state.model_signal:=Some ms;
+          let state value=Signal.state context.Lui_ui.ui_scheduler value in
+          let sidebar : Sidebar_state.t =
+            {favorites=state [];home_page=state None;favorite_drop=state None;
+             recents=state [];nav_checked=state [];nav_tag_titles=state [];
+             items=state [];open_menu=state "";groups_collapsed=state [];
+             left_width=state 246.;right_fraction=state 0.3;viewport_w=state 1280.} in
+          mounted:=Some sidebar;
+          Right_sidebar_view.help_pane sidebar) () in
+      Runtime.read_model:=(fun () -> Lui_app.model session.S.app);
+      Runtime.app_flush:=(fun () -> S.flush session);
+      Fun.protect ~finally:(fun () ->
+        ignore (Lui_app.dispose session.S.app);Sidebar_state.model_signal:=None) (fun () ->
+        let current ()=nodes session in
+        check "Help reuses the sidebar's existing Scroll instead of mounting another scroll owner"
+          (not (List.exists (fun node -> List.mem node.M.kind ["list";"virtual-list";"scroll"]) (current ())));
+        if profile.P.profile_host=P.NshHost then begin
+          let rows ()=List.filter (fun node -> class_has node "ls-help-native-item") (current ()) in
+          let find key=List.find (fun node -> M.string_prop node "accessibility-identifier"
+            =Some ("sidebar-help-" ^ key)) (rows ()) in
+          let original_ids=List.map (fun key -> key,(find key).M.id) ("li-shortcuts" :: List.map fst urls) in
+          check "Native Help has one named actionable ListItem per existing action"
+            (List.length (rows ())=14 && List.for_all (fun node ->
+              node.M.kind="list-item"
+              && Hashtbl.find_opt node.M.props "press-enabled"=Some (P.BoolValue true)
+              && M.string_prop node "accessibility-label"=M.string_prop node "text"
+              && M.string_prop node "text"<>None
+              && M.children session.S.tree node.M.id=[]
+              && Hashtbl.find_opt node.M.props "min-height"=Some (P.IntValue Ui_components.nav_item_height)
+              && not (Hashtbl.mem node.M.props "height")) (rows ()));
+          let titles=List.filter (fun node -> class_has node "ls-help-native-heading") (current ()) in
+          check "Native Help retains all five localized section headings"
+            (List.length titles=5 && List.for_all (fun title ->
+              List.exists (fun node -> node.M.kind="heading" && M.string_prop node "text"=Some title) titles) headings);
+          check "Native Help has no nested Link or Button action targets"
+            (not (List.exists (fun node -> List.mem node.M.kind ["link";"button"]) (current ())));
+          List.iter (fun (key,url) ->
+            let before=List.length !Stub_dom.opened_urls in
+            S.press session (find key).M.id;
+            check ("Native Help opens exactly the original external URL for " ^ key)
+              (List.length !Stub_dom.opened_urls=before+1 && List.hd !Stub_dom.opened_urls=url)) urls;
+          S.press session (find "li-shortcuts").M.id;
+          let sidebar=Option.get !mounted in
+          check "Native Help shortcuts action opens the original sticky settings pane"
+            (match Runtime.signal_get sidebar.Sidebar_state.items with
+             | [item] -> item.Sidebar_state.key="shortcut-settings" && item.kind="shortcut-settings"
+             | _ -> false);
+          ignore (Lui_app.send session.S.app ());S.flush session;
+          check "Help actions retain their canonical owners after an unrelated graph-model update"
+            (List.for_all (fun (key,id) -> (find key).M.id=id) original_ids)
+        end else begin
+          let items=List.filter (fun node -> class_has node "ls-hp-item") (current ()) in
+          let titles=List.filter (fun node -> class_has node "ls-hp-title") (current ()) in
+          let lists=List.filter (fun node -> class_has node "ls-hp-list") (current ()) in
+          let links=List.filter (fun node -> node.M.kind="link") (current ()) in
+          check "Non-NSH Help preserves all original marker Boxes and thirteen Links"
+            (List.length items=14 && List.for_all (fun node -> node.M.kind="box"
+              && M.string_prop node "data-attrs"=Some
+                "style\x1fdisplay:list-item;list-style:circle;font-size:16px;line-height:24px;margin-top:4px") items
+             && List.length links=13
+             && List.sort String.compare (List.filter_map (fun node -> M.string_prop node "url") links)
+                =List.sort String.compare (List.map snd urls));
+          check "Non-NSH Help preserves the original five text headings and fractional list indent"
+            (List.length titles=5 && List.for_all (fun node -> node.M.kind="text") titles
+             && List.for_all (fun title -> List.exists (fun node ->
+                  M.string_prop node "text"=Some title) titles) headings
+             && List.length lists=5 && List.for_all (fun node -> node.M.kind="box"
+               && M.string_prop node "data-attrs"=Some "style\x1fdisplay:block;margin-left:19.2px") lists);
+          check "Non-NSH Help retains its original shortcut button and no native list rows"
+            (List.length (List.filter (fun node -> node.M.kind="button"
+               && button_label node=Some (I18n.t "help.shortcuts/label")) (current ()))=1
+             && not (List.exists (fun node -> node.M.kind="list-item") (current ())))
+        end))
+      [{P.profile_os=P.MacOS;profile_host=P.NshHost};
+       {P.profile_os=P.WebOS;profile_host=P.WebHost};
+       {P.profile_os=P.IOS;profile_host=P.SwiftUIHost};
+       {P.profile_os=P.AndroidOS;profile_host=P.KotlinHost}])
+
 let sidebar_favorite_rows ~registry ~profile =
   let previous_worker = !Runtime.worker and previous_model = !Runtime.read_model
   and previous_flush = !Runtime.app_flush and previous_context = !Sidebar_state.lp_ctx in
@@ -1704,6 +1813,7 @@ let run_views ~registry ~profile ~finish =
   published_chrome_palette ~registry ~profile;
   table_column_ownership ~registry ~profile;
   table_title_completion ~registry ~profile;
+  sidebar_help_native_rows ~registry;
   sidebar_favorite_rows ~registry ~profile;
   right_sidebar_block_clipping ~registry ~profile;
   popup_layout_carriers ~registry ~profile;

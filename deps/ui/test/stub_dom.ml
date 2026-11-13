@@ -43,6 +43,9 @@ type elem =
 let document_ref : Js.Json.t ref = ref Js.Json.null
 let window_ref : Js.Json.t ref = ref Js.Json.null
 
+(* Observe real app external-link callbacks without replacing installed services. *)
+let opened_urls : string list ref = ref []
+
 let rec_r (el : Js.Json.t) : elem = get_field el "__r"
 let is_stub el = Js.testAny (get_field el "__r") = false
 
@@ -627,7 +630,7 @@ let make_window doc =
   set_field w "matchMedia" (match_media ());
   set_field w "getComputedStyle" (fun _el -> computed_style ());
   set_field w "parseFloat" (get_field global "parseFloat");
-  set_field w "open" (fun _url -> Js.null);
+  set_field w "open" (fun url -> opened_urls := url :: !opened_urls; Js.null);
   set_field w "close" (fun () -> ());
   set_field w "scrollTo" (fun _x _y -> ());
   set_field w "scrollBy" (fun _x _y -> ());
