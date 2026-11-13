@@ -1029,17 +1029,19 @@ let graphs_selector st (ms : Model.t Signal.signal) : t =
       context parent
 
 let contents (ms : Model.t Signal.signal) : t =
+ fun context parent ->
   let st = Sidebar_state.ensure ms in
-  Ui_components.with_props
+  (Ui_components.with_props
     [ Ui_components.Prop.position `relative
     ; Ui_components.Prop.padding_top 4
     ; Ui_components.Prop.padding_left 12
     ; Ui_components.Prop.padding_right 12 ]
     (scroll ~key:"ls-contents" ~grow:1. ~min_height:0 ~orientation:`vertical
+       ?height:(if Lui_ui.host context = Lui_protocol.NshHost then Some 0 else None)
        ~accessibility_identifier:"left-sidebar-scroll"
        ~style_class:"sidebar-contents-container"
        [ column ~key:"ls-groups" ~gap:4
-           [ favorites_group st; recents_group st ] ])
+           [ favorites_group st; recents_group st ] ])) context parent
 
 let menus (ms : Model.t Signal.signal) : t =
   let st = Sidebar_state.ensure ms in

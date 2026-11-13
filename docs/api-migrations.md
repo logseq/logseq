@@ -1,5 +1,27 @@
 # API migrations
 
+## NSH sidebar content fills the remaining viewport
+
+The left Favorites/Recent viewport and the right panel viewport now use typed
+`height=0`, `grow=1` and `min-height=0` on NSH. The zero height supplies a finite
+flex basis; the parent allocates the remaining height after its intrinsic
+header and navigation. A long intrinsic document no longer shares its sizing
+deficit with that header. For example, 36 Favorites in a 560pt window previously
+compressed the navigation rows to 9–10pt even though their authored height was
+32pt. The document remains full-sized inside the existing native Scroll.
+
+This changes neither a fixed viewport budget nor canonical shrink defaults.
+The existing titlebar minimum, graph/navigation dimensions, right topbar,
+content keys, callbacks and native scroll identities remain. Emptying or
+repopulating Favorites retains those owners. Apple/iOS, Android and Web omit
+this NSH-specific height and keep their existing sizing. No constructor or wire
+migration is required; application callers keep the same sidebar API.
+
+The actual producer regression checks the backend-specific viewport contract
+and retained identities across content changes. Real native short-window header
+bounds, populated Favorites/Recent wheel range and the analogous right panel
+remain application geometry qualification gates.
+
 ## Native code Copy reads the active document before persistence
 
 The native OCaml code toolbar's existing `Code_mirror.copy_button uuid` now

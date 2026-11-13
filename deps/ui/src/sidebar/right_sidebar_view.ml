@@ -789,8 +789,9 @@ let sidebar_item st idx (it : Sidebar_state.item) =
    docked track animates to/from ~0 the inner column keeps its
    expanded layout and is clipped by the pane's overflow:hidden
    (slide-out) instead of reflowing/shrinking its text *)
-let inner st =
-  Ui_parts.int_prop Lui_protocol.MinWidth
+let inner st : t =
+ fun context parent ->
+  (Ui_parts.int_prop Lui_protocol.MinWidth
     ~value:(reactive (fun rf vw -> int_of_float (Float.round (rf *. vw)))
        (Signal.value st.Sidebar_state.right_fraction)
        (Signal.value st.Sidebar_state.viewport_w))
@@ -800,6 +801,7 @@ let inner st =
        ~style_class:"cp__right-sidebar-inner"
     [ topbar st
     ; scroll ~key:"rs-scroll" ~orientation:`vertical ~grow:1. ~min_height:0
+        ?height:(if Lui_ui.host context = Lui_protocol.NshHost then Some 0 else None)
         ~style_class:"cp__right-sidebar-scrollable"
         [ Ui_components.with_props [ Ui_components.Prop.padding_bottom 150 ]
           (column ~key:"rs-items" ~padding_horizontal:8
@@ -812,7 +814,7 @@ let inner st =
                 ~mount:(fun entry ->
                   reactive (fun (idx, it) -> sidebar_item st idx it) entry)
             ]) ]
-    ])
+    ])) context parent
 
 let render (ms : Model.t Signal.signal) : t =
  fun ctx parent ->
