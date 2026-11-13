@@ -4,7 +4,7 @@ use super::{Duration, Headless, startup_rows::Agent, wait_for_chrome};
 use nsh_core::prelude::px;
 use nsh_testing::{LayoutNode, Screen};
 use serde_json::Value;
-use std::cell::RefCell;
+use std::{cell::RefCell, collections::BTreeMap};
 
 fn nodes(root: &Value) -> Vec<&Value> {
     let mut pending = vec![root];
@@ -155,10 +155,164 @@ fn cells<'a>(root: &'a Value, tab: &str) -> Vec<&'a Value> {
         .collect()
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 enum Choice {
     Emoji(String),
     Icon { id: String, name: String },
+}
+
+fn contains_native(outer: &LayoutNode, inner: &LayoutNode) -> bool {
+    let a = outer.bounds;
+    let b = inner.bounds;
+    !outer.hidden
+        && !inner.hidden
+        && [
+            a.origin.x.0,
+            a.origin.y.0,
+            a.size.width.0,
+            a.size.height.0,
+            b.origin.x.0,
+            b.origin.y.0,
+            b.size.width.0,
+            b.size.height.0,
+        ]
+        .iter()
+        .all(|value| value.is_finite())
+        && a.size.width.0 > 0.0
+        && a.size.height.0 > 0.0
+        && b.size.width.0 > 0.0
+        && b.size.height.0 > 0.0
+        && b.origin.x.0 >= a.origin.x.0 - 0.5
+        && b.origin.y.0 >= a.origin.y.0 - 0.5
+        && b.origin.x.0 + b.size.width.0 <= a.origin.x.0 + a.size.width.0 + 0.5
+        && b.origin.y.0 + b.size.height.0 <= a.origin.y.0 + a.size.height.0 + 0.5
+}
+
+fn native_choice_ready(
+    screen: &Screen,
+    tree: &Value,
+    popup: &str,
+    scroll: &str,
+    target: &str,
+    expected: &Choice,
+    tab: &str,
+) -> Result<(), String> {
+    let current_popup = picker(tree)?;
+    if selector(current_popup)? != popup || selector(body_scroll(tree)?)? != scroll {
+        return Err("canonical picker/body owner changed before its single choice press".into());
+    }
+    let cell = cells(current_popup, tab)
+        .into_iter()
+        .find(|cell| selector(cell).as_deref() == Ok(target))
+        .ok_or("exact canonical choice retired before native admission")?;
+    if Choice::from_cell(cell, tab)? != *expected
+        || cell
+            .pointer("/props/press-enabled")
+            .and_then(Value::as_bool)
+            != Some(true)
+        || cell.pointer("/props/enabled").and_then(Value::as_bool) == Some(false)
+    {
+        return Err(format!(
+            "canonical choice identity/capability changed: {cell}"
+        ));
+    }
+    let native = screen.layout_nodes();
+    let by_id: BTreeMap<_, _> = native.iter().map(|node| (node.id, node)).collect();
+    let exact = |selector: &str| -> Result<&LayoutNode, String> {
+        let found: Vec<_> = native
+            .iter()
+            .filter(|node| node.test_id.as_deref() == selector.strip_prefix("id:"))
+            .collect();
+        if found.len() != 1 {
+            return Err(format!(
+                "exact native {selector} has {} committed matches",
+                found.len()
+            ));
+        }
+        Ok(found[0])
+    };
+    let cell = exact(target)?;
+    let viewport = exact(scroll)?;
+    let popup = exact(popup)?;
+    let press = screen
+        .press_target(target)?
+        .ok_or("exact native choice has no enabled public press target")?;
+    let controller = by_id
+        .get(&press)
+        .copied()
+        .ok_or("public press target has no committed native layout")?;
+    let mut ancestor = cell;
+    let mut owns_controller = cell.id == press;
+    let mut owns_popup = cell.id == popup.id;
+    for _ in 0..native.len() {
+        let Some(parent) = by_id.get(&ancestor.parent).copied() else {
+            break;
+        };
+        if parent.id == ancestor.id {
+            break;
+        }
+        ancestor = parent;
+        owns_controller |= ancestor.id == press;
+        owns_popup |= ancestor.id == popup.id;
+    }
+    if !owns_controller
+        || !owns_popup
+        || !contains_native(viewport, cell)
+        || !contains_native(viewport, controller)
+        || !contains_native(popup, viewport)
+        || !contains_native(ancestor, popup)
+    {
+        return Err(format!(
+            "native choice not admitted: controller_owned={owns_controller}, popup_owned={owns_popup}, cell={cell:?}, controller={controller:?}, body={viewport:?}, popup={popup:?}, window={ancestor:?}"
+        ));
+    }
+    Ok(())
+}
+
+fn admit_choice(
+    app: &mut Headless,
+    agent: &Agent,
+    tab: &str,
+    popup: &str,
+    scroll: &str,
+    target: &str,
+    expected: &Choice,
+) -> Result<(), String> {
+    let pending = RefCell::new(String::new());
+    let mismatches = RefCell::new(Vec::<String>::new());
+    wait_for_chrome(
+        app,
+        &format!("exact {tab} final choice native controller admitted"),
+        Duration::from_secs(10),
+        |screen| {
+            let observed = agent.tree().and_then(|tree| {
+                native_choice_ready(screen, &tree, popup, scroll, target, expected, tab)
+            });
+            match observed {
+                Ok(()) => true,
+                Err(error) => {
+                    if mismatches.borrow().len() < 6 && !mismatches.borrow().contains(&error) {
+                        eprintln!("PENDING actual {tab} choice admission: {error}");
+                        mismatches.borrow_mut().push(error.clone());
+                    }
+                    *pending.borrow_mut() = error;
+                    false
+                }
+            }
+        },
+    )
+    .map_err(|error| {
+        format!(
+            "{error}\nExact native choice pending: {}\n{}",
+            pending.borrow(),
+            choice_failure(app, agent, tab, expected, target)
+        )
+    })?;
+    eprintln!(
+        "ADMIT actual {tab} final choice: expected={expected:?}, controller={target}, popup={popup}, body={scroll}, observed_mismatches={}",
+        mismatches.borrow().len()
+    );
+    Ok(())
 }
 impl Choice {
     fn from_cell(cell: &Value, tab: &str) -> Result<Self, String> {
@@ -517,8 +671,10 @@ pub(super) fn qualify(app: &mut Headless) -> Result<(), String> {
         let expected = Choice::from_cell(last, tab)?;
         let chosen_cell = last.clone();
         let last = selector(last)?;
-        // This uses only the already-observed tree/screen. Do not add a wait,
-        // alternate controller or pre-press worker query to qualify selection.
+        // Canonical end-row publication alone is not native input admission.
+        // Wait only for this exact choice and these captured owners; the action
+        // below remains one press, with no alternate target or action retry.
+        admit_choice(app, &agent, tab, &retired_picker, &scroll, &last, &expected)?;
         eprintln!(
             "BEGIN actual {tab} final choice: expected={expected:?}, controller={last}, generation={:?}, canonical={chosen_cell}, native={:#?}",
             tree.get("generation"),
