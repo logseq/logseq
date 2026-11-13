@@ -1026,7 +1026,7 @@ let enqueue_split batch ~context ~save ~restore persist =
     let persist_save job =
       match job.save with
       | None -> Js.Promise.resolve ()
-      | Some save -> Ops.save_pending save
+      | Some save -> Ops.save_pending ~current save
     in
     let rec drain_saves () =
       if Queue.is_empty batch.commits then Js.Promise.resolve () else

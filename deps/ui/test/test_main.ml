@@ -3584,6 +3584,20 @@ let test_title_refs3 () =
 
 (* ---- editor_actions: selection membership and document order ---- *)
 
+let test_block_source_remount () =
+  let module S = Editor_state in
+  let sources = !(S.extra_sources) in
+  Fun.protect ~finally:(fun () -> S.extra_sources := sources) (fun () ->
+    let scope = "property-source-remount" and uuid = "property-value" in
+    let old = S.register_block_source ~scope (fun () -> [block uuid "Before"]) in
+    let live = S.register_block_source ~scope (fun () -> [block uuid "After"]) in
+    old ();
+    check "Property source survives retirement of its previous view"
+      (Option.map (fun b -> b.Model.block_title) (S.find uuid) = Some "After"
+       && List.map (fun b -> b.Model.block_title) (S.blocks_in_scope scope) = ["After"]);
+    live ();
+    check "Retiring the live property source releases its block" (S.find uuid = None))
+
 let test_selected_uuids () =
   let module S = Editor_state in
   let saved_model = !model_stub in
@@ -4671,6 +4685,7 @@ let () =
   test_edn3 ();
   test_block_parse3 ();
   test_title_refs3 ();
+  test_block_source_remount ();
   test_selected_uuids ();
   test_update_sidebar2 ();
   test_decode7 ();

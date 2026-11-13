@@ -1126,7 +1126,7 @@ let release_save save =
   if save_current save then
     Hashtbl.remove autosave_revisions (save.context.repo, save.uuid)
 
-let save_pending_result save =
+let save_pending_result ?current save =
   if not (save_current save) then Js.Promise.resolve None else
   let write =
     let* bm =
@@ -1134,9 +1134,9 @@ let save_pending_result save =
         ~source:save.source save.uuid save.title
     in
     if not (save_current save) then Js.Promise.resolve None else
-    let* result = submit_result save.context save.opts [ op "save-block" [ bm; Wire.Map [] ] ] in
-    let current = save_current save in
-    if current then begin
+    let* result = submit_result ?current save.context save.opts [ op "save-block" [ bm; Wire.Map [] ] ] in
+    let accepted = save_current save in
+    if accepted then begin
       release_save save;
       if context_current save.context && Option.is_some save.editor then
         S.set_silent (fun st ->
@@ -1146,12 +1146,12 @@ let save_pending_result save =
                 { st with S.editing = Some { e with S.base = save.title } }
             | _ -> st)
     end;
-    Js.Promise.resolve (if current then result else None)
+    Js.Promise.resolve (if accepted then result else None)
   in
   write |> Js.Promise.catch (fun _ -> release_save save; write)
 
-let save_pending save =
-  let* _ = save_pending_result save in
+let save_pending ?current save =
+  let* _ = save_pending_result ?current save in
   Js.Promise.resolve ()
 
 let cancel_pending_save () =
@@ -1173,7 +1173,7 @@ let rec apply_result_for ?current context ?(flush_save = true) ?(opts = Wire.Map
   match (if flush_save then take_pending_save () else None) with
   | Some pending ->
       let opts = current_history_opts opts in
-      let* () = save_pending pending in
+      let* () = save_pending ~current:is_current pending in
       apply_result_for ?current context ~opts ops
   | None ->
       if flush_save then Ui_services.timers_clear_timeout !save_timer;
@@ -1865,6 +1865,18 @@ let resync_open_editor ?(force = false) () : unit Js.Promise.t =
   | None -> Js.Promise.resolve ()
   | Some e when S.is_draft e -> Js.Promise.resolve ()
   | Some e -> (
+      (* External editors can outlive their debounced property data.
+         Never resync a newly saved buffer from that older snapshot. *)
+      let* () =
+        if S.find_in (S.page_blocks ()) e.S.uuid = None then
+          Subs_state.promise_of_task (Runtime.hooks.refresh_property_areas ())
+        else Js.Promise.resolve ()
+      in
+      if not (context_current context)
+         || not (match S.editing () with
+           | Some live -> live.S.epoch == e.S.epoch
+           | None -> false)
+      then Js.Promise.resolve () else
       match S.find e.uuid with
       | Some b ->
           (* compare against the displayed title: committed edits carry a
@@ -1937,6 +1949,14 @@ let flush_pending_save () =
   | None -> Js.Promise.resolve ()
   | Some pending -> save_pending pending
 
+let restore_history ?owner result =
+  let context = Runtime.model () in
+  (* Property value blocks live outside the page tree. Refresh their
+     sources before rebuilding the editor from the history cursor. *)
+  let* () = Subs_state.promise_of_task (Runtime.hooks.refresh_property_areas ()) in
+  if refresh_current ?owner context then !(S.restore_history) result
+  else Js.Promise.resolve ()
+
 let undo ?owner () =
   let context = Runtime.model () in
   let owner = refresh_owner_for owner in
@@ -1948,7 +1968,7 @@ let undo ?owner () =
       let* result = Runtime.invoke1 "thread-api/undo-redo-undo" (Wire.String repo) in
       if not (current ()) then Js.Promise.resolve () else (
       S.clear_overrides ();
-      let* () = refresh_page_then ?owner (fun () -> !(S.restore_history) result) in
+      let* () = refresh_page_then ?owner (fun () -> restore_history ?owner result) in
       match owner with
       | Some owner -> require_refresh_success owner
       | None -> Js.Promise.resolve ()))
@@ -1969,7 +1989,7 @@ let redo ?owner () =
       let* result = Runtime.invoke1 "thread-api/undo-redo-redo" (Wire.String repo) in
       if not (current ()) then Js.Promise.resolve () else (
       S.clear_overrides ();
-      let* () = refresh_page_then ?owner (fun () -> !(S.restore_history) result) in
+      let* () = refresh_page_then ?owner (fun () -> restore_history ?owner result) in
       match owner with
       | Some owner -> require_refresh_success owner
       | None -> Js.Promise.resolve ()))

@@ -1275,6 +1275,8 @@ and apply_input ?frame uuid ev =
   | _ -> ()
   end
 
+let () = S.surface_input := fun frame uuid input -> apply_input ~frame uuid input
+
 (* translate a DOM keydown into the Edit_input event the conduit would
    have emitted for it *)
 let dispatch_command cid =

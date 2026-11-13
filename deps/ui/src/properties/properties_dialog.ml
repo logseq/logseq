@@ -564,6 +564,8 @@ let value_edit_view d prop : t =
             | Some n ->
                 write_prop_value d prop (Some (W.Float n))
             | None -> ())
+      else if ty = "string" then
+        Some (fun text -> write_prop_value d prop (Some (W.String text)))
       else if ty = "node" || ty = "class" then
         Some
           (fun text ->

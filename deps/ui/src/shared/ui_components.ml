@@ -55,6 +55,20 @@ let with_props (binds : Prop.t list) (elem : t) : t =
   List.iter (Prop.set ctx node) binds;
   node
 
+let block_bullet_color =
+  "var(--lx-gray-08, var(--ls-block-bullet-color, var(--rx-gray-08)))"
+
+let block_bullet_ring =
+  "var(--lx-gray-04-alpha, var(--ls-block-bullet-border-color, var(--rx-gray-04-alpha)))"
+
+let block_bullet ?key ?(font_size = 16.) ?(opacity = 0.8) ?opacity_signal
+    ?data_attrs () : t =
+  (* Typed dimensions are whole pixels; master's dot diameter is 0.4em. *)
+  let size = int_of_float (Float.round (font_size *. 0.4)) in
+  box ?key ~style_class:"bullet" ~width:size ~height:size ~corner_radius:999
+    ~opacity ?opacity_signal ~background:block_bullet_color
+    ~transition:"transform 0.2s" ?data_attrs []
+
 (* Application form colors belong to the shared view layer. Constructor
    arguments remain available to fields with an authored surface. *)
 let form_control make ?(background = "hsl(var(--background))")

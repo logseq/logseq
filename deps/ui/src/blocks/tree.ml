@@ -354,11 +354,17 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
           ]
         [ Ui_parts.class_signal cs
             (fun c -> bullet_cls ^ if c then " bullet-closed" else "")
-            (box ~key:("dotw-" ^ uuid)
+            (Ui_components.with_props
+              (if order_list then [] else
+                [ Ui_components.Prop.hover_background Ui_components.block_bullet_ring ])
+            (row ~key:("dotw-" ^ uuid)
                ~accessibility_identifier:("dot-" ^ uuid)
                ~main:`center ~cross:`center ~corner_radius:8
                ~width:control_size ~min_width:control_size
                ~height:(if order_list then 16 else control_size)
+               ~background:(reactive (fun c ->
+                 if c && not order_list then Ui_components.block_bullet_ring
+                 else "transparent") cs)
                ~data_attrs:
                  ([ ("data-blockid", uuid); ("draggable", string_of_bool (not (Ui_services.env_publishing ()))) ])
                [ (match node_icon ~library b with
@@ -379,17 +385,14 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
                           if S.String_set.mem uuid selected then
                             "selected bullet"
                           else "bullet")
-                        (box ~key:("b-" ^ uuid)
-                           ~transition:"transform 0.2s"
-                           ~width:6 ~height:6 ~corner_radius:999
+                        (Ui_components.block_bullet ~key:("b-" ^ uuid)
                            ~opacity:(reactive (fun collapsed _ ->
                              if not collapsed && Settings_state.document_mode () then 0. else 0.8)
                              cs (Signal.value (Settings_state.state ())))
-                           ~background:"var(--lx-gray-08, var(--ls-block-bullet-color))"
                            ~data_attrs:
                              [ ("data-blockid", uuid) ]
-                     []))
-            ])
+                     ()))
+            ]))
         ]
     ]
     ctx parent

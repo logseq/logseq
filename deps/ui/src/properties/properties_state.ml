@@ -407,6 +407,8 @@ let refresh_all_now () =
     |> Array.of_list
     |> Js.Promise.all
   in
+  (* Mounted property editors expose their block sources during render. *)
+  Runtime.flush_now ();
   Js.Promise.resolve ()
 
 (* sdk apply_ops awaits this before resolving — avoids a

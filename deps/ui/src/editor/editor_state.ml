@@ -146,6 +146,10 @@ let click_point : (string * float * float * float) option ref = ref None
    re-measure the caret/selection overlay *)
 let active_frame : Edit_input.frame Signal.state option ref = ref None
 
+(* Shared surfaces must not depend on commands that mount those surfaces. *)
+let surface_input : (Edit_input.frame Signal.state -> string -> Edit_input.event -> unit) ref =
+  ref (fun _ _ _ -> failwith "Editor input handler is not installed")
+
 (* block uuid whose input last reported the conduit's "focus" event —
    native `Editor_sink.is_focused` reads this (the DOM-level
    document.activeElement tracker only exists on the web profile) *)
@@ -513,6 +517,12 @@ let add_block_source ~scope f = extra_sources := (scope, f) :: !extra_sources
 
 let remove_block_source ~scope =
   extra_sources := List.filter (fun (owner, _) -> owner <> scope) !extra_sources
+
+let register_block_source ~scope source =
+  add_block_source ~scope source;
+  fun () ->
+    extra_sources := List.filter (fun (owner, live) ->
+      owner <> scope || live != source) !extra_sources
 
 let blocks_in_scope scope =
   let page_scope =

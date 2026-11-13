@@ -2,9 +2,9 @@
 
    Each cell is a semantic control per property type (web master's
    cell structure kept where it maps):
-   - text/url:    a ghost button showing the display text; press swaps
-                  in an inline text_field (Enter commits — the LUI
-                  event set has no blur event yet, recorded in NOTES)
+   - text:        the shared block editor, including autocomplete and
+                  soft newlines (Enter commits)
+   - url:         a link with an inline field for empty values
    - number:      same, commit parses Float
    - checkbox:    LUI checkbox; toggle writes Bool
    - date/datetime: ghost button opens an anchored popover with
@@ -488,14 +488,14 @@ let value_button ~text ~on_press : t =
      batch, so keep a label plus the cljs "Empty" placeholder *)
   let text = if text = "" then I18n.t "ui/empty" else text in
   Ui_components.button ~variant:`ghost ~grow:1.0 ~text_alignment:`start ~label:text
-    ~text ~style_class:"pv-scalar"
+    ~style_class:"pv-scalar"
     ~foreground:"var(--ls-primary-text-color)"
     ~data_attrs:
       [ ( "style"
         , "height:auto;min-height:0;padding:0;line-height:20px;\
            justify-content:flex-start" )
       ]
-    ~on_press []
+    ~on_press [Lui_elements.text ~value:text ~white_space:"pre-wrap" []]
 
 (* text/number cell: ghost button <-> autofocused text_field *)
 let scalar_edit_cell ?(jump_target = true) ctx row : t =
@@ -516,25 +516,25 @@ let scalar_edit_cell ?(jump_target = true) ctx row : t =
        && Editor_state.editing () = None)
   in
   let buffer = Signal.state sched initial in
-  let commit save =
+  let commit () =
     if not (Runtime.signal_get editing) then ()
     else (
       let v = Runtime.signal_get buffer in
       clear_active_edit ctx row;
       Runtime.signal_set editing false;
-      if save then commit_or_cancel ctx row v else ctx.refresh ())
+      commit_or_cancel ctx row v)
   in
   let open_editor ~steal () =
     !close_editor ();
     add_active_edit ctx row;
     set_edit_buffer ctx row (Runtime.signal_get buffer);
     Runtime.signal_set editing true;
-    close_editor := (fun () -> commit true);
+    close_editor := commit;
     if steal then !(Editor_state.close_block_editor) ()
   in
   if Runtime.signal_get editing then (
     add_active_edit ctx row;
-    close_editor := (fun () -> commit true));
+    close_editor := commit);
   (column ~gap:0 ~grow:1.0
      [ if_ ~test:(Logseq_el.own context (Signal.map (fun e -> not e) (Signal.value editing)))
          (Jump_state.target ~enabled:jump_target ~key:("value-" ^ ctx.owner_key ^ "-" ^ ident)
@@ -557,12 +557,10 @@ let scalar_edit_cell ?(jump_target = true) ctx row : t =
                   && target.contains focused && focused.contains target ->
                   ev.prevent_default ();
                   ev.stop_immediate ();
-                  if D.row_type row = "number" then (
-                    let value = target.value () in
-                    Signal.set buffer value;
-                    set_edit_buffer ctx row value;
-                    commit true)
-                  else (Signal.set buffer initial; commit false)
+                  let value = target.value () in
+                  Signal.set buffer value;
+                  set_edit_buffer ctx row value;
+                  commit ()
               | _ -> ()
           in
           let off = (Ui_services.get ()).dom.subscribe_window_event "keydown" on_key in
@@ -578,10 +576,63 @@ let scalar_edit_cell ?(jump_target = true) ctx row : t =
                   Signal.set buffer t;
                   set_edit_buffer ctx row t
               | _ -> ())
-            ~on_submit:(fun _ -> commit true)
+            ~on_submit:(fun _ -> commit ())
             []) edit_context edit_parent)
      ])
     context parent
+
+let text_edit_cell ?(jump_target = true) ctx row : t =
+ fun context parent ->
+  Editor_state.ensure context;
+  let ident = Option.get (D.row_ident row) in
+  let scope = "property-value-" ^ ctx.owner_key ^ "-" ^ ctx.block_uuid ^ "-" ^ ident in
+  let value = D.row_value row in
+  let initial = D.ref_title (D.row_effective_value row) in
+  let current = Runtime.repo (), Runtime.route () in
+  let alive () = Ui_effect.alive context.Lui_ui.ui_scope
+    && current = (Runtime.repo (), Runtime.route ()) in
+  let uuid = D.ref_uuid value in
+  (match uuid with
+   | Some _ ->
+       let block = Decode.block_of_wire value in
+       Signal.on_dispose context.Lui_ui.ui_scope
+         (Editor_state.register_block_source ~scope (fun () -> [block]))
+   | None -> ());
+  let creating = ref false in
+  let activate () =
+    match uuid with
+    | Some uuid ->
+        Editor_actions.enter_edit ~scope ~submit_on_enter:true uuid (-1)
+    | None when not !creating ->
+        creating := true;
+        let uuid = Ui_services.env_random_uuid () in
+        ignore ((let* _ = D.create_property_text_block ~block_uuid:ctx.block_uuid
+                    ~ident ~title:initial ~new_block_id:uuid () in
+          if alive () then begin
+            set_pending_edit ~block_uuid:ctx.block_uuid ~ident;
+            S.refresh_all ()
+          end;
+          Js.Promise.resolve ())
+          |> Js.Promise.catch (fun error ->
+            creating := false;
+            Ui_services.log_error ("Property editor activation failed", error);
+            Js.Promise.resolve ()))
+    | None -> ()
+  in
+  let pending = take_pending_edit ~block_uuid:ctx.block_uuid ~ident in
+  (column ~gap:0 ~grow:1. ~min_width:0
+     ~on_appear:(fun _ -> if pending then activate ())
+     [ reactive (fun target ->
+         match uuid, target with
+         | Some uuid, Some (editing_uuid, editing_scope)
+           when editing_uuid = uuid && editing_scope = scope ->
+             Editor_surface.mount uuid scope
+         | _ ->
+             Jump_state.target ~enabled:jump_target
+               ~key:("value-" ^ ctx.owner_key ^ "-" ^ ident)
+               ~uuid:ctx.block_uuid ~activate
+               (value_button ~text:initial ~on_press:(fun _ -> activate ())))
+         (Editor_state.editing_target_sig ()) ]) context parent
 
 let checkbox_view ?(jump_target = true) ctx row : t =
   let value = D.row_value row in
@@ -1413,11 +1464,13 @@ let rec view ?(jump_target = true) ?(positioned = false) ?(table_view = false)
           extends_view ~jump_target ctx row'
         else node_view ~jump_target ctx row'
     | _ ->
-        let cell = scalar_edit_cell ~jump_target ctx row' in
+        let cell = if ty = "default" && not (D.row_many row)
+          then text_edit_cell ~jump_target ctx row
+          else scalar_edit_cell ~jump_target ctx row' in
         (* cljs embeds every non-closed scalar value in a
            .property-block-container .ls-block row — control-wrap bullet
            + content; empty values show only .property-panel-bullet *)
-        if ty = "default" && D.ref_title (D.row_value row') <> ""
+        if ty = "default" && not (D.value_empty_p (D.row_value row))
         then block_value_wrap cell
         else cell
 
@@ -1482,22 +1535,29 @@ and icon_view ?(jump_target = true) ctx row : t =
    control-wrap (hidden fold arrow + bullet) + a non-flex content wrap
    so inline values (links) keep inline layout and line-box height *)
 and block_value_wrap (inner : t) : t =
-  Lui_elements.column ~min_width:0 ~grow:1. ~style_class:"property-block-container content"
+  Ui_components.with_props
+    [ Ui_components.Prop.font_size "0.875rem"; Ui_components.Prop.line_height "20px" ]
+  (Lui_elements.column ~min_width:0 ~grow:1. ~padding_vertical:4
+    ~style_class:"property-block-container content"
     [ Lui_elements.column ~min_width:0 ~grow:1. ~style_class:"ls-block"
         ~transition:Ui_components.block_transition
         [ Lui_elements.row ~gap:4 ~cross:`start ~grow:1.0 ~min_width:0
             ~style_class:"block-main-container"
-            [ Lui_elements.row ~gap:0 ~cross:`center
+            [ Lui_elements.row ~gap:0 ~cross:`center ~height:20
                 ~style_class:"block-control-wrap"
                 [ Ui_components.with_props
                     [ Ui_components.Prop.pressed_opacity 0.3 ]
                     (box ~style_class:"block-control"
-                       ~min_width:22 ~min_height:22 ~opacity:0.4 ~margin_top:1 ~padding:2
+                       ~width:22 ~height:20 ~opacity:0.4
                        [])
-                ; box ~style_class:"bullet-container"
-                    [ box ~style_class:"bullet" [] ] ]
+                ; Lui_elements.row ~height:20 ~cross:`center ~style_class:"bullet-link-wrap"
+                    [ Ui_components.with_props
+                        [ Ui_components.Prop.hover_background Ui_components.block_bullet_ring ]
+                        (Lui_elements.row ~width:14 ~min_width:14 ~height:14 ~corner_radius:7
+                          ~main:`center ~cross:`center ~style_class:"bullet-container"
+                          [ Ui_components.block_bullet ~font_size:14. () ]) ] ]
             ; Lui_elements.column ~grow:1.0 ~min_width:0
-                [ inner ] ] ] ]
+                [ inner ] ] ] ])
 
 (* cljs url values render the external-link inline inside the plain
    property-value cell (no .property-block-container / .ls-block wrap);

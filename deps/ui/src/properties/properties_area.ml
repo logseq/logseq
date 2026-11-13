@@ -104,8 +104,7 @@ let property_icon row =
   | None, None ->
       Lui_elements.row ~key:"pk-b" ~width:18 ~height:24 ~main:`center ~cross:`center
         ~style_class:"bullet-container"
-        [ box ~style_class:"bullet" ~width:5 ~height:5 ~corner_radius:3
-            ~background:"var(--ls-secondary-text-color)" [] ]
+        [ Ui_components.block_bullet ~font_size:14. () ]
 
 (* the key (name + bullet) opens a retained overlay so property refreshes
    do not reset the active pane. cljs property-key-cp skips the
@@ -181,12 +180,6 @@ let show_panel_bullet row =
   || D.value_empty_p (D.row_value row)
 
 let value_cell ~(hover : bool Signal.state option) ctx row : t =
-  (* cljs renders entity-valued properties (even :default/:url) as a
-     nested ls-block — its block-control bullet shows beside the value;
-     show_panel_bullet covers the cljs .property-panel-bullet rule *)
-  let entity_value =
-    match D.row_value row with W.Map _ -> true | _ -> false
-  in
   let centered =
     D.value_empty_p (D.row_value row)
     || (match D.row_type row with
@@ -198,14 +191,13 @@ let value_cell ~(hover : bool Signal.state option) ctx row : t =
     ~style_class:"ls-block property-value-container property-value-panel"
     ~transition:Ui_components.block_transition
     ~padding_vertical:0
-    ((if show_panel_bullet row || entity_value then
+    ((if show_panel_bullet row then
         [ Lui_elements.row ~key:"vpb" ~cross:`center ~margin_left:7 ~margin_right:(-7)
             ~style_class:"property-panel-bullet"
             ~min_height:24 ~opacity:0.6
             [ Lui_elements.row ~width:18 ~height:24 ~main:`center ~cross:`center
                 ~style_class:"bullet-container"
-                [ box ~style_class:"bullet" ~width:5 ~height:5 ~corner_radius:3
-                    ~background:"var(--ls-secondary-text-color)" [] ]
+                [ Ui_components.block_bullet ~font_size:14. () ]
             ]
         ]
       else [])
