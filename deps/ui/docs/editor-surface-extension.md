@@ -81,7 +81,8 @@ block-editor (column)
 The extension carries **no visual content** — it is the platform's
 text-input/IME/measurement channel bound to one block editor:
 
-- **props**: `block-id`, `caret` (model-unit offset), `composition`
+- **props**: `block-id`, required String `source` (exact display-model
+  text), `caret` (model-unit offset), `composition`
   (marked-text range while IME is active), `runs` (the emitted run
   spans `start,end,kind;…` in document order — measurement zips it
   against the rendered `.ed-r` elements)
@@ -96,6 +97,58 @@ text-input/IME/measurement channel bound to one block editor:
   platform on the rendered run nodes (web: Range.getClientRects /
   caretRangeFromPoint on the run text nodes; apple: TextKit
   layoutManager; OCaml host: editor text layout)
+
+### Source binding and native geometry requests
+
+The canonical native and web `logseq-editor` schemas require `source`
+without a default. The shared sink derives `source`, `runs`, `caret`, and
+`composition` from the same `Edit_model.display_model` frame, including
+IME preedit text. The Apple extension schema and its fingerprint must
+declare the same required String property. Missing `source` is a
+contract violation; it must not be replaced with an empty string.
+
+All five native geometry operations include the exact issuing
+display-model `source`, in addition to `block-id` and their arguments:
+
+| Operation | Request fields |
+| --- | --- |
+| `caret-rect` | `block-id`, `source`, `offset` |
+| `selection-rects` | `block-id`, `source`, `first`, `last` |
+| `offset-at` | `block-id`, `source`, `x`, `y` |
+| `line-ranges` | `block-id`, `source` |
+| `scroll-height` | `block-id`, `source` |
+
+The source is captured at issuance, not reconstructed when the host
+receives the request. If no active editor matches `block-id`, the
+operation emits no request and returns its normal no-data result
+(`None` or `[]`), even if an older measurement is cached.
+`set-input-focus {block-id, focused}` is unchanged and carries no source.
+Geometry reply shapes are unchanged.
+
+Before measuring, the native host must establish
+`request.source == current editor snapshot.source == projected sink.source`.
+This is byte-for-byte UTF-8 equality, not Swift's canonically equivalent
+String equality: composed `é` and decomposed `e` + combining acute have
+different byte offsets and cannot share a geometry request.
+The projected run spans and text geometry must belong to that source.
+AppKit input-method geometry also requires its native input buffer to
+equal that layout source before converting a character-range offset.
+The host must finish applying all metadata batches in a callback array
+before attempting geometry; a Core flush is not an acknowledgement that
+the host has committed those batches. A missing active editor or a
+source mismatch is stale lifecycle work, not permission to clamp offsets,
+invent a source, or slice run spans against a different document.
+
+For example, an editor containing `/upload` can issue
+`caret-rect {block-id: B, source: "/upload", offset: 7}` before the slash
+command clears its trigger text. The command then publishes `source: ""`
+with `runs: "0,0,z"`. If the old request arrives after the clear, its
+`source: "/upload"` identifies it as stale even if the same block and
+extension node remain mounted. It must not measure offset 7 in the empty
+source. Conversely, old projected runs `0,7,p;7,7,z` must not be sliced
+using a newer empty editor snapshot, even for a new request at offset 0.
+An actually empty active editor legitimately issues `source: ""` with
+its empty-model offsets; this is distinct from a missing source.
 
 All conduit geometry uses logical pixels relative to the block editor;
 source offsets retain the model's units. Native hosts convert drawable

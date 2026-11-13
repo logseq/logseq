@@ -76,14 +76,16 @@ final class LogseqHost: NSObject, NSApplicationDelegate, NSWindowDelegate {
         backend.onFramesReport = { [weak self] frames in
             guard let self, !self.services.closed else { return }
             self.services.frames = frames
-            self.services.perform {
-                try self.services.editorGeometry.flush()
-                self.services.scrolling.flush()
-                try self.services.flushImageSizes()
-                try self.input?.afterFrame()
-            }
+            self.services.perform { try self.afterFrame() }
         }
         backend.onEvent = { [weak self] event in self?.services.perform { try self?.input?.backendEvent(event) } }
+    }
+    func afterFrame() throws {
+        guard !services.closed, !services.applyingPatches else { return }
+        try services.editorGeometry.flush()
+        services.scrolling.flush()
+        try services.flushImageSizes()
+        try input?.afterFrame()
     }
     func apply(_ json: String, snapshot: Bool) throws {
         if let path = ProcessInfo.processInfo.environment["LOGSEQ_APPLE_TRACE_PATCHES"] {
@@ -100,6 +102,14 @@ final class LogseqHost: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         let rawBatches = try rawPatchBatches(json)
         guard rawBatches.count == batches.count else { throw HostError("Patch batch boundary mismatch") }
+        // Geometry must see the complete callback's presentation metadata.
+        services.applyingPatches = true
+        defer {
+            services.applyingPatches = false
+            onMainRunLoop { [weak self] in
+                self?.services.perform { try self?.afterFrame() }
+            }
+        }
         do {
             for (index, entry) in zip(rawBatches, batches).enumerated() {
                 if snapshot && index == 0 {

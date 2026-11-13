@@ -27,6 +27,7 @@
 
    Props consumed:
      block-id    registry key for [conduit]/[set_input_focus]
+     source      exact display-model text shared by runs and caret
      caret       model-unit caret offset — re-anchors the hidden input
      composition "a,b" marked range (bookkeeping only)
      runs        "a,b,k;…" — one entry per .ed-r element in document
@@ -55,6 +56,7 @@ let schema =
     []
     [ Lui_extension.property "block-id" Lui_extension.StringScalar true
         None
+    ; Lui_extension.property "source" Lui_extension.StringScalar true None
     ; Lui_extension.property "caret" Lui_extension.IntScalar false None
     ; Lui_extension.property "composition" Lui_extension.StringScalar
         false None

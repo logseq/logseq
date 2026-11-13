@@ -13,6 +13,7 @@ final class PlatformServices {
     @ObservationIgnored weak var window: NSWindow?
     @ObservationIgnored weak var backend: LUIAppleBackend?
     @ObservationIgnored var runtime: NativeRuntime?
+    @ObservationIgnored var applyingPatches = false
     // Native view registration and layout reports must not invalidate SwiftUI
     // while NSViewRepresentable is mounting or updating those same views.
     @ObservationIgnored var views: [Int: WeakView] = [:]

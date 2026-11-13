@@ -56,7 +56,7 @@ final class NativeEditorInput: NSTextView {
         guard !composing, let runtime = services?.runtime else { return }
         services?.perform {
             guard let snapshot = try runtime.snapshot(block: block), let source = snapshot["source"] as? String, let anchor = snapshot["anchor"] as? Int, let caret = snapshot["caret"] as? Int else { return }
-            if string != source { string = source }
+            if !string.utf8.elementsEqual(source.utf8) { string = source }
             func utf16(_ offset: Int) -> Int {
                 let bytes = Array(source.utf8.prefix(offset))
                 return String(decoding: bytes, as: UTF8.self).utf16.count
@@ -119,6 +119,7 @@ final class NativeEditorInput: NSTextView {
         guard let services, let window, let content = window.contentView,
               let byte = sourceByteOffset(string, utf16: min(range.location, string.utf16.count)),
               let layout = try? services.editorGeometry.layout(block),
+              layout.source.utf8.elementsEqual(string.utf8),
               let caret = try? layout.caret(byte) else { return super.firstRect(forCharacterRange: range, actualRange: actualRange) }
         actualRange?.pointee = NSRange(location: range.location, length: 0)
         let rect = content.isFlipped ? caret : CGRect(x: caret.minX, y: content.bounds.height - caret.maxY, width: max(caret.width, 1), height: caret.height)

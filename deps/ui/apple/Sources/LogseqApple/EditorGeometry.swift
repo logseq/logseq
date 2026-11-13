@@ -9,7 +9,10 @@ func sourceSlice(_ source: String, _ first: Int, _ last: Int) throws -> String {
 
 private func sourceSlice(_ bytes: [UInt8], _ first: Int, _ last: Int) throws -> String {
     func boundary(_ n: Int) -> Bool { n >= 0 && n <= bytes.count && (n == bytes.count || bytes[n] & 0xc0 != 0x80) }
-    guard first <= last, boundary(first), boundary(last) else { throw HostError("Invalid UTF-8 editor span") }
+    guard first <= last, boundary(first), boundary(last) else {
+        NSLog("Logseq Apple invalid editor span: first=%ld last=%ld sourceBytes=%ld", first, last, bytes.count)
+        throw HostError("Invalid UTF-8 editor span")
+    }
     return String(decoding: bytes[first..<last], as: UTF8.self)
 }
 
@@ -163,27 +166,30 @@ final class EditorGeometry {
     }
     func request(_ name: String, _ values: [String: Any]) throws {
         let block: String = try services.required(values, "block-id")
+        let source: String = try services.required(values, "source")
         let fields = name == "caret-rect" ? ["offset"] : name == "selection-rects" ? ["first", "last"] : name == "offset-at" ? ["x", "y"] : []
         for field in fields { _ = try integer(values, field) }
-        guard let source = try services.runtime?.snapshot(block: block)?["source"] as? String else { return }
+        guard let current = try services.runtime?.snapshot(block: block)?["source"] as? String, current.utf8.elementsEqual(source.utf8) else { return }
         let node = editorNode(block)
         pending[name + "|" + (try jsonString(values))] = Query(name: name, values: values, block: block, source: source, node: node, incarnation: node.flatMap { services.incarnations[$0] })
-        if !scheduled {
-            scheduled = true
-            CFRunLoopPerformBlock(CFRunLoopGetMain(), CFRunLoopMode.commonModes.rawValue) { [weak self] in
-                MainActor.assumeIsolated {
-                    guard let self else { return }
-                    self.scheduled = false
-                    self.services.perform { try self.flush() }
-                }
-            }
-            CFRunLoopWakeUp(CFRunLoopGetMain())
+        scheduleFlush()
+    }
+    private func scheduleFlush() {
+        guard !scheduled else { return }
+        scheduled = true
+        onMainRunLoop { [weak self] in
+            guard let self else { return }
+            self.scheduled = false
+            self.services.perform { try self.flush() }
         }
     }
     func layout(_ block: String) throws -> EditorLayout? {
-        guard let backend = services.backend, let node = editorNode(block),
-              let source = try services.runtime?.snapshot(block: block)?["source"] as? String,
-              let encoded = services.nodes[node]?["runs"] as? String else { return nil }
+        guard !services.applyingPatches, let backend = services.backend, let node = editorNode(block),
+              let current = try services.runtime?.snapshot(block: block)?["source"] as? String,
+              let metadata = services.nodes[node], let encoded = metadata["runs"] as? String else { return nil }
+        let source: String = try services.required(metadata, "source")
+        // A live OCaml buffer can advance before its retained runs arrive.
+        guard source.utf8.elementsEqual(current.utf8) else { return nil }
         var root = node
         while !services.styleClass(root).split(separator: " ").contains("block-editor") {
             guard let parent = services.parents[root] else { throw HostError("Editor has no block-editor ancestor") }
@@ -219,16 +225,16 @@ final class EditorGeometry {
                 for id in services.children[child] ?? [] { collectText(id) }
             }
             if !hidden { collectText(id); if fragments.isEmpty { ready = false } }
-            if ready, !hidden, tag != "a", tag != "z", fragments.map(\.text).joined() != text { throw HostError("Editor displayed text/source mismatch at byte \(lo)") }
+            if ready, !hidden, tag != "a", tag != "z", !fragments.map(\.text).joined().utf8.elementsEqual(text.utf8) { throw HostError("Editor displayed text/source mismatch at byte \(lo)") }
             runs.append(EditorRunGeometry(first: lo, last: hi, tag: tag, hidden: hidden, text: text, fragments: fragments))
         }
         return ready ? EditorLayout(source: source, origin: origin, runs: runs) : nil
     }
     func flush() throws {
-        guard !services.closed, services.runtime?.started == true else { return }
+        guard !services.closed, !services.applyingPatches, services.runtime?.started == true else { return }
         for (key, query) in pending {
             if let node = query.node, services.incarnations[node] != query.incarnation { pending.removeValue(forKey: key); continue }
-            guard let current = try services.runtime?.snapshot(block: query.block)?["source"] as? String, current == query.source else { pending.removeValue(forKey: key); continue }
+            guard let current = try services.runtime?.snapshot(block: query.block)?["source"] as? String, current.utf8.elementsEqual(query.source.utf8) else { pending.removeValue(forKey: key); continue }
             guard let layout = try layout(query.block) else { continue }
             var reply: [String: Any] = ["block-id": query.block]
             switch query.name {

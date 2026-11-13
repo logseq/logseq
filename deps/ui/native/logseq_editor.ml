@@ -4,7 +4,7 @@
 
    The OCaml half of the conduit is identical to web: the shared
    src/editor/edit_view.ml sink emits the `logseq-editor` node with
-   `block-id`/`caret`/`composition`/`runs` props and decodes
+   `block-id`/`source`/`caret`/`composition`/`runs` props and decodes
    key/insert/delete/composition/focus/blur/pointer events through
    Edit_input.decode. What differs is the adapter: the run views are
    host-rendered, so there is no hidden <input> element and no DOM
@@ -33,13 +33,13 @@
 
    Commands (OCaml -> host via Host.dom_op; measurement replies come
    back through the platform-event channel under the same name):
-     caret-rect      {block-id, offset} -> {block-id, offset, x, y, h, ox, oy}
+     caret-rect      {block-id, source, offset} -> {block-id, offset, x, y, h, ox, oy}
                      x/y/h relative to .block-editor; ox/oy its
                      window-space origin (popup anchors add them)
-     selection-rects {block-id, first, last} -> {block-id, first, last, rects}
-     offset-at       {block-id, x, y}   -> {block-id, x, y, offset}
-     line-ranges     {block-id}         -> {block-id, ranges} — "lo,hi;…"
-     scroll-height   {block-id}         -> {block-id, height}
+     selection-rects {block-id, source, first, last} -> {block-id, first, last, rects}
+     offset-at       {block-id, source, x, y} -> {block-id, x, y, offset}
+     line-ranges     {block-id, source} -> {block-id, ranges} — "lo,hi;…"
+     scroll-height   {block-id, source} -> {block-id, height}
      set-input-focus {block-id, focused} — one-way, no reply
 
    Measurement is the host's job over the rendered .ed-r text views:
@@ -86,6 +86,7 @@ let schema =
     []
     [ Lui_extension.property "block-id" Lui_extension.StringScalar true
         None
+    ; Lui_extension.property "source" Lui_extension.StringScalar true None
     ; Lui_extension.property "caret" Lui_extension.IntScalar false None
     ; Lui_extension.property "composition" Lui_extension.StringScalar
         false None
@@ -328,6 +329,15 @@ let request block_id name fields =
 
 let jnum_v n = Js.Json.JNumber (Float.of_int n)
 
+let request_geometry block_id name arg fields =
+  match Editor_state.editing () with
+  | Some editing when editing.uuid = block_id ->
+      let model = Edit_model.display_model editing.model in
+      issue block_id name arg;
+      request block_id name (("source", Js.Json.JString model.source) :: fields);
+      true
+  | _ -> false
+
 (* Unlike the web adapter there is no per-element create callback on the
    native backends, so mountedness is a host fact — the conduit is always
    constructible and each op degrades to the no-data answer (None / [])
@@ -337,31 +347,35 @@ let conduit block_id : Edit_input.conduit option =
   Some
     { Edit_input.caret_rect =
         (fun off ->
-          issue block_id "caret-rect" (string_of_int off);
-          request block_id "caret-rect" [ ("offset", jnum_v off) ];
+          if not (request_geometry block_id "caret-rect" (string_of_int off)
+                    [ ("offset", jnum_v off) ]) then None
+          else
           match Hashtbl.find_opt caret_rects (block_id, off) with
           | Some (r, ep) when ep = epoch_of block_id && r.ch > 0 ->
               Some { Edit_input.x = r.cx; y = r.cy; w = 0; h = r.ch }
           | _ -> None)
     ; selection_rects =
         (fun (first,last) ->
-          issue block_id "selection-rects" (Printf.sprintf "%d,%d" first last);
-          request block_id "selection-rects" ["first",jnum_v first;"last",jnum_v last];
+          if not (request_geometry block_id "selection-rects"
+                    (Printf.sprintf "%d,%d" first last)
+                    ["first",jnum_v first;"last",jnum_v last]) then []
+          else
           match Hashtbl.find_opt selection_rects (block_id,first,last) with
           | Some (rects,ep) when ep=epoch_of block_id -> rects
           | _ -> [])
     ; offset_at =
         (fun ~x ~y ->
-          issue block_id "offset-at" (Printf.sprintf "%d,%d" x y);
-          request block_id "offset-at"
-            [ ("x", jnum_v x); ("y", jnum_v y) ];
+          if not (request_geometry block_id "offset-at"
+                    (Printf.sprintf "%d,%d" x y)
+                    [ ("x", jnum_v x); ("y", jnum_v y) ]) then None
+          else
           match Hashtbl.find_opt offset_ats (block_id, x, y) with
           | Some (o, ep) when ep = epoch_of block_id -> Some o
           | _ -> None)
     ; line_ranges =
         (fun () ->
-          issue block_id "line-ranges" "";
-          request block_id "line-ranges" [];
+          if not (request_geometry block_id "line-ranges" "" []) then []
+          else
           match Hashtbl.find_opt line_ranges_store block_id with
           | Some (rs, ep) when ep = epoch_of block_id -> rs
           | _ -> [])
@@ -374,8 +388,8 @@ let conduit block_id : Edit_input.conduit option =
 (* host-side content height of the block editor's scrollable text —
    same request/reply pattern as the conduit ops *)
 let scroll_height block_id : int option =
-  issue block_id "scroll-height" "";
-  request block_id "scroll-height" [];
+  if not (request_geometry block_id "scroll-height" "" []) then None
+  else
   match Hashtbl.find_opt scroll_heights block_id with
   | Some (h, ep) when ep = epoch_of block_id -> Some h
   | _ -> None
@@ -389,9 +403,11 @@ let popup_pos block_id : (float * float * float) option =
   let live =
     match Editor_state.editing () with
     | Some e when e.Editor_state.uuid = block_id ->
-        let off = e.Editor_state.model.Edit_model.caret in
-        issue block_id "caret-rect" (string_of_int off);
-        request block_id "caret-rect" [ ("offset", jnum_v off) ];
+        let model = Edit_model.display_model e.Editor_state.model in
+        let off = model.Edit_model.caret in
+        if not (request_geometry block_id "caret-rect" (string_of_int off)
+                  [ ("offset", jnum_v off) ]) then None
+        else
         (* reply coords are container-relative — re-anchor into viewport
            space (x-20, line bottom - 3, line top), matching the web
            twin's popup_pos *)

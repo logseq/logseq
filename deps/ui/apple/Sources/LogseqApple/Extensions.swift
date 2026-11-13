@@ -43,7 +43,7 @@ func logseqExtensions(_ services: PlatformServices) throws -> LUIAppleExtensionR
         }
     }
     try register("logseq-dom", false, [], [], [dom]) { _ in AnyView(EmptyView()) }
-    let editorProps = fields("composition runs accessibility-identifier data-testid style-class attrs") + fields("block-id", "string", true) + fields("caret", "int")
+    let editorProps = fields("composition runs accessibility-identifier data-testid style-class attrs") + fields("block-id source", "string", true) + fields("caret", "int")
     let editorEvents = [
         EventSchema(name: "key", fields: fields("key", "string", true) + fields("code key-char") + fields("shift alt meta ctrl repeat", "bool")),
         EventSchema(name: "insert", fields: fields("text", "string", true)),

@@ -725,7 +725,7 @@ let overlay ?visible (frame : frame Signal.signal) : t =
 
 (* --- input sink ---------------------------------------------------------------- *)
 
-let sink ~block_id ~runs_s ~caret_s ~comp_s ~on_input : t =
+let sink ~block_id ~source_s ~runs_s ~caret_s ~comp_s ~on_input : t =
  fun context parent ->
   let node = Lui_ui.extension context Editor_sink.identifier in
   Lui_ui.key context node ("ed-sink-" ^ block_id);
@@ -746,6 +746,7 @@ let sink ~block_id ~runs_s ~caret_s ~comp_s ~on_input : t =
   Lui_ui.extension_property context node "attrs"
     (StringValue
        (Printf.sprintf {|{"data-block-id":"%s"}|} block_id));
+  Lui_ui.extension_property_signal context node "source" source_s;
   Lui_ui.extension_property_signal context node "runs" runs_s;
   Lui_ui.extension_property_signal context node "caret" caret_s;
   Lui_ui.extension_property_signal context node "composition" comp_s;
@@ -817,12 +818,15 @@ let view ~model ~frame ~block_id ~on_input ~cls : t =
     own context
       (Signal.map (fun ls -> StringValue (runs_prop_of ls)) lines_s)
   in
+  let source_s =
+    own context (Signal.map (fun m -> StringValue m.Edit_model.source) model)
+  in
   let caret_s = own context (Signal.map caret_prop model) in
   let comp_s = own context (Signal.map composition_prop model) in
   (column ~style_class:("block-editor" ^ cls) ~grow:1.
      [ keyed ~source:lines_s ~key:(fun l -> l.lidx) ~cmp:Int.compare
          ~mount:(line_view ~on_input)
      ; overlay ?visible frame
-     ; sink ~block_id ~runs_s ~caret_s ~comp_s ~on_input
+     ; sink ~block_id ~source_s ~runs_s ~caret_s ~comp_s ~on_input
      ])
     context parent
